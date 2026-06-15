@@ -223,6 +223,24 @@ pub fn enrich_brief(
   )
 }
 
+/// Activity name served by the teardown worker.
+pub const teardown_workspace_name = "teardown_workspace"
+
+/// `teardown_workspace`: remove build artifacts, worktree, branch, and norn
+/// sessions for a workspace. Runs on both success (after land) and failure
+/// paths so no stale state is left behind.
+pub fn teardown_workspace(
+  input: types.TeardownInput,
+) -> activity.Activity(types.TeardownInput, types.TornDown) {
+  activity.new(
+    teardown_workspace_name,
+    input,
+    codecs_flow.teardown_input_codec(),
+    codecs_flow.torn_down_codec(),
+    locals.teardown_workspace,
+  )
+}
+
 /// `assemble_wave`: read the ledgers and cluster documents under `design_dir`,
 /// resolve every reference, order the wave by `depends_on`, and refuse the
 /// whole wave when any brief is stale, coverage-broken, or dependency-blocked

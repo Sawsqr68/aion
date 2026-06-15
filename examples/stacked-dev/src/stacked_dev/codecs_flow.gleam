@@ -17,11 +17,12 @@ import stacked_dev/types.{
   type EnrichInput, type Enrichment, type GateError, type GateInput,
   type GateResult, type GateScope, type GateVerdict, type LandInput, type Landed,
   type ReviewAck, type ReviewInput, type ReviewNote, type ReviewRequest,
-  type ReviewVerdict, AffectedClosure, Approve, DevEnrichment, EnrichInput,
-  ExecutionEnrichment, GateFail, GateInput, GatePass, GateResult,
-  GateStageFailed, LandInput, Landed, Reject, RequestChanges, ReviewAck,
-  ReviewEnrichment, ReviewInput, ReviewNote, ReviewRequest, ReviewVerdict,
-  ScoutEnrichment, WorkspaceWide,
+  type ReviewVerdict, type TeardownInput, type TornDown, AffectedClosure,
+  Approve, DevEnrichment, EnrichInput, ExecutionEnrichment, GateFail, GateInput,
+  GatePass, GateResult, GateStageFailed, LandInput, Landed, Reject,
+  RequestChanges, ReviewAck, ReviewEnrichment, ReviewInput, ReviewNote,
+  ReviewRequest, ReviewVerdict, ScoutEnrichment, TeardownInput, TornDown,
+  WorkspaceWide,
 }
 
 /// Codec for the `gate` child input.
@@ -424,6 +425,46 @@ pub fn landed_codec() -> codec.Codec(Landed) {
       use branch <- decode.field("branch", decode.string)
       use merged_into <- decode.field("merged_into", decode.string)
       decode.success(Landed(branch: branch, merged_into: merged_into))
+    },
+  )
+}
+
+/// Codec for the `teardown_workspace` activity input.
+pub fn teardown_input_codec() -> codec.Codec(TeardownInput) {
+  codec.json_codec(
+    fn(input: TeardownInput) {
+      json.object([
+        #("workspace", codecs_core.workspace_to_json(input.workspace)),
+        #("repo_root", json.string(input.repo_root)),
+      ])
+    },
+    {
+      use workspace <- decode.field(
+        "workspace",
+        codecs_core.workspace_decoder(),
+      )
+      use repo_root <- decode.field("repo_root", decode.string)
+      decode.success(TeardownInput(
+        workspace: workspace,
+        repo_root: repo_root,
+      ))
+    },
+  )
+}
+
+/// Codec for the `teardown_workspace` activity output.
+pub fn torn_down_codec() -> codec.Codec(TornDown) {
+  codec.json_codec(
+    fn(td: TornDown) {
+      json.object([
+        #("branch", json.string(td.branch)),
+        #("cleaned", json.bool(td.cleaned)),
+      ])
+    },
+    {
+      use branch <- decode.field("branch", decode.string)
+      use cleaned <- decode.field("cleaned", decode.bool)
+      decode.success(TornDown(branch: branch, cleaned: cleaned))
     },
   )
 }

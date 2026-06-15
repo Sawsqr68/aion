@@ -31,11 +31,12 @@ import stacked_dev/types.{
   type DevInput, type EnrichInput, type GateInput, type GateResult,
   type LandInput, type Landed, type ProvisionInput, type ResumeInput,
   type ReviewAck, type ReviewInput, type ReviewRequest, type ScopedInput,
-  type ScoutInput, type StartupResult, type StartupTask, type Workspace,
-  AffectedClosure, BuildWarm, CheckFail, CheckPass, CheckResult, Copy,
-  DevEnrichment, DevTask, Developed, ExecutionEnrichment, GateFail, GatePass,
-  GateResult, Landed, Overlay, ReviewAck, ReviewEnrichment, ScoutEnrichment, Vm,
-  WarmTask, Warmed, Workspace, WorkspaceWide, Worktree,
+  type ScoutInput, type StartupResult, type StartupTask, type TeardownInput,
+  type TornDown, type Workspace, AffectedClosure, BuildWarm, CheckFail,
+  CheckPass, CheckResult, Copy, DevEnrichment, DevTask, Developed,
+  ExecutionEnrichment, GateFail, GatePass, GateResult, Landed, Overlay,
+  ReviewAck, ReviewEnrichment, ScoutEnrichment, TornDown, Vm, WarmTask, Warmed,
+  Workspace, WorkspaceWide, Worktree,
 }
 
 /// Provision an isolated workspace via the `yg` CLI.
@@ -505,6 +506,17 @@ pub fn land(input: LandInput) -> Result(Landed, error.ActivityError) {
     "yg branch merge",
   )
   Ok(Landed(branch: input.workspace.branch, merged_into: input.base_ref))
+}
+
+pub fn teardown_workspace(
+  input: TeardownInput,
+) -> Result(TornDown, error.ActivityError) {
+  let branch = input.workspace.branch
+  let _ =
+    cli.run("yg", ["branch", "teardown", branch], input.repo_root)
+  let _ =
+    cli.run("yg", ["branch", "remove", "--yes", branch], input.repo_root)
+  Ok(TornDown(branch: branch, cleaned: True))
 }
 
 /// Append one stage report or the execution block into the brief file inside

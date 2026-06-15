@@ -58,8 +58,8 @@ import stacked_dev/types.{
   ReviewCapExhausted, ReviewDrifted, ReviewDriftedInChild, ReviewEnrichment,
   ReviewRejected, ReviewRequest, ReviewTimedOut, ReviewVerdict, ScoutEnrichment,
   ScoutFailed, ScoutFailedInChild, StackedDevResult, StackedDevStatus,
-  StageFailed, VerdictApproved, VerifyExhausted, VerifyFixExhausted,
-  WorkspaceWide,
+  StageFailed, TeardownInput, VerdictApproved, VerifyExhausted,
+  VerifyFixExhausted, WorkspaceWide,
 }
 
 /// Name of the human/SDK review-verdict signal this workflow waits on.
@@ -127,6 +127,20 @@ pub fn execute(
 ) -> Result(StackedDevResult, StackedDevError) {
   use _ <- result_try(set_status("provisioning", 0))
   use workspace <- result_try(provision(input))
+  let result = execute_with_workspace(input, workspace)
+  case result {
+    Ok(_) -> result
+    Error(error) -> {
+      teardown(input, workspace)
+      Error(error)
+    }
+  }
+}
+
+fn execute_with_workspace(
+  input: StackedDevInput,
+  workspace: Workspace,
+) -> Result(StackedDevResult, StackedDevError) {
   use _ <- result_try(set_status("developing", 0))
   use brief_dev_result <- result_try(run_brief_dev(input, workspace))
   let dev_result = dev_result_of(workspace, brief_dev_result)
@@ -143,11 +157,19 @@ pub fn execute(
         1,
       )
     GateResult(verdict: GateFail(report: report)) ->
-      // A converged verify loop that still fails the authoritative gate
-      // surfaces loudly instead of silently looping: scoped checks missed
-      // something and the report says what.
       Error(GateRejected(report: report))
   }
+}
+
+fn teardown(input: StackedDevInput, workspace: Workspace) -> Nil {
+  let _ =
+    workflow.run(
+      activities.teardown_workspace(TeardownInput(
+        workspace: workspace,
+        repo_root: input.repo_root,
+      )),
+    )
+  Nil
 }
 
 /// Derive the outer arc's `DevResult` from the brief_dev child's dev report:

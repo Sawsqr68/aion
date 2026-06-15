@@ -234,6 +234,17 @@ pub type Landed {
   Landed(branch: String, merged_into: String)
 }
 
+/// Input to the `teardown_workspace` activity: the workspace to clean up
+/// and the repo root (needed for yg branch teardown on local placement).
+pub type TeardownInput {
+  TeardownInput(workspace: Workspace, repo_root: String)
+}
+
+/// Output of the `teardown_workspace` activity.
+pub type TornDown {
+  TornDown(branch: String, cleaned: Bool)
+}
+
 /// Input to the `brief_dev` child workflow (also independently dispatchable
 /// as a top-level run). It carries the v2 brief document and the pre-resolved
 /// reference context in place of the four document strings (ADR-008).
