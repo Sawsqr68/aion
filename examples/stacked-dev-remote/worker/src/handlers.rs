@@ -229,7 +229,6 @@ fn dev(shell: &Shell, input: &DevInput) -> Result<StartupResult, ActivityFailure
         "norn",
         &[
             "--print",
-            "--fast",
             "--reasoning-effort",
             "x-high",
             "--session-id",
@@ -266,9 +265,8 @@ pub fn scout(shell: &Shell, input: ScoutInput) -> Result<ScoutReport, ActivityFa
         "norn",
         &[
             "--print",
-            "--fast",
             "--reasoning-effort",
-            "x-high",
+            "medium",
             "--session-id",
             &session_id,
             "--resume-if-exists",
@@ -302,7 +300,6 @@ pub fn dev_review(shell: &Shell, input: ReviewInput) -> Result<ReviewReport, Act
         "norn",
         &[
             "--print",
-            "--fast",
             "--reasoning-effort",
             "x-high",
             "--session-id",
@@ -343,7 +340,6 @@ pub fn dev_resume(shell: &Shell, input: ResumeInput) -> Result<DevReport, Activi
         "norn",
         &[
             "--print",
-            "--fast",
             "--reasoning-effort",
             "x-high",
             "--resume",
