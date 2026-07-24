@@ -19,8 +19,12 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 /// Pinned digest of the committed SDK closure (names, lengths, bytes, in
 /// canonical order). A silent edit to the embedded bundle fails here; a
-/// deliberate regeneration updates this pin in the same commit.
-const BUNDLE_CHECKSUM: &str = "678ba48d3934dd9442344f33bd934ebeb92e3c13aad2a3b0c8cbaa4724b4e9b7";
+/// deliberate regeneration updates this pin in the same commit. Repinned on
+/// 2026-07-24: the regeneration drill rebuilt the source-unchanged 46-module
+/// `aion_flow` 0.7.0 closure with the build box's upgraded Erlang (`compile_info`
+/// version 9.0.6 -> 10.0.2), which changed every module's bytes. The full
+/// workspace suite executed the new closure on the embedded beamr runtime.
+const BUNDLE_CHECKSUM: &str = "497cd906e1a33ab12e9ed964de1541432860160b178dcabed3a61f1a6d59474b";
 const BUNDLE_MODULE_COUNT: usize = 46;
 const BUNDLE_SDK_VERSION: &str = "0.7.0";
 
@@ -86,11 +90,12 @@ fn assembling_twice_yields_byte_identical_archives() -> TestResult {
 /// timestamp, environment read, or ordering instability anywhere in the
 /// assembly path changes these bytes and fails this test. A deliberate SDK
 /// closure regeneration updates this pin in the same commit, exactly like
-/// `BUNDLE_CHECKSUM`. Last updated for the beamr-safe query exception catch,
-/// bounded source/catch-site traces, and removal of the unsupported production
-/// observation-count API, which regenerated the embedded closure.
+/// `BUNDLE_CHECKSUM`. Repinned on 2026-07-24: the regeneration drill rebuilt
+/// the source-unchanged closure with the build box's upgraded Erlang
+/// (`compile_info` version 9.0.6 -> 10.0.2), so the embedded archive bytes
+/// changed with the compiler, not with any `aion_flow` source edit.
 const FIXED_INPUT_ARCHIVE_SHA256: &str =
-    "3fb65554390ead1a8833fa161f452bb73edce05b969e57f4c1d46e76d77c070f";
+    "4ce99f09b27ecd990a6543166a2009e030066f4046d9253faaf1200e7e5fa84a";
 
 /// Proof 1b — cross-process determinism: a fully fixed input assembles to
 /// pinned archive bytes.

@@ -289,20 +289,20 @@ const SKILL_RESOURCES: [(&str, &str); 5] = [
         include_str!("../../../assistant/resources/ENVIRONMENT.md"),
     ),
     (
-        "SCAFFOLD.md",
-        include_str!("../../../assistant/resources/SCAFFOLD.md"),
+        "AWL-AUTHORING.md",
+        include_str!("../../../assistant/resources/AWL-AUTHORING.md"),
     ),
     (
         "COMMANDS.md",
         include_str!("../../../assistant/resources/COMMANDS.md"),
     ),
     (
-        "SDK.md",
-        include_str!("../../../assistant/resources/SDK.md"),
+        "AWL-REFERENCE.md",
+        include_str!("../../../assistant/resources/AWL-REFERENCE.md"),
     ),
     (
-        "TROUBLESHOOTING.md",
-        include_str!("../../../assistant/resources/TROUBLESHOOTING.md"),
+        "WORKERS.md",
+        include_str!("../../../assistant/resources/WORKERS.md"),
     ),
 ];
 
@@ -486,87 +486,5 @@ fn tail(text: &str, limit: usize) -> &str {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::ffi::OsString;
-    use std::path::PathBuf;
-
-    use super::{tail, workspace_root_from};
-
-    #[test]
-    fn workspace_root_override_wins_over_home() {
-        let resolved = workspace_root_from(
-            Some(OsString::from("/durable/clones")),
-            Some(OsString::from("/home/user")),
-        );
-        assert_eq!(resolved.ok(), Some(PathBuf::from("/durable/clones")));
-    }
-
-    #[test]
-    fn workspace_root_defaults_under_home() {
-        let resolved = workspace_root_from(None, Some(OsString::from("/home/user")));
-        assert_eq!(
-            resolved.ok(),
-            Some(PathBuf::from("/home/user/.aion/clones"))
-        );
-    }
-
-    #[test]
-    fn workspace_root_empty_override_falls_back_to_home() {
-        let resolved =
-            workspace_root_from(Some(OsString::new()), Some(OsString::from("/home/user")));
-        assert_eq!(
-            resolved.ok(),
-            Some(PathBuf::from("/home/user/.aion/clones"))
-        );
-    }
-
-    #[test]
-    fn workspace_root_without_home_or_override_is_a_hard_error() {
-        let message = workspace_root_from(None, None)
-            .err()
-            .map(|failure| failure.message().to_owned())
-            .unwrap_or_default();
-        assert!(
-            message.contains("AION_WORKSPACE_ROOT") && message.contains("HOME"),
-            "the error must name both the override and HOME; got: {message}"
-        );
-    }
-
-    #[test]
-    fn workspace_root_relative_override_is_a_hard_error() {
-        // A relative root resolves against the worker CWD at each call site,
-        // so the recorded history's path silently changes meaning after a
-        // restart from a different directory — refuse it loudly.
-        let message = workspace_root_from(
-            Some(OsString::from("relative/clones")),
-            Some(OsString::from("/home/user")),
-        )
-        .err()
-        .map(|failure| failure.message().to_owned())
-        .unwrap_or_default();
-        assert!(
-            message.contains("absolute") && message.contains("relative/clones"),
-            "the error must name the offending path and demand an absolute one; got: {message}"
-        );
-    }
-
-    #[test]
-    fn workspace_root_relative_home_is_a_hard_error() {
-        let message = workspace_root_from(None, Some(OsString::from("relative-home")))
-            .err()
-            .map(|failure| failure.message().to_owned())
-            .unwrap_or_default();
-        assert!(
-            message.contains("absolute"),
-            "a relative HOME-derived root must be refused; got: {message}"
-        );
-    }
-
-    #[test]
-    fn tail_keeps_the_end_of_long_output_and_short_output_whole() {
-        assert_eq!(tail("short", 10), "short");
-        assert_eq!(tail("abcdefgh", 3), "fgh");
-        // Multi-byte chars truncate on a char boundary, never mid-codepoint.
-        assert_eq!(tail("ééééé", 2), "éé");
-    }
-}
+#[path = "handlers_tests.rs"]
+mod tests;
