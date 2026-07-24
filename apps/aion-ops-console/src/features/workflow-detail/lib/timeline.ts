@@ -34,6 +34,7 @@ export {
   eventRecordedAt,
   eventSequence,
   isTerminalWorkflowEvent,
+  mergeEventWindowBySequence,
   mergeEventsBySequence,
   terminalOutcomeForEvents,
   terminalOutcomeForMergedEvents,

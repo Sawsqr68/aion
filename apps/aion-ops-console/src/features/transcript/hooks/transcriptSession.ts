@@ -1,3 +1,4 @@
+import { createAnimationFrameBatch } from '@/features/live-feed/hooks/animationFrameBatch';
 import type { AionSocketError, ConnectionStatus } from '@/lib/api';
 import type {
   AionTranscriptStreamManager,
@@ -6,7 +7,8 @@ import type {
 } from '@/lib/api/transcript-stream';
 import type { ActivityEvent } from '@/types';
 
-import { backfillEntries, foldTranscriptEvent, type TranscriptEntry } from '../lib/entries';
+import type { TranscriptEntry } from '../lib/entries';
+import { TranscriptFoldBuffer, type TranscriptFoldItem } from '../lib/transcriptFoldBuffer';
 
 /**
  * The transcript session controller: the REST-backfill-first-then-WS-tail
@@ -23,8 +25,8 @@ import { backfillEntries, foldTranscriptEvent, type TranscriptEntry } from '../l
  *    advanced past the consumed ids, backfill reports `ready`, and the WS tail
  *    attaches with `after_seq = lastSeq` (or a full replay when the retained
  *    transcript was empty — a pre-retention run, the honest fallback).
- * 3. On failure the error is surfaced VISIBLY (`error` state, never swallowed)
- *    and the WS still attaches with a full durable replay.
+ * 3. On failure the error is surfaced VISIBLY (`error` state, never swallowed).
+ *    No cursorless socket replay is started because it could remount all history.
  * 4. `stop()` cancels: a fetch settling after `stop()` neither mutates state nor
  *    attaches, and an attached manager's listeners are all unsubscribed.
  */
@@ -73,15 +75,18 @@ export function startTranscriptSession(options: TranscriptSessionOptions): Trans
   let cancelled = false;
   let teardown: (() => void) | null = null;
 
-  // Attach the live WS tail (after the REST backfill resolves either way).
-  const attach = (initialAfterSeq: number | undefined) => {
+  // Attach the live WS tail only after a bounded REST backfill establishes its cursor.
+  const attach = (initialAfterSeq: number | undefined, foldBuffer: TranscriptFoldBuffer) => {
     const manager = createManager(target, initialAfterSeq);
+    const batch = createAnimationFrameBatch<TranscriptFoldItem>((items) => {
+      options.onEntries(() => foldBuffer.foldBatch(items));
+    });
 
     const listener: TranscriptStreamListener = {
       onEvent: (event) => {
         const deltaId = deltaCounter.current;
         deltaCounter.current += 1;
-        options.onEntries((current) => foldTranscriptEvent(current, event, deltaId));
+        batch.push({ deltaId, event }, typeof event.store_seq === 'number');
       },
     };
 
@@ -90,6 +95,7 @@ export function startTranscriptSession(options: TranscriptSessionOptions): Trans
     const unsubscribeError = manager.onError(options.onSocketError);
     options.onStatus(manager.getStatus());
     teardown = () => {
+      batch.cancel();
       unsubscribeStream();
       unsubscribeStatus();
       unsubscribeError();
@@ -101,23 +107,21 @@ export function startTranscriptSession(options: TranscriptSessionOptions): Trans
       if (cancelled) {
         return;
       }
-      const { entries: retained, lastSeq } = backfillEntries(events);
+      const lastSeq = latestPersistedSequence(events);
+      const foldBuffer = new TranscriptFoldBuffer(events);
       // Keep live entry keys unique past the backfill's consumed ids.
       deltaCounter.current = events.length;
-      options.onEntries(() => retained);
+      options.onEntries(() => foldBuffer.snapshot());
       options.onBackfill('ready', null);
-      // REST history + WS tail (after_seq = lastSeq); lastSeq undefined ⇒
-      // full WS replay (pre-retention run — the honest fallback).
-      attach(lastSeq);
+      // An explicitly empty retained stream is the only cursorless attach: there
+      // is no durable history to replay at the splice point.
+      attach(lastSeq, foldBuffer);
     })
     .catch((error: unknown) => {
       if (cancelled) {
         return;
       }
       options.onBackfill('error', error instanceof Error ? error : new Error(String(error)));
-      // Resilient fallback: the WS durable replay still serves the full
-      // history; the REST failure stays VISIBLE (never swallowed).
-      attach(undefined);
     });
 
   return {
@@ -127,4 +131,14 @@ export function startTranscriptSession(options: TranscriptSessionOptions): Trans
       teardown?.();
     },
   };
+}
+
+function latestPersistedSequence(events: readonly ActivityEvent[]): number | undefined {
+  let latest: number | undefined;
+  for (const event of events) {
+    if (typeof event.store_seq === 'number') {
+      latest = latest === undefined ? event.store_seq : Math.max(latest, event.store_seq);
+    }
+  }
+  return latest;
 }

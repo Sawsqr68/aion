@@ -193,7 +193,7 @@ describe('startTranscriptSession', () => {
     session.stop();
   });
 
-  test('a backfill failure is surfaced visibly and the WS still attaches (full replay)', async () => {
+  test('a backfill failure is visible and never starts an unbounded cursorless replay', async () => {
     const failure = new Error('retention endpoint unavailable');
     const h = harness(() => Promise.reject(failure));
 
@@ -201,11 +201,8 @@ describe('startTranscriptSession', () => {
     await session.settled;
 
     expect(h.backfills).toEqual([{ state: 'error', error: failure }]);
-    // No entries were fabricated from the failed fetch.
     expect(h.entryUpdates).toHaveLength(0);
-    // The WS fallback attached with NO cursor: the durable replay serves everything.
-    expect(h.managers).toHaveLength(1);
-    expect(h.managers[0]?.initialAfterSeq).toBeUndefined();
+    expect(h.managers).toHaveLength(0);
     session.stop();
   });
 

@@ -1,32 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { AionSocketError, ConnectionStatus } from '@/lib/api';
 import type { AionTranscriptStreamManager, TranscriptTarget } from '@/lib/api/transcript-stream';
 import { createConfiguredTranscriptReader, createConfiguredTranscriptStream } from '@/lib/config';
 import type { ActivityEvent, Namespace, WorkflowId } from '@/types';
 
-import type { TranscriptEntry } from '../lib/entries';
+import { backfillEntries, type TranscriptEntry } from '../lib/entries';
+import { TRANSCRIPT_LIVE_TAIL_SIZE } from '../lib/transcriptFoldBuffer';
 import { startTranscriptSession, type TranscriptBackfillState } from './transcriptSession';
 
-/**
- * Live transcript hook (NOI-7).
- *
- * Subscribes to the dedicated transcript WebSocket for ONE
- * `(namespace, workflow, activity, attempt)` target and exposes the ordered,
- * deduplicated, COALESCED {@link TranscriptEntry} stream. REAL DATA ONLY,
- * socket-first, NO polling: the durable retained transcript is fetched over REST
- * first (lane #229), then the live WS tail attaches with `after_seq` at the
- * backfill's resume cursor, and the manager resumes by `store_seq` on reconnect
- * so there is no gap or duplicate.
- *
- * The sequencing itself lives in {@link startTranscriptSession} — a plain async
- * controller proven by direct execution in `transcriptSession.test.ts` — so this
- * hook is only the React adapter: state cells, target-change reset, and the
- * effect that starts/stops one session per target.
- *
- * The entry model + fold rules (dedup, `store_seq` ordering, delta/note
- * coalescing) live in `../lib/entries` and are re-exported here for callers.
- */
+export const TRANSCRIPT_HISTORY_RETENTION_SIZE = 1500;
 
 export type {
   TranscriptEntry,
@@ -39,34 +22,26 @@ export type {
 export { backfillEntries, foldTranscriptEvent } from '../lib/entries';
 
 export type UseTranscriptOptions = {
-  /** The attempt target to subscribe to; `null` disables the subscription. */
   target: TranscriptTarget | null;
-  /**
-   * Override the stream manager factory (tests); defaults to the configured
-   * one. `initialAfterSeq` seeds the WS resume cursor from the REST backfill.
-   */
   createManager?: (
     target: TranscriptTarget,
     initialAfterSeq?: number
   ) => AionTranscriptStreamManager;
-  /** Override the retained-transcript REST fetch (tests); defaults configured. */
   fetchRetained?: (target: TranscriptTarget) => Promise<ActivityEvent[]>;
+  fetchEarlier?: (target: TranscriptTarget, beforeSeq: number) => Promise<ActivityEvent[]>;
 };
 
 export type UseTranscriptResult = {
-  /** The ordered, deduplicated transcript entries (durable tail + live deltas). */
   entries: TranscriptEntry[];
-  /** Live socket connection status. */
   status: ConnectionStatus;
-  /** Typed live-socket error, or null (no silent failure). */
   socketError: AionSocketError | null;
-  /** REST-backfill lifecycle: the retained history fetch that precedes the WS. */
   backfillState: TranscriptBackfillState;
-  /** The retained-fetch failure, surfaced visibly (the WS replay still runs). */
   backfillError: Error | null;
+  hasEarlier: boolean;
+  isLoadingEarlier: boolean;
+  loadEarlier: () => Promise<void>;
 };
 
-/** A serialized target identity for effect dependency + remount on target change. */
 export function targetKey(target: TranscriptTarget | null): string {
   if (target === null) {
     return '';
@@ -79,15 +54,31 @@ export function targetKey(target: TranscriptTarget | null): string {
   ].join('\0');
 }
 
-/** Default retained-transcript fetch: the configured lane-#229 REST client. */
 async function defaultFetchRetained(target: TranscriptTarget): Promise<ActivityEvent[]> {
   const window = await createConfiguredTranscriptReader({
     namespace: target.namespace,
-  }).fetchTranscript(target);
+  }).fetchTranscript({ ...target, last: TRANSCRIPT_LIVE_TAIL_SIZE });
   return window.events;
 }
 
-/** Default manager factory: the configured WS stream, cursor-seeded. */
+async function defaultFetchEarlier(
+  target: TranscriptTarget,
+  beforeSeq: number
+): Promise<ActivityEvent[]> {
+  const fromSeq = Math.max(0, beforeSeq - TRANSCRIPT_LIVE_TAIL_SIZE);
+  if (fromSeq === beforeSeq) {
+    return [];
+  }
+  const window = await createConfiguredTranscriptReader({
+    namespace: target.namespace,
+  }).fetchTranscript({
+    ...target,
+    fromSeq,
+    limit: beforeSeq - fromSeq,
+  });
+  return window.events;
+}
+
 function defaultCreateManager(
   target: TranscriptTarget,
   initialAfterSeq?: number
@@ -99,31 +90,80 @@ export function useTranscript(options: UseTranscriptOptions): UseTranscriptResul
   const { target } = options;
   const createManager = options.createManager ?? defaultCreateManager;
   const fetchRetained = options.fetchRetained ?? defaultFetchRetained;
-  const [entries, setEntries] = useState<TranscriptEntry[]>([]);
+  const fetchEarlier = options.fetchEarlier ?? defaultFetchEarlier;
+  const [liveEntries, setLiveEntries] = useState<TranscriptEntry[]>([]);
+  const [earlierEntries, setEarlierEntries] = useState<TranscriptEntry[]>([]);
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [socketError, setSocketError] = useState<AionSocketError | null>(null);
   const [backfillState, setBackfillState] = useState<TranscriptBackfillState>('ready');
   const [backfillError, setBackfillError] = useState<Error | null>(null);
-  // A monotonic id source for ephemeral-delta React keys, stable across renders.
+  const [hasEarlier, setHasEarlier] = useState(false);
+  const [isLoadingEarlier, setIsLoadingEarlier] = useState(false);
   const deltaCounter = useRef(0);
-  // Serialize the target so the subscribe effect re-runs on ANY field change
-  // while depending on a single primitive (a fresh attempt is a fresh transcript).
+  const earliestLoadedSeq = useRef<number | null>(null);
   const key = targetKey(target);
+
+  const fetchRetainedForSession = useCallback(
+    async (sessionTarget: TranscriptTarget) => {
+      const events = await fetchRetained(sessionTarget);
+      const earliest = earliestStoreSequence(events);
+      earliestLoadedSeq.current = earliest;
+      setHasEarlier(earliest !== null && earliest > 0);
+      return events;
+    },
+    [fetchRetained]
+  );
+
+  const loadEarlier = useCallback(async () => {
+    const beforeSeq = earliestLoadedSeq.current;
+    if (key === '' || beforeSeq === null || beforeSeq === 0 || isLoadingEarlier) {
+      return;
+    }
+    setIsLoadingEarlier(true);
+    try {
+      const resolved = parseTargetKey(key);
+      const events = await fetchEarlier(resolved, beforeSeq);
+      const earliest = earliestStoreSequence(events);
+      if (events.length === 0 || earliest === null) {
+        setHasEarlier(false);
+        return;
+      }
+      const page = backfillEntries(events).entries;
+      const retainedCount = Math.min(
+        TRANSCRIPT_HISTORY_RETENTION_SIZE,
+        earlierEntries.length + page.length
+      );
+      setEarlierEntries((current) =>
+        mergeTranscriptEntries(page, current).slice(-TRANSCRIPT_HISTORY_RETENTION_SIZE)
+      );
+      earliestLoadedSeq.current = earliest;
+      setHasEarlier(earliest > 0 && retainedCount < TRANSCRIPT_HISTORY_RETENTION_SIZE);
+    } finally {
+      setIsLoadingEarlier(false);
+    }
+  }, [earlierEntries.length, fetchEarlier, isLoadingEarlier, key]);
 
   useEffect(() => {
     if (key === '') {
-      setEntries([]);
+      setLiveEntries([]);
+      setEarlierEntries([]);
       setStatus('disconnected');
       setSocketError(null);
       setBackfillState('ready');
       setBackfillError(null);
+      setHasEarlier(false);
+      setIsLoadingEarlier(false);
+      earliestLoadedSeq.current = null;
       return;
     }
-    // `key !== ''` iff `target` is non-null; the parse recovers the exact fields.
     const resolved = parseTargetKey(key);
-
-    // Reset on target change: a new attempt is a fresh transcript.
-    setEntries([]);
+    setLiveEntries([]);
+    setEarlierEntries([]);
+    setStatus('disconnected');
+    setSocketError(null);
+    setHasEarlier(false);
+    setIsLoadingEarlier(false);
+    earliestLoadedSeq.current = null;
     deltaCounter.current = 0;
     setBackfillError(null);
     setBackfillState('loading');
@@ -131,27 +171,49 @@ export function useTranscript(options: UseTranscriptOptions): UseTranscriptResul
     const session = startTranscriptSession({
       createManager,
       deltaCounter,
-      fetchRetained,
+      fetchRetained: fetchRetainedForSession,
       onBackfill: (state, error) => {
         setBackfillError(error);
         setBackfillState(state);
       },
-      onEntries: setEntries,
+      onEntries: setLiveEntries,
       onSocketError: setSocketError,
       onStatus: setStatus,
       target: resolved,
     });
 
     return session.stop;
-  }, [key, createManager, fetchRetained]);
+  }, [key, createManager, fetchRetainedForSession]);
+
+  const entries = useMemo(
+    () => mergeTranscriptEntries(earlierEntries, liveEntries),
+    [earlierEntries, liveEntries]
+  );
 
   return useMemo(
-    () => ({ entries, status, socketError, backfillState, backfillError }),
-    [entries, status, socketError, backfillState, backfillError]
+    () => ({
+      entries,
+      status,
+      socketError,
+      backfillState,
+      backfillError,
+      hasEarlier,
+      isLoadingEarlier,
+      loadEarlier,
+    }),
+    [
+      entries,
+      status,
+      socketError,
+      backfillState,
+      backfillError,
+      hasEarlier,
+      isLoadingEarlier,
+      loadEarlier,
+    ]
   );
 }
 
-/** Recover a {@link TranscriptTarget} from its serialized {@link targetKey}. */
 export function parseTargetKey(key: string): TranscriptTarget {
   const [namespace, workflowId, activityId, attempt] = key.split('\0');
   return {
@@ -160,4 +222,40 @@ export function parseTargetKey(key: string): TranscriptTarget {
     activityId: Number(activityId),
     attempt: Number(attempt),
   };
+}
+
+function earliestStoreSequence(events: readonly ActivityEvent[]): number | null {
+  for (const event of events) {
+    if (typeof event.store_seq === 'number') {
+      return event.store_seq;
+    }
+  }
+  return null;
+}
+
+function mergeTranscriptEntries(
+  earlier: readonly TranscriptEntry[],
+  later: readonly TranscriptEntry[]
+): TranscriptEntry[] {
+  const byKey = new Map<string, TranscriptEntry>();
+  const orderedKeys: string[] = [];
+  for (const entry of [...earlier, ...later]) {
+    const current = byKey.get(entry.key);
+    if (current === undefined) {
+      orderedKeys.push(entry.key);
+      byKey.set(entry.key, entry);
+    } else if (current.type === 'tool' && entry.type === 'tool') {
+      byKey.set(entry.key, {
+        ...entry,
+        call: entry.call ?? current.call,
+        result: entry.result ?? current.result,
+      });
+    } else {
+      byKey.set(entry.key, entry);
+    }
+  }
+  return orderedKeys.flatMap((entryKey) => {
+    const entry = byKey.get(entryKey);
+    return entry === undefined ? [] : [entry];
+  });
 }

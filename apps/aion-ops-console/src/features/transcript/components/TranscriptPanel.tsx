@@ -38,14 +38,26 @@ export type TranscriptPanelProps = {
 
 /** The data-bound panel: owns the transcript subscription for `target`. */
 export function TranscriptPanel({ target }: TranscriptPanelProps) {
-  const { entries, status, socketError, backfillState, backfillError } = useTranscript({ target });
+  const {
+    entries,
+    status,
+    socketError,
+    backfillState,
+    backfillError,
+    hasEarlier,
+    isLoadingEarlier,
+    loadEarlier,
+  } = useTranscript({ target });
 
   return (
     <TranscriptPanelContent
       backfillError={backfillError}
       backfillState={backfillState}
       entries={entries}
+      hasEarlier={hasEarlier}
       hasTarget={target !== null}
+      isLoadingEarlier={isLoadingEarlier}
+      onLoadEarlier={loadEarlier}
       socketError={socketError}
       status={status}
     />
@@ -61,6 +73,9 @@ export type TranscriptPanelContentProps = {
   backfillError?: Error | null;
   /** REST retained-backfill lifecycle (informational; defaults `ready`). */
   backfillState?: 'loading' | 'ready' | 'error';
+  hasEarlier?: boolean;
+  isLoadingEarlier?: boolean;
+  onLoadEarlier?: () => Promise<void>;
 };
 
 /** Presentational panel body, driven by already-resolved props (unit-testable). */
@@ -70,6 +85,9 @@ export function TranscriptPanelContent({
   socketError,
   hasTarget,
   backfillError = null,
+  hasEarlier = false,
+  isLoadingEarlier = false,
+  onLoadEarlier,
 }: TranscriptPanelContentProps) {
   if (!hasTarget) {
     return (
@@ -110,13 +128,18 @@ export function TranscriptPanelContent({
           data-testid="transcript-backfill-error"
           role="status"
         >
-          {`Retained transcript fetch failed: ${backfillError.message} — showing the live-socket replay instead.`}
+          {`Retained transcript fetch failed: ${backfillError.message} — live streaming is paused to avoid an unbounded replay.`}
         </p>
       )}
       {entries.length === 0 ? (
         <p className="py-6 text-center text-muted-foreground text-sm">No transcript events yet.</p>
       ) : (
-        <TranscriptList entries={entries} />
+        <TranscriptList
+          entries={entries}
+          hasEarlier={hasEarlier}
+          isLoadingEarlier={isLoadingEarlier}
+          {...(onLoadEarlier === undefined ? {} : { onLoadEarlier })}
+        />
       )}
     </section>
   );

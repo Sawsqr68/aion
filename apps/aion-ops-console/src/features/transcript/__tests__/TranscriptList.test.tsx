@@ -9,7 +9,7 @@ import {
   TranscriptBody,
   TranscriptEntryRow,
 } from '../components/TranscriptEventRow';
-import { TranscriptList } from '../components/TranscriptList';
+import { TRANSCRIPT_DOM_WINDOW_SIZE, TranscriptList } from '../components/TranscriptList';
 import type { TranscriptEntry } from '../hooks/useTranscript';
 
 function event(kind: ActivityEvent['kind'], storeSeq: number | null): ActivityEvent {
@@ -35,7 +35,7 @@ function messageEntry(seq: number, text: string): TranscriptEntry {
   };
 }
 
-describe('TranscriptList — bounded, non-virtualized scroller', () => {
+describe('TranscriptList — bounded paged scroller', () => {
   test('the scroll element is self-bounding and keeps its test id', () => {
     const markup = renderToStaticMarkup(<TranscriptList entries={[messageEntry(0, 'hello')]} />);
     // The bound lives directly on the scroller, so it never depends on an ancestor
@@ -58,6 +58,18 @@ describe('TranscriptList — bounded, non-virtualized scroller', () => {
     // Stable per-entry keys are carried through to the DOM.
     expect(markup).toContain('data-entry-key="seq:0"');
     expect(markup).toContain('data-entry-key="seq:39"');
+  });
+
+  test('large transcripts render only the fixed tail DOM page with an earlier affordance', () => {
+    const entries = Array.from({ length: TRANSCRIPT_DOM_WINDOW_SIZE + 40 }, (_, index) =>
+      messageEntry(index, `windowed-${index}`)
+    );
+    const markup = renderToStaticMarkup(<TranscriptList entries={entries} />);
+
+    expect(markup).toContain('Show earlier');
+    expect(markup).not.toContain('data-entry-key="seq:39"');
+    expect(markup).toContain('data-entry-key="seq:40"');
+    expect(markup).toContain(`data-entry-key="seq:${TRANSCRIPT_DOM_WINDOW_SIZE + 39}"`);
   });
 
   test('the first commit follows the tail: no "Jump to latest", nothing animates', () => {

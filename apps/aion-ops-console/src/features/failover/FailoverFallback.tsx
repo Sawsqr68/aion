@@ -1,12 +1,12 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
-import type { ApiClient } from '@/lib/api';
 import { createConfiguredApiClient } from '@/lib/config';
 import type { Event, Namespace } from '@/types';
 
 import { buildClusterConfig, type ClusterConfig } from './lib/clusterConfig';
 import { tallyExactlyOnce } from './lib/exactlyOnce';
+import { fetchFailoverHistoryTail, type FailoverHistoryClient } from './lib/historyTail';
 
 /**
  * Tier-1 BULLETPROOF FALLBACK (DEMO-VIEW-PLAN §7). The floor that cannot fail to
@@ -33,7 +33,7 @@ export type FailoverFallbackProps = {
   namespace: Namespace | null;
   config?: ClusterConfig;
   /** Override for tests; defaults to a fresh ApiClient per active base URL. */
-  apiClient?: Pick<ApiClient, 'getHistory'>;
+  apiClient?: FailoverHistoryClient;
   fetchImpl?: typeof fetch;
 };
 
@@ -100,7 +100,7 @@ export function FailoverFallback({
           namespace: cluster.namespace,
           ...(target && { baseUrl: target.baseUrl }),
         });
-      return client.getHistory(workflowId, { namespace: cluster.namespace });
+      return fetchFailoverHistoryTail(client, workflowId, { namespace: cluster.namespace });
     },
   });
 

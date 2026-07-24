@@ -231,6 +231,6 @@ describe('TranscriptPanelContent retained backfill', () => {
 
     expect(markup).toContain('data-testid="transcript-backfill-error"');
     expect(markup).toContain('boom');
-    expect(markup).toContain('live-socket replay');
+    expect(markup).toContain('live streaming is paused to avoid an unbounded replay');
   });
 });

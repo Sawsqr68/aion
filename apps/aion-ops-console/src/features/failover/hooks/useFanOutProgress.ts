@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { eventSequence, mergeEventsBySequence } from '@/features/workflow-detail/lib/timeline';
-import type { AionEventWebSocketManager, ApiClient, ConnectionStatus } from '@/lib/api';
+import { mergeEventWindowBySequence } from '@/features/workflow-detail/lib/timeline';
+import type { AionEventWebSocketManager, ConnectionStatus } from '@/lib/api';
 import type { FirehoseEventSubscriptionFilter, ResyncContext } from '@/lib/api/websocket';
 import { configuredEventSocket, createConfiguredApiClient } from '@/lib/config';
 import type { Event, Namespace, WorkflowId, WorkflowStatus } from '@/types';
 
 import { tallyExactlyOnce } from '../lib/exactlyOnce';
+import {
+  FAILOVER_HISTORY_WINDOW_SIZE,
+  fetchFailoverHistoryTail,
+  type FailoverHistoryClient,
+} from '../lib/historyTail';
 
 /**
  * The fan-out progress + exactly-once data core (DEMO-VIEW-PLAN §2, §4.1 — the riskiest
@@ -41,7 +46,7 @@ export type FanOutProgress = {
   refetch: () => void;
 };
 
-type HistoryClient = Pick<ApiClient, 'getHistory'>;
+type HistoryClient = FailoverHistoryClient;
 type Manager = Pick<AionEventWebSocketManager, 'subscribe' | 'getStatus' | 'onStatusChange'>;
 
 export type UseFanOutProgressOptions = {
@@ -112,6 +117,7 @@ export function useFanOutProgress({
 }: UseFanOutProgressOptions): FanOutProgress {
   const [historyEvents, setHistoryEvents] = useState<Event[]>([]);
   const [liveEvents, setLiveEvents] = useState<Event[]>([]);
+  const liveEventsRef = useRef<Event[]>([]);
   const [connection, setConnection] = useState<FanOutConnection>('disconnected');
   const [error, setError] = useState<string | null>(null);
 
@@ -124,7 +130,6 @@ export function useFanOutProgress({
     [apiClient, baseUrl, namespace]
   );
 
-  const liveSeqs = useRef<Set<number>>(new Set());
   const historyRequestGeneration = useRef(0);
   const historyAbort = useRef<AbortController | null>(null);
 
@@ -203,7 +208,7 @@ export function useFanOutProgress({
       }
 
       // Firehose has no resume cursor: drop the live buffer and back-fill fresh.
-      liveSeqs.current = new Set();
+      liveEventsRef.current = [];
       setLiveEvents([]);
       await fetchHistory(context);
     };
@@ -215,13 +220,16 @@ export function useFanOutProgress({
           return false;
         }
 
-        const seq = eventSequence(event);
-        if (liveSeqs.current.has(seq)) {
+        const next = mergeEventWindowBySequence(
+          liveEventsRef.current,
+          [event],
+          FAILOVER_HISTORY_WINDOW_SIZE
+        );
+        if (next === liveEventsRef.current) {
           return false;
         }
-
-        liveSeqs.current.add(seq);
-        setLiveEvents((previous) => [...previous, event]);
+        liveEventsRef.current = next;
+        setLiveEvents(next);
         return true;
       },
       { onResync }
@@ -234,7 +242,7 @@ export function useFanOutProgress({
   }, [enabled, manager, namespace, fetchHistory, workflowId]);
 
   const events = useMemo(
-    () => mergeEventsBySequence(historyEvents, liveEvents),
+    () => mergeEventWindowBySequence(historyEvents, liveEvents, FAILOVER_HISTORY_WINDOW_SIZE),
     [historyEvents, liveEvents]
   );
 
@@ -269,7 +277,7 @@ async function requestHistory(
   recovery?: ResyncContext
 ): Promise<HistoryFetchResult> {
   try {
-    const events = await client.getHistory(workflowId, {
+    const events = await fetchFailoverHistoryTail(client, workflowId, {
       namespace,
       signal: controller.signal,
     });

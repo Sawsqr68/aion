@@ -5,15 +5,16 @@ import { type EventSubscriptionManager, useBatchedEventSubscription } from '@/fe
 import { isSelectedNamespace, useNamespace } from '@/features/namespace';
 import type { ResyncHandler, WorkflowEventSubscriptionFilter } from '@/lib/api';
 import type { Event, WorkflowId } from '@/types';
+import { updateTimelineProjection, type TimelineProjection } from '../lib/incrementalTimeline';
 import {
   eventSequence,
   isTerminalWorkflowEvent,
   mergeEventsBySequence,
-  projectTimeline,
+  mergeEventWindowBySequence,
   terminalOutcomeForMergedEvents,
 } from '../lib/timeline';
 import type { LifecycleOutcome, TimelineEntry } from '../types';
-import { workflowHistoryQueryKey } from './useWorkflowHistory';
+import { HISTORY_WINDOW_SIZE, workflowHistoryQueryKey } from './useWorkflowHistory';
 
 export type LiveWorkflowEventsOptions = {
   enabled?: boolean;
@@ -47,6 +48,10 @@ export function useLiveWorkflowEvents({
   }));
   const liveEvents = liveState.identityKey === identityKey ? liveState.events : [];
   const currentIdentity = useRef(identityKey);
+  const projectionRef = useRef<{ identityKey: string; value: TimelineProjection | null }>({
+    identityKey,
+    value: null,
+  });
   currentIdentity.current = identityKey;
 
   useEffect(() => {
@@ -55,21 +60,32 @@ export function useLiveWorkflowEvents({
     );
   }, [identityKey]);
 
+  const historyWindow = useMemo(() => mergeEventsBySequence(history, []), [history]);
   const mergedEvents = useMemo(
-    () => mergeEventsBySequence(history, liveEvents),
-    [history, liveEvents]
+    () =>
+      mergeEventWindowBySequence(
+        historyWindow,
+        liveEvents,
+        historyWindow.length + HISTORY_WINDOW_SIZE
+      ),
+    [historyWindow, liveEvents]
   );
   const terminalOutcome = useMemo(
     () => terminalOutcomeForMergedEvents(mergedEvents),
     [mergedEvents]
   );
   const lastSeenSequence = useMemo(() => latestSequence(mergedEvents), [mergedEvents]);
-  const timeline = useMemo(() => projectTimeline(mergedEvents), [mergedEvents]);
+  const timeline = useMemo(() => {
+    const cached = projectionRef.current;
+    const previous = cached.identityKey === identityKey ? cached.value : null;
+    const value = updateTimelineProjection(previous, mergedEvents);
+    projectionRef.current = { identityKey, value };
+    return value.timeline;
+  }, [identityKey, mergedEvents]);
   const subscriptionFilter = useMemo<WorkflowEventSubscriptionFilter | null>(() => {
     if (!enabled || !isSelectedNamespace(selectedNamespace) || terminalOutcome !== null) {
       return null;
     }
-
     return { kind: 'workflow', namespace: selectedNamespace, workflowId };
   }, [enabled, selectedNamespace, terminalOutcome, workflowId]);
 
@@ -85,9 +101,10 @@ export function useLiveWorkflowEvents({
       }
       setLiveState((current) => ({
         identityKey,
-        events: mergeEventsBySequence(
+        events: mergeEventWindowBySequence(
           current.identityKey === identityKey ? current.events : [],
-          events
+          events,
+          HISTORY_WINDOW_SIZE
         ),
       }));
     },
@@ -98,18 +115,15 @@ export function useLiveWorkflowEvents({
           void queryClient.cancelQueries({ queryKey });
         };
         context.signal.addEventListener('abort', cancelStaleQuery, { once: true });
-
         try {
           await queryClient.invalidateQueries({ queryKey }, { throwOnError: true });
         } finally {
           context.signal.removeEventListener('abort', cancelStaleQuery);
         }
       }
-
       if (!context.isCurrent()) {
         return;
       }
-
       await onResync?.(context);
     },
   });
@@ -124,8 +138,6 @@ export function useLiveWorkflowEvents({
 }
 
 function latestSequence(events: readonly Event[]): number | undefined {
-  return events.reduce<number | undefined>((latest, event) => {
-    const sequence = eventSequence(event);
-    return latest === undefined || sequence > latest ? sequence : latest;
-  }, undefined);
+  const latest = events.at(-1);
+  return latest === undefined ? undefined : eventSequence(latest);
 }
