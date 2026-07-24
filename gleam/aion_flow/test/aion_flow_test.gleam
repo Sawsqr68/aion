@@ -361,7 +361,8 @@ pub fn workflow_all_single_failure_fails_collection_test() {
 }
 
 pub fn workflow_race_first_success_wins_and_loser_is_cancelled_test() {
-  let before = query.recorded_observations()
+  let assert Ok(env) = testing.new()
+  let before = testing.recorded_observations(env)
   let activities = [
     charge_activity("slow-charge-payment", "order-race-slow"),
     charge_activity("charge-payment", "order-race-fast"),
@@ -372,12 +373,13 @@ pub fn workflow_race_first_success_wins_and_loser_is_cancelled_test() {
     Ok(ChargeReceipt(id: "receipt-order-race-fast", approved: True)),
   )
 
-  query.recorded_observations()
+  testing.recorded_observations(env)
   |> should.equal(increment_count(before))
 }
 
 pub fn workflow_race_first_failure_wins_test() {
-  let before = query.recorded_observations()
+  let assert Ok(env) = testing.new()
+  let before = testing.recorded_observations(env)
   let activities = [
     charge_activity("race-fail-fast", "order-race-fail"),
     charge_activity("charge-payment", "order-race-loser"),
@@ -388,7 +390,7 @@ pub fn workflow_race_first_failure_wins_test() {
     Error(error.Terminal(message: "race failed first", details: "")),
   )
 
-  query.recorded_observations()
+  testing.recorded_observations(env)
   |> should.equal(increment_count(before))
 }
 
@@ -561,8 +563,9 @@ pub fn query_decode_failure_is_typed_data_test() {
 }
 
 pub fn query_dispatch_records_no_observation_test() {
+  let assert Ok(env) = testing.new()
   let state = ChargeReceipt(id: "receipt-no-event", approved: True)
-  let before = query.recorded_observations()
+  let before = testing.recorded_observations(env)
 
   query.handler("no-event-state", charge_receipt_codec(), fn() { state })
   |> should.equal(Ok(Nil))
@@ -570,12 +573,13 @@ pub fn query_dispatch_records_no_observation_test() {
   query.dispatch("no-event-state", charge_receipt_codec())
   |> should.equal(Ok(state))
 
-  query.recorded_observations()
+  testing.recorded_observations(env)
   |> should.equal(before)
 }
 
 pub fn workflow_spawn_returns_typed_child_handle_and_records_started_test() {
-  let before = query.recorded_observations()
+  let assert Ok(env) = testing.new()
+  let before = testing.recorded_observations(env)
   let request = ChargeRequest(order_id: "order-child-spawn", cents: 2500)
 
   case
@@ -603,7 +607,7 @@ pub fn workflow_spawn_returns_typed_child_handle_and_records_started_test() {
     Error(_) -> should.fail()
   }
 
-  query.recorded_observations()
+  testing.recorded_observations(env)
   |> should.equal(increment_count(before))
 }
 
@@ -809,8 +813,8 @@ pub fn canonical_example_workflow_runs_under_harness_test() {
 }
 
 fn increment_count(
-  count: Result(Int, error.QueryError),
-) -> Result(Int, error.QueryError) {
+  count: Result(Int, count_error),
+) -> Result(Int, count_error) {
   case count {
     Ok(value) -> Ok(value + 1)
     Error(error) -> Error(error)

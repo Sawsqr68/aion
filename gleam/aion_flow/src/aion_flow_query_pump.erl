@@ -16,7 +16,9 @@
 %% This module is plain Erlang because it is the only place in the package
 %% that can catch exceptions: a query handler raise must NEVER crash the
 %% workflow process, and reply failures (a late reply after the caller timed
-%% out) are non-fatal by design. `service/1` always returns normally.
+%% out) are non-fatal by design. Diagnostics cross the engine's non-durable
+%% tracing tap; query handling never writes workflow history. `service/1`
+%% always returns normally.
 %%
 %% `aion_flow_ffi` resolves to the engine's NIF registry namespace in
 %% production and to the in-process test double under `gleam test`; this
@@ -25,6 +27,11 @@
 -module(aion_flow_query_pump).
 
 -export([register/2, service/1]).
+
+-define(MAX_PAYLOAD_PREFIX_BYTES, 256).
+-define(MAX_REASON_BYTES, 512).
+-define(MAX_STACKTRACE_BYTES, 1024).
+-define(MAX_DIAGNOSTIC_BYTES, 2048).
 
 %% Store a query handler fun in the workflow process dictionary under the
 %% engine-contract key `{aion_query_handler, Name}`, where the engine's
@@ -50,16 +57,18 @@ service(Payload) when is_binary(Payload) ->
             case scan_name(Payload) of
                 {ok, Name} ->
                     run_handler(QueryId, Name);
-                error ->
+                {error, Reason} ->
+                    report_malformed(Payload, Reason),
                     reply_error(
                         QueryId,
-                        <<"malformed query sentinel: missing name field in ", Payload/binary>>
+                        <<"malformed query sentinel: ", (reason_binary(Reason))/binary>>
                     )
             end;
-        error ->
+        {error, Reason} ->
             %% Without a query id there is no reply channel to fail onto;
             %% the engine-side caller observes its configured timeout. The
             %% pump must keep the workflow alive regardless.
+            report_malformed(Payload, Reason),
             nil
     end.
 
@@ -72,13 +81,22 @@ run_handler(QueryId, Name) ->
             );
         Handler when is_function(Handler) ->
             try Handler(QueryId) of
-                %% The handler replies through `reply_query` itself and
-                %% returns that result. A failed reply ({error, _}: late
-                %% reply after caller timeout, unknown query id) is
-                %% non-fatal — the caller already stopped waiting.
-                _ReplyOutcome -> nil
+                {ok, _Confirmation} -> nil;
+                {error, Reason} ->
+                    report_reply_failure(<<"reply_query">>, QueryId, Reason),
+                    nil;
+                Other ->
+                    report_reply_failure(<<"reply_query_unexpected_outcome">>, QueryId, Other),
+                    nil
             catch
                 Class:Reason ->
+                    report_reply_exception(
+                        <<"reply_query_exception">>,
+                        QueryId,
+                        Class,
+                        Reason,
+                        <<"aion_flow_query_pump:run_handler/2">>
+                    ),
                     reply_error(QueryId, describe_exception(Class, Reason))
             end;
         _NotAFun ->
@@ -97,10 +115,94 @@ run_handler(QueryId, Name) ->
 reply_error(QueryId, Message) ->
     try aion_flow_ffi:reply_query_error(QueryId, Message) of
         {ok, _Confirmation} -> nil;
-        {error, _Reason} -> nil
+        {error, Reason} ->
+            report_reply_failure(<<"reply_query_error">>, QueryId, Reason),
+            nil;
+        Other ->
+            report_reply_failure(<<"reply_query_error_unexpected_outcome">>, QueryId, Other),
+            nil
+    catch
+        Class:Reason ->
+            report_reply_exception(
+                <<"reply_query_error_exception">>,
+                QueryId,
+                Class,
+                Reason,
+                <<"aion_flow_query_pump:reply_error/2">>
+            ),
+            nil
+    end.
+
+report_malformed(Payload, Reason) ->
+    Prefix = bounded_binary(Payload, ?MAX_PAYLOAD_PREFIX_BYTES),
+    report_diagnostic(
+        <<"malformed_query">>,
+        <<"payload_bytes=", (integer_to_binary(byte_size(Payload)))/binary,
+            " prefix=", Prefix/binary, " decode_reason=", (reason_binary(Reason))/binary>>
+    ).
+
+report_reply_failure(Operation, QueryId, Reason) ->
+    report_diagnostic(
+        <<"query_reply_failed">>,
+        <<"operation=", Operation/binary, " query_id=",
+            (bounded_binary(QueryId, ?MAX_PAYLOAD_PREFIX_BYTES))/binary, " reason=",
+            (bounded_binary(describe_reason(Reason), ?MAX_REASON_BYTES))/binary>>
+    ).
+
+report_reply_exception(Operation, QueryId, Class, Reason, CatchSite) ->
+    report_diagnostic(
+        <<"query_reply_exception">>,
+        <<"operation=", Operation/binary, " query_id=",
+            (bounded_binary(QueryId, ?MAX_PAYLOAD_PREFIX_BYTES))/binary, " class=",
+            (reason_binary(Class))/binary, " reason=",
+            (bounded_binary(describe_reason(Reason), ?MAX_REASON_BYTES))/binary, " stacktrace=",
+            (describe_exception_trace(Reason, CatchSite))/binary>>
+    ).
+
+%% The engine implementation forwards this message to its existing tracing
+%% subscriber. The call is itself isolated because diagnostics must never
+%% weaken the query pump's liveness contract.
+report_diagnostic(Category, Message) ->
+    try aion_flow_ffi:report_query_diagnostic(
+        Category, bounded_binary(Message, ?MAX_DIAGNOSTIC_BYTES)
+    ) of
+        _Outcome -> nil
     catch
         _Class:_Reason -> nil
     end.
+
+reason_binary(Reason) when is_atom(Reason) ->
+    bounded_binary(atom_to_binary(Reason, utf8), ?MAX_REASON_BYTES);
+reason_binary(Reason) ->
+    bounded_binary(describe_reason(Reason), ?MAX_REASON_BYTES).
+
+%% beamr 0.16.2 executes `Class:Reason` catches correctly, but Erlang's
+%% `Class:Reason:Stacktrace` form emits `build_stacktrace`, whose heap
+%% allocation does not collect or retry. A handler raise with one free heap
+%% word therefore kills the workflow before its error reply. Gleam panic
+%% reasons already carry their source frame; other exception terms retain the
+%% exact pump catch boundary instead of fabricating unavailable VM frames.
+describe_exception_trace(
+        #{module := Module, function := Function, file := File, line := Line}, CatchSite
+    )
+        when is_binary(Module), is_binary(Function), is_binary(File), is_integer(Line) ->
+    SourceFrame = <<
+        (bounded_binary(Module, ?MAX_REASON_BYTES))/binary,
+        ":",
+        (bounded_binary(Function, ?MAX_REASON_BYTES))/binary,
+        "@",
+        (bounded_binary(File, ?MAX_REASON_BYTES))/binary,
+        ":",
+        (integer_to_binary(Line))/binary
+    >>,
+    bounded_binary(<<SourceFrame/binary, ";", CatchSite/binary>>, ?MAX_STACKTRACE_BYTES);
+describe_exception_trace(_Reason, CatchSite) ->
+    bounded_binary(CatchSite, ?MAX_STACKTRACE_BYTES).
+
+bounded_binary(Binary, Limit) when byte_size(Binary) =< Limit -> Binary;
+bounded_binary(Binary, Limit) ->
+    <<Prefix:Limit/binary, _Rest/binary>> = Binary,
+    Prefix.
 
 describe_exception(Class, Reason) ->
     <<"query handler raised ", (atom_to_binary(Class, utf8))/binary, ": ",
@@ -131,13 +233,21 @@ describe_reason(_Reason) ->
 %% therefore never occurs inside a value, so scanning for the literal key
 %% pattern is exact. Key order is irrelevant to the scan.
 
-scan_query_id(<<"\"query_id\":\"", Rest/binary>>) -> unescape(Rest, <<>>);
+scan_query_id(<<"\"query_id\":\"", Rest/binary>>) ->
+    case unescape(Rest, <<>>) of
+        {ok, QueryId} -> {ok, QueryId};
+        error -> {error, malformed_query_id}
+    end;
 scan_query_id(<<_Byte, Tail/binary>>) -> scan_query_id(Tail);
-scan_query_id(<<>>) -> error.
+scan_query_id(<<>>) -> {error, missing_query_id}.
 
-scan_name(<<"\"name\":\"", Rest/binary>>) -> unescape(Rest, <<>>);
+scan_name(<<"\"name\":\"", Rest/binary>>) ->
+    case unescape(Rest, <<>>) of
+        {ok, Name} -> {ok, Name};
+        error -> {error, malformed_name}
+    end;
 scan_name(<<_Byte, Tail/binary>>) -> scan_name(Tail);
-scan_name(<<>>) -> error.
+scan_name(<<>>) -> {error, missing_name}.
 
 %% Decode a JSON string value up to its closing quote, resolving the escape
 %% sequences serde_json emits (`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`,

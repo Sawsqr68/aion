@@ -3,7 +3,6 @@
 import aion/codec.{type Codec}
 import aion/error
 import aion/internal/ffi
-import gleam/int
 import gleam/json
 
 /// Register a typed read-only query handler with AT's query service.
@@ -63,25 +62,6 @@ pub fn dispatch(
       case value_codec.decode(raw_payload) {
         Ok(value) -> Ok(value)
         Error(decode_error) -> Error(error.QueryDecodeFailed(decode_error))
-      }
-    }
-    Error(raw_error) -> Error(query_error(raw_error))
-  }
-}
-
-/// Return the test/engine observation count reported by the backing query
-/// service.
-///
-/// Production engines may expose this as diagnostic data; the shipped test double
-/// uses it to assert that query dispatch does not append recorded observations or
-/// history events.
-pub fn recorded_observations() -> Result(Int, error.QueryError) {
-  case ffi.query_recorded_observations() {
-    Ok(raw_count) -> {
-      case int.parse(raw_count) {
-        Ok(count) -> Ok(count)
-        Error(_) ->
-          Error(error.QueryEngineFailure("invalid query observation count"))
       }
     }
     Error(raw_error) -> Error(query_error(raw_error))

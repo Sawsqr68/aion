@@ -15,6 +15,7 @@ import aion/internal/ffi
 import aion/testing/clock
 import aion/testing/mock
 import aion/testing/replay
+import gleam/int
 
 /// Process-scoped test environment handle.
 ///
@@ -94,6 +95,22 @@ pub fn mock_child(
 pub fn observations(_env: TestEnv) -> Result(String, error.EngineError) {
   case ffi.testing_observations() {
     Ok(raw) -> Ok(raw)
+    Error(raw_error) -> Error(error.EngineFailure(raw_error))
+  }
+}
+
+/// Return the observation count held by the in-process test double.
+///
+/// This diagnostic is test-only because production engines do not expose an
+/// observation-count host function.
+pub fn recorded_observations(_env: TestEnv) -> Result(Int, error.EngineError) {
+  case ffi.testing_recorded_observations() {
+    Ok(raw_count) -> {
+      case int.parse(raw_count) {
+        Ok(count) -> Ok(count)
+        Error(_) -> Error(error.EngineFailure("invalid observation count"))
+      }
+    }
     Error(raw_error) -> Error(error.EngineFailure(raw_error))
   }
 }

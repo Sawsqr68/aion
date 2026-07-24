@@ -153,6 +153,10 @@ pub(super) fn engine_nif_entries() -> Vec<NifEntry> {
             Mfa::new(FFI_MODULE, "reply_query_error", 2),
             super::nif_query::reply_query_error,
         ),
+        NifEntry::new(
+            Mfa::new(FFI_MODULE, "report_query_diagnostic", 2),
+            super::nif_query_diagnostic::report_query_diagnostic,
+        ),
         NifEntry::dirty(
             Mfa::new(FFI_MODULE, "dispatch_query", 2),
             super::nif_query::dispatch_query,
@@ -192,14 +196,57 @@ pub(super) fn engine_nif_entries() -> Vec<NifEntry> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use beamr::native::ProcessContext;
     use beamr::term::Term;
     use beamr::term::binary_ref::BinaryRef;
     use beamr::term::boxed::Tuple;
 
-    use super::{NOT_YET_IMPLEMENTED, dispatch_activity, engine_nif_entries, not_yet_implemented};
+    use super::{
+        FFI_MODULE, NOT_YET_IMPLEMENTED, dispatch_activity, engine_nif_entries, not_yet_implemented,
+    };
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    const TEST_DOUBLE_SOURCE: &str =
+        include_str!("../../../../gleam/aion_flow/test/aion_flow_ffi.erl");
+
+    fn test_double_engine_mfas(
+        source: &str,
+    ) -> Result<BTreeSet<String>, Box<dyn std::error::Error>> {
+        let export_marker = "-export([";
+        let export_start = source
+            .find(export_marker)
+            .ok_or("test double is missing an Erlang export list")?;
+        let after_marker = &source[export_start + export_marker.len()..];
+        let export_end = after_marker
+            .find("]).")
+            .ok_or("test double export list is not terminated")?;
+        let export_body = &after_marker[..export_end];
+        let mut mfas = BTreeSet::new();
+
+        for line in export_body.lines() {
+            let export = line.trim().trim_end_matches(',');
+            if export.is_empty() {
+                continue;
+            }
+            let (function, arity_text) = export
+                .split_once('/')
+                .ok_or_else(|| format!("invalid test-double export `{export}`"))?;
+            // `testing_*` entries are harness controls, not production SDK
+            // bindings. Every other export must have an engine registration.
+            if function.starts_with("testing_") {
+                continue;
+            }
+            let arity = arity_text
+                .parse::<u8>()
+                .map_err(|error| format!("invalid arity in `{export}`: {error}"))?;
+            mfas.insert(format!("{FFI_MODULE}:{function}/{arity}"));
+        }
+
+        Ok(mfas)
+    }
 
     fn decode_result_tuple(term: Term) -> Result<(String, String), Box<dyn std::error::Error>> {
         let tuple = Tuple::new(term).ok_or("result should be a tuple")?;
@@ -247,7 +294,7 @@ mod tests {
             .map(|entry| entry.mfa.display())
             .collect::<std::collections::BTreeSet<_>>();
 
-        assert_eq!(entries.len(), 23);
+        assert_eq!(entries.len(), 24);
         assert_eq!(unique.len(), entries.len());
         for normal_nif in [
             "dispatch_activity",
@@ -263,6 +310,7 @@ mod tests {
             "register_query",
             "reply_query",
             "reply_query_error",
+            "report_query_diagnostic",
             "spawn_child",
             "await_child",
             "collect_all",
@@ -292,6 +340,7 @@ mod tests {
                         | "register_query"
                         | "reply_query"
                         | "reply_query_error"
+                        | "report_query_diagnostic"
                         | "spawn_child"
                         | "await_child"
                         | "collect_all"
@@ -325,6 +374,18 @@ mod tests {
                 "{name} should not use the stub"
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn engine_and_test_double_export_identical_mfa_sets() -> TestResult {
+        let engine_mfas = engine_nif_entries()
+            .into_iter()
+            .map(|entry| entry.mfa.display())
+            .collect::<BTreeSet<_>>();
+        let test_double_mfas = test_double_engine_mfas(TEST_DOUBLE_SOURCE)?;
+
+        assert_eq!(engine_mfas, test_double_mfas);
         Ok(())
     }
 

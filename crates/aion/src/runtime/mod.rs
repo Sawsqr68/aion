@@ -33,6 +33,7 @@ pub mod nif_context;
 mod nif_continue_as_new;
 pub(crate) mod nif_determinism;
 mod nif_query;
+mod nif_query_diagnostic;
 mod nif_query_mailbox;
 mod nif_query_pump;
 mod nif_signal;

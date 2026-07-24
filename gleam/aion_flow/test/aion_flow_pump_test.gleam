@@ -40,6 +40,9 @@ fn scripted_await() -> Result(String, String)
 @external(erlang, "aion_flow_ffi", "testing_query_replies")
 fn testing_query_replies() -> Result(String, String)
 
+@external(erlang, "aion_flow_ffi", "testing_query_diagnostics")
+fn testing_query_diagnostics() -> Result(String, String)
+
 @external(erlang, "aion_flow_ffi", "testing_enqueue_collect_result")
 fn enqueue_collect(result: Result(String, String)) -> Result(String, String)
 
@@ -51,6 +54,11 @@ fn fresh_env() -> Nil {
 fn query_replies() -> String {
   let assert Ok(replies) = testing_query_replies()
   replies
+}
+
+fn query_diagnostics() -> String {
+  let assert Ok(diagnostics) = testing_query_diagnostics()
+  diagnostics
 }
 
 fn reply_with(payload: String) -> fn(String) -> Result(String, String) {
@@ -125,6 +133,22 @@ pub fn handler_raise_replies_error_and_workflow_survives_test() {
   replies
   |> string.contains("handler exploded")
   |> should.be_true()
+
+  let diagnostics = query_diagnostics()
+  diagnostics
+  |> string.contains("query_reply_exception:operation=reply_query_exception")
+  |> should.be_true()
+  diagnostics
+  |> string.contains("class=error reason=handler exploded stacktrace=")
+  |> should.be_true()
+  diagnostics
+  |> string.contains(
+    "aion_flow_pump_test:handler_raise_replies_error_and_workflow_survives_test@",
+  )
+  |> should.be_true()
+  diagnostics
+  |> string.contains(";aion_flow_query_pump:run_handler/2")
+  |> should.be_true()
 }
 
 pub fn missing_handler_replies_error_and_workflow_survives_test() {
@@ -157,6 +181,11 @@ pub fn failed_reply_after_caller_timeout_is_non_fatal_test() {
 
   query_replies()
   |> should.equal("[\"failed:dropped-1\"]")
+  query_diagnostics()
+  |> string.contains(
+    "query_reply_failed:operation=reply_query query_id=dropped-1 reason=unknown_query_id",
+  )
+  |> should.be_true()
 }
 
 pub fn failed_error_reply_after_caller_timeout_is_non_fatal_test() {
@@ -171,6 +200,61 @@ pub fn failed_error_reply_after_caller_timeout_is_non_fatal_test() {
 
   query_replies()
   |> should.equal("[\"failed:dropped-2\"]")
+  query_diagnostics()
+  |> string.contains(
+    "query_reply_failed:operation=reply_query_error query_id=dropped-2 reason=unknown_query_id",
+  )
+  |> should.be_true()
+}
+
+pub fn reply_exception_is_diagnosed_and_falls_back_to_error_reply_test() {
+  fresh_env()
+  ffi.register_query_handler("pump-reply-exception", reply_with("{}"))
+  enqueue(Error(
+    "aion_query:{\"query_id\":\"exception-1\",\"name\":\"pump-reply-exception\"}",
+  ))
+  enqueue(Ok("survived"))
+
+  pump.run(scripted_await)
+  |> should.equal(Ok("survived"))
+
+  query_replies()
+  |> string.contains("error:exception-1:query handler raised error")
+  |> should.be_true()
+  let diagnostics = query_diagnostics()
+  diagnostics
+  |> string.contains("operation=reply_query_exception query_id=exception-1 class=error")
+  |> should.be_true()
+  diagnostics
+  |> string.contains(
+    "reason=simulated reply exception stacktrace=aion_flow_query_pump:run_handler/2",
+  )
+  |> should.be_true()
+}
+
+pub fn error_reply_exception_is_diagnosed_and_non_fatal_test() {
+  fresh_env()
+  enqueue(Error(
+    "aion_query:{\"query_id\":\"error-exception-1\",\"name\":\"ghost\"}",
+  ))
+  enqueue(Ok("survived"))
+
+  pump.run(scripted_await)
+  |> should.equal(Ok("survived"))
+
+  query_replies()
+  |> should.equal("[]")
+  let diagnostics = query_diagnostics()
+  diagnostics
+  |> string.contains(
+    "operation=reply_query_error_exception query_id=error-exception-1 class=error",
+  )
+  |> should.be_true()
+  diagnostics
+  |> string.contains(
+    "reason=simulated error reply exception stacktrace=aion_flow_query_pump:reply_error/2",
+  )
+  |> should.be_true()
 }
 
 pub fn sentinel_name_with_escaped_characters_resolves_handler_test() {
@@ -190,7 +274,8 @@ pub fn sentinel_name_with_escaped_characters_resolves_handler_test() {
 
 pub fn malformed_sentinel_without_query_id_is_skipped_test() {
   fresh_env()
-  enqueue(Error("aion_query:not-json"))
+  let payload = string.repeat("a", 300)
+  enqueue(Error("aion_query:" <> payload))
   enqueue(Ok("survived"))
 
   pump.run(scripted_await)
@@ -200,6 +285,20 @@ pub fn malformed_sentinel_without_query_id_is_skipped_test() {
   // caller times out and the workflow keeps running.
   query_replies()
   |> should.equal("[]")
+
+  let diagnostics = query_diagnostics()
+  diagnostics
+  |> string.contains("payload_bytes=300")
+  |> should.be_true()
+  diagnostics
+  |> string.contains("prefix=" <> string.repeat("a", 256))
+  |> should.be_true()
+  diagnostics
+  |> string.contains(string.repeat("a", 257))
+  |> should.be_false()
+  diagnostics
+  |> string.contains("decode_reason=missing_query_id")
+  |> should.be_true()
 }
 
 pub fn sentinel_missing_name_replies_malformed_error_test() {

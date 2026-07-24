@@ -18,13 +18,14 @@
     start_timer/2,
     cancel_timer/1,
     with_timeout/2,
+    continue_as_new/1,
     receive_signal/2,
     send_signal/3,
     register_query/2,
     reply_query/2,
     reply_query_error/2,
+    report_query_diagnostic/2,
     dispatch_query/2,
-    query_recorded_observations/0,
     spawn_child/3,
     await_child/1,
     collect_all/2,
@@ -36,7 +37,9 @@
     testing_register_child_mock/2,
     testing_clear_observations/0,
     testing_observations/0,
+    testing_recorded_observations/0,
     testing_query_replies/0,
+    testing_query_diagnostics/0,
     testing_enqueue_collect_result/1,
     testing_last_activity_config/1
 ]).
@@ -130,6 +133,14 @@ with_timeout(Duration, Operation) ->
         _ -> {ok, Operation()}
     end.
 
+%% The real NIF records a terminal and terminates the current process, allowing
+%% the lifecycle monitor to start the replacement run. The in-process harness
+%% cannot model that lifecycle boundary, so it records the encoded input as an
+%% observation and returns `Ok(Nil)` for wrapper-level contract tests.
+continue_as_new(Input) ->
+    observe(<<"continue_as_new:", Input/binary>>),
+    {ok, nil}.
+
 receive_signal(<<"malformed-signal">>, _Config) ->
     observe(<<"signal_receive:malformed-signal">>),
     {ok, <<"{\"order_id\":1,\"cents\":700}">>};
@@ -169,6 +180,8 @@ register_query(Name, _Config) ->
 reply_query(<<"dropped-", _/binary>> = QueryId, _Payload) ->
     record_query_reply(<<"failed:", QueryId/binary>>),
     {error, <<"unknown_query_id:", QueryId/binary>>};
+reply_query(<<"exception-", _/binary>>, _Payload) ->
+    erlang:error(#{message => <<"simulated reply exception">>});
 reply_query(QueryId, Payload) ->
     record_query_reply(<<"ok:", QueryId/binary, ":", Payload/binary>>),
     {ok, Payload}.
@@ -176,9 +189,17 @@ reply_query(QueryId, Payload) ->
 reply_query_error(<<"dropped-", _/binary>> = QueryId, _Message) ->
     record_query_reply(<<"failed:", QueryId/binary>>),
     {error, <<"unknown_query_id:", QueryId/binary>>};
+reply_query_error(<<"error-exception-", _/binary>>, _Message) ->
+    erlang:error(#{message => <<"simulated error reply exception">>});
 reply_query_error(QueryId, Message) ->
     record_query_reply(<<"error:", QueryId/binary, ":", Message/binary>>),
     {ok, <<"replied">>}.
+
+%% Mirrors the production tap into `tracing`: diagnostics remain process-local
+%% test state and are deliberately separate from durable observations.
+report_query_diagnostic(Category, Message) ->
+    record_query_diagnostic(<<Category/binary, ":", Message/binary>>),
+    {ok, <<"reported">>}.
 
 dispatch_query(Name, _Config) ->
     case erlang:get({aion_query_registered, self(), Name}) of
@@ -193,7 +214,7 @@ dispatch_query(Name, _Config) ->
             end
     end.
 
-query_recorded_observations() ->
+testing_recorded_observations() ->
     {ok, integer_to_binary(length(observations()))}.
 
 %% Registered child doubles take precedence over the legacy hardcoded
@@ -333,6 +354,9 @@ testing_last_activity_config(Name) ->
 testing_query_replies() ->
     {ok, json_string_array(query_replies())}.
 
+testing_query_diagnostics() ->
+    {ok, json_string_array(query_diagnostics())}.
+
 legacy_run_activity(<<"charge-payment">>, Input, _Config) ->
     OrderId = extract_string(Input, <<"order_id">>),
     {ok, <<"{\"id\":\"receipt-", OrderId/binary, "\",\"approved\":true}">>};
@@ -393,6 +417,15 @@ query_replies() ->
 
 record_query_reply(Entry) ->
     erlang:put({aion_query_replies, self()}, query_replies() ++ [Entry]).
+
+query_diagnostics() ->
+    case erlang:get({aion_query_diagnostics, self()}) of
+        undefined -> [];
+        Existing -> Existing
+    end.
+
+record_query_diagnostic(Entry) ->
+    erlang:put({aion_query_diagnostics, self()}, query_diagnostics() ++ [Entry]).
 
 earliest_activity([First | Rest]) ->
     lists:foldl(
@@ -511,6 +544,7 @@ clear_process_state() ->
 is_aion_key({aion_signal, Pid, _Name}) -> Pid =:= self();
 is_aion_key({aion_query_registered, Pid, _Name}) -> Pid =:= self();
 is_aion_key({aion_query_replies, Pid}) -> Pid =:= self();
+is_aion_key({aion_query_diagnostics, Pid}) -> Pid =:= self();
 is_aion_key({aion_query_counter, Pid}) -> Pid =:= self();
 %% The production handler key carries no pid: the process dictionary is
 %% per-process already (engine contract: {aion_query_handler, NameBinary}).

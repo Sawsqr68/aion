@@ -20,7 +20,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// Pinned digest of the committed SDK closure (names, lengths, bytes, in
 /// canonical order). A silent edit to the embedded bundle fails here; a
 /// deliberate regeneration updates this pin in the same commit.
-const BUNDLE_CHECKSUM: &str = "a9572a8d5264b557c0c6c2f78a68febb7b09a0370ac079c902ee5f04cb81cb7b";
+const BUNDLE_CHECKSUM: &str = "678ba48d3934dd9442344f33bd934ebeb92e3c13aad2a3b0c8cbaa4724b4e9b7";
 const BUNDLE_MODULE_COUNT: usize = 46;
 const BUNDLE_SDK_VERSION: &str = "0.7.0";
 
@@ -86,11 +86,11 @@ fn assembling_twice_yields_byte_identical_archives() -> TestResult {
 /// timestamp, environment read, or ordering instability anywhere in the
 /// assembly path changes these bytes and fails this test. A deliberate SDK
 /// closure regeneration updates this pin in the same commit, exactly like
-/// `BUNDLE_CHECKSUM`. Last updated for the `aion_flow` error-mapper change
-/// (failure messages carry the underlying reason), which regenerated the
-/// embedded closure.
+/// `BUNDLE_CHECKSUM`. Last updated for the beamr-safe query exception catch,
+/// bounded source/catch-site traces, and removal of the unsupported production
+/// observation-count API, which regenerated the embedded closure.
 const FIXED_INPUT_ARCHIVE_SHA256: &str =
-    "92193c67b047eba3fe3eb62b3ca09cfd1bf48c6d39c27889f58e4a30a6255a15";
+    "3fb65554390ead1a8833fa161f452bb73edce05b969e57f4c1d46e76d77c070f";
 
 /// Proof 1b — cross-process determinism: a fully fixed input assembles to
 /// pinned archive bytes.

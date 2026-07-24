@@ -93,9 +93,6 @@ pub fn reply_query_error(
 @external(erlang, "aion_flow_ffi", "dispatch_query")
 pub fn dispatch_query(name: String, config: String) -> Result(String, String)
 
-@external(erlang, "aion_flow_ffi", "query_recorded_observations")
-pub fn query_recorded_observations() -> Result(String, String)
-
 @external(erlang, "aion_flow_ffi", "spawn_child")
 pub fn spawn_child(
   workflow_name: String,
@@ -147,6 +144,9 @@ pub fn testing_clear_observations() -> Result(String, String)
 
 @external(erlang, "aion_flow_ffi", "testing_observations")
 pub fn testing_observations() -> Result(String, String)
+
+@external(erlang, "aion_flow_ffi", "testing_recorded_observations")
+pub fn testing_recorded_observations() -> Result(String, String)
 
 /// Store a query handler fun in the workflow process dictionary under the
 /// engine-contract key `{aion_query_handler, Name}`. The Erlang helper owns
