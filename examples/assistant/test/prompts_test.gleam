@@ -31,33 +31,35 @@ pub fn first_round_teaches_ground_truth_over_memory_test() {
   contains(prompt, "from memory")
   contains(prompt, ".assistant/resources/")
   contains(prompt, "ENVIRONMENT.md")
-  contains(prompt, "SCAFFOLD.md")
-  contains(prompt, "docs/GETTING-STARTED.md")
-  contains(prompt, "docs/guides/")
-  contains(prompt, "gleam/aion_flow/src/aion/")
+  contains(prompt, "AWL-AUTHORING.md")
+  contains(prompt, "AWL-REFERENCE.md")
+  contains(prompt, "WORKERS.md")
+  contains(prompt, "examples/awl-hello/awl_hello.awl")
+  contains(prompt, "crates/aion-awl/tests/fixtures/rev2/**/valid/*.awl")
 }
 
-pub fn first_round_teaches_the_types_first_authoring_canon_test() {
+pub fn first_round_teaches_the_awl_authoring_canon_test() {
   let prompt = prompts.first_round(harness.base_input(), workspace())
-  contains(prompt, "examples/hello-world")
-  contains(prompt, "examples/agent-dev")
-  contains(prompt, "aion generate")
-  contains(prompt, "NEVER edit or format generated files")
-  contains(prompt, "workflow.toml")
+  contains(prompt, "AWL source (`.awl`) is the authoring truth")
+  contains(prompt, "aion awl check FILE.awl")
+  contains(prompt, "children/subflows")
+  contains(prompt, "shell workers are host-native")
+  prompt |> string.contains("aion_flow") |> should.be_false
+  prompt |> string.contains("gleam.toml") |> should.be_false
 }
 
-pub fn first_round_teaches_build_and_deploy_concretely_test() {
+pub fn first_round_teaches_direct_awl_deploy_and_run_test() {
   let prompt = prompts.first_round(harness.base_input(), workspace())
-  contains(prompt, "package <dir> --build")
-  contains(prompt, ".aion")
-  contains(prompt, "deploy")
-  contains(prompt, "start")
+  contains(prompt, "aion deploy FILE.awl")
+  contains(prompt, "aion run FILE.awl --input 'JSON'")
+  contains(prompt, "observe the durable run")
+  prompt |> string.contains("aion package") |> should.be_false
 }
 
 pub fn first_round_carries_the_honesty_rules_test() {
   let prompt = prompts.first_round(harness.base_input(), workspace())
   contains(prompt, "I have not verified this")
-  contains(prompt, "Never invent SDK surface")
+  contains(prompt, "Never invent AWL syntax or worker capability")
 }
 
 pub fn first_round_states_the_file_tool_confinement_test() {
