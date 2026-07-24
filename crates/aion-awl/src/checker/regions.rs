@@ -9,11 +9,12 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::Span;
 use crate::ast::{DeliveryVerb, DistributeStmt, Statement, Step};
-use crate::semantic::StepKind;
+use crate::semantic::{StepInfo, StepKind};
 
 use super::avail::defined_names;
 use super::context::{Ctx, Flow};
 use super::graph::collect_route_names;
+use super::statement_info::statement_infos;
 
 /// One matched per-item region: `open` is the `distribute`/`sequence` step,
 /// `close` the `collect` step, members the steps strictly between.
@@ -406,8 +407,20 @@ fn classify_step(ctx: &mut Ctx<'_>, step: &Step, subflow: Option<&str>, region: 
     } else {
         StepKind::Plain
     };
-    ctx.semantic
-        .step_kind(step.name_span, &step.name, kind, subflow, region);
+    let body = statement_infos(ctx, &step.body);
+    let failure = step
+        .on_failure
+        .as_ref()
+        .map(|on_failure| statement_infos(ctx, &on_failure.body));
+    ctx.semantic.record_step(StepInfo {
+        span: step.name_span,
+        name: step.name.clone(),
+        kind,
+        subflow: subflow.map(str::to_owned),
+        region: region.map(str::to_owned),
+        body,
+        failure,
+    });
     classify_statement_lists(ctx, step, subflow, region);
 }
 

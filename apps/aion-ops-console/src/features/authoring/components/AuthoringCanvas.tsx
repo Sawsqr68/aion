@@ -19,12 +19,11 @@ import { diagnosticsByStep } from '../lib/projection';
 import type { GraphProjection, LayoutRecord, ProjectionStep } from '../lib/projection-types';
 import { ParallelCanvasEdge } from './CanvasEdge';
 import { CanvasGestureControls } from './CanvasGestureControls';
-import { type CanvasNodeData, ChildCanvasNode, StepCanvasNode } from './CanvasNode';
+import { type CanvasNodeData, StepCanvasNode } from './CanvasNode';
 
 const NODE_WIDTH = 240;
 const STEP_HEIGHT = 140;
-const CHILD_HEIGHT = 120;
-const nodeTypes = { step: StepCanvasNode, child: ChildCanvasNode };
+const nodeTypes = { step: StepCanvasNode };
 const edgeTypes = { parallel: ParallelCanvasEdge };
 
 export type AuthoringCanvasProps = {
@@ -40,18 +39,17 @@ export type AuthoringCanvasProps = {
   mode?: 'edit' | 'run';
 };
 
-export function AuthoringCanvas({
-  path,
-  graph,
-  diagnostics,
-  documents,
-  routeTargets,
-  selectedStep,
-  onJumpToSpan,
-  onOpenDocument,
-  onGesture,
-  mode = 'edit',
-}: AuthoringCanvasProps) {
+export function AuthoringCanvas(props: AuthoringCanvasProps) {
+  const {
+    path,
+    graph,
+    diagnostics,
+    routeTargets,
+    selectedStep,
+    onJumpToSpan,
+    onGesture,
+    mode = 'edit',
+  } = props;
   const [layout, setLayout] = useState<LayoutRecord>({ positions: {} });
   const [expandedSubflows, setExpandedSubflows] = useState<ReadonlySet<string>>(new Set());
   const [layoutError, setLayoutError] = useState<string | null>(null);
@@ -114,11 +112,9 @@ export function AuthoringCanvas({
       projectFlow(
         graph,
         layout,
-        documents,
         diagnosticTones,
         selectedStep,
         onJumpToSpan,
-        onOpenDocument,
         proseEditingStep,
         setProseEditingStep,
         performGesture,
@@ -128,11 +124,9 @@ export function AuthoringCanvas({
       ),
     [
       diagnosticTones,
-      documents,
       graph,
       layout,
       onJumpToSpan,
-      onOpenDocument,
       performGesture,
       proseEditingStep,
       selectedStep,
@@ -242,11 +236,9 @@ export function AuthoringCanvas({
 function projectFlow(
   graph: GraphProjection,
   layout: LayoutRecord,
-  documents: readonly AwlDocument[],
   diagnosticTones: ReadonlyMap<string, 'primary' | 'cascade'>,
   selectedStep: string | null,
   onJumpToSpan: (byteOffset: number) => void,
-  onOpenDocument: (path: string) => void,
   proseEditingStep: string | null,
   onBeginProseEdit: (step: string | null) => void,
   onGesture: (operation: GestureOperation) => Promise<EditResult>,
@@ -266,11 +258,7 @@ function projectFlow(
     stepSizes.set(step.name, size);
     dagreGraph.setNode(step.name, size);
   }
-  for (const child of graph.childCalls) {
-    dagreGraph.setNode(child.id, { width: NODE_WIDTH, height: CHILD_HEIGHT });
-  }
   for (const edge of graph.edges) dagreGraph.setEdge(edge.source, edge.target);
-  for (const child of graph.childCalls) dagreGraph.setEdge(child.parentStep, child.id);
   dagre.layout(dagreGraph);
 
   const nodes: Node<CanvasNodeData>[] = graph.steps.map((step) =>
@@ -296,26 +284,6 @@ function projectFlow(
       : Math.max(
           ...nodes.map((node) => node.position.x + (stepSizes.get(node.id)?.width ?? NODE_WIDTH))
         );
-  for (const child of graph.childCalls) {
-    const document = documents.find((item) => item.name === child.name);
-    const position = topLeft(dagreGraph.node(child.id));
-    nodes.push({
-      id: child.id,
-      type: 'child',
-      position,
-      draggable: false,
-      focusable: false,
-      selected: selectedStep === child.parentStep,
-      data: {
-        kind: 'child',
-        name: child.name,
-        label: child.signature,
-        childDocumentPath: document?.path,
-        onActivate: () => onJumpToSpan(child.span.start),
-        onOpenChild: document === undefined ? undefined : () => onOpenDocument(document.path),
-      },
-    });
-  }
 
   const siblingOffsets = parallelEdgeOffsets(graph.edges);
   const edges: Edge[] = graph.edges.map((edge) => ({
@@ -339,19 +307,6 @@ function projectFlow(
         edge.kind === 'fall_through' ? '6 5' : edge.kind === 'after' ? '2 5' : undefined,
     },
   }));
-  for (const child of graph.childCalls) {
-    edges.push({
-      id: `call:${child.id}`,
-      source: child.parentStep,
-      target: child.id,
-      label: 'child',
-      type: 'smoothstep',
-      markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--accent-primary)' },
-      style: { stroke: 'var(--accent-primary)', strokeDasharray: '4 4' },
-      labelStyle: { fill: 'var(--muted-foreground)', fontSize: 11 },
-      labelBgStyle: { fill: 'var(--surface-base)', fillOpacity: 0.9 },
-    });
-  }
   return { nodes, edges };
 }
 

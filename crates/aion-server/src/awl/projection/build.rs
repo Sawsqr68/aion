@@ -7,10 +7,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use aion_awl::semantic::{StepInfo, StepKind};
 use aion_awl::{
     ChildDecl, CollectStmt, DistributeStmt, Document, PipeStage, Statement, Step, SubflowDecl,
-    TypeRef, expr_text,
+    expr_text,
 };
 
 use super::edges::edges;
+use super::statement_build::{child_signature, statement_graph};
 use super::types::{
     GraphProjection, ProjectionChildCall, ProjectionCollect, ProjectionDistribution,
     ProjectionStep, ProjectionStepKind, ProjectionSubflow, ProjectionSubstepGraph,
@@ -117,6 +118,13 @@ impl<'a> Context<'a> {
             decision: !step.outcomes.is_empty(),
             waits: waits(step),
             activities: activities(step),
+            body: statement_graph(
+                info.map_or(&[], |semantic| semantic.body.as_slice()),
+                &self.children,
+            ),
+            failure: info
+                .and_then(|semantic| semantic.failure.as_deref())
+                .map(|statements| statement_graph(statements, &self.children)),
         }
     }
 
@@ -409,26 +417,4 @@ fn add_child_call(
         signature: child_signature(child),
         span: span.into(),
     });
-}
-
-fn child_signature(child: &ChildDecl) -> String {
-    let parameters = child
-        .params
-        .iter()
-        .map(|parameter| format!("{}: {}", parameter.name, type_text(&parameter.ty)))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!(
-        "{}({parameters}) -> {}",
-        child.name,
-        type_text(&child.returns)
-    )
-}
-
-fn type_text(ty: &TypeRef) -> String {
-    match ty {
-        TypeRef::Named { name, .. } => name.clone(),
-        TypeRef::List { inner, .. } => format!("[{}]", type_text(inner)),
-        TypeRef::Optional { inner, .. } => format!("{}?", type_text(inner)),
-    }
 }

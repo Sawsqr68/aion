@@ -20,6 +20,7 @@ import type {
   ProjectionStep,
   ProjectionSubstepGraph,
 } from '../lib/projection-types';
+import { StatementTopology } from './StatementTopology';
 
 /**
  * The canvas node vocabulary (AWL-FLOW-VOCABULARY rev 3 §6), free of any
@@ -83,6 +84,10 @@ export function StepNodeBody(props: StepBodyProps) {
           </span>
         )}
       </button>
+      <StatementTopology graph={step.body} label="Body flow" onJumpTo={props.onJumpTo} />
+      {step.failure !== null && (
+        <StatementTopology graph={step.failure} label="Failure flow" onJumpTo={props.onJumpTo} />
+      )}
       {step.subflow !== null && <SubflowSection {...props} />}
       {step.substeps.map((scoped) => (
         <SubstepSection {...props} key={`${scoped.scope}:${scoped.index}`} scoped={scoped} />

@@ -98,6 +98,8 @@ describe('authoring facade parsing', () => {
       visits: null,
       decision: false,
       waits: false,
+      body: { nodes: [], edges: [] },
+      failure: null,
       ...extra,
     });
     const wire = {
@@ -145,6 +147,38 @@ describe('authoring facade parsing', () => {
                   child_calls: [],
                 },
               },
+              body: {
+                nodes: [
+                  {
+                    id: 'statement:20:40',
+                    kind: 'parallel_fork',
+                    label: 'item in state.items',
+                    detail: 'join → results',
+                    span,
+                    fork: {
+                      binding: 'item',
+                      collection: 'state.items',
+                      sequential: false,
+                      result: 'results',
+                    },
+                    graph: {
+                      nodes: [
+                        {
+                          id: 'statement:24:32',
+                          kind: 'child_call',
+                          label: 'build_item',
+                          detail: 'build_item(item: Item) -> Result',
+                          span,
+                          fork: null,
+                          graph: null,
+                        },
+                      ],
+                      edges: [],
+                    },
+                  },
+                ],
+                edges: [],
+              },
             }),
             wireStep('gather', {
               kind: 'collect',
@@ -180,6 +214,9 @@ describe('authoring facade parsing', () => {
     expect(graph?.steps[1]?.subflow?.name).toBe('dev_item');
     expect(graph?.steps[1]?.subflow?.graph?.steps[0]?.decision).toBe(true);
     expect(graph?.steps[1]?.subflow?.graph?.childCalls).toEqual([]);
+    expect(graph?.steps[1]?.body.nodes[0]?.kind).toBe('parallel_fork');
+    expect(graph?.steps[1]?.body.nodes[0]?.fork?.collection).toBe('state.items');
+    expect(graph?.steps[1]?.body.nodes[0]?.graph?.nodes[0]?.kind).toBe('child_call');
     expect(graph?.steps[2]?.collect).toEqual({
       binding: 'verdict',
       tolerant: true,

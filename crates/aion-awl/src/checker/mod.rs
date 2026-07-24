@@ -24,6 +24,7 @@ mod outcomes;
 mod project;
 mod regions;
 mod stages;
+mod statement_info;
 mod subflows;
 mod types;
 mod walk;

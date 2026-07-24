@@ -1,13 +1,11 @@
-import { ExternalLink, Workflow } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Handle, type NodeProps, Position } from 'reactflow';
 
-import { cn } from '@/lib/utils';
 import type { ProjectionStep } from '../lib/projection-types';
 import { StepNodeBody } from './StepNodeBody';
 
 export type CanvasNodeData = {
-  kind: 'step' | 'child';
+  kind: 'step';
   name: string;
   label: string;
   step?: ProjectionStep;
@@ -15,13 +13,11 @@ export type CanvasNodeData = {
   onToggleSubflow?: ((path: string) => void) | undefined;
   onJumpTo?: ((byteOffset: number) => void) | undefined;
   diagnostic?: 'primary' | 'cascade' | undefined;
-  childDocumentPath?: string | undefined;
   onActivate: () => void;
   proseEditing?: boolean;
   onBeginProseEdit?: (() => void) | undefined;
   onCancelProseEdit?: (() => void) | undefined;
   onSaveProse?: ((prose: string) => Promise<void>) | undefined;
-  onOpenChild?: (() => void) | undefined;
 };
 
 export function StepCanvasNode({ data, selected }: NodeProps<CanvasNodeData>) {
@@ -113,53 +109,5 @@ export function StepCanvasNode({ data, selected }: NodeProps<CanvasNodeData>) {
         type="source"
       />
     </div>
-  );
-}
-
-export function ChildCanvasNode({ data, selected }: NodeProps<CanvasNodeData>) {
-  return (
-    <article
-      className={cn(
-        'min-w-56 max-w-72 rounded-xl border border-dashed bg-surface-base shadow-sm',
-        selected ? 'border-accent-primary' : 'border-border'
-      )}
-      aria-label={`Child call ${data.name}`}
-    >
-      <Handle
-        className="!size-2 !border-surface-base !bg-accent-primary"
-        position={Position.Top}
-        type="target"
-      />
-      <button
-        className="nodrag w-full rounded-t-xl p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-accent-primary"
-        onClick={data.onActivate}
-        type="button"
-      >
-        <span className="flex items-center gap-2 font-semibold text-accent-primary text-xs uppercase tracking-wide">
-          <Workflow aria-hidden="true" className="size-3.5" />
-          Child contract
-        </span>
-        <span className="mt-2 block font-mono text-foreground text-xs">{data.label}</span>
-      </button>
-      {data.childDocumentPath === undefined ? (
-        <p className="border-border border-t px-3 py-2 text-muted-foreground text-xs">
-          Contract stub
-        </p>
-      ) : (
-        <button
-          className="nodrag flex w-full items-center gap-1.5 rounded-b-xl border-border border-t px-3 py-2 text-accent-primary text-xs outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-accent-primary"
-          onClick={data.onOpenChild}
-          type="button"
-        >
-          <ExternalLink aria-hidden="true" className="size-3" />
-          Open {data.childDocumentPath}
-        </button>
-      )}
-      <Handle
-        className="!size-2 !border-surface-base !bg-accent-primary"
-        position={Position.Bottom}
-        type="source"
-      />
-    </article>
   );
 }

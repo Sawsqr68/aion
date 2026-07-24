@@ -8,6 +8,8 @@ import {
 } from './facade-values';
 import type {
   GraphProjection,
+  ProjectionStatementGraph,
+  ProjectionStatementKind,
   ProjectionStep,
   ProjectionSubstepGraph,
   SemanticDeclaration,
@@ -132,6 +134,32 @@ const projectionStepKinds: ProjectionStep['kind'][] = [
   'decision',
 ];
 
+const projectionStatementKinds: ProjectionStatementKind[] = [
+  'action_call',
+  'child_call',
+  'subflow_call',
+  'unresolved_call',
+  'spawn_child',
+  'invalid_spawn',
+  'pipe',
+  'action_stage',
+  'child_stage',
+  'unresolved_stage',
+  'field_stage',
+  'combinator_stage',
+  'wait',
+  'sleep',
+  'parallel_fork',
+  'sequential_fork',
+  'named_fork',
+  'loop',
+  'route',
+  'substep',
+  'distribute',
+  'sequence',
+  'collect',
+];
+
 function parseGraph(value: unknown): GraphProjection {
   const record = expectRecord(value);
   return {
@@ -187,6 +215,48 @@ function parseProjectionStep(value: unknown): ProjectionStep {
     visits: nullableString(step.visits, 'step.visits'),
     decision: expectBoolean(step.decision, 'step.decision'),
     waits: expectBoolean(step.waits, 'step.waits'),
+    body: parseStatementGraph(step.body),
+    failure: step.failure === null ? null : parseStatementGraph(step.failure),
+  };
+}
+
+function parseStatementGraph(value: unknown): ProjectionStatementGraph {
+  const graph = expectRecord(value);
+  return {
+    nodes: expectArray(graph.nodes, 'statement.nodes').map((item) => {
+      const node = expectRecord(item);
+      const kind = expectString(node.kind, 'statement.kind');
+      if (!projectionStatementKinds.includes(kind as ProjectionStatementKind)) {
+        throw new Error('Invalid authoring response: statement.kind');
+      }
+      return {
+        id: expectString(node.id, 'statement.id'),
+        kind: kind as ProjectionStatementKind,
+        label: expectString(node.label, 'statement.label'),
+        detail: nullableString(node.detail, 'statement.detail'),
+        span: parseSpan(node.span),
+        fork: node.fork === null ? null : parseFork(node.fork),
+        graph: node.graph === null ? null : parseStatementGraph(node.graph),
+      };
+    }),
+    edges: expectArray(graph.edges, 'statement.edges').map((item) => {
+      const edge = expectRecord(item);
+      return {
+        id: expectString(edge.id, 'statement.edge.id'),
+        source: expectString(edge.source, 'statement.edge.source'),
+        target: expectString(edge.target, 'statement.edge.target'),
+      };
+    }),
+  };
+}
+
+function parseFork(value: unknown) {
+  const fork = expectRecord(value);
+  return {
+    binding: nullableString(fork.binding, 'fork.binding'),
+    collection: nullableString(fork.collection, 'fork.collection'),
+    sequential: expectBoolean(fork.sequential, 'fork.sequential'),
+    result: nullableString(fork.result, 'fork.result'),
   };
 }
 

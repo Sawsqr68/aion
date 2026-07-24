@@ -5,6 +5,9 @@
 //! own: [`analyze`] and [`analyze_in`] run the normal checker pipeline and retain
 //! its semantic trace alongside diagnostics.
 
+mod topology;
+pub use topology::{ForkInfo, StatementInfo, StatementKind};
+
 use std::path::Path;
 
 use crate::ast::{Document, ForkHeader, PipeEnd, Statement, Step, TypeBody};
@@ -131,6 +134,10 @@ pub struct StepInfo {
     /// the opener itself and its `collect` — are not members of the region
     /// they delimit (though they may sit inside an outer one).
     pub region: Option<String>,
+    /// Checker-owned shape of the main statement list, in written order.
+    pub body: Vec<StatementInfo>,
+    /// Checker-owned shape of the `on failure` statement list, when written.
+    pub failure: Option<Vec<StatementInfo>>,
 }
 
 /// Semantic facts attached to one source span.
@@ -425,23 +432,9 @@ impl Builder {
         }
     }
 
-    /// Record one step's checker-derived classification and region
-    /// membership.
-    pub(crate) fn step_kind(
-        &mut self,
-        span: Span,
-        name: &str,
-        kind: StepKind,
-        subflow: Option<&str>,
-        region: Option<&str>,
-    ) {
-        self.steps.push(StepInfo {
-            span,
-            name: name.to_owned(),
-            kind,
-            subflow: subflow.map(str::to_owned),
-            region: region.map(str::to_owned),
-        });
+    /// Record one checker-derived step shape.
+    pub(crate) fn record_step(&mut self, step: StepInfo) {
+        self.steps.push(step);
     }
 
     fn binding_declaration(&mut self, span: Span, name: &str) {

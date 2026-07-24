@@ -19,6 +19,8 @@ const graph: GraphProjection = {
       visits: null,
       decision: false,
       waits: false,
+      body: { nodes: [], edges: [] },
+      failure: null,
     },
   ],
   edges: [],

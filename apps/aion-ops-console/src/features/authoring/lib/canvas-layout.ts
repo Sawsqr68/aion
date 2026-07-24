@@ -1,6 +1,11 @@
 import dagre from 'dagre';
 
-import type { GraphProjection, ProjectionStep, ProjectionSubstepGraph } from './projection-types';
+import type {
+  GraphProjection,
+  ProjectionStatementGraph,
+  ProjectionStep,
+  ProjectionSubstepGraph,
+} from './projection-types';
 
 /** Base box of one embedded graph node. */
 export const EMBED_NODE_WIDTH = 200;
@@ -44,7 +49,11 @@ export function nodeSize(
     return { width: DECISION_NODE_SIZE, height: DECISION_NODE_SIZE };
   }
   let width = base.width;
-  let height = base.height + step.substeps.length * EMBEDDED_SECTION_HEADER_HEIGHT;
+  let height =
+    base.height +
+    step.substeps.length * EMBEDDED_SECTION_HEADER_HEIGHT +
+    statementGraphHeight(step.body) +
+    (step.failure === null ? 0 : statementGraphHeight(step.failure));
   const subflow = step.subflow?.graph;
   if (subflow !== null && subflow !== undefined && expanded.has(path)) {
     const inner = layoutEmbedded(subflow, expanded, path);
@@ -59,6 +68,19 @@ export function nodeSize(
     height += inner.height + EMBED_PADDING;
   }
   return { width, height };
+}
+
+/** Conservative vertical extent of an always-visible positional statement graph. */
+export function statementGraphHeight(graph: ProjectionStatementGraph): number {
+  if (graph.nodes.length === 0) return 0;
+  const sectionChrome = 44;
+  const connectorHeight = 20;
+  const nodesHeight = graph.nodes.reduce((height, node) => {
+    const nodeChrome = node.detail === null && node.fork === null ? 38 : 54;
+    const nested = node.graph === null ? 0 : statementGraphHeight(node.graph) + 28;
+    return height + nodeChrome + nested;
+  }, 0);
+  return sectionChrome + nodesHeight + (graph.nodes.length - 1) * connectorHeight;
 }
 
 /** Expansion key for one statement-list-scoped substep graph. */

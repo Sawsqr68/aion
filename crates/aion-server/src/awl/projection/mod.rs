@@ -1,11 +1,14 @@
 //! Graph projection of a parsed AWL document — the canvas's 1:1 picture.
 //!
-//! Every step is a node; every node is a step. Step kinds come from the
-//! checker's semantic index (never re-derived here); this module only adds
-//! the label text and edge geometry the canvas draws.
+//! Workflow control uses one node per step. Each step also carries a nested,
+//! positional statement graph for calls, waits, forks, loops, and pipes. All
+//! construct kinds come from the checker's semantic index (never re-derived
+//! here); this module only adds wire labels and edge geometry.
 
 mod build;
 mod edges;
+mod statement_build;
+mod statement_types;
 mod types;
 
 #[cfg(test)]

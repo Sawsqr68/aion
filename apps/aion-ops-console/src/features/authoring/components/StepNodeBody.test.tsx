@@ -22,6 +22,8 @@ function step(name: string, extra: Partial<ProjectionStep> = {}): ProjectionStep
     visits: null,
     decision: false,
     waits: false,
+    body: { nodes: [], edges: [] },
+    failure: null,
     ...extra,
   };
 }
@@ -241,6 +243,8 @@ describe('flow-vocabulary node rendering', () => {
       visits: null,
       decision: false,
       waits: false,
+      body: { nodes: [], edges: [] },
+      failure: null,
       ...extra,
     });
     const scopedGraph = {

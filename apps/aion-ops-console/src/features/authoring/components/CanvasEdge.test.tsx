@@ -21,6 +21,8 @@ function step(name: string): ProjectionStep {
     visits: null,
     decision: false,
     waits: false,
+    body: { nodes: [], edges: [] },
+    failure: null,
   };
 }
 

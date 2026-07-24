@@ -5,6 +5,7 @@
 use serde::Serialize;
 
 use super::super::handlers::SourceSpan;
+use super::statement_types::ProjectionStatementGraph;
 
 /// One scoped projected graph: workflow or subflow steps, or sibling
 /// substeps embedded under their owning parent step.
@@ -14,7 +15,8 @@ pub struct GraphProjection {
     pub steps: Vec<ProjectionStep>,
     /// Control edges between the flow's steps.
     pub edges: Vec<ProjectionEdge>,
-    /// Child-workflow contract calls made from the flow's steps.
+    /// Compatibility summary of child-workflow calls. Positional ownership
+    /// and ordering live in each step's statement graphs.
     pub child_calls: Vec<ProjectionChildCall>,
 }
 
@@ -44,10 +46,15 @@ pub struct ProjectionStep {
     pub visits: Option<String>,
     /// Whether the step carries outcome arms (its decision diamond).
     pub decision: bool,
-    /// Whether the step waits durably (`wait signal` / `sleep`).
+    /// Durable-wait badge summary. Exact waits live in `body` / `failure`.
     pub waits: bool,
-    /// Worker actions and child calls invoked by the step, sorted.
+    /// Deduplicated, sorted activity summary retained for run-event lookup.
+    /// Exact call sites live in `body` / `failure`.
     pub activities: Vec<String>,
+    /// Positional executable constructs in the main step body.
+    pub body: ProjectionStatementGraph,
+    /// Positional executable constructs in `on failure`, when present.
+    pub failure: Option<ProjectionStatementGraph>,
 }
 
 /// One sibling-substep graph and the statement-list scope that owns it.

@@ -2,6 +2,8 @@
 //! picture — five parent nodes, one nested subflow graph, one region, one
 //! back edge bounded ×3.
 
+mod topology_tests;
+
 use aion_awl::semantic;
 
 use super::build;

@@ -18,6 +18,8 @@ const plain = {
   visits: null,
   decision: false,
   waits: false,
+  body: { nodes: [], edges: [] },
+  failure: null,
 };
 
 const graph: GraphProjection = {

@@ -49,6 +49,50 @@ export type ProjectionSubstepGraph = {
   index: number;
   graph: GraphProjection;
 };
+export type ProjectionStatementKind =
+  | 'action_call'
+  | 'child_call'
+  | 'subflow_call'
+  | 'unresolved_call'
+  | 'spawn_child'
+  | 'invalid_spawn'
+  | 'pipe'
+  | 'action_stage'
+  | 'child_stage'
+  | 'unresolved_stage'
+  | 'field_stage'
+  | 'combinator_stage'
+  | 'wait'
+  | 'sleep'
+  | 'parallel_fork'
+  | 'sequential_fork'
+  | 'named_fork'
+  | 'loop'
+  | 'route'
+  | 'substep'
+  | 'distribute'
+  | 'sequence'
+  | 'collect';
+export type ProjectionFork = {
+  binding: string | null;
+  collection: string | null;
+  sequential: boolean;
+  result: string | null;
+};
+export type ProjectionStatementNode = {
+  id: string;
+  kind: ProjectionStatementKind;
+  label: string;
+  detail: string | null;
+  span: SourceSpan;
+  fork: ProjectionFork | null;
+  graph: ProjectionStatementGraph | null;
+};
+export type ProjectionStatementEdge = { id: string; source: string; target: string };
+export type ProjectionStatementGraph = {
+  nodes: ProjectionStatementNode[];
+  edges: ProjectionStatementEdge[];
+};
 export type ProjectionStep = {
   name: string;
   documentation: string;
@@ -63,6 +107,8 @@ export type ProjectionStep = {
   decision: boolean;
   waits: boolean;
   activities: string[];
+  body: ProjectionStatementGraph;
+  failure: ProjectionStatementGraph | null;
 };
 export type ProjectionEdge = {
   id: string;
