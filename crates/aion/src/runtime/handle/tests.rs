@@ -10,7 +10,9 @@ use beamr::term::binary_ref::BinaryRef;
 
 use super::{RuntimeHandle, RuntimeInput};
 use crate::error::EngineError;
-use crate::runtime::{Mfa, NifEntry, NifRegistration, RuntimeConfig, SignalDeliveryConfig};
+use crate::runtime::{
+    Determinism, Mfa, NifEntry, NifRegistration, RuntimeConfig, SignalDeliveryConfig,
+};
 
 fn forty_two(args: &[Term], _: &mut ProcessContext) -> Result<Term, Term> {
     if args.len() > 255 {
@@ -144,8 +146,8 @@ fn duplicate_nif_mfa_returns_typed_error() -> Result<(), Box<dyn std::error::Err
     let mfa = Mfa::new("host", "answer", 0);
     let mut registration = NifRegistration::new();
     registration.add_host_nifs([
-        NifEntry::new(mfa.clone(), forty_two),
-        NifEntry::dirty(mfa, thirteen),
+        NifEntry::new(mfa.clone(), forty_two, Determinism::Pure),
+        NifEntry::dirty(mfa, thirteen, Determinism::Pure),
     ]);
 
     let error = runtime.install_nifs(registration).err();
@@ -166,7 +168,7 @@ fn payload_binary_remains_valid_through_spawn_and_is_released()
     let runtime = RuntimeHandle::new(RuntimeConfig::new(None))?;
     let mfa = Mfa::new("host", "binary_length", 1);
     let mut registration = NifRegistration::new();
-    registration.add_host_nifs([NifEntry::new(mfa, binary_length)]);
+    registration.add_host_nifs([NifEntry::new(mfa, binary_length, Determinism::Pure)]);
     runtime.install_nifs(registration)?;
 
     let native_entry = runtime.lookup_native_for_test("host", "binary_length", 1);
@@ -204,7 +206,7 @@ fn workflow_outcome_releases_payload_heaps() -> Result<(), Box<dyn std::error::E
     let runtime = RuntimeHandle::new(RuntimeConfig::new(None))?;
     let mfa = Mfa::new("host", "binary_length", 1);
     let mut registration = NifRegistration::new();
-    registration.add_host_nifs([NifEntry::new(mfa, binary_length)]);
+    registration.add_host_nifs([NifEntry::new(mfa, binary_length, Determinism::Pure)]);
     runtime.install_nifs(registration)?;
 
     let native_entry = runtime.lookup_native_for_test("host", "binary_length", 1);
@@ -245,7 +247,7 @@ fn repeated_completed_payload_spawns_do_not_accumulate_retained_heaps()
     let runtime = RuntimeHandle::new(RuntimeConfig::new(None))?;
     let mfa = Mfa::new("host", "binary_length", 1);
     let mut registration = NifRegistration::new();
-    registration.add_host_nifs([NifEntry::new(mfa, binary_length)]);
+    registration.add_host_nifs([NifEntry::new(mfa, binary_length, Determinism::Pure)]);
     runtime.install_nifs(registration)?;
 
     let native_entry = runtime.lookup_native_for_test("host", "binary_length", 1);
@@ -287,8 +289,8 @@ fn distinct_nifs_are_registered_and_callable() -> Result<(), Box<dyn std::error:
     let runtime = RuntimeHandle::new(RuntimeConfig::new(None))?;
     let mut registration = NifRegistration::new();
     registration.add_engine_nifs().add_host_nifs([
-        NifEntry::new(Mfa::new("host", "answer", 0), forty_two),
-        NifEntry::dirty(Mfa::new("host", "thirteen", 0), thirteen),
+        NifEntry::new(Mfa::new("host", "answer", 0), forty_two, Determinism::Pure),
+        NifEntry::dirty(Mfa::new("host", "thirteen", 0), thirteen, Determinism::Pure),
     ]);
 
     runtime.install_nifs(registration)?;

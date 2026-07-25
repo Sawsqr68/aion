@@ -11,7 +11,6 @@ members = [
     "crates/aion-package",
     "crates/aion-toolchain",
     "crates/aion",
-    "crates/aion-nif",
     "crates/aion-proto",
     "crates/aion-proto-generated",
     "crates/aion-server",

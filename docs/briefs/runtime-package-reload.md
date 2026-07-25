@@ -35,7 +35,7 @@ There is no routing table separate from the loader record. `LoadedWorkflows` (`c
 | `EngineScheduleStarter` (`ScheduleRuntimeDeps`) | `engine/api.rs:96-107` |
 | `ProcessExitContext` — **a fresh `Arc::new(clone())` per workflow start** | `lifecycle/start.rs:210` |
 
-A runtime load into any one copy would be invisible to the others. **The first structural job of this brief is replacing every clone with one shared, atomically-swappable catalog.** No external crate reaches `Engine::loaded_workflows()` (verified: no callers in aion-server/aion-cli/aion-nif), so the accessor can change shape freely.
+A runtime load into any one copy would be invisible to the others. **The first structural job of this brief is replacing every clone with one shared, atomically-swappable catalog.** No external crate reaches `Engine::loaded_workflows()` (verified: no callers in `aion-server` or `aion-cli`), so the accessor can change shape freely.
 
 ### 1.2 Version pinning (the actual mechanism — contradicts the working assumption)
 

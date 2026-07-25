@@ -308,9 +308,9 @@ load time differs.
 `aion_flow` declares the bindings and the types; it implements none of the
 mechanics (**CO10**). Timer firing, signal routing, query dispatch, child
 spawning, replay, and the determinism context are AE/AD/AT, reached via
-`@external`. Authoring the NIFs that `aion_flow_ffi` names in Rust is
-`aion-nif` (AN) and the engine (AE-004). Compiling the Gleam to `.beam` and
-bundling a `.aion` archive is `aion-package` (AP) — `workflow.define`
+`@external`. Implementing and registering the NIFs that `aion_flow_ffi` names
+is owned by the engine (AE-004). Compiling the Gleam to `.beam` and bundling a
+`.aion` archive is `aion-package` (AP) — `workflow.define`
 provides the typed entry contract the engine invokes at spawn (the manifest
 records only its module/function names), not the archive. Starting /
 signalling / querying a workflow from across a network is the client SDKs
@@ -377,8 +377,8 @@ gleam/aion_flow/
   failure is a typed `DecodeError`, never a panic. No primitive silently
   swallows a decode error.
 - **CO10** — `aion_flow` does not implement engine mechanics (AE/AD/AT),
-  does not author NIFs in Rust (AN), and is not packaged into `.aion` (AP).
-  It owns only the Gleam API surface and its binding declarations.
+  does not implement NIFs in Rust (AE), and is not packaged into `.aion`
+  (AP). It owns only the Gleam API surface and its binding declarations.
 - **CO11** — All acceptance uses Gleam tooling: `gleam build`, `gleam check`,
   `gleam format --check`, and `gleam test` must pass clean. The
   `aion/testing` harness runs under `gleam test` with no external services.
@@ -388,8 +388,8 @@ gleam/aion_flow/
 - **No engine mechanics** — timer firing, signal routing, query dispatch,
   child spawning, replay, and the determinism context are AE/AD/AT. This
   cluster declares the `@external` bindings and the Gleam types only.
-- **No Rust NIF authoring** — writing/registering the NIFs that
-  `aion_flow_ffi` names is `aion-nif` (AN) and the engine (AE-004).
+- **No Rust NIF implementation** — registering the NIFs that
+  `aion_flow_ffi` names is owned by the engine (AE-004).
 - **No `.aion` packaging** — compiling Gleam to `.beam` and bundling the
   archive is `aion-package` (AP). `workflow.define` provides the typed entry
   contract the engine invokes at spawn (the manifest records only its

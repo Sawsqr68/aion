@@ -36,7 +36,6 @@ CRATES=(
   aion-store
   aion-package
   aion-proto
-  aion-nif
   aion-store-libsql
   aion-store-haematite
   aion-toolchain

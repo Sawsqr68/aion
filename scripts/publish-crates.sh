@@ -15,7 +15,6 @@ readonly MODE_LIVE="live"
 #   aion-store: aion-core
 #   aion-store-libsql: aion-core, aion-store
 #   aion-package: aion-core
-#   aion-nif: aion-core
 #   aion: aion-core, aion-package, aion-store
 #   aion-proto: aion-core, aion-store
 #   aion-darwin-acl: no Aion crate dependencies
@@ -28,7 +27,6 @@ readonly PUBLISH_ORDER=(
   aion-store
   aion-store-libsql
   aion-package
-  aion-nif
   aion-rs
   aion-proto
   aion-darwin-acl
