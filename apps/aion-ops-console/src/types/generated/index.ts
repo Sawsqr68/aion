@@ -21,7 +21,7 @@ export type Namespace = string;
 
 export type ContentType = "Json";
 
-export type PayloadElision = { "__elided": true, size_bytes: number };
+export type PayloadElision = { __elided: true, size_bytes: number, };
 
 export type Payload = { content_type: ContentType, bytes: Array<number> | PayloadElision, };
 
@@ -1240,3 +1240,4 @@ primitive: InterventionPrimitive, } | { "outcome": "StaleTarget",
  * Human-readable detail describing why the target is stale.
  */
 detail: string, };
+

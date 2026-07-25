@@ -60,7 +60,7 @@ pub use intervention::{
     ApprovalDecision, InjectPriority, InterventionCapabilities, InterventionCommand,
     InterventionKind, InterventionOutcome, InterventionPrimitive,
 };
-pub use payload::{ContentType, Payload, PayloadError};
+pub use payload::{ContentType, Payload, PayloadElision, PayloadError};
 pub use schedule::{CatchUpPolicy, OverlapPolicy, ScheduleConfig, ScheduleId, TriggerSpec};
 pub use search::{
     SearchAttributeError, SearchAttributeSchema, SearchAttributeType, SearchAttributeValue,

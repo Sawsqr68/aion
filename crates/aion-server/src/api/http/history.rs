@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use aion::Engine;
-use aion_core::{Event, WorkflowId};
+use aion_core::{Event, PayloadElision, WorkflowId};
 use aion_proto::{ProtoDescribeWorkflowRequest, ProtoWorkflowId, WireError};
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
@@ -189,36 +189,42 @@ fn project_event(event: Event, payload_limit: u32) -> Result<Value, HttpWireErro
         )))
     })?;
     if payload_limit != 0 {
-        elide_payload_bytes(&mut value, u64::from(payload_limit));
+        elide_payload_bytes(&mut value, u64::from(payload_limit))?;
     }
     Ok(value)
 }
 
-fn elide_payload_bytes(value: &mut Value, limit: u64) {
+fn elide_payload_bytes(value: &mut Value, limit: u64) -> Result<(), HttpWireError> {
     match value {
         Value::Array(values) => {
             for value in values {
-                elide_payload_bytes(value, limit);
+                elide_payload_bytes(value, limit)?;
             }
         }
         Value::Object(object) => {
             if is_payload_object(object) {
                 if let Some(bytes) = object.get_mut("bytes") {
                     if let Some(size_bytes) = payload_byte_len(bytes).filter(|size| *size > limit) {
-                        *bytes = serde_json::json!({
-                            "__elided": true,
-                            "size_bytes": size_bytes,
-                        });
+                        *bytes = elision_value(size_bytes)?;
                     }
                 }
             } else {
                 for value in object.values_mut() {
-                    elide_payload_bytes(value, limit);
+                    elide_payload_bytes(value, limit)?;
                 }
             }
         }
         _ => {}
     }
+    Ok(())
+}
+
+fn elision_value(size_bytes: u64) -> Result<Value, HttpWireError> {
+    serde_json::to_value(PayloadElision::new(size_bytes)).map_err(|error| {
+        HttpWireError(WireError::backend(format!(
+            "payload elision encoding failed: {error}"
+        )))
+    })
 }
 
 fn is_payload_object(object: &Map<String, Value>) -> bool {
