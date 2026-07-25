@@ -441,10 +441,12 @@ mod tests {
         Ok(ProtoActivityTask {
             workflow_id: Some(ProtoWorkflowId::from(WorkflowId::new_v4())),
             activity_id: Some(ProtoActivityId::from(ActivityId::from_sequence_position(1))),
-            run_id: None,
+            run_id: Some(aion_proto::ProtoRunId::from(aion_core::RunId::new_v4())),
             activity_type: activity_type.to_owned(),
             input: Some(ProtoPayload::from(encode_payload(&input)?)),
             attempt: 1,
+            completion_token: String::from("generation-1"),
+            idempotency_key: String::from("effect-key"),
             labels: std::collections::HashMap::new(),
         })
     }

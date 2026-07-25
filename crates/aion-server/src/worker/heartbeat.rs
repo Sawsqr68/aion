@@ -14,6 +14,7 @@ use crate::shutdown::DrainState;
 use crate::worker::dispatch::{
     ActivityCompletion, ActivityCompletionOutcome, ActivityCompletionSink, lost_worker_error,
 };
+use crate::worker::envelope::CompletionToken;
 use crate::worker::registry::{ConnectedWorkerRegistry, WorkerId};
 
 /// In-flight activity assigned to a connected worker.
@@ -23,6 +24,8 @@ pub struct InFlightActivity {
     pub workflow_id: WorkflowId,
     /// Correlating activity id.
     pub activity_id: ActivityId,
+    /// Generation authorized to receive a result or synthesized loss.
+    pub completion_token: CompletionToken,
 }
 
 /// Observable liveness state for a single in-flight activity.
@@ -34,6 +37,8 @@ pub struct TaskLiveness {
     pub workflow_id: WorkflowId,
     /// Correlating activity id.
     pub activity_id: ActivityId,
+    /// Generation authorized to receive a result or synthesized loss.
+    pub completion_token: CompletionToken,
     /// Operator-configured heartbeat window used for expiry checks.
     pub heartbeat_window: Duration,
     /// Monotonic timestamp of assignment or the most recent heartbeat.
@@ -108,6 +113,7 @@ impl HeartbeatTracker {
             worker_id,
             workflow_id: task.workflow_id,
             activity_id: task.activity_id,
+            completion_token: task.completion_token,
             heartbeat_window: self.heartbeat_window,
             last_heartbeat_at: now,
             last_progress: None,
@@ -468,6 +474,7 @@ impl HeartbeatTracker {
                 workflow_id: task.workflow_id.clone(),
                 activity_id: task.activity_id.clone(),
                 run_id: None,
+                completion_token: task.completion_token.clone(),
                 outcome: ActivityCompletionOutcome::Failed(lost_worker_error(worker_id)),
             })?;
         }
@@ -491,6 +498,7 @@ impl HeartbeatTracker {
                 tasks.push(InFlightActivity {
                     workflow_id: liveness.workflow_id,
                     activity_id: liveness.activity_id,
+                    completion_token: liveness.completion_token,
                 });
             }
         }
@@ -796,6 +804,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id.clone(),
+                completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
         )?;
@@ -838,6 +847,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id.clone(),
+                completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
         )?;
@@ -888,6 +898,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id(21),
+                completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
         )?;
@@ -896,6 +907,7 @@ mod tests {
             InFlightActivity {
                 workflow_id,
                 activity_id: activity_id(22),
+                completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
         )?;
@@ -939,6 +951,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id(60),
+                completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
         )?;
@@ -947,6 +960,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id(61),
+                completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
         )?;
@@ -1016,6 +1030,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id(70),
+                completion_token: crate::worker::CompletionToken::for_test(),
             },
             Instant::now(),
         )?;
@@ -1067,6 +1082,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id.clone(),
+                completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
         )?;
@@ -1135,6 +1151,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id.clone(),
+                completion_token: crate::worker::CompletionToken::for_test(),
             },
             now,
         )?;
@@ -1183,6 +1200,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: id.clone(),
+                completion_token: crate::worker::CompletionToken::for_test(),
             },
             Instant::now(),
         )?;
@@ -1217,6 +1235,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: id.clone(),
+                completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
         )?;

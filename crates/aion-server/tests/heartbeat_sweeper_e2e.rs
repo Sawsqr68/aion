@@ -98,6 +98,7 @@ fn greet_request() -> ActivityDispatch {
         task_queue: TASK_QUEUE.to_owned(),
         node: None,
         workflow_id: aion_core::WorkflowId::new_v4(),
+        run_id: aion_core::RunId::new_v4(),
         activity_id: aion_core::ActivityId::from_sequence_position(0),
         name: ACTIVITY_TYPE.to_owned(),
         input: "{}".to_owned(),
@@ -280,6 +281,7 @@ impl Harness {
                         workflow_id: task.workflow_id,
                         activity_id: task.activity_id,
                         run_id: task.run_id,
+                        completion_token: task.completion_token,
                         outcome: Some(generated::activity_result::Outcome::Result(
                             generated::Payload {
                                 content_type: "application/json".to_owned(),

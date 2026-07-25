@@ -369,6 +369,7 @@ fn dispatch_unscheduled(
                 // `ActivityScheduled` for this ordinal on the flag-OFF path.
                 node: super::nif_activity::resolve_node(&spec.config),
                 workflow_id: workflow_id.clone(),
+                run_id: context.workflow_handle().run_id().clone(),
                 activity_id: ActivityId::from_sequence_position(*ordinal),
                 name: spec.name.clone(),
                 input: spec.input.clone(),

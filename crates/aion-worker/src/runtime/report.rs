@@ -27,6 +27,8 @@ pub(crate) struct DispatchFinished {
     pub(crate) key: ActivityExecutionKey,
     /// Concrete workflow run echoed from the received task, when known.
     pub(crate) run_id: Option<RunId>,
+    /// Opaque execution generation echoed from the received task.
+    pub(crate) completion_token: String,
     /// Outcome computed by the dispatcher, or the dispatch failure.
     pub(crate) outcome: Result<DispatchOutcome, WorkerError>,
 }
@@ -120,6 +122,7 @@ pub(crate) async fn report_finished<S>(
             tracker.record(pending_report(
                 &finished.key,
                 finished.run_id.clone(),
+                finished.completion_token.clone(),
                 &outcome,
             ));
             let sent = report_outcome(
@@ -127,6 +130,7 @@ pub(crate) async fn report_finished<S>(
                 finished.key.workflow_id,
                 finished.key.activity_id,
                 finished.run_id,
+                finished.completion_token,
                 outcome,
             )
             .await;
@@ -149,6 +153,7 @@ pub(crate) async fn report_finished<S>(
 fn pending_report(
     key: &ActivityExecutionKey,
     run_id: Option<RunId>,
+    completion_token: String,
     outcome: &DispatchOutcome,
 ) -> PendingActivityReport {
     match outcome {
@@ -156,12 +161,14 @@ fn pending_report(
             workflow_id: key.workflow_id.clone(),
             activity_id: key.activity_id.clone(),
             run_id,
+            completion_token,
             output: output.clone(),
         },
         DispatchOutcome::Failed { failure } => PendingActivityReport::Failed {
             workflow_id: key.workflow_id.clone(),
             activity_id: key.activity_id.clone(),
             run_id,
+            completion_token,
             failure: failure.clone(),
         },
     }
@@ -172,6 +179,7 @@ async fn report_outcome<S>(
     workflow_id: WorkflowId,
     activity_id: ActivityId,
     run_id: Option<RunId>,
+    completion_token: String,
     outcome: DispatchOutcome,
 ) -> Result<(), WorkerError>
 where
@@ -184,7 +192,13 @@ where
     match outcome {
         DispatchOutcome::Completed { output } => {
             session
-                .report_result(workflow_id, activity_id.clone(), run_id, output)
+                .report_result(
+                    workflow_id,
+                    activity_id.clone(),
+                    run_id,
+                    completion_token,
+                    output,
+                )
                 .await?;
             info!(
                 activity_id = activity_id.sequence_position(),
@@ -193,7 +207,13 @@ where
         }
         DispatchOutcome::Failed { failure } => {
             session
-                .report_failure(workflow_id, activity_id.clone(), run_id, failure)
+                .report_failure(
+                    workflow_id,
+                    activity_id.clone(),
+                    run_id,
+                    completion_token,
+                    failure,
+                )
                 .await?;
             info!(
                 activity_id = activity_id.sequence_position(),

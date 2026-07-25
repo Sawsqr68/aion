@@ -81,6 +81,8 @@ fn task_frame() -> ServerToWorker {
                 attempt: 1,
                 labels: std::collections::HashMap::new(),
                 run_id: None,
+                completion_token: String::from("generation-1"),
+                idempotency_key: String::from("effect-key"),
             },
         )),
     }

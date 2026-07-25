@@ -95,11 +95,20 @@ pub struct ProtoActivityTask {
     /// can show what a dispatch is working on. Empty when none were set.
     #[prost(map = "string, string", tag = "6")]
     pub labels: ::std::collections::HashMap<String, String>,
-    /// Run that owns this dispatch; threaded so a completion only resolves the
-    /// run that issued it (continue-as-new safety, OBX-011). Absent for legacy
-    /// dispatches that predate run threading.
+    /// Concrete run that owns this dispatch. The protobuf field remains optional
+    /// so old bytes can be decoded, but current servers and workers refuse its
+    /// absence rather than execute an effect without run scope.
     #[prost(message, optional, tag = "7")]
     pub run_id: Option<ProtoRunId>,
+    /// Opaque execution-generation proof assigned by the server. Workers echo
+    /// this verbatim and never interpret it. Empty is an incompatible task.
+    #[prost(string, tag = "8")]
+    pub completion_token: String,
+    /// Stable external-effect key for this run and action site. Attempts and
+    /// execution generations do not participate in its derivation. Empty is an
+    /// incompatible task.
+    #[prost(string, tag = "9")]
+    pub idempotency_key: String,
 }
 
 /// Server-initiated drain: the server is going away (restart, deploy,
@@ -153,11 +162,15 @@ pub struct ProtoActivityResult {
     /// Successful result payload or explicit activity error.
     #[prost(oneof = "proto_activity_result::Outcome", tags = "3, 4")]
     pub outcome: Option<proto_activity_result::Outcome>,
-    /// Run that owns this completion; echoed from the dispatched task so a
-    /// completion only resolves the run that issued it (continue-as-new safety,
-    /// OBX-011). Absent for legacy completions that predate run threading.
+    /// Concrete run echoed from the dispatched task. The protobuf field remains
+    /// optional so old bytes can be decoded, but current servers reject its
+    /// absence rather than bypass the run gate.
     #[prost(message, optional, tag = "5")]
     pub run_id: Option<ProtoRunId>,
+    /// Verbatim execution-generation token from the dispatched task. Empty is
+    /// never treated as current; it denotes an incompatible pre-fencing worker.
+    #[prost(string, tag = "6")]
+    pub completion_token: String,
 }
 
 /// Types nested under [`ProtoActivityResult`].
@@ -367,6 +380,8 @@ mod tests {
             .into_iter()
             .collect(),
             run_id: None,
+            completion_token: String::from("generation-3"),
+            idempotency_key: String::from("effect-key"),
         };
 
         assert_json_and_proto_round_trip(&task)
@@ -455,6 +470,8 @@ mod tests {
             attempt: 9,
             labels: ::std::collections::HashMap::new(),
             run_id: None,
+            completion_token: String::new(),
+            idempotency_key: String::new(),
         };
         let mut bytes = Vec::new();
         task.encode(&mut bytes)?;
@@ -474,6 +491,7 @@ mod tests {
                 aion_core::Payload::from_json(&json!({"authorization": "ok"}))?,
             ))),
             run_id: None,
+            completion_token: String::from("generation-1"),
         };
 
         assert_json_and_proto_round_trip(&result)
@@ -495,6 +513,7 @@ mod tests {
                 }),
             )),
             run_id: None,
+            completion_token: String::from("generation-1"),
         };
 
         assert_json_and_proto_round_trip(&result)

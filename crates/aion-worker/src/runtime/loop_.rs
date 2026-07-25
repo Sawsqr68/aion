@@ -268,7 +268,7 @@ where
                             break;
                         };
                         if !handle_task(
-                            proto_task,
+                            *proto_task,
                             SessionEventContext {
                                 permit,
                                 dispatcher: Arc::clone(&dispatcher),
@@ -564,20 +564,23 @@ where
     );
     let key = ActivityExecutionKey::new(task.workflow_id.clone(), task.activity_id.clone());
     heartbeat_bookkeeper.register(key.clone())?;
-    let (context, cancellation_handle) = ActivityContext::for_workflow(
-        Some(task.workflow_id.clone()),
+    let (context, cancellation_handle) = ActivityContext::for_task(
+        task.workflow_id.clone(),
         task.activity_id.clone(),
         task.attempt,
+        task.idempotency_key.clone(),
         Some(heartbeat_sender),
     );
     let finished_key = key.clone();
     let finished_run_id = task.run_id.clone();
+    let finished_completion_token = task.completion_token.clone();
     let join_handle = tokio::spawn(async move {
         let outcome = dispatcher.dispatch(task, context).await;
         if result_sender
             .send(DispatchFinished {
                 key: finished_key,
                 run_id: finished_run_id,
+                completion_token: finished_completion_token,
                 outcome,
             })
             .is_err()

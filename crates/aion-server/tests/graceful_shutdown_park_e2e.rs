@@ -255,6 +255,7 @@ impl WorkerSession {
                         workflow_id: task.workflow_id.clone(),
                         activity_id: task.activity_id,
                         run_id: task.run_id.clone(),
+                        completion_token: task.completion_token.clone(),
                         outcome: Some(generated::activity_result::Outcome::Result(
                             generated::Payload {
                                 content_type: "application/json".to_owned(),

@@ -7,6 +7,8 @@ pub mod backpressure;
 pub mod bridge;
 /// Activity completion handling and dispatch abstractions.
 pub mod dispatch;
+/// Task-envelope generation, idempotency keys, and completion fencing.
+pub mod envelope;
 /// Worker heartbeat and liveness tracking.
 pub mod heartbeat;
 /// Server-side mid-run intervention routing (NOI-6): capability gate + attempt
@@ -41,6 +43,7 @@ pub use dispatch::{
     ActivityCompletion, ActivityCompletionOutcome, ActivityCompletionSink, ActivityDispatcher,
     ScheduledActivity, handle_activity_result,
 };
+pub use envelope::{CompletionFences, CompletionToken, idempotency_key};
 pub use heartbeat::{
     HeartbeatSweeper, HeartbeatTracker, HeartbeatUpdate, InFlightActivity, LostWorkerReport,
     TaskLiveness, sweep_interval,

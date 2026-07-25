@@ -262,6 +262,7 @@ fn dispatch_activity_with_context(
                 task_queue,
                 node,
                 workflow_id: context.workflow_id().clone(),
+                run_id: context.workflow_handle().run_id().clone(),
                 activity_id,
                 name: call.name,
                 input: call.input,

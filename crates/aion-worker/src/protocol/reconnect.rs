@@ -23,6 +23,8 @@ pub enum PendingActivityReport {
         activity_id: ActivityId,
         /// Concrete workflow run to echo on re-report, when known.
         run_id: Option<RunId>,
+        /// Opaque execution generation to echo on every re-report.
+        completion_token: String,
         /// Opaque activity output payload.
         output: Payload,
     },
@@ -34,6 +36,8 @@ pub enum PendingActivityReport {
         activity_id: ActivityId,
         /// Concrete workflow run to echo on re-report, when known.
         run_id: Option<RunId>,
+        /// Opaque execution generation to echo on every re-report.
+        completion_token: String,
         /// Classified activity error.
         failure: ActivityError,
     },
@@ -356,6 +360,7 @@ where
                 workflow_id,
                 activity_id,
                 run_id,
+                completion_token,
                 output,
             } => {
                 debug!(
@@ -364,13 +369,14 @@ where
                     "re-reporting unacknowledged activity result"
                 );
                 session
-                    .report_result(workflow_id, activity_id, run_id, output)
+                    .report_result(workflow_id, activity_id, run_id, completion_token, output)
                     .await?;
             }
             PendingActivityReport::Failed {
                 workflow_id,
                 activity_id,
                 run_id,
+                completion_token,
                 failure,
             } => {
                 debug!(
@@ -379,7 +385,7 @@ where
                     "re-reporting unacknowledged activity failure"
                 );
                 session
-                    .report_failure(workflow_id, activity_id, run_id, failure)
+                    .report_failure(workflow_id, activity_id, run_id, completion_token, failure)
                     .await?;
             }
         }
@@ -426,12 +432,14 @@ mod tests {
             workflow_id: workflow_id.clone(),
             activity_id: first_id.clone(),
             run_id: None,
+            completion_token: String::from("generation-1"),
             output: Payload::new(ContentType::Json, b"{\"first\":true}".to_vec()),
         });
         tracker.record(PendingActivityReport::Completed {
             workflow_id: workflow_id.clone(),
             activity_id: second_id.clone(),
             run_id: None,
+            completion_token: String::from("generation-1"),
             output: Payload::new(ContentType::Json, b"{\"second\":true}".to_vec()),
         });
 
@@ -453,12 +461,14 @@ mod tests {
             workflow_id: first_workflow.clone(),
             activity_id: activity_id.clone(),
             run_id: None,
+            completion_token: String::from("generation-1"),
             output: Payload::new(ContentType::Json, b"{\"workflow\":\"a\"}".to_vec()),
         });
         tracker.record(PendingActivityReport::Completed {
             workflow_id: second_workflow.clone(),
             activity_id: activity_id.clone(),
             run_id: None,
+            completion_token: String::from("generation-1"),
             output: Payload::new(ContentType::Json, b"{\"workflow\":\"b\"}".to_vec()),
         });
 
@@ -675,6 +685,7 @@ mod tests {
             workflow_id: workflow_id.clone(),
             activity_id: activity_id.clone(),
             run_id: None,
+            completion_token: String::from("generation-1"),
             output: output.clone(),
         });
         let mut session = ReconnectFakeSession::default();
@@ -729,9 +740,10 @@ mod tests {
             workflow_id: WorkflowId,
             activity_id: ActivityId,
             run_id: Option<RunId>,
+            completion_token: String,
             result: Payload,
         ) -> Result<(), WorkerError> {
-            drop((workflow_id, activity_id, run_id, result));
+            drop((workflow_id, activity_id, run_id, completion_token, result));
             Err(WorkerError::Registration {
                 source: Box::new(self.denial.clone()),
             })
@@ -742,9 +754,10 @@ mod tests {
             workflow_id: WorkflowId,
             activity_id: ActivityId,
             run_id: Option<RunId>,
+            completion_token: String,
             failure: ActivityError,
         ) -> Result<(), WorkerError> {
-            drop((workflow_id, activity_id, run_id, failure));
+            drop((workflow_id, activity_id, run_id, completion_token, failure));
             Err(WorkerError::Registration {
                 source: Box::new(self.denial.clone()),
             })
@@ -795,9 +808,10 @@ mod tests {
             workflow_id: WorkflowId,
             activity_id: ActivityId,
             run_id: Option<RunId>,
+            completion_token: String,
             result: Payload,
         ) -> Result<(), WorkerError> {
-            let _ = run_id;
+            drop((run_id, completion_token));
             self.reports
                 .push(RecordedReport::Completed(workflow_id, activity_id, result));
             Ok(())
@@ -808,9 +822,10 @@ mod tests {
             workflow_id: WorkflowId,
             activity_id: ActivityId,
             run_id: Option<RunId>,
+            completion_token: String,
             failure: ActivityError,
         ) -> Result<(), WorkerError> {
-            let _ = run_id;
+            drop((run_id, completion_token));
             self.reports
                 .push(RecordedReport::Failed(workflow_id, activity_id, failure));
             Ok(())
@@ -855,12 +870,14 @@ mod tests {
             workflow_id: workflow_id.clone(),
             activity_id: activity_id.clone(),
             run_id: None,
+            completion_token: String::from("generation-1"),
             output: Payload::new(ContentType::Json, b"{}".to_vec()),
         });
         tracker.record(PendingActivityReport::Failed {
             workflow_id: workflow_id.clone(),
             activity_id: activity_id.clone(),
             run_id: None,
+            completion_token: String::from("generation-1"),
             failure: terminal_failure(),
         });
 
