@@ -58,7 +58,7 @@
   ],
   "non_goals": [
     "No engine mechanics — timer firing, signal routing into mailboxes, query dispatch, child spawning, replay, and determinism context are AE/AD/AT. This cluster declares the @external bindings to them and the Gleam types; it does not implement them.",
-    "No Rust NIF authoring — writing/registering the NIFs that aion_flow_ffi names is aion-nif (AN) and the engine (AE-004). This cluster names the bindings; it does not implement the native side.",
+    "No Rust NIF implementation — registering the NIFs that aion_flow_ffi names is owned by the engine (AE-004). This cluster names the bindings; it does not implement the native side.",
     "No .aion packaging — compiling the Gleam to .beam and bundling into a .aion archive is aion-package (AP). This cluster's workflow.define provides the typed entry contract the engine invokes at spawn; the manifest records its module/function names; this cluster does not build the archive.",
     "No network transport, client, or server — starting/signalling/querying a workflow from outside is the client SDKs (AL) over aion-server (AW). aion/signal's send helper is the in-engine/Gleam-client typed binding, not an HTTP client.",
     "No Elixir SDK — aion_flow_ex is a later phase with its own package.",

@@ -5,11 +5,11 @@
 //! dispatch NIF plus a selective-receive await NIF.
 
 use beamr::atom::Atom;
-use beamr::native::ProcessContext;
+use beamr::native::{NativeFn, ProcessContext};
 use beamr::term::Term;
 use beamr::term::binary_ref::BinaryRef;
 
-use super::nif::{Mfa, NifEntry};
+use super::nif::{Determinism, Mfa, NifEntry};
 use super::nif_child;
 use super::nif_continue_as_new;
 use super::nif_determinism::{now_impl, random_impl, random_int_impl, workflow_id_impl};
@@ -84,83 +84,73 @@ fn not_yet_implemented(args: &[Term], ctx: &mut ProcessContext) -> Result<Term, 
     Ok(error_result_term(ctx, NOT_YET_IMPLEMENTED).unwrap_or(Term::NIL))
 }
 
+fn pure(function: &str, arity: u8, native: NativeFn) -> NifEntry {
+    NifEntry::new(
+        Mfa::new(FFI_MODULE, function, arity),
+        native,
+        Determinism::Pure,
+    )
+}
+
+fn side_effectful(function: &str, arity: u8, native: NativeFn) -> NifEntry {
+    NifEntry::new(
+        Mfa::new(FFI_MODULE, function, arity),
+        native,
+        Determinism::SideEffectful,
+    )
+}
+
+fn dirty_side_effectful(function: &str, arity: u8, native: NativeFn) -> NifEntry {
+    NifEntry::dirty(
+        Mfa::new(FFI_MODULE, function, arity),
+        native,
+        Determinism::SideEffectful,
+    )
+}
+
 /// Collect engine-owned NIF entries for `aion_flow_ffi`.
 pub(super) fn engine_nif_entries() -> Vec<NifEntry> {
     vec![
-        NifEntry::new(
-            Mfa::new(FFI_MODULE, "dispatch_activity", 3),
-            dispatch_activity,
-        ),
+        side_effectful("dispatch_activity", 3, dispatch_activity),
         // The in-VM wire is non-dirty by the same reasoning as the remote
         // wire: the NIF itself only resolves/records and spawns — the runner
         // executes in its own linked child process, and the blocking exit
         // wait lives on the Tokio blocking pool, never a scheduler thread.
-        NifEntry::new(
-            Mfa::new(FFI_MODULE, "dispatch_activity_in_vm", 4),
-            dispatch_activity_in_vm,
-        ),
-        NifEntry::new(
-            Mfa::new(FFI_MODULE, "await_activity_result", 1),
-            await_activity_result,
-        ),
-        NifEntry::new(Mfa::new(FFI_MODULE, "workflow_id", 0), workflow_id_impl),
-        NifEntry::new(Mfa::new(FFI_MODULE, "now", 0), now_impl),
-        NifEntry::new(Mfa::new(FFI_MODULE, "random", 0), random_impl),
-        NifEntry::new(Mfa::new(FFI_MODULE, "random_int", 2), random_int_impl),
+        side_effectful("dispatch_activity_in_vm", 4, dispatch_activity_in_vm),
+        side_effectful("await_activity_result", 1, await_activity_result),
+        pure("workflow_id", 0, workflow_id_impl),
+        side_effectful("now", 0, now_impl),
+        side_effectful("random", 0, random_impl),
+        side_effectful("random_int", 2, random_int_impl),
         // Suspending awaits run on the normal schedulers: they park via
         // request_suspend instead of blocking, so a dirty thread would only
         // be wasted on them.
-        NifEntry::new(Mfa::new(FFI_MODULE, "sleep", 1), nif_timer::sleep_impl),
-        NifEntry::dirty(
-            Mfa::new(FFI_MODULE, "start_timer", 2),
-            nif_timer::start_timer_impl,
-        ),
-        NifEntry::dirty(
-            Mfa::new(FFI_MODULE, "cancel_timer", 1),
-            nif_timer::cancel_timer_impl,
-        ),
-        NifEntry::new(
-            Mfa::new(FFI_MODULE, "with_timeout", 2),
-            nif_timeout::with_timeout_impl,
-        ),
-        NifEntry::dirty(
-            Mfa::new(FFI_MODULE, "continue_as_new", 1),
+        side_effectful("sleep", 1, nif_timer::sleep_impl),
+        dirty_side_effectful("start_timer", 2, nif_timer::start_timer_impl),
+        dirty_side_effectful("cancel_timer", 1, nif_timer::cancel_timer_impl),
+        side_effectful("with_timeout", 2, nif_timeout::with_timeout_impl),
+        dirty_side_effectful(
+            "continue_as_new",
+            1,
             nif_continue_as_new::continue_as_new_impl,
         ),
-        NifEntry::new(
-            Mfa::new(FFI_MODULE, "receive_signal", 2),
-            nif_signal::receive_signal,
-        ),
-        NifEntry::dirty(
-            Mfa::new(FFI_MODULE, "send_signal", 3),
-            nif_signal::send_signal,
-        ),
-        NifEntry::new(
-            Mfa::new(FFI_MODULE, "register_query", 2),
-            super::nif_query::register_query,
-        ),
+        side_effectful("receive_signal", 2, nif_signal::receive_signal),
+        dirty_side_effectful("send_signal", 3, nif_signal::send_signal),
+        side_effectful("register_query", 2, super::nif_query::register_query),
         // The reply NIFs are non-blocking (registry check, map removal, a
         // oneshot send) and run on the normal schedulers. Running them dirty
         // routed every query reply through beamr's dirty-result resume,
         // which deep-copies the result onto the workflow heap *without GC*:
         // on a full heap the copy fails and the VM kills the workflow with
         // `Badarg`, surfacing as `ReplyDropped` to the caller (F8).
-        NifEntry::new(
-            Mfa::new(FFI_MODULE, "reply_query", 2),
-            super::nif_query::reply_query,
-        ),
-        NifEntry::new(
-            Mfa::new(FFI_MODULE, "reply_query_error", 2),
-            super::nif_query::reply_query_error,
-        ),
-        NifEntry::new(
-            Mfa::new(FFI_MODULE, "report_query_diagnostic", 2),
+        side_effectful("reply_query", 2, super::nif_query::reply_query),
+        side_effectful("reply_query_error", 2, super::nif_query::reply_query_error),
+        side_effectful(
+            "report_query_diagnostic",
+            2,
             super::nif_query_diagnostic::report_query_diagnostic,
         ),
-        NifEntry::dirty(
-            Mfa::new(FFI_MODULE, "dispatch_query", 2),
-            super::nif_query::dispatch_query,
-        ),
+        dirty_side_effectful("dispatch_query", 2, super::nif_query::dispatch_query),
         // spawn_child runs on the normal schedulers: its blocking work (one
         // recorder append plus the child start round trip) is short and
         // bounded, and its replay fast-path does no blocking work at all.
@@ -172,25 +162,19 @@ pub(super) fn engine_nif_entries() -> Vec<NifEntry> {
         // pids, so no engine-side wake (including the wake-confirmation
         // ladder) can heal that park; the only robust embedder-side remedy
         // is to keep this call off the dirty bridge entirely.
-        NifEntry::new(
-            Mfa::new(FFI_MODULE, "spawn_child", 3),
-            nif_child::spawn_child_impl,
-        ),
+        side_effectful("spawn_child", 3, nif_child::spawn_child_impl),
         // await_child is a two-phase suspending native: it parks via
         // request_suspend and the child-terminal watcher wakes it, so a
         // dirty thread would only be wasted (and ten long-lived children
         // would wedge the default dirty IO pool).
-        NifEntry::new(
-            Mfa::new(FFI_MODULE, "await_child", 1),
-            nif_child::await_child_impl,
-        ),
+        side_effectful("await_child", 1, nif_child::await_child_impl),
         // collect_* are two-phase suspending natives over parallel activity
         // dispatch: they park via request_suspend and completion markers wake
         // them, so dirty threads would only be wasted (and N parents parked
         // on slow fan-outs would wedge the default dirty IO pool).
-        NifEntry::new(Mfa::new(FFI_MODULE, "collect_all", 2), collect_all),
-        NifEntry::new(Mfa::new(FFI_MODULE, "collect_race", 2), collect_race),
-        NifEntry::new(Mfa::new(FFI_MODULE, "collect_map", 2), collect_map),
+        side_effectful("collect_all", 2, collect_all),
+        side_effectful("collect_race", 2, collect_race),
+        side_effectful("collect_map", 2, collect_map),
     ]
 }
 
@@ -203,6 +187,7 @@ mod tests {
     use beamr::term::binary_ref::BinaryRef;
     use beamr::term::boxed::Tuple;
 
+    use super::super::nif::Determinism;
     use super::{
         FFI_MODULE, NOT_YET_IMPLEMENTED, dispatch_activity, engine_nif_entries, not_yet_implemented,
     };
@@ -379,12 +364,47 @@ mod tests {
 
     #[test]
     fn engine_and_test_double_export_identical_mfa_sets() -> TestResult {
-        let engine_mfas = engine_nif_entries()
+        let expected_determinism = [
+            ("dispatch_activity", Determinism::SideEffectful),
+            ("dispatch_activity_in_vm", Determinism::SideEffectful),
+            ("await_activity_result", Determinism::SideEffectful),
+            ("workflow_id", Determinism::Pure),
+            ("now", Determinism::SideEffectful),
+            ("random", Determinism::SideEffectful),
+            ("random_int", Determinism::SideEffectful),
+            ("sleep", Determinism::SideEffectful),
+            ("start_timer", Determinism::SideEffectful),
+            ("cancel_timer", Determinism::SideEffectful),
+            ("with_timeout", Determinism::SideEffectful),
+            ("continue_as_new", Determinism::SideEffectful),
+            ("receive_signal", Determinism::SideEffectful),
+            ("send_signal", Determinism::SideEffectful),
+            ("register_query", Determinism::SideEffectful),
+            ("reply_query", Determinism::SideEffectful),
+            ("reply_query_error", Determinism::SideEffectful),
+            ("report_query_diagnostic", Determinism::SideEffectful),
+            ("dispatch_query", Determinism::SideEffectful),
+            ("spawn_child", Determinism::SideEffectful),
+            ("await_child", Determinism::SideEffectful),
+            ("collect_all", Determinism::SideEffectful),
+            ("collect_race", Determinism::SideEffectful),
+            ("collect_map", Determinism::SideEffectful),
+        ]
+        .into_iter()
+        .map(|(function, determinism)| (function.to_owned(), determinism))
+        .collect::<std::collections::BTreeMap<_, _>>();
+        let entries = engine_nif_entries();
+        let engine_determinism = entries
+            .iter()
+            .map(|entry| (entry.mfa.function.clone(), entry.determinism))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        let engine_mfas = entries
             .into_iter()
             .map(|entry| entry.mfa.display())
             .collect::<BTreeSet<_>>();
         let test_double_mfas = test_double_engine_mfas(TEST_DOUBLE_SOURCE)?;
 
+        assert_eq!(engine_determinism, expected_determinism);
         assert_eq!(engine_mfas, test_double_mfas);
         Ok(())
     }

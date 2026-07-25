@@ -33,6 +33,16 @@ impl Mfa {
     }
 }
 
+/// Classifies whether a NIF is safe to re-execute inline during workflow replay.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub enum Determinism {
+    /// Deterministic helper whose output is fully determined by its inputs.
+    Pure,
+    /// Operation with effects or runtime-dependent output that must be mediated
+    /// by the engine's durable execution contract.
+    SideEffectful,
+}
+
 /// A host- or engine-owned native implemented function entry.
 #[derive(Clone, Debug)]
 pub struct NifEntry {
@@ -42,26 +52,30 @@ pub struct NifEntry {
     pub function: NativeFn,
     /// Whether beamr should mark the entry for dirty scheduler execution.
     pub is_dirty: bool,
+    /// Replay-safety classification for this native function.
+    pub determinism: Determinism,
 }
 
 impl NifEntry {
     /// Construct a normal native implemented function entry.
     #[must_use]
-    pub fn new(mfa: Mfa, function: NativeFn) -> Self {
+    pub fn new(mfa: Mfa, function: NativeFn, determinism: Determinism) -> Self {
         Self {
             mfa,
             function,
             is_dirty: false,
+            determinism,
         }
     }
 
     /// Construct a native implemented function entry marked dirty.
     #[must_use]
-    pub fn dirty(mfa: Mfa, function: NativeFn) -> Self {
+    pub fn dirty(mfa: Mfa, function: NativeFn, determinism: Determinism) -> Self {
         Self {
             mfa,
             function,
             is_dirty: true,
+            determinism,
         }
     }
 }
@@ -147,7 +161,7 @@ mod tests {
     use beamr::native::ProcessContext;
     use beamr::term::Term;
 
-    use super::{Mfa, NifEntry, NifRegistration};
+    use super::{Determinism, Mfa, NifEntry, NifRegistration};
 
     fn native_zero(args: &[Term], context: &mut ProcessContext) -> Result<Term, Term> {
         super::test_native_zero(args, context)
@@ -158,7 +172,11 @@ mod tests {
         let mut registration = NifRegistration::new();
         registration
             .add_engine_nifs()
-            .add_host_nifs([NifEntry::dirty(Mfa::new("host", "zero", 0), native_zero)]);
+            .add_host_nifs([NifEntry::dirty(
+                Mfa::new("host", "zero", 0),
+                native_zero,
+                Determinism::Pure,
+            )]);
 
         assert!(registration.len() >= 2);
         let module_names = registration.module_names();
@@ -167,7 +185,7 @@ mod tests {
 
         let entries = registration.into_entries();
         let host_entry = entries.iter().find(|e| e.mfa.display() == "host:zero/0");
-        assert!(host_entry.is_some_and(|e| e.is_dirty));
+        assert!(host_entry.is_some_and(|e| e.is_dirty && e.determinism == Determinism::Pure));
         let dispatch_activity = entries
             .iter()
             .find(|e| e.mfa.display() == "aion_flow_ffi:dispatch_activity/3");

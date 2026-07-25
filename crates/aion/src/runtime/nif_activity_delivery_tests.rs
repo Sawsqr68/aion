@@ -17,7 +17,9 @@ use super::nif_activity_await::{ActivityAwaitStep, await_activity_step};
 use super::nif_activity_dispatch::dispatch_activity_impl;
 use super::nif_context::NifContext;
 use super::outcome::WorkflowProcessOutcome;
-use super::{Mfa, NifEntry, NifRegistration, RuntimeConfig, RuntimeHandle, RuntimeInput};
+use super::{
+    Determinism, Mfa, NifEntry, NifRegistration, RuntimeConfig, RuntimeHandle, RuntimeInput,
+};
 use crate::activity::bridge::{ActivityDispatch, ActivityDispatcher};
 use crate::durability::Recorder;
 use crate::registry::{
@@ -260,9 +262,21 @@ fn install_test_nifs(runtime: &RuntimeHandle) -> TestResult {
     let mut registration = NifRegistration::new();
     registration.add_engine_nifs();
     registration.add_host_nifs([
-        NifEntry::new(Mfa::new("round6_test", "fast_gate", 3), fast_gate),
-        NifEntry::new(Mfa::new("round6_test", "held_dispatch", 3), held_dispatch),
-        NifEntry::new(Mfa::new("round6_test", "poison_gate", 1), poison_gate),
+        NifEntry::new(
+            Mfa::new("round6_test", "fast_gate", 3),
+            fast_gate,
+            Determinism::SideEffectful,
+        ),
+        NifEntry::new(
+            Mfa::new("round6_test", "held_dispatch", 3),
+            held_dispatch,
+            Determinism::SideEffectful,
+        ),
+        NifEntry::new(
+            Mfa::new("round6_test", "poison_gate", 1),
+            poison_gate,
+            Determinism::SideEffectful,
+        ),
     ]);
     runtime.install_nifs(registration)?;
     Ok(())

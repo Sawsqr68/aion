@@ -6,6 +6,7 @@ use beamr::module::{Module, ResolvedImport, ResolvedImportTarget};
 use beamr::term::Term;
 
 use super::{EngineError, Mfa, NifRegistration, RuntimeHandle, RuntimeInput};
+use crate::runtime::Determinism;
 
 impl RuntimeInput {
     pub(crate) fn from_payloads_for_test(
@@ -36,9 +37,17 @@ impl RuntimeHandle {
             test_activity_fail
         };
         let entry = if dirty {
-            super::super::nif::NifEntry::dirty(Mfa::new(module, function, 1), native)
+            super::super::nif::NifEntry::dirty(
+                Mfa::new(module, function, 1),
+                native,
+                Determinism::SideEffectful,
+            )
         } else {
-            super::super::nif::NifEntry::new(Mfa::new(module, function, 1), native)
+            super::super::nif::NifEntry::new(
+                Mfa::new(module, function, 1),
+                native,
+                Determinism::SideEffectful,
+            )
         };
         registration.add_host_nifs([entry]);
         self.install_nifs(registration)

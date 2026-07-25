@@ -17,7 +17,6 @@ The crate / package family:
 - **`aion-store-libsql`** — the default durable `EventStore` over libSQL; runs the conformance suite.
 - **`aion-package`** — the `.aion` archive format, content-hash versioning, module namespacing, and the `WorkflowVersion` record.
 - **`aion`** — the engine. Embeds beamr; owns workflow lifecycle, process-per-workflow management, supervision, `.aion` loading (cluster AE), durability and replay (the `durability` module set, AD), and timers/signals/queries/children/concurrency (the `time`/`signal`/`query`/`child`/`concurrency` modules, AT). Transport-agnostic.
-- **`aion-nif`** — Rust helper for writing and registering the NIFs Gleam activities call.
 - **`aion-proto`** / **`aion-server`** — the wire contract and the server library (HTTP/gRPC/WebSocket, worker protocol, multi-tenancy). Lib-only: the server runs as `aion server` via `aion_server::run`.
 - **`aion-worker[-python/-typescript]`**, **`aion-client[-python/-typescript]`** — remote worker and caller SDKs.
 - **`aion_flow`** (Gleam, Hex) — the typed authoring SDK. **`aion-ops-console`** — the React ops console UI.

@@ -108,7 +108,6 @@ The whole-system design lives in
 | `aion-store-libsql` | Default durable store over libSQL |
 | `aion-package` | The `.aion` package format, content-hash versioning |
 | `aion` | The engine: lifecycle, durability/replay, timers, signals, queries |
-| `aion-nif` | Rust helper for in-VM activity NIFs |
 | `aion-proto` | Shared wire contract (gRPC + serde) |
 | `aion-darwin-acl` | Single-snapshot native macOS ACL decoder for the server's path-safety gate |
 | `aion-server` | Server library: HTTP/gRPC/WebSocket + worker protocol |
@@ -123,7 +122,7 @@ The whole-system design lives in
 ## Repository layout
 
 ```
-crates/            Rust crates (engine, store, package, proto, server, nif, worker, client, cli)
+crates/            Rust crates (engine, store, package, proto, server, worker, client, cli)
 gleam/             Gleam packages (aion_flow authoring SDK, aion_client)
 sdks/python/       Python worker + client SDKs
 sdks/typescript/   TypeScript worker + client SDKs

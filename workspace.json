@@ -77,15 +77,6 @@
       "external_deps": ["beamr", "tokio", "tokio-util", "thiserror", "serde", "serde_json", "chrono", "uuid", "tracing", "futures", "dashmap"]
     },
     {
-      "id": "aion-nif",
-      "kind": "rust-lib",
-      "path": "crates/aion-nif",
-      "cluster": "aion-nif",
-      "description": "Rust helper crate for writing and registering NIFs that Gleam activities call. Deterministic helpers and recorded light in-VM activities, with the split enforced by type.",
-      "internal_deps": ["aion-core", "aion"],
-      "external_deps": ["beamr", "thiserror", "serde", "serde_json"]
-    },
-    {
       "id": "aion-proto",
       "kind": "rust-lib",
       "path": "crates/aion-proto",

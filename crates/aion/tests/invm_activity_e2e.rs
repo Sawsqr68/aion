@@ -120,6 +120,7 @@ async fn engine_over(
         .register_nifs([NifEntry::new(
             Mfa::new("invm_test_host", "bump", 1),
             bump_nif,
+            aion::runtime::Determinism::SideEffectful,
         )])
         .load_workflows(fixture_package(entry_function)?)
         .build()

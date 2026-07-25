@@ -218,16 +218,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aion-nif"
-version = "0.10.0"
-dependencies = [
- "aion-core",
- "beamr",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "aion-package"
 version = "0.10.0"
 dependencies = [

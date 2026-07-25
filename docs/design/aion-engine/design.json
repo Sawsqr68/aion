@@ -54,7 +54,7 @@
     "No replay/determinism machinery (event-append-on-observable-action, the replay engine, workflow.now/random, recovery-on-startup) — cluster AD. AE calls the append path and triggers replay; it does not implement them.",
     "No durable timers, signal routing, query service, child-workflow spawning, or concurrency primitives (all/race/map) — cluster AT. AE surfaces signal/query on Engine and owns suspend/resume around them; delivery and primitives are AT's.",
     "No HTTP/gRPC/WebSocket or server — cluster AW. aion is transport-agnostic.",
-    "No Rust NIF authoring helper — aion-nif, cluster AN. This crate registers NIFs handed to the builder; it does not provide the macros/builders to write them.",
+    "No Rust NIF authoring macros or term-mapping helper. This crate registers explicitly classified NativeFn entries handed to the builder.",
     "No Gleam SDK — aion_flow, cluster AF.",
     "No durable storage backend — libSQL is AS, PostgreSQL is AX. Engine tests use InMemoryStore.",
     "No remote (Tier-3) activity worker dispatch — that rides the worker protocol in aion-server (AW)."

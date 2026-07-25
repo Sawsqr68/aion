@@ -865,7 +865,7 @@ mod tests {
         schedule_coordinator_run_id, schedule_coordinator_workflow_id,
         schedule_coordinator_workflow_type,
     };
-    use crate::runtime::{Mfa, NifEntry};
+    use crate::runtime::{Determinism, Mfa, NifEntry};
 
     use super::EngineBuilder;
     use crate::EngineError;
@@ -1214,8 +1214,16 @@ mod tests {
             .store(InMemoryStore::default())
             .in_memory_visibility()
             .register_nifs([
-                NifEntry::new(mfa.clone(), crate::runtime::nif::test_native_zero),
-                NifEntry::dirty(mfa, crate::runtime::nif::test_native_zero),
+                NifEntry::new(
+                    mfa.clone(),
+                    crate::runtime::nif::test_native_zero,
+                    Determinism::Pure,
+                ),
+                NifEntry::dirty(
+                    mfa,
+                    crate::runtime::nif::test_native_zero,
+                    Determinism::Pure,
+                ),
             ])
             .build()
             .await

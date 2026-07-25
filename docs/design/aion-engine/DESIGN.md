@@ -380,9 +380,9 @@ activity children.
   resume around them; the delivery and the primitives are AT's.
 - **No HTTP/gRPC/WebSocket or server** — cluster **AW**. `aion` is
   transport-agnostic.
-- **No Rust NIF *authoring* helper** — that is `aion-nif` (cluster **AN**).
-  This crate *registers* NIFs handed to the builder; it does not provide the
-  macros/builders to write them.
+- **No Rust NIF *authoring* macros or term-mapping helper.** This crate
+  registers explicitly classified `NativeFn` entries handed to the builder;
+  callers implement their native boundary directly.
 - **No Gleam SDK** — `aion_flow` is cluster **AF**.
 - **No durable storage backend** — libSQL is AS, PostgreSQL is AX. Engine tests
   use `InMemoryStore`.

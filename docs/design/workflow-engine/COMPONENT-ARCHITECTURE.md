@@ -20,7 +20,7 @@ person/system usually touches only one or two.
 |------|--------------|---------------|
 | **Engine operator** | Deploys and runs the engine | `aion` (embed) or `aion-server` (standalone) |
 | **Workflow author** | Defines workflows | `aion_flow` (Gleam), later Elixir |
-| **In-VM activity author** | Writes native/BEAM activities | `aion-nif` (Rust), or plain Gleam |
+| **In-VM activity author** | Writes native/BEAM activities | `aion` host NIF registration, or plain Gleam |
 | **Remote activity author** | Writes out-of-process activities | `aion-worker-*` (their language) |
 | **Workflow caller** | Starts/signals/queries workflows | `aion-client-*` (their language) |
 
@@ -62,11 +62,6 @@ the engine internals.
 - aion_flow_ex          Elixir package (Hex). Same concepts, idiomatic
                         Elixir. Later phase — depends on beamr Elixir
                         coverage.
-
-## In-VM Activity Helpers (native, inside the BEAM)
-- aion-nif              Rust helper crate for writing + registering NIFs
-                        that Gleam/Elixir activities call. Deterministic
-                        helpers and light in-VM activities.
 
 ## Remote Activity Worker SDKs (own runtime, network protocol)
 - aion-worker           Rust remote-worker SDK.
@@ -282,33 +277,6 @@ Hex registry.
 
 ---
 
-## In-VM Activity Helpers (native, inside the BEAM)
-
-### `aion-nif` — Rust NIF helper
-
-A helper crate that makes it easy to write native Rust functions and
-register them as NIFs callable from Gleam/Elixir workflows. Two use cases
-(see DESIGN-OVERVIEW.md "Execution Tiers"):
-
-1. **Deterministic helpers** — JSON transform, template rendering, parsing,
-   crypto, formatting. Called inline from workflow code. Not recorded.
-2. **Light in-VM activities** — small side-effectful operations (read a
-   file, run a quick command) invoked through the activity contract so the
-   result is recorded.
-
-Provides macros/builders for declaring a NIF, mapping BEAM terms to/from
-Rust types, and registering with the engine. Wraps the beamr NIF surface
-that `beamr-meridian` already demonstrates.
-
-Depends on: `beamr` (NIF API), `aion` (activity contract for the recorded
-case).
-
-Open question: whether to fold this into the `aion` crate behind a feature
-flag. Recommendation: keep separate — an activity author who only writes
-NIFs should not pull the whole engine.
-
----
-
 ## Remote Activity Worker SDKs (out-of-process, any language)
 
 These connect to a running engine (via `aion-server`'s worker protocol),
@@ -367,19 +335,17 @@ their ecosystems.
                          beamr  (existing VM)
                            ^
                            |
-        +------------------+------------------+
-        |                  |                  |
-    aion-nif             aion            aion_flow (Gleam, @external)
-        |                  ^                  |
-        |        +---------+---------+        | (runtime binding via beamr)
-        |        |         |         |        |
-        |   aion-store  aion-proto   |        |
-        |        ^         ^         |        |
-        |        |         |         |        |
-        |  aion-store-sqlite  aion-store-postgres
-        |        |
-        +--------+
-                 |
+              +------------+
+              |            |
+            aion       aion_flow (Gleam, @external)
+              ^            |
+     +--------+--------+   | (runtime binding via beamr)
+     |        |        |   |
+aion-store aion-proto  |   |
+     ^        ^        |   |
+     |        |        |   |
+aion-store-sqlite  aion-store-postgres
+              |
             aion-server  ----<gRPC/WS>----  aion-worker-*  (Python/TS/Rust)
                  |                            aion-client-*  (Python/TS/Gleam)
                  |
@@ -420,7 +386,7 @@ the ideal end state; sequencing is a separate exercise).
 2. `aion-package` — the `.aion` format (load path needed early by the engine)
 3. `aion` core — engine on beamr, embedded Rust API, replay, timers,
    signals, queries
-4. `aion_flow` (Gleam) — authoring SDK + `aion-nif` helper
+4. `aion_flow` (Gleam) — authoring SDK
 5. `aion-proto` + `aion-server` — network API, WebSocket streaming,
    dashboard
 6. `aion-client-*` — caller SDKs
@@ -435,16 +401,14 @@ the ideal end state; sequencing is a separate exercise).
 
 ## Open Architecture Questions
 
-1. **`aion-nif` folding** — separate crate or feature flag on `aion`?
-   (Recommendation: separate.)
-2. **Worker transport** — gRPC vs WebSocket vs both for the remote worker
+1. **Worker transport** — gRPC vs WebSocket vs both for the remote worker
    protocol.
-3. **Client codegen** — hand-write each client SDK, or generate from
+2. **Client codegen** — hand-write each client SDK, or generate from
    `aion-proto`?
-4. **Dashboard packaging** — bundled into `aion-server` binary, or a
+3. **Dashboard packaging** — bundled into `aion-server` binary, or a
    separate static frontend served alongside?
-5. **Store trait granularity** — single `EventStore` trait, or split into
+4. **Store trait granularity** — single `EventStore` trait, or split into
    `EventStore` + `TimerStore` + `VisibilityStore` so backends can
    implement subsets?
-6. **Meridian's store** — does Meridian implement `aion-store` directly, or
+5. **Meridian's store** — does Meridian implement `aion-store` directly, or
    do we ship a `meridian-aion` adapter crate in the Meridian tree?
