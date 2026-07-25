@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import type { Event, Namespace } from '@/types';
-import { FirehoseFeedContent } from './FirehoseFeed';
+import { appendFirehoseEvents, FirehoseFeedContent } from './FirehoseFeed';
 
 const namespace = 'default' as Namespace;
 
@@ -57,6 +57,26 @@ test('FirehoseFeedContent renders streamed events in newest-first order', () => 
   expect(markup.indexOf('seq 2')).toBeLessThan(markup.indexOf('seq 1'));
   expect(markup).toContain('WorkflowCompleted');
   expect(markup).toContain('workflow workflow-1');
+});
+
+test('appendFirehoseEvents inserts a frame by sequence, deduplicates, and caps the window', () => {
+  const current = [workflowStarted(2), workflowStarted(4)];
+  const next = appendFirehoseEvents(
+    current,
+    [workflowStarted(3), workflowStarted(4), workflowStarted(5)],
+    3
+  );
+
+  expect(next.map((event) => event.data.envelope.seq)).toEqual([3, 4, 5]);
+  expect(next[1]).toBe(current[1]);
+});
+
+test('appendFirehoseEvents preserves window identity when a delivered frame is all duplicates', () => {
+  const current = [workflowStarted(2), workflowStarted(4)];
+
+  expect(appendFirehoseEvents(current, [workflowCompleted(2), workflowCompleted(4)], 100)).toBe(
+    current
+  );
 });
 
 function workflowStarted(seq: number): Event {

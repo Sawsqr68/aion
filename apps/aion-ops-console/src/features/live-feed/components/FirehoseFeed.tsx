@@ -5,18 +5,32 @@ import { isSelectedNamespace, useNamespace } from '@/features/namespace';
 import {
   eventRecordedAt,
   eventSequence,
-  mergeEventsBySequence,
+  mergeEventWindowBySequence,
 } from '@/features/workflow-detail/lib/timeline';
 import type { AionSocketError, FirehoseEventSubscriptionFilter } from '@/lib/api';
 import type { Event } from '@/types';
 import { useConnectionStatus, useSocketError } from '../hooks/useConnectionStatus';
-import { type EventSubscriptionManager, useEventSubscription } from '../hooks/useEventSubscription';
+import {
+  type EventSubscriptionManager,
+  useBatchedEventSubscription,
+} from '../hooks/useEventSubscription';
 import { ConnectionIndicatorContent } from './ConnectionIndicator';
 
 export type FirehoseFeedProps = {
   manager?: EventSubscriptionManager;
   maxEvents?: number;
 };
+
+const NEVER_FLUSH_FIREHOSE_BATCH = () => false;
+
+/** Merge one delivered frame into the ascending, deduplicated, bounded firehose window. */
+export function appendFirehoseEvents(
+  current: readonly Event[],
+  arriving: readonly Event[],
+  maxEvents: number
+): Event[] {
+  return mergeEventWindowBySequence(current, arriving, maxEvents);
+}
 
 export function FirehoseFeed({ manager, maxEvents = 100 }: FirehoseFeedProps) {
   const { selectedNamespace } = useNamespace();
@@ -31,13 +45,13 @@ export function FirehoseFeed({ manager, maxEvents = 100 }: FirehoseFeedProps) {
     return { kind: 'firehose', namespace: selectedNamespace };
   }, [selectedNamespace]);
 
-  useEventSubscription({
+  useBatchedEventSubscription({
     enabled: subscriptionFilter !== null,
     filter: subscriptionFilter,
+    flushAfter: NEVER_FLUSH_FIREHOSE_BATCH,
     manager,
-    onEvent: (event) => {
-      setEvents((current) => mergeEventsBySequence(current, [event]).slice(-maxEvents));
-      return true;
+    onEvents: (arriving) => {
+      setEvents((current) => appendFirehoseEvents(current, arriving, maxEvents));
     },
   });
 
