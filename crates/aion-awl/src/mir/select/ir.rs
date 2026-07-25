@@ -123,6 +123,15 @@ pub(super) enum Step {
         lhs: Src,
         rhs: Src,
     },
+    /// A boolean value whose RHS steps execute only on the non-deciding LHS
+    /// path, then reconverge before the next enclosing step.
+    ShortCircuit {
+        dst: Var,
+        op: BoolBin,
+        lhs: Src,
+        rhs_steps: Vec<Step>,
+        rhs: Src,
+    },
     /// A value-producing boolean negation burst.
     Not { dst: Var, src: Src },
 }
@@ -199,6 +208,7 @@ impl Step {
             | Self::JsonObj { dst, .. }
             | Self::Cmp { dst, .. }
             | Self::BoolOp { dst, .. }
+            | Self::ShortCircuit { dst, .. }
             | Self::Cons { dst, .. }
             | Self::Not { dst, .. } => Some(*dst),
             Self::CallImport { dst, .. }

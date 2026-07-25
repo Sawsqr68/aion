@@ -9,7 +9,7 @@ use beamr::loader::decode::{BifOp, ComparisonOp, Instruction, Operand, TypeTestO
 use crate::mir::RuntimeFn;
 use crate::mir::{BoolBin, CmpOp, Var};
 
-use super::{Emit, SelectError, Src};
+use super::{Emit, SelectError, Src, Step};
 
 impl Emit<'_, '_> {
     pub(super) fn operand(&self, src: &Src) -> Result<Operand, SelectError> {
@@ -115,6 +115,59 @@ impl Emit<'_, '_> {
         self.finish_bool(dst, false_label, done)
     }
 
+    /// Emit value-position `and`/`or` with the RHS steps physically behind the
+    /// deciding LHS branch. Both paths place the resulting boolean in `X0`,
+    /// reconverge, and store the one SSA destination before execution resumes.
+    pub(super) fn short_circuit_value(
+        &mut self,
+        dst: Var,
+        op: BoolBin,
+        lhs: &Src,
+        rhs_steps: &[Step],
+        rhs: &Src,
+    ) -> Result<(), SelectError> {
+        let rhs_label = self.builder.fresh_label();
+        let done = self.builder.fresh_label();
+        match op {
+            BoolBin::And => {
+                self.truth_test(lhs, done)?;
+                for step in rhs_steps {
+                    self.step(step)?;
+                }
+                self.reload(rhs, 0)?;
+                let store = self.builder.fresh_label();
+                self.push(Instruction::Jump {
+                    target: Operand::Label(store),
+                });
+                self.push(Instruction::Label { label: done });
+                let false_atom = self.builder.atom("false");
+                self.push(Instruction::Move {
+                    source: Operand::Atom(Some(false_atom)),
+                    destination: Operand::X(0),
+                });
+                self.push(Instruction::Label { label: store });
+            }
+            BoolBin::Or => {
+                self.truth_test(lhs, rhs_label)?;
+                let true_atom = self.builder.atom("true");
+                self.push(Instruction::Move {
+                    source: Operand::Atom(Some(true_atom)),
+                    destination: Operand::X(0),
+                });
+                self.push(Instruction::Jump {
+                    target: Operand::Label(done),
+                });
+                self.push(Instruction::Label { label: rhs_label });
+                for step in rhs_steps {
+                    self.step(step)?;
+                }
+                self.reload(rhs, 0)?;
+                self.push(Instruction::Label { label: done });
+            }
+        }
+        self.store(dst)
+    }
+
     pub(super) fn not_value(&mut self, dst: Var, src: &Src) -> Result<(), SelectError> {
         let true_label = self.builder.fresh_label();
         let done = self.builder.fresh_label();
@@ -186,6 +239,63 @@ impl Emit<'_, '_> {
             ],
         });
         self.store(dst)
+    }
+}
+
+impl Emit<'_, '_> {
+    pub(super) fn field_get(&mut self, dst: Var, base: Var, index: u16) -> Result<(), SelectError> {
+        self.push(Instruction::Move {
+            source: Operand::Y(self.home(base)?),
+            destination: Operand::X(0),
+        });
+        self.push(Instruction::GetTupleElement {
+            source: Operand::X(0),
+            index: Operand::Unsigned(u64::from(index)),
+            destination: Operand::X(1),
+        });
+        self.push(Instruction::Move {
+            source: Operand::X(1),
+            destination: Operand::Y(self.home(dst)?),
+        });
+        Ok(())
+    }
+
+    pub(super) fn assert_some(
+        &mut self,
+        dst: Var,
+        option: Var,
+        some_atom: beamr::atom::Atom,
+    ) -> Result<(), SelectError> {
+        let fail = self.builder.fresh_label();
+        let done = self.builder.fresh_label();
+        self.push(Instruction::Move {
+            source: Operand::Y(self.home(option)?),
+            destination: Operand::X(0),
+        });
+        self.push(Instruction::IsTaggedTuple {
+            fail: Operand::Label(fail),
+            value: Operand::X(0),
+            arity: Operand::Unsigned(2),
+            tag: Operand::Atom(Some(some_atom)),
+        });
+        self.push(Instruction::GetTupleElement {
+            source: Operand::X(0),
+            index: Operand::Unsigned(1),
+            destination: Operand::X(1),
+        });
+        self.push(Instruction::Move {
+            source: Operand::X(1),
+            destination: Operand::Y(self.home(dst)?),
+        });
+        self.push(Instruction::Jump {
+            target: Operand::Label(done),
+        });
+        self.push(Instruction::Label { label: fail });
+        self.push(Instruction::Badmatch {
+            value: Operand::X(0),
+        });
+        self.push(Instruction::Label { label: done });
+        Ok(())
     }
 }
 

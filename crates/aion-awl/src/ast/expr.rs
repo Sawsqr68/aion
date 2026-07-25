@@ -28,6 +28,23 @@ impl DurationLiteral {
             .checked_mul(seconds_per_unit)
             .map(Duration::from_secs)
     }
+
+    /// Converts this literal to the signed millisecond representation used by
+    /// native BEAM duration calls. Returns `None` instead of changing the
+    /// declared duration when multiplication or the `i64` conversion would
+    /// overflow.
+    #[must_use]
+    pub fn checked_milliseconds(&self) -> Option<i64> {
+        let milliseconds_per_unit = match self.unit {
+            DurationUnit::Seconds => 1_000,
+            DurationUnit::Minutes => 60_000,
+            DurationUnit::Hours => 3_600_000,
+            DurationUnit::Days => 86_400_000,
+        };
+        self.magnitude
+            .checked_mul(milliseconds_per_unit)
+            .and_then(|milliseconds| i64::try_from(milliseconds).ok())
+    }
 }
 
 /// Named argument inside a call, record construction, or route payload.

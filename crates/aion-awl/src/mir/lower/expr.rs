@@ -261,20 +261,28 @@ fn lower_logic(
             span,
         } => {
             let (lhs, lhs_ty) = lower_expr(ctx, left, scope, stmts)?;
-            let (rhs, rhs_ty) = lower_expr(ctx, right, scope, stmts)?;
             match op {
-                BinaryOp::And | BinaryOp::Or => stmts.push(Stmt::BoolOp {
-                    dst,
-                    op: if matches!(op, BinaryOp::And) {
-                        BoolBin::And
-                    } else {
-                        BoolBin::Or
-                    },
-                    lhs,
-                    rhs,
-                    span: span_of(*span),
-                }),
+                BinaryOp::And | BinaryOp::Or => {
+                    // The RHS prelude can contain calls, `TryBind`, field
+                    // access, or indexing. It must stay behind the LHS branch:
+                    // lowering it into `stmts` here would eagerly execute it.
+                    let mut rhs_stmts = Vec::new();
+                    let (rhs, _) = lower_expr(ctx, right, scope, &mut rhs_stmts)?;
+                    stmts.push(Stmt::ShortCircuit {
+                        dst,
+                        op: if matches!(op, BinaryOp::And) {
+                            BoolBin::And
+                        } else {
+                            BoolBin::Or
+                        },
+                        lhs,
+                        rhs_stmts,
+                        rhs,
+                        span: span_of(*span),
+                    });
+                }
                 BinaryOp::Concat => {
+                    let (rhs, rhs_ty) = lower_expr(ctx, right, scope, stmts)?;
                     let resolved = (
                         ctx.emitter.env.resolve(&lhs_ty),
                         ctx.emitter.env.resolve(&rhs_ty),
@@ -289,13 +297,16 @@ fn lower_logic(
                         span: span_of(*span),
                     });
                 }
-                comparison => stmts.push(Stmt::Cmp {
-                    dst,
-                    op: cmp_op(*comparison, &lhs_ty),
-                    lhs,
-                    rhs,
-                    span: span_of(*span),
-                }),
+                comparison => {
+                    let (rhs, _) = lower_expr(ctx, right, scope, stmts)?;
+                    stmts.push(Stmt::Cmp {
+                        dst,
+                        op: cmp_op(*comparison, &lhs_ty),
+                        lhs,
+                        rhs,
+                        span: span_of(*span),
+                    });
+                }
             }
         }
         Expr::Predicate {

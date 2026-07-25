@@ -8,7 +8,7 @@ use crate::semantic::SemanticAnalysis;
 
 use super::context::{Ctx, Flow};
 use super::error::CheckError;
-use super::{consts, decls, graph, subflows, walk};
+use super::{consts, decls, durations, graph, subflows, walk};
 
 /// Typecheck a parsed document with no document directory: schema imports
 /// (`type X = schema("file")`) cannot resolve and are reported as errors.
@@ -45,6 +45,7 @@ fn run(document: &Document, root: Option<&Path>) -> (Vec<CheckError>, crate::sem
     {
         ctx.error(timeout.span, "workflow `timeout` is too large");
     }
+    durations::run(&mut ctx);
     decls::run(&mut ctx);
     consts::run(&mut ctx);
     subflows::run(&mut ctx);

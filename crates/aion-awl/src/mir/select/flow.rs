@@ -155,6 +155,23 @@ fn lower_stmt(builder: &mut Builder<'_>, stmt: &Stmt) -> Result<Step, SelectErro
             lhs: src(builder, lhs)?,
             rhs: src(builder, rhs)?,
         }),
+        Stmt::ShortCircuit {
+            dst,
+            op,
+            lhs,
+            rhs_stmts,
+            rhs,
+            ..
+        } => Ok(Step::ShortCircuit {
+            dst: *dst,
+            op: *op,
+            lhs: src(builder, lhs)?,
+            rhs_steps: rhs_stmts
+                .iter()
+                .map(|stmt| lower_stmt(builder, stmt))
+                .collect::<Result<Vec<_>, _>>()?,
+            rhs: src(builder, rhs)?,
+        }),
         Stmt::Not {
             dst, src: value, ..
         } => Ok(Step::Not {
@@ -351,6 +368,7 @@ fn unsupported_stmt(stmt: &Stmt) -> SelectError {
         Stmt::WaitTimeoutCase { span, .. } => ("wait_timeout", *span),
         Stmt::Cmp { span, .. } => ("cmp", *span),
         Stmt::BoolOp { span, .. } => ("boolop", *span),
+        Stmt::ShortCircuit { span, .. } => ("short_circuit", *span),
         Stmt::Not { span, .. } => ("not", *span),
         Stmt::Concat { span, .. } => ("concat", *span),
         Stmt::AssertSome { span, .. } => ("assert_some", *span),
