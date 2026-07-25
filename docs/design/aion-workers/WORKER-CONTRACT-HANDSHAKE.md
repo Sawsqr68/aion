@@ -40,7 +40,7 @@ Worker registration carries typed activity schemas, not just names. The server v
 
 ### 2.3 Run-start hard gate
 
-A run cannot start unless every queue its contract references has at least one live, contract-compatible worker registered. This is the conversion point: mid-flight structural death becomes an up-front refusal. The gate is absolute — no override flag. (An operator who wants to start a doomed run has no legitimate use case; the historical hand-launched-worker pattern is exactly what this forbids.)
+A run cannot start when its contract is **structurally unservable**: a referenced queue no deployment declares, or every registered worker for it contract-incompatible (`NO_QUEUE_DECLARATION` / `POLLERS_INCOMPATIBLE` in the runtime doc's four-way taxonomy). That refusal is absolute — no override flag; an operator who wants to start a doomed run has no legitimate use case, and the historical hand-launched-worker pattern is exactly what this forbids. *Amended in cross-review with the runtime doc (R1):* when the contract is declared and compatible workers exist but none are live right now (`NO_LIVE_POLLERS` — the legitimate deploy-then-start-worker ordering of §2.4, at run scale), a dispatch may declare the **`durable_pending`** service policy: the run is accepted, marked `UNSERVED` visibly and immediately, alerted out-of-band, and bounded by a service-availability deadline producing a typed `WorkerUnavailable` failure. `strict` (refuse) remains the default. This is a declared policy with stated semantics, not an override of the structural gate — structural absence still refuses unconditionally.
 
 ### 2.4 Deploy posture: warn/park, with strict mode
 
