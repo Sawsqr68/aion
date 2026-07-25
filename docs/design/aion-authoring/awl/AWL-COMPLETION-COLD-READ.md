@@ -31,7 +31,7 @@ First-match ordering was flagged as assumed-not-stated by both panels; `decide` 
 
 Runtime meaning (cross-review, Vesper): **`goto` is a durable checkpoint** — step results commit to the journal before control moves. The lifecycle doc owns the full statement; here it is the reason `goto` is honest rather than merely blunt, and why `decide`'s stated-first-match is replay-deterministic.
 
-### 2.2 The invisible-dataflow rule (4/4 readers across both panels — must-fix)
+### 2.2 The invisible-dataflow rule (6/6 — every reader, both panels — must-fix)
 
 `join -> lane_results`, `wait ruling -> rulings` bind values that are then never passed; the true dependency rides "recorded in this run's history" prompt prose. Panel B's Opus reader called it "the one genuinely surprising convention." Rule: **typed bindings are the carrier; history is the audit trail — never the reverse.** Agent actions that need prior results receive them as declared, typed arguments (the transforms layer §4 makes the reshaping cheap). A binding that is never consumed becomes a checker warning; the flagship gets rewritten to pass `lane_results` and `rulings` explicitly.
 
@@ -43,6 +43,11 @@ Runtime meaning (cross-review, Vesper): **`goto` is a durable checkpoint** — s
 - **Fork binding unified.** Named forks bind per-branch, collection forks bind at join — two shapes for one construct (2 panels). Collection forks gain nothing from per-branch names; the fix is documentation-of-record plus checker text that names the distinction when misused.
 - **Explicit failure edges.** No sample shows what happens when an action exhausts retries, a fork sibling dies, or a timeout fires; readers inferred a hidden error channel (3/3). Every step gains an optional `on failure` edge (already a stopgap-dialect construct; lands natively with the parity arc), and the checker requires one wherever a **non-advisory** declared retry can exhaust. *Pending Bundle B's posture ruling:* the lifecycle doc is expected to declare an advisory/side-channel action class (exhaustion logs and surfaces on the run, never faults the step) for heartbeat-shaped actions; the checker requirement scopes to non-advisory actions so the rule doesn't force boilerplate edges exactly where both panels agreed failure should be non-fatal-by-default.
 - **`""` vs absent for optionals** (2 panels): the checker rejects passing `""` to `String?` parameters; absence is spelled by omission.
+- **Retry counting stated in one word** (panel B, both Sols): neither reader could tell whether `retry 5` means five total attempts or five retries after the first. The reference defines it as "N further attempts after the first" and the grammar keeps the word `retry` honest to that.
+- **Visit counting stated** (panel B): `max N visits` declares that the first entry counts as visit one and that action retries within a visit do not increment it — both were guessed at.
+- **Empty collection fork = immediate join, stated** (panel B): `fork x in xs` over an empty collection joins immediately with an empty binding; currently assumed by every reader, promised by none.
+- **Shell exit codes: data, not failure** (panel B + §5.2): when an action's result type carries `exit_code`, a nonzero exit is a *successful* action returning data — retry triggers only on transport/infrastructure failure (worker lost, timeout, malformed payload). The current corpus chooses neither reading; this ruling makes `retry 3` on `run_command` mean what it should. Failure-classification detail (what counts as which) is a lifecycle-doc ruling; the language reference cites it.
+- **`session_key` is a convention wearing a parameter's clothes** (panel B, xhigh): agent-session continuity is invisible in the grammar — it reads as an ordinary `String?`. If session affinity becomes engine-guaranteed (the lifecycle doc's session-as-first-class-object direction), it graduates to a keyword; until then the reference names the convention explicitly.
 
 ## 3. Missing capabilities
 
@@ -68,7 +73,7 @@ Surface choices (hole syntax, stage keywords vs pipes) wait on the competition-l
 
 ## 4. Honest limits — what types cannot promise
 
-Sol-xhigh's sharpest structural observation: the flagship is a **typed shell around an advisory core** — merge rules, completion criteria, and holding discipline live in prompt prose; the types guarantee shape, not behavior. This is not a defect to fix in grammar, it is a limit to state in documentation and to shrink deliberately: every rule that CAN move from prose into a construct (the escalation set → workflow state, owned by Bundle B; completion criteria → `decide` guards; heartbeat posture → declared edge) should move. What remains advisory must be visibly advisory.
+Sol-xhigh's sharpest structural observation: the flagship is a **typed shell around an advisory core** — merge rules, completion criteria, and holding discipline live in prompt prose; the types guarantee shape, not behavior. Panel B's xhigh reader quantified the same boundary from the other side: control-flow graph readable 8/10 cold, operational semantics 5/10 — "the prompts look procedural but most of their contents are not engine-level steps." The 8 is this doc's to keep; shrinking the 5 is the lifecycle doc's job (making the runtime contract stated). This is not a defect to fix in grammar, it is a limit to state in documentation and to shrink deliberately: every rule that CAN move from prose into a construct (the escalation set → workflow state, owned by Bundle B; completion criteria → `decide` guards; heartbeat posture → declared edge) should move. What remains advisory must be visibly advisory.
 
 ## 5. Bugs filed from the study
 
