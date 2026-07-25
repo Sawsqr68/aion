@@ -11,7 +11,34 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, ts_rs::TS, Clone, Debug, PartialEq, Eq)]
 pub struct Payload {
     content_type: ContentType,
+    #[ts(type = "Array<number> | PayloadElision")]
     bytes: Vec<u8>,
+}
+
+/// Wire marker that replaces `Payload` bytes when an HTTP projection elides a
+/// payload larger than the caller's byte limit.
+///
+/// Elision applies to serialized JSON projections only — the durable payload
+/// is untouched. `size_bytes` reports the original byte length so consoles
+/// can offer on-demand loading. The marker field is always `true` on the
+/// wire, which the generated TypeScript states as a literal.
+#[derive(Serialize, ts_rs::TS, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PayloadElision {
+    #[serde(rename = "__elided")]
+    #[ts(type = "true")]
+    elided: bool,
+    size_bytes: u64,
+}
+
+impl PayloadElision {
+    /// Creates the elision marker for an original payload of `size_bytes`.
+    #[must_use]
+    pub const fn new(size_bytes: u64) -> Self {
+        Self {
+            elided: true,
+            size_bytes,
+        }
+    }
 }
 
 impl Payload {

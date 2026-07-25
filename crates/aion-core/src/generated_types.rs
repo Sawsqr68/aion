@@ -11,8 +11,8 @@ use crate::{
     ClusterShard, ClusterSnapshot, ClusterStreamError, ClusterWorker, ContentType,
     DescribeWorkflowResponse, Event, EventEnvelope, InjectPriority, InterventionCapabilities,
     InterventionCommand, InterventionKind, InterventionOutcome, InterventionPrimitive, MessageRole,
-    NamespacePlacementWire, OverlapPolicy, PackageVersion, Payload, ProgressDetail, RunId,
-    ScheduleConfig, ScheduleId, SearchAttributeType, SearchAttributeValue, StopKind,
+    NamespacePlacementWire, OverlapPolicy, PackageVersion, Payload, PayloadElision, ProgressDetail,
+    RunId, ScheduleConfig, ScheduleId, SearchAttributeType, SearchAttributeValue, StopKind,
     TimerCancelCause, TimerId, TimerIdKind, TriggerSpec, WithTimeoutOutcome, WorkerDeathReason,
     WorkerTransport, WorkflowError, WorkflowFilter, WorkflowId, WorkflowStatus, WorkflowSummary,
 };
@@ -52,6 +52,7 @@ fn ops_console_wire_types() -> Result<String, ts_rs::ExportError> {
     push_type::<TimerCancelCause>(&config, &mut output)?;
     output.push_str("export type Namespace = string;\n\n");
     push_type::<ContentType>(&config, &mut output)?;
+    push_type::<PayloadElision>(&config, &mut output)?;
     push_type::<Payload>(&config, &mut output)?;
     push_type::<TriggerSpec>(&config, &mut output)?;
     push_type::<OverlapPolicy>(&config, &mut output)?;
