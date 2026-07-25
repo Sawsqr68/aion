@@ -229,12 +229,10 @@ where
                 forward_heartbeat(session, &heartbeat_bookkeeper, request, &mut pending_error)
                     .await;
             }
-            // Automatic liveness beats for every in-flight activity: the
-            // runtime — not each handler — keeps the server's per-task
-            // heartbeat window satisfied while a handler legitimately runs
-            // longer than the window. Disabled while nothing is in flight
-            // (an idle worker has no tracked task to keep alive).
-            () = tick_liveness_pump(&mut liveness_pump), if !in_flight.is_empty() => {
+            // Automatic connection lease beat plus per-task liveness beats.
+            // This arm remains active while idle so an open but wedged runtime
+            // becomes detectable by the server's connection lease.
+            () = tick_liveness_pump(&mut liveness_pump) => {
                 pump_liveness(session, &heartbeat_bookkeeper, &in_flight, &mut pending_error)
                     .await;
             }
@@ -458,9 +456,8 @@ async fn tick_liveness_pump(pump: &mut Option<tokio::time::Interval>) {
     }
 }
 
-/// Sends one automatic liveness heartbeat (no progress payload) for every
-/// in-flight activity, recording the first send error. A liveness beat never
-/// carries progress — explicit handler heartbeats own the progress channel.
+/// Sends one connection lease heartbeat followed by a task liveness heartbeat
+/// (with no progress payload) for every in-flight activity.
 async fn pump_liveness<S>(
     session: &mut S,
     heartbeat_bookkeeper: &HeartbeatBookkeeper,
@@ -469,6 +466,10 @@ async fn pump_liveness<S>(
 ) where
     S: WorkerSession,
 {
+    record_first_error(pending_error, session.send_connection_heartbeat().await);
+    if pending_error.is_some() {
+        return;
+    }
     for key in in_flight.keys() {
         record_first_error(
             pending_error,

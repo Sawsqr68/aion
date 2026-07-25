@@ -121,6 +121,14 @@ pub trait WorkerSession: Send {
         progress: Option<Payload>,
     ) -> Result<(), WorkerError>;
 
+    /// Heartbeat the worker connection while it is idle.
+    ///
+    /// The gRPC transport encodes this on the existing heartbeat path with no
+    /// task identifiers. Transport fakes may retain the no-op default.
+    async fn send_connection_heartbeat(&mut self) -> Result<(), WorkerError> {
+        Ok(())
+    }
+
     /// Server-assigned liveness window from the `RegisterAck`, once registered.
     ///
     /// The serve loop derives its AUTOMATIC liveness-heartbeat cadence from
@@ -483,6 +491,18 @@ impl WorkerSession for GrpcWorkerSession {
             workflow_id: Some(ProtoWorkflowId::from(workflow_id)),
             activity_id: Some(ProtoActivityId::from(activity_id)),
             progress: progress.map(ProtoPayload::from),
+        };
+        self.send_to_server(aion_proto::generated::worker_to_server::Message::Heartbeat(
+            generated_heartbeat(heartbeat),
+        ))
+        .await
+    }
+
+    async fn send_connection_heartbeat(&mut self) -> Result<(), WorkerError> {
+        let heartbeat = ProtoHeartbeat {
+            workflow_id: None,
+            activity_id: None,
+            progress: None,
         };
         self.send_to_server(aion_proto::generated::worker_to_server::Message::Heartbeat(
             generated_heartbeat(heartbeat),

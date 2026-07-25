@@ -31,6 +31,7 @@ mod schedules;
 mod transcripts;
 mod visibility;
 mod whoami;
+mod workers;
 mod workflows;
 
 #[cfg(test)]
