@@ -14,6 +14,7 @@ mod consts;
 mod context;
 mod cycles;
 mod decls;
+mod durations;
 mod entry;
 mod error;
 mod exhaustive;

@@ -26,13 +26,31 @@ pub(super) fn annotate(module: &mut MirModule) {
 /// Annotate `block` in place and return the set of vars live on entry to it.
 /// A block's tail is terminal, so nothing outlives the block itself.
 fn block_live_in(block: &mut Block) -> BTreeSet<Var> {
-    let mut live = tail_live_in(&mut block.tail);
-    for stmt in block.stmts.iter_mut().rev() {
+    let live = tail_live_in(&mut block.tail);
+    stmts_live_in(&mut block.stmts, live)
+}
+
+fn stmts_live_in(stmts: &mut [Stmt], mut live: BTreeSet<Var>) -> BTreeSet<Var> {
+    for stmt in stmts.iter_mut().rev() {
         let live_out = live.clone();
         let defs = defs(stmt);
         set_live_after(stmt, &live_out, &defs);
         for def in &defs {
             live.remove(def);
+        }
+        if let Stmt::ShortCircuit {
+            lhs,
+            rhs_stmts,
+            rhs,
+            ..
+        } = stmt
+        {
+            let mut rhs_live = live.clone();
+            rhs_live.extend(single(rhs));
+            let rhs_live_in = stmts_live_in(rhs_stmts, rhs_live);
+            live.extend(rhs_live_in);
+            live.extend(single(lhs));
+            continue;
         }
         annotate_nested(stmt);
         for used in uses(stmt) {
@@ -124,6 +142,12 @@ fn uses(stmt: &Stmt) -> BTreeSet<Var> {
         Stmt::TryBind { result, .. } => BTreeSet::from([*result]),
         Stmt::Cmp { lhs, rhs, .. }
         | Stmt::BoolOp { lhs, rhs, .. }
+        | Stmt::ShortCircuit {
+            lhs,
+            rhs,
+            rhs_stmts: _,
+            ..
+        }
         | Stmt::Concat { lhs, rhs, .. }
         | Stmt::ListPrepend {
             head: lhs,

@@ -22,15 +22,6 @@ pub(super) fn zero_span() -> Span {
     Span::zero()
 }
 
-fn zero_src() -> crate::Span {
-    crate::Span {
-        start: 0,
-        end: 0,
-        line: 0,
-        column: 0,
-    }
-}
-
 /// How one activity value is formed at its call site: the call-site config
 /// override line (merged per key over the declaration by
 /// `apply_action_config`), the piped single argument (a pipe stage;
@@ -203,7 +194,7 @@ fn apply_action_config(
         .and_then(|config| config.timeout.as_ref())
         .or_else(|| decl.and_then(|config| config.timeout.as_ref()));
     if let Some(timeout) = timeout {
-        let dur = duration_var(ctx, timeout.magnitude, timeout.unit, stmts, span);
+        let dur = duration_var(ctx, timeout.magnitude, timeout.unit, stmts, timeout.span)?;
         current = call_rt(
             ctx,
             RuntimeFn::ActTimeout,
@@ -244,15 +235,15 @@ fn duration_var(
     unit: crate::DurationUnit,
     stmts: &mut Vec<Stmt>,
     span: crate::Span,
-) -> Var {
-    let ms = duration_ms(magnitude, unit);
-    call_rt(
+) -> Result<Var, LowerError> {
+    let ms = duration_ms(magnitude, unit, span)?;
+    Ok(call_rt(
         ctx,
         RuntimeFn::DurationMs,
         vec![Value::Int(ms)],
         stmts,
         span,
-    )
+    ))
 }
 
 /// Build the `activity.RetryPolicy(max_attempts, backoff)` record the SDK's
@@ -267,7 +258,7 @@ fn build_retry_policy(
     use crate::ast::RetrySpec;
     let (count, backoff) = match retry {
         RetrySpec::Every { count, every, .. } => {
-            let delay = duration_var(ctx, every.magnitude, every.unit, stmts, span);
+            let delay = duration_var(ctx, every.magnitude, every.unit, stmts, every.span)?;
             let fixed = ctx.atom("fixed");
             (
                 *count,
@@ -277,9 +268,9 @@ fn build_retry_policy(
         RetrySpec::Backoff {
             count, min, max, ..
         } => {
-            let initial = duration_var(ctx, min.magnitude, min.unit, stmts, span);
+            let initial = duration_var(ctx, min.magnitude, min.unit, stmts, min.span)?;
             let multiplier = ctx.push_float("2.0");
-            let cap = duration_var(ctx, max.magnitude, max.unit, stmts, span);
+            let cap = duration_var(ctx, max.magnitude, max.unit, stmts, max.span)?;
             let exponential = ctx.atom("exponential");
             (
                 *count,
@@ -326,46 +317,52 @@ pub(super) fn lower_sleep(
     magnitude: u64,
     unit: crate::DurationUnit,
     stmts: &mut Vec<Stmt>,
-) {
-    let ms = duration_ms(magnitude, unit);
+    span: crate::Span,
+) -> Result<(), LowerError> {
+    let ms = duration_ms(magnitude, unit, span)?;
     let millis = call_rt(
         ctx,
         RuntimeFn::DurationMs,
         vec![Value::Int(ms)],
         stmts,
-        zero_src(),
+        span,
     );
     let slept = call_rt(
         ctx,
         RuntimeFn::WfSleep,
         vec![Value::Var(millis)],
         stmts,
-        zero_src(),
+        span,
     );
     let mapped = call_rt(
         ctx,
         RuntimeFn::MapTimerError,
         vec![Value::Var(slept)],
         stmts,
-        zero_src(),
+        span,
     );
     let discard = ctx.fresh_var();
     stmts.push(Stmt::TryBind {
         dst: discard,
         result: mapped,
         live_after: LiveAfter::default(),
-        span: zero_span(),
+        span: Span::from_source(span),
     });
+    Ok(())
 }
 
-pub(super) fn duration_ms(magnitude: u64, unit: crate::DurationUnit) -> i64 {
-    let ms = match unit {
-        crate::DurationUnit::Seconds => magnitude.saturating_mul(1_000),
-        crate::DurationUnit::Minutes => magnitude.saturating_mul(60_000),
-        crate::DurationUnit::Hours => magnitude.saturating_mul(3_600_000),
-        crate::DurationUnit::Days => magnitude.saturating_mul(86_400_000),
-    };
-    i64::try_from(ms).unwrap_or(i64::MAX)
+pub(super) fn duration_ms(
+    magnitude: u64,
+    unit: crate::DurationUnit,
+    span: crate::Span,
+) -> Result<i64, LowerError> {
+    crate::ast::DurationLiteral {
+        span,
+        magnitude,
+        unit,
+    }
+    .checked_milliseconds()
+    .ok_or_else(|| LowerError::new(span, "duration exceeds the native signed-millisecond range"))
 }
 
 /// Encode a payload to JSON through its output codec's `_to_json` (or a leaf).

@@ -421,7 +421,13 @@ pub(super) fn lower_statement(
             Ok(None)
         }
         Statement::Sleep(sleep) => {
-            lower_sleep(ctx, sleep.duration.magnitude, sleep.duration.unit, stmts);
+            lower_sleep(
+                ctx,
+                sleep.duration.magnitude,
+                sleep.duration.unit,
+                stmts,
+                sleep.duration.span,
+            )?;
             Ok(None)
         }
         Statement::Pipe(pipe) => {

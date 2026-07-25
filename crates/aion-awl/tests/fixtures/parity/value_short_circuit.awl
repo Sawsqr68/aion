@@ -1,0 +1,11 @@
+//! Return booleans whose skipped right-hand sides would index an empty list.
+workflow value_short_circuit
+  input items: [String]
+  outcome completed: type Decision, route success
+
+type Decision { and_value: Bool, or_value: Bool }
+
+step decide
+  outcome done: otherwise,
+    route completed(and_value: false and items[0] == "boom",
+      or_value: true or items[0] == "boom")

@@ -1,0 +1,14 @@
+//! Dispatch one action with the largest whole-second native duration.
+workflow duration_boundary
+  input url: String
+  outcome fetched: type Report, route success
+
+type Report { body: String }
+
+worker fetcher
+  action fetch(url: String) -> Report
+    node edge01, timeout 9223372036854775s
+
+step fetch_report
+  fetch(url: url) -> report
+  report |> route fetched

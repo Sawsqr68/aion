@@ -365,6 +365,24 @@ fn render_stmt_ops(module: &MirModule, stmt: &Stmt) -> String {
             render_value(module, lhs),
             render_value(module, rhs)
         ),
+        Stmt::ShortCircuit {
+            dst,
+            op,
+            lhs,
+            rhs_stmts,
+            rhs,
+            ..
+        } => format!(
+            "{} = short_circuit {op:?} {} rhs=[{}] => {}",
+            var(*dst),
+            render_value(module, lhs),
+            rhs_stmts
+                .iter()
+                .map(|stmt| render_stmt(module, stmt))
+                .collect::<Vec<_>>()
+                .join("; "),
+            render_value(module, rhs)
+        ),
         Stmt::Not { dst, src, .. } => format!("{} = not {}", var(*dst), render_value(module, src)),
         Stmt::Concat { dst, lhs, rhs, .. } => format!(
             "{} = concat {} {}",

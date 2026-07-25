@@ -136,6 +136,15 @@ fn plan_steps(
                 assign_var(*bind, homes, slot);
             }
         }
+        if let Step::ShortCircuit { rhs_steps, .. } = step {
+            plan_steps(
+                rhs_steps,
+                &TailKind::Return(Src::Nil),
+                homes,
+                slot,
+                needs_acc,
+            );
+        }
         if let Step::JsonObj { pairs, .. } = step {
             *needs_acc = *needs_acc || pairs.len() >= 2;
         }
@@ -356,63 +365,15 @@ impl Emit<'_, '_> {
             } => self.json_obj(*dst, pairs, *object_import)?,
             Step::Cmp { dst, op, lhs, rhs } => self.cmp_value(*dst, *op, lhs, rhs)?,
             Step::BoolOp { dst, op, lhs, rhs } => self.bool_value(*dst, *op, lhs, rhs)?,
+            Step::ShortCircuit {
+                dst,
+                op,
+                lhs,
+                rhs_steps,
+                rhs,
+            } => self.short_circuit_value(*dst, *op, lhs, rhs_steps, rhs)?,
             Step::Not { dst, src } => self.not_value(*dst, src)?,
         }
-        Ok(())
-    }
-
-    fn field_get(&mut self, dst: Var, base: Var, index: u16) -> Result<(), SelectError> {
-        self.push(Instruction::Move {
-            source: Operand::Y(self.home(base)?),
-            destination: Operand::X(0),
-        });
-        self.push(Instruction::GetTupleElement {
-            source: Operand::X(0),
-            index: Operand::Unsigned(u64::from(index)),
-            destination: Operand::X(1),
-        });
-        self.push(Instruction::Move {
-            source: Operand::X(1),
-            destination: Operand::Y(self.home(dst)?),
-        });
-        Ok(())
-    }
-
-    fn assert_some(
-        &mut self,
-        dst: Var,
-        option: Var,
-        some_atom: beamr::atom::Atom,
-    ) -> Result<(), SelectError> {
-        let fail = self.builder.fresh_label();
-        let done = self.builder.fresh_label();
-        self.push(Instruction::Move {
-            source: Operand::Y(self.home(option)?),
-            destination: Operand::X(0),
-        });
-        self.push(Instruction::IsTaggedTuple {
-            fail: Operand::Label(fail),
-            value: Operand::X(0),
-            arity: Operand::Unsigned(2),
-            tag: Operand::Atom(Some(some_atom)),
-        });
-        self.push(Instruction::GetTupleElement {
-            source: Operand::X(0),
-            index: Operand::Unsigned(1),
-            destination: Operand::X(1),
-        });
-        self.push(Instruction::Move {
-            source: Operand::X(1),
-            destination: Operand::Y(self.home(dst)?),
-        });
-        self.push(Instruction::Jump {
-            target: Operand::Label(done),
-        });
-        self.push(Instruction::Label { label: fail });
-        self.push(Instruction::Badmatch {
-            value: Operand::X(0),
-        });
-        self.push(Instruction::Label { label: done });
         Ok(())
     }
 

@@ -144,6 +144,12 @@ fn verify_stmt(
                 check_value(module, function, value)?;
             }
         }
+        Stmt::ShortCircuit { rhs_stmts, rhs, .. } => {
+            for rhs_stmt in rhs_stmts {
+                verify_stmt(module, function, rhs_stmt, defined)?;
+            }
+            check_value(module, function, rhs)?;
+        }
         Stmt::Attempt {
             lifted,
             captures,
@@ -353,6 +359,7 @@ fn stmt_values(stmt: &Stmt) -> Vec<Value> {
         Stmt::MakeClosure { captures, .. } => captures.clone(),
         Stmt::Cmp { lhs, rhs, .. }
         | Stmt::BoolOp { lhs, rhs, .. }
+        | Stmt::ShortCircuit { lhs, rhs, .. }
         | Stmt::Concat { lhs, rhs, .. }
         | Stmt::ListPrepend {
             head: lhs,

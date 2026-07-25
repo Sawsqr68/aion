@@ -440,6 +440,11 @@ fn collect_step(step: &Step, homes: &HashMap<Var, u32>, out: &mut Vec<CallExpect
             args: arg_srcs(captures, homes)?,
             produces: produces(Some(*dst), homes)?,
         }),
+        Step::ShortCircuit { rhs_steps, .. } => {
+            for rhs_step in rhs_steps {
+                collect_step(rhs_step, homes, out)?;
+            }
+        }
         Step::JsonObj {
             dst,
             pairs,

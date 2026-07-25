@@ -102,7 +102,7 @@ pub(super) fn lower_wait_stmt(
                 captures: Vec::new(),
                 span,
             });
-            let ms = duration_ms(timeout.magnitude, timeout.unit);
+            let ms = duration_ms(timeout.magnitude, timeout.unit, timeout.span)?;
             let dur = call_rt(
                 ctx,
                 RuntimeFn::DurationMs,

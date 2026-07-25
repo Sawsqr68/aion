@@ -32,6 +32,8 @@ mod fork_generality;
 mod harness;
 #[path = "runtime_codecs/pipes.rs"]
 mod pipes;
+#[path = "runtime_codecs/semantic_pins.rs"]
+mod semantic_pins;
 #[path = "runtime_codecs/stmt_parity.rs"]
 mod stmt_parity;
 

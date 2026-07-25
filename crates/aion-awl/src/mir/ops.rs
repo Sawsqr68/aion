@@ -178,6 +178,18 @@ pub enum Stmt {
         rhs: Value,
         span: Span,
     },
+    /// A value-position `and`/`or` whose right-hand statement prelude is
+    /// evaluated only when `lhs` does not decide the result. Keeping the RHS
+    /// as an explicit nested burst lets instruction selection emit a branch
+    /// and join without duplicating the enclosing continuation.
+    ShortCircuit {
+        dst: Var,
+        op: BoolBin,
+        lhs: Value,
+        rhs_stmts: Vec<Stmt>,
+        rhs: Value,
+        span: Span,
+    },
     Not {
         dst: Var,
         src: Value,
@@ -268,6 +280,7 @@ impl Stmt {
             | Self::WaitTimeoutCase { dst, .. }
             | Self::Cmp { dst, .. }
             | Self::BoolOp { dst, .. }
+            | Self::ShortCircuit { dst, .. }
             | Self::Not { dst, .. }
             | Self::Concat { dst, .. }
             | Self::Increment { dst, .. }
