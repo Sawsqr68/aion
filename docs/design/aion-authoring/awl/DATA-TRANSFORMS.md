@@ -57,9 +57,23 @@ Transforms are pure, so **Tier 0 executes them at edit time**: fixture inputs ru
 - No stringly-typed query evaluation at runtime.
 - No auto-coercion between shapes: every mapping is a declared, reviewable artifact.
 
-## 8. Open design questions (for the checker/MIR owners)
+## 8. Landscape lessons (external survey, Jul 25 2026 — session records with the blind-reader study)
+
+The survey (jq, JSONata, JMESPath, Step Functions' 2024 JSONata migration, CUE, Jsonnet, XSLT, Temporal converters, GraphQL, LINQ, Elm) converged on the same verdict as the blind-reader panels: a **typed shape calculus**, not a general embedded expression language. Rules promoted into this design from evidence:
+
+- **Absence is a taxonomy, not a value.** jq conflates null/no-output/false/error behind `?`; JMESPath silently returns or omits null structurally; JSONata's empty/singleton/multi sequence rules change output shape invisibly. Here: *missing*, *null*, *optional-absent*, *empty collection*, and *failure* are five distinct, checker-visible things. Nothing is silently omitted, ever.
+- **Cardinality is explicit.** jq's stream algebra (everything is a zero/one/many stream) is its documented readability cliff. Here: `map`/`filter`/`flat_map` are distinct named operations with typed cardinality (the LINQ lesson); no implicit flattening, no result streams.
+- **Prohibitions (the XSLT/Jsonnet lessons), added to §7:** no implicit context/current-node rebinding, no global or implicit dispatch, no inheritance/overlay merging, no late binding, no dynamic evaluation, no user recursion, no arbitrary I/O. XSLT's plausible-but-unintended output came from implicit template dispatch with built-in fallbacks — the exact uncanny valley Tom named, forty years early.
+- **The escape hatch is typed and named, not gradual.** Step Functions' intrinsic functions show what happens when a deliberately-small layer meets real needs with no principled exit: users decant into Lambda glue. Here: a registry of named, typed, deterministic host functions (`tail(s, lines: N)`-class) — the simple layer never accretes into a second programming language because the pressure has a typed somewhere to go.
+- **Converters are protocol, not serialization detail** (Temporal). Transform and codec versioning at durable boundaries follows the handshake's written compat rules (§2.6 there); a transform's identity participates in the content-hash pinning story.
+- **Precedents adopted:** GraphQL selection sets for compile-validated output shape; CUE's conflicts-are-errors rigor (never last-writer-wins) under the schema system; Elm-style same-type record update; Jsonnet's hermeticity (pure, no ambient state) with none of its dynamism.
+
+Survey unknowns resolved by existing rulings: transforms compile into workflow bytecode and are pure/deterministic, so replay semantics are settled by construction (§2); templating is text-only and JSON is never string-built (§4), so escaping-model concerns don't arise in the reshaping layer; user-defined pure transforms are the feature itself (§2). Deferred, stated: joins/grouping/dynamic object keys and streaming evaluation wait for a demanding consumer; first release covers the pipe-stage family plus shape-mapping.
+
+## 9. Open design questions (for the checker/MIR owners)
 
 - Surface syntax for deep paths and narrowing (`?.` vs match-based) — pick what composes with existing accessor syntax.
 - Whether transforms compile to dedicated MIR functions or inline at call sites (replay-neutral either way; the choice is code-size vs locality).
 - Template output types beyond `String` (markdown/document builders) — defer until a consumer demands it.
 - Interaction with the parity-first construct landings (`on failure`, substeps) — transforms should land after those, on a compiler that already expresses the full language.
+- Hole syntax for templates (`{expr}` vs `${expr}`) — both blind-reader panels sketched `${}` unprompted (Sol-medium, Sol-xhigh); weight that as the reader-native instinct.

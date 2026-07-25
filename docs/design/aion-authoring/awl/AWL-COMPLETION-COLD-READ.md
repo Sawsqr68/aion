@@ -77,7 +77,7 @@ Sol-xhigh's sharpest structural observation: the flagship is a **typed shell aro
 
 ## 6. Open — pending the landscape leg
 
-External survey (jq failure modes, JSONata/JMESPath and the Step Functions migration, CUE/Jsonnet, XSLT's cautionary arc, Temporal payload converters, typed-reshaping precedents) resumes after a provider drop; its output selects the transforms surface details in `DATA-TRANSFORMS.md` §8. Nothing in §§2–5 depends on it.
+External survey complete (one provider drop, session resumed). Landed — lessons folded into DATA-TRANSFORMS.md §8 (absence taxonomy, explicit cardinality, XSLT-class prohibitions, typed escape hatch, converters-as-protocol, adopted precedents). Nothing in §§2–5 depended on it.
 
 ## 7. Handoffs to Bundle B (delivered to Vesper, Jul 25)
 
