@@ -7,5 +7,6 @@
 //! fake-CLI shims on a private `PATH`.
 
 pub mod handlers;
+pub mod registry;
 pub mod shell;
 pub mod types;

@@ -17,15 +17,20 @@
 //! deleted — and the run key is refused unless it is a single normal path
 //! component.
 //!
-//! The functions are plain synchronous `(&Shell, Input) -> Result<Output, _>`
-//! (provision also takes the resolved workspace root, threaded ONCE from the
-//! composition root) so the hermetic tests drive them directly with fake-CLI
-//! shims on a private `PATH`; `main.rs` adapts them onto the worker's async
-//! handler signature via `spawn_blocking`.
+//! The functions are asynchronous and carry their [`ActivityContext`] into
+//! every shell-out, so cancellation stops the complete command process group.
+//! Hermetic tests still drive them directly with fake-CLI shims on a private
+//! `PATH`.
 
 use std::path::{Path, PathBuf};
 
-use aion_worker::ActivityFailure;
+use aion_worker::{ActivityContext, ActivityFailure};
+
+mod skill_resources;
+
+#[cfg(test)]
+use skill_resources::SKILL_RESOURCES;
+use skill_resources::materialize_skill_resources;
 
 use crate::shell::{CliRun, Shell};
 use crate::types::{
@@ -182,10 +187,11 @@ fn require_single_component(key: &str, what: &str) -> Result<(), ActivityFailure
 /// Terminal [`ActivityFailure`] when the run id is not a single path
 /// component, when the workspace directory cannot be claimed, or when
 /// `git clone` / `git checkout -b` cannot run or exits non-zero.
-pub fn provision(
+pub async fn provision(
     shell: &Shell,
     root: &Path,
     input: ProvisionInput,
+    context: ActivityContext,
 ) -> Result<Workspace, ActivityFailure> {
     let ProvisionInput {
         repo_url,
@@ -209,7 +215,9 @@ pub fn provision(
         &["clone", &repo_url, &repo_dir],
         &run_dir_str,
         "git clone",
-    )?;
+        &context,
+    )
+    .await?;
 
     let branch = format!("agent-dev-{brief_id}");
     require_run(
@@ -218,7 +226,9 @@ pub fn provision(
         &["checkout", "-b", &branch, &base_ref],
         &repo_dir,
         "git checkout -b",
-    )?;
+        &context,
+    )
+    .await?;
 
     Ok(Workspace {
         path: repo_dir,
@@ -242,10 +252,11 @@ pub fn provision(
 /// Terminal [`ActivityFailure`] when the run id is not a single path
 /// component, when the workspace directory cannot be claimed, or when the
 /// `git clone` / `git init` cannot run or exits non-zero.
-pub fn assistant_provision(
+pub async fn assistant_provision(
     shell: &Shell,
     root: &Path,
     input: AssistantProvisionInput,
+    context: ActivityContext,
 ) -> Result<AssistantWorkspace, ActivityFailure> {
     let AssistantProvisionInput { repo_path, run_id } = input;
     std::fs::create_dir_all(root).map_err(|source| {
@@ -264,7 +275,7 @@ pub fn assistant_provision(
                 "cannot create scratch workspace directory {repo_dir}: {source}"
             ))
         })?;
-        require_run(shell, "git", &["init"], &repo_dir, "git init")?;
+        require_run(shell, "git", &["init"], &repo_dir, "git init", &context).await?;
     } else {
         require_run(
             shell,
@@ -272,61 +283,13 @@ pub fn assistant_provision(
             &["clone", &repo_path, &repo_dir],
             &run_dir_str,
             "git clone",
-        )?;
+            &context,
+        )
+        .await?;
     }
     materialize_skill_resources(Path::new(&repo_dir))?;
 
     Ok(AssistantWorkspace { path: repo_dir })
-}
-
-/// The assistant's skill documents, embedded at compile time so every session
-/// gets them regardless of whether an aion repository is present. They are
-/// the assistant's primary operating manual; the repository is optional
-/// enrichment on top.
-const SKILL_RESOURCES: [(&str, &str); 5] = [
-    (
-        "ENVIRONMENT.md",
-        include_str!("../../../assistant/resources/ENVIRONMENT.md"),
-    ),
-    (
-        "AWL-AUTHORING.md",
-        include_str!("../../../assistant/resources/AWL-AUTHORING.md"),
-    ),
-    (
-        "COMMANDS.md",
-        include_str!("../../../assistant/resources/COMMANDS.md"),
-    ),
-    (
-        "AWL-REFERENCE.md",
-        include_str!("../../../assistant/resources/AWL-REFERENCE.md"),
-    ),
-    (
-        "WORKERS.md",
-        include_str!("../../../assistant/resources/WORKERS.md"),
-    ),
-];
-
-/// Write the embedded skill documents into `<workspace>/.assistant/resources/`
-/// — inside the workspace so the harness's confined file tools can read them,
-/// dot-prefixed so they stay out of the way of the operator's actual work
-/// (and untracked-but-ignorable inside a repo clone).
-fn materialize_skill_resources(workspace: &Path) -> Result<(), ActivityFailure> {
-    let resources = workspace.join(".assistant").join("resources");
-    std::fs::create_dir_all(&resources).map_err(|source| {
-        ActivityFailure::terminal(format!(
-            "cannot create skill-resource directory {}: {source}",
-            resources.display()
-        ))
-    })?;
-    for (name, contents) in SKILL_RESOURCES {
-        std::fs::write(resources.join(name), contents).map_err(|source| {
-            ActivityFailure::terminal(format!(
-                "cannot write skill resource {name} into {}: {source}",
-                resources.display()
-            ))
-        })?;
-    }
-    Ok(())
 }
 
 /// Claim `<root>/<run_id>` for this provision attempt. A collision is this
@@ -371,8 +334,7 @@ fn claim_run_directory(root: &Path, run_id: &str) -> Result<PathBuf, ActivityFai
 fn unique_suffix() -> String {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_nanos())
-        .unwrap_or(0);
+        .map_or(0, |elapsed| elapsed.as_nanos());
     format!("{nanos}-p{}", std::process::id())
 }
 
@@ -387,18 +349,25 @@ fn unique_suffix() -> String {
 /// Terminal [`ActivityFailure`] when the workspace is missing or when a gate
 /// command cannot RUN at all (missing `cargo`, dead working directory) —
 /// that is a broken environment, not a gate verdict.
-pub fn gate(shell: &Shell, input: GateInput) -> Result<GateResult, ActivityFailure> {
+pub async fn gate(
+    shell: &Shell,
+    input: GateInput,
+    context: ActivityContext,
+) -> Result<GateResult, ActivityFailure> {
     let GateInput { path, branch: _ } = input;
     require_workspace_dir(&path)?;
-    for (context, args) in GATE_COMMANDS {
-        let command_run = shell.run("cargo", args, &path).map_err(|failure| {
-            ActivityFailure::terminal(format!("{context}: {}", failure.message()))
-        })?;
+    for (command_name, args) in GATE_COMMANDS {
+        let command_run = shell
+            .run("cargo", args, &path, &context)
+            .await
+            .map_err(|failure| {
+                ActivityFailure::terminal(format!("{command_name}: {}", failure.message()))
+            })?;
         if !command_run.succeeded() {
             return Ok(GateResult {
                 pass: false,
                 diagnostics: format!(
-                    "{context} failed — exit status {}:\n{}",
+                    "{command_name} failed — exit status {}:\n{}",
                     command_run.exit_status,
                     tail(&command_run.output, DIAGNOSTICS_TAIL)
                 ),
@@ -420,14 +389,18 @@ pub fn gate(shell: &Shell, input: GateInput) -> Result<GateResult, ActivityFailu
 /// cannot run, or when the add/commit/rev-parse exits non-zero (a commit with
 /// nothing to commit is a terminal failure — the workflow must not record a
 /// phantom landing).
-pub fn land(shell: &Shell, input: LandInput) -> Result<LandResult, ActivityFailure> {
+pub async fn land(
+    shell: &Shell,
+    input: LandInput,
+    context: ActivityContext,
+) -> Result<LandResult, ActivityFailure> {
     let LandInput {
         workspace,
         brief_id,
     } = input;
     let path = workspace.path;
     require_workspace_dir(&path)?;
-    require_run(shell, "git", &["add", "-A"], &path, "git add")?;
+    require_run(shell, "git", &["add", "-A"], &path, "git add", &context).await?;
     let message = format!("agent-dev: {brief_id}");
     require_run(
         shell,
@@ -435,8 +408,18 @@ pub fn land(shell: &Shell, input: LandInput) -> Result<LandResult, ActivityFailu
         &["commit", "-m", &message],
         &path,
         "git commit",
-    )?;
-    let rev_parse = require_run(shell, "git", &["rev-parse", "HEAD"], &path, "git rev-parse")?;
+        &context,
+    )
+    .await?;
+    let rev_parse = require_run(
+        shell,
+        "git",
+        &["rev-parse", "HEAD"],
+        &path,
+        "git rev-parse",
+        &context,
+    )
+    .await?;
     let commit_sha = rev_parse.stdout.trim().to_owned();
     if commit_sha.is_empty() {
         return Err(ActivityFailure::terminal(
@@ -448,14 +431,15 @@ pub fn land(shell: &Shell, input: LandInput) -> Result<LandResult, ActivityFailu
 
 /// Require a command to run AND exit zero; anything else is a terminal
 /// activity failure carrying the command's diagnostics.
-fn require_run(
+async fn require_run(
     shell: &Shell,
     executable: &str,
     args: &[&str],
     cwd: &str,
     context: &str,
+    activity_context: &ActivityContext,
 ) -> Result<CliRun, ActivityFailure> {
-    match shell.run(executable, args, cwd) {
+    match shell.run(executable, args, cwd, activity_context).await {
         Ok(command_run) if command_run.succeeded() => Ok(command_run),
         Ok(command_run) => Err(ActivityFailure::terminal(format!(
             "{context} failed — exit status {}: {}",

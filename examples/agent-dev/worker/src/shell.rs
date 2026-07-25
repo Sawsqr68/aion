@@ -8,8 +8,12 @@
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::Instant;
+
+use aion_worker::{
+    ActivityContext, CancellableCommandOutput, ProcessGroupError, run_cancellable_command,
+};
+use tokio::process::Command;
 
 /// A completed command run: the exit status, stdout, stderr, and the
 /// wall-clock duration of the process.
@@ -51,6 +55,13 @@ pub enum CliFailure {
         /// Why the spawn failed.
         reason: String,
     },
+    /// Activity cancellation stopped and verified the command's process group.
+    Cancelled,
+    /// The command's process group could not be observed or stopped safely.
+    ContainmentFailed {
+        /// Why containment could not uphold its contract.
+        reason: String,
+    },
 }
 
 impl CliFailure {
@@ -63,6 +74,10 @@ impl CliFailure {
             }
             Self::SpawnFailed { reason } => {
                 format!("command could not be spawned: {reason}")
+            }
+            Self::Cancelled => "command cancelled after its process group stopped".to_owned(),
+            Self::ContainmentFailed { reason } => {
+                format!("command process containment failed: {reason}")
             }
         }
     }
@@ -97,14 +112,26 @@ impl Shell {
     /// Run `executable` with `args` in `cwd`, capturing exit status,
     /// combined output, and duration.
     ///
+    /// The command starts in its own process group. Activity cancellation sends
+    /// `SIGTERM` and then `SIGKILL` to the entire group as needed, and this
+    /// future returns [`CliFailure::Cancelled`] only after the group is verified
+    /// empty and the direct child is reaped.
+    ///
     /// # Errors
     ///
     /// Fails with [`CliFailure::SpawnFailed`] when `cwd` is not a directory
     /// or the process cannot start, and [`CliFailure::ExecutableNotFound`]
-    /// when `executable` does not resolve on the effective search path. A
-    /// non-zero exit status is NOT an error — it is recorded data on the
-    /// returned [`CliRun`].
-    pub fn run(&self, executable: &str, args: &[&str], cwd: &str) -> Result<CliRun, CliFailure> {
+    /// when `executable` does not resolve on the effective search path.
+    /// [`CliFailure::ContainmentFailed`] means cancellation could not be proven
+    /// complete. A non-zero exit status is NOT an error — it is recorded data
+    /// on the returned [`CliRun`].
+    pub async fn run(
+        &self,
+        executable: &str,
+        args: &[&str],
+        cwd: &str,
+        context: &ActivityContext,
+    ) -> Result<CliRun, CliFailure> {
         // A missing working directory would surface from spawn as the same
         // `NotFound` io error as a missing binary on some platforms; check it
         // first so the two failures stay distinguishable.
@@ -126,10 +153,22 @@ impl Shell {
         }
 
         let started = Instant::now();
-        let output = command.output().map_err(|error| CliFailure::SpawnFailed {
-            reason: error.to_string(),
-        })?;
-        let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let output = match run_cancellable_command(command, context.cancelled()).await {
+            Ok(CancellableCommandOutput::Completed(output)) => output,
+            Ok(CancellableCommandOutput::Cancelled) => return Err(CliFailure::Cancelled),
+            Err(ProcessGroupError::Spawn { source }) => {
+                return Err(CliFailure::SpawnFailed {
+                    reason: source.to_string(),
+                });
+            }
+            Err(error) => {
+                return Err(CliFailure::ContainmentFailed {
+                    reason: error.to_string(),
+                });
+            }
+        };
+        let duration_ms =
+            u64::try_from(started.elapsed().as_millis()).map_or(u64::MAX, |value| value);
 
         let stdout_text = String::from_utf8_lossy(&output.stdout).into_owned();
         let stderr_text = String::from_utf8_lossy(&output.stderr).into_owned();
@@ -172,7 +211,7 @@ fn exit_code(status: std::process::ExitStatus) -> i32 {
 
 #[cfg(not(unix))]
 fn exit_code(status: std::process::ExitStatus) -> i32 {
-    status.code().unwrap_or(-1)
+    status.code().map_or(-1, |code| code)
 }
 
 #[cfg(unix)]
@@ -180,8 +219,7 @@ fn is_executable_file(candidate: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
     candidate
         .metadata()
-        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
-        .unwrap_or(false)
+        .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
 }
 
 #[cfg(not(unix))]

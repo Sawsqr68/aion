@@ -16,8 +16,8 @@
 //!   dispatch of the same type in one run resumes ONE session, which is what
 //!   makes the assistant's multi-round conversation continuous.
 //! - PLAIN registry activities `provision`, `assistant_provision`, `gate`,
-//!   `land`: synchronous handler bodies in [`agent_dev_worker::handlers`],
-//!   adapted onto the async handler signature via `spawn_blocking`.
+//!   `land`: async handler bodies in [`agent_dev_worker::handlers`] whose
+//!   command process groups are stopped and verified on activity cancellation.
 //!
 //! Auth: Norn is invoked with `OPENAI_API_KEY` REMOVED from its child
 //! environment (via the adapter's `without_env`) so it uses the operator's
@@ -33,13 +33,11 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use agent_dev_worker::handlers;
+use agent_dev_worker::registry::build_registry;
 use agent_dev_worker::shell::Shell;
 use aion_integration_norn::NornHarness;
 use aion_integrations::{DynAgentHarness, InterventionCapabilities, InterventionPrimitive};
-use aion_worker::{
-    ActivityContext, ActivityFailure, ActivityRegistry, AgentHarnessConfig, HandlerFuture,
-    RedialTiming, WorkerConfig,
-};
+use aion_worker::{AgentHarnessConfig, RedialTiming, WorkerConfig};
 
 /// The agent activity types routed through the composed harness rather than
 /// the typed registry — the three Norn rounds of the `agent_dev` workflow
@@ -101,65 +99,6 @@ fn composed_agent_harness(norn_bin: &str, workspace_root: &Path) -> AgentHarness
     )
 }
 
-/// Adapt a synchronous, blocking handler body onto the worker SDK's async
-/// handler signature. The bodies block on child processes (git clones and
-/// cargo gates can run for minutes), so each invocation moves to the blocking
-/// thread pool instead of stalling the worker's async runtime.
-fn blocking<Input, Output, Body>(
-    body: Body,
-) -> impl for<'context> Fn(Input, &'context ActivityContext) -> HandlerFuture<'context, Output>
-+ Send
-+ Sync
-+ 'static
-where
-    Body: Fn(Input) -> Result<Output, ActivityFailure> + Clone + Send + Sync + 'static,
-    Input: Send + 'static,
-    Output: Send + 'static,
-{
-    move |input: Input, _context: &ActivityContext| {
-        let body = body.clone();
-        Box::pin(async move {
-            tokio::task::spawn_blocking(move || body(input))
-                .await
-                .map_err(|join_error| {
-                    ActivityFailure::terminal(format!(
-                        "activity handler task did not complete: {join_error}"
-                    ))
-                })?
-        })
-    }
-}
-
-/// Build the plain activity registry: `provision` and `assistant_provision`
-/// (both materialise workspaces under the resolved `workspace_root`),
-/// `gate`, and `land`.
-fn build_registry(shell: &Shell, workspace_root: &Path) -> anyhow::Result<Arc<ActivityRegistry>> {
-    let provision = {
-        let shell = shell.clone();
-        let root = workspace_root.to_path_buf();
-        move |input| handlers::provision(&shell, &root, input)
-    };
-    let assistant_provision = {
-        let shell = shell.clone();
-        let root = workspace_root.to_path_buf();
-        move |input| handlers::assistant_provision(&shell, &root, input)
-    };
-    let gate = {
-        let shell = shell.clone();
-        move |input| handlers::gate(&shell, input)
-    };
-    let land = {
-        let shell = shell.clone();
-        move |input| handlers::land(&shell, input)
-    };
-    let registry = ActivityRegistry::new()
-        .register_activity("provision", blocking(provision))?
-        .register_activity("assistant_provision", blocking(assistant_provision))?
-        .register_activity("gate", blocking(gate))?
-        .register_activity("land", blocking(land))?;
-    Ok(Arc::new(registry))
-}
-
 /// Parsed command-line arguments.
 #[derive(Debug)]
 struct Args {
@@ -176,7 +115,10 @@ struct Args {
 /// Parse `--address` (repeatable), `--identity`, `--ready-file`, `--norn-bin` from the process
 /// arguments, defaulting `--norn-bin` from the `NORN_BIN` environment variable.
 fn parse_args() -> anyhow::Result<Args> {
-    let default_norn_bin = std::env::var("NORN_BIN").unwrap_or_else(|_| "norn".to_owned());
+    let default_norn_bin = match std::env::var("NORN_BIN") {
+        Ok(value) => value,
+        Err(_) => "norn".to_owned(),
+    };
     parse_args_from(std::env::args().skip(1), default_norn_bin)
 }
 
@@ -227,12 +169,11 @@ fn parse_args_from(
 }
 
 fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    let env_filter = match tracing_subscriber::EnvFilter::try_from_default_env() {
+        Ok(filter) => filter,
+        Err(_) => tracing_subscriber::EnvFilter::new("info"),
+    };
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     let args = parse_args()?;
 
