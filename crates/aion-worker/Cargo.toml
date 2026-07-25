@@ -50,6 +50,11 @@ liminal-sdk = { workspace = true, optional = true }
 # `liminal-transport`.
 liminal = { workspace = true, optional = true }
 
+[target.'cfg(unix)'.dependencies]
+# Safe process-group signalling for worker-owned command containment. The shared
+# adapter is consumed by both `aion worker shell` and worker harnesses.
+nix = { version = "0.30", features = ["process", "signal"] }
+
 [features]
 default = []
 # Liminal worker transport: a `LiminalActivityWorker` that connects a server-push

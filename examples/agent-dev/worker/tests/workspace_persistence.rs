@@ -31,8 +31,14 @@ use std::sync::OnceLock;
 use agent_dev_worker::handlers;
 use agent_dev_worker::shell::Shell;
 use agent_dev_worker::types::{GateInput, LandInput, ProvisionInput};
+use aion_core::ActivityId;
+use aion_worker::ActivityContext;
 
 type TestResult = Result<(), Box<dyn Error>>;
+
+fn activity_context() -> ActivityContext {
+    ActivityContext::new(ActivityId::from_sequence_position(1), 1).0
+}
 
 static WORKSPACE_ROOT: OnceLock<PathBuf> = OnceLock::new();
 
@@ -127,8 +133,8 @@ fn clone_input(fixture: &Path, brief_id: &str, run_id: &str) -> ProvisionInput {
 /// the workspace, (c) simulate the reboot purge of volatile temp roots, (d)
 /// run a later activity step (`land`) against the recorded `workspace.path` —
 /// the step must succeed and the dev-round commit must be intact.
-#[test]
-fn workspace_survives_reboot_purge_and_later_activity_succeeds() -> TestResult {
+#[tokio::test]
+async fn workspace_survives_reboot_purge_and_later_activity_succeeds() -> TestResult {
     let root = stable_root();
     let fixture = fixture_repo("survival")?;
     let shell = Shell::inherited();
@@ -138,7 +144,9 @@ fn workspace_survives_reboot_purge_and_later_activity_succeeds() -> TestResult {
         &shell,
         root,
         clone_input(&fixture, "loss-repro", "run-survival"),
+        activity_context(),
     )
+    .await
     .map_err(|failure| format!("provision failed: {}", failure.message()))?;
     let workspace_dir = PathBuf::from(&workspace.path);
     assert_eq!(workspace.branch, "agent-dev-loss-repro");
@@ -163,7 +171,9 @@ fn workspace_survives_reboot_purge_and_later_activity_succeeds() -> TestResult {
             workspace: workspace.clone(),
             brief_id: "loss-repro".to_owned(),
         },
+        activity_context(),
     )
+    .await
     .map_err(|failure| {
         format!(
             "later activity failed against the recorded workspace path — \
@@ -213,8 +223,8 @@ fn workspace_survives_reboot_purge_and_later_activity_succeeds() -> TestResult {
 /// attempt aside — its contents survive intact, nothing is deleted — and
 /// proceeds fresh, so a worker killed mid-clone recovers through reopen with
 /// the SAME run id instead of wedging terminally.
-#[test]
-fn run_id_collision_renames_the_stale_attempt_aside_and_reprovisions() -> TestResult {
+#[tokio::test]
+async fn run_id_collision_renames_the_stale_attempt_aside_and_reprovisions() -> TestResult {
     let root = stable_root();
     let fixture = fixture_repo("collision")?;
     let shell = Shell::inherited();
@@ -228,7 +238,9 @@ fn run_id_collision_renames_the_stale_attempt_aside_and_reprovisions() -> TestRe
         &shell,
         root,
         clone_input(&fixture, "collision", "run-collision"),
+        activity_context(),
     )
+    .await
     .map_err(|failure| {
         format!(
             "re-provision after a collision failed: {}",
@@ -269,8 +281,8 @@ fn run_id_collision_renames_the_stale_attempt_aside_and_reprovisions() -> TestRe
 /// An activity dispatched against a genuinely missing workspace fails with
 /// the explicit missing-workspace diagnostic — never a confusing downstream
 /// CLI error.
-#[test]
-fn missing_workspace_fails_with_the_explicit_diagnostic() {
+#[tokio::test]
+async fn missing_workspace_fails_with_the_explicit_diagnostic() -> TestResult {
     let root = stable_root();
     let dead = root.join("run-never-provisioned").join("repo");
 
@@ -280,13 +292,16 @@ fn missing_workspace_fails_with_the_explicit_diagnostic() {
             path: dead.to_string_lossy().into_owned(),
             branch: "agent-dev-TEST".to_owned(),
         },
+        activity_context(),
     )
+    .await
     .err()
-    .map(|failure| failure.message().to_owned())
-    .unwrap_or_default();
+    .ok_or("missing workspace must fail the activity")?;
+    let message = failure.message();
 
     assert!(
-        failure.contains("workspace missing at") && failure.contains("run cannot resume"),
-        "the diagnostic must name the lost workspace; got: {failure}"
+        message.contains("workspace missing at") && message.contains("run cannot resume"),
+        "the diagnostic must name the lost workspace; got: {message}"
     );
+    Ok(())
 }

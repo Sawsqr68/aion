@@ -18,9 +18,14 @@ use agent_dev_worker::shell::Shell;
 use agent_dev_worker::types::{
     AssistantProvisionInput, GateInput, LandInput, ProvisionInput, Workspace,
 };
-use aion_worker::{ActivityFailure, Classification};
+use aion_core::ActivityId;
+use aion_worker::{ActivityContext, ActivityFailure, Classification};
 
 type TestResult = Result<(), Box<dyn Error>>;
+
+fn activity_context() -> ActivityContext {
+    ActivityContext::new(ActivityId::from_sequence_position(1), 1).0
+}
 
 /// One test's shim directory. A `workspace-root` subdirectory serves as the
 /// stable workspace root handed to `provision`.
@@ -70,7 +75,12 @@ impl Shims {
 
     /// Read one shim's argv recording (empty when the shim never ran).
     fn log(&self, name: &str) -> String {
-        std::fs::read_to_string(self.root().join(format!("{name}.log"))).unwrap_or_default()
+        let path = self.root().join(format!("{name}.log"));
+        match std::fs::read_to_string(&path) {
+            Ok(log) => log,
+            Err(source) if source.kind() == std::io::ErrorKind::NotFound => String::new(),
+            Err(source) => format!("could not read shim log {}: {source}", path.display()),
+        }
     }
 }
 
@@ -106,8 +116,8 @@ fn provision_input(repo_url: String, run_id: &str) -> ProvisionInput {
 
 // --- provision -----------------------------------------------------------------
 
-#[test]
-fn provision_clones_into_the_run_keyed_layout_and_creates_the_branch() -> TestResult {
+#[tokio::test]
+async fn provision_clones_into_the_run_keyed_layout_and_creates_the_branch() -> TestResult {
     let shims = Shims::new()?;
     shims.write("git", GIT_PROVISION_SHIM)?;
     let root = shims.workspace_root();
@@ -116,7 +126,9 @@ fn provision_clones_into_the_run_keyed_layout_and_creates_the_branch() -> TestRe
         &shims.shell(),
         &root,
         provision_input("https://example.test/repo.git".to_owned(), "wf-123"),
+        activity_context(),
     )
+    .await
     .map_err(|failure| failure.message().to_owned())?;
 
     let expected_repo = root.join("wf-123").join("repo");
@@ -141,8 +153,8 @@ fn provision_clones_into_the_run_keyed_layout_and_creates_the_branch() -> TestRe
     Ok(())
 }
 
-#[test]
-fn provision_collision_renames_the_stale_attempt_aside() -> TestResult {
+#[tokio::test]
+async fn provision_collision_renames_the_stale_attempt_aside() -> TestResult {
     let shims = Shims::new()?;
     shims.write("git", GIT_PROVISION_SHIM)?;
     let root = shims.workspace_root();
@@ -156,7 +168,9 @@ fn provision_collision_renames_the_stale_attempt_aside() -> TestResult {
         &shims.shell(),
         &root,
         provision_input("https://example.test/repo.git".to_owned(), "wf-123"),
+        activity_context(),
     )
+    .await
     .map_err(|failure| failure.message().to_owned())?;
 
     assert_eq!(
@@ -184,8 +198,8 @@ fn provision_collision_renames_the_stale_attempt_aside() -> TestResult {
     Ok(())
 }
 
-#[test]
-fn provision_rejects_a_run_id_that_escapes_the_root() -> TestResult {
+#[tokio::test]
+async fn provision_rejects_a_run_id_that_escapes_the_root() -> TestResult {
     let shims = Shims::new()?;
     shims.write("git", GIT_PROVISION_SHIM)?;
     let root = shims.workspace_root();
@@ -195,7 +209,9 @@ fn provision_rejects_a_run_id_that_escapes_the_root() -> TestResult {
             &shims.shell(),
             &root,
             provision_input("https://example.test/repo.git".to_owned(), bad_run_id),
+            activity_context(),
         )
+        .await
         .err()
         .ok_or_else(|| format!("run_id {bad_run_id:?} must be refused"))?;
         assert_terminal(&failure, "not a single path component");
@@ -204,8 +220,8 @@ fn provision_rejects_a_run_id_that_escapes_the_root() -> TestResult {
     Ok(())
 }
 
-#[test]
-fn provision_failing_clone_is_terminal_with_diagnostics() -> TestResult {
+#[tokio::test]
+async fn provision_failing_clone_is_terminal_with_diagnostics() -> TestResult {
     let shims = Shims::new()?;
     shims.write("git", "echo 'fatal: repository not found' >&2\nexit 128")?;
     let root = shims.workspace_root();
@@ -214,7 +230,9 @@ fn provision_failing_clone_is_terminal_with_diagnostics() -> TestResult {
         &shims.shell(),
         &root,
         provision_input("https://example.test/missing.git".to_owned(), "wf-404"),
+        activity_context(),
     )
+    .await
     .err()
     .ok_or("a failing clone must fail the activity")?;
     assert_terminal(&failure, "git clone failed — exit status 128");
@@ -231,8 +249,8 @@ fn assistant_provision_input(repo_path: &str, run_id: &str) -> AssistantProvisio
     }
 }
 
-#[test]
-fn assistant_provision_clones_into_the_run_keyed_layout() -> TestResult {
+#[tokio::test]
+async fn assistant_provision_clones_into_the_run_keyed_layout() -> TestResult {
     let shims = Shims::new()?;
     shims.write("git", GIT_PROVISION_SHIM)?;
     let root = shims.workspace_root();
@@ -241,7 +259,9 @@ fn assistant_provision_clones_into_the_run_keyed_layout() -> TestResult {
         &shims.shell(),
         &root,
         assistant_provision_input("/repos/aion", "wf-assist-1"),
+        activity_context(),
     )
+    .await
     .map_err(|failure| failure.message().to_owned())?;
 
     let expected_repo = root.join("wf-assist-1").join("repo");
@@ -262,8 +282,8 @@ fn assistant_provision_clones_into_the_run_keyed_layout() -> TestResult {
     Ok(())
 }
 
-#[test]
-fn assistant_provision_empty_repo_path_inits_a_scratch_workspace() -> TestResult {
+#[tokio::test]
+async fn assistant_provision_empty_repo_path_inits_a_scratch_workspace() -> TestResult {
     let shims = Shims::new()?;
     shims.write("git", "exit 0")?;
     let root = shims.workspace_root();
@@ -272,7 +292,9 @@ fn assistant_provision_empty_repo_path_inits_a_scratch_workspace() -> TestResult
         &shims.shell(),
         &root,
         assistant_provision_input("", "wf-scratch-1"),
+        activity_context(),
     )
+    .await
     .map_err(|failure| failure.message().to_owned())?;
 
     let expected_repo = root.join("wf-scratch-1").join("repo");
@@ -293,8 +315,8 @@ fn assistant_provision_empty_repo_path_inits_a_scratch_workspace() -> TestResult
     Ok(())
 }
 
-#[test]
-fn assistant_provision_collision_renames_the_stale_attempt_aside() -> TestResult {
+#[tokio::test]
+async fn assistant_provision_collision_renames_the_stale_attempt_aside() -> TestResult {
     let shims = Shims::new()?;
     shims.write("git", GIT_PROVISION_SHIM)?;
     let root = shims.workspace_root();
@@ -308,7 +330,9 @@ fn assistant_provision_collision_renames_the_stale_attempt_aside() -> TestResult
         &shims.shell(),
         &root,
         assistant_provision_input("/repos/aion", "wf-assist-1"),
+        activity_context(),
     )
+    .await
     .map_err(|failure| failure.message().to_owned())?;
 
     assert_eq!(
@@ -337,8 +361,8 @@ fn assistant_provision_collision_renames_the_stale_attempt_aside() -> TestResult
     Ok(())
 }
 
-#[test]
-fn assistant_provision_rejects_a_run_id_that_escapes_the_root() -> TestResult {
+#[tokio::test]
+async fn assistant_provision_rejects_a_run_id_that_escapes_the_root() -> TestResult {
     let shims = Shims::new()?;
     shims.write("git", GIT_PROVISION_SHIM)?;
     let root = shims.workspace_root();
@@ -348,7 +372,9 @@ fn assistant_provision_rejects_a_run_id_that_escapes_the_root() -> TestResult {
             &shims.shell(),
             &root,
             assistant_provision_input("/repos/aion", bad_run_id),
+            activity_context(),
         )
+        .await
         .err()
         .ok_or_else(|| format!("run_id {bad_run_id:?} must be refused"))?;
         assert_terminal(&failure, "not a single path component");
@@ -357,8 +383,8 @@ fn assistant_provision_rejects_a_run_id_that_escapes_the_root() -> TestResult {
     Ok(())
 }
 
-#[test]
-fn assistant_provision_failing_clone_is_terminal_with_diagnostics() -> TestResult {
+#[tokio::test]
+async fn assistant_provision_failing_clone_is_terminal_with_diagnostics() -> TestResult {
     let shims = Shims::new()?;
     shims.write("git", "echo 'fatal: repository not found' >&2\nexit 128")?;
     let root = shims.workspace_root();
@@ -367,7 +393,9 @@ fn assistant_provision_failing_clone_is_terminal_with_diagnostics() -> TestResul
         &shims.shell(),
         &root,
         assistant_provision_input("/repos/missing", "wf-assist-404"),
+        activity_context(),
     )
+    .await
     .err()
     .ok_or("a failing clone must fail the activity")?;
     assert_terminal(&failure, "git clone failed — exit status 128");
@@ -375,236 +403,5 @@ fn assistant_provision_failing_clone_is_terminal_with_diagnostics() -> TestResul
     Ok(())
 }
 
-// --- gate ------------------------------------------------------------------------
-
-#[test]
-fn gate_pass_runs_clippy_then_tests() -> TestResult {
-    let shims = Shims::new()?;
-    shims.write("cargo", "exit 0")?;
-
-    let result = handlers::gate(
-        &shims.shell(),
-        GateInput {
-            path: shims.root_string(),
-            branch: "agent-dev-TEST".to_owned(),
-        },
-    )
-    .map_err(|failure| failure.message().to_owned())?;
-
-    assert!(result.pass, "both commands exit zero: the gate passes");
-    assert!(
-        result.diagnostics.is_empty(),
-        "a pass carries no diagnostics"
-    );
-    let log = shims.log("cargo");
-    assert!(
-        log.contains("clippy --workspace --all-targets -- -D warnings"),
-        "clippy must run with the full strict argv; got log: {log}"
-    );
-    assert!(
-        log.contains("test --workspace"),
-        "the test suite must run after clippy; got log: {log}"
-    );
-    Ok(())
-}
-
-#[test]
-fn gate_failure_is_recorded_data_carrying_the_diagnostics_tail() -> TestResult {
-    let shims = Shims::new()?;
-    // Clippy fails; the test suite would pass but must not even run.
-    shims.write(
-        "cargo",
-        r#"if [ "$1" = clippy ]; then echo 'error: unused variable `count`'; exit 1; fi
-exit 0"#,
-    )?;
-
-    let result = handlers::gate(
-        &shims.shell(),
-        GateInput {
-            path: shims.root_string(),
-            branch: "agent-dev-TEST".to_owned(),
-        },
-    )
-    .map_err(|failure| failure.message().to_owned())?;
-
-    assert!(!result.pass, "a failing command is a recorded fail verdict");
-    assert!(
-        result
-            .diagnostics
-            .contains("cargo clippy failed — exit status 1"),
-        "diagnostics must name the failing command; got: {}",
-        result.diagnostics
-    );
-    assert!(
-        result
-            .diagnostics
-            .contains("error: unused variable `count`"),
-        "diagnostics must carry the command output; got: {}",
-        result.diagnostics
-    );
-    assert!(
-        !shims.log("cargo").contains("test --workspace"),
-        "the test suite must not run after a failed clippy"
-    );
-    Ok(())
-}
-
-#[test]
-fn gate_test_failure_after_clean_clippy_is_recorded_data() -> TestResult {
-    let shims = Shims::new()?;
-    shims.write(
-        "cargo",
-        r#"if [ "$1" = test ]; then echo 'test result: FAILED. 1 failed'; exit 101; fi
-exit 0"#,
-    )?;
-
-    let result = handlers::gate(
-        &shims.shell(),
-        GateInput {
-            path: shims.root_string(),
-            branch: "agent-dev-TEST".to_owned(),
-        },
-    )
-    .map_err(|failure| failure.message().to_owned())?;
-
-    assert!(!result.pass);
-    assert!(
-        result
-            .diagnostics
-            .contains("cargo test failed — exit status 101"),
-        "diagnostics must name the failing command; got: {}",
-        result.diagnostics
-    );
-    assert!(result.diagnostics.contains("test result: FAILED"));
-    Ok(())
-}
-
-#[test]
-fn gate_that_cannot_run_at_all_is_a_loud_terminal_failure() -> TestResult {
-    // No cargo shim is written, and the shim directory is the entire search
-    // path, so cargo is genuinely absent — a broken environment, not a
-    // recorded gate verdict.
-    let shims = Shims::new()?;
-
-    let failure = handlers::gate(
-        &shims.shell(),
-        GateInput {
-            path: shims.root_string(),
-            branch: "agent-dev-TEST".to_owned(),
-        },
-    )
-    .err()
-    .ok_or("a missing CLI must fail the activity")?;
-    assert_terminal(
-        &failure,
-        "cargo clippy: executable not found on PATH: cargo",
-    );
-    Ok(())
-}
-
-#[test]
-fn gate_against_a_missing_workspace_is_the_explicit_diagnostic() -> TestResult {
-    let shims = Shims::new()?;
-    shims.write("cargo", "exit 0")?;
-
-    let failure = handlers::gate(
-        &shims.shell(),
-        GateInput {
-            path: format!("{}/never-provisioned/repo", shims.root_string()),
-            branch: "agent-dev-TEST".to_owned(),
-        },
-    )
-    .err()
-    .ok_or("a missing workspace must fail the activity")?;
-    assert_terminal(&failure, "workspace missing at");
-    assert_terminal(&failure, "run cannot resume");
-    assert!(shims.log("cargo").is_empty(), "no gate command may run");
-    Ok(())
-}
-
-// --- land ------------------------------------------------------------------------
-
-#[test]
-fn land_commits_and_returns_the_commit_sha() -> TestResult {
-    let shims = Shims::new()?;
-    shims.write(
-        "git",
-        r#"if [ "$1" = rev-parse ]; then printf '%s\n' 0123456789abcdef0123456789abcdef01234567; fi
-exit 0"#,
-    )?;
-
-    let landed = handlers::land(
-        &shims.shell(),
-        LandInput {
-            workspace: Workspace {
-                path: shims.root_string(),
-                branch: "agent-dev-brief-7".to_owned(),
-            },
-            brief_id: "brief-7".to_owned(),
-        },
-    )
-    .map_err(|failure| failure.message().to_owned())?;
-
-    assert_eq!(
-        landed.commit_sha,
-        "0123456789abcdef0123456789abcdef01234567"
-    );
-    let log = shims.log("git");
-    assert!(log.contains("add -A"));
-    assert!(
-        log.contains("commit -m agent-dev: brief-7"),
-        "the commit message must be `agent-dev: <brief_id>`; got log: {log}"
-    );
-    assert!(log.contains("rev-parse HEAD"));
-    Ok(())
-}
-
-#[test]
-fn land_with_nothing_to_commit_is_terminal() -> TestResult {
-    let shims = Shims::new()?;
-    shims.write(
-        "git",
-        "if [ \"$1\" = commit ]; then echo 'nothing to commit, working tree clean'; exit 1; fi\nexit 0",
-    )?;
-
-    let failure = handlers::land(
-        &shims.shell(),
-        LandInput {
-            workspace: Workspace {
-                path: shims.root_string(),
-                branch: "agent-dev-brief-7".to_owned(),
-            },
-            brief_id: "brief-7".to_owned(),
-        },
-    )
-    .err()
-    .ok_or("a no-op land must fail the activity")?;
-    assert_terminal(&failure, "git commit failed — exit status 1");
-    assert_terminal(&failure, "nothing to commit");
-    assert!(
-        !shims.log("git").contains("rev-parse"),
-        "no sha may be read after a failed commit"
-    );
-    Ok(())
-}
-
-#[test]
-fn land_with_an_empty_rev_parse_is_terminal() -> TestResult {
-    let shims = Shims::new()?;
-    shims.write("git", "exit 0")?;
-
-    let failure = handlers::land(
-        &shims.shell(),
-        LandInput {
-            workspace: Workspace {
-                path: shims.root_string(),
-                branch: "agent-dev-brief-7".to_owned(),
-            },
-            brief_id: "brief-7".to_owned(),
-        },
-    )
-    .err()
-    .ok_or("an empty rev-parse must fail the activity")?;
-    assert_terminal(&failure, "printed no commit sha");
-    Ok(())
-}
+#[path = "handlers_shims/gate_land.rs"]
+mod gate_land;

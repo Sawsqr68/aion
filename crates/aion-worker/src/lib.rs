@@ -48,6 +48,8 @@ pub mod config;
 pub mod context;
 /// Worker runtime and configuration errors.
 pub mod error;
+/// Cancellable process-group containment for worker-owned commands.
+pub mod process;
 /// Worker-session protocol abstractions and task types.
 pub mod protocol;
 /// Activity dispatch and task-serving loops.
@@ -64,6 +66,10 @@ pub use config::{
 };
 pub use context::{ActivityCancellationHandle, ActivityContext, HeartbeatRequest};
 pub use error::{MissingActivityHandler, WorkerError};
+pub use process::{
+    CancellableCommandOutput, PROCESS_GROUP_TERMINATION_GRACE, ProcessGroupError,
+    run_cancellable_command,
+};
 pub use protocol::{
     ActivityTask, GrpcWorkerSession, PendingActivityReport, ReconnectBackoff,
     RegisteredSessionInfo, UnackedResultTracker, WorkerSession, WorkerSessionEvent,

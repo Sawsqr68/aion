@@ -9,7 +9,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::time::Duration;
 
-use aion_worker::{ActivityContext, ActivityFailure, Worker, WorkerConfig};
+use aion_worker::{
+    ActivityContext, ActivityFailure, CancellableCommandOutput, ProcessGroupError, Worker,
+    WorkerConfig, run_cancellable_command,
+};
 use anyhow::{Context, Result, bail};
 use clap::Args;
 use serde::Deserialize;
@@ -146,19 +149,31 @@ async fn execute(
 ) -> Result<Value, ActivityFailure> {
     let program = expand(&action.command[0], input)?;
     let mut command = Command::new(program);
-    command.kill_on_drop(true);
     for argument in &action.command[1..] {
         command.arg(expand(argument, input)?);
     }
     for (name, value) in &action.env {
         command.env(name, expand(value, input)?);
     }
-    let output = tokio::select! {
-        result = command.output() => result.map_err(|error| {
-            ActivityFailure::retryable(format!("shell action `{}` could not spawn: {error}", action.name))
-        })?,
-        () = context.cancelled() => {
-            return Err(ActivityFailure::terminal(format!("shell action `{}` was cancelled", action.name)));
+    let output = match run_cancellable_command(command, context.cancelled()).await {
+        Ok(CancellableCommandOutput::Completed(output)) => output,
+        Ok(CancellableCommandOutput::Cancelled) => {
+            return Err(ActivityFailure::terminal(format!(
+                "shell action `{}` was cancelled after its process group stopped",
+                action.name
+            )));
+        }
+        Err(ProcessGroupError::Spawn { source }) => {
+            return Err(ActivityFailure::retryable(format!(
+                "shell action `{}` could not spawn: {source}",
+                action.name
+            )));
+        }
+        Err(error) => {
+            return Err(ActivityFailure::terminal(format!(
+                "shell action `{}` process containment failed: {error}",
+                action.name
+            )));
         }
     };
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
@@ -233,10 +248,18 @@ fn scalar(field: &str, value: &Value) -> Result<String, ActivityFailure> {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
+    use std::io;
+    use std::path::Path;
+    use std::process::Command as StdCommand;
+    use std::time::Instant;
+
     use aion_core::ActivityId;
     use serde_json::json;
 
     use super::*;
+
+    type TestResult = Result<(), Box<dyn Error>>;
 
     const MANIFEST: &str = r#"
 [worker]
@@ -285,5 +308,114 @@ result = "text"
         let value = execute(&json_action, &json!({"ok": true}), &context).await?;
         assert_eq!(value, json!({"ok": true}));
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn cancellation_reaps_the_entire_spawned_process_group() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let parent_file = directory.path().join("parent.pid");
+        let grandchild_file = directory.path().join("grandchild.pid");
+        let script = "echo $$ > \"$1\"; sh -c 'echo $$ > \"$1\"; sleep 300' sh \"$2\" & wait";
+        let action = ActionWiring {
+            name: "orphan-scan".to_owned(),
+            command: vec![
+                "sh".to_owned(),
+                "-c".to_owned(),
+                script.to_owned(),
+                "sh".to_owned(),
+                parent_file.to_string_lossy().into_owned(),
+                grandchild_file.to_string_lossy().into_owned(),
+            ],
+            env: BTreeMap::new(),
+            result: ResultEncoding::Text,
+        };
+        let (context, cancellation) =
+            ActivityContext::new(ActivityId::from_sequence_position(2), 1);
+        let execution = tokio::spawn(async move { execute(&action, &Value::Null, &context).await });
+
+        wait_for_pid_file(&parent_file).await?;
+        wait_for_pid_file(&grandchild_file).await?;
+        let parent = read_pid(&parent_file)?;
+        let grandchild = read_pid(&grandchild_file)?;
+        cancellation.cancel();
+
+        let result = tokio::time::timeout(Duration::from_secs(5), execution)
+            .await
+            .map_err(|_| io::Error::other("cancelled shell action did not complete"))??;
+        if result.is_ok() {
+            return Err(io::Error::other("cancelled shell action reported success").into());
+        }
+
+        let gone = wait_for_processes_gone(&[parent, grandchild], Duration::from_secs(2)).await?;
+        if gone.iter().all(|(_, is_gone)| *is_gone) {
+            return Ok(());
+        }
+        for (pid, is_gone) in &gone {
+            if !is_gone {
+                kill_process(*pid)?;
+            }
+        }
+        Err(io::Error::other(format!(
+            "orphan scan found live processes after cancellation: {gone:?}"
+        ))
+        .into())
+    }
+
+    async fn wait_for_pid_file(path: &Path) -> TestResult {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !path.is_file() {
+            if Instant::now() >= deadline {
+                return Err(io::Error::other(format!(
+                    "timed out waiting for pid file {}",
+                    path.display()
+                ))
+                .into());
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        Ok(())
+    }
+
+    fn read_pid(path: &Path) -> Result<i32, Box<dyn Error>> {
+        Ok(std::fs::read_to_string(path)?.trim().parse()?)
+    }
+
+    async fn wait_for_processes_gone(
+        pids: &[i32],
+        timeout: Duration,
+    ) -> Result<Vec<(i32, bool)>, io::Error> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let states = pids
+                .iter()
+                .map(|pid| process_is_gone(*pid).map(|gone| (*pid, gone)))
+                .collect::<Result<Vec<_>, _>>()?;
+            if states.iter().all(|(_, gone)| *gone) || Instant::now() >= deadline {
+                return Ok(states);
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    fn process_is_gone(pid: i32) -> Result<bool, io::Error> {
+        let status = StdCommand::new("kill")
+            .args(["-0", &pid.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()?;
+        Ok(!status.success())
+    }
+
+    fn kill_process(pid: i32) -> Result<(), io::Error> {
+        let status = StdCommand::new("kill")
+            .args(["-KILL", &pid.to_string()])
+            .status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(io::Error::other(format!(
+                "cleanup could not kill orphan pid {pid}"
+            )))
+        }
     }
 }
