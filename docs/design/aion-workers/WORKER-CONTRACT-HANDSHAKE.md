@@ -9,7 +9,7 @@
 The workflow↔worker boundary is unchecked at every layer until runtime:
 
 - **Compile time:** `check_workers_and_children` (aion-awl `checker/decls.rs:220-261`) validates only internal name-collision and type-resolution. Worker action signatures are declared on faith; nothing verifies them against any real worker.
-- **Registration:** workers advertise a bare name set (`aion-worker/src/activity.rs:119-171`). No schemas cross the wire.
+- **Registration:** workers advertise a bare name set. Ground-truthed wire paths (scout, Jul 25 2026): the gRPC frame carries only namespaces, activity names, queue, and node (`aion-proto-generated/proto/worker.proto:79-109`, sent at `aion-worker/src/protocol/session.rs:398-417`); the liminal path sends the same shape (`aion-worker/src/runtime/liminal.rs:900-922`); the server admits on names alone (`aion-server/src/worker/registry.rs:334-382`, handles carry no schemas at `:147-217`). No schemas cross either wire. (The earlier `activity.rs:119-171` citation names the worker-local registry, not the wire — kept here for the record, superseded by the paths above.)
 - **First real check:** runtime input serde, surfacing as a terminal activity failure (`activity.rs:264-279`).
 - **Output mismatch:** caught even later, by workflow-side codec decode — the worst failure point.
 
@@ -30,6 +30,26 @@ Deploying a workflow writes its **declared worker contract** into durable cluste
 - For every declared worker: queue name, and for every action: name, input schema, output schema, retry envelope.
 - For every declared child workflow and signal: the same typed shape.
 - Multiple content-hashes of the same workflow coexist (observed reality: three loaded `remediation_packet` hashes). **A run is pinned for its lifetime to the contract of the content-hash it started under.** Fleet upgrades never mutate a live run's expectations.
+
+**Identity ruling (formalized Jul 25 2026 — line one of the handshake build leg).**
+Ground truth first: today's `ContentHash` commits to the canonical BEAMs only,
+with the `.v3` domain adding per-entry routing identity and timeouts
+(`aion-package/src/hash.rs:63-136`) — nothing commits to the contract surface,
+so the pinning promise above cannot yet be kept by the stored identity. The
+ruling: package identity becomes a single domain-separated **`.v4`** hash that
+binds the canonical encoding of the contract surface (action schemas, children,
+signals, retry policies) alongside the BEAMs and the `.v3` routing/timeout
+material. Not a compound tuple — one identity that cannot be half-checked (the
+same theorem the runtime doc's R2 completion fencing commits to, applied at the
+package layer). Contract records are stored durably beside the identity;
+refusal precision comes from field-level diffs of those records, never from
+hash forensics. Pre-`.v4` identities decode as wholly-uncommitted and are
+refused with a typed error naming the migration — never grandfathered
+(`hash.rs`'s own `.v2`→`.v3` supersession is the precedent). The contract
+encoding is derived at package time from the compiled workflow — never
+re-derived at check time, because derivation code drifts under server upgrades
+— and its determinism is pinned by test: same contract, permuted declaration
+order, identical hash.
 
 ### 2.2 Registration-time validation
 
