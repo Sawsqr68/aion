@@ -29,8 +29,10 @@ both `aion worker shell` and the agent-dev harness); cancellation sends
 group-wide `SIGTERM`, waits a bounded grace, escalates to `SIGKILL`, reaps
 the direct child, and reports cancellation complete only after a
 `killpg(signal 0)` → `ESRCH` probe confirms the group is empty. A group that
-survives `SIGKILL` yields the typed `CancellationIncomplete` error — `Killed`
-is never claimed without proof.
+survives `SIGKILL` yields the typed `ProcessGroupError::GroupStillAlive`
+error ("cancellation is not complete") — `Killed` is never claimed without
+proof. (The commit message of the code commit paraphrases this variant as
+"CancellationIncomplete"; `GroupStillAlive` is the real name.)
 
 ```
 test worker_shell::tests::cancellation_reaps_the_entire_spawned_process_group ... ok
