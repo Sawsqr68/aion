@@ -82,6 +82,9 @@ impl WorkerProtocol for WorkerGrpcService {
         let worker_id = registration
             .worker_id()
             .ok_or_else(|| Status::internal("worker registration missing id"))?;
+        heartbeat
+            .register_connection(worker_id, std::time::Instant::now())
+            .map_err(|error| status_from_server_error(&error))?;
         // A worker serves a SET of namespaces; the ack echoes them joined in
         // stable order purely for the worker's logs (the RegisterAck namespace
         // field is informational, not a routing input).
@@ -306,6 +309,7 @@ async fn process_inbound(
 ) -> Result<(), Status> {
     let mut expired_since: Option<std::time::Instant> = None;
     while let Some(msg) = inbound.message().await? {
+        refresh_connection_lease(&session)?;
         let Some(inner) = msg.message else {
             continue;
         };
@@ -372,13 +376,15 @@ async fn process_inbound(
                 }
             }
             generated::worker_to_server::Message::Register(_) => {
-                tracing::warn!(
-                    worker_id = ?session.worker_id,
-                    "ignoring subsequent RegisterWorker message; \
-                     only the first registration is accepted per stream"
-                );
+                warn_duplicate_registration(session.worker_id);
             }
             generated::worker_to_server::Message::Heartbeat(heartbeat_msg) => {
+                // Empty task ids are the connection-level lease beat. The frame
+                // already advanced the lease above; it intentionally has no
+                // per-task liveness entry to update.
+                if heartbeat_msg.workflow_id.is_none() && heartbeat_msg.activity_id.is_none() {
+                    continue;
+                }
                 if let Err(error) = session.heartbeat.record_heartbeat(
                     session.worker_id,
                     decode_heartbeat(heartbeat_msg),
@@ -418,6 +424,29 @@ async fn process_inbound(
         }
     }
     Ok(())
+}
+
+fn refresh_connection_lease(session: &WorkerSession<'_>) -> Result<(), Status> {
+    session
+        .heartbeat
+        .record_connection_activity(session.worker_id, std::time::Instant::now())
+        .map(|_| ())
+        .map_err(|error| {
+            tracing::error!(
+                worker_id = ?session.worker_id,
+                %error,
+                "failed to advance worker connection lease"
+            );
+            status_from_server_error(&error)
+        })
+}
+
+fn warn_duplicate_registration(worker_id: WorkerId) {
+    tracing::warn!(
+        worker_id = ?worker_id,
+        "ignoring subsequent RegisterWorker message; \
+         only the first registration is accepted per stream"
+    );
 }
 
 async fn worker_caller_from_metadata(

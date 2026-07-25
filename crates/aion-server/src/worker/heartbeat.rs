@@ -67,6 +67,8 @@ struct TaskKey(WorkerId, WorkflowId, ActivityId);
 #[derive(Debug, Default)]
 struct HeartbeatState {
     tasks: HashMap<TaskKey, TaskLiveness>,
+    /// Last frame observed on each live worker connection.
+    connections: HashMap<WorkerId, Instant>,
 }
 
 /// Per-task liveness tracker for remote-worker streams.
@@ -86,6 +88,51 @@ impl HeartbeatTracker {
             inner: Arc::new(Mutex::new(HeartbeatState::default())),
             empty: Arc::new(Notify::new()),
         }
+    }
+
+    /// Start the connection-level lease for a newly registered worker.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if tracker state cannot be trusted.
+    pub fn register_connection(
+        &self,
+        worker_id: WorkerId,
+        now: Instant,
+    ) -> Result<(), ServerError> {
+        self.state()?.connections.insert(worker_id, now);
+        Ok(())
+    }
+
+    /// Advance a worker's connection lease after receiving any frame.
+    ///
+    /// Returns `false` if the worker has already been removed from lease tracking;
+    /// a frame racing deregistration must not resurrect it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if tracker state cannot be trusted.
+    pub fn record_connection_activity(
+        &self,
+        worker_id: WorkerId,
+        now: Instant,
+    ) -> Result<bool, ServerError> {
+        let mut state = self.state()?;
+        let Some(last_activity) = state.connections.get_mut(&worker_id) else {
+            return Ok(false);
+        };
+        *last_activity = now;
+        Ok(true)
+    }
+
+    /// End connection-lease tracking when a transport closes normally.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if tracker state cannot be trusted.
+    pub fn unregister_connection(&self, worker_id: WorkerId) -> Result<(), ServerError> {
+        self.state()?.connections.remove(&worker_id);
+        Ok(())
     }
 
     /// Track a newly accepted in-flight activity for heartbeat expiry.
@@ -112,7 +159,9 @@ impl HeartbeatTracker {
             last_heartbeat_at: now,
             last_progress: None,
         };
-        self.state()?.tasks.insert(key, liveness);
+        let mut state = self.state()?;
+        state.tasks.insert(key, liveness);
+        state.connections.insert(worker_id, now);
         Ok(())
     }
 
@@ -182,6 +231,12 @@ impl HeartbeatTracker {
     ) -> Result<bool, ServerError> {
         let key = TaskKey::new(worker_id, workflow_id.clone(), activity_id.clone());
         let mut state = self.state()?;
+        if !state.tasks.contains_key(&key) {
+            return Ok(false);
+        }
+        if let Some(last_activity) = state.connections.get_mut(&worker_id) {
+            *last_activity = now;
+        }
         let Some(liveness) = state.tasks.get_mut(&key) else {
             return Ok(false);
         };
@@ -226,6 +281,12 @@ impl HeartbeatTracker {
         let decoded = DecodedHeartbeat::try_from(heartbeat)?;
         let key = TaskKey::new(worker_id, decoded.workflow_id, decoded.activity_id);
         let mut state = self.state()?;
+        if !state.tasks.contains_key(&key) {
+            return Err(wire_error("heartbeat task is not in flight"));
+        }
+        if let Some(last_activity) = state.connections.get_mut(&worker_id) {
+            *last_activity = now;
+        }
         let Some(liveness) = state.tasks.get_mut(&key) else {
             return Err(wire_error("heartbeat task is not in flight"));
         };
@@ -267,6 +328,15 @@ impl HeartbeatTracker {
         let state = self.state()?;
         let mut seen = HashSet::new();
         let mut workers = Vec::new();
+        for (worker_id, last_activity) in &state.connections {
+            if now
+                .checked_duration_since(*last_activity)
+                .is_some_and(|elapsed| elapsed > self.heartbeat_window)
+                && seen.insert(*worker_id)
+            {
+                workers.push(*worker_id);
+            }
+        }
         for liveness in state.tasks.values() {
             if is_expired(liveness, now) && seen.insert(liveness.worker_id) {
                 workers.push(liveness.worker_id);
@@ -290,9 +360,7 @@ impl HeartbeatTracker {
         let mut reports = Vec::new();
         for worker_id in self.expired_workers(now)? {
             let report = self.fail_lost_worker(worker_id, registry, sink)?;
-            if !report.tasks.is_empty() {
-                reports.push(report);
-            }
+            reports.push(report);
         }
         Ok(reports)
     }
@@ -433,6 +501,7 @@ impl HeartbeatTracker {
         reason: aion_core::WorkerDeathReason,
     ) -> Result<LostWorkerReport, ServerError> {
         registry.deregister_with_reason(worker_id, reason)?;
+        self.state()?.connections.remove(&worker_id);
         let tasks = self.remove_worker_tasks(worker_id)?;
         for task in &tasks {
             sink.park_activity(&task.workflow_id, &task.activity_id)?;
@@ -462,6 +531,7 @@ impl HeartbeatTracker {
         // This is the liveness-timeout sweep: the proven reason is Timeout, the
         // one finer-grained WS3 distinction this call site can honestly assert.
         registry.deregister_with_reason(worker_id, aion_core::WorkerDeathReason::Timeout)?;
+        self.state()?.connections.remove(&worker_id);
         let tasks = self.remove_worker_tasks(worker_id)?;
         for task in &tasks {
             sink.complete_activity(ActivityCompletion {
@@ -531,12 +601,11 @@ pub fn sweep_interval(heartbeat_window: Duration) -> Duration {
 
 /// Production driver of [`HeartbeatTracker::fail_expired_workers`] (#176).
 ///
-/// The tracker records per-task liveness, and the stream-teardown sweep fails a
-/// worker whose stream ENDS — but a worker whose stream stays open while its
-/// process wedges (stops heartbeating without disconnecting) was never expired
-/// by anything on the boot path, so its in-flight dispatches waited forever.
-/// This interval task is that missing caller: each tick fails every worker with
-/// a task beyond its heartbeat window, deregistering it with the provable
+/// The tracker records connection and per-task liveness, while the stream-teardown
+/// sweep fails a worker whose stream ENDS. A worker whose stream stays open while
+/// its process wedges is caught by the connection lease even when it is idle.
+/// This interval task expires every silent connection or task, deregistering it
+/// with the provable
 /// [`WorkerDeathReason::Timeout`](aion_core::WorkerDeathReason::Timeout) and
 /// surfacing its tasks as retryable lost-worker failures through the shared
 /// completion sink. It shares the server's shutdown watch, so it drains with
@@ -637,12 +706,19 @@ where
             }
         };
         for report in &reports {
-            warn!(
-                worker_id = ?report.worker_id,
-                failed_tasks = report.tasks.len(),
-                "worker heartbeat window expired with in-flight activities; \
-                 deregistered and surfaced as retryable lost-worker failures"
-            );
+            if report.tasks.is_empty() {
+                warn!(
+                    worker_id = ?report.worker_id,
+                    "idle worker connection lease expired; worker deregistered"
+                );
+            } else {
+                warn!(
+                    worker_id = ?report.worker_id,
+                    failed_tasks = report.tasks.len(),
+                    "worker heartbeat window expired with in-flight activities; \
+                     deregistered and surfaced as retryable lost-worker failures"
+                );
+            }
         }
         if !reports.is_empty() {
             // In-flight accounting may have just reached zero; wake any drain

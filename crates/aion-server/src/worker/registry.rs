@@ -136,6 +136,13 @@ type RegistryMap = HashMap<ActivityKey, WorkerMap>;
 pub struct WorkerId(u64);
 
 impl WorkerId {
+    /// Build a worker id from the numeric value exposed by administrative and
+    /// wire surfaces.
+    #[must_use]
+    pub const fn from_value(value: u64) -> Self {
+        Self(value)
+    }
+
     /// Raw numeric value, as carried by the wire `RegisterAck.worker_id` so
     /// workers can correlate their logs with the server's.
     #[must_use]
@@ -764,6 +771,10 @@ impl ConnectedWorkerRegistry {
     }
 
     /// Broadcast a graceful drain request to every connected worker stream.
+    /// Workers are removed from routing before any transport signal is attempted.
+    /// A liminal worker has no drain control frame, so it is force-fenced and
+    /// deregistered with an error-level identity-bearing log instead of being
+    /// silently skipped.
     ///
     /// # Errors
     ///
@@ -772,19 +783,57 @@ impl ConnectedWorkerRegistry {
         let workers = self.all_workers()?;
         let mut delivered = 0usize;
         for worker in workers {
-            // Only gRPC-stream workers carry a drain mpsc. A worker on a non-gRPC
-            // transport (liminal) has no drain frame in this spike, so it is left
-            // untouched rather than spuriously deregistered.
-            let Some(sender) = worker.sender() else {
-                continue;
-            };
-            if sender.try_send(WorkerMessage::DrainRequest).is_ok() {
+            if self.drain_worker(worker.id())? {
                 delivered = delivered.saturating_add(1);
-            } else {
-                self.deregister(worker.id())?;
             }
         }
         Ok(delivered)
+    }
+
+    /// Stop assigning work to one worker and request a graceful transport drain.
+    ///
+    /// Returns `false` if the worker is not registered or if its transport has no
+    /// drain channel. In the latter case the worker is deregistered immediately,
+    /// after an error-level log names the worker and its transport limitation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if the registry lock is poisoned.
+    pub fn drain_worker(&self, worker_id: WorkerId) -> Result<bool, ServerError> {
+        let worker = {
+            let mut state = self.state()?;
+            let Some(worker) = state.workers.get(&worker_id).cloned() else {
+                return Ok(false);
+            };
+            Self::remove_worker_from_service(&mut state, &worker);
+            worker
+        };
+        match worker.delivery() {
+            WorkerDelivery::Grpc(sender) => {
+                if sender.try_send(WorkerMessage::DrainRequest).is_ok() {
+                    tracing::info!(worker_id = worker_id.value(), "worker drain requested");
+                    Ok(true)
+                } else {
+                    tracing::error!(
+                        worker_id = worker_id.value(),
+                        "worker drain signal failed; force-deregistering closed transport"
+                    );
+                    self.deregister(worker_id)?;
+                    Ok(false)
+                }
+            }
+            #[cfg(feature = "liminal-transport")]
+            WorkerDelivery::Liminal(delivery) => {
+                tracing::error!(
+                    worker_id = worker_id.value(),
+                    connection_pid = delivery.pid(),
+                    "liminal transport has no drain control channel; worker fenced and \
+                     deregistered at drain start"
+                );
+                self.deregister(worker_id)?;
+                Ok(false)
+            }
+        }
     }
 
     /// Select one worker for the `(namespace, task_queue, activity_type)` pool.
@@ -897,13 +946,19 @@ impl ConnectedWorkerRegistry {
     /// `None` if the worker was already gone.
     fn remove_worker(state: &mut RegistryState, worker_id: WorkerId) -> Option<BTreeSet<String>> {
         let handle = state.workers.remove(&worker_id)?;
+        Self::remove_worker_from_service(state, &handle);
+        Some(handle.namespaces)
+    }
 
+    /// Fence a worker from every routing index while retaining its connection
+    /// handle so an in-progress graceful drain can finish and tear down normally.
+    fn remove_worker_from_service(state: &mut RegistryState, handle: &WorkerHandle) {
         for namespace in &handle.namespaces {
             let pool = PoolAddress::new(namespace.clone(), handle.task_queue.clone());
             for activity_type in &handle.activity_types {
                 let key = ActivityKey::new(pool.clone(), activity_type.clone());
                 if let Some(workers) = state.by_activity.get_mut(&key) {
-                    workers.remove(&worker_id);
+                    workers.remove(&handle.id);
                     if workers.is_empty() {
                         state.by_activity.remove(&key);
                         // Prune the round-robin cursor in lockstep: the cursor
@@ -917,8 +972,6 @@ impl ConnectedWorkerRegistry {
                 }
             }
         }
-
-        Some(handle.namespaces)
     }
 
     fn state(&self) -> Result<MutexGuard<'_, RegistryState>, ServerError> {

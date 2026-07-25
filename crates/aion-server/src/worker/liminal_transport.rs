@@ -1361,6 +1361,13 @@ impl ConnectionNotifier for LiminalConnectionNotifier {
                     "liminal worker registration for connection {pid} rejected: {error}"
                 ),
             })?;
+        let worker_id = guard
+            .worker_id()
+            .ok_or_else(|| LiminalServerError::ListenerAccept {
+                message: format!(
+                    "liminal worker registration for connection {pid} has no worker id"
+                ),
+            })?;
 
         // OWN the guard for the connection's lifetime, keyed by pid. Dropping it
         // (on unregister) deregisters the worker, so the registration lives
@@ -1377,6 +1384,21 @@ impl ConnectionNotifier for LiminalConnectionNotifier {
             }
         })?;
         guards.insert(pid, guard);
+        drop(guards);
+        if let Some(tracker) = &self.heartbeat_tracker {
+            if let Err(error) = tracker.register_connection(worker_id, std::time::Instant::now()) {
+                let removed = match self.guards.lock() {
+                    Ok(mut guards) => guards.remove(&pid),
+                    Err(poisoned) => poisoned.into_inner().remove(&pid),
+                };
+                drop(removed);
+                return Err(LiminalServerError::ListenerAccept {
+                    message: format!(
+                        "liminal worker registration for connection {pid} rejected: {error}"
+                    ),
+                });
+            }
+        }
         tracing::info!(
             connection_pid = pid,
             identity = %registration.identity,
@@ -1395,6 +1417,17 @@ impl ConnectionNotifier for LiminalConnectionNotifier {
             Ok(mut guards) => guards.remove(&pid),
             Err(poisoned) => poisoned.into_inner().remove(&pid),
         };
+        let worker_id = removed.as_ref().and_then(WorkerRegistration::worker_id);
+        if let (Some(tracker), Some(worker_id)) = (&self.heartbeat_tracker, worker_id) {
+            if let Err(error) = tracker.unregister_connection(worker_id) {
+                tracing::error!(
+                    %error,
+                    connection_pid = pid,
+                    worker_id = worker_id.value(),
+                    "failed to clear liminal worker connection lease"
+                );
+            }
+        }
         if removed.is_some() {
             tracing::info!(
                 connection_pid = pid,
@@ -1404,6 +1437,27 @@ impl ConnectionNotifier for LiminalConnectionNotifier {
     }
 
     fn on_channel_publish(&self, pid: u64, channel: &str, payload: &[u8]) -> bool {
+        if let Some(tracker) = &self.heartbeat_tracker {
+            let worker_id = match self.guards.lock() {
+                Ok(guards) => guards.get(&pid).and_then(WorkerRegistration::worker_id),
+                Err(poisoned) => poisoned
+                    .into_inner()
+                    .get(&pid)
+                    .and_then(WorkerRegistration::worker_id),
+            };
+            if let Some(worker_id) = worker_id {
+                if let Err(error) =
+                    tracker.record_connection_activity(worker_id, std::time::Instant::now())
+                {
+                    tracing::error!(
+                        %error,
+                        connection_pid = pid,
+                        worker_id = worker_id.value(),
+                        "failed to advance liminal worker connection lease"
+                    );
+                }
+            }
+        }
         // Reserved liveness channel: refresh the beat's in-flight task stamp in
         // the shared heartbeat tracker (always consumed, never fanned out).
         if channel == WORKER_LIVENESS_CHANNEL {
