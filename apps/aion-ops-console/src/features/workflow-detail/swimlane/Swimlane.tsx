@@ -6,6 +6,11 @@ import type { WorkflowId } from '@/types';
 
 import type { TimelineEntry } from '../types';
 import { ChildTimelineLoader } from './ChildTimelineLoader';
+import {
+  mergeChildTimelineWindow,
+  retainChildTimelineWindow,
+  withoutChildTimelineBranch,
+} from './childTimelineWindow';
 import { layoutSwimlane, type SwimlaneBar, type SwimlaneLane } from './laneLayout';
 import { toggleSetMember, withoutPathAndDescendants } from './laneSet';
 import {
@@ -17,6 +22,7 @@ import {
 import { Scrubber } from './Scrubber';
 import { Axis, ChartToolbar, LaneRow, NoticeRow } from './SwimlaneRows';
 import { cutsAtGlobalRank, cutsAtTimestamp, prefixUpTo, snapGlobalRank } from './scrub';
+import { useCurrentTime, useObservedWidth } from './swimlaneHooks';
 import { type AxisMode, buildAxisLayout, type LaneScrubClip } from './timeLayout';
 import { useVirtualizedLaneRows } from './useVirtualizedLaneRows';
 
@@ -115,6 +121,17 @@ function Swimlane({
       workflowId,
     ]
   );
+  const visibleChildPaths = useMemo(
+    () => new Set(tree.requests.map((request) => request.path)),
+    [tree.requests]
+  );
+  const visibleChildPathsRef = useRef(visibleChildPaths);
+  visibleChildPathsRef.current = visibleChildPaths;
+
+  useEffect(() => {
+    setChildTimelines((current) => retainChildTimelineWindow(current, visibleChildPaths));
+  }, [visibleChildPaths]);
+
   const containerRef = useRef<HTMLElement | null>(null);
   const containerWidth = useObservedWidth(containerRef);
   const nowMs = useCurrentTime(
@@ -198,14 +215,9 @@ function Swimlane({
   }, [fullEntriesByPath, scrubCursor]);
 
   const updateChildState = useCallback((path: string, state: ChildTimelineState) => {
-    setChildTimelines((current) => {
-      if (current.get(path) === state) {
-        return current;
-      }
-      const next = new Map(current);
-      next.set(path, state);
-      return next;
-    });
+    setChildTimelines((current) =>
+      mergeChildTimelineWindow(current, path, state, visibleChildPathsRef.current)
+    );
   }, []);
 
   const setMode = useCallback(
@@ -227,6 +239,7 @@ function Swimlane({
       if (expanded) {
         setCollapsedPaths((current) => new Set(current).add(path));
         setExpandedPaths((current) => withoutPathAndDescendants(current, path));
+        setChildTimelines((current) => withoutChildTimelineBranch(current, path));
       } else {
         setCollapsedPaths((current) => {
           const next = new Set(current);
@@ -386,46 +399,6 @@ function timelineForPath(
     return rootEntries;
   }
   return children.get(path)?.entries ?? [];
-}
-
-function useObservedWidth(ref: { current: HTMLElement | null }): number {
-  const [width, setWidth] = useState(0);
-
-  useEffect(() => {
-    const element = ref.current;
-    if (element === null || typeof ResizeObserver === 'undefined') {
-      return;
-    }
-    const observer = new ResizeObserver((entries) => {
-      const observed = entries[0];
-      if (observed !== undefined) {
-        setWidth(observed.contentRect.width);
-      }
-    });
-    observer.observe(element);
-    setWidth(element.getBoundingClientRect().width);
-    return () => observer.disconnect();
-  }, [ref]);
-
-  return width;
-}
-
-function useCurrentTime(running: boolean, override: number | undefined): number {
-  const [nowMs, setNowMs] = useState(() => override ?? Date.now());
-
-  useEffect(() => {
-    if (override !== undefined) {
-      setNowMs(override);
-      return;
-    }
-    if (!running) {
-      return;
-    }
-    const interval = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(interval);
-  }, [override, running]);
-
-  return override ?? nowMs;
 }
 
 export { Swimlane };
