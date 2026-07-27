@@ -604,6 +604,7 @@ async fn worker_lost_mid_dispatch_fails_retryable_lost_worker() -> Result<(), Te
         node: None,
         activity_types: vec![DOOMED.to_owned()],
         identity: "doomed-worker".to_owned(),
+        activities: Vec::new(),
     };
     let client = liminal_sdk::PushClient::connect_with_registration(
         &server.address.to_string(),

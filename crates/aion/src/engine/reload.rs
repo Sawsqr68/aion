@@ -9,7 +9,7 @@ use aion_core::Event;
 use aion_package::ContentHash;
 
 use crate::error::PinHolder;
-use crate::loader::{LoadOutcome, WorkflowVersionInfo};
+use crate::loader::{DeployedWorkerContract, LoadOutcome, WorkflowVersionInfo};
 use crate::{EngineError, WorkflowCatalog};
 
 use super::api::Engine;
@@ -98,6 +98,22 @@ impl Engine {
     /// Returns [`EngineError::CatalogPoisoned`] when the catalog lock is poisoned.
     pub fn list_workflow_versions(&self) -> Result<Vec<WorkflowVersionInfo>, EngineError> {
         self.workflow_catalog().versions()
+    }
+
+    /// Returns every retained `.v4` package contract declaring `task_queue`.
+    ///
+    /// Registration uses this exact-version set so a worker cannot be accepted
+    /// when it would violate any concurrently deployable workflow contract.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EngineError::CatalogPoisoned`] when the catalog lock is poisoned.
+    pub fn worker_contracts_for_queue(
+        &self,
+        task_queue: &str,
+    ) -> Result<Vec<DeployedWorkerContract>, EngineError> {
+        self.workflow_catalog()
+            .worker_contracts_for_queue(task_queue)
     }
 
     /// Re-points routing for `workflow_type` at an already-loaded version

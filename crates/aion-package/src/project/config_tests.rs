@@ -69,16 +69,39 @@ fn full_descriptor_round_trips_with_derived_and_explicit_outputs() -> TestResult
     let first = &config.workflows[0];
     assert_eq!(first.entry_module, "demo");
     assert_eq!(first.entry_function, "run");
-    assert_eq!(first.timeout, Duration::from_secs(30));
+    assert_eq!(first.timeout, Some(Duration::from_secs(30)));
     assert_eq!(first.input_schema, json!({ "type": "object" }));
     assert_eq!(first.output_schema, json!(true));
     assert_eq!(first.activities, vec!["greet".to_owned()]);
     assert_eq!(first.output_path, root.join("demo.aion"));
     let second = &config.workflows[1];
     assert_eq!(second.entry_module, "demo@nested");
-    assert_eq!(second.timeout, Duration::from_secs(3600));
+    assert_eq!(second.timeout, Some(Duration::from_secs(3600)));
     assert!(second.activities.is_empty());
     assert_eq!(second.output_path, root.join("custom-name.aion"));
+    Ok(())
+}
+
+/// LAW 1 at the authoring surface: an entry with NO `timeout_seconds` parses
+/// to `None` — absence of the declaration is absence of the deadline, never a
+/// buried default. A declared zero still refuses.
+#[test]
+fn absent_timeout_seconds_declares_no_timeout() -> TestResult {
+    let descriptor = "[[workflow]]\nentry_module = \"demo\"\nentry_function = \"run\"\n\
+         input_schema = \"schemas/input.json\"\noutput_schema = \"schemas/output.json\"\n\
+         activities = []\n";
+    let (_root, result) = load_and_clean("config-no-timeout", descriptor)?;
+    let config = result?;
+    assert_eq!(config.workflows[0].timeout, None);
+
+    let zero = "[[workflow]]\nentry_module = \"demo\"\nentry_function = \"run\"\n\
+         timeout_seconds = 0\ninput_schema = \"schemas/input.json\"\n\
+         output_schema = \"schemas/output.json\"\nactivities = []\n";
+    let (_root, result) = load_and_clean("config-zero-timeout", zero)?;
+    assert!(matches!(
+        result,
+        Err(PackagingError::ConfigInvalid { field, .. }) if field.contains("timeout_seconds")
+    ));
     Ok(())
 }
 
@@ -106,6 +129,11 @@ fn missing_descriptor_returns_config_missing() -> TestResult {
 #[test]
 fn omitting_each_required_field_returns_config_parse_naming_it() -> TestResult {
     for (field, _) in REQUIRED_LINES {
+        // `timeout_seconds` is deliberately optional: absence declares no
+        // timeout (pinned by `absent_timeout_seconds_declares_no_timeout`).
+        if field == "timeout_seconds" {
+            continue;
+        }
         let label = format!("config-omit-{field}");
         let (_, result) = load_and_clean(&label, &workflow_block(Some(field)))?;
 

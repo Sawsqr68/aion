@@ -112,6 +112,9 @@ where
     let agent_types = agent
         .map(|config| config.agent_activity_types().clone())
         .unwrap_or_default();
+    let agent_descriptors = agent
+        .map(|config| config.activity_descriptors().to_vec())
+        .unwrap_or_default();
     // One drain slot spanning every reconnection: each connect refreshes it with the
     // new connection's writer, so an observability drain spawned against an earlier
     // (now-dead) connection re-resolves the survivor instead of a dead socket (#254).
@@ -127,6 +130,7 @@ where
             config,
             Arc::clone(registry),
             &agent_types,
+            &agent_descriptors,
         )
         .map(|worker| {
             worker

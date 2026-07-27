@@ -142,6 +142,7 @@ async fn aion_workflow_survives_restart_recovered_from_haematite()
     // This is the entire wiring: HaematiteStore IS the engine's event store.
     let store: Arc<dyn EventStore> = Arc::new(first_store);
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -269,6 +270,7 @@ async fn aion_workflow_survives_restart_recovered_from_haematite()
     );
 
     let recovered_engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&reopened_store))
         .in_memory_visibility()
         .scheduler_threads(1)

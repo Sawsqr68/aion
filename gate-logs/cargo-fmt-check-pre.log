@@ -1,0 +1,317 @@
+Diff in /Users/tom/Developer/ablative/aion/crates/aion/src/engine/reload.rs:112:
+         &self,
+         task_queue: &str,
+     ) -> Result<Vec<DeployedWorkerContract>, EngineError> {
+[31m-        self.workflow_catalog().worker_contracts_for_queue(task_queue)
+(B[m[32m+        self.workflow_catalog()
+(B[m[32m+            .worker_contracts_for_queue(task_queue)
+(B[m     }
+ 
+     /// Re-points routing for `workflow_type` at an already-loaded version
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-awl/src/compile.rs:216:
+         for action in &worker.actions {
+             let input_schema = crate::schema_for_params_in(document, schema_root, &action.params)
+                 .map_err(CompileError::Schema)?;
+[31m-            let output_schema = crate::schema_for_type_ref_in(document, schema_root, &action.returns)
+(B[m[31m-                .map_err(CompileError::Schema)?;
+(B[m[32m+            let output_schema =
+(B[m[32m+                crate::schema_for_type_ref_in(document, schema_root, &action.returns)
+(B[m[32m+                    .map_err(CompileError::Schema)?;
+(B[m             let node = action
+                 .config
+                 .as_ref()
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-awl/src/compile.rs:257:
+                 name: child.name.clone(),
+                 input_schema: crate::schema_for_params_in(document, schema_root, &child.params)
+                     .map_err(CompileError::Schema)?,
+[31m-                output_schema: crate::schema_for_type_ref_in(
+(B[m[31m-                    document,
+(B[m[31m-                    schema_root,
+(B[m[31m-                    &child.returns,
+(B[m[31m-                )
+(B[m[31m-                .map_err(CompileError::Schema)?,
+(B[m[32m+                output_schema: crate::schema_for_type_ref_in(document, schema_root, &child.returns)
+(B[m[32m+                    .map_err(CompileError::Schema)?,
+(B[m             })
+         })
+         .collect::<Result<Vec<_>, CompileError>>()?;
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-awl/src/compile.rs:302:
+             count: *count,
+             every: checked_contract_duration(every)?,
+         }),
+[31m-        RetrySpec::Backoff { count, min, max, .. } => Ok(RetryContract::Backoff {
+(B[m[32m+        RetrySpec::Backoff {
+(B[m[32m+            count, min, max, ..
+(B[m[32m+        } => Ok(RetryContract::Backoff {
+(B[m             count: *count,
+             min: checked_contract_duration(min)?,
+             max: checked_contract_duration(max)?,
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-awl/src/compile.rs:310:
+     }
+ }
+ 
+[31m-fn checked_contract_duration(
+(B[m[31m-    duration: &crate::DurationLiteral,
+(B[m[31m-) -> Result<Duration, CompileError> {
+(B[m[32m+fn checked_contract_duration(duration: &crate::DurationLiteral) -> Result<Duration, CompileError> {
+(B[m     duration
+         .checked_duration()
+         .ok_or_else(|| CompileError::Backend {
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-package/src/codegen/activity_worker_rust.rs:444:
+         assert!(module.contains(
+             ".register_activity_with_contract(\"charge_payment\", handlers::charge_payment)?"
+         ));
+[31m-        assert!(module.contains(
+(B[m[31m-            ".register_activity_with_contract(\"ship_order\", handlers::ship_order)?"
+(B[m[31m-        ));
+(B[m[32m+        assert!(
+(B[m[32m+            module.contains(
+(B[m[32m+                ".register_activity_with_contract(\"ship_order\", handlers::ship_order)?"
+(B[m[32m+            )
+(B[m[32m+        );
+(B[m         let charge_at = module.find("charge_payment\", handlers");
+         let ship_at = module.find("ship_order\", handlers");
+         assert!(charge_at < ship_at);
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-package/src/hash.rs:189:
+     contract: Option<&PackageContract>,
+     hash: &ContentHash,
+ ) -> bool {
+[31m-    contract.is_some_and(|contract| {
+(B[m[31m-        hash == &content_hash_with_contract(beams, manifest, contract)
+(B[m[31m-    })
+(B[m[32m+    contract.is_some_and(|contract| hash == &content_hash_with_contract(beams, manifest, contract))
+(B[m }
+ 
+ /// Verifies an archive that may carry a `.v4` contract record.
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-package/src/lib.rs:20:
+ pub mod beam;
+ /// Archive builder utilities for tests and packaging tools.
+ pub mod builder;
+[32m+/// Gleam type and JSON codec generation from project schemas.
+(B[m[32m+pub mod codegen;
+(B[m /// Worker advertisement compatibility and field-level differences.
+ pub mod compatibility;
+ /// Durable worker-contract records and canonical identity encoding.
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-package/src/lib.rs:26:
+ pub mod contract;
+[31m-/// Gleam type and JSON codec generation from project schemas.
+(B[m[31m-pub mod codegen;
+(B[m /// Package validation and archive-loading errors.
+ pub mod error;
+ /// Explicit inflate budgets for archive extraction.
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-package/src/lib.rs:48:
+ 
+ pub use beam::{BeamModule, BeamSet, RESERVED_MODULE_NAMES};
+ pub use builder::PackageBuilder;
+[31m-pub use compatibility::{ContractDiff, contract_diffs};
+(B[m[31m-pub use contract::{
+(B[m[31m-    ActionContract, ActivityDescriptor, AdditionalWorkflowContract, ChildContract,
+(B[m[31m-    ContractIdentityError, PackageContract, RetryContract, SignalContract, WorkerContract,
+(B[m[31m-};
+(B[m pub use codegen::{
+     ActivityArtifact, ActivityDeclaration, ActivityReport, BoundaryType, CodecReport, CodegenError,
+     CodegenMode, SchemaEmitReport, TestScaffoldReport, Tier, boundary_types_from_interface,
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-package/src/lib.rs:59:
+     build_input_skeleton, emit_schemas, generate_activities, generate_codecs,
+     generate_test_scaffold, parse_declarations,
+[32m+};
+(B[m[32m+pub use compatibility::{ContractDiff, contract_diffs};
+(B[m[32m+pub use contract::{
+(B[m[32m+    ActionContract, ActivityDescriptor, AdditionalWorkflowContract, ChildContract,
+(B[m[32m+    ContractIdentityError, PackageContract, RetryContract, SignalContract, WorkerContract,
+(B[m };
+ pub use error::PackageError;
+ pub use extraction::ExtractionLimits;
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-package/src/package.rs:88:
+         let contract = read_contract(&mut archive, &mut budget)?;
+ 
+         let (beams, source) = read_archive_entries(&mut archive, &mut budget)?;
+[31m-        let content_hash = verified_content_hash_with_contract(&beams, &manifest, contract.as_ref())?;
+(B[m[32m+        let content_hash =
+(B[m[32m+            verified_content_hash_with_contract(&beams, &manifest, contract.as_ref())?;
+(B[m 
+         if beams.get(&manifest.entry_module).is_none() {
+             return Err(PackageError::MissingEntryModule {
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-package/src/package.rs:142:
+             self.contract.as_ref(),
+             &self.content_hash,
+         ) {
+[31m-            self.contract.as_ref().ok_or_else(|| {
+(B[m[31m-                ContractIdentityError::RedeployRequired {
+(B[m[32m+            self.contract
+(B[m[32m+                .as_ref()
+(B[m[32m+                .ok_or_else(|| ContractIdentityError::RedeployRequired {
+(B[m                     stored_version: self.content_hash.to_string(),
+[31m-                }
+(B[m[31m-            })
+(B[m[32m+                })
+(B[m         } else {
+             Err(ContractIdentityError::RedeployRequired {
+                 stored_version: self.content_hash.to_string(),
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-proto/src/lib.rs:65:
+ pub use worker::{
+     ProtoActivityDescriptor, ProtoActivityError, ProtoActivityErrorKind, ProtoActivityResult,
+     ProtoActivityTask, ProtoDrainRequest, ProtoHeartbeat, ProtoRegisterAck, ProtoRegisterWorker,
+[31m-    ProtoResultAck,
+(B[m[31m-    proto_activity_result,
+(B[m[32m+    ProtoResultAck, proto_activity_result,
+(B[m };
+ pub use workflow::{
+     ProtoCancelRequest, ProtoCancelResponse, ProtoCountWorkflowsRequest,
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-server/src/api/worker_grpc.rs:557:
+         .activities
+         .iter()
+         .map(|activity| {
+[31m-            let input_schema = serde_json::from_str(&activity.input_schema_json).map_err(|error| {
+(B[m[31m-                Status::invalid_argument(format!(
+(B[m[31m-                    "worker activity `{}` input_schema_json is invalid: {error}",
+(B[m[31m-                    activity.name
+(B[m[31m-                ))
+(B[m[31m-            })?;
+(B[m[32m+            let input_schema =
+(B[m[32m+                serde_json::from_str(&activity.input_schema_json).map_err(|error| {
+(B[m[32m+                    Status::invalid_argument(format!(
+(B[m[32m+                        "worker activity `{}` input_schema_json is invalid: {error}",
+(B[m[32m+                        activity.name
+(B[m[32m+                    ))
+(B[m[32m+                })?;
+(B[m             let output_schema =
+                 serde_json::from_str(&activity.output_schema_json).map_err(|error| {
+                     Status::invalid_argument(format!(
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-server/src/error.rs:406:
+         EngineError::RouteActive { .. } => simple_engine_fields("RouteActive", source),
+         EngineError::ManifestMismatch { .. } => simple_engine_fields("ManifestMismatch", source),
+         EngineError::Package(_) => simple_engine_fields("Package", source),
+[31m-        EngineError::ContractIdentity { .. } => {
+(B[m[31m-            simple_engine_fields("ContractIdentity", source)
+(B[m[31m-        }
+(B[m[32m+        EngineError::ContractIdentity { .. } => simple_engine_fields("ContractIdentity", source),
+(B[m         EngineError::NoQueueDeclaration { .. } => {
+             simple_engine_fields("NoQueueDeclaration", source)
+         }
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-server/src/worker/liminal_transport.rs:1338:
+         let Some(engine) = &self.contract_catalog else {
+             return Ok(());
+         };
+[31m-        let advertised = registration
+(B[m[31m-            .activities
+(B[m[31m-            .iter()
+(B[m[31m-            .map(|activity| {
+(B[m[31m-                let input_schema = serde_json::from_str(&activity.input_schema_json).map_err(
+(B[m[31m-                    |error| LiminalServerError::ListenerAccept {
+(B[m[31m-                        message: format!(
+(B[m[31m-                            "liminal worker activity `{}` input schema is invalid: {error}",
+(B[m[31m-                            activity.name
+(B[m[31m-                        ),
+(B[m[31m-                    },
+(B[m[31m-                )?;
+(B[m[31m-                let output_schema = serde_json::from_str(&activity.output_schema_json).map_err(
+(B[m[31m-                    |error| LiminalServerError::ListenerAccept {
+(B[m[31m-                        message: format!(
+(B[m[31m-                            "liminal worker activity `{}` output schema is invalid: {error}",
+(B[m[31m-                            activity.name
+(B[m[31m-                        ),
+(B[m[31m-                    },
+(B[m[31m-                )?;
+(B[m[31m-                Ok(aion_package::ActivityDescriptor {
+(B[m[31m-                    name: activity.name.clone(),
+(B[m[31m-                    input_schema,
+(B[m[31m-                    output_schema,
+(B[m[32m+        let advertised =
+(B[m[32m+            registration
+(B[m[32m+                .activities
+(B[m[32m+                .iter()
+(B[m[32m+                .map(|activity| {
+(B[m[32m+                    let input_schema =
+(B[m[32m+                        serde_json::from_str(&activity.input_schema_json).map_err(|error| {
+(B[m[32m+                            LiminalServerError::ListenerAccept {
+(B[m[32m+                                message: format!(
+(B[m[32m+                                    "liminal worker activity `{}` input schema is invalid: {error}",
+(B[m[32m+                                    activity.name
+(B[m[32m+                                ),
+(B[m[32m+                            }
+(B[m[32m+                        })?;
+(B[m[32m+                    let output_schema = serde_json::from_str(&activity.output_schema_json)
+(B[m[32m+                        .map_err(|error| LiminalServerError::ListenerAccept {
+(B[m[32m+                            message: format!(
+(B[m[32m+                                "liminal worker activity `{}` output schema is invalid: {error}",
+(B[m[32m+                                activity.name
+(B[m[32m+                            ),
+(B[m[32m+                        })?;
+(B[m[32m+                    Ok(aion_package::ActivityDescriptor {
+(B[m[32m+                        name: activity.name.clone(),
+(B[m[32m+                        input_schema,
+(B[m[32m+                        output_schema,
+(B[m[32m+                    })
+(B[m                 })
+[31m-            })
+(B[m[31m-            .collect::<Result<Vec<_>, LiminalServerError>>()?;
+(B[m[32m+                .collect::<Result<Vec<_>, LiminalServerError>>()?;
+(B[m         super::contracts::validate_worker_contracts(
+             engine,
+             &registration.task_queue,
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-server/tests/worker_contract_registration.rs:68:
+     let prepared = compile_and_assemble_awl(SOURCE, root.path())?;
+     let package = Package::load_from_bytes(prepared.archive, ExtractionLimits::unbounded())?;
+     let action = package.contract()?.workers[0].actions[0].clone();
+[31m-    let state = ServerState::build_with_store(aion_store::InMemoryStore::default(), runtime_config())
+(B[m[31m-        .await?;
+(B[m[32m+    let state =
+(B[m[32m+        ServerState::build_with_store(aion_store::InMemoryStore::default(), runtime_config())
+(B[m[32m+            .await?;
+(B[m     state.engine()?.load_package(package).await?;
+     Ok((state, action))
+ }
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-server/tests/worker_contract_registration.rs:77:
+ async fn register(
+     state: ServerState,
+     activity: generated::ActivityDescriptor,
+[31m-) -> TestResult<Result<tonic::Response<tonic::Streaming<generated::ServerToWorker>>, tonic::Status>> {
+(B[m[32m+) -> TestResult<Result<tonic::Response<tonic::Streaming<generated::ServerToWorker>>, tonic::Status>>
+(B[m[32m+{
+(B[m     let listener = TcpListener::bind("127.0.0.1:0").await?;
+     let address = listener.local_addr()?;
+     let server = tokio::spawn(
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-worker/src/activity.rs:172:
+         handler: Handler,
+     ) -> Result<Self, WorkerError>
+     where
+[31m-        Input: Serialize
+(B[m[31m-            + DeserializeOwned
+(B[m[31m-            + schemars::JsonSchema
+(B[m[31m-            + Send
+(B[m[31m-            + Sync
+(B[m[31m-            + 'static,
+(B[m[32m+        Input: Serialize + DeserializeOwned + schemars::JsonSchema + Send + Sync + 'static,
+(B[m         Output: Serialize + schemars::JsonSchema + Send + Sync + 'static,
+         Handler: for<'context> Fn(Input, &'context ActivityContext) -> HandlerFuture<'context, Output>
+             + Send
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-worker/src/lib.rs:55:
+ /// High-level worker builder and run loop.
+ pub mod worker;
+ 
+[31m-pub use schemars::JsonSchema;
+(B[m pub use activity::{
+     ActivityFailure, ActivityRegistry, Classification, DuplicateActivityType, HandlerFuture,
+     activity_descriptor,
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-worker/src/lib.rs:85:
+ };
+ #[cfg(feature = "liminal-transport")]
+ pub use runtime::{RedialTiming, serve_with_redial};
+[32m+pub use schemars::JsonSchema;
+(B[m pub use worker::{EmptyActivitySet, Worker, WorkerBuilder, run_worker_with_session};
+ 
+Diff in /Users/tom/Developer/ablative/aion/crates/aion-worker/src/worker.rs:73:
+         handler: Handler,
+     ) -> Result<Self, WorkerError>
+     where
+[31m-        Input: Serialize
+(B[m[31m-            + DeserializeOwned
+(B[m[31m-            + schemars::JsonSchema
+(B[m[31m-            + Send
+(B[m[31m-            + Sync
+(B[m[31m-            + 'static,
+(B[m[32m+        Input: Serialize + DeserializeOwned + schemars::JsonSchema + Send + Sync + 'static,
+(B[m         Output: Serialize + schemars::JsonSchema + Send + Sync + 'static,
+         Handler: for<'context> Fn(Input, &'context ActivityContext) -> HandlerFuture<'context, Output>
+             + Send

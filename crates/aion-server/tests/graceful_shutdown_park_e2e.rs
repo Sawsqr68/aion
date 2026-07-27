@@ -33,8 +33,8 @@ use std::time::{Duration, Instant};
 
 use aion_core::Event;
 use aion_package::{
-    BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest, ManifestVersion,
-    PackageBuilder,
+    ActionContract, BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest,
+    ManifestVersion, PackageBuilder, PackageContract, WorkerContract,
 };
 use aion_proto::generated::worker_protocol_client::WorkerProtocolClient;
 use aion_proto::generated::{self, server_to_worker, worker_to_server};
@@ -116,7 +116,31 @@ fn write_package_archive(dir: &std::path::Path, beam: &[u8]) -> Result<PathBuf, 
         format_version: CURRENT_FORMAT_VERSION,
         additional_workflows: Vec::new(),
     };
-    let archive = PackageBuilder::new(manifest, beams).write_to_bytes()?;
+    // The park runs start through the server's strict queue-routed admission,
+    // so the fixture declares its one activity queue-scoped — the same checked
+    // contract a real `.v4` deploy carries — instead of a legacy unscoped list.
+    let contract = PackageContract {
+        input_schema: json!({ "type": "object" }),
+        output_schema: json!({ "type": "integer" }),
+        workers: vec![WorkerContract {
+            task_queue: TASK_QUEUE.to_owned(),
+            actions: vec![ActionContract {
+                name: ACTIVITY_TYPE.to_owned(),
+                input_schema: json!({}),
+                output_schema: json!({}),
+                node: None,
+                timeout: None,
+                retry: None,
+            }],
+        }],
+        children: Vec::new(),
+        signals: Vec::new(),
+        additional_workflows: Vec::new(),
+        unscoped_activities: Vec::new(),
+    };
+    let archive = PackageBuilder::new(manifest, beams)
+        .with_contract(contract)
+        .write_to_bytes()?;
     let path = dir.join("park_fixture.aion");
     std::fs::write(&path, archive)?;
     Ok(path)
@@ -186,6 +210,15 @@ impl WorkerSession {
                         activity_types: vec![ACTIVITY_TYPE.to_owned()],
                         task_queue: TASK_QUEUE.to_owned(),
                         node: String::new(),
+                        // The deployed fixture contract declares `greet` on
+                        // this queue, so registration must advertise the
+                        // matching typed surface to pass the field-level diff.
+                        activities: vec![generated::ActivityDescriptor {
+                            name: ACTIVITY_TYPE.to_owned(),
+                            input_schema_json: "{}".to_owned(),
+                            output_schema_json: "{}".to_owned(),
+                        }],
+                        identity: "shutdown-test-worker".to_owned(),
                     },
                 )),
             })

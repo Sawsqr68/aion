@@ -11,6 +11,10 @@ pub enum PackageError {
     #[error("missing required manifest.json entry")]
     MissingManifest,
 
+    /// A new package builder has no contract record to bind into `.v4` identity.
+    #[error("missing required contract record for .v4 package identity")]
+    MissingContractRecord,
+
     /// A module uses a namespace owned by the engine's native NIF layer.
     #[error(
         "module `{module}` uses an engine-reserved namespace and must not ship as package bytecode"
@@ -41,6 +45,20 @@ pub enum PackageError {
     /// The manifest could not be serialised for writing into the archive.
     #[error("failed to serialise manifest.json: {source}")]
     ManifestSerialise {
+        /// JSON serialisation failure reported by `serde_json`.
+        source: serde_json::Error,
+    },
+
+    /// The durable contract record is present but is not valid contract JSON.
+    #[error("failed to parse contract.json: {source}")]
+    ContractParse {
+        /// JSON parsing failure reported by `serde_json`.
+        source: serde_json::Error,
+    },
+
+    /// The durable contract record could not be serialised.
+    #[error("failed to serialise contract.json: {source}")]
+    ContractSerialise {
         /// JSON serialisation failure reported by `serde_json`.
         source: serde_json::Error,
     },
@@ -83,13 +101,6 @@ pub enum PackageError {
         /// The caller-configured inflate ceiling in bytes.
         limit: u64,
     },
-
-    /// Explicit-timeout package identity was requested for a manifest that
-    /// declares no workflow timeout, so there is no value to bind into the hash.
-    #[error(
-        "explicit-timeout package identity requires an authored workflow timeout, but the manifest declares none"
-    )]
-    ExplicitTimeoutWithoutValue,
 }
 
 #[cfg(test)]

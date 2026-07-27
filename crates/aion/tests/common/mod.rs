@@ -1,7 +1,6 @@
 //! Shared helpers for aion engine integration tests.
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use aion::{Engine, EngineBuilder};
 use aion_core::Payload;
@@ -31,7 +30,7 @@ pub fn fixture_package(entry_function: &str) -> Result<Package, Box<dyn std::err
         entry_function: entry_function.to_owned(),
         input_schema: json!({ "type": "object" }),
         output_schema: json!({}),
-        timeout: Some(Duration::from_secs(30)),
+        timeout: None,
         activities: vec![DeclaredActivity {
             activity_type: "fixture_activity".to_owned(),
         }],
@@ -53,6 +52,7 @@ pub async fn engine_with_fixture(
 ) -> Result<(Engine, Arc<dyn EventStore>), Box<dyn std::error::Error>> {
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)

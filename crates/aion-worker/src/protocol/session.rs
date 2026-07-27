@@ -92,6 +92,22 @@ pub trait WorkerSession: Send {
         available_handlers: &BTreeSet<String>,
     ) -> Result<(), WorkerError>;
 
+    /// Registers activity names together with their committed wire schemas.
+    ///
+    /// Session implementations predating contract handshakes remain useful as
+    /// test and custom transport adapters: the default validates through their
+    /// legacy registration path. Production transports override this method and
+    /// carry `activities` on the wire.
+    async fn register_with_contract(
+        &mut self,
+        activity_types: Vec<String>,
+        activities: Vec<aion_package::ActivityDescriptor>,
+        available_handlers: &BTreeSet<String>,
+    ) -> Result<(), WorkerError> {
+        drop(activities);
+        self.register(activity_types, available_handlers).await
+    }
+
     /// Opens the receive side of AW's `StreamWorker` RPC and yields pushed tasks.
     fn receive_tasks(&mut self) -> WorkerTaskStream;
 
@@ -400,6 +416,16 @@ impl WorkerSession for GrpcWorkerSession {
         activity_types: Vec<String>,
         available_handlers: &BTreeSet<String>,
     ) -> Result<(), WorkerError> {
+        self.register_with_contract(activity_types, Vec::new(), available_handlers)
+            .await
+    }
+
+    async fn register_with_contract(
+        &mut self,
+        activity_types: Vec<String>,
+        activities: Vec<aion_package::ActivityDescriptor>,
+        available_handlers: &BTreeSet<String>,
+    ) -> Result<(), WorkerError> {
         validate_activity_handlers(&activity_types, available_handlers)?;
         self.activity_types.clone_from(&activity_types);
 
@@ -408,11 +434,25 @@ impl WorkerSession for GrpcWorkerSession {
         // registers into exactly the namespaces it is authorized for.
         // `task_queue` is the disjoint pool/flavour selector within each
         // namespace; `node` is the optional locality affinity (default hostname).
+        let activities = activities
+            .into_iter()
+            .map(|activity| {
+                Ok(aion_proto::generated::ActivityDescriptor {
+                    name: activity.name,
+                    input_schema_json: serde_json::to_string(&activity.input_schema)
+                        .map_err(WorkerError::encode)?,
+                    output_schema_json: serde_json::to_string(&activity.output_schema)
+                        .map_err(WorkerError::encode)?,
+                })
+            })
+            .collect::<Result<Vec<_>, WorkerError>>()?;
         let register = aion_proto::generated::RegisterWorker {
             namespaces: self.config.namespaces.clone(),
             activity_types,
             task_queue: self.config.task_queue.clone(),
             node: self.config.node.clone(),
+            activities,
+            identity: self.config.identity.clone(),
         };
         self.open_registered_stream(register).await
     }

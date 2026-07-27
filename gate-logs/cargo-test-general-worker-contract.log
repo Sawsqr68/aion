@@ -1,0 +1,16 @@
+   Compiling general-worker v0.1.0 (/Users/tom/Developer/ablative/aion/examples/general-worker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.35s
+     Running tests/composition.rs (examples/general-worker/target/debug/deps/composition-aed93f34a0e121de)
+
+running 8 tests
+test activity_node_map_is_exact ... ok
+test cli_rejects_unknown_flags_missing_values_and_blank_values ... ok
+test cli_defaults_are_explicit_and_norn_uses_the_injected_environment_default ... ok
+test cli_accepts_repeatable_addresses_and_all_overrides ... ok
+test agent_capabilities_are_exactly_inject_and_cancel ... ok
+test agent_activity_aliases_extend_the_advertisement_and_keep_run_agent ... ok
+test registries_and_agent_activity_advertisement_are_exact ... ok
+test mechanical_descriptors_match_the_real_awl_contract ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

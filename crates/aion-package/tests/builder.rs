@@ -57,6 +57,7 @@ fn write_to_bytes_produces_fixed_zip_layout() -> Result<(), PackageError> {
         names,
         vec![
             "manifest.json",
+            "contract.json",
             "beam/workflow/order.beam",
             "beam/workflow/support.beam",
             "src/workflow/order.gleam",

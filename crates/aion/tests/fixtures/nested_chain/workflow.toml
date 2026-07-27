@@ -10,7 +10,6 @@
 [[workflow]]
 entry_module = "level_one"
 entry_function = "run"
-timeout_seconds = 600
 input_schema = "schemas/chain_input.json"
 output_schema = "schemas/output.json"
 activities = []
@@ -19,7 +18,6 @@ output = "level-one.aion"
 [[workflow]]
 entry_module = "level_two"
 entry_function = "run"
-timeout_seconds = 600
 input_schema = "schemas/chain_input.json"
 output_schema = "schemas/output.json"
 activities = []
@@ -28,7 +26,6 @@ output = "level-two.aion"
 [[workflow]]
 entry_module = "level_three"
 entry_function = "run"
-timeout_seconds = 600
 input_schema = "schemas/chain_input.json"
 output_schema = "schemas/output.json"
 activities = ["leaf_work"]
@@ -37,7 +34,6 @@ output = "level-three.aion"
 [[workflow]]
 entry_module = "level_self"
 entry_function = "run"
-timeout_seconds = 600
 input_schema = "schemas/self_input.json"
 output_schema = "schemas/output.json"
 activities = ["leaf_work"]

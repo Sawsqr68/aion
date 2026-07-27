@@ -134,6 +134,7 @@ async fn engine_over(
 ) -> Result<Engine, Box<dyn std::error::Error>> {
     let event_store: Arc<dyn EventStore> = Arc::clone(store) as Arc<dyn EventStore>;
     Ok(EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(event_store)
         .in_memory_visibility()
         .scheduler_threads(1)

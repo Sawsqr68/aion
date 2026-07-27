@@ -1,0 +1,93 @@
+   Compiling libc v0.2.186
+   Compiling serde_core v1.0.228
+    Checking log v0.4.32
+    Checking hashbrown v0.16.1
+    Checking smallvec v1.15.1
+    Checking fnv v1.0.7
+   Compiling anyhow v1.0.102
+    Checking num-traits v0.2.19
+    Checking thiserror v2.0.18
+   Compiling rustix v1.1.4
+    Checking scopeguard v1.2.0
+    Checking mio v1.2.1
+    Checking lock_api v0.4.14
+    Checking zopfli v0.8.3
+    Checking regalloc2 v0.15.1
+    Checking parking_lot_core v0.9.12
+    Checking toml_parser v1.1.2+spec-1.1.0
+   Compiling tokio-macros v2.7.0
+    Checking errno v0.3.14
+    Checking wasmtime-internal-core v44.0.2
+    Checking gimli v0.33.0
+    Checking hashbrown v0.14.5
+   Compiling jobserver v0.1.34
+   Compiling cc v1.2.63
+    Checking cranelift-bitset v0.131.2
+    Checking wasmtime-internal-jit-icache-coherence v44.0.2
+    Checking cranelift-entity v0.131.2
+    Checking bytes v1.11.1
+    Checking toml_writer v1.1.1+spec-1.1.0
+    Checking dashmap v6.2.1
+    Checking cranelift-bforest v0.131.2
+    Checking tokio v1.52.3
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+    Checking serde v1.0.228
+    Checking serde_json v1.0.150
+    Checking uuid v1.23.4
+    Checking serde_spanned v1.1.1
+    Checking toml_datetime v1.1.1+spec-1.1.0
+    Checking toml v1.1.2+spec-1.1.0
+    Checking chrono v0.4.45
+    Checking cranelift-codegen v0.131.2
+    Checking ts-rs v12.0.1
+    Checking aion-core v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-core)
+   Compiling zstd-safe v7.2.4
+    Checking zstd v0.13.3
+    Checking zip v8.6.0
+   Compiling beamr v0.16.2
+    Checking aion-package v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-package)
+error[E0596]: cannot borrow `digest` as mutable, as it is not declared as mutable
+   --> crates/aion-package/src/hash.rs:152:20
+    |
+152 | fn update_timeouts(digest: &mut Sha256, manifest: &Manifest) {
+    |                    ^^^^^^ not mutable
+...
+155 |     update_framed(&mut digest, manifest.entry_module.as_bytes());
+    |                   ----------- cannot borrow as mutable
+156 |     update_timeout_field(&mut digest, manifest.timeout);
+    |                          ----------- cannot borrow as mutable
+157 |     for entry in &manifest.additional_workflows {
+158 |         update_framed(&mut digest, entry.workflow_type.as_bytes());
+    |                       ----------- cannot borrow as mutable
+159 |         update_timeout_field(&mut digest, entry.timeout);
+    |                              ----------- cannot borrow as mutable
+    |
+note: the binding is already a mutable borrow
+   --> crates/aion-package/src/hash.rs:152:28
+    |
+152 | fn update_timeouts(digest: &mut Sha256, manifest: &Manifest) {
+    |                            ^^^^^^^^^^^
+help: try removing `&mut` here
+    |
+155 -     update_framed(&mut digest, manifest.entry_module.as_bytes());
+155 +     update_framed(digest, manifest.entry_module.as_bytes());
+    |
+help: try removing `&mut` here
+    |
+156 -     update_timeout_field(&mut digest, manifest.timeout);
+156 +     update_timeout_field(digest, manifest.timeout);
+    |
+help: try removing `&mut` here
+    |
+158 -         update_framed(&mut digest, entry.workflow_type.as_bytes());
+158 +         update_framed(digest, entry.workflow_type.as_bytes());
+    |
+help: try removing `&mut` here
+    |
+159 -         update_timeout_field(&mut digest, entry.timeout);
+159 +         update_timeout_field(digest, entry.timeout);
+    |
+
+For more information about this error, try `rustc --explain E0596`.
+error: could not compile `aion-package` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

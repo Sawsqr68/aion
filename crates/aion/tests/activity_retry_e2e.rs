@@ -84,12 +84,26 @@ impl ActivityDispatcher for FlakyDispatcher {
     }
 }
 
+/// A dispatcher that serves NOTHING: every dispatch is a typed terminal
+/// miss, mirroring an embedder whose `InProcess` serving claim is wrong.
+struct MissDispatcher;
+
+impl ActivityDispatcher for MissDispatcher {
+    fn dispatch(&self, request: ActivityDispatch) -> Result<String, String> {
+        Err(format!(
+            "terminal:this dispatcher serves no activity (miss: {})",
+            request.name
+        ))
+    }
+}
+
 async fn engine_with(
-    dispatcher: Arc<FlakyDispatcher>,
+    dispatcher: Arc<dyn ActivityDispatcher>,
     store: &Arc<dyn EventStore>,
 ) -> Result<aion::Engine, Box<dyn std::error::Error>> {
     let package = example_build::built_package("examples/retry-policy", "retry_policy")?;
     Ok(EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -121,7 +135,11 @@ async fn retryable_flakes_cost_retries_not_the_run() -> Result<(), Box<dyn std::
     }
     let dispatcher = FlakyDispatcher::new(3);
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
-    let engine = engine_with(Arc::clone(&dispatcher), &store).await?;
+    let engine = engine_with(
+        Arc::clone(&dispatcher) as Arc<dyn ActivityDispatcher>,
+        &store,
+    )
+    .await?;
 
     let handle = engine
         .start_workflow(
@@ -189,7 +207,11 @@ async fn exhausted_retries_fail_the_run_and_reopen_continues_the_trail()
     // first run exhausts, and the reopened re-dispatch (attempt 4) succeeds.
     let dispatcher = FlakyDispatcher::new(4);
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
-    let engine = engine_with(Arc::clone(&dispatcher), &store).await?;
+    let engine = engine_with(
+        Arc::clone(&dispatcher) as Arc<dyn ActivityDispatcher>,
+        &store,
+    )
+    .await?;
 
     let handle = engine
         .start_workflow(
@@ -260,6 +282,65 @@ async fn exhausted_retries_fail_the_run_and_reopen_continues_the_trail()
     assert_eq!(
         aion_core::status_from_events(&history),
         WorkflowStatus::Completed
+    );
+
+    engine.shutdown()?;
+    Ok(())
+}
+
+/// The residual failure mode of declared in-process serving is LOUD: a
+/// dispatch the configured dispatcher does not serve is a typed, journaled,
+/// run-failing miss — never a hang and never a silent drop. This is the
+/// honest cost of the `InProcess` admission opt-in: the miss moves from
+/// admission-time refusal to dispatch-time failure, and this pin keeps that
+/// residual failure mode evidence instead of belief.
+#[tokio::test]
+async fn in_process_dispatch_miss_is_typed_recorded_and_fails_the_run()
+-> Result<(), Box<dyn std::error::Error>> {
+    if crate::gleam_test_support::skip_if_unavailable() {
+        return Ok(());
+    }
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+    let engine = engine_with(Arc::new(MissDispatcher), &store).await?;
+
+    let handle = engine
+        .start_workflow(
+            "retry_policy",
+            Payload::from_json(&json!({ "name": "Ada" }))?,
+            std::collections::HashMap::new(),
+            String::from("default"),
+        )
+        .await?;
+    let result = engine.result(handle.workflow_id(), handle.run_id()).await?;
+    let error = match result {
+        Err(error) => error,
+        Ok(payload) => {
+            return Err(format!("a dispatch miss must fail the run: {payload:?}").into());
+        }
+    };
+    let detail = error
+        .details
+        .as_ref()
+        .map(|payload| String::from_utf8_lossy(payload.bytes()).into_owned())
+        .unwrap_or_default();
+    assert!(
+        detail.contains("miss: flaky_call"),
+        "the miss reason must surface verbatim on the run failure: {error:?}"
+    );
+
+    let history = store.read_history(handle.workflow_id()).await?;
+    assert_eq!(
+        aion_core::status_from_events(&history),
+        WorkflowStatus::Failed
+    );
+    assert!(
+        history.iter().any(|event| matches!(
+            event,
+            Event::ActivityFailed { error, .. }
+                if error.kind == ActivityErrorKind::Terminal
+                    && error.message.contains("miss: flaky_call")
+        )),
+        "the miss must be journaled as a terminal activity failure: {history:#?}"
     );
 
     engine.shutdown()?;

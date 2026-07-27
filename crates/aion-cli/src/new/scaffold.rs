@@ -61,6 +61,26 @@ struct NewOutput {
     worker: Option<&'static str>,
     files: Vec<String>,
     next_steps: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    warning: Option<String>,
+}
+
+/// The mint-time refusal warning for the legacy Gleam `agent` template: its
+/// implicit activity declarations cannot carry a queue-scoped contract, so
+/// the packaged workflow fails the `.v4` structural start admission. The
+/// break must be loud here, at mint — not discovered at the server's door.
+fn refusal_warning(args: &NewArgs) -> Option<String> {
+    (args.template == Template::Agent).then(|| {
+        let mut activities = args.template.activities().to_vec();
+        activities.sort_unstable();
+        format!(
+            "the `agent` template is the legacy Gleam scaffold: its activities ({}) carry no \
+             queue-scoped contract, so `aion start` refuses the deployed package with \
+             NO_QUEUE_DECLARATION. Scaffold it to study the shape; the AWL agent scaffold \
+             (template-AWL-migration lane) is its successor",
+            activities.join(", ")
+        )
+    })
 }
 
 /// Runs the `new` subcommand against the invoker's current directory.
@@ -90,6 +110,10 @@ fn scaffold(parent: &Path, args: &NewArgs) -> Result<Value> {
         written.push(relative);
     }
 
+    let warning = refusal_warning(args);
+    if let Some(warning) = &warning {
+        eprintln!("warning: {warning}");
+    }
     to_value(NewOutput {
         project: args.name.clone(),
         path: target.display().to_string(),
@@ -97,6 +121,7 @@ fn scaffold(parent: &Path, args: &NewArgs) -> Result<Value> {
         worker: args.worker.map(|WorkerLanguage::Rust| "rust"),
         files: written,
         next_steps: format!("see {}/README.md", args.name),
+        warning,
     })
 }
 
@@ -431,6 +456,37 @@ mod tests {
         assert!(convert.contains("import demo_pipe_io as generated"));
         let cargo = std::fs::read_to_string(project.join("worker/Cargo.toml"))?;
         assert!(cargo.contains(&format!("aion-worker = \"{}\"", env!("CARGO_PKG_VERSION"))));
+        Ok(())
+    }
+
+    /// The legacy `agent` template mints with the unmissable refusal warning
+    /// — start admission will refuse its unscoped activities — while the
+    /// non-legacy templates mint with no warning at all.
+    #[test]
+    fn agent_scaffold_warns_it_will_be_refused_at_start() -> Result<(), TestError> {
+        let parent = tempfile::tempdir()?;
+        let args = NewArgs::for_tests("agent_demo", Template::Agent, Some(WorkerLanguage::Rust));
+        let output: Value = scaffold(parent.path(), &args)?;
+        let warning = output["warning"]
+            .as_str()
+            .ok_or("the agent scaffold report must carry the refusal warning")?;
+        for marker in [
+            "NO_QUEUE_DECLARATION",
+            "act, scout, verify",
+            "AWL agent scaffold",
+        ] {
+            assert!(
+                warning.contains(marker),
+                "the warning must carry {marker}: {warning}"
+            );
+        }
+
+        let args = NewArgs::for_tests("plain_flow", Template::HelloWorld, None);
+        let output: Value = scaffold(parent.path(), &args)?;
+        assert!(
+            output.get("warning").is_none(),
+            "non-legacy templates must not warn: {output}"
+        );
         Ok(())
     }
 

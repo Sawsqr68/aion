@@ -45,6 +45,8 @@ impl WorkerSession {
                             .collect(),
                         task_queue: String::from("default"),
                         node: String::new(),
+                        activities: Vec::new(),
+                        identity: "run-server-outbox-test-worker".to_owned(),
                     },
                 )),
             })

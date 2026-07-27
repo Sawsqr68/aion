@@ -11,6 +11,9 @@ use aion_store::EventStore;
 use aion_store::visibility::VisibilityStore;
 use chrono::Utc;
 
+#[path = "start_admission.rs"]
+mod admission;
+
 use super::completion::{ProcessExitContext, handle_process_exit};
 use super::visibility::upsert_workflow_visibility;
 use crate::durability::Recorder;
@@ -113,30 +116,15 @@ pub async fn start_workflow_with_options(
     // The pinned resolution is held for the whole start: from here until the
     // registry insert lands (or the start fails), unload verification sees
     // this version as in use, closing the registration birth window.
-    let pinned = match &options.loaded_version {
-        Some(version) => context.catalog.resolve_exact(workflow_type, version)?,
-        None => context.catalog.resolve_routed(workflow_type)?,
-    }
-    .ok_or_else(|| EngineError::WorkflowNotFound {
-        workflow_type: workflow_type.to_owned(),
-    })?;
+    let pinned = admission::resolve_contract(
+        &context.catalog,
+        workflow_type,
+        options.loaded_version.as_ref(),
+    )?;
     let loaded = pinned.workflow();
-
-    let supplied_workflow_id = options.workflow_id.is_some();
-    let workflow_id = options.workflow_id.unwrap_or_else(WorkflowId::new_v4);
+    let (workflow_id, initial_head) =
+        admission::workflow_identity(&context.store, options.workflow_id).await?;
     let run_id = RunId::new_v4();
-    let initial_head = if supplied_workflow_id {
-        context
-            .store
-            .read_history(&workflow_id)
-            .await?
-            .iter()
-            .map(Event::seq)
-            .max()
-            .unwrap_or_default()
-    } else {
-        0
-    };
     // Single deterministic clock read: `WorkflowStarted.recorded_at` AND the
     // deadline's `fire_at` both derive from it, so a replay/adoption re-arm
     // computes the identical fire time (never a second live-clock read).
@@ -682,6 +670,10 @@ impl EngineHandle for StartResumeEngineHandle<'_> {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "start_contract_tests.rs"]
+mod contract_tests;
 
 #[cfg(test)]
 #[path = "start_tests.rs"]

@@ -57,6 +57,7 @@ pub mod worker;
 
 pub use activity::{
     ActivityFailure, ActivityRegistry, Classification, DuplicateActivityType, HandlerFuture,
+    activity_descriptor,
 };
 pub use config::{
     ReconnectConfig, TransportCredentials, WorkerConfig, WorkerConfigBuildError,
@@ -83,4 +84,5 @@ pub use runtime::{
 };
 #[cfg(feature = "liminal-transport")]
 pub use runtime::{RedialTiming, serve_with_redial};
+pub use schemars;
 pub use worker::{EmptyActivitySet, Worker, WorkerBuilder, run_worker_with_session};

@@ -25,14 +25,17 @@ use serde_json::json;
 
 /// Real content-hash version of a single-module fixture package, in the
 /// durable textual form recorded on start events. Synthesized histories
-/// must pin the version the engine actually loads or recovery refuses them.
+/// must pin the version the engine actually loads or recovery refuses them
+/// — since `.v4`, that identity is the contract-bound hash, so it is
+/// recomputed through the SAME package construction the loads use (the
+/// entry function and shipped source never participate in identity).
 fn fixture_version(
     module: &str,
     beam: &[u8],
 ) -> Result<aion_core::PackageVersion, Box<dyn std::error::Error>> {
-    let beams = BeamSet::new(vec![BeamModule::new(module, beam)])?;
+    let package = fixture_package(module, beam, &[], "run")?;
     Ok(aion_core::PackageVersion::new(
-        aion_package::content_hash(&beams).to_string(),
+        package.content_hash().to_string(),
     ))
 }
 
@@ -57,7 +60,7 @@ fn fixture_package(
         entry_function: entry_function.to_owned(),
         input_schema: json!({ "type": "object" }),
         output_schema: json!({}),
-        timeout: Some(Duration::from_secs(30)),
+        timeout: None,
         activities: vec![DeclaredActivity {
             activity_type: "fixture_activity".to_owned(),
         }],
@@ -86,6 +89,7 @@ async fn engine_over(
     parent_entry: &str,
 ) -> Result<Engine, Box<dyn std::error::Error>> {
     Ok(EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(store))
         .in_memory_visibility()
         .scheduler_threads(1)

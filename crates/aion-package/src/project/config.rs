@@ -37,7 +37,11 @@ struct RawPackage {
 struct RawWorkflow {
     entry_module: String,
     entry_function: String,
-    timeout_seconds: u64,
+    /// Authored workflow timeout in whole seconds, or absent when the entry
+    /// declares none. Absent decodes to `None` (no buried default): the
+    /// workflow arms no deadline.
+    #[serde(default)]
+    timeout_seconds: Option<u64>,
     input_schema: String,
     output_schema: String,
     activities: Vec<String>,
@@ -99,8 +103,9 @@ pub(crate) struct WorkflowConfig {
     pub(crate) entry_module: String,
     /// Exported entry function on the entry module.
     pub(crate) entry_function: String,
-    /// Workflow timeout declared in whole seconds.
-    pub(crate) timeout: Duration,
+    /// Explicitly authored workflow timeout, or `None` when the entry
+    /// declares none — absence of the declaration is absence of the deadline.
+    pub(crate) timeout: Option<Duration>,
     /// Parsed JSON-Schema document for input payloads.
     pub(crate) input_schema: serde_json::Value,
     /// Parsed JSON-Schema document for result payloads.
@@ -223,10 +228,10 @@ fn validate_fields(index: usize, entry: &RawWorkflow) -> Result<(), PackagingErr
     if entry.entry_function.is_empty() {
         return Err(invalid("entry_function", "must not be empty"));
     }
-    if entry.timeout_seconds == 0 {
+    if entry.timeout_seconds == Some(0) {
         return Err(invalid(
             "timeout_seconds",
-            "must be an integer of at least 1",
+            "when declared, must be an integer of at least 1 (omit the field to declare no timeout)",
         ));
     }
 
@@ -353,7 +358,7 @@ fn resolve_workflows(
                 output_schema_path,
                 entry_module: entry.entry_module,
                 entry_function: entry.entry_function,
-                timeout: Duration::from_secs(entry.timeout_seconds),
+                timeout: entry.timeout_seconds.map(Duration::from_secs),
                 activities: entry.activities,
                 additional_workflows,
                 output_path,

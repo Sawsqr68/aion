@@ -1070,6 +1070,7 @@ fn normalize_wire_node(node: Option<&str>) -> Option<String> {
 /// production `unwrap`/`expect` and no second always-`None` code path.
 pub struct LiminalConnectionNotifier {
     registry: ConnectedWorkerRegistry,
+    contract_catalog: Option<Arc<aion::Engine>>,
     supervisor: OnceLock<ConnectionSupervisor>,
     guards: Mutex<HashMap<u64, WorkerRegistration>>,
     /// The neutral intervention primitives a liminal-connected agent worker
@@ -1133,12 +1134,21 @@ impl LiminalConnectionNotifier {
     pub fn new(registry: ConnectedWorkerRegistry) -> Self {
         Self {
             registry,
+            contract_catalog: None,
             supervisor: OnceLock::new(),
             guards: Mutex::new(HashMap::new()),
             intervention_capabilities: aion_core::InterventionCapabilities::none(),
             transcript: None,
             heartbeat_tracker: None,
         }
+    }
+
+    /// Install the live package catalog used to refuse incompatible workers
+    /// before liminal acknowledges or publishes their registration.
+    #[must_use]
+    pub fn with_contract_catalog(mut self, engine: Arc<aion::Engine>) -> Self {
+        self.contract_catalog = Some(engine);
+        self
     }
 
     /// Install the shared per-task liveness tracker so a worker's automatic
@@ -1320,6 +1330,52 @@ impl LiminalConnectionNotifier {
             ),
         }
     }
+
+    fn validate_registration_contract(
+        &self,
+        registration: &WireWorkerRegistration,
+    ) -> Result<(), LiminalServerError> {
+        let Some(engine) = &self.contract_catalog else {
+            return Ok(());
+        };
+        let advertised =
+            registration
+                .activities
+                .iter()
+                .map(|activity| {
+                    let input_schema =
+                        serde_json::from_str(&activity.input_schema_json).map_err(|error| {
+                            LiminalServerError::ListenerAccept {
+                                message: format!(
+                                    "liminal worker activity `{}` input schema is invalid: {error}",
+                                    activity.name
+                                ),
+                            }
+                        })?;
+                    let output_schema = serde_json::from_str(&activity.output_schema_json)
+                        .map_err(|error| LiminalServerError::ListenerAccept {
+                            message: format!(
+                                "liminal worker activity `{}` output schema is invalid: {error}",
+                                activity.name
+                            ),
+                        })?;
+                    Ok(aion_package::ActivityDescriptor {
+                        name: activity.name.clone(),
+                        input_schema,
+                        output_schema,
+                    })
+                })
+                .collect::<Result<Vec<_>, LiminalServerError>>()?;
+        super::contracts::validate_worker_contracts(
+            engine,
+            &registration.task_queue,
+            &registration.identity,
+            &advertised,
+        )
+        .map_err(|error| LiminalServerError::ListenerAccept {
+            message: error.to_string(),
+        })
+    }
 }
 
 impl ConnectionNotifier for LiminalConnectionNotifier {
@@ -1328,6 +1384,7 @@ impl ConnectionNotifier for LiminalConnectionNotifier {
         pid: u64,
         registration: &WireWorkerRegistration,
     ) -> Result<(), LiminalServerError> {
+        self.validate_registration_contract(registration)?;
         // The delivery leg needs the supervisor to push to this connection. In
         // correct wiring it is bound before any connection is accepted; a missing
         // binding is a rejected registration, never a panic.
@@ -1489,6 +1546,10 @@ impl super::intervention::InterventionTransport for LiminalInterventionTransport
         Ok(reply.outcome)
     }
 }
+
+#[cfg(test)]
+#[path = "liminal_contract_tests.rs"]
+mod contract_tests;
 
 #[cfg(test)]
 mod tests {

@@ -3,6 +3,7 @@
 use aion::EngineError;
 use aion::durability::DurabilityError;
 use aion_proto::WireError;
+use aion_store::StoreError;
 
 pub(super) fn invalid_state_wire(reason: &str) -> WireError {
     WireError::invalid_state_with_type("InvalidState", reason.to_owned())
@@ -10,6 +11,20 @@ pub(super) fn invalid_state_wire(reason: &str) -> WireError {
 
 pub(super) fn backend_wire(error_type: &'static str, source: &EngineError) -> WireError {
     WireError::backend_with_type(error_type, source.to_string())
+}
+
+pub(super) fn contract_refusal_wire(error_type: &'static str, source: &EngineError) -> WireError {
+    WireError::invalid_state(source.to_string()).with_error_type(error_type)
+}
+
+pub(super) const fn store_error_type(source: &StoreError) -> &'static str {
+    match source {
+        StoreError::SequenceConflict { .. } => "SequenceConflict",
+        StoreError::NotFound { .. } => "NotFound",
+        StoreError::NotOwner { .. } => "NotOwner",
+        StoreError::Backend(_) => "Backend",
+        StoreError::Serialization(_) => "Serialization",
+    }
 }
 
 pub(super) fn durability_wire(durability: &DurabilityError, source: &EngineError) -> WireError {

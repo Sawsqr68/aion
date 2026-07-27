@@ -191,6 +191,7 @@ async fn nested_outer_int_child_decodes_exact_durable_bytes_and_parent_completes
 
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(4)

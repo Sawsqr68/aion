@@ -1,0 +1,16 @@
+   Compiling aion-package v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-package)
+   Compiling aion-awl v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-awl)
+   Compiling aion-rs v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion)
+   Compiling aion-toolchain v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-toolchain)
+   Compiling aion-worker v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-worker)
+   Compiling aion-awl-package v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-awl-package)
+   Compiling aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 28.90s
+     Running tests/worker_contract_registration.rs (target/debug/deps/worker_contract_registration-1a3a48f3776b445b)
+
+running 2 tests
+test matching_worker_receives_register_ack ... ok
+test mismatched_worker_is_refused_with_field_level_diff ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+

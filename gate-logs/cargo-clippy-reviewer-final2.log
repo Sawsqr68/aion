@@ -1,0 +1,15 @@
+    Checking aion-rs v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion)
+    Checking aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-server)
+    Checking aion-client v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-client)
+error: this function has too many lines (101/100)
+   --> crates/aion/tests/multi_step_distribute_e2e.rs:416:7
+    |
+416 | async fn emitted_multistep_distribute_is_parallel_ordered_and_tolerant() -> TestResult {
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.92.0/index.html#too_many_lines
+    = note: `-D clippy::too-many-lines` implied by `-D clippy::pedantic`
+    = help: to override `-D clippy::pedantic` add `#[allow(clippy::too_many_lines)]`
+
+error: could not compile `aion-rs` (test "multi_step_distribute_e2e") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

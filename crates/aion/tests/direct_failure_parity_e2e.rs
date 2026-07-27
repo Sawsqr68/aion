@@ -174,6 +174,7 @@ fn details_json(error: &WorkflowError) -> Result<Value, TestError> {
 async fn run_to_failure(package: Package, module: &str) -> Result<FailureRecord, TestError> {
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(2)

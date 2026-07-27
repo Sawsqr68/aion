@@ -61,10 +61,13 @@ fn main() -> anyhow::Result<()> {
 
 fn registry() -> Result<ActivityRegistry, aion_worker::WorkerError> {
     ActivityRegistry::new()
-        .register_activity("run_check", blocking(activities::run_check))?
-        .register_activity("run_clippy", blocking(activities::run_clippy))?
-        .register_activity("run_tests", blocking(activities::run_tests))?
-        .register_activity("run_fmt_check", blocking(activities::run_fmt_check))
+        .register_activity_with_contract("run_check", blocking(activities::run_check))?
+        .register_activity_with_contract("run_clippy", blocking(activities::run_clippy))?
+        .register_activity_with_contract("run_tests", blocking(activities::run_tests))?
+        .register_activity_with_contract(
+            "run_fmt_check",
+            blocking(activities::run_fmt_check),
+        )
 }
 
 fn worker_config(identity: &str) -> Result<WorkerConfig, WorkerConfigBuildError> {
@@ -131,4 +134,30 @@ fn parse_args() -> anyhow::Result<Args> {
 fn next_value(args: &mut impl Iterator<Item = String>, flag: &str) -> anyhow::Result<String> {
     args.next()
         .ok_or_else(|| anyhow::anyhow!("{flag} requires a value"))
+}
+
+#[cfg(test)]
+mod contract_tests {
+    use super::{TASK_QUEUE, registry};
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    #[test]
+    fn mechanical_descriptors_match_the_real_awl_contract() -> TestResult {
+        let schema_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .ok_or("cargo-gates worker manifest has no parent")?;
+        let compiled = aion_awl::compile(include_str!("../../cargo_gates.awl"), schema_root)?;
+        let contract = compiled
+            .contract
+            .workers
+            .iter()
+            .find(|contract| contract.task_queue == TASK_QUEUE)
+            .ok_or("compiled cargo-gates contract is missing its task queue")?;
+        let advertised = registry()?.activity_descriptors();
+
+        let diffs = aion_package::contract_diffs("cargo-gates-test", contract, &advertised);
+        assert!(diffs.is_empty(), "descriptor drift: {diffs:#?}");
+        Ok(())
+    }
 }

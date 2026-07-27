@@ -18,6 +18,7 @@ async fn bootstrap_flag_gates_schedule_coordinator_seeding()
     // Default (true): the coordinator history is seeded at build.
     let seeded: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let _seeded_engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&seeded))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -33,6 +34,7 @@ async fn bootstrap_flag_gates_schedule_coordinator_seeding()
     // Disabled: a node that does not own the coordinator's shard seeds nothing.
     let bare: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let _bare_engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&bare))
         .in_memory_visibility()
         .scheduler_threads(1)

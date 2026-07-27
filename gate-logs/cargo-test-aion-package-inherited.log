@@ -1,0 +1,106 @@
+   Compiling libc v0.2.186
+   Compiling typenum v1.20.1
+   Compiling cfg-if v1.0.4
+   Compiling cmov v0.5.4
+   Compiling zeroize v1.8.2
+   Compiling serde_core v1.0.228
+   Compiling const-oid v0.10.2
+   Compiling getrandom v0.4.2
+   Compiling syn v2.0.117
+   Compiling core-foundation-sys v0.8.7
+   Compiling zstd-safe v7.2.4
+   Compiling ctutils v0.4.2
+   Compiling iana-time-zone v0.1.65
+   Compiling num-traits v0.2.19
+   Compiling memchr v2.8.1
+   Compiling powerfmt v0.2.0
+   Compiling zmij v1.0.21
+   Compiling deranged v0.5.8
+   Compiling crc32fast v1.5.0
+   Compiling num-conv v0.2.2
+   Compiling hybrid-array v0.4.12
+   Compiling rustix v1.1.4
+   Compiling winnow v1.0.3
+   Compiling libbz2-rs-sys v0.2.5
+   Compiling equivalent v1.0.2
+   Compiling hashbrown v0.17.1
+   Compiling log v0.4.32
+   Compiling jobserver v0.1.34
+   Compiling zlib-rs v0.6.3
+   Compiling crypto-common v0.2.2
+   Compiling block-buffer v0.12.0
+   Compiling cc v1.2.63
+   Compiling inout v0.2.2
+   Compiling simd-adler32 v0.3.9
+   Compiling once_cell v1.21.4
+   Compiling time-core v0.1.8
+   Compiling cpubits v0.1.1
+   Compiling bumpalo v3.20.3
+   Compiling itoa v1.0.18
+   Compiling time v0.3.47
+   Compiling indexmap v2.14.0
+   Compiling zopfli v0.8.3
+   Compiling bzip2 v0.6.1
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling cpufeatures v0.3.0
+   Compiling digest v0.11.3
+   Compiling cipher v0.5.2
+   Compiling sha2 v0.11.0
+   Compiling hmac v0.13.0
+   Compiling uuid v1.23.4
+   Compiling sha1 v0.11.0
+   Compiling pbkdf2 v0.13.0
+   Compiling aes v0.9.1
+   Compiling errno v0.3.14
+   Compiling serde_spanned v1.1.1
+   Compiling serde_json v1.0.150
+   Compiling toml_parser v1.1.2+spec-1.1.0
+   Compiling constant_time_eq v0.4.2
+   Compiling ppmd-rust v1.4.0
+   Compiling bitflags v2.13.0
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling lzma-rust2 v0.16.4
+   Compiling typed-path v0.12.3
+   Compiling deflate64 v0.1.12
+   Compiling toml_writer v1.1.1+spec-1.1.0
+   Compiling toml v1.1.2+spec-1.1.0
+   Compiling tracing-core v0.1.36
+   Compiling fastrand v2.4.1
+   Compiling pin-project-lite v0.2.17
+   Compiling serde_derive v1.0.228
+   Compiling thiserror-impl v2.0.18
+   Compiling ts-rs-macros v12.0.1
+   Compiling tracing-attributes v0.1.31
+   Compiling tempfile v3.27.0
+   Compiling tracing v0.1.44
+   Compiling thiserror v2.0.18
+   Compiling flate2 v1.1.9
+   Compiling serde v1.0.228
+   Compiling chrono v0.4.45
+   Compiling zstd v0.13.3
+   Compiling zip v8.6.0
+   Compiling ts-rs v12.0.1
+   Compiling aion-core v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-core)
+   Compiling aion-package v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-package)
+error[E0599]: no method named `with_explicit_timeout_identity` found for struct `PackageBuilder` in the current scope
+   --> crates/aion-package/src/package_tests.rs:369:6
+    |
+361 |       let bytes = PackageBuilder::with_source(
+    |  _________________-
+362 | |         manifest,
+363 | |         sample_beams()?,
+364 | |         BTreeMap::from([(
+...   |
+369 | |     .with_explicit_timeout_identity()
+    | |     -^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ method not found in `PackageBuilder`
+    | |_____|
+    |
+    |
+   ::: crates/aion-package/src/builder.rs:21:1
+    |
+ 21 |   pub struct PackageBuilder {
+    |   ------------------------- method `with_explicit_timeout_identity` not found for this struct
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `aion-package` (lib test) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

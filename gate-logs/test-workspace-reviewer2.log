@@ -1,0 +1,1159 @@
+   Compiling aion-package v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-package)
+   Compiling aws-lc-rs v1.17.0
+   Compiling aws-lc-sys v0.41.0
+   Compiling liminal-sdk v0.4.0
+   Compiling liminal-server v0.4.0
+   Compiling aion-integrations v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-integrations)
+   Compiling aion-integration-norn v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-integration-norn)
+   Compiling aion-store-haematite v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-store-haematite)
+   Compiling rustls v0.23.40
+   Compiling aion-awl v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-awl)
+   Compiling aion-rs v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion)
+   Compiling rustls-webpki v0.103.13
+   Compiling aion-toolchain v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-toolchain)
+   Compiling aion-awl-package v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-awl-package)
+   Compiling aion-awl-lsp v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-awl-lsp)
+   Compiling tokio-rustls v0.26.4
+   Compiling tungstenite v0.29.0
+   Compiling hyper-rustls v0.27.9
+   Compiling rustls-platform-verifier v0.7.0
+   Compiling tokio-tungstenite v0.29.0
+   Compiling axum v0.8.9
+   Compiling reqwest v0.13.4
+   Compiling tonic v0.14.6
+   Compiling million-processes v0.1.0 (/Users/tom/Developer/ablative/aion/benchmarks/million-processes)
+   Compiling tonic-prost v0.14.5
+   Compiling aion-proto-generated v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-proto-generated)
+   Compiling aion-proto v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-proto)
+   Compiling aion-worker v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-worker)
+   Compiling aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-server)
+   Compiling aion-client v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-client)
+   Compiling aion-integration-cli v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-integration-cli)
+   Compiling aion-store v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-store)
+   Compiling xtask v0.0.0 (/Users/tom/Developer/ablative/aion/xtask)
+   Compiling aion-core v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-core)
+   Compiling aion-darwin-acl v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-darwin-acl)
+   Compiling aion-cli v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 52s
+     Running unittests src/lib.rs (target/debug/deps/aion_awl-88ef191c987a91e3)
+
+running 68 tests
+test mir::deferred_tests::bc4_zero_step_workflow_refuses_no_start_region ... ok
+test mir::deferred_tests::bc4_nested_handlers_refuses_on_failure ... ok
+test mir::codec_tests::required_recursive_default_is_refused_on_both_sides ... ok
+test mir::codec_tests::colliding_codec_stems_are_refused_not_cross_wired ... ok
+test mir::deferred_tests::guard_optional_wait_now_lowers ... ok
+test mir::deferred_tests::ordinary_call_index_lowers_with_the_anchored_runtime_message ... ok
+test mir::deferred_tests::sort_non_comparable_key_refuses_with_the_reference_class ... ok
+test mir::child_fork_tests::sequential_child_fork_matches_reference_fold_order ... ok
+test mir::deferred_tests::post_join_combinator_now_lowers ... ok
+test mir::fork_tests::collection_child_fork_config_refuses_with_the_child_class ... ok
+test mir::child_fork_tests::child_spawn_keeps_identity_and_outcome_envelope_codec ... ok
+test mir::child_fork_tests::parallel_child_fork_is_spawn_all_then_ordered_await_with_emitter_parity ... ok
+test mir::fork_tests::named_child_branch_refuses_cleanly ... ok
+test mir::deferred_tests::statement_level_child_forms_plan_the_witness ... ok
+test mir::fork_tests::homogeneous_named_fork_pins_one_typed_all ... ok
+test mir::fork_tests::parallel_action_fork_pins_map_fanout_semantics ... ok
+test mir::fork_tests::sequential_fork_pins_fold_initial_state_and_result_order ... ok
+test mir::fork_tests::action_and_child_collection_forks_route_distinctly ... ok
+test mir::fork_tests::fork_branch_call_site_config_lowers_with_per_key_merge ... ok
+test mir::runtime::tests::enumeration_covers_every_variant_exactly_once ... ok
+test mir::fork_tests::heterogeneous_named_fork_pins_raw_twins_and_positional_decode ... ok
+test mir::runtime::tests::import_surface_projects_the_full_enumeration ... ok
+test mir::pipe_tests::pipe_child_stage_lowers_to_spawn_and_wait ... ok
+test mir::fork_tests::stopgap_refusals_match_the_reference_classes ... ok
+test mir::pipe_tests::post_stage_any_all_lower_through_predicate_closures ... ok
+test mir::pipe_tests::sort_string_key_selects_string_compare ... ok
+test mir::deferred_tests::combined_loop_fixtures_advance_to_the_next_refusal ... ok
+test mir::select::control_tests::assert_list_badmatch_traps_the_subject_list ... ok
+test mir::select::inspect_tests::framed_return_reloads_the_return_value_into_x0 ... ok
+test mir::pipe_tests::combinator_stages_lower_to_list_runtime_calls ... ok
+test mir::select::inspect_tests::return_keeps_x0_live_across_a_preceding_heap_op ... ok
+test mir::select::inspect_tests::targeted_framed_function_brackets_and_single_exits ... ok
+test mir::select::inspect_tests::targeted_heap_ops_declare_accurate_live ... ok
+test mir::select::inspect_tests::targeted_frameless_body_uses_no_frame_or_y ... ok
+test mir::select::inspect_tests::marshaling_rejects_swapped_args_dropped_store_and_wrong_arity ... ok
+test mir::select::control_tests::enum_total_tail_selects_with_explicit_case_end_trap ... ok
+test mir::select::control_tests::short_circuit_optional_selects_checked_assert_some ... ok
+test mir::select::inspect_tests::awl_hello_outcome_route_returns_not_tail_calls ... ok
+test mir::select::control_tests::loop_counter_selects_a_gc_bif2_against_erlang_plus ... ok
+test mir::select::tests::dead_body_is_a_real_sidecar_visible_function ... ok
+test mir::select::tests::minimal_module_has_the_expected_abi_structure ... ok
+test mir::select::control_tests::outcome_guard_decision_tree_uses_real_failure_labels ... ok
+test mir::select::tests::run_shell_passes_raw_payload_not_the_closure ... ok
+test mir::select::tests::shape_call_import ... ok
+test mir::select::tests::shape_field_get ... ok
+test mir::select::tests::shape_call_local ... ok
+test mir::select::inspect_tests::targeted_loop_recursion_is_a_self_tail_call ... ok
+test mir::select::tests::shape_frameless_tail_import ... ok
+test mir::select::tests::shape_make_closure ... ok
+test mir::select::tests::shape_json_obj_two_pairs ... ok
+test mir::select::tests::shape_record_tuple ... ok
+test mir::select::tests::shape_record_with_literal_int ... ok
+test mir::select::tests::shape_record_zero_field ... ok
+test mir::select::tests::shape_try_bind ... ok
+test mir::select::tests::selection_is_deterministic ... ok
+test mir::tests::counterless_loop_pins_the_scalar_result_path ... ok
+test mir::tests::loop_lowering_pins_the_reference_semantics ... ok
+test mir::tests::compound_until_clones_control_only_into_unresolved_leaves ... ok
+test mir::select::inspect_tests::targeted_route_to_step_is_a_local_tail_call ... ok
+test mir::tests::minimal_exercises_core_op_shapes ... ok
+test mir::tests::backward_route_reentry_now_lowers ... ok
+test mir::tests::optional_rhs_is_nested_below_short_circuit_branch ... ok
+test mir::tests::typed_codec_bodies_pin_the_wire_shapes ... ok
+test mir::select::inspect_tests::make_fun_capture_reads_are_modeled_and_a_removed_reload_is_caught ... ok
+test mir::tests::lowers_cover_and_golden ... ok
+test mir::select::tests::every_lowered_fixture_emits_and_validates ... ok
+test mir::select::inspect_tests::wrong_live_expectation_goes_red ... ok
+test mir::select::inspect_tests::covered_ratchet_upholds_ir14_and_section_11 ... ok
+
+test result: ok. 68 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.18s
+
+     Running tests/awl2_defects.rs (target/debug/deps/awl2_defects-ad6dba14d5f4ae46)
+
+running 10 tests
+test error_column_after_multibyte_prose_is_character_correct ... ok
+test dead_header_keywords_get_targeted_fix_its ... ok
+test own_line_comments_survive_at_every_nesting_level ... ok
+test inline_schema_error_column_after_multibyte_content_is_character_correct ... ok
+test guard_error_deep_in_document_reports_true_line_and_offset ... ok
+test comment_torture_document_round_trips_byte_identically ... ok
+test dead_statement_keywords_get_targeted_fix_its ... ok
+test guard_error_at_exactly_line_forty_is_source_correct ... ok
+test fork_collection_span_matches_flagship_true_position ... ok
+test action_config_duration_span_matches_flagship_true_position ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/b2_review_regressions.rs (target/debug/deps/b2_review_regressions-f7c4ff766ae8ae3f)
+
+running 13 tests
+test a_bounded_sibling_substep_cycle_is_accepted ... ok
+test a_self_routing_substep_without_a_bound_is_rejected ... ok
+test a_failure_route_does_not_inherit_success_bindings ... ok
+test compensation_bindings_before_the_failure_route_do_flow ... ok
+test a_subflow_parameter_cannot_shadow_a_const ... ok
+test a_substep_visits_bound_is_type_checked ... ok
+test bounds_covering_every_overlapping_cycle_check_clean ... ok
+test a_failure_route_into_a_collect_breaks_definite_assignment ... ok
+test a_sub_cycle_avoiding_the_bounded_vertex_is_rejected ... ok
+test an_unbounded_sibling_substep_cycle_is_rejected ... ok
+test the_failure_binding_document_is_refused_before_emission ... ok
+test same_named_subflow_outcomes_resolve_to_their_own_declarations ... ok
+test incompatible_per_path_collected_types_are_rejected ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/b2_review_round2.rs (target/debug/deps/b2_review_round2-fb9ccd2cd2879914)
+
+running 8 tests
+test an_unknown_sibling_after_target_is_rejected ... ok
+test a_sibling_substep_after_cycle_is_rejected ... ok
+test a_pure_sibling_after_cycle_is_rejected ... ok
+test disjoint_branches_may_reuse_a_name_at_different_types ... ok
+test a_structurally_equal_join_keeps_a_concrete_type ... ok
+test incompatible_types_meeting_at_a_join_are_rejected_there ... ok
+test a_structurally_equal_join_rejects_incompatible_consumption ... ok
+test substep_after_is_refused_at_emission ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/checker.rs (target/debug/deps/checker-527c68e6a4f0974d)
+
+running 8 tests
+test diagnostics_arrive_sorted_by_source_position ... ok
+test duplicate_step_names_are_refused ... ok
+test imported_optional_field_is_optional_in_the_projection_direction ... ok
+test unknown_binding_error_is_span_exact ... ok
+test check_without_a_root_reports_unresolvable_imports ... ok
+test route_targeted_earlier_step_reads_a_later_steps_binding ... ok
+test every_valid_fixture_checks_clean ... ok
+test every_check_staged_invalid_fixture_is_rejected_as_expected ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/checker_hardening.rs (target/debug/deps/checker_hardening-8d337eb6072fd342)
+
+running 7 tests
+test inline_schema_error_anchors_at_the_offending_nested_token ... ok
+test call_site_config_on_a_child_call_is_refused ... ok
+test structurally_equal_recursive_types_are_compatible_and_terminate ... ok
+test inline_schema_refusal_skips_an_earlier_property_named_like_the_keyword ... ok
+test statements_after_an_unconditional_route_are_refused ... ok
+test outcome_clauses_behind_a_body_terminal_route_are_refused ... ok
+test deep_record_mismatch_is_refused_past_the_old_depth_cap ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/checker_regressions.rs (target/debug/deps/checker_regressions-b05b48b0ee96e051)
+
+running 11 tests
+test piped_route_to_a_step_is_refused ... ok
+test loop_max_may_not_read_the_counter ... ok
+test loop_max_over_inputs_stays_clean ... ok
+test loop_max_may_not_read_loop_locals ... ok
+test dangling_middle_step_is_refused ... ok
+test named_fork_branch_cannot_read_a_sibling_bindings ... ok
+test falling_step_consumed_by_an_after_dependent_is_legal ... ok
+test named_fork_join_binding_is_refused ... ok
+test backward_route_re_armed_by_an_after_edge_needs_a_bound ... ok
+test loop_rebind_inside_a_collection_fork_branch_does_not_count ... ok
+test step_sharing_a_workflow_outcome_name_is_refused ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/checker_rulings.rs (target/debug/deps/checker_rulings-ba204186808b693c)
+
+running 8 tests
+test list_element_optional_is_refused_in_outcome_and_child_positions ... ok
+test list_element_optional_is_refused_in_input_position ... ok
+test nested_list_element_optional_is_refused ... ok
+test routes_outside_loop_bodies_stay_legal ... ok
+test optional_list_stays_legal ... ok
+test loop_inside_a_fork_branch_still_requires_outcome_clauses ... ok
+test loop_inside_a_substep_answers_to_the_substep ... ok
+test route_nested_in_a_fork_inside_a_loop_is_refused_by_check ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/compile.rs (target/debug/deps/compile-488fd2839d5f8431)
+
+running 12 tests
+test lowering_display_parity_for_message_and_planning ... ok
+test multi_outcome_envelope_derives_one_arm_per_outcome ... ok
+test declared_node_and_override_both_surface ... ok
+test mutually_recursive_payload_falls_back_via_trial_defs ... ok
+test recursive_payload_derives_through_defs_not_inline ... ok
+test language_errors_pass_through_verbatim ... ok
+test call_site_node_override_yields_the_override ... ok
+test refusal_passthrough_is_lossless ... ok
+test awl_hello_actions_are_the_two_unpinned_requirements ... ok
+test awl_hello_contracts_match_the_reference_shapes ... ok
+test awl_hello_compiles_deterministically_to_the_select_bytes ... ok
+test fork_action_fanout_compiles_deterministically_to_the_select_bytes ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/compile_child_fork.rs (target/debug/deps/compile_child_fork-bc01db9e872a5ab5)
+
+running 1 test
+test child_collection_fork_compiles_deterministically_to_the_select_bytes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/concat_lowering.rs (target/debug/deps/concat_lowering-1ca026cc8098a520)
+
+running 4 tests
+test direct_lower_refuses_concat_unless_both_operands_are_strings ... ok
+test checked_compile_rejects_mixed_concat_before_lowering ... ok
+test int_alias_plus_string_still_refuses_at_direct_lowering ... ok
+test checker_approved_string_alias_concat_lowers_and_selects ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/emitter.rs (target/debug/deps/emitter-de71895e319416a6)
+
+running 32 tests
+test child_tests::named_fork_child_refusal_is_honest ... ok
+test child_tests::spawn_lowers_detached ... ok
+test conflicting_binding_types_across_branches_are_refused ... ok
+test enum_total_outcomes_lower_to_case ... ok
+test child_tests::child_call_lowers_to_string_name_spawn ... ok
+test codec_bodies_pin_the_same_wire_fragments ... ok
+test float_orderings_render_float_operators ... ok
+test fork_tests::homogeneous_named_fork_is_one_typed_all ... ok
+test fork_forms_map_and_fold ... ok
+test gleam_keywords_are_sanitized_everywhere ... ok
+test fork_tests::parallel_action_fork_is_one_map_with_error_collapse ... ok
+test fork_tests::sequential_fork_folds_from_empty_and_reverses ... ok
+test child_tests::child_collection_fork_spawns_all_then_awaits_all ... ok
+test loop_tests::compound_until_is_short_circuited_in_nested_loops ... ok
+test heterogeneous_named_fork_dispatches_one_parallel_all ... ok
+test flagship_scout_and_warm_build_share_one_parallel_all ... ok
+test loop_tests::counting_name_collision_is_checker_refused ... ok
+test loop_counter_is_language_owned ... ok
+test loop_tests::route_inside_a_loop_body_is_refused ... ok
+test loop_tests::counterless_loop_uses_the_scalar_result_path ... ok
+test loop_tests::loop_max_must_be_loop_invariant ... ok
+test loop_tests::unchecked_counter_is_not_in_until_scope ... ok
+test piped_route_with_payload_is_refused_at_emit ... ok
+test nested_boolean_expressions_use_gleam_block_grouping ... ok
+test wait_timeout_binds_optionally ... ok
+test on_failure_compensates_then_routes ... ok
+test emitted_sources_avoid_nondeterministic_apis ... ok
+test schema_import_without_root_is_a_spanned_emit_error ... ok
+test sequential_layer_fallback_is_announced ... ok
+test every_valid_fixture_emits ... ok
+test compile_tests::flagship_fixtures_compile_under_gleam ... ok
+test compile_tests::loop_and_fork_fixtures_compile_under_gleam ... ok
+
+test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.35s
+
+     Running tests/feature_any_all_workflow_id.rs (target/debug/deps/feature_any_all_workflow_id-9122005c02365f2c)
+
+running 3 tests
+test workflow_id_has_reference_direct_structural_parity ... ok
+test fallible_predicates_have_result_callbacks_and_outer_binds ... ok
+test nested_any_all_has_reference_direct_structural_parity ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/flow_vocab_b4_compile_proof.rs (target/debug/deps/flow_vocab_b4_compile_proof-63db3f51e44c3ee5)
+
+running 1 test
+test b4_flow_shape_fixtures_compile_under_gleam ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+
+     Running tests/flow_vocab_compile_proof.rs (target/debug/deps/flow_vocab_compile_proof-422a6ce955c2473e)
+
+running 1 test
+test flow_vocab_b1_fixture_compiles_under_gleam ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.16s
+
+     Running tests/flow_vocab_ergonomics.rs (target/debug/deps/flow_vocab_ergonomics-702e5bf04592e045)
+
+running 22 tests
+test an_expression_headed_statement_still_needs_a_terminator ... ok
+test json_body_brace_counting_respects_braces_inside_strings ... ok
+test const_values_reject_runtime_reads ... ok
+test invalid_json_body_points_into_the_body ... ok
+test const_cycles_are_rejected_at_the_backward_reference ... ok
+test invalid_json_error_span_stays_on_char_boundaries_for_non_ascii ... ok
+test bindings_cannot_shadow_consts ... ok
+test duplicate_consts_are_rejected_at_the_second_declaration ... ok
+test a_statement_may_start_with_a_string_literal ... ok
+test json_is_a_reserved_word_at_declaration_sites ... ok
+test emit_refuses_documents_that_do_not_check_cleanly ... ok
+test of_is_a_reserved_word_at_declaration_sites ... ok
+test raw_string_value_is_verbatim_with_no_escape_processing ... ok
+test malformed_multiline_json_string_is_reported_inside_the_body ... ok
+test mir_lower_refuses_documents_that_do_not_check_cleanly ... ok
+test schema_of_an_undeclared_type_is_rejected ... ok
+test unterminated_raw_string_is_refused_at_the_opener ... ok
+test unterminated_json_body_is_refused_at_the_open_brace ... ok
+test undefined_const_references_are_rejected ... ok
+test the_semantic_index_declares_consts_with_their_folded_type ... ok
+test consts_fold_through_emission_as_plain_strings ... ok
+test the_vocabulary_document_round_trips_byte_identically ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/flow_vocab_refusals.rs (target/debug/deps/flow_vocab_refusals-32ff9a241aeefbb8)
+
+running 1 test
+test every_new_construct_emits_with_its_generated_shape ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/flow_vocab_regions.rs (target/debug/deps/flow_vocab_regions-b4a31bf75e2d3cc5)
+
+running 19 tests
+test a_collect_with_no_open_region_is_rejected ... ok
+test a_distribute_step_may_not_carry_outcomes ... ok
+test an_empty_collection_is_legal ... ok
+test an_in_region_loopback_is_legal_and_stays_inside ... ok
+test an_after_edge_may_not_cross_the_region_boundary ... ok
+test a_route_out_of_the_region_is_rejected ... ok
+test a_route_entering_the_region_mid_track_is_rejected ... ok
+test a_route_to_a_flow_outcome_from_inside_is_rejected ... ok
+test a_route_to_the_collect_from_outside_is_rejected ... ok
+test an_unclosed_region_is_rejected_at_its_opener ... ok
+test a_collect_closes_the_nearest_open_region ... ok
+test region_statements_are_step_level_only ... ok
+test distribute_must_be_its_steps_only_line ... ok
+test distribute_needs_a_list_collection ... ok
+test collect_must_open_its_step ... ok
+test region_locals_fall_out_of_scope_at_the_collect ... ok
+test the_collected_binding_must_be_produced_inside_the_region ... ok
+test the_collected_binding_must_be_assigned_on_every_success_path ... ok
+test nested_regions_with_inner_loopback_check_clean ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/flow_vocab_roundtrip_property.rs (target/debug/deps/flow_vocab_roundtrip_property-c0213e17a92b5a33)
+
+running 2 tests
+test generated_vocabulary_documents_round_trip_losslessly ... ok
+test generated_flow_shape_documents_round_trip_losslessly ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/flow_vocab_shape.rs (target/debug/deps/flow_vocab_shape-b3fca730f26c36b7)
+
+running 7 tests
+test sequence_steps_classify_as_sequence ... ok
+test a_sequence_region_with_a_strict_collect_round_trips ... ok
+test the_subflow_declaration_reaches_the_semantic_index ... ok
+test every_step_carries_its_region_membership_in_the_semantic_index ... ok
+test every_step_carries_its_kind_in_the_semantic_index ... ok
+test collect_results_type_strict_and_tolerant_forms ... ok
+test the_shape_document_round_trips_byte_identically ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/flow_vocab_subflows.rs (target/debug/deps/flow_vocab_subflows-afb3bd1c072cd5fb)
+
+running 14 tests
+test a_subflow_declares_exactly_one_outcome ... ok
+test a_step_level_max_must_end_in_visits ... ok
+test a_subflow_outcome_carries_no_route ... ok
+test a_subflow_without_an_outcome_is_refused ... ok
+test collect_requires_its_result_binding ... ok
+test a_subflow_is_not_a_pipe_stage ... ok
+test a_subflow_call_must_be_its_steps_only_statement ... ok
+test a_subflow_cannot_be_spawned ... ok
+test a_subflow_captures_nothing_from_the_enclosing_flow ... ok
+test a_value_route_payload_must_match_the_outcome_type ... ok
+test a_subflow_call_may_not_nest_inside_a_block ... ok
+test document_consts_stay_visible_inside_a_subflow ... ok
+test subflow_recursion_is_rejected ... ok
+test a_subflow_call_binds_the_outcome_type ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/flow_vocab_visits.rs (target/debug/deps/flow_vocab_visits-317b7097337aae54)
+
+running 8 tests
+test a_visits_bound_on_a_cycle_member_makes_the_cycle_legal ... ok
+test the_visits_bound_must_be_input_derived ... ok
+test a_cycle_rebinding_that_changes_the_type_is_rejected ... ok
+test a_cycle_bounded_only_by_an_inner_loop_is_now_rejected ... ok
+test the_visits_bound_must_be_an_int ... ok
+test a_cycle_step_may_rebind_a_cycle_threaded_name_keeping_its_type ... ok
+test a_non_cycle_step_still_may_not_rebind ... ok
+test visits_is_unreadable_outside_the_bounded_steps_guards ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/implicit_child_identity.rs (target/debug/deps/implicit_child_identity-9b01ac8101838a9c)
+
+running 1 test
+test same_shape_parents_receive_distinct_reserved_child_types ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/lexer.rs (target/debug/deps/lexer-6046c709a164296c)
+
+running 13 tests
+test doc_header_lines_lex_as_data_with_verbatim_text ... ok
+test doc_line_spans_carry_true_position_and_marker ... ok
+test doc_lines_lex_as_data_and_do_not_disturb_indentation ... ok
+test four_slashes_and_plain_comments_stay_trivia ... ok
+test awl_hello_flagship_lexes_to_the_exact_token_sequence ... ok
+test dead_awl0_words_lex_as_plain_identifiers ... ok
+test keywords_embedded_in_longer_identifiers_stay_identifiers ... ok
+test every_rev2_keyword_lexes_as_a_keyword ... ok
+test trailing_comment_after_code_stays_trivia_before_newline ... ok
+test trailing_doc_header_marker_after_code_is_trivia_not_doc_data ... ok
+test trailing_triple_slash_after_code_is_trivia_not_doc_data ... ok
+test dev_brief_loop_region_lexes_loop_counting_until_max ... ok
+test entire_rev2_corpus_lexes_without_error ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/lexer_spans.rs (target/debug/deps/lexer_spans-3a5a9fd75e2d88cc)
+
+running 14 tests
+test crlf_newline_spans_cover_the_full_terminator ... ok
+test bad_escape_reports_escape_span ... ok
+test columns_after_multibyte_content_on_the_same_line_are_char_based ... ok
+test lf_newline_span_is_the_single_terminator_byte ... ok
+test lone_dot_without_field_name_reports_span ... ok
+test odd_indentation_reports_span ... ok
+test over_indentation_jump_reports_a_lexical_error ... ok
+test spans_stay_byte_correct_after_multibyte_doc_lines ... ok
+test stray_character_reports_span ... ok
+test lex_error_deep_in_document_reports_true_line_and_offset ... ok
+test tab_in_indentation_reports_span ... ok
+test tokens_expose_byte_line_and_column_spans ... ok
+test unterminated_string_reports_span ... ok
+test token_deep_in_document_reports_true_line_and_offset ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/operators_and_literals.rs (target/debug/deps/operators_and_literals-9384ed5a19ea7da5)
+
+running 17 tests
+test arrow_binds_call_results_and_accessors_chain ... ok
+test durations_lex_with_all_units_and_backoff_ranges ... ok
+test combinators_take_accessor_arguments ... ok
+test enum_bar_is_distinct_from_pipe ... ok
+test comparisons_booleans_and_string_concat_lex ... ok
+test fork_line_lexes_with_in_as_identifier ... ok
+test float_lexeme_is_preserved_verbatim ... ok
+test inline_schema_json_tokens_lex ... ok
+test list_literals_and_literal_indexing_lex ... ok
+test loop_seed_equal_and_schema_door_equal_lex_as_equal ... ok
+test pipe_chain_with_accessor_stage_and_route_terminator ... ok
+test predicates_lex_as_keyword_pairs ... ok
+test question_marks_optional_types_including_list_types ... ok
+test separated_unit_letter_is_not_a_duration ... ok
+test spawn_join_wait_timeout_line_shapes_lex ... ok
+test string_escapes_booleans_and_floats_lex ... ok
+test unit_prefixed_identifier_is_not_a_duration ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/parser_corpus.rs (target/debug/deps/parser_corpus-ee6d1a7afc6fa453)
+
+running 4 tests
+test corpus_has_not_shrunk ... ok
+test every_parse_staged_invalid_fixture_fails_as_expected ... ok
+test every_check_staged_invalid_fixture_parses_cleanly ... ok
+test every_valid_fixture_parses ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/parser_diagnostics.rs (target/debug/deps/parser_diagnostics-b5a1a4b91b2d0bf8)
+
+running 4 tests
+test call_headed_pipe_chain_gets_a_targeted_fix_it ... ok
+test statement_after_an_outcome_clause_is_rejected ... ok
+test duplicate_loop_until_is_rejected_at_the_second_keyword ... ok
+test duplicate_loop_max_is_rejected_at_the_second_keyword ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/printer_roundtrip.rs (target/debug/deps/printer_roundtrip-a3e9b1d8d642864f)
+
+running 7 tests
+test wrapped_bind_chain_keeps_its_trailing_comment ... ok
+test stageless_bind_over_the_width_limit_stays_on_one_line_and_reparses ... ok
+test long_pipe_chains_break_before_each_stage ... ok
+test comma_tolerance_normalizes_to_canonical_form ... ok
+test trailing_comments_survive_and_normalize ... ok
+test parse_print_is_identity_over_the_canonical_corpus ... ok
+test print_parse_print_is_idempotent_over_the_whole_corpus ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/runtime_codecs.rs (target/debug/deps/runtime_codecs-be6a139427018709)
+
+running 23 tests
+test assert_list_badmatch_reports_the_subject_at_runtime ... ok
+test fix_cycle::empty_list_literal_materializes_nil_at_runtime ... ok
+test concat::general_concat_executes_with_emitter_byte_parity ... ok
+test direct_codecs_execute_with_reference_parity ... ok
+test fix_cycle::dev_brief_fix_cycle_encode_reaches_dispatch_with_reference_parity ... ok
+test fork_generality::named_fork_heterogeneous_site_config_parity ... ok
+test fork_generality::named_fork_homogeneous_site_config_parity ... ok
+test fork_generality::parallel_action_fork_site_config_dispatches_with_reference_parity ... ok
+test fork_generality::fork_inside_loop_completes_two_passes_with_reference_parity ... ok
+test child_envelope::real_child_outcome_envelope_completes_parent_fold_on_both_backends ... ok
+test semantic_pins::value_boolean_operators_skip_faulting_rhs_at_runtime ... ok
+test child_envelope::child_output_codec_is_strict_and_symmetric_on_both_backends ... ok
+test pipes::pipe_combinators_execute_with_reference_parity ... ok
+test nested_collection_predicates_execute_with_reference_parity ... ok
+test fork_generality::sequential_fork_site_config_and_index_prelude_dispatch_with_reference_parity ... ok
+test stmt_parity::index_and_lists_execute_with_reference_parity ... ok
+test fork_generality::plain_call_site_config_merges_per_key_with_reference_parity ... ok
+test fallible_predicates_execute_through_production_hosts_with_parity ... ok
+test stmt_parity::child_call_statement_and_spawn_execute_with_reference_parity ... ok
+test semantic_pins::duration_boundary_executes_exactly_and_next_second_is_refused ... ok
+test stmt_parity::wait_signal_binds_payload_with_reference_parity ... ok
+test pipes::pipe_child_stage_executes_with_reference_parity ... ok
+test stmt_parity::wait_timeout_arms_execute_with_reference_parity ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.15s
+
+     Running tests/schema.rs (target/debug/deps/schema-fc3a29eff5b516c2)
+
+running 11 tests
+test recursive_records_self_reference_the_schema_root ... ok
+test doc_comments_flow_to_descriptions_at_type_and_field_level ... ok
+test builtins_lists_and_optionals_map_to_json_types ... ok
+test import_derivation_without_a_root_refuses ... ok
+test enums_derive_string_enum_schemas ... ok
+test imported_schemas_reemit_verbatim_with_constraints_preserved ... ok
+test optional_fields_are_omitted_from_required_and_never_nullable ... ok
+test workflow_contract_covers_inputs_with_optionality_and_narration ... ok
+test unknown_types_are_refused_by_name ... ok
+test inline_schemas_reemit_their_pasted_json_with_constraints ... ok
+test named_type_references_become_local_defs ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/schema_door.rs (target/debug/deps/schema_door-7cf87579c7b0f90b)
+
+running 11 tests
+test brace_on_the_line_after_schema_is_not_a_raw_door ... ok
+test braces_and_escaped_quotes_inside_json_strings_do_not_close_the_body ... ok
+test no_structural_tokens_are_emitted_inside_a_multiline_body ... ok
+test inline_schema_body_is_one_verbatim_token ... ok
+test negative_numbers_exponents_and_json_escapes_pass_verbatim ... ok
+test pasted_schema_with_non_two_space_indentation_lexes ... ok
+test schema_body_span_is_document_true ... ok
+test schema_file_import_door_is_not_raw_captured ... ok
+test single_line_schema_body_keeps_lexing_the_rest_of_the_line ... ok
+test tokens_after_a_multiline_body_report_the_closing_line ... ok
+test unterminated_schema_body_reports_the_opening_brace ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/semantic.rs (target/debug/deps/semantic-ac43354046090941)
+
+running 1 test
+test semantic_spans_cover_declarations_and_checker_owned_scopes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/short_circuit.rs (target/debug/deps/short_circuit-4958886950351ffc)
+
+running 1 test
+test gleam_emitter_keeps_optional_rhs_inside_some_branch ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/workflow_timeout.rs (target/debug/deps/workflow_timeout-72b7b72ca2c6dc31)
+
+running 4 tests
+test workflow_timeout_parses_and_prints_with_header_trivia ... ok
+test overflowing_workflow_timeout_is_checked_at_the_declaration ... ok
+test zero_and_negative_workflow_timeouts_are_checked_at_the_declaration ... ok
+test timeout_is_compile_metadata_for_both_backends_not_workflow_code ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/aion_awl_lsp-f571707f60d62fdf)
+
+running 2 tests
+test analysis::tests::point_spans_stay_points ... ok
+test analysis::tests::positions_are_utf16_not_bytes_or_scalar_columns ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/corpus.rs (target/debug/deps/corpus-3532133057bf2f0e)
+
+running 2 tests
+test lsp_g2_all_valid_fixtures_use_the_canonical_idempotent_printer ... ok
+test lsp_g1_rev2_corpus_diagnostics_conform ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests/protocol.rs (target/debug/deps/protocol-a3961168d4f0beeb)
+
+running 2 tests
+test live_initialize_open_diagnose_format_shutdown_exchange ... ok
+test rev2_corpus_hover_and_definition_use_checker_semantics ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/aion_awl_package-6abe3496f161dc72)
+
+running 4 tests
+test bundle::tests::closure_is_nonempty_and_versioned ... ok
+test bundle::tests::generated_table_is_sorted_and_duplicate_free ... ok
+test assemble::tests::repeated_action_requirements_dedupe_into_one_activity ... ok
+test assemble::tests::unauthored_timeout_is_absent_and_authored_timeout_is_declared ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/awl_assemble.rs (target/debug/deps/awl_assemble-bda14cff4db564e7)
+
+running 10 tests
+test regeneration_script_is_documented_and_outside_the_product_path ... ok
+test unsafe_workflow_name_is_refused_typed ... ok
+test workflow_name_colliding_with_a_bundle_module_is_refused_typed ... ok
+test every_workflow_beam_import_is_shipped_in_the_closure ... ok
+test bundle_is_versioned_pinned_and_carries_the_imported_sdk_modules ... ok
+test fixed_input_archive_bytes_match_the_cross_process_pin ... ok
+test format_v1_loader_admits_the_archive_with_derived_manifest ... ok
+test bundle_is_closed_under_imports_modulo_engine_and_erts_modules ... ok
+test assembling_twice_yields_byte_identical_archives ... ok
+test document_timeout_reaches_the_manifest_and_absence_arms_nothing ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/distribute_parity.rs (target/debug/deps/distribute_parity-07959db28850eaac)
+
+running 5 tests
+test unsafe_synthesized_workflow_type_is_refused_typed ... ok
+test duplicate_workflow_types_are_refused_typed ... ok
+test single_activity_distribute_synthesizes_no_child ... ok
+test direct_archive_carries_the_implicit_child_with_gleam_path_identity ... ok
+test direct_distribute_archive_is_deterministic ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/runtime_surface_guard.rs (target/debug/deps/runtime_surface_guard-cdbc77e760f18179)
+
+running 1 test
+test every_runtime_fn_signature_is_exported_by_the_closure ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/sdk_closure_freshness.rs (target/debug/deps/sdk_closure_freshness-e4d0b970212e7578)
+
+running 1 test
+test committed_closure_matches_a_fresh_oracle_harvest ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running unittests src/main.rs (target/debug/deps/aion-668f05a4c4b25f03)
+
+running 153 tests
+test awl::tests::diagnostic_renders_the_compiler_style_line ... ok
+test awl::tests::emit_beam_refuses_without_output ... ok
+test awl::tests::check_source_renders_a_parse_error_as_a_diagnostic ... ok
+test awl::tests::check_source_counts_steps_on_a_clean_document ... ok
+test awl::tests::check_source_accepts_the_flow_vocabulary ... ok
+test awl::tests::emit_source_generates_gleam_for_a_clean_document ... ok
+test awl::tests::check_source_renders_typecheck_errors_as_diagnostics ... ok
+test awl::tests::emit_source_renders_a_parse_error_as_a_diagnostic ... ok
+test awl::tests::emit_gleam_target_reproduces_the_committed_golden ... ok
+test awl::tests::emit_source_is_gated_on_a_clean_typecheck ... ok
+test awl::tests::emit_source_folds_the_flow_vocabulary ... ok
+test awl::tests::format_source_reports_a_parse_error_without_output ... ok
+test awl::tests::format_source_is_the_canonical_printer ... ok
+test awl::tests::format_source_is_idempotent_on_the_flow_vocabulary ... ok
+test awl::tests::schema_source_is_gated_on_a_clean_typecheck ... ok
+test awl::tests::schema_source_derives_a_declared_type ... ok
+test awl::tests::schema_source_without_type_emits_the_start_contract ... ok
+test deploy::tests::token_resolution_prefers_the_flag ... ok
+test dev::args::tests::debounce_parses_positive_milliseconds ... ok
+test dev::args::tests::debounce_rejects_zero_and_non_numeric ... ok
+test dev::pipeline::tests::reload_outcome_reads_the_deploy_response_document ... ok
+test dev::pipeline::tests::reload_outcome_rejects_a_response_missing_a_field ... ok
+test dev::watch::tests::gleam_sources_are_recognised_case_insensitively ... ok
+test dev::watch::tests::relevant_only_for_source_content_changes ... ok
+test dev::watch::tests::watcher_errors_force_a_rebuild ... ok
+test awl::tests::emit_gleam_synthesized_children_reproduce_the_committed_goldens ... ok
+test awl::tests::emit_output_writes_packaging_sidecar_for_implicit_children ... ok
+test generate::tests::comment_lines_are_never_treated_as_imports ... ok
+test generate::tests::aliased_and_unqualified_imports_yield_bare_name ... ok
+test dev::watch::tests::source_root_prefers_src_then_falls_back_to_root ... ok
+test check_deterministic::tests::without_the_flag_the_command_explains_itself ... ok
+test generate::tests::cyclic_imports_do_not_loop ... ok
+test generate::tests::imports_are_parsed_to_bare_module_names ... ok
+test generate::tests::indented_real_import_is_found ... ok
+test generate::tests::marked_json_is_extracted_from_noisy_stdout ... ok
+test generate::tests::missing_marker_is_an_error ... ok
+test generate::tests::module_names_use_forward_slashes_under_src ... ok
+test awl::tests::emit_beam_writes_a_module_and_a_beam_shaped_sidecar ... ok
+test check_deterministic::tests::positive_fixture_tainted_workflow_fails_non_zero ... ok
+test generate::tests::sync_clean_match_check_is_checked ... ok
+test generate::tests::extraction_lock_is_exclusive_then_reacquirable ... ok
+test generate::tests::sync_clean_match_write_is_unchanged_and_preserves_bytes ... ok
+test check_deterministic::tests::negative_fixture_clean_workflow_passes ... ok
+test generate::tests::trailing_comment_after_import_is_ignored_but_module_kept ... ok
+test generate::tests::transitive_importers_of_the_target_are_found ... ok
+test harness::tests::compiled_harness_name_reports_norn_when_on ... ok
+test harness::tests::composition_root_injects_a_plain_norn_harness ... ok
+test harness::tests::default_harness_is_available_with_the_norn_feature ... ok
+test generate::tests::sync_multiple_workflow_tables_bails_naming_the_count ... ok
+test generate::tests::sync_missing_activities_key_is_created_on_write ... ok
+test generate::tests::sync_no_workflow_table_bails ... ok
+test inspect::tests::inspection_json_renders_random_as_a_draw_ordinal_projection_not_per_step ... ok
+test inspect::tests::parse_mock_rejects_a_missing_or_unknown_kind ... ok
+test inspect::tests::parse_mock_reads_every_explicit_kind ... ok
+test inspect::tests::parse_mock_requires_explicit_failure_message ... ok
+test generate::tests::sync_stale_list_check_bails_with_path_and_reason ... ok
+test inspect::tests::parse_mock_requires_the_result_or_payload_field ... ok
+test inspect::tests::resolve_run_id_errors_without_a_start ... ok
+test inspect::tests::resolve_run_id_falls_back_to_latest_started ... ok
+test inspect::tests::resolve_run_id_prefers_explicit_request ... ok
+test inspect::tests::what_if_to_json_emits_from_seq_exactly_once ... ok
+test inspect::tests::what_if_to_json_terminal_and_diverged_carry_from_seq_once ... ok
+test new::scaffold::tests::name_validation_accepts_snake_case ... ok
+test new::scaffold::tests::name_validation_rejects_invalid_names_with_the_rule ... ok
+test generate::tests::sync_stale_list_write_rewrites_in_declared_order ... ok
+test generate::tests::crash_leftovers_are_recovered ... ok
+test new::scaffold::tests::accepts_an_existing_empty_directory ... ok
+test new::scaffold::tests::readme_instructions_match_real_subcommands ... ok
+test input::tests::unknown_workflow_type_fails_naming_the_available_types ... ok
+test input::tests::emits_type_derived_skeleton_for_the_named_workflow ... ok
+test new::scaffold::tests::refuses_worker_for_templates_without_activities ... ok
+test new::scaffold::tests::render_substitutes_name_and_rejects_leftover_placeholders ... ok
+test new::scaffold::tests::refuses_dev_pipeline_without_a_worker_and_writes_nothing ... ok
+test new::template::tests::agent_template_requires_a_worker ... ok
+test new::template::tests::aion_toml_carries_every_required_server_key ... ok
+test new::template::tests::dev_pipeline_declares_three_workflow_entries_and_its_gates ... ok
+test new::template::tests::types_first_templates_ship_marked_generated_artifacts ... ok
+test new::template::tests::worker_free_templates_do_not_require_a_worker ... ok
+test new::template::tests::agent_template_declares_its_three_steps_and_a_review_deadline_input ... ok
+test new::template::tests::every_template_manifest_is_complete ... ok
+test new::scaffold::tests::every_template_renders_without_leftover_placeholders ... ok
+test new::template::tests::workflow_descriptors_declare_the_template_activities ... ok
+test new::scaffold::tests::refuses_non_empty_target_directory ... ok
+test output::tests::describe_output_decodes_json_payloads_recursively ... ok
+test generate::tests::modules_reaching_sets_aside_targets_and_their_importers ... ok
+test output::tests::describe_output_only_decodes_payloads_inside_history ... ok
+test output::tests::empty_payload_uses_clear_empty_indicator ... ok
+test output::tests::invalid_payload_shape_is_left_unchanged ... ok
+test output::tests::invalid_utf8_json_payload_falls_back_to_hex ... ok
+test new::template::tests::worker_manifests_exist_exactly_for_templates_with_activities ... ok
+test output::tests::malformed_json_payload_falls_back_to_hex ... ok
+test output::tests::non_json_payload_falls_back_to_hex_with_content_type ... ok
+test output::tests::raw_describe_output_preserves_payload_byte_arrays ... ok
+test payload::tests::json_payload_round_trips_to_json_value ... ok
+test payload::tests::parse_run_id_rejects_invalid_uuid ... ok
+test payload::tests::parse_status_accepts_documented_and_serde_spellings ... ok
+test payload::tests::parse_workflow_id_rejects_invalid_uuid ... ok
+test render::tests::each_query_wire_code_renders_a_distinct_class_detail_and_hint ... ok
+test render::tests::empty_server_detail_is_stated_not_hidden ... ok
+test render::tests::invalid_input_and_backend_render_without_a_hint ... ok
+test render::tests::namespace_denied_and_not_found_render_their_classes ... ok
+test render::tests::nested_context_layers_all_appear_before_the_detail ... ok
+test render::tests::non_client_errors_render_the_full_anyhow_chain ... ok
+test render::tests::structured_error_type_gets_its_own_line ... ok
+test render::tests::unavailable_renders_transport_chain_and_endpoint_hint ... ok
+test tests::awl_emit_requires_a_file ... ok
+test tests::awl_check_and_fmt_parse_the_file_path ... ok
+test tests::awl_emit_parses_the_file_path_and_optional_output ... ok
+test tests::awl_commands_require_a_file_and_fmt_has_no_check_mode ... ok
+test tests::check_help_documents_the_determinism_gate ... ok
+test tests::deploy_help_documents_the_operator_surface ... ok
+test tests::describe_accepts_raw_payload_flag ... ok
+test tests::describe_accepts_optional_run_id ... ok
+test tests::check_parses_path_and_requires_the_deterministic_flag ... ok
+test new::scaffold::tests::scaffold_writes_every_manifest_file ... ok
+test tests::describe_help_documents_raw_payload_flag ... ok
+test tests::deploy_subcommands_parse_with_global_token ... ok
+test tests::dev_parses_path_gleam_path_and_optional_debounce ... ok
+test tests::inspect_help_documents_oplog_read_and_what_if ... ok
+test tests::dev_help_documents_the_instant_loop_and_pinning ... ok
+test tests::dev_requires_gleam_path_and_rejects_zero_debounce ... ok
+test tests::input_parses_workflow_type_and_path ... ok
+test tests::new_help_documents_templates_and_refusal ... ok
+test tests::normalize_endpoint_defaults_to_http_scheme ... ok
+test tests::normalize_endpoint_preserves_explicit_scheme ... ok
+test tests::inspect_parses_workflow_run_from_and_mock ... ok
+test tests::package_accepts_path_out_and_build ... ok
+test tests::package_help_documents_local_only_behaviour ... ok
+test tests::reopen_help_documents_the_subcommand ... ok
+test tests::package_defaults_to_current_directory_without_build_or_out ... ok
+test tests::new_parses_name_template_and_worker ... ok
+test tests::server_help_documents_the_server_surface ... ok
+test tests::reopen_parses_workflow_id_and_optional_run_id ... ok
+test tests::server_subcommand_converts_all_overrides ... ok
+test tests::start_malformed_inline_input_json_error_names_the_flag ... ok
+test awl::tests::emit_beam_bytes_equal_the_archive_entry_module ... ok
+test tests::server_subcommand_maps_authoring_gleam_path ... ok
+test tests::start_missing_input_file_error_names_the_path ... ok
+test tests::server_workflow_package_flag_is_repeatable ... ok
+test tests::start_rejects_input_and_input_file_together ... ok
+test tests::start_without_input_file_keeps_inline_input ... ok
+test tests::start_malformed_input_file_json_error_names_the_flag_and_path ... ok
+test worker_shell::tests::composite_field_projection_is_typed_refusal ... ok
+test tests::start_reads_input_payload_from_file ... ok
+test tests::signal_cancel_and_query_accept_optional_run_id ... ok
+test worker_shell::tests::strict_manifest_rejects_unknown_keys_and_bad_placeholders ... ok
+test tests::top_level_help_lists_the_server_subcommand ... ok
+test tests::workflow_operations_allow_omitted_run_id ... ok
+test one_motion::tests::known_good_corpus_fixture_compiles_and_assembles_without_a_server ... ok
+test one_motion::tests::document_timeout_reaches_the_one_motion_archive_manifest ... ok
+test new::scaffold::tests::scaffold_dev_pipeline_ships_the_types_module_and_generated_artifacts ... ok
+test worker_shell::tests::process_boundary_round_trips_text_and_json ... ok
+test one_motion::tests::mismatching_input_is_refused_before_an_archive_can_be_deployed ... ok
+
+test result: ok. 153 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/authoring_quality_e2e.rs (target/debug/deps/authoring_quality_e2e-d1b29eef570a92ab)
+
+running 3 tests
+test determinism_gate_passes_clean_and_fails_on_injected_wall_clock ... ok
+test generated_test_scaffold_compiles_under_gleam_build ... ok
+test input_skeleton_round_trips_through_the_workflow_input_codec ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.04s
+
+     Running tests/awl_emit_beam.rs (target/debug/deps/awl_emit_beam-4104f3e753ee89a6)
+
+running 3 tests
+test emit_beam_binary_refuses_stdout ... ok
+test emit_beam_binary_output_equals_the_archive_entry_module ... ok
+test emit_beam_resolves_schema_imports_from_the_document_directory ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/deploy_commands.rs (target/debug/deps/deploy_commands-536ec57730cf4787)
+
+running 1 test
+test deploy_subcommands_drive_a_live_server ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+
+     Running tests/dev_hot_reload_e2e.rs (target/debug/deps/dev_hot_reload_e2e-48da28c8bf109010)
+
+running 1 test
+test dev_hot_loads_a_new_content_hash_version_on_edit_without_restart ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.23s
+
+     Running tests/error_rendering.rs (target/debug/deps/error_rendering-cf5dad548623e4fd)
+
+running 4 tests
+test signal_not_found_renders_class_detail_error_type_and_hint ... ok
+test typed_error_type_from_status_details_reaches_stderr ... ok
+test connect_failure_renders_unavailable_with_detail_and_hint ... ok
+test each_query_wire_code_renders_distinctly_end_to_end ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/generate_e2e.rs (target/debug/deps/generate_e2e-f6772b4af3d45c57)
+
+running 2 tests
+test generate_check_gates_workflow_toml_drift ... ok
+test generate_round_trips_check_gates_and_invents_no_defaults ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.49s
+
+     Running tests/generate_types_first_e2e.rs (target/debug/deps/generate_types_first_e2e-fa0bceb87f677620)
+
+running 3 tests
+test type_outside_subset_fails_loudly ... ok
+test stray_authored_schema_fails_with_the_migration_hint ... ok
+  Compiling gleam_stdlib
+  Compiling gleam_json
+  Compiling aion_flow
+  Compiling codegen_gate
+warning: Unused function argument
+   ┌─ /private/var/folders/87/tdf6vfls1fj_4ydz_y6sk3580000gn/T/.tmpeGo94d/codegen_gate/src/codegen_gate_codecs.gleam:65:25
+   │
+65 │ pub fn ab_empty_to_json(value: io.AbEmpty) -> json.Json {
+   │                         ^^^^^ This argument is never used
+
+Hint: You can ignore it with an underscore: `_value`.
+
+   Compiled in 0.52s
+test generate_compiles_round_trips_and_checks ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.23s
+
+     Running tests/lsub5b_osproc_failover_e2e.rs (target/debug/deps/lsub5b_osproc_failover_e2e-94297add81eeccdd)
+
+running 1 test
+test osproc_liminal_listener_accepts_real_worker_connection ... ignored, slow: spawns real aion-server + liminal worker OS processes
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/lsub5b_osproc_kill9_failover_e2e.rs (target/debug/deps/lsub5b_osproc_kill9_failover_e2e-eaada14e2366f345)
+
+running 1 test
+test osproc_kill9_liminal_failover_completes_exactly_once ... ignored, slow: spawns a 3-node aion-server cluster + a liminal worker, kill -9 failover
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/new_agent_e2e.rs (target/debug/deps/new_agent_e2e-558e5a5de10dc888)
+
+running 1 test
+  Resolving versions
+Downloading packages
+ Downloaded 2 packages in 0.02s
+      Added aion_flow v0.7.0
+      Added gleam_json v3.1.0
+      Added gleam_stdlib v1.0.3
+  Compiling gleam_stdlib
+  Compiling gleam_json
+  Compiling aion_flow
+  Compiling agent_demo
+   Compiled in 0.54s
+    Updating crates.io index
+     Locking 209 packages to latest Rust 1.92.0 compatible versions
+      Adding matchit v0.8.4 (available: v0.8.6)
+      Adding tonic-prost v0.14.5 (available: v0.14.6)
+      Adding tonic-prost-build v0.14.5 (available: v0.14.6)
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+   Compiling libc v0.2.189
+   Compiling cfg-if v1.0.4
+   Compiling memchr v2.8.3
+   Compiling pin-project-lite v0.2.17
+   Compiling serde_core v1.0.229
+   Compiling bytes v1.12.1
+   Compiling futures-core v0.3.33
+   Compiling equivalent v1.0.2
+   Compiling hashbrown v0.17.1
+   Compiling itoa v1.0.18
+   Compiling parking_lot_core v0.9.12
+   Compiling futures-sink v0.3.33
+   Compiling scopeguard v1.2.0
+   Compiling smallvec v1.15.2
+   Compiling lock_api v0.4.14
+   Compiling typenum v1.20.1
+   Compiling slab v0.4.12
+   Compiling futures-channel v0.3.33
+   Compiling anyhow v1.0.104
+   Compiling http v1.4.2
+   Compiling once_cell v1.21.4
+   Compiling indexmap v2.14.0
+   Compiling either v1.17.0
+   Compiling futures-task v0.3.33
+   Compiling futures-io v0.3.33
+   Compiling itertools v0.14.0
+   Compiling tracing-core v0.1.36
+   Compiling bitflags v2.13.1
+   Compiling serde v1.0.229
+   Compiling hybrid-array v0.4.13
+   Compiling getrandom v0.4.3
+   Compiling http-body v1.1.0
+   Compiling autocfg v1.5.1
+   Compiling shlex v2.0.1
+   Compiling httparse v1.10.1
+   Compiling prettyplease v0.2.37
+   Compiling crypto-common v0.2.2
+   Compiling find-msvc-tools v0.1.9
+   Compiling syn v2.0.119
+   Compiling syn v3.0.3
+   Compiling cmov v0.5.4
+   Compiling pulldown-cmark v0.13.4
+   Compiling errno v0.3.14
+   Compiling signal-hook-registry v1.4.8
+   Compiling mio v1.2.2
+   Compiling socket2 v0.6.5
+   Compiling jobserver v0.1.35
+   Compiling parking_lot v0.12.5
+   Compiling log v0.4.33
+   Compiling tower-service v0.3.3
+   Compiling rustix v1.1.4
+   Compiling zeroize v1.9.0
+   Compiling cc v1.4.0
+   Compiling block-buffer v0.12.1
+   Compiling ctutils v0.4.2
+   Compiling num-traits v0.2.19
+   Compiling pkg-config v0.3.33
+   Compiling unicase v2.9.0
+   Compiling regex-syntax v0.8.11
+   Compiling const-oid v0.10.2
+   Compiling try-lock v0.2.5
+   Compiling atomic-waker v1.1.2
+   Compiling fnv v1.0.7
+   Compiling foldhash v0.1.5
+   Compiling zmij v1.0.23
+   Compiling want v0.3.1
+   Compiling hashbrown v0.15.5
+   Compiling digest v0.11.3
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling sync_wrapper v1.0.2
+   Compiling fixedbitset v0.5.7
+   Compiling thiserror v2.0.19
+   Compiling core-foundation-sys v0.8.7
+   Compiling regex-automata v0.4.16
+   Compiling serde_json v1.0.151
+   Compiling tower-layer v0.3.3
+   Compiling httpdate v1.0.3
+   Compiling fastrand v2.5.0
+   Compiling pulldown-cmark-to-cmark v22.0.0
+   Compiling tempfile v3.27.0
+   Compiling petgraph v0.8.3
+   Compiling iana-time-zone v0.1.65
+   Compiling cpufeatures v0.3.0
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.19
+   Compiling http-body-util v0.1.4
+   Compiling heck v0.5.0
+   Compiling multimap v0.10.1
+   Compiling termcolor v1.4.1
+   Compiling mime v0.3.17
+   Compiling async-trait v0.1.91
+   Compiling regex v1.13.1
+   Compiling axum-core v0.5.6
+   Compiling tokio-macros v2.7.1
+   Compiling futures-macro v0.3.33
+   Compiling tracing-attributes v0.1.31
+   Compiling prost-derive v0.14.4
+   Compiling ts-rs-macros v12.0.1
+   Compiling tokio v1.53.1
+   Compiling futures-util v0.3.33
+   Compiling pin-project-internal v1.1.13
+   Compiling tonic-build v0.14.6
+   Compiling uuid v1.24.0
+   Compiling tracing v0.1.44
+   Compiling protoc-bin-vendored-linux-s390_64 v3.2.0
+   Compiling matchit v0.8.4
+   Compiling prost v0.14.4
+   Compiling zstd-safe v7.2.4
+   Compiling percent-encoding v2.3.2
+   Compiling crc32fast v1.5.0
+   Compiling protoc-bin-vendored-macos-aarch_64 v3.2.0
+   Compiling protoc-bin-vendored-macos-x86_64 v3.2.0
+   Compiling protoc-bin-vendored-linux-ppcle_64 v3.2.0
+   Compiling protoc-bin-vendored-linux-x86_64 v3.2.0
+   Compiling protoc-bin-vendored-linux-x86_32 v3.2.0
+   Compiling protoc-bin-vendored-win32 v3.2.0
+   Compiling protoc-bin-vendored-linux-aarch_64 v3.2.0
+   Compiling pin-project v1.1.13
+   Compiling protoc-bin-vendored v3.2.0
+   Compiling inout v0.2.2
+   Compiling base64 v0.22.1
+   Compiling cipher v0.5.2
+   Compiling sha2 v0.11.0
+   Compiling hmac v0.13.0
+   Compiling time-core v0.1.9
+   Compiling ref-cast v1.0.26
+   Compiling libbz2-rs-sys v0.2.5
+   Compiling zlib-rs v0.6.6
+   Compiling num-conv v0.2.2
+   Compiling winnow v1.0.4
+   Compiling cpubits v0.1.1
+   Compiling bumpalo v3.20.3
+   Compiling deranged v0.5.8
+   Compiling simd-adler32 v0.3.10
+   Compiling powerfmt v0.2.0
+   Compiling prost-types v0.14.4
+   Compiling aes v0.9.1
+   Compiling toml_parser v1.1.2+spec-1.1.0
+   Compiling time v0.3.54
+   Compiling bzip2 v0.6.1
+   Compiling futures-executor v0.3.33
+   Compiling tokio-util v0.7.19
+   Compiling prost-build v0.14.4
+   Compiling chrono v0.4.45
+   Compiling tokio-stream v0.1.19
+   Compiling zopfli v0.8.3
+   Compiling h2 v0.4.15
+   Compiling tower v0.5.3
+   Compiling tonic-prost-build v0.14.5
+   Compiling pbkdf2 v0.13.0
+   Compiling lzma-rust2 v0.16.5
+   Compiling sha1 v0.11.0
+   Compiling aion-proto-generated v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-proto-generated)
+   Compiling ref-cast-impl v1.0.26
+   Compiling serde_derive_internals v0.29.1
+   Compiling axum v0.8.9
+   Compiling ts-rs v12.0.1
+   Compiling serde_spanned v1.1.1
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling toml_writer v1.1.2+spec-1.1.0
+   Compiling flate2 v1.1.9
+   Compiling constant_time_eq v0.4.2
+   Compiling aion-core v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-core)
+   Compiling deflate64 v0.1.12
+   Compiling ppmd-rust v1.4.0
+   Compiling typed-path v0.12.3
+   Compiling toml v1.1.3+spec-1.1.0
+   Compiling schemars_derive v1.2.1
+   Compiling futures v0.3.33
+   Compiling dyn-clone v1.0.20
+   Compiling hostname v0.4.2
+   Compiling hyper v1.11.0
+   Compiling schemars v1.2.1
+   Compiling hyper-util v0.1.20
+   Compiling zstd v0.13.3
+   Compiling zip v8.6.0
+   Compiling hyper-timeout v0.5.2
+   Compiling tonic v0.14.6
+   Compiling aion-integrations v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-integrations)
+   Compiling aion-package v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-package)
+   Compiling tonic-prost v0.14.5
+   Compiling aion-proto v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-proto)
+   Compiling aion-worker v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-worker)
+   Compiling agent_demo_worker v0.1.0 (/private/var/folders/87/tdf6vfls1fj_4ydz_y6sk3580000gn/T/.tmpR8lSdh/agent_demo/worker)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 22.90s
+test scaffolded_agent_runs_scout_act_verify_review_with_resolve_and_timeout ... FAILED
+
+failures:
+
+---- scaffolded_agent_runs_scout_act_verify_review_with_resolve_and_timeout stdout ----
+Error: "expected success, got Some(1); stdout:  stderr: error[invalid_state]: failed to start workflow: NO_QUEUE_DECLARATION: workflow `agent_demo` version `dc515e9763e6c9fa87cbb6b8bbc1f73160250d947b123bfc09865b8e32b7fd65` has unscoped activities act,scout,verify; re-deploy from a checked AWL contract\n  server error type: NoQueueDeclaration\n  hint: the target run is not in a state this operation accepts (e.g. reopen requires a terminal Failed or Cancelled run); inspect it with `aion describe <workflow-id>`\n"
+
+
+failures:
+    scaffolded_agent_runs_scout_act_verify_review_with_resolve_and_timeout
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 27.04s
+
+error: test failed, to rerun pass `-p aion-cli --test new_agent_e2e`

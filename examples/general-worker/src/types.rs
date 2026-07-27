@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Input accepted by the `run_agent` activity.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
 pub struct RunAgentInput {
     /// System instructions appended for this run.
     pub instructions: String,
@@ -19,8 +19,15 @@ pub struct RunAgentInput {
     pub disallowed_tools: Option<String>,
 }
 
+/// Output promised by the default `run_agent` activity.
+#[derive(Clone, Debug, Serialize, schemars::JsonSchema)]
+pub struct AgentResult {
+    /// Concise workspace summary requested by the default activity.
+    pub summary: String,
+}
+
 /// Input accepted by the `run_command` activity.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
 pub struct CommandInput {
     /// Working directory for the child process.
     pub workspace_path: String,
@@ -31,7 +38,7 @@ pub struct CommandInput {
 }
 
 /// Output returned by the `run_command` activity.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
 pub struct CommandOutput {
     /// Human-readable command name copied from the input.
     pub name: String,
@@ -50,7 +57,7 @@ pub struct CommandOutput {
 }
 
 /// Input accepted by the `parse_output` activity.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
 pub struct ParseInput {
     /// Text to parse.
     pub text: String,
@@ -61,7 +68,7 @@ pub struct ParseInput {
 }
 
 /// Data-level parse result returned by `parse_output`.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, schemars::JsonSchema)]
 pub struct ParseOutput {
     /// Whether the requested value was found and rendered.
     pub ok: bool,

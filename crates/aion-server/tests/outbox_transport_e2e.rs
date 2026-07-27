@@ -62,8 +62,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use aion_core::Event;
 use aion_package::{
-    BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest, ManifestVersion,
-    PackageBuilder,
+    ActionContract, BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest,
+    ManifestVersion, PackageBuilder, PackageContract, WorkerContract,
 };
 use aion_proto::generated::worker_protocol_client::WorkerProtocolClient;
 use aion_proto::generated::{self, server_to_worker, worker_to_server};
@@ -141,8 +141,34 @@ fn write_package_archive(dir: &std::path::Path) -> Result<PathBuf, TestError> {
         format_version: CURRENT_FORMAT_VERSION,
         additional_workflows: Vec::new(),
     };
+    // The cutover runs start through strict queue-routed admission, so the
+    // fixture declares its REAL queue surface — the fan actions the raw
+    // worker serves — instead of the manifest's vestigial unscoped name.
+    let contract = PackageContract {
+        input_schema: json!({ "type": "object" }),
+        output_schema: json!({}),
+        workers: vec![WorkerContract {
+            task_queue: TASK_QUEUE.to_owned(),
+            actions: FAN_ACTIVITY_TYPES
+                .iter()
+                .map(|name| ActionContract {
+                    name: (*name).to_owned(),
+                    input_schema: json!({}),
+                    output_schema: json!({}),
+                    node: None,
+                    timeout: None,
+                    retry: None,
+                })
+                .collect(),
+        }],
+        children: Vec::new(),
+        signals: Vec::new(),
+        additional_workflows: Vec::new(),
+        unscoped_activities: Vec::new(),
+    };
     let archive =
         PackageBuilder::with_source(manifest, beams, [(OUTBOX_MODULE, OUTBOX_SOURCE.to_vec())])
+            .with_contract(contract)
             .write_to_bytes()?;
     let path = dir.join("collect_four.aion");
     std::fs::write(&path, archive)?;
@@ -252,6 +278,17 @@ impl WorkerSession {
                             .collect(),
                         task_queue: TASK_QUEUE.to_owned(),
                         node: String::new(),
+                        // Advertise the typed census matching the deployed
+                        // fixture contract, or registration diffs refuse it.
+                        activities: FAN_ACTIVITY_TYPES
+                            .iter()
+                            .map(|name| generated::ActivityDescriptor {
+                                name: (*name).to_owned(),
+                                input_schema_json: "{}".to_owned(),
+                                output_schema_json: "{}".to_owned(),
+                            })
+                            .collect(),
+                        identity: "outbox-test-worker".to_owned(),
                     },
                 )),
             })

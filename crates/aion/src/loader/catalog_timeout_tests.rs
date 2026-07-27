@@ -27,7 +27,6 @@ fn additional_entry(workflow_type: &str, timeout: Option<Duration>) -> WorkflowE
 fn multi_entry_package(
     primary: Option<Duration>,
     additional: Vec<WorkflowEntry>,
-    explicit: bool,
 ) -> Result<Package, aion_package::PackageError> {
     let beams = BeamSet::new(vec![BeamModule::new("workflow/order", vec![1, 2, 3])])?;
     let manifest = Manifest {
@@ -41,33 +40,27 @@ fn multi_entry_package(
         format_version: CURRENT_FORMAT_VERSION,
         additional_workflows: additional,
     };
-    let mut builder = PackageBuilder::new(manifest, beams);
-    if explicit {
-        builder = builder.with_explicit_timeout_identity();
-    }
-    let archive = builder.write_to_bytes()?;
+    let archive = PackageBuilder::new(manifest, beams).write_to_bytes()?;
     Package::load_from_bytes(archive, ExtractionLimits::unbounded())
 }
 
-/// LAW 2, per-entry: a legacy (beams-only) identity carrying BOTH a primary and
-/// an additional-entry timeout value arms nothing — every entry reads as
-/// undeclared regardless of the values the manifest happens to carry.
+/// The mandatory v4 identity authenticates every timeout without an opt-in
+/// builder mode.
 #[test]
-fn legacy_identity_with_additional_timeout_arms_no_entry() -> TestResult {
+fn package_builder_authenticates_every_entry_timeout() -> TestResult {
     let package = multi_entry_package(
         Some(Duration::from_secs(3_600)),
         vec![additional_entry(
             "order_child",
             Some(Duration::from_secs(3_600)),
         )],
-        false,
     )?;
-    assert!(!package.has_declared_timeout());
-    assert_eq!(package.declared_timeout(), None);
+    assert!(package.has_declared_timeout());
+    assert_eq!(package.declared_timeout(), Some(Duration::from_secs(3_600)));
     assert_eq!(
         package.declared_entry_timeout(Some(Duration::from_secs(3_600))),
-        None,
-        "an additional entry under a legacy identity is unarmed"
+        Some(Duration::from_secs(3_600)),
+        "the v4 contract authenticates additional entry timeouts"
     );
     Ok(())
 }
@@ -83,7 +76,6 @@ fn per_entry_identity_authenticates_primary_and_additional() -> TestResult {
             "order_child",
             Some(Duration::from_secs(30)),
         )],
-        true,
     )?;
     assert!(package.has_declared_timeout());
     assert_eq!(package.declared_timeout(), Some(Duration::from_secs(60)));
@@ -95,7 +87,7 @@ fn per_entry_identity_authenticates_primary_and_additional() -> TestResult {
     Ok(())
 }
 
-fn package(timeout: Duration, explicit: bool) -> Result<Package, aion_package::PackageError> {
+fn package(timeout: Duration) -> Result<Package, aion_package::PackageError> {
     let beams = BeamSet::new(vec![BeamModule::new("workflow/order", vec![1, 2, 3])])?;
     let manifest = Manifest {
         entry_module: "workflow/order".to_owned(),
@@ -108,11 +100,7 @@ fn package(timeout: Duration, explicit: bool) -> Result<Package, aion_package::P
         format_version: CURRENT_FORMAT_VERSION,
         additional_workflows: Vec::new(),
     };
-    let mut builder = PackageBuilder::new(manifest, beams);
-    if explicit {
-        builder = builder.with_explicit_timeout_identity();
-    }
-    let archive = builder.write_to_bytes()?;
+    let archive = PackageBuilder::new(manifest, beams).write_to_bytes()?;
     Package::load_from_bytes(archive, ExtractionLimits::unbounded())
 }
 
@@ -132,8 +120,8 @@ async fn load(
 
 #[tokio::test]
 async fn timeout_only_redeploy_loads_as_a_new_version() -> TestResult {
-    let original = package(Duration::from_secs(3_600), false)?;
-    let edited = package(Duration::from_secs(7_200), true)?;
+    let original = package(Duration::from_secs(3_600))?;
+    let edited = package(Duration::from_secs(7_200))?;
     assert_eq!(original.beams(), edited.beams());
     assert_ne!(original.content_hash(), edited.content_hash());
 

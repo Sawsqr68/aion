@@ -99,6 +99,7 @@ async fn reopen_failed_workflow_supersedes_terminal_and_re_drives_running()
     let (workflow_id, run_id) = seed_failed_run(&store, &hash, "default").await?;
 
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -150,6 +151,7 @@ async fn reopen_of_a_failed_run_preserves_namespace_affinity()
     let (workflow_id, run_id) = seed_failed_run(&store, &hash, "remote").await?;
 
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -227,6 +229,7 @@ async fn double_reopen_of_a_running_run_is_rejected() -> Result<(), Box<dyn std:
     let (workflow_id, run_id) = seed_failed_run(&store, &hash, "default").await?;
 
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -265,6 +268,7 @@ async fn restart_after_reopen_recovers_the_run_as_running() -> Result<(), Box<dy
     .await?;
 
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -278,6 +282,7 @@ async fn restart_after_reopen_recovers_the_run_as_running() -> Result<(), Box<dy
     // and re-drives it through the ordinary startup recovery path — no
     // reopen-specific special-casing.
     let recovered = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -388,6 +393,7 @@ async fn reopen_clears_the_lingering_handle_of_a_run_that_failed_while_resident(
     let (workflow_id, run_id) = seed_failed_run(&store, &hash, "default").await?;
 
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -425,6 +431,7 @@ async fn reopen_still_rejects_a_genuinely_running_concurrent_reopen()
     let (workflow_id, run_id) = seed_failed_run(&store, &hash, "default").await?;
 
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -471,6 +478,7 @@ async fn reopened_failed_run_can_fail_and_be_reopened_again()
     let (workflow_id, run_id) = seed_failed_run(&store, &hash, "default").await?;
 
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)

@@ -96,6 +96,7 @@ async fn engine_with(
     packages: Vec<Package>,
 ) -> Result<Engine, Box<dyn std::error::Error>> {
     let mut builder = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(store))
         .in_memory_visibility()
         .scheduler_threads(1)

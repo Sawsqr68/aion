@@ -61,6 +61,7 @@ async fn engine_over(
     let package = fixture_package(entry_function)?;
     let hash = package.content_hash().to_string();
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -231,6 +232,7 @@ async fn paused_run_is_recovery_excluded_then_resumes_and_completes()
     .await?;
 
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)

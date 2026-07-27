@@ -120,6 +120,7 @@ async fn engine_with_store(
     store: Arc<dyn EventStore>,
 ) -> Result<Engine, Box<dyn std::error::Error>> {
     Ok(EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(store)
         .in_memory_visibility()
         .scheduler_threads(1)

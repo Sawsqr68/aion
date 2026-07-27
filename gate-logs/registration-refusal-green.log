@@ -1,0 +1,25 @@
+   Compiling aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-server)
+warning: missing documentation for the crate
+   --> crates/aion-server/tests/worker_contract_registration.rs:1:1
+    |
+  1 | / use std::net::SocketAddr;
+  2 | | use std::time::Duration;
+  3 | |
+  4 | | use aion_awl_package::compile_and_assemble_awl;
+...   |
+149 | |     Ok(())
+150 | | }
+    | |_^
+    |
+    = note: requested on the command line with `-W missing-docs`
+
+warning: `aion-server` (test "worker_contract_registration") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 15.57s
+     Running tests/worker_contract_registration.rs (target/debug/deps/worker_contract_registration-5f4503f93b875be7)
+
+running 2 tests
+test matching_worker_receives_register_ack ... ok
+test mismatched_worker_is_refused_with_field_level_diff ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+

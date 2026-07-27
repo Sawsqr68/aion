@@ -144,6 +144,8 @@ impl Cluster {
                         activity_types: vec![ACTIVITY_TYPE.to_owned()],
                         task_queue: task_queue.to_owned(),
                         node: node.to_owned(),
+                        activities: Vec::new(),
+                        identity: label.to_owned(),
                     },
                 )),
             })

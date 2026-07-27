@@ -185,7 +185,7 @@ fn build_workflow_package(
         // Gleam `workflow.toml` requires a primary timeout, so it is always an
         // authored value; the Gleam path does not opt into explicit-timeout
         // package identity, so the engine still reads it as non-arming.
-        timeout: Some(workflow.timeout),
+        timeout: workflow.timeout,
         activities: workflow
             .activities
             .iter()
@@ -483,7 +483,7 @@ activities = []
     }
 
     #[test]
-    fn multi_workflow_project_shares_hash_with_distinct_deployed_entries() -> TestResult {
+    fn multi_workflow_project_binds_each_primary_route_into_identity() -> TestResult {
         let root = fixture::synthetic_built_project("assemble-multi")?;
         fixture::write_file(&root, "workflow.toml", TWO_WORKFLOW_TOML.as_bytes())?;
         let report = package_project(&root, &PackageOptions::default());
@@ -495,7 +495,7 @@ activities = []
         let second = &report.packages[1];
         assert_eq!(first.workflow_type, "demo");
         assert_eq!(second.workflow_type, "demo@nested");
-        assert_eq!(first.package.content_hash(), second.package.content_hash());
+        assert_ne!(first.package.content_hash(), second.package.content_hash());
         assert_ne!(
             first.package.deployed_entry_module(),
             second.package.deployed_entry_module()

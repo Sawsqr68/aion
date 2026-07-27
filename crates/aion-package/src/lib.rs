@@ -22,6 +22,10 @@ pub mod beam;
 pub mod builder;
 /// Gleam type and JSON codec generation from project schemas.
 pub mod codegen;
+/// Worker advertisement compatibility and field-level differences.
+pub mod compatibility;
+/// Durable worker-contract records and canonical identity encoding.
+pub mod contract;
 /// Package validation and archive-loading errors.
 pub mod error;
 /// Explicit inflate budgets for archive extraction.
@@ -50,9 +54,17 @@ pub use codegen::{
     build_input_skeleton, emit_schemas, generate_activities, generate_codecs,
     generate_test_scaffold, parse_declarations,
 };
+pub use compatibility::{ContractDiff, contract_diffs};
+pub use contract::{
+    ActionContract, ActivityDescriptor, AdditionalWorkflowContract, ChildContract,
+    ContractIdentityError, PackageContract, RetryContract, SignalContract, WorkerContract,
+};
 pub use error::PackageError;
 pub use extraction::ExtractionLimits;
-pub use hash::{ContentHash, content_hash, content_hash_with_timeout, content_hash_with_timeouts};
+pub use hash::{
+    ContentHash, content_hash, content_hash_with_contract, content_hash_with_timeout,
+    content_hash_with_timeouts,
+};
 pub use manifest::{
     CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest, ManifestDigest, ManifestVersion,
     WorkflowEntry,

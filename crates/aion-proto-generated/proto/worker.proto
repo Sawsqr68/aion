@@ -91,6 +91,15 @@ message ResultAck {
 // within a pool; absent means the worker is reachable for unpinned dispatches.
 // `activity_type` (carried separately at registration) is NOT a routing
 // dimension — it is matched inside a pool after the pool is selected.
+message ActivityDescriptor {
+  // Activity type whose concrete serde types produced these schemas.
+  string name = 1;
+  // Canonical JSON Schema accepted by the worker.
+  string input_schema_json = 2;
+  // Canonical JSON Schema produced by the worker.
+  string output_schema_json = 3;
+}
+
 message RegisterWorker {
   // Set of correctness/isolation boundaries this worker is authorized for. The
   // server indexes the worker under each, matching a workflow's activities only
@@ -106,6 +115,11 @@ message RegisterWorker {
   // empty value means the worker carries no locality and is reachable only for
   // unpinned dispatches' general pool. Default = the worker's machine hostname.
   string node = 4;
+  // Typed action surface. Empty means this worker predates contract commitment
+  // and is refused whenever a deployed `.v4` contract requires this queue.
+  repeated ActivityDescriptor activities = 5;
+  // Stable worker-build identity used to correlate compatibility decisions.
+  string identity = 6;
 }
 
 // Activity invocation pushed by the server to a registered worker.

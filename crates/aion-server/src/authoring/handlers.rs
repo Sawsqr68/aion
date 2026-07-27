@@ -236,12 +236,17 @@ pub(crate) fn package_with_options(
     };
     let mut manifest = package.manifest().clone();
     manifest.timeout = Some(timeout);
+    let contract = package.contract().map_err(|error| {
+        AuthoringApiError::Wire(WireError::invalid_input(format!(
+            "AWL manifest options require a `.v4` package contract: {error}"
+        )))
+    })?;
     let source = package
         .source()
         .iter()
         .map(|(name, bytes)| (name.clone(), bytes.clone()));
     let bytes = PackageBuilder::with_source(manifest, package.beams().clone(), source)
-        .with_explicit_timeout_identity()
+        .with_contract(contract.clone())
         .write_to_bytes()
         .map_err(|error| package_options_error(&error))?;
     Package::load_from_bytes(bytes, ExtractionLimits::unbounded())

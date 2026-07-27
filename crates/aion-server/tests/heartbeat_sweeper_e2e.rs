@@ -200,6 +200,8 @@ impl Harness {
                         activity_types: vec![ACTIVITY_TYPE.to_owned()],
                         task_queue: TASK_QUEUE.to_owned(),
                         node: String::new(),
+                        activities: Vec::new(),
+                        identity: "heartbeat-test-worker".to_owned(),
                     },
                 )),
             })
@@ -617,5 +619,65 @@ async fn sweeper_exits_promptly_on_shutdown_between_ticks() -> Result<(), TestEr
         stopped_in.elapsed() < Duration::from_secs(2),
         "sweeper must exit on the watch, not wait out its 7.5s tick"
     );
+    Ok(())
+}
+
+/// The no-catalog admission is admission-because-nothing-to-contradict, not a
+/// validity bypass: on this same engine-less server state (whose catalog-less
+/// registration path the suite's real-worker test proves ADMITS a well-formed
+/// worker), a registration advertising a malformed activity descriptor is
+/// still refused before any ack — declaration validity needs no catalog.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn no_catalog_registration_still_refuses_malformed_descriptor() -> Result<(), TestError> {
+    let ServerHarness {
+        address, server, ..
+    } = ServerHarness::start().await?;
+
+    let mut client = WorkerProtocolClient::connect(format!("http://{address}")).await?;
+    let (worker_tx, worker_rx) = tokio::sync::mpsc::channel::<generated::WorkerToServer>(8);
+    worker_tx
+        .send(generated::WorkerToServer {
+            message: Some(worker_to_server::Message::Register(
+                generated::RegisterWorker {
+                    namespaces: vec![NAMESPACE.to_owned()],
+                    activity_types: vec![ACTIVITY_TYPE.to_owned()],
+                    task_queue: TASK_QUEUE.to_owned(),
+                    node: String::new(),
+                    activities: vec![generated::ActivityDescriptor {
+                        name: ACTIVITY_TYPE.to_owned(),
+                        input_schema_json: "not json at all".to_owned(),
+                        output_schema_json: "{}".to_owned(),
+                    }],
+                    identity: "malformed-descriptor-worker".to_owned(),
+                },
+            )),
+        })
+        .await?;
+    let mut request = tonic::Request::new(ReceiverStream::new(worker_rx));
+    request
+        .metadata_mut()
+        .insert("x-aion-namespaces", NAMESPACE.parse()?);
+    let outcome = client.stream_worker(request).await;
+    let refused = match outcome {
+        Err(status) => status,
+        Ok(streaming) => {
+            let mut inbound = streaming.into_inner();
+            match inbound.message().await {
+                Err(status) => status,
+                Ok(frame) => {
+                    return Err(format!(
+                        "a malformed descriptor must refuse registration, got frame {frame:?}"
+                    )
+                    .into());
+                }
+            }
+        }
+    };
+    assert_eq!(refused.code(), tonic::Code::InvalidArgument);
+    assert!(
+        refused.message().contains("input_schema_json is invalid"),
+        "the refusal must name the malformed field: {refused:?}"
+    );
+    server.abort();
     Ok(())
 }

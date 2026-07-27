@@ -36,6 +36,7 @@ fn package() -> Result<aion_package::Package, Box<dyn std::error::Error>> {
 
 async fn build_engine(store: &Arc<dyn EventStore>) -> Result<Engine, Box<dyn std::error::Error>> {
     Ok(EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(store))
         .in_memory_visibility()
         .scheduler_threads(1)

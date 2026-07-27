@@ -1,0 +1,9 @@
+   Compiling aion-package v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-package)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.37s
+     Running tests/rust_worker_build.rs (target/debug/deps/rust_worker_build-a853126d4776b9af)
+
+running 1 test
+test generated_rust_worker_compiles_against_real_aion_worker ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 25.03s
+

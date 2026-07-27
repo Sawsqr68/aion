@@ -7,7 +7,7 @@
 
 use aion_awl::{CompiledWorkflow, SynthesizedWorkflowEntry};
 use aion_awl_package::{AssembleError, AwlAssembleOptions, assemble_awl, compile_and_assemble_awl};
-use aion_package::{ExtractionLimits, Package};
+use aion_package::{ExtractionLimits, Package, PackageContract};
 
 /// The B5 engine-proof document: a three-step parallel region with a
 /// tolerant collect.
@@ -133,6 +133,15 @@ fn with_children(entries: Vec<SynthesizedWorkflowEntry>) -> CompiledWorkflow {
         beam_bytes: b"opaque".to_vec(),
         input_schema: serde_json::json!({ "type": "object" }),
         output_schema: serde_json::json!({ "type": "object" }),
+        contract: PackageContract {
+            input_schema: serde_json::json!({ "type": "object" }),
+            output_schema: serde_json::json!({ "type": "object" }),
+            workers: Vec::new(),
+            children: Vec::new(),
+            signals: Vec::new(),
+            additional_workflows: Vec::new(),
+            unscoped_activities: Vec::new(),
+        },
         actions: Vec::new(),
         sidecar_bytes: Vec::new(),
         synthesized_workflows: entries,

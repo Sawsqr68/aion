@@ -23,8 +23,8 @@ use aion_core::{
     Payload, RunId, SearchAttributeSchema, SearchAttributeType, WorkflowId, WorkflowStatus,
 };
 use aion_package::{
-    BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, ExtractionLimits, Manifest,
-    ManifestVersion, Package, PackageBuilder,
+    BeamModule, BeamSet, CURRENT_FORMAT_VERSION, ExtractionLimits, Manifest, ManifestVersion,
+    Package, PackageBuilder,
 };
 use aion_proto::{
     ProtoQueryRequest, ProtoQueryResponse, ProtoSignalRequest, ProtoStartWorkflowRequest,
@@ -109,9 +109,10 @@ fn query_package(entry_function: &str) -> Result<Package, TestError> {
         input_schema: json!({ "type": "object" }),
         output_schema: json!({}),
         timeout: Some(Duration::from_secs(30)),
-        activities: vec![DeclaredActivity {
-            activity_type: "fixture_activity".to_owned(),
-        }],
+        // No activity declaration: nothing here is queue-served, and a
+        // vestigial unscoped name would refuse the start under `.v4`
+        // structural admission.
+        activities: Vec::new(),
         version: ManifestVersion::new("stamped-by-builder"),
         format_version: CURRENT_FORMAT_VERSION,
         additional_workflows: Vec::new(),

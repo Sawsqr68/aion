@@ -1,0 +1,9 @@
+   Compiling beamr v0.16.2
+    Checking aion-package v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-package)
+    Checking haematite v0.7.0
+    Checking aion-awl v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-awl)
+    Checking liminal-rs v0.4.1 (/Users/tom/Developer/ablative/aion/vendor/liminal-rs)
+    Checking liminal-sdk v0.4.1
+    Checking aion-worker v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-worker)
+    Checking cargo-gates-worker v0.1.0 (/Users/tom/Developer/ablative/aion/examples/cargo-gates/worker)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.60s

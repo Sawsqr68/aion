@@ -1,0 +1,164 @@
+   Compiling bytes v1.11.1
+   Compiling serde_core v1.0.228
+   Compiling smallvec v1.15.1
+   Compiling mio v1.2.1
+   Compiling anyhow v1.0.102
+   Compiling jobserver v0.1.34
+   Compiling errno v0.3.14
+   Compiling pulldown-cmark v0.13.4
+   Compiling getrandom v0.4.2
+   Compiling rustix v1.1.4
+   Compiling serde_json v1.0.150
+   Compiling sync_wrapper v1.0.2
+   Compiling parking_lot_core v0.9.12
+   Compiling cc v1.2.63
+   Compiling http v1.4.1
+   Compiling parking_lot v0.12.5
+   Compiling petgraph v0.8.3
+   Compiling tonic-build v0.14.6
+   Compiling tokio v1.52.3
+   Compiling http-body v1.0.1
+   Compiling tempfile v3.27.0
+   Compiling pulldown-cmark-to-cmark v22.0.0
+   Compiling http-body-util v0.1.3
+   Compiling ref-cast-impl v1.0.25
+   Compiling serde_derive_internals v0.29.1
+   Compiling serde v1.0.228
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling axum-core v0.5.6
+   Compiling uuid v1.23.4
+   Compiling serde_spanned v1.1.1
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling prost-derive v0.14.3
+   Compiling chrono v0.4.45
+   Compiling ref-cast v1.0.25
+   Compiling toml v1.1.2+spec-1.1.0
+   Compiling schemars_derive v1.2.1
+   Compiling ts-rs v12.0.1
+   Compiling schemars v1.2.1
+   Compiling prost v0.14.3
+   Compiling aion-core v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-core)
+   Compiling tokio-util v0.7.18
+   Compiling tokio-stream v0.1.18
+   Compiling h2 v0.4.14
+   Compiling tower v0.5.3
+   Compiling axum v0.8.9
+   Compiling prost-types v0.14.3
+   Compiling zstd-safe v7.2.4
+   Compiling hyper v1.10.1
+   Compiling prost-build v0.14.3
+   Compiling aion-integrations v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-integrations)
+   Compiling tonic-prost-build v0.14.5
+   Compiling aion-proto-generated v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-proto-generated)
+   Compiling hyper-util v0.1.20
+   Compiling zstd v0.13.3
+   Compiling hyper-timeout v0.5.2
+   Compiling tonic v0.14.6
+   Compiling zip v8.6.0
+   Compiling tonic-prost v0.14.5
+   Compiling aion-package v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-package)
+   Compiling aion-proto v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-proto)
+   Compiling aion-worker v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-worker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 18.08s
+     Running unittests src/lib.rs (target/debug/deps/aion_worker-a8d9d4b64576942a)
+
+running 78 tests
+test activity::tests::retryable_and_terminal_failures_map_to_distinct_wire_classifications ... ok
+test config::tests::worker_config_new_uses_auth_metadata_defaults ... ok
+test error::tests::display_messages_name_failed_condition ... ok
+test config::tests::worker_config_builder_round_trips_fields ... ok
+test error::tests::permission_denied_and_unauthenticated_are_not_retryable ... ok
+test error::tests::registration_error_exposes_boxed_grpc_status ... ok
+test error::tests::transient_and_non_grpc_failures_stay_retryable ... ok
+test config::tests::worker_config_builder_carries_namespace_set_and_node ... ok
+test error::tests::worker_error_is_send_sync_static ... ok
+test activity::tests::duplicate_activity_registration_is_rejected ... ok
+test context::tests::emit_event_is_a_no_op_without_an_installed_seam ... ok
+test context::tests::context_exposes_identity_attempt_and_cancellation_signal ... ok
+test protocol::reconnect::tests::re_reports_unacked_reports_without_removing_them ... ok
+test protocol::heartbeat::tests::colliding_sequence_positions_track_per_workflow ... ok
+test protocol::reconnect::tests::tracker_keeps_reports_for_distinct_workflows_at_the_same_sequence_position ... ok
+test context::tests::emit_event_forwards_to_installed_seam ... ok
+test protocol::heartbeat::tests::sends_explicit_heartbeats_and_preserves_detail ... ok
+test activity::tests::typed_activity_round_trips_through_registry ... ok
+test protocol::reconnect::tests::reconnect_fails_once_then_handshakes_and_registers ... ok
+test protocol::reconnect::tests::tracker_records_reports_and_acknowledges_by_workflow_and_activity_id ... ok
+test protocol::reconnect::tests::permission_denied_registration_stops_after_one_attempt ... ok
+test protocol::reconnect::tests::tracker_replaces_existing_activity_report ... ok
+test protocol::reconnect::tests::unauthenticated_handshake_stops_after_one_attempt ... ok
+test protocol::reconnect::tests::unavailable_transport_retries_until_attempts_exhausted ... ok
+test protocol::session::tests::apply_auth_metadata_sets_worker_authorization_headers ... ok
+test protocol::session::tests::registration_rejects_activity_without_handler ... ok
+test protocol::session::tests::fake_session_records_handshake_and_registration ... ok
+test protocol::task::tests::missing_required_field_maps_to_decode_error ... ok
+test protocol::session::tests::report_send_times_out_retryably_at_max_backoff ... ok
+test protocol::task::tests::decodes_proto_activity_task_preserving_payload_content_type ... ok
+test protocol::task::tests::zero_attempt_is_a_malformed_task ... ok
+test runtime::agent::tests::a_capability_gated_command_is_not_fatal ... ok
+test runtime::agent::tests::a_closed_event_sink_still_reaches_the_result ... ok
+test runtime::agent::tests::a_harness_reported_failure_surfaces_and_maps_to_failed ... ok
+test runtime::agent::tests::drives_events_to_sink_and_captures_the_terminal_result ... ok
+test runtime::agent::tests::a_command_with_an_ack_channel_replies_the_neutral_outcome ... ok
+test runtime::agent::tests::observability_only_session_runs_with_no_control_channel ... ok
+test runtime::agent::tests::feeds_control_commands_into_intervene ... ok
+test runtime::intervention::tests::a_command_to_an_empty_registry_is_a_stale_target_no_op ... ok
+test runtime::intervention::tests::a_deregistered_session_no_longer_receives_commands ... ok
+test runtime::intervention::tests::a_command_for_an_unknown_attempt_is_a_stale_target_no_op ... ok
+test runtime::intervention::tests::delivers_an_advertised_command_to_the_live_session ... ok
+test runtime::loop_::tests::liveness_pump_interval_is_quarter_window_floored_at_one_millisecond ... ok
+test runtime::intervention::tests::gates_an_unadvertised_primitive_at_the_worker ... ok
+test runtime::loop_::tests::drain_frame_ends_serve_as_drained_and_latches_health ... ok
+test runtime::loop_::tests::cancellation_event_flips_context_without_suppressing_result ... ok
+test runtime::loop_::tests::dispatches_two_tasks_and_reports_corresponding_outcomes ... ok
+test runtime::loop_::tests::zero_attempt_task_fails_serve_with_decode_error ... ok
+test runtime::loop_::tests::wire_attempt_is_exposed_on_the_activity_context ... ok
+test worker::tests::acked_results_decay_out_of_the_reconnect_replay ... ok
+test worker::tests::empty_worker_is_rejected ... ok
+test worker::tests::establishment_denial_surfaces_after_one_attempt ... ok
+test worker::tests::clean_close_loop_exhausts_drop_budget_with_classified_error ... ok
+test protocol::heartbeat::tests::last_heartbeat_timestamp_advances_on_each_send ... ok
+test worker::tests::drain_cycles_reconnect_without_consuming_drop_budget ... ok
+test worker::tests::mid_run_denial_surfaces_without_reconnect ... ok
+test worker::tests::drain_latch_keeps_abrupt_post_drain_failures_unbudgeted ... ok
+test worker::tests::mid_run_drop_budget_exhaustion_surfaces_last_drop_error ... ok
+test worker::tests::result_ack_clears_exactly_its_tracker_entry ... ok
+test worker::tests::post_drop_drain_time_does_not_reset_drop_budget ... ok
+test worker::tests::session_outliving_max_backoff_resets_drop_budget ... ok
+test worker::tests::shutdown_during_establishment_backoff_returns_promptly ... ok
+test worker::tests::served_tasks_reset_drop_budget_across_cycles ... ok
+test worker::tests::clean_close_reconnects_re_registers_and_keeps_serving ... ok
+test worker::tests::mid_run_drop_re_reports_unacked_results_for_all_workflows ... ok
+test worker::tests::establishment_retries_transient_failures_until_attempts_exhausted ... ok
+test worker::tests::shutdown_interrupts_hung_unacked_replay_promptly ... ok
+test worker::tests::worker_collects_two_activity_registration_names ... ok
+test worker::tests::worker_registers_names_with_session ... ok
+test worker::tests::mid_run_drop_reconnects_re_registers_and_re_reports_unacked ... ok
+test worker::tests::shutdown_during_recovery_establishment_returns_original_drop_error ... ok
+test runtime::loop_::tests::max_concurrency_caps_dispatches_at_two ... ok
+test worker::tests::shutdown_waits_for_slow_in_flight_activity ... ok
+test worker::tests::shutdown_during_mid_run_drop_backoff_returns_promptly ... ok
+test worker::tests::shutdown_during_clean_close_backoff_returns_ok_promptly ... ok
+test worker::tests::shutdown_during_post_drain_backoff_returns_ok_promptly ... ok
+test runtime::loop_::tests::no_window_means_no_automatic_heartbeats ... ok
+test runtime::loop_::tests::runtime_auto_heartbeats_long_activity_within_the_window ... ok
+
+test result: ok. 78 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+     Running tests/grpc_registration.rs (target/debug/deps/grpc_registration-550807f2089dbb4e)
+
+running 4 tests
+test register_completes_on_register_ack_and_captures_ack_payload ... ok
+test non_ack_first_frame_is_a_typed_protocol_violation ... ok
+test register_surfaces_server_permission_denial_as_non_retryable ... ok
+test register_times_out_retryably_when_server_never_acks ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+   Doc-tests aion_worker
+
+running 1 test
+test crates/aion-worker/src/lib.rs - (line 9) - compile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 1.78s; merged doctests compilation took 0.47s

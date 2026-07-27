@@ -412,6 +412,27 @@ async fn assert_durable_child_overlap(
     Ok(())
 }
 
+/// Build the gated in-process engine over `store` for the parallelism proof.
+async fn gated_engine(
+    store: &Arc<dyn EventStore>,
+    gates: &Arc<Gates>,
+) -> Result<aion::Engine, Box<dyn std::error::Error>> {
+    Ok(EngineBuilder::new()
+        .in_process_activity_serving()
+        .store_arc(Arc::clone(store))
+        .in_memory_visibility()
+        .scheduler_threads(4)
+        .signal_router_factory(|runtime: Arc<RuntimeHandle>, handoff| {
+            Arc::new(ConcreteSignalRouter::new(runtime, handoff)) as Arc<dyn SignalRouter>
+        })
+        .activity_dispatcher(Arc::new(GatedDispatcher {
+            gates: Arc::clone(gates),
+        }))
+        .load_workflows(emitted_package()?)
+        .build()
+        .await?)
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn emitted_multistep_distribute_is_parallel_ordered_and_tolerant() -> TestResult {
     if crate::gleam_test_support::skip_if_unavailable() {
@@ -419,19 +440,7 @@ async fn emitted_multistep_distribute_is_parallel_ordered_and_tolerant() -> Test
     }
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let gates = Gates::new();
-    let engine = EngineBuilder::new()
-        .store_arc(Arc::clone(&store))
-        .in_memory_visibility()
-        .scheduler_threads(4)
-        .signal_router_factory(|runtime: Arc<RuntimeHandle>, handoff| {
-            Arc::new(ConcreteSignalRouter::new(runtime, handoff)) as Arc<dyn SignalRouter>
-        })
-        .activity_dispatcher(Arc::new(GatedDispatcher {
-            gates: Arc::clone(&gates),
-        }))
-        .load_workflows(emitted_package()?)
-        .build()
-        .await?;
+    let engine = gated_engine(&store, &gates).await?;
     let handle = engine
         .start_workflow(
             MODULE,
