@@ -153,3 +153,22 @@ condition, both built:
   plain `cargo test --workspace` at the exact committed tree, exit 0,
   **214 suites, 0 failures**. Clippy `-D warnings` exit 0 at the same tree
   (`gate-logs/cargo-clippy-reviewer-final3.log`); `cargo fmt` clean.
+
+## The re-pin re-gate (post-publish, 2026-07-28)
+
+The landing refusal's road back, discharged: the liminal delta landed in
+its own repo (liminal main 4c2a4d8, gated at 62f3f80) and published as the
+0.5.0 lockstep family. Commit `ad3f6b0e` retires the vendored escape
+hatch — the `[patch.crates-io]` override, the workspace exclude, both
+example patch sections, and `vendor/liminal-rs` itself — and bumps the
+family pins to 0.5.0. The lock resolves liminal-rs / liminal-sdk /
+liminal-server from the registry alone; `git ls-files` counts zero
+vendor entries; the branch builds from a clean clone.
+
+* **Battery in a FRESH worktree at the committed tree** (per the
+  fresh-worktree gate law this lane minted): `gate-logs/regate-tests.log` —
+  `cargo test --workspace --no-fail-fast`, exit 0, **214 suites,
+  2939 passed, 0 failed** against the published crates. fmt clean
+  (`regate-fmt.log`), clippy `-D warnings` exit 0 (`regate-clippy.log`);
+  exit manifests alongside. Same suite count as the citable battery; the
+  only delta between the trees is the dependency source.
