@@ -164,6 +164,9 @@ pub(super) async fn dispatch_with_retries(
             Err(reason) => reason,
         };
         if let Some(terminal) = failure_stand_down(policy.as_ref(), &reason, attempt) {
+            if matches!(terminal, RetryLoopTerminal::Failed(_)) {
+                record_advisory_exhaustion(seam, request, &reason, attempt).await;
+            }
             return RetryLoopOutcome { attempt, terminal };
         }
         // The stand-down above returns `Failed` whenever no policy is present,
@@ -254,12 +257,64 @@ pub(super) async fn dispatch_with_retries(
     }
 }
 
+/// Record the R5 warning when an ADVISORY activity's attempt budget is spent
+/// (RUNTIME-OPERATIONS.md R5).
+///
+/// "Retry exhaustion" is read as the attempt budget being SPENT, whatever its
+/// size: an advisory action with no declared retry has a budget of one, and its
+/// single failure exhausts it exactly as a declared `retry 5` exhausts five.
+/// The warning therefore fires on every terminal failure of an advisory
+/// dispatch, and never on a park or a settled-elsewhere stand-down (neither is
+/// a failure, and both must record nothing).
+///
+/// Ordering: the warning lands JUST BEFORE the failure is delivered, so it
+/// precedes the terminal `ActivityFailed` the workflow thread records on
+/// receipt. Both are in history; the warning never replaces the failure.
+///
+/// A recording failure here is logged and swallowed — deliberately. The
+/// activity's own honest terminal is what the workflow acts on; losing the
+/// warning must not also change the outcome the run gets.
+async fn record_advisory_exhaustion(
+    seam: &RetryRecorderSeam,
+    request: &ActivityDispatch,
+    reason: &str,
+    attempt: u32,
+) {
+    if !request.advisory {
+        return;
+    }
+    match record_retry_event(
+        seam,
+        request,
+        RetryRecord::AdvisoryExhausted {
+            attempt,
+            reason: reason.to_owned(),
+        },
+    )
+    .await
+    {
+        RetryRecordOutcome::Recorded | RetryRecordOutcome::Settled => {}
+        RetryRecordOutcome::RecordFailed(record_error) => {
+            tracing::warn!(
+                workflow_id = %request.workflow_id,
+                activity_id = %request.activity_id,
+                attempt,
+                error = %record_error,
+                "failed to record the advisory-exhaustion warning; the activity's terminal \
+                 failure still stands"
+            );
+        }
+    }
+}
+
 /// One durable retry record the loop appends between attempts.
 enum RetryRecord {
     /// The just-failed attempt's non-terminal `ActivityFailed`.
     AttemptFailed { attempt: u32, reason: String },
     /// The next delivery's `ActivityStarted`.
     AttemptStarted { attempt: u32 },
+    /// The R5 warning that an ADVISORY activity spent its attempt budget.
+    AdvisoryExhausted { attempt: u32, reason: String },
 }
 
 enum RetryRecordOutcome {
@@ -310,6 +365,17 @@ async fn record_retry_event(
         RetryRecord::AttemptStarted { attempt } => {
             recorder
                 .record_activity_started(chrono::Utc::now(), request.activity_id.clone(), attempt)
+                .await
+        }
+        RetryRecord::AdvisoryExhausted { attempt, reason } => {
+            recorder
+                .record_activity_advisory_exhausted(
+                    chrono::Utc::now(),
+                    request.activity_id.clone(),
+                    request.name.clone(),
+                    reason,
+                    attempt,
+                )
                 .await
         }
     };

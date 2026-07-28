@@ -391,6 +391,11 @@ fn print_action(printer: &mut Printer, action: &ActionDecl) {
 pub(super) fn print_config_line(printer: &mut Printer, indent: usize, config: &ConfigLine) {
     printer.leads(indent, &config.lead);
     let mut parts = Vec::new();
+    // `advisory` leads: it classifies the action, and the keys after it
+    // configure how that class is delivered.
+    if config.advisory.is_some() {
+        parts.push("advisory".to_owned());
+    }
     if let Some(node) = &config.node {
         parts.push(format!("node {}", node.name));
     }

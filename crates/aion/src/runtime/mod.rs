@@ -13,6 +13,7 @@ pub mod monitor;
 /// Native-function registration records.
 pub mod nif;
 mod nif_activity;
+mod nif_activity_advisory;
 mod nif_activity_await;
 #[cfg(test)]
 mod nif_activity_delivery_tests;
@@ -26,6 +27,7 @@ mod nif_child_spawn_retry;
 mod nif_child_tasks;
 mod nif_child_watch;
 mod nif_collect;
+mod nif_collect_dispatch;
 mod nif_collect_settlement;
 mod nif_concurrency;
 /// Workflow NIF execution context.

@@ -213,6 +213,7 @@ mod tests {
                 node: None,
                 timeout: None,
                 retry: None,
+                advisory: false,
             }],
         }
     }

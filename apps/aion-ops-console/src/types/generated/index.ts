@@ -421,6 +421,27 @@ error: ActivityError,
 /**
  * One-based activity attempt number that produced this failure.
  */
+attempt: number, } } | { "type": "ActivityAdvisoryExhausted", "data": { 
+/**
+ * Recording metadata for this event.
+ */
+envelope: EventEnvelope, 
+/**
+ * Advisory activity whose attempt budget was spent.
+ */
+activity_id: ActivityId, 
+/**
+ * Activity type of the exhausted advisory activity.
+ */
+activity_type: string, 
+/**
+ * The last attempt's failure reason, verbatim — the same string the
+ * accompanying terminal [`Event::ActivityFailed`] carries.
+ */
+reason: string, 
+/**
+ * One-based number of the attempt that spent the budget.
+ */
 attempt: number, } } | { "type": "ActivityCancelled", "data": { 
 /**
  * Recording metadata for this event.

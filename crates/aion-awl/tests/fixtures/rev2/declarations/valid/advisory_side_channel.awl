@@ -1,0 +1,20 @@
+//! Announce progress on a side channel, then do the work the run exists for.
+workflow announce_and_build
+  input project_dir: String
+  outcome built: type BuildResult, route success
+
+type BuildResult { artifact_path: String }
+
+worker builder
+  /// A side channel: the run must survive an announcement outage.
+  action announce(project_dir: String) -> Nil
+    advisory, node shell, timeout 30s, retry 3 every 10s
+  action compile(project_dir: String) -> BuildResult
+    node shell, timeout 20m
+
+step announce
+  announce(project_dir: project_dir)
+
+step build after announce
+  compile(project_dir: project_dir) -> result
+  route built(artifact_path: result.artifact_path)

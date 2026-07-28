@@ -97,6 +97,8 @@ pub enum Keyword {
     Timeout,
     /// `retry`.
     Retry,
+    /// `advisory`.
+    Advisory,
     /// `every`.
     Every,
     /// `backoff`.
@@ -191,6 +193,7 @@ impl Keyword {
             Self::Sleep => "sleep",
             Self::Timeout => "timeout",
             Self::Retry => "retry",
+            Self::Advisory => "advisory",
             Self::Every => "every",
             Self::Backoff => "backoff",
             Self::Node => "node",
@@ -253,6 +256,7 @@ impl Keyword {
             "sleep" => Some(Self::Sleep),
             "timeout" => Some(Self::Timeout),
             "retry" => Some(Self::Retry),
+            "advisory" => Some(Self::Advisory),
             "every" => Some(Self::Every),
             "backoff" => Some(Self::Backoff),
             "node" => Some(Self::Node),

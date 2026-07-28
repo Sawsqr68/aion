@@ -1,0 +1,13 @@
+//! A pipe stage hands its value on; an advisory stage would have none.
+workflow notify_pipeline
+  input subject: String
+  outcome told: type Receipt, route success
+
+type Receipt { id: String }
+
+worker notifier
+  action notify(subject: String) -> Receipt
+    advisory, retry 3 every 10s
+
+step notify
+  subject |> notify |> route told

@@ -30,7 +30,7 @@ use aion_core::{ActivityId, Event};
 use chrono::Utc;
 use serde::Deserialize;
 
-use crate::activity::bridge::{ActivityDispatch, ActivityDispatcher};
+use crate::activity::bridge::ActivityDispatcher;
 use crate::durability::FanOutItem;
 use crate::error::EngineError;
 use crate::registry::Registry;
@@ -42,9 +42,9 @@ use crate::runtime::nif_state::{CollectKind, EngineNifState, PendingAwait};
 /// One fan-out member, decoded from the SDK's activity-spec JSON.
 #[derive(Deserialize)]
 pub(super) struct ActivitySpec {
-    name: String,
-    input: String,
-    config: String,
+    pub(super) name: String,
+    pub(super) input: String,
+    pub(super) config: String,
 }
 
 impl ActivitySpec {
@@ -69,6 +69,10 @@ pub(super) struct CollectDeps {
     pub(super) runtime: Arc<RuntimeHandle>,
     pub(super) tokio_handle: tokio::runtime::Handle,
     pub(super) dispatcher: Option<Arc<dyn ActivityDispatcher>>,
+    /// The loaded-workflow catalog, the authority on an action's declared
+    /// advisory class (R5). `None` before engine build wires it, which reads
+    /// as "not advisory" — the pre-R5 posture.
+    pub(super) advisory_catalog: Option<Arc<crate::loader::WorkflowCatalog>>,
 }
 
 /// One fan-out member's settlement state after a sweep.
@@ -354,29 +358,15 @@ fn dispatch_unscheduled(
             },
             context.pid(),
             super::nif_activity::correlation_id(*ordinal),
-            ActivityDispatch {
-                namespace: namespace.clone(),
-                // NSTQ-4 (+#144): resolve once at this schedule seam (member
-                // override > workflow default > the workflow's recorded start-time
-                // queue > the named default), matching the recorded
-                // `ActivityScheduled` for this ordinal on the flag-OFF path.
-                task_queue: super::nif_activity::resolve_task_queue(
-                    &spec.config,
-                    start_time_task_queue,
-                ),
-                // NODE-4: resolve the OPTIONAL node affinity at the same seam
-                // (member pin, else None), matching the recorded
-                // `ActivityScheduled` for this ordinal on the flag-OFF path.
-                node: super::nif_activity::resolve_node(&spec.config),
-                workflow_id: workflow_id.clone(),
-                run_id: context.workflow_handle().run_id().clone(),
-                activity_id: ActivityId::from_sequence_position(*ordinal),
-                name: spec.name.clone(),
-                input: spec.input.clone(),
-                config: spec.config.clone(),
-                attempt: FIRST_DELIVERY_ATTEMPT,
-                labels: super::nif_activity::labels_from_config(&spec.config),
-            },
+            super::nif_collect_dispatch::member_dispatch(
+                deps,
+                context,
+                spec,
+                *ordinal,
+                &namespace,
+                &workflow_id,
+                start_time_task_queue,
+            ),
         );
     }
     Ok(())

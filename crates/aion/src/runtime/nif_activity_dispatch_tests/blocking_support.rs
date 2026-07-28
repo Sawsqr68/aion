@@ -70,6 +70,7 @@ fn blocking_dispatch_scenario() -> Result<Vec<u8>, String> {
                 config: "{}".to_owned(),
                 attempt: super::FIRST_DELIVERY_ATTEMPT,
                 labels: std::collections::BTreeMap::new(),
+                advisory: false,
             },
         );
         // The release runs as a task on this same single-threaded

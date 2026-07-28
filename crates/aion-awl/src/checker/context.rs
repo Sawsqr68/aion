@@ -89,6 +89,23 @@ pub(super) struct Callable {
     pub(super) params: Vec<Param>,
     /// Declared result type.
     pub(super) returns: Ty,
+    /// Span of the `advisory` marker when the DECLARATION carries it.
+    ///
+    /// Declaration-owned, like `retry`: an action is a side channel
+    /// everywhere or nowhere, so this is a property of the callable and not
+    /// of one call of it. `None` for children and subflows, which carry no
+    /// config line at all. An advisory action never faults its calling step
+    /// (RUNTIME-OPERATIONS.md R5), which is why its result may not be
+    /// consumed.
+    pub(super) advisory: Option<Span>,
+}
+
+impl Callable {
+    /// The `advisory` marker a config line declares (`None` when there is no
+    /// config line — children and subflows).
+    pub(super) fn advisory_of(config: Option<&crate::ast::ConfigLine>) -> Option<Span> {
+        config.and_then(|config| config.advisory)
+    }
 }
 
 /// One declared parameter of a callable.

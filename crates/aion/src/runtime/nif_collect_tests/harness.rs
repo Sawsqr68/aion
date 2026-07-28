@@ -108,6 +108,7 @@ impl CollectHarness {
             runtime: Arc::clone(&runtime),
             tokio_handle: tokio::runtime::Handle::current(),
             dispatcher: None,
+            advisory_catalog: None,
         };
         Ok(Self {
             state: Arc::new(EngineNifState::default()),

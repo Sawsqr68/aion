@@ -81,6 +81,7 @@ export function classifyKnownEvent(eventType: string): KnownVariantDescriptor | 
     case 'ActivityStarted':
     case 'ActivityCompleted':
     case 'ActivityFailed':
+    case 'ActivityAdvisoryExhausted':
     case 'ActivityCancelled':
       return { family: 'activity', subKind };
     case 'TimerStarted':
@@ -164,6 +165,7 @@ export const KNOWN_EVENT_TYPES: readonly KnownEventType[] = [
   'ActivityStarted',
   'ActivityCompleted',
   'ActivityFailed',
+  'ActivityAdvisoryExhausted',
   'ActivityCancelled',
   'TimerStarted',
   'TimerFired',

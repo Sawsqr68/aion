@@ -1,0 +1,201 @@
+module announce_and_build source=announce_and_build.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_announce:
+    aion@activity:retry/2 [activities] (v1, v4)
+    aion@activity:timeout/2 [activities] (v5, v6)
+    aion@activity:task_queue/2 [activities] (v7, lit#10)
+    aion@activity:node/2 [activities] (v8, lit#11)
+    aion@workflow:run/1 [activities] (v9)
+  step_build:
+    aion@activity:timeout/2 [activities] (v1, v2)
+    aion@activity:task_queue/2 [activities] (v3, lit#12)
+    aion@activity:node/2 [activities] (v4, lit#13)
+    aion@workflow:run/1 [activities] (v5)
+== durable families == activities
+== atoms ==
+  [0] build_result
+  [1] announce_input
+  [2] compile_input
+  [3] announce_and_build_input
+  [4] built_outcome
+  [5] fixed
+  [6] retry_policy
+  [7] ok
+== literals ==
+  [0] "artifact_path"
+  [1] "project_dir"
+  [2] "project_dir"
+  [3] "project_dir"
+  [4] "built"
+  [5] "outcome"
+  [6] ""
+  [7] "AnnounceAndBuildOutcome"
+  [8] "built"
+  [9] "payload"
+  [10] "builder"
+  [11] "shell"
+  [12] "builder"
+  [13] "shell"
+== types ==
+  record BuildResult tag=build_result
+    artifact_path: string
+  record AnnounceInput tag=announce_input
+    project_dir: string
+  record CompileInput tag=compile_input
+    project_dir: string
+  record AnnounceAndBuildInput tag=announce_and_build_input
+    project_dir: string
+  union AnnounceAndBuildOutcome
+    built -> built_outcome(ref(BuildResult))
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=announce_and_build_input_codec output=announce_and_build_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(announce_and_build.AnnounceAndBuildInput, announce_and_build.AnnounceAndBuildOutcome, AwlError)
+  T-DEF name="announce_and_build" input=announce_and_build_input_codec output=announce_and_build_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (announce_and_build.AnnounceAndBuildInput) -> Result(announce_and_build.AnnounceAndBuildOutcome, AwlError)
+  T-EXEC fields=[project_dir:String] entry=step_announce args=[0]
+== fn build_result_codec/0 origin=codec_template(RecordTrio, BuildResult, record#0) ==
+  sig: () -> Codec(announce_and_build.BuildResult)
+  v0 = make_closure build_result_to_json captures=[]
+  v1 = call_local build_result_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn build_result_to_json/1 origin=codec_template(RecordTrio, BuildResult, record#0) ==
+  sig: (announce_and_build.BuildResult) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"artifact_path": v1|>awlc.string_to_json}
+  return v2
+== fn build_result_decoder/0 origin=codec_template(RecordTrio, BuildResult, record#0) ==
+  sig: () -> Decoder(announce_and_build.BuildResult)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure build_result_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn build_result_decoder$0/1 origin=lifted(build_result_decoder, #0) ==
+  sig: (String) -> Decoder(announce_and_build.BuildResult)
+  v1 = record(build_result, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn announce_input_codec/0 origin=codec_template(RecordTrio, AnnounceInput, record#1) ==
+  sig: () -> Codec(announce_and_build.AnnounceInput)
+  v0 = make_closure announce_input_to_json captures=[]
+  v1 = call_local announce_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn announce_input_to_json/1 origin=codec_template(RecordTrio, AnnounceInput, record#1) ==
+  sig: (announce_and_build.AnnounceInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"project_dir": v1|>awlc.string_to_json}
+  return v2
+== fn announce_input_decoder/0 origin=codec_template(RecordTrio, AnnounceInput, record#1) ==
+  sig: () -> Decoder(announce_and_build.AnnounceInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure announce_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v0, v1)
+== fn announce_input_decoder$0/1 origin=lifted(announce_input_decoder, #0) ==
+  sig: (String) -> Decoder(announce_and_build.AnnounceInput)
+  v1 = record(announce_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn compile_input_codec/0 origin=codec_template(RecordTrio, CompileInput, record#2) ==
+  sig: () -> Codec(announce_and_build.CompileInput)
+  v0 = make_closure compile_input_to_json captures=[]
+  v1 = call_local compile_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn compile_input_to_json/1 origin=codec_template(RecordTrio, CompileInput, record#2) ==
+  sig: (announce_and_build.CompileInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"project_dir": v1|>awlc.string_to_json}
+  return v2
+== fn compile_input_decoder/0 origin=codec_template(RecordTrio, CompileInput, record#2) ==
+  sig: () -> Decoder(announce_and_build.CompileInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure compile_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v0, v1)
+== fn compile_input_decoder$0/1 origin=lifted(compile_input_decoder, #0) ==
+  sig: (String) -> Decoder(announce_and_build.CompileInput)
+  v1 = record(compile_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn announce_and_build_input_codec/0 origin=codec_template(RecordTrio, AnnounceAndBuildInput, record#3) ==
+  sig: () -> Codec(announce_and_build.AnnounceAndBuildInput)
+  v0 = make_closure announce_and_build_input_to_json captures=[]
+  v1 = call_local announce_and_build_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn announce_and_build_input_to_json/1 origin=codec_template(RecordTrio, AnnounceAndBuildInput, record#3) ==
+  sig: (announce_and_build.AnnounceAndBuildInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"project_dir": v1|>awlc.string_to_json}
+  return v2
+== fn announce_and_build_input_decoder/0 origin=codec_template(RecordTrio, AnnounceAndBuildInput, record#3) ==
+  sig: () -> Decoder(announce_and_build.AnnounceAndBuildInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure announce_and_build_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v0, v1)
+== fn announce_and_build_input_decoder$0/1 origin=lifted(announce_and_build_input_decoder, #0) ==
+  sig: (String) -> Decoder(announce_and_build.AnnounceAndBuildInput)
+  v1 = record(announce_and_build_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn announce_and_build_outcome_codec/0 origin=codec_template(UnionTrio, AnnounceAndBuildOutcome, union#4) ==
+  sig: () -> Codec(announce_and_build.AnnounceAndBuildOutcome)
+  v0 = make_closure announce_and_build_outcome_to_json captures=[]
+  v1 = call_local announce_and_build_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn announce_and_build_outcome_to_json/1 origin=codec_template(UnionTrio, AnnounceAndBuildOutcome, union#4) ==
+  sig: (announce_and_build.AnnounceAndBuildOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#4|>awlc.string_to_json, "payload": v1|>build_result_to_json}
+  return v2
+== fn announce_and_build_outcome_decoder/0 origin=codec_template(UnionTrio, AnnounceAndBuildOutcome, union#4) ==
+  sig: () -> Decoder(announce_and_build.AnnounceAndBuildOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure announce_and_build_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#5, v0, v1)
+== fn announce_and_build_outcome_decoder$outcome/1 origin=lifted(announce_and_build_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(announce_and_build.AnnounceAndBuildOutcome)
+  if cmp Eq v0 lit#8:
+    v3 = call_local build_result_decoder()
+    v4 = make_closure announce_and_build_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#9, v3, v4)
+  else:
+    v1 = record(build_result, [lit#6])
+    v2 = record(built_outcome, [v1])
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#7)
+== fn announce_and_build_outcome_decoder$arm0/1 origin=lifted(announce_and_build_outcome_decoder, #1) ==
+  sig: (announce_and_build.BuildResult) -> Decoder(announce_and_build.AnnounceAndBuildOutcome)
+  v1 = record(built_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn announce_activity/1 origin=activity_wrapper(announce, raw=false) ==
+  sig: (String) -> Activity(announce_and_build.AnnounceInput, Nil)
+  T-ACT action=announce input_codec=announce_input_codec return=awlc.nil_codec
+== fn compile_activity/1 origin=activity_wrapper(compile, raw=false) ==
+  sig: (String) -> Activity(announce_and_build.CompileInput, announce_and_build.BuildResult)
+  T-ACT action=compile input_codec=compile_input_codec return=build_result_codec
+== fn step_announce/1 origin=region(announce) ==
+  sig: (String) -> Result(announce_and_build.AnnounceAndBuildOutcome, AwlError)
+  v1 = call_local announce_activity(v0) live_after=[v0]
+  v2 = call_rt aion@duration:milliseconds/1(10000) live_after=[v0, v1]
+  v3 = record(fixed, [v2])
+  v4 = record(retry_policy, [3, v3])
+  v5 = call_rt aion@activity:retry/2(v1, v4) live_after=[v0]
+  v6 = call_rt aion@duration:milliseconds/1(30000) live_after=[v0, v5]
+  v7 = call_rt aion@activity:timeout/2(v5, v6) live_after=[v0]
+  v8 = call_rt aion@activity:task_queue/2(v7, lit#10) live_after=[v0]
+  v9 = call_rt aion@activity:node/2(v8, lit#11) live_after=[v0]
+  v10 = call_rt aion@workflow:run/1(v9) live_after=[v0]
+  tail_local step_build(v0)
+== fn step_build/1 origin=chain_step(announce.build) ==
+  sig: (String) -> Result(announce_and_build.AnnounceAndBuildOutcome, AwlError)
+  v1 = call_local compile_activity(v0)
+  v2 = call_rt aion@duration:milliseconds/1(1200000) live_after=[v1]
+  v3 = call_rt aion@activity:timeout/2(v1, v2)
+  v4 = call_rt aion@activity:task_queue/2(v3, lit#12)
+  v5 = call_rt aion@activity:node/2(v4, lit#13)
+  v6 = call_rt aion@workflow:run/1(v5)
+  v7 = call_rt aion@awl@error:map_activity_error/1(v6)
+  v8 = try_bind v7
+  v9 = field(v8, 1)
+  v10 = record(build_result, [v9])
+  v11 = record(built_outcome, [v10])
+  v12 = record(ok, [v11])
+  return v12
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD

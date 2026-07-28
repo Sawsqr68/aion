@@ -236,6 +236,10 @@ fn package_contract(
                 .and_then(|config| config.retry.as_ref())
                 .map(retry_contract)
                 .transpose()?;
+            let advisory = action
+                .config
+                .as_ref()
+                .is_some_and(|config| config.advisory.is_some());
             actions.push(ActionContract {
                 name: action.name.clone(),
                 input_schema,
@@ -243,6 +247,7 @@ fn package_contract(
                 node,
                 timeout,
                 retry,
+                advisory,
             });
         }
         workers.push(WorkerContract {

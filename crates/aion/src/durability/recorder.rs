@@ -695,6 +695,37 @@ impl Recorder {
         .await
     }
 
+    /// Records the R5 warning that an ADVISORY activity spent its whole
+    /// attempt budget and failed for good.
+    ///
+    /// This ACCOMPANIES the activity's honest terminal `ActivityFailed`; it
+    /// never replaces it. The advisory class suppresses the FAULT, never the
+    /// RECORD — the side channel really did fail, and history says so twice:
+    /// once as the activity's own failure, once as the visible warning on the
+    /// run (RUNTIME-OPERATIONS.md R5).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DurabilityError`] if the event store rejects the append or the
+    /// sequence tracker cannot advance after a successful append.
+    pub async fn record_activity_advisory_exhausted(
+        &mut self,
+        recorded_at: DateTime<Utc>,
+        activity_id: ActivityId,
+        activity_type: String,
+        reason: String,
+        attempt: u32,
+    ) -> Result<(), DurabilityError> {
+        self.append_with(recorded_at, |envelope| Event::ActivityAdvisoryExhausted {
+            envelope,
+            activity_id,
+            activity_type,
+            reason,
+            attempt,
+        })
+        .await
+    }
+
     /// Records activity cancellation.
     ///
     /// # Errors

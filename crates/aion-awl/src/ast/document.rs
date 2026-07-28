@@ -301,7 +301,8 @@ pub struct ParamDecl {
     pub ty: TypeRef,
 }
 
-/// An indented config line: `node <name>, timeout <duration>, retry …`.
+/// An indented config line: `advisory, node <name>, timeout <duration>,
+/// retry …`.
 ///
 /// Appears under an action declaration, or under a call statement as a
 /// call-site override (the checker rules on which keys may pin where).
@@ -313,6 +314,13 @@ pub struct ConfigLine {
     pub lead: Vec<Lead>,
     /// Same-line trailing comment.
     pub trailing: Option<Comment>,
+    /// The `advisory` class marker, carrying its own source span.
+    ///
+    /// Declaration-only, like `retry`: an action IS advisory or is not, and
+    /// a call site cannot make one call of it side-channel. Present means
+    /// the action is a side channel — its failure warns on the run and
+    /// never faults the calling step (RUNTIME-OPERATIONS.md R5).
+    pub advisory: Option<Span>,
     /// Optional `node <name>` routing key.
     pub node: Option<ConfigValue>,
     /// Optional `timeout <duration>` key.

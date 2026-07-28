@@ -81,6 +81,9 @@ pub fn status_from_events(events: &[Event]) -> WorkflowStatus {
             | Event::ActivityStarted { .. }
             | Event::ActivityCompleted { .. }
             | Event::ActivityFailed { .. }
+            // The advisory warning says a SIDE CHANNEL failed; it says
+            // nothing about the run's outcome, so it projects no status.
+            | Event::ActivityAdvisoryExhausted { .. }
             | Event::ActivityCancelled { .. }
             | Event::TimerStarted { .. }
             | Event::TimerFired { .. }
@@ -136,6 +139,9 @@ pub fn current_lease_terminal(events: &[Event]) -> Option<&Event> {
             | Event::ActivityStarted { .. }
             | Event::ActivityCompleted { .. }
             | Event::ActivityFailed { .. }
+            // The advisory warning says a SIDE CHANNEL failed; it says
+            // nothing about the run's outcome, so it projects no status.
+            | Event::ActivityAdvisoryExhausted { .. }
             | Event::ActivityCancelled { .. }
             | Event::TimerStarted { .. }
             | Event::TimerFired { .. }

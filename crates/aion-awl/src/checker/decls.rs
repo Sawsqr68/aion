@@ -221,7 +221,8 @@ fn check_workers_and_children(ctx: &mut Ctx<'_>) {
     let doc = ctx.doc;
     for worker in &doc.workers {
         for action in &worker.actions {
-            let callable = resolve_callable(ctx, &action.params, &action.returns);
+            let callable =
+                resolve_callable(ctx, &action.params, &action.returns, action.config.as_ref());
             ctx.semantic
                 .ty(action.name_span, &callable.returns.to_string());
             if ctx.children.contains_key(&action.name) {
@@ -242,7 +243,7 @@ fn check_workers_and_children(ctx: &mut Ctx<'_>) {
         }
     }
     for child in &doc.children {
-        let callable = resolve_callable(ctx, &child.params, &child.returns);
+        let callable = resolve_callable(ctx, &child.params, &child.returns, None);
         ctx.semantic
             .ty(child.name_span, &callable.returns.to_string());
         if ctx.actions.contains_key(&child.name) {
@@ -285,7 +286,7 @@ fn check_subflows(ctx: &mut Ctx<'_>) {
                 ),
             );
         }
-        let callable = resolve_callable(ctx, &subflow.params, &subflow.outcome.ty);
+        let callable = resolve_callable(ctx, &subflow.params, &subflow.outcome.ty, None);
         ctx.semantic
             .ty(subflow.name_span, &callable.returns.to_string());
         ctx.semantic
@@ -313,7 +314,12 @@ fn check_subflows(ctx: &mut Ctx<'_>) {
     }
 }
 
-fn resolve_callable(ctx: &mut Ctx<'_>, params: &[ParamDecl], returns: &TypeRef) -> Callable {
+fn resolve_callable(
+    ctx: &mut Ctx<'_>,
+    params: &[ParamDecl],
+    returns: &TypeRef,
+    config: Option<&crate::ast::ConfigLine>,
+) -> Callable {
     let mut resolved: Vec<Param> = Vec::new();
     for param in params {
         let ty = ctx.resolve_type_ref(&param.ty);
@@ -333,5 +339,6 @@ fn resolve_callable(ctx: &mut Ctx<'_>, params: &[ParamDecl], returns: &TypeRef) 
     Callable {
         params: resolved,
         returns: ctx.resolve_type_ref(returns),
+        advisory: Callable::advisory_of(config),
     }
 }

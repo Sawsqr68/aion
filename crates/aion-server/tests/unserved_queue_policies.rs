@@ -36,6 +36,7 @@ fn dispatch_to_unserved_queue() -> ActivityDispatch {
         input: "{}".to_owned(),
         config: "{}".to_owned(),
         attempt: 1,
+        advisory: false,
         labels: BTreeMap::new(),
     }
 }

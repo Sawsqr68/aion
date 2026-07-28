@@ -697,6 +697,7 @@ fn event_kind(event: &Event) -> &'static str {
         Event::ActivityStarted { .. } => "ActivityStarted",
         Event::ActivityCompleted { .. } => "ActivityCompleted",
         Event::ActivityFailed { .. } => "ActivityFailed",
+        Event::ActivityAdvisoryExhausted { .. } => "ActivityAdvisoryExhausted",
         Event::ActivityCancelled { .. } => "ActivityCancelled",
         Event::TimerStarted { .. } => "TimerStarted",
         Event::TimerFired { .. } => "TimerFired",

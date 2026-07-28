@@ -104,6 +104,19 @@ fn activity_value_form(
     Ok(value)
 }
 
+/// Whether the named action's DECLARATION carries the `advisory` marker.
+///
+/// Declaration-only by construction: the call-site config line is not
+/// consulted, and the checker refuses `advisory` there.
+pub(super) fn declared_advisory(emitter: &Emitter<'_>, name: &str) -> bool {
+    emitter.actions.get(name).is_some_and(|&(_, action)| {
+        action
+            .config
+            .as_ref()
+            .is_some_and(|config| config.advisory.is_some())
+    })
+}
+
 /// Match named call arguments against declared parameters, in declared order.
 fn ordered_args<'c>(
     args: &'c [Arg],
@@ -206,6 +219,15 @@ pub(super) fn lower_call(
             &mut prelude,
         )?;
         flush_prelude(emitter, prelude);
+        // R5: an ADVISORY call is routed AROUND the fault arm. The dispatch
+        // still runs and still records its honest terminal failure; its
+        // `Result` is simply never threaded into the flow's error path, so a
+        // spent side channel cannot fault the calling step. The checker has
+        // already refused any binding of an advisory result.
+        if declared_advisory(emitter, call.call.name.as_str()) {
+            emitter.line(&format!("let _ = {value} |> workflow.run"));
+            return Ok(());
+        }
         emitter.line(&format!(
             "use {binder} <- result.try({value} |> workflow.run |> awl_error.map_activity_error)"
         ));

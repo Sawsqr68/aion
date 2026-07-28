@@ -24,6 +24,8 @@ pub(super) const COVERED: &[&str] = &[
     // BC-4 adversarial: a runtime-sized fork over a plain input list.
     "dag-fork/valid/runtime_sized_fork",
     "dag-fork/valid/sit_one",
+    // R5: an advisory side channel lowers past the fault arm.
+    "declarations/valid/advisory_side_channel",
     "declarations/valid/call_site_override",
     "declarations/valid/child_call_awaited",
     // BC-4 adversarial: await a child, then fire-and-forget a detached child.

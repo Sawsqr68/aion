@@ -93,6 +93,7 @@ impl RetryLoopHarness {
             config: config.to_owned(),
             attempt: super::FIRST_DELIVERY_ATTEMPT,
             labels: std::collections::BTreeMap::new(),
+            advisory: false,
         };
         Ok(Self {
             store,

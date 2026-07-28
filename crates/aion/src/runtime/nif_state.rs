@@ -44,6 +44,16 @@ pub(crate) struct EngineNifState {
     pub(super) signal_bridge: RwLock<Option<Arc<SignalNifBridge>>>,
     /// Child workflow bridge.
     pub(super) child_bridge: RwLock<Option<Arc<ChildNifBridge>>>,
+    /// The engine's loaded-workflow catalog, the AUTHORITY on an action's
+    /// declared advisory class (RUNTIME-OPERATIONS.md R5).
+    ///
+    /// `advisory` is a declaration-only marker committed into the package's
+    /// `.v4` contract identity, so the contract — not the dispatch wire — is
+    /// where the dispatch seam reads it from. This is the SAME `Arc` the
+    /// child bridge and the reload path hold, and the catalog swaps its
+    /// snapshot behind interior mutability, so a hot redeploy is visible here
+    /// without reinstalling anything.
+    pub(super) workflow_catalog: RwLock<Option<Arc<crate::loader::WorkflowCatalog>>>,
     /// Query bridge state (registry, engine handle, mailbox engine).
     pub(super) query_bridge: Mutex<Option<QueryBridgeState>>,
     /// Registered query handlers and pending query responses.
@@ -364,6 +374,10 @@ impl EngineNifState {
             Ok(mut slot) => *slot = None,
             Err(poisoned) => *poisoned.into_inner() = None,
         }
+        match self.workflow_catalog.write() {
+            Ok(mut slot) => *slot = None,
+            Err(poisoned) => *poisoned.into_inner() = None,
+        }
         match self.query_bridge.lock() {
             Ok(mut slot) => *slot = None,
             Err(poisoned) => *poisoned.into_inner() = None,
@@ -376,6 +390,22 @@ impl EngineNifState {
 
     fn installed_timer_bridge(&self) -> Option<Arc<TimerNifBridge>> {
         match self.timer_bridge.lock() {
+            Ok(slot) => slot.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
+    }
+
+    /// Install the engine's workflow catalog for contract lookups.
+    pub(crate) fn set_workflow_catalog(&self, catalog: Arc<crate::loader::WorkflowCatalog>) {
+        match self.workflow_catalog.write() {
+            Ok(mut slot) => *slot = Some(catalog),
+            Err(poisoned) => *poisoned.into_inner() = Some(catalog),
+        }
+    }
+
+    /// The installed workflow catalog, or `None` before engine build wires it.
+    pub(crate) fn installed_workflow_catalog(&self) -> Option<Arc<crate::loader::WorkflowCatalog>> {
+        match self.workflow_catalog.read() {
             Ok(slot) => slot.clone(),
             Err(poisoned) => poisoned.into_inner().clone(),
         }

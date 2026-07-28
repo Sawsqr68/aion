@@ -829,6 +829,11 @@ fn install_configured_child_nif_bridge(
             watch_backoff: assembly.watch_backoff,
         })?),
     );
+    // The dispatch seam reads an action's declared advisory class off the
+    // package contract this catalog carries (RUNTIME-OPERATIONS.md R5).
+    assembly
+        .nif_state
+        .set_workflow_catalog(Arc::clone(assembly.catalog));
     // Register the workflow-deadline handler here too: it needs the same
     // teardown deps this assembly carries, and this runs before startup timer
     // recovery, so an already-due `deadline:{run_id}` swept at boot routes to

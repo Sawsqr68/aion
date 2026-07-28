@@ -193,6 +193,12 @@ pub struct ActionContract {
     /// Declaration-owned retry envelope.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retry: Option<RetryContract>,
+    /// Whether the declaration classes this activity as ADVISORY: a side
+    /// channel whose failure warns on the run and never faults the calling
+    /// step (RUNTIME-OPERATIONS.md R5). Identity-bound — flipping it changes
+    /// what the package promises a caller.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub advisory: bool,
 }
 
 impl ActionContract {
@@ -217,9 +223,30 @@ impl ActionContract {
                 encode_duration(&mut bytes, *max);
             }
         }
+        // ADVISORY is encoded ONLY when true: a single marker byte appended
+        // after the retry block, and nothing at all when false. Every
+        // contract written before this field therefore hashes to the same
+        // bytes it always did, so adding the advisory class mints no
+        // redeploy wave. It is injective because absence and the marker
+        // cannot be confused at the end of a positional record.
+        //
+        // CEILING — this consumes `ActionContract`'s ONE trailing-append
+        // slot. A second optional tail would not be injective (two absent
+        // fields and one present are indistinguishable from the tail), so
+        // any future field must ALWAYS encode, under a bumped identity
+        // domain, and never as another optional tail.
+        if self.advisory {
+            bytes.push(ADVISORY_MARKER);
+        }
         bytes
     }
 }
+
+/// The marker byte appended to an advisory action's canonical record.
+///
+/// Distinct from every retry-kind discriminant (`0`/`1`/`2`) it can follow,
+/// so a reader of the trailing bytes is never ambiguous.
+const ADVISORY_MARKER: u8 = 0xA0;
 
 /// A declaration-owned retry envelope.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

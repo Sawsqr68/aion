@@ -1,0 +1,16 @@
+//! `advisory` classifies the action itself; a call site cannot declare it.
+workflow render_scene
+  input scene_path: String
+  outcome rendered: type Render, route success
+
+type Render { output_path: String }
+
+worker renderer
+  action render(scene_path: String) -> Render
+    node gpu_small, timeout 30m
+
+step render
+  render(scene_path: scene_path) -> result
+    advisory, node gpu_large
+
+  route rendered(output_path: result.output_path)

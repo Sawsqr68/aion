@@ -158,6 +158,7 @@ fn write_package_archive(dir: &std::path::Path) -> Result<PathBuf, TestError> {
                     node: None,
                     timeout: None,
                     retry: None,
+                    advisory: false,
                 })
                 .collect(),
         }],

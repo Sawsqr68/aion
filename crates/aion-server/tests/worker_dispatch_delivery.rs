@@ -58,6 +58,7 @@ fn greet_request(input: &str, attempt: u32) -> ActivityDispatch {
         config: "{}".to_owned(),
         attempt,
         labels: std::collections::BTreeMap::new(),
+        advisory: false,
     }
 }
 

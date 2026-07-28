@@ -67,6 +67,21 @@ fn pipe_stage(w: &mut Walker<'_, '_>, view: View<'_>, incoming: Ty, stage: &Pipe
                 w.ctx.semantic.reference(*span, kind, name);
                 w.ctx.semantic.ty(*span, &callable.returns.to_string());
             }
+            // A stage exists to hand its value on, and an advisory action
+            // has no value to hand on when it fails (R5: it never faults the
+            // step, so the pipe would have to invent one).
+            if callable.advisory.is_some() {
+                w.err(
+                    *span,
+                    format!(
+                        "advisory action `{name}` cannot be a pipe stage — an advisory \
+                         failure never faults the step, so the stage would have no value \
+                         to pass on; call it as a bare statement, or remove `advisory` \
+                         from its declaration"
+                    ),
+                );
+                return callable.returns;
+            }
             if callable.params.len() != 1 {
                 w.err(
                     *span,

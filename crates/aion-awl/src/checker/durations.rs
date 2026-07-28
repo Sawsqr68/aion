@@ -60,6 +60,8 @@ fn check_statements(statements: &[Statement], out_of_range: &mut Vec<Span>) {
 }
 
 fn check_config(config: &ConfigLine, out_of_range: &mut Vec<Span>) {
+    // `advisory` and `node` carry no duration — deliberately nothing to
+    // range-check here.
     if let Some(timeout) = &config.timeout {
         check_duration(timeout, out_of_range);
     }

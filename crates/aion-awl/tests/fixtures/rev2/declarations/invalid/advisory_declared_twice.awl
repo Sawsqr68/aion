@@ -1,0 +1,14 @@
+//! One config key, one spelling: a repeated `advisory` is a refusal.
+workflow notify_once
+  input subject: String
+  outcome told: type Receipt, route success
+
+type Receipt { id: String }
+
+worker notifier
+  action notify(subject: String) -> Receipt
+    advisory, retry 3 every 10s, advisory
+
+step notify
+  notify(subject: subject)
+  route told(id: "sent")

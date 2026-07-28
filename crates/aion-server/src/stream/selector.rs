@@ -87,6 +87,9 @@ const fn event_status(event: &Event) -> WorkflowStatus {
         | Event::ActivityStarted { .. }
         | Event::ActivityCompleted { .. }
         | Event::ActivityFailed { .. }
+        // A side channel exhausted its budget; the workflow it warns about
+        // is still running.
+        | Event::ActivityAdvisoryExhausted { .. }
         | Event::ActivityCancelled { .. }
         | Event::TimerStarted { .. }
         | Event::TimerFired { .. }
