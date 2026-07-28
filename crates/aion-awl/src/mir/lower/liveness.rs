@@ -142,12 +142,7 @@ fn uses(stmt: &Stmt) -> BTreeSet<Var> {
         Stmt::TryBind { result, .. } => BTreeSet::from([*result]),
         Stmt::Cmp { lhs, rhs, .. }
         | Stmt::BoolOp { lhs, rhs, .. }
-        | Stmt::ShortCircuit {
-            lhs,
-            rhs,
-            rhs_stmts: _,
-            ..
-        }
+        | Stmt::ShortCircuit { lhs, rhs, .. }
         | Stmt::Concat { lhs, rhs, .. }
         | Stmt::ListPrepend {
             head: lhs,
