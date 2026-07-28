@@ -13,7 +13,7 @@ jq-1.8.1
 === gleam --version ===
 gleam 1.17.0
 === git HEAD ===
-4200e6bb286c41b95b6fc4360dc9a618a12c34e5
+bf4181ca4e1b871d6449e139d3ec4ee4295cdc82
 === df ===
 Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
-/dev/disk3s5   926Gi   738Gi   163Gi    82%    8.3M  1.7G    0%   /System/Volumes/Data
+/dev/disk3s5   926Gi   742Gi   158Gi    83%    8.3M  1.7G    0%   /System/Volumes/Data

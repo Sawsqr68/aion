@@ -275,9 +275,11 @@ serialization).
 | clippy | `cargo clippy --workspace --all-targets --message-format=json` | **0** | see below |
 | tests | `cargo test --workspace --no-fail-fast` | **0** | see below |
 
-Battery run at the committed tree (`git rev-parse HEAD` recorded in the stamp
-file); the earlier run was discarded when a source change landed mid-run
-rather than being cited across two trees.
+Battery run at the committed tree `bf4181ca` (`git rev-parse HEAD` recorded in
+the stamp file and in the clippy verdict artifact). Two earlier runs were
+discarded rather than cited across trees: the first when a source change
+landed mid-run, the second when the executed body-terminal-route pin was
+added.
 
 `gate-logs/on-failure-lowering-clippy.json` is the raw JSON stream;
 `…clippy.verdict.txt` is the jq extraction beside it:
@@ -296,7 +298,7 @@ not empty, and the absence of findings is a real absence.
 its own `test result:` lines are the verdict, summed over all 220 of them:
 
 ```
-exit 0 — 220 suites, 3021 passed, 0 failed, 6 ignored
+exit 0 — 220 suites, 3022 passed, 0 failed, 6 ignored
 ```
 
 The 6 ignored are the pre-existing, individually-reasoned OS-process and
