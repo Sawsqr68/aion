@@ -44,6 +44,3 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 aion-awl = { path = "../../crates/aion-awl" }
 aion-package = { path = "../../crates/aion-package" }
 tempfile = "3.19"
-
-[patch.crates-io]
-liminal-rs = { path = "../../vendor/liminal-rs" }
