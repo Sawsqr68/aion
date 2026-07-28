@@ -85,6 +85,16 @@ struct ServerStateInner {
     /// router resolves the CURRENT owner. Empty until an agent attempt is
     /// dispatched — a command to an unbound attempt is the attempt-scoped no-op.
     attempt_owners: crate::worker::AttemptOwnerIndex,
+    /// R1 live unserved-queue state. Always present (cheap, no `Option`): the
+    /// bridge dispatcher publishes every parked dispatch into THIS instance, so
+    /// `unserved_queues()` answers "which addresses are unserved, why, and which
+    /// runs are waiting on them" without reading logs. Empty whenever nothing is
+    /// parked.
+    queue_service_state: crate::worker::QueueServiceState,
+    /// R1 queue-declaration source, filled in with the engine-backed reader once
+    /// the engine exists. Held so surfaces (and the bridge) share ONE reader
+    /// rather than each building their own view of the deployed contracts.
+    queue_declarations: crate::worker::QueueDeclarationSource,
     /// This node's distribution name for the WS3 cluster snapshot self-identity.
     /// `Some` on a distributed haematite boot (the configured `store.cluster.node_id`),
     /// `None` on a single-node boot — the snapshot then reports the standalone
@@ -215,20 +225,8 @@ impl ServerState {
             .with_outbox_wake(Arc::clone(&outbox_wake)),
         );
         let exported_metrics = runtime.metrics.enabled.then_some(metrics.clone());
-        // WS3 topology deltas + Control-Plane Phase 1 mint hook (`with_namespace_minting`).
-        let worker_registry = ConnectedWorkerRegistry::default()
-            .with_cluster_publisher(cluster_publisher.clone())
-            .with_namespace_minting(connected.namespace_store.clone(), runtime.auto_create);
-        let pending_activities = PendingActivities::default();
-        let heartbeat_tracker = HeartbeatTracker::new(runtime.worker.heartbeat_window);
-        let drain_state = DrainState::default();
-        let (dispatcher, attempt_owners) = build_bridge_dispatcher(
-            &runtime,
-            &worker_registry,
-            &pending_activities,
-            &heartbeat_tracker,
-            &drain_state,
-        );
+        let seams = build_worker_seams(&runtime, &cluster_publisher, &connected.namespace_store);
+        let (dispatcher, attempt_owners) = build_bridge_dispatcher(&runtime, &seams);
         let (activity_dispatcher, activity_mock_registry) =
             decorate_activity_dispatcher(dispatcher, runtime.dev.enabled);
 
@@ -243,7 +241,8 @@ impl ServerState {
         })
         .await?;
         let engine = Arc::new(engine);
-        install_outbox_delivery(&pending_activities, &engine, runtime.outbox.enabled);
+        install_outbox_delivery(&seams.pending_activities, &engine, runtime.outbox.enabled);
+        install_queue_declarations(&seams.queue_declarations, &engine);
         let resolver = NamespaceResolver::from_config(runtime.namespace.clone(), engine);
         #[cfg(feature = "auth")]
         let jwks_cache = build_jwks_cache(&runtime).await?;
@@ -251,10 +250,10 @@ impl ServerState {
             inner: Arc::new(ServerStateInner {
                 namespace_guard: NamespaceGuard::new(resolver),
                 runtime,
-                worker_registry,
-                pending_activities,
-                heartbeat_tracker,
-                drain_state,
+                worker_registry: seams.worker_registry,
+                pending_activities: seams.pending_activities,
+                heartbeat_tracker: seams.heartbeat_tracker,
+                drain_state: seams.drain_state,
                 metrics: exported_metrics,
                 health: Some(HealthState::new(instrumented_store, true)),
                 activity_mock_registry,
@@ -264,6 +263,8 @@ impl ServerState {
                 cluster_publisher,
                 transcript_publisher,
                 attempt_owners,
+                queue_service_state: seams.queue_service_state,
+                queue_declarations: seams.queue_declarations,
                 cluster_self_node,
                 #[cfg(feature = "haematite-backend")]
                 cluster_responder,
@@ -339,6 +340,8 @@ impl ServerState {
                     bounds,
                 ),
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
+                queue_service_state: crate::worker::QueueServiceState::default(),
+                queue_declarations: crate::worker::QueueDeclarationSource::default(),
                 cluster_self_node: None,
                 #[cfg(feature = "haematite-backend")]
                 cluster_responder: None,
@@ -403,6 +406,8 @@ impl ServerState {
                     bounds,
                 ),
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
+                queue_service_state: crate::worker::QueueServiceState::default(),
+                queue_declarations: crate::worker::QueueDeclarationSource::default(),
                 cluster_self_node: None,
                 #[cfg(feature = "haematite-backend")]
                 cluster_responder: None,
@@ -466,6 +471,8 @@ impl ServerState {
                     bounds,
                 ),
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
+                queue_service_state: crate::worker::QueueServiceState::default(),
+                queue_declarations: crate::worker::QueueDeclarationSource::default(),
                 cluster_self_node: None,
                 #[cfg(feature = "haematite-backend")]
                 cluster_responder: None,
@@ -524,6 +531,8 @@ impl ServerState {
                     bounds,
                 ),
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
+                queue_service_state: crate::worker::QueueServiceState::default(),
+                queue_declarations: crate::worker::QueueDeclarationSource::default(),
                 cluster_self_node: None,
                 #[cfg(feature = "haematite-backend")]
                 cluster_responder: None,
@@ -588,6 +597,35 @@ impl ServerState {
     #[must_use]
     pub fn attempt_owners(&self) -> &crate::worker::AttemptOwnerIndex {
         &self.inner.attempt_owners
+    }
+
+    /// Borrow the R1 live unserved-queue state — the same instance the bridge
+    /// dispatcher publishes every parked dispatch into.
+    #[must_use]
+    pub fn queue_service_state(&self) -> &crate::worker::QueueServiceState {
+        &self.inner.queue_service_state
+    }
+
+    /// Borrow the R1 queue-declaration source — the engine-backed reader the
+    /// bridge classifies against. Answers `Unknown` on a state built without an
+    /// engine, which never refuses anything.
+    #[must_use]
+    pub fn queue_declarations(&self) -> &crate::worker::QueueDeclarationSource {
+        &self.inner.queue_declarations
+    }
+
+    /// Every queue address currently unserved, with its taxonomy reason, the
+    /// policy it is held under, the live poller census behind the verdict, and
+    /// the runs parked on it.
+    ///
+    /// This is the server-side answer to "is anything stuck, and on what" — the
+    /// question the pre-R1 seam could only be asked by reading logs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if the state lock is poisoned.
+    pub fn unserved_queues(&self) -> Result<Vec<crate::worker::UnservedQueue>, ServerError> {
+        self.inner.queue_service_state.unserved()
     }
 
     /// Build the NOI-6 intervention router over the connected-worker registry, the
@@ -1031,6 +1069,52 @@ fn install_outbox_delivery(
     }
 }
 
+/// The per-boot worker-side seams every dispatch path shares.
+struct WorkerSeams {
+    worker_registry: ConnectedWorkerRegistry,
+    pending_activities: PendingActivities,
+    heartbeat_tracker: HeartbeatTracker,
+    drain_state: DrainState,
+    queue_declarations: crate::worker::QueueDeclarationSource,
+    queue_service_state: crate::worker::QueueServiceState,
+}
+
+/// Build the worker-side seams: the connected-worker registry (WS3 topology
+/// deltas + the Control-Plane Phase 1 mint hook), the shared completion tracker,
+/// worker liveness, the drain gate, and the two R1 queue-service handles the
+/// bridge publishes into and the state reads from.
+fn build_worker_seams(
+    runtime: &RuntimeConfig,
+    cluster_publisher: &crate::cluster_publisher::ClusterEventPublisher,
+    namespace_store: &Arc<dyn NamespaceStore>,
+) -> WorkerSeams {
+    WorkerSeams {
+        worker_registry: ConnectedWorkerRegistry::default()
+            .with_cluster_publisher(cluster_publisher.clone())
+            .with_namespace_minting(namespace_store.clone(), runtime.auto_create),
+        pending_activities: PendingActivities::default(),
+        heartbeat_tracker: HeartbeatTracker::new(runtime.worker.heartbeat_window),
+        drain_state: DrainState::default(),
+        queue_declarations: crate::worker::QueueDeclarationSource::default(),
+        queue_service_state: crate::worker::QueueServiceState::default(),
+    }
+}
+
+/// Point the bridge's R1 classifier at the engine's live workflow catalog.
+///
+/// Installed only after the engine exists (the dispatcher is built before it),
+/// exactly like the outbox delivery callback: the dispatcher is not rebuilt, it
+/// shares this handle. Until this runs — and on any state built without an
+/// engine — the classifier answers `Unknown`, which never refuses anything.
+fn install_queue_declarations(
+    queue_declarations: &crate::worker::QueueDeclarationSource,
+    engine: &Arc<aion::Engine>,
+) {
+    queue_declarations.install(Arc::new(crate::worker::EngineQueueDeclarations::new(
+        Arc::clone(engine),
+    )));
+}
+
 /// Decorate the worker activity dispatcher with the per-run activity-mock layer
 /// when the dev surface is commissioned, returning the dispatcher and the shared
 /// mock registry (if any).
@@ -1045,21 +1129,21 @@ fn install_outbox_delivery(
 /// router to read, so the ops console can enumerate and target live attempts.
 fn build_bridge_dispatcher(
     runtime: &RuntimeConfig,
-    worker_registry: &ConnectedWorkerRegistry,
-    pending_activities: &PendingActivities,
-    heartbeat_tracker: &HeartbeatTracker,
-    drain_state: &DrainState,
+    seams: &WorkerSeams,
 ) -> (WorkerActivityDispatcher, crate::worker::AttemptOwnerIndex) {
     let attempt_owners = crate::worker::AttemptOwnerIndex::new();
     let dispatcher = WorkerActivityDispatcher::new(
-        worker_registry.clone(),
+        seams.worker_registry.clone(),
         runtime.default_namespace.clone(),
-        heartbeat_tracker.clone(),
+        seams.heartbeat_tracker.clone(),
     )
-    .with_pending(pending_activities.clone())
-    .with_drain_state(drain_state.clone())
+    .with_pending(seams.pending_activities.clone())
+    .with_drain_state(seams.drain_state.clone())
     .with_tokio_handle(tokio::runtime::Handle::current())
-    .with_attempt_owners(attempt_owners.clone());
+    .with_attempt_owners(attempt_owners.clone())
+    .with_queue_service(runtime.worker.queue_service.clone())
+    .with_queue_declarations(seams.queue_declarations.clone())
+    .with_queue_state(seams.queue_service_state.clone());
     (dispatcher, attempt_owners)
 }
 
@@ -1691,6 +1775,7 @@ mod tests {
             },
             worker: WorkerConfig {
                 heartbeat_window: Duration::from_secs(30),
+                ..WorkerConfig::default()
             },
             websocket: WebSocketConfig {
                 outbound_buffer_bound: 32,
@@ -1723,6 +1808,100 @@ mod tests {
         std::hint::black_box(state.namespace_guard());
         std::hint::black_box(state.worker_registry());
 
+        Ok(())
+    }
+
+    /// R1 surfacing: a real boot exposes the unserved-queue state, the bridge
+    /// publishes parked dispatches into THAT instance, and the address leaves
+    /// the state the moment the dispatch resolves.
+    ///
+    /// The dispatch is driven through a dispatcher built over the state's OWN
+    /// registry, queue state, and engine-backed declaration source — the same
+    /// three handles `build_bridge_dispatcher` hands the production bridge.
+    #[tokio::test]
+    async fn unserved_queues_surfaces_a_parked_dispatch_and_clears_it()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use aion::{ActivityDispatch, ActivityDispatcher as _};
+        use aion_core::{ActivityId, RunId, WorkflowId};
+        use std::sync::Arc;
+
+        let state =
+            ServerState::build_with_store(InMemoryStore::default(), runtime_config()).await?;
+        assert!(
+            state.unserved_queues()?.is_empty(),
+            "a calm boot has no unserved queues"
+        );
+        // The engine-backed reader IS installed on a real boot; with no
+        // queue-declaring package deployed it can contradict nothing, so it must
+        // answer Unknown rather than manufacture a structural refusal.
+        assert!(state.queue_declarations().is_installed());
+        assert_eq!(
+            state
+                .queue_declarations()
+                .declaration_for("nobody-serves-this"),
+            crate::worker::QueueDeclaration::Unknown
+        );
+
+        let dispatcher = Arc::new(
+            crate::worker::WorkerActivityDispatcher::new(
+                state.worker_registry().clone(),
+                "default",
+                crate::worker::HeartbeatTracker::new(Duration::from_secs(5)),
+            )
+            .with_queue_state(state.queue_service_state().clone())
+            .with_queue_declarations(state.queue_declarations().clone()),
+        );
+        let workflow_id = WorkflowId::new_v4();
+        let request = ActivityDispatch {
+            namespace: "default".to_owned(),
+            task_queue: "nobody-serves-this".to_owned(),
+            node: None,
+            workflow_id: workflow_id.clone(),
+            run_id: RunId::new_v4(),
+            activity_id: ActivityId::from_sequence_position(0),
+            name: "greet".to_owned(),
+            input: "{}".to_owned(),
+            config: "{}".to_owned(),
+            attempt: 1,
+            labels: std::collections::BTreeMap::new(),
+        };
+        let parked = std::thread::spawn(move || dispatcher.dispatch(request));
+
+        let mut unserved = Vec::new();
+        for _ in 0..30 {
+            unserved = state.unserved_queues()?;
+            if !unserved.is_empty() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        assert_eq!(unserved.len(), 1, "the parked dispatch is not surfaced");
+        assert_eq!(
+            unserved[0].reason,
+            crate::worker::QueueServiceReason::NoLivePollers,
+            "an empty catalog must not be read as a structural refusal"
+        );
+        assert_eq!(unserved[0].key.task_queue, "nobody-serves-this");
+        assert_eq!(unserved[0].waiting.len(), 1);
+        assert_eq!(unserved[0].waiting[0].workflow_id, workflow_id);
+
+        // Release the dispatch: a worker arrives whose receiver is already gone.
+        let (worker_tx, worker_rx) = tokio::sync::mpsc::channel(1);
+        drop(worker_rx);
+        let registration = state.worker_registry().register_namespaces(
+            [String::from("default")],
+            "nobody-serves-this",
+            None,
+            [String::from("greet")].iter(),
+            worker_tx,
+        )?;
+        let outcome = parked.join().map_err(|_| "parked dispatch panicked")?;
+        assert!(outcome.is_err(), "the released dispatch must resolve");
+        assert!(
+            state.unserved_queues()?.is_empty(),
+            "a resolved dispatch must leave the unserved state"
+        );
+        registration.deregister()?;
         Ok(())
     }
 

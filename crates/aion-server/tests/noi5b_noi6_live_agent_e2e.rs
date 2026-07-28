@@ -273,6 +273,7 @@ fn runtime_config() -> RuntimeConfig {
         },
         worker: ServerWorkerConfig {
             heartbeat_window: Duration::from_secs(30),
+            ..Default::default()
         },
         websocket: WebSocketConfig {
             outbound_buffer_bound: 32,

@@ -334,6 +334,15 @@ pub struct WorkerConfig {
     /// Window after which a silent worker is considered lost.
     #[serde(with = "duration_millis")]
     pub heartbeat_window: Duration,
+    /// R1 queue-service policies and clocks (`[worker.queue_service]`).
+    ///
+    /// Absent, every queue is served `strict` with no clocks: structural
+    /// unservability refuses, everything else waits — loudly, typed, and
+    /// queryable. Writing a deadline is how an operator declares how long a
+    /// dispatch may wait; writing a `durable_pending` override is how a queue
+    /// declares that its runs park rather than refuse.
+    #[serde(default)]
+    pub queue_service: crate::worker::queue_service::QueueServiceConfig,
 }
 
 /// WebSocket stream configuration.
@@ -725,6 +734,7 @@ impl Default for WorkerConfig {
     fn default() -> Self {
         Self {
             heartbeat_window: Duration::from_secs(30),
+            queue_service: crate::worker::queue_service::QueueServiceConfig::default(),
         }
     }
 }

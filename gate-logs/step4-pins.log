@@ -1,0 +1,21 @@
+   Compiling aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 36.35s
+     Running tests/unserved_queue_honesty.rs (target/debug/deps/unserved_queue_honesty-71495b5c465b0536)
+
+running 1 test
+test parked_dispatch_on_an_unserved_queue_states_its_reason_at_warn ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.52s
+
+     Running tests/unserved_queue_policies.rs (target/debug/deps/unserved_queue_policies-593ff6693e766fbc)
+
+running 6 tests
+test an_undeclared_queue_refuses_immediately_under_both_policies ... ok
+test the_recorded_failure_reason_is_typed_and_never_reads_as_a_park ... ok
+test a_full_intake_on_a_live_worker_refuses_as_saturated ... ok
+test connected_workers_that_do_not_serve_the_activity_are_incompatible ... ok
+test strict_refuses_no_live_pollers_when_the_availability_deadline_expires ... ok
+test durable_pending_parks_visibly_and_completes_when_a_worker_arrives ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.03s
+

@@ -141,6 +141,7 @@ pub(crate) fn runtime_config() -> RuntimeConfig {
         },
         worker: WorkerConfig {
             heartbeat_window: std::time::Duration::from_secs(30),
+            ..WorkerConfig::default()
         },
         websocket: WebSocketConfig {
             outbound_buffer_bound: 32,

@@ -1,0 +1,28 @@
+   Compiling aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 40.75s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-bb8770177361cfc7)
+
+running 20 tests
+test state::tests::connect_store_memory_backend_exposes_no_outbox_store ... ok
+test state::tests::builds_state_with_in_memory_store ... ok
+test state::tests::namespace_store_is_reachable_and_functional_after_default_boot ... ok
+test state::tests::state_build_fails_with_zero_query_timeout ... ok
+test state::tests::state_build_fails_without_event_broadcast_capacity ... ok
+test state::tests::state_build_fails_without_query_timeout ... ok
+test state::tests::path_ambient_haematite_refuses_group_or_world_writable_ancestors ... ok
+test worker::queue_service::state::tests::a_parked_dispatch_is_visible_immediately ... ok
+test worker::queue_service::state::tests::clearing_an_unknown_dispatch_is_a_no_op ... ok
+test state::tests::path_ambient_haematite_refuses_mutating_allow_acl_ancestor ... ok
+test worker::queue_service::state::tests::clearing_the_last_waiter_removes_the_address ... ok
+test state::tests::path_ambient_haematite_refuses_a_non_euid_user_uuid_allow_ace ... ok
+test worker::queue_service::state::tests::re_marking_refreshes_the_verdict_without_duplicating_the_waiter ... ok
+test state::tests::path_ambient_haematite_accepts_an_owner_controlled_chain ... ok
+test state::tests::path_ambient_haematite_accepts_the_stock_home_acl_chain ... ok
+test state::tests::haematite_root_swap_before_first_backend_touch_cannot_redirect_writes ... ok
+test state::tests::path_ambient_haematite_accepts_a_deny_only_acl_ancestor ... ok
+test state::tests::connect_store_haematite_round_trips_through_event_store ... ok
+test state::tests::path_ambient_haematite_accepts_the_euid_uuid_allow_ace ... ok
+test state::tests::unserved_queues_surfaces_a_parked_dispatch_and_clears_it ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 587 filtered out; finished in 0.55s
+

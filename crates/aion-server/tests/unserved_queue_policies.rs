@@ -366,3 +366,43 @@ fn durable_pending_parks_visibly_and_completes_when_a_worker_arrives() -> Result
     registration.deregister()?;
     Ok(())
 }
+
+/// What the run records is typed, and it is NOT mistaken for a park.
+///
+/// The dispatch seam hands this exact string to the engine, which writes it as
+/// the activity's failure reason — so the run's history carries the taxonomy
+/// verdict, readable back without string sniffing. The park check is the sharp
+/// edge: a refusal that looked like the drain sentinel would be swallowed as a
+/// "parked for restart recovery" no-op and the run would silently stall again.
+#[test]
+fn the_recorded_failure_reason_is_typed_and_never_reads_as_a_park() -> Result<(), TestError> {
+    let seam = seam(
+        strict_with_deadline(Duration::from_millis(400)),
+        Some(DeclaredQueues::declaring(&["nobody-serves-this"])),
+    );
+    let failure = seam
+        .dispatcher
+        .dispatch(dispatch_to_unserved_queue())
+        .err()
+        .ok_or("expected a refusal")?;
+
+    assert!(
+        !aion::is_parked_reason(&failure),
+        "a queue-service refusal must never be classified as a park: {failure}"
+    );
+    assert!(
+        failure.starts_with("retryable:") || failure.starts_with("terminal:"),
+        "the recorded reason must carry the engine's retryability vocabulary: {failure}"
+    );
+    let summary = WorkerUnavailable::parse(&failure).ok_or_else(|| {
+        format!("the recorded reason is not readable back as a typed refusal: {failure}")
+    })?;
+    assert_eq!(summary.reason, QueueServiceReason::NoLivePollers);
+    assert_eq!(summary.clock, Some(ExpiredClock::ServiceAvailability));
+    // The human tail names the address an operator has to fix.
+    assert!(
+        failure.contains("nobody-serves-this") && failure.contains("greet"),
+        "the recorded reason does not name the address: {failure}"
+    );
+    Ok(())
+}

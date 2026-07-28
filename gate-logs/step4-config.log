@@ -1,0 +1,90 @@
+   Compiling aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.21s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-bb8770177361cfc7)
+
+running 70 tests
+test config::load::home_tests::aion_home_env_probe_child ... ok
+test config::file::tests::unstatable_project_and_home_paths_are_loud ... ok
+test config::file::tests::dangling_home_config_is_loud_instead_of_defaults ... ok
+test config::file::tests::dangling_project_config_is_loud_and_home_is_not_read ... ok
+test config::load::home_tests::malformed_home_config_is_a_loud_typed_failure ... ok
+test config::load::tests::authoring_explicit_workspace_is_honored ... ok
+test config::load::home_tests::unconfigured_paths_resolve_under_home_without_eager_creation ... ok
+test config::load::tests::authoring_absent_defaults_awl_workspace_but_keeps_gleam_dark ... ok
+test config::load::tests::authoring_empty_gleam_path_fails_naming_key_and_env ... ok
+test config::load::home_tests::legacy_symlink_directories_are_never_selected ... ok
+test config::load::tests::authoring_gleam_path_without_project_root_fails_naming_key_and_env ... ok
+test config::load::tests::cli_overrides_set_authoring_paths ... ok
+test config::load::tests::authoring_section_parses_and_round_trips ... ok
+test config::load::tests::cors_allowed_origins_default_empty ... ok
+test config::load::tests::cli_overrides_win_over_loaded_values ... ok
+test config::load::home_tests::discovery_precedence_covers_explicit_local_home_and_defaults ... ok
+test config::load::tests::deploy_disabled_requires_no_archive_ceiling ... ok
+test config::load::tests::deploy_enabled_defaults_max_archive_bytes ... ok
+test config::load::tests::cors_allowed_origins_reject_malformed ... ok
+test config::load::tests::deploy_enabled_defaults_max_inflated_bytes ... ok
+test config::load::tests::cors_allowed_origins_parse_and_round_trip ... ok
+test config::load::tests::deploy_max_inflated_below_max_archive_fails_startup_validation ... ok
+test config::load::tests::deploy_section_parses_enabled_with_ceilings ... ok
+test config::load::tests::deploy_zero_max_inflated_bytes_fails_startup_validation ... ok
+test config::load::tests::deploy_zero_max_archive_bytes_fails_startup_validation ... ok
+test config::load::tests::default_config_defaults ... ok
+test config::load::tests::cli_packages_are_additive ... ok
+test config::load::tests::dev_absent_leaves_surface_dark ... ok
+test config::load::tests::empty_config_boots_on_operational_defaults ... ok
+test config::load::tests::dev_section_parses_enabled ... ok
+test config::load::tests::invalid_values_name_problematic_field ... ok
+test config::load::tests::missing_cluster_broadcast_capacity_uses_default ... ok
+test config::load::tests::legacy_dashboard_section_alias_still_parses ... ok
+test config::load::tests::missing_event_broadcast_capacity_uses_default ... ok
+test config::load::tests::missing_observability_section_uses_defaults ... ok
+test config::load::tests::missing_query_timeout_uses_default ... ok
+test config::load::tests::namespaces_auto_create_closed_parses ... ok
+test config::load::tests::namespaces_auto_create_open_parses ... ok
+test config::load::tests::namespaces_max_in_flight_activities_defaults_when_omitted ... ok
+test config::load::tests::namespaces_auto_create_rejects_unknown_variant ... ok
+test config::load::tests::namespaces_max_in_flight_activities_override_parses ... ok
+test config::load::tests::outbox_backoff_max_below_base_is_rejected ... ok
+test config::load::tests::observability_section_parses_and_round_trips ... ok
+test config::load::tests::ops_console_section_parses ... ok
+test config::load::tests::outbox_enabled_can_leave_reconciliation_dark ... ok
+test config::load::tests::outbox_enabled_with_all_knobs_validates ... ok
+test config::load::tests::outbox_enabled_defaults_poll_interval ... ok
+test config::load::tests::outbox_enabled_defaults_max_attempts ... ok
+test config::load::tests::outbox_enabled_zero_max_attempts_is_rejected ... ok
+test config::load::home_tests::legacy_directories_guard_only_unconfigured_defaults ... ok
+test config::load::tests::outbox_enabled_zero_poll_interval_is_rejected ... ok
+test config::load::tests::outbox_is_disabled_by_default_and_needs_no_knobs ... ok
+test config::load::tests::outbox_reconciliation_requires_interval_when_partially_enabled ... ok
+test config::load::tests::outbox_enabled_with_only_enabled_flag_uses_all_defaults ... ok
+test config::load::tests::outbox_reconciliation_requires_stale_threshold_when_partially_enabled ... ok
+test config::load::tests::zero_cluster_broadcast_capacity_fails_startup_validation ... ok
+test config::load::tests::workflow_package_merge_is_additive_and_deduplicated ... ok
+test config::load::tests::valid_toml_is_parsed_into_typed_config ... ok
+test config::load::tests::queue_service_settings_are_read_from_the_worker_section ... ok
+test config::load::tests::zero_event_broadcast_capacity_fails_startup_validation ... ok
+test config::load::tests::zero_observability_max_stream_events_fails_startup_validation ... ok
+test config::resolution::tests::non_unix_explicit_sensitive_root_selection_is_accepted_for_shape_validation ... ok
+test config::load::tests::zero_observability_max_event_bytes_fails_startup_validation ... ok
+test config::load::tests::zero_query_timeout_fails_startup_validation ... ok
+test config::resolution::tests::non_unix_default_sensitive_roots_fail_with_explicit_acl_remediation ... ok
+test config::load::tests::zero_config_cli_workflow_package_uses_in_memory_defaults ... ok
+test config::load::tests::package_merge_deduplicates_canonical_files ... ok
+test config::load::tests::package_discovery_is_sorted ... ok
+
+running 1 test
+test config::load::home_tests::aion_home_env_probe_child ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 607 filtered out; finished in 0.00s
+
+test config::load::home_tests::aion_home_environment_override_is_respected_everywhere ... ok
+
+running 1 test
+test config::load::home_tests::aion_home_env_probe_child ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 607 filtered out; finished in 0.00s
+
+test config::load::home_tests::missing_home_is_a_typed_error ... ok
+
+test result: ok. 70 passed; 0 failed; 0 ignored; 0 measured; 538 filtered out; finished in 0.02s
+

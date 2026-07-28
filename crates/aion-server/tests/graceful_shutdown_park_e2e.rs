@@ -166,6 +166,7 @@ fn runtime_config(package_path: PathBuf, drain_timeout: Duration) -> RuntimeConf
         },
         worker: WorkerConfig {
             heartbeat_window: Duration::from_secs(30),
+            ..Default::default()
         },
         websocket: WebSocketConfig {
             outbound_buffer_bound: 32,

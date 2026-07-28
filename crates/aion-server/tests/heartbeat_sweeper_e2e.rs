@@ -66,7 +66,10 @@ fn runtime_config(heartbeat_window: Duration) -> RuntimeConfig {
         namespace: NamespaceConfig {
             mode: NamespaceMode::SharedEngine,
         },
-        worker: WorkerConfig { heartbeat_window },
+        worker: WorkerConfig {
+            heartbeat_window,
+            ..Default::default()
+        },
         websocket: WebSocketConfig {
             outbound_buffer_bound: 32,
             event_broadcast_capacity: Some(64),

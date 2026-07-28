@@ -71,8 +71,9 @@ pub use placement_cache::{
 };
 pub use queue_service::{
     DeliveryRefusal, EngineQueueDeclarations, ExpiredClock, PoolCensus, QueueDeclaration,
-    QueueDeclarationSource, QueueDeclarations, QueueServiceReason, ServiceAddress,
-    UnavailableSummary, WorkerUnavailable,
+    QueueDeclarationSource, QueueDeclarations, QueueServiceConfig, QueueServiceOverride,
+    QueueServicePolicy, QueueServiceReason, QueueServiceState, ServiceAddress, UnavailableSummary,
+    UnservedDispatch, UnservedKey, UnservedQueue, WorkerUnavailable,
 };
 pub use quota_broadcast::QuotaBroadcaster;
 pub use quota_cache::QuotaCache;

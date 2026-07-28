@@ -1523,6 +1523,84 @@ mod tests {
 
     /// The config field renamed `dashboard` -> `ops_console` carries a serde
     /// alias so existing `[dashboard]` TOML still parses (non-breaking rename).
+    /// R1: the written queue-service settings reach `RuntimeConfig`, and an
+    /// operator who writes nothing gets `strict` with no clocks.
+    #[test]
+    fn queue_service_settings_are_read_from_the_worker_section()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use crate::worker::QueueServicePolicy;
+        use std::time::Duration;
+
+        let bare = ServerConfig::from_slice(
+            br"
+                [websocket]
+                event_broadcast_capacity = 64
+                cluster_broadcast_capacity = 64
+            ",
+        )?;
+        assert_eq!(
+            bare.worker.queue_service.default_policy,
+            QueueServicePolicy::Strict,
+            "strict is the default with nothing written"
+        );
+        assert_eq!(
+            bare.worker.queue_service.service_availability_deadline,
+            None
+        );
+        assert_eq!(bare.worker.queue_service.schedule_to_start_timeout, None);
+
+        let written = ServerConfig::from_slice(
+            br#"
+                [websocket]
+                event_broadcast_capacity = 64
+                cluster_broadcast_capacity = 64
+
+                [worker.queue_service]
+                service_availability_deadline = 45000
+                schedule_to_start_timeout = 5000
+
+                [[worker.queue_service.overrides]]
+                task_queue = "general"
+                policy = "durable_pending"
+            "#,
+        )?;
+        assert_eq!(
+            written.worker.queue_service.service_availability_deadline,
+            Some(Duration::from_secs(45))
+        );
+        assert_eq!(
+            written.worker.queue_service.schedule_to_start_timeout,
+            Some(Duration::from_secs(5))
+        );
+        assert_eq!(
+            written
+                .worker
+                .queue_service
+                .policy_for("default", "general"),
+            QueueServicePolicy::DurablePending,
+            "the written opt-in must reach the dispatch seam"
+        );
+        assert_eq!(
+            written
+                .worker
+                .queue_service
+                .policy_for("default", "billing"),
+            QueueServicePolicy::Strict,
+            "an override must not leak onto other queues"
+        );
+
+        // The same settings survive the runtime projection the server boots from.
+        let (_store, runtime) = written.into_parts();
+        assert_eq!(
+            runtime
+                .worker
+                .queue_service
+                .policy_for("default", "general"),
+            QueueServicePolicy::DurablePending
+        );
+        Ok(())
+    }
+
     #[test]
     fn legacy_dashboard_section_alias_still_parses() -> Result<(), Box<dyn std::error::Error>> {
         let config = ServerConfig::from_slice(
