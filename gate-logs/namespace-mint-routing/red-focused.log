@@ -1,0 +1,17 @@
+   Compiling aion-store-haematite v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/namespace-mint-routing/crates/aion-store-haematite)
+   Compiling aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/namespace-mint-routing/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 52.77s
+     Running tests/namespace_mint_routing_e2e.rs (target/debug/deps/namespace_mint_routing_e2e-d1f312aa2913e5b1)
+
+running 1 test
+Error: StoreBackend { source: NotOwner { shard: 1 } }
+test unsteered_namespace_mint_reaches_the_registry_shards_owner ... FAILED
+
+failures:
+
+failures:
+    unsteered_namespace_mint_reaches_the_registry_shards_owner
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+error: test failed, to rerun pass `-p aion-server --test namespace_mint_routing_e2e`
