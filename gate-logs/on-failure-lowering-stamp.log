@@ -12,6 +12,8 @@ cargo 1.97.1 (c980f4866 2026-06-30)
 jq-1.8.1
 === gleam --version ===
 gleam 1.17.0
+=== git HEAD ===
+4200e6bb286c41b95b6fc4360dc9a618a12c34e5
 === df ===
 Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
-/dev/disk3s5   926Gi   719Gi   181Gi    80%    8.2M  1.9G    0%   /System/Volumes/Data
+/dev/disk3s5   926Gi   738Gi   163Gi    82%    8.3M  1.7G    0%   /System/Volumes/Data

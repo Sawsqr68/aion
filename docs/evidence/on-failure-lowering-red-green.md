@@ -79,7 +79,31 @@ defs tuple. A later reason-binding arrives as one more parameter.
 One reserved compensation slot per guarded step, after every wait slot and
 before the implicit-child adapter shells (`lower/plan_slots.rs` item 6). A
 module with no `on failure` reserves none, so every pre-edge `FnRef` is
-byte-identical — the 77 pre-existing goldens are untouched by this landing.
+byte-identical. Measured, not asserted:
+
+```
+git diff --stat edc3c3af..HEAD -- crates/aion-awl/tests/mir-goldens
+  12 files changed, 1913 insertions(+)
+```
+
+Twelve files, all NEW (six fixtures × `.mir` + `.gleam_types.hex`); not one
+pre-existing golden byte changed.
+
+### The rewrite proves itself complete
+
+The cascade reaches the guarded step's own straight-line burst and everything
+the recursion carries into the success arms. A `TryBind` left anywhere else —
+inside a tail's arms, or inside a `ShortCircuit`'s conditionally-evaluated
+right-hand burst (`lower/expr.rs:266` documents that one can live there) —
+would return its `Error` straight out of the step function while the
+reference, whose whole body sits inside the attempt closure, would have caught
+it and compensated. `failure::guard` therefore walks the BUILT block for any
+residual `TryBind` and refuses honestly if one survives. The check is over the
+block, not over a list of shapes, so a future lowering that starts producing
+fallible results in a new position is caught by construction rather than by
+someone remembering to extend a list. No covered fixture trips it.
+
+### Compensation-body inventory
 
 Compensation bodies are lowered OUTSIDE the shared inventory traversal
 (`plan_slots::for_each_step` walks `step.body` only), so a construct that
@@ -242,8 +266,12 @@ serialization).
 | leg | command | exit | verdict |
 | --- | --- | --- | --- |
 | fmt | `cargo fmt --all` | 0 | applied, tree clean |
-| clippy | `cargo clippy --workspace --all-targets --message-format=json` | 0 | see below |
-| tests | `cargo test --workspace --no-fail-fast` | 0 | see below |
+| clippy | `cargo clippy --workspace --all-targets --message-format=json` | **0** | see below |
+| tests | `cargo test --workspace --no-fail-fast` | **0** | see below |
+
+Battery run at the committed tree (`git rev-parse HEAD` recorded in the stamp
+file); the earlier run was discarded when a source change landed mid-run
+rather than being cited across two trees.
 
 `gate-logs/on-failure-lowering-clippy.json` is the raw JSON stream;
 `…clippy.verdict.txt` is the jq extraction beside it:
@@ -259,6 +287,25 @@ denominator of 804 compiler artifacts from the same stream** — the stream was
 not empty, and the absence of findings is a real absence.
 
 `gate-logs/on-failure-lowering-tests.{log,exit}` carries the workspace suite;
-its own `test result:` lines are the verdict. Both ratchet censuses are
-EQUALITY checks inside the suite (`COVERED_COUNT == 83`, and
-`lowers_cover_and_golden`'s exact set comparison), not `>=`.
+its own `test result:` lines are the verdict, summed over all 220 of them:
+
+```
+exit 0 — 220 suites, 3021 passed, 0 failed, 6 ignored
+```
+
+The 6 ignored are the pre-existing, individually-reasoned OS-process and
+network suites (`osproc_*`, the hex.pm-downloading dev-pipeline template,
+`stacked_dev_lands_through_the_real_worker_and_review_signal`); this lane
+neither added nor changed an `#[ignore]`.
+
+Both ratchet censuses are EQUALITY checks inside the suite
+(`COVERED_COUNT == 83`, and `lowers_cover_and_golden`'s exact set comparison),
+not `>=`.
+
+### RAIL 6 (estate lead, at dispatch)
+
+The tests leg is the standing-law `cargo test --workspace --no-fail-fast`, NOT
+nextest: aion has server-booting e2e suites that depend on cargo's
+binary-level serialization, and a naive nextest leg reds them on pure
+contention. HARNESS R2's JSON + jq verdict layer applies to the clippy leg
+only, which is where it is used above.

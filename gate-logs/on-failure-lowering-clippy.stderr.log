@@ -1,1 +1,7 @@
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.64s
+    Checking aion-awl v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/on-failure-lowering/crates/aion-awl)
+    Checking aion-awl-package v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/on-failure-lowering/crates/aion-awl-package)
+    Checking aion-awl-lsp v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/on-failure-lowering/crates/aion-awl-lsp)
+    Checking aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/on-failure-lowering/crates/aion-server)
+    Checking aion-rs v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/on-failure-lowering/crates/aion)
+    Checking aion-cli v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/on-failure-lowering/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 14.09s
