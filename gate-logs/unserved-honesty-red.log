@@ -1,0 +1,22 @@
+   Compiling aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.44s
+     Running tests/unserved_queue_honesty.rs (target/debug/deps/unserved_queue_honesty-71495b5c465b0536)
+
+running 1 test
+test parked_dispatch_on_an_unserved_queue_states_its_reason_at_warn ... FAILED
+
+failures:
+
+---- parked_dispatch_on_an_unserved_queue_states_its_reason_at_warn stdout ----
+
+thread 'parked_dispatch_on_an_unserved_queue_states_its_reason_at_warn' (3378217) panicked at crates/aion-server/tests/unserved_queue_honesty.rs:163:5:
+a dispatch parked on an unserved queue emitted no reasoned event; captured instead: [CapturedEvent { level: Level(Info), message: "no connected worker; waiting for a matching worker to register", fields: {"activity_id": "activity:0", "activity_type": "greet", "namespace": "default", "workflow_id": "907bcf36-7d65-492e-9d3a-f4c30c02cc7a"} }, CapturedEvent { level: Level(Info), message: "no connected worker; waiting for a matching worker to register", fields: {"activity_id": "activity:0", "activity_type": "greet", "namespace": "default", "workflow_id": "907bcf36-7d65-492e-9d3a-f4c30c02cc7a"} }, CapturedEvent { level: Level(Info), message: "no connected worker; waiting for a matching worker to register", fields: {"activity_id": "activity:0", "activity_type": "greet", "namespace": "default", "workflow_id": "907bcf36-7d65-492e-9d3a-f4c30c02cc7a"} }, CapturedEvent { level: Level(Info), message: "no connected worker; waiting for a matching worker to register", fields: {"activity_id": "activity:0", "activity_type": "greet", "namespace": "default", "workflow_id": "907bcf36-7d65-492e-9d3a-f4c30c02cc7a"} }, CapturedEvent { level: Level(Info), message: "no connected worker; waiting for a matching worker to register", fields: {"activity_id": "activity:0", "activity_type": "greet", "namespace": "default", "workflow_id": "907bcf36-7d65-492e-9d3a-f4c30c02cc7a"} }]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    parked_dispatch_on_an_unserved_queue_states_its_reason_at_warn
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.52s
+
+error: test failed, to rerun pass `-p aion-server --test unserved_queue_honesty`
