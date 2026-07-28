@@ -1863,6 +1863,7 @@ mod tests {
             input: "{}".to_owned(),
             config: "{}".to_owned(),
             attempt: 1,
+            advisory: false,
             labels: std::collections::BTreeMap::new(),
         };
         let parked = std::thread::spawn(move || dispatcher.dispatch(request));
