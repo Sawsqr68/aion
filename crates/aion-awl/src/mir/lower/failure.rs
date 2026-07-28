@@ -147,8 +147,32 @@ fn refuse_uninventoried(ctx: &Ctx<'_>, on_failure: &OnFailure) -> Result<(), Low
 }
 
 /// Rewrite a guarded step body so every `TryBind` tests its result in place
-/// and routes a failure to the compensation function.
-pub(super) fn guard(body: Block, edge: &FailureEdge) -> Block {
+/// and routes a failure to the compensation function, then PROVE none was
+/// missed.
+///
+/// The rewrite reaches the statements of the body's own straight-line burst
+/// and everything the recursion carries into the success arms. A `TryBind`
+/// left anywhere else — inside a tail's arms, or inside a `ShortCircuit`'s
+/// conditionally-evaluated right-hand burst — would return its `Error`
+/// straight out of the step function while the reference, whose whole body
+/// sits inside the attempt closure, would have caught it and compensated.
+/// That is a SILENT divergence, so an unguarded residual refuses instead.
+/// The check is over the built block, not over a list of shapes, so a future
+/// lowering that starts producing fallible results in a new position is
+/// caught by construction rather than by remembering to extend a list.
+pub(super) fn guard(step: &Step, body: Block, edge: &FailureEdge) -> Result<Block, LowerError> {
+    let guarded = guard_block(body, edge);
+    if residual_fallible_block(&guarded) {
+        return Err(LowerError::unsupported(
+            "a fallible result the `on failure` edge cannot guard in place (a conditional \
+             prelude or an outcome-guard result)",
+            step.name_span,
+        ));
+    }
+    Ok(guarded)
+}
+
+fn guard_block(body: Block, edge: &FailureEdge) -> Block {
     let Block { mut stmts, tail } = body;
     let Some(position) = stmts.iter().position(is_try_bind) else {
         return Block { stmts, tail };
@@ -162,7 +186,7 @@ pub(super) fn guard(body: Block, edge: &FailureEdge) -> Block {
         // else. Leaving the block untouched is the honest no-op.
         return Block { stmts, tail };
     };
-    let inner = guard(
+    let inner = guard_block(
         Block {
             stmts: rest.collect(),
             tail,
@@ -203,6 +227,38 @@ pub(super) fn guard(body: Block, edge: &FailureEdge) -> Block {
 
 fn is_try_bind(stmt: &Stmt) -> bool {
     matches!(stmt, Stmt::TryBind { .. })
+}
+
+/// Whether any `TryBind` survives anywhere in a guarded block — its own
+/// statements, a `ShortCircuit`'s nested right-hand burst, or either arm of
+/// any tail.
+fn residual_fallible_block(block: &Block) -> bool {
+    block.stmts.iter().any(residual_fallible_stmt) || residual_fallible_tail(&block.tail)
+}
+
+fn residual_fallible_stmt(stmt: &Stmt) -> bool {
+    match stmt {
+        Stmt::TryBind { .. } => true,
+        Stmt::ShortCircuit { rhs_stmts, .. } => rhs_stmts.iter().any(residual_fallible_stmt),
+        Stmt::Attempt { on_ok, on_err, .. } => {
+            residual_fallible_block(on_ok) || residual_fallible_block(on_err)
+        }
+        _ => false,
+    }
+}
+
+fn residual_fallible_tail(tail: &Tail) -> bool {
+    match tail {
+        Tail::If {
+            then_block,
+            else_block,
+            ..
+        } => residual_fallible_block(then_block) || residual_fallible_block(else_block),
+        Tail::SelectEnum { arms, .. } => {
+            arms.iter().any(|(_, block)| residual_fallible_block(block))
+        }
+        Tail::Return(_) | Tail::TailLocal { .. } | Tail::TailRt { .. } => false,
+    }
 }
 
 /// Build the lifted compensation `FlowFn` and record it against its reserved

@@ -1,0 +1,6 @@
+# clippy verdict — jq extraction over gate-logs/on-failure-lowering-clippy.json
+# leg: cargo clippy --workspace --all-targets --message-format=json   exit 0
+DENOMINATOR compiler-artifact count: 804
+error   diagnostics: 0
+warning diagnostics: 0
+--- every diagnostic, level: message (empty means clean) ---

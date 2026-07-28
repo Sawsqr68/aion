@@ -246,7 +246,7 @@ fn lower_chain_step(
     // the body into a test whose failure arm tail-calls it.
     let body = match edge {
         Some((on_failure, edge)) => {
-            let body = super::failure::guard(body, &edge);
+            let body = super::failure::guard(chain.step, body, &edge)?;
             super::failure::lower_compensation(
                 ctx,
                 env,
