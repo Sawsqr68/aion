@@ -1,0 +1,14 @@
+# R5 landing battery (re-run after rebase-fallout fix) — build/advisory-class @ 15179da8f7955fb1030eb7ac464c3ea0e7626a68
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+commit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452
+# 2026-07-28T17:16:30Z
+bun install v1.3.14 (0d9b296a)
+
+Checked 425 installs across 529 packages (no changes) [50.00ms]
+bun test v1.3.14 (0d9b296a)
+
+ 580 pass
+ 0 fail
+ 1952 expect() calls
+Ran 580 tests across 92 files. [859.00ms]

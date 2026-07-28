@@ -1,0 +1,7 @@
+# R5 landing battery (re-run after rebase-fallout fix) — build/advisory-class @ 15179da8f7955fb1030eb7ac464c3ea0e7626a68
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+commit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452
+# 2026-07-28T17:05:02Z
+Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s5   926Gi   830Gi    70Gi    93%    8.5M  734M    1%   /System/Volumes/Data
