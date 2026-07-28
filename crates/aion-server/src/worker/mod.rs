@@ -30,6 +30,9 @@ pub mod outbox_settle;
 /// Short-TTL per-namespace placement cache for the dispatcher (Control-Plane
 /// Phase 2, P2-P3).
 pub mod placement_cache;
+/// Unserved-queue honesty at the bridge seam (R1): the four-way taxonomy,
+/// service policies, the two service clocks, and the queryable queue state.
+pub mod queue_service;
 /// Throttled per-namespace quota-state broadcaster for the ops-console live badge
 /// (Control-Plane Phase 2, P2-Q3).
 pub mod quota_broadcast;
@@ -65,6 +68,11 @@ pub use outbox_reconciler::{OutboxReconciler, OutboxReconcilerConfig};
 pub use outbox_settle::settle_terminal_outbox_rows;
 pub use placement_cache::{
     PlacementCache, WorkerSelection, preferred_node_order, worker_selection_for,
+};
+pub use queue_service::{
+    DeliveryRefusal, EngineQueueDeclarations, ExpiredClock, PoolCensus, QueueDeclaration,
+    QueueDeclarationSource, QueueDeclarations, QueueServiceReason, ServiceAddress,
+    UnavailableSummary, WorkerUnavailable,
 };
 pub use quota_broadcast::QuotaBroadcaster;
 pub use quota_cache::QuotaCache;

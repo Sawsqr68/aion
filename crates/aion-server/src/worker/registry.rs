@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
 use aion_core::{ClusterEvent, InterventionCapabilities, WorkerDeathReason, WorkerTransport};
 use aion_proto::{ProtoActivityTask, ProtoRegisterWorker};
@@ -247,6 +248,13 @@ struct RegistryState {
     /// Round-robin cursor per `(namespace, task_queue, activity_type)` triple, so
     /// each pool rotates independently of every other pool.
     rotation: HashMap<ActivityKey, usize>,
+    /// When a worker advertising a given `(pool, activity_type)` and node last
+    /// LEFT service, per advertised node. Read by [`ConnectedWorkerRegistry::pool_census`]
+    /// to answer "how old is the last compatible poller" for an address that has
+    /// none right now (R1). Node-keyed because a node-pinned dispatch's notion
+    /// of "compatible" is node-specific: a worker still serving the activity on
+    /// another node must never make a pinned address look freshly served.
+    last_departure: HashMap<ActivityKey, BTreeMap<Option<String>, Instant>>,
 }
 
 impl Default for RegistryState {
@@ -256,6 +264,7 @@ impl Default for RegistryState {
             workers: BTreeMap::new(),
             by_activity: HashMap::new(),
             rotation: HashMap::new(),
+            last_departure: HashMap::new(),
         }
     }
 }
@@ -604,9 +613,21 @@ impl ConnectedWorkerRegistry {
         for namespace in &namespaces {
             let pool = PoolAddress::new(namespace.clone(), task_queue.clone());
             for activity_type in &activity_types {
+                let key = ActivityKey::new(pool.clone(), activity_type.clone());
+                // This address is served again, so its departure record has no
+                // remaining meaning — drop it in lockstep with the insert. The
+                // departure map is therefore bounded by the addresses real
+                // workers have served and left, never by caller-supplied
+                // dispatch strings (which never create an entry at all).
+                if let Some(by_node) = state.last_departure.get_mut(&key) {
+                    by_node.remove(&handle.node);
+                    if by_node.is_empty() {
+                        state.last_departure.remove(&key);
+                    }
+                }
                 state
                     .by_activity
-                    .entry(ActivityKey::new(pool.clone(), activity_type.clone()))
+                    .entry(key)
                     .or_default()
                     .insert(worker_id, handle.clone());
             }
@@ -863,6 +884,71 @@ impl ConnectedWorkerRegistry {
         }))
     }
 
+    /// Census the live fleet for one dispatch address (R1).
+    ///
+    /// Taken under the SAME lock discipline as [`Self::select_worker`] and read
+    /// immediately after a selection miss, so the taxonomy verdict describes
+    /// the fleet selection actually saw. Three nested counts — the pool, the
+    /// activity coverage within it, the node coverage within that — are what
+    /// separate `NO_LIVE_POLLERS` from `POLLERS_INCOMPATIBLE`.
+    ///
+    /// `last_compatible_poller_age` is zero while a compatible worker is
+    /// connected, the elapsed time since the most recent compatible departure
+    /// when one has left, and `None` when this server has never had one.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if the registry lock is poisoned.
+    pub fn pool_census(
+        &self,
+        namespace: &str,
+        task_queue: &str,
+        activity_type: &str,
+        node: Option<&str>,
+    ) -> Result<super::queue_service::PoolCensus, ServerError> {
+        let state = self.state()?;
+        let key = ActivityKey::new(PoolAddress::new(namespace, task_queue), activity_type);
+        let workers_in_pool = state
+            .workers
+            .values()
+            .filter(|worker| {
+                worker.task_queue == task_queue && worker.namespaces.contains(namespace)
+            })
+            .count();
+        let serving = state.by_activity.get(&key);
+        let workers_serving_activity = serving.map_or(0, HashMap::len);
+        let compatible_workers = serving.map_or(0, |workers| {
+            workers
+                .values()
+                .filter(|worker| worker_matches_node(worker, node))
+                .count()
+        });
+        let last_compatible_poller_age = if compatible_workers > 0 {
+            Some(Duration::ZERO)
+        } else {
+            state
+                .last_departure
+                .get(&key)
+                .and_then(|by_node| {
+                    by_node
+                        .iter()
+                        .filter(|(departed_node, _)| match node {
+                            None => true,
+                            Some(node) => departed_node.as_deref() == Some(node),
+                        })
+                        .map(|(_, departed_at)| *departed_at)
+                        .max()
+                })
+                .map(|departed_at| departed_at.elapsed())
+        };
+        Ok(super::queue_service::PoolCensus {
+            workers_in_pool,
+            workers_serving_activity,
+            compatible_workers,
+            last_compatible_poller_age,
+        })
+    }
+
     /// Return whether a worker stream is currently registered.
     ///
     /// The activity dispatch path uses this after queuing a task to detect a
@@ -953,10 +1039,19 @@ impl ConnectedWorkerRegistry {
     /// Fence a worker from every routing index while retaining its connection
     /// handle so an in-progress graceful drain can finish and tear down normally.
     fn remove_worker_from_service(state: &mut RegistryState, handle: &WorkerHandle) {
+        let departed_at = Instant::now();
         for namespace in &handle.namespaces {
             let pool = PoolAddress::new(namespace.clone(), handle.task_queue.clone());
             for activity_type in &handle.activity_types {
                 let key = ActivityKey::new(pool.clone(), activity_type.clone());
+                // Departure time is recorded for EVERY address this worker
+                // served, so a later census can age the last compatible poller
+                // instead of reporting a bare "nobody" (R1).
+                state
+                    .last_departure
+                    .entry(key.clone())
+                    .or_default()
+                    .insert(handle.node.clone(), departed_at);
                 if let Some(workers) = state.by_activity.get_mut(&key) {
                     workers.remove(&handle.id);
                     if workers.is_empty() {
@@ -2042,6 +2137,100 @@ mod tests {
             .await?;
         let tq = DEFAULT_TASK_QUEUE;
         assert_eq!(registry.workers_for("orders", tq, "charge", None)?.len(), 1);
+        Ok(())
+    }
+
+    /// R1 census: an address no worker has ever served reports an empty fleet
+    /// and no poller age at all — "never seen" is not "seen long ago".
+    #[test]
+    fn a_never_served_address_censuses_empty_with_no_poller_age() -> Result<(), ServerError> {
+        let registry = ConnectedWorkerRegistry::default();
+        let census = registry.pool_census("default", "general", "greet", None)?;
+        assert_eq!(census.workers_in_pool, 0);
+        assert_eq!(census.workers_serving_activity, 0);
+        assert_eq!(census.compatible_workers, 0);
+        assert_eq!(census.last_compatible_poller_age, None);
+        assert!(!census.is_served());
+        Ok(())
+    }
+
+    /// R1 census: pool membership, activity coverage, and node coverage are
+    /// three separate counts — that separation is what tells `NO_LIVE_POLLERS`
+    /// apart from `POLLERS_INCOMPATIBLE`.
+    #[test]
+    fn the_census_separates_pool_activity_and_node_coverage() -> Result<(), ServerError> {
+        let registry = ConnectedWorkerRegistry::default();
+        let (tx, _rx) = mpsc::channel(1);
+        let _worker = registry.register_namespaces(
+            [String::from("default")],
+            "general",
+            Some(String::from("n1")),
+            [String::from("greet")].iter(),
+            tx,
+        )?;
+
+        let unpinned = registry.pool_census("default", "general", "greet", None)?;
+        assert_eq!(unpinned.workers_in_pool, 1);
+        assert_eq!(unpinned.workers_serving_activity, 1);
+        assert_eq!(unpinned.compatible_workers, 1);
+        assert_eq!(unpinned.last_compatible_poller_age, Some(Duration::ZERO));
+
+        // Same pool, activity nobody advertises: pollers are live but
+        // incompatible.
+        let other_activity = registry.pool_census("default", "general", "settle", None)?;
+        assert_eq!(other_activity.workers_in_pool, 1);
+        assert_eq!(other_activity.workers_serving_activity, 0);
+        assert_eq!(other_activity.compatible_workers, 0);
+
+        // Same activity, wrong node: coverage exists in the pool but not for
+        // this dispatch.
+        let wrong_node = registry.pool_census("default", "general", "greet", Some("n2"))?;
+        assert_eq!(wrong_node.workers_serving_activity, 1);
+        assert_eq!(wrong_node.compatible_workers, 0);
+        assert_eq!(wrong_node.last_compatible_poller_age, None);
+        Ok(())
+    }
+
+    /// R1 census: after the last compatible worker leaves, the address reports
+    /// how long ago it was served — the age an operator sees on the parked
+    /// dispatch's WARN.
+    #[test]
+    fn a_departed_worker_leaves_a_last_compatible_poller_age() -> Result<(), ServerError> {
+        let registry = ConnectedWorkerRegistry::default();
+        let (tx, _rx) = mpsc::channel(1);
+        let worker = registry.register_namespaces(
+            [String::from("default")],
+            "general",
+            None,
+            [String::from("greet")].iter(),
+            tx,
+        )?;
+        worker.deregister()?;
+
+        let census = registry.pool_census("default", "general", "greet", None)?;
+        assert_eq!(census.workers_in_pool, 0);
+        assert_eq!(census.compatible_workers, 0);
+        let age = census
+            .last_compatible_poller_age
+            .ok_or_else(|| test_failure("a departed worker must leave an age behind"))?;
+        assert!(
+            age < Duration::from_secs(60),
+            "the recorded departure is implausibly old: {age:?}"
+        );
+
+        // A worker returning to the address clears the departure record: the
+        // map that answers "how long ago" never accumulates live addresses.
+        let (tx, _rx) = mpsc::channel(1);
+        let _back = registry.register_namespaces(
+            [String::from("default")],
+            "general",
+            None,
+            [String::from("greet")].iter(),
+            tx,
+        )?;
+        let served = registry.pool_census("default", "general", "greet", None)?;
+        assert_eq!(served.last_compatible_poller_age, Some(Duration::ZERO));
+        assert!(served.is_served());
         Ok(())
     }
 }

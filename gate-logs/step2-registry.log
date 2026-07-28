@@ -1,0 +1,32 @@
+   Compiling aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 17.41s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-bb8770177361cfc7)
+
+running 24 tests
+test worker::registry::tests::a_never_served_address_censuses_empty_with_no_poller_age ... ok
+test worker::registry::tests::closed_rejects_unknown_namespace_and_does_not_create_it ... ok
+test worker::registry::tests::denied_namespace_is_not_registered ... ok
+test worker::registry::tests::open_register_mints_each_namespace_in_a_multi_namespace_worker ... ok
+test worker::registry::tests::closed_admits_a_known_namespace ... ok
+test worker::registry::tests::node_pin_filters_within_pool ... ok
+test worker::registry::tests::no_minter_registry_skips_the_placement_gate ... ok
+test worker::registry::tests::a_departed_worker_leaves_a_last_compatible_poller_age ... ok
+test worker::registry::tests::no_minter_leaves_registration_untouched ... ok
+test worker::registry::tests::open_register_mints_durable_record_and_is_idempotent ... ok
+test worker::registry::tests::pinned_admits_a_worker_on_a_required_node ... ok
+test worker::registry::tests::pinned_rejects_a_wrong_node_worker ... ok
+test worker::registry::tests::pinned_rejects_a_node_less_worker ... ok
+test worker::registry::tests::pinned_violation_rejects_the_whole_multi_namespace_registration ... ok
+test worker::registry::tests::register_and_deregister_are_namespace_isolated ... ok
+test worker::registry::tests::rotation_cursor_is_pruned_when_last_worker_leaves ... ok
+test worker::registry::tests::concurrent_registrations_for_a_new_namespace_create_exactly_one_record ... ok
+test worker::registry::tests::same_task_queue_in_different_namespaces_is_isolated ... ok
+test worker::registry::tests::the_census_separates_pool_activity_and_node_coverage ... ok
+test worker::registry::tests::shared_node_id_round_robins_across_workers ... ok
+test worker::registry::tests::set_intervention_capabilities_updates_live_worker ... ok
+test worker::registry::tests::task_queues_partition_disjoint_pools_within_one_namespace ... ok
+test worker::registry::tests::unplaced_and_prefer_admission_is_unaffected_by_the_pinned_gate ... ok
+test worker::registry::tests::worker_serving_a_namespace_set_is_reachable_in_each ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 573 filtered out; finished in 0.01s
+

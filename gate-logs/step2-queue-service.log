@@ -1,0 +1,30 @@
+   Compiling aion-rs v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion)
+   Compiling aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 04s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-bb8770177361cfc7)
+
+running 21 tests
+test worker::queue_service::census::tests::a_served_address_is_not_classified ... ok
+test worker::queue_service::census::tests::an_undeclared_queue_is_structural ... ok
+test worker::queue_service::census::tests::an_unknowable_declaration_never_produces_a_structural_refusal ... ok
+test worker::queue_service::census::tests::pollers_off_the_pinned_node_are_incompatible ... ok
+test worker::queue_service::census::tests::an_empty_pool_on_a_declared_queue_has_no_live_pollers ... ok
+test worker::queue_service::census::tests::pollers_that_do_not_cover_the_activity_are_incompatible ... ok
+test worker::queue_service::declarations::tests::an_installed_source_answers_and_is_visible_to_every_clone ... ok
+test worker::queue_service::declarations::tests::an_uninstalled_source_answers_unknown ... ok
+test worker::queue_service::declarations::tests::a_duplicate_install_never_changes_the_answer ... ok
+test worker::queue_service::taxonomy::tests::an_ordinary_failure_is_not_read_as_a_queue_service_refusal ... ok
+test worker::queue_service::delivery::tests::a_closed_intake_is_never_reported_as_saturation ... ok
+test worker::queue_service::delivery::tests::a_full_intake_with_no_clock_fails_at_once ... ok
+test worker::queue_service::delivery::tests::a_drain_during_the_retry_window_fails_with_the_drain_reason ... ok
+test worker::queue_service::delivery::tests::a_free_intake_accepts_the_task_immediately ... ok
+test worker::queue_service::taxonomy::tests::every_reason_round_trips_through_its_canonical_spelling ... ok
+test worker::queue_service::taxonomy::tests::the_two_clocks_render_distinctly ... ok
+test worker::queue_service::taxonomy::tests::structural_refusal_is_terminal_and_carries_no_clock ... ok
+test worker::queue_service::taxonomy::tests::fleet_refusals_are_retryable_and_name_the_expired_clock ... ok
+test worker::queue_service::taxonomy::tests::a_refusal_round_trips_back_to_its_typed_head ... ok
+test worker::queue_service::delivery::tests::an_intake_that_stays_full_past_the_clock_is_saturated ... ok
+test worker::queue_service::delivery::tests::an_intake_that_frees_up_within_the_clock_is_served ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 573 filtered out; finished in 0.51s
+
