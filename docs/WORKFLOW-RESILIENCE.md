@@ -1,9 +1,13 @@
 # Workflow resilience & self-healing — design notes
 
-> Status: design notes, not yet briefs. Captured 2026-06-16 after two local
-> stacked-dev runs failed at `dev_review` on a transient provider error.
-> Decision so far: build **L3 (resume) first**, then **L1+L2 (auto-retry)** as
-> one follow-on. Nothing here is implemented yet.
+> Status: HISTORICAL design notes — the core has since landed. Captured
+> 2026-06-16 after two local stacked-dev runs failed at `dev_review` on a
+> transient provider error. As of 2026-07-28: the activity retry driver
+> (engine durability path), run **reopen** (server API), and **pause/resume**
+> (`docs/PAUSE-RESUME-DESIGN.md`, ratified & implemented #204 v1) are all on
+> main. These notes remain for the incident record and for the unbuilt
+> tails discussed below; read them against the shipped surfaces, not as a
+> to-do list.
 
 ## 1. The incident
 
