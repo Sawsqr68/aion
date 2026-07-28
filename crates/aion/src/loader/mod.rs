@@ -7,6 +7,8 @@ use crate::error::EngineError;
 
 /// Shared, atomically-swappable workflow package catalog.
 pub mod catalog;
+/// What one read of the deployed contracts could say about declared queues.
+pub mod declared_queues;
 /// Package staging and workflow entry discovery.
 pub mod load;
 /// Durable persistence and startup reload for runtime-deployed packages.
@@ -15,6 +17,7 @@ pub mod persistence;
 pub mod version_info;
 
 pub use catalog::{ActivityServing, PinnedWorkflow, WorkflowCatalog};
+pub use declared_queues::DeclaredQueues;
 pub use load::{DeployedWorkerContract, LoadOutcome, LoadedWorkflow};
 pub use version_info::WorkflowVersionInfo;
 

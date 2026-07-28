@@ -15,6 +15,8 @@
 
 use std::sync::{Arc, OnceLock};
 
+use aion::loader::DeclaredQueues;
+
 /// What the deployed contract records say about a task queue.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum QueueDeclaration {
@@ -100,14 +102,27 @@ impl std::fmt::Debug for EngineQueueDeclarations {
     }
 }
 
+/// Maps one catalog read to the answer for `task_queue`.
+///
+/// A positive find is positive. An ABSENCE is only reported as
+/// [`QueueDeclaration::NotDeclared`] when the read has standing to make it:
+/// a catalog that declares no queue at all contradicts nothing.
+fn declaration_from(read: &DeclaredQueues, task_queue: &str) -> QueueDeclaration {
+    if read.declares(task_queue) {
+        QueueDeclaration::Declared
+    } else if read.found_no_declaration() {
+        // Nothing declares any queue: this catalog cannot contradict a
+        // dispatch, so it must not refuse one.
+        QueueDeclaration::Unknown
+    } else {
+        QueueDeclaration::NotDeclared
+    }
+}
+
 impl QueueDeclarations for EngineQueueDeclarations {
     fn declaration_for(&self, task_queue: &str) -> QueueDeclaration {
         match self.engine.declared_task_queues() {
-            // Nothing declares any queue: this catalog cannot contradict a
-            // dispatch, so it must not refuse one.
-            Ok(queues) if queues.is_empty() => QueueDeclaration::Unknown,
-            Ok(queues) if queues.contains(task_queue) => QueueDeclaration::Declared,
-            Ok(_) => QueueDeclaration::NotDeclared,
+            Ok(read) => declaration_from(&read, task_queue),
             Err(error) => {
                 tracing::warn!(
                     task_queue,
@@ -122,7 +137,77 @@ impl QueueDeclarations for EngineQueueDeclarations {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
+    use super::super::census::{PoolCensus, classify};
+    use super::super::taxonomy::QueueServiceReason;
     use super::*;
+
+    fn queues(names: &[&str]) -> BTreeSet<String> {
+        names.iter().map(|name| (*name).to_owned()).collect()
+    }
+
+    /// A catalog that decoded every entry has standing to say "nobody declares
+    /// this queue", and that refusal stays structural.
+    #[test]
+    fn a_complete_read_still_reports_an_absent_queue_as_undeclared() {
+        let read = DeclaredQueues::new(queues(&["orders"]), Vec::new());
+        assert_eq!(
+            declaration_from(&read, "checkout"),
+            QueueDeclaration::NotDeclared
+        );
+        assert_eq!(
+            declaration_from(&read, "orders"),
+            QueueDeclaration::Declared
+        );
+    }
+
+    #[test]
+    fn a_complete_read_that_found_nothing_is_unknown() {
+        let read = DeclaredQueues::new(BTreeSet::new(), Vec::new());
+        assert_eq!(declaration_from(&read, "orders"), QueueDeclaration::Unknown);
+    }
+
+    /// The blocker pin, mapping half. A read that could not decode every entry
+    /// has seen only part of the catalog: a queue it did not find may well be
+    /// declared by the entry it could not read.
+    #[test]
+    fn a_queue_absent_from_a_partial_read_is_never_undeclared() {
+        let read = DeclaredQueues::new(queues(&["orders"]), vec!["sha256:legacy".to_owned()]);
+        assert_eq!(
+            declaration_from(&read, "checkout"),
+            QueueDeclaration::Unknown
+        );
+    }
+
+    #[test]
+    fn a_positive_find_survives_a_partial_read() {
+        let read = DeclaredQueues::new(queues(&["orders"]), vec!["sha256:legacy".to_owned()]);
+        assert_eq!(
+            declaration_from(&read, "orders"),
+            QueueDeclaration::Declared
+        );
+    }
+
+    /// The blocker pin, consequence half. The mixed catalog the handshake
+    /// migration creates must never terminally refuse a dispatch to the
+    /// pre-`.v4` package's queue — it is a fleet condition, retryable and
+    /// serviceable the moment a compatible worker connects.
+    #[test]
+    fn a_mixed_catalog_never_structurally_refuses_the_undecodable_queue() {
+        let read = DeclaredQueues::new(queues(&["orders"]), vec!["sha256:legacy".to_owned()]);
+        let reason = classify(
+            declaration_from(&read, "checkout"),
+            &PoolCensus {
+                workers_in_pool: 1,
+                workers_serving_activity: 0,
+                compatible_workers: 0,
+                last_compatible_poller_age: None,
+            },
+        );
+        assert_ne!(reason, Some(QueueServiceReason::NoQueueDeclaration));
+        assert_eq!(reason, Some(QueueServiceReason::PollersIncompatible));
+    }
 
     struct FixedDeclarations(QueueDeclaration);
 

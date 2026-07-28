@@ -20,6 +20,7 @@ use aion_core::PackageVersion;
 use aion_package::{ContentHash, ManifestDigest, ManifestVersion};
 use chrono::{DateTime, Utc};
 
+use super::declared_queues::DeclaredQueues;
 use super::load::{DeployedWorkerContract, LoadedWorkflow, load_error};
 use super::version_info::WorkflowVersionInfo;
 use crate::error::EngineError;
@@ -301,7 +302,7 @@ impl WorkflowCatalog {
     /// # Errors
     ///
     /// Returns [`EngineError::CatalogPoisoned`] when the snapshot lock is poisoned.
-    pub fn declared_task_queues(&self) -> Result<BTreeSet<String>, EngineError> {
+    pub fn declared_task_queues(&self) -> Result<DeclaredQueues, EngineError> {
         let snapshot = self.current()?;
         let mut queues = BTreeSet::new();
         for entry in snapshot.by_version.values() {
@@ -312,7 +313,7 @@ impl WorkflowCatalog {
                 queues.insert(worker.task_queue.clone());
             }
         }
-        Ok(queues)
+        Ok(DeclaredQueues::new(queues, Vec::new()))
     }
 
     /// Every loaded version with its route flag, sorted by `(type, loaded_at)`.

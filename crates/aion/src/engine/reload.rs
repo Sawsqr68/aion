@@ -9,7 +9,7 @@ use aion_core::Event;
 use aion_package::ContentHash;
 
 use crate::error::PinHolder;
-use crate::loader::{DeployedWorkerContract, LoadOutcome, WorkflowVersionInfo};
+use crate::loader::{DeclaredQueues, DeployedWorkerContract, LoadOutcome, WorkflowVersionInfo};
 use crate::{EngineError, WorkflowCatalog};
 
 use super::api::Engine;
@@ -127,7 +127,7 @@ impl Engine {
     /// # Errors
     ///
     /// Returns [`EngineError::CatalogPoisoned`] when the catalog lock is poisoned.
-    pub fn declared_task_queues(&self) -> Result<std::collections::BTreeSet<String>, EngineError> {
+    pub fn declared_task_queues(&self) -> Result<DeclaredQueues, EngineError> {
         self.workflow_catalog().declared_task_queues()
     }
 
