@@ -3,7 +3,7 @@
 //!
 //! ## CURRENT STATUS — RED, and it has NEVER been green anywhere
 //!
-//! This gate has no green in its history: six specimens across three machines,
+//! This gate has no green in its history: seven specimens across two machines,
 //! zero passes, and the `kill -9` it exists to exercise has never once fired.
 //! It is blocked in SETUP, before the kill, on the unsteered start below. The
 //! cause is proven at the bytes in
