@@ -81,6 +81,12 @@ pub(super) fn walk_call(w: &mut Walker<'_, '_>, scope: &mut Scope, call: &CallSt
                      inline; its own actions carry the pins (`{name}` is a subflow)"
                 ),
             );
+        } else if let Some(span) = config.advisory {
+            w.err(
+                span,
+                "a call site may pin `node` and `timeout` only — `advisory` stays on the \
+                 action declaration; an action is a side channel everywhere or nowhere",
+            );
         } else if let Some(retry) = &config.retry {
             let span = match retry {
                 RetrySpec::Every { span, .. } | RetrySpec::Backoff { span, .. } => *span,
@@ -92,10 +98,39 @@ pub(super) fn walk_call(w: &mut Walker<'_, '_>, scope: &mut Scope, call: &CallSt
             );
         }
     }
+    check_advisory_call(w, call, name);
     if let Some(bind) = &call.bind {
         insert_binding(w, scope, &bind.name, returns.clone(), bind.span);
     }
     returns
+}
+
+/// An ADVISORY action never faults its calling step (RUNTIME-OPERATIONS.md
+/// R5), so on the failing path it has no value to hand anyone. Binding its
+/// result would promise a value the class cannot deliver, so the binding is
+/// a refusal — the failure is visible on the run as a warning event, not as
+/// data in the flow.
+fn check_advisory_call(w: &mut Walker<'_, '_>, call: &CallStmt, name: &str) {
+    let advisory = w
+        .ctx
+        .actions
+        .get(name)
+        .is_some_and(|action| action.advisory.is_some());
+    if !advisory {
+        return;
+    }
+    if let Some(bind) = &call.bind {
+        w.err(
+            bind.span,
+            format!(
+                "advisory action `{name}` cannot bind a result — an advisory failure never \
+                 faults the step, so there is no value to provide when it fails; call it as \
+                 a bare statement (drop `-> {}`), or remove `advisory` from its declaration \
+                 if the flow needs its value",
+                bind.name
+            ),
+        );
+    }
 }
 
 pub(super) fn walk_spawn(

@@ -206,7 +206,9 @@ pub(super) fn parse_config_block(stream: &mut Stream) -> Result<Option<ConfigLin
         && stream.peek_second().is_some_and(|token| {
             matches!(
                 token.kind,
-                TokenKind::Keyword(Keyword::Node | Keyword::Timeout | Keyword::Retry)
+                TokenKind::Keyword(
+                    Keyword::Node | Keyword::Timeout | Keyword::Retry | Keyword::Advisory
+                )
             )
         });
     if !opens_config {
@@ -223,6 +225,7 @@ pub(super) fn parse_config_block(stream: &mut Stream) -> Result<Option<ConfigLin
 
 fn parse_config_line(stream: &mut Stream, lead: Vec<Lead>) -> Result<ConfigLine, ParseError> {
     let start = stream.peek_span();
+    let mut advisory = None;
     let mut node = None;
     let mut timeout = None;
     let mut retry = None;
@@ -231,6 +234,13 @@ fn parse_config_line(stream: &mut Stream, lead: Vec<Lead>) -> Result<ConfigLine,
             Some(token) => {
                 let key_span = token.span;
                 match token.kind {
+                    TokenKind::Keyword(Keyword::Advisory) => {
+                        stream.next();
+                        if advisory.is_some() {
+                            return Err(ParseError::new(key_span, "duplicate `advisory` key"));
+                        }
+                        advisory = Some(key_span);
+                    }
                     TokenKind::Keyword(Keyword::Node) => {
                         stream.next();
                         if node.is_some() {
@@ -261,7 +271,8 @@ fn parse_config_line(stream: &mut Stream, lead: Vec<Lead>) -> Result<ConfigLine,
                         return Err(ParseError::new(
                             key_span,
                             format!(
-                                "expected a config key (`node`, `timeout`, `retry`), found {}",
+                                "expected a config key (`advisory`, `node`, `timeout`, `retry`), \
+                                 found {}",
                                 describe(other)
                             ),
                         ));
@@ -271,7 +282,8 @@ fn parse_config_line(stream: &mut Stream, lead: Vec<Lead>) -> Result<ConfigLine,
             None => {
                 return Err(ParseError::new(
                     stream.eof_span(),
-                    "expected a config key (`node`, `timeout`, `retry`), found end of input",
+                    "expected a config key (`advisory`, `node`, `timeout`, `retry`), found end \
+                     of input",
                 ));
             }
         }
@@ -286,6 +298,7 @@ fn parse_config_line(stream: &mut Stream, lead: Vec<Lead>) -> Result<ConfigLine,
             span: start,
             lead,
             trailing,
+            advisory,
             node,
             timeout,
             retry,

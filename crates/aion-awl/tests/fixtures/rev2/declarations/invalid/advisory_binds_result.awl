@@ -1,0 +1,14 @@
+//! An advisory failure never faults the step, so it can promise no value.
+workflow notify_then_use
+  input subject: String
+  outcome told: type Receipt, route success
+
+type Receipt { id: String }
+
+worker notifier
+  action notify(subject: String) -> Receipt
+    advisory, retry 3 every 10s
+
+step notify
+  notify(subject: subject) -> receipt
+  route told(id: receipt.id)
