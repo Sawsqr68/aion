@@ -1,12 +1,49 @@
 //! The queue-declaration read over a MIXED catalog — the state the handshake
 //! migration creates: retained pre-`.v4` packages beside deployed `.v4` ones.
 
+use std::sync::{Arc, Mutex};
+
 use aion_package::{ContentHash, PackageContract, WorkerContract};
+use tracing::field::{Field, Visit};
+use tracing_subscriber::Layer;
+use tracing_subscriber::layer::{Context, SubscriberExt as _};
+use tracing_subscriber::registry::Registry;
 
 use super::DeclaredQueues;
 use crate::loader::WorkflowCatalog;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+/// Renders one event's fields, enough to pin what the operator is told and
+/// which identity is named.
+#[derive(Default)]
+struct EventFields(Vec<String>);
+
+impl Visit for EventFields {
+    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+        self.0.push(format!("{}={value:?}", field.name()));
+    }
+
+    fn record_str(&mut self, field: &Field, value: &str) {
+        self.0.push(format!("{}={value}", field.name()));
+    }
+}
+
+/// Collects this thread's events as `LEVEL|field=value…`; `with_default`
+/// keeps the capture thread-scoped, so parallel unit tests never empty each
+/// other's log.
+struct CaptureLayer(Arc<Mutex<Vec<String>>>);
+
+impl<S: tracing::Subscriber> Layer<S> for CaptureLayer {
+    fn on_event(&self, event: &tracing::Event<'_>, _context: Context<'_, S>) {
+        let mut fields = EventFields::default();
+        event.record(&mut fields);
+        let rendered = format!("{}|{}", event.metadata().level(), fields.0.join("|"));
+        if let Ok(mut captured) = self.0.lock() {
+            captured.push(rendered);
+        }
+    }
+}
 
 fn contract_declaring(task_queue: &str) -> PackageContract {
     PackageContract {
@@ -73,6 +110,42 @@ fn a_mixed_catalog_names_the_entry_it_could_not_decode() -> TestResult {
         read.undecodable_identities(),
         [legacy_version.to_string()].as_slice(),
         "the undecodable stored identity must be named, not skipped"
+    );
+    Ok(())
+}
+
+/// The operator half of the fix: an entry that could not be decoded is not
+/// only carried in the answer, it is SAID — at WARN, naming the identity to
+/// re-deploy. A silent downgrade to `Unknown` would leave the fleet reading
+/// as merely unserved forever.
+#[test]
+fn an_undecodable_entry_is_named_at_warn() -> TestResult {
+    let captured = Arc::new(Mutex::new(Vec::new()));
+    let subscriber = Registry::default().with(CaptureLayer(Arc::clone(&captured)));
+    let legacy_version = ContentHash::from_bytes([3; 32]);
+
+    tracing::subscriber::with_default(subscriber, || {
+        let catalog = WorkflowCatalog::new();
+        catalog.note_loaded_workflow_with_contract_for_test(
+            "checkout",
+            "checkout__legacy",
+            "run",
+            legacy_version.clone(),
+            None,
+        );
+        catalog.declared_task_queues().map(|_| ())
+    })?;
+
+    let events = captured.lock().map_err(|error| error.to_string())?;
+    let warnings: Vec<&String> = events
+        .iter()
+        .filter(|event| event.starts_with("WARN"))
+        .collect();
+    assert_eq!(warnings.len(), 1, "captured: {events:?}");
+    assert!(
+        warnings[0].contains(&legacy_version.to_string()),
+        "the WARN must name the stored identity to re-deploy: {}",
+        warnings[0]
     );
     Ok(())
 }

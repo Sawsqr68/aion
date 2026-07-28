@@ -4,87 +4,88 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 binary: rustc
 
 $ cargo test -p aion-rs --lib loader::
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.37s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s
      Running unittests src/lib.rs (target/debug/deps/aion-fa693d274060ff19)
 
-running 26 tests
+running 27 tests
 test loader::catalog::catalog_tests::content_hash_fixture_changes_when_bytes_change ... ok
-test loader::catalog::catalog_multi_entry_tests::secondary_entry_verification_failure_commits_no_routes ... ok
 test loader::catalog::catalog_tests::missing_entry_module_returns_load_error ... ok
 test loader::catalog::catalog_tests::entry_verification_failure_rolls_back_every_registration ... ok
-test loader::catalog::catalog_multi_entry_tests::staged_group_is_not_resolvable_until_durable_publication ... ok
-test loader::catalog::catalog_tests::retains_two_versions_and_routes_to_the_last_loaded ... ok
-test loader::catalog::catalog_tests::records_deployed_entry_function_and_routes_to_it ... ok
 test loader::catalog::catalog_tests::collision_from_different_hash_fails_before_registration ... ok
+test loader::catalog::catalog_multi_entry_tests::secondary_entry_verification_failure_commits_no_routes ... ok
+test loader::catalog::catalog_tests::records_deployed_entry_function_and_routes_to_it ... ok
+test loader::catalog::catalog_multi_entry_tests::staged_group_is_not_resolvable_until_durable_publication ... ok
 test loader::catalog::catalog_tests::identical_reload_is_idempotent_and_reload_re_routes ... ok
+test loader::catalog::catalog_multi_entry_tests::swapping_out_one_member_removes_and_restores_the_whole_archive_group ... ok
 test loader::catalog::catalog_multi_entry_tests::multi_entry_package_registers_and_routes_atomically ... ok
 test loader::catalog::catalog_tests::registers_every_package_derived_deployed_module ... ok
-test loader::catalog::catalog_tests::runtime_failure_does_not_commit_catalog_state ... ok
-test loader::catalog::catalog_tests::swap_out_refuses_routed_package_and_restore_round_trips ... ok
-test loader::catalog::catalog_tests::route_version_re_points_and_rejects_unknown_hashes ... ok
 test loader::catalog::catalog_tests::same_hash_different_manifest_reload_is_refused_typed ... ok
+test loader::catalog::catalog_tests::route_version_re_points_and_rejects_unknown_hashes ... ok
+test loader::catalog::catalog_tests::runtime_failure_does_not_commit_catalog_state ... ok
 test loader::catalog::catalog_tests::start_pins_are_held_until_dropped ... ok
+test loader::catalog::catalog_tests::retains_two_versions_and_routes_to_the_last_loaded ... ok
 test loader::catalog::catalog_timeout_tests::package_builder_authenticates_every_entry_timeout ... ok
 test loader::catalog::catalog_timeout_tests::per_entry_identity_authenticates_primary_and_additional ... ok
-test loader::catalog::catalog_multi_entry_tests::swapping_out_one_member_removes_and_restores_the_whole_archive_group ... ok
-test loader::catalog::catalog_timeout_tests::timeout_only_redeploy_loads_as_a_new_version ... ok
+test loader::catalog::catalog_tests::swap_out_refuses_routed_package_and_restore_round_trips ... ok
 test loader::catalog::catalog_tests::versions_listing_reports_route_flags_sorted ... ok
 test loader::declared_queues::declared_queues_tests::a_read_of_only_v4_entries_covers_every_entry ... ok
-test loader::declared_queues::declared_queues_tests::a_read_reports_exactly_what_it_was_given ... ok
 test loader::declared_queues::declared_queues_tests::a_mixed_catalog_names_the_entry_it_could_not_decode ... ok
+test loader::catalog::catalog_timeout_tests::timeout_only_redeploy_loads_as_a_new_version ... ok
+test loader::declared_queues::declared_queues_tests::a_read_reports_exactly_what_it_was_given ... ok
+test loader::declared_queues::declared_queues_tests::an_undecodable_entry_is_named_at_warn ... ok
 test loader::catalog::catalog_tests::unexported_entry_function_fails_the_runtime_load ... ok
 test loader::catalog::catalog_tests::package_loaded_under_content_hash_namespace_spawns_entrypoint ... ok
 
-test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 555 filtered out; finished in 0.28s
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 555 filtered out; finished in 0.24s
 
 
 $ cargo test -p aion-rs --lib lifecycle::
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.19s
      Running unittests src/lib.rs (target/debug/deps/aion-fa693d274060ff19)
 
 running 71 tests
 test lifecycle::completion::tests::terminal_outcome_is_scoped_to_requested_run_segment ... ok
-test lifecycle::completion::tests::abnormal_exit_records_failed_reconciles_and_notifies ... ok
 test lifecycle::completion::tests::normal_exit_records_completed_reconciles_and_notifies ... ok
-test lifecycle::completion::tests::process_exit_does_not_retire_a_timed_out_deadline ... ok
 test lifecycle::completion::tests::process_exit_resumes_interrupted_deadline_cancellation ... ok
-test lifecycle::continue_as_new::tests::recorded_terminal_rejects_continue_without_second_terminal_event ... ok
-test lifecycle::continue_as_new::tests::pending_child_rejects_without_terminal_event ... ok
-test lifecycle::continue_as_new::tests::different_replacement_type_rejects_before_terminal_mutation ... ok
+test lifecycle::completion::tests::process_exit_does_not_retire_a_timed_out_deadline ... ok
+test lifecycle::completion::tests::abnormal_exit_records_failed_reconciles_and_notifies ... ok
 test lifecycle::continue_as_new::tests::success_records_notifies_deregisters_and_starts_new_run ... ok
-test lifecycle::deadline::tests::deadline_loses_to_an_already_recorded_terminal ... ok
-test lifecycle::deadline::tests::teardown_failure_preserves_retry_anchors_then_resumes ... ok
-test lifecycle::deadline::tests::retired_deadline_loses_before_any_workflow_terminal ... ok
+test lifecycle::continue_as_new::tests::pending_activity_rejects_without_terminal_event ... ok
+test lifecycle::deadline::tests::deadline_fire_retires_the_deadline_behind_a_competing_terminal ... ok
 test lifecycle::deadline::tests::deadline_records_timed_out_and_tears_down ... ok
-test lifecycle::reopen::tests::cancelled_run_reopens_with_an_empty_set ... ok
+test lifecycle::deadline::tests::re_fire_after_recorded_timeout_resumes_teardown_without_a_second_terminal ... ok
+test lifecycle::deadline::tests::retired_deadline_loses_before_any_workflow_terminal ... ok
 test lifecycle::reopen::tests::a_reopened_run_that_reterminated_reopens_from_the_new_failure ... ok
+test lifecycle::reopen::tests::cancelled_run_reopens_with_an_empty_set ... ok
 test lifecycle::reopen::tests::completed_run_is_rejected_as_invalid_state ... ok
 test lifecycle::reopen::tests::concurrent_fan_out_reopens_every_failed_key ... ok
 test lifecycle::reopen::tests::failed_run_computes_the_terminally_failed_step ... ok
 test lifecycle::reopen::tests::failed_then_succeeded_step_is_not_reopened ... ok
 test lifecycle::reopen::tests::fired_timer_is_not_rearmed ... ok
+test lifecycle::deadline::tests::teardown_failure_preserves_retry_anchors_then_resumes ... ok
 test lifecycle::reopen::tests::in_flight_activity_is_never_reopened ... ok
+test lifecycle::deadline::tests::timeout_teardown_retires_the_runs_active_timers ... ok
 test lifecycle::reopen::tests::outstanding_timer_rearms_without_touching_history ... ok
 test lifecycle::reopen::tests::rearm_keeps_the_original_fire_at_and_covers_multiple_timers ... ok
 test lifecycle::reopen::tests::running_run_is_rejected_as_invalid_state ... ok
 test lifecycle::reopen::tests::teardown_cancelled_timer_is_rearmed_with_a_restart_marker ... ok
 test lifecycle::reopen::tests::timed_out_run_is_rejected_as_invalid_state ... ok
 test lifecycle::reopen::tests::workflow_intent_cancellation_is_never_resurrected ... ok
-test lifecycle::deadline::tests::timeout_teardown_retires_the_runs_active_timers ... ok
-test lifecycle::continue_as_new::tests::pending_activity_rejects_without_terminal_event ... ok
-test lifecycle::deadline::tests::deadline_for_deregistered_run_is_a_noop ... ok
+test lifecycle::continue_as_new::tests::pending_child_rejects_without_terminal_event ... ok
+test lifecycle::continue_as_new::tests::different_replacement_type_rejects_before_terminal_mutation ... ok
+test lifecycle::continue_as_new::tests::recorded_terminal_rejects_continue_without_second_terminal_event ... ok
+test lifecycle::deadline::tests::deadline_loses_to_an_already_recorded_terminal ... ok
 test lifecycle::deadline::tests::cold_start_finalizes_timed_out_teardown_without_a_registered_handle ... ok
-test lifecycle::deadline::tests::deadline_fire_retires_the_deadline_behind_a_competing_terminal ... ok
-test lifecycle::deadline::tests::re_fire_after_recorded_timeout_resumes_teardown_without_a_second_terminal ... ok
-test lifecycle::start::contract_tests::in_process_serving_still_refuses_pre_v4_identity ... ok
+test lifecycle::deadline::tests::deadline_for_deregistered_run_is_a_noop ... ok
 test lifecycle::start::contract_tests::pre_v4_exact_version_is_refused_before_history_or_registration ... ok
 test lifecycle::start::contract_tests::in_process_serving_admits_unscoped_activities_past_admission ... ok
+test lifecycle::start::contract_tests::in_process_serving_still_refuses_pre_v4_identity ... ok
 test lifecycle::start::contract_tests::unscoped_activity_contract_is_refused_before_history_or_registration ... ok
-test lifecycle::start::start_tests::recorder_append_happens_before_spawn_failure ... ok
-test lifecycle::start::start_tests::failed_start_with_unabortable_process_retains_ownership_not_orphan ... ok
 test lifecycle::start::start_tests::normal_start_monitor_failure_retracts_publication_and_observes_abort ... ok
-test lifecycle::start::start_tests::start_with_attributes_records_started_then_attributes_before_spawn ... ok
+test lifecycle::start::start_tests::failed_start_with_unabortable_process_retains_ownership_not_orphan ... ok
 test lifecycle::start::start_tests::start_with_existing_workflow_id_resumes_history_sequence ... ok
+test lifecycle::start::start_tests::start_with_attributes_records_started_then_attributes_before_spawn ... ok
+test lifecycle::start::start_tests::recorder_append_happens_before_spawn_failure ... ok
 test lifecycle::transition::tests::reconcile_after_suspend_preserves_suspended_residency ... ok
 test lifecycle::transition::tests::resume_is_idempotent_for_already_resident_handle ... ok
 test lifecycle::transition::tests::resume_missing_handle_returns_workflow_not_found ... ok
@@ -105,83 +106,83 @@ test lifecycle::visibility::tests::terminal_recorded_at_returns_none_for_non_ter
 test lifecycle::visibility::tests::terminal_recorded_at_returns_timed_out_timestamp ... ok
 test lifecycle::visibility::tests::visibility_record_from_history_projects_completed_workflow_with_attributes ... ok
 test lifecycle::visibility::tests::visibility_record_from_history_projects_running_workflow ... ok
-test lifecycle::terminate::tests::cancel_kills_linked_children_records_notifies_and_deregisters ... ok
-test lifecycle::start::start_tests::start_with_unregistered_attribute_fails_without_append_or_spawn ... ok
 test lifecycle::start::start_tests::unknown_workflow_type_returns_not_found_and_appends_nothing ... ok
 test lifecycle::start::start_tests::successful_start_appends_spawns_places_registers_and_returns_handle ... ok
+test lifecycle::start::start_tests::start_with_unregistered_attribute_fails_without_append_or_spawn ... ok
+test lifecycle::terminate::tests::cancel_kills_linked_children_records_notifies_and_deregisters ... ok
 test lifecycle::terminate::tests::cancel_unknown_workflow_returns_not_found ... ok
 test lifecycle::terminate::tests::complete_cancels_an_armed_deadline ... ok
 test lifecycle::terminate::tests::complete_records_notifies_and_deregisters ... ok
 test lifecycle::terminate::tests::fail_records_notifies_and_deregisters ... ok
 test lifecycle::deadline::tests::deadline_and_cancel_race_records_exactly_one_terminal ... ok
 
-test result: ok. 71 passed; 0 failed; 0 ignored; 0 measured; 510 filtered out; finished in 9.26s
+test result: ok. 71 passed; 0 failed; 0 ignored; 0 measured; 511 filtered out; finished in 9.03s
 
 
 $ cargo test -p aion-server --lib worker::
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.53s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
      Running unittests src/lib.rs (target/debug/deps/aion_server-bb8770177361cfc7)
 
 running 188 tests
-test worker::backpressure::tests::fraction_clamps_degenerate_inputs ... ok
-test worker::backpressure::tests::own_all_ceiling_equals_full_quota ... ok
 test worker::backpressure::tests::proportional_ceiling_is_owned_fraction_of_quota_rounded_up ... ok
+test worker::backpressure::tests::own_all_ceiling_equals_full_quota ... ok
+test worker::backpressure::tests::fraction_clamps_degenerate_inputs ... ok
 test worker::backpressure::tests::per_node_ceilings_sum_to_at_least_the_cluster_quota ... ok
-test worker::bridge::tests::matched_completion_never_reaches_outbox_callback ... ok
-test worker::bridge::tests::malformed_payload_does_not_consume_the_current_generation ... ok
-test worker::bridge::tests::completion_sink_routes_success ... ok
-test worker::bridge::tests::park_activity_resolves_matched_waiter_with_the_parked_sentinel ... ok
 test worker::bridge::tests::completion_sink_routes_retryable_error ... ok
+test worker::bridge::tests::completion_sink_routes_success ... ok
+test worker::bridge::tests::malformed_payload_does_not_consume_the_current_generation ... ok
+test worker::bridge::tests::park_activity_resolves_matched_waiter_with_the_parked_sentinel ... ok
+test worker::bridge::tests::matched_completion_never_reaches_outbox_callback ... ok
 test worker::bridge::tests::dispatcher_fails_immediately_when_draining_without_workers ... ok
-test worker::bridge::tests::pending_complete_unknown_returns_false ... ok
-test worker::bridge::tests::pending_insert_and_complete_delivers_result ... ok
 test worker::bridge::tests::stale_result_for_other_workflow_does_not_complete_pending_dispatch ... ok
+test worker::bridge::tests::pending_insert_and_complete_delivers_result ... ok
 test worker::bridge::tests::unmatched_completion_is_silent_drop_when_no_callback_installed ... ok
-test worker::bridge::tests::dispatch_on_current_thread_runtime_fails_fast ... ok
-test worker::bridge::tests::unmatched_failure_routes_to_outbox_callback_and_not_live_reports_false ... ok
-test worker::bridge::tests::unmatched_park_is_a_noop_and_never_reaches_the_outbox_callback ... ok
+test worker::bridge::tests::pending_complete_unknown_returns_false ... ok
 test worker::bridge::tests::unmatched_completion_routes_to_outbox_callback_when_installed ... ok
+test worker::bridge::tests::unmatched_park_is_a_noop_and_never_reaches_the_outbox_callback ... ok
+test worker::bridge::tests::unmatched_failure_routes_to_outbox_callback_and_not_live_reports_false ... ok
+test worker::bridge::tests::dispatch_on_current_thread_runtime_fails_fast ... ok
 test worker::dispatch::tests::failed_activity_result_preserves_error_classification ... ok
-test worker::dispatch::tests::dispatch_pushes_activity_task_with_correlation ... ok
-test worker::dispatch::tests::dispatch_skips_closed_worker_and_uses_next_match ... ok
-test worker::dispatch::tests::dispatch_requiring_never_mutates_the_rows_node ... ok
-test worker::envelope::tests::a_pre_recovery_generation_is_rejected_after_recovery ... ok
-test worker::bridge::tests::dispatch_pinned_to_node_reaches_only_that_node ... ok
-test worker::dispatch::tests::successful_activity_result_calls_completion_sink ... ok
-test worker::bridge::tests::dispatch_inside_runtime_task_delivers_promptly_and_round_trips ... ok
 test worker::backpressure::tests::collapsed_scan_yields_identical_namespace_buckets_and_one_scan ... ok
-test worker::bridge::tests::unpinned_dispatch_reaches_a_pooled_worker_regardless_of_node ... ok
+test worker::dispatch::tests::dispatch_pushes_activity_task_with_correlation ... ok
+test worker::dispatch::tests::dispatch_requiring_never_mutates_the_rows_node ... ok
+test worker::dispatch::tests::dispatch_skips_closed_worker_and_uses_next_match ... ok
+test worker::envelope::tests::a_pre_recovery_generation_is_rejected_after_recovery ... ok
+test worker::dispatch::tests::successful_activity_result_calls_completion_sink ... ok
+test worker::bridge::tests::dispatch_pinned_to_node_reaches_only_that_node ... ok
 test worker::envelope::tests::accepted_generation_is_consumed_exactly_once ... ok
+test worker::bridge::tests::unpinned_dispatch_reaches_a_pooled_worker_regardless_of_node ... ok
+test worker::bridge::tests::dispatch_inside_runtime_task_delivers_promptly_and_round_trips ... ok
 test worker::envelope::tests::an_empty_wire_token_is_a_typed_compatibility_refusal ... ok
 test worker::envelope::tests::issuing_a_retry_rejects_the_stale_generation ... ok
 test worker::envelope::tests::idempotency_key_is_attempt_independent_and_site_run_scoped ... ok
 test worker::envelope::tests::revoking_an_old_generation_does_not_remove_its_replacement ... ok
-test worker::heartbeat::tests::disconnected_worker_fails_each_in_flight_task_once ... ok
 test worker::heartbeat::tests::complete_task_reports_whether_the_entry_was_tracked ... ok
+test worker::heartbeat::tests::disconnected_worker_fails_each_in_flight_task_once ... ok
 test worker::heartbeat::tests::heartbeat_progress_is_not_reported_as_activity_result ... ok
-test worker::heartbeat::tests::malformed_heartbeat_missing_ids_is_wire_error ... ok
 test worker::heartbeat::tests::heartbeat_refresh_keeps_task_live_across_window ... ok
+test worker::heartbeat::tests::malformed_heartbeat_missing_ids_is_wire_error ... ok
 test worker::heartbeat::tests::missed_heartbeat_deregisters_worker_and_fails_in_flight_once ... ok
 test worker::heartbeat::tests::park_disconnected_worker_parks_tasks_without_synthesizing_completions ... ok
 test worker::heartbeat::tests::payload_free_heartbeat_refreshes_liveness_without_clearing_progress ... ok
-test worker::heartbeat::tests::park_all_in_flight_workers_parks_everything_and_wakes_drain_waiters ... ok
 test worker::heartbeat::tests::record_liveness_refreshes_stamp_and_ignores_untracked_tasks ... ok
 test worker::heartbeat::tests::sweep_interval_is_quarter_window_clamped_to_one_second_and_window ... ok
+test worker::heartbeat::tests::park_all_in_flight_workers_parks_everything_and_wakes_drain_waiters ... ok
 test worker::intervention::tests::a_disconnected_owner_is_a_stale_target_no_op ... ok
-test worker::intervention::tests::a_transport_connection_loss_maps_to_a_stale_target_no_op ... ok
 test worker::intervention::tests::a_command_for_an_unowned_attempt_is_a_stale_target_no_op ... ok
+test worker::intervention::tests::a_transport_connection_loss_maps_to_a_stale_target_no_op ... ok
+test worker::intervention::tests::capabilities_for_reads_the_owning_workers_advertised_set ... ok
 test worker::intervention::tests::an_unadvertised_primitive_is_gated_at_the_server_and_never_sent ... ok
 test worker::intervention::tests::intervenable_attempts_drops_an_attempt_whose_owner_disconnected ... ok
-test worker::intervention::tests::capabilities_for_reads_the_owning_workers_advertised_set ... ok
 test worker::intervention::tests::gated_stale_and_cancel_outcomes_retain_nothing ... ok
 test worker::intervention::tests::intervenable_attempts_enumerates_only_live_owned_attempts_of_the_workflow ... ok
-test worker::intervention::tests::routes_an_advertised_command_to_the_owning_worker ... ok
-test worker::liminal_transport::tests::attempt_owner_guard_releases_on_drop ... ok
 test worker::intervention::tests::an_applied_inject_is_retained_as_an_operator_user_message ... ok
+test worker::intervention::tests::routes_an_advertised_command_to_the_owning_worker ... ok
 test worker::liminal_transport::tests::channel_derivation_is_stable ... ok
+test worker::liminal_transport::tests::attempt_owner_guard_releases_on_drop ... ok
+test worker::liminal_transport::tests::channel_for_row_derives_node_subchannel_when_pinned ... ok
 test worker::liminal_transport::tests::channel_for_row_uses_namespace_and_task_queue_only ... ok
 test worker::liminal_transport::tests::channel_format_is_pinned ... ok
-test worker::liminal_transport::tests::channel_for_row_derives_node_subchannel_when_pinned ... ok
 test worker::liminal_transport::tests::distinct_pools_get_distinct_channels ... ok
 test worker::liminal_transport::tests::dotted_fields_do_not_collide_across_segments ... ok
 test worker::liminal_transport::tests::node_pin_separates_channels ... ok
@@ -190,20 +191,20 @@ test worker::liminal_transport::tests::node_subsegment_does_not_collide_with_dot
 test worker::liminal_transport::tests::placement_selection::no_cache_selection_is_byte_identical_to_pre_163 ... ok
 test worker::liminal_transport::tests::placement_selection::pinned_never_spills_to_a_wrong_node_worker_on_liminal_path ... ok
 test worker::liminal_transport::tests::placement_selection::pinned_selects_required_node_worker_on_liminal_path ... ok
-test worker::liminal_transport::tests::placement_selection::authored_node_pin_wins_over_namespace_prefer_on_liminal_path ... ok
 test worker::liminal_transport::tests::placement_selection::placement_never_mutates_recorded_row_node_on_liminal_path ... ok
-test worker::liminal_transport::tests::placement_selection::prefer_spills_to_any_live_worker_on_liminal_path ... ok
 test worker::liminal_transport::tests::placement_selection::prefer_selects_preferred_node_worker_on_liminal_path ... ok
+test worker::liminal_transport::tests::placement_selection::authored_node_pin_wins_over_namespace_prefer_on_liminal_path ... ok
+test worker::liminal_transport::tests::placement_selection::prefer_spills_to_any_live_worker_on_liminal_path ... ok
+test worker::liminal_transport::tests::wire_node_normalizes_empty_to_none ... ok
+test worker::liminal_transport::tests::reserved_char_shifts_stay_distinct ... ok
 test worker::liminal_transport::tests::placement_selection::unplaced_namespace_selects_any_worker_on_liminal_path ... ok
 test worker::liminal_transport::tests::request_for_row_stamps_one_based_attempt_and_no_window ... ok
-test worker::liminal_transport::tests::encoding_is_injective_over_reserved_char_triples ... ok
-test worker::liminal_transport::tests::reserved_char_shifts_stay_distinct ... ok
-test worker::liminal_transport::tests::wire_node_normalizes_empty_to_none ... ok
 test worker::outbox_dispatcher::tests::backoff_grows_geometrically_and_clamps_to_max ... ok
 test worker::outbox_dispatcher::tests::authored_node_pin_wins_over_namespace_prefer ... ok
-test worker::outbox_dispatcher::tests::connection_lost_rearms_immediately_and_consumes_attempt ... ok
+test worker::liminal_transport::tests::encoding_is_injective_over_reserved_char_triples ... ok
 test worker::outbox_dispatcher::tests::connection_lost_dead_letters_after_max_attempts ... ok
 test worker::outbox_dispatcher::tests::claim_marks_row_claimed_then_sweep_advances_to_done ... ok
+test worker::outbox_dispatcher::tests::connection_lost_rearms_immediately_and_consumes_attempt ... ok
 test worker::outbox_dispatcher::tests::mark_done_failure_leaves_row_claimed_for_later_rearm ... ok
 test worker::outbox_dispatcher::tests::backpressure_claim_honours_the_pause_hold ... ok
 test worker::outbox_dispatcher::tests::placement_never_mutates_recorded_row_node_across_routings ... ok
@@ -212,32 +213,30 @@ test worker::outbox_dispatcher::tests::prefer_selects_preferred_node_worker_when
 test worker::outbox_dispatcher::tests::prefer_spills_to_any_worker_when_preferred_node_absent ... ok
 test worker::dispatch::tests::dispatch_requiring_waits_and_never_spills_to_a_wrong_node_worker ... ok
 test worker::dispatch::tests::dispatch_waits_for_worker_then_delivers ... ok
+test worker::liminal_transport::contract_tests::mismatched_liminal_registration_names_field_and_exact_version ... ok
+test worker::liminal_transport::contract_tests::matching_liminal_registration_passes_pre_insertion_admission ... ok
 test worker::outbox_dispatcher::tests::dispatch_fails_row_after_max_attempts ... ok
 test worker::outbox_dispatcher::tests::paused_run_row_is_held_pending_then_dispatches_after_release ... ok
 test worker::outbox_dispatcher::tests::failed_dispatch_retries_with_backoff_and_bumps_attempt ... ok
-test worker::outbox_dispatcher::tests::poll_dispatches_staged_row_when_wake_never_fires ... ok
-test worker::outbox_dispatcher::tests::proportional_ceiling_caps_a_partial_shard_node ... ok
-test worker::liminal_transport::contract_tests::matching_liminal_registration_passes_pre_insertion_admission ... ok
+test worker::outbox_dispatcher::tests::default_ceiling_claim_matches_unscoped_claim ... ok
 test worker::outbox_dispatcher::tests::to_scheduled_sources_node_affinity_from_row ... ok
 test worker::outbox_dispatcher::tests::unplaced_namespace_dispatches_to_any_worker ... ok
-test worker::outbox_dispatcher::tests::sweep_dispatches_claimed_rows_and_marks_them_done ... ok
-test worker::outbox_dispatcher::tests::tenant_at_ceiling_holds_pending_then_resumes_when_headroom_returns ... ok
+test worker::outbox_dispatcher::tests::poll_dispatches_staged_row_when_wake_never_fires ... ok
+test worker::outbox_dispatcher::tests::proportional_ceiling_caps_a_partial_shard_node ... ok
 test worker::outbox_reconciler::tests::mixed_sweep_settles_terminal_and_rearms_live ... ok
 test worker::outbox_reconciler::tests::probe_error_aborts_the_sweep_leaving_the_row_claimed ... ok
-test worker::outbox_dispatcher::tests::throttled_claim_dispatches_each_row_exactly_once ... ok
-test worker::liminal_transport::contract_tests::mismatched_liminal_registration_names_field_and_exact_version ... ok
 test worker::outbox_reconciler::tests::stale_row_of_paused_workflow_is_rearmed_not_settled ... ok
 test worker::outbox_reconciler::tests::stale_row_of_running_workflow_is_rearmed ... ok
 test worker::outbox_reconciler::tests::stale_row_of_terminal_workflow_is_settled_not_rearmed ... ok
 test worker::outbox_settle::tests::only_hard_terminals_are_settle_eligible ... ok
-test worker::placement_cache::tests::empty_prefer_set_is_just_the_spill ... ok
 test worker::placement_cache::tests::absent_namespace_defaults_to_unplaced ... ok
+test worker::placement_cache::tests::empty_prefer_set_is_just_the_spill ... ok
 test worker::placement_cache::tests::pinned_selects_required_labels_and_never_spills ... ok
 test worker::placement_cache::tests::prefer_order_is_each_label_then_the_none_spill ... ok
 test worker::placement_cache::tests::prefer_selects_ordered_tiers_with_a_none_spill ... ok
-test worker::placement_cache::tests::unplaced_is_a_single_any_worker_tier ... ok
 test worker::placement_cache::tests::reads_placement_from_store_and_serves_a_fresh_hit ... ok
 test worker::placement_cache::tests::refreshes_after_ttl_expiry ... ok
+test worker::placement_cache::tests::unplaced_is_a_single_any_worker_tier ... ok
 test worker::placement_cache::tests::unplaced_selects_the_single_any_worker_tier ... ok
 test worker::queue_service::census::tests::a_served_address_is_not_classified ... ok
 test worker::queue_service::census::tests::an_empty_pool_on_a_declared_queue_has_no_live_pollers ... ok
@@ -257,18 +256,20 @@ test worker::queue_service::delivery::tests::a_closed_intake_is_never_reported_a
 test worker::queue_service::delivery::tests::a_drain_during_the_retry_window_fails_with_the_drain_reason ... ok
 test worker::queue_service::delivery::tests::a_free_intake_accepts_the_task_immediately ... ok
 test worker::queue_service::delivery::tests::a_full_intake_with_no_clock_fails_at_once ... ok
-test worker::outbox_dispatcher::tests::run_loop_drains_pending_then_stops_on_shutdown ... ok
+test worker::outbox_dispatcher::tests::sweep_dispatches_claimed_rows_and_marks_them_done ... ok
+test worker::outbox_dispatcher::tests::tenant_at_ceiling_holds_pending_then_resumes_when_headroom_returns ... ok
 test worker::queue_service::policy::tests::a_written_override_opts_one_queue_into_durable_pending ... ok
 test worker::queue_service::policy::tests::an_override_can_be_scoped_to_one_namespace ... ok
-test worker::queue_service::policy::tests::strict_is_the_default_policy_and_no_clock_is_invented ... ok
 test worker::queue_service::policy::tests::queue_service_settings_deserialize_from_the_written_form ... ok
+test worker::queue_service::policy::tests::strict_is_the_default_policy_and_no_clock_is_invented ... ok
 test worker::queue_service::policy::tests::the_availability_deadline_bounds_strict_only ... ok
-test worker::queue_service::state::tests::a_parked_dispatch_is_visible_immediately ... ok
+test worker::outbox_dispatcher::tests::throttled_claim_dispatches_each_row_exactly_once ... ok
 test worker::queue_service::state::tests::clearing_an_unknown_dispatch_is_a_no_op ... ok
+test worker::queue_service::state::tests::a_parked_dispatch_is_visible_immediately ... ok
 test worker::queue_service::state::tests::clearing_the_last_waiter_removes_the_address ... ok
 test worker::queue_service::state::tests::re_marking_refreshes_the_verdict_without_duplicating_the_waiter ... ok
-test worker::queue_service::taxonomy::tests::a_refusal_round_trips_back_to_its_typed_head ... ok
 test worker::queue_service::taxonomy::tests::an_ordinary_failure_is_not_read_as_a_queue_service_refusal ... ok
+test worker::queue_service::taxonomy::tests::a_refusal_round_trips_back_to_its_typed_head ... ok
 test worker::queue_service::taxonomy::tests::every_reason_round_trips_through_its_canonical_spelling ... ok
 test worker::queue_service::taxonomy::tests::fleet_refusals_are_retryable_and_name_the_expired_clock ... ok
 test worker::queue_service::taxonomy::tests::structural_refusal_is_terminal_and_carries_no_clock ... ok
@@ -281,43 +282,42 @@ test worker::quota_cache::tests::refreshes_after_ttl_expiry ... ok
 test worker::quota_cache::tests::unset_override_resolves_to_platform_default ... ok
 test worker::registry::tests::a_never_served_address_censuses_empty_with_no_poller_age ... ok
 test worker::registry::tests::a_departed_worker_leaves_a_last_compatible_poller_age ... ok
-test worker::registry::tests::closed_admits_a_known_namespace ... ok
 test worker::registry::tests::closed_rejects_unknown_namespace_and_does_not_create_it ... ok
+test worker::registry::tests::closed_admits_a_known_namespace ... ok
 test worker::registry::tests::denied_namespace_is_not_registered ... ok
-test worker::registry::tests::concurrent_registrations_for_a_new_namespace_create_exactly_one_record ... ok
 test worker::registry::tests::no_minter_leaves_registration_untouched ... ok
+test worker::registry::tests::concurrent_registrations_for_a_new_namespace_create_exactly_one_record ... ok
 test worker::registry::tests::no_minter_registry_skips_the_placement_gate ... ok
-test worker::registry::tests::node_pin_filters_within_pool ... ok
 test worker::registry::tests::open_register_mints_durable_record_and_is_idempotent ... ok
+test worker::outbox_dispatcher::tests::wake_dispatches_staged_row_well_under_poll_interval ... ok
+test worker::registry::tests::node_pin_filters_within_pool ... ok
 test worker::registry::tests::open_register_mints_each_namespace_in_a_multi_namespace_worker ... ok
-test worker::registry::tests::pinned_admits_a_worker_on_a_required_node ... ok
 test worker::registry::tests::pinned_rejects_a_node_less_worker ... ok
+test worker::registry::tests::pinned_admits_a_worker_on_a_required_node ... ok
 test worker::registry::tests::pinned_rejects_a_wrong_node_worker ... ok
-test worker::registry::tests::pinned_violation_rejects_the_whole_multi_namespace_registration ... ok
 test worker::registry::tests::register_and_deregister_are_namespace_isolated ... ok
-test worker::registry::tests::same_task_queue_in_different_namespaces_is_isolated ... ok
-test worker::registry::tests::set_intervention_capabilities_updates_live_worker ... ok
+test worker::registry::tests::pinned_violation_rejects_the_whole_multi_namespace_registration ... ok
 test worker::registry::tests::rotation_cursor_is_pruned_when_last_worker_leaves ... ok
+test worker::registry::tests::same_task_queue_in_different_namespaces_is_isolated ... ok
 test worker::registry::tests::shared_node_id_round_robins_across_workers ... ok
 test worker::registry::tests::the_census_separates_pool_activity_and_node_coverage ... ok
+test worker::registry::tests::set_intervention_capabilities_updates_live_worker ... ok
 test worker::registry::tests::task_queues_partition_disjoint_pools_within_one_namespace ... ok
 test worker::registry::tests::unplaced_and_prefer_admission_is_unaffected_by_the_pinned_gate ... ok
 test worker::registry::tests::worker_serving_a_namespace_set_is_reachable_in_each ... ok
+test worker::outbox_dispatcher::tests::run_loop_drains_pending_then_stops_on_shutdown ... ok
 test worker::outbox_dispatcher::tests::round_robin_gives_quiet_tenant_a_slot_every_sweep ... ok
-test worker::outbox_dispatcher::tests::wake_dispatches_staged_row_well_under_poll_interval ... ok
-test worker::outbox_dispatcher::tests::default_ceiling_claim_matches_unscoped_claim ... ok
 test worker::outbox_dispatcher::tests::throttled_claim_preserves_recorded_row_identity ... ok
 test worker::outbox_dispatcher::tests::quiet_tenant_not_starved_by_bursty_tenant_spread_across_routes ... ok
 test worker::outbox_dispatcher::tests::worker_dispatch_routes_by_row_namespace_not_server_default ... ok
 test worker::queue_service::delivery::tests::an_intake_that_stays_full_past_the_clock_is_saturated ... ok
 test worker::queue_service::delivery::tests::an_intake_that_frees_up_within_the_clock_is_served ... ok
 
-test result: ok. 188 passed; 0 failed; 0 ignored; 0 measured; 425 filtered out; finished in 0.65s
+test result: ok. 188 passed; 0 failed; 0 ignored; 0 measured; 425 filtered out; finished in 0.58s
 
 
 $ cargo test -p aion-server --test unserved_queue_policies
-   Compiling aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-server)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 11s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
      Running tests/unserved_queue_policies.rs (target/debug/deps/unserved_queue_policies-593ff6693e766fbc)
 
 running 6 tests
@@ -328,16 +328,15 @@ test strict_refuses_no_live_pollers_when_the_availability_deadline_expires ... o
 test connected_workers_that_do_not_serve_the_activity_are_incompatible ... ok
 test durable_pending_parks_visibly_and_completes_when_a_worker_arrives ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.01s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.02s
 
 
 $ cargo test -p aion-server --test unserved_queue_honesty
-   Compiling aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-server)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.26s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
      Running tests/unserved_queue_honesty.rs (target/debug/deps/unserved_queue_honesty-71495b5c465b0536)
 
 running 1 test
 test parked_dispatch_on_an_unserved_queue_states_its_reason_at_warn ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.53s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.52s
 

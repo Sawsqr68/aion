@@ -3,26 +3,5 @@ rustc 1.97.1 (8bab26f4f 2026-07-14)
 binary: rustc
 
 $ cargo clippy --workspace --all-targets -- -D warnings
-    Checking aion-core v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-core)
-   Compiling aion-proto-generated v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-proto-generated)
-    Checking aion-darwin-acl v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-darwin-acl)
-    Checking xtask v0.0.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/xtask)
-    Checking aion-package v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-package)
-    Checking aion-store v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-store)
-    Checking aion-integrations v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-integrations)
-    Checking aion-proto v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-proto)
-    Checking aion-integration-norn v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-integration-norn)
-    Checking aion-integration-cli v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-integration-cli)
-    Checking aion-store-haematite v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-store-haematite)
-    Checking aion-store-libsql v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-store-libsql)
-    Checking aion-awl v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-awl)
     Checking aion-rs v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion)
-    Checking aion-toolchain v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-toolchain)
-    Checking aion-worker v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-worker)
-    Checking aion-awl-package v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-awl-package)
-    Checking aion-awl-lsp v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-awl-lsp)
-    Checking aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-server)
-    Checking aion-client v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-client)
-    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/benchmarks/million-processes)
-    Checking aion-cli v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-cli)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 39s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.44s

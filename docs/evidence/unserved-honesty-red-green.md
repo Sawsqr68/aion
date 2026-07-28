@@ -254,6 +254,11 @@ New pins, all at the seams that actually decide:
   `a_positive_find_survives_a_partial_read` — the mapping, both directions.
 * `a_complete_read_still_reports_an_absent_queue_as_undeclared` — the
   structural refusal is preserved where it is earned, not weakened.
+* `an_undecodable_entry_is_named_at_warn` — the operator half, read back off
+  the seam's real tracing output through a thread-scoped subscriber: exactly
+  one WARN, naming the stored identity to re-deploy. A silent downgrade to
+  `Unknown` would leave a fleet reading as merely unserved, forever. (Green
+  only: added after the red commit, so it is proven green, not red-then-green.)
 * `a_mixed_catalog_never_structurally_refuses_the_undecodable_queue` — the
   consequence, through `classify`: `POLLERS_INCOMPATIBLE`, a retryable fleet
   condition, never `NO_QUEUE_DECLARATION`.
@@ -274,9 +279,9 @@ host: aarch64-apple-darwin
 | df preflight | `refix-df-preflight.log` | — | 125Gi available |
 | F1 red (aion) | `refix-f1-red.log` | 101 | 2 passed, 1 failed |
 | F1 red (aion-server) | `refix-f1-red.log` | 101 | 6 passed, 2 failed |
-| F1 green (aion) | `refix-f1-green.log` | 0 | 3 passed |
+| F1 green (aion) | `refix-f1-green.log` | 0 | 4 passed |
 | F1 green (aion-server) | `refix-f1-green.log` | 0 | 35 passed |
-| `aion-rs --lib loader::` | `refix-green-suites.log` | 0 | 26 passed |
+| `aion-rs --lib loader::` | `refix-green-suites.log` | 0 | 27 passed |
 | `aion-rs --lib lifecycle::` | `refix-green-suites.log` | 0 | 71 passed |
 | `aion-server --lib worker::` | `refix-green-suites.log` | 0 | 188 passed |
 | `unserved_queue_policies` | `refix-green-suites.log` | 0 | 6 passed |
