@@ -1,0 +1,20 @@
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+commit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452
+commit-date: 2026-07-14
+host: aarch64-apple-darwin
+release: 1.97.1
+LLVM version: 22.1.6
+# tree: 5dd03128d6e1545b56d3dee5e198065444f5f5fa
+# cmd: cargo test -p aion-cli --features haematite-backend,liminal-transport --test lsub5b_osproc_failover_e2e -- --ignored --nocapture
+# the CONNECT-HALF sibling gate — it shares common/osproc.rs and was moved off undrained pipes by Act 1
+   Compiling aion-cli v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.51s
+     Running tests/lsub5b_osproc_failover_e2e.rs (target/debug/deps/lsub5b_osproc_failover_e2e-7a065a45f653e29e)
+
+running 1 test
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.34s
+test osproc_liminal_listener_accepts_real_worker_connection ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 5.66s
+

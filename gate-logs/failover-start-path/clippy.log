@@ -1,0 +1,32 @@
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+commit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452
+commit-date: 2026-07-14
+host: aarch64-apple-darwin
+release: 1.97.1
+LLVM version: 22.1.6
+# tree: 5dd03128d6e1545b56d3dee5e198065444f5f5fa
+# cmd: cargo clippy --workspace --all-targets -- -D warnings
+    Checking aion-core v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-core)
+   Compiling aion-proto-generated v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-proto-generated)
+    Checking aion-darwin-acl v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-darwin-acl)
+    Checking xtask v0.0.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/xtask)
+    Checking aion-package v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-package)
+    Checking aion-store v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-store)
+    Checking aion-proto v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-proto)
+    Checking aion-integrations v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-integrations)
+    Checking aion-integration-norn v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-integration-norn)
+    Checking aion-integration-cli v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-integration-cli)
+    Checking aion-store-haematite v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-store-haematite)
+    Checking aion-store-libsql v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-store-libsql)
+    Checking aion-awl v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-awl)
+    Checking aion-rs v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion)
+    Checking aion-worker v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-worker)
+    Checking aion-toolchain v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-toolchain)
+    Checking aion-awl-package v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-awl-package)
+    Checking aion-awl-lsp v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-awl-lsp)
+    Checking aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-server)
+    Checking aion-client v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-client)
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/benchmarks/million-processes)
+    Checking aion-cli v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 49.47s
