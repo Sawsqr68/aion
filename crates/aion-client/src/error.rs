@@ -169,6 +169,23 @@ pub enum ClientError {
         /// Server-supplied precondition-failure detail naming the actual state.
         detail: ErrorDetail,
     },
+    /// The request reached a server that is not the current owner of the
+    /// target's shard, so it could not be served there.
+    ///
+    /// A ROUTING signal, not a connectivity one: the endpoint answered. It is
+    /// transient — cluster ownership moves on failover and the caller may retry
+    /// or re-resolve — which is why it is retryable, but it must not be
+    /// confused with [`ClientError::Unavailable`], whose remedy ("check your
+    /// endpoint") is wrong here and sends the operator hunting a network fault
+    /// that does not exist.
+    ///
+    /// Maps from the wire error code `not_owner` / gRPC `ABORTED` with the typed
+    /// detail present.
+    #[error("not_owner: {detail}")]
+    NotOwner {
+        /// Server-supplied detail naming the shard and what owns it.
+        detail: ErrorDetail,
+    },
     /// The server reported an unexpected internal failure.
     #[error("backend: {detail}")]
     Server {
@@ -238,6 +255,11 @@ impl ClientError {
             "Creates an [`ClientError::InvalidState`] precondition failure."
         ),
         (
+            not_owner,
+            NotOwner,
+            "Creates a wrong-shard-owner routing refusal."
+        ),
+        (
             server,
             Server,
             "Creates an unexpected-server-failure error from a local conversion or server detail."
@@ -260,6 +282,7 @@ impl ClientError {
             Self::NamespaceDenied { .. } => "namespace_denied",
             Self::InvalidArgument { .. } => "invalid_input",
             Self::InvalidState { .. } => "invalid_state",
+            Self::NotOwner { .. } => "not_owner",
             Self::Server { .. } => "backend",
         }
     }
@@ -280,6 +303,7 @@ impl ClientError {
             | Self::NamespaceDenied { detail }
             | Self::InvalidArgument { detail }
             | Self::InvalidState { detail }
+            | Self::NotOwner { detail }
             | Self::Server { detail } => detail,
         }
     }
@@ -312,11 +336,15 @@ impl ClientError {
             | WireErrorCode::VersionPinned => Self::Server { detail },
             WireErrorCode::QueryFailed => Self::QueryFailed { detail },
             WireErrorCode::QueryTimeout => Self::QueryTimeout { detail },
-            // `not_owner` (wrong-shard-owner fence) is a retryable routing
+            WireErrorCode::Lagged => Self::Unavailable { detail },
+            // `not_owner` (wrong-shard-owner fence) is a retryable ROUTING
             // signal: the request reached a node that does not own the
-            // workflow's shard. It is transient (re-resolve + retry), so it
-            // joins the `Unavailable` bucket alongside the lagged-stream signal.
-            WireErrorCode::Lagged | WireErrorCode::NotOwner => Self::Unavailable { detail },
+            // target's shard. It used to collapse into `Unavailable`, which
+            // made every CLI surface tell the operator to "check --endpoint" —
+            // a wrong hint that cost the failover investigation real diagnosis
+            // time. It is its own class now, typed at the taxonomy so no
+            // surface has to read message text to tell the two apart.
+            WireErrorCode::NotOwner => Self::NotOwner { detail },
         }
     }
 
@@ -397,81 +425,8 @@ fn decode_status_details(status: &tonic::Status) -> Option<ProtoWireError> {
     ProtoWireError::decode(details).ok()
 }
 
+/// Unit tests live in a sibling file so this module stays under the 500-line
+/// law with the test bodies intact rather than thinned.
 #[cfg(test)]
-mod tests {
-    use super::{ClientError, ErrorDetail};
-
-    fn assert_send_sync_static<T: Send + Sync + 'static>() {}
-
-    #[test]
-    fn client_error_is_send_sync_static() {
-        assert_send_sync_static::<ClientError>();
-    }
-
-    /// Every variant of the taxonomy, exercised so adding a variant breaks
-    /// this list until its class/Display contract is pinned.
-    fn all_variants() -> Vec<ClientError> {
-        vec![
-            ClientError::not_found("d"),
-            ClientError::already_exists("d"),
-            ClientError::query_failed("d"),
-            ClientError::query_timeout("d"),
-            ClientError::unknown_query("d"),
-            ClientError::not_running("d"),
-            ClientError::cancelled("d"),
-            ClientError::unavailable("d"),
-            ClientError::unauthenticated("d"),
-            ClientError::namespace_denied("d"),
-            ClientError::invalid_argument("d"),
-            ClientError::invalid_state("d"),
-            ClientError::server("d"),
-        ]
-    }
-
-    #[test]
-    fn display_is_class_colon_detail_for_every_variant() {
-        let mut classes = Vec::new();
-        for error in all_variants() {
-            assert_eq!(
-                error.to_string(),
-                format!("{}: d", error.class()),
-                "{error:?} Display must be `<class>: <detail>`",
-            );
-            assert_eq!(error.detail().message, "d");
-            classes.push(error.class());
-        }
-        let expected = [
-            "not_found",
-            "already_exists",
-            "query_failed",
-            "query_timeout",
-            "unknown_query",
-            "not_running",
-            "cancelled",
-            "unavailable",
-            "unauthenticated",
-            "namespace_denied",
-            "invalid_input",
-            "invalid_state",
-            "backend",
-        ];
-        assert_eq!(classes, expected, "class strings are a pinned contract");
-    }
-
-    #[test]
-    fn detail_display_appends_the_typed_discriminator() {
-        assert_eq!(ErrorDetail::new("plain").to_string(), "plain");
-        assert_eq!(
-            ErrorDetail::with_type("store unavailable", "Durability").to_string(),
-            "store unavailable [Durability]"
-        );
-        assert_eq!(
-            ClientError::not_found(ErrorDetail::with_type(
-                "workflow was not found",
-                "WorkflowNotFound"
-            ))
-            .to_string(),
-            "not_found: workflow was not found [WorkflowNotFound]"
-        );
-    }
-}
+#[path = "error_tests.rs"]
+mod tests;

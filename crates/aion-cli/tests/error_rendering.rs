@@ -148,10 +148,23 @@ impl WorkflowService for MockWorkflowService {
         off_scope()
     }
 
+    /// The wrong-shard-owner fence, exactly as the server sends it: the typed
+    /// `not_owner` wire code on gRPC `ABORTED`. Used by the routing-hint test.
     async fn cancel(
         &self,
         _: Request<generated::CancelRequest>,
     ) -> Result<Response<generated::CancelResponse>, Status> {
+        Err(typed_status(
+            Code::Aborted,
+            WireError::not_owner("workflow shard 1 is owned by another cluster node")
+                .with_error_type("NotOwner"),
+        ))
+    }
+
+    async fn mint_namespace(
+        &self,
+        _: Request<generated::MintNamespaceRequest>,
+    ) -> Result<Response<generated::MintNamespaceResponse>, Status> {
         off_scope()
     }
 
@@ -344,6 +357,43 @@ async fn signal_not_found_renders_class_detail_error_type_and_hint() -> TestResu
     assert!(
         stderr.contains("hint: verify the workflow id, --run-id, and --namespace"),
         "got {stderr:?}"
+    );
+    Ok(())
+}
+
+/// A wrong-shard-owner fence renders as its OWN class with a ROUTING hint —
+/// never as `unavailable` with "check --endpoint".
+///
+/// The server answered; there is no connectivity fault to hunt. Collapsing the
+/// two cost the failover start-path investigation real diagnosis time, so this
+/// pins that the CLI now says something true. The `unavailable` rendering above
+/// (`connect_failure_renders_unavailable_with_detail_and_hint`) is unchanged and
+/// still asserted, so the two classes are proved distinct rather than swapped.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn not_owner_renders_a_routing_hint_not_a_connectivity_one() -> TestResult {
+    let output = run_cli_against_mock(&["cancel", WORKFLOW_ID]).await?;
+
+    assert_failure_contract(&output);
+    let stderr = stderr_of(&output);
+    assert_eq!(
+        stderr.lines().next(),
+        Some(
+            "error[not_owner]: failed to cancel workflow: workflow shard 1 is \
+             owned by another cluster node"
+        ),
+        "got {stderr:?}"
+    );
+    assert!(
+        stderr.contains("server error type: NotOwner"),
+        "got {stderr:?}"
+    );
+    assert!(
+        stderr.contains("hint: the server answered but does not own this target's shard"),
+        "got {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("cannot reach the server"),
+        "the connectivity hint must NOT appear for a routing fence, got {stderr:?}"
     );
     Ok(())
 }

@@ -958,6 +958,7 @@ fn error_variant(error: &ClientError) -> &'static str {
         ClientError::NamespaceDenied { .. } => "NamespaceDenied",
         ClientError::InvalidArgument { .. } => "InvalidArgument",
         ClientError::InvalidState { .. } => "InvalidState",
+        ClientError::NotOwner { .. } => "NotOwner",
         ClientError::Server { .. } => "Server",
     }
 }

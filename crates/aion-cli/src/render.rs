@@ -168,6 +168,15 @@ const fn hint(error: &ClientError) -> Option<&'static str> {
         ClientError::Unavailable { .. } => {
             Some("cannot reach the server; check --endpoint and that aion-server is running")
         }
+        // NOT a connectivity failure: the server answered, it simply does not
+        // own this target's shard. Telling the operator to check --endpoint
+        // here sends them hunting a network fault that does not exist — the
+        // exact wrong turn the failover start-path investigation took.
+        ClientError::NotOwner { .. } => Some(
+            "the server answered but does not own this target's shard; shard \
+             ownership moves as the cluster fails over, so retry — or point \
+             --endpoint at another node in the cluster",
+        ),
         ClientError::InvalidState { .. } => Some(
             "the target run is not in a state this operation accepts (e.g. reopen \
              requires a terminal Failed or Cancelled run); inspect it with `aion \
