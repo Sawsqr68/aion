@@ -6,20 +6,34 @@ Aion is a general-purpose **durable workflow engine** — Temporal-class durabil
 
 Aion is general purpose. Meridian is the first consumer, not a constraint.
 
-The design lives under `docs/design/` — twelve clusters, all reviewed and approved. JSON is the source of truth (`design.json`, `checklist.json`, `stories.json`, `briefs/*.json`); markdown is rendered output. The whole-system picture is in `docs/design/workflow-engine/DESIGN-OVERVIEW.md` and `COMPONENT-ARCHITECTURE.md` — read those first.
+The design lives under `docs/design/` — 30 clusters. JSON is the source of truth (`design.json`, `checklist.json`, `stories.json`, `briefs/*.json`) where a cluster carries those sources; markdown is rendered output. The whole-system picture is in `docs/design/workflow-engine/DESIGN-OVERVIEW.md` and `COMPONENT-ARCHITECTURE.md` — read those first.
 
 ## Architecture
 
-The crate / package family:
+The Rust crate family is the `crates/` workspace membership in the root `Cargo.toml`:
 
-- **`aion-core`** — pure domain model: `Event` enum, `Payload`, newtype identifiers, `WorkflowStatus`, filters, error taxonomy. Leaf crate.
-- **`aion-store`** — the `EventStore` persistence trait, `StoreError`, `InMemoryStore` reference, and the conformance suite (the behavioural oracle every backend must match). Leaf (depends only on `aion-core`).
-- **`aion-store-libsql`** — the default durable `EventStore` over libSQL; runs the conformance suite.
-- **`aion-package`** — the `.aion` archive format, content-hash versioning, module namespacing, and the `WorkflowVersion` record.
-- **`aion`** — the engine. Embeds beamr; owns workflow lifecycle, process-per-workflow management, supervision, `.aion` loading (cluster AE), durability and replay (the `durability` module set, AD), and timers/signals/queries/children/concurrency (the `time`/`signal`/`query`/`child`/`concurrency` modules, AT). Transport-agnostic.
-- **`aion-proto`** / **`aion-server`** — the wire contract and the server library (HTTP/gRPC/WebSocket, worker protocol, multi-tenancy). Lib-only: the server runs as `aion server` via `aion_server::run`.
-- **`aion-worker[-python/-typescript]`**, **`aion-client[-python/-typescript]`** — remote worker and caller SDKs.
-- **`aion_flow`** (Gleam, Hex) — the typed authoring SDK. **`aion-ops-console`** — the React ops console UI.
+- **`crates/aion-awl`** — the AWL lexer, parser, checker, canonical printer, schema derivation, and compiler.
+- **`crates/aion-awl-lsp`** — the AWL Language Server Protocol adapter.
+- **`crates/aion-awl-package`** — assembles compiled AWL workflows into `.aion` archives.
+- **`crates/aion-core`** — pure domain model: events, payloads, identifiers, `WorkflowStatus`, filters, and errors.
+- **`crates/aion-store`** — persistence contracts, the in-memory reference store, and backend conformance tests.
+- **`crates/aion-store-libsql`** — the alternative durable libSQL backend.
+- **`crates/aion-store-haematite`** — the default durable backend, with single-node and distributed modes.
+- **`crates/aion-package`** — `.aion` archive validation, content hashing, and module namespacing.
+- **`crates/aion-toolchain`** — the server-side Gleam compile, type-check, and package adapter.
+- **`crates/aion`** — the transport-agnostic engine (`aion-rs` package): lifecycle, replay, timers, signals, queries, children, and supervision.
+- **`crates/aion-proto`** — hand-written shared wire contracts.
+- **`crates/aion-proto-generated`** — generated tonic/prost gRPC stubs.
+- **`crates/aion-server`** — the HTTP/gRPC/WebSocket and worker-protocol server library; `aion server` runs it.
+- **`crates/aion-darwin-acl`** — the macOS ACL decoder used by the server's path-safety gate.
+- **`crates/aion-worker`** — the Rust remote-worker SDK.
+- **`crates/aion-client`** — the Rust caller SDK.
+- **`crates/aion-integrations`** — the neutral agent-harness integration contract and shared building blocks.
+- **`crates/aion-integration-norn`** — the first-party Norn harness adapter.
+- **`crates/aion-integration-cli`** — the plain-CLI harness adapter.
+- **`crates/aion-cli`** — the `aion` binary for authoring, serving, deploying, and operating workflows.
+
+Workflow authoring has two first-class surfaces: the typed Gleam SDK under `gleam/aion_flow/`, and AWL `.awl` documents. The AWL CLI verbs are `aion awl check`, `aion awl fmt`, `aion awl emit`, and `aion awl schema`; `aion deploy <file.awl>` direct-compiles and deploys a document, while `aion run <file.awl> --input <json>` compiles, deploys, starts, and awaits it. Python and TypeScript worker/client SDKs live under `sdks/python/` and `sdks/typescript/`, not under `crates/`.
 
 beamr is reached through a single boundary module (`runtime`) inside the `aion` crate; no other module imports beamr.
 
@@ -30,7 +44,7 @@ These are the architectural decisions every implementation and review must uphol
 1. **Type-erased events.** `Event` carries an opaque `Payload` (bytes + content-type tag), never a generic type parameter. The engine and store are type-erased; only the Gleam SDK knows concrete types. No `Event<T>`.
 2. **The determinism boundary.** Workflow code must be deterministic and is re-executed on replay. Side effects must be recorded activities (the recorded result is returned on replay). `workflow.now` is the recorded event timestamp; `workflow.random` is seeded from `WorkflowId` + `RunId`. No wall clock, no entropy source in workflow-visible paths.
 3. **Single writer per workflow.** Exactly one `Recorder` instance exists per active workflow and is the sole append path. Both the durability replay handoff (command-issued events) and the timer/signal/child services (asynchronous-arrival events) append through that one Recorder. **Never call `EventStore::append` directly.** A `SequenceConflict` signals a double-writer bug.
-4. **Status is a projection.** `WorkflowStatus` (Running, Completed, Failed, Cancelled, TimedOut) is derived from event history, never a stored mutable field. Each terminal status has exactly one corresponding terminal event. Suspension is a separate engine-internal **residency** flag (Resident / Suspended), orthogonal to status — there is no `Suspended` status, and status reconciliation never touches residency.
+4. **Status is a projection.** `WorkflowStatus` (`Running`, `Completed`, `Failed`, `Cancelled`, `TimedOut`, `ContinuedAsNew`, `Paused`) is derived from event history, never a stored mutable field. `Paused` is non-terminal and is superseded by `WorkflowResumed`; engine-internal **residency** (`Resident` / `Suspended`) is separate and orthogonal — there is no `Suspended` status, and status reconciliation never touches residency.
 5. **Content-hash module namespacing.** Each `.aion` package version is a distinct, immutable module named by its content hash (`logical_name$hash`, the `$` separator and SHA-256 are format constraints). This is how long-lived workflows coexist with new deploys without binding beamr's two-deep version limit.
 
 ## Coding Standards
