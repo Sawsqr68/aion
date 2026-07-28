@@ -1,0 +1,17 @@
+   Compiling aion-rs v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/advisory-class/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.44s
+     Running tests/advisory_class_e2e.rs (target/debug/deps/advisory_class_e2e-44c96af01bf9aadc)
+
+running 2 tests
+test advisory_exhaustion_warns_and_the_run_completes ... Error: Compile(Parse(ParseError { span: Span { start: 256, end: 260, line: 10, column: 1 }, message: "expected an `action` declaration inside the worker block, found an indented block" }))
+FAILED
+test non_advisory_exhaustion_still_fails_the_run ... ok
+
+failures:
+
+failures:
+    advisory_exhaustion_warns_and_the_run_completes
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.29s
+
+error: test failed, to rerun pass `-p aion-rs --test advisory_class_e2e`
