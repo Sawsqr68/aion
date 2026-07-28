@@ -41,14 +41,15 @@
 #![cfg(all(unix, feature = "haematite-backend", feature = "liminal-transport"))]
 
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::time::{Duration, Instant};
 
 #[path = "common/osproc.rs"]
 mod osproc;
 
 use osproc::{
-    TestError, build_worker_binary, reap, reserve_port, wait_for_liveness, write_package_archive,
+    TestError, build_worker_binary, describe_exit, log_redirect, log_tail, preserve_on_failure,
+    reap, reserve_port, wait_for_liveness, write_package_archive,
 };
 
 /// Deadline for the worker to write its readiness file (first registration).
@@ -110,31 +111,44 @@ liminal_listen_address = "127.0.0.1:{liminal_port}"
 #[ignore = "slow: spawns real aion-server + liminal worker OS processes"]
 fn osproc_liminal_listener_accepts_real_worker_connection() -> Result<(), TestError> {
     let temp = tempfile::tempdir()?;
+    run_connect_half(temp.path())
+        .map_err(|error| preserve_on_failure(temp.path(), "lsub5b-connect-half", &error))
+}
+
+/// The scenario proper, run inside `dir`. Split out from the `#[test]` so every
+/// failure flows through the caller's log preservation before the tempdir — and
+/// with it the server and worker logs — is deleted.
+fn run_connect_half(dir: &Path) -> Result<(), TestError> {
     let http_port = reserve_port()?;
     let grpc_port = reserve_port()?;
     let liminal_port = reserve_port()?;
 
-    let package = write_package_archive(temp.path())?;
-    let config = write_config(temp.path(), &package, http_port, grpc_port, liminal_port)?;
+    let package = write_package_archive(dir)?;
+    let config = write_config(dir, &package, http_port, grpc_port, liminal_port)?;
     let worker_binary = build_worker_binary()?;
 
     // (1) Boot the REAL aion server OS process with the liminal outbox transport.
+    // Its output goes to a FILE, not a pipe: nothing drains a pipe during the run
+    // (a chatty server would block on a full one) and a file survives to be read
+    // back after a failure.
+    let server_log = dir.join("server.log");
+    let (server_out, server_err) = log_redirect(&server_log)?;
     let mut server = Command::new(env!("CARGO_BIN_EXE_aion"))
         .args(["server", "--config", &config.to_string_lossy()])
         .env(
             "AION_HOME",
             std::env::temp_dir().join(format!("aion-e2e-home-{}", std::process::id())),
         )
-        .current_dir(temp.path())
+        .current_dir(dir)
         .env("RUST_LOG", "info")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(server_out)
+        .stderr(server_err)
         .spawn()?;
 
     // Readiness on a real observable: poll the HTTP health probe until the server
-    // answers. If it exits during boot, surface its output (a feature/config
+    // answers. If it exits during boot, surface its log (a feature/config
     // regression would fail to host the liminal listener and exit here).
-    if let Err(error) = wait_for_liveness(&mut server, http_port) {
+    if let Err(error) = wait_for_liveness(&mut server, http_port, &server_log) {
         reap(server);
         return Err(error);
     }
@@ -143,7 +157,9 @@ fn osproc_liminal_listener_accepts_real_worker_connection() -> Result<(), TestEr
     // liminal_listen_address. It writes its readiness file ONLY after the in-band
     // WorkerRegister/Ack round-trip completes against the spawned binary's
     // notifier — a genuine observable that the production listener accepted it.
-    let ready_file = temp.path().join("worker.ready");
+    let ready_file = dir.join("worker.ready");
+    let worker_log = dir.join("worker.log");
+    let (worker_out, worker_err) = log_redirect(&worker_log)?;
     let liminal_address = format!("127.0.0.1:{liminal_port}");
     let mut worker = Command::new(&worker_binary)
         .args([
@@ -155,15 +171,21 @@ fn osproc_liminal_listener_accepts_real_worker_connection() -> Result<(), TestEr
             &ready_file.to_string_lossy(),
         ])
         .env("RUST_LOG", "info")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(worker_out)
+        .stderr(worker_err)
         .spawn()?;
 
     let started = Instant::now();
     let connected = loop {
         if let Some(status) = worker.try_wait()? {
             reap(server);
-            return Err(format!("worker exited before registering (status {status})").into());
+            return Err(format!(
+                "worker exited before registering ({exit}); tail of {log}:\n{tail}",
+                exit = describe_exit(status),
+                log = worker_log.display(),
+                tail = log_tail(&worker_log),
+            )
+            .into());
         }
         if ready_file.exists() {
             break true;
@@ -179,7 +201,9 @@ fn osproc_liminal_listener_accepts_real_worker_connection() -> Result<(), TestEr
         reap(server);
         return Err(format!(
             "worker never registered against the OS-process liminal listener within \
-             {WORKER_READY_DEADLINE:?}"
+             {WORKER_READY_DEADLINE:?}; tail of {log}:\n{tail}",
+            log = worker_log.display(),
+            tail = log_tail(&worker_log),
         )
         .into());
     }

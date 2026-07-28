@@ -54,7 +54,7 @@
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
@@ -64,9 +64,10 @@ mod aion_cli;
 #[path = "common/osproc.rs"]
 mod osproc;
 
-use aion_cli::{activity_completed_count, describe, status_of, try_start};
+use aion_cli::{check_exactly_once, describe, status_of, try_start};
 use osproc::{
-    TestError, build_worker_binary, reap, reserve_port, wait_for_liveness, write_package_archive,
+    TestError, build_worker_binary, log_redirect, log_tail, preserve_on_failure, reap,
+    reserve_port, wait_for_liveness, write_package_archive,
 };
 
 /// Poll `predicate` until it returns true or `deadline` elapses; returns whether
@@ -91,9 +92,6 @@ fn file_contains(path: &Path, needle: &str) -> bool {
 /// one leaves a 2-node majority that CAN re-elect and adopt the dead shard. A
 /// 2-node cluster could not (a lone survivor never forms a majority).
 const NODE_COUNT: usize = 3;
-/// Fan-out arity of the `collect_four` fixture (one `ActivityCompleted` terminal
-/// per ordinal on success).
-const FAN_OUT: usize = 4;
 /// The library log line a survivor's `ClusterSupervisor::tick` emits on
 /// auto-adoption — the load-bearing proof the LIBRARY did the failover.
 const ADOPT_LINE: &str = "adopted a downed peer's shards (SS-5b auto-failover)";
@@ -228,8 +226,7 @@ liminal_listen_address = "127.0.0.1:{liminal_port}"
 
 /// Spawn one `aion server` OS process from `config`, logging to `log_path`.
 fn boot_node(config: &Path, log_path: &Path, ports: (u16, u16, u16)) -> Result<Node, TestError> {
-    let log = std::fs::File::create(log_path)?;
-    let stderr = log.try_clone()?;
+    let (stdout, stderr) = log_redirect(log_path)?;
     let child = Command::new(env!("CARGO_BIN_EXE_aion"))
         .args(["server", "--config", &config.to_string_lossy()])
         .env(
@@ -237,8 +234,8 @@ fn boot_node(config: &Path, log_path: &Path, ports: (u16, u16, u16)) -> Result<N
             std::env::temp_dir().join(format!("aion-e2e-home-{}", std::process::id())),
         )
         .env("RUST_LOG", "info")
-        .stdout(Stdio::from(log))
-        .stderr(Stdio::from(stderr))
+        .stdout(stdout)
+        .stderr(stderr)
         .spawn()?;
     Ok(Node {
         child,
@@ -253,7 +250,15 @@ fn boot_node(config: &Path, log_path: &Path, ports: (u16, u16, u16)) -> Result<N
 #[ignore = "slow: spawns a 3-node aion-server cluster + a liminal worker, kill -9 failover"]
 fn osproc_kill9_liminal_failover_completes_exactly_once() -> Result<(), TestError> {
     let temp = tempfile::tempdir()?;
-    let package = write_package_archive(temp.path())?;
+    run_kill9_failover(temp.path())
+        .map_err(|error| preserve_on_failure(temp.path(), "lsub5b-kill9-failover", &error))
+}
+
+/// The scenario proper, run inside `dir`. Split out from the `#[test]` so EVERY
+/// failure — including a boot death before the cluster is even up — flows
+/// through the caller's log preservation before the tempdir is deleted.
+fn run_kill9_failover(dir: &Path) -> Result<(), TestError> {
+    let package = write_package_archive(dir)?;
     let worker_binary = build_worker_binary()?;
 
     // Reserve every port up front so configs can cross-reference peers' grpc.
@@ -262,9 +267,9 @@ fn osproc_kill9_liminal_failover_completes_exactly_once() -> Result<(), TestErro
         ports.push((reserve_port()?, reserve_port()?, reserve_port()?));
     }
 
-    let mut nodes = boot_cluster(temp.path(), &package, &ports)?;
+    let mut nodes = boot_cluster(dir, &package, &ports)?;
 
-    let worker = match spawn_worker(temp.path(), &worker_binary, &nodes) {
+    let worker = match spawn_worker(dir, &worker_binary, &nodes) {
         Ok(worker) => worker,
         Err(error) => {
             reap_all(nodes);
@@ -273,30 +278,9 @@ fn osproc_kill9_liminal_failover_completes_exactly_once() -> Result<(), TestErro
     };
 
     let result = drive_failover(&mut nodes, &ports);
-    if result.is_err() {
-        dump_logs_if_requested(temp.path());
-    }
     reap(worker);
     reap_all(nodes);
     result
-}
-
-/// On failure, copy the whole work dir (node logs + worker log + configs) to the
-/// path in `KILL9_KEEP_LOGS`, for post-mortem diagnosis. No-op when unset.
-fn dump_logs_if_requested(dir: &Path) {
-    let Ok(dest) = std::env::var("KILL9_KEEP_LOGS") else {
-        return;
-    };
-    let dest = Path::new(&dest);
-    let _ = std::fs::create_dir_all(dest);
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file() {
-                let _ = std::fs::copy(&path, dest.join(entry.file_name()));
-            }
-        }
-    }
 }
 
 /// Boot the N-node cluster, wait for every node's liveness probe, and confirm
@@ -331,22 +315,36 @@ fn boot_cluster(
 
     for index in 0..nodes.len() {
         let http_port = nodes[index].http_port;
-        if let Err(error) = wait_for_liveness(&mut nodes[index].child, http_port) {
+        let log_path = nodes[index].log_path.clone();
+        if let Err(error) = wait_for_liveness(&mut nodes[index].child, http_port, &log_path) {
             reap_all(nodes);
             return Err(format!("node {index} failed to boot: {error}").into());
         }
     }
-    let supervisors_up = wait_until(CLUSTER_BOOT_DEADLINE, || {
-        nodes
-            .iter()
-            .all(|node| file_contains(&node.log_path, "commissioned"))
-    });
+    let supervisors_up = wait_until(CLUSTER_BOOT_DEADLINE, || nodes.iter().all(commissioned));
     if supervisors_up {
-        Ok(nodes)
-    } else {
-        reap_all(nodes);
-        Err("cluster supervisors did not commission within the boot deadline".into())
+        return Ok(nodes);
     }
+    let mut still_waiting = String::new();
+    for node in nodes.iter().filter(|node| !commissioned(node)) {
+        let _ = write!(
+            still_waiting,
+            "\n{}:\n{}",
+            node.log_path.display(),
+            log_tail(&node.log_path)
+        );
+    }
+    reap_all(nodes);
+    Err(format!(
+        "cluster supervisors did not commission within {CLUSTER_BOOT_DEADLINE:?}; \
+         still waiting on:{still_waiting}"
+    )
+    .into())
+}
+
+/// Whether `node`'s log carries its cluster supervisor's commissioning line.
+fn commissioned(node: &Node) -> bool {
+    file_contains(&node.log_path, "commissioned")
 }
 
 /// Spawn ONE worker with ALL nodes' liminal addresses as candidates and wait for
@@ -363,8 +361,8 @@ fn spawn_worker(dir: &Path, worker_binary: &Path, nodes: &[Node]) -> Result<Chil
     worker_args.push("kill9-failover-worker".to_owned());
     worker_args.push("--ready-file".to_owned());
     worker_args.push(ready_file.to_string_lossy().into_owned());
-    let worker_log = std::fs::File::create(dir.join("worker.log"))?;
-    let worker_log_err = worker_log.try_clone()?;
+    let worker_log_path = dir.join("worker.log");
+    let (worker_log, worker_log_err) = log_redirect(&worker_log_path)?;
     let worker = Command::new(worker_binary)
         .args(&worker_args)
         .env("RUST_LOG", "info")
@@ -373,14 +371,20 @@ fn spawn_worker(dir: &Path, worker_binary: &Path, nodes: &[Node]) -> Result<Chil
         // the redialed worker. Without this the worker might serve all 4 before
         // the kill and the failover would not be genuinely exercised.
         .env("LIMINAL_FAN_DELAY_MS", FAN_ACTIVITY_DELAY_MS)
-        .stdout(Stdio::from(worker_log))
-        .stderr(Stdio::from(worker_log_err))
+        .stdout(worker_log)
+        .stderr(worker_log_err)
         .spawn()?;
     if wait_until(FAILOVER_DEADLINE, || ready_file.exists()) {
         Ok(worker)
     } else {
         reap(worker);
-        Err("worker never registered against node 0's liminal listener".into())
+        Err(format!(
+            "worker never registered against node 0's liminal listener within \
+             {FAILOVER_DEADLINE:?}; tail of {}:\n{}",
+            worker_log_path.display(),
+            log_tail(&worker_log_path),
+        )
+        .into())
     }
 }
 
@@ -392,15 +396,29 @@ fn drive_failover(nodes: &mut Vec<Node>, ports: &[(u16, u16, u16)]) -> Result<()
     // lands (mirrors mp-failover-spike.sh — there is no cross-shard start routing).
     let node0_grpc = format!("http://127.0.0.1:{}", ports[0].1);
     let mut workflow_id = String::new();
-    let landed = wait_until(START_DEADLINE, || match try_start(&node0_grpc) {
-        Some(id) => {
-            workflow_id = id;
-            true
+    // Keep the LAST rejection: a loop that only ever saw "not yet" cannot say
+    // what it spent the deadline being told.
+    let mut last_refusal = String::from("<no attempt was made>");
+    let mut attempts: u32 = 0;
+    let landed = wait_until(START_DEADLINE, || {
+        attempts += 1;
+        match try_start(&node0_grpc) {
+            Ok(id) => {
+                workflow_id = id;
+                true
+            }
+            Err(refusal) => {
+                last_refusal = refusal;
+                false
+            }
         }
-        None => false,
     });
     if !landed {
-        return Err("collect_four never landed on node 0's shard".into());
+        return Err(format!(
+            "collect_four never landed on node 0's shard: {attempts} start attempts over \
+             {START_DEADLINE:?} against {node0_grpc} all refused; the last one said:\n{last_refusal}"
+        )
+        .into());
     }
 
     // Confirm the fan-out is genuinely in flight (Running, NOT yet Completed)
@@ -471,22 +489,6 @@ fn drive_failover(nodes: &mut Vec<Node>, ports: &[(u16, u16, u16)]) -> Result<()
         check_exactly_once(final_description.as_ref())
     } else {
         Err("fan-out did not reach Completed on any survivor after the kill-9 failover".into())
-    }
-}
-
-/// Assert the completed run recorded EXACTLY ONE terminal per ordinal.
-fn check_exactly_once(description: Option<&Value>) -> Result<(), TestError> {
-    let description =
-        description.ok_or_else(|| TestError::from("missing completed describe payload"))?;
-    let completions = activity_completed_count(description);
-    if completions == FAN_OUT {
-        Ok(())
-    } else {
-        Err(format!(
-            "exactly-once violated: expected {FAN_OUT} ActivityCompleted terminals \
-             (one per ordinal), found {completions}"
-        )
-        .into())
     }
 }
 
