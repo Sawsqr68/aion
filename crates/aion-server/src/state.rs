@@ -202,6 +202,7 @@ impl ServerState {
         let RoutingState {
             shard_directory,
             request_forwarder,
+            mint_routing,
         } = build_routing_state(
             cluster_store.as_ref(),
             connected.directory_peers,
@@ -225,7 +226,14 @@ impl ServerState {
             .with_outbox_wake(Arc::clone(&outbox_wake)),
         );
         let exported_metrics = runtime.metrics.enabled.then_some(metrics.clone());
-        let seams = build_worker_seams(&runtime, &cluster_publisher, &connected.namespace_store);
+        #[cfg(not(feature = "haematite-backend"))]
+        let mint_routing: Option<crate::namespace::NamespaceRouting> = None;
+        let seams = build_worker_seams(
+            &runtime,
+            &cluster_publisher,
+            &connected.namespace_store,
+            mint_routing,
+        );
         let (dispatcher, attempt_owners) = build_bridge_dispatcher(&runtime, &seams);
         let (activity_dispatcher, activity_mock_registry) =
             decorate_activity_dispatcher(dispatcher, runtime.dev.enabled);
@@ -761,7 +769,7 @@ impl ServerState {
     /// policy), so transports construct it per request rather than holding it.
     #[must_use]
     pub fn namespace_minter(&self) -> NamespaceMinter {
-        NamespaceMinter::new(
+        let minter = NamespaceMinter::new(
             Arc::clone(&self.inner.namespace_store),
             self.inner.runtime.auto_create,
         )
@@ -769,7 +777,41 @@ impl ServerState {
         // net (S6) and the explicit `POST /namespaces` path (S7) emit the same
         // live "namespace created" delta the worker-mint seam (S5) does — all
         // three mint choke-points surface on the one ops-console push channel.
-        .with_cluster_publisher(self.inner.cluster_publisher.clone())
+        .with_cluster_publisher(self.inner.cluster_publisher.clone());
+        // And the namespace-mint routing context on a clustered boot, so a
+        // namespace whose registry shard this node does not own is minted by the
+        // node that does rather than being fenced forever. `None` off-cluster,
+        // where the minter is byte-identical to before routing existed.
+        match self.namespace_routing() {
+            Some(routing) => minter.with_routing(routing),
+            None => minter,
+        }
+    }
+
+    /// The namespace-mint routing context for this boot, or `None` when there is
+    /// nothing to route to.
+    ///
+    /// Present only when ALL THREE handles exist: the distributed store (which
+    /// hashes a namespace to its registry shard), the R-2 shard directory (which
+    /// resolves that shard's current owner), and the R-3 request forwarder (which
+    /// dials it). Those three are populated together by `build_routing_state` on
+    /// a `[store.cluster]` boot and are all `None` otherwise, so a partial
+    /// context can never arise — but each is checked rather than assumed.
+    #[cfg(feature = "haematite-backend")]
+    #[must_use]
+    pub fn namespace_routing(&self) -> Option<crate::namespace::NamespaceRouting> {
+        build_namespace_routing(
+            self.cluster_store(),
+            self.shard_directory(),
+            self.request_forwarder(),
+        )
+    }
+
+    /// No cluster backend compiled in: nothing to route a mint to.
+    #[cfg(not(feature = "haematite-backend"))]
+    #[must_use]
+    pub const fn namespace_routing(&self) -> Option<crate::namespace::NamespaceRouting> {
+        None
     }
 
     /// Clone the advisory outbox wake (LSUB-2) shared with the engine's stage
@@ -1087,11 +1129,22 @@ fn build_worker_seams(
     runtime: &RuntimeConfig,
     cluster_publisher: &crate::cluster_publisher::ClusterEventPublisher,
     namespace_store: &Arc<dyn NamespaceStore>,
+    mint_routing: Option<crate::namespace::NamespaceRouting>,
 ) -> WorkerSeams {
+    let worker_registry = ConnectedWorkerRegistry::default()
+        .with_cluster_publisher(cluster_publisher.clone())
+        .with_namespace_minting(namespace_store.clone(), runtime.auto_create);
+    // The worker-registration mint is the OTHER `mint_or_gate` choke-point, so
+    // it gets the same routing the start seams get: a worker registering for a
+    // namespace whose registry shard this node does not own must not be refused
+    // `NotOwner` forever either. `None` off-cluster leaves the registry
+    // byte-identical.
+    let worker_registry = match mint_routing {
+        Some(routing) => worker_registry.with_namespace_routing(routing),
+        None => worker_registry,
+    };
     WorkerSeams {
-        worker_registry: ConnectedWorkerRegistry::default()
-            .with_cluster_publisher(cluster_publisher.clone())
-            .with_namespace_minting(namespace_store.clone(), runtime.auto_create),
+        worker_registry,
         pending_activities: PendingActivities::default(),
         heartbeat_tracker: HeartbeatTracker::new(runtime.worker.heartbeat_window),
         drain_state: DrainState::default(),
@@ -1238,6 +1291,11 @@ fn build_transcript_publisher(
 struct RoutingState {
     shard_directory: Option<Arc<crate::routing::StaticShardDirectory>>,
     request_forwarder: Option<Arc<dyn crate::routing::RequestForwarder>>,
+    /// The namespace-mint routing context assembled from the two handles above
+    /// plus the cluster store, so the boot path can thread it into the worker
+    /// registry's minter (the second of the two minter construction sites)
+    /// without re-deriving it.
+    mint_routing: Option<crate::namespace::NamespaceRouting>,
 }
 
 /// Build the R-2 shard directory and R-3 request forwarder over the cluster
@@ -1253,16 +1311,53 @@ fn build_routing_state(
         return RoutingState {
             shard_directory: None,
             request_forwarder: None,
+            mint_routing: None,
         };
     };
+    let shard_directory = Arc::new(crate::routing::StaticShardDirectory::new(
+        Arc::clone(store),
+        directory_peers,
+        self_node_id,
+    ));
+    let request_forwarder: Arc<dyn crate::routing::RequestForwarder> =
+        Arc::new(crate::routing::GrpcRequestForwarder::new());
+    let mint_routing = build_namespace_routing(
+        Some(store),
+        Some(&shard_directory),
+        Some(&request_forwarder),
+    );
     RoutingState {
-        shard_directory: Some(Arc::new(crate::routing::StaticShardDirectory::new(
-            Arc::clone(store),
-            directory_peers,
-            self_node_id,
-        ))),
-        request_forwarder: Some(Arc::new(crate::routing::GrpcRequestForwarder::new())),
+        shard_directory: Some(shard_directory),
+        request_forwarder: Some(request_forwarder),
+        mint_routing,
     }
+}
+
+/// Assemble the namespace-mint routing context from the three handles a
+/// distributed boot produces, or `None` when any is absent.
+///
+/// The single place the context is built, shared by the boot path (which wires
+/// it into the worker registry's minter before the state exists) and
+/// [`ServerState::namespace_routing`] (which serves the per-request minters).
+/// Each handle is checked rather than assumed present: `build_routing_state`
+/// populates them together, but a partial context would silently route mints to
+/// nowhere.
+#[cfg(feature = "haematite-backend")]
+fn build_namespace_routing(
+    cluster_store: Option<&Arc<aion_store_haematite::HaematiteStore>>,
+    shard_directory: Option<&Arc<crate::routing::StaticShardDirectory>>,
+    request_forwarder: Option<&Arc<dyn crate::routing::RequestForwarder>>,
+) -> Option<crate::namespace::NamespaceRouting> {
+    use crate::namespace::{
+        GrpcMintForwarder, MintForwarder, MintShardOwners, NamespaceRouting, NamespaceShardResolver,
+    };
+    let store = Arc::clone(cluster_store?);
+    let directory = Arc::clone(shard_directory?);
+    let shards: Arc<dyn NamespaceShardResolver> = store;
+    let owners: Arc<dyn MintShardOwners> = directory;
+    let forwarder: Arc<dyn MintForwarder> =
+        Arc::new(GrpcMintForwarder::new(Arc::clone(request_forwarder?)));
+    Some(NamespaceRouting::new(shards, owners, forwarder))
 }
 
 /// A connected durable store plus the lifecycle pieces the boot path needs.

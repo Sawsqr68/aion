@@ -23,7 +23,40 @@ service WorkflowService {
   rpc DeleteSchedule(ScheduleIdRequest) returns (DeleteScheduleResponse);
   rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);
   rpc DescribeSchedule(ScheduleIdRequest) returns (DescribeScheduleResponse);
+  // Mint (or gate) a set of already-authorized namespaces on THIS node.
+  //
+  // The intra-cluster vehicle for namespace-mint routing: a namespace's
+  // registry record hashes to a shard of its own, so a node that does not own
+  // that shard forwards the mint here rather than being fenced forever. The
+  // receiving node applies its ORDINARY auto-create policy through the same
+  // minter a local start uses -- a forwarded mint is exactly as privileged as
+  // a local one, never a policy bypass -- and authorizes the caller from the
+  // forwarded metadata exactly as any other RPC does.
+  rpc MintNamespace(MintNamespaceRequest) returns (MintNamespaceResponse);
 }
+
+// How a namespace came to be minted, carried so the owner records the same
+// provenance the initiating node would have recorded.
+enum NamespaceMintOrigin {
+  NAMESPACE_MINT_ORIGIN_UNSPECIFIED = 0;
+  NAMESPACE_MINT_ORIGIN_WORKER = 1;
+  NAMESPACE_MINT_ORIGIN_START = 2;
+  NAMESPACE_MINT_ORIGIN_EXPLICIT = 3;
+  NAMESPACE_MINT_ORIGIN_INFERRED_FROM_STATE = 4;
+}
+
+message MintNamespaceRequest {
+  // The namespace set to mint or gate. Every name is authorized against the
+  // caller on the receiving node before anything is written.
+  repeated string namespaces = 1;
+  // Provenance recorded on a genuinely-new namespace. The unspecified value is
+  // refused rather than guessed.
+  NamespaceMintOrigin origin = 2;
+}
+
+// An empty ack: the mint is idempotent, so "created" and "already existed" are
+// the same success to the caller.
+message MintNamespaceResponse {}
 
 message StartWorkflowRequest {
   string namespace = 1;

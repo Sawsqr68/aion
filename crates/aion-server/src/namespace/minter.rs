@@ -20,6 +20,7 @@ use std::sync::Arc;
 use aion_core::{ClusterEvent, NamespacePlacementWire};
 use aion_store::{MintOutcome, NamespaceOrigin, NamespacePlacement, NamespaceStore};
 
+use super::route::{MintCredentials, MintRoute, NamespaceRouting};
 use crate::cluster_publisher::ClusterEventPublisher;
 use crate::config::AutoCreate;
 use crate::error::ServerError;
@@ -44,6 +45,12 @@ pub struct NamespaceMinter {
     /// refresh. `None` keeps every existing construction (and every test) silent,
     /// exactly like the registry's other optional seams.
     cluster_publisher: Option<ClusterEventPublisher>,
+    /// Optional namespace-mint routing context. `None` on every single-node /
+    /// non-clustered boot, where the mint is always local and the minter behaves
+    /// byte-for-byte as it did before routing existed. On a clustered boot it
+    /// carries the three handles that decide, per namespace, whether the durable
+    /// write executes here or on the registry shard's owner.
+    routing: Option<NamespaceRouting>,
 }
 
 impl std::fmt::Debug for NamespaceMinter {
@@ -52,6 +59,7 @@ impl std::fmt::Debug for NamespaceMinter {
             .debug_struct("NamespaceMinter")
             .field("policy", &self.policy)
             .field("cluster_publisher", &self.cluster_publisher.is_some())
+            .field("routing", &self.routing.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -64,7 +72,45 @@ impl NamespaceMinter {
             store,
             policy,
             cluster_publisher: None,
+            routing: None,
         }
+    }
+
+    /// Attach the namespace-mint routing context a clustered boot builds, so a
+    /// namespace whose registry shard this node does not own is minted by the
+    /// node that does instead of being fenced forever.
+    ///
+    /// Pure builder addition: without it the minter mints locally exactly as
+    /// before, which is what every single-node boot and every unit test does.
+    #[must_use]
+    pub fn with_routing(mut self, routing: NamespaceRouting) -> Self {
+        self.routing = Some(routing);
+        self
+    }
+
+    /// Drop the routing context, pinning every mint to THIS node.
+    ///
+    /// Used by the owner-side `MintNamespace` handler: a mint that already
+    /// travelled must not travel again, so an arrival whose shard has moved
+    /// on is answered with the local fence's typed refusal rather than a
+    /// re-forward chain. The refusal returns to the initiator, which surfaces
+    /// it; nothing retries internally.
+    #[must_use]
+    pub fn without_routing(mut self) -> Self {
+        self.routing = None;
+        self
+    }
+
+    /// Carry the inbound request's caller credentials onto any forwarded mint,
+    /// so the owning node authorizes the caller exactly as this node did.
+    ///
+    /// A no-op with no routing context attached (nothing can be forwarded).
+    #[must_use]
+    pub fn with_caller_credentials(mut self, credentials: MintCredentials) -> Self {
+        self.routing = self
+            .routing
+            .map(|routing| routing.with_credentials(credentials));
+        self
     }
 
     /// Attach the WS3 cluster-event publisher so a first mint pushes a live
@@ -125,13 +171,7 @@ impl NamespaceMinter {
     ) -> Result<(), ServerError> {
         for namespace in namespaces {
             match self.policy {
-                AutoCreate::Open => {
-                    if self.store.register_namespace(namespace, origin).await?
-                        == MintOutcome::Created
-                    {
-                        self.announce_created(namespace, origin).await?;
-                    }
-                }
+                AutoCreate::Open => self.mint(namespace, origin).await?,
                 AutoCreate::Closed => {
                     if self.store.get_namespace(namespace).await?.is_none() {
                         return Err(ServerError::namespace_denied(format!(
@@ -140,6 +180,34 @@ impl NamespaceMinter {
                     }
                 }
             }
+        }
+        Ok(())
+    }
+
+    /// Durably mint ONE namespace under the `open` policy, on the node that owns
+    /// its registry record.
+    ///
+    /// With no routing context (every single-node / non-clustered boot) this is
+    /// byte-for-byte the local upsert it always was. With one, the namespace's
+    /// registry shard decides: this node writes when it owns the shard, or when
+    /// ownership is not known with confidence (the receiver fence — not the
+    /// directory — is the authority, so an uncertain answer is resolved by
+    /// attempting and being told the truth). Only a confidently-remote,
+    /// dialable owner is forwarded to, and then the WHOLE read-modify-write
+    /// happens there.
+    ///
+    /// The `Created` edge is therefore decided wherever the write executes: a
+    /// forwarded mint's `NamespaceCreated` delta fires on the OWNER's publisher,
+    /// which is the deployment-global channel the ops console already listens
+    /// on. That is the one observable difference a forwarded mint makes.
+    async fn mint(&self, namespace: &str, origin: NamespaceOrigin) -> Result<(), ServerError> {
+        if let Some(routing) = &self.routing {
+            if let MintRoute::Remote { shard, target } = routing.route_for(namespace) {
+                return routing.forward(namespace, target, shard, origin).await;
+            }
+        }
+        if self.store.register_namespace(namespace, origin).await? == MintOutcome::Created {
+            self.announce_created(namespace, origin).await?;
         }
         Ok(())
     }

@@ -50,6 +50,10 @@ use std::time::{Duration, Instant};
 
 use aion_server::NamespaceMinter;
 use aion_server::config::AutoCreate;
+use aion_server::namespace::{
+    ForwardMintError, MintCredentials, MintForwarder, MintOwner, MintShardOwners, NamespaceRouting,
+    NamespaceShardResolver,
+};
 use aion_store::{NamespaceOrigin, NamespaceStore, StoreError};
 use aion_store_haematite::HaematiteStore;
 use haematite::db::respond_to_inbound_writes;
@@ -280,7 +284,7 @@ fn unsteered_namespace_mint_reaches_the_registry_shards_owner() -> TestResult {
 
     // (3) THE ROUTED PATH LANDS THE RECORD. The same mint, from the same node,
     // through the routing context a clustered boot wires.
-    let routed = routed_minter(&node_c);
+    let routed = routed_minter(&node_c, &node_a);
     runtime.block_on(async {
         routed
             .mint_or_gate(&[DEFAULT_NAMESPACE.to_owned()], NamespaceOrigin::StartMint)
@@ -320,14 +324,80 @@ fn unsteered_namespace_mint_reaches_the_registry_shards_owner() -> TestResult {
     Ok(())
 }
 
-/// The minter a clustered boot builds on node C. RED-FIRST STATE: there is no
-/// routing seam yet, so this is today's plain minter and claim (3) above fails
-/// with the very `NotOwner { shard: 1 }` claim (2) pins.
-fn routed_minter(node_c: &Node) -> NamespaceMinter {
+/// The minter a clustered boot builds on node C: the production
+/// `NamespaceRouting` over C's own store as the namespace-shard resolver, a
+/// directory that resolves the namespace's shard to A, and a forwarder that
+/// hands the mint to A's OWN minter.
+///
+/// The forwarder here is in-process rather than gRPC deliberately, so this test
+/// proves the ROUTING (decision → the owner executes the whole quorum write →
+/// the record replicates back) without a tonic server in the way. The gRPC hop
+/// itself — dial, verbatim caller metadata, hop stamp, the owner-side handler's
+/// policy — is proved over a real tonic server in
+/// `namespace_mint_forward_e2e.rs`. Together they cover the path end to end.
+fn routed_minter(node_c: &Node, node_a: &Node) -> NamespaceMinter {
+    let routing = NamespaceRouting::new(
+        Arc::clone(&node_c.store) as Arc<dyn NamespaceShardResolver>,
+        Arc::new(OwnerIsNodeA {
+            shard: DEFAULT_NAMESPACE_SHARD,
+            address: OWNER_ADDRESS,
+        }),
+        Arc::new(MintOnOwner {
+            owner: NamespaceMinter::new(
+                Arc::clone(&node_a.store) as Arc<dyn NamespaceStore>,
+                AutoCreate::Open,
+            ),
+        }),
+    );
     NamespaceMinter::new(
         Arc::clone(&node_c.store) as Arc<dyn NamespaceStore>,
         AutoCreate::Open,
     )
+    .with_routing(routing)
+}
+
+/// The address the directory reports for node A. Never dialed — this test's
+/// forwarder is in-process — but carried through the real decision path so the
+/// route resolves `Remote` exactly as it does in production.
+const OWNER_ADDRESS: SocketAddr =
+    SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 50051);
+
+/// A directory that answers "node A owns the namespace's registry shard".
+struct OwnerIsNodeA {
+    shard: usize,
+    address: SocketAddr,
+}
+
+impl MintShardOwners for OwnerIsNodeA {
+    fn owner_of(&self, shard: usize) -> MintOwner {
+        if shard == self.shard {
+            MintOwner::Remote(self.address)
+        } else {
+            MintOwner::Local
+        }
+    }
+}
+
+/// A forwarder that hands the mint to the OWNER's own minter — what the
+/// owner-side `MintNamespace` handler does once the gRPC hop has landed.
+struct MintOnOwner {
+    owner: NamespaceMinter,
+}
+
+#[async_trait::async_trait]
+impl MintForwarder for MintOnOwner {
+    async fn forward_mint(
+        &self,
+        _target: SocketAddr,
+        _credentials: &MintCredentials,
+        namespaces: &[String],
+        origin: NamespaceOrigin,
+    ) -> Result<(), ForwardMintError> {
+        self.owner
+            .mint_or_gate(namespaces, origin)
+            .await
+            .map_err(|error| ForwardMintError::Refused(error.to_wire_error()))
+    }
 }
 
 /// Umask-independent private temporary directory: the server's private-root

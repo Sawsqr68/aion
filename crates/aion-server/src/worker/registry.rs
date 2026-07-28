@@ -347,6 +347,23 @@ impl ConnectedWorkerRegistry {
         self
     }
 
+    /// Thread the boot's namespace-mint routing context into the registry's
+    /// minter, so a worker registering for a namespace whose registry shard this
+    /// node does not own mints through the shard's owner instead of being
+    /// refused `NotOwner` forever.
+    ///
+    /// The SECOND of the two minter construction sites (the first is
+    /// [`ServerState::namespace_minter`](crate::ServerState::namespace_minter),
+    /// which serves the gRPC and HTTP start seams). Called after
+    /// [`Self::with_namespace_minting`] on the boot path; a no-op when no minter
+    /// is installed, and never called at all off-cluster, so default/test
+    /// registries stay byte-identical.
+    #[must_use]
+    pub fn with_namespace_routing(mut self, routing: crate::namespace::NamespaceRouting) -> Self {
+        self.minter = self.minter.map(|minter| minter.with_routing(routing));
+        self
+    }
+
     /// Authorize a worker registration and insert it into the connected-worker registry.
     ///
     /// # Errors

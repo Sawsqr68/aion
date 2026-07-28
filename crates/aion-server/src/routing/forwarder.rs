@@ -48,6 +48,9 @@ pub enum ForwardRequest {
     Pause(generated::PauseRequest),
     /// A `resume` to relay verbatim to the owner (#204).
     Resume(generated::ResumeRequest),
+    /// An already-authorized namespace mint to relay to the namespace registry
+    /// shard's owner, which applies its own auto-create policy to it.
+    MintNamespace(generated::MintNamespaceRequest),
 }
 
 /// The owner's reply, relayed back to the original caller unchanged.
@@ -67,6 +70,8 @@ pub enum ForwardReply {
     Pause(generated::PauseResponse),
     /// The owner's `resume` reply (#204).
     Resume(generated::ResumeResponse),
+    /// The owner's namespace-mint ack.
+    MintNamespace(generated::MintNamespaceResponse),
 }
 
 /// Relays a client request to a remote shard owner and returns its reply.
@@ -198,6 +203,14 @@ impl RequestForwarder for GrpcRequestForwarder {
                     .resume(outbound)
                     .await
                     .map(|response| ForwardReply::Resume(response.into_inner()))
+            }
+            ForwardRequest::MintNamespace(message) => {
+                let mut outbound = Request::new(message);
+                *outbound.metadata_mut() = metadata;
+                client
+                    .mint_namespace(outbound)
+                    .await
+                    .map(|response| ForwardReply::MintNamespace(response.into_inner()))
             }
         }
     }
