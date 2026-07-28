@@ -339,13 +339,19 @@ pub struct ConfigValue {
 }
 
 /// Retry policy on an action config line.
+///
+/// `retry N` declares N FURTHER attempts AFTER the first — N+1 total
+/// executions. The lowerings translate `count` into the SDK's total-attempt
+/// budget (`emitter::stmts::total_attempts` and its direct-lowering twin);
+/// `count` itself is always the number the author wrote, and it is what
+/// `RetryContract` commits to package identity.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RetrySpec {
     /// `retry N every D` — constant interval.
     Every {
         /// Span covering the complete retry clause.
         span: Span,
-        /// Number of retry attempts.
+        /// Number of further attempts after the first.
         count: u64,
         /// Constant delay between attempts.
         every: DurationLiteral,
@@ -354,7 +360,7 @@ pub enum RetrySpec {
     Backoff {
         /// Span covering the complete retry clause.
         span: Span,
-        /// Number of retry attempts.
+        /// Number of further attempts after the first.
         count: u64,
         /// Minimum backoff delay.
         min: DurationLiteral,

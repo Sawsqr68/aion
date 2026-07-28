@@ -247,6 +247,11 @@ worker dev_brief
 - The worker name is the task queue. `node`, `timeout`, `retry N every D`
   (or `retry N backoff D..D`) are per-action config on the indented line;
   a step may override `node`/`timeout` at the call site when it must pin.
+- **`retry N` is N FURTHER attempts after the first** — N+1 total executions,
+  so `retry 2 every 30s` runs the action up to three times. `retry 0` is one
+  execution and no retry. The declared number is the number the author wrote:
+  it is what the package contract commits to identity, and the lowerings
+  translate it into the SDK's total-attempt budget at emission.
 - Calls use **required named arguments**, checked against the declaration —
   no positional form (the positional-swap bug is unwritable).
 - Deploy-time contract verification (rides #186): at deploy and at worker

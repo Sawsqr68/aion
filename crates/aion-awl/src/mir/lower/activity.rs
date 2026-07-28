@@ -269,7 +269,14 @@ fn duration_var(
 
 /// Build the `activity.RetryPolicy(max_attempts, backoff)` record the SDK's
 /// `activity.retry/2` takes, mirroring the reference `retry_policy`
-/// (`stmts.rs:141-156`): `Fixed(delay)` or `Exponential(initial, 2.0, max)`.
+/// (`emitter/stmts.rs`): `Fixed(delay)` or `Exponential(initial, 2.0, max)`.
+///
+/// This is the direct lowering's ONE retry-counting site. AWL's `retry N`
+/// declares N FURTHER attempts after the first, while the SDK's `max_attempts`
+/// is the TOTAL attempt budget the engine's dispatch loop counts against
+/// (`attempt < max_attempts`), so the declared count is translated here — and
+/// only here — through [`total_attempts`], exactly as the reference emitter
+/// does.
 fn build_retry_policy(
     ctx: &mut Ctx<'_>,
     retry: &crate::ast::RetrySpec,
@@ -304,15 +311,25 @@ fn build_retry_policy(
             )
         }
     };
-    let count_int = i64::try_from(count)
+    let total = i64::try_from(total_attempts(count))
         .map_err(|_| LowerError::unsupported("retry count above i64::MAX", span))?;
     let policy_tag = ctx.atom("retry_policy");
     Ok(record_new(
         ctx,
         policy_tag,
-        vec![Value::Int(count_int), Value::Var(backoff)],
+        vec![Value::Int(total), Value::Var(backoff)],
         stmts,
     ))
+}
+
+/// The SDK total-attempt budget a declared count of FURTHER attempts buys:
+/// the first delivery plus `count` retries. Saturating, so an absurd declared
+/// count cannot wrap the budget to zero (which the engine decodes as "no
+/// policy" — silently dropping the author's retries); the saturated value is
+/// still above `i64::MAX`, so the caller refuses it rather than emitting a
+/// budget the BEAM cannot hold.
+const fn total_attempts(count: u64) -> u64 {
+    count.saturating_add(1)
 }
 
 pub(super) fn call_rt(

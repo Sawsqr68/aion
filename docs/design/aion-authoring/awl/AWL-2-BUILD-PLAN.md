@@ -239,7 +239,7 @@ fixtures** (plus sidecars) under `crates/aion-awl/tests/fixtures/rev2/` —
 - [Checker] Payload refusal on a substep's route to a parent outcome arm mislabels the arm as a "step"
 - [Checker] Implementing agent's report overstates counts: 101 tests / "52+" valid fixtures claimed; actual is 99 tests and 50 valid fixtures
 - [Emitter] The golden flagship example fails `aion awl check`/`emit` in place: no schemas/ directory beside docs/design/aion-authoring/awl/examples/rev2/dev_brief.awl
-- [Emitter] Retry mapping semantics unspecified and partly invented: `retry N` → max_attempts: N (N TOTAL attempts, so `retry 2` = one retry) and `backoff D..D` → Exponential with an invented multiplier 2.0
+- [Emitter] Retry mapping semantics unspecified and partly invented: `retry N` → max_attempts: N (N TOTAL attempts, so `retry 2` = one retry) and `backoff D..D` → Exponential with an invented multiplier 2.0 — COUNTING HALF RESOLVED 2026-07-29: ratified as "N FURTHER attempts after the first" (COLD-READ §2.3), stated in AWL-2-SPEC.md, and enforced at BOTH lowerings as `max_attempts = N + 1` (evidence: docs/evidence/retry-counting-red-green.md). The 2.0 multiplier remains an invented constant and is still open.
 - [Emitter] emit() on an unchecked document silently drops the piped value when a piped route also constructs a payload, instead of returning the documented EmitError
 - [Emitter] Orphaned old-grammar fixtures survive the deletion the phase report claims: typed_contract.awl and brief.schema.golden.json are referenced by nothing
 - [Emitter] Doc comment for emit_sub_tail is misattached to struct SubChain, stacking two unrelated doc paragraphs on the struct and leaving the function undocumented

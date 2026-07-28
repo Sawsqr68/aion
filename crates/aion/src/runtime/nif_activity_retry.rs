@@ -73,6 +73,11 @@ pub(super) fn is_retryable_reason(reason: &str) -> bool {
 /// Mirrors `aion/activity.RetryPolicy` in the Gleam SDK: `max_attempts` is the
 /// TOTAL attempt budget (a policy of 3 means at most 2 retries after the first
 /// delivery), and `backoff` is the delay strategy between attempts.
+///
+/// This is the SDK's convention, and it is NOT AWL's. AWL's `retry N` declares
+/// N FURTHER attempts after the first; its two lowerings translate that count
+/// into this total budget (`N + 1`) at emission, so nothing here needs to know
+/// which surface authored the policy.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct RetryPolicy {
     /// Total one-based attempt budget, including the first delivery.

@@ -187,7 +187,7 @@ exports: run/1, definition/0, execute/1
   v9 = call_local ship_activity(v0)
   v10 = call_rt aion@duration:milliseconds/1(30000) live_after=[v9]
   v11 = record(fixed, [v10])
-  v12 = record(retry_policy, [2, v11])
+  v12 = record(retry_policy, [3, v11])
   v13 = call_rt aion@activity:retry/2(v9, v12)
   v14 = call_rt aion@duration:milliseconds/1(600000) live_after=[v13]
   v15 = call_rt aion@activity:timeout/2(v13, v14)

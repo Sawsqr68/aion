@@ -151,21 +151,40 @@ fn ordered_args<'c>(
         .collect()
 }
 
+/// Build the `activity.RetryPolicy(max_attempts, backoff)` call the SDK's
+/// `activity.retry/2` takes.
+///
+/// This is the reference lowering's ONE retry-counting site. AWL's `retry N`
+/// declares N FURTHER attempts after the first, while the SDK's `max_attempts`
+/// is the TOTAL attempt budget the engine's dispatch loop counts against
+/// (`attempt < max_attempts`), so the declared count is translated here — and
+/// only here — as `N + 1`. The direct lowering's twin is
+/// `mir::lower::activity::total_attempts`; the two must stay in step.
 pub(super) fn retry_policy(retry: &RetrySpec) -> String {
     match retry {
         RetrySpec::Every { count, every, .. } => format!(
-            "activity.RetryPolicy(max_attempts: {count}, backoff: activity.Fixed({}))",
+            "activity.RetryPolicy(max_attempts: {}, backoff: activity.Fixed({}))",
+            total_attempts(*count),
             duration_expr(every)
         ),
         RetrySpec::Backoff {
             count, min, max, ..
         } => format!(
-            "activity.RetryPolicy(max_attempts: {count}, backoff: activity.Exponential(initial: \
-             {}, multiplier: 2.0, max: {}))",
+            "activity.RetryPolicy(max_attempts: {}, backoff: activity.Exponential(initial: {}, \
+             multiplier: 2.0, max: {}))",
+            total_attempts(*count),
             duration_expr(min),
             duration_expr(max)
         ),
     }
+}
+
+/// The SDK total-attempt budget a declared count of FURTHER attempts buys:
+/// the first delivery plus `count` retries. Saturating, so an absurd declared
+/// count cannot wrap the budget to zero (which the engine decodes as "no
+/// policy" — silently dropping the author's retries).
+const fn total_attempts(count: u64) -> u64 {
+    count.saturating_add(1)
 }
 
 /// Build the string-name child-spawn expression (without the leading

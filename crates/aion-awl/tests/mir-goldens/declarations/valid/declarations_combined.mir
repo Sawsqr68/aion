@@ -418,7 +418,7 @@ exports: run/1, definition/0, execute/1
   v2 = call_local cut_build_activity(v0, v1) live_after=[v0, v1]
   v3 = call_rt aion@duration:milliseconds/1(120000) live_after=[v0, v1, v2]
   v4 = record(fixed, [v3])
-  v5 = record(retry_policy, [2, v4])
+  v5 = record(retry_policy, [3, v4])
   v6 = call_rt aion@activity:retry/2(v2, v5) live_after=[v0, v1]
   v7 = call_rt aion@duration:milliseconds/1(2700000) live_after=[v0, v1, v6]
   v8 = call_rt aion@activity:timeout/2(v6, v7) live_after=[v0, v1]
@@ -431,7 +431,7 @@ exports: run/1, definition/0, execute/1
   v15 = call_rt aion@duration:milliseconds/1(5000) live_after=[v0, v1, v13, v14]
   v16 = call_rt aion@duration:milliseconds/1(120000) live_after=[v0, v1, v13, v14, v15]
   v17 = record(exponential, [v15, lit#32, v16])
-  v18 = record(retry_policy, [4, v17])
+  v18 = record(retry_policy, [5, v17])
   v19 = call_rt aion@activity:retry/2(v14, v18) live_after=[v0, v1, v13]
   v20 = call_rt aion@duration:milliseconds/1(30000) live_after=[v0, v1, v13, v19]
   v21 = call_rt aion@activity:timeout/2(v19, v20) live_after=[v0, v1, v13]
@@ -472,7 +472,7 @@ exports: run/1, definition/0, execute/1
   v20 = call_local tag_release_activity(v2) live_after=[v2, v10, v19]
   v21 = call_rt aion@duration:milliseconds/1(20000) live_after=[v2, v10, v19, v20]
   v22 = record(fixed, [v21])
-  v23 = record(retry_policy, [3, v22])
+  v23 = record(retry_policy, [4, v22])
   v24 = call_rt aion@activity:retry/2(v20, v23) live_after=[v2, v10, v19]
   v25 = call_rt aion@activity:task_queue/2(v24, lit#40) live_after=[v2, v10, v19]
   v26 = call_rt aion@workflow:run/1(v25) live_after=[v2, v10, v19]

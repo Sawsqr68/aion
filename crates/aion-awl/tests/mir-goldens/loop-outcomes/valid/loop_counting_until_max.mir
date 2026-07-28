@@ -251,7 +251,7 @@ exports: run/1, definition/0, execute/1
   v4 = call_local poll_activity(v3, v0) live_after=[v1, v2, v3]
   v5 = call_rt aion@duration:milliseconds/1(10000) live_after=[v1, v2, v3, v4]
   v6 = record(fixed, [v5])
-  v7 = record(retry_policy, [3, v6])
+  v7 = record(retry_policy, [4, v6])
   v8 = call_rt aion@activity:retry/2(v4, v7) live_after=[v1, v2, v3]
   v9 = call_rt aion@duration:milliseconds/1(60000) live_after=[v1, v2, v3, v8]
   v10 = call_rt aion@activity:timeout/2(v8, v9) live_after=[v1, v2, v3]

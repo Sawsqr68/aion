@@ -142,7 +142,7 @@ exports: run/1, definition/0, execute/1
   v2 = call_rt aion@duration:milliseconds/1(5000) live_after=[v1]
   v3 = call_rt aion@duration:milliseconds/1(120000) live_after=[v1, v2]
   v4 = record(exponential, [v2, lit#9, v3])
-  v5 = record(retry_policy, [4, v4])
+  v5 = record(retry_policy, [5, v4])
   v6 = call_rt aion@activity:retry/2(v1, v5)
   v7 = call_rt aion@duration:milliseconds/1(30000) live_after=[v6]
   v8 = call_rt aion@activity:timeout/2(v6, v7)

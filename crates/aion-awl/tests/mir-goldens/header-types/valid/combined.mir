@@ -631,7 +631,7 @@ exports: run/1, definition/0, execute/1
   v1 = call_local publish_activity(v0)
   v2 = call_rt aion@duration:milliseconds/1(30000) live_after=[v1]
   v3 = record(fixed, [v2])
-  v4 = record(retry_policy, [2, v3])
+  v4 = record(retry_policy, [3, v3])
   v5 = call_rt aion@activity:retry/2(v1, v4)
   v6 = call_rt aion@duration:milliseconds/1(300000) live_after=[v5]
   v7 = call_rt aion@activity:timeout/2(v5, v6)
