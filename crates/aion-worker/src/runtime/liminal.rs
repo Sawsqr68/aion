@@ -91,6 +91,10 @@ pub struct DispatchRequest {
     pub ordinal: u64,
     /// Run that dispatched this ordinal, when known (continue-as-new safety).
     pub run_id: Option<RunId>,
+    /// Opaque execution generation echoed verbatim in the response.
+    pub completion_token: String,
+    /// Stable external-effect key for this run and action site.
+    pub idempotency_key: String,
     /// Opaque activity input bytes (JSON-tagged on the aion side).
     pub input: Vec<u8>,
     /// One-based delivery attempt (the gRPC `ActivityTask.attempt` mirror).
@@ -116,6 +120,30 @@ pub struct DispatchRequest {
 /// attempt field is a first delivery.
 const fn first_attempt() -> u32 {
     1
+}
+
+fn validate_dispatch_envelope(request: &DispatchRequest) -> Result<(), WorkerError> {
+    let reason = if request.run_id.is_none() {
+        Some("run_id is missing")
+    } else if request.attempt == 0 {
+        Some("attempt is zero")
+    } else if request.completion_token.is_empty() {
+        Some("completion_token is missing")
+    } else if request.idempotency_key.is_empty() {
+        Some("idempotency_key is missing")
+    } else {
+        None
+    };
+    match reason {
+        Some(reason) => Err(WorkerError::decode(InvalidDispatchEnvelope { reason })),
+        None => Ok(()),
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("invalid liminal activity dispatch envelope: {reason}")]
+struct InvalidDispatchEnvelope {
+    reason: &'static str,
 }
 
 /// Reserved liminal channel this worker publishes automatic liveness beats on.
@@ -162,6 +190,8 @@ pub struct DispatchResponse {
     pub ordinal: u64,
     /// Run that issued the dispatch, echoed back for the run gate.
     pub run_id: Option<RunId>,
+    /// Opaque execution generation echoed from the request.
+    pub completion_token: String,
     /// Worker outcome: `Ok(result)` or `Err(reason)`.
     pub outcome: Result<String, String>,
 }
@@ -633,6 +663,7 @@ impl LiminalActivityWorker {
         }
         let request: DispatchRequest =
             serde_json::from_slice(frame.payload()).map_err(WorkerError::decode)?;
+        validate_dispatch_envelope(&request)?;
         // Receipt is logged BEFORE execution so a dispatch that reaches the wrong
         // connection (or wedges mid-handler) is visible in the worker log — the
         // server side only sees silence either way (a lost-worker expiry), so this
@@ -732,6 +763,8 @@ impl LiminalActivityWorker {
             run_id: request.run_id.clone(),
             activity_type: request.activity_type.clone(),
             attempt,
+            completion_token: request.completion_token.clone(),
+            idempotency_key: request.idempotency_key.clone(),
             input: Payload::new(ContentType::Json, request.input.clone()),
             labels: request.labels.clone(),
         };
@@ -747,6 +780,7 @@ impl LiminalActivityWorker {
             Some(request.workflow_id.clone()),
             activity_id,
             attempt,
+            Some(request.idempotency_key.clone()),
             None,
             Some(event_sender),
         );
@@ -767,6 +801,7 @@ impl LiminalActivityWorker {
             workflow_id: request.workflow_id.clone(),
             ordinal: request.ordinal,
             run_id: request.run_id.clone(),
+            completion_token: request.completion_token.clone(),
             outcome,
         })
     }
@@ -829,6 +864,7 @@ async fn run_agent_dispatch(
         workflow_id: request.workflow_id.clone(),
         ordinal: request.ordinal,
         run_id: request.run_id.clone(),
+        completion_token: request.completion_token.clone(),
         outcome: wire_outcome(outcome),
     };
     // Reply the terminal result to the server on the shared connection. A failed
@@ -1068,6 +1104,8 @@ mod tests {
             workflow_id: WorkflowId::new(Uuid::new_v4()),
             ordinal: 7,
             run_id: Some(RunId::new(Uuid::new_v4())),
+            completion_token: "generation-3".to_owned(),
+            idempotency_key: "effect-key".to_owned(),
             input: br#"{"amount":42}"#.to_vec(),
             attempt: 3,
             labels: std::collections::BTreeMap::from([("region".to_owned(), "apac".to_owned())]),
@@ -1083,6 +1121,8 @@ mod tests {
             "workflow_id",
             "ordinal",
             "run_id",
+            "completion_token",
+            "idempotency_key",
             "input",
             "attempt",
             "labels",
@@ -1093,13 +1133,9 @@ mod tests {
         Ok(())
     }
 
-    /// A frame from a server that predates `attempt`/`labels`/
-    /// `heartbeat_window_ms` still decodes — as a first delivery with no labels
-    /// and no liveness window (no pump) — so the wire change is
-    /// backward-compatible in both directions.
+    /// A frame from a pre-fencing server is refused rather than guessed current.
     #[test]
-    fn dispatch_request_without_new_fields_decodes_as_first_delivery()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn dispatch_request_without_fencing_fields_is_rejected() {
         let old_frame = serde_json::json!({
             "activity_type": "charge-card",
             "workflow_id": WorkflowId::new(Uuid::new_v4()),
@@ -1107,20 +1143,10 @@ mod tests {
             "run_id": null,
             "input": [123, 125],
         });
-        let decoded: DispatchRequest = serde_json::from_value(old_frame)?;
-        assert_eq!(
-            decoded.attempt, 1,
-            "a pre-attempt frame is a first delivery"
-        );
         assert!(
-            decoded.labels.is_empty(),
-            "a pre-labels frame has no labels"
+            serde_json::from_value::<DispatchRequest>(old_frame).is_err(),
+            "a pre-fencing task must be rejected as a registration-era mismatch"
         );
-        assert_eq!(
-            decoded.heartbeat_window_ms, 0,
-            "a pre-window frame arms no liveness pump"
-        );
-        Ok(())
     }
 
     /// The liveness beat round-trips with stable field names — the cross-crate
@@ -1208,6 +1234,8 @@ mod tests {
             workflow_id: WorkflowId::new(Uuid::new_v4()),
             ordinal: 7,
             run_id: None,
+            completion_token: "generation-1".to_owned(),
+            idempotency_key: "effect-key".to_owned(),
             input: b"{}".to_vec(),
             attempt: 1,
             labels: std::collections::BTreeMap::new(),
@@ -1240,12 +1268,14 @@ mod tests {
             workflow_id: workflow_id.clone(),
             ordinal: 0,
             run_id: None,
+            completion_token: "generation-1".to_owned(),
             outcome: Ok(r#"{"charged":true}"#.to_owned()),
         };
         let err = DispatchResponse {
             workflow_id,
             ordinal: 1,
             run_id: None,
+            completion_token: "generation-1".to_owned(),
             outcome: Err("boom".to_owned()),
         };
         for response in [ok, err] {

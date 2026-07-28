@@ -86,6 +86,7 @@ impl RetryLoopHarness {
             task_queue: String::from("default"),
             node: None,
             workflow_id: workflow_id.clone(),
+            run_id: run_id.clone(),
             activity_id: ActivityId::from_sequence_position(0),
             name: "flaky".to_owned(),
             input: r#""in""#.to_owned(),

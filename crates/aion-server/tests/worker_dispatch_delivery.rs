@@ -51,6 +51,7 @@ fn greet_request(input: &str, attempt: u32) -> ActivityDispatch {
         task_queue: TASK_QUEUE.to_owned(),
         node: None,
         workflow_id: WorkflowId::new_v4(),
+        run_id: aion_core::RunId::new_v4(),
         activity_id: ActivityId::from_sequence_position(0),
         name: ACTIVITY_TYPE.to_owned(),
         input: input.to_owned(),
@@ -243,6 +244,7 @@ impl Harness {
                         workflow_id: task.workflow_id,
                         activity_id: task.activity_id,
                         run_id: task.run_id,
+                        completion_token: task.completion_token,
                         outcome: Some(generated::activity_result::Outcome::Result(
                             generated::Payload {
                                 content_type: "application/json".to_owned(),
@@ -586,6 +588,7 @@ async fn malformed_result_gets_no_ack_and_stream_stays_healthy() -> Result<(), T
                     }),
                     activity_id: None,
                     run_id: None,
+                    completion_token: String::new(),
                     outcome: Some(generated::activity_result::Outcome::Result(
                         generated::Payload {
                             content_type: "application/json".to_owned(),

@@ -78,6 +78,7 @@ use liminal_server::server::connection::{
 use serde::{Deserialize, Serialize};
 
 use super::bridge::OutboxDeliveryCallback;
+use super::envelope::{CompletionFences, CompletionToken, idempotency_key};
 use super::outbox_dispatcher::OutboxRowDispatch;
 use super::registry::{ConnectedWorkerRegistry, WorkerDelivery, WorkerHandle, WorkerRegistration};
 use crate::error::ServerError;
@@ -115,6 +116,10 @@ pub struct DispatchRequest {
     pub ordinal: u64,
     /// Run that dispatched this ordinal, when known (continue-as-new safety).
     pub run_id: Option<RunId>,
+    /// Opaque execution-generation proof echoed verbatim by the worker.
+    pub completion_token: String,
+    /// Stable external-effect key for this run and action site.
+    pub idempotency_key: String,
     /// Opaque activity input bytes (JSON-tagged on the aion side).
     pub input: Vec<u8>,
     /// One-based delivery attempt, mirroring the gRPC `ActivityTask.attempt`.
@@ -171,6 +176,8 @@ pub struct DispatchResponse {
     pub ordinal: u64,
     /// Run that issued the dispatch, echoed back for the run gate.
     pub run_id: Option<RunId>,
+    /// Opaque execution-generation proof echoed from the request.
+    pub completion_token: String,
     /// Worker outcome: `Ok(result)` or `Err(reason)`.
     pub outcome: Result<String, String>,
 }
@@ -287,12 +294,19 @@ pub struct WorkerLivenessBeat {
 /// Kept free-standing (not a method) so both the dispatch path and tests build
 /// the request the same way.
 #[must_use]
-pub fn request_for_row(row: &OutboxRow) -> DispatchRequest {
+pub fn request_for_row(
+    row: &OutboxRow,
+    run_id: &RunId,
+    completion_token: &CompletionToken,
+) -> DispatchRequest {
+    let activity_id = ActivityId::from_sequence_position(row.ordinal);
     DispatchRequest {
         activity_type: row.activity_type.clone(),
         workflow_id: row.workflow_id.clone(),
         ordinal: row.ordinal,
-        run_id: row.run_id.clone(),
+        run_id: Some(run_id.clone()),
+        completion_token: completion_token.as_str().to_owned(),
+        idempotency_key: idempotency_key(&row.workflow_id, run_id, &activity_id),
         input: row.input.bytes().to_vec(),
         // The stored zero-based attempt is stamped one-based on the wire (zero
         // is malformed), exactly as the gRPC outbox arm's `to_scheduled` does.
@@ -443,6 +457,7 @@ fn dispatch_error(channel: &str, reason: String) -> ServerError {
 /// gates apply unchanged.
 pub struct LiminalCompletionSource {
     callback: Arc<dyn OutboxDeliveryCallback>,
+    completion_fences: CompletionFences,
 }
 
 impl std::fmt::Debug for LiminalCompletionSource {
@@ -456,7 +471,17 @@ impl LiminalCompletionSource {
     /// Build a completion source over the shared outbox delivery callback.
     #[must_use]
     pub fn new(callback: Arc<dyn OutboxDeliveryCallback>) -> Self {
-        Self { callback }
+        Self {
+            callback,
+            completion_fences: CompletionFences::default(),
+        }
+    }
+
+    /// Share the authoritative generation registry used by dispatch.
+    #[must_use]
+    pub fn with_completion_fences(mut self, completion_fences: CompletionFences) -> Self {
+        self.completion_fences = completion_fences;
+        self
     }
 
     /// Re-enter one worker result into aion through the delivery callback.
@@ -471,18 +496,31 @@ impl LiminalCompletionSource {
     /// Returns [`ServerError`] when the response carries an unparseable id or
     /// the engine rejects the delivery.
     pub fn deliver(&self, response: &DispatchResponse) -> Result<bool, ServerError> {
+        let run_id = response.run_id.as_ref().ok_or_else(|| {
+            dispatch_error(
+                "liminal completion",
+                "activity result run id is missing; refusing run-gate bypass".to_owned(),
+            )
+        })?;
         let activity_id = ActivityId::from_sequence_position(response.ordinal);
+        let completion_token = CompletionToken::from_wire(
+            &response.workflow_id,
+            &activity_id,
+            response.completion_token.clone(),
+        )?;
+        self.completion_fences
+            .accept(&response.workflow_id, &activity_id, &completion_token)?;
         match &response.outcome {
             Ok(result) => self.callback.deliver_completion(
                 &response.workflow_id,
                 &activity_id,
-                response.run_id.as_ref(),
+                Some(run_id),
                 result.clone(),
             ),
             Err(reason) => self.callback.deliver_failure(
                 &response.workflow_id,
                 &activity_id,
-                response.run_id.as_ref(),
+                Some(run_id),
                 reason.clone(),
             ),
         }
@@ -819,6 +857,13 @@ impl RegistryLiminalDispatch {
         }
     }
 
+    /// Share completion-generation authority with result ingestion.
+    #[must_use]
+    pub fn with_completion_fences(mut self, completion_fences: CompletionFences) -> Self {
+        self.completion = self.completion.with_completion_fences(completion_fences);
+        self
+    }
+
     /// Install the NOI-6 attempt-owner back-index so each dispatched attempt binds
     /// its owning worker for the intervention router to resolve (NOI-6).
     ///
@@ -968,21 +1013,50 @@ impl OutboxRowDispatch for RegistryLiminalDispatch {
         // Push the dispatch to the worker and block for its correlated reply. The
         // push is a blocking, thread-based liminal call; run it off the async
         // runtime so a long-running activity cannot starve a runtime worker.
-        let request = request_for_row(row);
-        let response = tokio::task::spawn_blocking(move || delivery.dispatch(&request))
+        let activity_id = ActivityId::from_sequence_position(row.ordinal);
+        let run_id = row.run_id.as_ref().ok_or_else(|| {
+            dispatch_error(
+                &channel_for_row(row),
+                "activity run id is missing; refusing unfenced external effect".to_owned(),
+            )
+        })?;
+        let completion_token = self
+            .completion
+            .completion_fences
+            .issue(&row.workflow_id, &activity_id)?;
+        let request = request_for_row(row, run_id, &completion_token);
+        let dispatched = tokio::task::spawn_blocking(move || delivery.dispatch(&request))
             .await
             .map_err(|error| {
                 dispatch_error(
                     &channel_for_row(row),
                     format!("dispatch task join failed: {error}"),
                 )
-            })??;
+            });
+        let response = match dispatched {
+            Ok(Ok(response)) => response,
+            Ok(Err(error)) | Err(error) => {
+                self.completion.completion_fences.revoke(
+                    &row.workflow_id,
+                    &activity_id,
+                    &completion_token,
+                )?;
+                return Err(error);
+            }
+        };
 
         // Re-enter the worker's result through the SAME completion path the gRPC
         // transport uses (terminal dedup in `record_fan_out_completion` applies
         // unchanged). The dispatch itself succeeded — the row's terminal state is
         // recorded by the completion callback, exactly as in the gRPC path.
-        self.completion.deliver(&response)?;
+        if let Err(error) = self.completion.deliver(&response) {
+            self.completion.completion_fences.revoke(
+                &row.workflow_id,
+                &activity_id,
+                &completion_token,
+            )?;
+            return Err(error);
+        }
         Ok(())
     }
 }
@@ -1830,7 +1904,7 @@ mod tests {
             dispatch_key: format!("{workflow_id}:0"),
             workflow_id,
             ordinal: 0,
-            run_id: None,
+            run_id: Some(aion_core::RunId::new_v4()),
             namespace: namespace.to_owned(),
             task_queue: task_queue.to_owned(),
             node: None,
@@ -1887,10 +1961,15 @@ mod tests {
     /// and assigns no liveness window (outbox rows are not tracker-tracked; the
     /// outbox retry loop is their liveness backstop).
     #[test]
-    fn request_for_row_stamps_one_based_attempt_and_no_window() {
+    fn request_for_row_stamps_one_based_attempt_and_no_window() -> Result<(), crate::ServerError> {
         let mut retried = row("remote", "gpu");
         retried.attempt = 2;
-        let request = super::request_for_row(&retried);
+        let run_id = retried
+            .run_id
+            .as_ref()
+            .ok_or_else(|| crate::ServerError::worker_dispatch("", "", "test row missing run"))?;
+        let token = super::CompletionToken::for_test();
+        let request = super::request_for_row(&retried, run_id, &token);
         assert_eq!(
             request.attempt, 3,
             "zero-based row attempt goes one-based on the wire"
@@ -1899,7 +1978,12 @@ mod tests {
         assert_eq!(request.heartbeat_window_ms, 0);
 
         let fresh = row("remote", "gpu");
-        assert_eq!(super::request_for_row(&fresh).attempt, 1);
+        let fresh_run = fresh
+            .run_id
+            .as_ref()
+            .ok_or_else(|| crate::ServerError::worker_dispatch("", "", "test row missing run"))?;
+        assert_eq!(super::request_for_row(&fresh, fresh_run, &token).attempt, 1);
+        Ok(())
     }
 
     /// The wire `node` is normalized onto the registry's optional affinity with

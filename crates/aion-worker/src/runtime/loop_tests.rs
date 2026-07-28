@@ -59,9 +59,11 @@ impl WorkerSession for FakeSession {
         workflow_id: WorkflowId,
         activity_id: ActivityId,
         run_id: Option<RunId>,
+
+        completion_token: String,
         result: Payload,
     ) -> Result<(), WorkerError> {
-        let _ = (workflow_id, run_id);
+        drop((workflow_id, run_id, completion_token));
         self.reports
             .push(RecordedReport::Completed(activity_id, result));
         Ok(())
@@ -72,9 +74,11 @@ impl WorkerSession for FakeSession {
         workflow_id: WorkflowId,
         activity_id: ActivityId,
         run_id: Option<RunId>,
+
+        completion_token: String,
         failure: ActivityError,
     ) -> Result<(), WorkerError> {
-        let _ = (workflow_id, run_id);
+        drop((workflow_id, run_id, completion_token));
         self.reports
             .push(RecordedReport::Failed(activity_id, failure));
         Ok(())
@@ -189,16 +193,16 @@ async fn dispatches_two_tasks_and_reports_corresponding_outcomes() -> Result<(),
     };
     let mut session = FakeSession {
         tasks: vec![
-            Ok(WorkerSessionEvent::Task(proto_task(
+            Ok(WorkerSessionEvent::Task(Box::new(proto_task(
                 workflow_id.clone(),
                 first_activity.clone(),
                 "charge-card",
-            ))),
-            Ok(WorkerSessionEvent::Task(proto_task(
+            )))),
+            Ok(WorkerSessionEvent::Task(Box::new(proto_task(
                 workflow_id.clone(),
                 second_activity.clone(),
                 "charge-card",
-            ))),
+            )))),
         ],
         reports: Vec::new(),
     };
@@ -253,11 +257,11 @@ async fn max_concurrency_caps_dispatches_at_two() -> Result<(), WorkerError> {
     };
     for position in 1..=5 {
         task_sender
-            .send(Ok(WorkerSessionEvent::Task(proto_task(
+            .send(Ok(WorkerSessionEvent::Task(Box::new(proto_task(
                 workflow_id.clone(),
                 ActivityId::from_sequence_position(position),
                 "slow",
-            ))))
+            )))))
             .await
             .map_err(WorkerError::decode)?;
     }
@@ -304,11 +308,11 @@ async fn cancellation_event_flips_context_without_suppressing_result() -> Result
         reports: Vec::new(),
     };
     event_sender
-        .send(Ok(WorkerSessionEvent::Task(proto_task(
+        .send(Ok(WorkerSessionEvent::Task(Box::new(proto_task(
             workflow_id.clone(),
             activity_id.clone(),
             "cancellable",
-        ))))
+        )))))
         .await
         .map_err(WorkerError::decode)?;
     let dispatcher = Arc::new(CancellingDispatcher {
@@ -379,9 +383,11 @@ impl WorkerSession for ChannelSession {
         workflow_id: WorkflowId,
         activity_id: ActivityId,
         run_id: Option<RunId>,
+
+        completion_token: String,
         result: Payload,
     ) -> Result<(), WorkerError> {
-        let _ = (workflow_id, run_id);
+        drop((workflow_id, run_id, completion_token));
         self.reports
             .push(RecordedReport::Completed(activity_id, result));
         Ok(())
@@ -392,9 +398,11 @@ impl WorkerSession for ChannelSession {
         workflow_id: WorkflowId,
         activity_id: ActivityId,
         run_id: Option<RunId>,
+
+        completion_token: String,
         failure: ActivityError,
     ) -> Result<(), WorkerError> {
-        let _ = (workflow_id, run_id);
+        drop((workflow_id, run_id, completion_token));
         self.reports
             .push(RecordedReport::Failed(activity_id, failure));
         Ok(())
@@ -419,13 +427,15 @@ fn proto_task(
     ProtoActivityTask {
         workflow_id: Some(ProtoWorkflowId::from(workflow_id)),
         activity_id: Some(ProtoActivityId::from(activity_id)),
-        run_id: None,
+        run_id: Some(aion_proto::ProtoRunId::from(RunId::new_v4())),
         activity_type: String::from(activity_type),
         input: Some(ProtoPayload::from(Payload::new(
             ContentType::Json,
             b"{}".to_vec(),
         ))),
         attempt: 1,
+        completion_token: String::from("generation-1"),
+        idempotency_key: String::from("effect-key"),
         labels: std::collections::HashMap::new(),
     }
 }
@@ -497,7 +507,7 @@ async fn wire_attempt_is_exposed_on_the_activity_context() -> Result<(), WorkerE
     );
     task.attempt = 3;
     let mut session = FakeSession {
-        tasks: vec![Ok(WorkerSessionEvent::Task(task))],
+        tasks: vec![Ok(WorkerSessionEvent::Task(Box::new(task)))],
         reports: Vec::new(),
     };
     let dispatcher = Arc::new(AttemptRecordingDispatcher {
@@ -531,7 +541,7 @@ async fn zero_attempt_task_fails_serve_with_decode_error() -> Result<(), WorkerE
     );
     task.attempt = 0;
     let mut session = FakeSession {
-        tasks: vec![Ok(WorkerSessionEvent::Task(task))],
+        tasks: vec![Ok(WorkerSessionEvent::Task(Box::new(task)))],
         reports: Vec::new(),
     };
     let dispatcher = Arc::new(AttemptRecordingDispatcher {
@@ -632,9 +642,11 @@ impl WorkerSession for WindowSession {
         workflow_id: WorkflowId,
         activity_id: ActivityId,
         run_id: Option<RunId>,
+
+        completion_token: String,
         result: Payload,
     ) -> Result<(), WorkerError> {
-        let _ = (workflow_id, run_id);
+        drop((workflow_id, run_id, completion_token));
         self.reports
             .push(RecordedReport::Completed(activity_id, result));
         Ok(())
@@ -645,9 +657,11 @@ impl WorkerSession for WindowSession {
         workflow_id: WorkflowId,
         activity_id: ActivityId,
         run_id: Option<RunId>,
+
+        completion_token: String,
         failure: ActivityError,
     ) -> Result<(), WorkerError> {
-        let _ = (workflow_id, run_id);
+        drop((workflow_id, run_id, completion_token));
         self.reports
             .push(RecordedReport::Failed(activity_id, failure));
         Ok(())
@@ -732,11 +746,11 @@ async fn runtime_auto_heartbeats_long_activity_within_the_window() -> Result<(),
         }
     });
     event_tx
-        .send(Ok(WorkerSessionEvent::Task(proto_task(
+        .send(Ok(WorkerSessionEvent::Task(Box::new(proto_task(
             workflow_id.clone(),
             activity_id.clone(),
             "charge-card",
-        ))))
+        )))))
         .await
         .map_err(|_| WorkerError::Transport {
             source: tonic::Status::internal("serve loop hung up prematurely"),
@@ -818,11 +832,11 @@ async fn no_window_means_no_automatic_heartbeats() -> Result<(), WorkerError> {
         serve_activity_tasks(&test_config(1), &mut session, dispatcher, &mut tracker).await
     });
     event_tx
-        .send(Ok(WorkerSessionEvent::Task(proto_task(
+        .send(Ok(WorkerSessionEvent::Task(Box::new(proto_task(
             WorkflowId::new_v4(),
             ActivityId::from_sequence_position(10),
             "charge-card",
-        ))))
+        )))))
         .await
         .map_err(|_| WorkerError::Transport {
             source: tonic::Status::internal("serve loop hung up prematurely"),

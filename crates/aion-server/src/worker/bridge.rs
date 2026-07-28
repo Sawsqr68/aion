@@ -66,6 +66,7 @@ use aion_proto::{ProtoActivityId, ProtoActivityTask, ProtoPayload, ProtoWorkflow
 use dashmap::DashMap;
 
 use super::dispatch::{ActivityCompletion, ActivityCompletionOutcome, ActivityCompletionSink};
+use super::envelope::{CompletionFences, CompletionToken, idempotency_key};
 use super::heartbeat::{HeartbeatTracker, InFlightActivity};
 use super::registry::{
     ConnectedWorkerRegistry, WorkerDelivery, WorkerHandle, WorkerId, WorkerMessage,
@@ -152,6 +153,7 @@ pub trait OutboxDeliveryCallback: Send + Sync {
 #[derive(Clone, Default)]
 pub struct PendingActivities {
     pending: Arc<DashMap<PendingActivityKey, SyncSender>>,
+    completion_fences: CompletionFences,
     outbox_delivery: Arc<OnceLock<Arc<dyn OutboxDeliveryCallback>>>,
 }
 
@@ -160,6 +162,7 @@ impl std::fmt::Debug for PendingActivities {
         formatter
             .debug_struct("PendingActivities")
             .field("pending", &self.pending.len())
+            .field("completion_fences", &self.completion_fences)
             .field(
                 "outbox_delivery_installed",
                 &self.outbox_delivery.get().is_some(),
@@ -169,10 +172,21 @@ impl std::fmt::Debug for PendingActivities {
 }
 
 impl PendingActivities {
-    fn insert(&self, workflow_id: WorkflowId, activity_id: ActivityId) -> SyncReceiver {
+    fn insert(
+        &self,
+        workflow_id: WorkflowId,
+        activity_id: ActivityId,
+    ) -> Result<(CompletionToken, SyncReceiver), ServerError> {
+        let completion_token = self.completion_fences.issue(&workflow_id, &activity_id)?;
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
         self.pending.insert((workflow_id, activity_id), tx);
-        rx
+        Ok((completion_token, rx))
+    }
+
+    /// Share the generation registry with non-blocking outbox dispatch.
+    #[must_use]
+    pub fn completion_fences(&self) -> CompletionFences {
+        self.completion_fences.clone()
     }
 
     /// Test seam: register a pending waiter exactly as a live dispatch does,
@@ -183,7 +197,7 @@ impl PendingActivities {
         &self,
         workflow_id: WorkflowId,
         activity_id: ActivityId,
-    ) -> SyncReceiver {
+    ) -> Result<(CompletionToken, SyncReceiver), ServerError> {
         self.insert(workflow_id, activity_id)
     }
 
@@ -251,6 +265,29 @@ impl PendingActivities {
             }
         }
     }
+
+    /// Atomically consume `completion_token` and only then resolve its waiter or
+    /// durable-outbox callback.
+    fn complete_fenced(
+        &self,
+        workflow_id: &WorkflowId,
+        activity_id: &ActivityId,
+        run_id: Option<&RunId>,
+        completion_token: &CompletionToken,
+        result: Result<String, String>,
+    ) -> Result<bool, ServerError> {
+        self.completion_fences
+            .accept(workflow_id, activity_id, completion_token)
+            .inspect_err(|error| {
+                tracing::warn!(
+                    workflow_id = %workflow_id,
+                    activity_id = %activity_id,
+                    %error,
+                    "activity completion rejected by execution-generation fence"
+                );
+            })?;
+        Ok(self.complete(workflow_id, activity_id, run_id, result))
+    }
 }
 
 impl ActivityCompletionSink for PendingActivities {
@@ -269,6 +306,8 @@ impl ActivityCompletionSink for PendingActivities {
         workflow_id: &WorkflowId,
         activity_id: &ActivityId,
     ) -> Result<(), ServerError> {
+        self.completion_fences
+            .revoke_current(workflow_id, activity_id)?;
         let matched = self
             .pending
             .remove(&(workflow_id.clone(), activity_id.clone()));
@@ -314,12 +353,13 @@ impl ActivityCompletionSink for PendingActivities {
                 Err(format!("{prefix}:{}", error.message))
             }
         };
-        self.complete(
+        self.complete_fenced(
             &completion.workflow_id,
             &completion.activity_id,
             completion.run_id.as_ref(),
+            &completion.completion_token,
             result,
-        );
+        )?;
         Ok(())
     }
 }
@@ -527,6 +567,7 @@ impl WorkerActivityDispatcher {
         activity_type: &str,
         workflow_id: &WorkflowId,
         activity_id: &ActivityId,
+        completion_token: CompletionToken,
     ) -> Result<(), String> {
         self.heartbeat_tracker
             .track_task(
@@ -534,6 +575,7 @@ impl WorkerActivityDispatcher {
                 InFlightActivity {
                     workflow_id: workflow_id.clone(),
                     activity_id: activity_id.clone(),
+                    completion_token,
                 },
                 Instant::now(),
             )
@@ -557,10 +599,23 @@ impl WorkerActivityDispatcher {
         worker_id: WorkerId,
         workflow_id: &WorkflowId,
         activity_id: &ActivityId,
+        completion_token: &CompletionToken,
     ) {
         self.pending
             .pending
             .remove(&(workflow_id.clone(), activity_id.clone()));
+        if let Err(error) =
+            self.pending
+                .completion_fences
+                .revoke(workflow_id, activity_id, completion_token)
+        {
+            tracing::error!(
+                workflow_id = %workflow_id,
+                activity_id = %activity_id,
+                %error,
+                "failed to revoke undelivered activity generation"
+            );
+        }
         let _ = self
             .heartbeat_tracker
             .complete_task(worker_id, workflow_id, activity_id);
@@ -583,15 +638,21 @@ impl WorkerActivityDispatcher {
         activity_type: &str,
         workflow_id: &WorkflowId,
         activity_id: &ActivityId,
+        completion_token: &CompletionToken,
     ) -> Result<(), String> {
         match worker.delivery() {
             WorkerDelivery::Grpc(sender) => {
-                match sender.try_send(WorkerMessage::ActivityTask(task)) {
+                match sender.try_send(WorkerMessage::ActivityTask(Box::new(task))) {
                     Ok(()) => Ok(()),
                     Err(error) => {
                         let worker_id = worker.id();
                         let reason = format!("worker task channel full or closed: {error}");
-                        self.cleanup_activity(worker_id, workflow_id, activity_id);
+                        self.cleanup_activity(
+                            worker_id,
+                            workflow_id,
+                            activity_id,
+                            completion_token,
+                        );
                         log_worker_error(
                             "WorkerChannelClosed",
                             &self.namespace,
@@ -628,9 +689,9 @@ impl WorkerActivityDispatcher {
     /// arm's `ActivityTask` carries (a retry over liminal executes with the real
     /// attempt, not a re-stamped first delivery), plus the server's heartbeat
     /// window so the worker's automatic liveness pump keeps this TRACKED
-    /// dispatch alive under the #176 expiry sweeper. It carries no run context
-    /// (`run_id: None`), byte-identical to the gRPC bridge task's `run_id: None`
-    /// (OBX-011).
+    /// dispatch alive under the #176 expiry sweeper. It carries the engine's
+    /// concrete run identity, generation proof, and stable effect key exactly
+    /// like the gRPC bridge task.
     ///
     /// A successful push also binds the attempt into the NOI-6 attempt→owner
     /// back-index (when installed) with the SAME `(workflow, activity, attempt)`
@@ -650,6 +711,9 @@ impl WorkerActivityDispatcher {
         workflow_id: &WorkflowId,
         activity_id: &ActivityId,
     ) -> Result<(), String> {
+        let completion_token =
+            CompletionToken::from_wire(workflow_id, activity_id, task.completion_token.clone())
+                .map_err(|error| error.to_string())?;
         let heartbeat_window_ms =
             u64::try_from(self.heartbeat_tracker.heartbeat_window().as_millis())
                 .unwrap_or(u64::MAX);
@@ -658,8 +722,14 @@ impl WorkerActivityDispatcher {
             activity_type: activity_type.to_owned(),
             workflow_id: workflow_id.clone(),
             ordinal: activity_id.sequence_position(),
-            run_id: None,
+            run_id: task
+                .run_id
+                .map(RunId::try_from)
+                .transpose()
+                .map_err(|error| error.to_string())?,
             attempt,
+            completion_token: task.completion_token,
+            idempotency_key: task.idempotency_key,
             labels: task.labels.into_iter().collect(),
             heartbeat_window_ms,
             input: task.input.map(|payload| payload.bytes).unwrap_or_default(),
@@ -671,7 +741,7 @@ impl WorkerActivityDispatcher {
             Ok(awaiter) => awaiter,
             Err(error) => {
                 let reason = format!("worker liminal push failed: {error}");
-                self.cleanup_activity(worker_id, workflow_id, activity_id);
+                self.cleanup_activity(worker_id, workflow_id, activity_id, &completion_token);
                 log_worker_error(
                     "WorkerChannelClosed",
                     &self.namespace,
@@ -703,6 +773,7 @@ impl WorkerActivityDispatcher {
             awaiter,
             workflow_id,
             activity_id,
+            &completion_token,
             owner_binding,
         );
         Ok(())
@@ -754,6 +825,7 @@ impl WorkerActivityDispatcher {
         awaiter: liminal_server::server::connection::PushReplyAwaiter,
         workflow_id: &WorkflowId,
         activity_id: &ActivityId,
+        completion_token: &CompletionToken,
         owner_binding: Option<super::liminal_transport::AttemptOwnerGuard>,
     ) {
         let pending = self.pending.clone();
@@ -761,6 +833,7 @@ impl WorkerActivityDispatcher {
         let drain_state = self.drain_state.clone();
         let workflow_id = workflow_id.clone();
         let activity_id = activity_id.clone();
+        let completion_token = completion_token.clone();
         std::thread::spawn(move || {
             // Owns the NOI-6 attempt binding for the dispatch's lifetime: it
             // drops (releasing the back-index entry) when this router exits,
@@ -770,10 +843,8 @@ impl WorkerActivityDispatcher {
                 &pending,
                 &heartbeat_tracker,
                 &drain_state,
-                worker_id,
                 &awaiter,
-                &workflow_id,
-                &activity_id,
+                (worker_id, &workflow_id, &activity_id, &completion_token),
             );
         });
     }
@@ -802,7 +873,12 @@ impl WorkerActivityDispatcher {
                 if let Ok(result) = rx.try_recv() {
                     return self.deliver_result(context, result);
                 }
-                self.cleanup_activity(context.worker_id, context.workflow_id, context.activity_id);
+                self.cleanup_activity(
+                    context.worker_id,
+                    context.workflow_id,
+                    context.activity_id,
+                    &context.completion_token,
+                );
                 let reason = format!(
                     "retryable:{}",
                     super::dispatch::lost_worker_error(context.worker_id).message
@@ -819,7 +895,12 @@ impl WorkerActivityDispatcher {
                 return Err(reason);
             }
             Err(error) => {
-                self.cleanup_activity(context.worker_id, context.workflow_id, context.activity_id);
+                self.cleanup_activity(
+                    context.worker_id,
+                    context.workflow_id,
+                    context.activity_id,
+                    &context.completion_token,
+                );
                 let reason = format!("worker registry inspection failed: {error}");
                 log_worker_error(
                     "WorkerRegistry",
@@ -838,7 +919,12 @@ impl WorkerActivityDispatcher {
         }
         // Every sender was dropped without completing: a cleanup path
         // removed the pending entry. Surface it instead of hanging.
-        self.cleanup_activity(context.worker_id, context.workflow_id, context.activity_id);
+        self.cleanup_activity(
+            context.worker_id,
+            context.workflow_id,
+            context.activity_id,
+            &context.completion_token,
+        );
         let reason = "activity response channel dropped".to_owned();
         log_worker_error(
             "WorkerChannelClosed",
@@ -947,6 +1033,7 @@ impl WorkerActivityDispatcher {
             // `None` is unpinned and reaches any worker in the pool.
             node,
             workflow_id,
+            run_id,
             activity_id,
             name,
             input,
@@ -985,18 +1072,43 @@ impl WorkerActivityDispatcher {
             Some(worker_id),
         )?;
 
-        let task = activity_task(&name, &input, &workflow_id, &activity_id, attempt, labels);
-        let rx = self
+        let (completion_token, rx) = self
             .pending
-            .insert(workflow_id.clone(), activity_id.clone());
-        self.track_worker_task(worker_id, &name, &workflow_id, &activity_id)?;
-        self.send_activity_task(&worker, task, &name, &workflow_id, &activity_id)?;
+            .insert(workflow_id.clone(), activity_id.clone())
+            .map_err(|error| error.to_string())?;
+        let task = activity_task(
+            &name,
+            &input,
+            (&workflow_id, &run_id, &activity_id),
+            attempt,
+            labels,
+            &completion_token,
+        );
+        if let Err(error) = self.track_worker_task(
+            worker_id,
+            &name,
+            &workflow_id,
+            &activity_id,
+            completion_token.clone(),
+        ) {
+            self.cleanup_activity(worker_id, &workflow_id, &activity_id, &completion_token);
+            return Err(error);
+        }
+        self.send_activity_task(
+            &worker,
+            task,
+            &name,
+            &workflow_id,
+            &activity_id,
+            &completion_token,
+        )?;
         let context = ActivityDispatchContext {
             namespace: &namespace,
             activity_type: &name,
             worker_id,
             workflow_id: &workflow_id,
             activity_id: &activity_id,
+            completion_token,
             started_at,
         };
         self.await_activity_result(&context, &rx)
@@ -1014,11 +1126,10 @@ fn route_liminal_reply(
     pending: &PendingActivities,
     heartbeat_tracker: &HeartbeatTracker,
     drain_state: &DrainState,
-    worker_id: WorkerId,
     awaiter: &liminal_server::server::connection::PushReplyAwaiter,
-    workflow_id: &WorkflowId,
-    activity_id: &ActivityId,
+    execution: (WorkerId, &WorkflowId, &ActivityId, &CompletionToken),
 ) {
+    let (worker_id, workflow_id, activity_id, current_token) = execution;
     // The wait re-arms only while this dispatch is still tracked in-flight, so
     // a dispatch resolved elsewhere (expiry sweep, shutdown drain, cleanup)
     // releases this thread within one reply poll instead of parking it for the
@@ -1031,8 +1142,27 @@ fn route_liminal_reply(
     // `synthesized` marks a failure this router FABRICATED (disconnect or
     // receive fault) as opposed to a real worker reply: only fabricated
     // failures are gated on the tracker below.
-    let (run_id, outcome, synthesized) = match waited {
-        Ok(Some(response)) => (response.run_id, response.outcome, false),
+    let (run_id, submitted_token, outcome, synthesized) = match waited {
+        Ok(Some(response)) => {
+            let submitted_token = match CompletionToken::from_wire(
+                workflow_id,
+                activity_id,
+                response.completion_token,
+            ) {
+                Ok(token) => token,
+                Err(error) => {
+                    tracing::warn!(
+                        worker_id = ?worker_id,
+                        workflow_id = %workflow_id,
+                        activity_id = %activity_id,
+                        %error,
+                        "liminal activity completion omitted its generation proof"
+                    );
+                    return;
+                }
+            };
+            (response.run_id, submitted_token, response.outcome, false)
+        }
         Ok(None) => {
             tracing::debug!(
                 worker_id = ?worker_id,
@@ -1044,6 +1174,7 @@ fn route_liminal_reply(
         }
         Err(error) if error.is_worker_connection_lost() => (
             None,
+            current_token.clone(),
             Err(format!(
                 "retryable:{}",
                 super::dispatch::lost_worker_error(worker_id).message
@@ -1052,6 +1183,7 @@ fn route_liminal_reply(
         ),
         Err(error) => (
             None,
+            current_token.clone(),
             Err(format!("retryable:worker liminal reply failed: {error}")),
             true,
         ),
@@ -1060,7 +1192,59 @@ fn route_liminal_reply(
     // this is the same structural gate: `complete_task` reports whether THIS
     // call retired the tracked entry. A poisoned tracker fails open (deliver)
     // so the blocked dispatch thread is never left hanging on a broken lock.
-    let was_tracked = heartbeat_tracker
+    if synthesized {
+        let was_tracked =
+            complete_liminal_tracking(heartbeat_tracker, worker_id, workflow_id, activity_id);
+        if !was_tracked {
+            // Another path already resolved this dispatch (and notified drain):
+            // injecting the fabricated lost-worker failure now could reach a retry.
+            tracing::debug!(
+                worker_id = ?worker_id,
+                workflow_id = %workflow_id,
+                activity_id = %activity_id,
+                "liminal dispatch already resolved; dropping synthesized lost-worker failure"
+            );
+            return;
+        }
+    }
+    if let Err(error) = pending.complete_fenced(
+        workflow_id,
+        activity_id,
+        run_id.as_ref(),
+        &submitted_token,
+        outcome,
+    ) {
+        tracing::warn!(
+            worker_id = ?worker_id,
+            workflow_id = %workflow_id,
+            activity_id = %activity_id,
+            %error,
+            "liminal activity completion handoff rejected"
+        );
+        return;
+    }
+    if !synthesized
+        && let Err(error) = heartbeat_tracker.complete_task(worker_id, workflow_id, activity_id)
+    {
+        tracing::error!(
+            worker_id = ?worker_id,
+            workflow_id = %workflow_id,
+            activity_id = %activity_id,
+            %error,
+            "failed to clear in-flight tracking for completed liminal activity"
+        );
+    }
+    drain_state.notify_activity_drained();
+}
+
+#[cfg(feature = "liminal-transport")]
+fn complete_liminal_tracking(
+    heartbeat_tracker: &HeartbeatTracker,
+    worker_id: WorkerId,
+    workflow_id: &WorkflowId,
+    activity_id: &ActivityId,
+) -> bool {
+    heartbeat_tracker
         .complete_task(worker_id, workflow_id, activity_id)
         .unwrap_or_else(|error| {
             tracing::error!(
@@ -1071,22 +1255,7 @@ fn route_liminal_reply(
                 "failed to clear in-flight tracking for completed liminal activity"
             );
             true
-        });
-    if synthesized && !was_tracked {
-        // Another path already resolved this dispatch (and notified drain):
-        // injecting the fabricated lost-worker failure now could reach a retry
-        // attempt's entry or the outbox callback for an ordinal that is no
-        // longer this router's to fail.
-        tracing::debug!(
-            worker_id = ?worker_id,
-            workflow_id = %workflow_id,
-            activity_id = %activity_id,
-            "liminal dispatch already resolved; dropping synthesized lost-worker failure"
-        );
-        return;
-    }
-    drain_state.notify_activity_drained();
-    pending.complete(workflow_id, activity_id, run_id.as_ref(), outcome);
+        })
 }
 
 struct ActivityDispatchContext<'a> {
@@ -1095,17 +1264,19 @@ struct ActivityDispatchContext<'a> {
     worker_id: WorkerId,
     workflow_id: &'a WorkflowId,
     activity_id: &'a ActivityId,
+    completion_token: CompletionToken,
     started_at: Instant,
 }
 
 fn activity_task(
     activity_type: &str,
     input: &str,
-    workflow_id: &WorkflowId,
-    activity_id: &ActivityId,
+    execution: (&WorkflowId, &RunId, &ActivityId),
     attempt: u32,
     labels: BTreeMap<String, String>,
+    completion_token: &CompletionToken,
 ) -> ProtoActivityTask {
+    let (workflow_id, run_id, activity_id) = execution;
     ProtoActivityTask {
         workflow_id: Some(ProtoWorkflowId::from(workflow_id.clone())),
         activity_id: Some(ProtoActivityId::from(activity_id.clone())),
@@ -1116,9 +1287,9 @@ fn activity_task(
         }),
         attempt,
         labels: labels.into_iter().collect(),
-        // The synchronous `ActivityDispatch` bridge path carries no run context
-        // (run scoping is threaded through the durable-outbox path; OBX-011).
-        run_id: None,
+        run_id: Some(run_id.clone().into()),
+        completion_token: completion_token.as_str().to_owned(),
+        idempotency_key: idempotency_key(workflow_id, run_id, activity_id),
     }
 }
 
@@ -1176,17 +1347,18 @@ mod tests {
     }
 
     #[test]
-    fn pending_insert_and_complete_delivers_result() {
+    fn pending_insert_and_complete_delivers_result() -> Result<(), ServerError> {
         let pending = PendingActivities::default();
         let workflow_id = WorkflowId::new_v4();
         let id = activity_id(1);
-        let rx = pending.insert(workflow_id.clone(), id.clone());
+        let rx = pending.insert(workflow_id.clone(), id.clone())?.1;
 
         assert!(pending.complete(&workflow_id, &id, None, Ok("done".to_owned())));
         assert_eq!(
             rx.recv_timeout(Duration::from_millis(50)),
             Ok(Ok("done".to_owned()))
         );
+        Ok(())
     }
 
     #[test]
@@ -1311,7 +1483,7 @@ mod tests {
 
         let workflow_id = WorkflowId::new_v4();
         let id = activity_id(10);
-        let rx = pending.insert(workflow_id.clone(), id.clone());
+        let rx = pending.insert(workflow_id.clone(), id.clone())?.1;
 
         assert!(pending.complete(&workflow_id, &id, None, Ok("matched".to_owned())));
         assert_eq!(
@@ -1337,7 +1509,7 @@ mod tests {
         let pending = PendingActivities::default();
         let workflow_id = WorkflowId::new_v4();
         let id = activity_id(11);
-        let rx = pending.insert(workflow_id.clone(), id.clone());
+        let rx = pending.insert(workflow_id.clone(), id.clone())?.1;
 
         pending.park_activity(&workflow_id, &id)?;
         let result = rx
@@ -1385,13 +1557,14 @@ mod tests {
         let pending = PendingActivities::default();
         let workflow_id = WorkflowId::new_v4();
         let id = activity_id(2);
-        let rx = pending.insert(workflow_id.clone(), id.clone());
+        let (completion_token, rx) = pending.insert(workflow_id.clone(), id.clone())?;
         let payload = Payload::new(ContentType::Json, br#"{"greeting":"hi"}"#.to_vec());
 
         pending.complete_activity(ActivityCompletion {
             workflow_id,
             activity_id: id,
             run_id: None,
+            completion_token,
             outcome: ActivityCompletionOutcome::Succeeded(payload),
         })?;
 
@@ -1403,16 +1576,57 @@ mod tests {
     }
 
     #[test]
-    fn completion_sink_routes_retryable_error() -> Result<(), ServerError> {
+    fn malformed_payload_does_not_consume_the_current_generation() -> Result<(), ServerError> {
         let pending = PendingActivities::default();
         let workflow_id = WorkflowId::new_v4();
-        let id = activity_id(3);
-        let rx = pending.insert(workflow_id.clone(), id.clone());
+        let id = activity_id(12);
+        let (completion_token, rx) = pending.insert(workflow_id.clone(), id.clone())?;
+
+        let malformed = pending.complete_activity(ActivityCompletion {
+            workflow_id: workflow_id.clone(),
+            activity_id: id.clone(),
+            run_id: None,
+            completion_token: completion_token.clone(),
+            outcome: ActivityCompletionOutcome::Succeeded(Payload::new(
+                ContentType::Json,
+                vec![0xff],
+            )),
+        });
+        assert!(matches!(malformed, Err(ServerError::WorkerDispatch { .. })));
+        assert!(
+            rx.try_recv().is_err(),
+            "an invalid result must leave the waiter unresolved"
+        );
 
         pending.complete_activity(ActivityCompletion {
             workflow_id,
             activity_id: id,
             run_id: None,
+            completion_token,
+            outcome: ActivityCompletionOutcome::Succeeded(Payload::new(
+                ContentType::Json,
+                br#""valid""#.to_vec(),
+            )),
+        })?;
+        let result = rx
+            .recv_timeout(Duration::from_millis(50))
+            .map_err(|error| ServerError::worker_dispatch("", "", format!("channel: {error}")))?;
+        assert_eq!(result, Ok(r#""valid""#.to_owned()));
+        Ok(())
+    }
+
+    #[test]
+    fn completion_sink_routes_retryable_error() -> Result<(), ServerError> {
+        let pending = PendingActivities::default();
+        let workflow_id = WorkflowId::new_v4();
+        let id = activity_id(3);
+        let (completion_token, rx) = pending.insert(workflow_id.clone(), id.clone())?;
+
+        pending.complete_activity(ActivityCompletion {
+            workflow_id,
+            activity_id: id,
+            run_id: None,
+            completion_token,
             outcome: ActivityCompletionOutcome::Failed(ActivityError {
                 kind: ActivityErrorKind::Retryable,
                 message: "temporary".to_owned(),
@@ -1443,18 +1657,23 @@ mod tests {
         let pre_restart_workflow = WorkflowId::new_v4();
         // Counter resets to the same sequence position after restart.
         let id = activity_id(1);
-        let rx = pending.insert(post_restart_workflow.clone(), id.clone());
+        let (completion_token, rx) = pending.insert(post_restart_workflow.clone(), id.clone())?;
 
         // Stale pre-restart result: same activity id, different workflow.
-        pending.complete_activity(ActivityCompletion {
+        let rejected = pending.complete_activity(ActivityCompletion {
             workflow_id: pre_restart_workflow,
             activity_id: id.clone(),
             run_id: None,
+            completion_token: CompletionToken::for_test(),
             outcome: ActivityCompletionOutcome::Succeeded(Payload::new(
                 ContentType::Json,
                 br#""stale""#.to_vec(),
             )),
-        })?;
+        });
+        assert!(matches!(
+            rejected,
+            Err(ServerError::ActivityCompletionRejected { .. })
+        ));
         assert!(
             rx.try_recv().is_err(),
             "stale result for a different workflow must not complete this dispatch"
@@ -1465,6 +1684,7 @@ mod tests {
             workflow_id: post_restart_workflow,
             activity_id: id,
             run_id: None,
+            completion_token,
             outcome: ActivityCompletionOutcome::Succeeded(Payload::new(
                 ContentType::Json,
                 br#""fresh""#.to_vec(),
@@ -1491,6 +1711,7 @@ mod tests {
             task_queue: "default".to_owned(),
             node: None,
             workflow_id: WorkflowId::new_v4(),
+            run_id: RunId::new_v4(),
             activity_id: ActivityId::from_sequence_position(0),
             name: "greet".to_owned(),
             input: "{}".to_owned(),
@@ -1556,10 +1777,14 @@ mod tests {
                 .activity_id
                 .map(ActivityId::from)
                 .ok_or("task missing activity id")?;
+            let completion_token =
+                CompletionToken::from_wire(&workflow_id, &activity_id, task.completion_token)
+                    .map_err(|error| error.to_string())?;
             sink.complete_activity(ActivityCompletion {
                 workflow_id,
                 activity_id,
                 run_id: None,
+                completion_token,
                 outcome: ActivityCompletionOutcome::Succeeded(Payload::new(
                     ContentType::Json,
                     br#"{"greeting":"hello"}"#.to_vec(),
@@ -1670,10 +1895,14 @@ mod tests {
                 .activity_id
                 .map(ActivityId::from)
                 .ok_or("task missing activity id")?;
+            let completion_token =
+                CompletionToken::from_wire(&workflow_id, &activity_id, task.completion_token)
+                    .map_err(|error| error.to_string())?;
             sink.complete_activity(ActivityCompletion {
                 workflow_id,
                 activity_id,
                 run_id: None,
+                completion_token,
                 outcome: ActivityCompletionOutcome::Succeeded(Payload::new(
                     ContentType::Json,
                     br#"{"greeting":"hello"}"#.to_vec(),
@@ -1745,10 +1974,14 @@ mod tests {
                 .activity_id
                 .map(ActivityId::from)
                 .ok_or("task missing activity id")?;
+            let completion_token =
+                CompletionToken::from_wire(&workflow_id, &activity_id, task.completion_token)
+                    .map_err(|error| error.to_string())?;
             sink.complete_activity(ActivityCompletion {
                 workflow_id,
                 activity_id,
                 run_id: None,
+                completion_token,
                 outcome: ActivityCompletionOutcome::Succeeded(Payload::new(
                     ContentType::Json,
                     br#"{"greeting":"hello"}"#.to_vec(),

@@ -57,7 +57,7 @@ pub enum WorkerDelivery {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum WorkerMessage {
     /// Activity invocation pushed to a worker.
-    ActivityTask(ProtoActivityTask),
+    ActivityTask(Box<ProtoActivityTask>),
     /// Graceful-shutdown notification; no new work will be dispatched.
     DrainRequest,
 }

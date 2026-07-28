@@ -42,6 +42,7 @@ fn greet_request(input: &str, attempt: u32) -> ActivityDispatch {
         task_queue: TASK_QUEUE.to_owned(),
         node: None,
         workflow_id: WorkflowId::new_v4(),
+        run_id: aion_core::RunId::new_v4(),
         activity_id: ActivityId::from_sequence_position(0),
         name: ACTIVITY_TYPE.to_owned(),
         input: input.to_owned(),

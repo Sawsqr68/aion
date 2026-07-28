@@ -14,6 +14,7 @@ pub struct ActivityContext {
     workflow_id: Option<WorkflowId>,
     activity_id: ActivityId,
     attempt: u32,
+    idempotency_key: Option<String>,
     cancellation: Arc<CancellationState>,
     heartbeat_sender: Option<mpsc::UnboundedSender<HeartbeatRequest>>,
     /// NOI-5b agent-observability event seam (additive, OPTIONAL). A running
@@ -66,6 +67,15 @@ impl ActivityContext {
     #[must_use]
     pub const fn attempt(&self) -> u32 {
         self.attempt
+    }
+
+    /// Returns the stable external-effect key delivered with this task.
+    ///
+    /// Live worker tasks always return `Some`; manually constructed unit-test
+    /// contexts return `None` because they are not attached to a server task.
+    #[must_use]
+    pub fn idempotency_key(&self) -> Option<&str> {
+        self.idempotency_key.as_deref()
     }
 
     /// Emits a cooperative heartbeat request for this activity.
@@ -154,7 +164,31 @@ impl ActivityContext {
         attempt: u32,
         heartbeat_sender: Option<mpsc::UnboundedSender<HeartbeatRequest>>,
     ) -> (Self, ActivityCancellationHandle) {
-        Self::for_workflow_with_events(workflow_id, activity_id, attempt, heartbeat_sender, None)
+        Self::for_workflow_with_events(
+            workflow_id,
+            activity_id,
+            attempt,
+            None,
+            heartbeat_sender,
+            None,
+        )
+    }
+
+    pub(crate) fn for_task(
+        workflow_id: WorkflowId,
+        activity_id: ActivityId,
+        attempt: u32,
+        idempotency_key: String,
+        heartbeat_sender: Option<mpsc::UnboundedSender<HeartbeatRequest>>,
+    ) -> (Self, ActivityCancellationHandle) {
+        Self::for_workflow_with_events(
+            Some(workflow_id),
+            activity_id,
+            attempt,
+            Some(idempotency_key),
+            heartbeat_sender,
+            None,
+        )
     }
 
     /// Build a context with BOTH the heartbeat seam and the NOI-5b transcript
@@ -165,6 +199,7 @@ impl ActivityContext {
         workflow_id: Option<WorkflowId>,
         activity_id: ActivityId,
         attempt: u32,
+        idempotency_key: Option<String>,
         heartbeat_sender: Option<mpsc::UnboundedSender<HeartbeatRequest>>,
         event_sender: Option<mpsc::UnboundedSender<ActivityEvent>>,
     ) -> (Self, ActivityCancellationHandle) {
@@ -176,6 +211,7 @@ impl ActivityContext {
             workflow_id,
             activity_id,
             attempt,
+            idempotency_key,
             cancellation: Arc::clone(&cancellation),
             heartbeat_sender,
             event_sender,
@@ -265,6 +301,7 @@ mod tests {
             ActivityId::from_sequence_position(1),
             0,
             None,
+            None,
             Some(sender),
         );
         let event = ActivityEvent {
@@ -287,6 +324,21 @@ mod tests {
         assert_eq!(delivered.worker_seq, 7);
         assert_eq!(delivered, event);
         Ok(())
+    }
+
+    #[test]
+    fn live_task_context_exposes_the_server_idempotency_key() {
+        let (context, cancellation) = ActivityContext::for_task(
+            aion_core::WorkflowId::new_v4(),
+            ActivityId::from_sequence_position(7),
+            3,
+            String::from("effect-key"),
+            None,
+        );
+
+        assert_eq!(context.idempotency_key(), Some("effect-key"));
+        assert_eq!(context.attempt(), 3);
+        drop(cancellation);
     }
 
     #[tokio::test]

@@ -665,9 +665,10 @@ mod tests {
             workflow_id: WorkflowId,
             activity_id: ActivityId,
             run_id: Option<RunId>,
+            completion_token: String,
             result: Payload,
         ) -> Result<(), WorkerError> {
-            let _ = run_id;
+            drop((run_id, completion_token));
             self.reports
                 .push(RecordedReport::Completed(workflow_id, activity_id, result));
             Ok(())
@@ -678,9 +679,10 @@ mod tests {
             workflow_id: WorkflowId,
             activity_id: ActivityId,
             run_id: Option<RunId>,
+            completion_token: String,
             failure: ActivityError,
         ) -> Result<(), WorkerError> {
-            let _ = run_id;
+            drop((run_id, completion_token));
             self.reports
                 .push(RecordedReport::Failed(workflow_id, activity_id, failure));
             Ok(())
@@ -731,8 +733,10 @@ mod tests {
             _workflow_id: WorkflowId,
             _activity_id: ActivityId,
             _run_id: Option<RunId>,
+            completion_token: String,
             _result: Payload,
         ) -> Result<(), WorkerError> {
+            drop(completion_token);
             std::future::pending::<()>().await;
             Ok(())
         }
@@ -742,8 +746,10 @@ mod tests {
             _workflow_id: WorkflowId,
             _activity_id: ActivityId,
             _run_id: Option<RunId>,
+            completion_token: String,
             _failure: ActivityError,
         ) -> Result<(), WorkerError> {
+            drop(completion_token);
             std::future::pending::<()>().await;
             Ok(())
         }
@@ -797,17 +803,18 @@ mod tests {
             workflow_id: WorkflowId,
             activity_id: ActivityId,
             run_id: Option<RunId>,
+            completion_token: String,
             result: Payload,
         ) -> Result<(), WorkerError> {
             match self {
                 Self::Scripted(session) => {
                     session
-                        .report_result(workflow_id, activity_id, run_id, result)
+                        .report_result(workflow_id, activity_id, run_id, completion_token, result)
                         .await
                 }
                 Self::Hung(session) => {
                     session
-                        .report_result(workflow_id, activity_id, run_id, result)
+                        .report_result(workflow_id, activity_id, run_id, completion_token, result)
                         .await
                 }
             }
@@ -818,17 +825,18 @@ mod tests {
             workflow_id: WorkflowId,
             activity_id: ActivityId,
             run_id: Option<RunId>,
+            completion_token: String,
             failure: ActivityError,
         ) -> Result<(), WorkerError> {
             match self {
                 Self::Scripted(session) => {
                     session
-                        .report_failure(workflow_id, activity_id, run_id, failure)
+                        .report_failure(workflow_id, activity_id, run_id, completion_token, failure)
                         .await
                 }
                 Self::Hung(session) => {
                     session
-                        .report_failure(workflow_id, activity_id, run_id, failure)
+                        .report_failure(workflow_id, activity_id, run_id, completion_token, failure)
                         .await
                 }
             }
@@ -887,8 +895,10 @@ mod tests {
             _workflow_id: WorkflowId,
             activity_id: ActivityId,
             _run_id: Option<RunId>,
+            completion_token: String,
             _result: Payload,
         ) -> Result<(), WorkerError> {
+            drop(completion_token);
             if activity_id == self.fail_id {
                 return Err(WorkerError::Transport {
                     source: tonic::Status::unavailable(
@@ -904,8 +914,10 @@ mod tests {
             _workflow_id: WorkflowId,
             _activity_id: ActivityId,
             _run_id: Option<RunId>,
+            completion_token: String,
             _failure: ActivityError,
         ) -> Result<(), WorkerError> {
+            drop(completion_token);
             Ok(())
         }
 
@@ -956,17 +968,18 @@ mod tests {
             workflow_id: WorkflowId,
             activity_id: ActivityId,
             run_id: Option<RunId>,
+            completion_token: String,
             result: Payload,
         ) -> Result<(), WorkerError> {
             match self {
                 Self::Latch(session) => {
                     session
-                        .report_result(workflow_id, activity_id, run_id, result)
+                        .report_result(workflow_id, activity_id, run_id, completion_token, result)
                         .await
                 }
                 Self::Deny(session) => {
                     session
-                        .report_result(workflow_id, activity_id, run_id, result)
+                        .report_result(workflow_id, activity_id, run_id, completion_token, result)
                         .await
                 }
             }
@@ -977,17 +990,18 @@ mod tests {
             workflow_id: WorkflowId,
             activity_id: ActivityId,
             run_id: Option<RunId>,
+            completion_token: String,
             failure: ActivityError,
         ) -> Result<(), WorkerError> {
             match self {
                 Self::Latch(session) => {
                     session
-                        .report_failure(workflow_id, activity_id, run_id, failure)
+                        .report_failure(workflow_id, activity_id, run_id, completion_token, failure)
                         .await
                 }
                 Self::Deny(session) => {
                     session
-                        .report_failure(workflow_id, activity_id, run_id, failure)
+                        .report_failure(workflow_id, activity_id, run_id, completion_token, failure)
                         .await
                 }
             }
@@ -1060,12 +1074,12 @@ mod tests {
         let activity_id = ActivityId::from_sequence_position(7);
         let (sender, receiver) = mpsc::channel(2);
         sender
-            .send(Ok(WorkerSessionEvent::Task(proto_task(
+            .send(Ok(WorkerSessionEvent::Task(Box::new(proto_task(
                 workflow_id,
                 activity_id.clone(),
                 "slow",
                 0,
-            ))))
+            )))))
             .await
             .map_err(WorkerError::decode)?;
         let release = Arc::new(AtomicBool::new(false));
@@ -1155,7 +1169,7 @@ mod tests {
         ProtoActivityTask {
             workflow_id: Some(ProtoWorkflowId::from(workflow_id)),
             activity_id: Some(ProtoActivityId::from(activity_id)),
-            run_id: None,
+            run_id: Some(aion_proto::ProtoRunId::from(RunId::new_v4())),
             activity_type: activity_type.to_owned(),
             input: Some(ProtoPayload::from(Payload::new(
                 ContentType::Json,
@@ -1163,6 +1177,8 @@ mod tests {
             ))),
             attempt: 1,
             labels: std::collections::HashMap::new(),
+            completion_token: String::from("generation-1"),
+            idempotency_key: String::from("effect-key"),
         }
     }
 
@@ -1273,14 +1289,15 @@ mod tests {
             workflow_id: WorkflowId,
             activity_id: ActivityId,
             run_id: Option<RunId>,
+            completion_token: String,
             result: Payload,
         ) -> Result<(), WorkerError> {
+            drop((run_id, completion_token));
             if self.fail_reports {
                 return Err(WorkerError::Transport {
                     source: tonic::Status::unavailable("transport dropped before result ack"),
                 });
             }
-            let _ = run_id;
             self.log
                 .send(SessionLog::Reported(
                     self.index,
@@ -1294,14 +1311,15 @@ mod tests {
             workflow_id: WorkflowId,
             activity_id: ActivityId,
             run_id: Option<RunId>,
+            completion_token: String,
             failure: ActivityError,
         ) -> Result<(), WorkerError> {
+            drop((run_id, completion_token));
             if self.fail_reports {
                 return Err(WorkerError::Transport {
                     source: tonic::Status::unavailable("transport dropped before failure ack"),
                 });
             }
-            let _ = run_id;
             self.log
                 .send(SessionLog::Reported(
                     self.index,
@@ -1422,7 +1440,7 @@ mod tests {
                         Ok(ScriptedSession {
                             index: 1,
                             log,
-                            events: vec![Ok(WorkerSessionEvent::Task(task))],
+                            events: vec![Ok(WorkerSessionEvent::Task(Box::new(task)))],
                             fail_reports: true,
                             register_denial: None,
                             delay_stream: None,
@@ -1519,8 +1537,8 @@ mod tests {
                             index: 1,
                             log,
                             events: vec![
-                                Ok(WorkerSessionEvent::Task(first_task)),
-                                Ok(WorkerSessionEvent::Task(second_task)),
+                                Ok(WorkerSessionEvent::Task(Box::new(first_task))),
+                                Ok(WorkerSessionEvent::Task(Box::new(second_task))),
                             ],
                             fail_reports: true,
                             register_denial: None,
@@ -1864,7 +1882,7 @@ mod tests {
                             index: attempt,
                             log,
                             events: vec![
-                                Ok(WorkerSessionEvent::Task(task)),
+                                Ok(WorkerSessionEvent::Task(Box::new(task))),
                                 Err(WorkerError::Transport {
                                     source: tonic::Status::unavailable("stream reset by peer"),
                                 }),
@@ -2039,7 +2057,7 @@ mod tests {
                             index: attempt,
                             log,
                             events: vec![
-                                Ok(WorkerSessionEvent::Task(task)),
+                                Ok(WorkerSessionEvent::Task(Box::new(task))),
                                 Err(WorkerError::Transport {
                                     source: tonic::Status::unavailable("stream reset by peer"),
                                 }),
@@ -2105,7 +2123,7 @@ mod tests {
                         1 => Ok(ScriptedSession {
                             index: 1,
                             log,
-                            events: vec![Ok(WorkerSessionEvent::Task(first_task))],
+                            events: vec![Ok(WorkerSessionEvent::Task(Box::new(first_task)))],
                             fail_reports: false,
                             register_denial: None,
                             delay_stream: None,
@@ -2113,7 +2131,7 @@ mod tests {
                         2 => Ok(ScriptedSession {
                             index: 2,
                             log,
-                            events: vec![Ok(WorkerSessionEvent::Task(second_task))],
+                            events: vec![Ok(WorkerSessionEvent::Task(Box::new(second_task)))],
                             fail_reports: false,
                             register_denial: None,
                             delay_stream: None,
@@ -2278,6 +2296,7 @@ mod tests {
                 workflow_id: workflow.clone(),
                 activity_id: position.clone(),
                 run_id: None,
+                completion_token: String::from("generation-1"),
                 output: Payload::new(ContentType::Json, b"{\"value\":1}".to_vec()),
             });
         }
@@ -2343,6 +2362,7 @@ mod tests {
                 workflow_id: workflow_id.clone(),
                 activity_id: id.clone(),
                 run_id: None,
+                completion_token: String::from("generation-1"),
                 output: Payload::new(ContentType::Json, b"{\"value\":2}".to_vec()),
             });
         }
@@ -2462,7 +2482,7 @@ mod tests {
                         Ok(SessionKind::Scripted(ScriptedSession {
                             index: 1,
                             log,
-                            events: vec![Ok(WorkerSessionEvent::Task(task))],
+                            events: vec![Ok(WorkerSessionEvent::Task(Box::new(task)))],
                             fail_reports: true,
                             register_denial: None,
                             delay_stream: None,
@@ -2619,7 +2639,7 @@ mod tests {
                     if attempt <= 3 {
                         Ok(LatchKind::Latch(DrainLatchSession {
                             events: vec![
-                                Ok(WorkerSessionEvent::Task(task)),
+                                Ok(WorkerSessionEvent::Task(Box::new(task))),
                                 Ok(WorkerSessionEvent::Drain),
                             ],
                             fail_id: activity_id,

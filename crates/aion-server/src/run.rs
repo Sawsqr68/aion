@@ -590,7 +590,8 @@ fn select_outbox_row_dispatch(
     match outbox_config.transport {
         OutboxTransport::Grpc => {
             let push_dispatcher = ActivityDispatcher::new(state.worker_registry().clone())
-                .with_drain_state(state.drain_state().clone());
+                .with_drain_state(state.drain_state().clone())
+                .with_completion_fences(state.pending_activities().completion_fences());
             // Control-Plane Phase 2 (P2-P3): attach the short-TTL placement cache
             // so an unpinned row in a `Prefer{L}` namespace prefers an L-labelled
             // worker (spilling to any live worker). The cache front-runs a per-row

@@ -10,6 +10,7 @@ use aion_proto::{
 
 use crate::error::ServerError;
 use crate::shutdown::DrainState;
+use crate::worker::envelope::{CompletionFences, CompletionToken, idempotency_key};
 use crate::worker::registry::{ConnectedWorkerRegistry, WorkerMessage};
 use tracing::{Instrument, info_span};
 
@@ -50,18 +51,41 @@ pub struct ScheduledActivity {
 }
 
 impl ScheduledActivity {
+    /// Return the concrete run required to derive a run-scoped effect key.
+    /// Refuses a legacy row without a run id because no run-scoped
+    /// idempotency key can be truthfully derived.
+    fn require_run_id(&self) -> Result<&RunId, ServerError> {
+        self.run_id.as_ref().ok_or_else(|| {
+            ServerError::worker_dispatch(
+                self.namespace.clone(),
+                self.activity_type.clone(),
+                "activity run id is missing; refusing unfenced external effect",
+            )
+        })
+    }
+
     /// Build the wire task pushed to the worker stream.
-    #[must_use]
-    pub fn to_task(&self) -> ProtoActivityTask {
-        ProtoActivityTask {
+    ///
+    /// # Errors
+    ///
+    /// Refuses a legacy row without a run id because no run-scoped
+    /// idempotency key can be truthfully derived.
+    pub fn to_task(
+        &self,
+        completion_token: &CompletionToken,
+    ) -> Result<ProtoActivityTask, ServerError> {
+        let run_id = self.require_run_id()?;
+        Ok(ProtoActivityTask {
             workflow_id: Some(ProtoWorkflowId::from(self.workflow_id.clone())),
             activity_id: Some(ProtoActivityId::from(self.activity_id.clone())),
             activity_type: self.activity_type.clone(),
             input: Some(ProtoPayload::from(self.input.clone())),
             attempt: self.attempt,
             labels: self.labels.clone().into_iter().collect(),
-            run_id: self.run_id.clone().map(ProtoRunId::from),
-        }
+            run_id: Some(ProtoRunId::from(run_id.clone())),
+            completion_token: completion_token.as_str().to_owned(),
+            idempotency_key: idempotency_key(&self.workflow_id, run_id, &self.activity_id),
+        })
     }
 }
 
@@ -70,6 +94,7 @@ impl ScheduledActivity {
 pub struct ActivityDispatcher {
     registry: ConnectedWorkerRegistry,
     drain_state: DrainState,
+    completion_fences: CompletionFences,
 }
 
 impl ActivityDispatcher {
@@ -79,6 +104,7 @@ impl ActivityDispatcher {
         Self {
             registry,
             drain_state: DrainState::default(),
+            completion_fences: CompletionFences::default(),
         }
     }
 
@@ -86,6 +112,13 @@ impl ActivityDispatcher {
     #[must_use]
     pub fn with_drain_state(mut self, drain_state: DrainState) -> Self {
         self.drain_state = drain_state;
+        self
+    }
+
+    /// Share the completion-generation registry used by result ingestion.
+    #[must_use]
+    pub fn with_completion_fences(mut self, completion_fences: CompletionFences) -> Self {
+        self.completion_fences = completion_fences;
         self
     }
 
@@ -363,9 +396,23 @@ impl ActivityDispatcher {
         candidates: Vec<crate::worker::registry::WorkerHandle>,
         span_fields: &tracing::Span,
     ) -> Result<Option<()>, ServerError> {
+        activity.require_run_id()?;
+        let completion_token = self
+            .completion_fences
+            .issue(&activity.workflow_id, &activity.activity_id)?;
+        let task = activity.to_task(&completion_token)?;
         for worker in candidates {
-            self.drain_state
-                .ensure_accepting(&activity.namespace, &activity.activity_type)?;
+            if let Err(error) = self
+                .drain_state
+                .ensure_accepting(&activity.namespace, &activity.activity_type)
+            {
+                self.completion_fences.revoke(
+                    &activity.workflow_id,
+                    &activity.activity_id,
+                    &completion_token,
+                )?;
+                return Err(error);
+            }
             span_fields.record("worker_id", format!("{:?}", worker.id()));
             // The gRPC dispatch path only registers gRPC-delivery workers, so a
             // worker here always carries a stream sender; a missing one means a
@@ -373,7 +420,7 @@ impl ActivityDispatcher {
             // over it, so it is deregistered like a closed stream.
             if let Some(sender) = worker.sender() {
                 if sender
-                    .send(WorkerMessage::ActivityTask(activity.to_task()))
+                    .send(WorkerMessage::ActivityTask(Box::new(task.clone())))
                     .await
                     .is_ok()
                 {
@@ -382,6 +429,11 @@ impl ActivityDispatcher {
             }
             self.registry.deregister(worker.id())?;
         }
+        self.completion_fences.revoke(
+            &activity.workflow_id,
+            &activity.activity_id,
+            &completion_token,
+        )?;
         Ok(None)
     }
 }
@@ -421,6 +473,8 @@ pub struct ActivityCompletion {
     pub activity_id: ActivityId,
     /// Concrete workflow run echoed by the worker, when known.
     pub run_id: Option<RunId>,
+    /// Opaque execution generation echoed from the dispatched task.
+    pub completion_token: CompletionToken,
     /// Worker-reported outcome.
     pub outcome: ActivityCompletionOutcome,
 }
@@ -439,8 +493,10 @@ impl TryFrom<ProtoActivityResult> for ActivityCompletion {
             .map(ActivityId::from)?;
         let run_id = value
             .run_id
-            .map(|id| RunId::try_from(id).map_err(ServerError::from))
-            .transpose()?;
+            .ok_or_else(|| wire_error("activity result run id is missing"))
+            .and_then(|id| RunId::try_from(id).map_err(ServerError::from))?;
+        let completion_token =
+            CompletionToken::from_wire(&workflow_id, &activity_id, value.completion_token)?;
         let outcome = match value.outcome {
             Some(proto_activity_result::Outcome::Result(payload)) => {
                 ActivityCompletionOutcome::Succeeded(
@@ -458,7 +514,8 @@ impl TryFrom<ProtoActivityResult> for ActivityCompletion {
         Ok(Self {
             workflow_id,
             activity_id,
-            run_id,
+            run_id: Some(run_id),
+            completion_token,
             outcome,
         })
     }
@@ -569,7 +626,7 @@ mod tests {
             node: None,
             workflow_id: workflow_id(),
             activity_id: activity_id(),
-            run_id: None,
+            run_id: Some(RunId::new_v4()),
             input: input.clone(),
             attempt: 1,
             labels: std::collections::BTreeMap::new(),
@@ -602,7 +659,7 @@ mod tests {
             node: None,
             workflow_id: workflow_id(),
             activity_id: activity_id(),
-            run_id: None,
+            run_id: Some(RunId::new_v4()),
             input: Payload::new(ContentType::Json, b"{}".to_vec()),
             attempt: 1,
             labels: std::collections::BTreeMap::new(),
@@ -646,7 +703,7 @@ mod tests {
             node: None,
             workflow_id: workflow_id(),
             activity_id: activity_id(),
-            run_id: None,
+            run_id: Some(RunId::new_v4()),
             input: Payload::new(ContentType::Json, b"{}".to_vec()),
             attempt: 1,
             labels: std::collections::BTreeMap::new(),
@@ -677,7 +734,7 @@ mod tests {
             node: None,
             workflow_id: workflow_id(),
             activity_id: activity_id(),
-            run_id: None,
+            run_id: Some(RunId::new_v4()),
             input: Payload::new(ContentType::Json, b"{}".to_vec()),
             attempt: 1,
             labels: std::collections::BTreeMap::new(),
@@ -821,7 +878,8 @@ mod tests {
         let result = ProtoActivityResult {
             workflow_id: Some(ProtoWorkflowId::from(workflow_id())),
             activity_id: Some(ProtoActivityId::from(activity_id())),
-            run_id: None,
+            run_id: Some(ProtoRunId::from(RunId::new_v4())),
+            completion_token: String::from("generation-1"),
             outcome: Some(proto_activity_result::Outcome::Result(ProtoPayload::from(
                 output.clone(),
             ))),
@@ -857,7 +915,8 @@ mod tests {
         let result = ProtoActivityResult {
             workflow_id: Some(ProtoWorkflowId::from(workflow_id())),
             activity_id: Some(ProtoActivityId::from(activity_id())),
-            run_id: None,
+            run_id: Some(ProtoRunId::from(RunId::new_v4())),
+            completion_token: String::from("generation-1"),
             outcome: Some(proto_activity_result::Outcome::Error(error)),
         };
 

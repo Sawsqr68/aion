@@ -350,6 +350,7 @@ impl WorkerSession {
                         workflow_id: task.workflow_id.clone(),
                         activity_id: task.activity_id,
                         run_id: task.run_id.clone(),
+                        completion_token: task.completion_token.clone(),
                         outcome: Some(generated::activity_result::Outcome::Result(
                             generated::Payload {
                                 content_type: "application/json".to_owned(),
@@ -579,7 +580,8 @@ async fn outbox_cutover_completes_through_the_real_server_sink() -> Result<(), T
     //    rows to the connected worker through the production push dispatcher.
     let outbox_store: Arc<dyn OutboxStore> = Arc::new(LibSqlStore::open(db_path.clone()).await?);
     let push = ActivityDispatcher::new(state.worker_registry().clone())
-        .with_drain_state(state.drain_state().clone());
+        .with_drain_state(state.drain_state().clone())
+        .with_completion_fences(state.pending_activities().completion_fences());
     let row_dispatch = Arc::new(WorkerOutboxDispatch::new(push));
     let dispatcher = OutboxDispatcher::new(outbox_store, row_dispatch, outbox_dispatcher_config());
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
@@ -691,6 +693,7 @@ async fn seed_incident_state(
     use aion_store::WriteToken;
 
     let workflow_id = aion_core::WorkflowId::new_v4();
+    let run_id = aion_core::RunId::new_v4();
     let envelope = |seq: u64| EventEnvelope {
         seq,
         recorded_at: chrono::Utc::now(),
@@ -701,7 +704,7 @@ async fn seed_incident_state(
             envelope: envelope(1),
             workflow_type: OUTBOX_MODULE.to_owned(),
             input: aion_core::Payload::from_json(&json!({}))?,
-            run_id: aion_core::RunId::new_v4(),
+            run_id: run_id.clone(),
             parent_run_id: None,
             package_version: aion_core::PackageVersion::new("a".repeat(64)),
         },
@@ -737,7 +740,8 @@ async fn seed_incident_state(
         FAN_ACTIVITY_TYPES[0].to_owned(),
         aion_core::Payload::from_json(&json!("in"))?,
         chrono::Utc::now(),
-    );
+    )
+    .with_run_id(Some(run_id));
     let dispatch_key = row.dispatch_key.clone();
     store
         .append_outbox_batch(std::slice::from_ref(&row))
@@ -819,7 +823,8 @@ async fn boot_sweep_settles_terminal_workflow_rows_before_any_dispatch() -> Resu
     // NOW commission the dispatcher + reconciler over the swept table: the
     // production order. Nothing may reach the worker.
     let push = ActivityDispatcher::new(state.worker_registry().clone())
-        .with_drain_state(state.drain_state().clone());
+        .with_drain_state(state.drain_state().clone())
+        .with_completion_fences(state.pending_activities().completion_fences());
     let row_dispatch = Arc::new(WorkerOutboxDispatch::new(push));
     let dispatcher = OutboxDispatcher::new(
         Arc::clone(&outbox_store),
@@ -861,7 +866,8 @@ async fn boot_sweep_settles_terminal_workflow_rows_before_any_dispatch() -> Resu
         FAN_ACTIVITY_TYPES[0].to_owned(),
         aion_core::Payload::from_json(&json!("in"))?,
         chrono::Utc::now(),
-    );
+    )
+    .with_run_id(Some(aion_core::RunId::new_v4()));
     reader
         .rearm_outbox_pending(std::slice::from_ref(&rearm_row))
         .await?;
@@ -910,7 +916,8 @@ async fn reconciler_gate_settles_stranded_row_of_terminal_workflow() -> Result<(
 
     let outbox_store: Arc<dyn OutboxStore> = Arc::new(LibSqlStore::open(db_path.clone()).await?);
     let push = ActivityDispatcher::new(state.worker_registry().clone())
-        .with_drain_state(state.drain_state().clone());
+        .with_drain_state(state.drain_state().clone())
+        .with_completion_fences(state.pending_activities().completion_fences());
     let row_dispatch = Arc::new(WorkerOutboxDispatch::new(push));
     let dispatcher = OutboxDispatcher::new(
         Arc::clone(&outbox_store),

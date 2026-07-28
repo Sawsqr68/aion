@@ -27,7 +27,7 @@ pub type WorkerTaskStream =
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkerSessionEvent {
     /// A new activity task to execute.
-    Task(ProtoActivityTask),
+    Task(Box<ProtoActivityTask>),
     /// Server-initiated drain: the server is going away (restart, deploy,
     /// rebalance). The worker finishes in-flight work, reports what it can,
     /// stops expecting new tasks, and reconnects after the schedule's initial
@@ -111,21 +111,25 @@ pub trait WorkerSession: Send {
     /// Opens the receive side of AW's `StreamWorker` RPC and yields pushed tasks.
     fn receive_tasks(&mut self) -> WorkerTaskStream;
 
-    /// Reports successful activity output via `WorkerToServer.result`.
+    /// Reports successful activity output and echoes its opaque execution
+    /// generation via `WorkerToServer.result`.
     async fn report_result(
         &mut self,
         workflow_id: WorkflowId,
         activity_id: ActivityId,
         run_id: Option<RunId>,
+        completion_token: String,
         result: Payload,
     ) -> Result<(), WorkerError>;
 
-    /// Reports explicit activity failure via `WorkerToServer.result`.
+    /// Reports explicit activity failure and echoes its opaque execution
+    /// generation via `WorkerToServer.result`.
     async fn report_failure(
         &mut self,
         workflow_id: WorkflowId,
         activity_id: ActivityId,
         run_id: Option<RunId>,
+        completion_token: String,
         failure: ActivityError,
     ) -> Result<(), WorkerError>;
 
@@ -486,15 +490,24 @@ impl WorkerSession for GrpcWorkerSession {
         workflow_id: WorkflowId,
         activity_id: ActivityId,
         run_id: Option<RunId>,
+        completion_token: String,
         result: Payload,
     ) -> Result<(), WorkerError> {
+        let run_id = run_id.ok_or_else(|| {
+            WorkerError::decode(SessionStateError {
+                message: String::from(
+                    "activity result run_id is missing; refusing an incomplete fenced report",
+                ),
+            })
+        })?;
         let result = ProtoActivityResult {
             workflow_id: Some(ProtoWorkflowId::from(workflow_id)),
             activity_id: Some(ProtoActivityId::from(activity_id)),
-            run_id: run_id.map(ProtoRunId::from),
+            run_id: Some(ProtoRunId::from(run_id)),
             outcome: Some(proto_activity_result::Outcome::Result(ProtoPayload::from(
                 result,
             ))),
+            completion_token,
         };
         self.send_to_server(aion_proto::generated::worker_to_server::Message::Result(
             generated_activity_result(result),
@@ -507,13 +520,22 @@ impl WorkerSession for GrpcWorkerSession {
         workflow_id: WorkflowId,
         activity_id: ActivityId,
         run_id: Option<RunId>,
+        completion_token: String,
         failure: ActivityError,
     ) -> Result<(), WorkerError> {
+        let run_id = run_id.ok_or_else(|| {
+            WorkerError::decode(SessionStateError {
+                message: String::from(
+                    "activity failure run_id is missing; refusing an incomplete fenced report",
+                ),
+            })
+        })?;
         let result = ProtoActivityResult {
             workflow_id: Some(ProtoWorkflowId::from(workflow_id)),
             activity_id: Some(ProtoActivityId::from(activity_id)),
-            run_id: run_id.map(ProtoRunId::from),
+            run_id: Some(ProtoRunId::from(run_id)),
             outcome: Some(proto_activity_result::Outcome::Error(failure.into())),
+            completion_token,
         };
         self.send_to_server(aion_proto::generated::worker_to_server::Message::Result(
             generated_activity_result(result),
@@ -562,7 +584,7 @@ fn decode_server_message(
 ) -> Result<WorkerSessionEvent, WorkerError> {
     match message.message {
         Some(aion_proto::generated::server_to_worker::Message::Task(task)) => {
-            Ok(WorkerSessionEvent::Task(proto_task(task)))
+            Ok(WorkerSessionEvent::Task(Box::new(proto_task(task))))
         }
         Some(aion_proto::generated::server_to_worker::Message::Drain(_)) => {
             Ok(WorkerSessionEvent::Drain)
@@ -621,6 +643,7 @@ fn generated_activity_result(value: ProtoActivityResult) -> aion_proto::generate
         workflow_id: value.workflow_id.map(generated_workflow_id),
         activity_id: value.activity_id.map(generated_activity_id),
         run_id: value.run_id.map(generated_run_id),
+        completion_token: value.completion_token,
         outcome: value.outcome.map(|outcome| match outcome {
             proto_activity_result::Outcome::Result(result) => {
                 aion_proto::generated::activity_result::Outcome::Result(generated_payload(result))
@@ -649,6 +672,8 @@ fn proto_task(value: aion_proto::generated::ActivityTask) -> ProtoActivityTask {
         attempt: value.attempt,
         labels: value.labels,
         run_id: value.run_id.map(proto_run_id),
+        completion_token: value.completion_token,
+        idempotency_key: value.idempotency_key,
     }
 }
 
@@ -748,7 +773,7 @@ mod tests {
         }
 
         fn receive_tasks(&mut self) -> WorkerTaskStream {
-            Box::pin(stream::iter([Ok(WorkerSessionEvent::Task(
+            Box::pin(stream::iter([Ok(WorkerSessionEvent::Task(Box::new(
                 ProtoActivityTask {
                     workflow_id: None,
                     activity_id: None,
@@ -756,9 +781,11 @@ mod tests {
                     input: None,
                     attempt: 1,
                     labels: std::collections::HashMap::new(),
-                    run_id: None,
+                    run_id: Some(aion_proto::ProtoRunId::from(aion_core::RunId::new_v4())),
+                    completion_token: String::from("generation-1"),
+                    idempotency_key: String::from("effect-key"),
                 },
-            ))]))
+            )))]))
         }
 
         async fn report_result(
@@ -766,9 +793,10 @@ mod tests {
             workflow_id: aion_core::WorkflowId,
             activity_id: aion_core::ActivityId,
             run_id: Option<aion_core::RunId>,
+            completion_token: String,
             result: aion_core::Payload,
         ) -> Result<(), WorkerError> {
-            drop((workflow_id, activity_id, run_id, result));
+            drop((workflow_id, activity_id, run_id, completion_token, result));
             Ok(())
         }
 
@@ -777,9 +805,10 @@ mod tests {
             workflow_id: aion_core::WorkflowId,
             activity_id: aion_core::ActivityId,
             run_id: Option<aion_core::RunId>,
+            completion_token: String,
             failure: aion_core::ActivityError,
         ) -> Result<(), WorkerError> {
-            drop((workflow_id, activity_id, run_id, failure));
+            drop((workflow_id, activity_id, run_id, completion_token, failure));
             Ok(())
         }
 
@@ -859,6 +888,88 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn grpc_reports_echo_the_dispatched_completion_token() -> Result<(), WorkerError> {
+        let config = WorkerConfig::new(
+            "http://127.0.0.1:50051",
+            "payments",
+            "worker-a",
+            1,
+            ReconnectConfig::new(
+                std::time::Duration::from_millis(5),
+                std::time::Duration::from_millis(20),
+                3,
+            ),
+            None,
+        );
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(2);
+        let mut session = super::GrpcWorkerSession {
+            config,
+            activity_types: Vec::new(),
+            client: None,
+            sender: Some(sender),
+            receiver: None,
+            registered_info: None,
+        };
+
+        session
+            .report_result(
+                aion_core::WorkflowId::new_v4(),
+                aion_core::ActivityId::from_sequence_position(1),
+                Some(aion_core::RunId::new_v4()),
+                String::from("success-generation"),
+                aion_core::Payload::new(aion_core::ContentType::Json, b"{}".to_vec()),
+            )
+            .await?;
+        session
+            .report_failure(
+                aion_core::WorkflowId::new_v4(),
+                aion_core::ActivityId::from_sequence_position(2),
+                Some(aion_core::RunId::new_v4()),
+                String::from("failure-generation"),
+                aion_core::ActivityError {
+                    kind: aion_core::ActivityErrorKind::Terminal,
+                    message: String::from("failed"),
+                    details: None,
+                },
+            )
+            .await?;
+
+        let success = receiver.recv().await.ok_or_else(|| {
+            WorkerError::decode(super::SessionStateError {
+                message: String::from("result report channel closed"),
+            })
+        })?;
+        let failure = receiver.recv().await.ok_or_else(|| {
+            WorkerError::decode(super::SessionStateError {
+                message: String::from("failure report channel closed"),
+            })
+        })?;
+        let success_token = match success.message {
+            Some(aion_proto::generated::worker_to_server::Message::Result(result)) => {
+                result.completion_token
+            }
+            _ => {
+                return Err(WorkerError::decode(super::SessionStateError {
+                    message: String::from("success report did not emit an ActivityResult"),
+                }));
+            }
+        };
+        let failure_token = match failure.message {
+            Some(aion_proto::generated::worker_to_server::Message::Result(result)) => {
+                result.completion_token
+            }
+            _ => {
+                return Err(WorkerError::decode(super::SessionStateError {
+                    message: String::from("failure report did not emit an ActivityResult"),
+                }));
+            }
+        };
+        assert_eq!(success_token, "success-generation");
+        assert_eq!(failure_token, "failure-generation");
+        Ok(())
+    }
+
     /// Brief test 16: a report send that never completes (server stopped
     /// reading; outbound channel full) times out retryably at the reconnect
     /// policy's `max_backoff` on a paused clock — the worker never hangs.
@@ -895,7 +1006,8 @@ mod tests {
             .report_result(
                 aion_core::WorkflowId::new_v4(),
                 aion_core::ActivityId::from_sequence_position(1),
-                None,
+                Some(aion_core::RunId::new_v4()),
+                String::from("generation-1"),
                 aion_core::Payload::new(aion_core::ContentType::Json, b"{}".to_vec()),
             )
             .await;

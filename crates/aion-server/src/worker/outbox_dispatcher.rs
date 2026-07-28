@@ -574,7 +574,7 @@ mod tests {
     use std::sync::Mutex;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-    use aion_core::{ContentType, Payload, WorkflowId};
+    use aion_core::{ContentType, Payload, RunId, WorkflowId};
     use aion_store::{OutboxRow, OutboxStatus, OutboxStore};
     use aion_store_libsql::LibSqlStore;
     use async_trait::async_trait;
@@ -620,6 +620,7 @@ mod tests {
             Payload::new(ContentType::Json, b"{}".to_vec()),
             Utc::now(),
         )
+        .with_run_id(Some(RunId::new_v4()))
     }
 
     /// Records every dispatched row; configurable to always succeed or always fail.
@@ -1222,6 +1223,7 @@ mod tests {
             Payload::new(ContentType::Json, b"{}".to_vec()),
             Utc::now(),
         )
+        .with_run_id(Some(RunId::new_v4()))
         .with_namespace("remote")
         .with_task_queue("default");
 
@@ -1307,6 +1309,7 @@ mod tests {
             Payload::new(ContentType::Json, b"{}".to_vec()),
             Utc::now(),
         )
+        .with_run_id(Some(RunId::new_v4()))
         .with_namespace(namespace)
         .with_task_queue("default")
     }

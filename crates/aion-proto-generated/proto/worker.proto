@@ -138,7 +138,16 @@ message ActivityTask {
   // replay. Carried purely so worker logs and the dashboard can show what a
   // dispatch is working on. Absent (empty map) when the workflow set none.
   map<string, string> labels = 6;
+  // Concrete run that owns this task. New servers MUST stamp it; a missing run
+  // cannot produce a run-scoped idempotency key and is refused before dispatch.
   optional RunId run_id = 7;
+  // Opaque proof of this execution generation. Workers MUST echo it verbatim
+  // on ActivityResult and MUST NOT infer or synthesize it. Empty means the
+  // server is from an incompatible pre-fencing registration era.
+  string completion_token = 8;
+  // Stable external-effect key derived from workflow id + run id + activity
+  // site. It is intentionally independent of attempt and execution generation.
+  string idempotency_key = 9;
 }
 
 // Activity completion or failure reported by a worker.
@@ -149,7 +158,13 @@ message ActivityResult {
     Payload result = 3;
     ActivityError error = 4;
   }
+  // Concrete run echoed from ActivityTask. Current servers reject absence
+  // rather than let a completion bypass the run gate.
   optional RunId run_id = 5;
+  // Verbatim token from the ActivityTask. Empty is never interpreted as the
+  // current generation: it identifies an incompatible pre-fencing worker and
+  // the server rejects the completion.
+  string completion_token = 6;
 }
 
 // Explicit retryability classification for an activity failure.

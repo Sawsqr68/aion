@@ -321,31 +321,38 @@ async fn process_inbound(
                     Ok(completion) => {
                         let workflow_id = completion.workflow_id.clone();
                         let activity_id = completion.activity_id.clone();
-                        if let Err(error) = session.heartbeat.complete_task(
-                            session.worker_id,
-                            &workflow_id,
-                            &activity_id,
-                        ) {
-                            // A poisoned liveness tracker would also break
-                            // the lost-worker sweep the unbounded dispatch
-                            // wait relies on — never swallow it.
-                            tracing::error!(
-                                worker_id = ?session.worker_id,
-                                workflow_id = %workflow_id,
-                                activity_id = %activity_id,
-                                %error,
-                                "failed to clear in-flight tracking for completed activity"
-                            );
-                        }
-                        session.drain.notify_activity_drained();
-                        if let Err(error) = session.pending.complete_activity(completion) {
-                            tracing::error!(
-                                worker_id = ?session.worker_id,
-                                workflow_id = %workflow_id,
-                                activity_id = %activity_id,
-                                %error,
-                                "activity completion handoff failed"
-                            );
+                        match session.pending.complete_activity(completion) {
+                            Ok(()) => {
+                                if let Err(error) = session.heartbeat.complete_task(
+                                    session.worker_id,
+                                    &workflow_id,
+                                    &activity_id,
+                                ) {
+                                    // A poisoned liveness tracker would also break
+                                    // the lost-worker sweep the unbounded dispatch
+                                    // wait relies on — never swallow it.
+                                    tracing::error!(
+                                        worker_id = ?session.worker_id,
+                                        workflow_id = %workflow_id,
+                                        activity_id = %activity_id,
+                                        %error,
+                                        "failed to clear in-flight tracking for completed activity"
+                                    );
+                                }
+                                session.drain.notify_activity_drained();
+                            }
+                            Err(error) => {
+                                // Leave the current worker's liveness entry intact
+                                // when the generation proof is wrong. Its stopped
+                                // heartbeat pump will drive the normal loss/retry path.
+                                tracing::error!(
+                                    worker_id = ?session.worker_id,
+                                    workflow_id = %workflow_id,
+                                    activity_id = %activity_id,
+                                    %error,
+                                    "activity completion handoff failed"
+                                );
+                            }
                         }
                         // Ack every well-formed result frame — including
                         // duplicates with no pending waiter; their re-report
@@ -409,18 +416,7 @@ async fn process_inbound(
                         );
                     }
                 }
-                if token_expired(session.token_expires_at) {
-                    let first_expired = *expired_since.get_or_insert_with(std::time::Instant::now);
-                    let _ = session
-                        .task_tx
-                        .send(Err(Status::unauthenticated(
-                            "worker token expired; re-authentication required",
-                        )))
-                        .await;
-                    if first_expired.elapsed() >= session.heartbeat_grace {
-                        return Err(Status::unauthenticated("worker token expired"));
-                    }
-                }
+                enforce_token_expiration(&session, &mut expired_since).await?;
             }
         }
     }
@@ -448,6 +444,26 @@ fn warn_duplicate_registration(worker_id: WorkerId) {
         "ignoring subsequent RegisterWorker message; \
          only the first registration is accepted per stream"
     );
+}
+
+async fn enforce_token_expiration(
+    session: &WorkerSession<'_>,
+    expired_since: &mut Option<std::time::Instant>,
+) -> Result<(), Status> {
+    if !token_expired(session.token_expires_at) {
+        return Ok(());
+    }
+    let first_expired = *expired_since.get_or_insert_with(std::time::Instant::now);
+    let _ = session
+        .task_tx
+        .send(Err(Status::unauthenticated(
+            "worker token expired; re-authentication required",
+        )))
+        .await;
+    if first_expired.elapsed() >= session.heartbeat_grace {
+        return Err(Status::unauthenticated("worker token expired"));
+    }
+    Ok(())
 }
 
 async fn worker_caller_from_metadata(
@@ -640,7 +656,7 @@ fn validate_worker_contracts(
 fn encode_server_to_worker(message: WorkerMessage) -> generated::ServerToWorker {
     let message = match message {
         WorkerMessage::ActivityTask(task) => {
-            generated::server_to_worker::Message::Task(encode_task(task))
+            generated::server_to_worker::Message::Task(encode_task(*task))
         }
         WorkerMessage::DrainRequest => {
             generated::server_to_worker::Message::Drain(generated::DrainRequest {})
@@ -667,6 +683,8 @@ fn encode_task(task: aion_proto::ProtoActivityTask) -> generated::ActivityTask {
         attempt: task.attempt,
         labels: task.labels,
         run_id: task.run_id.map(|id| generated::RunId { uuid: id.uuid }),
+        completion_token: task.completion_token,
+        idempotency_key: task.idempotency_key,
     }
 }
 
@@ -680,6 +698,7 @@ fn decode_activity_result(r: generated::ActivityResult) -> ProtoActivityResult {
         }),
         outcome: r.outcome.map(decode_outcome),
         run_id: r.run_id.map(|id| aion_proto::ProtoRunId { uuid: id.uuid }),
+        completion_token: r.completion_token,
     }
 }
 
@@ -725,9 +744,12 @@ fn decode_outcome(
 mod tests {
     use std::time::{Duration, Instant};
 
-    use aion_core::{ActivityId, WorkflowId};
+    use aion_core::{ActivityId, ContentType, Payload, WorkflowId};
 
     use crate::shutdown::DrainState;
+    use crate::worker::dispatch::{
+        ActivityCompletion, ActivityCompletionOutcome, ActivityCompletionSink,
+    };
     use crate::worker::heartbeat::InFlightActivity;
     use crate::worker::registry::ConnectedWorkerRegistry;
     use crate::worker::{HeartbeatTracker, PendingActivities};
@@ -747,6 +769,7 @@ mod tests {
         worker_id: crate::worker::registry::WorkerId,
         workflow_id: WorkflowId,
         activity_id: ActivityId,
+        completion_token: crate::worker::CompletionToken,
         rx: std::sync::mpsc::Receiver<Result<String, String>>,
         /// Held so the registered worker stays routable until the teardown
         /// under test deregisters it (dropping the guard would race that).
@@ -765,15 +788,17 @@ mod tests {
         let pending = PendingActivities::default();
         let workflow_id = WorkflowId::new_v4();
         let activity_id = ActivityId::from_sequence_position(0);
+        let (completion_token, rx) =
+            pending.insert_for_test(workflow_id.clone(), activity_id.clone())?;
         tracker.track_task(
             worker_id,
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id.clone(),
+                completion_token: completion_token.clone(),
             },
             Instant::now(),
         )?;
-        let rx = pending.insert_for_test(workflow_id.clone(), activity_id.clone());
         Ok(TeardownFixture {
             registry,
             tracker,
@@ -782,6 +807,7 @@ mod tests {
             worker_id,
             workflow_id,
             activity_id,
+            completion_token,
             rx,
             _registration: registration,
         })
@@ -847,6 +873,54 @@ mod tests {
             "the failure must name worker loss: {reason}"
         );
         assert_eq!(fixture.tracker.in_flight_count()?, 0);
+        Ok(())
+    }
+
+    /// R2 fencing red: after heartbeat loss resolves worker A's attempt and a
+    /// retry installs worker B's waiter for the same activity, A's late result
+    /// must not resolve B's generation.
+    #[test]
+    fn stale_worker_completion_after_heartbeat_loss_does_not_resolve_retry() -> Result<(), TestError>
+    {
+        let fixture = fixture()?;
+        teardown_worker_stream(
+            fixture.worker_id,
+            &fixture.tracker,
+            &fixture.registry,
+            &fixture.pending,
+            &fixture.drain,
+        );
+        let first = fixture.rx.recv_timeout(Duration::from_millis(200))?;
+        assert!(
+            first
+                .err()
+                .is_some_and(|reason| reason.starts_with("retryable:")),
+            "worker A loss must release attempt 1 as retryable"
+        );
+
+        let (retry_token, retry_rx) = fixture
+            .pending
+            .insert_for_test(fixture.workflow_id.clone(), fixture.activity_id.clone())?;
+        let rejected = fixture.pending.complete_activity(ActivityCompletion {
+            workflow_id: fixture.workflow_id,
+            activity_id: fixture.activity_id,
+            run_id: None,
+            completion_token: fixture.completion_token,
+            outcome: ActivityCompletionOutcome::Succeeded(Payload::new(
+                ContentType::Json,
+                br#"{"worker":"A","stale":true}"#.to_vec(),
+            )),
+        });
+
+        assert!(matches!(
+            rejected,
+            Err(crate::ServerError::ActivityCompletionRejected { .. })
+        ));
+        drop(retry_token);
+        assert!(
+            retry_rx.recv_timeout(Duration::from_millis(50)).is_err(),
+            "worker A's late completion must be rejected instead of resolving worker B's retry"
+        );
         Ok(())
     }
 }

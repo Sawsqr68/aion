@@ -14,13 +14,19 @@ pub struct ActivityTask {
     pub workflow_id: WorkflowId,
     /// Activity id correlating reports and heartbeats with this task.
     pub activity_id: ActivityId,
-    /// Concrete workflow run that staged this task, when provided by the server.
+    /// Concrete workflow run that staged this task. Live decoding rejects a
+    /// missing value; the `Option` remains only for manually built test tasks.
     pub run_id: Option<RunId>,
     /// Registered activity type name requested by the engine.
     pub activity_type: String,
     /// One-based delivery attempt stamped by the dispatching engine seam and
     /// read from the wire. Zero is malformed and rejected at decode.
     pub attempt: u32,
+    /// Opaque execution-generation token echoed verbatim on every outcome.
+    pub completion_token: String,
+    /// Stable external-effect key for this run and action site. Identical across
+    /// retries and available to handlers through [`crate::ActivityContext`].
+    pub idempotency_key: String,
     /// Opaque activity input payload, preserving its content-type tag.
     pub input: Payload,
     /// Human-meaningful display labels the workflow attached to the activity
@@ -49,11 +55,11 @@ impl TryFrom<ProtoActivityTask> for ActivityTask {
             .map_err(WorkerError::decode)?;
         let run_id = value
             .run_id
-            .map(|run_id| {
+            .ok_or(MalformedActivityTask::MissingRunId)
+            .and_then(|run_id| {
                 RunId::try_from(run_id)
                     .map_err(|source| MalformedActivityTask::InvalidRunId { source })
             })
-            .transpose()
             .map_err(WorkerError::decode)?;
         if value.activity_type.is_empty() {
             return Err(WorkerError::decode(
@@ -73,13 +79,25 @@ impl TryFrom<ProtoActivityTask> for ActivityTask {
             // proto3 zero default = the producer failed to stamp the attempt.
             return Err(WorkerError::decode(MalformedActivityTask::MissingAttempt));
         }
+        if value.completion_token.is_empty() {
+            return Err(WorkerError::decode(
+                MalformedActivityTask::MissingCompletionToken,
+            ));
+        }
+        if value.idempotency_key.is_empty() {
+            return Err(WorkerError::decode(
+                MalformedActivityTask::MissingIdempotencyKey,
+            ));
+        }
 
         Ok(Self {
             workflow_id,
             activity_id,
-            run_id,
+            run_id: Some(run_id),
             activity_type: value.activity_type,
             attempt: value.attempt,
+            completion_token: value.completion_token,
+            idempotency_key: value.idempotency_key,
             input,
             labels: value.labels.into_iter().collect(),
         })
@@ -100,8 +118,14 @@ enum MalformedActivityTask {
     MissingInput,
     #[error("activity task attempt is missing or zero (producer failed to stamp it)")]
     MissingAttempt,
+    #[error("activity task completion_token is missing (server registration era is incompatible)")]
+    MissingCompletionToken,
+    #[error("activity task idempotency_key is missing (server registration era is incompatible)")]
+    MissingIdempotencyKey,
     #[error("activity task input payload is invalid: {source}")]
     InvalidInput { source: aion_proto::WireError },
+    #[error("activity task run_id is missing (server registration era is incompatible)")]
+    MissingRunId,
     #[error("activity task run_id is invalid: {source}")]
     InvalidRunId { source: aion_proto::WireError },
 }
@@ -132,6 +156,8 @@ mod tests {
             activity_type: String::from("charge-card"),
             input: Some(ProtoPayload::from(input.clone())),
             attempt: 3,
+            completion_token: String::from("generation-3"),
+            idempotency_key: String::from("effect-key"),
             labels: [(String::from("brief"), String::from("IP-001"))]
                 .into_iter()
                 .collect(),
@@ -167,6 +193,8 @@ mod tests {
                 b"{}".to_vec(),
             ))),
             attempt: 1,
+            completion_token: String::from("generation-1"),
+            idempotency_key: String::from("effect-key"),
             labels: std::collections::HashMap::new(),
         });
 
@@ -174,27 +202,79 @@ mod tests {
     }
 
     #[test]
-    fn zero_attempt_is_a_malformed_task() {
+    fn zero_attempt_is_a_malformed_task() -> Result<(), Box<dyn std::error::Error>> {
         let result = ActivityTask::try_from(ProtoActivityTask {
             workflow_id: Some(ProtoWorkflowId::from(WorkflowId::new_v4())),
             activity_id: Some(ProtoActivityId::from(ActivityId::from_sequence_position(1))),
-            run_id: None,
+            run_id: Some(ProtoRunId::from(aion_core::RunId::new_v4())),
             activity_type: String::from("charge-card"),
             input: Some(ProtoPayload::from(Payload::new(
                 ContentType::Json,
                 b"{}".to_vec(),
             ))),
             attempt: 0,
+            completion_token: String::from("generation-1"),
+            idempotency_key: String::from("effect-key"),
             labels: std::collections::HashMap::new(),
         });
 
-        let Err(error) = result else {
-            unreachable!("attempt 0 must be rejected as malformed");
-        };
+        let error = result
+            .err()
+            .ok_or("attempt 0 must be rejected as malformed")?;
         assert!(matches!(error, WorkerError::Decode { .. }));
         assert!(
             error.to_string().contains("attempt"),
             "error must name the attempt field: {error}"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn missing_fencing_fields_are_incompatible_tasks() -> Result<(), Box<dyn std::error::Error>> {
+        let valid = ProtoActivityTask {
+            workflow_id: Some(ProtoWorkflowId::from(WorkflowId::new_v4())),
+            activity_id: Some(ProtoActivityId::from(ActivityId::from_sequence_position(1))),
+            run_id: Some(ProtoRunId::from(aion_core::RunId::new_v4())),
+            activity_type: String::from("charge-card"),
+            input: Some(ProtoPayload::from(Payload::new(
+                ContentType::Json,
+                b"{}".to_vec(),
+            ))),
+            attempt: 1,
+            completion_token: String::from("generation-1"),
+            idempotency_key: String::from("effect-key"),
+            labels: std::collections::HashMap::new(),
+        };
+
+        let mut missing_token = valid.clone();
+        missing_token.completion_token.clear();
+        let token_error = ActivityTask::try_from(missing_token)
+            .err()
+            .ok_or("empty completion token must be rejected")?;
+        assert!(
+            token_error.to_string().contains("completion_token"),
+            "refusal must name the missing generation proof: {token_error}"
+        );
+
+        let mut missing_key = valid.clone();
+        missing_key.idempotency_key.clear();
+        let key_error = ActivityTask::try_from(missing_key)
+            .err()
+            .ok_or("empty idempotency key must be rejected")?;
+        assert!(
+            key_error.to_string().contains("idempotency_key"),
+            "refusal must name the missing external-effect key: {key_error}"
+        );
+
+        let mut missing_run = valid;
+        missing_run.run_id = None;
+        let run_error = ActivityTask::try_from(missing_run)
+            .err()
+            .ok_or("missing run id must be rejected")?;
+        assert!(
+            run_error.to_string().contains("run_id"),
+            "refusal must name the missing concrete run: {run_error}"
+        );
+        Ok(())
     }
 }

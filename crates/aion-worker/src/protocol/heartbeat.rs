@@ -174,9 +174,10 @@ mod tests {
             workflow_id: WorkflowId,
             activity_id: ActivityId,
             run_id: Option<RunId>,
+            completion_token: String,
             result: Payload,
         ) -> Result<(), WorkerError> {
-            drop((workflow_id, activity_id, run_id, result));
+            drop((workflow_id, activity_id, run_id, completion_token, result));
             Ok(())
         }
 
@@ -185,9 +186,10 @@ mod tests {
             workflow_id: WorkflowId,
             activity_id: ActivityId,
             run_id: Option<RunId>,
+            completion_token: String,
             failure: ActivityError,
         ) -> Result<(), WorkerError> {
-            drop((workflow_id, activity_id, run_id, failure));
+            drop((workflow_id, activity_id, run_id, completion_token, failure));
             Ok(())
         }
 

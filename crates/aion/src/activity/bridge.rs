@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use aion_core::{ActivityId, WorkflowId};
+use aion_core::{ActivityId, RunId, WorkflowId};
 use futures::future::BoxFuture;
 
 /// A fully-resolved activity dispatch crossing the engine→transport seam.
@@ -31,9 +31,8 @@ pub struct ActivityDispatch {
     /// boundary the activity may dispatch within.
     pub namespace: String,
     /// Task queue (pool/flavour) selected within the namespace. The worker-pool
-    /// address is `(namespace, task_queue)`. There is no workflow-level
-    /// selection yet, so the engine seam stamps the named `"default"` pool until
-    /// the Gleam SDK selection (NSTQ-4) lands.
+    /// address is `(namespace, task_queue)`. The engine resolves the activity
+    /// override, workflow default, or recorded start-time queue before this seam.
     pub task_queue: String,
     /// OPTIONAL node affinity (NODE-4): the concrete worker host this dispatch is
     /// pinned to within the `(namespace, task_queue)` pool. `None` = no affinity
@@ -42,6 +41,9 @@ pub struct ActivityDispatch {
     pub node: Option<String>,
     /// Real owning workflow id, recorded in history at `WorkflowStarted`.
     pub workflow_id: WorkflowId,
+    /// Concrete workflow run. Required for a run-scoped idempotency key and
+    /// echoed by the worker on completion.
+    pub run_id: RunId,
     /// Real per-workflow activity ordinal, recorded at `ActivityScheduled`.
     pub activity_id: ActivityId,
     /// Registered activity-type name to match against worker registrations.
@@ -112,7 +114,7 @@ mod tests {
 
     use std::collections::BTreeMap;
 
-    use aion_core::{ActivityId, WorkflowId};
+    use aion_core::{ActivityId, RunId, WorkflowId};
 
     use super::{ActivityDispatch, ActivityDispatcher};
     use crate::runtime::EngineNifState;
@@ -131,6 +133,7 @@ mod tests {
             task_queue: "default".to_owned(),
             node: None,
             workflow_id: WorkflowId::new_v4(),
+            run_id: RunId::new_v4(),
             activity_id: ActivityId::from_sequence_position(0),
             name: "test".to_owned(),
             input: input.to_owned(),

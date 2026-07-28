@@ -47,13 +47,14 @@ fn blocking_dispatch_scenario() -> Result<Vec<u8>, String> {
             workflow_id.clone(),
             Arc::new(aion_store::InMemoryStore::default()),
         )));
+        let run_id = RunId::new_v4();
         spawn_completion_task(
             &tokio::runtime::Handle::current(),
             Arc::clone(&runtime),
             dispatcher,
             super::RetryRecorderSeam {
                 recorder,
-                run_id: RunId::new_v4(),
+                run_id: run_id.clone(),
             },
             pid,
             super::correlation_id(0),
@@ -62,6 +63,7 @@ fn blocking_dispatch_scenario() -> Result<Vec<u8>, String> {
                 task_queue: String::from("default"),
                 node: None,
                 workflow_id,
+                run_id,
                 activity_id: ActivityId::from_sequence_position(0),
                 name: "gated".to_owned(),
                 input: r#""r0""#.to_owned(),

@@ -416,6 +416,7 @@ fn dispatch_request(
         task_queue: TASK_QUEUE.to_owned(),
         node: None,
         workflow_id: workflow_id.clone(),
+        run_id: aion_core::RunId::new_v4(),
         activity_id: ActivityId::from_sequence_position(ordinal),
         name: activity_type.to_owned(),
         input: input.to_string(),

@@ -5,6 +5,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use aion::EngineError;
+use aion_core::{ActivityId, WorkflowId};
 use aion_proto::WireError;
 use aion_store::StoreError;
 use thiserror::Error;
@@ -133,6 +134,20 @@ pub enum ServerError {
         detail: String,
     },
 
+    /// A worker result did not prove ownership of the current execution
+    /// generation and was refused before reaching workflow state.
+    #[error(
+        "activity completion rejected for workflow {workflow_id}, activity {activity_id}: {reason}"
+    )]
+    ActivityCompletionRejected {
+        /// Workflow named by the submitted completion.
+        workflow_id: WorkflowId,
+        /// Activity site named by the submitted completion.
+        activity_id: ActivityId,
+        /// Typed reason the completion token did not authorize this write.
+        reason: CompletionRejectionReason,
+    },
+
     /// A lock was poisoned and the protected state cannot be trusted.
     #[error("{resource} lock was poisoned")]
     LockPoisoned {
@@ -146,6 +161,20 @@ pub enum ServerError {
         /// Stable wire error.
         wire: WireError,
     },
+}
+
+/// Typed completion-fence refusal classes.
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+pub enum CompletionRejectionReason {
+    /// A worker from before completion-token support omitted the required token.
+    #[error("completion token is missing (worker registration era is incompatible)")]
+    MissingCompletionToken,
+    /// No generation is currently authorized for this activity execution.
+    #[error("no execution generation is currently accepting completion")]
+    NoCurrentGeneration,
+    /// A later dispatch superseded the submitted generation.
+    #[error("completion token belongs to a stale execution generation")]
+    StaleGeneration,
 }
 
 /// Bounded-stream and connection failure classes.
@@ -180,6 +209,9 @@ impl ServerError {
             | Self::Transport { .. }
             | Self::SignalListener { .. }
             | Self::LockPoisoned { .. } => WireError::backend("server backend failure"),
+            Self::ActivityCompletionRejected { .. } => {
+                WireError::backend("stale activity completion rejected")
+            }
             Self::WorkerDispatch { .. } => WireError::backend("worker dispatch failed"),
             Self::WorkerConnectionLost { .. } => {
                 WireError::backend("worker connection lost during dispatch")
@@ -359,6 +391,11 @@ impl ServerError {
                 error_type: Cow::Borrowed("WorkerConnectionLost"),
                 store_error_type: None,
                 reason: detail,
+            },
+            Self::ActivityCompletionRejected { reason, .. } => ErrorTraceFields {
+                error_type: Cow::Borrowed("ActivityCompletionRejected"),
+                store_error_type: None,
+                reason,
             },
             Self::LockPoisoned { resource } => ErrorTraceFields {
                 error_type: Cow::Borrowed("LockPoisoned"),

@@ -189,7 +189,7 @@ impl Cluster {
             node: node.map(str::to_owned),
             workflow_id: WorkflowId::new(uuid::Uuid::new_v4()),
             activity_id: ActivityId::from_sequence_position(0),
-            run_id: None,
+            run_id: Some(aion_core::RunId::new_v4()),
             input: Payload::new(ContentType::Json, b"{}".to_vec()),
             attempt: 1,
             labels: BTreeMap::new(),

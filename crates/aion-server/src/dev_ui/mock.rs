@@ -221,6 +221,7 @@ mod tests {
             task_queue: "default".to_owned(),
             node: None,
             workflow_id,
+            run_id: aion_core::RunId::new_v4(),
             activity_id: ActivityId::from_sequence_position(0),
             name: name.to_owned(),
             input: "{}".to_owned(),
