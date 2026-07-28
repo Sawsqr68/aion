@@ -70,6 +70,12 @@ defs tuple. A later reason-binding arrives as one more parameter.
     tail_local publish_it_on_failure(v0)
 ```
 
+   That structural claim is also EXECUTED, not merely read off the golden:
+   `compensation::a_routed_failure_outcome_never_compensates` runs the fixture
+   on a real engine, on both productions, and asserts the trail carries
+   `publish`, carries NO `ActivityFailed`, and does NOT carry `snapshot` — the
+   action only the `on failure` block calls.
+
 2. **The edge binds nothing** — stated in `failure.rs`'s module doc with the
    §2.3 citation, and true of the reference (`Error(_)`), the AST (`OnFailure`
    has no binding slot) and the checker's `avail_in` law alike.

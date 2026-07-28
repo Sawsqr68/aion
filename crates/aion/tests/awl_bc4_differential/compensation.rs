@@ -172,3 +172,67 @@ fn scheduled(trail: &[Event], activity_type: &str) -> bool {
         _ => false,
     })
 }
+
+/// The body-terminal-route invariant, EXECUTED rather than only read off a
+/// golden: `on_failure_route_tail`'s publish SUCCEEDS, so the step's terminal
+/// `route dead_end(...)` fires and the run ends in `AwlOutcomeFailure`. A
+/// routed failure outcome is not an operation failure, so the compensation
+/// must NOT run — the trail must carry `publish` and must NOT carry
+/// `snapshot`, the action only the `on failure` block calls.
+///
+/// Structurally this cannot fail on the direct backend (a route lowers to a
+/// `Tail`, never to a `TryBind`, so it never passes through the `IsTagged`
+/// test), which is exactly why it is worth executing: the assertion proves the
+/// structural claim on a real engine, on both productions.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_routed_failure_outcome_never_compensates() -> TestResult {
+    if crate::gleam_test_support::skip_if_unavailable() {
+        return Ok(());
+    }
+    let name = String::from("flow-shape/valid/on_failure_route_tail");
+    let fixtures = build_spliced(std::slice::from_ref(&name), "route_tail_invariant").await?;
+    let fixture = fixtures.first().ok_or("no on_failure_route_tail fixture")?;
+    for (label, package, entry) in [
+        (
+            "direct",
+            fixture.direct_package.clone(),
+            fixture.entry_bytes.clone(),
+        ),
+        (
+            "reference",
+            fixture.reference_package.clone(),
+            reference_entry(fixture)?,
+        ),
+    ] {
+        let outcome = run_package(
+            package,
+            &fixture.entry_module,
+            &fixture.input,
+            fixture.action_results.clone(),
+            &entry,
+        )
+        .await?;
+        assert_eq!(
+            outcome.disposition,
+            Disposition::Failed,
+            "({label}) the deliberate `route dead_end(...)` must end the run failed"
+        );
+        assert!(
+            scheduled(&outcome.trail, "publish"),
+            "({label}) the guarded body never ran its publish"
+        );
+        assert!(
+            !outcome
+                .trail
+                .iter()
+                .any(|event| matches!(event, Event::ActivityFailed { .. })),
+            "({label}) nothing failed here — the route is not an operation failure"
+        );
+        assert!(
+            !scheduled(&outcome.trail, "snapshot"),
+            "({label}) the compensation RAN on a deliberately routed failure \
+             outcome — AwlOutcomeFailure was mistaken for a step failure"
+        );
+    }
+    Ok(())
+}
