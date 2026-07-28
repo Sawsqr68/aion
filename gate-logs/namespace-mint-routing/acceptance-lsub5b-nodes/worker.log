@@ -1,0 +1,2 @@
+[2m2026-07-28T19:41:19.995405Z[0m [32m INFO[0m [2mliminal_fan_worker[0m[2m:[0m liminal-fan-worker starting [3mcandidates[0m[2m=[0m["127.0.0.1:52954", "127.0.0.1:52958", "127.0.0.1:52962"] [3midentity[0m[2m=[0mkill9-failover-worker
+[2m2026-07-28T19:41:19.998051Z[0m [32m INFO[0m [2mliminal_fan_worker[0m[2m:[0m liminal-fan-worker connected and registered; serving pushes

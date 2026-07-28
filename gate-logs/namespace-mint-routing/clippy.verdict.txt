@@ -1,0 +1,4 @@
+DENOMINATOR compiler-artifact count: 844
+error   diagnostics: 0
+warning diagnostics: 0
+--- any non-empty extraction below this line is a finding ---

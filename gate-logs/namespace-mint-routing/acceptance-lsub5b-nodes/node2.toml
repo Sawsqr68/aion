@@ -1,0 +1,51 @@
+workflow_packages = ["/var/folders/87/tdf6vfls1fj_4ydz_y6sk3580000gn/T/.tmpJfFT4e/collect_four.aion"]
+
+[server]
+listen_address = "127.0.0.1:52960"
+grpc_address = "127.0.0.1:52961"
+
+[store]
+backend = "haematite"
+data_dir = "/var/folders/87/tdf6vfls1fj_4ydz_y6sk3580000gn/T/.tmpJfFT4e/data2"
+shard_count = 3
+owned_shards = [2]
+
+[store.cluster]
+node_id = "node-2@127.0.0.1"
+bind_address = "127.0.0.1:52963"
+members = ["node-0@127.0.0.1", "node-1@127.0.0.1", "node-2@127.0.0.1"]
+failover_poll_interval_ms = 500
+failover_confirmations = 3
+
+[[store.cluster.peers]]
+name = "node-0@127.0.0.1"
+address = "127.0.0.1:52955"
+grpc_address = "127.0.0.1:52953"
+owned_shards = []
+
+[[store.cluster.peers]]
+name = "node-1@127.0.0.1"
+address = "127.0.0.1:52959"
+grpc_address = "127.0.0.1:52957"
+owned_shards = [1]
+
+[runtime]
+query_timeout_ms = 10000
+
+[namespaces]
+default = "default"
+
+[websocket]
+event_broadcast_capacity = 1024
+cluster_broadcast_capacity = 64
+
+[outbox]
+enabled = true
+poll_interval_ms = 20
+batch_size = 16
+max_attempts = 5
+backoff_base_ms = 50
+backoff_multiplier = 2
+backoff_max_ms = 1000
+transport = "liminal"
+liminal_listen_address = "127.0.0.1:52962"

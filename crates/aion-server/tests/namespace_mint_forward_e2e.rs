@@ -361,3 +361,60 @@ async fn an_unspecified_origin_is_refused() -> Result<(), TestError> {
     );
     Ok(())
 }
+
+/// The measured cost of routing, stated rather than assumed.
+///
+/// `GrpcRequestForwarder` is a unit struct with no connection pool, so EVERY
+/// forwarded mint pays a fresh TCP + HTTP/2 handshake to the owner. This walks
+/// the same number of mints down both paths on the same box in the same process
+/// and prints both, so the evidence file quotes a measurement and not a guess.
+///
+/// It asserts only that both paths mint — never a timing threshold, which would
+/// be a flake on a contended box. The numbers are read from the printed line.
+#[tokio::test]
+async fn measure_the_cost_of_a_forwarded_mint_against_a_local_one() -> Result<(), TestError> {
+    /// Enough mints to average out scheduler noise, few enough to stay fast.
+    const MINTS: u32 = 20;
+
+    let owner = owner(AutoCreate::Open).await?;
+    let registry = Arc::clone(&owner.namespaces);
+    let local_minter = owner.state.namespace_minter();
+
+    let began = std::time::Instant::now();
+    for index in 0..MINTS {
+        local_minter
+            .mint_or_gate(&[format!("local-{index}")], NamespaceOrigin::StartMint)
+            .await?;
+    }
+    let local_elapsed = began.elapsed();
+
+    let received = Arc::clone(&owner.received);
+    let (addr, shutdown) = spawn_owner(workflow_service(owner.state), received).await?;
+    let forwarder = mint_forwarder();
+    let began = std::time::Instant::now();
+    for index in 0..MINTS {
+        forwarder
+            .forward_mint(
+                addr,
+                &caller_credentials()?,
+                &[format!("forwarded-{index}")],
+                NamespaceOrigin::StartMint,
+            )
+            .await
+            .map_err(|error| format!("forwarded mint {index} failed: {error:?}"))?;
+    }
+    let forwarded_elapsed = began.elapsed();
+    let _ = shutdown.send(());
+
+    println!(
+        "MINT COST over {MINTS} mints: local total {local_elapsed:?} (mean {:?}); \
+         forwarded total {forwarded_elapsed:?} (mean {:?}), fresh dial per forward",
+        local_elapsed / MINTS,
+        forwarded_elapsed / MINTS,
+    );
+
+    // Both paths really minted: the measurement is of work, not of no-ops.
+    assert!(registry.get_namespace("local-0").await?.is_some());
+    assert!(registry.get_namespace("forwarded-0").await?.is_some());
+    Ok(())
+}
