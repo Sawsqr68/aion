@@ -34,6 +34,8 @@
 
 mod error;
 mod keyspace;
+/// Namespace-registry shard resolution ([`HaematiteStore::shard_for_namespace`]).
+mod namespace_shard;
 /// The [`HaematiteStore`] type and its `EventStore` trait implementations.
 pub mod store;
 
