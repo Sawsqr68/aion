@@ -1,0 +1,19 @@
+# retry-counting lane — final battery
+# tree: build/retry-counting @ bbdd291f70dc35e16ee9f4de30d86cb89e2f750d
+# rustc 1.97.1 (8bab26f4f 2026-07-14)
+# cargo 1.97.1 (c980f4866 2026-06-30)
+# gleam: gleam 1.17.0
+# date: 2026-07-28T16:31:11Z
+# disk: /dev/disk3s5   926Gi   815Gi    85Gi    91%    8.4M  890M    1%   /System/Volumes/Data
+
+# cmd: cargo clippy --workspace --all-targets -- -D warnings
+
+    Checking aion-awl v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/retry-counting/crates/aion-awl)
+    Checking aion-rs v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/retry-counting/crates/aion)
+    Checking aion-awl-package v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/retry-counting/crates/aion-awl-package)
+    Checking aion-awl-lsp v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/retry-counting/crates/aion-awl-lsp)
+    Checking aion-client v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/retry-counting/crates/aion-client)
+    Checking aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/retry-counting/crates/aion-server)
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/aion/.worktrees/retry-counting/benchmarks/million-processes)
+    Checking aion-cli v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/retry-counting/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.13s
