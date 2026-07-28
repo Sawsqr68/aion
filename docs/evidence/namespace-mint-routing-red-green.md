@@ -338,12 +338,25 @@ OUT, and NOT touched:
 - **No `#[allow]` anywhere in the lane** — and one was REMOVED: `minter.rs`'s
   test module carried `#![allow(clippy::expect_used)]`, which is gone along with
   the `expect` it existed for.
-- ≤500 lines: two god-file-adjacent files were brought under the law by moving
-  their inline test modules to `#[path]` siblings rather than thinning them —
+- ≤500 lines, and every new file small: `route.rs` 348, `mint_resolve.rs` 75,
+  `mint_forward.rs` 89, `namespace_shard.rs` 44.
+- God-files: **`store.rs` (4084 lines) did not grow by one line** —
+  `shard_for_namespace` is a new sibling module, and
+  `git diff --stat bbfe7065..HEAD -- crates/aion-store-haematite/src/store.rs`
+  is empty. Two files were brought UNDER the law by moving their inline test
+  modules to `#[path]` siblings rather than thinning them:
   `namespace/minter.rs` 512 → 417 and `aion-client/src/error.rs` 505 → 432.
-  `store.rs` (4084 lines) did not grow by one line: `shard_for_namespace` is a
-  new sibling module. Every new file is small (`route.rs` 348,
-  `mint_forward.rs` 89, `namespace_shard.rs` 44).
+  The `MintNamespace` handler body was peeled into
+  `api/grpc/mint_resolve.rs` — the same AO-007 sibling-`impl` discipline
+  `routing_resolve.rs` in that directory already follows — so `grpc/mod.rs`
+  carries a one-line delegation and grew 901 → 922 rather than 901 → 966.
+- Stated plainly rather than glossed: **`state.rs` did grow**, 2557 → 2652.
+  The brief itself requires BOTH minter construction sites to thread the
+  routing, and both live there, alongside every other `build_*` boot helper
+  (`build_routing_state`, `build_worker_seams`, `build_real_time_publishers`).
+  Peeling `build_namespace_routing` out would have broken that file's own
+  local convention for the sake of ~25 lines, so it was not done. `registry.rs`
+  grew by one 17-line builder for the same reason.
 - No `#[ignore]` added or changed. `lsub5b` keeps the `#[ignore]` it has always
   had (it spawns four OS processes), and is run explicitly with `--ignored`.
 - No `rust-toolchain.toml` edit. Default target dirs. No vendored cross-repo
@@ -529,9 +542,17 @@ real_worker_and_review_signal`). **This lane neither added nor changed an
 `crates/aion-store-haematite/tests/namespace_quorum_cas.rs` (the store's own
 fence and idempotence gates) is untouched by this lane and is inside that green.
 
-Battery bytes: the clippy and tests legs ran on the exact working-tree bytes
-that were then committed unchanged as the evidence commit; only the git
-metadata differs.
+Battery bytes: the clippy and tests legs above were **re-run in full** after the
+`MintNamespace` handler was peeled into `api/grpc/mint_resolve.rs`, on the exact
+working-tree bytes that were then committed unchanged; only the git metadata
+differs. The earlier run at the pre-peel tree is not cited — a battery is not
+carried across trees.
+
+The acceptance leg was NOT re-run after the peel: it is a pure code move (the
+trait method delegates one line to the peeled `impl`), the workspace tests leg
+covers it, and re-running a 95-second 4-process cluster gate to re-observe a
+refusal that comes from a seam this lane does not touch would add no
+information. That choice is stated here rather than hidden.
 
 
 ## Release note

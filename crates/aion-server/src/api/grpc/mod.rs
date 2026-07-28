@@ -4,6 +4,8 @@
 mod auth;
 /// Codec conversions between the generated wire messages and `aion-proto` types.
 mod convert;
+/// The owner side of namespace-mint routing (`MintNamespace`).
+mod mint_resolve;
 /// Cluster request routing/resolution (steered start + forward-or-local).
 #[cfg(feature = "haematite-backend")]
 mod routing_resolve;
@@ -16,7 +18,7 @@ pub(crate) use status::{status_from_wire_error, status_with_code};
 use aion_proto::generated::{self, workflow_service_server::WorkflowServiceServer};
 use tonic::{Request, Response, Status};
 
-use crate::namespace::{MintCredentials, decode_mint_origin};
+use crate::namespace::MintCredentials;
 use crate::{CallerIdentity, ServerState, api::handlers, api::schedule_handlers};
 #[cfg(feature = "haematite-backend")]
 use convert::decode_workflow_id;
@@ -571,58 +573,14 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
     }
 
     /// Mint (or gate) an already-authorized namespace set on THIS node — the
-    /// owner-side half of namespace-mint routing.
-    ///
-    /// A node whose registry shard for a namespace is foreign forwards the mint
-    /// here rather than proposing a write it can never win. What arrives is an
-    /// ordinary client request, not a privileged internal one:
-    ///
-    /// 1. the caller is resolved from the forwarded metadata exactly as on every
-    ///    other RPC (`caller_from_metadata`), so a forwarded mint authenticates
-    ///    as the ORIGINAL caller, never as "a peer node";
-    /// 2. EVERY namespace in the set is authorized against that caller through
-    ///    the same guard the worker-registration seam uses, so this RPC can
-    ///    never mint a namespace its caller could not mint locally;
-    /// 3. the mint itself runs through this node's ORDINARY
-    ///    [`NamespaceMinter::mint_or_gate`](crate::NamespaceMinter::mint_or_gate)
-    ///    — never a raw store write — so an `auto_create = closed` deployment
-    ///    refuses a forwarded mint with exactly the refusal it gives a local
-    ///    one. A forwarded mint is precisely as privileged as a local one.
-    ///
-    /// The minter used here carries NO routing: a mint that already travelled
-    /// does not travel again. If this node's ownership of the shard has moved on
-    /// since the initiator resolved it, the local quorum write is fenced and the
-    /// typed `NotOwner` returns to the initiator, which surfaces it to the
-    /// client. No re-forward chains and no internal retry loops — the client
-    /// owns retry policy.
+    /// owner side of namespace-mint routing. See
+    /// [`WorkflowGrpcService::mint_namespace_here`] for the authorization and
+    /// policy-parity contract this delegates to.
     async fn mint_namespace(
         &self,
         request: Request<generated::MintNamespaceRequest>,
     ) -> Result<Response<generated::MintNamespaceResponse>, Status> {
-        let caller = self.caller(&request).await?;
-        let inner = request.into_inner();
-        let origin = decode_mint_origin(inner.origin).ok_or_else(|| {
-            status_from_wire_error(aion_proto::WireError::invalid_input(
-                "mint origin is unspecified or unknown",
-            ))
-        })?;
-        if inner.namespaces.is_empty() {
-            return Err(status_from_wire_error(
-                aion_proto::WireError::invalid_input("mint request named no namespaces"),
-            ));
-        }
-        let namespaces = self
-            .state
-            .namespace_guard()
-            .scope_worker_namespaces(&caller, &inner.namespaces)
-            .map_err(|error| status_from_wire_error(error.to_wire_error()))?;
-        self.state
-            .namespace_minter()
-            .without_routing()
-            .mint_or_gate(&namespaces, origin)
-            .await
-            .map_err(|error| status_from_wire_error(error.to_wire_error()))?;
-        Ok(Response::new(generated::MintNamespaceResponse {}))
+        self.mint_namespace_here(request).await
     }
 }
 
