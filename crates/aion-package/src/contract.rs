@@ -310,7 +310,7 @@ fn encode_json(bytes: &mut Vec<u8>, parent_key: Option<&str>, value: &Value) {
         Value::Object(values) => {
             bytes.push(5);
             let mut entries = values.iter().collect::<Vec<_>>();
-            entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+            entries.sort_by_key(|(left, _)| *left);
             encode_len(bytes, entries.len());
             for (key, value) in entries {
                 encode_text(bytes, key);

@@ -6,8 +6,8 @@ use aion_core::{ActivityId, WorkflowId};
 use aion_server::ServerError;
 use aion_server::worker::registry::WorkerMessage;
 use aion_server::worker::{
-    ActivityCompletion, ActivityCompletionSink, ConnectedWorkerRegistry, HeartbeatTracker,
-    InFlightActivity, WorkerDelivery,
+    ActivityCompletion, ActivityCompletionSink, CompletionToken, ConnectedWorkerRegistry,
+    HeartbeatTracker, InFlightActivity, WorkerDelivery,
 };
 
 #[derive(Debug, Default)]
@@ -73,6 +73,11 @@ fn active_worker_heartbeat_refreshes_connection_lease() -> Result<(), Box<dyn st
         InFlightActivity {
             workflow_id: workflow_id.clone(),
             activity_id: activity_id.clone(),
+            completion_token: CompletionToken::from_wire(
+                &workflow_id,
+                &activity_id,
+                "lease-test-generation".to_owned(),
+            )?,
         },
         now,
     )?;
