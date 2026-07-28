@@ -43,6 +43,10 @@ pub(super) const COVERED: &[&str] = &[
     "flow-shape/valid/distribute_activity_tolerant",
     "flow-shape/valid/distribute_child_collect",
     "flow-shape/valid/distribute_child_tolerant",
+    // The on-failure edge (top-level steps): a guarded body whose terminal
+    // route stays OUTSIDE the guard, so a deliberate `route <failure outcome>`
+    // can never trigger compensation.
+    "flow-shape/valid/on_failure_route_tail",
     "flow-shape/valid/region_pure_decision",
     "flow-shape/valid/sequence_activity_tolerant",
     "flow-shape/valid/sequence_region_loopback",
@@ -70,7 +74,13 @@ pub(super) const COVERED: &[&str] = &[
     "loop-outcomes/valid/loop_compound_until_nested",
     "loop-outcomes/valid/loop_counting_until_max",
     "loop-outcomes/valid/loop_without_counting",
+    // The on-failure edge: compensation to a workflow outcome.
+    "loop-outcomes/valid/nested_handlers",
+    "loop-outcomes/valid/on_failure_compensation",
     "loop-outcomes/valid/route_outcome_by_name",
+    // The on-failure edge: compensation to a SIBLING STEP, inside a workflow
+    // that also carries a counting loop and a `max … visits` bound.
+    "loop-outcomes/valid/ship_release_combined",
     "schema-doors/valid/import_constraints",
     "schema-doors/valid/import_nested_defs",
     "schema-doors/valid/import_ticket",
