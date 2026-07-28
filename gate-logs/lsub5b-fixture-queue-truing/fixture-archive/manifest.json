@@ -1,0 +1,28 @@
+{
+  "entry_module": "aion_outbox_fixture",
+  "entry_function": "collect_four",
+  "input_schema": {
+    "type": "object"
+  },
+  "output_schema": {},
+  "timeout": {
+    "secs": 30,
+    "nanos": 0
+  },
+  "activities": [
+    {
+      "activity_type": "fan:0"
+    },
+    {
+      "activity_type": "fan:1"
+    },
+    {
+      "activity_type": "fan:2"
+    },
+    {
+      "activity_type": "fan:3"
+    }
+  ],
+  "version": "d7af27307453c08db333e8c1dd026caf00e18794b92f8929a0b0b81cf2a32edd",
+  "format_version": 1
+}

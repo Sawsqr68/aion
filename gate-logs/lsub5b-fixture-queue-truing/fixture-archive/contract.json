@@ -1,0 +1,57 @@
+{
+  "input_schema": {
+    "type": "object"
+  },
+  "output_schema": {},
+  "workers": [
+    {
+      "task_queue": "default",
+      "actions": [
+        {
+          "name": "fan:0",
+          "input_schema": {
+            "title": "string",
+            "type": "string"
+          },
+          "output_schema": {
+            "title": "string",
+            "type": "string"
+          }
+        },
+        {
+          "name": "fan:1",
+          "input_schema": {
+            "title": "string",
+            "type": "string"
+          },
+          "output_schema": {
+            "title": "string",
+            "type": "string"
+          }
+        },
+        {
+          "name": "fan:2",
+          "input_schema": {
+            "title": "string",
+            "type": "string"
+          },
+          "output_schema": {
+            "title": "string",
+            "type": "string"
+          }
+        },
+        {
+          "name": "fan:3",
+          "input_schema": {
+            "title": "string",
+            "type": "string"
+          },
+          "output_schema": {
+            "title": "string",
+            "type": "string"
+          }
+        }
+      ]
+    }
+  ]
+}
