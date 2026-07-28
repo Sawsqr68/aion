@@ -180,8 +180,6 @@ exports: run/1, definition/0, execute/1
   v8 = call_rt aion@activity:task_queue/2(v7, lit#10) live_after=[v0]
   v9 = call_rt aion@activity:node/2(v8, lit#11) live_after=[v0]
   v10 = call_rt aion@workflow:run/1(v9) live_after=[v0]
-  v11 = call_rt aion@awl@error:map_activity_error/1(v10) live_after=[v0]
-  v12 = try_bind v11 live_after=[v0]
   tail_local step_build(v0)
 == fn step_build/1 origin=chain_step(announce.build) ==
   sig: (String) -> Result(announce_and_build.AnnounceAndBuildOutcome, AwlError)

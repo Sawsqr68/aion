@@ -13,6 +13,7 @@ pub mod monitor;
 /// Native-function registration records.
 pub mod nif;
 mod nif_activity;
+mod nif_activity_advisory;
 mod nif_activity_await;
 #[cfg(test)]
 mod nif_activity_delivery_tests;

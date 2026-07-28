@@ -169,6 +169,7 @@ fn run_collect(
         runtime: runtime.runtime,
         tokio_handle: runtime.tokio_handle,
         dispatcher: state.activity_dispatcher(),
+        advisory_catalog: state.installed_workflow_catalog(),
     };
     match collect_step(&state, &deps, pid, kind, &specs, label) {
         Ok(CollectStep::QuerySentinel(sentinel)) => {

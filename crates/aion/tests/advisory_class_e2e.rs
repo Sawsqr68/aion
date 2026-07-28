@@ -20,14 +20,15 @@
 //!   exactly as today — the non-advisory posture is unchanged by R5 and this
 //!   test is its regression pin.
 //!
-//! RED-FIRST: the first test asserts the DESIRED post-build behaviour and is
-//! expected to fail before the advisory class is built (`advisory` is not yet
-//! a config key, so the document does not even parse). The warning event is
-//! asserted through its serialized `type` discriminant rather than a Rust
-//! variant so this exhibit COMPILES against the pre-build tree and fails at
-//! run time with a readable diagnosis, instead of failing to build.
-//! The second test passes both before and after: it is the non-advisory
-//! control.
+//! RED-FIRST, and the record of it: at 65973b59 the first test FAILED (the
+//! document did not parse — `advisory` was not yet a config key) while the
+//! second passed, which is why the pair is written as one exhibit differing in
+//! one token. The warning event is still asserted through its serialized
+//! `type` discriminant rather than a Rust variant, so the exhibit reads the
+//! same name the store, the event stream, and the console read.
+//!
+//! The third test is the replay pin: the run's history — warning event and
+//! all — replays from history alone with no divergence.
 
 use std::path::Path;
 use std::sync::Arc;
@@ -158,6 +159,7 @@ impl ActivityDispatcher for OutageDispatcher {
 struct RunRecord {
     outcome: Result<Payload, aion_core::WorkflowError>,
     history: Vec<Event>,
+    run_id: aion_core::RunId,
     heartbeat_deliveries: u32,
     work_deliveries: u32,
 }
@@ -196,6 +198,7 @@ async fn run_probe(source: &str, module: &str) -> Result<RunRecord, TestError> {
         .await?;
     let workflow_id = handle.workflow_id().clone();
     let run_id = handle.run_id().clone();
+    let inspected_run = run_id.clone();
     let outcome = tokio::time::timeout(
         Duration::from_secs(60),
         engine.result(&workflow_id, &run_id),
@@ -206,6 +209,7 @@ async fn run_probe(source: &str, module: &str) -> Result<RunRecord, TestError> {
     Ok(RunRecord {
         outcome,
         history,
+        run_id: inspected_run,
         heartbeat_deliveries: dispatcher.heartbeat_deliveries(),
         work_deliveries: dispatcher.work_deliveries(),
     })
@@ -255,7 +259,10 @@ async fn advisory_exhaustion_warns_and_the_run_completes() -> TestResult {
     let result: Value = serde_json::from_slice(payload.bytes())?;
     assert_eq!(
         result,
-        json!({ "reply": "work done for packet run" }),
+        json!({
+            "outcome": "done",
+            "payload": { "reply": "work done for packet run" }
+        }),
         "the run's real work must still produce the outcome payload"
     );
 
@@ -347,6 +354,60 @@ async fn non_advisory_exhaustion_still_fails_the_run() -> TestResult {
     assert!(
         !types.iter().any(|name| name == ADVISORY_EVENT_TYPE),
         "a non-advisory failure must not emit the advisory warning: {types:?}"
+    );
+
+    Ok(())
+}
+
+/// Replay determinism after an advisory exhaustion: the recorded history —
+/// which now carries the warning event WEDGED BETWEEN the last
+/// `ActivityStarted` and the activity's terminal `ActivityFailed` — replays
+/// from history alone with no divergence, and the advisory ordinal still
+/// resolves to the same recorded terminal it resolved to live.
+///
+/// This is the pin the ordering choice needs. The warning is recorded by the
+/// dispatch-side retry loop just before the failure is delivered, so it lands
+/// BEFORE the terminal the workflow thread records on receipt. If it landed
+/// after, it would be the last event of the ordinal's matched range and replay
+/// would read the run's outcome off a warning instead of off the failure.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn advisory_exhaustion_replays_from_history_without_divergence() -> TestResult {
+    let record = run_probe(ADVISORY, ADVISORY_MODULE).await?;
+    let inspection =
+        aion::durability::replay_inspect::inspect_run(record.history.clone(), &record.run_id)?;
+
+    assert!(
+        inspection.divergence.is_none(),
+        "an advisory exhaustion must replay from history alone with no divergence: {:#?}",
+        inspection.divergence
+    );
+
+    // The warning is present in the projected trail...
+    assert!(
+        inspection
+            .steps
+            .iter()
+            .any(|step| step.event_kind == ADVISORY_EVENT_TYPE),
+        "the replay projection must carry the advisory warning: {:?}",
+        inspection
+            .steps
+            .iter()
+            .map(|step| step.event_kind)
+            .collect::<Vec<_>>()
+    );
+    // ...and it did not displace the terminal the ordinal resolves to.
+    let resolved_terminal = inspection.steps.iter().any(|step| {
+        matches!(
+            &step.projection,
+            aion::durability::replay_inspect::StepProjection::Resolved(
+                aion::durability::Resolution::ActivityFailedTerminal(error)
+            ) if error.message == "retryable:meridian unreachable (delivery attempt 2)"
+        )
+    });
+    assert!(
+        resolved_terminal,
+        "the advisory ordinal must still resolve to its recorded terminal failure: {:#?}",
+        inspection.steps
     );
 
     Ok(())

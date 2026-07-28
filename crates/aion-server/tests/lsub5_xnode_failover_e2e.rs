@@ -235,6 +235,7 @@ fn fixture_action_contract(name: &str) -> Result<ActionContract, TestError> {
         node: None,
         timeout: None,
         retry: None,
+        advisory: false,
     })
 }
 

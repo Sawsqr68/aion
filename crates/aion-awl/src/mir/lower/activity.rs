@@ -145,6 +145,15 @@ pub(super) fn activity_call(
         stmts,
         call.name_span,
     );
+    // R5: an ADVISORY call is routed AROUND the fault arm. The dispatch still
+    // runs, still retries to exhaustion, and still records its honest terminal
+    // `ActivityFailed`; the `Result` it hands back is simply not threaded into
+    // the flow's error path, so a spent side channel cannot fault the step
+    // that called it. The checker has already refused any binding of an
+    // advisory result, so nothing downstream reads this var.
+    if declared_advisory(ctx, call.name.as_str()) {
+        return Ok(ran);
+    }
     let mapped = call_rt(
         ctx,
         RuntimeFn::MapActivityError,
@@ -160,6 +169,18 @@ pub(super) fn activity_call(
         span: Span::from_source(call.name_span),
     });
     Ok(bound)
+}
+
+/// Whether the named action's DECLARATION carries the `advisory` marker.
+///
+/// Declaration-only by construction: the call-site config line is not
+/// consulted, and the checker refuses `advisory` there.
+fn declared_advisory(ctx: &Ctx<'_>, name: &str) -> bool {
+    ctx.emitter.actions.get(name).is_some_and(|&(_, decl)| {
+        decl.config
+            .as_ref()
+            .is_some_and(|config| config.advisory.is_some())
+    })
 }
 
 /// Apply config in the reference's per-key merge and order

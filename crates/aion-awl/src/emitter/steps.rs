@@ -370,6 +370,14 @@ fn layer_calls<'a>(
         if !emitter.actions.contains_key(call.call.name.as_str()) {
             return None;
         }
+        // R5: an advisory call is not a layer-completion dependency. Its
+        // result is never consumed and its failure never faults the step, so
+        // it must not join a `workflow.all` whose whole purpose is to gate the
+        // layer on every member's outcome; the layer falls back to written
+        // order and the advisory call keeps its around-the-fault-arm form.
+        if super::stmts::declared_advisory(emitter, call.call.name.as_str()) {
+            return None;
+        }
         calls.push(call);
     }
     Some(calls)

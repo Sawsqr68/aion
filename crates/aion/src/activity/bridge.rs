@@ -60,6 +60,16 @@ pub struct ActivityDispatch {
     /// the ops console can show what a dispatch is working on. `BTreeMap` keeps
     /// the rendered order stable.
     pub labels: BTreeMap<String, String>,
+    /// Whether the DECLARATION classes this activity as advisory: a side
+    /// channel whose exhaustion warns on the run and never faults the calling
+    /// step (RUNTIME-OPERATIONS.md R5).
+    ///
+    /// Resolved at the schedule seam from the package contract this run is
+    /// pinned to (`nif_activity_advisory`), never from the dispatch config the
+    /// SDK builds — the class is declaration-owned and a call site cannot
+    /// forge it. Dispatchers ignore it; it exists so the retry loop knows to
+    /// record the warning when the attempt budget is spent.
+    pub advisory: bool,
 }
 
 /// Executes an activity request originating from workflow code.
@@ -140,6 +150,7 @@ mod tests {
             config: "{}".to_owned(),
             attempt: 1,
             labels: BTreeMap::new(),
+            advisory: false,
         }
     }
 

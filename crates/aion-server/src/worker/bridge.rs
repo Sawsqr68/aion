@@ -1166,6 +1166,11 @@ impl WorkerActivityDispatcher {
             config: _,
             attempt,
             labels,
+            // R5 advisory class: engine-side only. The wire carries no such
+            // field and a worker's behaviour is identical either way — the
+            // class governs how the ENGINE treats the failure, never how the
+            // work is done.
+            advisory: _,
         } = request;
         let started_at = Instant::now();
         self.ensure_accepting(&namespace, &name, &workflow_id, &activity_id, None)?;
@@ -1843,6 +1848,7 @@ mod tests {
             config: "{}".to_owned(),
             attempt: 1,
             labels: std::collections::BTreeMap::new(),
+            advisory: false,
         }
     }
 

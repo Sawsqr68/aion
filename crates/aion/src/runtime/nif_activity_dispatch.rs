@@ -74,12 +74,14 @@ pub(super) fn dispatch_activity_impl(
         Err(error) => return Ok(context_error_term(ctx, &error)),
     };
     let dispatcher = state.activity_dispatcher();
+    let advisory_catalog = state.installed_workflow_catalog();
     dispatch_activity_with_context(
         ctx,
         context,
         dispatcher,
         runtime.runtime,
         &runtime.tokio_handle,
+        advisory_catalog.as_deref(),
         ActivityCall {
             name,
             input,
@@ -189,6 +191,7 @@ fn dispatch_activity_with_context(
     dispatcher: Option<Arc<dyn ActivityDispatcher>>,
     runtime: Arc<crate::RuntimeHandle>,
     tokio_handle: &tokio::runtime::Handle,
+    advisory_catalog: Option<&crate::loader::WorkflowCatalog>,
     call: ActivityCall,
 ) -> Result<Term, Term> {
     let input_payload = json_payload(ctx, &call.input, "dispatch_activity", "input")?;
@@ -257,6 +260,13 @@ fn dispatch_activity_with_context(
                 },
             )?;
             let labels = labels_from_config(&call.config);
+            // R5: the declared class comes off the contract this run is pinned
+            // to, never off the dispatch config the SDK builds.
+            let advisory = super::nif_activity_advisory::declared_advisory(
+                advisory_catalog,
+                &context.workflow_handle(),
+                &call.name,
+            );
             let request = ActivityDispatch {
                 namespace,
                 task_queue,
@@ -269,6 +279,7 @@ fn dispatch_activity_with_context(
                 config: call.config,
                 attempt,
                 labels,
+                advisory,
             };
             spawn_completion_task(
                 tokio_handle,

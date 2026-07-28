@@ -426,6 +426,7 @@ fn dispatch_request(
         config: "{}".to_owned(),
         attempt: 1,
         labels: BTreeMap::new(),
+        advisory: false,
     }
 }
 
