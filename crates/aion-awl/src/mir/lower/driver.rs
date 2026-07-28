@@ -186,6 +186,7 @@ pub fn lower(document: &Document, root: Option<&Path>) -> Result<MirModule, Lowe
         loops: super::loops::LoopSlots::new(skeleton.plan.loops.clone()),
         forks: super::slots::ForkSlots::new(skeleton.plan.forks.clone()),
         waits: super::slots::WaitSlots::new(skeleton.plan.waits.clone()),
+        compensations: super::slots::CompensationSlots::new(skeleton.plan.compensations.clone()),
     };
     let host_flow = flow::FlowCtx {
         steps: &document.steps,
@@ -216,11 +217,13 @@ pub fn lower(document: &Document, root: Option<&Path>) -> Result<MirModule, Lowe
     )?;
     // Loop bodies fill their skeleton-reserved slots after every chain fn;
     // fork-lifted bodies follow after every loop fn, wait-lifted bodies
-    // after every fork fn (the reserved order).
+    // after every fork fn, and lifted compensation bodies after every wait
+    // fn (the reserved order).
     slots.loops.append_into(&mut skeleton.functions)?;
     slots.forks.append_into(&mut skeleton.functions)?;
     slots.waits.append_into(&mut skeleton.functions)?;
-    // Implicit-child adapter shells follow every wait slot (ascending region
+    slots.compensations.append_into(&mut skeleton.functions)?;
+    // Implicit-child adapter shells follow every compensation slot (ascending region
     // id), before the fixed helpers.
     for shell in super::nested::adapter_shells(&ctx, &skeleton.plan)? {
         skeleton.functions.push(shell);

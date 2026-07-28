@@ -20,31 +20,65 @@ fn lower_source(source: &str) -> Result<Result<MirModule, LowerError>, Box<dyn s
     Ok(lower(&document, Some(Path::new("."))))
 }
 
-/// BC-4 adversarial fixture `nested_handlers` is out-of-intersection: the
-/// reference emitter accepts its `on failure` region, but the direct path does
-/// not yet lower `on failure`, so it refuses with the reference class anchored
-/// to the guarding step `fulfil`. The COMPLETE span (start/end/line/column) is
-/// pinned so range or column drift also fails, not just the line. Kept as a
-/// refusal ratchet so a future `on failure` lowering flips this pin loudly.
+/// The retired `on failure` refusal: `nested_handlers` was the exact-span pin
+/// for the whole class while the direct path refused every `on failure`
+/// block. The edge now lowers (`lower/failure.rs`), so the pin flips to a
+/// lowering + verify coverage pin (the same promotion as
+/// `guard_optional_wait_now_lowers`) — and the SUBSTEP half of the deferral
+/// keeps its own exact-span pin below, so retiring the top-level refusal can
+/// never retire the substep one by accident.
 #[test]
-fn bc4_nested_handlers_refuses_on_failure() -> Result<(), Box<dyn std::error::Error>> {
+fn nested_handlers_on_failure_now_lowers() -> Result<(), Box<dyn std::error::Error>> {
     let path = manifest_dir().join("tests/fixtures/rev2/loop-outcomes/valid/nested_handlers.awl");
-    match lower_fixture(&path)? {
-        Err(LowerError::Unsupported { shape, span }) => {
-            assert_eq!(shape, "on failure", "nested_handlers refusal drifted");
-            assert_eq!(
-                span,
-                crate::Span {
-                    start: 377,
-                    end: 383,
-                    line: 13,
-                    column: 6
-                },
-                "nested_handlers refusal span drifted"
-            );
-        }
-        other => {
-            return Err(format!("nested_handlers must refuse at `on failure`: {other:?}").into());
+    let module = lower_fixture(&path)??;
+    super::verify(&module)?;
+    Ok(())
+}
+
+/// The substep deferral is UNTOUCHED by the on-failure edge: both substep
+/// fixtures still refuse, each pinned to its OWN exact class and COMPLETE
+/// span (start/end/line/column), so range or column drift fails too — the
+/// pin the retired `on failure` ratchet used to carry.
+///
+/// The two refuse at different gates, and the difference is deliberate:
+/// `substep_on_failure_route_tail` carries a value route payload
+/// (`route failed("…")`), so it never reaches step lowering at all — the
+/// driver's staging gate takes it first; `substeps_two_stage` reaches
+/// `step::lower_step` and refuses at `substeps`, anchored to its guarding
+/// top-level step. A future substep lowering must retire BOTH knowingly.
+#[test]
+fn substep_fixtures_still_refuse() -> Result<(), Box<dyn std::error::Error>> {
+    for (fixture, expected_shape, expected) in [
+        (
+            "tests/fixtures/rev2/flow-shape/valid/substep_on_failure_route_tail.awl",
+            "value route payloads (`route out(<value>)`) — the rev-3 flow shape is not yet \
+             lowered (B4)",
+            crate::Span {
+                start: 513,
+                end: 531,
+                line: 20,
+                column: 43,
+            },
+        ),
+        (
+            "tests/fixtures/rev2/loop-outcomes/valid/substeps_two_stage.awl",
+            "substeps",
+            crate::Span {
+                start: 503,
+                end: 510,
+                line: 18,
+                column: 6,
+            },
+        ),
+    ] {
+        match lower_fixture(&manifest_dir().join(fixture))? {
+            Err(LowerError::Unsupported { shape, span }) => {
+                assert_eq!(shape, expected_shape, "{fixture} refusal class drifted");
+                assert_eq!(span, expected, "{fixture} refusal span drifted");
+            }
+            other => {
+                return Err(format!("{fixture} must still refuse: {other:?}").into());
+            }
         }
     }
     Ok(())
@@ -87,32 +121,19 @@ fn bc4_zero_step_workflow_refuses_no_start_region() -> Result<(), Box<dyn std::e
     Ok(())
 }
 
-/// The two combined fixtures advance to their next honest refusal instead of
-/// silently claiming coverage: `dev_brief` refuses at its dependency-parallel
-/// layer, while `ship_release_combined` — its `max … visits` bound lowered by
-/// the fan-out parity landing — now surfaces the `on failure` refusal that
-/// waited behind it.
+/// `dev_brief` still refuses at its dependency-parallel layer — the ONE
+/// remaining flow-shape gap in that fixture, unchanged by the on-failure
+/// edge. Its sibling `ship_release_combined` (whose `max … visits` bound the
+/// fan-out parity landing lowered, leaving `on failure` as its last gap) has
+/// retired from this pin into the covered ratchet.
 #[test]
-fn combined_loop_fixtures_advance_to_the_next_refusal() -> Result<(), Box<dyn std::error::Error>> {
+fn dev_brief_still_refuses_at_its_parallel_layer() -> Result<(), Box<dyn std::error::Error>> {
     let dev_brief = manifest_dir().join("tests/fixtures/rev2/flagship/valid/dev_brief.awl");
     match lower_fixture(&dev_brief)? {
         Err(LowerError::Unsupported { shape, .. }) => {
             assert_eq!(shape, "parallel region", "dev_brief refusal drifted");
         }
         other => return Err(format!("dev_brief must still refuse: {other:?}").into()),
-    }
-    let ship =
-        manifest_dir().join("tests/fixtures/rev2/loop-outcomes/valid/ship_release_combined.awl");
-    match lower_fixture(&ship)? {
-        Err(LowerError::Unsupported { shape, .. }) => {
-            assert!(
-                shape.contains("on failure"),
-                "ship_release refusal drifted: {shape}"
-            );
-        }
-        other => {
-            return Err(format!("ship_release must refuse at `on failure`: {other:?}").into());
-        }
     }
     Ok(())
 }

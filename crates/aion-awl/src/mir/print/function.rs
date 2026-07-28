@@ -54,6 +54,7 @@ fn render_origin(module: &MirModule, origin: &FnOrigin) -> String {
         FnOrigin::Loop { step, index } => format!("loop({step}#{index})"),
         FnOrigin::Fork { step, index } => format!("fork({step}#{index})"),
         FnOrigin::Wait { step, index } => format!("wait({step}#{index})"),
+        FnOrigin::Compensation { step } => format!("compensation({step})"),
         FnOrigin::ActivityWrapper { action, raw } => {
             format!("activity_wrapper({action}, raw={raw})")
         }

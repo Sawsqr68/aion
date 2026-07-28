@@ -13,6 +13,7 @@ mod collection_predicate;
 mod ctx;
 mod driver;
 mod expr;
+mod failure;
 mod fanout;
 mod fanout_action;
 mod fanout_child;

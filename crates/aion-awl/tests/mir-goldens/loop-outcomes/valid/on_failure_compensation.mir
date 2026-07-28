@@ -1,0 +1,340 @@
+module publish_assets source=publish_assets.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_render:
+    aion@activity:timeout/2 [activities] (v1, v2)
+    aion@activity:task_queue/2 [activities] (v3, lit#13)
+    aion@activity:node/2 [activities] (v4, lit#14)
+    aion@workflow:run/1 [activities] (v5)
+  step_publish:
+    aion@activity:retry/2 [activities] (v1, v4)
+    aion@activity:timeout/2 [activities] (v5, v6)
+    aion@activity:task_queue/2 [activities] (v7, lit#15)
+    aion@activity:node/2 [activities] (v8, lit#16)
+    aion@workflow:run/1 [activities] (v9)
+  publish_on_failure:
+    aion@activity:timeout/2 [activities] (v25, v26)
+    aion@activity:task_queue/2 [activities] (v27, lit#19)
+    aion@activity:node/2 [activities] (v28, lit#20)
+    aion@workflow:run/1 [activities] (v29)
+== durable families == activities
+== atoms ==
+  [0] assets
+  [1] published_ok
+  [2] publish_failed
+  [3] delete_assets_input
+  [4] push_live_input
+  [5] render_input
+  [6] publish_assets_input
+  [7] published_outcome
+  [8] ok
+  [9] fixed
+  [10] retry_policy
+  [11] awl_outcome_failure
+  [12] error
+== literals ==
+  [0] "urls"
+  [1] "count"
+  [2] "count"
+  [3] "reason"
+  [4] "assets"
+  [5] "assets"
+  [6] "bundle"
+  [7] "bundle"
+  [8] "published"
+  [9] "outcome"
+  [10] "PublishAssetsOutcome"
+  [11] "published"
+  [12] "payload"
+  [13] "publishing"
+  [14] "shell"
+  [15] "publishing"
+  [16] "shell"
+  [17] "nothing was published"
+  [18] "failed"
+  [19] "publishing"
+  [20] "shell"
+  [21] "publish failed after compensation"
+  [22] "failed"
+== types ==
+  record Assets tag=assets
+    urls: list(string)
+    count: int
+  record PublishedOk tag=published_ok
+    count: int
+  record PublishFailed tag=publish_failed
+    reason: string
+  record DeleteAssetsInput tag=delete_assets_input
+    assets: ref(Assets)
+  record PushLiveInput tag=push_live_input
+    assets: ref(Assets)
+  record RenderInput tag=render_input
+    bundle: string
+  record PublishAssetsInput tag=publish_assets_input
+    bundle: string
+  union PublishAssetsOutcome
+    published -> published_outcome(ref(PublishedOk))
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=publish_assets_input_codec output=publish_assets_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(publish_assets.PublishAssetsInput, publish_assets.PublishAssetsOutcome, AwlError)
+  T-DEF name="publish_assets" input=publish_assets_input_codec output=publish_assets_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (publish_assets.PublishAssetsInput) -> Result(publish_assets.PublishAssetsOutcome, AwlError)
+  T-EXEC fields=[bundle:String] entry=step_render args=[0]
+== fn assets_codec/0 origin=codec_template(RecordTrio, Assets, record#0) ==
+  sig: () -> Codec(publish_assets.Assets)
+  v0 = make_closure assets_to_json captures=[]
+  v1 = call_local assets_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn assets_to_json/1 origin=codec_template(RecordTrio, Assets, record#0) ==
+  sig: (publish_assets.Assets) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"urls": v1|>list_string_to_json, "count": v2|>awlc.int_to_json}
+  return v3
+== fn assets_decoder/0 origin=codec_template(RecordTrio, Assets, record#0) ==
+  sig: () -> Decoder(publish_assets.Assets)
+  v0 = call_local list_string_decoder()
+  v1 = make_closure assets_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn assets_decoder$0/1 origin=lifted(assets_decoder, #0) ==
+  sig: (List(String)) -> Decoder(publish_assets.Assets)
+  v1 = call_rt aion@awl@codec:int_decoder/0() live_after=[v0]
+  v2 = make_closure assets_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v1, v2)
+== fn assets_decoder$1/2 origin=lifted(assets_decoder, #1) ==
+  sig: (Int, List(String)) -> Decoder(publish_assets.Assets)
+  v2 = record(assets, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn published_ok_codec/0 origin=codec_template(RecordTrio, PublishedOk, record#1) ==
+  sig: () -> Codec(publish_assets.PublishedOk)
+  v0 = make_closure published_ok_to_json captures=[]
+  v1 = call_local published_ok_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn published_ok_to_json/1 origin=codec_template(RecordTrio, PublishedOk, record#1) ==
+  sig: (publish_assets.PublishedOk) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"count": v1|>awlc.int_to_json}
+  return v2
+== fn published_ok_decoder/0 origin=codec_template(RecordTrio, PublishedOk, record#1) ==
+  sig: () -> Decoder(publish_assets.PublishedOk)
+  v0 = call_rt aion@awl@codec:int_decoder/0()
+  v1 = make_closure published_ok_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v0, v1)
+== fn published_ok_decoder$0/1 origin=lifted(published_ok_decoder, #0) ==
+  sig: (Int) -> Decoder(publish_assets.PublishedOk)
+  v1 = record(published_ok, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn publish_failed_codec/0 origin=codec_template(RecordTrio, PublishFailed, record#2) ==
+  sig: () -> Codec(publish_assets.PublishFailed)
+  v0 = make_closure publish_failed_to_json captures=[]
+  v1 = call_local publish_failed_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn publish_failed_to_json/1 origin=codec_template(RecordTrio, PublishFailed, record#2) ==
+  sig: (publish_assets.PublishFailed) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"reason": v1|>awlc.string_to_json}
+  return v2
+== fn publish_failed_decoder/0 origin=codec_template(RecordTrio, PublishFailed, record#2) ==
+  sig: () -> Decoder(publish_assets.PublishFailed)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure publish_failed_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v0, v1)
+== fn publish_failed_decoder$0/1 origin=lifted(publish_failed_decoder, #0) ==
+  sig: (String) -> Decoder(publish_assets.PublishFailed)
+  v1 = record(publish_failed, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn delete_assets_input_codec/0 origin=codec_template(RecordTrio, DeleteAssetsInput, record#3) ==
+  sig: () -> Codec(publish_assets.DeleteAssetsInput)
+  v0 = make_closure delete_assets_input_to_json captures=[]
+  v1 = call_local delete_assets_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn delete_assets_input_to_json/1 origin=codec_template(RecordTrio, DeleteAssetsInput, record#3) ==
+  sig: (publish_assets.DeleteAssetsInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"assets": v1|>assets_to_json}
+  return v2
+== fn delete_assets_input_decoder/0 origin=codec_template(RecordTrio, DeleteAssetsInput, record#3) ==
+  sig: () -> Decoder(publish_assets.DeleteAssetsInput)
+  v0 = call_local assets_decoder()
+  v1 = make_closure delete_assets_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+== fn delete_assets_input_decoder$0/1 origin=lifted(delete_assets_input_decoder, #0) ==
+  sig: (publish_assets.Assets) -> Decoder(publish_assets.DeleteAssetsInput)
+  v1 = record(delete_assets_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn push_live_input_codec/0 origin=codec_template(RecordTrio, PushLiveInput, record#4) ==
+  sig: () -> Codec(publish_assets.PushLiveInput)
+  v0 = make_closure push_live_input_to_json captures=[]
+  v1 = call_local push_live_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn push_live_input_to_json/1 origin=codec_template(RecordTrio, PushLiveInput, record#4) ==
+  sig: (publish_assets.PushLiveInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"assets": v1|>assets_to_json}
+  return v2
+== fn push_live_input_decoder/0 origin=codec_template(RecordTrio, PushLiveInput, record#4) ==
+  sig: () -> Decoder(publish_assets.PushLiveInput)
+  v0 = call_local assets_decoder()
+  v1 = make_closure push_live_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#5, v0, v1)
+== fn push_live_input_decoder$0/1 origin=lifted(push_live_input_decoder, #0) ==
+  sig: (publish_assets.Assets) -> Decoder(publish_assets.PushLiveInput)
+  v1 = record(push_live_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn render_input_codec/0 origin=codec_template(RecordTrio, RenderInput, record#5) ==
+  sig: () -> Codec(publish_assets.RenderInput)
+  v0 = make_closure render_input_to_json captures=[]
+  v1 = call_local render_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn render_input_to_json/1 origin=codec_template(RecordTrio, RenderInput, record#5) ==
+  sig: (publish_assets.RenderInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"bundle": v1|>awlc.string_to_json}
+  return v2
+== fn render_input_decoder/0 origin=codec_template(RecordTrio, RenderInput, record#5) ==
+  sig: () -> Decoder(publish_assets.RenderInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure render_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
+== fn render_input_decoder$0/1 origin=lifted(render_input_decoder, #0) ==
+  sig: (String) -> Decoder(publish_assets.RenderInput)
+  v1 = record(render_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn publish_assets_input_codec/0 origin=codec_template(RecordTrio, PublishAssetsInput, record#6) ==
+  sig: () -> Codec(publish_assets.PublishAssetsInput)
+  v0 = make_closure publish_assets_input_to_json captures=[]
+  v1 = call_local publish_assets_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn publish_assets_input_to_json/1 origin=codec_template(RecordTrio, PublishAssetsInput, record#6) ==
+  sig: (publish_assets.PublishAssetsInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"bundle": v1|>awlc.string_to_json}
+  return v2
+== fn publish_assets_input_decoder/0 origin=codec_template(RecordTrio, PublishAssetsInput, record#6) ==
+  sig: () -> Decoder(publish_assets.PublishAssetsInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure publish_assets_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#7, v0, v1)
+== fn publish_assets_input_decoder$0/1 origin=lifted(publish_assets_input_decoder, #0) ==
+  sig: (String) -> Decoder(publish_assets.PublishAssetsInput)
+  v1 = record(publish_assets_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn publish_assets_outcome_codec/0 origin=codec_template(UnionTrio, PublishAssetsOutcome, union#7) ==
+  sig: () -> Codec(publish_assets.PublishAssetsOutcome)
+  v0 = make_closure publish_assets_outcome_to_json captures=[]
+  v1 = call_local publish_assets_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn publish_assets_outcome_to_json/1 origin=codec_template(UnionTrio, PublishAssetsOutcome, union#7) ==
+  sig: (publish_assets.PublishAssetsOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#8|>awlc.string_to_json, "payload": v1|>published_ok_to_json}
+  return v2
+== fn publish_assets_outcome_decoder/0 origin=codec_template(UnionTrio, PublishAssetsOutcome, union#7) ==
+  sig: () -> Decoder(publish_assets.PublishAssetsOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure publish_assets_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#9, v0, v1)
+== fn publish_assets_outcome_decoder$outcome/1 origin=lifted(publish_assets_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(publish_assets.PublishAssetsOutcome)
+  if cmp Eq v0 lit#11:
+    v3 = call_local published_ok_decoder()
+    v4 = make_closure publish_assets_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#12, v3, v4)
+  else:
+    v1 = record(published_ok, [0])
+    v2 = record(published_outcome, [v1])
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#10)
+== fn publish_assets_outcome_decoder$arm0/1 origin=lifted(publish_assets_outcome_decoder, #1) ==
+  sig: (publish_assets.PublishedOk) -> Decoder(publish_assets.PublishAssetsOutcome)
+  v1 = record(published_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn list_string_codec/0 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: () -> Codec(List(String))
+  v0 = make_closure list_string_to_json captures=[]
+  v1 = call_local list_string_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn list_string_to_json/1 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: (List(String)) -> Json
+  v1 = make_closure list_string_to_json$item captures=[]
+  tail_rt gleam@json:array/2(v0, v1)
+== fn list_string_decoder/0 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: () -> Decoder(List(String))
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  tail_rt gleam@dynamic@decode:list/1(v0)
+== fn list_string_to_json$item/1 origin=lifted(list_string_to_json, #0) ==
+  sig: (String) -> Json
+  tail_rt aion@awl@codec:string_to_json/1(v0)
+== fn delete_assets_activity/1 origin=activity_wrapper(delete_assets, raw=false) ==
+  sig: (publish_assets.Assets) -> Activity(publish_assets.DeleteAssetsInput, Nil)
+  T-ACT action=delete_assets input_codec=delete_assets_input_codec return=awlc.nil_codec
+== fn push_live_activity/1 origin=activity_wrapper(push_live, raw=false) ==
+  sig: (publish_assets.Assets) -> Activity(publish_assets.PushLiveInput, publish_assets.Assets)
+  T-ACT action=push_live input_codec=push_live_input_codec return=assets_codec
+== fn render_activity/1 origin=activity_wrapper(render, raw=false) ==
+  sig: (String) -> Activity(publish_assets.RenderInput, publish_assets.Assets)
+  T-ACT action=render input_codec=render_input_codec return=assets_codec
+== fn step_render/1 origin=region(render) ==
+  sig: (String) -> Result(publish_assets.PublishAssetsOutcome, AwlError)
+  v1 = call_local render_activity(v0)
+  v2 = call_rt aion@duration:milliseconds/1(900000) live_after=[v1]
+  v3 = call_rt aion@activity:timeout/2(v1, v2)
+  v4 = call_rt aion@activity:task_queue/2(v3, lit#13)
+  v5 = call_rt aion@activity:node/2(v4, lit#14)
+  v6 = call_rt aion@workflow:run/1(v5)
+  v7 = call_rt aion@awl@error:map_activity_error/1(v6)
+  v8 = try_bind v7
+  tail_local step_publish(v8)
+== fn step_publish/1 origin=chain_step(render.publish) ==
+  sig: (publish_assets.Assets) -> Result(publish_assets.PublishAssetsOutcome, AwlError)
+  v1 = call_local push_live_activity(v0) live_after=[v0]
+  v2 = call_rt aion@duration:milliseconds/1(15000) live_after=[v0, v1]
+  v3 = record(fixed, [v2])
+  v4 = record(retry_policy, [3, v3])
+  v5 = call_rt aion@activity:retry/2(v1, v4) live_after=[v0]
+  v6 = call_rt aion@duration:milliseconds/1(300000) live_after=[v0, v5]
+  v7 = call_rt aion@activity:timeout/2(v5, v6) live_after=[v0]
+  v8 = call_rt aion@activity:task_queue/2(v7, lit#15) live_after=[v0]
+  v9 = call_rt aion@activity:node/2(v8, lit#16) live_after=[v0]
+  v10 = call_rt aion@workflow:run/1(v9) live_after=[v0]
+  v11 = call_rt aion@awl@error:map_activity_error/1(v10) live_after=[v0]
+  if is_tagged v11 ok/2:
+    v12 = field(v11, 1)
+    v14 = field(v12, 2)
+    v13 = cmp Gt v14 0
+    if is_true v13:
+      v15 = field(v12, 2)
+      v16 = record(published_ok, [v15])
+      v17 = record(published_outcome, [v16])
+      v18 = record(ok, [v17])
+      return v18
+    else:
+      v19 = record(publish_failed, [lit#17])
+      v20 = call_local publish_failed_to_json(v19)
+      v21 = call_rt gleam@json:to_string/1(v20)
+      v22 = record(awl_outcome_failure, [lit#18, v21])
+      v23 = record(error, [v22])
+      return v23
+  else:
+    tail_local publish_on_failure(v0)
+== fn publish_on_failure/1 origin=compensation(publish) ==
+  sig: (publish_assets.Assets) -> Result(publish_assets.PublishAssetsOutcome, AwlError)
+  v25 = call_local delete_assets_activity(v24)
+  v26 = call_rt aion@duration:milliseconds/1(300000) live_after=[v25]
+  v27 = call_rt aion@activity:timeout/2(v25, v26)
+  v28 = call_rt aion@activity:task_queue/2(v27, lit#19)
+  v29 = call_rt aion@activity:node/2(v28, lit#20)
+  v30 = call_rt aion@workflow:run/1(v29)
+  v31 = call_rt aion@awl@error:map_activity_error/1(v30)
+  v32 = try_bind v31
+  v33 = record(publish_failed, [lit#21])
+  v34 = call_local publish_failed_to_json(v33)
+  v35 = call_rt gleam@json:to_string/1(v34)
+  v36 = record(awl_outcome_failure, [lit#22, v35])
+  v37 = record(error, [v36])
+  return v37
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD

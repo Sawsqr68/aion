@@ -59,7 +59,7 @@ pub(super) struct FlowCtx<'a> {
 }
 
 impl FlowCtx<'_> {
-    fn origin_step(&self, step: &str) -> String {
+    pub(super) fn origin_step(&self, step: &str) -> String {
         match &self.label {
             Some(label) => format!("{label}::{step}"),
             None => step.to_owned(),
@@ -213,6 +213,25 @@ fn lower_chain_step(
         )?),
         None => None,
     };
+    // The `on failure` edge is planned BEFORE the body lowers: its call
+    // arguments are the step's `avail_in`, read from the scope as it stands
+    // here — after the visit prologue's counter rebind, before any statement
+    // rebinds a name (the reference clones exactly this scope into its
+    // compensation arm).
+    let edge = match &chain.step.on_failure {
+        Some(on_failure) => Some((
+            on_failure,
+            super::failure::plan_edge(
+                ctx,
+                chain.step,
+                on_failure,
+                chain.param_names,
+                &scope,
+                slots,
+            )?,
+        )),
+        None => None,
+    };
     let body = lower_step(
         ctx,
         env,
@@ -222,6 +241,25 @@ fn lower_chain_step(
         chain.region_last,
         slots,
     )?;
+    // The compensation function is built after the body so the step's own
+    // vars stay contiguous; the guard then rewrites every fallible result in
+    // the body into a test whose failure arm tail-calls it.
+    let body = match edge {
+        Some((on_failure, edge)) => {
+            let body = super::failure::guard(body, &edge);
+            super::failure::lower_compensation(
+                ctx,
+                env,
+                chain.step,
+                on_failure,
+                chain.param_names,
+                &edge,
+                slots,
+            )?;
+            body
+        }
+        None => body,
+    };
     let body = match guard {
         Some((test, error_block)) => Block {
             stmts: prologue,

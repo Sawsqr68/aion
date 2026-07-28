@@ -113,6 +113,12 @@ pub(super) struct FnPlan {
     /// descending into loop bodies). All wait slots follow every fork slot,
     /// so modules without timeout waits keep byte-identical refs.
     pub(super) waits: Vec<FnRef>,
+    /// One reserved slot per top-level step carrying an `on failure` block —
+    /// its lifted compensation `FlowFn` (`failure::lower_compensation`) — in
+    /// the same traversal order as the pools above. All compensation slots
+    /// follow every wait slot, so modules without the failure edge keep
+    /// byte-identical refs.
+    pub(super) compensations: Vec<FnRef>,
     /// The fixed child witness function passed to string-name child spawns,
     /// present exactly when a reachable child spawn form needs it.
     pub(super) child_witness: Option<FnRef>,
@@ -257,6 +263,7 @@ pub(super) fn skeleton(ctx: &mut Ctx<'_>) -> Result<Skeleton, LowerError> {
         forks: slots.forks,
         signals: signal_refs,
         waits: slots.waits,
+        compensations: slots.compensations,
         child_witness,
         predicate_start,
     };

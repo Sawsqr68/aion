@@ -357,10 +357,14 @@ step second_pass
 /// structured fields and rendered prose both identical.
 #[test]
 fn refusal_passthrough_is_lossless() -> TestResult {
-    let (source, root) = read(&fixture("loop-outcomes/valid/on_failure_compensation.awl"))?;
+    // Repointed at the SUBSTEP deferral when the `on failure` edge landed
+    // (`aion-awl/src/mir/lower/failure.rs`): this obligation needs a fixture
+    // the direct path still refuses, and substeps are the remaining
+    // step-shaped one. It self-documents its own next flip.
+    let (source, root) = read(&fixture("loop-outcomes/valid/substeps_two_stage.awl"))?;
     let document = aion_awl::parse(&source)?;
     let Err(mir_error) = lower(&document, Some(&root)) else {
-        return Err("on_failure_compensation now lowers; pick a refused fixture".into());
+        return Err("substeps_two_stage now lowers; pick a refused fixture".into());
     };
     let LowerError::Unsupported { shape, span } = &mir_error else {
         return Err(format!("expected an unsupported refusal, got {mir_error:?}").into());
@@ -382,7 +386,7 @@ fn refusal_passthrough_is_lossless() -> TestResult {
                 }
             }
         }
-        Ok(_) => return Err("on_failure_compensation unexpectedly compiled".into()),
+        Ok(_) => return Err("substeps_two_stage unexpectedly compiled".into()),
     }
     Ok(())
 }

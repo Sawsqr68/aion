@@ -1,7 +1,9 @@
 //! Step-body and statement lowering (split from `flow` for the 500-line law):
 //! one step's statements in written order, the step tail (outcome clauses,
 //! chain fall-through, or the flow end), and the per-statement dispatch every
-//! nested body (`loops`, `fork_named`) reuses.
+//! nested body (`loops`, `fork_named`, `failure`) reuses. A step's `on
+//! failure` edge is layered over this body by `failure`, invoked from
+//! `flow::lower_chain_step`.
 //!
 //! Still deferred (`LowerError::unsupported`, visible incompleteness — never
 //! silent divergence from the reference):
@@ -9,9 +11,6 @@
 //!   `sub_params`/`sub_node`, sibling/parent route frames, `on failure`
 //!   interaction — reference `emitter/subs.rs:20-60`) — `FnOrigin::SubStep`
 //!   already exists;
-//! - `on failure`: needs the reserved `Stmt::Attempt` select emission —
-//!   instruction selection refuses it (`select/flow.rs::unsupported_stmt`),
-//!   so support is select-surface work beyond lowering scope;
 //! - `subflow` declarations and value route payloads (`route out(<value>)`):
 //!   refused at the driver's staging gate;
 //! - dependency-parallel region layers (`parallel region`) — see the design
@@ -56,9 +55,6 @@ pub(super) fn lower_step(
     region_last: usize,
     slots: &mut Slots,
 ) -> Result<Block, LowerError> {
-    if step.on_failure.is_some() {
-        return Err(LowerError::unsupported("on failure", step.name_span));
-    }
     if step.body.iter().any(|s| matches!(s, Statement::SubStep(_))) {
         return Err(LowerError::unsupported("substeps", step.name_span));
     }
