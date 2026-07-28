@@ -69,9 +69,9 @@ use super::dispatch::{ActivityCompletion, ActivityCompletionOutcome, ActivityCom
 use super::envelope::{CompletionFences, CompletionToken, idempotency_key};
 use super::heartbeat::{HeartbeatTracker, InFlightActivity};
 use super::queue_service::{
-    DeliveryRefusal, ExpiredClock, PARK_POLL_INTERVAL, QueueDeclarationSource, QueueServiceConfig,
-    QueueServiceReason, QueueServiceState, SelectionRefusal, ServiceAddress, ServiceWait,
-    WorkerUnavailable, deliver_within_schedule_to_start, select_worker_or_refuse,
+    DeliveryRefusal, ExpiredClock, PARK_POLL_INTERVAL, PoolCensus, QueueDeclarationSource,
+    QueueServiceConfig, QueueServiceReason, QueueServiceState, SelectionRefusal, ServiceAddress,
+    ServiceWait, WorkerUnavailable, deliver_within_schedule_to_start, select_worker_or_refuse,
 };
 use super::registry::{
     ConnectedWorkerRegistry, WorkerDelivery, WorkerHandle, WorkerId, WorkerMessage,
@@ -731,6 +731,12 @@ impl WorkerActivityDispatcher {
                 }
                 Err(reason)
             }
+            // The liminal leg has no bounded intake queue to saturate: the push
+            // either enqueues on the worker's live connection or fails
+            // synchronously because that connection is already gone. There is
+            // therefore no schedule-to-start window to apply here, and reporting
+            // `SATURATED` for a push failure would name a condition that did not
+            // happen.
             #[cfg(feature = "liminal-transport")]
             WorkerDelivery::Liminal(delivery) => self.send_liminal_activity_task(
                 worker.id(),
@@ -756,6 +762,8 @@ impl WorkerActivityDispatcher {
     ) -> (&'static str, String) {
         match refusal {
             DeliveryRefusal::Saturated { waited } => {
+                // A census failure must not swallow the refusal: report the
+                // saturation with an empty census and say why it is empty.
                 let census = self
                     .registry
                     .pool_census(
@@ -764,7 +772,17 @@ impl WorkerActivityDispatcher {
                         &address.activity_type,
                         address.node.as_deref(),
                     )
-                    .unwrap_or_default();
+                    .unwrap_or_else(|error| {
+                        tracing::error!(
+                            namespace = %address.namespace,
+                            task_queue = %address.task_queue,
+                            activity_type = %address.activity_type,
+                            %error,
+                            "poller census failed while reporting a saturated queue; \
+                             the refusal carries an empty census"
+                        );
+                        PoolCensus::default()
+                    });
                 let unavailable = WorkerUnavailable {
                     reason: QueueServiceReason::Saturated,
                     clock: Some(ExpiredClock::ScheduleToStart),
