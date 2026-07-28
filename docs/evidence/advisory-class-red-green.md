@@ -203,6 +203,16 @@ own lane. Note also that the rule as scouted only reaches CALL statements;
 `worker_retry_backoff.awl` shows a retrying action used as a PIPE stage, so
 the eventual rule must cover both positions.
 
+**Standing of §2.3's edge rule (landing ruling, 2026-07-28): TRUE AS WRITTEN
+BUT NOT YET MACHINE-ENFORCED.** The requirement remains the authored contract
+of record — a workflow author must still route non-advisory retry exhaustion
+through an `on failure` edge — but no checker refuses its absence today, and
+no reader may assume one does. The enforcement chain, in order: (1) the
+`on failure` lowering lane in the direct/MIR backend (boarded, dispatches
+after the R4 retry-counting lane), then (2) the checker edge rule as its
+dependent, widened to cover retrying actions in both CALL and PIPE-stage
+positions. Bundle A §2.3 carries the matching margin note.
+
 ## Out of scope — flagged, not fixed
 
 - **tree-sitter-awl grammar** (cross-repo): `advisory` is not in the editor
