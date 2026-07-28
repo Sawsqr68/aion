@@ -1,0 +1,9 @@
+   Compiling aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 52.23s
+     Running tests/unserved_queue_honesty.rs (target/debug/deps/unserved_queue_honesty-71495b5c465b0536)
+
+running 1 test
+test parked_dispatch_on_an_unserved_queue_states_its_reason_at_warn ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.52s
+

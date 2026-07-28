@@ -68,6 +68,11 @@ use dashmap::DashMap;
 use super::dispatch::{ActivityCompletion, ActivityCompletionOutcome, ActivityCompletionSink};
 use super::envelope::{CompletionFences, CompletionToken, idempotency_key};
 use super::heartbeat::{HeartbeatTracker, InFlightActivity};
+use super::queue_service::{
+    DeliveryRefusal, ExpiredClock, PARK_POLL_INTERVAL, QueueDeclarationSource, QueueServiceConfig,
+    QueueServiceReason, QueueServiceState, SelectionRefusal, ServiceAddress, ServiceWait,
+    WorkerUnavailable, deliver_within_schedule_to_start, select_worker_or_refuse,
+};
 use super::registry::{
     ConnectedWorkerRegistry, WorkerDelivery, WorkerHandle, WorkerId, WorkerMessage,
 };
@@ -392,6 +397,15 @@ pub struct WorkerActivityDispatcher {
     /// console's live-attempts enumeration) can see and target it. `None`
     /// (isolated tests) binds nothing.
     attempt_owners: Option<super::intervention::AttemptOwnerIndex>,
+    /// R1 service policies and the two service clocks. Default: `strict` with
+    /// no clocks — refuse the structurally unservable, wait (loudly) for
+    /// everything else, and invent no deadline the operator never wrote.
+    queue_service: QueueServiceConfig,
+    /// Deployed queue declarations, installed once the engine exists. Answers
+    /// `Unknown` until then, and `Unknown` never refuses anything.
+    queue_declarations: QueueDeclarationSource,
+    /// Live unserved-queue state a parked dispatch publishes itself into.
+    queue_state: QueueServiceState,
 }
 
 impl std::fmt::Debug for WorkerActivityDispatcher {
@@ -424,7 +438,35 @@ impl WorkerActivityDispatcher {
             drain_state: DrainState::default(),
             tokio_handle: None,
             attempt_owners: None,
+            queue_service: QueueServiceConfig::default(),
+            queue_declarations: QueueDeclarationSource::default(),
+            queue_state: QueueServiceState::default(),
         }
+    }
+
+    /// Share the operator's R1 queue-service settings: the default policy, the
+    /// written per-queue `durable_pending` opt-ins, and the two clocks.
+    #[must_use]
+    pub fn with_queue_service(mut self, queue_service: QueueServiceConfig) -> Self {
+        self.queue_service = queue_service;
+        self
+    }
+
+    /// Share the queue-declaration source the boot path fills in once the
+    /// engine exists (the handle is cloneable; installing on any clone is
+    /// visible here).
+    #[must_use]
+    pub fn with_queue_declarations(mut self, queue_declarations: QueueDeclarationSource) -> Self {
+        self.queue_declarations = queue_declarations;
+        self
+    }
+
+    /// Share the queue-service state so the server can read which addresses are
+    /// unserved and which runs are parked on them.
+    #[must_use]
+    pub fn with_queue_state(mut self, queue_state: QueueServiceState) -> Self {
+        self.queue_state = queue_state;
+        self
     }
 
     /// Share the server's NOI-6 attempt→owner back-index so liminal-delivered
@@ -490,75 +532,88 @@ impl WorkerActivityDispatcher {
             })
     }
 
-    /// Select a worker for the namespace and activity type, waiting if none is
-    /// currently available. Blocks until a matching worker registers or the
-    /// server begins draining.
+    /// Select a worker for the address, or refuse with a typed R1 reason.
+    ///
+    /// The wait itself lives in [`super::queue_service::wait`]: every selection
+    /// miss is classified against the deployed contract records and the live
+    /// poller census, published to the queue-service state, and stated at WARN.
+    /// This method owns only the two things the seam cannot delegate — the
+    /// drain gate and the runtime plumbing of one bounded park.
     fn select_worker_or_wait(
         &self,
-        namespace: &str,
-        task_queue: &str,
-        activity_type: &str,
-        node: Option<&str>,
+        address: &ServiceAddress,
         workflow_id: &WorkflowId,
         activity_id: &ActivityId,
     ) -> Result<WorkerHandle, String> {
-        loop {
-            // `node` is the OPTIONAL within-pool affinity carried on the
-            // dispatch: `Some(n)` pins selection to workers advertising node
-            // `n` (require semantics — it waits, via the no-worker path below,
-            // if none are present); `None` is unpinned and reaches any worker
-            // in the (namespace, task_queue) pool — byte-identical to the
-            // pre-NODE behaviour.
-            match self
-                .registry
-                .select_worker(namespace, task_queue, activity_type, node)
-            {
-                Ok(Some(worker)) => return Ok(worker),
-                Ok(None) => {
-                    self.ensure_accepting(
-                        namespace,
-                        activity_type,
-                        workflow_id,
-                        activity_id,
-                        None,
-                    )?;
-                    tracing::info!(
-                        namespace,
-                        activity_type,
-                        node,
-                        workflow_id = %workflow_id,
-                        activity_id = %activity_id,
-                        "no connected worker; waiting for a matching worker to register"
-                    );
-                    match &self.tokio_handle {
-                        Some(handle) => {
-                            handle.block_on(self.registry.wait_for_worker());
-                        }
-                        None => match tokio::runtime::Handle::try_current() {
-                            Ok(handle) => {
-                                handle.block_on(self.registry.wait_for_worker());
-                            }
-                            Err(_) => {
-                                std::thread::sleep(Duration::from_millis(500));
-                            }
-                        },
-                    }
-                }
-                Err(error) => {
-                    let reason = format!("registry error: {error}");
-                    log_worker_error(
-                        "WorkerRegistry",
-                        namespace,
-                        activity_type,
-                        workflow_id,
-                        activity_id,
-                        None,
-                        &reason,
-                    );
-                    return Err(reason);
+        let wait = ServiceWait {
+            registry: &self.registry,
+            declarations: &self.queue_declarations,
+            config: &self.queue_service,
+            state: &self.queue_state,
+            address,
+            workflow_id,
+            activity_id,
+        };
+        let mut accepting = || {
+            self.ensure_accepting(
+                &address.namespace,
+                &address.activity_type,
+                workflow_id,
+                activity_id,
+                None,
+            )
+        };
+        let mut park = |budget: Option<Duration>| self.park_for_worker(budget);
+        select_worker_or_refuse(&wait, &mut accepting, &mut park).map_err(|refusal| {
+            let reason = refusal.reason_string();
+            // The drain gate already logged its own refusal at its own site;
+            // logging it twice would double-count the incident.
+            if !matches!(refusal, SelectionRefusal::NotAccepting { .. }) {
+                let error_type = match refusal {
+                    SelectionRefusal::Unavailable(_) => "WorkerUnavailable",
+                    _ => "WorkerRegistry",
+                };
+                log_worker_error(
+                    error_type,
+                    &address.namespace,
+                    &address.activity_type,
+                    workflow_id,
+                    activity_id,
+                    None,
+                    &reason,
+                );
+            }
+            reason
+        })
+    }
+
+    /// Wait once for a worker arrival, bounded by `budget` when one is given.
+    ///
+    /// `None` is the pre-R1 wait, unchanged: block until the registry signals
+    /// an arrival (or, with no runtime in reach, sleep one park interval).
+    fn park_for_worker(&self, budget: Option<Duration>) {
+        let handle = self
+            .tokio_handle
+            .clone()
+            .or_else(|| tokio::runtime::Handle::try_current().ok());
+        let Some(handle) = handle else {
+            // No runtime in reach (a plain OS thread in an isolated test):
+            // sleep the seam's park interval, clamped to the remaining budget.
+            std::thread::sleep(
+                budget.map_or(PARK_POLL_INTERVAL, |budget| budget.min(PARK_POLL_INTERVAL)),
+            );
+            return;
+        };
+        handle.block_on(async {
+            match budget {
+                None => self.registry.wait_for_worker().await,
+                Some(budget) => {
+                    // Timeout is not failure here: the caller re-classifies and
+                    // decides whether the clock has run out.
+                    drop(tokio::time::timeout(budget, self.registry.wait_for_worker()).await);
                 }
             }
-        }
+        });
     }
 
     fn track_worker_task(
@@ -635,46 +690,99 @@ impl WorkerActivityDispatcher {
         &self,
         worker: &WorkerHandle,
         task: ProtoActivityTask,
-        activity_type: &str,
+        address: &ServiceAddress,
         workflow_id: &WorkflowId,
         activity_id: &ActivityId,
         completion_token: &CompletionToken,
     ) -> Result<(), String> {
         match worker.delivery() {
             WorkerDelivery::Grpc(sender) => {
-                match sender.try_send(WorkerMessage::ActivityTask(Box::new(task))) {
-                    Ok(()) => Ok(()),
-                    Err(error) => {
-                        let worker_id = worker.id();
-                        let reason = format!("worker task channel full or closed: {error}");
-                        self.cleanup_activity(
-                            worker_id,
-                            workflow_id,
-                            activity_id,
-                            completion_token,
-                        );
-                        log_worker_error(
-                            "WorkerChannelClosed",
-                            &self.namespace,
-                            activity_type,
-                            workflow_id,
-                            activity_id,
-                            Some(worker_id),
-                            &reason,
-                        );
-                        Err(reason)
-                    }
+                let worker_id = worker.id();
+                let mut accepting = || {
+                    self.ensure_accepting(
+                        &address.namespace,
+                        &address.activity_type,
+                        workflow_id,
+                        activity_id,
+                        Some(worker_id),
+                    )
+                };
+                let handed_over = deliver_within_schedule_to_start(
+                    sender,
+                    WorkerMessage::ActivityTask(Box::new(task)),
+                    self.queue_service.schedule_to_start_timeout,
+                    &mut accepting,
+                );
+                let Err(refusal) = handed_over else {
+                    return Ok(());
+                };
+                self.cleanup_activity(worker_id, workflow_id, activity_id, completion_token);
+                let (error_type, reason) = self.hand_off_failure(&refusal, address);
+                if !matches!(refusal, DeliveryRefusal::NotAccepting { .. }) {
+                    log_worker_error(
+                        error_type,
+                        &address.namespace,
+                        &address.activity_type,
+                        workflow_id,
+                        activity_id,
+                        Some(worker_id),
+                        &reason,
+                    );
                 }
+                Err(reason)
             }
             #[cfg(feature = "liminal-transport")]
             WorkerDelivery::Liminal(delivery) => self.send_liminal_activity_task(
                 worker.id(),
                 delivery,
                 task,
-                activity_type,
+                &address.activity_type,
                 workflow_id,
                 activity_id,
             ),
+        }
+    }
+
+    /// Render one hand-off refusal into its log class and failure reason.
+    ///
+    /// `SATURATED` is the only one that becomes a typed [`WorkerUnavailable`]:
+    /// a compatible worker WAS live and would not take the task inside the
+    /// schedule-to-start clock. A full intake with no clock configured, and a
+    /// closed transport, keep the failure they always had.
+    fn hand_off_failure(
+        &self,
+        refusal: &DeliveryRefusal,
+        address: &ServiceAddress,
+    ) -> (&'static str, String) {
+        match refusal {
+            DeliveryRefusal::Saturated { waited } => {
+                let census = self
+                    .registry
+                    .pool_census(
+                        &address.namespace,
+                        &address.task_queue,
+                        &address.activity_type,
+                        address.node.as_deref(),
+                    )
+                    .unwrap_or_default();
+                let unavailable = WorkerUnavailable {
+                    reason: QueueServiceReason::Saturated,
+                    clock: Some(ExpiredClock::ScheduleToStart),
+                    waited: *waited,
+                    address: address.clone(),
+                    census,
+                };
+                ("WorkerUnavailable", unavailable.reason_string())
+            }
+            DeliveryRefusal::Full => (
+                "WorkerChannelClosed",
+                "worker task channel full or closed: no available capacity".to_owned(),
+            ),
+            DeliveryRefusal::Closed => (
+                "WorkerChannelClosed",
+                "worker task channel full or closed: channel closed".to_owned(),
+            ),
+            DeliveryRefusal::NotAccepting { reason } => ("WorkerDispatch", reason.clone()),
         }
     }
 
@@ -1043,14 +1151,13 @@ impl WorkerActivityDispatcher {
         } = request;
         let started_at = Instant::now();
         self.ensure_accepting(&namespace, &name, &workflow_id, &activity_id, None)?;
-        let worker = self.select_worker_or_wait(
-            &namespace,
-            &task_queue,
-            &name,
-            node.as_deref(),
-            &workflow_id,
-            &activity_id,
-        )?;
+        let address = ServiceAddress {
+            namespace: namespace.clone(),
+            task_queue: task_queue.clone(),
+            activity_type: name.clone(),
+            node: node.clone(),
+        };
+        let worker = self.select_worker_or_wait(&address, &workflow_id, &activity_id)?;
         let worker_id = worker.id();
         let span = info_span!(
             "activity_dispatch",
@@ -1097,7 +1204,7 @@ impl WorkerActivityDispatcher {
         self.send_activity_task(
             &worker,
             task,
-            &name,
+            &address,
             &workflow_id,
             &activity_id,
             &completion_token,

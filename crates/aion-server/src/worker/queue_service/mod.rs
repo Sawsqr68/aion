@@ -6,14 +6,23 @@ pub mod census;
 pub mod declarations;
 /// Schedule-to-start hand-off to a live worker (where `SATURATED` is emitted).
 pub mod delivery;
+/// Service policies (`strict` / `durable_pending`) and the two service clocks.
+pub mod policy;
+/// The live, queryable unserved-queue state.
+pub mod state;
 /// The four-way taxonomy and the typed `WorkerUnavailable` dispatch failure.
 pub mod taxonomy;
+/// The classification-driven selection wait.
+pub mod wait;
 
 pub use census::{PoolCensus, classify};
 pub use declarations::{
     EngineQueueDeclarations, QueueDeclaration, QueueDeclarationSource, QueueDeclarations,
 };
 pub use delivery::{DeliveryRefusal, PARK_POLL_INTERVAL, deliver_within_schedule_to_start};
+pub use policy::{QueueServiceConfig, QueueServiceOverride, QueueServicePolicy};
+pub use state::{Parked, QueueServiceState, UnservedDispatch, UnservedKey, UnservedQueue};
 pub use taxonomy::{
     ExpiredClock, QueueServiceReason, ServiceAddress, UnavailableSummary, WorkerUnavailable,
 };
+pub use wait::{SelectionRefusal, ServiceWait, select_worker_or_refuse};

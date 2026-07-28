@@ -12,6 +12,12 @@
 //! parked on an unserved queue the seam states, at WARN, WHICH of the four
 //! taxonomy states it is in and how old the last compatible poller is. It
 //! fails against the pre-R1 seam because only an unreasoned INFO is emitted.
+//!
+//! This exhibit owns its whole test binary deliberately. It reads the seam's
+//! real tracing output through a thread-scoped subscriber, and `tracing`'s
+//! default-dispatcher state is process-global: a sibling test running
+//! concurrently in the same binary can leave this thread's capture empty. The
+//! typed refusal pins live next door in `unserved_queue_policies.rs`.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
