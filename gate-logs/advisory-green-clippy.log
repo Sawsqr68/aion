@@ -1,1 +1,6 @@
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.60s
+    Checking aion-rs v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/advisory-class/crates/aion)
+    Checking aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/advisory-class/crates/aion-server)
+    Checking aion-client v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/advisory-class/crates/aion-client)
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/aion/.worktrees/advisory-class/benchmarks/million-processes)
+    Checking aion-cli v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/advisory-class/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 19.25s

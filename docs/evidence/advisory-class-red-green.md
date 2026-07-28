@@ -135,6 +135,16 @@ retroactively reclasses an in-flight run's activities. Every absence
 activity) reads as NOT advisory — the loud, pre-R5 posture, never the quiet
 one.
 
+### Both backends agree, proven by running them
+
+`awl_bc4_differential::covered_set_is_byte_identical` builds BOTH backends
+for every covered fixture (one real `gleam build`), runs both, and asserts
+byte-identical normalized trails. `declarations/valid/advisory_side_channel`
+joins the ratchet (76 → 77) and lands in the SUCCEEDED bucket on both, with
+**0 divergences** — a side channel that always fails and a run that completes
+anyway, identically on the direct and Gleam lowerings. The MIR golden shows
+the shape; the differential shows the two agree at run time.
+
 ### Replay determinism
 
 `advisory_exhaustion_replays_from_history_without_divergence` walks the
@@ -221,4 +231,6 @@ At the branch tip, in the lane worktree, logs and exit codes in `gate-logs/`
 | preflight | `df -h .` | 0 |
 | fmt | `cargo fmt --all --check` | 0 |
 | clippy | `cargo clippy --workspace --all-targets -- -D warnings` | 0 |
-| tests | `cargo test --workspace --no-fail-fast` | see `advisory-green-tests.exit` |
+| tests | `cargo test --workspace --no-fail-fast` | 0 |
+
+**2963 passed / 0 failed across 216 suites**, at branch tip `6e4d5c81`.
