@@ -1,0 +1,99 @@
+   Compiling aion-awl v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/on-failure-lowering/crates/aion-awl)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.96s
+     Running unittests src/lib.rs (target/debug/deps/aion_awl-838b7eb4f0843ad1)
+
+running 68 tests
+test mir::deferred_tests::bc4_nested_handlers_refuses_on_failure ... ok
+test mir::codec_tests::required_recursive_default_is_refused_on_both_sides ... ok
+test mir::deferred_tests::bc4_zero_step_workflow_refuses_no_start_region ... ok
+test mir::deferred_tests::ordinary_call_index_lowers_with_the_anchored_runtime_message ... ok
+test mir::deferred_tests::guard_optional_wait_now_lowers ... ok
+test mir::codec_tests::colliding_codec_stems_are_refused_not_cross_wired ... ok
+test mir::child_fork_tests::child_spawn_keeps_identity_and_outcome_envelope_codec ... ok
+test mir::child_fork_tests::parallel_child_fork_is_spawn_all_then_ordered_await_with_emitter_parity ... ok
+test mir::deferred_tests::sort_non_comparable_key_refuses_with_the_reference_class ... ok
+test mir::child_fork_tests::sequential_child_fork_matches_reference_fold_order ... ok
+test mir::deferred_tests::post_join_combinator_now_lowers ... ok
+test mir::fork_tests::collection_child_fork_config_refuses_with_the_child_class ... ok
+test mir::deferred_tests::combined_loop_fixtures_advance_to_the_next_refusal ... ok
+test mir::deferred_tests::statement_level_child_forms_plan_the_witness ... ok
+test mir::fork_tests::homogeneous_named_fork_pins_one_typed_all ... ok
+test mir::fork_tests::parallel_action_fork_pins_map_fanout_semantics ... ok
+test mir::fork_tests::named_child_branch_refuses_cleanly ... ok
+test mir::fork_tests::heterogeneous_named_fork_pins_raw_twins_and_positional_decode ... ok
+test mir::runtime::tests::enumeration_covers_every_variant_exactly_once ... ok
+test mir::fork_tests::action_and_child_collection_forks_route_distinctly ... ok
+test mir::fork_tests::fork_branch_call_site_config_lowers_with_per_key_merge ... ok
+test mir::pipe_tests::sort_string_key_selects_string_compare ... ok
+test mir::pipe_tests::pipe_child_stage_lowers_to_spawn_and_wait ... ok
+test mir::runtime::tests::import_surface_projects_the_full_enumeration ... ok
+test mir::fork_tests::stopgap_refusals_match_the_reference_classes ... ok
+test mir::pipe_tests::post_stage_any_all_lower_through_predicate_closures ... ok
+test mir::fork_tests::sequential_fork_pins_fold_initial_state_and_result_order ... ok
+test mir::select::control_tests::assert_list_badmatch_traps_the_subject_list ... ok
+test mir::pipe_tests::combinator_stages_lower_to_list_runtime_calls ... ok
+test mir::select::inspect_tests::framed_return_reloads_the_return_value_into_x0 ... ok
+test mir::select::inspect_tests::return_keeps_x0_live_across_a_preceding_heap_op ... ok
+test mir::select::inspect_tests::targeted_framed_function_brackets_and_single_exits ... ok
+test mir::select::inspect_tests::marshaling_rejects_swapped_args_dropped_store_and_wrong_arity ... ok
+test mir::select::inspect_tests::targeted_frameless_body_uses_no_frame_or_y ... ok
+test mir::select::inspect_tests::targeted_heap_ops_declare_accurate_live ... ok
+test mir::select::inspect_tests::awl_hello_outcome_route_returns_not_tail_calls ... ok
+test mir::select::control_tests::loop_counter_selects_a_gc_bif2_against_erlang_plus ... ok
+test mir::select::control_tests::short_circuit_optional_selects_checked_assert_some ... ok
+test mir::select::inspect_tests::targeted_loop_recursion_is_a_self_tail_call ... ok
+test mir::select::control_tests::enum_total_tail_selects_with_explicit_case_end_trap ... ok
+test mir::select::tests::dead_body_is_a_real_sidecar_visible_function ... ok
+test mir::select::control_tests::outcome_guard_decision_tree_uses_real_failure_labels ... ok
+test mir::select::tests::run_shell_passes_raw_payload_not_the_closure ... ok
+test mir::select::tests::minimal_module_has_the_expected_abi_structure ... ok
+test mir::select::inspect_tests::targeted_route_to_step_is_a_local_tail_call ... ok
+test mir::select::tests::shape_call_import ... ok
+test mir::select::tests::shape_call_local ... ok
+test mir::select::tests::shape_field_get ... ok
+test mir::select::tests::shape_frameless_tail_import ... ok
+test mir::select::tests::shape_json_obj_two_pairs ... ok
+test mir::select::tests::selection_is_deterministic ... ok
+test mir::select::tests::shape_record_with_literal_int ... ok
+test mir::select::tests::shape_make_closure ... ok
+test mir::select::tests::shape_record_tuple ... ok
+test mir::select::tests::shape_record_zero_field ... ok
+test mir::select::tests::shape_try_bind ... ok
+test mir::tests::counterless_loop_pins_the_scalar_result_path ... ok
+test mir::tests::minimal_exercises_core_op_shapes ... ok
+test mir::tests::backward_route_reentry_now_lowers ... ok
+test mir::tests::loop_lowering_pins_the_reference_semantics ... ok
+test mir::tests::compound_until_clones_control_only_into_unresolved_leaves ... ok
+test mir::tests::optional_rhs_is_nested_below_short_circuit_branch ... ok
+test mir::tests::typed_codec_bodies_pin_the_wire_shapes ... ok
+test mir::select::inspect_tests::make_fun_capture_reads_are_modeled_and_a_removed_reload_is_caught ... ok
+test mir::tests::lowers_cover_and_golden ... FAILED
+test mir::select::inspect_tests::wrong_live_expectation_goes_red ... ok
+test mir::select::tests::every_lowered_fixture_emits_and_validates ... ok
+test mir::select::inspect_tests::covered_ratchet_upholds_ir14_and_section_11 ... FAILED
+
+failures:
+
+---- mir::tests::lowers_cover_and_golden stdout ----
+
+thread 'mir::tests::lowers_cover_and_golden' (6070383) panicked at crates/aion-awl/src/mir/tests.rs:155:5:
+assertion `left == right` failed: BC-2 covered set drifted from the pinned COVERED list
+  left: ["dag-fork/valid/after_single", "dag-fork/valid/child_collection_fork", "dag-fork/valid/child_collection_fork_sequential", "dag-fork/valid/empty_fork_collection", "dag-fork/valid/fall_through_chain", "dag-fork/valid/fork_action_fanout", "dag-fork/valid/fork_collection_join", "dag-fork/valid/fork_named_branches", "dag-fork/valid/fork_named_homogeneous", "dag-fork/valid/fork_sequential", "dag-fork/valid/fork_sequential_route", "dag-fork/valid/runtime_sized_fork", "dag-fork/valid/sit_one", "declarations/valid/advisory_side_channel", "declarations/valid/call_site_override", "declarations/valid/child_call_awaited", "declarations/valid/child_spawn_combo", "declarations/valid/declarations_combined", "declarations/valid/spawn_detached", "declarations/valid/timeout_inside_retry", "declarations/valid/worker_action_config_lines", "declarations/valid/worker_retry_backoff", "declarations/valid/worker_single_action", "declarations/valid/workers_multiple", "ergonomics/valid/flow_vocab_b1", "flagship/valid/awl_hello", "flow-shape/valid/distribute_activity_tolerant", "flow-shape/valid/distribute_child_collect", "flow-shape/valid/distribute_child_tolerant", "flow-shape/valid/region_pure_decision", "flow-shape/valid/sequence_activity_tolerant", "flow-shape/valid/sequence_region_loopback", "header-types/valid/builtins", "header-types/valid/combined", "header-types/valid/doc_comments", "header-types/valid/enum", "header-types/valid/line_width", "header-types/valid/max_arity_record", "header-types/valid/minimal", "header-types/valid/noncanonical_commas", "header-types/valid/signal_wait", "header-types/valid/workflow_timeout", "header-types/valid/zero_inputs", "loop-outcomes/valid/backward_route_bounded_cycle", "loop-outcomes/valid/enum_when_totality", "loop-outcomes/valid/float_threshold_guard", "loop-outcomes/valid/fork_in_loop_live_ins", "loop-outcomes/valid/guard_optional_wait", "loop-outcomes/valid/loop_after_fall_through", "loop-outcomes/valid/loop_compound_until_nested", "loop-outcomes/valid/loop_counting_until_max", "loop-outcomes/valid/loop_without_counting", "loop-outcomes/valid/route_outcome_by_name", "schema-doors/valid/import_constraints", "schema-doors/valid/import_nested_defs", "schema-doors/valid/import_ticket", "schema-doors/valid/inline_schema_round", "schema-doors/valid/inline_verbatim_constraints", "schema-doors/valid/mixed_doors", "schema-doors/valid/optional_shorthand", "schema-doors/valid/short_circuit_optional", "step-bodies/valid/calls_and_side_effects", "step-bodies/valid/collection_predicates", "step-bodies/valid/combinators", "step-bodies/valid/fallible_all_short_circuit", "step-bodies/valid/fallible_any_short_circuit", "step-bodies/valid/fallible_collection_predicates", "step-bodies/valid/general_concat", "step-bodies/valid/index_and_concat", "step-bodies/valid/literal_forms", "step-bodies/valid/pipe_chain_stages", "step-bodies/valid/predicates_and_operators", "step-bodies/valid/step_bodies_combined", "step-bodies/valid/unicode_payloads", "step-bodies/valid/wait_and_sleep", "step-bodies/valid/wait_timeout_optional", "step-bodies/valid/workflow_id"]
+ right: ["dag-fork/valid/after_single", "dag-fork/valid/child_collection_fork", "dag-fork/valid/child_collection_fork_sequential", "dag-fork/valid/empty_fork_collection", "dag-fork/valid/fall_through_chain", "dag-fork/valid/fork_action_fanout", "dag-fork/valid/fork_collection_join", "dag-fork/valid/fork_named_branches", "dag-fork/valid/fork_named_homogeneous", "dag-fork/valid/fork_sequential", "dag-fork/valid/fork_sequential_route", "dag-fork/valid/runtime_sized_fork", "dag-fork/valid/sit_one", "declarations/valid/advisory_side_channel", "declarations/valid/call_site_override", "declarations/valid/child_call_awaited", "declarations/valid/child_spawn_combo", "declarations/valid/declarations_combined", "declarations/valid/spawn_detached", "declarations/valid/timeout_inside_retry", "declarations/valid/worker_action_config_lines", "declarations/valid/worker_retry_backoff", "declarations/valid/worker_single_action", "declarations/valid/workers_multiple", "ergonomics/valid/flow_vocab_b1", "flagship/valid/awl_hello", "flow-shape/valid/distribute_activity_tolerant", "flow-shape/valid/distribute_child_collect", "flow-shape/valid/distribute_child_tolerant", "flow-shape/valid/on_failure_route_tail", "flow-shape/valid/region_pure_decision", "flow-shape/valid/sequence_activity_tolerant", "flow-shape/valid/sequence_region_loopback", "header-types/valid/builtins", "header-types/valid/combined", "header-types/valid/doc_comments", "header-types/valid/enum", "header-types/valid/line_width", "header-types/valid/max_arity_record", "header-types/valid/minimal", "header-types/valid/noncanonical_commas", "header-types/valid/signal_wait", "header-types/valid/workflow_timeout", "header-types/valid/zero_inputs", "loop-outcomes/valid/backward_route_bounded_cycle", "loop-outcomes/valid/enum_when_totality", "loop-outcomes/valid/float_threshold_guard", "loop-outcomes/valid/fork_in_loop_live_ins", "loop-outcomes/valid/guard_optional_wait", "loop-outcomes/valid/loop_after_fall_through", "loop-outcomes/valid/loop_compound_until_nested", "loop-outcomes/valid/loop_counting_until_max", "loop-outcomes/valid/loop_without_counting", "loop-outcomes/valid/nested_handlers", "loop-outcomes/valid/on_failure_compensation", "loop-outcomes/valid/route_outcome_by_name", "loop-outcomes/valid/ship_release_combined", "schema-doors/valid/import_constraints", "schema-doors/valid/import_nested_defs", "schema-doors/valid/import_ticket", "schema-doors/valid/inline_schema_round", "schema-doors/valid/inline_verbatim_constraints", "schema-doors/valid/mixed_doors", "schema-doors/valid/optional_shorthand", "schema-doors/valid/short_circuit_optional", "step-bodies/valid/calls_and_side_effects", "step-bodies/valid/collection_predicates", "step-bodies/valid/combinators", "step-bodies/valid/fallible_all_short_circuit", "step-bodies/valid/fallible_any_short_circuit", "step-bodies/valid/fallible_collection_predicates", "step-bodies/valid/general_concat", "step-bodies/valid/index_and_concat", "step-bodies/valid/literal_forms", "step-bodies/valid/pipe_chain_stages", "step-bodies/valid/predicates_and_operators", "step-bodies/valid/step_bodies_combined", "step-bodies/valid/unicode_payloads", "step-bodies/valid/wait_and_sleep", "step-bodies/valid/wait_timeout_optional", "step-bodies/valid/workflow_id"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- mir::select::inspect_tests::covered_ratchet_upholds_ir14_and_section_11 stdout ----
+
+thread 'mir::select::inspect_tests::covered_ratchet_upholds_ir14_and_section_11' (6070353) panicked at crates/aion-awl/src/mir/select/inspect_tests.rs:112:5:
+assertion `left == right` failed: the sweep inspected 77 fixtures but the pinned ratchet has 81 — silent covered→refused drift (BC-5 review advisory B)
+  left: 77
+ right: 81
+
+
+failures:
+    mir::select::inspect_tests::covered_ratchet_upholds_ir14_and_section_11
+    mir::tests::lowers_cover_and_golden
+
+test result: FAILED. 66 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.13s
+
+error: test failed, to rerun pass `-p aion-awl --lib`

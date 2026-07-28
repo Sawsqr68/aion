@@ -168,6 +168,13 @@ pub enum FnOrigin {
         step: String,
         index: u32,
     },
+    /// The lifted compensation function of a step's `on failure` edge: the
+    /// arm every guarded fallible statement tail-calls when its `Result` is
+    /// an `Error` (`lower/failure.rs`). Its parameters are the guarded step's
+    /// `avail_in` — the edge binds nothing.
+    Compensation {
+        step: String,
+    },
     ActivityWrapper {
         action: String,
         raw: bool,

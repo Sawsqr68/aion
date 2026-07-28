@@ -1,14 +1,18 @@
 //! Nested failure handling — a step guarding its body with an on-failure region.
+//! The declared type is `Shipment`, NOT `Result`: a declared type that shadows
+//! a Gleam builtin makes the REFERENCE backend emit uncompilable code (see
+//! docs/evidence/on-failure-lowering-red-green.md), and this fixture is built
+//! by both backends in the BC-4 differential.
 workflow nested_handlers
   input order_id: String
-  outcome shipped: type Result, route success
-  outcome aborted: type Result, route failure
+  outcome shipped: type Shipment, route success
+  outcome aborted: type Shipment, route failure
 
-type Result { order_id: String, ok: Bool }
+type Shipment { order_id: String, ok: Bool }
 
 worker orders
-  action ship(order_id: String) -> Result
-  action refund(order_id: String) -> Result
+  action ship(order_id: String) -> Shipment
+  action refund(order_id: String) -> Shipment
 
 step fulfil
   ship(order_id: order_id) -> shipped

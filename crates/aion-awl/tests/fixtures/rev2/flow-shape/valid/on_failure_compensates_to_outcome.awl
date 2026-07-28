@@ -1,0 +1,23 @@
+//! The compensation arm actually RUNS. `fail_publish` fails by name (the
+//! BC-4 differential's `fail_*` convention), so the guarded body's error edge
+//! fires, the compensation call executes, and the run ends on the failure
+//! outcome the compensation routed to.
+workflow compensate_to_outcome
+  input target: String
+  outcome shipped: type Receipt, route success
+  outcome cleaned: type Cleaned, route failure
+
+type Receipt { url: String }
+type Cleaned { reason: String }
+
+worker shell
+  action fail_publish(target: String) -> Receipt
+  action snapshot(target: String) -> Cleaned
+
+step publish_it
+  fail_publish(target: target) -> receipt
+  route shipped(url: receipt.url)
+
+  on failure
+    snapshot(target: target)
+    route cleaned(reason: "publish failed; snapshot taken")

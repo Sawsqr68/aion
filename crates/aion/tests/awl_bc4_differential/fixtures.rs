@@ -25,6 +25,10 @@ pub fn fixture_path(relative: &str) -> PathBuf {
     rev2_dir().join(format!("{relative}.awl"))
 }
 
+/// What the shared dispatcher answers one declared action with: its canned
+/// schema-valid success payload, or a terminal failure reason.
+pub type ActionResult = Result<String, String>;
+
 /// A parsed fixture: its ratchet name, source, parsed document, and directory
 /// (schema-door imports resolve against the directory).
 pub struct Loaded {
@@ -158,12 +162,30 @@ fn is_null_schema(schema: &Value) -> bool {
         .is_some_and(|ty| ty == "null")
 }
 
+/// The action-name prefix that makes an action FAIL deterministically.
+///
+/// An action declared `fail_<something>` is answered with a terminal `Err`
+/// instead of a canned success value. That is the differential's only way to
+/// EXECUTE a failure-driven arm — an `on failure` compensation block, above
+/// all — inside a run whose activities are otherwise all canned successes;
+/// without it the arm is lowered but never run, and unrun is unproven.
+///
+/// The convention is safe by CONSTRUCTION, not by discipline: `action_results`
+/// builds ONE map per fixture and `driver::differential_one` hands the SAME
+/// map to both the reference run and the direct run, so a `fail_*` action
+/// fails identically on both backends and can never manufacture a divergence.
+/// The reason carries no retryable prefix, so the engine fails it on the first
+/// delivery with no retry timing in the trail.
+const FAILING_ACTION_PREFIX: &str = "fail_";
+
 /// A deterministic, schema-valid canned activity result per declared worker
 /// action, keyed by action name. Both backends' runs use the SAME map, so an
 /// activity that decodes on one decodes identically on the other. Unlike a
 /// generic echo, each value satisfies its action's declared return-type codec,
 /// so the workflow runs its REAL body instead of taking an activity-decode
 /// detour (the flagship's greet -> shout path actually executes).
+/// An action whose name starts with [`FAILING_ACTION_PREFIX`] is the deliberate
+/// exception: it maps to a terminal `Err`, so failure-driven arms actually run.
 /// This map answers ONLY `ActivityDispatcher` dispatches — i.e. declared worker
 /// ACTIONS. Declared `child` workflows are launched through `workflow.spawn`,
 /// not the dispatcher (the reference emitter's `CHILD_WITNESS` is a type anchor
@@ -173,13 +195,23 @@ fn is_null_schema(schema: &Value) -> bool {
 /// (`child_call_awaited`, `child_spawn_combo`, `spawn_detached`); a fourth,
 /// `declarations_combined`, takes a data-driven route-failure first — both
 /// classes proven in `child_boundary.rs` (see `covered.rs`).
-pub fn action_results(document: &Document, root: &Path) -> HashMap<String, String> {
+pub fn action_results(document: &Document, root: &Path) -> HashMap<String, ActionResult> {
     let mut results = HashMap::new();
     for worker in &document.workers {
         for action in &worker.actions {
+            if action.name.starts_with(FAILING_ACTION_PREFIX) {
+                results.insert(
+                    action.name.clone(),
+                    Err(format!(
+                        "terminal:`{}` fails by name (the `{FAILING_ACTION_PREFIX}` convention)",
+                        action.name
+                    )),
+                );
+                continue;
+            }
             let value = example_for_schema(&schema_for_typeref(document, root, &action.returns));
             if let Ok(json) = serde_json::to_string(&value) {
-                results.insert(action.name.clone(), json);
+                results.insert(action.name.clone(), Ok(json));
             }
         }
     }

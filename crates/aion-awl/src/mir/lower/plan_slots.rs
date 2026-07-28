@@ -18,9 +18,12 @@
 //!    `distribute`/`sequence` marker heads the synthetic body, so its
 //!    closures precede any later fork's in the same step);
 //! 5. wait slots — the same extended traversal;
-//! 6. implicit-child adapter shells (`_execute` then `_run`), ascending
+//! 6. compensation slots — one per step carrying an `on failure` block, the
+//!    same extended traversal (a module with no `on failure` reserves none,
+//!    so every pre-edge `FnRef` is preserved exactly);
+//! 7. implicit-child adapter shells (`_execute` then `_run`), ascending
 //!    region id, one pair per region that runs as a synthesized child;
-//! 7. the fixed helpers (T-DEAD, T-WIT) and dynamic predicates, as always.
+//! 8. the fixed helpers (T-DEAD, T-WIT) and dynamic predicates, as always.
 
 use std::collections::BTreeMap;
 
@@ -40,6 +43,7 @@ pub(super) struct FlowSlots {
     pub(super) loops: Vec<FnRef>,
     pub(super) forks: Vec<FnRef>,
     pub(super) waits: Vec<FnRef>,
+    pub(super) compensations: Vec<FnRef>,
     pub(super) adapters: BTreeMap<usize, AdapterFns>,
     pub(super) child_witness_needed: bool,
 }
@@ -141,6 +145,15 @@ pub(super) fn plan_flow_slots(ctx: &Ctx<'_>, next: &mut u32) -> Result<FlowSlots
             }
         });
     }
+    let mut compensations = Vec::new();
+    for flow in &flows {
+        for_each_step(flow, |step| {
+            if step.on_failure.is_some() {
+                compensations.push(FnRef(*next));
+                *next += 1;
+            }
+        });
+    }
     let mut adapters = BTreeMap::new();
     for &id in plans.regions.keys() {
         let Some(&shape) = plans.region_shapes.get(&id) else {
@@ -160,6 +173,7 @@ pub(super) fn plan_flow_slots(ctx: &Ctx<'_>, next: &mut u32) -> Result<FlowSlots
         loops,
         forks,
         waits,
+        compensations,
         adapters,
         child_witness_needed,
     })

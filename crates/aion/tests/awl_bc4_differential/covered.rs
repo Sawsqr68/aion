@@ -13,7 +13,7 @@ use crate::fixtures;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 /// The exact covered corpus size (`aion-awl/src/mir/covered.rs`).
-const COVERED_COUNT: usize = 77;
+const COVERED_COUNT: usize = 83;
 
 /// Out-of-oracle (r2 finding 3): bare signal-wait fixtures whose durable park
 /// boundary is NOT observable through any engine surface without racy sampling.
@@ -74,6 +74,23 @@ const EXPECTED_FAILED: &[&str] = &[
     "declarations/valid/declarations_combined",
     "declarations/valid/spawn_detached",
     "declarations/valid/worker_action_config_lines",
+    // The on-failure edge, arm EXECUTED. `fail_publish` fails by name (the
+    // `fail_*` convention at `fixtures::action_results`), so the guarded body
+    // takes its error edge, the compensation call RUNS, and the run ends on
+    // the failure outcome the compensation routed to — the only fixtures in
+    // this corpus whose compensation is executed rather than merely lowered.
+    "flow-shape/valid/on_failure_compensates_to_outcome",
+    // A deliberate `route <failure outcome>` as the guarded body's TAIL. The
+    // publish SUCCEEDS here; the route fires and the compensation must NOT —
+    // `AwlOutcomeFailure` is never mistaken for a step failure.
+    "flow-shape/valid/on_failure_route_tail",
+    // `on failure` on `publish`; the publish SUCCEEDS on the canned data, so
+    // the compensation is lowered but not taken and the run takes the
+    // data-driven `nothing was published` route.
+    "loop-outcomes/valid/on_failure_compensation",
+    // `on failure` on `publish`; the run never reaches it — the zero-round
+    // build loop takes the data-driven `not_ready` route first.
+    "loop-outcomes/valid/ship_release_combined",
     "header-types/valid/builtins",
     "header-types/valid/zero_inputs",
     "loop-outcomes/valid/backward_route_bounded_cycle",
@@ -122,6 +139,11 @@ const EXPECTED_SUCCEEDED: &[&str] = &[
     "flow-shape/valid/distribute_activity_tolerant",
     "flow-shape/valid/distribute_child_collect",
     "flow-shape/valid/distribute_child_tolerant",
+    // The on-failure edge, arm EXECUTED, compensating to a SIBLING STEP:
+    // `fail_charge` fails by name, the compensation routes to `unwind`, and
+    // the refund settles the workflow — a completed run whose completion is
+    // reached THROUGH the failure edge.
+    "flow-shape/valid/on_failure_compensates_to_step",
     "flow-shape/valid/region_pure_decision",
     "flow-shape/valid/sequence_activity_tolerant",
     "flow-shape/valid/sequence_region_loopback",
@@ -133,6 +155,9 @@ const EXPECTED_SUCCEEDED: &[&str] = &[
     "header-types/valid/noncanonical_commas",
     "header-types/valid/workflow_timeout",
     "loop-outcomes/valid/enum_when_totality",
+    // `on failure` on `fulfil`; the ship SUCCEEDS on the canned data, so the
+    // compensation is lowered but not taken and the run completes.
+    "loop-outcomes/valid/nested_handlers",
     "schema-doors/valid/inline_verbatim_constraints",
     "schema-doors/valid/mixed_doors",
     "schema-doors/valid/optional_shorthand",
@@ -248,7 +273,7 @@ async fn covered_set_is_byte_identical() -> TestResult {
         report.render()
     );
 
-    // The union of every bucket is EXACTLY the 76 distinct covered names.
+    // The union of every bucket is EXACTLY the distinct covered names.
     let mut union: BTreeSet<String> = BTreeSet::new();
     let parked_names = report.parked_timer.iter().map(|(name, _)| name);
     for name in report

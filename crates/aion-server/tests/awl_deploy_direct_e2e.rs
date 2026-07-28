@@ -330,7 +330,11 @@ fn workerless_source(name: &str) -> String {
     )
 }
 
-const LOWER_REFUSED: &str = "//! Focused on-failure lowering refusal (checker-valid; the direct path\n//! refuses `on failure` blocks — one of the three remaining refusal classes\n//! alongside parallel regions and substeps).\nworkflow studio_on_failure_refused\n  input title: String\n  outcome done: type Done, route success\n  outcome failed: type Failed, route failure\n\ntype Done   { title: String }\ntype Failed { reason: String }\n\nworker review\n  action check_doc(title: String) -> Done\n  action undo_check(title: String) -> Nil\n\nstep check_one\n  check_doc(title: title) -> checked\n\n  on failure\n    undo_check(title: title)\n    route failed(reason: \"check failed after compensation\")\n\n  route done(title: checked.title)\n";
+/// A checker-valid document the DIRECT path still refuses, so the deploy
+/// surface's refusal passthrough stays exercised. Repointed from an
+/// `on failure` body to a SUBSTEP body when the failure edge landed
+/// (`aion-awl/src/mir/lower/failure.rs`).
+const LOWER_REFUSED: &str = "//! Focused substep lowering refusal (checker-valid; the direct path\n//! refuses substep blocks — with the `on failure` edge landed, substeps and\n//! parallel regions are the remaining step-shaped refusal classes).\nworkflow studio_substeps_refused\n  input title: String\n  outcome done: type Done, route success\n  outcome failed: type Failed, route failure\n\ntype Done   { title: String }\ntype Failed { reason: String }\n\nworker review\n  action check_doc(title: String) -> Done\n\nstep check_one\n  step inner\n    check_doc(title: title) -> checked\n\n  outcome ok: when checked.title != \"\",\n    route done(title: checked.title)\n  outcome hollow: otherwise,\n    route failed(reason: \"nothing to check\")\n";
 const CHECK_REFUSED: &str = "//! Focused checker refusal.\nworkflow studio_check_refused\n  outcome done: type Done, route success\n\ntype Done { value: String }\n\nstep finish\n  route done(value: missing)\n";
 
 async fn seed_package(

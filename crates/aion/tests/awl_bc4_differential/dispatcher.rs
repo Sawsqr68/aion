@@ -7,33 +7,42 @@
 //! action return type (`fixtures::action_results`), so the activity's generated
 //! output codec ACCEPTS it and the workflow runs its real body — the flagship's
 //! `greet -> shout` path actually executes rather than tripping an
-//! activity-decode detour. The identical map drives both runs, so a completion
-//! or a data-driven failure outcome is byte-identical either way.
+//! activity-decode detour. An action the map answers with `Err` fails
+//! terminally (the `fail_*` naming convention documented at
+//! `fixtures::action_results`), which is how failure-driven arms get EXECUTED.
+//! The identical map drives both runs, so a completion, a data-driven failure
+//! outcome, or an induced activity failure is byte-identical either way.
 
 use std::collections::HashMap;
 
 use aion::activity::bridge::{ActivityDispatch, ActivityDispatcher};
 
+use crate::fixtures::ActionResult;
+
 /// A deterministic dispatcher returning the canned schema-valid result for each
 /// declared action.
 pub struct TypedDispatcher {
-    results: HashMap<String, String>,
+    results: HashMap<String, ActionResult>,
 }
 
 impl TypedDispatcher {
-    /// Builds a dispatcher over a fixture's `(action name -> result JSON)` map.
-    pub fn new(results: HashMap<String, String>) -> Self {
+    /// Builds a dispatcher over a fixture's `(action name -> canned outcome)`
+    /// map.
+    pub fn new(results: HashMap<String, ActionResult>) -> Self {
         Self { results }
     }
 }
 
 impl ActivityDispatcher for TypedDispatcher {
     fn dispatch(&self, request: ActivityDispatch) -> Result<String, String> {
-        self.results.get(&request.name).cloned().ok_or_else(|| {
+        self.results.get(&request.name).cloned().unwrap_or_else(|| {
             // Deterministic and identical on both backends: a fixture that
             // dispatches an activity with no declared return type fails the
             // same way on each side (surfaced, never a silent divergence).
-            format!("terminal:no canned result for activity `{}`", request.name)
+            Err(format!(
+                "terminal:no canned result for activity `{}`",
+                request.name
+            ))
         })
     }
 }

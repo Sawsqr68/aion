@@ -1,7 +1,7 @@
 //! Deliverable 4: the eight rev-2 adversarial fixtures (all net-new) and their
 //! honest classification (decision 16 — coverage is never forced).
 //!
-//! Six lower AND emit, so they join the `covered.rs` ratchet and run through
+//! Seven lower AND emit, so they join the `covered.rs` ratchet and run through
 //! the differential to byte-identical trails:
 //! - `empty_fork_collection`  — a fork over a possibly-empty input collection.
 //! - `runtime_sized_fork`     — a fork whose width is only known at run time.
@@ -9,11 +9,13 @@
 //! - `unicode_payloads`       — UTF-8 string literals + concat onto the wire.
 //! - `child_spawn_combo`      — an awaited child plus a detached `spawn`.
 //! - `max_arity_record`       — a high-arity record (wide tuple).
+//! - `nested_handlers`        — a step guarding its body with an `on failure`
+//!   region. It was out-of-intersection while the direct path refused the
+//!   edge; the direct lowering landed (`aion-awl/src/mir/lower/failure.rs`),
+//!   so it retired from the refusal pin into the lowering set.
 //!
-//! Two are out-of-intersection and refuse (recorded, never failed), pinned to
-//! their EXACT `LowerError` variant, message, and span:
-//! - `nested_handlers`   — the reference emits its `on failure` region, but the
-//!   direct path does not yet lower it (`Unsupported { shape: "on failure" }`).
+//! One is out-of-intersection and refuses (recorded, never failed), pinned to
+//! its EXACT `LowerError` variant, message, and span:
 //! - `zero_step_workflow` — below BOTH backends' floor (no steps to execute);
 //!   `Message("the workflow has no start region")`.
 
@@ -25,7 +27,7 @@ use crate::fixtures;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-/// The six adversarial fixtures both backends accept.
+/// The seven adversarial fixtures both backends accept.
 const LOWERING: &[&str] = &[
     "dag-fork/valid/empty_fork_collection",
     "dag-fork/valid/runtime_sized_fork",
@@ -33,44 +35,20 @@ const LOWERING: &[&str] = &[
     "step-bodies/valid/unicode_payloads",
     "declarations/valid/child_spawn_combo",
     "header-types/valid/max_arity_record",
-];
-
-/// The two out-of-intersection adversarial fixtures (recorded refusals).
-const REFUSING: &[&str] = &[
     "loop-outcomes/valid/nested_handlers",
-    "header-types/zero_step_workflow",
 ];
 
-/// Classification pin: the six lower; the two refuse with their EXACT
-/// `LowerError` variant, message/shape, and span (not a substring).
+/// The one out-of-intersection adversarial fixture (a recorded refusal).
+const REFUSING: &[&str] = &["header-types/zero_step_workflow"];
+
+/// Classification pin: the seven lower; the one refuses with its EXACT
+/// `LowerError` variant, message, and span (not a substring).
 #[test]
 fn adversarial_fixtures_classify_as_expected() -> TestResult {
     for name in LOWERING {
         let loaded = fixtures::load(name)?;
         lower(&loaded.document, Some(loaded.dir.as_path()))
             .map_err(|error| format!("{name} must lower but refused: {error}"))?;
-    }
-
-    // `nested_handlers`: reference class `Unsupported { shape: "on failure" }`
-    // anchored to the guarding step `fulfil`, pinned to the COMPLETE span (kept
-    // identical to the aion-awl deferred ratchet so the two copies cannot drift).
-    let nested = fixtures::load("loop-outcomes/valid/nested_handlers")?;
-    match lower(&nested.document, Some(nested.dir.as_path())) {
-        Err(LowerError::Unsupported { shape, span }) => {
-            assert_eq!(shape, "on failure");
-            assert_eq!(
-                span,
-                Span {
-                    start: 377,
-                    end: 383,
-                    line: 13,
-                    column: 6
-                }
-            );
-        }
-        other => {
-            return Err(format!("nested_handlers must refuse at `on failure`: {other:?}").into());
-        }
     }
 
     // `zero_step_workflow`: `Message` (span-carrying) at the workflow header,
@@ -98,10 +76,10 @@ fn adversarial_fixtures_classify_as_expected() -> TestResult {
     Ok(())
 }
 
-/// The differential over all eight adversarial fixtures: the six lowering ones
+/// The differential over all eight adversarial fixtures: the seven lowering ones
 /// produce byte-identical normalized trails across both backends (each a
-/// completed/failed/parked comparison, never an infra failure); the two
-/// refusals are recorded out-of-intersection (exactly the pinned set).
+/// completed/failed/parked comparison, never an infra failure); the one
+/// refusal is recorded out-of-intersection (exactly the pinned set).
 #[tokio::test(flavor = "multi_thread")]
 async fn adversarial_differential_is_byte_identical() -> TestResult {
     if crate::gleam_test_support::skip_if_unavailable() {

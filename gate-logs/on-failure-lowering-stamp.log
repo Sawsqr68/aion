@@ -1,0 +1,19 @@
+=== rustc -vV ===
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+commit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452
+commit-date: 2026-07-14
+host: aarch64-apple-darwin
+release: 1.97.1
+LLVM version: 22.1.6
+=== cargo --version ===
+cargo 1.97.1 (c980f4866 2026-06-30)
+=== jq --version ===
+jq-1.8.1
+=== gleam --version ===
+gleam 1.17.0
+=== git HEAD ===
+bf4181ca4e1b871d6449e139d3ec4ee4295cdc82
+=== df ===
+Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s5   926Gi   742Gi   158Gi    83%    8.3M  1.7G    0%   /System/Volumes/Data

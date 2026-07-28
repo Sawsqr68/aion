@@ -1,0 +1,219 @@
+module compensate_to_outcome source=compensate_to_outcome.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_publish_it:
+    aion@activity:task_queue/2 [activities] (v1, lit#11)
+    aion@workflow:run/1 [activities] (v2)
+  publish_it_on_failure:
+    aion@activity:task_queue/2 [activities] (v11, lit#12)
+    aion@workflow:run/1 [activities] (v12)
+== durable families == activities
+== atoms ==
+  [0] receipt
+  [1] cleaned
+  [2] fail_publish_input
+  [3] snapshot_input
+  [4] compensate_to_outcome_input
+  [5] shipped_outcome
+  [6] ok
+  [7] awl_outcome_failure
+  [8] error
+== literals ==
+  [0] "url"
+  [1] "reason"
+  [2] "target"
+  [3] "target"
+  [4] "target"
+  [5] "shipped"
+  [6] "outcome"
+  [7] ""
+  [8] "CompensateToOutcomeOutcome"
+  [9] "shipped"
+  [10] "payload"
+  [11] "shell"
+  [12] "shell"
+  [13] "publish failed; snapshot taken"
+  [14] "cleaned"
+== types ==
+  record Receipt tag=receipt
+    url: string
+  record Cleaned tag=cleaned
+    reason: string
+  record FailPublishInput tag=fail_publish_input
+    target: string
+  record SnapshotInput tag=snapshot_input
+    target: string
+  record CompensateToOutcomeInput tag=compensate_to_outcome_input
+    target: string
+  union CompensateToOutcomeOutcome
+    shipped -> shipped_outcome(ref(Receipt))
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=compensate_to_outcome_input_codec output=compensate_to_outcome_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(compensate_to_outcome.CompensateToOutcomeInput, compensate_to_outcome.CompensateToOutcomeOutcome, AwlError)
+  T-DEF name="compensate_to_outcome" input=compensate_to_outcome_input_codec output=compensate_to_outcome_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (compensate_to_outcome.CompensateToOutcomeInput) -> Result(compensate_to_outcome.CompensateToOutcomeOutcome, AwlError)
+  T-EXEC fields=[target:String] entry=step_publish_it args=[0]
+== fn receipt_codec/0 origin=codec_template(RecordTrio, Receipt, record#0) ==
+  sig: () -> Codec(compensate_to_outcome.Receipt)
+  v0 = make_closure receipt_to_json captures=[]
+  v1 = call_local receipt_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn receipt_to_json/1 origin=codec_template(RecordTrio, Receipt, record#0) ==
+  sig: (compensate_to_outcome.Receipt) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"url": v1|>awlc.string_to_json}
+  return v2
+== fn receipt_decoder/0 origin=codec_template(RecordTrio, Receipt, record#0) ==
+  sig: () -> Decoder(compensate_to_outcome.Receipt)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure receipt_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn receipt_decoder$0/1 origin=lifted(receipt_decoder, #0) ==
+  sig: (String) -> Decoder(compensate_to_outcome.Receipt)
+  v1 = record(receipt, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn cleaned_codec/0 origin=codec_template(RecordTrio, Cleaned, record#1) ==
+  sig: () -> Codec(compensate_to_outcome.Cleaned)
+  v0 = make_closure cleaned_to_json captures=[]
+  v1 = call_local cleaned_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn cleaned_to_json/1 origin=codec_template(RecordTrio, Cleaned, record#1) ==
+  sig: (compensate_to_outcome.Cleaned) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"reason": v1|>awlc.string_to_json}
+  return v2
+== fn cleaned_decoder/0 origin=codec_template(RecordTrio, Cleaned, record#1) ==
+  sig: () -> Decoder(compensate_to_outcome.Cleaned)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure cleaned_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v0, v1)
+== fn cleaned_decoder$0/1 origin=lifted(cleaned_decoder, #0) ==
+  sig: (String) -> Decoder(compensate_to_outcome.Cleaned)
+  v1 = record(cleaned, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn fail_publish_input_codec/0 origin=codec_template(RecordTrio, FailPublishInput, record#2) ==
+  sig: () -> Codec(compensate_to_outcome.FailPublishInput)
+  v0 = make_closure fail_publish_input_to_json captures=[]
+  v1 = call_local fail_publish_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn fail_publish_input_to_json/1 origin=codec_template(RecordTrio, FailPublishInput, record#2) ==
+  sig: (compensate_to_outcome.FailPublishInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"target": v1|>awlc.string_to_json}
+  return v2
+== fn fail_publish_input_decoder/0 origin=codec_template(RecordTrio, FailPublishInput, record#2) ==
+  sig: () -> Decoder(compensate_to_outcome.FailPublishInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure fail_publish_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v0, v1)
+== fn fail_publish_input_decoder$0/1 origin=lifted(fail_publish_input_decoder, #0) ==
+  sig: (String) -> Decoder(compensate_to_outcome.FailPublishInput)
+  v1 = record(fail_publish_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn snapshot_input_codec/0 origin=codec_template(RecordTrio, SnapshotInput, record#3) ==
+  sig: () -> Codec(compensate_to_outcome.SnapshotInput)
+  v0 = make_closure snapshot_input_to_json captures=[]
+  v1 = call_local snapshot_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn snapshot_input_to_json/1 origin=codec_template(RecordTrio, SnapshotInput, record#3) ==
+  sig: (compensate_to_outcome.SnapshotInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"target": v1|>awlc.string_to_json}
+  return v2
+== fn snapshot_input_decoder/0 origin=codec_template(RecordTrio, SnapshotInput, record#3) ==
+  sig: () -> Decoder(compensate_to_outcome.SnapshotInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure snapshot_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v0, v1)
+== fn snapshot_input_decoder$0/1 origin=lifted(snapshot_input_decoder, #0) ==
+  sig: (String) -> Decoder(compensate_to_outcome.SnapshotInput)
+  v1 = record(snapshot_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn compensate_to_outcome_input_codec/0 origin=codec_template(RecordTrio, CompensateToOutcomeInput, record#4) ==
+  sig: () -> Codec(compensate_to_outcome.CompensateToOutcomeInput)
+  v0 = make_closure compensate_to_outcome_input_to_json captures=[]
+  v1 = call_local compensate_to_outcome_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn compensate_to_outcome_input_to_json/1 origin=codec_template(RecordTrio, CompensateToOutcomeInput, record#4) ==
+  sig: (compensate_to_outcome.CompensateToOutcomeInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"target": v1|>awlc.string_to_json}
+  return v2
+== fn compensate_to_outcome_input_decoder/0 origin=codec_template(RecordTrio, CompensateToOutcomeInput, record#4) ==
+  sig: () -> Decoder(compensate_to_outcome.CompensateToOutcomeInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure compensate_to_outcome_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+== fn compensate_to_outcome_input_decoder$0/1 origin=lifted(compensate_to_outcome_input_decoder, #0) ==
+  sig: (String) -> Decoder(compensate_to_outcome.CompensateToOutcomeInput)
+  v1 = record(compensate_to_outcome_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn compensate_to_outcome_outcome_codec/0 origin=codec_template(UnionTrio, CompensateToOutcomeOutcome, union#5) ==
+  sig: () -> Codec(compensate_to_outcome.CompensateToOutcomeOutcome)
+  v0 = make_closure compensate_to_outcome_outcome_to_json captures=[]
+  v1 = call_local compensate_to_outcome_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn compensate_to_outcome_outcome_to_json/1 origin=codec_template(UnionTrio, CompensateToOutcomeOutcome, union#5) ==
+  sig: (compensate_to_outcome.CompensateToOutcomeOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#5|>awlc.string_to_json, "payload": v1|>receipt_to_json}
+  return v2
+== fn compensate_to_outcome_outcome_decoder/0 origin=codec_template(UnionTrio, CompensateToOutcomeOutcome, union#5) ==
+  sig: () -> Decoder(compensate_to_outcome.CompensateToOutcomeOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure compensate_to_outcome_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
+== fn compensate_to_outcome_outcome_decoder$outcome/1 origin=lifted(compensate_to_outcome_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(compensate_to_outcome.CompensateToOutcomeOutcome)
+  if cmp Eq v0 lit#9:
+    v3 = call_local receipt_decoder()
+    v4 = make_closure compensate_to_outcome_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#10, v3, v4)
+  else:
+    v1 = record(receipt, [lit#7])
+    v2 = record(shipped_outcome, [v1])
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#8)
+== fn compensate_to_outcome_outcome_decoder$arm0/1 origin=lifted(compensate_to_outcome_outcome_decoder, #1) ==
+  sig: (compensate_to_outcome.Receipt) -> Decoder(compensate_to_outcome.CompensateToOutcomeOutcome)
+  v1 = record(shipped_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn fail_publish_activity/1 origin=activity_wrapper(fail_publish, raw=false) ==
+  sig: (String) -> Activity(compensate_to_outcome.FailPublishInput, compensate_to_outcome.Receipt)
+  T-ACT action=fail_publish input_codec=fail_publish_input_codec return=receipt_codec
+== fn snapshot_activity/1 origin=activity_wrapper(snapshot, raw=false) ==
+  sig: (String) -> Activity(compensate_to_outcome.SnapshotInput, compensate_to_outcome.Cleaned)
+  T-ACT action=snapshot input_codec=snapshot_input_codec return=cleaned_codec
+== fn step_publish_it/1 origin=region(publish_it) ==
+  sig: (String) -> Result(compensate_to_outcome.CompensateToOutcomeOutcome, AwlError)
+  v1 = call_local fail_publish_activity(v0) live_after=[v0]
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#11) live_after=[v0]
+  v3 = call_rt aion@workflow:run/1(v2) live_after=[v0]
+  v4 = call_rt aion@awl@error:map_activity_error/1(v3) live_after=[v0]
+  if is_tagged v4 ok/2:
+    v5 = field(v4, 1)
+    v6 = field(v5, 1)
+    v7 = record(receipt, [v6])
+    v8 = record(shipped_outcome, [v7])
+    v9 = record(ok, [v8])
+    return v9
+  else:
+    tail_local publish_it_on_failure(v0)
+== fn publish_it_on_failure/1 origin=compensation(publish_it) ==
+  sig: (String) -> Result(compensate_to_outcome.CompensateToOutcomeOutcome, AwlError)
+  v11 = call_local snapshot_activity(v10)
+  v12 = call_rt aion@activity:task_queue/2(v11, lit#12)
+  v13 = call_rt aion@workflow:run/1(v12)
+  v14 = call_rt aion@awl@error:map_activity_error/1(v13)
+  v15 = try_bind v14
+  v16 = record(cleaned, [lit#13])
+  v17 = call_local cleaned_to_json(v16)
+  v18 = call_rt gleam@json:to_string/1(v17)
+  v19 = record(awl_outcome_failure, [lit#14, v18])
+  v20 = record(error, [v19])
+  return v20
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD

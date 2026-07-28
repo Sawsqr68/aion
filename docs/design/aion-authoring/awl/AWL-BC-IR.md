@@ -467,6 +467,20 @@ The complete op set — each row one instruction burst, each grounded:
 | `IndexGuard{dst,base,index,msg}` | `items[i]` prelude (`exprs.rs:174-185`) | `call_ext aion@awl@runtime:index/3` + TryBind burst |
 | `Attempt{lifted,captures,defs,on_ok,on_err}` | `on failure` (`steps.rs:301-354`, `subs.rs:65-127`) | `make_fun2` attempt closure (body = Lifted fn ending `Ok(defs-tuple)`), `call_fun`, `is_tagged_tuple {ok,2}` → destructure into `on_ok`; else `on_err` (compensation, must end in a route — refusal preserved) |
 
+**`Attempt` is RESERVED AND UNCONSTRUCTED (ruled 2026-07-28).** The row
+above records the op's *reference-parity* recipe, and that rationale is
+superseded for the construct it names: the direct backend lowers a top-level
+step's `on failure` WITHOUT it. The landed shape (design B) tests each
+fallible statement's `Result` in place — `Test::IsTagged{ok,2}` under a
+`Tail::If`, failure arm `Tail::TailLocal` into a lifted compensation `FlowFn`
+whose parameters are the step's `avail_in` — reusing only primitives tolerant
+collect already proves, so the construct needs no new instruction selection
+(`aion-awl/src/mir/lower/failure.rs`). BC-4 compares durable trails, not
+bytes, so the parity burst was work the differential could not even observe.
+The row stays reserved for the record; **any future CONSTRUCTOR of
+`Stmt::Attempt` requires a NEW ruling** — it is not quietly buildable later on
+the parity rationale this note retires.
+
 `CallRt`/`CallLocal`/`CallClosure`/`TryBind` ops carry the computed
 `live_after` set (S14). Every op carries a `Span` (→ Line chunk, R4).
 
@@ -575,7 +589,7 @@ refusals (§4.1); any other failure is a bug, never a user-visible surface.
 | substeps | `FlowFn(Sub)` per substep; sibling routes = `TailLocal`; parent-arm firing re-enters the parent frame's outcome lowering; chain end = parent outcomes inline (`subs.rs`); all `substep_split` refusals preserved (`graph.rs:73-116`) |
 | outcome clauses | enum-total → `SelectEnum` tail; else `If` cascade tail with `otherwise` terminal; guard-indexing refusal preserved; `is present` → `AssertSome` rebind (`outcomes.rs:215-373`) |
 | route | outcome return (`RecordNew`+`Return`), region tail (`TailLocal`), sibling substep tail, or parent-arm resolution — the full `emit_route` decision order (`outcomes.rs:25-110`) |
-| `on failure` | `Attempt` (defs-tuple protocol of `render_defs_tuple`, `steps.rs:360-372`); compensation route-tail requirement preserved |
+| `on failure` (top-level step) | If-cascade over each fallible `Result` (`Test::IsTagged{ok,2}`) whose failure arm tail-calls a lifted compensation `FlowFn` taking the step's `avail_in`; the edge binds nothing; a body-terminal route is a `Tail` and so can never pass through the test (`lower/failure.rs`). NOT `Attempt` — see §2.5's ruling note. Compensation route-tail requirement preserved; substep `on failure` still deferred |
 | declared/projected types | `TypeShape` entries (tag atoms via `names::snake`, arity) + one trio stamping (§3) per record/enum/union/composite reachable from a wire position |
 | keel expressions | `Bind`/`FieldGet`/`Cmp`/`BoolOp`/`Not`/`Concat`/`RecordNew`/`ListNew`/`IndexGuard` per `exprs.rs`; float lexemes retained (S3); Int/Float ordering split preserved (`exprs.rs:237-268`) |
 

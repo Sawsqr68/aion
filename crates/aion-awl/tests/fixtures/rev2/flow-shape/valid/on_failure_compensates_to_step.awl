@@ -1,0 +1,27 @@
+//! The compensation arm actually RUNS and hands control to a SIBLING STEP,
+//! which completes the run. `fail_charge` fails by name (the BC-4
+//! differential's `fail_*` convention); the compensation records the failure
+//! and routes to `unwind`, whose refund succeeds and settles the workflow.
+workflow compensate_to_step
+  input order_id: String
+  outcome settled: type Settlement, route success
+
+type Settlement { order_id: String, unwound: Bool }
+type Note       { text: String }
+
+worker billing
+  action fail_charge(order_id: String) -> Settlement
+  action note_failure(order_id: String) -> Note
+  action refund(order_id: String) -> Settlement
+
+step charge
+  fail_charge(order_id: order_id) -> charged
+  route settled(order_id: charged.order_id, unwound: false)
+
+  on failure
+    note_failure(order_id: order_id)
+    route unwind
+
+step unwind
+  refund(order_id: order_id) -> refund_result
+  route settled(order_id: refund_result.order_id, unwound: true)

@@ -1,0 +1,222 @@
+module publish_with_cleanup source=publish_with_cleanup.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_publish_it:
+    aion@activity:task_queue/2 [activities] (v1, lit#11)
+    aion@workflow:run/1 [activities] (v2)
+  publish_it_on_failure:
+    aion@activity:task_queue/2 [activities] (v12, lit#14)
+    aion@workflow:run/1 [activities] (v13)
+== durable families == activities
+== atoms ==
+  [0] receipt
+  [1] failed
+  [2] publish_input
+  [3] snapshot_input
+  [4] publish_with_cleanup_input
+  [5] shipped_outcome
+  [6] ok
+  [7] awl_outcome_failure
+  [8] error
+== literals ==
+  [0] "url"
+  [1] "reason"
+  [2] "target"
+  [3] "target"
+  [4] "target"
+  [5] "shipped"
+  [6] "outcome"
+  [7] ""
+  [8] "PublishWithCleanupOutcome"
+  [9] "shipped"
+  [10] "payload"
+  [11] "shell"
+  [12] "deliberately routed failure outcome"
+  [13] "dead_end"
+  [14] "shell"
+  [15] "publish failed; snapshot taken"
+  [16] "cleaned"
+== types ==
+  record Receipt tag=receipt
+    url: string
+  record Failed tag=failed
+    reason: string
+  record PublishInput tag=publish_input
+    target: string
+  record SnapshotInput tag=snapshot_input
+    target: string
+  record PublishWithCleanupInput tag=publish_with_cleanup_input
+    target: string
+  union PublishWithCleanupOutcome
+    shipped -> shipped_outcome(ref(Receipt))
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=publish_with_cleanup_input_codec output=publish_with_cleanup_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(publish_with_cleanup.PublishWithCleanupInput, publish_with_cleanup.PublishWithCleanupOutcome, AwlError)
+  T-DEF name="publish_with_cleanup" input=publish_with_cleanup_input_codec output=publish_with_cleanup_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (publish_with_cleanup.PublishWithCleanupInput) -> Result(publish_with_cleanup.PublishWithCleanupOutcome, AwlError)
+  T-EXEC fields=[target:String] entry=step_publish_it args=[0]
+== fn receipt_codec/0 origin=codec_template(RecordTrio, Receipt, record#0) ==
+  sig: () -> Codec(publish_with_cleanup.Receipt)
+  v0 = make_closure receipt_to_json captures=[]
+  v1 = call_local receipt_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn receipt_to_json/1 origin=codec_template(RecordTrio, Receipt, record#0) ==
+  sig: (publish_with_cleanup.Receipt) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"url": v1|>awlc.string_to_json}
+  return v2
+== fn receipt_decoder/0 origin=codec_template(RecordTrio, Receipt, record#0) ==
+  sig: () -> Decoder(publish_with_cleanup.Receipt)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure receipt_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn receipt_decoder$0/1 origin=lifted(receipt_decoder, #0) ==
+  sig: (String) -> Decoder(publish_with_cleanup.Receipt)
+  v1 = record(receipt, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn failed_codec/0 origin=codec_template(RecordTrio, Failed, record#1) ==
+  sig: () -> Codec(publish_with_cleanup.Failed)
+  v0 = make_closure failed_to_json captures=[]
+  v1 = call_local failed_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn failed_to_json/1 origin=codec_template(RecordTrio, Failed, record#1) ==
+  sig: (publish_with_cleanup.Failed) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"reason": v1|>awlc.string_to_json}
+  return v2
+== fn failed_decoder/0 origin=codec_template(RecordTrio, Failed, record#1) ==
+  sig: () -> Decoder(publish_with_cleanup.Failed)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure failed_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v0, v1)
+== fn failed_decoder$0/1 origin=lifted(failed_decoder, #0) ==
+  sig: (String) -> Decoder(publish_with_cleanup.Failed)
+  v1 = record(failed, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn publish_input_codec/0 origin=codec_template(RecordTrio, PublishInput, record#2) ==
+  sig: () -> Codec(publish_with_cleanup.PublishInput)
+  v0 = make_closure publish_input_to_json captures=[]
+  v1 = call_local publish_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn publish_input_to_json/1 origin=codec_template(RecordTrio, PublishInput, record#2) ==
+  sig: (publish_with_cleanup.PublishInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"target": v1|>awlc.string_to_json}
+  return v2
+== fn publish_input_decoder/0 origin=codec_template(RecordTrio, PublishInput, record#2) ==
+  sig: () -> Decoder(publish_with_cleanup.PublishInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure publish_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v0, v1)
+== fn publish_input_decoder$0/1 origin=lifted(publish_input_decoder, #0) ==
+  sig: (String) -> Decoder(publish_with_cleanup.PublishInput)
+  v1 = record(publish_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn snapshot_input_codec/0 origin=codec_template(RecordTrio, SnapshotInput, record#3) ==
+  sig: () -> Codec(publish_with_cleanup.SnapshotInput)
+  v0 = make_closure snapshot_input_to_json captures=[]
+  v1 = call_local snapshot_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn snapshot_input_to_json/1 origin=codec_template(RecordTrio, SnapshotInput, record#3) ==
+  sig: (publish_with_cleanup.SnapshotInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"target": v1|>awlc.string_to_json}
+  return v2
+== fn snapshot_input_decoder/0 origin=codec_template(RecordTrio, SnapshotInput, record#3) ==
+  sig: () -> Decoder(publish_with_cleanup.SnapshotInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure snapshot_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v0, v1)
+== fn snapshot_input_decoder$0/1 origin=lifted(snapshot_input_decoder, #0) ==
+  sig: (String) -> Decoder(publish_with_cleanup.SnapshotInput)
+  v1 = record(snapshot_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn publish_with_cleanup_input_codec/0 origin=codec_template(RecordTrio, PublishWithCleanupInput, record#4) ==
+  sig: () -> Codec(publish_with_cleanup.PublishWithCleanupInput)
+  v0 = make_closure publish_with_cleanup_input_to_json captures=[]
+  v1 = call_local publish_with_cleanup_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn publish_with_cleanup_input_to_json/1 origin=codec_template(RecordTrio, PublishWithCleanupInput, record#4) ==
+  sig: (publish_with_cleanup.PublishWithCleanupInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"target": v1|>awlc.string_to_json}
+  return v2
+== fn publish_with_cleanup_input_decoder/0 origin=codec_template(RecordTrio, PublishWithCleanupInput, record#4) ==
+  sig: () -> Decoder(publish_with_cleanup.PublishWithCleanupInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure publish_with_cleanup_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+== fn publish_with_cleanup_input_decoder$0/1 origin=lifted(publish_with_cleanup_input_decoder, #0) ==
+  sig: (String) -> Decoder(publish_with_cleanup.PublishWithCleanupInput)
+  v1 = record(publish_with_cleanup_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn publish_with_cleanup_outcome_codec/0 origin=codec_template(UnionTrio, PublishWithCleanupOutcome, union#5) ==
+  sig: () -> Codec(publish_with_cleanup.PublishWithCleanupOutcome)
+  v0 = make_closure publish_with_cleanup_outcome_to_json captures=[]
+  v1 = call_local publish_with_cleanup_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn publish_with_cleanup_outcome_to_json/1 origin=codec_template(UnionTrio, PublishWithCleanupOutcome, union#5) ==
+  sig: (publish_with_cleanup.PublishWithCleanupOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#5|>awlc.string_to_json, "payload": v1|>receipt_to_json}
+  return v2
+== fn publish_with_cleanup_outcome_decoder/0 origin=codec_template(UnionTrio, PublishWithCleanupOutcome, union#5) ==
+  sig: () -> Decoder(publish_with_cleanup.PublishWithCleanupOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure publish_with_cleanup_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
+== fn publish_with_cleanup_outcome_decoder$outcome/1 origin=lifted(publish_with_cleanup_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(publish_with_cleanup.PublishWithCleanupOutcome)
+  if cmp Eq v0 lit#9:
+    v3 = call_local receipt_decoder()
+    v4 = make_closure publish_with_cleanup_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#10, v3, v4)
+  else:
+    v1 = record(receipt, [lit#7])
+    v2 = record(shipped_outcome, [v1])
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#8)
+== fn publish_with_cleanup_outcome_decoder$arm0/1 origin=lifted(publish_with_cleanup_outcome_decoder, #1) ==
+  sig: (publish_with_cleanup.Receipt) -> Decoder(publish_with_cleanup.PublishWithCleanupOutcome)
+  v1 = record(shipped_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn publish_activity/1 origin=activity_wrapper(publish, raw=false) ==
+  sig: (String) -> Activity(publish_with_cleanup.PublishInput, publish_with_cleanup.Receipt)
+  T-ACT action=publish input_codec=publish_input_codec return=receipt_codec
+== fn snapshot_activity/1 origin=activity_wrapper(snapshot, raw=false) ==
+  sig: (String) -> Activity(publish_with_cleanup.SnapshotInput, publish_with_cleanup.Receipt)
+  T-ACT action=snapshot input_codec=snapshot_input_codec return=receipt_codec
+== fn step_publish_it/1 origin=region(publish_it) ==
+  sig: (String) -> Result(publish_with_cleanup.PublishWithCleanupOutcome, AwlError)
+  v1 = call_local publish_activity(v0) live_after=[v0]
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#11) live_after=[v0]
+  v3 = call_rt aion@workflow:run/1(v2) live_after=[v0]
+  v4 = call_rt aion@awl@error:map_activity_error/1(v3) live_after=[v0]
+  if is_tagged v4 ok/2:
+    v5 = field(v4, 1)
+    v6 = record(failed, [lit#12])
+    v7 = call_local failed_to_json(v6)
+    v8 = call_rt gleam@json:to_string/1(v7)
+    v9 = record(awl_outcome_failure, [lit#13, v8])
+    v10 = record(error, [v9])
+    return v10
+  else:
+    tail_local publish_it_on_failure(v0)
+== fn publish_it_on_failure/1 origin=compensation(publish_it) ==
+  sig: (String) -> Result(publish_with_cleanup.PublishWithCleanupOutcome, AwlError)
+  v12 = call_local snapshot_activity(v11)
+  v13 = call_rt aion@activity:task_queue/2(v12, lit#14)
+  v14 = call_rt aion@workflow:run/1(v13)
+  v15 = call_rt aion@awl@error:map_activity_error/1(v14)
+  v16 = try_bind v15
+  v17 = record(failed, [lit#15])
+  v18 = call_local failed_to_json(v17)
+  v19 = call_rt gleam@json:to_string/1(v18)
+  v20 = record(awl_outcome_failure, [lit#16, v19])
+  v21 = record(error, [v20])
+  return v21
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD
