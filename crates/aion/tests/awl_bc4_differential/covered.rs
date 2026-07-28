@@ -13,7 +13,7 @@ use crate::fixtures;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 /// The exact covered corpus size (`aion-awl/src/mir/covered.rs`).
-const COVERED_COUNT: usize = 76;
+const COVERED_COUNT: usize = 77;
 
 /// Out-of-oracle (r2 finding 3): bare signal-wait fixtures whose durable park
 /// boundary is NOT observable through any engine surface without racy sampling.
@@ -108,6 +108,11 @@ const EXPECTED_SUCCEEDED: &[&str] = &[
     "dag-fork/valid/fork_sequential_route",
     "dag-fork/valid/runtime_sized_fork",
     "dag-fork/valid/sit_one",
+    // R5: an advisory side channel that always fails. It SUCCEEDS on both
+    // backends — that is the whole point of the class, and the differential
+    // proves the direct and Gleam lowerings route around the fault arm
+    // identically.
+    "declarations/valid/advisory_side_channel",
     "declarations/valid/timeout_inside_retry",
     "declarations/valid/worker_retry_backoff",
     "declarations/valid/worker_single_action",

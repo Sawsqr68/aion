@@ -27,6 +27,7 @@ mod nif_child_spawn_retry;
 mod nif_child_tasks;
 mod nif_child_watch;
 mod nif_collect;
+mod nif_collect_dispatch;
 mod nif_collect_settlement;
 mod nif_concurrency;
 /// Workflow NIF execution context.
