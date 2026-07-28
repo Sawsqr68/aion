@@ -41,8 +41,8 @@ use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use aion_package::{
-    BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest, ManifestVersion,
-    PackageBuilder,
+    ActionContract, BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest,
+    ManifestVersion, PackageBuilder, PackageContract, WorkerContract,
 };
 use serde_json::json;
 
@@ -64,6 +64,13 @@ const OUTBOX_BEAM: &[u8] =
 const OUTBOX_SOURCE: &[u8] =
     include_bytes!("../../../aion-server/tests/fixtures/aion_outbox_fixture.erl");
 
+/// The task queue `spike/liminal-fan-worker` polls (`WorkerConfig::task_queue`),
+/// and therefore the queue this package's activities must be scoped onto.
+const FIXTURE_TASK_QUEUE: &str = "default";
+/// The activity types `collect_four` schedules, one per fan-out ordinal — the
+/// same four names `spike/liminal-fan-worker` registers handlers for.
+const FAN_ACTIVITY_TYPES: [&str; 4] = ["fan:0", "fan:1", "fan:2", "fan:3"];
+
 /// Reserve a loopback port by binding to 0 and dropping the listener.
 pub fn reserve_port() -> Result<u16, TestError> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
@@ -81,19 +88,70 @@ pub fn write_package_archive(dir: &Path) -> Result<PathBuf, TestError> {
         input_schema: json!({ "type": "object" }),
         output_schema: json!({}),
         timeout: Some(Duration::from_secs(30)),
-        activities: vec![DeclaredActivity {
-            activity_type: "fixture_activity".to_owned(),
-        }],
+        // The four ordinals `collect_four` actually fans out. This manifest used
+        // to name one invented activity, `fixture_activity`, that the fixture
+        // never schedules and no worker ever served.
+        activities: FAN_ACTIVITY_TYPES
+            .iter()
+            .map(|activity_type| DeclaredActivity {
+                activity_type: (*activity_type).to_owned(),
+            })
+            .collect(),
         version: ManifestVersion::new("stamped-by-builder"),
         format_version: CURRENT_FORMAT_VERSION,
         additional_workflows: Vec::new(),
     };
+    let contract = fixture_contract(&manifest)?;
     let archive =
         PackageBuilder::with_source(manifest, beams, [(OUTBOX_MODULE, OUTBOX_SOURCE.to_vec())])
+            .with_contract(contract)
             .write_to_bytes()?;
     let path = dir.join("collect_four.aion");
     std::fs::write(&path, &archive)?;
     Ok(path)
+}
+
+/// The fixture's queue-scoped `.v4` contract: the four `fan:N` activities
+/// `collect_four` schedules, declared on the queue its worker actually polls.
+///
+/// Why the archive cannot just carry the manifest-derived record: by design
+/// `PackageContract::from_manifest` "never invents a queue", so a manifest's
+/// bare activity names land in `unscoped_activities` — and under the server's
+/// queue-routed posture an unscoped catalog is a terminal `NO_QUEUE_DECLARATION`
+/// at start admission (`aion::lifecycle::start_admission`). That refusal is
+/// EARNED: an unserved queue would otherwise wait silently forever. So the
+/// derived record is amended rather than bypassed — the same four names move out
+/// of `unscoped_activities` and onto the queue that serves them — and the
+/// package still loads through the server's real boot path with the `.v4`
+/// identity `PackageBuilder` stamps over this exact contract.
+///
+/// The action schemas come from the SAME generator the worker's typed registry
+/// uses, for the SAME Rust types: `collect_four` passes each member the JSON
+/// string `"in"` and the handler returns a `String`. Deriving both sides from
+/// `activity_descriptor::<String, String>` means the package's declaration and
+/// the worker's advertisement cannot drift apart, so registration admission
+/// (`WORKER_CONTRACT_MISMATCH`) compares two schemas with one source.
+fn fixture_contract(manifest: &Manifest) -> Result<PackageContract, TestError> {
+    let mut actions = Vec::with_capacity(FAN_ACTIVITY_TYPES.len());
+    for activity_type in FAN_ACTIVITY_TYPES {
+        let descriptor = aion_worker::activity_descriptor::<String, String>(activity_type)?;
+        actions.push(ActionContract {
+            name: descriptor.name,
+            input_schema: descriptor.input_schema,
+            output_schema: descriptor.output_schema,
+            node: None,
+            timeout: None,
+            retry: None,
+            advisory: false,
+        });
+    }
+    let mut contract = PackageContract::from_manifest(manifest);
+    contract.workers = vec![WorkerContract {
+        task_queue: FIXTURE_TASK_QUEUE.to_owned(),
+        actions,
+    }];
+    contract.unscoped_activities.clear();
+    Ok(contract)
 }
 
 /// Create `path` and return the `(stdout, stderr)` redirection pair for a child,

@@ -1,23 +1,34 @@
 //! LSUB-5-B kill-9 reconnect-to-survivor failover (G-1, #112): a REAL
 //! multi-OS-process hard-kill liminal-PUSH failover.
 //!
-//! ## CURRENT STATUS — RED, and it has NEVER been green anywhere
+//! ## CURRENT STATUS — GREEN, first reached 2026-07-28
 //!
-//! This gate has no green in its history: seven specimens across two machines,
-//! zero passes, and the `kill -9` it exists to exercise has never once fired.
-//! It is blocked in SETUP, before the kill, on the unsteered start below. The
-//! cause is proven at the bytes in
-//! `docs/evidence/failover-start-path-investigation.md`: an `aion start` mints
-//! its namespace on use, `namespace_key("default")` lands on shard 1 of this
-//! 3-shard cluster, node 0 owns only shard 0, and the quorum write is fenced —
-//! so every start against node 0 returns the SAME `NotOwner { shard: 1 }`
-//! forever. Whether this gate could EVER have passed was settled at authoring
-//! time by whether the default namespace happened to hash to node 0's shard.
-//! It did not. Do NOT read the scenario below as a proven capability, and do
-//! not "fix" it by weakening the assertions: the seam is production start-path
-//! routing and its disposition is a ruled lane's call.
+//! For its whole existence before that date this gate was RED and had never
+//! once fired the `kill -9` it exists to exercise: seven specimens across two
+//! machines, zero passes, every one of them dead in SETUP on the unsteered
+//! start below. Two independent blockers sat one behind the other, and BOTH had
+//! to be cleared before the kill could happen at all:
 //!
-//! ## What it is built to prove (not yet proven)
+//! 1. **The namespace fence — production, landed on `main` at `7bd0dbb0`.** An
+//!    `aion start` mints its namespace on use; `namespace_key("default")` lands
+//!    on shard 1 of this 3-shard cluster, node 0 owns only shard 0, and the
+//!    quorum write was fenced — so every start against node 0 returned the SAME
+//!    `NotOwner { shard: 1 }`, forever. Diagnosed at the bytes in
+//!    `docs/evidence/failover-start-path-investigation.md`; the namespace-mint
+//!    routing lane now routes the mint to its owning node.
+//! 2. **The fixture's missing queue declaration — this gate's own asset.** With
+//!    the fence gone the start reached the ENGINE and was refused
+//!    `NO_QUEUE_DECLARATION` 172 times out of 172: the harness-built package
+//!    declared its activities with no task queue, which the queue-service
+//!    taxonomy refuses because an unserved queue would otherwise wait silently
+//!    forever. That refusal was EARNED — the fixture predated the taxonomy and
+//!    was never trued. `common/osproc.rs` now declares the four `fan:N`
+//!    activities on `default`, the queue this gate's worker actually polls.
+//!
+//! The `RefusalTally` on the start loop is the instrument that named both
+//! blockers, one after the other. It stays.
+//!
+//! ## What it proves
 //!
 //! Each deployed `aion server` hosts its OWN liminal listener backed by its OWN
 //! per-process `ConnectedWorkerRegistry`. G-1 gave the worker a STATIC
@@ -303,14 +314,15 @@ fn drive_failover(nodes: &mut Vec<Node>, ports: &[(u16, u16, u16)]) -> Result<()
     // Start collect_four so it lands on shard 0 (node 0's shard).
     //
     // This loop's premise — "an unsteered start to node 0 lands on a locally-owned
-    // shard or is fenced; retry until it lands" — is FALSE, and the retry has never
-    // once succeeded (see docs/evidence/failover-start-path-investigation.md). The
-    // refusal does not come from the workflow's shard: the start first mints the
-    // namespace on use, and `namespace_key("default")` lands on shard 1 of 3, which
-    // node 0 does not own, so the quorum write is fenced and every attempt returns
-    // the SAME `NotOwner { shard: 1 }`. It is a constant, not a lottery, so the
-    // deadline buys nothing. Left standing and RED on purpose: the fix crosses into
-    // production start-path routing and is a ruled lane's call, not this harness's.
+    // shard or is fenced; retry until it lands" — held two constant refusals for
+    // this gate's whole red history, and neither was a lottery the deadline could
+    // win (see the module header and
+    // docs/evidence/failover-start-path-investigation.md): the namespace-registry
+    // fence, until production learned to route the mint to its owning node, and
+    // then the fixture's undeclared task queue, until the archive this harness
+    // writes declared one. Both are gone; the retry is now what it always claimed
+    // to be — tolerance for a cluster that is still settling, not a wait on a
+    // refusal that can never change.
     let node0_grpc = format!("http://127.0.0.1:{}", ports[0].1);
     let mut workflow_id = String::new();
     // Tally EVERY refusal, not just the last: one refusal repeated N times is a

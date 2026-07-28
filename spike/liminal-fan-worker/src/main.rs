@@ -60,11 +60,20 @@ fn fan_delay() -> std::time::Duration {
 /// Build the activity registry: one handler per `fan:N` type, each returning the
 /// activity-type name as its deterministic result string after the configured
 /// per-activity delay.
+///
+/// Registered WITH a contract: the `collect_four` package declares these four
+/// activities on the `default` queue, and registration admission compares a
+/// worker's advertised surface against every deployed `.v4` contract for the
+/// queue it asks to serve. `register_activity` alone derives no descriptor, so
+/// the registration would advertise NOTHING and every declared action would read
+/// as missing — a `WORKER_CONTRACT_MISMATCH` rejection. The typed form derives
+/// each descriptor from the same `FanInput`/`String` pair the handler dispatches
+/// on, which is exactly what the package declares.
 fn build_registry() -> anyhow::Result<Arc<ActivityRegistry>> {
     let mut registry = ActivityRegistry::new();
     let delay = fan_delay();
     for activity_type in FAN_ACTIVITY_TYPES {
-        registry = registry.register_activity(
+        registry = registry.register_activity_with_contract(
             activity_type,
             move |_input: FanInput, _context: &ActivityContext| -> HandlerFuture<'_, String> {
                 Box::pin(async move {

@@ -15,6 +15,12 @@
 //!    round-trip against the spawned binary's `LiminalConnectionNotifier`, and
 //!    becomes a selectable pool member. The worker proves registration on a REAL
 //!    observable (a readiness file it writes only AFTER the ack), never a sleep.
+//!    The ack is no formality: the notifier admits the worker against every
+//!    deployed `.v4` worker contract for the queue it asks to serve, so a green
+//!    here also proves the fixture package's declared `fan:N` actions and the
+//!    worker's advertised activity surface AGREE. That is load-bearing and was
+//!    observed failing: while the archive declared the queue and the worker
+//!    still registered untyped, this gate went red at exactly this step.
 //!
 //! Together these exercise the cross-PROCESS half of the production liminal seam
 //! that the in-process `run.rs::lsub_prod_xnode_e2e` and
@@ -24,11 +30,13 @@
 //!
 //! The full kill-9 LIMINAL-PUSH failover — kill the owner mid-dispatch; the
 //! survivor adopts the shard and re-dispatches to the worker — is proven by the
-//! sibling gate `lsub5b_osproc_kill9_failover_e2e.rs`, now that the worker has a
-//! reconnect-to-survivor capability (`aion_worker::serve_with_redial`: a static
-//! candidate-address list + redial-on-drop that re-registers in the survivor's
-//! registry). This file covers the steady-state CONNECT + DISPATCH half; the
-//! sibling covers the hard-kill migration half.
+//! sibling gate `lsub5b_osproc_kill9_failover_e2e.rs` (green since 2026-07-28;
+//! its module header carries the two blockers that kept it red until then), now
+//! that the worker has a reconnect-to-survivor capability
+//! (`aion_worker::serve_with_redial`: a static candidate-address list +
+//! redial-on-drop that re-registers in the survivor's registry). This file
+//! covers the steady-state CONNECT + DISPATCH half; the sibling covers the
+//! hard-kill migration half.
 //!
 //! ## Running
 //!
