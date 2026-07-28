@@ -273,9 +273,10 @@ async fn advisory_exhaustion_warns_and_the_run_completes() -> TestResult {
         record.history
     );
 
-    // The budget really was exhausted: `retry 2` delivered twice and stopped.
+    // The budget really was exhausted: `retry 2` = two FURTHER attempts, so
+    // three deliveries total, then it stopped.
     assert_eq!(
-        record.heartbeat_deliveries, 2,
+        record.heartbeat_deliveries, 3,
         "the advisory heartbeat must exhaust its declared budget"
     );
     // The step after the advisory call still ran — "never faults the step".
@@ -288,8 +289,8 @@ async fn advisory_exhaustion_warns_and_the_run_completes() -> TestResult {
     // the FAULT, never the RECORD.
     let terminals = terminal_activity_failures(&record.history);
     assert!(
-        terminals.iter().any(|(attempt, message)| *attempt == 2
-            && message == "retryable:meridian unreachable (delivery attempt 2)"),
+        terminals.iter().any(|(attempt, message)| *attempt == 3
+            && message == "retryable:meridian unreachable (delivery attempt 3)"),
         "the exhausted advisory activity must still record its terminal \
          ActivityFailed with the verbatim last reason: {terminals:?}"
     );
@@ -327,10 +328,10 @@ async fn non_advisory_exhaustion_still_fails_the_run() -> TestResult {
         .map(|payload| String::from_utf8_lossy(payload.bytes()).into_owned())
         .unwrap_or_default();
     assert!(
-        detail.contains("meridian unreachable (delivery attempt 2)")
+        detail.contains("meridian unreachable (delivery attempt 3)")
             || error
                 .message
-                .contains("meridian unreachable (delivery attempt 2)"),
+                .contains("meridian unreachable (delivery attempt 3)"),
         "the last attempt's reason must surface verbatim on the run failure: {error:?}"
     );
 
@@ -341,7 +342,7 @@ async fn non_advisory_exhaustion_still_fails_the_run() -> TestResult {
         record.history
     );
     assert_eq!(
-        record.heartbeat_deliveries, 2,
+        record.heartbeat_deliveries, 3,
         "the non-advisory heartbeat exhausts the same declared budget"
     );
     assert_eq!(
@@ -401,7 +402,7 @@ async fn advisory_exhaustion_replays_from_history_without_divergence() -> TestRe
             &step.projection,
             aion::durability::replay_inspect::StepProjection::Resolved(
                 aion::durability::Resolution::ActivityFailedTerminal(error)
-            ) if error.message == "retryable:meridian unreachable (delivery attempt 2)"
+            ) if error.message == "retryable:meridian unreachable (delivery attempt 3)"
         )
     });
     assert!(
