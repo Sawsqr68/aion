@@ -270,6 +270,16 @@ const VARIANT_FIXTURES: Record<string, Event> = {
   ActivityStarted: activityStarted(1),
   ActivityCompleted: activityCompleted(1),
   ActivityFailed: activityFailed(1, 1),
+  ActivityAdvisoryExhausted: {
+    type: 'ActivityAdvisoryExhausted',
+    data: {
+      envelope: envelope(1),
+      activity_id: 7,
+      activity_type: 'send_heartbeat',
+      reason: 'retryable:meridian unreachable',
+      attempt: 2,
+    },
+  },
   ActivityCancelled: {
     type: 'ActivityCancelled',
     data: { envelope: envelope(1), activity_id: 7, attempt: 1 },
@@ -360,6 +370,7 @@ const LANE_VARIANTS: Record<string, string> = {
   ActivityStarted: 'activity',
   ActivityCompleted: 'activity',
   ActivityFailed: 'activity',
+  ActivityAdvisoryExhausted: 'activity',
   ActivityCancelled: 'activity',
   TimerStarted: 'timer',
   TimerFired: 'timer',
@@ -373,13 +384,13 @@ const LANE_VARIANTS: Record<string, string> = {
   ChildWorkflowCancelled: 'child',
 };
 
-test('every one of the 31 variants is covered by a fixture', () => {
+test('every one of the 32 variants is covered by a fixture', () => {
   for (const eventType of KNOWN_EVENT_TYPES) {
     expect(VARIANT_FIXTURES[eventType]).toBeDefined();
   }
 });
 
-test('each of the 31 variants projects to a real typed row (no silent drop)', () => {
+test('each of the 32 variants projects to a real typed row (no silent drop)', () => {
   for (const eventType of KNOWN_EVENT_TYPES) {
     const event = VARIANT_FIXTURES[eventType];
 

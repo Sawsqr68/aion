@@ -416,6 +416,7 @@ const fn event_family(event: &Event) -> EventFamily {
         | Event::ActivityStarted { .. }
         | Event::ActivityCompleted { .. }
         | Event::ActivityFailed { .. }
+        | Event::ActivityAdvisoryExhausted { .. }
         | Event::ActivityCancelled { .. } => EventFamily::Activity,
         Event::TimerStarted { .. }
         | Event::TimerFired { .. }

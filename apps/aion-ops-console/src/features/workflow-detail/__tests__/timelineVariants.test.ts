@@ -7,9 +7,9 @@ import {
   type KnownEventType,
 } from '../lib/timelineVariants';
 
-test('KNOWN_EVENT_TYPES enumerates exactly the 31 generated variants', () => {
-  expect(KNOWN_EVENT_TYPES).toHaveLength(31);
-  expect(new Set(KNOWN_EVENT_TYPES).size).toBe(31);
+test('KNOWN_EVENT_TYPES enumerates exactly the 32 generated variants', () => {
+  expect(KNOWN_EVENT_TYPES).toHaveLength(32);
+  expect(new Set(KNOWN_EVENT_TYPES).size).toBe(32);
 });
 
 test('classifyKnownEvent maps every known variant to a family + sub-kind', () => {
@@ -36,6 +36,7 @@ test('classifyKnownEvent assigns the expected families', () => {
     ActivityStarted: 'activity',
     ActivityCompleted: 'activity',
     ActivityFailed: 'activity',
+    ActivityAdvisoryExhausted: 'activity',
     ActivityCancelled: 'activity',
     TimerStarted: 'timer',
     TimerFired: 'timer',

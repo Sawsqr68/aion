@@ -60,6 +60,7 @@ export function projectTimeline(events: readonly Event[]): TimelineEntry[] {
       case 'ActivityStarted':
       case 'ActivityCompleted':
       case 'ActivityFailed':
+      case 'ActivityAdvisoryExhausted':
       case 'ActivityCancelled':
         patchActivity(entries, activities, event);
         break;
@@ -133,6 +134,8 @@ function patchActivity(
     entry.completed = event;
   } else if (event.type === 'ActivityFailed') {
     entry.failures.push(activityAttempt(event));
+  } else if (event.type === 'ActivityAdvisoryExhausted') {
+    entry.advisoryExhausted = event;
   } else {
     entry.cancelled = event;
   }
@@ -159,6 +162,7 @@ function newActivityEntry(
     started: null,
     completed: null,
     cancelled: null,
+    advisoryExhausted: null,
     failures: [],
     status: 'scheduled',
   };
@@ -171,11 +175,13 @@ function refreshActivity(entry: ActivityTimelineEntry): void {
     ? 'cancelled'
     : entry.completed
       ? 'completed'
-      : entry.failures.length > 0
-        ? 'failed'
-        : entry.started
-          ? 'started'
-          : 'scheduled';
+      : entry.advisoryExhausted
+        ? 'advisory-exhausted'
+        : entry.failures.length > 0
+          ? 'failed'
+          : entry.started
+            ? 'started'
+            : 'scheduled';
   entry.summary = activitySummary(entry);
   entry.payload = activityPayload(entry);
   entry.recordedAt = latest ? eventRecordedAt(latest) : entry.recordedAt;
@@ -407,6 +413,11 @@ function activitySummary(entry: ActivityTimelineEntry): string {
     return `Activity ${name} completed after ${entry.failures.length} failed attempt(s)`;
   }
 
+  if (entry.status === 'advisory-exhausted') {
+    const warning = entry.advisoryExhausted;
+    return `Advisory activity ${name} exhausted its budget at attempt ${warning?.data.attempt ?? entry.failures.length} — the step was not faulted`;
+  }
+
   if (entry.status === 'failed') {
     return `Activity ${name} failed attempt ${entry.failures.at(-1)?.attempt ?? entry.failures.length}`;
   }
@@ -434,6 +445,8 @@ function stringifyTimerId(timerId: TimerId): string {
   return 'Named' in timerId ? timerId.Named : `anonymous-${timerId.Anonymous}`;
 }
 
-type ActivityType = `Activity${'Scheduled' | 'Started' | 'Completed' | 'Failed' | 'Cancelled'}`;
+type ActivityType =
+  | `Activity${'Scheduled' | 'Started' | 'Completed' | 'Failed' | 'Cancelled'}`
+  | 'ActivityAdvisoryExhausted';
 type TimerType = 'TimerStarted' | 'TimerFired' | 'TimerCancelled' | 'WithTimeoutCompleted';
 type ChildType = `ChildWorkflow${'Started' | 'Completed' | 'Failed' | 'Cancelled'}`;

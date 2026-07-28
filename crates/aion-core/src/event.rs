@@ -328,6 +328,31 @@ pub enum Event {
         /// One-based activity attempt number that produced this failure.
         attempt: u32,
     },
+    /// An ADVISORY activity spent its whole attempt budget and failed for good
+    /// (RUNTIME-OPERATIONS.md R5).
+    ///
+    /// The warning the class promises: an advisory action is a side channel
+    /// (a heartbeat, a notification), so its exhaustion never faults the
+    /// calling step — but it must never be silent either. This event is that
+    /// visibility. It ACCOMPANIES the activity's honest terminal
+    /// [`Event::ActivityFailed`]; it never replaces it, because the activity
+    /// really did fail and history says so.
+    ///
+    /// Non-terminal for the workflow: it says nothing about the run's
+    /// outcome, so status projection deliberately ignores it.
+    ActivityAdvisoryExhausted {
+        /// Recording metadata for this event.
+        envelope: EventEnvelope,
+        /// Advisory activity whose attempt budget was spent.
+        activity_id: ActivityId,
+        /// Activity type of the exhausted advisory activity.
+        activity_type: String,
+        /// The last attempt's failure reason, verbatim — the same string the
+        /// accompanying terminal [`Event::ActivityFailed`] carries.
+        reason: String,
+        /// One-based number of the attempt that spent the budget.
+        attempt: u32,
+    },
     /// An activity was cancelled as an explicit cancellation outcome.
     ActivityCancelled {
         /// Recording metadata for this event.
@@ -557,6 +582,7 @@ impl Event {
             | Self::ActivityStarted { envelope, .. }
             | Self::ActivityCompleted { envelope, .. }
             | Self::ActivityFailed { envelope, .. }
+            | Self::ActivityAdvisoryExhausted { envelope, .. }
             | Self::ActivityCancelled { envelope, .. }
             | Self::TimerStarted { envelope, .. }
             | Self::TimerFired { envelope, .. }

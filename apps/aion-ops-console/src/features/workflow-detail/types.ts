@@ -41,8 +41,15 @@ export type ActivityTimelineEntry = TimelineBase & {
   started: Extract<Event, { type: 'ActivityStarted' }> | null;
   completed: Extract<Event, { type: 'ActivityCompleted' }> | null;
   cancelled: Extract<Event, { type: 'ActivityCancelled' }> | null;
+  /**
+   * The R5 warning: this ADVISORY activity spent its whole attempt budget.
+   * It accompanies a terminal `ActivityFailed`, never replaces it, and the
+   * step it was called from was NOT faulted — so the lane reads
+   * `advisory-exhausted`, not `failed`.
+   */
+  advisoryExhausted: Extract<Event, { type: 'ActivityAdvisoryExhausted' }> | null;
   failures: ActivityAttempt[];
-  status: 'scheduled' | 'started' | 'completed' | 'failed' | 'cancelled';
+  status: 'scheduled' | 'started' | 'completed' | 'failed' | 'cancelled' | 'advisory-exhausted';
 };
 
 export type TimerTimelineEntry = TimelineBase & {
