@@ -1,0 +1,38 @@
+    Checking aion-awl v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-awl)
+    Checking aion-store-libsql v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-store-libsql)
+    Checking axum v0.8.9
+    Checking liminal-sdk v0.5.0
+    Checking clap v4.6.1
+    Checking prometheus v0.14.0
+    Checking aion-integration-norn v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-integration-norn)
+    Checking rustls-platform-verifier v0.7.0
+    Checking lsp-types v0.97.0
+    Checking notify-types v2.1.0
+    Checking toml_datetime v0.7.5+spec-1.1.0
+    Checking fsevent-sys v4.1.0
+    Checking aion-integration-cli v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-integration-cli)
+    Checking aion-toolchain v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-toolchain)
+    Checking liminal-server v0.5.0
+    Checking notify v8.2.0
+    Checking reqwest v0.13.4
+    Checking toml_edit v0.23.10+spec-1.0.0
+    Checking aion-integrations v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-integrations)
+    Checking million-processes v0.1.0 (/Users/deanwhiting/Developer/stack/aion/benchmarks/million-processes)
+    Checking aion-store-haematite v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-store-haematite)
+    Checking aion-store v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-store)
+    Checking aion-package v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-package)
+    Checking tonic v0.14.6
+    Checking aion-core v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-core)
+    Checking xtask v0.0.0 (/Users/deanwhiting/Developer/stack/aion/xtask)
+    Checking aion-awl-package v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-awl-package)
+    Checking tonic-prost v0.14.5
+    Checking aion-rs v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion)
+    Checking aion-proto-generated v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-proto-generated)
+    Checking aion-awl-lsp v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-awl-lsp)
+    Checking aion-proto v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-proto)
+    Checking aion-worker v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-worker)
+    Checking aion-server v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-server)
+    Checking aion-client v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-client)
+    Checking aion-darwin-acl v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-darwin-acl)
+    Checking aion-cli v0.10.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 32.86s
