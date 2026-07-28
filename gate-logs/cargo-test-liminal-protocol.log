@@ -1,0 +1,436 @@
+   Compiling liminal-rs v0.4.1 (/Users/tom/Developer/ablative/aion/vendor/liminal-rs)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.25s
+     Running unittests src/lib.rs (vendor/liminal-rs/target/debug/deps/liminal-6bb79c60b5d203f9)
+
+running 336 tests
+test causal::tests::generated_message_ids_are_unique ... ok
+test causal::tests::root_context_has_no_parent ... ok
+test causal::tests::happened_before_follows_full_parent_chain ... ok
+test causal::tests::child_context_carries_parent_reference ... ok
+test channel::schema::tests::schema_is_clone_send_sync ... ok
+test causal::orderer::tests::buffers_child_until_parent_emits ... ok
+test causal::orderer::tests::orphan_drain_keeps_buffered_chain_in_causal_order ... ok
+test causal::orderer::tests::independent_messages_emit_immediately ... ok
+test causal::orderer::tests::orphan_timeout_emits_with_warning_flag ... ok
+test channel::subscription::inbox_bounding::drop_backstop_releases_queued_charges ... ok
+test channel::subscription::inbox_bounding::close_releases_queued_charges_so_siblings_recover ... ok
+test channel::subscription::inbox_bounding::close_is_idempotent_and_drains_the_queue ... ok
+test channel::subscription::inbox_bounding::closed_inbox_refuses_without_charging ... ok
+test channel::subscription::inbox_bounding::charge_and_release_are_exact ... ok
+test channel::subscription::inbox_bounding::overflow_sheds_and_does_not_grow_memory ... ok
+test channel::subscription::inbox_bounding::per_entry_charge_ownership_survives_budget_install ... ok
+test channel::subscription::inbox_bounding::per_inbox_fairness_trip_stops_one_inbox_starving_siblings ... ok
+test channel::subscription::inbox_bounding::notifier_install_onto_non_empty_inbox_fires_once ... ok
+test channel::subscription::inbox_bounding::notifier_fires_only_on_empty_to_non_empty_transition ... ok
+test channel::subscription::inbox_bounding::shared_budget_is_spent_across_all_a_connections_inboxes ... ok
+test channel::subscription::cooperative_smoke::real_subscriber_process_delivers_a_published_envelope_cooperatively ... ok
+test channel::schema::tests::explicit_schema_id_is_preserved ... ok
+test channel::schema::tests::evolution_rejects_non_object_schema ... ok
+test channel::schema::tests::validates_payload_against_json_schema ... ok
+test channel::schema::tests::evolution_adds_defaulted_field_and_changes_schema_id ... ok
+test channel::tests::command_on_dead_actor_returns_promptly_not_after_timeout ... ok
+test channel::tests::channel_restarts_after_crash_and_publish_succeeds ... ok
+test channel::tests::publish_after_close_is_rejected ... ok
+test channel::tests::max_restarts_budget_bounds_restarts ... ok
+test channel::tests::evolved_schema_keeps_existing_subscriber_and_applies_default ... ok
+test channel::tests::publish_valid_message_delivers_envelope ... ok
+test channel::tests::publish_invalid_message_returns_schema_mismatch_without_delivery ... ok
+test channel::wire::tests::rejects_a_truncated_frame ... ok
+test channel::wire::tests::magic_is_stable ... ok
+test channel::wire::tests::rejects_an_empty_frame ... ok
+test channel::tests::explicit_unsubscribe_removes_subscriber ... ok
+test channel::tests::dropping_subscription_removes_subscriber_via_exit ... ok
+test channel::wire::tests::round_trips_a_full_envelope ... ok
+test channel::wire::tests::rejects_an_unknown_magic ... ok
+test channel::wire::tests::round_trips_an_envelope_without_causal_context ... ok
+test channel::tests::predicate_subscription_only_receives_matching_messages ... ok
+test conversation::actor::tests::abnormal_exit_racing_close_is_recorded_without_reopening_phase ... ok
+test channel::tests::registry_creates_looks_up_lists_and_rejects_duplicates ... ok
+test channel::tests::restart_policy_never_is_configurable ... ok
+test conversation::actor::tests::actor_is_spawned_linked_and_queryable ... ok
+test conversation::actor::tests::bare_actor_exit_removes_registrations_without_restart_or_close ... ok
+test channel::tests::separate_channels_are_independent_processes ... ok
+test conversation::actor::tests::blocked_receive_is_released_by_finalize ... ok
+test conversation::actor::tests::boot_discovered_death_under_fail_policy_fails_conversation_honestly ... ok
+test channel::tests::restarting_one_channel_does_not_disturb_another ... ok
+test conversation::actor::tests::command_enqueued_after_finalize_is_rejected ... ok
+test conversation::actor::tests::closing_conversation_terminates_and_deregisters_participant ... ok
+test conversation::actor::tests::boot_records_death_that_occurred_while_actor_was_down_and_continues ... ok
+test conversation::actor::tests::finalize_racing_respawn_leaves_no_processes_or_registrations ... ok
+test conversation::actor::tests::close_and_finalize_suppress_expected_watcher_exit ... ok
+test conversation::actor::tests::parked_unlinked_watcher_wake_probes_and_self_terminates ... ok
+test conversation::actor::tests::notify_on_already_dead_participant_fires_immediately ... ok
+test channel::tests::subscriber_death_detection_survives_restart ... ok
+test conversation::actor::tests::external_watcher_kill_fails_and_finalizes_conversation ... ok
+test conversation::actor::tests::handle_progresses_created_active_closed_lifecycle ... ok
+test conversation::actor::tests::finalized_conversation_refuses_all_operations_without_respawn ... ok
+test conversation::actor::tests::watcher_probe_reaps_already_dead_target_instead_of_parking ... ok
+test conversation::actor::tests::participant_death_arrives_as_trapped_exit_without_timeout ... ok
+test conversation::actor::tests::watcher_is_linked_to_actor_after_open ... ok
+test conversation::actor::tests::spawn_rolls_back_when_actor_dies_between_watcher_arm_and_boot ... ok
+test conversation::types::tests::child_conversation_references_parent_trace_context ... ok
+test conversation::types::tests::conversation_handle_is_clone_send_sync ... ok
+test conversation::types::tests::message_mapping_preserves_trace_context ... ok
+test conversation::types::tests::messages_inherit_conversation_trace_context_automatically ... ok
+test conversation::actor::tests::restart_after_recorded_participant_crash_prunes_dead_pid_without_duplicate ... ok
+test conversation::types::tests::starting_conversation_creates_named_span_with_fresh_trace_context ... ok
+test durability::bridge::tests::block_on_returns_value_from_ready_future ... ok
+test durability::conversation::tests::append_advances_sequence_and_conflict_is_not_retried ... ok
+test durability::conversation::tests::event_serialization_round_trips_all_variants ... ok
+test conversation::patterns::tests::ask_echo_round_trips_payload ... ok
+test durability::conversation::tests::fully_processed_redelivery_is_no_op ... ok
+test durability::conversation::tests::never_seen_delivery_appends_received_event_and_starts ... ok
+test durability::conversation::tests::partial_redelivery_resumes_after_last_completed_step ... ok
+test conversation::patterns::tests::ask_reports_participant_crash_before_reply ... ok
+test durability::conversation::tests::replaying_same_events_twice_produces_identical_state ... ok
+test durability::conversation::tests::recovery_replays_event_log_and_sets_expected_sequence ... ok
+test durability::conversation::tests::state_default_is_empty_and_helpers_track_finished_and_steps ... ok
+test durability::cursor::tests::checkpoint_returns_regression_for_stale_or_backward_offsets ... ok
+test durability::cursor::tests::checkpoint_uses_current_offset_key_and_updates_on_success ... ok
+test durability::cursor::tests::driver_can_be_built_from_durability_config ... ok
+test durability::cursor::tests::cursor_constructors_expose_partition_state_and_debug_clone ... ok
+test durability::bridge::tests::block_on_fails_loudly_and_fast_on_always_pending_future ... ok
+test durability::cursor::tests::explicit_flush_driver_checkpoints_only_on_flush ... ok
+test durability::cursor::tests::per_message_driver_checkpoints_each_message_and_resets ... ok
+test durability::cursor::tests::resume_reads_persisted_offset_without_writing ... ok
+test durability::cursor::tests::resume_without_persisted_offset_starts_at_zero ... ok
+test durability::cursor::tests::per_batch_driver_waits_for_batch_size_then_resets ... ok
+test durability::dedup::tests::complete_receipt_appends_completed_entry_with_receipt_timestamp ... ok
+test durability::dedup::tests::completing_missing_key_returns_collision ... ok
+test durability::dedup::tests::completing_completed_key_is_idempotent_only_for_matching_receipt ... ok
+test durability::dedup::tests::duplicate_completed_returns_receipt_without_append ... ok
+test durability::dedup::tests::duplicate_inflight_returns_status_without_timestamp_refresh ... ok
+test durability::dedup::tests::key_hash_and_stream_key_are_deterministic ... ok
+test durability::dedup::tests::entry_serialization_round_trips_required_fields ... ok
+test durability::dedup::tests::release_claim_is_idempotent_across_double_release ... ok
+test durability::dedup::tests::release_claim_never_clobbers_a_stored_receipt ... ok
+test durability::dedup::tests::release_claim_on_absent_key_is_noop ... ok
+test durability::dedup::tests::release_claim_conflict_resolves_against_a_legitimate_reclaim ... ok
+test durability::dedup::tests::release_claim_tombstones_inflight_and_allows_reclaim ... ok
+test durability::dedup::tests::sweep_keeps_receipt_younger_than_ttl_even_when_claim_is_old ... ok
+test durability::receipt::tests::receipt_debug_reports_length_not_contents ... ok
+test durability::dedup::tests::sweep_uses_scan_and_respects_ttl_grace ... ok
+test durability::receipt::tests::receipts_compare_by_bytes ... ok
+test durability::recovery::tests::conversation_recovery_replays_partial_and_finished_state ... ok
+test durability::recovery::tests::channel_recovery_reconstructs_partition_sequences ... ok
+test durability::recovery::tests::cursor_recovery_without_persisted_offset_starts_at_zero ... ok
+test durability::recovery::tests::cursor_recovery_resumes_offset_and_replays_missed_messages ... ok
+test durability::replay::tests::deserialize_orders_strictly_by_sequence_when_input_is_shuffled ... ok
+test durability::replay::tests::replay_empty_range_returns_empty_without_error ... ok
+test durability::replay::tests::replay_empty_partition_from_zero_returns_empty_without_error ... ok
+test durability::replay::tests::replay_paginates_until_empty_even_when_pages_are_partial ... ok
+test durability::replay::tests::replay_returns_messages_in_sequence_order_from_offset ... ok
+test conversation::actor::tests::supervisor_restarts_only_crashed_actor ... ok
+test durability::store::ephemeral_lifecycle_tests::guard_drops_store_before_removing_directory ... ok
+test conversation::patterns::tests::ask_returns_real_participant_reply ... ok
+test conversation::actor::tests::stale_watcher_exit_is_ignored_by_identity_check ... ok
+test envelope::tests::envelope_assigns_unique_message_ids ... ok
+test envelope::tests::envelope_carries_required_fields ... ok
+test metrics::export::tests::escapes_label_values_and_sanitizes_label_names ... ok
+test metrics::export::tests::render_prefixes_digit_leading_metric_and_label_names ... ok
+test metrics::export::tests::renders_counter_with_type_help_labels_and_sanitized_name ... ok
+test metrics::export::tests::renders_gauge_values_without_empty_label_blocks ... ok
+test metrics::export::tests::renders_histogram_buckets_sum_and_count ... ok
+test metrics::export::tests::renders_same_snapshot_identically ... ok
+test metrics::export::tests::sanitizers_prefix_leading_digit_to_keep_first_char_valid ... ok
+test pressure::capacity::tests::capacity_tracker_reports_underflow_errors_without_negative_counts ... ok
+test pressure::capacity::tests::capacity_tracker_starts_empty_and_records_counts ... ok
+test pressure::capacity::tests::consumer_capacity_constructs_with_public_fields_and_validates_positive_limits ... ok
+test pressure::capacity::tests::pressure_root_re_exports_capacity_types ... ok
+test pressure::capacity::tests::pressure_signal_accepts_available_in_flight_regardless_of_buffer_state ... ok
+test pressure::capacity::tests::pressure_signal_accepts_when_in_flight_capacity_is_available ... ok
+test pressure::capacity::tests::pressure_signal_defers_when_in_flight_full_and_buffer_has_capacity ... ok
+test pressure::capacity::tests::pressure_signal_rejects_when_in_flight_and_buffer_limits_are_reached ... ok
+test pressure::enforce::tests::custom_monitor_scores_are_enforced_without_manual_evaluate_call ... ok
+test pressure::enforce::tests::enforcement_returns_no_actions_below_all_thresholds ... ok
+test pressure::enforce::tests::enforcement_runs_as_part_of_each_monitor_update ... ok
+test pressure::enforce::tests::policy_enforcement_emits_slow_producer_when_threshold_is_crossed ... ok
+test pressure::enforce::tests::scale_consumer_policy_emits_scale_signal_with_channel_and_consumer_count ... ok
+test pressure::monitor::tests::channel_pressure_aggregates_across_consumers ... ok
+test pressure::monitor::tests::consumer_utilization_uses_current_and_max_in_flight ... ok
+test pressure::monitor::tests::monitor_tracks_accept_defer_and_reject_counts_per_consumer ... ok
+test pressure::monitor::tests::pressure_monitor_starts_without_tracked_consumers ... ok
+test pressure::monitor::tests::pressure_scores_are_clamped_to_unit_range ... ok
+test pressure::monitor::tests::scoring_function_is_configurable ... ok
+test pressure::monitor::tests::signal_for_unregistered_consumer_does_not_create_ghost_or_dilute_pressure ... ok
+test pressure::policy::tests::channel_policy_config_stores_policies_in_threshold_order ... ok
+test pressure::policy::tests::policies_compose_in_escalation_sequence ... ok
+test pressure::policy::tests::policy_action_defines_exact_pressure_actions ... ok
+test pressure::policy::tests::pressure_policy_constructs_with_action_and_threshold ... ok
+test pressure::policy::tests::pressure_root_re_exports_policy_types ... ok
+test pressure::signal::tests::delivery_result_carries_signal_in_return_value ... ok
+test pressure::signal::tests::pressure_root_re_exports_signal_result_types ... ok
+test pressure::signal::tests::pressure_signal_defines_only_accept_defer_reject_semantics ... ok
+test protocol::backpressure::tests::accept_decrements_outstanding_and_returns_to_normal ... ok
+test protocol::backpressure::tests::accept_preserves_rejecting_when_still_beyond_buffer ... ok
+test protocol::backpressure::tests::accept_with_zero_outstanding_returns_protocol_error ... ok
+test protocol::backpressure::tests::payload_structs_carry_referenced_message_ids_and_reasons ... ok
+test protocol::backpressure::tests::pressure_state_has_exact_required_variants ... ok
+test protocol::backpressure::tests::public_backpressure_types_implement_debug ... ok
+test protocol::backpressure::tests::stream_pressure_rejects_zero_capacity ... ok
+test protocol::backpressure::tests::stream_pressure_transitions_to_deferred_at_max_in_flight ... ok
+test protocol::backpressure::tests::stream_pressure_transitions_to_rejecting_beyond_buffer ... ok
+test protocol::backpressure::tests::subscribe_capacity_can_create_stream_pressure ... ok
+test protocol::causal::tests::causal_context_serialization_round_trips ... ok
+test protocol::causal::tests::causal_context_trait_bounds_are_available ... ok
+test protocol::causal::tests::constructors_create_expected_context_shapes ... ok
+test protocol::causal::tests::extract_reads_causal_context_without_payload_parsing ... ok
+test protocol::causal::tests::independent_context_serializes_as_absent_fields ... ok
+test protocol::codec::tests::causal_context_extracts_from_publish_frame_envelope_bytes ... ok
+test protocol::codec::tests::conversation_close_optional_reason_code_round_trips ... ok
+test protocol::codec::tests::decode_handles_garbage_inputs_without_panicking ... ok
+test protocol::codec::tests::decode_rejects_invalid_stream_without_panicking ... ok
+test protocol::codec::tests::decode_short_header_returns_incomplete_header ... ok
+test protocol::codec::tests::decode_truncated_payload_returns_truncated_payload ... ok
+test protocol::codec::tests::decode_unknown_frame_type_returns_unknown_and_consumes_payload ... ok
+test protocol::codec::tests::deliver_frame_round_trips_seq_and_envelope ... ok
+test protocol::codec::tests::encode_writes_header_fields_in_wire_order ... ok
+test protocol::codec::tests::message_frames_preserve_envelope_payload_bytes ... ok
+test protocol::codec::tests::no_payload_frames_round_trip_as_header_only ... ok
+test protocol::codec::tests::pressure_frames_preserve_referenced_message_ids_and_reasons ... ok
+test protocol::codec::tests::publish_idempotency_key_is_additive_and_round_trips ... ok
+test protocol::codec::tests::round_trips_all_named_frame_types ... ok
+test protocol::codec::tests::subscription_schema_fields_round_trip_and_remain_accessible ... ok
+test protocol::codec::tests::worker_register_ack_invalid_status_byte_is_rejected ... ok
+test protocol::codec::tests::worker_register_ack_outcome_round_trips ... ok
+test protocol::codec::tests::worker_register_discriminants_are_additive_and_unknown_preserved ... ok
+test protocol::codec::tests::worker_register_frames_round_trip ... ok
+test protocol::codec::tests::worker_register_node_presence_distinguishes_none_from_empty ... ok
+test protocol::envelope::tests::causal_context_is_extractable_from_envelope_bytes ... ok
+test protocol::envelope::tests::constructor_sets_all_fields ... ok
+test protocol::envelope::tests::empty_payload_round_trips ... ok
+test protocol::envelope::tests::encoded_layout_starts_with_schema_id_and_big_endian_lengths ... ok
+test protocol::envelope::tests::envelope_trait_bounds_are_available ... ok
+test protocol::envelope::tests::identical_fields_produce_identical_bytes ... ok
+test protocol::envelope::tests::schema_id_wraps_exactly_thirty_two_bytes ... ok
+test protocol::envelope::tests::serialization_round_trips_losslessly ... ok
+test protocol::frame::tests::constructors_validate_streams ... ok
+test protocol::frame::tests::frame_type_discriminants_round_trip ... ok
+test protocol::handshake::tests::connect_ack_constructor_builds_stream_zero_frame ... ok
+test protocol::handshake::tests::connect_ack_constructor_rejects_non_zero_stream ... ok
+test protocol::handshake::tests::connect_ack_frame_round_trips_through_codec ... ok
+test protocol::handshake::tests::connect_constructor_builds_stream_zero_frame_with_opaque_token ... ok
+test protocol::handshake::tests::connect_constructor_rejects_non_zero_stream ... ok
+test protocol::handshake::tests::connect_error_constructor_rejects_non_zero_stream ... ok
+test protocol::handshake::tests::connect_error_frame_uses_error_reason_code_and_message ... ok
+test protocol::handshake::tests::connect_frame_round_trips_through_codec ... ok
+test protocol::lifecycle::tests::active_accepts_subscribe ... ok
+test protocol::lifecycle::tests::closed_accepts_nothing ... ok
+test protocol::lifecycle::tests::connect_ack_transitions_authenticating_to_active ... ok
+test protocol::lifecycle::tests::connect_transitions_to_authenticating ... ok
+test protocol::lifecycle::tests::connecting_rejects_ping_with_state_and_frame_type ... ok
+test protocol::lifecycle::tests::connecting_rejects_publish_with_state_and_frame_type ... ok
+test protocol::lifecycle::tests::disconnect_ack_in_closing_transitions_to_closed ... ok
+test protocol::lifecycle::tests::ping_generates_pong_response_on_stream_zero ... ok
+test protocol::lifecycle::tests::ping_in_connecting_returns_invalid_state_transition ... ok
+test protocol::lifecycle::tests::ping_on_stream_one_in_active_returns_invalid_stream ... ok
+test protocol::lifecycle::tests::ping_on_stream_zero_in_active_is_valid ... ok
+test protocol::lifecycle::tests::pong_frames_carry_no_payload_semantically ... ok
+test protocol::multiplex::tests::allocator_never_recycles_ids ... ok
+test protocol::multiplex::tests::client_allocator_errors_after_final_odd_stream_id ... ok
+test protocol::multiplex::tests::client_allocator_produces_odd_ids ... ok
+test protocol::multiplex::tests::duplicate_insert_returns_error_and_preserves_state ... ok
+test protocol::multiplex::tests::insert_adds_stream_and_counts_it ... ok
+test protocol::multiplex::tests::remove_deletes_stream_and_updates_count ... ok
+test protocol::multiplex::tests::server_allocator_errors_after_final_even_stream_id ... ok
+test protocol::multiplex::tests::server_allocator_produces_even_ids ... ok
+test protocol::multiplex::tests::stream_id_trait_bounds_are_available ... ok
+test protocol::multiplex::tests::stream_one_is_application_and_not_control ... ok
+test protocol::multiplex::tests::stream_state_has_exact_required_variants ... ok
+test protocol::multiplex::tests::stream_zero_is_control_and_not_application ... ok
+test protocol::multiplex::tests::transition_on_missing_stream_returns_protocol_error ... ok
+test protocol::multiplex::tests::transition_updates_existing_stream_state ... ok
+test protocol::schema::tests::negotiation_accepts_empty_list_as_opt_out ... ok
+test protocol::schema::tests::negotiation_reports_schema_incompatible_with_distinct_reason_code ... ok
+test protocol::schema::tests::negotiation_requires_exact_schema_id_equality ... ok
+test protocol::schema::tests::negotiation_selects_channel_schema_when_accepted ... ok
+test protocol::schema::tests::schema_incompatible_error_builds_subscribe_error_frame ... ok
+test protocol::version::tests::deserialize_rejects_wrong_length ... ok
+test protocol::version::tests::negotiation_reports_version_mismatch ... ok
+test protocol::version::tests::negotiation_selects_exact_single_version ... ok
+test protocol::version::tests::negotiation_selects_highest_mutual_version ... ok
+test protocol::version::tests::version_round_trips_through_wire_bytes ... ok
+test protocol::version::tests::version_serializes_to_exactly_four_bytes ... ok
+test protocol::version::tests::version_trait_bounds_are_available ... ok
+test protocol::version::tests::versions_order_by_major_then_minor ... ok
+test routing::compiler::tests::and_extracts_more_frequent_field_first_among_equal_cost_clauses ... ok
+test routing::compiler::tests::and_places_existence_check_before_comparison ... ok
+test routing::compiler::tests::compile_borrows_predicate_unchanged ... ok
+test routing::compiler::tests::compiled_matches_direct_evaluation_for_all_combinations ... ok
+test routing::compiler::tests::reordering_preserves_result_for_existence_and_comparison ... ok
+test durability::store::ephemeral_lifecycle_tests::guard_leaks_directory_when_store_drop_panics ... ok
+test conversation::actor::tests::repeated_open_close_pins_bounded_registries ... ok
+test durability::store::ephemeral_lifecycle_tests::ephemeral_open_failure_rolls_back_directory ... ok
+test routing::dispatch::tests::empty_group_yields_no_consumer_available ... ok
+test routing::dispatch::tests::no_remaining_consumer_after_crash_is_an_error ... ok
+test routing::dispatch::tests::registration_helper_constructs_consumer_state ... ok
+test conversation::actor::tests::boot_wait_is_bounded_and_purges_the_queued_command ... ok
+test routing::evaluate::tests::and_short_circuits_at_first_false ... ok
+test routing::evaluate::tests::comparison_returns_false_for_missing_field ... ok
+test routing::evaluate::tests::empty_boolean_combinators_have_vacuous_values ... ok
+test routing::evaluate::tests::exists_returns_false_for_missing_field ... ok
+test routing::evaluate::tests::exists_returns_true_for_present_field ... ok
+test routing::evaluate::tests::integer_greater_than_comparison_matches ... ok
+test routing::evaluate::tests::integer_greater_than_comparison_rejects_lower_value ... ok
+test routing::evaluate::tests::not_negates_child_predicate ... ok
+test routing::evaluate::tests::or_short_circuits_at_first_true ... ok
+test routing::evaluate::tests::range_includes_middle_and_bounds ... ok
+test routing::evaluate::tests::range_rejects_missing_field ... ok
+test routing::evaluate::tests::range_rejects_type_mismatch ... ok
+test routing::evaluate::tests::range_rejects_value_below_lower_bound ... ok
+test routing::function::execute::actor::cooperative_smoke::real_routing_actor_replies_to_a_cooperative_call_async ... ok
+test routing::function::execute::tests::execution_returns_decision_using_consumer_state_view ... ok
+test conversation::patterns::tests::ask_times_out_when_participant_never_replies ... ok
+test routing::function::execute::tests::hot_deploy_does_not_interrupt_in_flight_and_swaps_next_version ... ok
+test routing::function::execute::tests::message_fields_are_visible_to_routing_function ... ok
+test routing::function::execute::tests::panic_in_function_is_contained_and_other_channels_proceed ... ok
+test durability::store::ephemeral_lifecycle_tests::rooted_ephemeral_store_lives_and_dies_under_the_given_root ... ok
+test routing::function::loader::tests::content_hash_is_stable_and_distinguishes_bytecode ... ok
+test routing::function::loader::tests::load_returns_executable_function_keyed_by_content_hash ... ok
+test routing::function::loader::tests::loading_same_content_hash_twice_does_not_duplicate ... ok
+test routing::function::loader::tests::slot_deploy_swaps_active_function ... ok
+test routing::group::tests::consumer_set_is_ordered_and_deduplicated ... ok
+test routing::group::tests::new_group_has_routing_function_and_empty_consumer_set ... ok
+test routing::group::tests::remove_consumer_affects_future_snapshots_only ... ok
+test routing::predicate::tests::boolean_combinators_construct ... ok
+test routing::predicate::tests::comparison_debug_round_trips_all_variants ... ok
+test routing::predicate::tests::comparison_predicate_constructs ... ok
+test routing::predicate::tests::empty_boolean_combinators_construct ... ok
+test routing::predicate::tests::field_path_segments_are_borrowed_dot_parts ... ok
+test routing::predicate::tests::range_and_exists_predicates_construct ... ok
+test routing::predicate::tests::routing_root_re_exports_predicate_types ... ok
+test routing::table::tests::multiple_subscriptions_on_channel_are_evaluated_independently ... ok
+test routing::table::tests::new_table_is_empty ... ok
+test routing::table::tests::register_does_not_block_active_resolve ... ok
+test routing::table::tests::register_during_active_resolve_preserves_state ... ok
+test routing::table::tests::remove_does_not_block_active_resolve ... ok
+test routing::table::tests::removing_last_subscription_makes_channel_resolve_empty ... ok
+test routing::table::tests::resolve_nonexistent_channel_returns_empty_set ... ok
+test routing::table::tests::resolve_returns_empty_when_no_subscription_matches ... ok
+test routing::table::tests::resolve_returns_matching_subscription ... ok
+test routing::table::tests::routing_table_is_send_and_sync ... ok
+test routing::table::tests::updater_completion_is_observed_before_resolve_release ... ok
+test tracing::context::tests::child_preserves_trace_id_and_changes_span_id ... ok
+test tracing::context::tests::from_ids_round_trips ... ok
+test tracing::context::tests::invalid_traceparents_return_none ... ok
+test tracing::context::tests::new_root_generates_non_zero_ids ... ok
+test tracing::context::tests::roots_have_distinct_trace_ids ... ok
+test tracing::context::tests::traceparent_round_trips ... ok
+test tracing::logging::tests::builder_captures_active_trace_context_at_build_time ... ok
+test tracing::logging::tests::builder_constructs_structured_entries ... ok
+test routing::function::execute::tests::repeated_panics_do_not_poison_the_shared_supervisor ... ok
+test tracing::logging::tests::builder_records_no_context_after_span_leaves_scope ... ok
+test tracing::logging::tests::global_log_path_is_no_op_until_installed_then_emits_with_trace_context ... ok
+test tracing::logging::tests::log_levels_are_ordered_by_severity ... ok
+test tracing::logging::tests::minimum_level_filter_discards_lower_severity_entries ... ok
+test tracing::logging::tests::noop_emitter_discards_entries ... ok
+test tracing::logging::tests::public_logging_types_are_debug ... ok
+test tracing::span::tests::conversation_span_creates_root_and_child_contexts ... ok
+test tracing::span::tests::finished_span_is_clone_debug ... ok
+test tracing::span::tests::noop_collector_discards_spans ... ok
+test tracing::span::tests::span_finish_returns_finished_span ... ok
+test tracing::span::tests::span_guard_sets_and_restores_current_context ... ok
+test tracing::span::tests::span_start_is_now ... ok
+test durability::store::ephemeral_lifecycle_tests::ephemeral_dir_survives_until_last_store_clone_drops ... ok
+test durability::store::ephemeral_lifecycle_tests::ephemeral_dir_removed_after_last_handle_drops ... ok
+test routing::dispatch::tests::dispatch_links_to_selected_consumer_before_completion ... ok
+test routing::dispatch::tests::consumer_crash_reroutes_to_backup_with_real_sub_millisecond_latency ... ok
+test routing::dispatch::tests::dispatch_selects_consumer_via_routing_function ... ok
+test routing::dispatch::tests::reroute_timing_spans_real_exit_to_reroute_via_event_path ... ok
+test routing::function::execute::tests::function_exceeding_timeout_is_terminated_with_error ... ok
+test durability::store::ephemeral_lifecycle_tests::repeated_ephemeral_cycles_each_own_distinct_dir_zero_residue ... ok
+
+test result: ok. 336 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+
+     Running tests/channel_metrics.rs (vendor/liminal-rs/target/debug/deps/channel_metrics-8af67db2c851519a)
+
+running 5 tests
+test subscriber_count_tracks_active_subscribers ... ok
+test queue_depth_sets_absolute_value ... ok
+test delivery_latency_records_configured_histogram ... ok
+test record_publish_counts_per_channel ... ok
+test channel_metrics_is_clone_debug ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/conversation_metrics.rs (vendor/liminal-rs/target/debug/deps/conversation_metrics-7c1d92c0bae95cd5)
+
+running 8 tests
+test conversation_outcome_has_expected_variants ... ok
+test active_count_tracks_open_conversations ... ok
+test completion_count_tracks_successful_terminal_events ... ok
+test conversation_metrics_is_clone_debug ... ok
+test error_count_tracks_failed_terminal_events ... ok
+test duration_records_seconds_into_configured_histogram ... ok
+test terminal_completed_records_completion_duration_and_end ... ok
+test terminal_failures_record_error_duration_and_end ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/durability_channel.rs (vendor/liminal-rs/target/debug/deps/durability_channel-0ac99edf8efc61e9)
+
+running 6 tests
+test ephemeral_channel_has_no_store_and_performs_no_store_operations ... ok
+test message_envelope_round_trips_with_deterministic_bytes ... ok
+test durable_publish_propagates_sequence_conflict_without_retry ... ok
+test durable_publish_appends_serialized_envelope_before_returning_ok ... ok
+test durable_channel_tracks_per_partition_next_sequences ... ok
+test partition_routing_uses_key_function_and_modulo ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/durability_foundation.rs (vendor/liminal-rs/target/debug/deps/durability_foundation-20d3db5c158d9475)
+
+running 7 tests
+test durability_config_validates_fields_and_exposes_values ... ok
+test durability_error_variants_carry_required_context_and_error_trait ... ok
+test durable_store_trait_is_object_safe_and_has_expected_entry_shape ... ok
+test haematite_store_delegates_cas_and_maps_mismatch_to_cursor_regression ... ok
+test cas_to_offset_zero_does_not_brick_a_cursor_that_later_advances ... ok
+test haematite_store_delegates_append_read_scan_and_maps_sequence_conflict ... ok
+test haematite_store_point_read_returns_only_the_exact_physical_event ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/durability_real_persistence.rs (vendor/liminal-rs/target/debug/deps/durability_real_persistence-40f86f96bbd39fb7)
+
+running 2 tests
+test cursor_checkpoint_round_trip_against_the_real_engine ... ok
+test durable_channel_messages_survive_a_real_on_disk_reopen ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running tests/metrics_registry.rs (vendor/liminal-rs/target/debug/deps/metrics_registry-edb442f352467b75)
+
+running 7 tests
+test metrics_registry_is_clone_send_sync ... ok
+test histogram_registration_rejects_more_than_fixed_bucket_limit ... ok
+test metrics_snapshot_is_owned_static_debug ... ok
+test counter_saturates_instead_of_wrapping ... ok
+test duplicate_name_with_different_kind_returns_error ... ok
+test snapshot_contains_owned_metric_values ... ok
+test snapshot_tolerates_concurrent_writes ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/pressure_metrics.rs (vendor/liminal-rs/target/debug/deps/pressure_metrics-0bcdd378175becd5)
+
+running 9 tests
+test delivery_outcome_has_exactly_three_variants ... ok
+test record_delivery_outcome_rejected_increments_reject ... ok
+test set_capacity_utilization_does_not_clamp ... ok
+test set_capacity_utilization_sets_gauge_per_consumer ... ok
+test record_delivery_outcome_deferred_increments_defer ... ok
+test record_reject_counts_per_channel ... ok
+test record_defer_counts_per_channel ... ok
+test record_delivery_outcome_accepted_is_noop ... ok
+test pressure_metrics_is_clone_debug ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests liminal
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -38,6 +38,20 @@ pub struct ProtoActivityError {
     pub details: Option<ProtoPayload>,
 }
 
+/// Typed activity surface advertised during worker registration.
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, prost::Message)]
+pub struct ProtoActivityDescriptor {
+    /// Activity type.
+    #[prost(string, tag = "1")]
+    pub name: String,
+    /// JSON-encoded input schema.
+    #[prost(string, tag = "2")]
+    pub input_schema_json: String,
+    /// JSON-encoded output schema.
+    #[prost(string, tag = "3")]
+    pub output_schema_json: String,
+}
+
 /// Worker registration advertisement.
 ///
 /// A registration scopes the worker to a SET of `namespaces` correctness
@@ -67,6 +81,12 @@ pub struct ProtoRegisterWorker {
     /// worker's machine hostname, resolved by the SDK at registration.
     #[prost(string, tag = "4")]
     pub node: String,
+    /// Typed activity descriptors. Empty marks a pre-contract worker.
+    #[prost(message, repeated, tag = "5")]
+    pub activities: Vec<ProtoActivityDescriptor>,
+    /// Stable worker-build identity.
+    #[prost(string, tag = "6")]
+    pub identity: String,
 }
 
 /// Activity invocation pushed to a worker.
@@ -289,6 +309,8 @@ mod tests {
             activity_types: vec![String::from("charge-card"), String::from("send-email")],
             task_queue: String::from("claude"),
             node: String::from("host-7"),
+            activities: Vec::new(),
+            identity: String::new(),
         };
 
         assert_json_and_proto_round_trip(&registration)
@@ -304,6 +326,8 @@ mod tests {
             activity_types: vec![String::from("dev")],
             task_queue: String::from("default"),
             node: String::new(),
+            activities: Vec::new(),
+            identity: String::new(),
         };
         let decoded =
             ProtoRegisterWorker::decode(prost_round_trip_bytes(&registration)?.as_slice())?;
@@ -324,6 +348,8 @@ mod tests {
             activity_types: Vec::new(),
             task_queue: String::from("gpu"),
             node: String::from("n1"),
+            activities: Vec::new(),
+            identity: String::new(),
         };
         let mut bytes = Vec::new();
         registration.encode(&mut bytes)?;
@@ -338,6 +364,8 @@ mod tests {
             activity_types: vec![String::from("charge-card")],
             task_queue: String::new(),
             node: String::new(),
+            activities: Vec::new(),
+            identity: String::new(),
         };
         let mut bytes = Vec::new();
         no_node.encode(&mut bytes)?;

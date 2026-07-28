@@ -10,15 +10,17 @@ use std::{
 use zip::{ZipArchive, result::ZipError};
 
 use crate::{
-    BeamModule, BeamSet, ContentHash, ExtractionLimits, Manifest, PackageError,
+    BeamModule, BeamSet, ContentHash, ContractIdentityError, ExtractionLimits, Manifest,
+    PackageContract, PackageError,
     builder::is_safe_logical_name,
     extraction::ExtractionBudget,
-    hash::{has_explicit_timeout_identity, verified_content_hash},
+    hash::{has_contract_identity, verified_content_hash_with_contract},
     namespace::deployed_name,
     version::WorkflowVersion,
 };
 
 const MANIFEST_ENTRY: &str = "manifest.json";
+const CONTRACT_ENTRY: &str = "contract.json";
 const BEAM_PREFIX: &str = "beam/";
 const BEAM_SUFFIX: &str = ".beam";
 const SOURCE_PREFIX: &str = "src/";
@@ -32,6 +34,7 @@ const SOURCE_SUFFIX: &str = ".gleam";
 #[derive(Clone, Debug, PartialEq)]
 pub struct Package {
     manifest: Manifest,
+    contract: Option<PackageContract>,
     beams: BeamSet,
     source: BTreeMap<String, Vec<u8>>,
     content_hash: ContentHash,
@@ -82,9 +85,11 @@ impl Package {
         let mut budget = limits.budget();
         let manifest = read_manifest(&mut archive, &mut budget)?;
         manifest.check_format_version()?;
+        let contract = read_contract(&mut archive, &mut budget)?;
 
         let (beams, source) = read_archive_entries(&mut archive, &mut budget)?;
-        let content_hash = verified_content_hash(&beams, &manifest)?;
+        let content_hash =
+            verified_content_hash_with_contract(&beams, &manifest, contract.as_ref())?;
 
         if beams.get(&manifest.entry_module).is_none() {
             return Err(PackageError::MissingEntryModule {
@@ -94,6 +99,7 @@ impl Package {
 
         Ok(Self {
             manifest,
+            contract,
             beams,
             source,
             content_hash,
@@ -124,20 +130,54 @@ impl Package {
         &self.content_hash
     }
 
+    /// Returns the durable contract only when the stored identity commits to it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ContractIdentityError::RedeployRequired`] for every pre-`.v4`
+    /// identity, including integrity-valid legacy, `.v1`, and `.v3` packages.
+    pub fn contract(&self) -> Result<&PackageContract, ContractIdentityError> {
+        if has_contract_identity(
+            &self.beams,
+            &self.manifest,
+            self.contract.as_ref(),
+            &self.content_hash,
+        ) {
+            self.contract
+                .as_ref()
+                .ok_or_else(|| ContractIdentityError::RedeployRequired {
+                    stored_version: self.content_hash.to_string(),
+                })
+        } else {
+            Err(ContractIdentityError::RedeployRequired {
+                stored_version: self.content_hash.to_string(),
+            })
+        }
+    }
+
     /// Whether this package's version identity commits to an explicitly authored
     /// workflow timeout.
     ///
     /// This is the single, tamper-evident authority for "did the author declare
-    /// a workflow timeout": it is true only when the content hash is the
-    /// domain-separated timeout-bearing identity over exactly `manifest.timeout`.
-    /// A legacy (beams-only) archive — even one whose manifest still carries a
-    /// defaulted `timeout` value — reads as `false`, so it can never arm a
-    /// deadline. Callers pair this with [`Self::manifest`] to read the declared
-    /// timeout: the value is trustworthy precisely because it is bound into the
-    /// version hash.
+    /// a workflow timeout": it is true only when the manifest carries an
+    /// authored `timeout` AND the content hash is the domain-separated
+    /// contract-bearing identity that binds it. The `.v4` identity commits to
+    /// every package's timeout vector, so identity alone does not mean a
+    /// timeout was authored — absence of the value is absence of the
+    /// declaration. A legacy (beams-only) archive — even one whose manifest
+    /// still carries a defaulted `timeout` value — reads as `false`, so it can
+    /// never arm a deadline. Callers pair this with [`Self::manifest`] to read
+    /// the declared timeout: the value is trustworthy precisely because it is
+    /// bound into the version hash.
     #[must_use]
     pub fn has_declared_timeout(&self) -> bool {
-        has_explicit_timeout_identity(&self.beams, &self.manifest, &self.content_hash)
+        self.manifest.timeout.is_some()
+            && has_contract_identity(
+                &self.beams,
+                &self.manifest,
+                self.contract.as_ref(),
+                &self.content_hash,
+            )
     }
 
     /// The explicitly authored workflow timeout of the primary entry, or `None`.
@@ -223,15 +263,13 @@ impl Package {
     /// writer failures; the entry module is already proven present by load
     /// validation.
     pub fn to_archive_bytes(&self) -> Result<Vec<u8>, PackageError> {
-        let mut builder = crate::PackageBuilder::with_source(
+        crate::PackageBuilder::with_source(
             self.manifest.clone(),
             self.beams.clone(),
             self.source.clone(),
-        );
-        if has_explicit_timeout_identity(&self.beams, &self.manifest, &self.content_hash) {
-            builder = builder.with_explicit_timeout_identity();
-        }
-        builder.write_to_bytes()
+        )
+        .preserving_loaded_identity(self.content_hash.clone(), self.contract.clone())
+        .write_to_bytes()
     }
 
     #[cfg(any(test, feature = "test-support"))]
@@ -245,6 +283,7 @@ impl Package {
     ) -> Self {
         Self {
             manifest,
+            contract: None,
             beams,
             source,
             content_hash,
@@ -270,6 +309,24 @@ where
     serde_json::from_slice(&manifest_bytes).map_err(|source| PackageError::ManifestParse { source })
 }
 
+fn read_contract<R>(
+    archive: &mut ZipArchive<R>,
+    budget: &mut ExtractionBudget,
+) -> Result<Option<PackageContract>, PackageError>
+where
+    R: Read + Seek,
+{
+    let mut contract_file = match archive.by_name(CONTRACT_ENTRY) {
+        Ok(file) => file,
+        Err(ZipError::FileNotFound) => return Ok(None),
+        Err(error) => return Err(PackageError::ArchiveRead(error)),
+    };
+    let contract_bytes = budget.read_entry(&mut contract_file)?;
+    let contract = serde_json::from_slice(&contract_bytes)
+        .map_err(|source| PackageError::ContractParse { source })?;
+    Ok(Some(contract))
+}
+
 fn read_archive_entries<R>(
     archive: &mut ZipArchive<R>,
     budget: &mut ExtractionBudget,
@@ -287,7 +344,7 @@ where
         }
 
         let entry = file.name().to_owned();
-        if entry == MANIFEST_ENTRY {
+        if entry == MANIFEST_ENTRY || entry == CONTRACT_ENTRY {
             continue;
         }
 

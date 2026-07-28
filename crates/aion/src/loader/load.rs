@@ -3,7 +3,10 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
-use aion_package::{ContentHash, ManifestDigest, ManifestVersion, Package};
+use aion_package::{
+    ContentHash, ContractIdentityError, ManifestDigest, ManifestVersion, Package, PackageContract,
+    WorkerContract,
+};
 
 use crate::error::EngineError;
 
@@ -24,6 +27,15 @@ pub struct LoadOutcome {
     pub route_changed: bool,
 }
 
+/// One queue contract retained under an exact `.v4` package identity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeployedWorkerContract {
+    /// Exact package identity requiring the queue surface.
+    pub package_version: ContentHash,
+    /// Queue-scoped action declarations from the durable contract record.
+    pub contract: WorkerContract,
+}
+
 /// Workflow package entrypoint registered in the embedded runtime.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LoadedWorkflow {
@@ -32,6 +44,7 @@ pub struct LoadedWorkflow {
     entry_function: String,
     version: ContentHash,
     declared_timeout: Option<Duration>,
+    contract: Option<PackageContract>,
 }
 
 impl LoadedWorkflow {
@@ -48,6 +61,7 @@ impl LoadedWorkflow {
         entry_function: String,
         version: ContentHash,
         declared_timeout: Option<Duration>,
+        contract: Option<PackageContract>,
     ) -> Self {
         Self {
             workflow_type,
@@ -55,6 +69,7 @@ impl LoadedWorkflow {
             entry_function,
             version,
             declared_timeout,
+            contract,
         }
     }
 
@@ -91,6 +106,20 @@ impl LoadedWorkflow {
     pub fn declared_timeout(&self) -> Option<Duration> {
         self.declared_timeout
     }
+
+    /// Returns the durable contract only when this exact identity is `.v4`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ContractIdentityError::RedeployRequired`] for a pre-`.v4`
+    /// package, naming the exact stored identity that must be re-deployed.
+    pub fn contract(&self) -> Result<&PackageContract, ContractIdentityError> {
+        self.contract
+            .as_ref()
+            .ok_or_else(|| ContractIdentityError::RedeployRequired {
+                stored_version: self.version.to_string(),
+            })
+    }
 }
 
 /// One workflow entry staged from a package manifest.
@@ -108,12 +137,14 @@ pub(crate) struct StagedLoad<'a> {
     pub(crate) manifest_digest: ManifestDigest,
     pub(crate) version: ContentHash,
     pub(crate) modules: Vec<StagedModule<'a>>,
+    pub(crate) contract: Option<PackageContract>,
 }
 
 impl<'a> StagedLoad<'a> {
     pub(crate) fn new(package: &'a Package) -> Result<Self, EngineError> {
         let manifest = package.manifest();
         let version = package.content_hash().clone();
+        let contract = package.contract().ok().cloned();
         // Declaredness is a tamper-evident, authenticated PER-ENTRY property of
         // the content-hash identity: the timeout-bearing identity binds every
         // entry's timeout, so `declared_entry_timeout` returns an entry's authored
@@ -170,6 +201,7 @@ impl<'a> StagedLoad<'a> {
             manifest_digest: manifest.canonical_digest()?,
             version,
             modules,
+            contract,
         })
     }
 
@@ -184,6 +216,7 @@ impl<'a> StagedLoad<'a> {
                     entry.entry_function.clone(),
                     self.version.clone(),
                     entry.declared_timeout,
+                    self.contract.clone(),
                 )
             })
             .collect()

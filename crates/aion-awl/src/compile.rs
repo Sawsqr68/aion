@@ -8,9 +8,13 @@ use std::fmt;
 use std::path::Path;
 use std::time::Duration;
 
+use aion_package::{
+    ActionContract, AdditionalWorkflowContract, ChildContract, PackageContract, RetryContract,
+    SignalContract, WorkerContract,
+};
 use serde_json::Value;
 
-use crate::ast::{Document, PipeStage, Statement, Step};
+use crate::ast::{Document, PipeStage, RetrySpec, Statement, Step};
 use crate::mir::{LowerError, lower, project_sidecar, select, verify};
 use crate::{CheckError, ParseError, SchemaError, Span};
 
@@ -31,6 +35,8 @@ pub struct CompiledWorkflow {
     pub input_schema: Value,
     /// Derived outcome envelope (`{ "outcome": name, "payload": … }`).
     pub output_schema: Value,
+    /// Complete checked contract surface committed into package identity.
+    pub contract: PackageContract,
     /// Effective action requirements, one row per distinct node requirement.
     pub actions: Vec<ActionRequirement>,
     /// `.gleam_types` sidecar bytes (deterministic).
@@ -156,6 +162,13 @@ pub fn compile(source: &str, schema_root: &Path) -> Result<CompiledWorkflow, Com
         crate::schema_for_outcomes_in(&document, schema_root).map_err(CompileError::Schema)?;
     let actions = action_requirements(&document);
     let synthesized_workflows = synthesized_workflow_entries(&document, schema_root)?;
+    let contract = package_contract(
+        &document,
+        schema_root,
+        input_schema.clone(),
+        output_schema.clone(),
+        &synthesized_workflows,
+    )?;
     let module = lower(&document, Some(schema_root)).map_err(lower_diagnostic)?;
     verify(&module).map_err(|error| CompileError::Backend {
         message: error.to_string(),
@@ -183,10 +196,125 @@ pub fn compile(source: &str, schema_root: &Path) -> Result<CompiledWorkflow, Com
         beam_bytes,
         input_schema,
         output_schema,
+        contract,
         actions,
         sidecar_bytes,
         synthesized_workflows,
     })
+}
+
+fn package_contract(
+    document: &Document,
+    schema_root: &Path,
+    input_schema: Value,
+    output_schema: Value,
+    synthesized: &[crate::SynthesizedWorkflowEntry],
+) -> Result<PackageContract, CompileError> {
+    let mut workers = Vec::new();
+    for worker in &document.workers {
+        let mut actions = Vec::new();
+        for action in &worker.actions {
+            let input_schema = crate::schema_for_params_in(document, schema_root, &action.params)
+                .map_err(CompileError::Schema)?;
+            let output_schema =
+                crate::schema_for_type_ref_in(document, schema_root, &action.returns)
+                    .map_err(CompileError::Schema)?;
+            let node = action
+                .config
+                .as_ref()
+                .and_then(|config| config.node.as_ref())
+                .map(|node| node.name.clone());
+            let timeout = action
+                .config
+                .as_ref()
+                .and_then(|config| config.timeout.as_ref())
+                .map(checked_contract_duration)
+                .transpose()?;
+            let retry = action
+                .config
+                .as_ref()
+                .and_then(|config| config.retry.as_ref())
+                .map(retry_contract)
+                .transpose()?;
+            actions.push(ActionContract {
+                name: action.name.clone(),
+                input_schema,
+                output_schema,
+                node,
+                timeout,
+                retry,
+            });
+        }
+        workers.push(WorkerContract {
+            task_queue: worker.name.clone(),
+            actions,
+        });
+    }
+    let children = document
+        .children
+        .iter()
+        .map(|child| {
+            Ok(ChildContract {
+                name: child.name.clone(),
+                input_schema: crate::schema_for_params_in(document, schema_root, &child.params)
+                    .map_err(CompileError::Schema)?,
+                output_schema: crate::schema_for_type_ref_in(document, schema_root, &child.returns)
+                    .map_err(CompileError::Schema)?,
+            })
+        })
+        .collect::<Result<Vec<_>, CompileError>>()?;
+    let signals = document
+        .signals
+        .iter()
+        .map(|signal| {
+            Ok(SignalContract {
+                name: signal.name.clone(),
+                input_schema: crate::schema_for_type_ref_in(document, schema_root, &signal.ty)
+                    .map_err(CompileError::Schema)?,
+            })
+        })
+        .collect::<Result<Vec<_>, CompileError>>()?;
+    let additional_workflows = synthesized
+        .iter()
+        .map(|entry| AdditionalWorkflowContract {
+            workflow_type: entry.workflow_type.clone(),
+            input_schema: entry.input_schema.clone(),
+            output_schema: entry.output_schema.clone(),
+        })
+        .collect();
+    Ok(PackageContract {
+        input_schema,
+        output_schema,
+        workers,
+        children,
+        signals,
+        additional_workflows,
+        unscoped_activities: Vec::new(),
+    })
+}
+
+fn retry_contract(retry: &RetrySpec) -> Result<RetryContract, CompileError> {
+    match retry {
+        RetrySpec::Every { count, every, .. } => Ok(RetryContract::Every {
+            count: *count,
+            every: checked_contract_duration(every)?,
+        }),
+        RetrySpec::Backoff {
+            count, min, max, ..
+        } => Ok(RetryContract::Backoff {
+            count: *count,
+            min: checked_contract_duration(min)?,
+            max: checked_contract_duration(max)?,
+        }),
+    }
+}
+
+fn checked_contract_duration(duration: &crate::DurationLiteral) -> Result<Duration, CompileError> {
+    duration
+        .checked_duration()
+        .ok_or_else(|| CompileError::Backend {
+            message: "checked contract duration overflowed during compilation".to_owned(),
+        })
 }
 
 /// The synthesized same-package workflow entries of a checked document, from

@@ -186,7 +186,13 @@ async fn register_completes_on_register_ack_and_captures_ack_payload() -> Result
     let session = GrpcWorkerSession::connect(config.clone()).await?;
     let registered = tokio::time::timeout(
         Duration::from_secs(5),
-        register_connected_session(session, &config, activity_types.clone(), &handlers),
+        register_connected_session(
+            session,
+            &config,
+            activity_types.clone(),
+            Vec::new(),
+            &handlers,
+        ),
     )
     .await
     .map_err(|_| failure("register did not complete within five seconds"))??;
@@ -221,7 +227,7 @@ async fn register_times_out_retryably_when_server_never_acks() -> Result<(), Wor
     let session = GrpcWorkerSession::connect(config.clone()).await?;
     let result = tokio::time::timeout(
         Duration::from_secs(5),
-        register_connected_session(session, &config, activity_types, &handlers),
+        register_connected_session(session, &config, activity_types, Vec::new(), &handlers),
     )
     .await
     .map_err(|_| {
@@ -257,7 +263,7 @@ async fn non_ack_first_frame_is_a_typed_protocol_violation() -> Result<(), Worke
     let session = GrpcWorkerSession::connect(config.clone()).await?;
     let result = tokio::time::timeout(
         Duration::from_secs(5),
-        register_connected_session(session, &config, activity_types, &handlers),
+        register_connected_session(session, &config, activity_types, Vec::new(), &handlers),
     )
     .await
     .map_err(|_| failure("a task-before-ack server must fail registration promptly"))?;
@@ -294,7 +300,7 @@ async fn register_surfaces_server_permission_denial_as_non_retryable() -> Result
     let session = GrpcWorkerSession::connect(config.clone()).await?;
     let result = tokio::time::timeout(
         Duration::from_secs(5),
-        register_connected_session(session, &config, activity_types, &handlers),
+        register_connected_session(session, &config, activity_types, Vec::new(), &handlers),
     )
     .await
     .map_err(|_| failure("denied registration must fail promptly, not hang"))?;

@@ -3,7 +3,7 @@
 //! Generates `worker/src/main.rs`, the do-not-edit plumbing that serves a
 //! package's `RemoteRust` activities: the `serde` input/output structs and
 //! enums derived from the schemas, the env-driven [`WorkerConfig`], and the
-//! `register_activity` chain binding each engine activity name to the matching
+//! `register_activity_with_contract` chain binding each engine activity name to the matching
 //! author-written handler in the hand-written `handlers` module. The worker
 //! never carries an activity body — the author fills `worker/src/handlers.rs`
 //! with one `fn <name>(input, &ActivityContext) -> HandlerFuture<'_, Output>`
@@ -36,7 +36,7 @@ const RUST_HEADER: &str =
 /// Emits `worker/src/main.rs` serving `activities` (all `RemoteRust`), in
 /// declaration order. Every input and output value type becomes one `serde`
 /// struct or enum (deduplicated by type name, first use wins), and each
-/// activity is registered against `handlers::<name>`.
+/// activity and its mechanical schema are registered against `handlers::<name>`.
 pub(crate) fn emit(package_name: &str, activities: &[&ResolvedActivity]) -> String {
     let mut out = String::new();
     out.push_str(RUST_HEADER);
@@ -53,6 +53,7 @@ pub(crate) fn emit(package_name: &str, activities: &[&ResolvedActivity]) -> Stri
     // `handlers.rs`, so importing them here would be an unused-import error
     // under `-D warnings`.
     out.push_str("use aion_worker::{Worker, WorkerConfig};\n");
+    out.push_str("use aion_worker::schemars;\n");
     out.push_str("use serde::{Deserialize, Serialize};\n\n");
     out.push_str("mod handlers;\n");
 
@@ -92,7 +93,7 @@ fn ordered_type_defs<'a>(activities: &[&'a ResolvedActivity<'a>]) -> Vec<&'a Typ
 fn emit_struct(out: &mut String, record: &RecordDef) {
     let _ = write!(
         out,
-        "\n#[derive(Clone, Debug, Serialize, Deserialize)]\npub struct {} {{",
+        "\n#[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]\npub struct {} {{",
         record.type_name
     );
     if record.fields.is_empty() {
@@ -133,7 +134,7 @@ fn emit_struct_field(out: &mut String, field: &Field) {
 fn emit_enum(out: &mut String, definition: &EnumDef) {
     let _ = write!(
         out,
-        "\n#[derive(Clone, Debug, Serialize, Deserialize)]\npub enum {} {{\n",
+        "\n#[derive(Clone, Debug, Serialize, Deserialize, schemars::JsonSchema)]\npub enum {} {{\n",
         definition.type_name
     );
     for variant in &definition.variants {
@@ -144,7 +145,7 @@ fn emit_enum(out: &mut String, definition: &EnumDef) {
 }
 
 /// Renders the `#[tokio::main]` entry point: the env-driven config and the
-/// `register_activity` chain in declaration order, followed by the two
+/// `register_activity_with_contract` chain in declaration order, followed by the two
 /// fail-loud environment helpers it uses. Every required connection value is
 /// read from the environment with no invented fallback (ADR-001); a missing or
 /// unparseable variable is surfaced as an error naming the variable.
@@ -173,7 +174,7 @@ fn emit_main(out: &mut String, activities: &[&ResolvedActivity]) {
         let name = &activity.declaration.name;
         let _ = writeln!(
             out,
-            "        .register_activity(\"{name}\", handlers::{name})?"
+            "        .register_activity_with_contract(\"{name}\", handlers::{name})?"
         );
     }
     out.push_str("        .build()?\n        .run()\n        .await?;\n\n    Ok(())\n}\n");
@@ -441,10 +442,14 @@ mod tests {
             "    #[serde(default, skip_serializing_if = \"Option::is_none\")]\n    pub note: Option<String>,\n"
         ));
         // Registration chain in declaration order, dispatching to handlers.
+        assert!(module.contains(
+            ".register_activity_with_contract(\"charge_payment\", handlers::charge_payment)?"
+        ));
         assert!(
-            module.contains(".register_activity(\"charge_payment\", handlers::charge_payment)?")
+            module.contains(
+                ".register_activity_with_contract(\"ship_order\", handlers::ship_order)?"
+            )
         );
-        assert!(module.contains(".register_activity(\"ship_order\", handlers::ship_order)?"));
         let charge_at = module.find("charge_payment\", handlers");
         let ship_at = module.find("ship_order\", handlers");
         assert!(charge_at < ship_at);

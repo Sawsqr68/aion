@@ -17,6 +17,7 @@ workspace = true
 
 [dependencies]
 aion-core = { version = "0.10.0", path = "../aion-core" }
+aion-package = { version = "0.10.0", path = "../aion-package" }
 # The harness-integration SDK — the TRAIT ONLY (`AgentHarness`/`AgentSession`).
 # The worker drives ANY harness generically through this seam; it must NEVER
 # depend on a concrete adapter (`aion-integration-norn`) or on `norn` itself
@@ -30,6 +31,7 @@ prost = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+schemars = { workspace = true }
 tracing = { workspace = true }
 futures = { workspace = true }
 async-trait.workspace = true

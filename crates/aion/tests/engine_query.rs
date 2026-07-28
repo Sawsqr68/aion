@@ -42,7 +42,7 @@ fn query_package(entry_function: &str) -> Result<Package, Box<dyn std::error::Er
         entry_function: entry_function.to_owned(),
         input_schema: json!({ "type": "object" }),
         output_schema: json!({}),
-        timeout: Some(Duration::from_secs(30)),
+        timeout: None,
         activities: vec![DeclaredActivity {
             activity_type: "fixture_activity".to_owned(),
         }],
@@ -65,6 +65,7 @@ async fn engine_over(
     query_timeout: Duration,
 ) -> Result<Engine, Box<dyn std::error::Error>> {
     Ok(EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -800,6 +801,7 @@ async fn engine_with_dispatcher(
     gate: &Arc<ActivityGate>,
 ) -> Result<Engine, Box<dyn std::error::Error>> {
     Ok(EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(store))
         .in_memory_visibility()
         .scheduler_threads(1)

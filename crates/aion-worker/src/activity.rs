@@ -120,6 +120,7 @@ type BoxedHandler<Input, Output> = Box<
 #[derive(Default)]
 pub struct ActivityRegistry {
     handlers: BTreeMap<String, Box<dyn ErasedActivityHandler>>,
+    descriptors: BTreeMap<String, aion_package::ActivityDescriptor>,
 }
 
 impl ActivityRegistry {
@@ -158,6 +159,33 @@ impl ActivityRegistry {
         Ok(self)
     }
 
+    /// Registers a typed handler and mechanically derives its wire contract
+    /// from the same concrete serde types used at dispatch.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkerError::Registration`] for a duplicate name or
+    /// [`WorkerError::Encode`] if a generated schema cannot be represented as JSON.
+    pub fn register_activity_with_contract<Input, Output, Handler>(
+        mut self,
+        activity_type: impl Into<String>,
+        handler: Handler,
+    ) -> Result<Self, WorkerError>
+    where
+        Input: Serialize + DeserializeOwned + schemars::JsonSchema + Send + Sync + 'static,
+        Output: Serialize + schemars::JsonSchema + Send + Sync + 'static,
+        Handler: for<'context> Fn(Input, &'context ActivityContext) -> HandlerFuture<'context, Output>
+            + Send
+            + Sync
+            + 'static,
+    {
+        let activity_type = activity_type.into();
+        let descriptor = activity_descriptor::<Input, Output>(activity_type.clone())?;
+        self = self.register_activity(activity_type.clone(), handler)?;
+        self.descriptors.insert(activity_type, descriptor);
+        Ok(self)
+    }
+
     /// Returns true when no activity handlers have been registered.
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -169,6 +197,45 @@ impl ActivityRegistry {
     pub fn activity_types(&self) -> BTreeSet<String> {
         self.handlers.keys().cloned().collect()
     }
+
+    /// Returns committed typed activity descriptors in deterministic name order.
+    #[must_use]
+    pub fn activity_descriptors(&self) -> Vec<aion_package::ActivityDescriptor> {
+        self.descriptors.values().cloned().collect()
+    }
+}
+
+/// Mechanically derives a wire descriptor from concrete serde activity types.
+///
+/// # Errors
+///
+/// Returns [`WorkerError::Encode`] if a generated schema cannot be represented
+/// as JSON.
+pub fn activity_descriptor<Input, Output>(
+    name: impl Into<String>,
+) -> Result<aion_package::ActivityDescriptor, WorkerError>
+where
+    Input: schemars::JsonSchema,
+    Output: schemars::JsonSchema,
+{
+    let schema = || {
+        schemars::generate::SchemaSettings::draft2020_12()
+            .with(|settings| {
+                // AWL contracts carry their dialect at the document root; the
+                // registration envelope already fixes that dialect, so draft
+                // metadata and presentation-only `$defs` must not create drift.
+                settings.meta_schema = None;
+                settings.inline_subschemas = true;
+            })
+            .into_generator()
+    };
+    Ok(aion_package::ActivityDescriptor {
+        name: name.into(),
+        input_schema: serde_json::to_value(schema().into_root_schema_for::<Input>())
+            .map_err(WorkerError::encode)?,
+        output_schema: serde_json::to_value(schema().into_root_schema_for::<Output>())
+            .map_err(WorkerError::encode)?,
+    })
 }
 
 #[async_trait]

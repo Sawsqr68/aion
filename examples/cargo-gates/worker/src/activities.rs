@@ -12,14 +12,14 @@ use serde::{Deserialize, Serialize};
 const OUTPUT_TAIL_LINES: usize = 40;
 
 /// Shared input shape for every gate action.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct GateInput {
     /// Workspace directory in which Cargo should run.
     pub path: String,
 }
 
 /// One gate's bounded, factual result.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct GateResult {
     /// Stable human-readable gate name.
     pub gate: String,

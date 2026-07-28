@@ -721,6 +721,7 @@ fn build_liminal_row_dispatch(
     // runtime handle to bridge the sync connection callback onto the async append.)
     let notifier = Arc::new(
         LiminalConnectionNotifier::new(registry.clone())
+            .with_contract_catalog(state.engine()?)
             .with_transcript_publisher(state.transcript_publisher().clone())
             // The SAME per-task liveness tracker the engine-seam bridge tracks
             // into: a liminal worker's automatic liveness beats refresh it, so

@@ -87,6 +87,7 @@ async fn direct_single_activity_tolerant_distribute_completes_with_slot_semantic
 
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(2)

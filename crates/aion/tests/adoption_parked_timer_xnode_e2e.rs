@@ -269,6 +269,7 @@ fn park_sleeper_on_a(
     let store_a: Arc<dyn EventStore> = Arc::clone(&node_a.store) as Arc<dyn EventStore>;
     let engine_a = runtime.block_on(
         EngineBuilder::new()
+            .in_process_activity_serving()
             .store_arc(Arc::clone(&store_a))
             .in_memory_visibility()
             .scheduler_threads(1)
@@ -383,6 +384,7 @@ fn parked_timer_workflow_resumes_on_xnode_shard_adoption() -> TestResult {
     let store_b: Arc<dyn EventStore> = Arc::clone(&nodes[1].store) as Arc<dyn EventStore>;
     let engine_b = runtime.block_on(
         EngineBuilder::new()
+            .in_process_activity_serving()
             .store_arc(Arc::clone(&store_b))
             .in_memory_visibility()
             .scheduler_threads(1)

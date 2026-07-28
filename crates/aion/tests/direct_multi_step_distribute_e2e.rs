@@ -325,6 +325,7 @@ async fn direct_multistep_distribute_is_parallel_ordered_and_tolerant() -> TestR
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let gates = Gates::new();
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(4)

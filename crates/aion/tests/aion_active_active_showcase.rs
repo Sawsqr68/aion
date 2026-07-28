@@ -322,6 +322,7 @@ async fn build_engine_over(
     bootstrap_coordinator: bool,
 ) -> Result<aion::Engine, Box<dyn Error>> {
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(store)
         .in_memory_visibility()
         .scheduler_threads(1)

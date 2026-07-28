@@ -61,6 +61,31 @@ impl WorkerBuilder {
         Ok(self)
     }
 
+    /// Registers one typed activity and commits mechanically derived schemas
+    /// to every registration handshake.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkerError`] for duplicate activity names or schema encoding.
+    pub fn register_activity_with_contract<Input, Output, Handler>(
+        mut self,
+        activity_type: impl Into<String>,
+        handler: Handler,
+    ) -> Result<Self, WorkerError>
+    where
+        Input: Serialize + DeserializeOwned + schemars::JsonSchema + Send + Sync + 'static,
+        Output: Serialize + schemars::JsonSchema + Send + Sync + 'static,
+        Handler: for<'context> Fn(Input, &'context ActivityContext) -> HandlerFuture<'context, Output>
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.activities = self
+            .activities
+            .register_activity_with_contract(activity_type, handler)?;
+        Ok(self)
+    }
+
     /// Builds the worker after validating that it has at least one activity.
     ///
     /// # Errors
@@ -72,9 +97,11 @@ impl WorkerBuilder {
         }
         let available_handlers = self.activities.activity_types();
         let activity_types = available_handlers.iter().cloned().collect();
+        let activity_descriptors = self.activities.activity_descriptors();
         Ok(Worker {
             config: self.config,
             activity_types,
+            activity_descriptors,
             available_handlers,
             activities: Arc::new(self.activities),
         })
@@ -86,6 +113,7 @@ impl WorkerBuilder {
 pub struct Worker {
     config: WorkerConfig,
     activity_types: Vec<String>,
+    activity_descriptors: Vec<aion_package::ActivityDescriptor>,
     available_handlers: BTreeSet<String>,
     activities: Arc<ActivityRegistry>,
 }
@@ -100,6 +128,12 @@ impl Worker {
     #[must_use]
     pub fn activity_types(&self) -> &[String] {
         &self.activity_types
+    }
+
+    /// Returns the committed typed descriptors advertised by this worker.
+    #[must_use]
+    pub fn activity_descriptors(&self) -> &[aion_package::ActivityDescriptor] {
+        &self.activity_descriptors
     }
 
     /// Returns the handler-name set used for registration validation.
@@ -231,6 +265,7 @@ impl Worker {
                 result = reconnect_with_backoff(
                     &self.config,
                     self.activity_types.clone(),
+                    self.activity_descriptors.clone(),
                     &self.available_handlers,
                     &mut connect,
                 ) => result,
@@ -357,6 +392,7 @@ impl Worker {
             session,
             &self.config,
             self.activity_types.clone(),
+            self.activity_descriptors.clone(),
             &self.available_handlers,
         )
         .await?;

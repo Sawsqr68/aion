@@ -1,0 +1,180 @@
+    Checking serde_core v1.0.228
+    Checking scopeguard v1.2.0
+    Checking zstd-sys v2.0.16+zstd.1.5.7
+    Checking blake3 v1.8.5
+    Checking getrandom v0.2.17
+   Compiling rustix v0.38.44
+   Compiling nom v7.1.3
+   Compiling libloading v0.8.9
+    Checking hashbrown v0.12.3
+    Checking lock_api v0.4.14
+    Checking zstd-safe v7.2.4
+    Checking rand_core v0.6.4
+   Compiling clang-sys v1.8.1
+   Compiling lazy_static v1.5.0
+    Checking parking_lot v0.12.5
+    Checking zstd v0.13.3
+    Checking indexmap v1.9.3
+    Checking rand_chacha v0.3.1
+   Compiling uncased v0.9.10
+    Checking security-framework-sys v2.17.0
+    Checking zip v8.6.0
+    Checking rand v0.8.6
+   Compiling siphasher v1.0.3
+   Compiling beamr v0.16.2
+   Compiling which v4.4.2
+   Compiling prost-derive v0.12.6
+    Checking block-padding v0.3.3
+   Compiling phf_shared v0.11.3
+    Checking inout v0.1.4
+    Checking ring v0.17.14
+    Checking serde v1.0.228
+    Checking serde_json v1.0.150
+    Checking uuid v1.23.4
+    Checking serde_spanned v1.1.1
+    Checking toml_datetime v1.1.1+spec-1.1.0
+   Compiling cexpr v0.6.0
+    Checking toml v1.1.2+spec-1.1.0
+    Checking bytes v1.11.1
+    Checking chrono v0.4.45
+    Checking ahash v0.8.12
+    Checking tracing-serde v0.2.0
+   Compiling bindgen v0.66.1
+    Checking hashbrown v0.14.5
+   Compiling phf_generator v0.11.3
+    Checking tokio v1.52.3
+    Checking http v0.2.12
+    Checking tracing-subscriber v0.3.23
+    Checking base64 v0.21.7
+    Checking matchit v0.7.3
+    Checking prost v0.12.6
+    Checking dashmap v6.2.1
+    Checking ts-rs v12.0.1
+    Checking saffron v0.1.0
+    Checking sync_wrapper v0.1.2
+    Checking http-body v0.4.6
+    Checking hashlink v0.8.4
+    Checking async-stream v0.3.6
+    Checking aion-core v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-core)
+    Checking axum-core v0.3.4
+   Compiling phf_codegen v0.11.3
+    Checking rustls-webpki v0.102.8
+    Checking cipher v0.4.4
+    Checking core-foundation v0.9.4
+    Checking fallible-streaming-iterator v0.1.9
+    Checking fallible-iterator v0.2.0
+    Checking byteorder v1.5.0
+   Compiling libsql-sqlite3-parser v0.13.0
+    Checking security-framework v2.11.1
+    Checking rustls v0.22.4
+    Checking zerocopy v0.7.35
+    Checking http-range-header v0.3.1
+    Checking aes v0.8.4
+    Checking phf v0.11.3
+    Checking cbc v0.1.2
+    Checking fallible-iterator v0.3.0
+    Checking rustls-native-certs v0.7.3
+    Checking libsql-hrana v0.9.30
+    Checking bincode v1.3.3
+    Checking http v1.4.1
+    Checking aws-lc-sys v0.41.0
+   Compiling prost-derive v0.14.3
+    Checking sync_wrapper v1.0.2
+   Compiling getrandom v0.4.2
+   Compiling rustix v1.1.4
+    Checking http-body v1.0.1
+    Checking aws-lc-rs v1.17.0
+    Checking serde_urlencoded v0.7.1
+    Checking http-body-util v0.1.3
+    Checking serde_path_to_error v0.1.20
+    Checking tokio-util v0.7.18
+    Checking tokio-stream v0.1.18
+    Checking tokio-io-timeout v1.2.1
+    Checking tokio-rustls v0.25.0
+    Checking axum-core v0.5.6
+    Checking h2 v0.3.27
+    Checking tower v0.4.13
+    Checking h2 v0.4.14
+    Checking rustls-webpki v0.103.13
+   Compiling prost v0.14.3
+    Checking rustls v0.23.40
+    Checking tower v0.5.3
+   Compiling libsql-ffi v0.9.30
+    Checking tower-http v0.4.4
+   Compiling tempfile v3.27.0
+   Compiling prost-types v0.14.3
+    Checking fluent-uri v0.4.1
+    Checking email_address v0.2.9
+    Checking aion-package v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-package)
+    Checking aion-store v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-store)
+    Checking aion-integrations v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-integrations)
+    Checking referencing v0.46.6
+   Compiling prost-build v0.14.3
+    Checking tungstenite v0.30.0
+    Checking jsonschema v0.46.6
+    Checking hyper v0.14.32
+    Checking tokio-rustls v0.26.4
+    Checking hyper v1.10.1
+    Checking tungstenite v0.29.0
+    Checking schemars v1.2.1
+    Checking tokio-tungstenite v0.29.0
+   Compiling tonic-prost-build v0.14.5
+   Compiling cpufeatures v0.2.17
+    Checking hyper-util v0.1.20
+    Checking serde_spanned v0.6.9
+   Compiling sha2 v0.10.9
+    Checking toml_datetime v0.6.11
+    Checking tower-http v0.6.11
+    Checking aion-toolchain v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-toolchain)
+   Compiling aion-proto-generated v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-proto-generated)
+    Checking toml_edit v0.22.27
+   Compiling rust-embed-utils v8.11.0
+    Checking prometheus v0.14.0
+    Checking aion-darwin-acl v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-darwin-acl)
+   Compiling rust-embed-impl v8.11.0
+    Checking core-foundation v0.10.1
+    Checking exacl v0.13.0
+    Checking users v0.11.0
+    Checking axum v0.8.9
+    Checking hyper-timeout v0.5.2
+    Checking security-framework v3.7.0
+    Checking hyper-rustls v0.27.9
+    Checking hyper-timeout v0.4.1
+    Checking axum v0.6.20
+    Checking hyper-rustls v0.25.0
+    Checking aion-awl v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-awl)
+    Checking haematite v0.7.0
+    Checking aion-rs v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion)
+    Checking toml v0.8.23
+    Checking rust-embed v8.11.0
+    Checking rustls-platform-verifier v0.7.0
+    Checking libsql-rusqlite v0.9.30
+    Checking reqwest v0.13.4
+    Checking lsp-types v0.97.0
+    Checking lsp-server v0.8.0
+    Checking aion-integration-norn v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-integration-norn)
+    Checking libsql-sys v0.9.30
+    Checking toml_datetime v0.7.5+spec-1.1.0
+    Checking aion-integration-cli v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-integration-cli)
+    Checking toml_edit v0.23.10+spec-1.0.0
+    Checking aion-store-haematite v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-store-haematite)
+    Checking liminal-rs v0.4.1 (/Users/tom/Developer/ablative/aion/vendor/liminal-rs)
+    Checking tonic v0.14.6
+    Checking tonic v0.11.0
+    Checking libsql_replication v0.9.30
+    Checking tonic-web v0.11.0
+    Checking tonic-prost v0.14.5
+    Checking aion-awl-package v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-awl-package)
+    Checking libsql v0.9.30
+    Checking aion-proto v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-proto)
+    Checking aion-awl-lsp v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-awl-lsp)
+    Checking aion-store-libsql v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-store-libsql)
+    Checking aion-client v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-client)
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/aion/benchmarks/million-processes)
+    Checking liminal-sdk v0.4.0
+    Checking liminal-server v0.4.0
+    Checking aion-worker v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-worker)
+    Checking aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-server)
+    Checking xtask v0.0.0 (/Users/tom/Developer/ablative/aion/xtask)
+    Checking aion-cli v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 56.08s

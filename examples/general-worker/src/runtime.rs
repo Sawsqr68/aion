@@ -147,7 +147,7 @@ fn serve_agent(
 ) -> Result<()> {
     let config = build_worker_config(identity, AGENT_NODE)?;
     let registry = Arc::new(agent_registry());
-    let harness = agent_config(norn_bin, agent_activities);
+    let harness = agent_config(norn_bin, agent_activities)?;
     serve_with_redial(
         addresses.to_vec(),
         &config,

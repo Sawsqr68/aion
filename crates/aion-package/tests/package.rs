@@ -4,7 +4,8 @@ use std::{collections::BTreeMap, io::Cursor, time::Duration};
 
 use aion_package::{
     BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, ExtractionLimits, Manifest,
-    ManifestVersion, Package, PackageBuilder, PackageError, content_hash, deployed_name,
+    ManifestVersion, Package, PackageBuilder, PackageError, content_hash_with_contract,
+    deployed_name,
 };
 use serde_json::json;
 use zip::{CompressionMethod, ZipArchive, ZipWriter, write::SimpleFileOptions};
@@ -133,10 +134,13 @@ fn deployed_modules_match_namespace_transform_for_every_module() -> Result<(), P
 }
 
 #[test]
-fn loaded_hash_matches_canonical_beam_hash() -> Result<(), PackageError> {
+fn loaded_hash_matches_canonical_contract_bound_hash() -> Result<(), Box<dyn std::error::Error>> {
     let bytes = PackageBuilder::new(sample_manifest(), sample_beams()?).write_to_bytes()?;
     let package = Package::load_from_bytes(bytes, ExtractionLimits::unbounded())?;
 
-    assert_eq!(package.content_hash(), &content_hash(package.beams()));
+    assert_eq!(
+        package.content_hash(),
+        &content_hash_with_contract(package.beams(), package.manifest(), package.contract()?)
+    );
     Ok(())
 }

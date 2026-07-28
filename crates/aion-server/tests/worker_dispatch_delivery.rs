@@ -149,6 +149,8 @@ impl Harness {
                         activity_types: vec![ACTIVITY_TYPE.to_owned()],
                         task_queue: TASK_QUEUE.to_owned(),
                         node: String::new(),
+                        activities: Vec::new(),
+                        identity: "dispatch-test-worker".to_owned(),
                     },
                 )),
             })
@@ -488,6 +490,8 @@ async fn denied_registration_fails_rpc_without_frames() -> Result<(), TestError>
                     activity_types: vec![ACTIVITY_TYPE.to_owned()],
                     task_queue: TASK_QUEUE.to_owned(),
                     node: String::new(),
+                    activities: Vec::new(),
+                    identity: "unauthorized-test-worker".to_owned(),
                 },
             )),
         })

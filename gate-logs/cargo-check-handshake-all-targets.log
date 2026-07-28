@@ -1,0 +1,8 @@
+    Checking aion-package v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-package)
+    Checking aion-awl v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-awl)
+    Checking aion-rs v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion)
+    Checking aion-worker v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-worker)
+    Checking aion-toolchain v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-toolchain)
+    Checking aion-awl-package v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-awl-package)
+    Checking aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-server)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 12.61s

@@ -434,20 +434,18 @@ async fn runtime_deployed_package_survives_restart_and_recovers_runs() -> TestRe
     Ok(())
 }
 
-/// Regression: before timeout identity preservation in `to_archive_bytes`,
-/// the stored archive was silently restamped beams-only and restart skipped
-/// the explicit-timeout version because it no longer matched its store key.
+/// Regression: `to_archive_bytes` must preserve the complete contract-bound
+/// identity; restart must not skip a timeout-bearing version because its stored
+/// archive was silently restamped under a different key.
 #[tokio::test]
-async fn explicit_timeout_deploy_survives_restart_under_the_same_store_key() -> TestResult {
+async fn contract_bound_timeout_deploy_survives_restart_under_the_same_store_key() -> TestResult {
     if crate::gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
     let legacy = reload_package(&compile_reload_beam(1)?, "run")?;
     let mut manifest = legacy.manifest().clone();
     manifest.timeout = Some(Duration::new(7_200, 500_000_000));
-    let archive = PackageBuilder::new(manifest, legacy.beams().clone())
-        .with_explicit_timeout_identity()
-        .write_to_bytes()?;
+    let archive = PackageBuilder::new(manifest, legacy.beams().clone()).write_to_bytes()?;
     let package = Package::load_from_bytes(archive, ExtractionLimits::unbounded())?;
     let expected = package.content_hash().clone();
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());

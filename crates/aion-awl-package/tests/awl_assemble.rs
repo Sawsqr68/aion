@@ -10,7 +10,7 @@ use aion_awl::{ActionRequirement, CompiledWorkflow};
 use aion_awl_package::{
     AssembleError, AwlAssembleOptions, assemble_awl, sdk_closure_modules, sdk_closure_version,
 };
-use aion_package::{ExtractionLimits, Package};
+use aion_package::{ExtractionLimits, Package, PackageContract};
 use beamr::atom::AtomTable;
 use beamr::loader::load_beam_chunks;
 use sha2::{Digest, Sha256};
@@ -94,8 +94,13 @@ fn assembling_twice_yields_byte_identical_archives() -> TestResult {
 /// the source-unchanged closure with the build box's upgraded Erlang
 /// (`compile_info` version 9.0.6 -> 10.0.2), so the embedded archive bytes
 /// changed with the compiler, not with any `aion_flow` source edit.
+/// Repinned on 2026-07-25: the worker-contract handshake embeds the canonical
+/// `.v4` contract record in the archive and binds it into the identity, so
+/// the archive bytes changed with the ARCHIVE FORMAT, not with any workflow
+/// source edit; `assembling_twice_yields_byte_identical_archives` proves the
+/// new bytes remain deterministic.
 const FIXED_INPUT_ARCHIVE_SHA256: &str =
-    "4ce99f09b27ecd990a6543166a2009e030066f4046d9253faaf1200e7e5fa84a";
+    "6182bbb85ce9aadc213cbc97b9a0550b913c5f9886930c1de870e43e391ee725";
 
 /// Proof 1b — cross-process determinism: a fully fixed input assembles to
 /// pinned archive bytes.
@@ -401,6 +406,15 @@ fn hand_built(name: &str) -> CompiledWorkflow {
         beam_bytes: b"opaque".to_vec(),
         input_schema: serde_json::json!({ "type": "object" }),
         output_schema: serde_json::json!({ "type": "object" }),
+        contract: PackageContract {
+            input_schema: serde_json::json!({ "type": "object" }),
+            output_schema: serde_json::json!({ "type": "object" }),
+            workers: Vec::new(),
+            children: Vec::new(),
+            signals: Vec::new(),
+            additional_workflows: Vec::new(),
+            unscoped_activities: Vec::new(),
+        },
         actions: vec![ActionRequirement {
             task_queue: "q".to_owned(),
             action: "act".to_owned(),

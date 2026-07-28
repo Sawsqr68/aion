@@ -204,10 +204,18 @@ impl ReconnectBackoff {
 pub async fn connect_registered_grpc_session(
     config: &WorkerConfig,
     activity_types: Vec<String>,
+    activities: Vec<aion_package::ActivityDescriptor>,
     available_handlers: &BTreeSet<String>,
 ) -> Result<GrpcWorkerSession, WorkerError> {
     let session = GrpcWorkerSession::connect(config.clone()).await?;
-    register_connected_session(session, config, activity_types, available_handlers).await
+    register_connected_session(
+        session,
+        config,
+        activity_types,
+        activities,
+        available_handlers,
+    )
+    .await
 }
 
 /// Handshakes and registers an already-connected session.
@@ -219,13 +227,16 @@ pub async fn register_connected_session<S>(
     mut session: S,
     config: &WorkerConfig,
     activity_types: Vec<String>,
+    activities: Vec<aion_package::ActivityDescriptor>,
     available_handlers: &BTreeSet<String>,
 ) -> Result<S, WorkerError>
 where
     S: WorkerSession,
 {
     session.handshake(config).await?;
-    session.register(activity_types, available_handlers).await?;
+    session
+        .register_with_contract(activity_types, activities, available_handlers)
+        .await?;
     Ok(session)
 }
 
@@ -240,6 +251,7 @@ where
 pub async fn reconnect_with_backoff<S, F, Fut>(
     config: &WorkerConfig,
     activity_types: Vec<String>,
+    activities: Vec<aion_package::ActivityDescriptor>,
     available_handlers: &BTreeSet<String>,
     connect: F,
 ) -> Result<S, WorkerError>
@@ -251,6 +263,7 @@ where
     reconnect_with_sleep(
         config,
         activity_types,
+        activities,
         available_handlers,
         connect,
         tokio::time::sleep,
@@ -270,6 +283,7 @@ where
 pub async fn reconnect_with_sleep<S, F, Fut, Sleep, SleepFut>(
     config: &WorkerConfig,
     activity_types: Vec<String>,
+    activities: Vec<aion_package::ActivityDescriptor>,
     available_handlers: &BTreeSet<String>,
     mut connect: F,
     mut sleep: Sleep,
@@ -291,6 +305,7 @@ where
                     session,
                     config,
                     activity_types.clone(),
+                    activities.clone(),
                     available_handlers,
                 )
                 .await
@@ -486,6 +501,7 @@ mod tests {
         let session = reconnect_with_sleep(
             &config,
             activity_types.clone(),
+            Vec::new(),
             &handlers,
             move || {
                 let attempts_for_connect = Rc::clone(&attempts_for_connect);
@@ -530,6 +546,7 @@ mod tests {
         let result = reconnect_with_sleep(
             &config,
             activity_types,
+            Vec::new(),
             &handlers,
             move || {
                 let attempts_for_connect = Rc::clone(&attempts_for_connect);
@@ -584,6 +601,7 @@ mod tests {
         let result = reconnect_with_sleep(
             &config,
             activity_types,
+            Vec::new(),
             &handlers,
             move || {
                 let attempts_for_connect = Rc::clone(&attempts_for_connect);
@@ -632,6 +650,7 @@ mod tests {
         let result = reconnect_with_sleep(
             &config,
             activity_types,
+            Vec::new(),
             &handlers,
             move || {
                 let attempts_for_connect = Rc::clone(&attempts_for_connect);

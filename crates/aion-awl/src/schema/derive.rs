@@ -12,7 +12,7 @@ use std::path::Path;
 
 use serde_json::{Map, Value, json};
 
-use crate::ast::{Document, TypeBody, TypeDecl, TypeRef, doc_text};
+use crate::ast::{Document, ParamDecl, TypeBody, TypeDecl, TypeRef, doc_text};
 
 use super::error::SchemaError;
 
@@ -91,6 +91,36 @@ pub fn schema_for_outcomes_in(document: &Document, root: &Path) -> Result<Value,
     Deriver::new(document, Some(root)).envelope_schema()
 }
 
+/// Derive an object schema over callable parameters, resolving schema imports
+/// relative to `root`.
+///
+/// # Errors
+///
+/// Returns [`SchemaError`] when a parameter type is undeclared or its schema
+/// door cannot be resolved or parsed.
+pub fn schema_for_params_in(
+    document: &Document,
+    root: &Path,
+    params: &[ParamDecl],
+) -> Result<Value, SchemaError> {
+    Deriver::new(document, Some(root)).params_schema(params)
+}
+
+/// Derive one callable result or signal payload schema, resolving schema
+/// imports relative to `root`.
+///
+/// # Errors
+///
+/// Returns [`SchemaError`] when the type is undeclared or its schema door
+/// cannot be resolved or parsed.
+pub fn schema_for_type_ref_in(
+    document: &Document,
+    root: &Path,
+    ty: &TypeRef,
+) -> Result<Value, SchemaError> {
+    Deriver::new(document, Some(root)).standalone_type_ref_schema(ty)
+}
+
 struct Deriver<'a> {
     document: &'a Document,
     root: Option<&'a Path>,
@@ -158,6 +188,44 @@ impl<'a> Deriver<'a> {
             object.insert("$defs".to_owned(), Value::Object(defs));
         }
         Ok(Value::Object(object))
+    }
+
+    fn params_schema(&self, params: &[ParamDecl]) -> Result<Value, SchemaError> {
+        let mut defs = Map::new();
+        let mut properties = Map::new();
+        let mut required = Vec::new();
+        for param in params {
+            let mut visited = BTreeSet::new();
+            let schema = self.type_ref_schema(&param.ty, "", &mut defs, &mut visited)?;
+            if !matches!(param.ty, TypeRef::Optional { .. }) {
+                required.push(Value::String(param.name.clone()));
+            }
+            properties.insert(param.name.clone(), schema);
+        }
+        let mut object = Map::new();
+        object.insert(
+            "$schema".to_owned(),
+            json!("https://json-schema.org/draft/2020-12/schema"),
+        );
+        object.insert("type".to_owned(), json!("object"));
+        object.insert("properties".to_owned(), Value::Object(properties));
+        object.insert("required".to_owned(), Value::Array(required));
+        if !defs.is_empty() {
+            object.insert("$defs".to_owned(), Value::Object(defs));
+        }
+        Ok(Value::Object(object))
+    }
+
+    fn standalone_type_ref_schema(&self, ty: &TypeRef) -> Result<Value, SchemaError> {
+        let mut defs = Map::new();
+        let mut visited = BTreeSet::new();
+        let mut schema = self.type_ref_schema(ty, "", &mut defs, &mut visited)?;
+        if !defs.is_empty()
+            && let Some(object) = schema.as_object_mut()
+        {
+            object.insert("$defs".to_owned(), Value::Object(defs));
+        }
+        Ok(schema)
     }
 
     fn envelope_schema(&self) -> Result<Value, SchemaError> {

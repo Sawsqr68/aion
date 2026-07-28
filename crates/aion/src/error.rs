@@ -2,7 +2,7 @@
 
 use crate::schedule::{ScheduleError, ScheduleEvaluatorError};
 use aion_core::{RunId, ScheduleId, WorkflowId};
-use aion_package::{ContentHash, PackageError};
+use aion_package::{ContentHash, ContractIdentityError, PackageError};
 use aion_store::StoreError;
 
 use crate::durability::DurabilityError;
@@ -62,12 +62,12 @@ pub enum EngineError {
         version: ContentHash,
     },
 
-    /// An idempotent re-load presented the resident content hash with a
-    /// different manifest. The content hash covers the canonical beam set
-    /// only, so this is the wrong-deploy tripwire: the resident version is
-    /// retained untouched and the incoming archive is refused.
+    /// An idempotent re-load presented the resident package identity with a
+    /// different manifest. V4 binds beams and the durable execution contract,
+    /// but not every packaging/admin field, so this remains the wrong-deploy
+    /// tripwire: the resident version is retained and the archive is refused.
     #[error(
-        "workflow `{workflow_type}` version `{version}` is already loaded with a different manifest (resident digest {resident_digest}, incoming digest {incoming_digest}); the content hash covers beams only — rebuild the archive so its manifest matches the resident version, or change the beam set"
+        "workflow `{workflow_type}` version `{version}` is already loaded with a different manifest (resident digest {resident_digest}, incoming digest {incoming_digest}); rebuild the archive so its complete manifest matches the resident version, or change its contract-bound content"
     )]
     ManifestMismatch {
         /// Logical workflow type targeted by the load.
@@ -101,6 +101,29 @@ pub enum EngineError {
     /// A `.aion` package operation returned an error.
     #[error("package error: {0}")]
     Package(#[from] PackageError),
+
+    /// The selected package identity predates the `.v4` contract commitment.
+    #[error("workflow `{workflow_type}` cannot start: {source}")]
+    ContractIdentity {
+        /// Workflow type selected for the start.
+        workflow_type: String,
+        /// Typed migration refusal from the package identity boundary.
+        #[source]
+        source: ContractIdentityError,
+    },
+
+    /// The package names activities without a durable queue-scoped contract.
+    #[error(
+        "NO_QUEUE_DECLARATION: workflow `{workflow_type}` version `{version}` has unscoped activities {activities}; re-deploy from a checked AWL contract"
+    )]
+    NoQueueDeclaration {
+        /// Workflow type selected for the start.
+        workflow_type: String,
+        /// Exact `.v4` package identity selected for the run.
+        version: ContentHash,
+        /// Stable comma-separated unscoped activity names.
+        activities: String,
+    },
 
     /// The embedded runtime returned an error.
     #[error("runtime error: {reason}")]

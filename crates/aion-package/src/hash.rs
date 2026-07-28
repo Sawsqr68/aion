@@ -5,12 +5,13 @@ use std::{fmt, str::FromStr, time::Duration};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use sha2::{Digest, Sha256};
 
-use crate::{BeamSet, Manifest, PackageError};
+use crate::{BeamSet, Manifest, PackageContract, PackageError};
 
 const DIGEST_LEN: usize = 32;
 const TEXT_LEN: usize = DIGEST_LEN * 2;
 const WORKFLOW_TIMEOUT_DOMAIN: &[u8] = b"aion.package.version.workflow-timeout.v1";
 const WORKFLOW_TIMEOUTS_DOMAIN: &[u8] = b"aion.package.version.workflow-timeouts.v3";
+const WORKER_CONTRACT_DOMAIN: &[u8] = b"aion.package.version.worker-contract.v4";
 
 /// A SHA-256 package version identity.
 ///
@@ -124,16 +125,39 @@ pub fn content_hash_with_timeouts(beams: &BeamSet, manifest: &Manifest) -> Conte
     let mut digest = Sha256::new();
     update_beams(&mut digest, beams);
     update_framed(&mut digest, WORKFLOW_TIMEOUTS_DOMAIN);
+    update_timeouts(&mut digest, manifest);
+    ContentHash(digest.finalize().into())
+}
+
+/// Computes the single `.v4` package identity over canonical BEAMs, the full
+/// `.v3` routing/timeout vector, and the canonical durable contract record.
+///
+/// This is one domain-separated digest, not a tuple of independently checkable
+/// hashes. A change to code, routing, timeouts, or any contract field therefore
+/// changes the package identity at the same boundary.
+#[must_use]
+pub fn content_hash_with_contract(
+    beams: &BeamSet,
+    manifest: &Manifest,
+    contract: &PackageContract,
+) -> ContentHash {
+    let mut digest = Sha256::new();
+    update_beams(&mut digest, beams);
+    update_framed(&mut digest, WORKER_CONTRACT_DOMAIN);
+    update_timeouts(&mut digest, manifest);
+    update_framed(&mut digest, &contract.canonical_bytes());
+    ContentHash(digest.finalize().into())
+}
+
+fn update_timeouts(digest: &mut Sha256, manifest: &Manifest) {
     let entry_count = 1 + manifest.additional_workflows.len() as u64;
     digest.update(entry_count.to_be_bytes());
-    // The primary entry, framed by the module the loader routes to.
-    update_framed(&mut digest, manifest.entry_module.as_bytes());
-    update_timeout_field(&mut digest, manifest.timeout);
+    update_framed(digest, manifest.entry_module.as_bytes());
+    update_timeout_field(digest, manifest.timeout);
     for entry in &manifest.additional_workflows {
-        update_framed(&mut digest, entry.workflow_type.as_bytes());
-        update_timeout_field(&mut digest, entry.timeout);
+        update_framed(digest, entry.workflow_type.as_bytes());
+        update_timeout_field(digest, entry.timeout);
     }
-    ContentHash(digest.finalize().into())
 }
 
 /// Whether this package's version identity commits to explicitly authored
@@ -149,12 +173,38 @@ pub fn content_hash_with_timeouts(beams: &BeamSet, manifest: &Manifest) -> Conte
 /// entry is provably the one baked into the version hash, so a hand-edited or
 /// injected per-entry timeout that was not part of the identity cannot fake
 /// declaredness.
+#[cfg(test)]
 pub(crate) fn has_explicit_timeout_identity(
     beams: &BeamSet,
     manifest: &Manifest,
     hash: &ContentHash,
 ) -> bool {
     hash != &content_hash(beams) && hash == &content_hash_with_timeouts(beams, manifest)
+}
+
+/// Whether the package identity commits to its complete `.v4` contract record.
+pub(crate) fn has_contract_identity(
+    beams: &BeamSet,
+    manifest: &Manifest,
+    contract: Option<&PackageContract>,
+    hash: &ContentHash,
+) -> bool {
+    contract.is_some_and(|contract| hash == &content_hash_with_contract(beams, manifest, contract))
+}
+
+/// Verifies an archive that may carry a `.v4` contract record.
+pub(crate) fn verified_content_hash_with_contract(
+    beams: &BeamSet,
+    manifest: &Manifest,
+    contract: Option<&PackageContract>,
+) -> Result<ContentHash, PackageError> {
+    if let Some(contract) = contract {
+        let v4_hash = content_hash_with_contract(beams, manifest, contract);
+        if manifest.version.as_str() == v4_hash.to_string() {
+            return Ok(v4_hash);
+        }
+    }
+    verified_content_hash(beams, manifest)
 }
 
 /// Verifies the stored manifest version against the recomputed identities and

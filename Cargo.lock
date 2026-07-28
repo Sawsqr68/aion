@@ -57,6 +57,7 @@ dependencies = [
 name = "aion-awl"
 version = "0.10.0"
 dependencies = [
+ "aion-package",
  "beamr",
  "flate2",
  "gleam-types",
@@ -419,6 +420,7 @@ version = "0.10.0"
 dependencies = [
  "aion-core",
  "aion-integrations",
+ "aion-package",
  "aion-proto",
  "async-trait",
  "chrono",
@@ -428,6 +430,7 @@ dependencies = [
  "liminal-sdk",
  "nix",
  "prost 0.14.3",
+ "schemars",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1561,6 +1564,12 @@ name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
+
+[[package]]
+name = "dyn-clone"
+version = "1.0.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
 name = "ecdsa"
@@ -2988,15 +2997,15 @@ dependencies = [
 
 [[package]]
 name = "liminal-protocol"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6f0b1a003447c5cfebda8ab9b92e699c98c25f4b9929fbf79e5fa8f837d4012"
+checksum = "6cf93f2f956b6902f4e25e948392d5fb4724df59f469900712b1bc6cb4f0c931"
 
 [[package]]
 name = "liminal-rs"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f73dc89877a27026388e7db8805cc51754ea9b433f7ef481add0f64e3fc1f85"
+checksum = "741903fb9f82b03bda99a3ac8f110e41bfd10453108f5ccf1c0c75e3bcc55299"
 dependencies = [
  "async-trait",
  "beamr",
@@ -3013,9 +3022,9 @@ dependencies = [
 
 [[package]]
 name = "liminal-sdk"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97555cb1583af046d9d4dcfd9e0c117754a91ae26f9aef485aae7186d520fa87"
+checksum = "60eeba575facea9db73a065576209791992c9abc5d6702a613d3fe455c8a4246"
 dependencies = [
  "futures-core",
  "liminal-protocol",
@@ -3029,9 +3038,9 @@ dependencies = [
 
 [[package]]
 name = "liminal-server"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b949a07c66dd963ba04f0f1c37293c41cbb4e36e8026444b13a958a3623751b9"
+checksum = "c782a3e8e60428ded30dba80dd8a4b7e75292eddf2620e846e92cc2553e92dcf"
 dependencies = [
  "anyhow",
  "beamr",
@@ -4488,6 +4497,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "schemars"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2b42f36aa1cd011945615b92222f6bf73c599a102a300334cd7f8dbeec726cc"
+dependencies = [
+ "dyn-clone",
+ "ref-cast",
+ "schemars_derive",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d115b50f4aaeea07e79c1912f645c7513d81715d0420f8bc77a18c6260b307f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_derive_internals",
+ "syn",
+]
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4573,6 +4607,17 @@ name = "serde_derive"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "serde_derive_internals"
+version = "0.29.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18d26a20a969b9e3fdf2fc2d9f21eda6c40e2de84c9408bb5d3b05d499aae711"
 dependencies = [
  "proc-macro2",
  "quote",

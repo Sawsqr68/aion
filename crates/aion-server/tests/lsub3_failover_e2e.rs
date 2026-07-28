@@ -304,6 +304,7 @@ fn doomed_registration() -> WorkerRegistration {
         node: Some(NODE.to_owned()),
         activity_types: vec![ACTIVITY_TYPE.to_owned()],
         identity: "lsub3-doomed-worker".to_owned(),
+        activities: Vec::new(),
     }
 }
 

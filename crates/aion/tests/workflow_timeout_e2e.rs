@@ -47,27 +47,14 @@ fn base_sleep_query() -> Result<Package, Box<dyn std::error::Error>> {
     example_build::built_package("crates/aion/tests/fixtures/sleep_query", "sleep_query")
 }
 
-/// Re-stamp the `sleep_query` beams with a manifest `timeout`, optionally
-/// binding it into the content-hash identity.
-///
-/// `explicit_identity == true` yields a package whose `has_declared_timeout()`
-/// is true (the deadline arms); `false` yields a legacy/defaulted-shaped
-/// manifest carrying a `timeout` value that is NOT in the identity, so it reads
-/// as not-declared (LAW 2).
-fn sleep_query_with_timeout(
-    timeout: Duration,
-    explicit_identity: bool,
-) -> Result<Package, Box<dyn std::error::Error>> {
+/// Re-stamp the `sleep_query` beams with a contract-bound manifest timeout.
+fn sleep_query_with_timeout(timeout: Duration) -> Result<Package, Box<dyn std::error::Error>> {
     let base = base_sleep_query()?;
     let manifest = Manifest {
         timeout: Some(timeout),
         ..base.manifest().clone()
     };
-    let mut builder = PackageBuilder::new(manifest, base.beams().clone());
-    if explicit_identity {
-        builder = builder.with_explicit_timeout_identity();
-    }
-    let bytes = builder.write_to_bytes()?;
+    let bytes = PackageBuilder::new(manifest, base.beams().clone()).write_to_bytes()?;
     Ok(Package::load_from_bytes(
         bytes,
         ExtractionLimits::unbounded(),
@@ -79,6 +66,7 @@ async fn build_engine(
     package: Package,
 ) -> Result<Engine, Box<dyn std::error::Error>> {
     Ok(EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -93,6 +81,7 @@ async fn build_engine_shards(
     owned_shards: Vec<usize>,
 ) -> Result<Engine, Box<dyn std::error::Error>> {
     Ok(EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -202,6 +191,7 @@ async fn no_declared_timeout_arms_nothing() -> TestResult {
     let package = example_build::built_package("examples/hello-world", "hello_world")?;
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -249,55 +239,6 @@ async fn no_declared_timeout_arms_nothing() -> TestResult {
     Ok(())
 }
 
-// --- LAW 2: a legacy/defaulted manifest can never arm. ---
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn legacy_defaulted_manifest_never_arms() -> TestResult {
-    if crate::gleam_test_support::skip_if_unavailable() {
-        return Ok(());
-    }
-    // The manifest carries a 300ms timeout, but it is NOT bound into the
-    // package identity (no `with_explicit_timeout_identity`), exactly like a
-    // legacy archive written with the old defaulted 1h value. The run must
-    // outlive that timeout without arming a deadline or timing out.
-    let package = sleep_query_with_timeout(Duration::from_millis(300), false)?;
-    assert!(
-        !package.has_declared_timeout(),
-        "a legacy/defaulted manifest must read as not-declared"
-    );
-    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
-    let engine = build_engine(&store, package).await?;
-    let (workflow_id, run_id) = start_sleeper(&engine, 2_000).await?;
-
-    // Live well past the manifest's 300ms timeout.
-    tokio::time::sleep(Duration::from_millis(900)).await;
-
-    let history = store.read_history(&workflow_id).await?;
-    assert!(
-        !history.iter().any(is_deadline_started),
-        "LAW 2: a legacy/defaulted manifest arms no deadline: {history:#?}"
-    );
-    assert_eq!(
-        count_timed_out(&history),
-        0,
-        "LAW 2: a legacy/defaulted manifest never times out"
-    );
-    assert_ne!(
-        aion_core::status_from_events(&history),
-        WorkflowStatus::TimedOut,
-        "LAW 2: status is not TimedOut past the manifest timeout"
-    );
-    // LAW 2 at the store boundary: no durable deadline timer row was scheduled
-    // for the legacy/defaulted manifest either.
-    assert!(
-        !workflow_has_deadline_row(&store, &workflow_id).await?,
-        "LAW 2: a legacy/defaulted manifest schedules no durable timer row"
-    );
-    let _ = run_id;
-    engine.shutdown()?;
-    Ok(())
-}
-
 // --- Declared timeout fires to a TimedOut terminal. ---
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -305,7 +246,7 @@ async fn declared_timeout_fires_to_timed_out() -> TestResult {
     if crate::gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
-    let package = sleep_query_with_timeout(Duration::from_millis(400), true)?;
+    let package = sleep_query_with_timeout(Duration::from_millis(400))?;
     assert!(
         package.has_declared_timeout(),
         "the timeout-bearing identity must read as declared"
@@ -375,7 +316,7 @@ async fn continue_as_new_cancels_the_predecessor_deadline() -> TestResult {
     }
     // A comfortably long deadline so neither run times out during the test; we
     // only inspect the recorded transition.
-    let package = sleep_query_with_timeout(Duration::from_secs(120), true)?;
+    let package = sleep_query_with_timeout(Duration::from_secs(120))?;
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let engine = build_engine(&store, package).await?;
     let (workflow_id, predecessor_run) = start_sleeper(&engine, LONG_SLEEP_MS).await?;
@@ -447,9 +388,10 @@ async fn timed_out_terminal_is_delivered_on_the_live_event_stream() -> TestResul
         return Ok(());
     }
 
-    let package = sleep_query_with_timeout(Duration::from_millis(400), true)?;
+    let package = sleep_query_with_timeout(Duration::from_millis(400))?;
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -516,7 +458,7 @@ async fn adopted_deadline_fires_after_shard_adoption() -> TestResult {
     // "crash" while the deadline is still outstanding (no terminal yet).
     let engine_a = build_engine_shards(
         &store,
-        sleep_query_with_timeout(Duration::from_millis(1_200), true)?,
+        sleep_query_with_timeout(Duration::from_millis(1_200))?,
         (0..SHARD_COUNT).collect(),
     )
     .await?;
@@ -535,7 +477,7 @@ async fn adopted_deadline_fires_after_shard_adoption() -> TestResult {
     let survivor_shards: Vec<usize> = (0..SHARD_COUNT).filter(|&s| s != sleeper_shard).collect();
     let engine_b = build_engine_shards(
         &store,
-        sleep_query_with_timeout(Duration::from_millis(1_200), true)?,
+        sleep_query_with_timeout(Duration::from_millis(1_200))?,
         survivor_shards,
     )
     .await?;

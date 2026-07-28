@@ -5,6 +5,8 @@
 pub mod backpressure;
 /// Bridge from engine activity dispatch to connected workers.
 pub mod bridge;
+/// Worker contract admission shared by every registration transport.
+pub mod contracts;
 /// Activity completion handling and dispatch abstractions.
 pub mod dispatch;
 /// Worker heartbeat and liveness tracking.

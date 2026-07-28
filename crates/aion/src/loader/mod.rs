@@ -14,8 +14,8 @@ pub mod persistence;
 /// Serde-ready listing record for loaded workflow versions.
 pub mod version_info;
 
-pub use catalog::{PinnedWorkflow, WorkflowCatalog};
-pub use load::{LoadOutcome, LoadedWorkflow};
+pub use catalog::{ActivityServing, PinnedWorkflow, WorkflowCatalog};
+pub use load::{DeployedWorkerContract, LoadOutcome, LoadedWorkflow};
 pub use version_info::WorkflowVersionInfo;
 
 /// Canonical durable form of a loaded package version.

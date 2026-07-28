@@ -8,7 +8,7 @@
 //! atomic route flip for new starts, while in-flight runs keep the version
 //! they already resolved (loads never unregister anything).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, RwLock};
 
 #[path = "catalog_load.rs"]
@@ -20,12 +20,33 @@ use aion_core::PackageVersion;
 use aion_package::{ContentHash, ManifestDigest, ManifestVersion};
 use chrono::{DateTime, Utc};
 
-use super::load::{LoadedWorkflow, load_error};
+use super::load::{DeployedWorkerContract, LoadedWorkflow, load_error};
 use super::version_info::WorkflowVersionInfo;
 use crate::error::EngineError;
 
 /// In-flight start pins keyed by `(workflow type, version)`.
 type StartPins = Arc<Mutex<HashMap<(String, ContentHash), usize>>>;
+
+/// How this engine's activities are fulfilled, declared at construction.
+///
+/// This gates ONLY the structural queue-service admission check
+/// (`NoQueueDeclaration`). The `.v4` identity floor (`ContractIdentity`) is
+/// unconditional in both modes — pre-`.v4` packages are never grandfathered.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ActivityServing {
+    /// Activities route to declared task queues — the server posture and the
+    /// fail-closed default. A package naming activities without a
+    /// queue-scoped contract is refused at start: an unserved queue would
+    /// otherwise wait silently forever.
+    #[default]
+    QueueRouted,
+    /// The engine owner declared that a configured in-process
+    /// `ActivityDispatcher` fulfils every activity directly — the embedded
+    /// posture. No queue exists to be unserved: dispatch either runs
+    /// immediately or fails loudly when the dispatcher is missing, so the
+    /// queue-service check does not apply. Never the server posture.
+    InProcess,
+}
 
 /// Shared, atomically-swappable workflow package catalog.
 pub struct WorkflowCatalog {
@@ -40,6 +61,9 @@ pub struct WorkflowCatalog {
     /// (the registration birth window). Unload refuses while any pin for the
     /// target version is held.
     pinned_starts: StartPins,
+    /// Declared activity-fulfilment posture; gates the queue-service
+    /// admission check in `start_admission`.
+    serving: ActivityServing,
 }
 
 /// One immutable catalog view.
@@ -66,9 +90,9 @@ struct PackageGroup {
 struct CatalogEntry {
     workflow: LoadedWorkflow,
     manifest_version: ManifestVersion,
-    /// Canonical digest of the manifest this version was loaded with. The
-    /// content hash covers beams only, so this digest is what detects a
-    /// same-hash-different-manifest re-load (the silent-wrong-deploy tripwire).
+    /// Canonical digest of the manifest this version was loaded with. V4 binds
+    /// beams and the execution contract but not every packaging/admin field, so
+    /// this detects any remaining same-identity manifest drift.
     manifest_digest: ManifestDigest,
     loaded_at: DateTime<Utc>,
 }
@@ -134,14 +158,28 @@ impl Default for WorkflowCatalog {
 }
 
 impl WorkflowCatalog {
-    /// Creates an empty catalog.
+    /// Creates an empty catalog with the fail-closed queue-routed posture.
     #[must_use]
     pub fn new() -> Self {
+        Self::new_with_serving(ActivityServing::QueueRouted)
+    }
+
+    /// Creates an empty catalog with an explicitly declared activity-serving
+    /// posture.
+    #[must_use]
+    pub fn new_with_serving(serving: ActivityServing) -> Self {
         Self {
             snapshot: RwLock::new(Arc::new(CatalogSnapshot::default())),
             mutations: tokio::sync::Mutex::new(()),
             pinned_starts: Arc::new(Mutex::new(HashMap::new())),
+            serving,
         }
+    }
+
+    /// The activity-fulfilment posture declared at construction.
+    #[must_use]
+    pub fn activity_serving(&self) -> ActivityServing {
+        self.serving
     }
 
     fn current(&self) -> Result<Arc<CatalogSnapshot>, EngineError> {
@@ -215,6 +253,40 @@ impl WorkflowCatalog {
             .values()
             .map(|entry| entry.workflow.clone())
             .collect())
+    }
+
+    /// Every retained `.v4` contract that declares `task_queue`, once per
+    /// package identity and in stable identity order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EngineError::CatalogPoisoned`] when the snapshot lock is poisoned.
+    pub fn worker_contracts_for_queue(
+        &self,
+        task_queue: &str,
+    ) -> Result<Vec<DeployedWorkerContract>, EngineError> {
+        let snapshot = self.current()?;
+        let mut contracts = BTreeMap::new();
+        for entry in snapshot.by_version.values() {
+            let Ok(package_contract) = entry.workflow.contract() else {
+                continue;
+            };
+            let Some(worker) = package_contract
+                .workers
+                .iter()
+                .find(|worker| worker.task_queue == task_queue)
+            else {
+                continue;
+            };
+            let version = entry.workflow.version().clone();
+            contracts
+                .entry(version.to_string())
+                .or_insert_with(|| DeployedWorkerContract {
+                    package_version: version,
+                    contract: worker.clone(),
+                });
+        }
+        Ok(contracts.into_values().collect())
     }
 
     /// Every loaded version with its route flag, sorted by `(type, loaded_at)`.

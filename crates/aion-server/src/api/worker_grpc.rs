@@ -1,7 +1,7 @@
 //! tonic `WorkerProtocol` service — bidirectional stream handler.
 
 use aion_proto::{
-    ProtoActivityResult, ProtoRegisterWorker,
+    ProtoActivityDescriptor, ProtoActivityResult, ProtoRegisterWorker,
     generated::{
         self,
         worker_protocol_server::{WorkerProtocol, WorkerProtocolServer},
@@ -64,6 +64,7 @@ impl WorkerProtocol for WorkerGrpcService {
                 ));
             }
         };
+        validate_worker_contracts(&self.state, &register)?;
 
         let (task_tx, task_rx) = mpsc::channel::<Result<generated::ServerToWorker, Status>>(32);
         let (worker_tx, worker_rx) = mpsc::channel(32);
@@ -564,7 +565,76 @@ fn decode_register(r: generated::RegisterWorker) -> ProtoRegisterWorker {
         activity_types: r.activity_types,
         task_queue: r.task_queue,
         node: r.node,
+        activities: r
+            .activities
+            .into_iter()
+            .map(|activity| ProtoActivityDescriptor {
+                name: activity.name,
+                input_schema_json: activity.input_schema_json,
+                output_schema_json: activity.output_schema_json,
+            })
+            .collect(),
+        identity: r.identity,
     }
+}
+
+fn validate_worker_contracts(
+    state: &ServerState,
+    register: &ProtoRegisterWorker,
+) -> Result<(), Status> {
+    let advertised = register
+        .activities
+        .iter()
+        .map(|activity| {
+            let input_schema =
+                serde_json::from_str(&activity.input_schema_json).map_err(|error| {
+                    Status::invalid_argument(format!(
+                        "worker activity `{}` input_schema_json is invalid: {error}",
+                        activity.name
+                    ))
+                })?;
+            let output_schema =
+                serde_json::from_str(&activity.output_schema_json).map_err(|error| {
+                    Status::invalid_argument(format!(
+                        "worker activity `{}` output_schema_json is invalid: {error}",
+                        activity.name
+                    ))
+                })?;
+            Ok(aion_package::ActivityDescriptor {
+                name: activity.name.clone(),
+                input_schema,
+                output_schema,
+            })
+        })
+        .collect::<Result<Vec<_>, Status>>()?;
+    // Mirrors the liminal transport's no-catalog admission: a state built
+    // from parts without an engine handle has no durable catalog, so no
+    // deployed `.v4` contract can exist to contradict this worker. Refusing
+    // here would turn every registration away forever on such a server; the
+    // strict field-level check applies on every engine-backed state.
+    let Ok(engine) = state.engine() else {
+        tracing::warn!(
+            task_queue = %register.task_queue,
+            identity = %register.identity,
+            "worker contract check skipped: server state has no engine handle, \
+             so no deployed contracts exist to check against"
+        );
+        return Ok(());
+    };
+    crate::worker::contracts::validate_worker_contracts(
+        &engine,
+        &register.task_queue,
+        &register.identity,
+        &advertised,
+    )
+    .map_err(|error| match error {
+        crate::worker::contracts::ContractAdmissionError::Mismatch { .. } => {
+            Status::failed_precondition(error.to_string())
+        }
+        crate::worker::contracts::ContractAdmissionError::Catalog { .. } => {
+            Status::internal(error.to_string())
+        }
+    })
 }
 
 fn encode_server_to_worker(message: WorkerMessage) -> generated::ServerToWorker {

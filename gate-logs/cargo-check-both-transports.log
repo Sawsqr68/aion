@@ -1,0 +1,6 @@
+    Checking liminal-rs v0.4.0 (/Users/tom/Developer/ablative/aion/vendor/liminal-rs)
+    Checking liminal-sdk v0.4.0
+    Checking liminal-server v0.4.0
+    Checking aion-worker v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-worker)
+    Checking aion-server v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-server)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 30.83s

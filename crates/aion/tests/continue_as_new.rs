@@ -149,6 +149,7 @@ async fn recovery_active_listing_contains_only_current_continuation_run()
     // The production AD seam re-spawns both active fixture workflows from
     // their recorded start metadata — no synthetic process ids.
     let recovered = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)

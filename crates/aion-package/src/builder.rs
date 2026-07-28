@@ -10,8 +10,11 @@ use std::{
 use zip::{CompressionMethod, DateTime, ZipWriter, write::SimpleFileOptions};
 
 use crate::{
-    BeamSet, Manifest, ManifestVersion, PackageError, content_hash, content_hash_with_timeouts,
+    BeamSet, ContentHash, Manifest, ManifestVersion, PackageContract, PackageError,
+    content_hash_with_contract,
 };
+
+const CONTRACT_ENTRY: &str = "contract.json";
 
 /// Deterministic writer for the `.aion` ZIP container format.
 #[derive(Clone, Debug)]
@@ -19,18 +22,21 @@ pub struct PackageBuilder {
     manifest: Manifest,
     beams: BeamSet,
     source: BTreeMap<String, Vec<u8>>,
-    explicit_timeout_identity: bool,
+    contract: Option<PackageContract>,
+    preserved_identity: Option<ContentHash>,
 }
 
 impl PackageBuilder {
     /// Creates a builder without source files.
     #[must_use]
     pub fn new(manifest: Manifest, beams: BeamSet) -> Self {
+        let contract = PackageContract::from_manifest(&manifest);
         Self {
             manifest,
             beams,
             source: BTreeMap::new(),
-            explicit_timeout_identity: false,
+            contract: Some(contract),
+            preserved_identity: None,
         }
     }
 
@@ -42,6 +48,7 @@ impl PackageBuilder {
         N: Into<String>,
         B: Into<Vec<u8>>,
     {
+        let contract = PackageContract::from_manifest(&manifest);
         Self {
             manifest,
             beams,
@@ -49,14 +56,25 @@ impl PackageBuilder {
                 .into_iter()
                 .map(|(name, bytes)| (name.into(), bytes.into()))
                 .collect(),
-            explicit_timeout_identity: false,
+            contract: Some(contract),
+            preserved_identity: None,
         }
     }
 
-    /// Includes the manifest workflow timeout in the package version identity.
+    /// Replaces the manifest-derived record with the complete compiled contract.
     #[must_use]
-    pub const fn with_explicit_timeout_identity(mut self) -> Self {
-        self.explicit_timeout_identity = true;
+    pub fn with_contract(mut self, contract: PackageContract) -> Self {
+        self.contract = Some(contract);
+        self
+    }
+
+    pub(crate) fn preserving_loaded_identity(
+        mut self,
+        identity: ContentHash,
+        contract: Option<PackageContract>,
+    ) -> Self {
+        self.preserved_identity = Some(identity);
+        self.contract = contract;
         self
     }
 
@@ -78,8 +96,8 @@ impl PackageBuilder {
     /// serialisation failures, ZIP writer failures, or target I/O failures.
     pub fn write_to_bytes(&self) -> Result<Vec<u8>, PackageError> {
         let cursor = Cursor::new(Vec::new());
-        let manifest_bytes = self.manifest_bytes()?;
-        let cursor = self.write_archive(cursor, &manifest_bytes)?;
+        let (manifest_bytes, contract_bytes) = self.archive_metadata()?;
+        let cursor = self.write_archive(cursor, &manifest_bytes, contract_bytes.as_deref())?;
         Ok(cursor.into_inner())
     }
 
@@ -90,15 +108,23 @@ impl PackageBuilder {
     /// Returns [`PackageError`] variants for missing entry modules, manifest JSON
     /// serialisation failures, ZIP writer failures, or target I/O failures.
     pub fn write_to_path(&self, path: impl AsRef<Path>) -> Result<(), PackageError> {
-        let manifest_bytes = self.manifest_bytes()?;
+        let (manifest_bytes, contract_bytes) = self.archive_metadata()?;
         let file = File::create(path).map_err(|source| PackageError::ArchiveWriteIo { source })?;
-        self.write_archive(file, &manifest_bytes)?;
+        self.write_archive(file, &manifest_bytes, contract_bytes.as_deref())?;
         Ok(())
     }
 
-    fn manifest_bytes(&self) -> Result<Vec<u8>, PackageError> {
+    fn archive_metadata(&self) -> Result<(Vec<u8>, Option<Vec<u8>>), PackageError> {
         let manifest = self.stamped_manifest()?;
-        serde_json::to_vec(&manifest).map_err(|source| PackageError::ManifestSerialise { source })
+        let manifest_bytes = serde_json::to_vec(&manifest)
+            .map_err(|source| PackageError::ManifestSerialise { source })?;
+        let contract_bytes = self
+            .contract
+            .as_ref()
+            .map(serde_json::to_vec)
+            .transpose()
+            .map_err(|source| PackageError::ContractSerialise { source })?;
+        Ok((manifest_bytes, contract_bytes))
     }
 
     fn stamped_manifest(&self) -> Result<Manifest, PackageError> {
@@ -108,29 +134,24 @@ impl PackageBuilder {
             });
         }
 
-        let hash = if self.explicit_timeout_identity {
-            // At least one entry (the primary or an additional workflow) must
-            // declare a timeout for the explicit-timeout identity to mean
-            // anything; an all-absent opt-in is a caller mistake.
-            let any_declared = self.manifest.timeout.is_some()
-                || self
-                    .manifest
-                    .additional_workflows
-                    .iter()
-                    .any(|entry| entry.timeout.is_some());
-            if !any_declared {
-                return Err(PackageError::ExplicitTimeoutWithoutValue);
+        let hash = match (&self.preserved_identity, &self.contract) {
+            (Some(identity), _) => identity.clone(),
+            (None, Some(contract)) => {
+                content_hash_with_contract(&self.beams, &self.manifest, contract)
             }
-            content_hash_with_timeouts(&self.beams, &self.manifest)
-        } else {
-            content_hash(&self.beams)
+            (None, None) => return Err(PackageError::MissingContractRecord),
         };
         let mut manifest = self.manifest.clone();
         manifest.version = ManifestVersion::new(hash.to_string());
         Ok(manifest)
     }
 
-    fn write_archive<W>(&self, writer: W, manifest_bytes: &[u8]) -> Result<W, PackageError>
+    fn write_archive<W>(
+        &self,
+        writer: W,
+        manifest_bytes: &[u8],
+        contract_bytes: Option<&[u8]>,
+    ) -> Result<W, PackageError>
     where
         W: Write + Seek,
     {
@@ -138,6 +159,9 @@ impl PackageBuilder {
         let options = deterministic_file_options();
 
         write_entry(&mut archive, "manifest.json", manifest_bytes, options)?;
+        if let Some(contract_bytes) = contract_bytes {
+            write_entry(&mut archive, CONTRACT_ENTRY, contract_bytes, options)?;
+        }
 
         for module in self.beams.iter() {
             let entry_name = archive_entry_name("beam", module.name(), "beam")?;
@@ -216,7 +240,7 @@ mod tests {
     use super::PackageBuilder;
     use crate::{
         BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest, ManifestVersion,
-        PackageError, content_hash,
+        PackageContract, PackageError, content_hash_with_contract,
     };
 
     fn sample_manifest() -> Manifest {
@@ -243,10 +267,12 @@ mod tests {
     }
 
     #[test]
-    fn finalised_manifest_version_equals_beam_content_hash() -> Result<(), PackageError> {
+    fn finalised_manifest_version_equals_v4_contract_hash() -> Result<(), PackageError> {
         let beams = sample_beams()?;
-        let expected = content_hash(&beams).to_string();
-        let manifest = PackageBuilder::new(sample_manifest(), beams).finalise_manifest()?;
+        let source_manifest = sample_manifest();
+        let contract = PackageContract::from_manifest(&source_manifest);
+        let expected = content_hash_with_contract(&beams, &source_manifest, &contract).to_string();
+        let manifest = PackageBuilder::new(source_manifest, beams).finalise_manifest()?;
 
         assert_eq!(manifest.version.as_str(), expected);
         Ok(())
@@ -255,8 +281,10 @@ mod tests {
     #[test]
     fn caller_supplied_manifest_version_is_overwritten() -> Result<(), PackageError> {
         let beams = sample_beams()?;
-        let expected = content_hash(&beams).to_string();
-        let manifest = PackageBuilder::new(sample_manifest(), beams).finalise_manifest()?;
+        let source_manifest = sample_manifest();
+        let contract = PackageContract::from_manifest(&source_manifest);
+        let expected = content_hash_with_contract(&beams, &source_manifest, &contract).to_string();
+        let manifest = PackageBuilder::new(source_manifest, beams).finalise_manifest()?;
 
         assert_ne!(manifest.version.as_str(), "caller-supplied-version");
         assert_eq!(manifest.version.as_str(), expected);
@@ -290,6 +318,7 @@ mod tests {
             names,
             vec![
                 "manifest.json",
+                "contract.json",
                 "beam/workflow/order.beam",
                 "beam/workflow/support.beam",
             ]

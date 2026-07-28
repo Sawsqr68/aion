@@ -782,6 +782,8 @@ mod tests {
             activity_types: vec![String::from("ship")],
             task_queue: String::new(),
             node: String::new(),
+            activities: Vec::new(),
+            identity: String::new(),
         };
 
         assert!(
@@ -1052,6 +1054,8 @@ mod tests {
             activity_types: Vec::new(),
             task_queue: String::new(),
             node: String::new(),
+            activities: Vec::new(),
+            identity: String::new(),
         };
 
         let scoped = guard

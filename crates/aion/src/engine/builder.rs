@@ -10,8 +10,8 @@ use aion_store::visibility::VisibilityStore;
 use aion_store::{EventStore, InMemoryStore};
 
 use crate::{
-    EngineError, Registry, RuntimeConfig, RuntimeHandle, SignalDeliveryConfig, SupervisionTree,
-    WorkflowCatalog,
+    ActivityServing, EngineError, Registry, RuntimeConfig, RuntimeHandle, SignalDeliveryConfig,
+    SupervisionTree, WorkflowCatalog,
     activity::bridge::ActivityDispatcher,
     durability::ActiveWorkflowRecoverySeam,
     runtime::{
@@ -106,8 +106,9 @@ async fn assemble_startup_catalog(
     runtime: &RuntimeHandle,
     store: &dyn EventStore,
     sources: Vec<WorkflowPackageSource>,
+    serving: ActivityServing,
 ) -> Result<Arc<WorkflowCatalog>, EngineError> {
-    let catalog = Arc::new(WorkflowCatalog::new());
+    let catalog = Arc::new(WorkflowCatalog::new_with_serving(serving));
     crate::loader::persistence::reload_persisted_packages(runtime, catalog.as_ref(), store).await?;
     for source in sources {
         let package = package_from_source(source)?;
@@ -258,6 +259,7 @@ pub struct EngineBuilder {
     delegated: DelegatedSeams,
     signal_router_factory: Option<SignalRouterFactory>,
     activity_dispatcher: Option<Arc<dyn ActivityDispatcher>>,
+    activity_serving: ActivityServing,
     active_registry: Option<Arc<Registry>>,
     visibility_reconciliation_interval: Option<Duration>,
     search_attribute_schema: SearchAttributeSchema,
@@ -297,6 +299,7 @@ impl EngineBuilder {
             delegated: DelegatedSeams::default(),
             signal_router_factory: None,
             activity_dispatcher: None,
+            activity_serving: ActivityServing::QueueRouted,
             active_registry: None,
             visibility_reconciliation_interval: None,
             search_attribute_schema: SearchAttributeSchema::new(),
@@ -572,6 +575,23 @@ impl EngineBuilder {
         self
     }
 
+    /// Declare that the configured in-process [`ActivityDispatcher`] fulfils
+    /// every activity this engine dispatches — the embedded posture.
+    ///
+    /// This gates ONLY the structural queue-service admission check: with
+    /// in-process serving declared, a package whose contract retains
+    /// unscoped (legacy-manifest) activities is admitted at start, because
+    /// no queue exists to be unserved — dispatch runs on the configured
+    /// dispatcher immediately, and a missing dispatcher fails loudly at
+    /// dispatch. The `.v4` identity floor is unconditional either way. The
+    /// server never declares this: its dispatcher routes to task queues, so
+    /// it keeps the fail-closed queue-routed default.
+    #[must_use]
+    pub const fn in_process_activity_serving(mut self) -> Self {
+        self.activity_serving = ActivityServing::InProcess;
+        self
+    }
+
     /// Supply the active workflow registry used by the built engine.
     ///
     /// Server-owned dispatchers that run behind raw NIFs use this to correlate a
@@ -602,6 +622,18 @@ impl EngineBuilder {
             .with_outbox_enabled(self.outbox_enabled)
     }
 
+    /// Start the runtime and install the engine plus host NIFs.
+    fn start_runtime_with_nifs(
+        runtime_config: RuntimeConfig,
+        host_nifs: Vec<NifEntry>,
+    ) -> Result<Arc<RuntimeHandle>, EngineError> {
+        let runtime = Arc::new(RuntimeHandle::new(runtime_config)?);
+        let mut nifs = NifRegistration::new();
+        nifs.add_engine_nifs().add_host_nifs(host_nifs);
+        runtime.install_nifs(nifs)?;
+        Ok(runtime)
+    }
+
     /// Construct the live engine.
     ///
     /// # Errors
@@ -627,18 +659,18 @@ impl EngineBuilder {
         // single-node / non-distributed backends, so default boot is unchanged.
         acquire_owned_shards(store.as_ref(), self.owned_shards.as_deref())?;
 
-        let runtime = Arc::new(RuntimeHandle::new(runtime_config)?);
-
-        let mut nifs = NifRegistration::new();
-        nifs.add_engine_nifs().add_host_nifs(self.host_nifs);
-        runtime.install_nifs(nifs)?;
+        let runtime = Self::start_runtime_with_nifs(runtime_config, self.host_nifs)?;
 
         // Persisted runtime deploys must be resident before startup recovery
         // below resolves any run's recorded pinned version — this is the
         // restart half of the deploy durability promise.
-        let catalog =
-            assemble_startup_catalog(runtime.as_ref(), store.as_ref(), self.workflow_sources)
-                .await?;
+        let catalog = assemble_startup_catalog(
+            runtime.as_ref(),
+            store.as_ref(),
+            self.workflow_sources,
+            self.activity_serving,
+        )
+        .await?;
 
         let registry = self
             .active_registry

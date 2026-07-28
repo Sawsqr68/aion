@@ -30,15 +30,21 @@ const EXCLUDED_OUT_OF_ORACLE: &[&str] = &[
 
 /// The fixtures that park at a durable TIMER, proven by visibility `Running`
 /// plus this exact pending-timer identity (the first anonymous timer).
-const EXPECTED_TIMER_PARKED: &[(&str, &str)] = &[
+// Each parked fixture's authored workflow timeout arms a run-scoped deadline
+// alongside its awaited timer; the deadline's run-uuid is aliased to `<run>`
+// by the driver before the evidence lands here.
+const EXPECTED_TIMER_PARKED: &[(&str, &[&str])] = &[
     (
         "loop-outcomes/valid/guard_optional_wait",
-        "timer:anonymous:0",
+        &["timer:anonymous:0", "timer:named:deadline:<run>"],
     ),
-    ("step-bodies/valid/wait_and_sleep", "timer:anonymous:0"),
+    (
+        "step-bodies/valid/wait_and_sleep",
+        &["timer:anonymous:0", "timer:named:deadline:<run>"],
+    ),
     (
         "step-bodies/valid/wait_timeout_optional",
-        "timer:anonymous:0",
+        &["timer:anonymous:0", "timer:named:deadline:<run>"],
     ),
 ];
 
@@ -223,7 +229,12 @@ async fn covered_set_is_byte_identical() -> TestResult {
     // Timer parks pinned to their exact pending-timer identity (r2 finding 3).
     let expected_timer: Vec<(String, Vec<String>)> = EXPECTED_TIMER_PARKED
         .iter()
-        .map(|(name, timer)| ((*name).to_owned(), vec![(*timer).to_owned()]))
+        .map(|(name, timers)| {
+            (
+                (*name).to_owned(),
+                timers.iter().map(|timer| (*timer).to_owned()).collect(),
+            )
+        })
         .collect();
     assert_eq!(
         report.timer_parked_evidence(),

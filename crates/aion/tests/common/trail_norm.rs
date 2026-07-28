@@ -48,6 +48,7 @@ fn normalize(value: &mut Value, run_ids: &mut HashMap<String, String>) {
                     "workflow_id" => *field = json!("<workflow-id>"),
                     "package_version" => *field = json!("<package-version>"),
                     "run_id" | "parent_run_id" => normalize_run_id(field, run_ids),
+                    "timer_id" => normalize_timer_id(field, run_ids),
                     _ => normalize(field, run_ids),
                 }
             }
@@ -59,6 +60,25 @@ fn normalize(value: &mut Value, run_ids: &mut HashMap<String, String>) {
         }
         _ => {}
     }
+}
+
+/// The declared-timeout deadline timer carries run identity inside a
+/// composite `Named` string (`deadline:<run-id>`). The embedded id maps
+/// through the SAME first-appearance table as `run_id` fields, so a deadline
+/// armed for the wrong run still diverges positionally; only the identity
+/// aliasing is normalized, never the event shape (decision 11).
+fn normalize_timer_id(field: &mut Value, run_ids: &mut HashMap<String, String>) {
+    if let Value::Object(map) = field {
+        if let Some(Value::String(name)) = map.get_mut("Named") {
+            if let Some(id) = name.strip_prefix("deadline:") {
+                let next = format!("<run-{}>", run_ids.len());
+                let placeholder = run_ids.entry(id.to_owned()).or_insert(next).clone();
+                *name = format!("deadline:{placeholder}");
+                return;
+            }
+        }
+    }
+    normalize(field, run_ids);
 }
 
 /// Maps a concrete run id to a `<run-N>` placeholder assigned in

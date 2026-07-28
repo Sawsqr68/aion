@@ -1,0 +1,330 @@
+   Compiling aion-rs v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 25.89s
+     Running unittests src/lib.rs (target/debug/deps/aion-299033524826c65b)
+
+running 10 tests
+test lifecycle::start::start_tests::failed_start_with_unabortable_process_retains_ownership_not_orphan ... ok
+test lifecycle::start::start_tests::start_with_attributes_records_started_then_attributes_before_spawn ... ok
+test lifecycle::start::start_tests::start_with_existing_workflow_id_resumes_history_sequence ... ok
+test lifecycle::start::start_tests::start_with_unregistered_attribute_fails_without_append_or_spawn ... ok
+test lifecycle::start::start_tests::recorder_append_happens_before_spawn_failure ... ok
+test lifecycle::start::start_tests::successful_start_appends_spawns_places_registers_and_returns_handle ... ok
+test lifecycle::start::contract_tests::unscoped_activity_contract_is_refused_before_history_or_registration ... ok
+test lifecycle::start::start_tests::unknown_workflow_type_returns_not_found_and_appends_nothing ... ok
+test lifecycle::start::contract_tests::pre_v4_exact_version_is_refused_before_history_or_registration ... ok
+test lifecycle::start::start_tests::normal_start_monitor_failure_retracts_publication_and_observes_abort ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 566 filtered out; finished in 0.26s
+
+     Running tests/activity_retry_e2e.rs (target/debug/deps/activity_retry_e2e-f302bf9ff1632b06)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/adoption_parked_timer_e2e.rs (target/debug/deps/adoption_parked_timer_e2e-a61a29d0b2d1c316)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/adoption_parked_timer_xnode_e2e.rs (target/debug/deps/adoption_parked_timer_xnode_e2e-034ce70292eb6f32)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/aion_active_active_showcase.rs (target/debug/deps/aion_active_active_showcase-fd8c09fd6e690862)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/aion_cluster_failover_showcase.rs (target/debug/deps/aion_cluster_failover_showcase-6d35329c0295726d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/aion_on_haematite_showcase.rs (target/debug/deps/aion_on_haematite_showcase-162a1147a50b7492)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/awl_bc4_differential.rs (target/debug/deps/awl_bc4_differential-dc33146c8ff32297)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.00s
+
+     Running tests/child_await_e2e.rs (target/debug/deps/child_await_e2e-345c5953b2e8691e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/child_await_query_e2e.rs (target/debug/deps/child_await_query_e2e-69687fd4dbea5b71)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/child_workflows_e2e.rs (target/debug/deps/child_workflows_e2e-b55cc9bddb284430)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/concurrency_e2e.rs (target/debug/deps/concurrency_e2e-1b5edebfb1ca5f9d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests/continue_as_new.rs (target/debug/deps/continue_as_new-61d7fe8d59f7c90b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/deploy_persistence_e2e.rs (target/debug/deps/deploy_persistence_e2e-3ee14697987c4e11)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/determinism_violation.rs (target/debug/deps/determinism_violation-c10550ffe668b833)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/direct_failure_parity_e2e.rs (target/debug/deps/direct_failure_parity_e2e-727ff757a8ede680)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/direct_multi_step_distribute_e2e.rs (target/debug/deps/direct_multi_step_distribute_e2e-577842b17089f846)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/direct_single_activity_distribute_e2e.rs (target/debug/deps/direct_single_activity_distribute_e2e-9ab90d3bcec99388)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/engine_cancel.rs (target/debug/deps/engine_cancel-2ee5e6b8b5dfcc55)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/engine_lifecycle.rs (target/debug/deps/engine_lifecycle-db09533c01d714e2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/engine_query.rs (target/debug/deps/engine_query-9eeb5c67d96ff067)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.00s
+
+     Running tests/engine_reload.rs (target/debug/deps/engine_reload-2b9c0f1d24323d18)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/engine_reload_recovery.rs (target/debug/deps/engine_reload_recovery-c292f4ddb9c85af0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/engine_reload_stress.rs (target/debug/deps/engine_reload_stress-97fc9da254183f86)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/engine_result.rs (target/debug/deps/engine_result-c460345f5b28a324)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/engine_signal.rs (target/debug/deps/engine_signal-eb1964c91ba98bc1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/example_query_reentry.rs (target/debug/deps/example_query_reentry-bf73369e0ea951c7)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/examples_e2e.rs (target/debug/deps/examples_e2e-6b392a9f1d5ff0fd)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/hello_world_e2e.rs (target/debug/deps/hello_world_e2e-f7757e2ea9752c97)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/invm_activity_e2e.rs (target/debug/deps/invm_activity_e2e-3fed2e2b34bf9d7a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/multi_step_distribute_e2e.rs (target/debug/deps/multi_step_distribute_e2e-f99feeaec0e258c1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/nested_implicit_child_decode_e2e.rs (target/debug/deps/nested_implicit_child_decode_e2e-f205888645aa4e66)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/nested_workflows_e2e.rs (target/debug/deps/nested_workflows_e2e-4080e585a199b9b9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/order_saga_e2e.rs (target/debug/deps/order_saga_e2e-6412673b41460ba8)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/outbox_e2e.rs (target/debug/deps/outbox_e2e-9993e2abc03ee76f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests/pause_resume_e2e.rs (target/debug/deps/pause_resume_e2e-793502e4a49f0857)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/query_stress.rs (target/debug/deps/query_stress-c3ba3df234db223a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/recovery_e2e.rs (target/debug/deps/recovery_e2e-ee0079ec12466e6f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/recovery_restart.rs (target/debug/deps/recovery_restart-463e09e8793c9167)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/reopen_e2e.rs (target/debug/deps/reopen_e2e-c1ab61913f7ff927)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/reopen_timer_rearm_e2e.rs (target/debug/deps/reopen_timer_rearm_e2e-43b7897083472541)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/replay_behaviour.rs (target/debug/deps/replay_behaviour-7e9da2cb3a7847c8)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/schedule_coordinator_gate_e2e.rs (target/debug/deps/schedule_coordinator_gate_e2e-06f52769d9e717ef)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/schedule_lifecycle.rs (target/debug/deps/schedule_lifecycle-9b53a025bf1603c9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/sdk_internal_privacy.rs (target/debug/deps/sdk_internal_privacy-f3700ceaaa68a46e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/sdk_sleep_query_e2e.rs (target/debug/deps/sdk_sleep_query_e2e-5c4c240ee543e844)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/settled_fanout_e2e.rs (target/debug/deps/settled_fanout_e2e-c9949eb71cd04522)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/ss1_owned_shards_builder.rs (target/debug/deps/ss1_owned_shards_builder-b3690775198e62e6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/ss2_shard_election_builder.rs (target/debug/deps/ss2_shard_election_builder-185794947b18ae15)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/ss5_failover_demo.rs (target/debug/deps/ss5_failover_demo-2a4ce9d9900bbfdb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/two_awl_workflows_e2e.rs (target/debug/deps/two_awl_workflows_e2e-ad7837fd9eff538a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/visibility.rs (target/debug/deps/visibility-23acb8ffdc71802c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/workflow_timeout_e2e.rs (target/debug/deps/workflow_timeout_e2e-75117cfe4a074df3)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+

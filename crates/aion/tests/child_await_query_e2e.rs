@@ -37,6 +37,7 @@ async fn engine_with_fixture(
     let parent = example_build::built_package(FIXTURE, "parent_query")?;
     let child = example_build::built_package(FIXTURE, "child_small")?;
     Ok(EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(store))
         .in_memory_visibility()
         .scheduler_threads(1)

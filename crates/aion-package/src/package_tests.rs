@@ -355,7 +355,7 @@ fn to_archive_bytes_preserves_legacy_identity() -> Result<(), PackageError> {
 }
 
 #[test]
-fn to_archive_bytes_preserves_explicit_timeout_identity() -> Result<(), PackageError> {
+fn to_archive_bytes_preserves_v4_contract_identity() -> Result<(), PackageError> {
     let mut manifest = sample_manifest();
     manifest.timeout = Some(Duration::new(7_200, 500_000_000));
     let bytes = PackageBuilder::with_source(
@@ -366,7 +366,6 @@ fn to_archive_bytes_preserves_explicit_timeout_identity() -> Result<(), PackageE
             b"pub fn run() { Nil }".to_vec(),
         )]),
     )
-    .with_explicit_timeout_identity()
     .write_to_bytes()?;
     let package = Package::load_from_bytes(bytes, ExtractionLimits::unbounded())?;
 

@@ -50,6 +50,7 @@ async fn every_example_archive_loads_into_the_engine() -> Result<(), Box<dyn std
             "{name} declared no workflow packages"
         );
         let mut builder = EngineBuilder::new()
+            .in_process_activity_serving()
             .store(InMemoryStore::default())
             .in_memory_visibility()
             .scheduler_threads(1);
@@ -82,6 +83,7 @@ async fn invm_demo_example_runs_end_to_end_without_a_dispatcher()
     let package = example_build::built_package("examples/invm-demo", "invm_demo")?;
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -177,6 +179,7 @@ async fn data_pipeline_example_runs_end_to_end() -> Result<(), Box<dyn std::erro
     }
     let package = example_build::built_package("examples/data-pipeline", "data_pipeline")?;
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store(InMemoryStore::default())
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -288,6 +291,7 @@ async fn approval_gate_signal_drives_publication() -> Result<(), Box<dyn std::er
     let dispatcher = Arc::new(RecordingDispatcher::new());
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -360,6 +364,7 @@ async fn subscription_bills_after_deadline_with_signaled_plan_and_rotates()
     let dispatcher = Arc::new(RecordingDispatcher::new());
     let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
     let engine = EngineBuilder::new()
+        .in_process_activity_serving()
         .store_arc(Arc::clone(&store))
         .in_memory_visibility()
         .scheduler_threads(1)
@@ -484,6 +489,7 @@ fn gate_input() -> serde_json::Value {
 
 fn gate_engine_builder(dispatcher: Arc<dyn ActivityDispatcher>) -> EngineBuilder {
     EngineBuilder::new()
+        .in_process_activity_serving()
         .store(InMemoryStore::default())
         .in_memory_visibility()
         .scheduler_threads(1)

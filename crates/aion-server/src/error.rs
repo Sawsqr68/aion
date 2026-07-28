@@ -406,6 +406,10 @@ fn engine_trace_fields(source: &EngineError) -> ErrorTraceFields<'_> {
         EngineError::RouteActive { .. } => simple_engine_fields("RouteActive", source),
         EngineError::ManifestMismatch { .. } => simple_engine_fields("ManifestMismatch", source),
         EngineError::Package(_) => simple_engine_fields("Package", source),
+        EngineError::ContractIdentity { .. } => simple_engine_fields("ContractIdentity", source),
+        EngineError::NoQueueDeclaration { .. } => {
+            simple_engine_fields("NoQueueDeclaration", source)
+        }
         EngineError::Schedule { .. } => simple_engine_fields("Schedule", source),
         EngineError::Runtime { .. } => simple_engine_fields("Runtime", source),
         EngineError::Gate3BifReplacementMissing { .. } => {
@@ -480,18 +484,8 @@ fn simple_engine_fields<'a>(
 fn store_trace_fields(source: &StoreError) -> ErrorTraceFields<'_> {
     ErrorTraceFields {
         error_type: Cow::Borrowed("StoreError"),
-        store_error_type: Some(store_error_type(source)),
+        store_error_type: Some(engine::store_error_type(source)),
         reason: source,
-    }
-}
-
-fn store_error_type(source: &StoreError) -> &'static str {
-    match source {
-        StoreError::SequenceConflict { .. } => "SequenceConflict",
-        StoreError::NotFound { .. } => "NotFound",
-        StoreError::NotOwner { .. } => "NotOwner",
-        StoreError::Backend(_) => "Backend",
-        StoreError::Serialization(_) => "Serialization",
     }
 }
 
@@ -503,9 +497,7 @@ fn wire_from_engine(source: &EngineError) -> WireError {
         EngineError::WorkflowNotFound { .. } => {
             WireError::not_found_with_type("WorkflowNotFound", source.to_string())
         }
-        // Reopen precondition failure (AD-012): the run is not a reopenable
-        // terminal. Carried on the dedicated `invalid_state` wire code (gRPC
-        // FailedPrecondition / HTTP 409), distinct from NotFound and Backend.
+        // Reopen preconditions use failed-precondition/HTTP 409, not NotFound.
         EngineError::InvalidState { reason } => engine::invalid_state_wire(reason),
         EngineError::ScheduleNotFound { .. } => {
             WireError::not_found_with_type("ScheduleNotFound", source.to_string())
@@ -520,10 +512,7 @@ fn wire_from_engine(source: &EngineError) -> WireError {
         E::ConflictingEventPublisher => backend("ConflictingEventPublisher", source),
         EngineError::EventStreaming(_) => engine::backend_wire("EventStreaming", source),
         EngineError::Load { .. } => WireError::backend_with_type("Load", source.to_string()),
-        // Deploy-surface refusals (the §2.4 mapping table): unknown
-        // `(type, version)` is not-found; route-active and pinned versions
-        // are state conflicts carried by the dedicated `version_pinned`
-        // code; a same-hash-different-manifest archive is invalid input.
+        // Deploy refusals preserve not-found, state-conflict, and input classes.
         EngineError::UnknownVersion { .. } => {
             WireError::not_found_with_type("UnknownVersion", source.to_string())
         }
@@ -537,16 +526,14 @@ fn wire_from_engine(source: &EngineError) -> WireError {
             WireError::invalid_input(source.to_string()).with_error_type("ManifestMismatch")
         }
         EngineError::Package(_) => WireError::backend_with_type("Package", source.to_string()),
-        EngineError::Schedule { .. } => {
-            WireError::backend_with_type("Schedule", source.to_string())
-        }
+        E::ContractIdentity { .. } => engine::contract_refusal_wire("ContractIdentity", source),
+        E::NoQueueDeclaration { .. } => engine::contract_refusal_wire("NoQueueDeclaration", source),
+        EngineError::Schedule { .. } => backend("Schedule", source),
         EngineError::Runtime { .. } => WireError::backend_with_type("Runtime", source.to_string()),
         E::Gate3BifReplacementMissing { .. } => backend("Gate3BifReplacementMissing", source),
-        EngineError::CleanupExecutorPoisoned => {
-            WireError::backend_with_type("CleanupExecutorPoisoned", source.to_string())
-        }
-        EngineError::CleanupExecutorShutdownTimedOut { .. } => {
-            WireError::backend_with_type("CleanupExecutorShutdownTimedOut", source.to_string())
+        E::CleanupExecutorPoisoned => backend("CleanupExecutorPoisoned", source),
+        E::CleanupExecutorShutdownTimedOut { .. } => {
+            backend("CleanupExecutorShutdownTimedOut", source)
         }
         EngineError::ProcessExitRegistryPoisoned => {
             WireError::backend_with_type("ProcessExitRegistryPoisoned", source.to_string())

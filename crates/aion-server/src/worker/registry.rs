@@ -1146,6 +1146,8 @@ mod tests {
                 .collect(),
             task_queue: task_queue.to_owned(),
             node: node.to_owned(),
+            activities: Vec::new(),
+            identity: String::new(),
         }
     }
 

@@ -144,6 +144,7 @@ fn builder_elects_owned_shard_before_recovery_in_a_cluster_of_one() -> TestResul
     // recovery. Coordinator bootstrap is gated on real ownership.
     let engine = runtime.block_on(
         EngineBuilder::new()
+            .in_process_activity_serving()
             .store_arc(Arc::clone(&store_arc))
             .in_memory_visibility()
             .scheduler_threads(1)

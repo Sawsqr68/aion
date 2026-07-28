@@ -276,6 +276,19 @@ async fn differential_one(
 /// Compares the two run outcomes and records the result. Any run error, `Stuck`
 /// disposition, or serialization failure is INFRA (a hard failure), never
 /// quiesced. A backend disagreement on disposition is a divergence.
+/// Aliases the run-uuid inside `timer:named:deadline:<run-id>` keys so the
+/// two backends' park summaries compare on timer STRUCTURE; every other key
+/// passes through byte-exact.
+fn alias_deadline_timers(timers: &[String]) -> Vec<String> {
+    timers
+        .iter()
+        .map(|key| {
+            key.strip_prefix("timer:named:deadline:")
+                .map_or_else(|| key.clone(), |_| "timer:named:deadline:<run>".to_owned())
+        })
+        .collect()
+}
+
 fn fold_runs(
     report: &mut Report,
     name: &str,
@@ -336,17 +349,18 @@ fn fold_runs(
         return;
     }
     // The two backends must agree on the pending-timer identities too (a
-    // different timer on either side would be a real behavioral split).
-    if reference.disposition == Disposition::Parked
-        && reference.pending_timers != direct.pending_timers
-    {
+    // different timer on either side would be a real behavioral split). The
+    // declared-timeout deadline embeds each run's own uuid in its name, so
+    // that one identity is aliased before comparison — wrong-run deadline
+    // divergence stays caught in the normalized trails, where run ids alias
+    // positionally.
+    let reference_timers = alias_deadline_timers(&reference.pending_timers);
+    let direct_timers = alias_deadline_timers(&direct.pending_timers);
+    if reference.disposition == Disposition::Parked && reference_timers != direct_timers {
         report.compare(
             name,
-            &[Value::String(format!(
-                "timers={:?}",
-                reference.pending_timers
-            ))],
-            &[Value::String(format!("timers={:?}", direct.pending_timers))],
+            &[Value::String(format!("timers={reference_timers:?}"))],
+            &[Value::String(format!("timers={direct_timers:?}"))],
         );
         return;
     }
@@ -357,7 +371,7 @@ fn fold_runs(
         Disposition::Completed => report.record_succeeded(name),
         Disposition::Failed => report.record_failed(name),
         Disposition::Cancelled => report.record_cancelled(name),
-        Disposition::Parked => report.record_parked_timer(name, reference.pending_timers.clone()),
+        Disposition::Parked => report.record_parked_timer(name, reference_timers),
         // `Stuck` was handled above as infra.
         Disposition::Stuck => report.record_infra(name, "unreachable stuck classification"),
     }

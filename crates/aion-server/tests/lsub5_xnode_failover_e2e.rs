@@ -81,8 +81,9 @@ use aion_core::{
     DEFAULT_TASK_QUEUE, Event, PackageVersion, Payload, RunId, WorkflowId, WorkflowStatus,
 };
 use aion_package::{
-    BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, ExtractionLimits, Manifest,
-    ManifestVersion, Package, PackageBuilder,
+    ActionContract, BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity,
+    ExtractionLimits, Manifest, ManifestVersion, Package, PackageBuilder, PackageContract,
+    WorkerContract,
 };
 use aion_server::cluster::{ClusterSupervisor, SupervisorConfig, WatchedPeer};
 use aion_server::worker::{
@@ -189,11 +190,52 @@ fn fixture_package() -> Result<Package, TestError> {
         format_version: CURRENT_FORMAT_VERSION,
         additional_workflows: Vec::new(),
     };
+    // The fan-out runs start through strict queue-routed admission, so the
+    // fixture declares its REAL queue surface — the per-ordinal fan actions
+    // the survivor worker serves — with schemas derived exactly as the
+    // worker's typed registration derives them, so the field-level diff is
+    // an identity comparison.
+    // Only the actions the queue's worker REALLY serves: registration diffs
+    // a worker against every declared action, so declaring the manifest's
+    // vestigial `fixture_activity` here would refuse the fan-out worker.
+    let mut actions = Vec::new();
+    for activity_type in fan_out_activity_types() {
+        actions.push(fixture_action_contract(&activity_type)?);
+    }
+    let contract = PackageContract {
+        input_schema: json!({ "type": "object" }),
+        output_schema: json!({}),
+        workers: vec![WorkerContract {
+            task_queue: TASK_QUEUE.to_owned(),
+            actions,
+        }],
+        children: Vec::new(),
+        signals: Vec::new(),
+        additional_workflows: Vec::new(),
+        unscoped_activities: Vec::new(),
+    };
     let archive =
         PackageBuilder::with_source(manifest, beams, [(OUTBOX_MODULE, OUTBOX_SOURCE.to_vec())])
+            .with_contract(contract)
             .write_to_bytes()
             .map_err(test_error)?;
     Package::load_from_bytes(archive, ExtractionLimits::unbounded()).map_err(test_error)
+}
+
+/// One queue action contract with the SAME mechanically derived
+/// `serde_json::Value` schemas the worker's typed registration advertises.
+fn fixture_action_contract(name: &str) -> Result<ActionContract, TestError> {
+    let descriptor =
+        aion_worker::activity::activity_descriptor::<serde_json::Value, serde_json::Value>(name)
+            .map_err(test_error)?;
+    Ok(ActionContract {
+        name: descriptor.name,
+        input_schema: descriptor.input_schema,
+        output_schema: descriptor.output_schema,
+        node: None,
+        timeout: None,
+        retry: None,
+    })
 }
 
 /// The deterministic per-ordinal worker result string the fixture collects. The
@@ -562,25 +604,28 @@ async fn serve_survivor(
         let activity_type = format!("fan:{ordinal}");
         let control = Arc::clone(control);
         registry = registry
-            .register_activity(activity_type, move |_input: serde_json::Value, _context| {
-                let control = Arc::clone(&control);
-                Box::pin(async move {
-                    // Count EVERY execution (at-least-once observability).
-                    control.executions.fetch_add(1, Ordering::SeqCst);
-                    // Announce that a dispatch reached a worker: this is the
-                    // genuine mid-dispatch signal the test kills A on.
-                    control.dispatch_seen.store(true, Ordering::SeqCst);
-                    // GATE: block until the test releases the wave (after the
-                    // kill). A's first-wave dispatches therefore never complete
-                    // back to a live A — their replies are lost like a process
-                    // death loses them — while B's post-adoption redelivery sees
-                    // the gate already open and completes immediately.
-                    while !control.released.load(Ordering::SeqCst) {
-                        tokio::time::sleep(Duration::from_millis(10)).await;
-                    }
-                    Ok(worker_result(ordinal))
-                })
-            })
+            .register_activity_with_contract(
+                activity_type,
+                move |_input: serde_json::Value, _context| {
+                    let control = Arc::clone(&control);
+                    Box::pin(async move {
+                        // Count EVERY execution (at-least-once observability).
+                        control.executions.fetch_add(1, Ordering::SeqCst);
+                        // Announce that a dispatch reached a worker: this is the
+                        // genuine mid-dispatch signal the test kills A on.
+                        control.dispatch_seen.store(true, Ordering::SeqCst);
+                        // GATE: block until the test releases the wave (after the
+                        // kill). A's first-wave dispatches therefore never complete
+                        // back to a live A — their replies are lost like a process
+                        // death loses them — while B's post-adoption redelivery sees
+                        // the gate already open and completes immediately.
+                        while !control.released.load(Ordering::SeqCst) {
+                            tokio::time::sleep(Duration::from_millis(10)).await;
+                        }
+                        Ok(worker_result(ordinal))
+                    })
+                },
+            )
             .map_err(test_error)?;
     }
 

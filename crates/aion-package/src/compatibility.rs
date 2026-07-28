@@ -1,0 +1,315 @@
+//! Worker advertisement comparison against durable package contracts.
+
+mod schema;
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use self::schema::{normalize_schema, schema_is_subset};
+use crate::{ActivityDescriptor, WorkerContract};
+
+/// One field-level incompatibility between a deployed contract and a worker.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContractDiff {
+    /// `.v4` package identity that requires the field.
+    pub package_version: String,
+    /// Activity whose contract differs.
+    pub action: String,
+    /// Stable dotted path within the activity contract.
+    pub field: String,
+    /// Value required by the deployed workflow, absent when the field is forbidden.
+    pub expected: Option<Value>,
+    /// Value advertised by the worker, absent when it omitted the field or action.
+    pub advertised: Option<Value>,
+}
+
+impl fmt::Display for ContractDiff {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "package `{}` action `{}` field `{}` expected {} but worker advertised {}",
+            self.package_version,
+            self.action,
+            self.field,
+            rendered_value(self.expected.as_ref()),
+            rendered_value(self.advertised.as_ref()),
+        )
+    }
+}
+
+/// Compares one queue contract with a worker advertisement.
+///
+/// A worker may advertise additional actions because one process can serve
+/// several concurrently deployed package versions. Input compatibility is
+/// contravariant: every value the workflow may send must be accepted by the
+/// worker. Output compatibility is covariant: every value the worker may emit
+/// must be decodable by the workflow. This admits input widening and optional
+/// output-field additions while refusing narrowing and undeclared output drift.
+#[must_use]
+pub fn contract_diffs(
+    package_version: &str,
+    contract: &WorkerContract,
+    advertised: &[ActivityDescriptor],
+) -> Vec<ContractDiff> {
+    let advertised = advertised
+        .iter()
+        .map(|activity| (activity.name.as_str(), activity))
+        .collect::<BTreeMap<_, _>>();
+    let mut expected = contract.actions.iter().collect::<Vec<_>>();
+    expected.sort_by(|left, right| left.name.cmp(&right.name));
+    let mut diffs = Vec::new();
+    for action in expected {
+        let Some(actual) = advertised.get(action.name.as_str()) else {
+            diffs.push(ContractDiff {
+                package_version: package_version.to_owned(),
+                action: action.name.clone(),
+                field: "action".to_owned(),
+                expected: Some(Value::String("declared".to_owned())),
+                advertised: None,
+            });
+            continue;
+        };
+
+        let expected_input = normalize_schema(&action.input_schema);
+        let advertised_input = normalize_schema(&actual.input_schema);
+        if !schema_is_subset(&expected_input, &advertised_input) {
+            diff_schema(
+                package_version,
+                &action.name,
+                "input_schema",
+                &expected_input,
+                &advertised_input,
+                &mut diffs,
+            );
+        }
+
+        let expected_output = normalize_schema(&action.output_schema);
+        let advertised_output = normalize_schema(&actual.output_schema);
+        if !schema_is_subset(&advertised_output, &expected_output) {
+            diff_schema(
+                package_version,
+                &action.name,
+                "output_schema",
+                &expected_output,
+                &advertised_output,
+                &mut diffs,
+            );
+        }
+    }
+    diffs
+}
+
+fn diff_schema(
+    package_version: &str,
+    action: &str,
+    field: &str,
+    expected: &Value,
+    advertised: &Value,
+    diffs: &mut Vec<ContractDiff>,
+) {
+    if schemas_equal(expected, advertised, None) {
+        return;
+    }
+    match (expected, advertised) {
+        (Value::Object(expected), Value::Object(advertised)) => {
+            let keys = expected
+                .keys()
+                .chain(advertised.keys())
+                .collect::<BTreeSet<_>>();
+            for key in keys {
+                let nested = format!("{field}.{key}");
+                match (expected.get(key), advertised.get(key)) {
+                    (Some(left), Some(right)) => {
+                        diff_schema(package_version, action, &nested, left, right, diffs);
+                    }
+                    (left, right) => diffs.push(ContractDiff {
+                        package_version: package_version.to_owned(),
+                        action: action.to_owned(),
+                        field: nested,
+                        expected: left.cloned(),
+                        advertised: right.cloned(),
+                    }),
+                }
+            }
+        }
+        _ => diffs.push(ContractDiff {
+            package_version: package_version.to_owned(),
+            action: action.to_owned(),
+            field: field.to_owned(),
+            expected: Some(expected.clone()),
+            advertised: Some(advertised.clone()),
+        }),
+    }
+}
+
+fn schemas_equal(left: &Value, right: &Value, parent: Option<&str>) -> bool {
+    match (left, right) {
+        (Value::Object(left), Value::Object(right)) => {
+            left.len() == right.len()
+                && left.iter().all(|(key, value)| {
+                    right
+                        .get(key)
+                        .is_some_and(|other| schemas_equal(value, other, Some(key)))
+                })
+        }
+        (Value::Array(left), Value::Array(right))
+            if matches!(parent, Some("required" | "enum" | "type")) =>
+        {
+            let mut left = left.iter().map(stable_json).collect::<Vec<_>>();
+            let mut right = right.iter().map(stable_json).collect::<Vec<_>>();
+            left.sort();
+            right.sort();
+            left == right
+        }
+        (Value::Array(left), Value::Array(right)) => {
+            left.len() == right.len()
+                && left
+                    .iter()
+                    .zip(right)
+                    .all(|(left, right)| schemas_equal(left, right, None))
+        }
+        _ => left == right,
+    }
+}
+
+fn stable_json(value: &Value) -> String {
+    match value {
+        Value::Object(values) => {
+            let fields = values
+                .iter()
+                .map(|(key, value)| format!("{key}:{}", stable_json(value)))
+                .collect::<Vec<_>>();
+            format!("{{{}}}", fields.join(","))
+        }
+        Value::Array(values) => {
+            let values = values.iter().map(stable_json).collect::<Vec<_>>();
+            format!("[{}]", values.join(","))
+        }
+        _ => value.to_string(),
+    }
+}
+
+fn rendered_value(value: Option<&Value>) -> String {
+    value.map_or_else(|| "<missing>".to_owned(), Value::to_string)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::contract_diffs;
+    use crate::{ActionContract, ActivityDescriptor, WorkerContract};
+
+    fn contract(input: serde_json::Value, output: serde_json::Value) -> WorkerContract {
+        WorkerContract {
+            task_queue: "payments".to_owned(),
+            actions: vec![ActionContract {
+                name: "charge".to_owned(),
+                input_schema: input,
+                output_schema: output,
+                node: None,
+                timeout: None,
+                retry: None,
+            }],
+        }
+    }
+
+    fn advertised(input: serde_json::Value, output: serde_json::Value) -> Vec<ActivityDescriptor> {
+        vec![ActivityDescriptor {
+            name: "charge".to_owned(),
+            input_schema: input,
+            output_schema: output,
+        }]
+    }
+
+    #[test]
+    fn mismatch_reports_the_exact_schema_field() {
+        let contract = contract(
+            json!({"type":"object","properties":{"amount":{"type":"integer"}}}),
+            json!({"type":"boolean"}),
+        );
+        let advertised = advertised(
+            json!({"properties":{"amount":{"type":"string"}},"type":"object"}),
+            json!({"type":"boolean"}),
+        );
+
+        let diffs = contract_diffs("abc", &contract, &advertised);
+        assert_eq!(diffs.len(), 1);
+        assert_eq!(diffs[0].field, "input_schema.properties.amount.type");
+        assert_eq!(diffs[0].expected, Some(json!("integer")));
+        assert_eq!(diffs[0].advertised, Some(json!("string")));
+    }
+
+    #[test]
+    fn input_widening_and_optional_output_addition_are_compatible() {
+        let contract = contract(
+            json!({
+                "$schema":"https://json-schema.org/draft/2020-12/schema",
+                "type":"object",
+                "properties":{"amount":{"type":"integer"}},
+                "required":["amount"]
+            }),
+            json!({
+                "type":"object",
+                "properties":{"approved":{"type":"boolean"}},
+                "required":["approved"]
+            }),
+        );
+        let advertised = advertised(
+            json!({
+                "title":"ChargeInput",
+                "type":"object",
+                "properties":{"amount":{"type":"number"}},
+                "required":["amount"]
+            }),
+            json!({
+                "title":"ChargeOutput",
+                "type":"object",
+                "properties":{
+                    "approved":{"type":"boolean"},
+                    "receipt":{"type":"string"}
+                },
+                "required":["approved"]
+            }),
+        );
+
+        assert!(contract_diffs("abc", &contract, &advertised).is_empty());
+    }
+
+    #[test]
+    fn input_narrowing_and_output_widening_are_refused() {
+        let contract = contract(json!({"type":"number"}), json!({"type":"integer"}));
+        let advertised = advertised(json!({"type":"integer"}), json!({"type":"number"}));
+
+        let diffs = contract_diffs("abc", &contract, &advertised);
+        assert_eq!(diffs.len(), 2);
+        assert_eq!(diffs[0].field, "input_schema.type");
+        assert_eq!(diffs[1].field, "output_schema.type");
+    }
+
+    #[test]
+    fn local_defs_and_inline_schemas_compare_semantically() {
+        let contract = contract(
+            json!({
+                "type":"object",
+                "properties":{"card":{"$ref":"#/$defs/Card"}},
+                "required":["card"],
+                "$defs":{"Card":{"type":"object","properties":{"last4":{"type":"string"}},"required":["last4"]}}
+            }),
+            json!({"type":"boolean"}),
+        );
+        let advertised = advertised(
+            json!({
+                "type":"object",
+                "properties":{"card":{"type":"object","properties":{"last4":{"type":"string"}},"required":["last4"]}},
+                "required":["card"]
+            }),
+            json!({"type":"boolean"}),
+        );
+
+        assert!(contract_diffs("abc", &contract, &advertised).is_empty());
+    }
+}

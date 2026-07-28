@@ -212,6 +212,8 @@ pub struct AgentHarnessConfig {
     harness: Arc<dyn DynAgentHarness>,
     /// The activity-type names routed through the harness rather than the registry.
     agent_activity_types: BTreeSet<String>,
+    /// Explicit schemas for agent activities whose concrete output is harness-owned.
+    activity_descriptors: Vec<aion_package::ActivityDescriptor>,
     /// The neutral intervention primitives the harness advertises.
     capabilities: InterventionCapabilities,
 }
@@ -228,6 +230,7 @@ impl AgentHarnessConfig {
         Self {
             harness,
             agent_activity_types: agent_activity_types.into_iter().map(Into::into).collect(),
+            activity_descriptors: Vec::new(),
             capabilities,
         }
     }
@@ -237,6 +240,30 @@ impl AgentHarnessConfig {
     #[must_use]
     pub fn agent_activity_types(&self) -> &BTreeSet<String> {
         &self.agent_activity_types
+    }
+
+    /// Commit explicit typed descriptors for harness-owned activities.
+    ///
+    /// Descriptor names are added to the advertised activity set so a schema can
+    /// never be sent for an activity the worker does not also route.
+    #[must_use]
+    pub fn with_activity_descriptors(
+        mut self,
+        descriptors: impl IntoIterator<Item = aion_package::ActivityDescriptor>,
+    ) -> Self {
+        self.activity_descriptors = descriptors.into_iter().collect();
+        self.agent_activity_types.extend(
+            self.activity_descriptors
+                .iter()
+                .map(|descriptor| descriptor.name.clone()),
+        );
+        self
+    }
+
+    /// Explicit typed descriptors carried for harness-owned activities.
+    #[must_use]
+    pub fn activity_descriptors(&self) -> &[aion_package::ActivityDescriptor] {
+        &self.activity_descriptors
     }
 }
 
@@ -324,7 +351,7 @@ impl LiminalActivityWorker {
         config: &WorkerConfig,
         registry: Arc<ActivityRegistry>,
     ) -> Result<Self, WorkerError> {
-        Self::connect_advertising(address, config, registry, &BTreeSet::new())
+        Self::connect_advertising(address, config, registry, &BTreeSet::new(), &[])
     }
 
     /// Connects like [`Self::connect`] but ADDITIONALLY advertises `agent_types` in
@@ -348,11 +375,27 @@ impl LiminalActivityWorker {
         config: &WorkerConfig,
         registry: Arc<ActivityRegistry>,
         agent_types: &BTreeSet<String>,
+        agent_descriptors: &[aion_package::ActivityDescriptor],
     ) -> Result<Self, WorkerError> {
         let mut registration = registration_from(config, &registry);
         for agent_type in agent_types {
             if !registration.activity_types.contains(agent_type) {
                 registration.activity_types.push(agent_type.clone());
+            }
+        }
+        for descriptor in agent_descriptors {
+            if !registration
+                .activities
+                .iter()
+                .any(|activity| activity.name == descriptor.name)
+            {
+                registration
+                    .activities
+                    .push(liminal::protocol::WorkerActivityDescriptor {
+                        name: descriptor.name.clone(),
+                        input_schema_json: descriptor.input_schema.to_string(),
+                        output_schema_json: descriptor.output_schema.to_string(),
+                    });
             }
         }
         let client = PushClient::connect_with_registration(address, registration)
@@ -919,6 +962,15 @@ fn registration_from(config: &WorkerConfig, registry: &ActivityRegistry) -> Work
         node,
         activity_types: registry.activity_types().into_iter().collect(),
         identity: config.identity.clone(),
+        activities: registry
+            .activity_descriptors()
+            .into_iter()
+            .map(|activity| liminal::protocol::WorkerActivityDescriptor {
+                name: activity.name,
+                input_schema_json: activity.input_schema.to_string(),
+                output_schema_json: activity.output_schema.to_string(),
+            })
+            .collect(),
     }
 }
 

@@ -1,0 +1,11 @@
+    Blocking waiting for file lock on package cache
+    Updating crates.io index
+    Blocking waiting for file lock on package cache
+     Locking 1 package to latest Rust 1.92.0 compatible version
+      Adding liminal-rs v0.4.1 (/Users/tom/Developer/ablative/aion/vendor/liminal-rs)
+    Blocking waiting for file lock on package cache
+    Checking liminal-rs v0.4.1 (/Users/tom/Developer/ablative/aion/vendor/liminal-rs)
+    Checking liminal-sdk v0.4.1
+    Checking aion-worker v0.10.0 (/Users/tom/Developer/ablative/aion/crates/aion-worker)
+    Checking general-worker v0.1.0 (/Users/tom/Developer/ablative/aion/examples/general-worker)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.77s

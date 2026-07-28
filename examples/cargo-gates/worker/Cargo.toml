@@ -32,9 +32,12 @@ todo = "warn"
 aion-worker = { path = "../../../crates/aion-worker", features = ["liminal-transport"] }
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
+schemars = "1"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
+aion-awl = { path = "../../../crates/aion-awl" }
+aion-package = { path = "../../../crates/aion-package" }
 tempfile = "3"

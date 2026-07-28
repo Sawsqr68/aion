@@ -5,14 +5,14 @@ use std::time::Duration;
 
 use aion_integrations::{DynAgentHarness, InterventionCapabilities, InterventionPrimitive};
 use aion_worker::{
-    ActivityContext, ActivityRegistry, AgentHarnessConfig, HandlerFuture, WorkerConfig,
+    ActivityContext, ActivityRegistry, AgentHarnessConfig, HandlerFuture, WorkerConfig, activity_descriptor,
     WorkerConfigBuildError, WorkerError,
 };
 
 use crate::agent::GeneralNornHarness;
 use crate::handlers::{parse_output, run_command};
 use crate::shell::Shell;
-use crate::types::{CommandInput, CommandOutput, ParseInput, ParseOutput};
+use crate::types::{AgentResult, CommandInput, CommandOutput, ParseInput, ParseOutput, RunAgentInput};
 
 /// Task queue served by both worker connections.
 pub const TASK_QUEUE: &str = "general";
@@ -57,13 +57,20 @@ pub fn agent_capabilities() -> InterventionCapabilities {
 /// operator-supplied aliases — every advertised name is served by the same
 /// harness with the same input contract, so a workflow can declare
 /// differently-typed agent actions against one worker.
-#[must_use]
-pub fn agent_config(norn_bin: &str, agent_activities: &[String]) -> AgentHarnessConfig {
+///
+/// # Errors
+///
+/// Returns [`WorkerError`] if mechanical schema generation fails.
+pub fn agent_config(
+    norn_bin: &str,
+    agent_activities: &[String],
+) -> Result<AgentHarnessConfig, WorkerError> {
     let harness: Arc<dyn DynAgentHarness> = Arc::new(GeneralNornHarness::new(norn_bin));
     let advertised = std::iter::once(RUN_AGENT.to_owned())
         .chain(agent_activities.iter().cloned())
         .collect::<Vec<_>>();
-    AgentHarnessConfig::new(harness, advertised, agent_capabilities())
+    Ok(AgentHarnessConfig::new(harness, advertised, agent_capabilities())
+        .with_activity_descriptors([activity_descriptor::<RunAgentInput, AgentResult>(RUN_AGENT)?]))
 }
 
 /// Build the shell registry containing exactly `run_command` and `parse_output`.
@@ -73,8 +80,8 @@ pub fn agent_config(norn_bin: &str, agent_activities: &[String]) -> AgentHarness
 /// Returns [`WorkerError`] if an activity type is registered more than once.
 pub fn shell_registry(shell: Shell) -> Result<ActivityRegistry, WorkerError> {
     ActivityRegistry::new()
-        .register_activity(RUN_COMMAND, blocking_command(shell))?
-        .register_activity(PARSE_OUTPUT, immediate_parse)
+        .register_activity_with_contract(RUN_COMMAND, blocking_command(shell))?
+        .register_activity_with_contract(PARSE_OUTPUT, immediate_parse)
 }
 
 /// Build one node-specific long-lived worker configuration.

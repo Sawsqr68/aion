@@ -1,6 +1,6 @@
 //! Test-only catalog seeding helpers shared by in-crate unit suites.
 
-use aion_package::{ContentHash, ManifestDigest, ManifestVersion};
+use aion_package::{ContentHash, ManifestDigest, ManifestVersion, PackageContract};
 use chrono::Utc;
 
 use super::{CatalogEntry, WorkflowCatalog};
@@ -25,12 +25,31 @@ impl WorkflowCatalog {
         entry_function: impl Into<String>,
         version: ContentHash,
     ) -> LoadedWorkflow {
+        self.note_loaded_workflow_with_contract_for_test(
+            workflow_type,
+            deployed_entry_module,
+            entry_function,
+            version,
+            Some(PackageContract::default()),
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn note_loaded_workflow_with_contract_for_test(
+        &self,
+        workflow_type: impl Into<String>,
+        deployed_entry_module: impl Into<String>,
+        entry_function: impl Into<String>,
+        version: ContentHash,
+        contract: Option<PackageContract>,
+    ) -> LoadedWorkflow {
         let record = LoadedWorkflow::from_parts(
             workflow_type.into(),
             deployed_entry_module.into(),
             entry_function.into(),
             version,
             None,
+            contract,
         );
         let Ok(snapshot) = self.current() else {
             return record;
