@@ -268,16 +268,23 @@ fn preserve_work_dir(work_dir: &Path, label: &str) -> Result<(PathBuf, Vec<Strin
     Ok((dest, copied))
 }
 
+/// Poll `predicate` until it returns true or `deadline` elapses; returns whether
+/// it became true. Used for process/log/store observables (never a bare sleep).
+pub fn wait_until<F: FnMut() -> bool>(deadline: Duration, mut predicate: F) -> bool {
+    let started = Instant::now();
+    while started.elapsed() < deadline {
+        if predicate() {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    false
+}
+
 /// Kill a child and wait for it to reap, so the test never leaks a process.
 pub fn reap(mut child: Child) {
     let _: Result<(), _> = child.kill();
-    let started = Instant::now();
-    while started.elapsed() < EXIT_DEADLINE {
-        if matches!(child.try_wait(), Ok(Some(_))) {
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    }
+    let _reaped = wait_until(EXIT_DEADLINE, || matches!(child.try_wait(), Ok(Some(_))));
 }
 
 /// Build the standalone liminal worker binary (it is NOT a workspace member, so

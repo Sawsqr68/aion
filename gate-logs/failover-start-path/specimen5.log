@@ -1,0 +1,28 @@
+# lsub5b kill-9 failover — SPECIMEN 5 (cluster distribution ports reserve_port-allocated)
+# tree: 79f0f7b6498a13aea0893e842b5a71a74bcfad09 + uncommitted port fix
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+commit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452
+commit-date: 2026-07-14
+host: aarch64-apple-darwin
+release: 1.97.1
+LLVM version: 22.1.6
+# box: 10 cores; load BEFORE: 8.58 19.66 18.99
+# NOTE: another lane is building/testing on this box (worktree .worktrees/retry-counting) — contention disclosed, not killed.
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.13s
+     Running tests/lsub5b_osproc_kill9_failover_e2e.rs (target/debug/deps/lsub5b_osproc_kill9_failover_e2e-9809b6a87add4201)
+
+running 1 test
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.35s
+Error: "collect_four never landed on node 0's shard: 263 start attempts over 30s against http://127.0.0.1:55011 all refused; the last one said:\n`aion start aion_outbox_fixture --input {\"fixture\":\"input\"} --endpoint http://127.0.0.1:55011` exited exit status: 1; stderr:\nerror[unavailable]: failed to start workflow: shard 1 is owned by another node (not owner)\n  server error type: NotOwner\n  hint: cannot reach the server; check --endpoint and that aion-server is running\n\npreserved this run's files in /Users/tom/Developer/ablative/aion/.worktrees/failover-start-path/target/tmp/failover-logs/lsub5b-kill9-failover-88686-1785260555959 (collect_four.aion, node0.log, node0.toml, node1.log, node1.toml, node2.log, node2.toml, worker.log, worker.ready)"
+test osproc_kill9_liminal_failover_completes_exactly_once ... FAILED
+
+failures:
+
+failures:
+    osproc_kill9_liminal_failover_completes_exactly_once
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 38.03s
+
+error: test failed, to rerun pass `-p aion-cli --test lsub5b_osproc_kill9_failover_e2e`
+# load AFTER: 10.19 18.66 18.65

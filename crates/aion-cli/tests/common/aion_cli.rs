@@ -2,6 +2,8 @@
 //! parse its JSON, start a workflow, describe a run, and read the observables the
 //! failover gate asserts on (status + per-ordinal terminal count).
 
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::process::Command;
 
 use serde_json::Value;
@@ -86,6 +88,35 @@ pub fn status_of(description: &Value) -> Option<&str> {
         .get("summary")
         .and_then(|summary| summary.get("status"))
         .and_then(Value::as_str)
+}
+
+/// A tally of what a retry loop kept being told: each distinct refusal and how
+/// many times it came back. The LAST refusal alone cannot tell a deterministic
+/// routing decision (one refusal, N times) from a random one (a spread) — and
+/// that distinction is the whole question about an unsteered start.
+#[derive(Default)]
+pub struct RefusalTally {
+    counts: BTreeMap<String, usize>,
+    total: usize,
+}
+
+impl RefusalTally {
+    /// Record one refusal.
+    pub fn record(&mut self, refusal: String) {
+        *self.counts.entry(refusal).or_default() += 1;
+        self.total += 1;
+    }
+
+    /// Every distinct refusal with its count, commonest first.
+    pub fn report(&self) -> String {
+        let mut ranked: Vec<(&String, &usize)> = self.counts.iter().collect();
+        ranked.sort_by(|left, right| right.1.cmp(left.1));
+        let mut report = format!("{} attempts, {} distinct: ", self.total, ranked.len());
+        for (refusal, count) in ranked {
+            let _ = write!(report, "\n\n  [x{count}] {refusal}");
+        }
+        report
+    }
 }
 
 /// Assert the completed run recorded EXACTLY ONE terminal per ordinal.

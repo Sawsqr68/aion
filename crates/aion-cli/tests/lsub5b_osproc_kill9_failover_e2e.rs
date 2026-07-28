@@ -1,16 +1,30 @@
 //! LSUB-5-B kill-9 reconnect-to-survivor failover (G-1, #112): a REAL
-//! multi-OS-process hard-kill liminal-PUSH failover that PASSES end to end.
+//! multi-OS-process hard-kill liminal-PUSH failover.
 //!
-//! ## What this proves (the gap the connect-half gate stopped at)
+//! ## CURRENT STATUS — RED, and it has NEVER been green anywhere
+//!
+//! This gate has no green in its history: six specimens across three machines,
+//! zero passes, and the `kill -9` it exists to exercise has never once fired.
+//! It is blocked in SETUP, before the kill, on the unsteered start below. The
+//! cause is proven at the bytes in
+//! `docs/evidence/failover-start-path-investigation.md`: an `aion start` mints
+//! its namespace on use, `namespace_key("default")` lands on shard 1 of this
+//! 3-shard cluster, node 0 owns only shard 0, and the quorum write is fenced —
+//! so every start against node 0 returns the SAME `NotOwner { shard: 1 }`
+//! forever. Whether this gate could EVER have passed was settled at authoring
+//! time by whether the default namespace happened to hash to node 0's shard.
+//! It did not. Do NOT read the scenario below as a proven capability, and do
+//! not "fix" it by weakening the assertions: the seam is production start-path
+//! routing and its disposition is a ruled lane's call.
+//!
+//! ## What it is built to prove (not yet proven)
 //!
 //! Each deployed `aion server` hosts its OWN liminal listener backed by its OWN
-//! per-process `ConnectedWorkerRegistry`. Before G-1 the worker dialed ONE
-//! address and exited on the first transport error, so when the owner of a
-//! fan-out's shard was `kill -9`'d the worker could not migrate to the survivor
-//! that adopted the shard — a full kill-9 liminal failover was impossible across
-//! real OS processes. G-1 gave the worker a STATIC candidate-address list and a
-//! redial-on-drop loop (`aion_worker::serve_with_redial`) that re-runs the
-//! in-band `WorkerRegister`/`Ack`, re-registering in the survivor's registry.
+//! per-process `ConnectedWorkerRegistry`. G-1 gave the worker a STATIC
+//! candidate-address list and a redial-on-drop loop
+//! (`aion_worker::serve_with_redial`) that re-runs the in-band
+//! `WorkerRegister`/`Ack`, re-registering in a survivor's registry, so a worker
+//! can migrate when the owner of its shard is `kill -9`'d.
 //!
 //! This test exercises that capability over REAL processes, no in-process
 //! shortcuts (the in-process LSUB-5 capstone only achieves liminal failover by
@@ -55,33 +69,23 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde_json::Value;
 
 #[path = "common/aion_cli.rs"]
 mod aion_cli;
+#[path = "common/cluster_config.rs"]
+mod cluster_config;
 #[path = "common/osproc.rs"]
 mod osproc;
 
-use aion_cli::{check_exactly_once, describe, status_of, try_start};
+use aion_cli::{RefusalTally, check_exactly_once, describe, status_of, try_start};
+use cluster_config::write_node_config;
 use osproc::{
     TestError, build_worker_binary, log_redirect, log_tail, preserve_on_failure, reap,
-    reserve_port, wait_for_liveness, write_package_archive,
+    reserve_port, wait_for_liveness, wait_until, write_package_archive,
 };
-
-/// Poll `predicate` until it returns true or `deadline` elapses; returns whether
-/// it became true. Used for log/store observables (never a bare sleep).
-fn wait_until<F: FnMut() -> bool>(deadline: Duration, mut predicate: F) -> bool {
-    let started = Instant::now();
-    while started.elapsed() < deadline {
-        if predicate() {
-            return true;
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-    false
-}
 
 /// Whether `path` exists and its contents contain `needle` (a server log line).
 fn file_contains(path: &Path, needle: &str) -> bool {
@@ -117,111 +121,6 @@ struct Node {
     grpc_port: u16,
     liminal_port: u16,
     log_path: PathBuf,
-}
-
-/// The node index that is killed (it always owns shard 0 and hosts the worker's
-/// first connection).
-const OWNER_INDEX: usize = 0;
-/// The node index designated as the SOLE adopter of the killed owner's shard.
-/// Pinning the adopter (rather than letting both survivors race the shard
-/// election) makes the single worker's redial deterministic: it migrates to its
-/// next candidate, which is this node, and lands on the genuine new owner. Every
-/// node still lists every peer for the distribution mesh + quorum; only the
-/// killed owner's `owned_shards` is declared exclusively here.
-const ADOPTER_INDEX: usize = 1;
-
-/// Emit one node's TOML config: an N-node haematite cluster with the liminal
-/// outbox transport. Node `index` owns shard `index`. The killed owner
-/// ([`OWNER_INDEX`]) is declared as an adoptable peer ONLY in the designated
-/// adopter's config ([`ADOPTER_INDEX`]); every other node lists it as a peer for
-/// the mesh/quorum but with no owned shards, so exactly one survivor adopts it.
-fn write_node_config(
-    dir: &Path,
-    index: usize,
-    package: &Path,
-    ports: &[(u16, u16, u16)],
-) -> Result<PathBuf, TestError> {
-    let (http_port, grpc_port, liminal_port) = ports[index];
-    let data_dir = dir.join(format!("data{index}"));
-    let bind_port = 7000 + index;
-
-    let mut members = String::new();
-    for node in 0..ports.len() {
-        let _ = write!(members, "\"node-{node}@127.0.0.1\", ");
-    }
-    let members = members.trim_end_matches(", ");
-
-    let mut peers = String::new();
-    for (peer, &(_, peer_grpc, _)) in ports.iter().enumerate() {
-        if peer == index {
-            continue;
-        }
-        // The killed owner's shard is adopted ONLY by the designated adopter, so
-        // the redial lands deterministically on the genuine new owner. Other
-        // peers keep their own shard as their declared adoptable set.
-        let owned = if peer == OWNER_INDEX && index != ADOPTER_INDEX {
-            String::new()
-        } else {
-            peer.to_string()
-        };
-        let _ = write!(
-            peers,
-            "\n[[store.cluster.peers]]\nname = \"node-{peer}@127.0.0.1\"\n\
-             address = \"127.0.0.1:{peer_bind}\"\n\
-             grpc_address = \"127.0.0.1:{peer_grpc}\"\n\
-             owned_shards = [{owned}]\n",
-            peer_bind = 7000 + peer,
-        );
-    }
-
-    let config = format!(
-        r#"workflow_packages = ["{package}"]
-
-[server]
-listen_address = "127.0.0.1:{http_port}"
-grpc_address = "127.0.0.1:{grpc_port}"
-
-[store]
-backend = "haematite"
-data_dir = "{data_dir}"
-shard_count = {node_count}
-owned_shards = [{index}]
-
-[store.cluster]
-node_id = "node-{index}@127.0.0.1"
-bind_address = "127.0.0.1:{bind_port}"
-members = [{members}]
-failover_poll_interval_ms = 500
-failover_confirmations = 3
-{peers}
-[runtime]
-query_timeout_ms = 10000
-
-[namespaces]
-default = "default"
-
-[websocket]
-event_broadcast_capacity = 1024
-cluster_broadcast_capacity = 64
-
-[outbox]
-enabled = true
-poll_interval_ms = 20
-batch_size = 16
-max_attempts = 5
-backoff_base_ms = 50
-backoff_multiplier = 2
-backoff_max_ms = 1000
-transport = "liminal"
-liminal_listen_address = "127.0.0.1:{liminal_port}"
-"#,
-        package = package.display(),
-        data_dir = data_dir.display(),
-        node_count = ports.len(),
-    );
-    let path = dir.join(format!("node{index}.toml"));
-    std::fs::write(&path, config)?;
-    Ok(path)
 }
 
 /// Spawn one `aion server` OS process from `config`, logging to `log_path`.
@@ -261,13 +160,22 @@ fn run_kill9_failover(dir: &Path) -> Result<(), TestError> {
     let package = write_package_archive(dir)?;
     let worker_binary = build_worker_binary()?;
 
-    // Reserve every port up front so configs can cross-reference peers' grpc.
+    // Reserve EVERY port up front — including each node's cluster distribution
+    // bind port — so configs can cross-reference peers and nothing collides with
+    // a port the host already owns. The distribution ports used to be hardcoded
+    // `7000 + index`, and 127.0.0.1:7000 is macOS AirPlay Receiver's port: a peer
+    // dialing node 0's distribution address before node 0 had bound it reached
+    // AirTunes, spoke beamr at an HTTP server, and died with "beamr distribution
+    // connection could not be established". Nothing in this gate may assume a
+    // fixed port is free.
     let mut ports: Vec<(u16, u16, u16)> = Vec::with_capacity(NODE_COUNT);
+    let mut bind_ports: Vec<u16> = Vec::with_capacity(NODE_COUNT);
     for _ in 0..NODE_COUNT {
         ports.push((reserve_port()?, reserve_port()?, reserve_port()?));
+        bind_ports.push(reserve_port()?);
     }
 
-    let mut nodes = boot_cluster(dir, &package, &ports)?;
+    let mut nodes = boot_cluster(dir, &package, &ports, &bind_ports)?;
 
     let worker = match spawn_worker(dir, &worker_binary, &nodes) {
         Ok(worker) => worker,
@@ -290,10 +198,11 @@ fn boot_cluster(
     dir: &Path,
     package: &Path,
     ports: &[(u16, u16, u16)],
+    bind_ports: &[u16],
 ) -> Result<Vec<Node>, TestError> {
     let mut nodes: Vec<Node> = Vec::with_capacity(ports.len());
     for index in 0..ports.len() {
-        let config = match write_node_config(dir, index, package, ports) {
+        let config = match write_node_config(dir, index, package, ports, bind_ports) {
             Ok(config) => config,
             Err(error) => {
                 reap_all(nodes);
@@ -391,32 +300,38 @@ fn spawn_worker(dir: &Path, worker_binary: &Path, nodes: &[Node]) -> Result<Chil
 /// Drive the in-flight start, the kill-9, and the survivor-side exactly-once
 /// assertion. `nodes[0]` is the owner that gets killed; the remainder survive.
 fn drive_failover(nodes: &mut Vec<Node>, ports: &[(u16, u16, u16)]) -> Result<(), TestError> {
-    // Start collect_four so it lands on shard 0 (node 0's shard). An unsteered
-    // start to node 0 lands on a locally-owned shard or is fenced; retry until it
-    // lands (mirrors mp-failover-spike.sh — there is no cross-shard start routing).
+    // Start collect_four so it lands on shard 0 (node 0's shard).
+    //
+    // This loop's premise — "an unsteered start to node 0 lands on a locally-owned
+    // shard or is fenced; retry until it lands" — is FALSE, and the retry has never
+    // once succeeded (see docs/evidence/failover-start-path-investigation.md). The
+    // refusal does not come from the workflow's shard: the start first mints the
+    // namespace on use, and `namespace_key("default")` lands on shard 1 of 3, which
+    // node 0 does not own, so the quorum write is fenced and every attempt returns
+    // the SAME `NotOwner { shard: 1 }`. It is a constant, not a lottery, so the
+    // deadline buys nothing. Left standing and RED on purpose: the fix crosses into
+    // production start-path routing and is a ruled lane's call, not this harness's.
     let node0_grpc = format!("http://127.0.0.1:{}", ports[0].1);
     let mut workflow_id = String::new();
-    // Keep the LAST rejection: a loop that only ever saw "not yet" cannot say
-    // what it spent the deadline being told.
-    let mut last_refusal = String::from("<no attempt was made>");
-    let mut attempts: u32 = 0;
-    let landed = wait_until(START_DEADLINE, || {
-        attempts += 1;
-        match try_start(&node0_grpc) {
-            Ok(id) => {
-                workflow_id = id;
-                true
-            }
-            Err(refusal) => {
-                last_refusal = refusal;
-                false
-            }
+    // Tally EVERY refusal, not just the last: one refusal repeated N times is a
+    // deterministic routing decision that retrying can never change, while a
+    // spread is a race. The two have opposite fixes.
+    let mut refusals = RefusalTally::default();
+    let landed = wait_until(START_DEADLINE, || match try_start(&node0_grpc) {
+        Ok(id) => {
+            workflow_id = id;
+            true
+        }
+        Err(refusal) => {
+            refusals.record(refusal);
+            false
         }
     });
     if !landed {
         return Err(format!(
-            "collect_four never landed on node 0's shard: {attempts} start attempts over \
-             {START_DEADLINE:?} against {node0_grpc} all refused; the last one said:\n{last_refusal}"
+            "collect_four never landed on node 0's shard within {START_DEADLINE:?} against \
+             {node0_grpc}; what it was told: {}",
+            refusals.report()
         )
         .into());
     }
