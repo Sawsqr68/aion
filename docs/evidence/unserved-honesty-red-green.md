@@ -159,11 +159,132 @@ output to `gate-logs/` with `.exit` manifests alongside.
 * `gate-logs/clippy.log` — `cargo clippy --workspace --all-targets -D warnings`,
   exit 0, zero errors.
 * `gate-logs/test-workspace.log` — `cargo test --workspace --no-fail-fast`,
-  exit 0, **217 suites, 2999 passed, 0 failed**, 6 ignored (all pre-existing:
-  the slow OS-process kill-9 gates and the network-dependent scaffold build;
-  this lane added none). 33 of the passing tests are this lane's.
+  exit 0, **217 suites, 2999 passed, 0 failed**, 6 ignored (all pre-existing;
+  this lane added none), named in full below. 33 of the passing tests are this
+  lane's.
 * Step logs retained: `unserved-honesty-red.log` (the red), `step2-*`,
   `step3-*`, `step4-*` (per-commit gates).
 
 The battery ran at the code tree of this branch; the only delta between that
-tree and the final commit is this evidence file.
+tree and the final commit is this evidence file. It ran BEFORE the toolchain
+pin landed and therefore carries no toolchain stamp — see the review-refusal
+record below, which supersedes this record's completeness claim.
+
+### The 6 ignored tests, by name
+
+None is a runtime-gated skip (those never use `#[ignore]` here; they log and
+pass). Every one is `#[ignore]`d for cost or for an off-box dependency:
+
+| Test | Suite | Why ignored |
+| --- | --- | --- |
+| `osproc_kill9_liminal_failover_completes_exactly_once` | `aion-cli/tests/lsub5b_osproc_kill9_failover_e2e.rs` | spawns a 3-node cluster + liminal worker, kill -9 failover |
+| `osproc_kill9_parked_timer_resumes_and_completes_exactly_once` | `aion-cli/tests/parked_timer_osproc_kill9_failover_e2e.rs` | 3-node cluster + hard-kill failover |
+| `osproc_liminal_listener_accepts_real_worker_connection` | `aion-cli/tests/lsub5b_osproc_failover_e2e.rs` | spawns real aion-server + liminal worker processes |
+| `stacked_dev_lands_through_the_real_worker_and_review_signal` | `aion-cli/tests/stacked_dev_live_e2e.rs` | cargo-builds an out-of-workspace worker, boots a server, drives real processes |
+| `dev_pipeline_template_builds_packages_and_passes_its_tests` | `aion-cli/tests/new_scaffold_build.rs` | downloads `gleam_json` from hex.pm; fails offline |
+| `norn_harness_drives_a_real_run_end_to_end` | `aion-integration-norn/tests/norn_e2e.rs` | spawns the real `norn` binary + a local mock provider |
+
+## Review refusal — a MIXED catalog, and the refusal it manufactured
+
+The domain-owner review refused this lane on one blocker, read-verified at the
+bytes. `WorkflowCatalog::declared_task_queues` skipped any entry it could not
+decode (`let Ok(contract) = entry.workflow.contract() else { continue }`).
+A catalog holding one `.v4` package beside one pre-`.v4` package — precisely
+the state the handshake migration creates, old packages retained while new
+`.v4` ones deploy — therefore answered with a NON-EMPTY set that silently
+omitted whatever the old package served. The empty-set fail-open above never
+fired; the omitted queue classified `NotDeclared`, and `NotDeclared` is
+terminal: dispatches a live compatible worker could have served were refused
+outright, with a confident and false reason. The bare `continue` was the
+defect and the concealment at once.
+
+### The fix: an answer that reports its own limits
+
+`declared_task_queues` now returns `DeclaredQueues`
+(`crates/aion/src/loader/declared_queues.rs`) — the queues one read found,
+plus the stored identities that same read could not decode. Not a bool: the
+undecodable identities ARE the completeness fact, and they are what an
+operator needs in order to act (re-deploy those packages under `.v4`). The
+reader is the site that observes an undecodable entry, so the reader is the
+site that warns, naming the identities.
+
+The classifier mapping follows the read's standing:
+
+| Read | Queue | Answer |
+| --- | --- | --- |
+| covered every entry | found | `Declared` |
+| covered every entry | missing | `NotDeclared` — structural refusal, and correct |
+| found no queue at all | — | `Unknown` (unchanged: contradicts nothing) |
+| partial | found | `Declared` — a positive find is positive |
+| partial | missing | `Unknown` + WARN naming the undecodable identities |
+
+The last row is the whole fix. What a partial read did not find, it may simply
+have been unable to see.
+
+### Red, then green
+
+Red first: `96fe31ed` lands the answer type and the threading with the DEFECT
+UNCHANGED — the reader still skips silently, still reports no undecodable
+identities — so the pins fail behaviourally rather than by compile error.
+`gate-logs/refix-f1-red.log` (+ `.exit` = 101 at both seams):
+
+```
+loader::declared_queues::…::a_mixed_catalog_names_the_entry_it_could_not_decode
+  FAILED: a pre-.v4 entry means this read saw only part of the catalog
+worker::queue_service::declarations::…::a_queue_absent_from_a_partial_read_is_never_undeclared
+  FAILED: left: NotDeclared  right: Unknown
+worker::queue_service::declarations::…::a_mixed_catalog_never_structurally_refuses_the_undecodable_queue
+  FAILED: left: Some(NoQueueDeclaration)  right: Some(NoQueueDeclaration)
+```
+
+That third line is the refused lane's whole point in one assertion: the
+terminal structural refusal, produced against a queue nobody contradicted.
+
+Green: `3d4bf77b` — `gate-logs/refix-f1-green.log` (+ `.exit` = 0).
+
+New pins, all at the seams that actually decide:
+
+* `a_mixed_catalog_names_the_entry_it_could_not_decode` — real
+  `WorkflowCatalog`, one `.v4` entry declaring `orders` and one pre-`.v4`
+  entry: the read finds `orders`, reports itself as not covering every entry,
+  and names the pre-`.v4` stored identity.
+* `a_read_of_only_v4_entries_covers_every_entry` — the converse; a fully
+  readable catalog keeps its standing to refuse.
+* `a_queue_absent_from_a_partial_read_is_never_undeclared` /
+  `a_positive_find_survives_a_partial_read` — the mapping, both directions.
+* `a_complete_read_still_reports_an_absent_queue_as_undeclared` — the
+  structural refusal is preserved where it is earned, not weakened.
+* `a_mixed_catalog_never_structurally_refuses_the_undecodable_queue` — the
+  consequence, through `classify`: `POLLERS_INCOMPATIBLE`, a retryable fleet
+  condition, never `NO_QUEUE_DECLARATION`.
+
+### Battery record for the refix
+
+Targeted gates at this seat, at the pinned tree (`rust-toolchain.toml`,
+channel `1.97.1`), inside the lane worktree, default target dirs, `gate-logs/`
+with `.exit` manifests. Toolchain stamped into every log header:
+
+```
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+host: aarch64-apple-darwin
+```
+
+| Leg | Log | Exit | Result |
+| --- | --- | --- | --- |
+| df preflight | `refix-df-preflight.log` | — | 125Gi available |
+| F1 red (aion) | `refix-f1-red.log` | 101 | 2 passed, 1 failed |
+| F1 red (aion-server) | `refix-f1-red.log` | 101 | 6 passed, 2 failed |
+| F1 green (aion) | `refix-f1-green.log` | 0 | 3 passed |
+| F1 green (aion-server) | `refix-f1-green.log` | 0 | 35 passed |
+| `aion-rs --lib loader::` | `refix-green-suites.log` | 0 | 26 passed |
+| `aion-rs --lib lifecycle::` | `refix-green-suites.log` | 0 | 71 passed |
+| `aion-server --lib worker::` | `refix-green-suites.log` | 0 | 188 passed |
+| `unserved_queue_policies` | `refix-green-suites.log` | 0 | 6 passed |
+| `unserved_queue_honesty` | `refix-green-suites.log` | 0 | 1 passed |
+| `cargo fmt --all --check` | `refix-fmt.log` | 0 | clean |
+| `cargo clippy --workspace --all-targets -D warnings` | `refix-clippy.log` | 0 | zero warnings |
+
+No `cargo test --workspace` was run at this seat and none is claimed. The full
+workspace re-battery on the pinned tree rides the LANDING run on the fast
+device, per the landing owner's routing; that run is the one that supersedes
+the untoolchain-stamped 2026-07-28 battery above.
