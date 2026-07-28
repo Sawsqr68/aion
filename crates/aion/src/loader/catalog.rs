@@ -8,7 +8,7 @@
 //! atomic route flip for new starts, while in-flight runs keep the version
 //! they already resolved (loads never unregister anything).
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, RwLock};
 
 #[path = "catalog_load.rs"]
@@ -290,30 +290,26 @@ impl WorkflowCatalog {
         Ok(contracts.into_values().collect())
     }
 
-    /// Every task queue declared by any retained `.v4` contract.
+    /// One read of the task queues declared by the retained contracts.
     ///
     /// The R1 queue-service classifier reads this to tell a structurally
     /// undeclared queue apart from a declared one that simply has no live
-    /// worker. An EMPTY set means no retained contract declares a queue at all
-    /// — callers must read that as "unknowable", never as "declared by
-    /// nobody", or an engine with no queue-scoped packages would refuse every
-    /// dispatch it cannot contradict.
+    /// worker, so the answer must report its own limits: a retained pre-`.v4`
+    /// entry carries no decodable contract, and the queues it serves are
+    /// unknowable to this read. [`DeclaredQueues`] therefore carries the
+    /// undecodable stored identities alongside the queues found — an ABSENCE
+    /// from the set means "declared by nobody" only when the read covered
+    /// every entry. An EMPTY set likewise means the catalog declares no queue
+    /// at all and can contradict nothing.
     ///
     /// # Errors
     ///
     /// Returns [`EngineError::CatalogPoisoned`] when the snapshot lock is poisoned.
     pub fn declared_task_queues(&self) -> Result<DeclaredQueues, EngineError> {
         let snapshot = self.current()?;
-        let mut queues = BTreeSet::new();
-        for entry in snapshot.by_version.values() {
-            let Ok(contract) = entry.workflow.contract() else {
-                continue;
-            };
-            for worker in &contract.workers {
-                queues.insert(worker.task_queue.clone());
-            }
-        }
-        Ok(DeclaredQueues::new(queues, Vec::new()))
+        Ok(DeclaredQueues::read(
+            snapshot.by_version.values().map(|entry| &entry.workflow),
+        ))
     }
 
     /// Every loaded version with its route flag, sorted by `(type, loaded_at)`.

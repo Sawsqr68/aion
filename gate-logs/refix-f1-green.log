@@ -1,0 +1,59 @@
+# F1 GREEN — the same pins, after the fix
+# toolchain (rust-toolchain.toml pins 1.97.1):
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+
+$ cargo test -p aion-rs --lib loader::declared_queues
+   Compiling aion-rs v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/unserved-honesty/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 18.07s
+     Running unittests src/lib.rs (target/debug/deps/aion-fa693d274060ff19)
+
+running 3 tests
+test loader::declared_queues::declared_queues_tests::a_read_reports_exactly_what_it_was_given ... ok
+test loader::declared_queues::declared_queues_tests::a_read_of_only_v4_entries_covers_every_entry ... ok
+test loader::declared_queues::declared_queues_tests::a_mixed_catalog_names_the_entry_it_could_not_decode ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 578 filtered out; finished in 0.00s
+
+
+$ cargo test -p aion-server --lib worker::queue_service
+
+running 35 tests
+test worker::queue_service::census::tests::pollers_that_do_not_cover_the_activity_are_incompatible ... ok
+test worker::queue_service::census::tests::an_unknowable_declaration_never_produces_a_structural_refusal ... ok
+test worker::queue_service::census::tests::a_served_address_is_not_classified ... ok
+test worker::queue_service::census::tests::an_undeclared_queue_is_structural ... ok
+test worker::queue_service::census::tests::an_empty_pool_on_a_declared_queue_has_no_live_pollers ... ok
+test worker::queue_service::census::tests::pollers_off_the_pinned_node_are_incompatible ... ok
+test worker::queue_service::declarations::tests::a_complete_read_that_found_nothing_is_unknown ... ok
+test worker::queue_service::declarations::tests::an_uninstalled_source_answers_unknown ... ok
+test worker::queue_service::declarations::tests::an_installed_source_answers_and_is_visible_to_every_clone ... ok
+test worker::queue_service::declarations::tests::a_duplicate_install_never_changes_the_answer ... ok
+test worker::queue_service::declarations::tests::a_mixed_catalog_never_structurally_refuses_the_undecodable_queue ... ok
+test worker::queue_service::declarations::tests::a_queue_absent_from_a_partial_read_is_never_undeclared ... ok
+test worker::queue_service::declarations::tests::a_positive_find_survives_a_partial_read ... ok
+test worker::queue_service::declarations::tests::a_complete_read_still_reports_an_absent_queue_as_undeclared ... ok
+test worker::queue_service::delivery::tests::a_free_intake_accepts_the_task_immediately ... ok
+test worker::queue_service::delivery::tests::a_closed_intake_is_never_reported_as_saturation ... ok
+test worker::queue_service::delivery::tests::a_drain_during_the_retry_window_fails_with_the_drain_reason ... ok
+test worker::queue_service::delivery::tests::a_full_intake_with_no_clock_fails_at_once ... ok
+test worker::queue_service::policy::tests::an_override_can_be_scoped_to_one_namespace ... ok
+test worker::queue_service::policy::tests::a_written_override_opts_one_queue_into_durable_pending ... ok
+test worker::queue_service::policy::tests::strict_is_the_default_policy_and_no_clock_is_invented ... ok
+test worker::queue_service::policy::tests::the_availability_deadline_bounds_strict_only ... ok
+test worker::queue_service::taxonomy::tests::an_ordinary_failure_is_not_read_as_a_queue_service_refusal ... ok
+test worker::queue_service::state::tests::clearing_an_unknown_dispatch_is_a_no_op ... ok
+test worker::queue_service::taxonomy::tests::every_reason_round_trips_through_its_canonical_spelling ... ok
+test worker::queue_service::taxonomy::tests::the_two_clocks_render_distinctly ... ok
+test worker::queue_service::taxonomy::tests::structural_refusal_is_terminal_and_carries_no_clock ... ok
+test worker::queue_service::taxonomy::tests::fleet_refusals_are_retryable_and_name_the_expired_clock ... ok
+test worker::queue_service::state::tests::re_marking_refreshes_the_verdict_without_duplicating_the_waiter ... ok
+test worker::queue_service::state::tests::a_parked_dispatch_is_visible_immediately ... ok
+test worker::queue_service::state::tests::clearing_the_last_waiter_removes_the_address ... ok
+test worker::queue_service::taxonomy::tests::a_refusal_round_trips_back_to_its_typed_head ... ok
+test worker::queue_service::policy::tests::queue_service_settings_deserialize_from_the_written_form ... ok
+test worker::queue_service::delivery::tests::an_intake_that_stays_full_past_the_clock_is_saturated ... ok
+test worker::queue_service::delivery::tests::an_intake_that_frees_up_within_the_clock_is_served ... ok
+
+test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 578 filtered out; finished in 0.51s
+

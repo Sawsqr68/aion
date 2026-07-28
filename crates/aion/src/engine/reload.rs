@@ -116,12 +116,14 @@ impl Engine {
             .worker_contracts_for_queue(task_queue)
     }
 
-    /// Returns every task queue declared by any retained `.v4` contract.
+    /// Returns one read of the task queues the retained contracts declare.
     ///
     /// The server's queue-service classifier (R1) reads this to tell a
-    /// structurally undeclared queue apart from a declared but unserved one. An
-    /// empty set means this catalog declares no queues at all and therefore
-    /// cannot contradict any dispatch — see
+    /// structurally undeclared queue apart from a declared but unserved one.
+    /// The answer reports whether it covered every retained entry: a queue
+    /// missing from a read that could not decode some entry is unknowable, not
+    /// undeclared. An empty set likewise means this catalog declares no queues
+    /// at all and therefore cannot contradict any dispatch — see
     /// [`WorkflowCatalog::declared_task_queues`](crate::loader::WorkflowCatalog::declared_task_queues).
     ///
     /// # Errors

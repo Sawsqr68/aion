@@ -16,6 +16,10 @@
 
 use std::collections::BTreeSet;
 
+use aion_package::ContractIdentityError;
+
+use super::load::LoadedWorkflow;
+
 /// The queues one catalog read positively found, with the stored identities
 /// that same read could not decode.
 ///
@@ -68,6 +72,44 @@ impl DeclaredQueues {
     #[must_use]
     pub fn declared(&self) -> &BTreeSet<String> {
         &self.declared
+    }
+
+    /// Reads the declarations out of retained catalog entries.
+    ///
+    /// This is the site that OBSERVES an entry it cannot decode, so this is the
+    /// site that says so: an undecodable entry is recorded by its stored
+    /// identity and reported at WARN, naming what must be re-deployed. It is
+    /// never skipped in silence — a skipped entry turns into a confident,
+    /// terminal refusal three seams downstream.
+    pub(crate) fn read<'entries>(
+        entries: impl IntoIterator<Item = &'entries LoadedWorkflow>,
+    ) -> Self {
+        let mut declared = BTreeSet::new();
+        let mut undecodable_identities = Vec::new();
+        for workflow in entries {
+            match workflow.contract() {
+                Ok(contract) => {
+                    for worker in &contract.workers {
+                        declared.insert(worker.task_queue.clone());
+                    }
+                }
+                Err(ContractIdentityError::RedeployRequired { stored_version }) => {
+                    undecodable_identities.push(stored_version);
+                }
+            }
+        }
+        if !undecodable_identities.is_empty() {
+            tracing::warn!(
+                undecodable_identities = %undecodable_identities.join(", "),
+                declared_queues = declared.len(),
+                "catalog entries carry no decodable contract; their task queues are unknowable \
+                 and no queue can be reported undeclared until they are re-deployed under `.v4`"
+            );
+        }
+        Self {
+            declared,
+            undecodable_identities,
+        }
     }
 }
 

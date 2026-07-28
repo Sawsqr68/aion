@@ -1,0 +1,5 @@
+0 cargo test -p aion-rs --lib loader::
+0 cargo test -p aion-rs --lib lifecycle::
+0 cargo test -p aion-server --lib worker::
+0 cargo test -p aion-server --test unserved_queue_policies
+0 cargo test -p aion-server --test unserved_queue_honesty

@@ -1,0 +1,2 @@
+0 cargo test -p aion-rs --lib loader::declared_queues
+0 cargo test -p aion-server --lib worker::queue_service

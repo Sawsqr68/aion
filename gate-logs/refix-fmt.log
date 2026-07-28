@@ -1,0 +1,5 @@
+# build/unserved-honesty refix — fmt
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+
+$ cargo fmt --all --check

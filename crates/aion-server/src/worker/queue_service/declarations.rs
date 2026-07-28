@@ -9,9 +9,13 @@
 //! (an engine-less state built from parts, a fresh boot, an embedded engine
 //! serving activities in process) can contradict nothing, so it answers
 //! [`QueueDeclaration::Unknown`] and no structural refusal is ever
-//! manufactured from an absence of information. That is the same discipline
-//! the handshake lane adopted after its engine-less registration defect —
-//! whose observed symptom was this very seam waiting forever at INFO.
+//! manufactured from an absence of information. The same holds for a catalog
+//! read that could not decode every retained entry — the mixed state the
+//! handshake migration creates, old packages retained beside new `.v4` ones:
+//! what such a read did not find, it may simply not have been able to see.
+//! That is the same discipline the handshake lane adopted after its
+//! engine-less registration defect — whose observed symptom was this very
+//! seam waiting forever at INFO.
 
 use std::sync::{Arc, OnceLock};
 
@@ -22,10 +26,12 @@ use aion::loader::DeclaredQueues;
 pub enum QueueDeclaration {
     /// At least one retained `.v4` contract declares this queue.
     Declared,
-    /// Contracts declaring queues exist, and none of them declares this one.
+    /// Contracts declaring queues exist, a read covered every retained entry,
+    /// and none of them declares this one.
     NotDeclared,
     /// Nothing in reach can answer: no source installed, no queue-declaring
-    /// contract deployed at all, or the catalog could not be read.
+    /// contract deployed at all, a read that could not decode every retained
+    /// entry, or a catalog that could not be read.
     Unknown,
 }
 
@@ -104,15 +110,16 @@ impl std::fmt::Debug for EngineQueueDeclarations {
 
 /// Maps one catalog read to the answer for `task_queue`.
 ///
-/// A positive find is positive. An ABSENCE is only reported as
-/// [`QueueDeclaration::NotDeclared`] when the read has standing to make it:
-/// a catalog that declares no queue at all contradicts nothing.
+/// A positive find is positive whatever else the read missed. An ABSENCE is
+/// only reported as [`QueueDeclaration::NotDeclared`] when the read has
+/// standing to make that claim: a catalog that declares no queue at all
+/// contradicts nothing, and neither does a read that could not decode every
+/// retained entry — the entry it could not read may be the one that declares
+/// this very queue.
 fn declaration_from(read: &DeclaredQueues, task_queue: &str) -> QueueDeclaration {
     if read.declares(task_queue) {
         QueueDeclaration::Declared
-    } else if read.found_no_declaration() {
-        // Nothing declares any queue: this catalog cannot contradict a
-        // dispatch, so it must not refuse one.
+    } else if read.found_no_declaration() || !read.covers_every_entry() {
         QueueDeclaration::Unknown
     } else {
         QueueDeclaration::NotDeclared
