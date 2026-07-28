@@ -30,6 +30,7 @@ mod plan_slots;
 mod registry;
 mod route;
 mod slots;
+mod step;
 mod visits;
 mod wait;
 mod wrappers;

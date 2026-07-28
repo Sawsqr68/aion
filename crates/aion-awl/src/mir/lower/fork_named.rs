@@ -53,7 +53,7 @@ pub(super) fn lower_named_fork(
             .all(|branch| branch.call.name == branches[0].call.name);
     if branches.len() <= 1 {
         for branch in &branches {
-            super::flow::lower_call(ctx, env, branch, scope, stmts)?;
+            super::step::lower_call(ctx, env, branch, scope, stmts)?;
         }
         return Ok(());
     }

@@ -31,9 +31,9 @@ use super::ctx::Ctx;
 use super::driver::LowerError;
 use super::expr::{Binding, Scope, lower_expr};
 use super::flow::FlowEnv;
-use super::flow::lower_statement;
 use super::outcome::lower_condition;
 use super::slots::Slots;
+use super::step::lower_statement;
 
 /// The reserved loop function slots (skeleton-planned, pre-order) and the
 /// bodies built while regions lower. `FnRef(n)` is literally `functions[n]`,
