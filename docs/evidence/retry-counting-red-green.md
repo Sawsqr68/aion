@@ -257,3 +257,13 @@ immediately afterwards and passed in the final battery above. It touches no AWL
 and no retry declaration — the suite drives the hand-written
 `aion_outbox_fixture.erl` — so it is not this lane's, but it is recorded here
 rather than quietly dropped.
+
+## Landing plan (sequencing ruled 2026-07-28)
+
+Landing order of record: R1 unserved-honesty → R5 advisory-class → **this lane
+last of the colliding pair**. Therefore OWED IN THIS LANE'S REBASE-AND-LAND
+COMMIT, not later: true the R5 advisory exhibit to the ratified counting —
+`crates/aion/tests/advisory_class_e2e.rs` declares `advisory, retry 2 every
+1s`, and its expected heartbeat deliveries move **2 → 3** (`retry 2` = 3 total
+executions) once this lane's mapping lands beneath it. The rebase is not
+complete, and the landing battery must not run, until that assertion is trued.
