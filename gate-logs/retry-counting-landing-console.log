@@ -1,0 +1,14 @@
+# R4 landing battery (rebased onto d93f2342, round 2 after golden bless f1c44907) — build/retry-counting @ f1c4490786e11922d840298039ddfb9865e73961
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+commit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452
+# 2026-07-28T17:47:36Z
+bun install v1.3.14 (0d9b296a)
+
+Checked 425 installs across 529 packages (no changes) [64.00ms]
+bun test v1.3.14 (0d9b296a)
+
+ 580 pass
+ 0 fail
+ 1952 expect() calls
+Ran 580 tests across 92 files. [998.00ms]

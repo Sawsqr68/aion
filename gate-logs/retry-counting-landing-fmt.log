@@ -1,0 +1,5 @@
+# R4 landing battery (rebased onto d93f2342, round 2 after golden bless f1c44907) — build/retry-counting @ f1c4490786e11922d840298039ddfb9865e73961
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+binary: rustc
+commit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452
+# 2026-07-28T17:42:18Z
