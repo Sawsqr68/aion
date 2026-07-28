@@ -32,6 +32,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::dispatcher::TypedDispatcher;
+use crate::fixtures::ActionResult;
 
 /// Hard upper bound on a single run. No fixture that reaches a terminal or a
 /// durable-timer park needs anywhere near this long; exceeding it is `Stuck`.
@@ -97,7 +98,7 @@ pub async fn run_package(
     package: Package,
     workflow_type: &str,
     input: &Value,
-    action_results: HashMap<String, String>,
+    action_results: HashMap<String, ActionResult>,
     expected_entry: &[u8],
 ) -> Result<RunOutcome, Box<dyn std::error::Error>> {
     // Splice binding: the package about to be loaded MUST carry the expected

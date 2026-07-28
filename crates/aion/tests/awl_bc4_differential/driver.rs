@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use aion_awl::mir::lower;
 use serde_json::Value;
 
-use crate::fixtures::{self, Loaded};
+use crate::fixtures::{self, ActionResult, Loaded};
 use crate::harness::{self, RefEntry};
 use crate::report::Report;
 use crate::run::{Disposition, RunOutcome, run_package};
@@ -22,7 +22,7 @@ pub struct Classified {
     /// Minimal schema-valid input per ratchet name.
     pub inputs: HashMap<String, Value>,
     /// Schema-valid canned activity results per ratchet name.
-    pub action_results: HashMap<String, HashMap<String, String>>,
+    pub action_results: HashMap<String, HashMap<String, ActionResult>>,
     /// Out-of-intersection refusals as `(ratchet name, refusal text)`.
     pub refusals: Vec<(String, String)>,
     /// Divergences discovered during classification (e.g. IR-12 name skew).
@@ -160,7 +160,7 @@ pub struct SplicedFixture {
     /// The minimal schema-valid start input.
     pub input: Value,
     /// The schema-valid canned activity results.
-    pub action_results: HashMap<String, String>,
+    pub action_results: HashMap<String, ActionResult>,
 }
 
 /// Builds the spliced direct package for each named fixture (ONE `gleam

@@ -27,6 +27,8 @@ mod abi;
 mod adversarial;
 #[path = "awl_bc4_differential/child_boundary.rs"]
 mod child_boundary;
+#[path = "awl_bc4_differential/compensation.rs"]
+mod compensation;
 #[path = "awl_bc4_differential/covered.rs"]
 mod covered;
 #[path = "awl_bc4_differential/dispatcher.rs"]

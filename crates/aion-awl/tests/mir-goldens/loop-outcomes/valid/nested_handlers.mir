@@ -9,7 +9,7 @@ exports: run/1, definition/0, execute/1
     aion@workflow:run/1 [activities] (v13)
 == durable families == activities
 == atoms ==
-  [0] result
+  [0] shipment
   [1] refund_input
   [2] ship_input
   [3] nested_handlers_input
@@ -34,7 +34,7 @@ exports: run/1, definition/0, execute/1
   [12] "orders"
   [13] "aborted"
 == types ==
-  record Result tag=result
+  record Shipment tag=shipment
     order_id: string
     ok: bool
   record RefundInput tag=refund_input
@@ -44,7 +44,7 @@ exports: run/1, definition/0, execute/1
   record NestedHandlersInput tag=nested_handlers_input
     order_id: string
   union NestedHandlersOutcome
-    shipped -> shipped_outcome(ref(Result))
+    shipped -> shipped_outcome(ref(Shipment))
 == fn run/1 origin=run ==
   sig: (Dynamic) -> Result(String, AwlError)
   T-RUN input=nested_handlers_input_codec output=nested_handlers_outcome_codec
@@ -54,30 +54,30 @@ exports: run/1, definition/0, execute/1
 == fn execute/1 origin=execute ==
   sig: (nested_handlers.NestedHandlersInput) -> Result(nested_handlers.NestedHandlersOutcome, AwlError)
   T-EXEC fields=[order_id:String] entry=step_fulfil args=[0]
-== fn result_codec/0 origin=codec_template(RecordTrio, Result, record#0) ==
-  sig: () -> Codec(nested_handlers.Result)
-  v0 = make_closure result_to_json captures=[]
-  v1 = call_local result_decoder() live_after=[v0]
+== fn shipment_codec/0 origin=codec_template(RecordTrio, Shipment, record#0) ==
+  sig: () -> Codec(nested_handlers.Shipment)
+  v0 = make_closure shipment_to_json captures=[]
+  v1 = call_local shipment_decoder() live_after=[v0]
   tail_rt aion@codec:json_codec/2(v0, v1)
-== fn result_to_json/1 origin=codec_template(RecordTrio, Result, record#0) ==
-  sig: (nested_handlers.Result) -> Json
+== fn shipment_to_json/1 origin=codec_template(RecordTrio, Shipment, record#0) ==
+  sig: (nested_handlers.Shipment) -> Json
   v1 = field(v0, 1)
   v2 = field(v0, 2)
   v3 = json_obj {"order_id": v1|>awlc.string_to_json, "ok": v2|>awlc.bool_to_json}
   return v3
-== fn result_decoder/0 origin=codec_template(RecordTrio, Result, record#0) ==
-  sig: () -> Decoder(nested_handlers.Result)
+== fn shipment_decoder/0 origin=codec_template(RecordTrio, Shipment, record#0) ==
+  sig: () -> Decoder(nested_handlers.Shipment)
   v0 = call_rt aion@awl@codec:string_decoder/0()
-  v1 = make_closure result_decoder$0 captures=[]
+  v1 = make_closure shipment_decoder$0 captures=[]
   tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
-== fn result_decoder$0/1 origin=lifted(result_decoder, #0) ==
-  sig: (String) -> Decoder(nested_handlers.Result)
+== fn shipment_decoder$0/1 origin=lifted(shipment_decoder, #0) ==
+  sig: (String) -> Decoder(nested_handlers.Shipment)
   v1 = call_rt aion@awl@codec:bool_decoder/0() live_after=[v0]
-  v2 = make_closure result_decoder$1 captures=[v0]
+  v2 = make_closure shipment_decoder$1 captures=[v0]
   tail_rt gleam@dynamic@decode:field/3(lit#1, v1, v2)
-== fn result_decoder$1/2 origin=lifted(result_decoder, #1) ==
-  sig: (Bool, String) -> Decoder(nested_handlers.Result)
-  v2 = record(result, [v1, v0])
+== fn shipment_decoder$1/2 origin=lifted(shipment_decoder, #1) ==
+  sig: (Bool, String) -> Decoder(nested_handlers.Shipment)
+  v2 = record(shipment, [v1, v0])
   tail_rt gleam@dynamic@decode:success/1(v2)
 == fn refund_input_codec/0 origin=codec_template(RecordTrio, RefundInput, record#1) ==
   sig: () -> Codec(nested_handlers.RefundInput)
@@ -144,7 +144,7 @@ exports: run/1, definition/0, execute/1
 == fn nested_handlers_outcome_to_json/1 origin=codec_template(UnionTrio, NestedHandlersOutcome, union#4) ==
   sig: (nested_handlers.NestedHandlersOutcome) -> Json
   v1 = field(v0, 1)
-  v2 = json_obj {"outcome": lit#5|>awlc.string_to_json, "payload": v1|>result_to_json}
+  v2 = json_obj {"outcome": lit#5|>awlc.string_to_json, "payload": v1|>shipment_to_json}
   return v2
 == fn nested_handlers_outcome_decoder/0 origin=codec_template(UnionTrio, NestedHandlersOutcome, union#4) ==
   sig: () -> Decoder(nested_handlers.NestedHandlersOutcome)
@@ -154,23 +154,23 @@ exports: run/1, definition/0, execute/1
 == fn nested_handlers_outcome_decoder$outcome/1 origin=lifted(nested_handlers_outcome_decoder, #0) ==
   sig: (String) -> Decoder(nested_handlers.NestedHandlersOutcome)
   if cmp Eq v0 lit#9:
-    v3 = call_local result_decoder()
+    v3 = call_local shipment_decoder()
     v4 = make_closure nested_handlers_outcome_decoder$arm0 captures=[]
     tail_rt gleam@dynamic@decode:field/3(lit#10, v3, v4)
   else:
-    v1 = record(result, [lit#7, 'false'])
+    v1 = record(shipment, [lit#7, 'false'])
     v2 = record(shipped_outcome, [v1])
     tail_rt gleam@dynamic@decode:failure/2(v2, lit#8)
 == fn nested_handlers_outcome_decoder$arm0/1 origin=lifted(nested_handlers_outcome_decoder, #1) ==
-  sig: (nested_handlers.Result) -> Decoder(nested_handlers.NestedHandlersOutcome)
+  sig: (nested_handlers.Shipment) -> Decoder(nested_handlers.NestedHandlersOutcome)
   v1 = record(shipped_outcome, [v0])
   tail_rt gleam@dynamic@decode:success/1(v1)
 == fn refund_activity/1 origin=activity_wrapper(refund, raw=false) ==
-  sig: (String) -> Activity(nested_handlers.RefundInput, nested_handlers.Result)
-  T-ACT action=refund input_codec=refund_input_codec return=result_codec
+  sig: (String) -> Activity(nested_handlers.RefundInput, nested_handlers.Shipment)
+  T-ACT action=refund input_codec=refund_input_codec return=shipment_codec
 == fn ship_activity/1 origin=activity_wrapper(ship, raw=false) ==
-  sig: (String) -> Activity(nested_handlers.ShipInput, nested_handlers.Result)
-  T-ACT action=ship input_codec=ship_input_codec return=result_codec
+  sig: (String) -> Activity(nested_handlers.ShipInput, nested_handlers.Shipment)
+  T-ACT action=ship input_codec=ship_input_codec return=shipment_codec
 == fn step_fulfil/1 origin=region(fulfil) ==
   sig: (String) -> Result(nested_handlers.NestedHandlersOutcome, AwlError)
   v1 = call_local ship_activity(v0) live_after=[v0]
@@ -181,7 +181,7 @@ exports: run/1, definition/0, execute/1
     v5 = field(v4, 1)
     v6 = field(v5, 1)
     v7 = field(v5, 2)
-    v8 = record(result, [v6, v7])
+    v8 = record(shipment, [v6, v7])
     v9 = record(shipped_outcome, [v8])
     v10 = record(ok, [v9])
     return v10
@@ -196,8 +196,8 @@ exports: run/1, definition/0, execute/1
   v16 = try_bind v15
   v17 = field(v16, 1)
   v18 = field(v16, 2)
-  v19 = record(result, [v17, v18])
-  v20 = call_local result_to_json(v19)
+  v19 = record(shipment, [v17, v18])
+  v20 = call_local shipment_to_json(v19)
   v21 = call_rt gleam@json:to_string/1(v20)
   v22 = record(awl_outcome_failure, [lit#13, v21])
   v23 = record(error, [v22])

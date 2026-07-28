@@ -1,0 +1,262 @@
+module compensate_to_step source=compensate_to_step.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_charge:
+    aion@activity:task_queue/2 [activities] (v1, lit#13)
+    aion@workflow:run/1 [activities] (v2)
+  step_unwind:
+    aion@activity:task_queue/2 [activities] (v1, lit#15)
+    aion@workflow:run/1 [activities] (v2)
+  charge_on_failure:
+    aion@activity:task_queue/2 [activities] (v11, lit#14)
+    aion@workflow:run/1 [activities] (v12)
+== durable families == activities
+== atoms ==
+  [0] settlement
+  [1] note
+  [2] fail_charge_input
+  [3] note_failure_input
+  [4] refund_input
+  [5] compensate_to_step_input
+  [6] settled_outcome
+  [7] false
+  [8] ok
+  [9] true
+== literals ==
+  [0] "order_id"
+  [1] "unwound"
+  [2] "text"
+  [3] "order_id"
+  [4] "order_id"
+  [5] "order_id"
+  [6] "order_id"
+  [7] "settled"
+  [8] "outcome"
+  [9] ""
+  [10] "CompensateToStepOutcome"
+  [11] "settled"
+  [12] "payload"
+  [13] "billing"
+  [14] "billing"
+  [15] "billing"
+== types ==
+  record Settlement tag=settlement
+    order_id: string
+    unwound: bool
+  record Note tag=note
+    text: string
+  record FailChargeInput tag=fail_charge_input
+    order_id: string
+  record NoteFailureInput tag=note_failure_input
+    order_id: string
+  record RefundInput tag=refund_input
+    order_id: string
+  record CompensateToStepInput tag=compensate_to_step_input
+    order_id: string
+  union CompensateToStepOutcome
+    settled -> settled_outcome(ref(Settlement))
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=compensate_to_step_input_codec output=compensate_to_step_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(compensate_to_step.CompensateToStepInput, compensate_to_step.CompensateToStepOutcome, AwlError)
+  T-DEF name="compensate_to_step" input=compensate_to_step_input_codec output=compensate_to_step_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (compensate_to_step.CompensateToStepInput) -> Result(compensate_to_step.CompensateToStepOutcome, AwlError)
+  T-EXEC fields=[order_id:String] entry=step_charge args=[0]
+== fn settlement_codec/0 origin=codec_template(RecordTrio, Settlement, record#0) ==
+  sig: () -> Codec(compensate_to_step.Settlement)
+  v0 = make_closure settlement_to_json captures=[]
+  v1 = call_local settlement_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn settlement_to_json/1 origin=codec_template(RecordTrio, Settlement, record#0) ==
+  sig: (compensate_to_step.Settlement) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"order_id": v1|>awlc.string_to_json, "unwound": v2|>awlc.bool_to_json}
+  return v3
+== fn settlement_decoder/0 origin=codec_template(RecordTrio, Settlement, record#0) ==
+  sig: () -> Decoder(compensate_to_step.Settlement)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure settlement_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn settlement_decoder$0/1 origin=lifted(settlement_decoder, #0) ==
+  sig: (String) -> Decoder(compensate_to_step.Settlement)
+  v1 = call_rt aion@awl@codec:bool_decoder/0() live_after=[v0]
+  v2 = make_closure settlement_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v1, v2)
+== fn settlement_decoder$1/2 origin=lifted(settlement_decoder, #1) ==
+  sig: (Bool, String) -> Decoder(compensate_to_step.Settlement)
+  v2 = record(settlement, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn note_codec/0 origin=codec_template(RecordTrio, Note, record#1) ==
+  sig: () -> Codec(compensate_to_step.Note)
+  v0 = make_closure note_to_json captures=[]
+  v1 = call_local note_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn note_to_json/1 origin=codec_template(RecordTrio, Note, record#1) ==
+  sig: (compensate_to_step.Note) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"text": v1|>awlc.string_to_json}
+  return v2
+== fn note_decoder/0 origin=codec_template(RecordTrio, Note, record#1) ==
+  sig: () -> Decoder(compensate_to_step.Note)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure note_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v0, v1)
+== fn note_decoder$0/1 origin=lifted(note_decoder, #0) ==
+  sig: (String) -> Decoder(compensate_to_step.Note)
+  v1 = record(note, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn fail_charge_input_codec/0 origin=codec_template(RecordTrio, FailChargeInput, record#2) ==
+  sig: () -> Codec(compensate_to_step.FailChargeInput)
+  v0 = make_closure fail_charge_input_to_json captures=[]
+  v1 = call_local fail_charge_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn fail_charge_input_to_json/1 origin=codec_template(RecordTrio, FailChargeInput, record#2) ==
+  sig: (compensate_to_step.FailChargeInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"order_id": v1|>awlc.string_to_json}
+  return v2
+== fn fail_charge_input_decoder/0 origin=codec_template(RecordTrio, FailChargeInput, record#2) ==
+  sig: () -> Decoder(compensate_to_step.FailChargeInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure fail_charge_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v0, v1)
+== fn fail_charge_input_decoder$0/1 origin=lifted(fail_charge_input_decoder, #0) ==
+  sig: (String) -> Decoder(compensate_to_step.FailChargeInput)
+  v1 = record(fail_charge_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn note_failure_input_codec/0 origin=codec_template(RecordTrio, NoteFailureInput, record#3) ==
+  sig: () -> Codec(compensate_to_step.NoteFailureInput)
+  v0 = make_closure note_failure_input_to_json captures=[]
+  v1 = call_local note_failure_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn note_failure_input_to_json/1 origin=codec_template(RecordTrio, NoteFailureInput, record#3) ==
+  sig: (compensate_to_step.NoteFailureInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"order_id": v1|>awlc.string_to_json}
+  return v2
+== fn note_failure_input_decoder/0 origin=codec_template(RecordTrio, NoteFailureInput, record#3) ==
+  sig: () -> Decoder(compensate_to_step.NoteFailureInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure note_failure_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+== fn note_failure_input_decoder$0/1 origin=lifted(note_failure_input_decoder, #0) ==
+  sig: (String) -> Decoder(compensate_to_step.NoteFailureInput)
+  v1 = record(note_failure_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn refund_input_codec/0 origin=codec_template(RecordTrio, RefundInput, record#4) ==
+  sig: () -> Codec(compensate_to_step.RefundInput)
+  v0 = make_closure refund_input_to_json captures=[]
+  v1 = call_local refund_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn refund_input_to_json/1 origin=codec_template(RecordTrio, RefundInput, record#4) ==
+  sig: (compensate_to_step.RefundInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"order_id": v1|>awlc.string_to_json}
+  return v2
+== fn refund_input_decoder/0 origin=codec_template(RecordTrio, RefundInput, record#4) ==
+  sig: () -> Decoder(compensate_to_step.RefundInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure refund_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#5, v0, v1)
+== fn refund_input_decoder$0/1 origin=lifted(refund_input_decoder, #0) ==
+  sig: (String) -> Decoder(compensate_to_step.RefundInput)
+  v1 = record(refund_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn compensate_to_step_input_codec/0 origin=codec_template(RecordTrio, CompensateToStepInput, record#5) ==
+  sig: () -> Codec(compensate_to_step.CompensateToStepInput)
+  v0 = make_closure compensate_to_step_input_to_json captures=[]
+  v1 = call_local compensate_to_step_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn compensate_to_step_input_to_json/1 origin=codec_template(RecordTrio, CompensateToStepInput, record#5) ==
+  sig: (compensate_to_step.CompensateToStepInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"order_id": v1|>awlc.string_to_json}
+  return v2
+== fn compensate_to_step_input_decoder/0 origin=codec_template(RecordTrio, CompensateToStepInput, record#5) ==
+  sig: () -> Decoder(compensate_to_step.CompensateToStepInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure compensate_to_step_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
+== fn compensate_to_step_input_decoder$0/1 origin=lifted(compensate_to_step_input_decoder, #0) ==
+  sig: (String) -> Decoder(compensate_to_step.CompensateToStepInput)
+  v1 = record(compensate_to_step_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn compensate_to_step_outcome_codec/0 origin=codec_template(UnionTrio, CompensateToStepOutcome, union#6) ==
+  sig: () -> Codec(compensate_to_step.CompensateToStepOutcome)
+  v0 = make_closure compensate_to_step_outcome_to_json captures=[]
+  v1 = call_local compensate_to_step_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn compensate_to_step_outcome_to_json/1 origin=codec_template(UnionTrio, CompensateToStepOutcome, union#6) ==
+  sig: (compensate_to_step.CompensateToStepOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#7|>awlc.string_to_json, "payload": v1|>settlement_to_json}
+  return v2
+== fn compensate_to_step_outcome_decoder/0 origin=codec_template(UnionTrio, CompensateToStepOutcome, union#6) ==
+  sig: () -> Decoder(compensate_to_step.CompensateToStepOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure compensate_to_step_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#8, v0, v1)
+== fn compensate_to_step_outcome_decoder$outcome/1 origin=lifted(compensate_to_step_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(compensate_to_step.CompensateToStepOutcome)
+  if cmp Eq v0 lit#11:
+    v3 = call_local settlement_decoder()
+    v4 = make_closure compensate_to_step_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#12, v3, v4)
+  else:
+    v1 = record(settlement, [lit#9, 'false'])
+    v2 = record(settled_outcome, [v1])
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#10)
+== fn compensate_to_step_outcome_decoder$arm0/1 origin=lifted(compensate_to_step_outcome_decoder, #1) ==
+  sig: (compensate_to_step.Settlement) -> Decoder(compensate_to_step.CompensateToStepOutcome)
+  v1 = record(settled_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn fail_charge_activity/1 origin=activity_wrapper(fail_charge, raw=false) ==
+  sig: (String) -> Activity(compensate_to_step.FailChargeInput, compensate_to_step.Settlement)
+  T-ACT action=fail_charge input_codec=fail_charge_input_codec return=settlement_codec
+== fn note_failure_activity/1 origin=activity_wrapper(note_failure, raw=false) ==
+  sig: (String) -> Activity(compensate_to_step.NoteFailureInput, compensate_to_step.Note)
+  T-ACT action=note_failure input_codec=note_failure_input_codec return=note_codec
+== fn refund_activity/1 origin=activity_wrapper(refund, raw=false) ==
+  sig: (String) -> Activity(compensate_to_step.RefundInput, compensate_to_step.Settlement)
+  T-ACT action=refund input_codec=refund_input_codec return=settlement_codec
+== fn step_charge/1 origin=region(charge) ==
+  sig: (String) -> Result(compensate_to_step.CompensateToStepOutcome, AwlError)
+  v1 = call_local fail_charge_activity(v0) live_after=[v0]
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#13) live_after=[v0]
+  v3 = call_rt aion@workflow:run/1(v2) live_after=[v0]
+  v4 = call_rt aion@awl@error:map_activity_error/1(v3) live_after=[v0]
+  if is_tagged v4 ok/2:
+    v5 = field(v4, 1)
+    v6 = field(v5, 1)
+    v7 = record(settlement, [v6, 'false'])
+    v8 = record(settled_outcome, [v7])
+    v9 = record(ok, [v8])
+    return v9
+  else:
+    tail_local charge_on_failure(v0)
+== fn step_unwind/1 origin=region(unwind) ==
+  sig: (String) -> Result(compensate_to_step.CompensateToStepOutcome, AwlError)
+  v1 = call_local refund_activity(v0)
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#15)
+  v3 = call_rt aion@workflow:run/1(v2)
+  v4 = call_rt aion@awl@error:map_activity_error/1(v3)
+  v5 = try_bind v4
+  v6 = field(v5, 1)
+  v7 = record(settlement, [v6, 'true'])
+  v8 = record(settled_outcome, [v7])
+  v9 = record(ok, [v8])
+  return v9
+== fn charge_on_failure/1 origin=compensation(charge) ==
+  sig: (String) -> Result(compensate_to_step.CompensateToStepOutcome, AwlError)
+  v11 = call_local note_failure_activity(v10) live_after=[v10]
+  v12 = call_rt aion@activity:task_queue/2(v11, lit#14) live_after=[v10]
+  v13 = call_rt aion@workflow:run/1(v12) live_after=[v10]
+  v14 = call_rt aion@awl@error:map_activity_error/1(v13) live_after=[v10]
+  v15 = try_bind v14 live_after=[v10]
+  tail_local step_unwind(v10)
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD
