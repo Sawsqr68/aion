@@ -1,0 +1,32 @@
+# RED — retry-counting lane (engine e2e, both lowerings)
+# tree: build/retry-counting @ 28eb1eec + uncommitted red tests
+# rustc 1.97.1 (8bab26f4f 2026-07-14)
+# cargo 1.97.1 (c980f4866 2026-06-30)
+# gleam: gleam 1.17.0
+# date: 2026-07-28T16:13:31Z
+# cmd: cargo test -p aion-rs --test awl_retry_counting_e2e
+
+   Compiling aion-rs v0.10.0 (/Users/tom/Developer/ablative/aion/.worktrees/retry-counting/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.15s
+     Running tests/awl_retry_counting_e2e.rs (target/debug/deps/awl_retry_counting_e2e-e6c267796b442a6b)
+
+running 1 test
+test retry_three_runs_the_action_four_times_on_both_backends ... FAILED
+
+failures:
+
+---- retry_three_runs_the_action_four_times_on_both_backends stdout ----
+
+thread 'retry_three_runs_the_action_four_times_on_both_backends' (4833126) panicked at crates/aion/tests/awl_retry_counting_e2e.rs:262:5:
+assertion `left == right` failed: `retry 3` must buy 3 FURTHER attempts after the first — 4 executions on the reference backend
+  left: 3
+ right: 4
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    retry_three_runs_the_action_four_times_on_both_backends
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.82s
+
+error: test failed, to rerun pass `-p aion-rs --test awl_retry_counting_e2e`

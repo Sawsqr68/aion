@@ -1,0 +1,47 @@
+# RED — retry-counting lane
+# tree: build/retry-counting @ 28eb1eec + uncommitted red tests
+# rustc 1.97.1 (8bab26f4f 2026-07-14)
+# cargo 1.97.1 (c980f4866 2026-06-30)
+# date: 2026-07-28T16:13:25Z
+# cmd: cargo test -p aion-awl --test retry_counting -- --test-threads=1
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.32s
+     Running tests/retry_counting.rs (target/debug/deps/retry_counting-34595367134d854f)
+
+running 4 tests
+test declared_count_is_the_identity_and_does_not_move ... ok
+test direct_lowering_maps_three_further_attempts_to_four_total ... FAILED
+test reference_emitter_maps_three_further_attempts_to_four_total ... FAILED
+test zero_further_attempts_is_one_total_execution ... FAILED
+
+failures:
+
+---- direct_lowering_maps_three_further_attempts_to_four_total stdout ----
+
+thread 'direct_lowering_maps_three_further_attempts_to_four_total' (4832575) panicked at crates/aion-awl/tests/retry_counting.rs:130:5:
+`retry 3 every 1s` must lower to a four-attempt budget: v4 = record(retry_policy, [3, v3])
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- reference_emitter_maps_three_further_attempts_to_four_total stdout ----
+
+thread 'reference_emitter_maps_three_further_attempts_to_four_total' (4832576) panicked at crates/aion-awl/tests/retry_counting.rs:112:5:
+assertion `left == right` failed: `retry 3 every 1s` grants three FURTHER attempts — four total
+  left: "activity.RetryPolicy(max_attempts: 3"
+ right: "activity.RetryPolicy(max_attempts: 4"
+
+---- zero_further_attempts_is_one_total_execution stdout ----
+
+thread 'zero_further_attempts_is_one_total_execution' (4832577) panicked at crates/aion-awl/tests/retry_counting.rs:147:5:
+assertion `left == right` failed: `retry 0` runs the action exactly once
+  left: "activity.RetryPolicy(max_attempts: 0"
+ right: "activity.RetryPolicy(max_attempts: 1"
+
+
+failures:
+    direct_lowering_maps_three_further_attempts_to_four_total
+    reference_emitter_maps_three_further_attempts_to_four_total
+    zero_further_attempts_is_one_total_execution
+
+test result: FAILED. 1 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p aion-awl --test retry_counting`
