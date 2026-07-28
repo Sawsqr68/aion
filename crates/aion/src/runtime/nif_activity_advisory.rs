@@ -26,10 +26,10 @@ use crate::registry::WorkflowHandle;
 /// reclasses an in-flight run's activities.
 ///
 /// Returns `false` for every absence: no catalog installed, no such loaded
-/// workflow, a package that predates contract-bound identity, or an activity
-/// the contract does not declare. `false` is the pre-R5 posture (the failure
-/// faults the step), so an unresolvable class degrades to the loud behaviour,
-/// never the quiet one.
+/// workflow, a package that predates contract-bound identity, an activity the
+/// contract does not declare, or a poisoned catalog lock. `false` is the
+/// pre-R5 posture (the failure faults the step), so an unresolvable class
+/// degrades to the loud behaviour, never the quiet one.
 pub(super) fn declared_advisory(
     catalog: Option<&WorkflowCatalog>,
     handle: &WorkflowHandle,
@@ -38,15 +38,11 @@ pub(super) fn declared_advisory(
     let Some(catalog) = catalog else {
         return false;
     };
-    let Ok(Some(loaded)) = catalog.get(handle.workflow_type(), handle.loaded_version()) else {
-        return false;
-    };
-    let Ok(contract) = loaded.contract() else {
-        return false;
-    };
-    contract
-        .workers
-        .iter()
-        .flat_map(|worker| worker.actions.iter())
-        .any(|action| action.name == activity_name && action.advisory)
+    catalog
+        .declares_advisory_action(
+            handle.workflow_type(),
+            handle.loaded_version(),
+            activity_name,
+        )
+        .unwrap_or(false)
 }

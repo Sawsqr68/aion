@@ -242,6 +242,40 @@ impl WorkflowCatalog {
             .map(|entry| entry.workflow.clone()))
     }
 
+    /// Whether `activity_name` is declared `advisory` by the contract of the
+    /// exact `(type, version)` this run is pinned to
+    /// (RUNTIME-OPERATIONS.md R5).
+    ///
+    /// Answers the question WITHOUT cloning the loaded record: this runs on
+    /// every activity dispatch, and [`Self::get`] clones the whole
+    /// `PackageContract` (schemas included) to hand a record back.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EngineError::CatalogPoisoned`] when the snapshot lock is poisoned.
+    pub fn declares_advisory_action(
+        &self,
+        workflow_type: &str,
+        version: &ContentHash,
+        activity_name: &str,
+    ) -> Result<bool, EngineError> {
+        let snapshot = self.current()?;
+        let Some(entry) = snapshot
+            .by_version
+            .get(&(workflow_type.to_owned(), version.clone()))
+        else {
+            return Ok(false);
+        };
+        let Ok(contract) = entry.workflow.contract() else {
+            return Ok(false);
+        };
+        Ok(contract
+            .workers
+            .iter()
+            .flat_map(|worker| worker.actions.iter())
+            .any(|action| action.name == activity_name && action.advisory))
+    }
+
     /// Every retained loaded workflow record.
     ///
     /// # Errors
