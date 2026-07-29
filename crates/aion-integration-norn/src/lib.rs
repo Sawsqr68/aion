@@ -42,13 +42,9 @@
 //! [`AgentSession::intervene`]: aion_integrations::AgentSession::intervene
 //! [`AgentSession::wait_result`]: aion_integrations::AgentSession::wait_result
 
-/// The Norn adapter implementing [`aion_integrations::AgentHarness`].
 pub mod harness;
-/// Norn's on-wire JSON-RPC contract — the ONLY module naming Norn's method/param strings.
 pub mod protocol;
-/// The live Norn session implementing [`aion_integrations::AgentSession`].
 pub mod session;
-/// The pure §3.4 translation between Norn's wire shapes and the neutral `aion-core` types.
 pub mod translate;
 
 pub use harness::{NornHarness, registration_capabilities};

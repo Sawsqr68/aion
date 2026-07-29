@@ -3,7 +3,7 @@
 //! Two directions, both pure and independently testable:
 //!
 //! - **OUT:** [`notification_to_event`] maps a Norn `event/*` JSON-RPC notification (its `method`
-//!   + `params`, as emitted by Norn's `agent_event_to_value` with `agent_id`/`agent_role` added)
+//!   and `params`, as emitted by Norn's `agent_event_to_value` with `agent_id`/`agent_role` added)
 //!   into a neutral [`ActivityEvent`]. Anything the adapter cannot classify falls through to
 //!   [`ActivityEventKind::Raw`], so nothing is ever silently dropped.
 //! - **IN:** [`intervention_to_request`] maps a neutral [`InterventionKind`] into the Norn
@@ -112,8 +112,9 @@ pub fn parse_capabilities(
 ///   `validation_errors`, `truncation`, …) survive into the error text the caller judges retry
 ///   on. When the envelope also carries a non-null `output` (the partial a `timed_out` /
 ///   `truncated` / `schema_unreachable` stop may hold), it rides in the same message, labelled
-///   `partial output:` and bounded at [`PARTIAL_OUTPUT_MESSAGE_BYTES`], so a caller's
-///   accept-the-partial policy stays reachable.
+///   `partial output:` and bounded — a partial longer than the bound is cut with an explicit
+///   `partial output truncated for this message` marker naming the shown and total byte counts, so
+///   a caller's accept-the-partial policy stays reachable and never mistakes a cut for the whole.
 /// - a `completed` envelope with the `output` KEY ABSENT → [`HarnessError::Protocol`] — the
 ///   contract says a completed run always carries `output`. A present `"output": null` is a
 ///   legal null output and passes through.
@@ -472,11 +473,13 @@ fn raw_kind(method: &str, params: &Value) -> ActivityEventKind {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
     use aion_core::{ActivityId, InjectPriority, WorkflowId};
     use serde_json::json;
+
+    /// Failures are reported as errors naming what was expected, so no assertion needs `unwrap`.
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
 
     fn identity() -> EventIdentity {
         EventIdentity {
@@ -488,40 +491,52 @@ mod tests {
 
     /// The `event/*` notification params Norn emits (`agent_event_to_value` shape, with
     /// `agent_id` / `agent_role` added by its emitter).
-    fn params(mut value: Value, agent_role: &str) -> Value {
-        let obj = value.as_object_mut().unwrap();
-        obj.insert(
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the fixture is not a JSON object — every `event/*` params is one.
+    fn params(value: Value, agent_role: &str) -> Result<Value, Box<dyn std::error::Error>> {
+        let mut object = match value {
+            Value::Object(object) => object,
+            other => {
+                return Err(format!(
+                    "an event/* params fixture must be a JSON object, got {other}"
+                )
+                .into());
+            }
+        };
+        object.insert(
             "agent_id".to_owned(),
             json!("11111111-1111-1111-1111-111111111111"),
         );
-        obj.insert("agent_role".to_owned(), json!(agent_role));
-        value
+        object.insert("agent_role".to_owned(), json!(agent_role));
+        Ok(Value::Object(object))
     }
 
     // --- OUT: event/* notification -> ActivityEvent, one per kind ---
 
     #[test]
-    fn message_notification_maps_to_message_event() {
-        let p = params(json!({ "type": "text", "text": "hello" }), "root");
+    fn message_notification_maps_to_message_event() -> TestResult {
+        let p = params(json!({ "type": "text", "text": "hello" }), "root")?;
         let event = notification_to_event(&identity(), 0, "event/message", &p);
         assert_eq!(event.attempt, 3);
         assert_eq!(event.agent_role, "root");
-        assert_eq!(
-            event.agent_id,
-            Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap()
-        );
+        let expected_agent = Uuid::parse_str("11111111-1111-1111-1111-111111111111")
+            .map_err(|error| format!("the fixture agent id must parse: {error}"))?;
+        assert_eq!(event.agent_id, expected_agent);
         assert!(!event.ephemeral);
         match event.kind {
             ActivityEventKind::Message { role, text } => {
                 assert_eq!(role, MessageRole::Assistant);
                 assert_eq!(text, "hello");
             }
-            other => panic!("expected Message, got {other:?}"),
+            other => return Err(format!("expected a Message event, got {other:?}").into()),
         }
+        Ok(())
     }
 
     #[test]
-    fn tool_call_notification_maps_to_tool_call_event() {
+    fn tool_call_notification_maps_to_tool_call_event() -> TestResult {
         let p = params(
             json!({
                 "type": "tool_call",
@@ -531,7 +546,7 @@ mod tests {
                 "kind": "function",
             }),
             "root",
-        );
+        )?;
         let event = notification_to_event(&identity(), 1, "event/toolCall", &p);
         match event.kind {
             ActivityEventKind::ToolCall {
@@ -543,12 +558,13 @@ mod tests {
                 assert_eq!(call_id, "c1");
                 assert_eq!(input, json!({ "path": "/tmp/x" }));
             }
-            other => panic!("expected ToolCall, got {other:?}"),
+            other => return Err(format!("expected a ToolCall event, got {other:?}").into()),
         }
+        Ok(())
     }
 
     #[test]
-    fn tool_result_notification_maps_to_tool_result_event() {
+    fn tool_result_notification_maps_to_tool_result_event() -> TestResult {
         let p = params(
             json!({
                 "type": "tool_result",
@@ -558,7 +574,7 @@ mod tests {
                 "duration_ms": 3,
             }),
             "root",
-        );
+        )?;
         let event = notification_to_event(&identity(), 2, "event/toolResult", &p);
         match event.kind {
             ActivityEventKind::ToolResult {
@@ -570,16 +586,17 @@ mod tests {
                 assert_eq!(output, json!({ "bytes": 12 }));
                 assert!(!is_error);
             }
-            other => panic!("expected ToolResult, got {other:?}"),
+            other => return Err(format!("expected a ToolResult event, got {other:?}").into()),
         }
+        Ok(())
     }
 
     #[test]
-    fn text_delta_notification_maps_to_ephemeral_delta() {
+    fn text_delta_notification_maps_to_ephemeral_delta() -> TestResult {
         let p = params(
             json!({ "type": "text_delta", "item_id": "m1", "text": "wor" }),
             "root",
-        );
+        )?;
         let event = notification_to_event(&identity(), 3, "event/progress", &p);
         assert!(event.ephemeral, "a token delta is ephemeral");
         assert_eq!(event.store_seq, None);
@@ -591,16 +608,17 @@ mod tests {
                 assert_eq!(message_id, "m1");
                 assert_eq!(text_fragment, "wor");
             }
-            other => panic!("expected Delta, got {other:?}"),
+            other => return Err(format!("expected a Delta event, got {other:?}").into()),
         }
+        Ok(())
     }
 
     #[test]
-    fn tool_call_delta_notification_is_ephemeral() {
+    fn tool_call_delta_notification_is_ephemeral() -> TestResult {
         let p = params(
             json!({ "type": "tool_call_delta", "text": "{\"pa" }),
             "root",
-        );
+        )?;
         let event = notification_to_event(&identity(), 3, "event/progress", &p);
         assert!(
             event.ephemeral,
@@ -611,12 +629,13 @@ mod tests {
             ActivityEventKind::Progress {
                 detail: ProgressDetail::Note { text },
             } => assert_eq!(text, "tool_call_delta"),
-            other => panic!("expected Progress::Note, got {other:?}"),
+            other => return Err(format!("expected a Progress::Note event, got {other:?}").into()),
         }
+        Ok(())
     }
 
     #[test]
-    fn raw_per_token_delta_notification_is_ephemeral_and_drops_its_payload() {
+    fn raw_per_token_delta_notification_is_ephemeral_and_drops_its_payload() -> TestResult {
         // The 2026-07-23 remediation-packet flood: provider-native per-token
         // frames arriving under `event/raw` were persisted whole (payload and
         // all), writing gigabytes per hour. They are the same class as the
@@ -628,7 +647,7 @@ mod tests {
                 "obfuscation": "xK9dQ2"
             }),
             "root",
-        );
+        )?;
         let event = notification_to_event(&identity(), 3, "event/raw", &p);
         assert!(
             event.ephemeral,
@@ -639,13 +658,14 @@ mod tests {
             ActivityEventKind::Progress {
                 detail: ProgressDetail::Note { text },
             } => assert_eq!(text, "response.function_call_arguments.delta"),
-            other => panic!("expected Progress::Note, got {other:?}"),
+            other => return Err(format!("expected a Progress::Note event, got {other:?}").into()),
         }
+        Ok(())
     }
 
     #[test]
-    fn raw_non_delta_notification_stays_durable() {
-        let p = params(json!({ "type": "response.completed", "id": "r1" }), "root");
+    fn raw_non_delta_notification_stays_durable() -> TestResult {
+        let p = params(json!({ "type": "response.completed", "id": "r1" }), "root")?;
         let event = notification_to_event(&identity(), 3, "event/raw", &p);
         assert!(
             !event.ephemeral,
@@ -653,65 +673,78 @@ mod tests {
         );
         match event.kind {
             ActivityEventKind::Raw { source, .. } => assert_eq!(source, "event/raw"),
-            other => panic!("expected Raw, got {other:?}"),
+            other => return Err(format!("expected a Raw event, got {other:?}").into()),
         }
+        Ok(())
     }
 
     #[test]
-    fn usage_estimate_notification_maps_to_progress() {
+    fn usage_estimate_notification_maps_to_progress() -> TestResult {
         let p = params(
             json!({ "type": "usage_estimate", "input_tokens": 100 }),
             "root",
-        );
+        )?;
         let event = notification_to_event(&identity(), 4, "event/progress", &p);
         assert!(!event.ephemeral);
         match event.kind {
             ActivityEventKind::Progress {
                 detail: ProgressDetail::UsageEstimate { input_tokens, .. },
             } => assert_eq!(input_tokens, Some(100)),
-            other => panic!("expected Progress::UsageEstimate, got {other:?}"),
+            other => {
+                return Err(
+                    format!("expected a Progress::UsageEstimate event, got {other:?}").into(),
+                );
+            }
         }
+        Ok(())
     }
 
     #[test]
-    fn stop_notification_maps_stop_reasons() {
+    fn stop_notification_maps_stop_reasons() -> TestResult {
         for (label, expected) in [
             ("end_turn", StopKind::EndTurn),
             ("tool_use", StopKind::ToolUse),
             ("max_tokens", StopKind::LimitReached),
         ] {
-            let p = params(json!({ "type": "done", "stop_reason": label }), "root");
+            let p = params(json!({ "type": "done", "stop_reason": label }), "root")?;
             let event = notification_to_event(&identity(), 5, "event/stop", &p);
             match event.kind {
                 ActivityEventKind::Stop { reason } => assert_eq!(reason, expected),
-                other => panic!("expected Stop, got {other:?}"),
+                other => {
+                    return Err(
+                        format!("expected a Stop event for `{label}`, got {other:?}").into(),
+                    );
+                }
             }
         }
+        Ok(())
     }
 
     #[test]
-    fn unknown_stop_reason_falls_through_to_other() {
-        let p = params(json!({ "type": "done", "stop_reason": "weird" }), "root");
+    fn unknown_stop_reason_falls_through_to_other() -> TestResult {
+        let p = params(json!({ "type": "done", "stop_reason": "weird" }), "root")?;
         let event = notification_to_event(&identity(), 6, "event/stop", &p);
         match event.kind {
             ActivityEventKind::Stop {
                 reason: StopKind::Other { reason },
             } => assert_eq!(reason, "weird"),
-            other => panic!("expected Stop::Other, got {other:?}"),
+            other => return Err(format!("expected a Stop::Other event, got {other:?}").into()),
         }
+        Ok(())
     }
 
     #[test]
-    fn unclassifiable_notification_falls_through_to_raw() {
-        let p = params(json!({ "type": "compaction", "item_type": "x" }), "root");
+    fn unclassifiable_notification_falls_through_to_raw() -> TestResult {
+        let p = params(json!({ "type": "compaction", "item_type": "x" }), "root")?;
         let event = notification_to_event(&identity(), 7, "event/raw", &p);
         match event.kind {
             ActivityEventKind::Raw { source, value } => {
                 assert_eq!(source, "event/raw");
                 assert_eq!(value["type"], json!("compaction"));
             }
-            other => panic!("expected Raw, got {other:?}"),
+            other => return Err(format!("expected a Raw event, got {other:?}").into()),
         }
+        Ok(())
     }
 
     #[test]
@@ -730,39 +763,43 @@ mod tests {
     // --- IN: neutral InterventionKind -> Norn intervene/* request ---
 
     #[test]
-    fn inject_interrupt_maps_to_inject_message_request() {
+    fn inject_interrupt_maps_to_inject_message_request() -> TestResult {
         let req = intervention_to_request(&InterventionKind::InjectMessage {
             text: "use the other module".to_owned(),
             priority: InjectPriority::Interrupt,
         })
-        .unwrap();
+        .map_err(|error| format!("an advertised inject must build a request: {error}"))?;
         assert_eq!(req.method, "intervene/injectMessage");
         assert_eq!(req.params["text"], json!("use the other module"));
         assert_eq!(req.params["priority"], json!("interrupt"));
+        Ok(())
     }
 
     #[test]
-    fn inject_normal_maps_to_normal_priority() {
+    fn inject_normal_maps_to_normal_priority() -> TestResult {
         let req = intervention_to_request(&InterventionKind::InjectMessage {
             text: "context".to_owned(),
             priority: InjectPriority::Normal,
         })
-        .unwrap();
+        .map_err(|error| format!("an advertised inject must build a request: {error}"))?;
         assert_eq!(req.params["priority"], json!("normal"));
+        Ok(())
     }
 
     #[test]
-    fn cancel_maps_to_cancel_request() {
+    fn cancel_maps_to_cancel_request() -> TestResult {
         let req = intervention_to_request(&InterventionKind::Cancel {
             reason: "operator abort".to_owned(),
         })
-        .unwrap();
+        .map_err(|error| format!("an advertised cancel must build a request: {error}"))?;
         assert_eq!(req.method, "intervene/cancel");
         assert_eq!(req.params["reason"], json!("operator abort"));
+        Ok(())
     }
 
     #[test]
-    fn unsupported_primitives_are_capability_not_supported_and_never_build_a_request() {
+    fn unsupported_primitives_are_capability_not_supported_and_never_build_a_request() -> TestResult
+    {
         for kind in [
             InterventionKind::PauseResume { paused: true },
             InterventionKind::UpdateBudget {
@@ -775,62 +812,77 @@ mod tests {
                 note: None,
             },
         ] {
-            let error = intervention_to_request(&kind).unwrap_err();
+            let Err(error) = intervention_to_request(&kind) else {
+                return Err(
+                    format!("{kind:?} must be refused, never turned into a request").into(),
+                );
+            };
             assert!(
                 matches!(error, HarnessError::CapabilityNotSupported { .. }),
                 "an unsupported primitive must be capability-gated, got {error:?}"
             );
         }
+        Ok(())
     }
 
     // --- capabilities parse (behind the protocol-version gate) ---
 
     #[test]
-    fn parse_capabilities_reads_norns_advertised_set() {
+    fn parse_capabilities_reads_norns_advertised_set() -> TestResult {
         // The exact shape Norn's `initialize` result emits.
         let init = json!({
             "protocol": "norn-driven/1",
             "capabilities": { "interventions": ["inject_message", "cancel"] }
         });
-        let caps = parse_capabilities(&init).unwrap();
+        let caps = parse_capabilities(&init)
+            .map_err(|error| format!("a norn-driven/1 advertisement must parse: {error}"))?;
         assert!(caps.supports_primitive(InterventionPrimitive::InjectMessage));
         assert!(caps.supports_primitive(InterventionPrimitive::Cancel));
         assert!(!caps.supports_primitive(InterventionPrimitive::PauseResume));
+        Ok(())
     }
 
     #[test]
-    fn parse_capabilities_missing_array_is_empty_set() {
+    fn parse_capabilities_missing_array_is_empty_set() -> TestResult {
         let init = json!({ "protocol": "norn-driven/1", "capabilities": {} });
-        let caps = parse_capabilities(&init).unwrap();
+        let caps = parse_capabilities(&init).map_err(|error| {
+            format!("an advertisement without an interventions array must parse: {error}")
+        })?;
         assert!(
             caps.is_empty(),
             "no interventions advertised = observability-only"
         );
+        Ok(())
     }
 
     #[test]
-    fn parse_capabilities_ignores_unknown_labels() {
+    fn parse_capabilities_ignores_unknown_labels() -> TestResult {
         let init = json!({
             "protocol": "norn-driven/1",
             "capabilities": { "interventions": ["inject_message", "teleport"] }
         });
-        let caps = parse_capabilities(&init).unwrap();
+        let caps = parse_capabilities(&init).map_err(|error| {
+            format!("an advertisement with an unknown label must parse: {error}")
+        })?;
         assert!(caps.supports_primitive(InterventionPrimitive::InjectMessage));
         // "teleport" is unknown and silently ignored, never fabricated into a primitive.
         assert_eq!(caps.supported.len(), 1);
+        Ok(())
     }
 
     // --- the protocol-version gate ---
 
     #[test]
-    fn missing_protocol_field_is_a_protocol_error_naming_expected_and_received() {
+    fn missing_protocol_field_is_a_protocol_error_naming_expected_and_received() -> TestResult {
         // The pre-norn-driven/1 shape: `protocolVersion: "2.0"` and no `protocol` field. This is
         // the "your norn binary is stale" signal.
         let init = json!({
             "protocolVersion": "2.0",
             "capabilities": { "interventions": ["inject_message", "cancel"] }
         });
-        let error = parse_capabilities(&init).unwrap_err();
+        let Err(error) = parse_capabilities(&init) else {
+            return Err("an advertisement with no `protocol` field must be refused".into());
+        };
         assert!(
             matches!(error, HarnessError::Protocol { .. }),
             "a stale advertisement is a protocol error, got {error:?}"
@@ -844,28 +896,34 @@ mod tests {
             message.contains("no `protocol` field"),
             "the error names what was received: {message}"
         );
+        Ok(())
     }
 
     #[test]
-    fn different_protocol_version_is_a_protocol_error_naming_expected_and_received() {
+    fn different_protocol_version_is_a_protocol_error_naming_expected_and_received() -> TestResult {
         let init = json!({
             "protocol": "norn-driven/2",
             "capabilities": { "interventions": ["inject_message"] }
         });
-        let error = parse_capabilities(&init).unwrap_err();
+        let Err(error) = parse_capabilities(&init) else {
+            return Err("a norn-driven/2 advertisement must be refused".into());
+        };
         assert!(matches!(error, HarnessError::Protocol { .. }));
         let message = error.to_string();
         assert!(
             message.contains("norn-driven/1") && message.contains("norn-driven/2"),
             "the error names the expected AND received versions: {message}"
         );
+        Ok(())
     }
 
     #[test]
-    fn non_string_protocol_field_is_reported_as_the_value_received() {
+    fn non_string_protocol_field_is_reported_as_the_value_received() -> TestResult {
         // A present-but-non-string `protocol` (e.g. `1`) must be reported as what actually
         // arrived, never misdescribed as a missing field.
-        let error = parse_capabilities(&json!({ "protocol": 1 })).unwrap_err();
+        let Err(error) = parse_capabilities(&json!({ "protocol": 1 })) else {
+            return Err("a non-string `protocol` field must be refused".into());
+        };
         assert!(matches!(error, HarnessError::Protocol { .. }));
         let message = error.to_string();
         assert!(
@@ -876,32 +934,38 @@ mod tests {
             !message.contains("no `protocol` field"),
             "a present field must not be reported as missing: {message}"
         );
+        Ok(())
     }
 
     // --- the run/execute stop envelope ---
 
     #[test]
-    fn completed_envelope_yields_the_output_value_as_is() {
+    fn completed_envelope_yields_the_output_value_as_is() -> TestResult {
         let envelope = json!({
             "envelope_version": 1,
             "stop": { "reason": "completed" },
             "output": { "answer": 7 },
         });
+        let output = run_result_to_output(&envelope)
+            .map_err(|error| format!("a completed envelope must yield its output: {error}"))?;
         assert_eq!(
-            run_result_to_output(&envelope).unwrap(),
+            output,
             json!({ "answer": 7 }),
             "a structured output passes through as the value, never re-stringified"
         );
+        Ok(())
     }
 
     #[test]
-    fn non_completed_stop_is_a_harness_error_carrying_the_stop_object_and_partial() {
+    fn non_completed_stop_is_a_harness_error_carrying_the_stop_object_and_partial() -> TestResult {
         let envelope = json!({
             "envelope_version": 1,
             "stop": { "reason": "timed_out", "elapsed_ms": 30000, "iterations": 4 },
             "output": "a half-written summary",
         });
-        let error = run_result_to_output(&envelope).unwrap_err();
+        let Err(error) = run_result_to_output(&envelope) else {
+            return Err("a timed_out envelope must be refused, never yield an output".into());
+        };
         assert!(matches!(error, HarnessError::Harness { .. }));
         let message = error.to_string();
         for fragment in ["timed_out", "elapsed_ms", "30000", "iterations", "4"] {
@@ -914,10 +978,11 @@ mod tests {
             message.contains("partial output: \"a half-written summary\""),
             "the partial output rides the message, labelled: {message}"
         );
+        Ok(())
     }
 
     #[test]
-    fn non_completed_stop_with_null_output_carries_no_partial_label() {
+    fn non_completed_stop_with_null_output_carries_no_partial_label() -> TestResult {
         // `max_iterations`/`cancelled` envelopes carry `output: null` — nothing to preserve, so
         // the message must not fabricate a partial.
         let envelope = json!({
@@ -925,16 +990,19 @@ mod tests {
             "stop": { "reason": "max_iterations" },
             "output": null,
         });
-        let error = run_result_to_output(&envelope).unwrap_err();
+        let Err(error) = run_result_to_output(&envelope) else {
+            return Err("a max_iterations envelope must be refused, never yield an output".into());
+        };
         let message = error.to_string();
         assert!(
             !message.contains("partial output"),
             "a null output is not a partial: {message}"
         );
+        Ok(())
     }
 
     #[test]
-    fn an_enormous_partial_output_is_bounded_with_an_explicit_marker() {
+    fn an_enormous_partial_output_is_bounded_with_an_explicit_marker() -> TestResult {
         // The bound is presentational truncation of the error MESSAGE, not data loss — the run
         // already failed. The marker makes the cut explicit.
         let huge = "x".repeat(10_000);
@@ -943,7 +1011,9 @@ mod tests {
             "stop": { "reason": "truncated", "truncation": "max_tokens", "iterations": 2 },
             "output": huge,
         });
-        let error = run_result_to_output(&envelope).unwrap_err();
+        let Err(error) = run_result_to_output(&envelope) else {
+            return Err("a truncated envelope must be refused, never yield an output".into());
+        };
         let message = error.to_string();
         assert!(
             message.contains("partial output: "),
@@ -958,17 +1028,23 @@ mod tests {
             "the message is bounded, got {} bytes",
             message.len()
         );
+        Ok(())
     }
 
     #[test]
-    fn a_completed_envelope_without_the_output_key_is_a_protocol_error() {
+    fn a_completed_envelope_without_the_output_key_is_a_protocol_error() -> TestResult {
         // The contract says completed ALWAYS carries `output`; an absent key is off-contract and
         // must never be silently coerced into a null payload.
         let envelope = json!({
             "envelope_version": 1,
             "stop": { "reason": "completed" },
         });
-        let error = run_result_to_output(&envelope).unwrap_err();
+        let Err(error) = run_result_to_output(&envelope) else {
+            return Err(
+                "a completed envelope without `output` must be refused, never yield an output"
+                    .into(),
+            );
+        };
         assert!(
             matches!(error, HarnessError::Protocol { .. }),
             "a completed envelope without output is a protocol error, got {error:?}"
@@ -979,40 +1055,54 @@ mod tests {
                 .contains("completed envelope carried no output field"),
             "the error names the off-contract shape: {error}"
         );
+        Ok(())
     }
 
     #[test]
-    fn a_completed_envelope_with_a_present_null_output_passes_null_through() {
+    fn a_completed_envelope_with_a_present_null_output_passes_null_through() -> TestResult {
         // A present `"output": null` is a legal null output, distinct from a missing key.
         let envelope = json!({
             "envelope_version": 1,
             "stop": { "reason": "completed" },
             "output": null,
         });
-        assert_eq!(run_result_to_output(&envelope).unwrap(), Value::Null);
+        let output = run_result_to_output(&envelope).map_err(|error| {
+            format!("a present null output must pass through, not fail: {error}")
+        })?;
+        assert_eq!(output, Value::Null);
+        Ok(())
     }
 
     #[test]
-    fn a_result_without_envelope_version_is_a_protocol_error_naming_it() {
+    fn a_result_without_envelope_version_is_a_protocol_error_naming_it() -> TestResult {
         // The pre-envelope shape must never silently pass through.
-        let error = run_result_to_output(&json!({ "result": "completed" })).unwrap_err();
+        let Err(error) = run_result_to_output(&json!({ "result": "completed" })) else {
+            return Err("a result without `envelope_version` must be refused".into());
+        };
         assert!(matches!(error, HarnessError::Protocol { .. }));
         assert!(error.to_string().contains("envelope_version"));
+        Ok(())
     }
 
     #[test]
-    fn a_result_without_stop_is_a_protocol_error_naming_it() {
-        let error =
-            run_result_to_output(&json!({ "envelope_version": 1, "output": "x" })).unwrap_err();
+    fn a_result_without_stop_is_a_protocol_error_naming_it() -> TestResult {
+        let Err(error) = run_result_to_output(&json!({ "envelope_version": 1, "output": "x" }))
+        else {
+            return Err("an envelope without `stop` must be refused".into());
+        };
         assert!(matches!(error, HarnessError::Protocol { .. }));
         assert!(error.to_string().contains("`stop`"));
+        Ok(())
     }
 
     #[test]
-    fn a_stop_without_a_string_reason_is_a_protocol_error() {
+    fn a_stop_without_a_string_reason_is_a_protocol_error() -> TestResult {
         let envelope = json!({ "envelope_version": 1, "stop": { "reason": 3 } });
-        let error = run_result_to_output(&envelope).unwrap_err();
+        let Err(error) = run_result_to_output(&envelope) else {
+            return Err("a `stop` without a string `reason` must be refused".into());
+        };
         assert!(matches!(error, HarnessError::Protocol { .. }));
         assert!(error.to_string().contains("`reason`"));
+        Ok(())
     }
 }

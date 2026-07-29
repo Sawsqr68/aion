@@ -280,7 +280,6 @@ impl<R, W> Drop for NornSession<R, W> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     //! Fast unit tests of the session against an IN-TEST FAKE PEER over an in-memory duplex — no
     //! real process. The fake peer feeds canned JSON-RPC frames (notifications + the id-matched
@@ -298,6 +297,9 @@ mod tests {
     use serde_json::json;
     use tokio::io::{DuplexStream, ReadHalf, WriteHalf, duplex, split};
     use uuid::Uuid;
+
+    /// Failures are reported as errors naming what was expected, so no assertion needs `unwrap`.
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
 
     type SessionUnderTest = NornSession<ReadHalf<DuplexStream>, WriteHalf<DuplexStream>>;
     /// The fake peer's own framed connection: it writes notifications/responses the session reads,
@@ -406,26 +408,32 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn live_events_stream_from_peer_notifications() {
+    async fn live_events_stream_from_peer_notifications() -> TestResult {
         let (mut session, peer, run_id) = wire();
         let mut events = session.events();
 
         // The peer streams two live event/* notifications, then the id-matched result.
-        peer.send_notification(&text_note("working")).await.unwrap();
+        peer.send_notification(&text_note("working"))
+            .await
+            .map_err(|error| format!("the peer must send the first notification: {error}"))?;
         peer.send_notification(&text_note("still working"))
             .await
-            .unwrap();
+            .map_err(|error| format!("the peer must send the second notification: {error}"))?;
 
-        let first = events.next().await.expect("first event streams live");
+        let Some(first) = events.next().await else {
+            return Err("the first event must stream live to the session".into());
+        };
         assert_eq!(first.attempt, 1);
         match first.kind {
             ActivityEventKind::Message { text, .. } => assert_eq!(text, "working"),
-            other => panic!("expected Message, got {other:?}"),
+            other => return Err(format!("expected a Message event, got {other:?}").into()),
         }
-        let second = events.next().await.expect("second event streams live");
+        let Some(second) = events.next().await else {
+            return Err("the second event must stream live to the session".into());
+        };
         match second.kind {
             ActivityEventKind::Message { text, .. } => assert_eq!(text, "still working"),
-            other => panic!("expected Message, got {other:?}"),
+            other => return Err(format!("expected a Message event, got {other:?}").into()),
         }
 
         // Close the run so wait_result completes and the stream ends.
@@ -434,117 +442,150 @@ mod tests {
             completed_envelope(&json!("all done")),
         ))
         .await
-        .unwrap();
-        let payload = session.wait_result().await.unwrap();
+        .map_err(|error| format!("the peer must send the run/execute result: {error}"))?;
+        let payload = session
+            .wait_result()
+            .await
+            .map_err(|error| format!("the completed run must yield a payload: {error}"))?;
         assert_eq!(payload.content_type(), &ContentType::Json);
+        Ok(())
     }
 
     #[tokio::test]
-    async fn wait_result_returns_the_id_matched_run_execute_response_payload() {
+    async fn wait_result_returns_the_id_matched_run_execute_response_payload() -> TestResult {
         let (session, peer, run_id) = wire();
         // A stray notification and a non-matching Response must NOT be captured as the result.
-        peer.send_notification(&text_note("noise")).await.unwrap();
+        peer.send_notification(&text_note("noise"))
+            .await
+            .map_err(|error| format!("the peer must send the stray notification: {error}"))?;
         peer.send_response(&JsonRpcResponse::success(
             JsonRpcId::number(999),
             json!({ "not": "the result" }),
         ))
         .await
-        .unwrap();
+        .map_err(|error| format!("the peer must send the non-matching response: {error}"))?;
         // Only the id-matched run/execute Response is the result.
         peer.send_response(&JsonRpcResponse::success(
             run_id,
             completed_envelope(&json!({ "answer": 7 })),
         ))
         .await
-        .unwrap();
+        .map_err(|error| format!("the peer must send the id-matched result: {error}"))?;
 
-        let payload = session.wait_result().await.unwrap();
-        let decoded = payload.to_json().unwrap();
+        let payload = session
+            .wait_result()
+            .await
+            .map_err(|error| format!("the id-matched result must yield a payload: {error}"))?;
+        let decoded = payload
+            .to_json()
+            .map_err(|error| format!("the result payload must be JSON: {error}"))?;
         assert_eq!(decoded, json!({ "answer": 7 }));
+        Ok(())
     }
 
     #[tokio::test]
-    async fn intervene_sends_request_and_awaits_the_peer_ack() {
+    async fn intervene_sends_request_and_awaits_the_peer_ack() -> TestResult {
         let (session, peer, _run_id) = wire();
 
         // Drive intervene concurrently: the peer must read the request and ack it.
         let intervene = tokio::spawn(async move { session.intervene(inject_command()).await });
 
         // The peer reads the outbound intervene/injectMessage request and acks its id.
-        let message = peer
+        let received = peer
             .recv()
             .await
-            .unwrap()
-            .expect("an intervene request arrives");
+            .map_err(|error| format!("the peer must read the intervene request: {error}"))?;
+        let Some(message) = received else {
+            return Err("an intervene request must arrive at the peer, got EOF".into());
+        };
         let request = match message {
             IncomingMessage::Request(request) => request,
-            other => panic!("expected a request, got {other:?}"),
+            other => return Err(format!("expected a request frame, got {other:?}").into()),
         };
         assert_eq!(request.method, "intervene/injectMessage");
-        assert_eq!(request.params.as_ref().unwrap()["text"], json!("steer now"));
-        assert_eq!(
-            request.params.as_ref().unwrap()["priority"],
-            json!("interrupt")
-        );
+        let Some(params) = request.params.as_ref() else {
+            return Err("the intervene request must carry params".into());
+        };
+        assert_eq!(params["text"], json!("steer now"));
+        assert_eq!(params["priority"], json!("interrupt"));
         peer.send_response(&JsonRpcResponse::success(
             request.id,
             json!({ "status": "injected" }),
         ))
         .await
-        .unwrap();
+        .map_err(|error| format!("the peer must ack the intervene request: {error}"))?;
 
         intervene
             .await
-            .unwrap()
-            .expect("the ack resolves the intervene");
+            .map_err(|error| format!("the intervene task must join cleanly: {error}"))?
+            .map_err(|error| format!("the peer ack must resolve the intervene: {error}"))?;
+        Ok(())
     }
 
     #[tokio::test]
-    async fn intervene_rejects_an_unsupported_primitive_without_sending() {
+    async fn intervene_rejects_an_unsupported_primitive_without_sending() -> TestResult {
         let (session, peer, _run_id) = wire();
         let mut cmd = inject_command();
         cmd.kind = InterventionKind::PauseResume { paused: true };
 
-        let error = session.intervene(cmd).await.unwrap_err();
+        let Err(error) = session.intervene(cmd).await else {
+            return Err("an unadvertised primitive must be refused, not accepted".into());
+        };
         assert!(
             matches!(error, HarnessError::CapabilityNotSupported { .. }),
             "an unadvertised primitive is capability-gated, got {error:?}"
         );
         // Nothing was sent: the peer sees no frame before EOF (drop the session to close it).
         drop(session);
-        let next = peer.recv().await.unwrap();
+        let next = peer
+            .recv()
+            .await
+            .map_err(|error| format!("the peer must read to EOF without error: {error}"))?;
         assert!(
             next.is_none(),
             "no request must reach the peer for a gated primitive"
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn intervene_surfaces_a_peer_error_ack() {
+    async fn intervene_surfaces_a_peer_error_ack() -> TestResult {
         let (session, peer, _run_id) = wire();
         let intervene = tokio::spawn(async move { session.intervene(inject_command()).await });
 
-        let message = peer.recv().await.unwrap().unwrap();
+        let received = peer
+            .recv()
+            .await
+            .map_err(|error| format!("the peer must read the intervene request: {error}"))?;
+        let Some(message) = received else {
+            return Err("an intervene request must arrive at the peer, got EOF".into());
+        };
         let request = match message {
             IncomingMessage::Request(request) => request,
-            other => panic!("expected a request, got {other:?}"),
+            other => return Err(format!("expected a request frame, got {other:?}").into()),
         };
         peer.send_response(&JsonRpcResponse::failure(
             request.id,
             aion_integrations::jsonrpc::JsonRpcError::new(-32603, "inbound channel full"),
         ))
         .await
-        .unwrap();
+        .map_err(|error| format!("the peer must send the error ack: {error}"))?;
 
-        let error = intervene.await.unwrap().unwrap_err();
+        let outcome = intervene
+            .await
+            .map_err(|error| format!("the intervene task must join cleanly: {error}"))?;
+        let Err(error) = outcome else {
+            return Err("a rejected intervene must not resolve successfully".into());
+        };
         assert!(
             matches!(error, HarnessError::Harness { .. }),
             "a rejected intervene surfaces as a harness error, got {error:?}"
         );
+        Ok(())
     }
 
     #[tokio::test]
-    async fn a_notification_is_never_captured_as_the_result() {
+    async fn a_notification_is_never_captured_as_the_result() -> TestResult {
         // The negative control: even an event/* notification whose params look result-shaped can
         // never fill the result slot, because it carries no id.
         let (session, peer, run_id) = wire();
@@ -556,39 +597,57 @@ mod tests {
             })),
         ))
         .await
-        .unwrap();
+        .map_err(|error| format!("the peer must send the result-shaped notification: {error}"))?;
         // Now the real result.
         peer.send_response(&JsonRpcResponse::success(
             run_id,
             completed_envelope(&json!("the real result")),
         ))
         .await
-        .unwrap();
-        let payload = session.wait_result().await.unwrap();
-        assert_eq!(payload.to_json().unwrap(), json!("the real result"));
+        .map_err(|error| format!("the peer must send the real result: {error}"))?;
+        let payload = session
+            .wait_result()
+            .await
+            .map_err(|error| format!("the id-matched result must yield a payload: {error}"))?;
+        let decoded = payload
+            .to_json()
+            .map_err(|error| format!("the result payload must be JSON: {error}"))?;
+        assert_eq!(decoded, json!("the real result"));
+        Ok(())
     }
 
     // --- response_into_payload: the stop-envelope branches ---
 
     #[test]
-    fn completed_string_output_is_the_json_string_payload() {
+    fn completed_string_output_is_the_json_string_payload() -> TestResult {
         // A schema-less run's output is a string: the payload is that VALUE serialized as JSON —
         // one layer of quoting, never stringified twice.
-        let payload = payload_of(completed_envelope(&json!("the final answer"))).unwrap();
+        let payload = payload_of(completed_envelope(&json!("the final answer")))
+            .map_err(|error| format!("a completed string output must be a payload: {error}"))?;
         assert_eq!(payload.content_type(), &ContentType::Json);
-        assert_eq!(payload.to_json().unwrap(), json!("the final answer"));
+        let decoded = payload
+            .to_json()
+            .map_err(|error| format!("the payload must be JSON: {error}"))?;
+        assert_eq!(decoded, json!("the final answer"));
+        Ok(())
     }
 
     #[test]
-    fn completed_structured_output_passes_through_as_the_object() {
+    fn completed_structured_output_passes_through_as_the_object() -> TestResult {
         // With an output schema, `output` is the validated JSON object: it passes through as-is.
         let output = json!({ "verdict": "pass", "notes": ["a", "b"] });
-        let payload = payload_of(completed_envelope(&output)).unwrap();
-        assert_eq!(payload.to_json().unwrap(), output);
+        let payload = payload_of(completed_envelope(&output))
+            .map_err(|error| format!("a completed structured output must be a payload: {error}"))?;
+        let decoded = payload
+            .to_json()
+            .map_err(|error| format!("the payload must be JSON: {error}"))?;
+        assert_eq!(decoded, output);
+        Ok(())
     }
 
     #[test]
-    fn each_non_completed_stop_reason_surfaces_with_its_detail_and_partial_verbatim() {
+    fn each_non_completed_stop_reason_surfaces_with_its_detail_and_partial_verbatim() -> TestResult
+    {
         // Every non-completed reason is a harness error whose message carries the reason AND its
         // per-variant detail fields — the caller judges retry on that text. The reasons that may
         // hold a partial `output` (timed_out / truncated / schema_unreachable) must carry it in
@@ -643,7 +702,11 @@ mod tests {
             ),
         ];
         for (stop, output, fragments) in cases {
-            let error = payload_of(stopped_envelope(&stop, &output)).unwrap_err();
+            let Err(error) = payload_of(stopped_envelope(&stop, &output)) else {
+                return Err(
+                    format!("stop {stop} must be refused as an error, never a payload").into(),
+                );
+            };
             assert!(
                 matches!(error, HarnessError::Harness { .. }),
                 "a non-completed stop is a harness error, got {error:?}"
@@ -662,15 +725,19 @@ mod tests {
                 );
             }
         }
+        Ok(())
     }
 
     #[test]
-    fn null_result_is_the_slash_command_harness_error() {
+    fn null_result_is_the_slash_command_harness_error() -> TestResult {
         // A prompt that resolves entirely to a local slash command is answered with a success
         // Response whose result is JSON null — an agent activity must produce output.
         let response: JsonRpcResponse =
-            serde_json::from_value(json!({ "jsonrpc": "2.0", "id": 1, "result": null })).unwrap();
-        let error = response_into_payload(response).unwrap_err();
+            serde_json::from_value(json!({ "jsonrpc": "2.0", "id": 1, "result": null }))
+                .map_err(|error| format!("the canned null-result frame must decode: {error}"))?;
+        let Err(error) = response_into_payload(response) else {
+            return Err("a null result must be refused as an error, never a payload".into());
+        };
         assert!(
             matches!(error, HarnessError::Harness { .. }),
             "a null result is a harness error, got {error:?}"
@@ -679,15 +746,21 @@ mod tests {
             error.to_string(),
             "harness reported failure: run resolved to a local slash command; no output"
         );
+        Ok(())
     }
 
     #[test]
-    fn a_response_with_neither_result_nor_error_is_a_protocol_error() {
+    fn a_response_with_neither_result_nor_error_is_a_protocol_error() -> TestResult {
         // A frame with NO `result` key and no `error` is a broken peer — distinct from the legal
         // `"result": null` slash-command answer above.
         let response: JsonRpcResponse =
-            serde_json::from_value(json!({ "jsonrpc": "2.0", "id": 1 })).unwrap();
-        let error = response_into_payload(response).unwrap_err();
+            serde_json::from_value(json!({ "jsonrpc": "2.0", "id": 1 }))
+                .map_err(|error| format!("the canned result-less frame must decode: {error}"))?;
+        let Err(error) = response_into_payload(response) else {
+            return Err(
+                "a frame with neither result nor error must be refused, never a payload".into(),
+            );
+        };
         assert!(
             matches!(error, HarnessError::Protocol { .. }),
             "a result-less, error-less response is a protocol error, got {error:?}"
@@ -698,24 +771,33 @@ mod tests {
                 .contains("carried neither result nor error"),
             "the error names the broken frame: {error}"
         );
+        Ok(())
     }
 
     #[test]
-    fn completed_envelope_with_present_null_output_passes_null_through() {
+    fn completed_envelope_with_present_null_output_passes_null_through() -> TestResult {
         // `"output": null` on a completed envelope is a legal null output — the payload is JSON
         // null, never an error.
-        let payload = payload_of(completed_envelope(&json!(null))).unwrap();
-        assert_eq!(payload.to_json().unwrap(), json!(null));
+        let payload = payload_of(completed_envelope(&json!(null)))
+            .map_err(|error| format!("a present null output must be a payload: {error}"))?;
+        let decoded = payload
+            .to_json()
+            .map_err(|error| format!("the payload must be JSON: {error}"))?;
+        assert_eq!(decoded, json!(null));
+        Ok(())
     }
 
     #[test]
-    fn completed_envelope_missing_the_output_key_is_a_protocol_error() {
+    fn completed_envelope_missing_the_output_key_is_a_protocol_error() -> TestResult {
         // The contract says completed ALWAYS carries `output`; an absent key is off-contract.
-        let error = payload_of(json!({
+        let Err(error) = payload_of(json!({
             "envelope_version": 1,
             "stop": { "reason": "completed" },
-        }))
-        .unwrap_err();
+        })) else {
+            return Err(
+                "a completed envelope without output must be refused, never a payload".into(),
+            );
+        };
         assert!(
             matches!(error, HarnessError::Protocol { .. }),
             "a completed envelope without output is a protocol error, got {error:?}"
@@ -725,20 +807,26 @@ mod tests {
                 .to_string()
                 .contains("completed envelope carried no output field")
         );
+        Ok(())
     }
 
     #[test]
-    fn non_envelope_result_is_a_protocol_error_never_a_silent_passthrough() {
+    fn non_envelope_result_is_a_protocol_error_never_a_silent_passthrough() -> TestResult {
         // The pre-envelope result shape must be rejected naming what was missing.
-        let error = payload_of(json!({ "result": "completed", "output": "x" })).unwrap_err();
+        let Err(error) = payload_of(json!({ "result": "completed", "output": "x" })) else {
+            return Err("a pre-envelope result shape must be refused, never a payload".into());
+        };
         assert!(
             matches!(error, HarnessError::Protocol { .. }),
             "an unknown result shape is a protocol error, got {error:?}"
         );
         assert!(error.to_string().contains("envelope_version"));
 
-        let error = payload_of(json!({ "envelope_version": 1, "output": "x" })).unwrap_err();
+        let Err(error) = payload_of(json!({ "envelope_version": 1, "output": "x" })) else {
+            return Err("an envelope without `stop` must be refused, never a payload".into());
+        };
         assert!(matches!(error, HarnessError::Protocol { .. }));
         assert!(error.to_string().contains("`stop`"));
+        Ok(())
     }
 }

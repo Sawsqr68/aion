@@ -134,7 +134,7 @@ impl NornHarness {
     /// into the neutral [`AgentRunSpec`].
     ///
     /// The argument may carry run-identity placeholders, expanded from the [`AgentRunSpec`] at
-    /// spawn time (see [`expand_arg`]): `{workflow_id}` becomes the spec's workflow id and
+    /// spawn time (see `expand_arg`): `{workflow_id}` becomes the spec's workflow id and
     /// `{activity_type}` becomes the dispatched activity-type name. Exactly those two are
     /// recognised; any other `{...}` text passes through literally.
     #[must_use]
