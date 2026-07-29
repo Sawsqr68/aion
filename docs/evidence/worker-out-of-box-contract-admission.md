@@ -298,7 +298,49 @@ Each was found by reading code this work touched. None is a regression from it.
    documentation linking the private `PARTIAL_OUTPUT_MESSAGE_BYTES`). Being fixed,
    not deferred.
 
-## `preserve_order`: investigated, benign
+## `preserve_order`: NOT benign — corrected
+
+🔴 **The section below was committed in `9d1a0bdc` concluding "benign". That conclusion
+was incomplete and is wrong as written.** Its reasoning about package identity holds
+and is unchanged. What it missed is that AWL's **emitted artifacts** also route JSON
+through `serde_json::Map` and were silently relying on its sorted iteration.
+
+A full-workspace battery caught it — which is why the battery was run rather than
+trusting three per-crate green reports. Two committed goldens go red:
+
+```
+FAIL aion-awl mir::tests::lowers_cover_and_golden
+  golden mismatch at crates/aion-awl/tests/mir-goldens/ergonomics/valid/flow_vocab_b1.mir
+FAIL aion-cli::bin/aion awl::tests::emit_gleam_synthesized_children_reproduce_the_committed_goldens
+  sidecar drifted from golden/cli_parallel.awl.json
+```
+
+Decoded, the committed golden is key-**sorted** (`entry_module`, `format_version`,
+`synthesized_workflows`; `entry_function` before `workflow_type`) and what is produced
+now is **insertion**-ordered (`format_version`, `entry_module`, …). That is
+`preserve_order` and nothing else.
+
+**Why this is more than two red tests.** Emitted sidecar and Gleam source bytes feed the
+compiled BEAM bytes, and `content_hash(beams)` is hashed over those. So the same `.awl`
+source compiles to a **different package version** depending on whether an unrelated
+crate is in the workspace. Nothing is corrupted — existing archives carry their own
+beams and stored hash, and identity recomputation is order-independent — but
+recompilation stopped being reproducible across this dependency change.
+
+**Re-blessing the goldens would be the wrong fix**, twice over: it records an accident
+caused by an unrelated feature flag as the intended contract, and it leaves the hole
+open for the next dependency that flips a serde feature. The fix is to make the
+emitters canonical **by construction**, the way `contract.rs::encode_json` already is —
+so the committed goldens pass **unmodified**, and that is the proof.
+
+**The lesson, which is the reusable part:** "the identity digest is safe" is not the
+same claim as "the output bytes are safe". I verified the first and wrote down the
+second. A dependency-level change to a serialization library needs the whole-tree
+battery, not a targeted argument about the hashes you happened to think of.
+
+### The original analysis, correct as far as it went
+
+
 
 `agent-client-protocol-schema` enables `serde_json/preserve_order`, and Cargo
 feature unification turns that on **workspace-wide** — `serde_json::Map` becomes
