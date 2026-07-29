@@ -10,7 +10,7 @@ from .payload import JSONValue
 from .stream import EventStream
 
 if TYPE_CHECKING:
-    from .client import Client, WorkflowDescription
+    from .client import Client, RunOutcome, WorkflowDescription
 
 T = TypeVar("T")
 
@@ -104,6 +104,41 @@ class WorkflowHandle:
         """
 
         await self.client.cancel(self.workflow_id, run_id=self.run_id, reason=reason, namespace=self.namespace)
+
+    async def reopen(self) -> RunOutcome:
+        """Reopen this workflow handle's target run.
+
+        Raises:
+            NotFound, InvalidArgument, Unauthenticated, NamespaceDenied,
+            Unavailable, ServerError, Cancelled.
+        """
+
+        return await self.client.reopen(self.workflow_id, run_id=self.run_id, namespace=self.namespace)
+
+    async def pause(self, *, reason: str = "") -> RunOutcome:
+        """Hold new activity dispatch for this workflow handle's target run.
+
+        Raises:
+            NotFound, InvalidArgument, Unauthenticated, NamespaceDenied,
+            Unavailable, ServerError, Cancelled.
+        """
+
+        return await self.client.pause(
+            self.workflow_id,
+            run_id=self.run_id,
+            reason=reason,
+            namespace=self.namespace,
+        )
+
+    async def resume(self) -> RunOutcome:
+        """Release the dispatch hold on this workflow handle's target run.
+
+        Raises:
+            NotFound, InvalidArgument, Unauthenticated, NamespaceDenied,
+            Unavailable, ServerError, Cancelled.
+        """
+
+        return await self.client.resume(self.workflow_id, run_id=self.run_id, namespace=self.namespace)
 
     async def describe(self, *, include_history: bool = False) -> WorkflowDescription:
         """Describe this workflow handle's target run.

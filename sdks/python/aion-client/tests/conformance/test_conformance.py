@@ -18,6 +18,7 @@ import pytest
 
 from aion_client import Client
 from aion_client.errors import AionClientError, InvalidArgument, Unavailable
+from aion_client.proto import common_pb2
 from aion_client.stream import EventStream
 
 SERVER_URL_ENV = "AION_SERVER_URL"
@@ -845,22 +846,44 @@ def _id_value(value: Any) -> str | None:
 
 
 def _status_name(value: Any) -> JSONValue:
+    """Render a workflow status in the scenario document's neutral spelling.
+
+    Two spellings arrive here and neither is the document's. A serde-encoded
+    `WorkflowSummary` carries aion-core's PascalCase name; a protobuf status field
+    carries an integer. Both are folded onto the SCREAMING_SNAKE form the shared
+    scenarios assert on.
+
+    The numeric side is resolved through the GENERATED enum descriptor rather than
+    a hand-written index table. The table it replaces stopped at 5, so `Paused`
+    (7) and `ContinuedAsNew` (6) rendered as the strings "7" and "6" and would
+    have failed any scenario asserting on them with an unreadable mismatch. Same
+    fossil shape as the stubs themselves: a private copy of the wire contract with
+    nothing keeping it honest.
+    """
+
     if isinstance(value, str):
-        # serde renders aion-core WorkflowStatus in PascalCase; the scenario
-        # document uses the language-neutral SCREAMING_SNAKE spelling.
-        names = {
-            "Running": "RUNNING",
-            "Completed": "COMPLETED",
-            "Failed": "FAILED",
-            "Cancelled": "CANCELLED",
-            "TimedOut": "TIMED_OUT",
-            "ContinuedAsNew": "CONTINUED_AS_NEW",
-        }
-        return names.get(value, value)
-    if isinstance(value, int):
-        names_by_index = {0: "UNKNOWN", 1: "RUNNING", 2: "COMPLETED", 3: "FAILED", 4: "CANCELLED", 5: "TIMED_OUT"}
-        return names_by_index.get(value, str(value))
+        return _PASCAL_STATUS_NAMES.get(value, value)
+    if isinstance(value, int) and not isinstance(value, bool):
+        try:
+            return str(common_pb2.WorkflowStatus.Name(value)).removeprefix("WORKFLOW_STATUS_")
+        except ValueError:
+            # A status the committed stubs do not define: reported verbatim so the
+            # scenario mismatch names the raw value instead of a guess.
+            return str(value)
     return normalize_json(value)
+
+
+# aion-core's serde spelling for each status, mapped to the scenario document's.
+# Derived from the generated enum's own members so a status added to the contract
+# cannot be missing from one side of this table and present on the other —
+# `test_status_names_cover_the_whole_contract` is the check that says so.
+_PASCAL_STATUS_NAMES: dict[str, str] = {
+    "".join(part.capitalize() for part in name.removeprefix("WORKFLOW_STATUS_").split("_")): name.removeprefix(
+        "WORKFLOW_STATUS_"
+    )
+    for name in common_pb2.WorkflowStatus.keys()  # .keys() is the protobuf enum wrapper's own API, not a dict's
+    if name != "WORKFLOW_STATUS_UNSPECIFIED"
+}
 
 
 def _optional_str(value: Any) -> str | None:
@@ -1006,6 +1029,31 @@ def test_ws_stream_endpoint_appends_route_and_maps_schemes() -> None:
     assert _ws_stream_endpoint("wss://aion.example/") == "wss://aion.example/events/stream"
     with pytest.raises(InvalidArgument):
         _ws_stream_endpoint("ftp://aion.example")
+
+
+def test_status_names_cover_the_whole_contract() -> None:
+    """Both status spellings must resolve for every status the contract defines.
+
+    The predecessor of `_status_name` handled six of eight, and the two it missed
+    were the two most recently added. A live scenario asserting on `PAUSED` would
+    have failed with `actual="7"` — a mismatch that reads as a server bug.
+    """
+
+    for name in common_pb2.WorkflowStatus.keys():  # .keys() is the protobuf enum wrapper's own API, not a dict's
+        neutral = name.removeprefix("WORKFLOW_STATUS_")
+        value = common_pb2.WorkflowStatus.Value(name)
+        assert _status_name(value) == neutral, f"numeric status {value} ({name}) did not render as {neutral}"
+        if neutral == "UNSPECIFIED":
+            continue
+        pascal = "".join(part.capitalize() for part in neutral.split("_"))
+        assert _status_name(pascal) == neutral, f"serde status {pascal!r} did not render as {neutral}"
+
+
+def test_an_unknown_numeric_status_is_reported_verbatim() -> None:
+    """A status newer than the stubs must not be silently renamed to something known."""
+
+    beyond = max(common_pb2.WorkflowStatus.values()) + 1
+    assert _status_name(beyond) == str(beyond)
 
 
 def test_collect_plan_reads_minimums_and_timeout() -> None:

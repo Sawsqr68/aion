@@ -5,7 +5,7 @@ import warnings
 
 from . import workflow_pb2 as workflow__pb2
 
-GRPC_GENERATED_VERSION = '1.81.1'
+GRPC_GENERATED_VERSION = '1.83.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -54,6 +54,21 @@ class WorkflowServiceStub:
                 '/aion.WorkflowService/Cancel',
                 request_serializer=workflow__pb2.CancelRequest.SerializeToString,
                 response_deserializer=workflow__pb2.CancelResponse.FromString,
+                _registered_method=True)
+        self.Reopen = channel.unary_unary(
+                '/aion.WorkflowService/Reopen',
+                request_serializer=workflow__pb2.ReopenRequest.SerializeToString,
+                response_deserializer=workflow__pb2.ReopenResponse.FromString,
+                _registered_method=True)
+        self.Pause = channel.unary_unary(
+                '/aion.WorkflowService/Pause',
+                request_serializer=workflow__pb2.PauseRequest.SerializeToString,
+                response_deserializer=workflow__pb2.PauseResponse.FromString,
+                _registered_method=True)
+        self.Resume = channel.unary_unary(
+                '/aion.WorkflowService/Resume',
+                request_serializer=workflow__pb2.ResumeRequest.SerializeToString,
+                response_deserializer=workflow__pb2.ResumeResponse.FromString,
                 _registered_method=True)
         self.ListWorkflows = channel.unary_unary(
                 '/aion.WorkflowService/ListWorkflows',
@@ -105,6 +120,11 @@ class WorkflowServiceStub:
                 request_serializer=workflow__pb2.ScheduleIdRequest.SerializeToString,
                 response_deserializer=workflow__pb2.DescribeScheduleResponse.FromString,
                 _registered_method=True)
+        self.MintNamespace = channel.unary_unary(
+                '/aion.WorkflowService/MintNamespace',
+                request_serializer=workflow__pb2.MintNamespaceRequest.SerializeToString,
+                response_deserializer=workflow__pb2.MintNamespaceResponse.FromString,
+                _registered_method=True)
 
 
 class WorkflowServiceServicer:
@@ -130,6 +150,24 @@ class WorkflowServiceServicer:
         raise NotImplementedError('Method not implemented!')
 
     def Cancel(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Reopen(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Pause(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Resume(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -195,6 +233,21 @@ class WorkflowServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def MintNamespace(self, request, context):
+        """Mint (or gate) a set of already-authorized namespaces on THIS node.
+
+        The intra-cluster vehicle for namespace-mint routing: a namespace's
+        registry record hashes to a shard of its own, so a node that does not own
+        that shard forwards the mint here rather than being fenced forever. The
+        receiving node applies its ORDINARY auto-create policy through the same
+        minter a local start uses -- a forwarded mint is exactly as privileged as
+        a local one, never a policy bypass -- and authorizes the caller from the
+        forwarded metadata exactly as any other RPC does.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_WorkflowServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -217,6 +270,21 @@ def add_WorkflowServiceServicer_to_server(servicer, server):
                     servicer.Cancel,
                     request_deserializer=workflow__pb2.CancelRequest.FromString,
                     response_serializer=workflow__pb2.CancelResponse.SerializeToString,
+            ),
+            'Reopen': grpc.unary_unary_rpc_method_handler(
+                    servicer.Reopen,
+                    request_deserializer=workflow__pb2.ReopenRequest.FromString,
+                    response_serializer=workflow__pb2.ReopenResponse.SerializeToString,
+            ),
+            'Pause': grpc.unary_unary_rpc_method_handler(
+                    servicer.Pause,
+                    request_deserializer=workflow__pb2.PauseRequest.FromString,
+                    response_serializer=workflow__pb2.PauseResponse.SerializeToString,
+            ),
+            'Resume': grpc.unary_unary_rpc_method_handler(
+                    servicer.Resume,
+                    request_deserializer=workflow__pb2.ResumeRequest.FromString,
+                    response_serializer=workflow__pb2.ResumeResponse.SerializeToString,
             ),
             'ListWorkflows': grpc.unary_unary_rpc_method_handler(
                     servicer.ListWorkflows,
@@ -267,6 +335,11 @@ def add_WorkflowServiceServicer_to_server(servicer, server):
                     servicer.DescribeSchedule,
                     request_deserializer=workflow__pb2.ScheduleIdRequest.FromString,
                     response_serializer=workflow__pb2.DescribeScheduleResponse.SerializeToString,
+            ),
+            'MintNamespace': grpc.unary_unary_rpc_method_handler(
+                    servicer.MintNamespace,
+                    request_deserializer=workflow__pb2.MintNamespaceRequest.FromString,
+                    response_serializer=workflow__pb2.MintNamespaceResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -378,6 +451,87 @@ class WorkflowService:
             '/aion.WorkflowService/Cancel',
             workflow__pb2.CancelRequest.SerializeToString,
             workflow__pb2.CancelResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Reopen(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/aion.WorkflowService/Reopen',
+            workflow__pb2.ReopenRequest.SerializeToString,
+            workflow__pb2.ReopenResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Pause(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/aion.WorkflowService/Pause',
+            workflow__pb2.PauseRequest.SerializeToString,
+            workflow__pb2.PauseResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Resume(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/aion.WorkflowService/Resume',
+            workflow__pb2.ResumeRequest.SerializeToString,
+            workflow__pb2.ResumeResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -648,6 +802,33 @@ class WorkflowService:
             '/aion.WorkflowService/DescribeSchedule',
             workflow__pb2.ScheduleIdRequest.SerializeToString,
             workflow__pb2.DescribeScheduleResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def MintNamespace(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/aion.WorkflowService/MintNamespace',
+            workflow__pb2.MintNamespaceRequest.SerializeToString,
+            workflow__pb2.MintNamespaceResponse.FromString,
             options,
             channel_credentials,
             insecure,

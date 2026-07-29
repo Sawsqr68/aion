@@ -1,6 +1,6 @@
 # aion-client
 
-Async Python caller SDK for Aion workflows. Status: in progress/hardening. The repository package is named `aion-client` and imported as `aion_client`; install from this checkout until a release is published for your target environment. It exposes connect plus the seven workflow operations: `start`, `signal`, `query`, `cancel`, `list`, `describe`, and `subscribe`.
+Async Python caller SDK for Aion workflows. Status: in progress/hardening. The repository package is named `aion-client` and imported as `aion_client`; install from this checkout until a release is published for your target environment. It exposes connect plus `start`, `signal`, `query`, `cancel`, `reopen`, `pause`, `resume`, `list`, `describe`, and `subscribe`.
 
 ## Install
 
@@ -51,6 +51,19 @@ handle = await client.start(
 )
 ```
 
+`routing_key` and `task_queue` are the two targeting dimensions. `routing_key` steers the start to the owner of that key's shard, forwarding there when the node you dialled is not the owner. `task_queue` sets the queue this workflow's activities default to, recorded durably on the start so it survives replay and failover. Omit either to mean "no selection" — a blank string is refused rather than sent, because the server reads a blank as no selection and you would get the default without being told.
+
+Both are part of the idempotency identity: reusing a key with a different routing key or task queue raises `AlreadyExists` instead of handing back the first workflow.
+
+```python
+handle = await client.start(
+    "reports.monthly",
+    {"period": "2026-07"},
+    routing_key="tenant-42",
+    task_queue="reports",
+)
+```
+
 ## signal
 
 ```python
@@ -86,6 +99,20 @@ Cancellation is a cooperative request: success means the server accepted the req
 
 ```python
 await handle.cancel(reason="caller requested cancellation")
+```
+
+## pause, resume, reopen
+
+These three are not empty acks. Each returns a `RunOutcome` carrying the run that moved and the status it moved into, because "accepted" would not tell you whether the run is actually held or live again.
+
+`pause` holds new activity dispatch on a `Running` run; the hold is durable and survives failover. `resume` releases it. `reopen` brings a reopenable terminal run back. Each targets the handle's run, or the latest run when the handle has none. A run in the wrong state raises `InvalidArgument`.
+
+```python
+held = await handle.pause(reason="holding for a store migration")
+print(held.run_id, held.status)  # -> "PAUSED"
+
+live = await handle.resume()
+print(live.status)  # -> "RUNNING"
 ```
 
 ## subscribe
@@ -126,3 +153,16 @@ except AlreadyExists:
 except Unavailable:
     print("server or stream transport is unavailable")
 ```
+
+`Unavailable` is the retryable member and covers the wrong-shard-owner fence (`not_owner`) as well as a genuinely unreachable server: in both cases retrying is the right response. `InvalidArgument` covers wrong-state refusals (`invalid_state`) — pausing a run that is not running, resuming one that is not paused.
+
+## Protobuf stubs
+
+`aion_client/proto/` holds committed protoc output generated from `crates/aion-proto-generated/proto/`. It is not generated at install time, so it must be correct in the repository. Regenerate after any change to the wire contract:
+
+```sh
+cd sdks/python/aion-client
+uv run --extra dev python -m proto_codegen
+```
+
+`tests/test_proto_contract.py` regenerates into a scratch directory and byte-compares against what is committed, so stale stubs fail CI. That gate is not optional decoration: these stubs were once a full contract behind the server — missing both start-routing fields, the whole pause/resume/reopen triple, and four error codes — with every test passing, because proto3 tolerates missing fields and the SDK simply could not reach what it could not see.

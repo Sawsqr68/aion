@@ -7,12 +7,29 @@ from dataclasses import dataclass
 from types import TracebackType
 from typing import Any, TypeVar, cast
 
-from .errors import AionClientError, AlreadyExists, InvalidArgument, QueryFailed, map_query_error, raise_mapped
+from .errors import (
+    AionClientError,
+    AlreadyExists,
+    InvalidArgument,
+    QueryFailed,
+    ServerError,
+    map_query_error,
+    raise_mapped,
+)
 from .handle import WorkflowHandle
 from .payload import JSONValue, Payload, assign_payload, decode_payload, ensure_payload, payload_from_wire
-from .transport import GrpcWorkflowTransport, MappingMetadata, WorkflowTransport, metadata
+from .transport import GrpcWorkflowTransport, MappingMetadata, WorkflowTransport, metadata, workflow_status_name
 
 T = TypeVar("T")
+
+# What a start request is keyed by for SDK-boundary idempotency: the namespace,
+# the workflow type, the payload's content type, its bytes, and BOTH routing
+# dimensions. The routing fields are part of the key because they change where
+# the workflow runs and which queue its activities go to — replaying a cached
+# handle for a key reused with a different task queue would silently discard the
+# caller's second, different intent and hand back the first workflow as though it
+# had honoured it.
+StartFingerprint = tuple[str, str, str, bytes, str | None, str | None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +49,25 @@ class WorkflowDescription:
 
     summary: Any
     history: list[Any]
+
+
+@dataclass(frozen=True, slots=True)
+class RunOutcome:
+    """The run a lifecycle transition acted on, and its projected status.
+
+    Returned by :meth:`Client.reopen`, :meth:`Client.pause`, and
+    :meth:`Client.resume`. All three carry exactly this pair — the concrete run
+    and the status the transition projects it into (``RUNNING`` after a reopen or
+    resume, ``PAUSED`` after a pause) — so one type serves all three rather than
+    three identical ones differing only in name.
+
+    ``status`` is the language-neutral status name shared with the other client
+    SDKs (``RUNNING``, ``PAUSED``, ``COMPLETED``, ...), decoded from the wire
+    enum's own descriptor.
+    """
+
+    run_id: str
+    status: str
 
 
 class Client:
@@ -85,8 +121,9 @@ class Client:
         # SDK-boundary start idempotency (the contract's hard case): the same
         # key retried with an identical request returns the original handle;
         # conflicting reuse raises AlreadyExists. Keyed by idempotency key,
-        # fingerprinted over namespace, workflow type, and encoded input.
-        self._idempotent_starts: dict[str, tuple[tuple[str, str, str, bytes], WorkflowHandle]] = {}
+        # fingerprinted over every field of the start request (see
+        # StartFingerprint).
+        self._idempotent_starts: dict[str, tuple[StartFingerprint, WorkflowHandle]] = {}
 
     @classmethod
     async def connect(
@@ -162,8 +199,22 @@ class Client:
         content_type: str | None = None,
         namespace: str | None = None,
         idempotency_key: str | None = None,
+        routing_key: str | None = None,
+        task_queue: str | None = None,
     ) -> WorkflowHandle:
         """Start a workflow and return a bound ``WorkflowHandle``.
+
+        ``routing_key`` steers the start to the owner of
+        ``shard_for(routing_key)``, forwarding there when the dialed node is not
+        the owner; omitting it keeps the default unsteered placement.
+        ``task_queue`` sets the queue this workflow's activities default to,
+        recorded durably on the start so it survives replay and failover;
+        omitting it keeps the namespace's default queue.
+
+        Neither accepts an empty or whitespace-only string. The server treats a
+        blank value as "not selected" and falls back to the default, so accepting
+        one would mean a caller who believed they had chosen a shard or a queue
+        silently got neither. Pass ``None`` to mean "no selection".
 
         Raises:
             AlreadyExists, Unauthenticated, NamespaceDenied, Unavailable,
@@ -172,10 +223,19 @@ class Client:
 
         if not workflow_type:
             raise InvalidArgument("workflow_type must not be empty")
+        _reject_blank_selection("routing_key", routing_key)
+        _reject_blank_selection("task_queue", task_queue)
         payload = ensure_payload(input, raw=raw, content_type=content_type)
-        fingerprint: tuple[str, str, str, bytes] | None = None
+        fingerprint: StartFingerprint | None = None
         if idempotency_key is not None:
-            fingerprint = (namespace or self.namespace, workflow_type, payload.content_type, bytes(payload.bytes))
+            fingerprint = (
+                namespace or self.namespace,
+                workflow_type,
+                payload.content_type,
+                bytes(payload.bytes),
+                routing_key,
+                task_queue,
+            )
             cached = self._idempotent_starts.get(idempotency_key)
             if cached is not None:
                 cached_fingerprint, cached_handle = cached
@@ -186,6 +246,15 @@ class Client:
         request.namespace = namespace or self.namespace
         request.workflow_type = workflow_type
         assign_payload(request.input, payload)
+        # `routing_key` and `task_queue` are proto3 `optional`, so assigning them
+        # is what marks them present. Leaving them unassigned is how "no
+        # selection" is expressed on the wire — never an empty string, which the
+        # server reads as absent anyway but which would make the request claim a
+        # selection it does not carry.
+        if routing_key is not None:
+            request.routing_key = routing_key
+        if task_queue is not None:
+            request.task_queue = task_queue
         try:
             response = await self._transport.start_workflow(
                 request,
@@ -297,6 +366,79 @@ class Client:
         request.reason = reason
         await self._call("cancel", self._transport.cancel(request, self._metadata))
 
+    async def reopen(
+        self,
+        workflow_id: str,
+        *,
+        run_id: str | None = None,
+        namespace: str | None = None,
+    ) -> RunOutcome:
+        """Reopen a reopenable terminal run and return it with its new status.
+
+        Targets the latest run unless ``run_id`` names one. Unlike ``cancel``,
+        this is not an empty ack: the response carries the run that is live again
+        and its projected status (``RUNNING``), because "the request was accepted"
+        would not tell the caller whether the run actually reopened.
+
+        Raises:
+            NotFound: no such workflow or run.
+            InvalidArgument: the run is not in a reopenable state.
+            Unauthenticated, NamespaceDenied, Unavailable, ServerError,
+            Cancelled.
+        """
+
+        request = self._targeted_message("ReopenRequest", namespace, workflow_id, run_id)
+        response = await self._call("reopen", self._transport.reopen(request, self._metadata))
+        return _run_outcome(response)
+
+    async def pause(
+        self,
+        workflow_id: str,
+        *,
+        run_id: str | None = None,
+        reason: str = "",
+        namespace: str | None = None,
+    ) -> RunOutcome:
+        """Hold new activity dispatch for a live run and return its new status.
+
+        Targets the latest run unless ``run_id`` names one. The hold is durable,
+        so it survives failover; ``Paused`` is a non-terminal status superseded by
+        a resume. ``reason`` is recorded for the operator and may be empty.
+
+        Raises:
+            NotFound: no such workflow or run.
+            InvalidArgument: the run is not ``Running``.
+            Unauthenticated, NamespaceDenied, Unavailable, ServerError,
+            Cancelled.
+        """
+
+        request = self._targeted_message("PauseRequest", namespace, workflow_id, run_id)
+        request.reason = reason
+        response = await self._call("pause", self._transport.pause(request, self._metadata))
+        return _run_outcome(response)
+
+    async def resume(
+        self,
+        workflow_id: str,
+        *,
+        run_id: str | None = None,
+        namespace: str | None = None,
+    ) -> RunOutcome:
+        """Release a paused run's dispatch hold and return its new status.
+
+        Targets the latest run unless ``run_id`` names one.
+
+        Raises:
+            NotFound: no such workflow or run.
+            InvalidArgument: the run is not ``Paused``.
+            Unauthenticated, NamespaceDenied, Unavailable, ServerError,
+            Cancelled.
+        """
+
+        request = self._targeted_message("ResumeRequest", namespace, workflow_id, run_id)
+        response = await self._call("resume", self._transport.resume(request, self._metadata))
+        return _run_outcome(response)
+
     async def list(self, *, namespace: str | None = None, workflow_filter: Any | None = None) -> list[Any]:
         """List workflow summaries in the namespace.
 
@@ -383,8 +525,42 @@ def _idempotency_conflict() -> AlreadyExists:
     different start request."""
 
     return AlreadyExists(
-        "idempotency key was already used by a different start request (namespace, workflow type, or input differ)"
+        "idempotency key was already used by a different start request "
+        "(namespace, workflow type, input, routing key, or task queue differ)"
     )
+
+
+def _reject_blank_selection(field: str, value: str | None) -> None:
+    """Refuse a present-but-blank routing selection.
+
+    The server trims these fields and treats a blank as "not selected", so a
+    caller passing `""` or `"  "` gets the default placement or queue with no
+    error — the request looks honoured and is not. `None` is the way to say "no
+    selection"; a blank string is a caller mistake and is reported as one.
+    """
+
+    if value is not None and not value.strip():
+        raise InvalidArgument(
+            f"{field} must not be empty or whitespace; the server reads a blank "
+            f"{field} as no selection at all, so pass None to mean that explicitly"
+        )
+
+
+def _run_outcome(response: Any) -> RunOutcome:
+    """Decode a reopen/pause/resume response into its run and projected status.
+
+    A missing run id is a SERVER fault, not a caller one: the caller asked to
+    transition a run and is entitled to know which run moved, so there is nothing
+    sensible to return without it and nothing the caller could have done
+    differently. (``start`` reports the same shape as ``InvalidArgument`` through
+    ``_id_value``; that is its established contract and is left alone here rather
+    than changed underneath it.)
+    """
+
+    uuid = getattr(getattr(response, "run_id", None), "uuid", None)
+    if not isinstance(uuid, str) or not uuid:
+        raise ServerError("server returned a lifecycle response with no run id; the transitioned run is unidentifiable")
+    return RunOutcome(run_id=uuid, status=workflow_status_name(getattr(response, "status", None)))
 
 
 def _normalize_tls(tls: TLSConfig | bool | None) -> TLSConfig:

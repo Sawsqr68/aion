@@ -16,7 +16,15 @@ from aion_client import (
     Unauthenticated,
     Unavailable,
 )
-from aion_client.errors import ErrorCode, ServerFailure, map_error, map_query_error
+from aion_client.errors import (
+    _WIRE_CODE_MAP,
+    ErrorCode,
+    ServerFailure,
+    _canonical_wire_code,
+    map_error,
+    map_query_error,
+)
+from aion_client.proto import common_pb2
 
 
 class _FakeRpcError(Exception):
@@ -206,3 +214,132 @@ def test_namespace_denied_is_branchable_and_distinct() -> None:
         raise map_error(ServerFailure(code="namespace_denied", message="denied"))
     error = map_error(ServerFailure(code="namespace_denied", message="denied"))
     assert not isinstance(error, Unauthenticated)
+
+
+# --- The wire-code table must not be allowed to fossilize again --------------
+#
+# Its predecessor was a hand-copied int-to-name mirror of the protobuf enum that
+# stopped at value 10. Four codes were added to the contract; `not_owner` (13)
+# and `invalid_state` (14) then arrived as ints, matched nothing, and were
+# reported as generic server faults — a retryable routing fence made
+# indistinguishable from a crashed backend, and a wrong-state refusal reported as
+# an internal error. Nothing failed. The tests below are what makes the next
+# addition fail instead.
+
+
+def test_every_wire_error_code_in_the_contract_is_mapped() -> None:
+    """Coverage is checked against the generated descriptor, not a copy of itself.
+
+    This is the gate the old numeric mirror never had. A code added to
+    `common.proto` and regenerated into the stubs now fails HERE, at the place
+    that has to make a taxonomy decision about it, rather than silently landing in
+    the server bucket.
+    """
+
+    # `.keys()` is the protobuf enum wrapper's own API listing every declared
+    # member; it is not a dict, so iterating it directly would yield nothing.
+    unmapped = sorted(
+        name for name in common_pb2.WireErrorCode.keys() if _canonical_wire_code(name) not in _WIRE_CODE_MAP
+    )
+    assert not unmapped, (
+        f"{unmapped} are values in the committed WireErrorCode contract with no entry in "
+        "aion_client.errors._WIRE_CODE_MAP; they would be reported as generic server "
+        "faults. Decide their taxonomy member deliberately — do not leave them to the "
+        "fallback, which is how not_owner and invalid_state were lost."
+    )
+
+
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [
+        # The four codes the fossilized table could not see, pinned by the
+        # numeric form the gRPC wire actually delivers.
+        (11, ServerError),  # deploy_denied — operator surface, not a caller error
+        (12, ServerError),  # version_pinned — operator surface, not a caller error
+        (13, Unavailable),  # not_owner — retryable shard fence, never "stop trying"
+        (14, InvalidArgument),  # invalid_state — target exists, wrong state
+    ],
+)
+def test_the_codes_added_after_the_stubs_froze_map_to_their_taxonomy_member(
+    code: int, expected: type[Exception]
+) -> None:
+    error = map_query_error(_WireQueryError(code=code, message="wire failure", detail="context"))
+    assert isinstance(error, expected), f"wire code {code} mapped to {type(error).__name__}"
+    assert str(error) == "wire failure"
+
+
+def test_not_owner_is_retryable_rather_than_a_server_fault() -> None:
+    """The distinction the fossil erased, asserted both ways.
+
+    `not_owner` means the request reached a node that does not own the target's
+    shard: re-resolve the owner and retry. Classifying it as a server fault tells
+    the caller the opposite, which is how a wrong-shard fence turns into a
+    diagnosis hunt.
+    """
+
+    for code in ("not_owner", "WIRE_ERROR_CODE_NOT_OWNER", 13):
+        error = map_query_error(_WireQueryError(code=code, message="not the shard owner"))
+        assert isinstance(error, Unavailable), f"{code!r} mapped to {type(error).__name__}"
+        assert not isinstance(error, ServerError)
+
+
+def test_invalid_state_is_a_caller_error_rather_than_a_server_fault() -> None:
+    """Pausing a run that is not Running is the caller's mistake, not the store's."""
+
+    # `ServerFailure.code` is the JSON/WebSocket spelling (a string); the numeric
+    # form only ever arrives on a protobuf message field, so each spelling is fed
+    # in through the shape that actually carries it.
+    for code in ("invalid_state", "WIRE_ERROR_CODE_INVALID_STATE"):
+        error = map_error(ServerFailure(code=code, message="run is not Running"))
+        assert isinstance(error, InvalidArgument), f"{code!r} mapped to {type(error).__name__}"
+    numeric = map_query_error(_WireQueryError(code=14, message="run is not Running"))
+    assert isinstance(numeric, InvalidArgument), f"numeric 14 mapped to {type(numeric).__name__}"
+
+
+def test_an_unspecified_wire_code_is_a_server_fault_not_an_unknown_one() -> None:
+    """Code 0 is proto3 padding: a failure the server declined to classify.
+
+    It is a real value in the contract, so it must not be reported as
+    "unrecognized" — that phrasing means "your stubs are behind the server", which
+    would send the reader to regenerate stubs that are already current.
+    """
+
+    error = map_query_error(_WireQueryError(code=0, message="unclassified", detail="context"))
+    assert isinstance(error, ServerError)
+    assert error.detail == "context"
+    assert "unrecognized" not in str(error.detail)
+
+
+def test_a_code_outside_the_committed_contract_names_itself_in_the_detail() -> None:
+    """An unclassifiable code must not be laundered into a bare "server error".
+
+    A server newer than these stubs can send a code this SDK has never heard of.
+    Server is the only honest classification, but the detail carries the number so
+    there is something to search for — the alternative is an operator staring at
+    "server error" with no thread to pull.
+    """
+
+    beyond = max(common_pb2.WireErrorCode.values()) + 1
+    error = map_query_error(_WireQueryError(code=beyond, message="future failure"))
+    assert isinstance(error, ServerError)
+    assert error.detail is not None
+    assert f"numeric_{beyond}" in error.detail
+    assert "unrecognized wire error code" in error.detail
+
+
+def test_an_unclassifiable_code_preserves_the_servers_own_detail() -> None:
+    """The added diagnostic must be additive, never a replacement."""
+
+    beyond = max(common_pb2.WireErrorCode.values()) + 1
+    error = map_query_error(_WireQueryError(code=beyond, message="future failure", detail="store said so"))
+    assert error.detail is not None
+    assert error.detail.startswith("store said so")
+    assert "unrecognized wire error code" in error.detail
+
+
+def test_a_failure_with_no_code_at_all_is_a_backend_fault() -> None:
+    """No code is not an unknown code; it is an unclassified server failure."""
+
+    error = map_error(ServerFailure(code="", message="something broke"))
+    assert isinstance(error, ServerError)
+    assert error.detail is None or "unrecognized" not in error.detail

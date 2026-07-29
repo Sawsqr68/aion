@@ -1,6 +1,6 @@
 """Public surface for the Aion Python caller SDK."""
 
-from .client import Client, TLSConfig, WorkflowDescription
+from .client import Client, RunOutcome, TLSConfig, WorkflowDescription
 from .errors import (
     AionClientError,
     AlreadyExists,
@@ -32,6 +32,7 @@ __all__ = [
     "Payload",
     "QueryFailed",
     "QueryTimeout",
+    "RunOutcome",
     "ServerError",
     "StreamEvent",
     "TLSConfig",

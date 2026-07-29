@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 import importlib
+import re
 from collections.abc import Sequence
 from types import ModuleType
 from typing import Any, Protocol
 from urllib.parse import urlparse
 
-from .errors import InvalidArgument
+from .errors import InvalidArgument, ServerError
+from .proto import common_pb2
 
 MappingMetadata = tuple[tuple[str, str], ...]
+
+# The prefix protobuf requires on every `WorkflowStatus` member because enum
+# names share one namespace per package. Stripped from the decoded name so the
+# SDK reports the language-neutral status spelling (`RUNNING`, `PAUSED`) that the
+# shared conformance contract uses, rather than the protobuf-internal one.
+_WORKFLOW_STATUS_PREFIX = "WORKFLOW_STATUS_"
 
 
 class WorkflowTransport(Protocol):
@@ -20,6 +28,9 @@ class WorkflowTransport(Protocol):
     async def signal(self, request: Any, metadata: MappingMetadata) -> Any: ...
     async def query(self, request: Any, metadata: MappingMetadata, timeout: float | None = None) -> Any: ...
     async def cancel(self, request: Any, metadata: MappingMetadata) -> Any: ...
+    async def reopen(self, request: Any, metadata: MappingMetadata) -> Any: ...
+    async def pause(self, request: Any, metadata: MappingMetadata) -> Any: ...
+    async def resume(self, request: Any, metadata: MappingMetadata) -> Any: ...
     async def list_workflows(self, request: Any, metadata: MappingMetadata) -> Any: ...
     async def describe_workflow(self, request: Any, metadata: MappingMetadata) -> Any: ...
     async def close(self) -> None: ...
@@ -74,6 +85,15 @@ class GrpcWorkflowTransport:
     async def cancel(self, request: Any, metadata: MappingMetadata) -> Any:
         return await self._stub.Cancel(request, metadata=metadata)
 
+    async def reopen(self, request: Any, metadata: MappingMetadata) -> Any:
+        return await self._stub.Reopen(request, metadata=metadata)
+
+    async def pause(self, request: Any, metadata: MappingMetadata) -> Any:
+        return await self._stub.Pause(request, metadata=metadata)
+
+    async def resume(self, request: Any, metadata: MappingMetadata) -> Any:
+        return await self._stub.Resume(request, metadata=metadata)
+
     async def list_workflows(self, request: Any, metadata: MappingMetadata) -> Any:
         return await self._stub.ListWorkflows(request, metadata=metadata)
 
@@ -117,6 +137,71 @@ def metadata(
     if namespaces is not None:
         entries.append(("x-aion-namespaces", ",".join(namespaces)))
     return tuple(entries)
+
+
+def workflow_status_name(value: Any) -> str:
+    """Decode a wire ``WorkflowStatus`` into its language-neutral name.
+
+    Reopen, pause, and resume each return the run's PROJECTED status, which is
+    the whole point of their having a response body rather than being an empty
+    ack: the caller learns the run is live again, or held. So an undecodable
+    status is a failed operation, not a detail to shrug at — every branch here
+    either produces a real status name or raises.
+
+    Protobuf enum fields read back as ``int``, resolved through the generated
+    descriptor so no name table is maintained by hand. A ``str`` is accepted for
+    non-gRPC transports and test doubles, in any of the three spellings in
+    circulation — the protobuf member name, that name without its prefix, or
+    aion-core's serde PascalCase — and is checked against the descriptor rather
+    than trusted. Naive upper-casing would turn ``TimedOut`` into ``TIMEDOUT``,
+    which is not a status and would be reported as though it were.
+
+    Raises:
+        ServerError: the status is unspecified (code 0 — the server declined to
+            report the projected status), unknown to the committed contract, or
+            of a type that carries no status at all.
+    """
+
+    if isinstance(value, str):
+        name = _status_name_from_text(value)
+    elif isinstance(value, int) and not isinstance(value, bool):
+        try:
+            name = str(common_pb2.WorkflowStatus.Name(value)).removeprefix(_WORKFLOW_STATUS_PREFIX)
+        except ValueError as exc:
+            raise ServerError(
+                f"server returned workflow status {value}, which is not a value in this "
+                "SDK's committed wire contract; the stubs are older than the server "
+                "(regenerate with `python -m proto_codegen`)"
+            ) from exc
+    else:
+        raise ServerError(f"server returned a workflow status of type {type(value).__name__}, which carries no status")
+    if not name or name == "UNSPECIFIED":
+        raise ServerError(
+            "server returned an unspecified workflow status; the projected status is "
+            "the point of this response and cannot be assumed"
+        )
+    return name
+
+
+def _status_name_from_text(value: str) -> str:
+    """Resolve a textual status to a declared enum member, or refuse it.
+
+    Both candidate spellings are checked against the generated descriptor because
+    a status name that merely LOOKS plausible is worse than an error: it would be
+    handed to the caller as a status the contract does not define.
+    """
+
+    direct = value.strip().upper().removeprefix(_WORKFLOW_STATUS_PREFIX)
+    # PascalCase (aion-core's serde spelling) split on each capital: TimedOut ->
+    # TIMED_OUT, ContinuedAsNew -> CONTINUED_AS_NEW.
+    pascal = re.sub(r"(?<!^)(?=[A-Z])", "_", value.strip()).upper()
+    for candidate in (direct, pascal):
+        if f"{_WORKFLOW_STATUS_PREFIX}{candidate}" in common_pb2.WorkflowStatus.keys():
+            return candidate
+    raise ServerError(
+        f"server returned workflow status {value!r}, which is not a status in this SDK's "
+        "committed wire contract in any recognised spelling"
+    )
 
 
 def grpc_target(endpoint: str) -> str:

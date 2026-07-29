@@ -1,5 +1,6 @@
 from . import common_pb2 as _common_pb2
 from google.protobuf.internal import containers as _containers
+from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
 from collections.abc import Iterable as _Iterable, Mapping as _Mapping
@@ -7,15 +8,44 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
+class NamespaceMintOrigin(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
+    __slots__ = ()
+    NAMESPACE_MINT_ORIGIN_UNSPECIFIED: _ClassVar[NamespaceMintOrigin]
+    NAMESPACE_MINT_ORIGIN_WORKER: _ClassVar[NamespaceMintOrigin]
+    NAMESPACE_MINT_ORIGIN_START: _ClassVar[NamespaceMintOrigin]
+    NAMESPACE_MINT_ORIGIN_EXPLICIT: _ClassVar[NamespaceMintOrigin]
+    NAMESPACE_MINT_ORIGIN_INFERRED_FROM_STATE: _ClassVar[NamespaceMintOrigin]
+NAMESPACE_MINT_ORIGIN_UNSPECIFIED: NamespaceMintOrigin
+NAMESPACE_MINT_ORIGIN_WORKER: NamespaceMintOrigin
+NAMESPACE_MINT_ORIGIN_START: NamespaceMintOrigin
+NAMESPACE_MINT_ORIGIN_EXPLICIT: NamespaceMintOrigin
+NAMESPACE_MINT_ORIGIN_INFERRED_FROM_STATE: NamespaceMintOrigin
+
+class MintNamespaceRequest(_message.Message):
+    __slots__ = ("namespaces", "origin")
+    NAMESPACES_FIELD_NUMBER: _ClassVar[int]
+    ORIGIN_FIELD_NUMBER: _ClassVar[int]
+    namespaces: _containers.RepeatedScalarFieldContainer[str]
+    origin: NamespaceMintOrigin
+    def __init__(self, namespaces: _Optional[_Iterable[str]] = ..., origin: _Optional[_Union[NamespaceMintOrigin, str]] = ...) -> None: ...
+
+class MintNamespaceResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
 class StartWorkflowRequest(_message.Message):
-    __slots__ = ("namespace", "workflow_type", "input")
+    __slots__ = ("namespace", "workflow_type", "input", "routing_key", "task_queue")
     NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_TYPE_FIELD_NUMBER: _ClassVar[int]
     INPUT_FIELD_NUMBER: _ClassVar[int]
+    ROUTING_KEY_FIELD_NUMBER: _ClassVar[int]
+    TASK_QUEUE_FIELD_NUMBER: _ClassVar[int]
     namespace: str
     workflow_type: str
     input: _common_pb2.Payload
-    def __init__(self, namespace: _Optional[str] = ..., workflow_type: _Optional[str] = ..., input: _Optional[_Union[_common_pb2.Payload, _Mapping]] = ...) -> None: ...
+    routing_key: str
+    task_queue: str
+    def __init__(self, namespace: _Optional[str] = ..., workflow_type: _Optional[str] = ..., input: _Optional[_Union[_common_pb2.Payload, _Mapping]] = ..., routing_key: _Optional[str] = ..., task_queue: _Optional[str] = ...) -> None: ...
 
 class StartWorkflowResponse(_message.Message):
     __slots__ = ("workflow_id", "run_id")
@@ -78,6 +108,62 @@ class CancelRequest(_message.Message):
 class CancelResponse(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
+
+class ReopenRequest(_message.Message):
+    __slots__ = ("namespace", "workflow_id", "run_id")
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    WORKFLOW_ID_FIELD_NUMBER: _ClassVar[int]
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    namespace: str
+    workflow_id: _common_pb2.WorkflowId
+    run_id: _common_pb2.RunId
+    def __init__(self, namespace: _Optional[str] = ..., workflow_id: _Optional[_Union[_common_pb2.WorkflowId, _Mapping]] = ..., run_id: _Optional[_Union[_common_pb2.RunId, _Mapping]] = ...) -> None: ...
+
+class ReopenResponse(_message.Message):
+    __slots__ = ("run_id", "status")
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    run_id: _common_pb2.RunId
+    status: _common_pb2.WorkflowStatus
+    def __init__(self, run_id: _Optional[_Union[_common_pb2.RunId, _Mapping]] = ..., status: _Optional[_Union[_common_pb2.WorkflowStatus, str]] = ...) -> None: ...
+
+class PauseRequest(_message.Message):
+    __slots__ = ("namespace", "workflow_id", "run_id", "reason")
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    WORKFLOW_ID_FIELD_NUMBER: _ClassVar[int]
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    REASON_FIELD_NUMBER: _ClassVar[int]
+    namespace: str
+    workflow_id: _common_pb2.WorkflowId
+    run_id: _common_pb2.RunId
+    reason: str
+    def __init__(self, namespace: _Optional[str] = ..., workflow_id: _Optional[_Union[_common_pb2.WorkflowId, _Mapping]] = ..., run_id: _Optional[_Union[_common_pb2.RunId, _Mapping]] = ..., reason: _Optional[str] = ...) -> None: ...
+
+class PauseResponse(_message.Message):
+    __slots__ = ("run_id", "status")
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    run_id: _common_pb2.RunId
+    status: _common_pb2.WorkflowStatus
+    def __init__(self, run_id: _Optional[_Union[_common_pb2.RunId, _Mapping]] = ..., status: _Optional[_Union[_common_pb2.WorkflowStatus, str]] = ...) -> None: ...
+
+class ResumeRequest(_message.Message):
+    __slots__ = ("namespace", "workflow_id", "run_id")
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    WORKFLOW_ID_FIELD_NUMBER: _ClassVar[int]
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    namespace: str
+    workflow_id: _common_pb2.WorkflowId
+    run_id: _common_pb2.RunId
+    def __init__(self, namespace: _Optional[str] = ..., workflow_id: _Optional[_Union[_common_pb2.WorkflowId, _Mapping]] = ..., run_id: _Optional[_Union[_common_pb2.RunId, _Mapping]] = ...) -> None: ...
+
+class ResumeResponse(_message.Message):
+    __slots__ = ("run_id", "status")
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    run_id: _common_pb2.RunId
+    status: _common_pb2.WorkflowStatus
+    def __init__(self, run_id: _Optional[_Union[_common_pb2.RunId, _Mapping]] = ..., status: _Optional[_Union[_common_pb2.WorkflowStatus, str]] = ...) -> None: ...
 
 class ListWorkflowsRequest(_message.Message):
     __slots__ = ("namespace", "filter")

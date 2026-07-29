@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, NoReturn
 
+from .proto import common_pb2
+
 
 class ErrorCode(str, Enum):
     """Shared language-neutral client error names."""
@@ -129,35 +131,56 @@ _GRPC_CODE_MAP: dict[str, ErrorCode] = {
     "UNKNOWN": ErrorCode.SERVER,
 }
 
+# Every `WireErrorCode` the contract defines, keyed by the stable `snake_case`
+# code that `aion_proto::WireErrorCode::as_str` documents as the branchable
+# spelling. The gRPC wire carries the same values as the protobuf enum's
+# SCREAMING_SNAKE names; `_canonical_wire_code` folds either spelling onto these
+# keys, so each code appears exactly once instead of twice.
+#
+# `tests/test_errors.py` requires this table to cover every value in the
+# generated `common_pb2.WireErrorCode` descriptor. That gate exists because this
+# table's predecessor was a hand-maintained mirror that stopped at code 10:
+# `not_owner` and `invalid_state` were added to the contract, arrived as ints
+# 13 and 14, matched nothing, and were reported as generic server faults — a
+# retryable routing fence indistinguishable from a crashed backend.
 _WIRE_CODE_MAP: dict[str, ErrorCode] = {
+    # Code 0 exists only because proto3 requires a zero value; the Rust enum has
+    # no such variant, so a server sending it is reporting a failure it declined
+    # to classify. That is a server fault, not an unrecognized code.
+    "unspecified": ErrorCode.SERVER,
     "not_found": ErrorCode.NOT_FOUND,
-    "WIRE_ERROR_CODE_NOT_FOUND": ErrorCode.NOT_FOUND,
     "namespace_denied": ErrorCode.NAMESPACE_DENIED,
-    "WIRE_ERROR_CODE_NAMESPACE_DENIED": ErrorCode.NAMESPACE_DENIED,
-    "unknown_query": ErrorCode.INVALID_ARGUMENT,
-    "WIRE_ERROR_CODE_UNKNOWN_QUERY": ErrorCode.INVALID_ARGUMENT,
-    "query_timeout": ErrorCode.QUERY_TIMEOUT,
-    "WIRE_ERROR_CODE_QUERY_TIMEOUT": ErrorCode.QUERY_TIMEOUT,
-    "not_running": ErrorCode.INVALID_ARGUMENT,
-    "WIRE_ERROR_CODE_NOT_RUNNING": ErrorCode.INVALID_ARGUMENT,
-    "lagged": ErrorCode.UNAVAILABLE,
-    "WIRE_ERROR_CODE_LAGGED": ErrorCode.UNAVAILABLE,
     # sequence_conflict signals an engine-internal double-writer bug, never an
     # idempotency conflict; it is a server fault on every operation.
     "sequence_conflict": ErrorCode.SERVER,
-    "WIRE_ERROR_CODE_SEQUENCE_CONFLICT": ErrorCode.SERVER,
+    "unknown_query": ErrorCode.INVALID_ARGUMENT,
+    "query_timeout": ErrorCode.QUERY_TIMEOUT,
+    "not_running": ErrorCode.INVALID_ARGUMENT,
+    "lagged": ErrorCode.UNAVAILABLE,
     "invalid_input": ErrorCode.INVALID_ARGUMENT,
-    "WIRE_ERROR_CODE_INVALID_INPUT": ErrorCode.INVALID_ARGUMENT,
     "backend": ErrorCode.SERVER,
-    "WIRE_ERROR_CODE_BACKEND": ErrorCode.SERVER,
     "query_failed": ErrorCode.QUERY_FAILED,
-    "WIRE_ERROR_CODE_QUERY_FAILED": ErrorCode.QUERY_FAILED,
+    # deploy_denied and version_pinned belong to the operator deploy surface,
+    # which the caller contract deliberately excludes, so no caller operation can
+    # return them. They are server faults here rather than new taxonomy members —
+    # the same call the Rust caller SDK makes.
+    "deploy_denied": ErrorCode.SERVER,
+    "version_pinned": ErrorCode.SERVER,
+    # not_owner is the wrong-shard-owner fence: the request reached a node that
+    # does not own the target's shard, and re-resolving the owner and retrying is
+    # the correct response. Unavailable is the shared taxonomy's retryable member,
+    # so that is where it belongs; Server would tell the caller to stop trying.
+    # (The Rust caller SDK gave it a dedicated `NotOwner` class, which the shared
+    # ten-code taxonomy this SDK implements with the TypeScript client has no room
+    # for; Unavailable is where Rust itself carried it before the split.)
+    "not_owner": ErrorCode.UNAVAILABLE,
+    # invalid_state means the target exists but is in the wrong state for the
+    # request — pausing a run that is not Running, resuming one that is not
+    # Paused. Distinct from not_found (absent) and backend (internal failure).
+    "invalid_state": ErrorCode.INVALID_ARGUMENT,
 }
 
-_START_IDEMPOTENCY_CODES = {
-    "already_exists",
-    "ALREADY_EXISTS",
-}
+_START_IDEMPOTENCY_CODES = {"already_exists"}
 
 
 @dataclass(frozen=True)
@@ -262,38 +285,66 @@ def _map_wire_like(error: Any, *, operation: str | None) -> AionClientError:
     message = str(getattr(error, "message", "") or getattr(error, "detail", "") or raw_code or "server error")
     detail = getattr(error, "detail", None)
 
-    code_name = _wire_code_name(raw_code)
+    code_name = _canonical_wire_code(_wire_code_name(raw_code))
     if operation == "start" and code_name in _START_IDEMPOTENCY_CODES:
         return AlreadyExists(message, detail=detail)
     mapped = _WIRE_CODE_MAP.get(code_name)
     if mapped is None:
-        mapped = _WIRE_CODE_MAP.get(code_name.lower())
-    if mapped is None:
+        # A code neither the contract nor this SDK's generated stubs know: the
+        # server is newer than the committed wire contract. Server is the only
+        # honest classification, but the code is carried into the detail so the
+        # operator can see WHICH code could not be classified instead of reading
+        # a bare "server error" and having nothing to search for.
+        unclassified = f"unrecognized wire error code {code_name!r}"
+        detail = f"{detail}; {unclassified}" if detail else unclassified
         mapped = ErrorCode.SERVER
     return error_from_code(mapped, message, detail=detail)
 
 
 def _wire_code_name(raw_code: Any) -> str:
-    if raw_code is None:
+    """Extract a wire error code's name from any of the shapes it arrives in.
+
+    A protobuf enum field reads back as a plain ``int``, so the numeric form is
+    the ordinary gRPC path rather than an exotic one, and it is resolved through
+    the GENERATED descriptor. Its predecessor was a hand-copied int-to-name table
+    that had to be edited whenever the contract grew a code and — being a copy
+    with nothing enforcing it — was not, twice.
+
+    ``None`` or a blank string means the failure carried no code at all, which the
+    shared taxonomy treats as a backend fault (an unclassified server-side
+    failure), matching how ``_map_mapping`` defaults a code-less mapping. That is
+    a different thing from a code this SDK does not RECOGNISE, which is reported
+    as such — conflating the two would send a reader off to regenerate stubs that
+    are perfectly current.
+    """
+
+    if raw_code is None or (isinstance(raw_code, str) and not raw_code.strip()):
         return "backend"
     name = getattr(raw_code, "name", None)
     if isinstance(name, str):
         return name
     if isinstance(raw_code, int):
-        numeric = {
-            1: "WIRE_ERROR_CODE_NOT_FOUND",
-            2: "WIRE_ERROR_CODE_NAMESPACE_DENIED",
-            3: "WIRE_ERROR_CODE_SEQUENCE_CONFLICT",
-            4: "WIRE_ERROR_CODE_UNKNOWN_QUERY",
-            5: "WIRE_ERROR_CODE_QUERY_TIMEOUT",
-            6: "WIRE_ERROR_CODE_NOT_RUNNING",
-            7: "WIRE_ERROR_CODE_LAGGED",
-            8: "WIRE_ERROR_CODE_INVALID_INPUT",
-            9: "WIRE_ERROR_CODE_BACKEND",
-            10: "WIRE_ERROR_CODE_QUERY_FAILED",
-        }
-        return numeric.get(raw_code, "WIRE_ERROR_CODE_BACKEND")
+        try:
+            return str(common_pb2.WireErrorCode.Name(raw_code))
+        except ValueError:
+            # Not a value in the committed contract. Reported verbatim so the
+            # unmapped branch above names the number the server actually sent,
+            # rather than being folded into `backend` and losing it.
+            return f"numeric_{raw_code}"
     return str(raw_code)
+
+
+def _canonical_wire_code(name: str) -> str:
+    """Fold either wire spelling of a code onto its stable ``snake_case`` form.
+
+    The JSON/WebSocket wire sends ``not_owner``; the protobuf descriptor names
+    the same value ``WIRE_ERROR_CODE_NOT_OWNER``. Normalising here is what lets
+    ``_WIRE_CODE_MAP`` hold one entry per code instead of two, which matters
+    because a two-spelling table is a table where half the entries can silently
+    go missing.
+    """
+
+    return name.lower().removeprefix("wire_error_code_")
 
 
 def _map_grpc_status(name: str, details: str, *, operation: str | None) -> AionClientError:

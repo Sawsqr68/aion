@@ -78,7 +78,9 @@ class EventStream(Generic[T]):
         self.decoder = decoder
         self.raw = raw
         if from_seq is not None and from_seq < 1:
-            raise InvalidArgument("from_seq must be >= 1 (the first sequence number wanted; 1 replays the full recorded history)")
+            raise InvalidArgument(
+                "from_seq must be >= 1 (the first sequence number wanted; 1 replays the full recorded history)"
+            )
         self._transport_factory = transport_factory or self._websocket_transport
         # Whether the transport can honour a non-None resume_from cursor on
         # reconnect. The built-in websocket transport can: the per-workflow

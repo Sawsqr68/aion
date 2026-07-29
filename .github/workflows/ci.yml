@@ -222,10 +222,16 @@ jobs:
   # tests therefore validated it against a fossil of the protocol. Agreement
   # was preserved exactly while correctness was lost.
   #
-  # `test_proto_contract_location.py` is the gate that catches that class: it
-  # regenerates the stubs and byte-compares them against what is committed.
-  # This job is what makes that gate real rather than something a developer
-  # might remember to run.
+  # Both packages now carry the gate that catches that class — it regenerates
+  # the stubs and byte-compares them against what is committed
+  # (`aion-worker/tests/test_proto_contract_location.py`,
+  # `aion-client/tests/test_proto_contract.py`). This job is what makes those
+  # gates real rather than something a developer might remember to run.
+  #
+  # The caller SDK went the same way for longer and less visibly: proto3
+  # tolerates missing fields, so nothing broke — it simply could not reach the
+  # start-routing fields, the pause/resume/reopen RPCs, or four error codes, and
+  # every test passed throughout.
   python-sdks:
     name: python SDKs (${{ matrix.package }})
     runs-on: ubuntu-latest
@@ -238,9 +244,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      # The worker SDK's stubs are generated from `crates/aion-proto-generated`
-      # at install time, so the checkout must include the Rust tree — it does,
-      # but the dependency is easy to miss and is the thing that broke before.
+      # Both packages need the Rust tree in the checkout: the worker SDK
+      # generates its stubs from `crates/aion-proto-generated` at build time,
+      # and both packages' staleness gates regenerate from it at test time. It
+      # is there — but the dependency is easy to miss and is the thing that
+      # broke before.
       - name: pytest
         working-directory: ${{ matrix.package }}
         run: uv run --extra dev python -m pytest tests/ -q

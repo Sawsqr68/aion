@@ -21,9 +21,16 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Typing :: Typed",
 ]
+# The grpcio and protobuf floors are NOT taste: the committed stubs in
+# aion_client/proto refuse to import on anything older. Each generated
+# `_pb2_grpc.py` raises RuntimeError below its plugin's grpcio version, and each
+# `_pb2.py` calls ValidateProtobufRuntimeVersion against its gencode version. A
+# lower floor here resolves cleanly and then fails at `import aion_client`, which
+# is what `grpcio>=1.62` did against stubs demanding 1.81.1. Regenerating the
+# stubs can move these; `tests/test_proto_contract.py` fails when they disagree.
 dependencies = [
-  "grpcio>=1.62",
-  "protobuf>=4.25",
+  "grpcio>=1.83.0",
+  "protobuf>=7.35.1",
   "websockets>=12",
 ]
 
@@ -36,6 +43,13 @@ Documentation = "https://github.com/ablative-io/aion/tree/main/sdks/python/aion-
 [project.optional-dependencies]
 dev = [
   "build>=1.2",
+  # The stub-staleness gate regenerates the committed protobuf artifacts and
+  # byte-compares, so the generator is a test dependency, not a build one (see
+  # proto_codegen.py for why this package deliberately has no build hook). The
+  # committed bytes carry the generator's version stamp, so the resolved
+  # grpcio-tools must be the one `uv.lock` pins or the comparison is a version
+  # skew rather than a staleness report.
+  "grpcio-tools>=1.83",
   "mypy>=1.10",
   "pytest>=8",
   "pytest-asyncio>=0.23",
@@ -53,6 +67,11 @@ include = ["aion_client", "README.md", "pyproject.toml"]
 [tool.ruff]
 line-length = 120
 target-version = "py310"
+# protoc output is machine-written and regenerated wholesale; linting it can only
+# produce findings nobody is allowed to act on (an edit there is erased by the
+# next regeneration and caught by tests/test_proto_contract.py). Same exclusion
+# as sdks/python/aion-worker.
+exclude = ["aion_client/proto"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
@@ -61,6 +80,7 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.10"
 strict = true
 warn_unused_ignores = true
+exclude = ["aion_client/proto"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
