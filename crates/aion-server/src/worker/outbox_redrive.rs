@@ -31,6 +31,36 @@
 //!
 //! Both checks refuse by default and are overridable only by an explicit
 //! [`RedriveMode::Forced`], which is logged at `warn` with the full reason it overrode.
+//!
+//! # Which gate is atomic, and which is not
+//!
+//! Stated exactly, because a gate believed stronger than it is is worse than a gate known to be
+//! advisory.
+//!
+//! **The judgment marker is ATOMIC and it is the control.** `failure_delivered` is never read
+//! here and acted on there: the store's `redrive_outbox_row` applies `status = 'failed'` and (in
+//! eligible mode) `failure_delivered = 0` as guards INSIDE the same transition that performs the
+//! write — one `IMMEDIATE` transaction on libSQL, one read-modify-write whose refusal writes
+//! nothing on haematite. A concurrent dead-letter, re-arm, or second redrive cannot interleave
+//! between the test and the write, and the `was_judged` an override reports comes from the
+//! store's own pre-state rather than from anything this module observed earlier.
+//!
+//! **The two history gates above are check-then-act, and structurally cannot be otherwise.** The
+//! workflow's event history and the outbox row are separate stores with no shared transaction, so
+//! nothing can read history and transition a row under one lock. They are advisory pre-checks
+//! that narrow a window, not controls that close it. The residual races, named rather than
+//! implied:
+//!
+//! - a workflow that goes terminal between the history read and the transition leaves a row
+//!   re-armed to Pending for a workflow that can never consume it — a zombie row, cleaned up by
+//!   the next [`outbox_settle`](super::outbox_settle) sweep on boot or shard adoption, and inert
+//!   until then because delivery into a terminal workflow is refused at the delivery seam;
+//! - an outcome recorded between the history read and the transition means a redrive proceeds for
+//!   an activity judged microseconds ago.
+//!
+//! Both windows are bounded by one operator-initiated call and neither can corrupt a row: the
+//! atomic guard still decides what the row BECOMES. The history gates exist to catch the crash
+//! window described in check 2, which the marker alone cannot see — not to be a second lock.
 
 use aion_core::{ActivityId, Event, WorkflowId, WorkflowStatus, status_from_events};
 use aion_store::{
