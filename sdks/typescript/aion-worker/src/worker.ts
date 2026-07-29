@@ -10,13 +10,13 @@ import {
 import {
 	connectGrpcWorkerSession,
 	type ActivityIdKey,
-	type GrpcClientFactory,
 	type Payload,
 	type WorkerConfig,
 	type WorkerSession,
 	type WorkerSessionFactory,
 	type WorkflowId,
 } from "./session.js";
+import type { GrpcClientFactory } from "./transport.js";
 
 export interface WorkerOptions {
 	readonly sessionFactory?: WorkerSessionFactory;
@@ -169,6 +169,14 @@ export class Worker {
 		}
 	}
 
+	/**
+	 * Resolves how sessions are established: an injected `sessionFactory`
+	 * wins, then an injected `clientFactory`, and otherwise the real
+	 * `@grpc/grpc-js` transport built from the generated protobuf client. A
+	 * worker configured with an endpoint therefore connects with no
+	 * hand-written wire plumbing; the injection points exist for tests and
+	 * alternative gRPC runtimes.
+	 */
 	private sessionFactory(): WorkerSessionFactory {
 		if (this.options.sessionFactory !== undefined) {
 			return this.options.sessionFactory;
@@ -177,9 +185,7 @@ export class Worker {
 		if (clientFactory !== undefined) {
 			return async (config) => connectGrpcWorkerSession(config, clientFactory);
 		}
-		throw new Error(
-			"worker run requires a sessionFactory or clientFactory to connect",
-		);
+		return async (config) => connectGrpcWorkerSession(config);
 	}
 
 	private dispatcher(liveSession: LiveSessionRouter): ActivityRegistry {

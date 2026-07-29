@@ -12,7 +12,16 @@ from typing import Protocol, TypeAlias, cast, runtime_checkable
 
 import grpc
 
-from .session import ActivityError, ActivityId, Payload, WorkerConfig, WorkerSession, WorkflowId
+from .session import (
+    ActivityDescriptor,
+    ActivityError,
+    ActivityId,
+    Payload,
+    RunId,
+    WorkerConfig,
+    WorkerSession,
+    WorkflowId,
+)
 
 ActivitySequence: TypeAlias = int
 PendingReportKey: TypeAlias = tuple[str, int]
@@ -93,10 +102,18 @@ class ServerClosedStreamError(Exception):
 
 @dataclass(frozen=True)
 class PendingCompletedReport:
-    """Completion report computed locally but not acknowledged by the engine."""
+    """Completion report computed locally but not acknowledged by the engine.
+
+    Carries the task's own ``run_id`` and ``completion_token`` because a replay
+    on a LATER session must still present the completion identity of the task
+    that produced it. Re-deriving either from the new session would be
+    fabrication, and the server rejects a result whose token it did not issue.
+    """
 
     workflow_id: WorkflowId
     activity_id: ActivityId
+    run_id: RunId
+    completion_token: str
     output: Payload
 
 
@@ -106,6 +123,8 @@ class PendingFailedReport:
 
     workflow_id: WorkflowId
     activity_id: ActivityId
+    run_id: RunId
+    completion_token: str
     failure: ActivityError
 
 
@@ -183,6 +202,7 @@ async def reconnect_with_backoff(
     connect: ConnectFactory,
     config: WorkerConfig,
     activity_types: Iterable[str],
+    descriptors: Iterable[ActivityDescriptor],
     available_handlers: Iterable[str],
     backoff: ReconnectBackoff,
     shutdown: asyncio.Event | None,
@@ -216,7 +236,9 @@ async def reconnect_with_backoff(
             logger.info("Shutdown requested during connection establishment; not dialling")
             return None
         try:
-            session = await _establish_or_shutdown(connect, config, activity_types, available_handlers, shutdown)
+            session = await _establish_or_shutdown(
+                connect, config, activity_types, descriptors, available_handlers, shutdown
+            )
             if session is None:
                 return None
             return session
@@ -246,6 +268,7 @@ async def _establish_session(
     connect: ConnectFactory,
     config: WorkerConfig,
     activity_types: Iterable[str],
+    descriptors: Iterable[ActivityDescriptor],
     available_handlers: Iterable[str],
 ) -> WorkerSession:
     """Run one full establishment attempt: dial, handshake, register.
@@ -262,7 +285,7 @@ async def _establish_session(
     try:
         session = await connect()
         await session.handshake(config)
-        await session.register(activity_types, available_handlers)
+        await session.register(activity_types, descriptors, available_handlers)
     except BaseException:
         await close_failed_session(session)
         raise
@@ -273,6 +296,7 @@ async def _establish_or_shutdown(
     connect: ConnectFactory,
     config: WorkerConfig,
     activity_types: Iterable[str],
+    descriptors: Iterable[ActivityDescriptor],
     available_handlers: Iterable[str],
     shutdown: asyncio.Event | None,
 ) -> WorkerSession | None:
@@ -288,8 +312,10 @@ async def _establish_or_shutdown(
     """
 
     if shutdown is None:
-        return await _establish_session(connect, config, activity_types, available_handlers)
-    attempt_task = asyncio.ensure_future(_establish_session(connect, config, activity_types, available_handlers))
+        return await _establish_session(connect, config, activity_types, descriptors, available_handlers)
+    attempt_task = asyncio.ensure_future(
+        _establish_session(connect, config, activity_types, descriptors, available_handlers)
+    )
     shutdown_task: asyncio.Task[bool] = asyncio.create_task(shutdown.wait())
     try:
         wait_tasks = cast(set[asyncio.Future[object]], {attempt_task, shutdown_task})
@@ -366,9 +392,21 @@ async def re_report_unacked(session: WorkerSession, tracker: UnackedResultTracke
 
     for report in tracker.snapshot():
         if isinstance(report, PendingCompletedReport):
-            await session.report_result(report.workflow_id, report.activity_id, report.output)
+            await session.report_result(
+                report.workflow_id,
+                report.activity_id,
+                report.run_id,
+                report.completion_token,
+                report.output,
+            )
         else:
-            await session.report_failure(report.workflow_id, report.activity_id, report.failure)
+            await session.report_failure(
+                report.workflow_id,
+                report.activity_id,
+                report.run_id,
+                report.completion_token,
+                report.failure,
+            )
 
 
 def activity_sequence(activity_id: ActivityId) -> ActivitySequence:

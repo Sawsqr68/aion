@@ -8,6 +8,7 @@ import {
 import { ActivityCancellationHandle, ActivityContext } from "./context.js";
 import { RetryableError, TerminalError } from "./errors.js";
 import type { ActivityFailure, ActivityTask, Payload } from "./session.js";
+import { PERMISSIVE_SCHEMA } from "./session.js";
 
 const textContentType = "application/vnd.aion+json";
 
@@ -154,6 +155,119 @@ describe("ActivityRegistry", () => {
 	});
 });
 
+describe("ActivityRegistry typed action surface", () => {
+	// RegisterWorker.activities is what proves a worker serves the contract a
+	// deployed package requires. TypeScript erases types at runtime, so these
+	// schemas are the AUTHOR's declaration — the registry's job is to make the
+	// three possible advertisements distinguishable and to refuse the one with
+	// no wire meaning.
+
+	it("advertises nothing when no activity declares a contract", () => {
+		// The proto's defined "predates contract commitment" value. The server
+		// admits this on an uncontracted queue and refuses it on a
+		// contract-bearing one, which is the honest outcome: the worker really
+		// has committed to nothing.
+		const registry = new ActivityRegistry([
+			defineActivity("charge", async () => ({ ok: true })),
+			defineActivity("refund", async () => ({ ok: true })),
+		]);
+
+		expect(registry.activityDescriptors()).toEqual([]);
+	});
+
+	it("advertises the permissive input schema when only an output is declared", () => {
+		// The server's input check is CONTRAVARIANT — schema_is_subset(contract,
+		// advertised) — so a worker claiming to accept anything satisfies every
+		// contract. It is also true: defineActivity decodes with JSON.parse and
+		// an unchecked cast, so the handler genuinely accepts any JSON.
+		const registry = new ActivityRegistry([
+			defineActivity("charge", async () => ({ ok: true }), {
+				contract: {
+					output: {
+						type: "object",
+						required: ["ok"],
+						properties: { ok: { type: "boolean" } },
+					},
+				},
+			}),
+		]);
+
+		expect(registry.activityDescriptors()).toEqual([
+			{
+				name: "charge",
+				input: PERMISSIVE_SCHEMA,
+				output: {
+					type: "object",
+					required: ["ok"],
+					properties: { ok: { type: "boolean" } },
+				},
+			},
+		]);
+	});
+
+	it("carries a declared input schema through unchanged", () => {
+		const input = {
+			type: "object",
+			required: ["amount"],
+			properties: { amount: { type: "integer" } },
+		};
+		const registry = new ActivityRegistry([
+			defineActivity("charge", async () => ({ ok: true }), {
+				contract: { input, output: { type: "object" } },
+			}),
+		]);
+
+		expect(registry.activityDescriptors()[0]?.input).toEqual(input);
+	});
+
+	it("refuses a PARTIAL action surface, naming the undeclared activities", () => {
+		// The refusal path for the descriptor decision. A partial set has no
+		// wire meaning: the server would read the gap as "this worker does not
+		// serve refund" and refuse with a message pointing at the wrong
+		// problem. Failing here names the real cause.
+		const registry = new ActivityRegistry([
+			defineActivity("charge", async () => ({ ok: true }), {
+				contract: { output: { type: "object" } },
+			}),
+			defineActivity("refund", async () => ({ ok: true })),
+			defineActivity("void", async () => ({ ok: true })),
+		]);
+
+		expect(() => registry.activityDescriptors()).toThrow(
+			"worker advertises a partial typed action surface: refund, void declared no contract while charge did",
+		);
+	});
+
+	it("sorts descriptors by name for a stable wire order", () => {
+		const contract = { contract: { output: { type: "object" } } };
+		const registry = new ActivityRegistry([
+			defineActivity("zeta", async () => ({}), contract),
+			defineActivity("alpha", async () => ({}), contract),
+			defineActivity("mid", async () => ({}), contract),
+		]);
+
+		expect(registry.activityDescriptors().map((a) => a.name)).toEqual([
+			"alpha",
+			"mid",
+			"zeta",
+		]);
+	});
+
+	it("preserves contracts across withSession rebinding", () => {
+		// withSession rebuilds the registry to reroute heartbeats; the action
+		// surface must survive that, or a reconnect would advertise nothing.
+		const registry = new ActivityRegistry([
+			defineActivity("charge", async () => ({ ok: true }), {
+				contract: { output: { type: "object" } },
+			}),
+		]).withSession({ sendHeartbeat: async () => undefined });
+
+		expect(registry.activityDescriptors()).toEqual([
+			{ name: "charge", input: PERMISSIVE_SCHEMA, output: { type: "object" } },
+		]);
+	});
+});
+
 describe("ActivityContext", () => {
 	it("resolves cancelled waiters when the handle is cancelled", async () => {
 		const handle = new ActivityCancellationHandle();
@@ -162,6 +276,8 @@ describe("ActivityContext", () => {
 				workflowId: "workflow",
 				activityId: "activity",
 				attempt: 1,
+				runId: "run-1",
+				idempotencyKey: "idem-1",
 				heartbeatSender: () => Promise.resolve(),
 			},
 			handle,
@@ -190,9 +306,13 @@ function failure(outcome: Awaited<ReturnType<ActivityRegistry["dispatch"]>>): Ac
 function task(activityType: string, input: Payload): ActivityTask {
 	return {
 		workflowId: "workflow",
-		activityId: "activity",
+		activityId: "1",
 		activityType,
 		input,
 		attempt: 1,
+		runId: "run-1",
+		completionToken: "generation-token",
+		idempotencyKey: "idem-1",
+		labels: {},
 	};
 }

@@ -11,9 +11,12 @@ import {
 	UnackedResultTracker,
 } from "./reconnect.js";
 import type {
+	ActivityCompletionIdentity,
+	ActivityDescriptor,
 	ActivityFailure,
 	ActivityTask,
 	Payload,
+	WorkerAdvertisement,
 	WorkerConfig,
 	WorkerSession,
 	WorkerSessionEvent,
@@ -44,18 +47,16 @@ class ArraySession implements WorkerSession {
 	}
 
 	public async reportResult(
-		_workflowId: string,
-		activityId: string,
+		completion: ActivityCompletionIdentity,
 	): Promise<void> {
-		this.reports.push(activityId);
+		this.reports.push(completion.activityId);
 	}
 
 	public async reportFailure(
-		_workflowId: string,
-		activityId: string,
+		completion: ActivityCompletionIdentity,
 		_failure: ActivityFailure,
 	): Promise<void> {
-		this.reports.push(activityId);
+		this.reports.push(completion.activityId);
 	}
 
 	public sendHeartbeat(): Promise<void> {
@@ -73,6 +74,10 @@ class SlowDispatcher implements ActivityDispatcher {
 
 	public activityTypes(): readonly string[] {
 		return ["slow"];
+	}
+
+	public activityDescriptors(): readonly ActivityDescriptor[] {
+		return [];
 	}
 
 	public async dispatch(): Promise<DispatchOutcome> {
@@ -118,6 +123,7 @@ describe("runWorkerLoop", () => {
 		const warnings: string[] = [];
 		const dispatcher: ActivityDispatcher = {
 			activityTypes: () => ["slow"],
+			activityDescriptors: () => [],
 			dispatch: async () => {
 				throw new Error("boom");
 			},
@@ -509,6 +515,7 @@ describe("runWorkerLoop", () => {
 		})([]);
 		const gatedDispatcher: ActivityDispatcher = {
 			activityTypes: () => ["slow"],
+			activityDescriptors: () => [],
 			dispatch: async () => {
 				await dispatchGate;
 				return { kind: "completed", output: payload };
@@ -667,8 +674,7 @@ describe("runWorkerLoop", () => {
 		const tracker = new UnackedResultTracker();
 		tracker.record({
 			kind: "completed",
-			workflowId: "workflow",
-			activityId: "unacked-1",
+			completion: completion("workflow", "unacked-1"),
 			result: payload,
 		});
 		const first = new ScriptedSession([{ kind: "throw", error: drop }]);
@@ -730,6 +736,7 @@ describe("runWorkerLoop", () => {
 		const second = new WorkflowQualifiedSession([{ kind: "closed" }]);
 		const dispatcher: ActivityDispatcher = {
 			activityTypes: () => ["slow"],
+			activityDescriptors: () => [],
 			dispatch: async (activityTask) =>
 				activityTask.workflowId === "workflow-a"
 					? { kind: "completed", output: payload }
@@ -783,8 +790,7 @@ describe("runWorkerLoop", () => {
 		const tracker = new UnackedResultTracker();
 		tracker.record({
 			kind: "completed",
-			workflowId: "workflow",
-			activityId: "unacked-1",
+			completion: completion("workflow", "unacked-1"),
 			result: payload,
 		});
 		const first = new ScriptedSession([{ kind: "throw", error: drop }]);
@@ -814,8 +820,7 @@ describe("runWorkerLoop", () => {
 		const tracker = new UnackedResultTracker();
 		tracker.record({
 			kind: "completed",
-			workflowId: "workflow",
-			activityId: "unacked-1",
+			completion: completion("workflow", "unacked-1"),
 			result: payload,
 		});
 		const first = new ScriptedSession([{ kind: "throw", error: drop }]);
@@ -1024,8 +1029,7 @@ describe("runWorkerLoop", () => {
 		const tracker = new UnackedResultTracker();
 		tracker.record({
 			kind: "completed",
-			workflowId: "workflow",
-			activityId: "unacked-1",
+			completion: completion("workflow", "unacked-1"),
 			result: payload,
 		});
 		const first = new ScriptedSession([{ kind: "throw", error: drop }]);
@@ -1194,6 +1198,8 @@ type ScriptedStep =
 class ScriptedSession implements WorkerSession {
 	public readonly reports: string[] = [];
 	public readonly registrations: string[][] = [];
+	/** Full advertisements, for the action-surface assertions. */
+	public readonly advertisements: WorkerAdvertisement[] = [];
 	public closed = false;
 	public handshakes = 0;
 
@@ -1204,8 +1210,9 @@ class ScriptedSession implements WorkerSession {
 		return Promise.resolve();
 	}
 
-	public register(activityTypes: readonly string[] = []): Promise<void> {
-		this.registrations.push([...activityTypes]);
+	public register(advertisement: WorkerAdvertisement): Promise<void> {
+		this.registrations.push([...advertisement.activityTypes]);
+		this.advertisements.push(advertisement);
 		return Promise.resolve();
 	}
 
@@ -1219,18 +1226,16 @@ class ScriptedSession implements WorkerSession {
 	}
 
 	public async reportResult(
-		_workflowId: string,
-		activityId: string,
+		completion: ActivityCompletionIdentity,
 	): Promise<void> {
-		this.reports.push(activityId);
+		this.reports.push(completion.activityId);
 	}
 
 	public async reportFailure(
-		_workflowId: string,
-		activityId: string,
+		completion: ActivityCompletionIdentity,
 		_failure: ActivityFailure,
 	): Promise<void> {
-		this.reports.push(activityId);
+		this.reports.push(completion.activityId);
 	}
 
 	public sendHeartbeat(): Promise<void> {
@@ -1250,18 +1255,20 @@ class WorkflowQualifiedSession extends ScriptedSession {
 	public readonly qualifiedReports: string[] = [];
 
 	public override async reportResult(
-		workflowId: string,
-		activityId: string,
+		completion: ActivityCompletionIdentity,
 	): Promise<void> {
-		this.qualifiedReports.push(`result:${workflowId}:${activityId}`);
+		this.qualifiedReports.push(
+			`result:${completion.workflowId}:${completion.activityId}`,
+		);
 	}
 
 	public override async reportFailure(
-		workflowId: string,
-		activityId: string,
+		completion: ActivityCompletionIdentity,
 		_failure: ActivityFailure,
 	): Promise<void> {
-		this.qualifiedReports.push(`failure:${workflowId}:${activityId}`);
+		this.qualifiedReports.push(
+			`failure:${completion.workflowId}:${completion.activityId}`,
+		);
 	}
 }
 
@@ -1316,12 +1323,31 @@ function workflowTask(workflowId: string, activityId: string): ActivityTask {
 		activityType: "slow",
 		input: payload,
 		attempt: 1,
+		runId: `run-${workflowId}`,
+		completionToken: `token-${workflowId}-${activityId}`,
+		idempotencyKey: `idem-${workflowId}-${activityId}`,
+		labels: {},
+	};
+}
+
+/** The fencing identity a task fixture would echo on its outcome. */
+function completion(
+	workflowId: string,
+	activityId: string,
+): ActivityCompletionIdentity {
+	return {
+		workflowId,
+		activityId,
+		runId: `run-${workflowId}`,
+		completionToken: `token-${workflowId}-${activityId}`,
 	};
 }
 
 function config(maxConcurrency: number): WorkerConfig {
 	return {
 		endpoint: "127.0.0.1:50051",
+		namespaces: ["default"],
+		subject: "worker",
 		taskQueue: "queue",
 		identity: "identity",
 		maxConcurrency,
@@ -1340,14 +1366,12 @@ describe("runWorkerLoop worker-protocol acks and drain", () => {
 		const tracker = new UnackedResultTracker();
 		tracker.record({
 			kind: "completed",
-			workflowId: "workflow-a",
-			activityId: "5",
+			completion: completion("workflow-a", "5"),
 			result: payload,
 		});
 		tracker.record({
 			kind: "completed",
-			workflowId: "workflow-b",
-			activityId: "5",
+			completion: completion("workflow-b", "5"),
 			result: payload,
 		});
 		const session = new ScriptedSession([
@@ -1373,14 +1397,12 @@ describe("runWorkerLoop worker-protocol acks and drain", () => {
 		const tracker = new UnackedResultTracker();
 		tracker.record({
 			kind: "completed",
-			workflowId: "workflow",
-			activityId: "1",
+			completion: completion("workflow", "1"),
 			result: payload,
 		});
 		tracker.record({
 			kind: "completed",
-			workflowId: "workflow",
-			activityId: "2",
+			completion: completion("workflow", "2"),
 			result: payload,
 		});
 		// Session 1 acks entry 1; the ack for entry 2 is "lost". Session 2's
@@ -1564,17 +1586,15 @@ describe("runWorkerLoop automatic liveness pump (#176)", () => {
 		}
 
 		public async reportResult(
-			_workflowId: string,
-			activityId: string,
+			completion: ActivityCompletionIdentity,
 		): Promise<void> {
-			this.reports.push(activityId);
+			this.reports.push(completion.activityId);
 		}
 
 		public async reportFailure(
-			_workflowId: string,
-			activityId: string,
+			completion: ActivityCompletionIdentity,
 		): Promise<void> {
-			this.reports.push(activityId);
+			this.reports.push(completion.activityId);
 		}
 
 		public sendHeartbeat(
@@ -1608,6 +1628,10 @@ describe("runWorkerLoop automatic liveness pump (#176)", () => {
 
 		public activityTypes(): readonly string[] {
 			return ["slow"];
+		}
+
+		public activityDescriptors(): readonly ActivityDescriptor[] {
+			return [];
 		}
 
 		public async dispatch(): Promise<DispatchOutcome> {
@@ -1680,5 +1704,124 @@ describe("runWorkerLoop automatic liveness pump (#176)", () => {
 		session.endStream();
 		await run;
 		expect(session.reports).toEqual(["7"]);
+	});
+});
+
+describe("runWorkerLoop completion fencing and action surface", () => {
+	/** Session recording the FULL fencing identity of every reported outcome. */
+	class IdentitySession extends ScriptedSession {
+		public readonly completions: ActivityCompletionIdentity[] = [];
+
+		public override async reportResult(
+			completion: ActivityCompletionIdentity,
+		): Promise<void> {
+			this.completions.push(completion);
+		}
+
+		public override async reportFailure(
+			completion: ActivityCompletionIdentity,
+			_failure: ActivityFailure,
+		): Promise<void> {
+			this.completions.push(completion);
+		}
+	}
+
+	it("echoes the task's run_id and completion_token verbatim on the result", async () => {
+		// End to end through dispatch: the identity the loop reports is the
+		// one the task carried, byte for byte. The server rejects a result
+		// missing either half, and a token is opaque proof of an execution
+		// generation — never something a worker may reconstruct.
+		const session = new IdentitySession([
+			{ kind: "task", task: workflowTask("wf-77", "9") },
+			{ kind: "closed" },
+		]);
+
+		await runWorkerLoop({
+			config: config(1),
+			session,
+			dispatcher: new SlowDispatcher(),
+		});
+
+		expect(session.completions).toEqual([
+			{
+				workflowId: "wf-77",
+				activityId: "9",
+				runId: "run-wf-77",
+				completionToken: "token-wf-77-9",
+			},
+		]);
+	});
+
+	it("echoes the identity on a FAILED outcome too", async () => {
+		const session = new IdentitySession([
+			{ kind: "task", task: workflowTask("wf-77", "9") },
+			{ kind: "closed" },
+		]);
+
+		await runWorkerLoop({
+			config: config(1),
+			session,
+			dispatcher: {
+				activityTypes: () => ["slow"],
+				activityDescriptors: () => [],
+				dispatch: async () => ({
+					kind: "failed" as const,
+					failure: { retryable: false, message: "declined" },
+				}),
+			},
+		});
+
+		expect(session.completions[0]?.completionToken).toBe("token-wf-77-9");
+		expect(session.completions[0]?.runId).toBe("run-wf-77");
+	});
+
+	it("advertises the dispatcher's typed action surface at registration", async () => {
+		const descriptors: readonly ActivityDescriptor[] = [
+			{ name: "slow", input: true, output: { type: "object" } },
+		];
+		const session = new ScriptedSession([{ kind: "closed" }]);
+
+		await runWorkerLoop({
+			config: config(1),
+			session,
+			dispatcher: {
+				activityTypes: () => ["slow"],
+				activityDescriptors: () => descriptors,
+				dispatch: async () => ({ kind: "completed" as const, output: payload }),
+			},
+		});
+
+		expect(session.advertisements).toEqual([
+			{ activityTypes: ["slow"], activities: descriptors },
+		]);
+	});
+
+	it("refuses a partial action surface before touching the transport", async () => {
+		// The dispatcher throws when its surface is partially declared. The
+		// loop must surface that error and close the session it was handed
+		// rather than registering, and rather than leaking the transport.
+		const refusal = new Error(
+			"worker advertises a partial typed action surface: refund declared no contract while charge did",
+		);
+		const session = new ScriptedSession([{ kind: "closed" }]);
+
+		await expect(
+			runWorkerLoop({
+				config: config(1),
+				session,
+				dispatcher: {
+					activityTypes: () => ["charge", "refund"],
+					activityDescriptors: () => {
+						throw refusal;
+					},
+					dispatch: async () => ({
+						kind: "completed" as const,
+						output: payload,
+					}),
+				},
+			}),
+		).rejects.toThrow("worker advertises a partial typed action surface");
+		expect(session.closed).toBe(true);
+		expect(session.advertisements).toEqual([]);
 	});
 });

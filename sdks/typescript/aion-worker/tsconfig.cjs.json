@@ -1,18 +1,17 @@
 {
-  "extends": "./tsconfig.json",
+  "extends": "./tsconfig.build.json",
   "compilerOptions": {
     "module": "CommonJS",
     "moduleResolution": "Node10",
     "outDir": "dist/cjs",
     "declaration": false,
     "declarationMap": false,
+    "declarationDir": null,
     "verbatimModuleSyntax": false
   },
-  "include": [
-    "src/**/*.ts"
-  ],
   "exclude": [
     "dist",
-    "node_modules"
+    "node_modules",
+    "src/**/*.test.ts"
   ]
 }

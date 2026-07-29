@@ -61,39 +61,76 @@ class ResultAck(_message.Message):
     activity_id: _common_pb2.ActivityId
     def __init__(self, workflow_id: _Optional[_Union[_common_pb2.WorkflowId, _Mapping]] = ..., activity_id: _Optional[_Union[_common_pb2.ActivityId, _Mapping]] = ...) -> None: ...
 
+class ActivityDescriptor(_message.Message):
+    __slots__ = ("name", "input_schema_json", "output_schema_json")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    INPUT_SCHEMA_JSON_FIELD_NUMBER: _ClassVar[int]
+    OUTPUT_SCHEMA_JSON_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    input_schema_json: str
+    output_schema_json: str
+    def __init__(self, name: _Optional[str] = ..., input_schema_json: _Optional[str] = ..., output_schema_json: _Optional[str] = ...) -> None: ...
+
 class RegisterWorker(_message.Message):
-    __slots__ = ("namespace", "activity_types")
-    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("namespaces", "activity_types", "task_queue", "node", "activities", "identity")
+    NAMESPACES_FIELD_NUMBER: _ClassVar[int]
     ACTIVITY_TYPES_FIELD_NUMBER: _ClassVar[int]
-    namespace: str
+    TASK_QUEUE_FIELD_NUMBER: _ClassVar[int]
+    NODE_FIELD_NUMBER: _ClassVar[int]
+    ACTIVITIES_FIELD_NUMBER: _ClassVar[int]
+    IDENTITY_FIELD_NUMBER: _ClassVar[int]
+    namespaces: _containers.RepeatedScalarFieldContainer[str]
     activity_types: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, namespace: _Optional[str] = ..., activity_types: _Optional[_Iterable[str]] = ...) -> None: ...
+    task_queue: str
+    node: str
+    activities: _containers.RepeatedCompositeFieldContainer[ActivityDescriptor]
+    identity: str
+    def __init__(self, namespaces: _Optional[_Iterable[str]] = ..., activity_types: _Optional[_Iterable[str]] = ..., task_queue: _Optional[str] = ..., node: _Optional[str] = ..., activities: _Optional[_Iterable[_Union[ActivityDescriptor, _Mapping]]] = ..., identity: _Optional[str] = ...) -> None: ...
 
 class ActivityTask(_message.Message):
-    __slots__ = ("workflow_id", "activity_id", "activity_type", "input", "attempt")
+    __slots__ = ("workflow_id", "activity_id", "activity_type", "input", "attempt", "labels", "run_id", "completion_token", "idempotency_key")
+    class LabelsEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
     WORKFLOW_ID_FIELD_NUMBER: _ClassVar[int]
     ACTIVITY_ID_FIELD_NUMBER: _ClassVar[int]
     ACTIVITY_TYPE_FIELD_NUMBER: _ClassVar[int]
     INPUT_FIELD_NUMBER: _ClassVar[int]
     ATTEMPT_FIELD_NUMBER: _ClassVar[int]
+    LABELS_FIELD_NUMBER: _ClassVar[int]
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    COMPLETION_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    IDEMPOTENCY_KEY_FIELD_NUMBER: _ClassVar[int]
     workflow_id: _common_pb2.WorkflowId
     activity_id: _common_pb2.ActivityId
     activity_type: str
     input: _common_pb2.Payload
     attempt: int
-    def __init__(self, workflow_id: _Optional[_Union[_common_pb2.WorkflowId, _Mapping]] = ..., activity_id: _Optional[_Union[_common_pb2.ActivityId, _Mapping]] = ..., activity_type: _Optional[str] = ..., input: _Optional[_Union[_common_pb2.Payload, _Mapping]] = ..., attempt: _Optional[int] = ...) -> None: ...
+    labels: _containers.ScalarMap[str, str]
+    run_id: _common_pb2.RunId
+    completion_token: str
+    idempotency_key: str
+    def __init__(self, workflow_id: _Optional[_Union[_common_pb2.WorkflowId, _Mapping]] = ..., activity_id: _Optional[_Union[_common_pb2.ActivityId, _Mapping]] = ..., activity_type: _Optional[str] = ..., input: _Optional[_Union[_common_pb2.Payload, _Mapping]] = ..., attempt: _Optional[int] = ..., labels: _Optional[_Mapping[str, str]] = ..., run_id: _Optional[_Union[_common_pb2.RunId, _Mapping]] = ..., completion_token: _Optional[str] = ..., idempotency_key: _Optional[str] = ...) -> None: ...
 
 class ActivityResult(_message.Message):
-    __slots__ = ("workflow_id", "activity_id", "result", "error")
+    __slots__ = ("workflow_id", "activity_id", "result", "error", "run_id", "completion_token")
     WORKFLOW_ID_FIELD_NUMBER: _ClassVar[int]
     ACTIVITY_ID_FIELD_NUMBER: _ClassVar[int]
     RESULT_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    COMPLETION_TOKEN_FIELD_NUMBER: _ClassVar[int]
     workflow_id: _common_pb2.WorkflowId
     activity_id: _common_pb2.ActivityId
     result: _common_pb2.Payload
     error: ActivityError
-    def __init__(self, workflow_id: _Optional[_Union[_common_pb2.WorkflowId, _Mapping]] = ..., activity_id: _Optional[_Union[_common_pb2.ActivityId, _Mapping]] = ..., result: _Optional[_Union[_common_pb2.Payload, _Mapping]] = ..., error: _Optional[_Union[ActivityError, _Mapping]] = ...) -> None: ...
+    run_id: _common_pb2.RunId
+    completion_token: str
+    def __init__(self, workflow_id: _Optional[_Union[_common_pb2.WorkflowId, _Mapping]] = ..., activity_id: _Optional[_Union[_common_pb2.ActivityId, _Mapping]] = ..., result: _Optional[_Union[_common_pb2.Payload, _Mapping]] = ..., error: _Optional[_Union[ActivityError, _Mapping]] = ..., run_id: _Optional[_Union[_common_pb2.RunId, _Mapping]] = ..., completion_token: _Optional[str] = ...) -> None: ...
 
 class ActivityError(_message.Message):
     __slots__ = ("kind", "message", "details")

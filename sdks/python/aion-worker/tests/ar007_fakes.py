@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import TypeVar
 
 from aion_worker import (
+    ActivityDescriptor,
     ActivityExecutionContext,
     ActivityTask,
     Completed,
@@ -24,6 +25,33 @@ def payload() -> common_pb2.Payload:
 
 def workflow_id() -> common_pb2.WorkflowId:
     return common_pb2.WorkflowId(uuid="workflow-1")
+
+
+def run_id() -> common_pb2.RunId:
+    return common_pb2.RunId(uuid="run-1")
+
+
+COMPLETION_TOKEN = "generation-1"
+"""The server's proof of execution generation, echoed verbatim on every result."""
+
+IDEMPOTENCY_KEY = "effect-key-1"
+
+
+def descriptors() -> list[ActivityDescriptor]:
+    """A minimal typed action surface for the `slow` fake activity.
+
+    Real, not empty: an empty `activities` list is what the server reads as
+    "this worker predates contract commitment", so tests that pass one would
+    exercise a registration no contract-bearing deployment accepts.
+    """
+
+    return [
+        ActivityDescriptor(
+            name="slow",
+            input_schema_json="true",
+            output_schema_json='{"type": "object"}',
+        )
+    ]
 
 
 def activity_id(sequence_position: int) -> common_pb2.ActivityId:
@@ -93,6 +121,10 @@ class FakeSession:
     log: list[str] = field(default_factory=list)
     handshakes: list[tuple[str, str]] = field(default_factory=list)
     registrations: list[list[str]] = field(default_factory=list)
+    advertised: list[list[ActivityDescriptor]] = field(default_factory=list)
+    reported: list[tuple[str, str, str]] = field(default_factory=list)
+    """(kind, run uuid, completion token) for every outcome report, so tests can
+    prove the completion identity was echoed rather than merely accepted."""
     drop_after_events: bool = False
     closed: bool = False
 
@@ -100,12 +132,18 @@ class FakeSession:
         self.handshakes.append((worker_config.task_queue, worker_config.identity))
         self.log.append("handshake")
 
-    async def register(self, activity_types: Iterable[str], available_handlers: Iterable[str]) -> None:
+    async def register(
+        self,
+        activity_types: Iterable[str],
+        descriptors: Iterable[ActivityDescriptor],
+        available_handlers: Iterable[str],
+    ) -> None:
         registered = list(activity_types)
         missing = [name for name in registered if name not in set(available_handlers)]
         if missing:
             raise AssertionError(f"missing fake handler for {missing[0]}")
         self.registrations.append(registered)
+        self.advertised.append(list(descriptors))
         self.log.append("register")
 
     async def push(self, event: WorkerSessionEvent) -> None:
@@ -118,16 +156,22 @@ class FakeSession:
         self,
         workflow: common_pb2.WorkflowId,
         activity: common_pb2.ActivityId,
+        run: common_pb2.RunId,
+        completion_token: str,
         result: common_pb2.Payload,
     ) -> None:
+        self.reported.append(("result", run.uuid, completion_token))
         self.log.append(f"result:{activity.sequence_position}")
 
     async def report_failure(
         self,
         workflow: common_pb2.WorkflowId,
         activity: common_pb2.ActivityId,
+        run: common_pb2.RunId,
+        completion_token: str,
         failure: worker_pb2.ActivityError,
     ) -> None:
+        self.reported.append(("failure", run.uuid, completion_token))
         self.log.append(f"failure:{activity.sequence_position}")
 
     async def send_heartbeat(
@@ -212,8 +256,11 @@ def task(sequence_position: int, activity_type: str = "slow") -> TaskReceived:
         ActivityTask(
             workflow_id=workflow_id(),
             activity_id=activity_id(sequence_position),
+            run_id=run_id(),
             activity_type=activity_type,
             input=payload(),
             attempt=1,
+            completion_token=COMPLETION_TOKEN,
+            idempotency_key=IDEMPOTENCY_KEY,
         )
     )

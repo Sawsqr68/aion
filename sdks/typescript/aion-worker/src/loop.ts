@@ -16,13 +16,16 @@ import {
 	type WorkerLogger,
 } from "./reconnect.js";
 import type {
+	ActivityDescriptor,
 	ActivityFailure,
 	ActivityTask,
 	Payload,
+	WorkerAdvertisement,
 	WorkerConfig,
 	WorkerSession,
 	WorkerSessionFactory,
 } from "./session.js";
+import { completionIdentity } from "./session.js";
 
 export type DispatchOutcome =
 	| { readonly kind: "completed"; readonly output: Payload }
@@ -30,6 +33,12 @@ export type DispatchOutcome =
 
 export interface ActivityDispatcher {
 	activityTypes(): readonly string[];
+	/**
+	 * The typed action surface to advertise. Throws when the dispatcher holds
+	 * a partially-declared surface, which has no wire meaning — see
+	 * `ActivityRegistry.activityDescriptors`.
+	 */
+	activityDescriptors(): readonly ActivityDescriptor[];
 	dispatch(task: ActivityTask): Promise<DispatchOutcome>;
 	cancelAll?(): void;
 }
@@ -95,7 +104,21 @@ export async function runWorkerLoop(
 	validateMaxConcurrency(options.config.maxConcurrency);
 	const reconnect = requireReconnectConfig(options.config.reconnect);
 	let session = options.session;
-	const activityTypes = options.dispatcher.activityTypes();
+	// Built once, before any transport use, and reused on every reconnect: the
+	// advertisement is a property of this worker build, not of a session. A
+	// partially-declared action surface throws here, so the failure names the
+	// activity instead of arriving later as a remote schema diff. The session
+	// this loop was handed is closed first so the throw never leaks it.
+	let advertisement: WorkerAdvertisement;
+	try {
+		advertisement = {
+			activityTypes: options.dispatcher.activityTypes(),
+			activities: options.dispatcher.activityDescriptors(),
+		};
+	} catch (error) {
+		await closeFailedSession(session, options.logger);
+		throw error;
+	}
 	if (shutdownRequested(options.signal)) {
 		options.logger?.info(
 			"worker shutdown requested before registration; not serving",
@@ -105,7 +128,7 @@ export async function runWorkerLoop(
 	}
 	try {
 		await session.handshake(options.config);
-		await session.register(activityTypes);
+		await session.register(advertisement);
 	} catch (error) {
 		await closeFailedSession(session, options.logger);
 		if (!isRetryableSessionError(error)) {
@@ -307,7 +330,7 @@ export async function runWorkerLoop(
 			}
 			const replacement = await reconnectWithBackoff(
 				options.config,
-				activityTypes,
+				advertisement,
 				{
 					createSession: options.sessionFactory,
 					sleep: options.sleep,
@@ -620,12 +643,16 @@ async function dispatchAndReport(
 	health: SessionHealth,
 ): Promise<void> {
 	const outcome = await dispatchWithClassification(task, options);
+	// Echoed verbatim from the task that produced this outcome — the server
+	// rejects any result whose run id or completion token is missing, and a
+	// token is proof of an execution generation, never something a worker may
+	// infer.
+	const completion = completionIdentity(task);
 	let reported: boolean;
 	if (outcome.kind === "completed") {
 		const report: PendingActivityReport = {
 			kind: "completed",
-			workflowId: task.workflowId,
-			activityId: task.activityId,
+			completion,
 			result: outcome.output,
 		};
 		options.tracker?.record(report);
@@ -633,16 +660,14 @@ async function dispatchAndReport(
 			activityId: task.activityId,
 		});
 		reported = await reportSafely(
-			() =>
-				session.reportResult(task.workflowId, task.activityId, outcome.output),
+			() => session.reportResult(completion, outcome.output),
 			task,
 			options,
 		);
 	} else {
 		const report: PendingActivityReport = {
 			kind: "failed",
-			workflowId: task.workflowId,
-			activityId: task.activityId,
+			completion,
 			failure: outcome.failure,
 		};
 		options.tracker?.record(report);
@@ -651,12 +676,7 @@ async function dispatchAndReport(
 			retryable: outcome.failure.retryable,
 		});
 		reported = await reportSafely(
-			() =>
-				session.reportFailure(
-					task.workflowId,
-					task.activityId,
-					outcome.failure,
-				),
+			() => session.reportFailure(completion, outcome.failure),
 			task,
 			options,
 		);

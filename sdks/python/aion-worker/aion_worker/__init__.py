@@ -8,8 +8,15 @@ from .activity import (
     default_registry,
     encode_json_payload,
 )
+from .codec import (
+    PayloadDecodeError,
+    ResultEncodeError,
+    decode_activity_input,
+    encode_activity_output,
+)
 from .context import ActivityCancellationHandle, ActivityContext
 from .errors import RetryableError, TerminalError
+from .host import ScriptLoadError, load_activity_script
 from .loop import (
     ActivityDispatcher,
     ActivityExecutionContext,
@@ -37,8 +44,16 @@ from .reconnect import (
     re_report_unacked,
     reconnect_with_backoff,
 )
+from .schema import (
+    PERMISSIVE_SCHEMA,
+    SchemaDerivationError,
+    derive_input_schema,
+    derive_output_schema,
+    schema_for_annotation,
+)
 from .session import (
     ActivityCancelled,
+    ActivityDescriptor,
     ActivityTask,
     DrainReceived,
     GrpcWorkerSession,
@@ -46,6 +61,7 @@ from .session import (
     RegisteredSessionInfo,
     RegistrationError,
     ResultAcknowledged,
+    RunId,
     TaskReceived,
     TransportCredentials,
     TransportError,
@@ -53,15 +69,16 @@ from .session import (
     WorkerSession,
     WorkerSessionError,
     WorkerSessionEvent,
+    default_node,
     validate_activity_handlers,
 )
 from .worker import Worker
 
 __all__ = [
-    "NON_RETRYABLE_STATUS_CODES",
     "ActivityCancellationHandle",
     "ActivityCancelled",
     "ActivityContext",
+    "ActivityDescriptor",
     "ActivityDispatcher",
     "ActivityExecutionContext",
     "ActivityRegistrationError",
@@ -73,6 +90,9 @@ __all__ = [
     "Drained",
     "Failed",
     "GrpcWorkerSession",
+    "NON_RETRYABLE_STATUS_CODES",
+    "PERMISSIVE_SCHEMA",
+    "PayloadDecodeError",
     "PendingActivityReport",
     "PendingCompletedReport",
     "PendingFailedReport",
@@ -82,7 +102,11 @@ __all__ = [
     "RegisteredSessionInfo",
     "RegistrationError",
     "ResultAcknowledged",
+    "ResultEncodeError",
     "RetryableError",
+    "RunId",
+    "SchemaDerivationError",
+    "ScriptLoadError",
     "ServerClosedStreamError",
     "SessionHealth",
     "ShutdownRequested",
@@ -99,13 +123,20 @@ __all__ = [
     "WorkerSessionEvent",
     "activity",
     "connect_register_replay_and_serve",
+    "decode_activity_input",
     "decode_json_payload",
+    "default_node",
     "default_registry",
+    "derive_input_schema",
+    "derive_output_schema",
+    "encode_activity_output",
     "encode_json_payload",
     "grpc_status_code",
     "is_retryable_session_error",
+    "load_activity_script",
     "re_report_unacked",
     "reconnect_with_backoff",
+    "schema_for_annotation",
     "serve",
     "validate_activity_handlers",
 ]

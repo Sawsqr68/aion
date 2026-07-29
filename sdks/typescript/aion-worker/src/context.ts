@@ -10,6 +10,15 @@ export interface ActivityContextOptions {
 	readonly workflowId: WorkflowId;
 	readonly activityId: ActivityIdKey;
 	readonly attempt: number;
+	/** Concrete run that owns the task, echoed from the wire. */
+	readonly runId: string;
+	/**
+	 * Stable external-effect key for this run and action site, identical
+	 * across retries and execution generations. Surfaced to handlers so a
+	 * side effect the ENGINE cannot deduplicate (a payment, an email) can be
+	 * deduplicated by the handler itself.
+	 */
+	readonly idempotencyKey: string;
 	readonly heartbeatSender: HeartbeatSender;
 	readonly contentType?: string;
 }
@@ -47,6 +56,10 @@ export class ActivityCancellationHandle {
 export class ActivityContext {
 	public readonly activityId: ActivityIdKey;
 	public readonly attempt: number;
+	/** Concrete run that owns this task. */
+	public readonly runId: string;
+	/** Stable external-effect key; identical across retries of this action site. */
+	public readonly idempotencyKey: string;
 	private readonly workflowId: WorkflowId;
 	private readonly heartbeatSender: HeartbeatSender;
 	private readonly cancellation: ActivityCancellationHandle;
@@ -59,6 +72,8 @@ export class ActivityContext {
 		this.workflowId = options.workflowId;
 		this.activityId = options.activityId;
 		this.attempt = options.attempt;
+		this.runId = options.runId;
+		this.idempotencyKey = options.idempotencyKey;
 		this.heartbeatSender = options.heartbeatSender;
 		this.cancellation = cancellation;
 		this.contentType = options.contentType ?? "application/json";

@@ -8,10 +8,13 @@ from collections.abc import AsyncIterator, Iterable
 import grpc
 import pytest
 from ar007_fakes import (
+    COMPLETION_TOKEN,
     FakeSession,
     RecordingDispatcher,
     activity_id,
+    descriptors,
     payload,
+    run_id,
     task,
     wait_for_condition,
     workflow_id,
@@ -86,6 +89,7 @@ async def test_drop_budget_resets_after_each_session_that_serves_a_task() -> Non
             _config(max_attempts=2),
             connect,
             dispatcher,
+            descriptors(),
             sleep=_no_sleep,
             shutdown=shutdown,
             clock=_frozen_clock,
@@ -128,6 +132,7 @@ async def test_drop_budget_resets_when_a_session_outlives_max_backoff() -> None:
             _config(max_attempts=2),
             connect,
             RecordingDispatcher(),
+            descriptors(),
             sleep=_no_sleep,
             clock=scripted_clock,
         )
@@ -154,6 +159,7 @@ async def test_flapping_sessions_exhaust_budget_at_exactly_max_attempts() -> Non
             _config(max_attempts=3),
             connect,
             RecordingDispatcher(),
+            descriptors(),
             sleep=_no_sleep,
             clock=_frozen_clock,
         )
@@ -186,6 +192,7 @@ async def test_clean_server_close_reconnects_re_registers_and_keeps_serving() ->
             _config(max_attempts=3),
             connect,
             dispatcher,
+            descriptors(),
             sleep=_no_sleep,
             shutdown=shutdown,
         )
@@ -220,6 +227,7 @@ async def test_persistent_clean_close_loop_exhausts_budget_with_classified_error
             _config(max_attempts=2),
             connect,
             RecordingDispatcher(),
+            descriptors(),
             sleep=_no_sleep,
             clock=_frozen_clock,
         )
@@ -237,6 +245,8 @@ class _ReplayFailingSession(FakeSession):
         self,
         workflow: common_pb2.WorkflowId,
         activity: common_pb2.ActivityId,
+        run: common_pb2.RunId,
+        completion_token: str,
         result: common_pb2.Payload,
     ) -> None:
         raise OSError("replay write lost the race with a second reset")
@@ -245,6 +255,8 @@ class _ReplayFailingSession(FakeSession):
         self,
         workflow: common_pb2.WorkflowId,
         activity: common_pb2.ActivityId,
+        run: common_pb2.RunId,
+        completion_token: str,
         failure: worker_pb2.ActivityError,
     ) -> None:
         raise OSError("replay write lost the race with a second reset")
@@ -261,6 +273,8 @@ class _DeniedReplaySession(FakeSession):
         self,
         workflow: common_pb2.WorkflowId,
         activity: common_pb2.ActivityId,
+        run: common_pb2.RunId,
+        completion_token: str,
         result: common_pb2.Payload,
     ) -> None:
         raise self.denial
@@ -269,6 +283,8 @@ class _DeniedReplaySession(FakeSession):
         self,
         workflow: common_pb2.WorkflowId,
         activity: common_pb2.ActivityId,
+        run: common_pb2.RunId,
+        completion_token: str,
         failure: worker_pb2.ActivityError,
     ) -> None:
         raise self.denial
@@ -280,6 +296,8 @@ def _unacked_tracker_with_one_report() -> UnackedResultTracker:
         PendingCompletedReport(
             workflow_id=workflow_id(),
             activity_id=activity_id(7),
+            run_id=run_id(),
+            completion_token=COMPLETION_TOKEN,
             output=payload(),
         )
     )
@@ -307,6 +325,7 @@ async def test_retryable_replay_failure_counts_against_drop_budget() -> None:
             _config(max_attempts=3),
             connect,
             RecordingDispatcher(),
+            descriptors(),
             tracker,
             sleep=_no_sleep,
             clock=_frozen_clock,
@@ -347,6 +366,7 @@ async def test_denial_during_replay_fails_fast_with_precedence() -> None:
             _config(max_attempts=5),
             connect,
             RecordingDispatcher(),
+            descriptors(),
             tracker,
             sleep=_no_sleep,
             clock=_frozen_clock,
@@ -403,6 +423,8 @@ class _ReleaseOnDropSession(FakeSession):
         self,
         workflow: common_pb2.WorkflowId,
         activity: common_pb2.ActivityId,
+        run: common_pb2.RunId,
+        completion_token: str,
         result: common_pb2.Payload,
     ) -> None:
         raise OSError("report send failed after the drop")
@@ -444,6 +466,7 @@ async def test_drain_outliving_max_backoff_does_not_reset_drop_budget() -> None:
             _config(max_attempts=2),
             connect,
             dispatcher,
+            descriptors(),
             sleep=_no_sleep,
             clock=drain_aware_clock,
         )
@@ -489,6 +512,7 @@ async def test_shutdown_during_error_backoff_wakes_immediately_and_raises_pendin
             _config(max_attempts=5),
             connect,
             RecordingDispatcher(),
+            descriptors(),
             sleep=hanging_sleep,
             shutdown=shutdown,
             clock=_frozen_clock,
@@ -547,6 +571,7 @@ async def test_shutdown_during_recovery_establishment_backoff_returns_promptly()
             _config(max_attempts=5),
             connect,
             RecordingDispatcher(),
+            descriptors(),
             sleep=hanging_establishment_sleep,
             shutdown=shutdown,
             clock=_frozen_clock,
@@ -583,6 +608,7 @@ async def test_shutdown_during_clean_close_backoff_returns_cleanly() -> None:
         _config(max_attempts=3),
         connect,
         RecordingDispatcher(),
+        descriptors(),
         sleep=shutdown_during_backoff,
         shutdown=shutdown,
     )
@@ -626,6 +652,7 @@ async def test_drain_cycles_reconnect_without_consuming_drop_budget() -> None:
             _config(max_attempts=2),
             connect,
             RecordingDispatcher(),
+            descriptors(),
             sleep=_no_sleep,
             clock=_frozen_clock,
         )
@@ -670,11 +697,13 @@ async def test_drain_latch_keeps_abrupt_post_drain_failure_unbudgeted() -> None:
             self,
             workflow: common_pb2.WorkflowId,
             activity: common_pb2.ActivityId,
+            run: common_pb2.RunId,
+            completion_token: str,
             result: common_pb2.Payload,
         ) -> None:
             if activity.sequence_position == self.fail_position:
                 raise OSError("stream broke abruptly after the drain frame")
-            await super().report_result(workflow, activity, result)
+            await super().report_result(workflow, activity, run, completion_token, result)
 
     attempts = 0
     release = asyncio.Event()
@@ -697,6 +726,7 @@ async def test_drain_latch_keeps_abrupt_post_drain_failure_unbudgeted() -> None:
             _config(max_attempts=2),
             connect,
             dispatcher,
+            descriptors(),
             sleep=_no_sleep,
             clock=_frozen_clock,
         )
@@ -728,6 +758,7 @@ async def test_shutdown_during_post_drain_backoff_returns_cleanly() -> None:
             _config(max_attempts=5),
             connect,
             RecordingDispatcher(),
+            descriptors(),
             sleep=hanging_sleep,
             shutdown=shutdown,
             clock=_frozen_clock,
@@ -754,7 +785,7 @@ async def test_result_ack_clears_exactly_its_tracker_entry() -> None:
     position = activity_id(5)
     tracker = UnackedResultTracker()
     for workflow in (workflow_a, workflow_b):
-        tracker.record(PendingCompletedReport(workflow, position, payload()))
+        tracker.record(PendingCompletedReport(workflow, position, run_id(), COMPLETION_TOKEN, payload()))
 
     session = FakeSession()
     await session.push(ResultAcknowledged(workflow_id=workflow_a, activity_id=position))
@@ -781,7 +812,7 @@ async def test_acked_results_decay_out_of_the_reconnect_replay() -> None:
     unacked_id = activity_id(2)
     tracker = UnackedResultTracker()
     for position in (acked_id, unacked_id):
-        tracker.record(PendingCompletedReport(workflow, position, payload()))
+        tracker.record(PendingCompletedReport(workflow, position, run_id(), COMPLETION_TOKEN, payload()))
 
     # Session 1 acks one of the two reported results; the other ack is lost.
     session = FakeSession()
@@ -813,13 +844,15 @@ async def test_shutdown_interrupts_hung_unacked_replay_promptly() -> None:
             self,
             workflow: common_pb2.WorkflowId,
             activity: common_pb2.ActivityId,
+            run: common_pb2.RunId,
+            completion_token: str,
             result: common_pb2.Payload,
         ) -> None:
             await asyncio.Event().wait()
 
     shutdown = asyncio.Event()
     tracker = UnackedResultTracker()
-    tracker.record(PendingCompletedReport(workflow_id(), activity_id(1), payload()))
+    tracker.record(PendingCompletedReport(workflow_id(), activity_id(1), run_id(), COMPLETION_TOKEN, payload()))
     session = HungReportSession()
 
     async def connect() -> FakeSession:
@@ -830,6 +863,7 @@ async def test_shutdown_interrupts_hung_unacked_replay_promptly() -> None:
             _config(max_attempts=3),
             connect,
             RecordingDispatcher(),
+            descriptors(),
             tracker=tracker,
             shutdown=shutdown,
             clock=_frozen_clock,

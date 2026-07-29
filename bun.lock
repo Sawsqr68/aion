@@ -69,6 +69,7 @@
       "name": "@aion/worker",
       "version": "0.1.0",
       "dependencies": {
+        "@bufbuild/protobuf": "^2.12.0",
         "@grpc/grpc-js": "^1.10.0",
       },
       "devDependencies": {

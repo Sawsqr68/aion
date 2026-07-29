@@ -9,7 +9,7 @@ from concurrent.futures import Executor
 from .activity import ActivityRegistry, clone_registry, default_registry, registry_from_mapping
 from .loop import connect_register_replay_and_serve, serve
 from .reconnect import UnackedResultTracker
-from .session import GrpcWorkerSession, WorkerConfig, WorkerSession
+from .session import ActivityDescriptor, GrpcWorkerSession, WorkerConfig, WorkerSession
 
 
 class Worker:
@@ -34,12 +34,21 @@ class Worker:
         self._activity_types = list(self._registry.activity_types())
         if not self._activity_types:
             raise ValueError("worker must register at least one activity")
+        # Derived HERE, before any network I/O, so a handler that cannot
+        # advertise what it returns fails at Worker construction rather than
+        # part-way through the reconnect cycle against a live server.
+        self._descriptors = self._registry.activity_descriptors()
         self._tracker = UnackedResultTracker()
 
     def activity_types(self) -> list[str]:
         """Return activity type names served by this worker."""
 
         return list(self._activity_types)
+
+    def activity_descriptors(self) -> list[ActivityDescriptor]:
+        """Return the typed action surface this worker advertises at registration."""
+
+        return list(self._descriptors)
 
     def available_handlers(self) -> list[str]:
         """Return handler names available for registration."""
@@ -58,6 +67,7 @@ class Worker:
             self.config,
             self._connect,
             self._registry,
+            self._descriptors,
             self._tracker,
             shutdown=shutdown,
         )
@@ -66,7 +76,7 @@ class Worker:
         """Test seam: serve an already constructed session with graceful drain."""
 
         await session.handshake(self.config)
-        await session.register(self._activity_types, self.available_handlers())
+        await session.register(self._activity_types, self._descriptors, self.available_handlers())
         await serve(self.config, session, self._registry, self._tracker, shutdown=shutdown)
 
     async def _connect(self) -> WorkerSession:

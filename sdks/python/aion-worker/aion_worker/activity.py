@@ -11,11 +11,13 @@ from concurrent.futures import Executor
 from dataclasses import dataclass
 from typing import get_type_hints
 
+from .codec import PayloadDecodeError, ResultEncodeError, decode_activity_input, encode_activity_output
 from .context import JSON_CONTENT_TYPE, ActivityContext, encode_detail
 from .errors import ActivityFailureError, RetryableError, TerminalError
 from .loop import Completed, DispatchOutcome, Failed
 from .proto import common_pb2, worker_pb2
-from .session import ActivityError, ActivityTask, Payload
+from .schema import PERMISSIVE_SCHEMA, SchemaDerivationError, derive_input_schema, derive_output_schema
+from .session import ActivityDescriptor, ActivityError, ActivityTask, Payload
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +26,37 @@ class ActivityRegistrationError(ValueError):
     """Raised when activity registration is invalid."""
 
 
+_NO_INPUT = object()
+"""Marks a handler that declares no input parameter.
+
+Distinct from an unconstrained hint: such a handler ignores the payload
+entirely, so it genuinely accepts whatever arrives and advertises the
+permissive input schema. It is not a type, so schema derivation refuses it and
+the input direction falls back to permissive — which is the true answer.
+"""
+
+
 @dataclass(frozen=True)
 class _ActivitySpec:
     name: str
     handler: Callable[..., object]
     input_parameter: str | None
+    input_annotation: object
+    input_schema: object
+    """The input schema advertised for this handler, derived once at registration.
+
+    Held rather than recomputed so the schema the server was shown and the
+    schema the codec enforces are literally the same value.
+    """
+    input_is_enforced: bool
+    """Whether the input hint produced a real schema rather than the permissive one.
+
+    The codec must enforce EXACTLY what was advertised and never more. When the
+    hint proved nothing, the worker told the server it accepts anything — so
+    refusing a payload at dispatch would break that promise, and the raw value
+    is passed through instead.
+    """
+    output_annotation: object
     context_parameter: str | None
     is_async: bool
 
@@ -61,6 +89,50 @@ class ActivityRegistry:
 
         return sorted(self._activities)
 
+    def activity_descriptors(self) -> list[ActivityDescriptor]:
+        """Derive the typed action surface advertised at registration.
+
+        ``RegisterWorker.activities`` is what proves a worker serves the
+        contract a deployed package requires; an empty list means "predates
+        contract commitment" and is refused by any contract-bearing deployment.
+        So this is derived for EVERY registered activity, from the same type
+        hints the codec uses at dispatch — advertisement and behaviour come from
+        one source and cannot drift.
+
+        Raises:
+            ActivityRegistrationError: a handler's return hint proves nothing
+                that can be honestly advertised. Refusing the WHOLE registration
+                is deliberate: dropping just the un-derivable descriptor would
+                leave a partially true advertisement, and the server checks only
+                the actions a contract names — so the worker would be admitted
+                on the strength of its other activities and then dispatched the
+                one whose contract was never checked. That is the "admitted,
+                then mismatched at dispatch" failure a missing descriptor is
+                supposed to prevent.
+        """
+
+        descriptors = []
+        for name in sorted(self._activities):
+            spec = self._activities[name]
+            try:
+                output_schema = derive_output_schema(spec.output_annotation)
+            except SchemaDerivationError as exc:
+                raise ActivityRegistrationError(
+                    f"activity {name!r} cannot advertise what it returns: {exc}. "
+                    "The server checks a worker's output schema covariantly against the "
+                    "deployed contract, so a return type that proves nothing is refused "
+                    "there rather than here — annotate the return with a dataclass, a "
+                    "JSON scalar, or a container of those."
+                ) from exc
+            descriptors.append(
+                worker_pb2.ActivityDescriptor(
+                    name=name,
+                    input_schema_json=json.dumps(spec.input_schema),
+                    output_schema_json=json.dumps(output_schema),
+                )
+            )
+        return descriptors
+
     async def dispatch(self, task: ActivityTask, context: ActivityContext) -> DispatchOutcome:
         """Decode input, invoke the registered handler, and encode the result."""
 
@@ -69,14 +141,25 @@ class ActivityRegistry:
             message = f"missing activity handler {task.activity_type!r}"
             return Failed(_activity_error(worker_pb2.ACTIVITY_ERROR_KIND_TERMINAL, message))
         try:
-            argument = decode_json_payload(task.input)
+            payload = decode_json_payload(task.input)
         except (UnicodeDecodeError, json.JSONDecodeError, TypeError) as exc:
             return Failed(
                 _activity_error(worker_pb2.ACTIVITY_ERROR_KIND_TERMINAL, f"failed to decode activity input: {exc}")
             )
         try:
+            argument = decode_activity_input(spec.input_annotation, payload) if spec.input_is_enforced else payload
+        except PayloadDecodeError as exc:
+            # The payload came off the wire and no retry will change it, so this
+            # is terminal — and it names the field rather than surfacing a
+            # TypeError from inside construction.
+            return Failed(
+                _activity_error(
+                    worker_pb2.ACTIVITY_ERROR_KIND_TERMINAL,
+                    f"activity {task.activity_type!r} input does not fit its declared type: {exc}",
+                )
+            )
+        try:
             result = await self._invoke(spec, argument, context)
-            return Completed(encode_json_payload(result, task.input.content_type))
         except RetryableError as exc:
             return Failed(_classified_error(worker_pb2.ACTIVITY_ERROR_KIND_RETRYABLE, exc, task.input.content_type))
         except TerminalError as exc:
@@ -88,6 +171,19 @@ class ActivityRegistry:
                 extra={"activity_type": task.activity_type},
             )
             return Failed(_activity_error(worker_pb2.ACTIVITY_ERROR_KIND_RETRYABLE, str(exc)))
+        try:
+            encoded = encode_activity_output(spec.output_annotation, result)
+        except ResultEncodeError as exc:
+            # A handler returning something unserialisable is a code defect, not
+            # a transient condition: retrying re-runs the same code and produces
+            # the same unencodable value.
+            return Failed(
+                _activity_error(
+                    worker_pb2.ACTIVITY_ERROR_KIND_TERMINAL,
+                    f"activity {task.activity_type!r} returned a value that cannot be encoded: {exc}",
+                )
+            )
+        return Completed(encode_json_payload(encoded, task.input.content_type))
 
     async def _invoke(self, spec: _ActivitySpec, argument: object, context: ActivityContext) -> object:
         args = _handler_arguments(spec, argument, context)
@@ -142,10 +238,21 @@ def _build_spec(name: str, func: Callable[..., object]) -> _ActivitySpec:
         raise ActivityRegistrationError(f"activity {name!r} input parameter {input_parameter!r} must have a type hint")
     if signature.return_annotation is inspect.Signature.empty and "return" not in hints:
         raise ActivityRegistrationError(f"activity {name!r} must have a return type hint")
+    input_annotation = hints[input_parameter] if input_parameter is not None else _NO_INPUT
+    input_schema = derive_input_schema(input_annotation)
     return _ActivitySpec(
         name=name,
         handler=func,
         input_parameter=input_parameter,
+        # The hints are captured, not merely checked. They are the single source
+        # for BOTH what the worker advertises at registration and what the codec
+        # does at dispatch, so an advertisement cannot drift from behaviour.
+        # A handler with no input parameter takes nothing off the wire; `None`
+        # marks that, distinct from an unconstrained hint.
+        input_annotation=input_annotation,
+        input_schema=input_schema,
+        input_is_enforced=input_schema is not PERMISSIVE_SCHEMA,
+        output_annotation=hints["return"],
         context_parameter=context_parameter,
         is_async=inspect.iscoroutinefunction(func),
     )

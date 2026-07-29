@@ -1,5 +1,6 @@
 export type {
 	ActivityDefinition,
+	ActivityDefinitionOptions,
 	ActivityHandler,
 	ActivityRegistryOptions,
 	ErasedActivityRun,
@@ -41,16 +42,19 @@ export {
 	UnackedResultTracker,
 } from "./reconnect.js";
 export type {
+	ActivityCompletionIdentity,
+	ActivityContract,
+	ActivityDescriptor,
 	ActivityFailure,
 	ActivityIdKey,
 	ActivityTask,
-	GrpcClientFactory,
+	JsonSchema,
 	Payload,
 	ReconnectConfig,
 	RegisteredSessionInfo,
+	WorkerAdvertisement,
 	WorkerConfig,
 	WorkerIdentity,
-	WorkerRegistration,
 	WorkerSession,
 	WorkerSessionEvent,
 	WorkerSessionFactory,
@@ -58,11 +62,21 @@ export type {
 } from "./session.js";
 export {
 	activityIdToKey,
+	completionIdentity,
 	connectGrpcWorkerSession,
 	decodePayload,
 	decodeTask,
 	encodePayload,
 	GrpcWorkerSession,
+	PERMISSIVE_SCHEMA,
+	resolveNode,
 } from "./session.js";
+export type {
+	GrpcClientFactory,
+	WorkerProtocolTransport,
+	WorkerStream,
+	WorkerStreamMetadata,
+} from "./transport.js";
+export { grpcClientFactory, workerAuthMetadata } from "./transport.js";
 export type { WorkerActivities, WorkerOptions, WorkerRunOptions } from "./worker.js";
 export { Worker } from "./worker.js";

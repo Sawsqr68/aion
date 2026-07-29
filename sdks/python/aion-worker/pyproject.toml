@@ -26,6 +26,11 @@ dependencies = [
   "protobuf>=5.28",
 ]
 
+[project.scripts]
+# Serve a decorated script without writing an entry point. The same callable
+# backs `python -m aion_worker`, so neither spelling is a second-class path.
+aion-worker = "aion_worker.host:main"
+
 [project.urls]
 Homepage = "https://github.com/ablative-io/aion"
 Repository = "https://github.com/ablative-io/aion"

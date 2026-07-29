@@ -14,8 +14,10 @@ import {
 	type WorkerLogger,
 } from "./reconnect.js";
 import type {
+	ActivityCompletionIdentity,
 	ActivityFailure,
 	Payload,
+	WorkerAdvertisement,
 	WorkerConfig,
 	WorkerSession,
 	WorkerSessionEvent,
@@ -37,8 +39,8 @@ class RecordingSession implements WorkerSession {
 		this.events.push(`handshake:${config.taskQueue}:${config.identity}`);
 	}
 
-	public async register(activityTypes: readonly string[]): Promise<void> {
-		this.events.push(`register:${activityTypes.join(",")}`);
+	public async register(advertisement: WorkerAdvertisement): Promise<void> {
+		this.events.push(`register:${advertisement.activityTypes.join(",")}`);
 	}
 
 	public async *receiveTasks(): AsyncIterable<WorkerSessionEvent> {
@@ -47,18 +49,22 @@ class RecordingSession implements WorkerSession {
 	}
 
 	public async reportResult(
-		_workflowId: string,
-		activityId: string,
+		completion: ActivityCompletionIdentity,
 	): Promise<void> {
-		this.events.push(`result:${activityId}`);
+		// The fencing identity is recorded alongside the activity id so the
+		// replay tests can assert the ORIGINAL token was echoed, not a fresh one.
+		this.events.push(
+			`result:${completion.activityId}:${completion.runId}:${completion.completionToken}`,
+		);
 	}
 
 	public async reportFailure(
-		_workflowId: string,
-		activityId: string,
+		completion: ActivityCompletionIdentity,
 		_failure: ActivityFailure,
 	): Promise<void> {
-		this.events.push(`failure:${activityId}`);
+		this.events.push(
+			`failure:${completion.activityId}:${completion.runId}:${completion.completionToken}`,
+		);
 	}
 
 	public sendHeartbeat(): Promise<void> {
@@ -83,14 +89,12 @@ describe("reconnect", () => {
 		};
 		tracker.record({
 			kind: "completed",
-			workflowId: "workflow-a",
-			activityId: "3",
+			completion: completion("workflow-a", "3"),
 			result: payload,
 		});
 		tracker.record({
 			kind: "failed",
-			workflowId: "workflow-b",
-			activityId: "3",
+			completion: completion("workflow-b", "3"),
 			failure,
 		});
 
@@ -100,7 +104,12 @@ describe("reconnect", () => {
 		expect(tracker.get("workflow-a", "3")?.kind).toBe("completed");
 		expect(tracker.get("workflow-b", "3")?.kind).toBe("failed");
 		expect(
-			tracker.snapshot().map((report) => `${report.workflowId}:${report.activityId}`),
+			tracker
+				.snapshot()
+				.map(
+					(report) =>
+						`${report.completion.workflowId}:${report.completion.activityId}`,
+				),
 		).toEqual(["workflow-a:3", "workflow-b:3"]);
 
 		// Acknowledging one workflow's report never touches the other's.
@@ -123,12 +132,11 @@ describe("reconnect", () => {
 		const tracker = new UnackedResultTracker();
 		tracker.record({
 			kind: "completed",
-			workflowId: "workflow",
-			activityId: "1",
+			completion: completion("workflow", "1"),
 			result: payload,
 		});
 
-		const session = await reconnectWithBackoff(config(), ["charge"], {
+		const session = await reconnectWithBackoff(config(), advertisement(), {
 			createSession: async () => new RecordingSession(events),
 			sleep: () => Promise.resolve(),
 			signal: undefined,
@@ -141,10 +149,15 @@ describe("reconnect", () => {
 		const iterator = session.receiveTasks()[Symbol.asyncIterator]();
 		await iterator.next();
 
+		// The replayed result carries the ORIGINAL run id and completion token,
+		// not a fresh pair: the token proves which execution generation produced
+		// the outcome, and reconnecting does not change which one that was. A
+		// re-report with a regenerated token would be refused by the server's
+		// completion fence and the work would be silently lost.
 		expect(events).toEqual([
 			"handshake:payments:worker-a",
 			"register:charge",
-			"result:1",
+			"result:1:run-workflow:token-workflow-1",
 			"receive",
 		]);
 		expect(tracker.len()).toBe(1);
@@ -160,7 +173,7 @@ describe("reconnect", () => {
 		let attempts = 0;
 
 		await expect(
-			reconnectWithBackoff(config(), ["charge"], {
+			reconnectWithBackoff(config(), advertisement(), {
 				createSession: async () => {
 					attempts += 1;
 					return new DeniedRegisterSession(events, denial);
@@ -192,7 +205,7 @@ describe("reconnect", () => {
 		let attempts = 0;
 
 		await expect(
-			reconnectWithBackoff(config(), ["charge"], {
+			reconnectWithBackoff(config(), advertisement(), {
 				createSession: async () => {
 					attempts += 1;
 					throw denial;
@@ -217,7 +230,7 @@ describe("reconnect", () => {
 		const sleeps: number[] = [];
 		let attempts = 0;
 
-		const failure = await reconnectWithBackoff(config(), ["charge"], {
+		const failure = await reconnectWithBackoff(config(), advertisement(), {
 			createSession: async () => {
 				attempts += 1;
 				throw unavailable;
@@ -258,7 +271,7 @@ describe("reconnect", () => {
 		// arbitrarily long delay — so only the abort race can end the wait.
 		// The result must be undefined (the caller's clean-return contract,
 		// mirroring the drop backoff) well before the backoff could elapse.
-		const session = await reconnectWithBackoff(config(), ["charge"], {
+		const session = await reconnectWithBackoff(config(), advertisement(), {
 			createSession: async () => {
 				attempts += 1;
 				throw unavailable;
@@ -323,7 +336,7 @@ describe("reconnect", () => {
 		const controller = new AbortController();
 		let attempts = 0;
 
-		const session = await reconnectWithBackoff(config(), ["charge"], {
+		const session = await reconnectWithBackoff(config(), advertisement(), {
 			createSession: () => {
 				attempts += 1;
 				setImmediate(() => {
@@ -347,7 +360,7 @@ describe("reconnect", () => {
 		const events: string[] = [];
 		let resolveDial: ((session: WorkerSession) => void) | undefined;
 
-		const session = await reconnectWithBackoff(config(), ["charge"], {
+		const session = await reconnectWithBackoff(config(), advertisement(), {
 			createSession: () =>
 				new Promise<WorkerSession>((resolve) => {
 					resolveDial = resolve;
@@ -391,7 +404,7 @@ describe("reconnect", () => {
 		};
 		let rejectDial: ((error: Error) => void) | undefined;
 
-		const session = await reconnectWithBackoff(config(), ["charge"], {
+		const session = await reconnectWithBackoff(config(), advertisement(), {
 			createSession: () =>
 				new Promise<WorkerSession>((_resolve, reject) => {
 					rejectDial = reject;
@@ -424,7 +437,7 @@ describe("reconnect", () => {
 		controller.abort();
 		let attempts = 0;
 
-		const session = await reconnectWithBackoff(config(), ["charge"], {
+		const session = await reconnectWithBackoff(config(), advertisement(), {
 			createSession: async () => {
 				attempts += 1;
 				return new RecordingSession([]);
@@ -483,7 +496,7 @@ describe("reconnect", () => {
 		const events: string[] = [];
 		let attempts = 0;
 
-		await reconnectWithBackoff(config(), ["charge"], {
+		await reconnectWithBackoff(config(), advertisement(), {
 			createSession: async () => {
 				attempts += 1;
 				events.push(`create:${attempts}`);
@@ -522,7 +535,7 @@ describe("reconnect", () => {
 		let attempts = 0;
 
 		await expect(
-			reconnectWithBackoff(config(), ["charge"], {
+			reconnectWithBackoff(config(), advertisement(), {
 				createSession: async () => {
 					attempts += 1;
 					return new ThrowingCloseSession(events, denial, closeFailure);
@@ -680,9 +693,27 @@ function serviceError(code: number, message: string): Error {
 	});
 }
 
+function advertisement(): WorkerAdvertisement {
+	return { activityTypes: ["charge"], activities: [] };
+}
+
+function completion(
+	workflowId: string,
+	activityId: string,
+): ActivityCompletionIdentity {
+	return {
+		workflowId,
+		activityId,
+		runId: `run-${workflowId}`,
+		completionToken: `token-${workflowId}-${activityId}`,
+	};
+}
+
 function config(): WorkerConfig {
 	return {
 		endpoint: "127.0.0.1:50051",
+		namespaces: ["payments"],
+		subject: "worker",
 		taskQueue: "payments",
 		identity: "worker-a",
 		maxConcurrency: 1,

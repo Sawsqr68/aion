@@ -6,7 +6,7 @@ import asyncio
 from typing import Any
 
 from .proto import common_pb2
-from .session import ActivityId, Payload, WorkerSession, WorkflowId
+from .session import ActivityId, Payload, RunId, WorkerSession, WorkflowId
 
 JSON_CONTENT_TYPE = "application/json"
 
@@ -15,7 +15,11 @@ class ActivityContext:
     """Context passed to each activity handler.
 
     ``attempt`` is the one-based delivery attempt read from the wire task —
-    always supplied by the receive loop, never defaulted.
+    always supplied by the receive loop, never defaulted. ``run_id`` names the
+    concrete workflow run that staged the task, and ``idempotency_key`` is the
+    stable external-effect key for this run and action site: identical across
+    retries and execution generations, so a handler can use it to make an
+    outside-world effect happen at most once.
     """
 
     def __init__(
@@ -23,13 +27,17 @@ class ActivityContext:
         *,
         workflow_id: WorkflowId,
         activity_id: ActivityId,
+        run_id: RunId,
         attempt: int,
+        idempotency_key: str,
         session: WorkerSession,
         content_type: str = JSON_CONTENT_TYPE,
     ) -> None:
         self.workflow_id = workflow_id
         self.activity_id = activity_id
+        self.run_id = run_id
         self.attempt = attempt
+        self.idempotency_key = idempotency_key
         self._session = session
         self._content_type = content_type
         self._cancelled = asyncio.Event()

@@ -2,7 +2,7 @@
 
 Regenerate from the repository proto source with::
 
-    python -m grpc_tools.protoc -I crates/aion-proto/proto \
+    python -m grpc_tools.protoc -I crates/aion-proto-generated/proto \
         --python_out=sdks/python/aion-client/aion_client/proto \
         --grpc_python_out=sdks/python/aion-client/aion_client/proto \
         --pyi_out=sdks/python/aion-client/aion_client/proto \

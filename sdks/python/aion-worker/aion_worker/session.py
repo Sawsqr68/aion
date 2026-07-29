@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Iterable
-from dataclasses import dataclass
+import os
+import socket
+from collections.abc import AsyncIterator, Iterable, Mapping
+from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any, Protocol, TypeAlias, cast
 
 import grpc
@@ -24,9 +27,39 @@ runtime attribute is stable public API.
 """
 
 WorkflowId: TypeAlias = common_pb2.WorkflowId
+RunId: TypeAlias = common_pb2.RunId
 ActivityId: TypeAlias = common_pb2.ActivityId
 ActivityError: TypeAlias = worker_pb2.ActivityError
 ActivityTaskMessage: TypeAlias = worker_pb2.ActivityTask
+ActivityDescriptor: TypeAlias = worker_pb2.ActivityDescriptor
+
+DEFAULT_WORKER_NAMESPACE = "default"
+DEFAULT_WORKER_SUBJECT = "worker"
+DEFAULT_WORKER_NODE = "localhost"
+"""Fallback node id when the machine hostname cannot be resolved.
+
+A worker must never fail to start over a missing hostname, so it advertises
+this documented value instead of raising — mirroring the Rust SDK's
+``DEFAULT_WORKER_NODE``.
+"""
+
+
+def default_node() -> str:
+    """Resolve the machine hostname for use as the default locality affinity.
+
+    Mirrors ``aion_worker::config::default_node`` in the Rust SDK: ``$HOSTNAME``
+    first so a container can state its own identity, then the OS hostname, then
+    :data:`DEFAULT_WORKER_NODE`. Never raises.
+    """
+
+    hostname = os.environ.get("HOSTNAME")
+    if hostname:
+        return hostname
+    try:
+        resolved = socket.gethostname()
+    except OSError:
+        return DEFAULT_WORKER_NODE
+    return resolved or DEFAULT_WORKER_NODE
 
 
 class WorkerSessionError(Exception):
@@ -97,7 +130,26 @@ class TransportCredentials:
 
 @dataclass(frozen=True)
 class WorkerConfig:
-    """Explicit worker configuration consumed by session, loop, and reconnect."""
+    """Explicit worker configuration consumed by session, loop, and reconnect.
+
+    ``namespaces``, ``task_queue``, and ``node`` are DISJOINT routing dimensions,
+    mirroring ``aion_worker::WorkerConfig`` in the Rust SDK:
+
+    * ``namespaces`` is the SET of correctness/isolation boundaries this worker
+      is authorized for. The same set is carried comma-joined in the
+      ``x-aion-namespaces`` metadata and in the registration scope, so
+      authorization and registration agree. Every one must be granted or the
+      whole registration is denied. Crossing a namespace is a bug, never a
+      tuning choice.
+    * ``task_queue`` is the pool/flavour selector WITHIN each namespace. The
+      worker-pool address is ``(namespace, task_queue)``; the server normalizes
+      an empty value to the literal ``"default"`` pool. A task_queue miss is a
+      liveness issue, never a correctness one.
+    * ``node`` is an OPTIONAL locality affinity (a locality, not a process:
+      many workers may share one). A dispatch pinned to a node reaches only
+      workers whose node equals it; an empty value means the worker carries no
+      locality and is reachable only for unpinned dispatches.
+    """
 
     endpoint: str
     task_queue: str
@@ -105,18 +157,43 @@ class WorkerConfig:
     max_concurrency: int
     reconnect: ReconnectConfig
     transport_credentials: TransportCredentials | None = None
-    namespace: str = "default"
-    subject: str = "worker"
+    namespaces: tuple[str, ...] = (DEFAULT_WORKER_NAMESPACE,)
+    node: str = field(default_factory=default_node)
+    subject: str = DEFAULT_WORKER_SUBJECT
+
+    def __post_init__(self) -> None:
+        """Reject a namespace set that could not authorize anything.
+
+        The Rust builder substitutes the default for an unset namespace list;
+        here the dataclass default already covers that case, so an EXPLICIT
+        empty (or blank-entry) set can only be an author error — and one that
+        would send a meaningless ``x-aion-namespaces`` header rather than fail.
+        """
+
+        if not isinstance(self.namespaces, tuple):
+            object.__setattr__(self, "namespaces", tuple(self.namespaces))
+        if not self.namespaces:
+            raise ValueError(
+                f"WorkerConfig.namespaces must name at least one namespace; omit it to use {DEFAULT_WORKER_NAMESPACE!r}"
+            )
+        blank = [namespace for namespace in self.namespaces if not namespace.strip()]
+        if blank:
+            raise ValueError("WorkerConfig.namespaces must not contain empty namespace names")
 
     def grpc_metadata(self) -> tuple[tuple[str, str], ...]:
         """Return authorization metadata for the worker stream connection.
 
         WorkerConfig owns the Aion authorization headers. Preserve any unrelated
         transport metadata while dropping reserved auth header duplicates so stale
-        credential metadata cannot shadow the configured namespace or subject.
+        credential metadata cannot shadow the configured namespaces or subject.
+
+        The server parses ``x-aion-namespaces`` by splitting on commas
+        (``aion-server/src/api/grpc/auth.rs``), so the set is joined the same way
+        the Rust worker joins it — and it is the SAME set sent in the
+        registration frame, so authorization and registration scope cannot drift.
         """
         auth_metadata = (
-            ("x-aion-namespaces", self.namespace),
+            ("x-aion-namespaces", ",".join(self.namespaces)),
             ("x-aion-subject", self.subject),
         )
         if self.transport_credentials is None:
@@ -128,27 +205,85 @@ class WorkerConfig:
         return (*transport_metadata, *auth_metadata)
 
 
+_EMPTY_LABELS: Mapping[str, str] = MappingProxyType({})
+
+
 @dataclass(frozen=True)
 class ActivityTask:
-    """Type-erased activity invocation delivered by the engine."""
+    """Type-erased activity invocation delivered by the engine.
+
+    Every field is read from the wire and none is defaulted. ``run_id`` and
+    ``completion_token`` are the completion identity: the server refuses any
+    result missing either (``aion-server/src/worker/dispatch.rs`` rejects an
+    absent run id, ``worker/envelope.rs`` an absent token), so a task that
+    arrives without them cannot be reported on and is refused at decode rather
+    than run to a result nobody can accept.
+    """
 
     workflow_id: WorkflowId
     activity_id: ActivityId
+    run_id: RunId
     activity_type: str
     input: Payload
     attempt: int
+    completion_token: str
+    """Opaque proof of this execution generation.
+
+    Echoed VERBATIM on every outcome. A worker must never synthesize, parse, or
+    reconstruct one: it is the server's evidence that this worker is still the
+    live generation for this activity, and a value the worker made up would
+    prove nothing while looking like proof.
+    """
+    idempotency_key: str
+    """Stable external-effect key for this run and action site.
+
+    Identical across retries and execution generations, so a handler can use it
+    to make an external effect happen at most once.
+    """
+    labels: Mapping[str, str] = _EMPTY_LABELS
+    """Display metadata the workflow attached (for example ``brief=IP-001``).
+
+    Never interpreted by the engine and never affects routing or replay.
+    """
 
     @classmethod
     def from_proto(cls, task: ActivityTaskMessage) -> ActivityTask:
+        """Decode a wire task, refusing anything malformed rather than defaulting it.
+
+        Mirrors ``TryFrom<ProtoActivityTask> for ActivityTask`` in the Rust SDK
+        field for field. Proto3 gives every scalar a zero default, so an absent
+        value is indistinguishable from an empty one on the wire — which is
+        exactly why each is checked: silently accepting the zero would turn a
+        server-side omission into a worker-side lie.
+        """
+
+        if not task.HasField("workflow_id") or not task.workflow_id.uuid:
+            raise TransportError("activity task workflow_id is missing")
+        if not task.HasField("activity_id"):
+            raise TransportError("activity task activity_id is missing")
+        if not task.HasField("run_id") or not task.run_id.uuid:
+            raise TransportError("activity task run_id is missing (server registration era is incompatible)")
+        if not task.activity_type:
+            raise TransportError("activity task activity_type is missing")
+        if not task.HasField("input"):
+            raise TransportError("activity task input payload is missing")
         if task.attempt == 0:
             # proto3 zero default = the producer failed to stamp the attempt.
             raise TransportError("activity task attempt is missing or zero (producer failed to stamp it)")
+        if not task.completion_token:
+            raise TransportError("activity task completion_token is missing (server registration era is incompatible)")
+        if not task.idempotency_key:
+            raise TransportError("activity task idempotency_key is missing (server registration era is incompatible)")
         return cls(
             workflow_id=task.workflow_id,
             activity_id=task.activity_id,
+            run_id=task.run_id,
             activity_type=task.activity_type,
             input=task.input,
             attempt=task.attempt,
+            completion_token=task.completion_token,
+            idempotency_key=task.idempotency_key,
+            labels=MappingProxyType(dict(task.labels)),
         )
 
 
@@ -208,17 +343,36 @@ class WorkerSession(Protocol):
     async def handshake(self, config: WorkerConfig) -> None:
         """Open the worker stream and advertise task queue plus identity."""
 
-    async def register(self, activity_types: Iterable[str], available_handlers: Iterable[str]) -> None:
-        """Register activity type names implemented by this worker."""
+    async def register(
+        self,
+        activity_types: Iterable[str],
+        descriptors: Iterable[ActivityDescriptor],
+        available_handlers: Iterable[str],
+    ) -> None:
+        """Register this worker's activity names and its typed action surface."""
 
     def receive_tasks(self) -> AsyncIterator[WorkerSessionEvent]:
         """Return an async iterator of server-pushed worker events."""
 
-    async def report_result(self, workflow_id: WorkflowId, activity_id: ActivityId, result: Payload) -> None:
-        """Report a completed activity result."""
+    async def report_result(
+        self,
+        workflow_id: WorkflowId,
+        activity_id: ActivityId,
+        run_id: RunId,
+        completion_token: str,
+        result: Payload,
+    ) -> None:
+        """Report a completed activity result with its completion identity."""
 
-    async def report_failure(self, workflow_id: WorkflowId, activity_id: ActivityId, failure: ActivityError) -> None:
-        """Report an explicitly classified activity failure."""
+    async def report_failure(
+        self,
+        workflow_id: WorkflowId,
+        activity_id: ActivityId,
+        run_id: RunId,
+        completion_token: str,
+        failure: ActivityError,
+    ) -> None:
+        """Report a classified activity failure with its completion identity."""
 
     async def send_heartbeat(
         self,
@@ -279,7 +433,12 @@ class GrpcWorkerSession:
         self._config = config
         await self._open_stream()
 
-    async def register(self, activity_types: Iterable[str], available_handlers: Iterable[str]) -> None:
+    async def register(
+        self,
+        activity_types: Iterable[str],
+        descriptors: Iterable[ActivityDescriptor],
+        available_handlers: Iterable[str],
+    ) -> None:
         """Send ``RegisterWorker`` and await the server's ``RegisterAck``.
 
         Registration succeeds only when the ack — the guaranteed first frame
@@ -294,7 +453,7 @@ class GrpcWorkerSession:
         requested = list(activity_types)
         validate_activity_handlers(requested, available_handlers)
         self._activity_types = requested
-        await self._send_register(requested)
+        await self._send_register(requested, list(descriptors))
         await self._await_register_ack()
 
     def receive_tasks(self) -> AsyncIterator[WorkerSessionEvent]:
@@ -303,23 +462,41 @@ class GrpcWorkerSession:
             raise TransportError("worker receive stream has not been opened")
         return self._receive_from_stream(stream)
 
-    async def report_result(self, workflow_id: WorkflowId, activity_id: ActivityId, result: Payload) -> None:
+    async def report_result(
+        self,
+        workflow_id: WorkflowId,
+        activity_id: ActivityId,
+        run_id: RunId,
+        completion_token: str,
+        result: Payload,
+    ) -> None:
         await self._send_to_server(
             worker_pb2.WorkerToServer(
                 result=worker_pb2.ActivityResult(
                     workflow_id=workflow_id,
                     activity_id=activity_id,
+                    run_id=run_id,
+                    completion_token=completion_token,
                     result=result,
                 )
             )
         )
 
-    async def report_failure(self, workflow_id: WorkflowId, activity_id: ActivityId, failure: ActivityError) -> None:
+    async def report_failure(
+        self,
+        workflow_id: WorkflowId,
+        activity_id: ActivityId,
+        run_id: RunId,
+        completion_token: str,
+        failure: ActivityError,
+    ) -> None:
         await self._send_to_server(
             worker_pb2.WorkerToServer(
                 result=worker_pb2.ActivityResult(
                     workflow_id=workflow_id,
                     activity_id=activity_id,
+                    run_id=run_id,
+                    completion_token=completion_token,
                     error=failure,
                 )
             )
@@ -358,10 +535,24 @@ class GrpcWorkerSession:
                 return
             yield message
 
-    async def _send_register(self, activity_types: list[str]) -> None:
+    async def _send_register(self, activity_types: list[str], descriptors: list[ActivityDescriptor]) -> None:
+        """Build the six-field ``RegisterWorker`` frame.
+
+        Mirrors ``register_with_contract`` in the Rust SDK. The namespace SET is
+        the same one advertised in ``x-aion-namespaces``, so a worker registers
+        into exactly the namespaces it is authorized for; ``task_queue`` is the
+        disjoint pool selector; ``node`` is the locality affinity; ``activities``
+        is the typed action surface, which is what a contract-bearing deployment
+        checks the worker against.
+        """
+
         register = worker_pb2.RegisterWorker(
-            namespace=self._config.task_queue,
+            namespaces=list(self._config.namespaces),
             activity_types=activity_types,
+            task_queue=self._config.task_queue,
+            node=self._config.node,
+            activities=descriptors,
+            identity=self._config.identity,
         )
         await self._send_to_server(worker_pb2.WorkerToServer(register=register))
 

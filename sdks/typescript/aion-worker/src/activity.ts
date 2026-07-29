@@ -2,7 +2,15 @@ import { ActivityCancellationHandle, ActivityContext } from "./context.js";
 import { RetryableError, TerminalError } from "./errors.js";
 import type { ActivityDispatcher, DispatchOutcome } from "./loop.js";
 import type { WorkerLogger } from "./reconnect.js";
-import type { ActivityFailure, ActivityTask, Payload, WorkerSession } from "./session.js";
+import type {
+	ActivityContract,
+	ActivityDescriptor,
+	ActivityFailure,
+	ActivityTask,
+	Payload,
+	WorkerSession,
+} from "./session.js";
+import { PERMISSIVE_SCHEMA } from "./session.js";
 
 export type ActivityHandler<I, O> = (
 	input: I,
@@ -31,6 +39,23 @@ export type ErasedActivityRun = (
 export interface ActivityDefinition {
 	readonly name: string;
 	readonly run: ErasedActivityRun;
+	/**
+	 * The typed action surface this activity commits to, if the author
+	 * declared one. Absent means the activity makes no contract claim — see
+	 * {@link ActivityRegistry.activityDescriptors} for what that means at
+	 * registration.
+	 */
+	readonly contract?: ActivityContract;
+}
+
+/** Options accepted by {@link defineActivity}. */
+export interface ActivityDefinitionOptions {
+	/**
+	 * The typed action surface to advertise for this activity. Supply it to
+	 * serve a queue with a deployed `.v4` contract — which, since AWL emits a
+	 * contract for every deployment, is every AWL-declared queue.
+	 */
+	readonly contract?: ActivityContract;
 }
 
 export interface ActivityRegistryOptions {
@@ -91,6 +116,56 @@ export class ActivityRegistry implements ActivityDispatcher {
 
 	public activityTypes(): readonly string[] {
 		return [...this.activities.keys()].sort();
+	}
+
+	/**
+	 * The typed action surface to advertise in `RegisterWorker.activities`.
+	 *
+	 * Three outcomes, and the middle one is the whole point:
+	 *
+	 *  - NO activity declared a contract: returns `[]`. That is the proto's
+	 *    defined "this worker predates contract commitment" value. The server
+	 *    admits such a worker on a queue with no deployed contract and refuses
+	 *    it on any contract-bearing queue, which is the correct and honest
+	 *    outcome — the worker really has committed to nothing.
+	 *  - SOME declared and some did not: throws. There is no wire encoding for
+	 *    a partial commitment, and the server would read the gap as "this
+	 *    worker does not serve that action" and refuse with a message pointing
+	 *    at the wrong problem.
+	 *  - ALL declared: returns the full set, name-sorted for a stable wire
+	 *    order.
+	 *
+	 * A declared contract with no `input` advertises {@link PERMISSIVE_SCHEMA}.
+	 * There is no equivalent fallback for `output` — the type system requires
+	 * it, because no honest default exists (see {@link ActivityContract}).
+	 */
+	public activityDescriptors(): readonly ActivityDescriptor[] {
+		const declared: ActivityDescriptor[] = [];
+		const undeclared: string[] = [];
+		for (const [name, activity] of this.activities) {
+			const contract = activity.definition.contract;
+			if (contract === undefined) {
+				undeclared.push(name);
+				continue;
+			}
+			declared.push({
+				name,
+				input: contract.input ?? PERMISSIVE_SCHEMA,
+				output: contract.output,
+			});
+		}
+		if (declared.length === 0) {
+			return [];
+		}
+		if (undeclared.length > 0) {
+			throw new Error(
+				"worker advertises a partial typed action surface: " +
+					`${undeclared.sort().join(", ")} declared no contract while ` +
+					`${declared.map((activity) => activity.name).sort().join(", ")} did. ` +
+					"Declare a contract for every activity, or for none.",
+			);
+		}
+		return declared.sort((left, right) => left.name.localeCompare(right.name));
 	}
 
 	public async dispatch(task: ActivityTask): Promise<DispatchOutcome> {
@@ -155,12 +230,14 @@ export class ActivityRegistry implements ActivityDispatcher {
 export function defineActivity<I, O>(
 	name: string,
 	handler: ActivityHandler<I, O>,
+	options: ActivityDefinitionOptions = {},
 ): ActivityDefinition {
 	if (name.length === 0) {
 		throw new Error("activity name must not be empty");
 	}
 	return {
 		name,
+		contract: options.contract,
 		run: async (input, ctx) => {
 			const decoded = decodeJsonPayload<I>(input);
 			const output = await handler(decoded, ctx);
@@ -193,6 +270,8 @@ async function dispatchActivity(
 			workflowId: task.workflowId,
 			activityId: task.activityId,
 			attempt: task.attempt,
+			runId: task.runId,
+			idempotencyKey: task.idempotencyKey,
 			heartbeatSender: dependencies.heartbeatSender,
 			contentType: task.input.contentType,
 		},

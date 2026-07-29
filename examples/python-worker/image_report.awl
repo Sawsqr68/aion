@@ -1,0 +1,39 @@
+//! image_report: hand a path to an image and get its real facts back, measured
+//! by a Python worker rather than by the server.
+//!
+//! This is the counterpart to `examples/shell-run`. There, an action carried a
+//! declared `run` body and the server executed it with no worker at all. Here
+//! the action has NO body, so it is served the other way: a separate Python
+//! process registers against the `python_box` queue and answers the dispatch.
+//! The same AWL file cannot tell you which it will be — that is the point. An
+//! action is a typed obligation; where it is discharged is an operational
+//! choice, not a language one.
+workflow image_report
+  input path: String
+
+  outcome inspected: type ImageFacts, route success
+
+/// What the worker actually measured, read out of the file's own header rather
+/// than guessed from its extension — a `.png` that is really a JPEG reports
+/// JPEG, because the bytes are the authority and the filename is not.
+type ImageFacts {
+  path: String,
+  format: String,
+  width: Int,
+  height: Int,
+  bytes: Int,
+}
+
+/// No `run` body: a remote worker must serve this queue. The worker block's
+/// name IS the task queue, so a worker registering under `python_box` with a
+/// matching typed action surface is what makes this workflow runnable.
+///
+/// The return type being a declared record is load-bearing. The server checks a
+/// worker's advertised output schema against this contract covariantly, so a
+/// worker that shrugs and advertises "I return anything" is refused here. It
+/// has to actually know what it produces.
+worker python_box
+  action inspect_image(path: String) -> ImageFacts
+
+step inspect_it
+  path |> inspect_image |> route inspected

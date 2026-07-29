@@ -211,6 +211,40 @@ jobs:
       - name: aion generate --check (examples/order-saga)
         run: cargo run -p aion-cli --bin aion -- generate examples/order-saga --check
 
+  # The Python SDKs get the same bar as the workspace, run in their own
+  # directory — for exactly the reason the `standalone-crates` lane above
+  # exists, and then some.
+  #
+  # Nothing in the Rust build references these packages, so a wire-contract
+  # change breaks them with no lane going red. That is not hypothetical: the
+  # worker SDK was wire-dead for an unknown period while its own suite stayed
+  # green, because its committed protobuf stubs were never regenerated and the
+  # tests therefore validated it against a fossil of the protocol. Agreement
+  # was preserved exactly while correctness was lost.
+  #
+  # `test_proto_contract_location.py` is the gate that catches that class: it
+  # regenerates the stubs and byte-compares them against what is committed.
+  # This job is what makes that gate real rather than something a developer
+  # might remember to run.
+  python-sdks:
+    name: python SDKs (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - sdks/python/aion-worker
+          - sdks/python/aion-client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # The worker SDK's stubs are generated from `crates/aion-proto-generated`
+      # at install time, so the checkout must include the Rust tree — it does,
+      # but the dependency is easy to miss and is the thing that broke before.
+      - name: pytest
+        working-directory: ${{ matrix.package }}
+        run: uv run --extra dev python -m pytest tests/ -q
+
   # ----------------------------------------------------------------------- #
   # SLOW LANE — the real OS-process failover gates (kill-9 + graceful). These
   # PASS on main since #157 (the per-shard failover seam now forwards through the

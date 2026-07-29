@@ -7,13 +7,17 @@ from typing import Any, NoReturn, cast
 import grpc
 import pytest
 from ar007_fakes import (
+    COMPLETION_TOKEN,
+    IDEMPOTENCY_KEY,
     FakeGrpcStream,
     FakeSession,
     RecordingDispatcher,
     activity_id,
     config,
+    descriptors,
     payload,
     register_ack_frame,
+    run_id,
     task,
     wait_for_condition,
     workflow_id,
@@ -21,6 +25,7 @@ from ar007_fakes import (
 
 import aion_worker
 from aion_worker import (
+    ActivityDescriptor,
     ReconnectBackoff,
     ReconnectConfig,
     ReconnectError,
@@ -45,7 +50,7 @@ async def test_fake_session_handshake_and_registration_carry_configured_values()
     session = FakeSession()
     worker_config = config()
     await session.handshake(worker_config)
-    await session.register(["alpha", "beta"], ["alpha", "beta"])
+    await session.register(["alpha", "beta"], descriptors(), ["alpha", "beta"])
     assert session.handshakes == [("queue-a", "worker-a")]
     assert session.registrations == [["alpha", "beta"]]
 
@@ -78,6 +83,8 @@ async def test_reconnect_re_reports_unacked_before_dispatching_new_task() -> Non
         aion_worker.PendingCompletedReport(
             workflow_id=workflow_id(),
             activity_id=activity_id(7),
+            run_id=run_id(),
+            completion_token=COMPLETION_TOKEN,
             output=payload(),
         )
     )
@@ -95,7 +102,9 @@ async def test_reconnect_re_reports_unacked_before_dispatching_new_task() -> Non
     # graceful shutdown once the new task has been dispatched.
     shutdown = asyncio.Event()
     run = asyncio.create_task(
-        connect_register_replay_and_serve(config(), fail_then_connect, dispatcher, tracker, shutdown=shutdown)
+        connect_register_replay_and_serve(
+            config(), fail_then_connect, dispatcher, descriptors(), tracker, shutdown=shutdown
+        )
     )
     await wait_for_condition(run, lambda: dispatcher.dispatched == [8])
     shutdown.set()
@@ -114,6 +123,8 @@ def test_tracker_keeps_reports_for_distinct_workflows_at_same_sequence_position(
         aion_worker.PendingCompletedReport(
             workflow_id=first_workflow,
             activity_id=activity_id(3),
+            run_id=run_id(),
+            completion_token=COMPLETION_TOKEN,
             output=payload(),
         )
     )
@@ -121,6 +132,8 @@ def test_tracker_keeps_reports_for_distinct_workflows_at_same_sequence_position(
         aion_worker.PendingCompletedReport(
             workflow_id=second_workflow,
             activity_id=activity_id(3),
+            run_id=run_id(),
+            completion_token=COMPLETION_TOKEN,
             output=payload(),
         )
     )
@@ -141,6 +154,8 @@ class WorkflowResultSession(FakeSession):
         self,
         workflow: common_pb2.WorkflowId,
         activity: common_pb2.ActivityId,
+        run: common_pb2.RunId,
+        completion_token: str,
         result: common_pb2.Payload,
     ) -> None:
         self.log.append(f"result:{workflow.uuid}:{activity.sequence_position}")
@@ -151,9 +166,12 @@ def _workflow_task(workflow_uuid: str, sequence_position: int) -> aion_worker.Ta
         aion_worker.ActivityTask(
             workflow_id=common_pb2.WorkflowId(uuid=workflow_uuid),
             activity_id=activity_id(sequence_position),
+            run_id=run_id(),
             activity_type="slow",
             input=payload(),
             attempt=1,
+            completion_token=COMPLETION_TOKEN,
+            idempotency_key=IDEMPOTENCY_KEY,
         )
     )
 
@@ -177,7 +195,9 @@ async def test_reconnect_re_reports_unacked_for_all_workflows_with_colliding_pos
     # a graceful shutdown once both replays have been observed.
     shutdown = asyncio.Event()
     run = asyncio.create_task(
-        connect_register_replay_and_serve(config(), connect, dispatcher, sleep=no_sleep, shutdown=shutdown)
+        connect_register_replay_and_serve(
+            config(), connect, dispatcher, descriptors(), sleep=no_sleep, shutdown=shutdown
+        )
     )
     await wait_for_condition(
         run,
@@ -215,7 +235,9 @@ async def test_reconnect_after_stream_drop_uses_backoff_and_replays_unacked(
     shutdown = asyncio.Event()
     with caplog.at_level("WARNING"):
         run = asyncio.create_task(
-            connect_register_replay_and_serve(config(), connect, dispatcher, sleep=record_sleep, shutdown=shutdown)
+            connect_register_replay_and_serve(
+                config(), connect, dispatcher, descriptors(), sleep=record_sleep, shutdown=shutdown
+            )
         )
         await wait_for_condition(run, lambda: dispatcher.dispatched == [7, 8])
         shutdown.set()
@@ -244,7 +266,9 @@ async def test_reconnect_logs_attempts_delays_and_exhausts_cleanly(
 
     worker_config = config()
     with caplog.at_level("WARNING"), pytest.raises(ReconnectError, match=worker_config.endpoint):
-        await connect_register_replay_and_serve(worker_config, fail_connect, RecordingDispatcher(), sleep=record_sleep)
+        await connect_register_replay_and_serve(
+            worker_config, fail_connect, RecordingDispatcher(), descriptors(), sleep=record_sleep
+        )
 
     messages = [record.getMessage() for record in caplog.records]
     assert "Connected" not in messages
@@ -282,7 +306,12 @@ async def test_shutdown_during_establishment_backoff_returns_promptly() -> None:
 
     run = asyncio.create_task(
         connect_register_replay_and_serve(
-            config(), fail_connect, RecordingDispatcher(), sleep=hanging_sleep, shutdown=shutdown
+            config(),
+            fail_connect,
+            RecordingDispatcher(),
+            descriptors(),
+            sleep=hanging_sleep,
+            shutdown=shutdown,
         )
     )
     await asyncio.wait_for(backoff_entered.wait(), timeout=5)
@@ -317,6 +346,7 @@ async def test_already_set_shutdown_never_dials() -> None:
         connect=connect,
         config=config(),
         activity_types=["greet"],
+        descriptors=descriptors(),
         available_handlers=["greet"],
         backoff=ReconnectBackoff.from_config(config()),
         shutdown=shutdown,
@@ -358,6 +388,7 @@ async def test_shutdown_during_hung_dial_cancels_the_attempt_and_returns_promptl
             connect=hung_connect,
             config=config(),
             activity_types=["greet"],
+            descriptors=descriptors(),
             available_handlers=["greet"],
             backoff=ReconnectBackoff.from_config(config()),
             shutdown=shutdown,
@@ -381,7 +412,12 @@ class HangingRegisterSession(FakeSession):
         super().__init__()
         self.register_entered = entered
 
-    async def register(self, activity_types: Iterable[str], available_handlers: Iterable[str]) -> None:
+    async def register(
+        self,
+        activity_types: Iterable[str],
+        descriptors: Iterable[ActivityDescriptor],
+        available_handlers: Iterable[str],
+    ) -> None:
         del activity_types, available_handlers
         self.register_entered.set()
         await asyncio.Event().wait()
@@ -407,6 +443,7 @@ async def test_shutdown_during_hung_register_closes_the_partial_session() -> Non
             connect=connect,
             config=config(),
             activity_types=["greet"],
+            descriptors=descriptors(),
             available_handlers=["greet"],
             backoff=ReconnectBackoff.from_config(config()),
             shutdown=shutdown,
@@ -446,7 +483,7 @@ async def test_worker_lifecycle_logs_startup_registration_waiting_receipt_and_co
     shutdown = asyncio.Event()
     with caplog.at_level("INFO"):
         run = asyncio.create_task(
-            connect_register_replay_and_serve(worker_config, connect, dispatcher, shutdown=shutdown)
+            connect_register_replay_and_serve(worker_config, connect, dispatcher, descriptors(), shutdown=shutdown)
         )
         await wait_for_condition(
             run,
@@ -477,7 +514,12 @@ class DeniedRegisterSession(FakeSession):
         super().__init__()
         self.denial = denial
 
-    async def register(self, activity_types: Iterable[str], available_handlers: Iterable[str]) -> None:
+    async def register(
+        self,
+        activity_types: Iterable[str],
+        descriptors: Iterable[ActivityDescriptor],
+        available_handlers: Iterable[str],
+    ) -> None:
         del activity_types, available_handlers
         self.log.append("register")
         raise TransportError(f"worker stream connection failed: {self.denial}") from self.denial
@@ -496,7 +538,9 @@ async def test_permission_denied_connect_stops_after_one_attempt() -> None:
         sleeps.append(delay)
 
     with pytest.raises(grpc.aio.AioRpcError) as denied:
-        await connect_register_replay_and_serve(config(), denied_connect, RecordingDispatcher(), sleep=record_sleep)
+        await connect_register_replay_and_serve(
+            config(), denied_connect, RecordingDispatcher(), descriptors(), sleep=record_sleep
+        )
 
     assert attempts == 1
     assert sleeps == []
@@ -519,7 +563,9 @@ async def test_unauthenticated_register_stops_after_one_attempt_and_closes_sessi
         sleeps.append(delay)
 
     with pytest.raises(TransportError) as denied:
-        await connect_register_replay_and_serve(config(), connect, RecordingDispatcher(), sleep=record_sleep)
+        await connect_register_replay_and_serve(
+            config(), connect, RecordingDispatcher(), descriptors(), sleep=record_sleep
+        )
 
     assert attempts == 1
     assert sleeps == []
@@ -544,7 +590,11 @@ async def test_unavailable_connect_still_retries_until_attempts_exhausted() -> N
     worker_config = config()
     with pytest.raises(ReconnectError, match=worker_config.endpoint):
         await connect_register_replay_and_serve(
-            worker_config, unavailable_connect, RecordingDispatcher(), sleep=record_sleep
+            worker_config,
+            unavailable_connect,
+            RecordingDispatcher(),
+            descriptors(),
+            sleep=record_sleep,
         )
 
     assert attempts == 3
@@ -575,13 +625,17 @@ async def test_worker_config_grpc_metadata_includes_namespace_and_subject() -> N
                 ("X-Aion-Subject", "stale"),
             )
         ),
-        namespace="payments",
+        namespaces=("payments", "billing"),
         subject="worker-a",
     )
 
+    # The namespace SET is comma-joined, matching how the server parses
+    # `x-aion-namespaces` and how the Rust worker builds it — and it is the
+    # SAME set sent in the registration frame, so authorization scope and
+    # registration scope cannot drift apart.
     assert configured.grpc_metadata() == (
         ("authorization", "Bearer token"),
-        ("x-aion-namespaces", "payments"),
+        ("x-aion-namespaces", "payments,billing"),
         ("x-aion-subject", "worker-a"),
     )
 
@@ -633,7 +687,7 @@ async def test_grpc_register_succeeds_only_on_register_ack_and_captures_payload(
     session._outbound = asyncio.Queue(maxsize=16)
     session._stream = stream
 
-    await session.register(["slow"], ["slow"])
+    await session.register(["slow"], descriptors(), ["slow"])
 
     assert stream.reads == 1
     info = session.registered_info
@@ -657,7 +711,7 @@ async def test_grpc_register_times_out_retryably_when_server_never_acks() -> Non
     session._stream = FakeGrpcStream(hang_after_frames=True)
 
     with pytest.raises(aion_worker.TransportError, match="did not acknowledge registration") as failure:
-        await session.register(["slow"], ["slow"])
+        await session.register(["slow"], descriptors(), ["slow"])
     assert aion_worker.is_retryable_session_error(failure.value)
 
 
@@ -674,7 +728,7 @@ async def test_grpc_register_rejects_non_ack_first_frame_as_protocol_violation()
     )
 
     with pytest.raises(aion_worker.TransportError, match="protocol violation"):
-        await session.register(["slow"], ["slow"])
+        await session.register(["slow"], descriptors(), ["slow"])
 
 
 async def test_grpc_register_surfaces_stream_end_before_ack_as_retryable() -> None:
@@ -684,7 +738,7 @@ async def test_grpc_register_surfaces_stream_end_before_ack_as_retryable() -> No
     session._stream = FakeGrpcStream()
 
     with pytest.raises(aion_worker.TransportError, match="ended the stream before acknowledging") as failure:
-        await session.register(["slow"], ["slow"])
+        await session.register(["slow"], descriptors(), ["slow"])
     assert aion_worker.is_retryable_session_error(failure.value)
 
 
@@ -710,7 +764,7 @@ async def test_reconnect_logs_connection_failure_reason(caplog: pytest.LogCaptur
 
     worker_config = config()
     with caplog.at_level("ERROR"), pytest.raises(ReconnectError, match="dial refused"):
-        await connect_register_replay_and_serve(worker_config, fail_connect, RecordingDispatcher())
+        await connect_register_replay_and_serve(worker_config, fail_connect, RecordingDispatcher(), descriptors())
 
     expected_message = f"Connection failed to {worker_config.endpoint}: dial refused"
     failure_records = [record for record in caplog.records if record.getMessage() == expected_message]
@@ -770,9 +824,12 @@ def test_activity_task_reads_wire_attempt_and_rejects_zero() -> None:
         worker_pb2.ActivityTask(
             workflow_id=common_pb2.WorkflowId(uuid="workflow-1"),
             activity_id=common_pb2.ActivityId(sequence_position=1),
+            run_id=run_id(),
             activity_type="slow",
             input=common_pb2.Payload(content_type="application/json", bytes=b"{}"),
             attempt=3,
+            completion_token=COMPLETION_TOKEN,
+            idempotency_key=IDEMPOTENCY_KEY,
         )
     )
     assert stamped.attempt == 3
@@ -782,6 +839,7 @@ def test_activity_task_reads_wire_attempt_and_rejects_zero() -> None:
             worker_pb2.ActivityTask(
                 workflow_id=common_pb2.WorkflowId(uuid="workflow-1"),
                 activity_id=common_pb2.ActivityId(sequence_position=1),
+                run_id=run_id(),
                 activity_type="slow",
                 input=common_pb2.Payload(content_type="application/json", bytes=b"{}"),
             )
@@ -820,9 +878,12 @@ async def test_wire_attempt_is_exposed_on_the_activity_context() -> None:
             aion_worker.ActivityTask(
                 workflow_id=workflow_id(),
                 activity_id=activity_id(1),
+                run_id=run_id(),
                 activity_type="slow",
                 input=payload(),
                 attempt=5,
+                completion_token=COMPLETION_TOKEN,
+                idempotency_key=IDEMPOTENCY_KEY,
             )
         )
     )

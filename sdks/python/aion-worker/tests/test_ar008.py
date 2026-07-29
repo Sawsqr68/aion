@@ -7,10 +7,17 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 import pytest
-from ar007_fakes import activity_id, config, workflow_id
+from ar007_fakes import COMPLETION_TOKEN, IDEMPOTENCY_KEY, activity_id, config, run_id, workflow_id
 
 import aion_worker
-from aion_worker import ActivityCancelled, ActivityContext, ActivityRegistry, Worker, WorkerConfig
+from aion_worker import (
+    ActivityCancelled,
+    ActivityContext,
+    ActivityDescriptor,
+    ActivityRegistry,
+    Worker,
+    WorkerConfig,
+)
 from aion_worker.proto import common_pb2, worker_pb2
 
 
@@ -26,7 +33,12 @@ class RecordingSession:
     async def handshake(self, worker_config: WorkerConfig) -> None:
         self.handshakes.append((worker_config.task_queue, worker_config.identity))
 
-    async def register(self, activity_types: Iterable[str], available_handlers: Iterable[str]) -> None:
+    async def register(
+        self,
+        activity_types: Iterable[str],
+        descriptors: Iterable[ActivityDescriptor],
+        available_handlers: Iterable[str],
+    ) -> None:
         del available_handlers
         self.registrations.append(list(activity_types))
 
@@ -43,6 +55,8 @@ class RecordingSession:
         self,
         workflow: common_pb2.WorkflowId,
         activity: common_pb2.ActivityId,
+        run: common_pb2.RunId,
+        completion_token: str,
         result: common_pb2.Payload,
     ) -> None:
         del workflow
@@ -52,6 +66,8 @@ class RecordingSession:
         self,
         workflow: common_pb2.WorkflowId,
         activity: common_pb2.ActivityId,
+        run: common_pb2.RunId,
+        completion_token: str,
         failure: worker_pb2.ActivityError,
     ) -> None:
         del workflow
@@ -83,9 +99,12 @@ def typed_task(sequence_position: int, activity_type: str, value: object) -> aio
         aion_worker.ActivityTask(
             workflow_id=workflow_id(),
             activity_id=activity_id(sequence_position),
+            run_id=run_id(),
             activity_type=activity_type,
             input=json_payload(value),
             attempt=1,
+            completion_token=COMPLETION_TOKEN,
+            idempotency_key=IDEMPOTENCY_KEY,
         )
     )
 
@@ -99,7 +118,14 @@ async def test_activity_registry_typed_json_round_trip_preserves_content_type() 
         return value * 2
 
     session = RecordingSession()
-    context = ActivityContext(workflow_id=workflow_id(), activity_id=activity_id(1), attempt=1, session=session)
+    context = ActivityContext(
+        workflow_id=workflow_id(),
+        activity_id=activity_id(1),
+        run_id=run_id(),
+        attempt=1,
+        idempotency_key=IDEMPOTENCY_KEY,
+        session=session,
+    )
     outcome = await registry.dispatch(typed_task(1, "double", 21).task, context)
 
     assert isinstance(outcome, aion_worker.Completed)
@@ -131,13 +157,23 @@ async def test_non_json_input_is_terminal_decode_failure() -> None:
         return value
 
     session = RecordingSession()
-    context = ActivityContext(workflow_id=workflow_id(), activity_id=activity_id(1), attempt=1, session=session)
+    context = ActivityContext(
+        workflow_id=workflow_id(),
+        activity_id=activity_id(1),
+        run_id=run_id(),
+        attempt=1,
+        idempotency_key=IDEMPOTENCY_KEY,
+        session=session,
+    )
     bad_task = aion_worker.ActivityTask(
         workflow_id=workflow_id(),
         activity_id=activity_id(1),
+        run_id=run_id(),
         activity_type="echo",
         input=common_pb2.Payload(content_type="application/x-custom", bytes=b"1"),
         attempt=1,
+        completion_token=COMPLETION_TOKEN,
+        idempotency_key=IDEMPOTENCY_KEY,
     )
 
     outcome = await registry.dispatch(bad_task, context)
@@ -168,7 +204,14 @@ async def test_retryable_terminal_and_unclassified_failures_are_classified(
         raise ValueError("boom")
 
     session = RecordingSession()
-    context = ActivityContext(workflow_id=workflow_id(), activity_id=activity_id(1), attempt=1, session=session)
+    context = ActivityContext(
+        workflow_id=workflow_id(),
+        activity_id=activity_id(1),
+        run_id=run_id(),
+        attempt=1,
+        idempotency_key=IDEMPOTENCY_KEY,
+        session=session,
+    )
 
     retry_outcome = await registry.dispatch(typed_task(1, "retry", 0).task, context)
     terminal_outcome = await registry.dispatch(typed_task(1, "terminal", 0).task, context)

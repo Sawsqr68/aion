@@ -15,6 +15,7 @@ class WorkflowStatus(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     WORKFLOW_STATUS_CANCELLED: _ClassVar[WorkflowStatus]
     WORKFLOW_STATUS_TIMED_OUT: _ClassVar[WorkflowStatus]
     WORKFLOW_STATUS_CONTINUED_AS_NEW: _ClassVar[WorkflowStatus]
+    WORKFLOW_STATUS_PAUSED: _ClassVar[WorkflowStatus]
 
 class WireErrorCode(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
@@ -29,6 +30,10 @@ class WireErrorCode(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     WIRE_ERROR_CODE_INVALID_INPUT: _ClassVar[WireErrorCode]
     WIRE_ERROR_CODE_BACKEND: _ClassVar[WireErrorCode]
     WIRE_ERROR_CODE_QUERY_FAILED: _ClassVar[WireErrorCode]
+    WIRE_ERROR_CODE_DEPLOY_DENIED: _ClassVar[WireErrorCode]
+    WIRE_ERROR_CODE_VERSION_PINNED: _ClassVar[WireErrorCode]
+    WIRE_ERROR_CODE_NOT_OWNER: _ClassVar[WireErrorCode]
+    WIRE_ERROR_CODE_INVALID_STATE: _ClassVar[WireErrorCode]
 WORKFLOW_STATUS_UNSPECIFIED: WorkflowStatus
 WORKFLOW_STATUS_RUNNING: WorkflowStatus
 WORKFLOW_STATUS_COMPLETED: WorkflowStatus
@@ -36,6 +41,7 @@ WORKFLOW_STATUS_FAILED: WorkflowStatus
 WORKFLOW_STATUS_CANCELLED: WorkflowStatus
 WORKFLOW_STATUS_TIMED_OUT: WorkflowStatus
 WORKFLOW_STATUS_CONTINUED_AS_NEW: WorkflowStatus
+WORKFLOW_STATUS_PAUSED: WorkflowStatus
 WIRE_ERROR_CODE_UNSPECIFIED: WireErrorCode
 WIRE_ERROR_CODE_NOT_FOUND: WireErrorCode
 WIRE_ERROR_CODE_NAMESPACE_DENIED: WireErrorCode
@@ -47,6 +53,10 @@ WIRE_ERROR_CODE_LAGGED: WireErrorCode
 WIRE_ERROR_CODE_INVALID_INPUT: WireErrorCode
 WIRE_ERROR_CODE_BACKEND: WireErrorCode
 WIRE_ERROR_CODE_QUERY_FAILED: WireErrorCode
+WIRE_ERROR_CODE_DEPLOY_DENIED: WireErrorCode
+WIRE_ERROR_CODE_VERSION_PINNED: WireErrorCode
+WIRE_ERROR_CODE_NOT_OWNER: WireErrorCode
+WIRE_ERROR_CODE_INVALID_STATE: WireErrorCode
 
 class WorkflowId(_message.Message):
     __slots__ = ("uuid",)

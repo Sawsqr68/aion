@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import { defineActivity } from "./activity.js";
 import { Worker } from "./worker.js";
 import type {
+	ActivityCompletionIdentity,
 	ActivityFailure,
 	ActivityTask,
 	Payload,
+	WorkerAdvertisement,
 	WorkerConfig,
 	WorkerSession,
 	WorkerSessionEvent,
@@ -24,7 +26,9 @@ type SessionScriptEvent =
 class FakeWorkerSession implements WorkerSession {
 	public readonly completed: Payload[] = [];
 	public readonly failures: ActivityFailure[] = [];
-	public readonly registrations: string[][] = [];
+	public readonly registrations: WorkerAdvertisement[] = [];
+	/** Fencing identities echoed on reported outcomes, in report order. */
+	public readonly reportedCompletions: ActivityCompletionIdentity[] = [];
 	public readonly heartbeats: Array<{
 		readonly workflowId: string;
 		readonly activityId: string;
@@ -38,13 +42,13 @@ class FakeWorkerSession implements WorkerSession {
 		return Promise.resolve();
 	}
 
-	public async register(activityTypes: readonly string[]): Promise<void> {
+	public async register(advertisement: WorkerAdvertisement): Promise<void> {
 		// Fidelity with the real transport: registering on a closed session
 		// is a write into an ended stream and must fail, never resolve.
 		if (this.closed) {
 			throw new Error("write after end");
 		}
-		this.registrations.push([...activityTypes]);
+		this.registrations.push(advertisement);
 	}
 
 	public async *receiveTasks(): AsyncIterable<WorkerSessionEvent> {
@@ -68,18 +72,18 @@ class FakeWorkerSession implements WorkerSession {
 	}
 
 	public async reportResult(
-		_workflowId: string,
-		_activityId: string,
+		completion: ActivityCompletionIdentity,
 		result: Payload,
 	): Promise<void> {
+		this.reportedCompletions.push(completion);
 		this.completed.push(result);
 	}
 
 	public async reportFailure(
-		_workflowId: string,
-		_activityId: string,
+		completion: ActivityCompletionIdentity,
 		failure: ActivityFailure,
 	): Promise<void> {
+		this.reportedCompletions.push(completion);
 		this.failures.push(failure);
 	}
 
@@ -188,7 +192,9 @@ describe("Worker", () => {
 		controller.abort();
 		await run;
 
-		expect(session.registrations).toEqual([["increment"]]);
+		expect(session.registrations).toEqual([
+			{ activityTypes: ["increment"], activities: [] },
+		]);
 		expect(session.failures).toEqual([]);
 		expect(decode(session.completed[0] as Payload)).toEqual({ value: 7 });
 	});
@@ -236,8 +242,12 @@ describe("Worker", () => {
 
 		expect(factoryCalls).toBe(2);
 		expect(first.closed).toBe(true);
-		expect(first.registrations).toEqual([["increment"]]);
-		expect(second.registrations).toEqual([["increment"]]);
+		expect(first.registrations).toEqual([
+			{ activityTypes: ["increment"], activities: [] },
+		]);
+		expect(second.registrations).toEqual([
+			{ activityTypes: ["increment"], activities: [] },
+		]);
 		expect(decode(second.completed[0] as Payload)).toEqual({ value: 2 });
 		expect(decode(second.completed[1] as Payload)).toEqual({ value: 6 });
 		expect(second.failures).toEqual([]);
@@ -396,10 +406,7 @@ describe("Worker", () => {
 		let factoryCalls = 0;
 		const worker = new Worker(
 			{
-				endpoint: "127.0.0.1:50051",
-				taskQueue: "queue",
-				identity: "identity",
-				maxConcurrency: 1,
+				...config(),
 				reconnect: { initialDelayMs: 1, maxDelayMs: 2, maxAttempts: 0 },
 			},
 			[defineActivity("increment", async () => ({}))],
@@ -543,6 +550,10 @@ function task(
 			bytes: new TextEncoder().encode(JSON.stringify(input)),
 		},
 		attempt: 1,
+		runId: "run-1",
+		completionToken: `token-${activityId}`,
+		idempotencyKey: `idem-${activityId}`,
+		labels: {},
 	};
 }
 
@@ -553,6 +564,8 @@ function decode(payload: Payload): unknown {
 function config(): WorkerConfig {
 	return {
 		endpoint: "127.0.0.1:50051",
+		namespaces: ["default"],
+		subject: "worker",
 		taskQueue: "queue",
 		identity: "identity",
 		maxConcurrency: 1,

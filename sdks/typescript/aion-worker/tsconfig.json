@@ -11,12 +11,12 @@
     "emitDeclarationOnly": false,
     "outDir": "dist/esm",
     "declarationDir": "dist/types",
-    "rootDir": "src",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "allowJs": true
   },
   "include": [
     "src/**/*.ts"

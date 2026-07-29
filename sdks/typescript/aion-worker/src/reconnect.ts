@@ -1,9 +1,11 @@
 import { status } from "@grpc/grpc-js";
 import type {
+	ActivityCompletionIdentity,
 	ActivityFailure,
 	ActivityIdKey,
 	Payload,
 	ReconnectConfig,
+	WorkerAdvertisement,
 	WorkerConfig,
 	WorkerSession,
 	WorkerSessionFactory,
@@ -100,17 +102,25 @@ export function isRetryableSessionError(error: unknown): boolean {
 	return code === undefined || !NON_RETRYABLE_GRPC_STATUS_CODES.has(code);
 }
 
+/**
+ * An outcome awaiting the server's `ResultAck`.
+ *
+ * Carries the full {@link ActivityCompletionIdentity}, not just the
+ * (workflowId, activityId) key: a re-report on a NEW session must echo the
+ * same `run_id` and `completion_token` the original task carried, and a
+ * regenerated or omitted token is refused by the server's completion fence.
+ * Keeping the identity in the tracker is what makes replay-after-reconnect
+ * survivable.
+ */
 export type PendingActivityReport =
 	| {
 			readonly kind: "completed";
-			readonly workflowId: WorkflowId;
-			readonly activityId: ActivityIdKey;
+			readonly completion: ActivityCompletionIdentity;
 			readonly result: Payload;
 	  }
 	| {
 			readonly kind: "failed";
-			readonly workflowId: WorkflowId;
-			readonly activityId: ActivityIdKey;
+			readonly completion: ActivityCompletionIdentity;
 			readonly failure: ActivityFailure;
 	  };
 
@@ -133,12 +143,13 @@ export class UnackedResultTracker {
 	>();
 
 	public record(report: PendingActivityReport): void {
-		let workflowReports = this.reports.get(report.workflowId);
+		const { workflowId, activityId } = report.completion;
+		let workflowReports = this.reports.get(workflowId);
 		if (workflowReports === undefined) {
 			workflowReports = new Map<ActivityIdKey, PendingActivityReport>();
-			this.reports.set(report.workflowId, workflowReports);
+			this.reports.set(workflowId, workflowReports);
 		}
-		workflowReports.set(report.activityId, report);
+		workflowReports.set(activityId, report);
 	}
 
 	public acknowledge(workflowId: WorkflowId, activityId: ActivityIdKey): void {
@@ -272,7 +283,7 @@ export class ServerClosedStreamError extends Error {
  */
 export async function reconnectWithBackoff(
 	config: WorkerConfig,
-	activityTypes: readonly string[],
+	advertisement: WorkerAdvertisement,
 	dependencies: ReconnectDependencies,
 ): Promise<WorkerSession | undefined> {
 	const reconnect = requireReconnectConfig(config.reconnect);
@@ -288,7 +299,7 @@ export async function reconnectWithBackoff(
 			return undefined;
 		}
 		dependencies.logger?.info("worker reconnect attempt", { attempt });
-		const establishment = establishSession(config, activityTypes, dependencies);
+		const establishment = establishSession(config, advertisement, dependencies);
 		const outcome = await raceEstablishmentAgainstAbort(
 			establishment,
 			dependencies.signal,
@@ -346,14 +357,14 @@ export async function reconnectWithBackoff(
  */
 async function establishSession(
 	config: WorkerConfig,
-	activityTypes: readonly string[],
+	advertisement: WorkerAdvertisement,
 	dependencies: ReconnectDependencies,
 ): Promise<WorkerSession> {
 	let session: WorkerSession | undefined;
 	try {
 		session = await dependencies.createSession(config);
 		await session.handshake(config);
-		await session.register(activityTypes);
+		await session.register(advertisement);
 		return session;
 	} catch (error) {
 		await closeFailedSession(session, dependencies.logger);
@@ -535,22 +546,17 @@ export async function reReportUnacked(
 ): Promise<void> {
 	for (const report of tracker.snapshot()) {
 		logger?.info("worker re-reporting unacknowledged activity", {
-			workflowId: report.workflowId,
-			activityId: report.activityId,
+			workflowId: report.completion.workflowId,
+			activityId: report.completion.activityId,
 			kind: report.kind,
 		});
+		// The ORIGINAL completion identity is replayed verbatim: the token
+		// proves which execution generation produced this outcome, and the new
+		// session does not change which one that was.
 		if (report.kind === "completed") {
-			await session.reportResult(
-				report.workflowId,
-				report.activityId,
-				report.result,
-			);
+			await session.reportResult(report.completion, report.result);
 		} else {
-			await session.reportFailure(
-				report.workflowId,
-				report.activityId,
-				report.failure,
-			);
+			await session.reportFailure(report.completion, report.failure);
 		}
 	}
 }

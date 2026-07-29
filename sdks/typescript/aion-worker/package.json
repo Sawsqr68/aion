@@ -27,15 +27,17 @@
     "README.md"
   ],
   "scripts": {
-    "generate:proto": "mkdir -p src/proto && grpc_tools_node_protoc --plugin=protoc-gen-ts_proto=./node_modules/.bin/protoc-gen-ts_proto --ts_proto_out=src/proto --ts_proto_opt=esModuleInterop=true,outputServices=grpc-js,useExactTypes=false,forceLong=bigint,importSuffix=.js -I ../../../crates/aion-proto/proto ../../../crates/aion-proto/proto/common.proto ../../../crates/aion-proto/proto/worker.proto",
-    "build": "npm run generate:proto && npm run build:esm && npm run build:cjs && node -e \"require('node:fs').writeFileSync('dist/cjs/package.json', JSON.stringify({ type: 'commonjs' }))\"",
-    "build:esm": "tsc -p tsconfig.json",
+    "generate:proto": "node scripts/generate-proto.mjs",
+    "check:proto": "node scripts/generate-proto.mjs --check",
+    "build": "npm run check:proto && npm run build:esm && npm run build:cjs && node -e \"require('node:fs').writeFileSync('dist/cjs/package.json', JSON.stringify({ type: 'commonjs' }))\"",
+    "build:esm": "tsc -p tsconfig.build.json",
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {
+    "@bufbuild/protobuf": "^2.12.0",
     "@grpc/grpc-js": "^1.10.0"
   },
   "devDependencies": {

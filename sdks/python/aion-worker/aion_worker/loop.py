@@ -26,6 +26,7 @@ from .reconnect import (
 )
 from .session import (
     ActivityCancelled,
+    ActivityDescriptor,
     ActivityError,
     ActivityId,
     ActivityTask,
@@ -218,6 +219,7 @@ async def connect_register_replay_and_serve(
     config: WorkerConfig,
     connect: SessionFactory,
     dispatcher: ActivityDispatcher,
+    descriptors: Iterable[ActivityDescriptor],
     tracker: UnackedResultTracker | None = None,
     sleep: SleepFactory = asyncio.sleep,
     shutdown: asyncio.Event | None = None,
@@ -257,6 +259,11 @@ async def connect_register_replay_and_serve(
 
     unacked = tracker if tracker is not None else UnackedResultTracker()
     activity_types = list(dispatcher.activity_types())
+    # Materialised once: the establishment cycle re-sends the same registration
+    # on every redial, and a consumed iterator would advertise an empty action
+    # surface on the second attempt — which a contract-bearing deployment reads
+    # as "this worker predates contract commitment" and refuses.
+    advertised = list(descriptors)
     backoff = ReconnectBackoff.from_config(config)
     dropped_attempt = 0
     while shutdown is None or not shutdown.is_set():
@@ -264,6 +271,7 @@ async def connect_register_replay_and_serve(
             connect=connect,
             config=config,
             activity_types=activity_types,
+            descriptors=advertised,
             available_handlers=activity_types,
             backoff=backoff,
             shutdown=shutdown,
@@ -491,7 +499,9 @@ async def _run_and_report(
         context = ActivityContext(
             workflow_id=task.workflow_id,
             activity_id=task.activity_id,
+            run_id=task.run_id,
             attempt=task.attempt,
+            idempotency_key=task.idempotency_key,
             session=session,
             content_type=task.input.content_type,
         )
@@ -541,22 +551,50 @@ async def _report_outcome(
     session: WorkerSession, task: ActivityTask, outcome: DispatchOutcome, tracker: UnackedResultTracker
 ) -> None:
     if isinstance(outcome, Completed):
-        report = PendingCompletedReport(task.workflow_id, task.activity_id, outcome.output)
+        report = PendingCompletedReport(
+            task.workflow_id,
+            task.activity_id,
+            task.run_id,
+            task.completion_token,
+            outcome.output,
+        )
         tracker.record(report)
         logger.info(
             "reporting activity completion",
             extra=_log_fields(task.workflow_id, task.activity_id, task.activity_type),
         )
-        await session.report_result(task.workflow_id, task.activity_id, outcome.output)
+        await session.report_result(
+            task.workflow_id,
+            task.activity_id,
+            task.run_id,
+            # Echoed VERBATIM: the token is the server's proof that this worker
+            # is still the live generation for the activity. A worker that
+            # rebuilt or reinterpreted it would be manufacturing its own
+            # authority to complete.
+            task.completion_token,
+            outcome.output,
+        )
         logger.info(
             "reported activity completion",
             extra=_log_fields(task.workflow_id, task.activity_id, task.activity_type),
         )
         return
-    failed_report = PendingFailedReport(task.workflow_id, task.activity_id, outcome.failure)
+    failed_report = PendingFailedReport(
+        task.workflow_id,
+        task.activity_id,
+        task.run_id,
+        task.completion_token,
+        outcome.failure,
+    )
     tracker.record(failed_report)
     logger.info("reporting activity failure", extra=_log_fields(task.workflow_id, task.activity_id, task.activity_type))
-    await session.report_failure(task.workflow_id, task.activity_id, outcome.failure)
+    await session.report_failure(
+        task.workflow_id,
+        task.activity_id,
+        task.run_id,
+        task.completion_token,
+        outcome.failure,
+    )
     logger.info("reported activity failure", extra=_log_fields(task.workflow_id, task.activity_id, task.activity_type))
 
 
