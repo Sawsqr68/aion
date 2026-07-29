@@ -189,15 +189,18 @@ fn render_schema(package_name: &str, boundary: &BoundaryType) -> String {
 /// Renders one boundary type's schema document **without** the `$comment`
 /// origin marker, for a worker's advertised typed action surface.
 ///
-/// The marker is deliberately absent, not merely tidied away. A worker's
-/// advertised input schema is the *superset* side of
-/// `aion_package::contract_diffs`, and that check requires every key it does
-/// not recognise as a validating constraint to appear identically on the
-/// deployed contract. `$comment` is not a recognised constraint and is not
-/// stripped as a presentation annotation, so advertising it would make the
-/// worker's input schema unsatisfiable against any contract that does not
-/// carry the byte-identical marker. Structure is the whole advertisement;
-/// provenance prose belongs only in the on-disk `schemas/*.json`.
+/// The marker is deliberately absent, not merely tidied away: structure is the
+/// whole advertisement, and a do-not-edit note naming a Gleam source file is
+/// provenance prose that belongs only in the on-disk `schemas/*.json`.
+///
+/// This split originally existed because `$comment` decided admission —
+/// `normalize_schema` did not strip it, and the subset check demands that an
+/// unrecognised key on one side appear identically on the other, so advertising
+/// the marker made the schema unsatisfiable against any contract lacking the
+/// byte-identical text. That defect is fixed at the normalizer, which now treats
+/// `$comment` as the non-validating annotation the specification says it is. So
+/// keeping the marker out of the advertisement is hygiene now rather than a
+/// workaround — still right, but no longer load-bearing for admission.
 pub(super) fn render_advertised_schema(boundary: &BoundaryType) -> String {
     let mut out = String::new();
     out.push_str("{\n");
