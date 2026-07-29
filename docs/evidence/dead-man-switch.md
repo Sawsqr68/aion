@@ -192,6 +192,51 @@ somewhere honest to go.
 
 ---
 
+## Hit A′ — busy is not silent (found by building the fix, fixed in-lane)
+
+Building the switch surfaced a fifth face of the same defect, and it is the one
+the live stack complained about loudest: **"any leg longer than ~40 s reliably
+loses its connection mid-work."**
+
+A plain activity executes **INLINE** on the worker's serve loop. While it runs
+the worker cannot dequeue — let alone answer — the server's pings, and on the
+outbox path (`heartbeat_window_ms: 0`) the per-dispatch liveness pump does not
+arm either. So **nothing** advanced the connection lease during a long leg, and
+a worker was deregistered mid-work for the crime of working. Left alone, the new
+switch would ALSO have made the worker tear down its own healthy connection the
+moment such a handler returned, because the silence clock started when the
+dispatch arrived — a self-inflicted regression strictly worse than the bug.
+
+Both halves are closed:
+
+* the silence clock re-arms on frame **completion** as well as arrival — the
+  switch measures silence while the worker is LISTENING; time spent executing is
+  work, not silence;
+* the existing per-dispatch liveness pump now arms from **either** window: the
+  dispatch's own (unchanged, the bridge path) **or the CONNECTION's**, learned
+  from the ping. The pump publishes from a background task on a shared writer,
+  so the lease stays alive whatever the serve loop is doing. No new mechanism —
+  the proven one, given the window it was missing.
+
+**Pin:** `a_long_activity_is_not_mistaken_for_a_dead_link` — an activity that
+holds the serve loop for 2× the window, then a second dispatch on the SAME
+registration.
+
+* **RED without the fix** (`gate-logs/dead-man-switch/red/long-activity-red.log`,
+  produced by reverting only the connection-window pump arming):
+  > `the worker tore its healthy connection down after a long activity: the dead-man switch counted execution time as silence`
+* **GREEN on the lane:** `test a_long_activity_is_not_mistaken_for_a_dead_link ... ok`
+
+> **⚠ Residual, reported not hidden.** The pump is armed by the FIRST ping, which
+> arrives within a quarter window of registration. A dispatch that both lands
+> inside that first quarter window AND outruns the whole window would still lose
+> its lease. Closing it needs a ruling between (a) spawning plain liminal
+> dispatches off the serve loop the way agent dispatches already are — which
+> changes per-worker concurrency semantics, and is not this lane's to decide —
+> or (b) a worker-initiated connection beat on a protocol-constant cadence until
+> the window is learned, which D1 permits but which adds a second liveness half.
+> **Not improvised here.**
+
 ## Hit D — retryable-but-never-retried on worker loss
 
 **Live:** gate runs `dca75b24-bd33-414d-9841-4dc80e6a1f43` and

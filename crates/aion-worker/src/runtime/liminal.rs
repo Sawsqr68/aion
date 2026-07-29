@@ -565,7 +565,18 @@ impl LiminalActivityWorker {
                 // intervention, or a liveness ping all re-arm the dead-man
                 // switch, so a busy connection is never declared dead.
                 self.silence.record_inbound();
-                self.handle_pushed_frame(frame).await?;
+                let served = self.handle_pushed_frame(frame).await;
+                // Re-arm on COMPLETION too. A plain activity executes INLINE on
+                // this loop, so a handler that outruns the silence window would
+                // otherwise return to a clock that started when its dispatch
+                // arrived and be declared dead on a perfectly healthy link. The
+                // switch measures silence while the worker is LISTENING; time
+                // spent executing is not silence, it is work. Pings that queued
+                // behind the handler are drained on the next iterations, so a
+                // link that genuinely died mid-activity is still declared dead
+                // one window after the handler returns.
+                self.silence.record_inbound();
+                served?;
                 Ok(true)
             }
             // A bare timeout with no push is not an error: surface it as "nothing
@@ -869,7 +880,8 @@ impl LiminalActivityWorker {
         // Keep this liveness-TRACKED dispatch beating for as long as the handler
         // genuinely runs (a no-op for the window-less outbox path). The guard
         // aborts the pump on every exit path.
-        let _liveness = spawn_liveness_pump(self.client.writer_handle(), request);
+        let _liveness =
+            spawn_liveness_pump(self.client.writer_handle(), request, self.silence.window());
         let (event_sender, drain) = spawn_event_drain(DrainBinding::new(
             self.live_writer.clone(),
             self.drain_backoff,
@@ -940,7 +952,11 @@ async fn run_agent_dispatch(
     let _session_guard = control.register(session_key, control_tx, capabilities);
     // Keep a liveness-TRACKED agent dispatch beating for the whole run (a no-op
     // for the window-less outbox path); the guard aborts the pump on every exit.
-    let _liveness = spawn_liveness_pump(writer.clone(), &request);
+    // An agent dispatch is SPAWNED off the serve loop, so the loop stays free to
+    // dequeue and answer liveness pings for the whole run — the connection
+    // window adds nothing here, and the dispatch's own window arms the pump
+    // exactly as before.
+    let _liveness = spawn_liveness_pump(writer.clone(), &request, None);
     let spec = AgentRunSpec::new(
         request.workflow_id.clone(),
         activity_id,
@@ -989,13 +1005,32 @@ async fn run_agent_dispatch(
 /// server's heartbeat sweeper, while a wedged process stops pumping and
 /// correctly is. Dropping the returned guard aborts the pump, so it lives
 /// exactly as long as the dispatch on every exit path.
-fn spawn_liveness_pump(writer: PushWriter, request: &DispatchRequest) -> Option<LivenessPump> {
-    if request.heartbeat_window_ms == 0 {
+fn spawn_liveness_pump(
+    writer: PushWriter,
+    request: &DispatchRequest,
+    connection_window: Option<Duration>,
+) -> Option<LivenessPump> {
+    // Two windows can arm this pump, and either is enough. The dispatch's own
+    // window arms it for a liveness-TRACKED (bridge) dispatch, as it always
+    // has. The CONNECTION's window — learned from the server's liveness ping —
+    // arms it for every other dispatch too, including an outbox one that
+    // carries no window of its own.
+    //
+    // That second source is load-bearing, not a nicety: a plain activity
+    // executes INLINE on the serve loop, so while it runs the worker cannot
+    // dequeue (or answer) the server's pings, and nothing else would advance
+    // the connection lease. A leg longer than the window would be deregistered
+    // mid-work for the crime of working — observed live on legs over ~40s. The
+    // pump publishes from a background task on a shared writer, so it keeps the
+    // lease alive whatever the serve loop is doing.
+    let window = match request.heartbeat_window_ms {
+        0 => connection_window?,
+        millis => Duration::from_millis(millis),
+    };
+    if window.is_zero() {
         return None;
     }
-    let period = crate::runtime::loop_::liveness_pump_interval(Duration::from_millis(
-        request.heartbeat_window_ms,
-    ));
+    let period = crate::runtime::loop_::liveness_pump_interval(window);
     let beat = WorkerLivenessBeat {
         workflow_id: request.workflow_id.clone(),
         ordinal: request.ordinal,

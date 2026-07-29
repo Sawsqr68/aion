@@ -76,6 +76,10 @@ const ACTIVITY_TYPE: &str = "run-check";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CheckInput {
     label: String,
+    /// Milliseconds the handler blocks for, so a pin can drive an activity that
+    /// deliberately outruns the connection's silence window.
+    #[serde(default)]
+    hold_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -198,6 +202,63 @@ fn a_wedged_link_is_detected_and_redialed() -> TestResult {
     harness.shutdown()
 }
 
+// ------------------------------------------------ busy is not silent ----
+
+/// A plain activity executes INLINE on the worker's serve loop, so a handler
+/// that outruns the silence window returns to a clock that started when its
+/// dispatch arrived. The dead-man switch must NOT read that as a dead link: the
+/// worker was busy, not silent, and tearing down a healthy connection after
+/// every long activity would be a far worse failure than the one being fixed.
+///
+/// This pin is a self-inflicted-regression guard, not one of the four hits: it
+/// fails against the switch's first cut (which re-armed only on frame ARRIVAL)
+/// and passes once the clock also re-arms on completion.
+#[test]
+fn a_long_activity_is_not_mistaken_for_a_dead_link() -> TestResult {
+    let harness = Harness::start()?;
+    let worker = WorkerThread::spawn(vec![harness.address.to_string()])?;
+    harness.wait_for_worker()?;
+    let handle = harness
+        .registered_worker()
+        .ok_or_else(|| test_error("the worker never registered"))?;
+    let worker_id = handle.id();
+
+    // Let the connection settle into its steady state first, exactly as the
+    // wedged-link pin does: the worker's switch and its connection-lease pump
+    // are both armed by the server's first ping, which arrives within a quarter
+    // window of registration. (A dispatch that lands inside that first quarter
+    // window is a documented residual — see the evidence doc.)
+    std::thread::sleep(HEARTBEAT_WINDOW);
+
+    // One activity that holds the serve loop for well over the silence window.
+    let hold = HEARTBEAT_WINDOW * 2;
+    let response = push_dispatch_holding(
+        &handle,
+        "long-but-alive",
+        u64::try_from(hold.as_millis()).unwrap_or(u64::MAX),
+    )?;
+    assert_eq!(response, r#"{"ran":"long-but-alive"}"#);
+
+    // The connection must be the SAME one: no declared death, no teardown, no
+    // redial. A second dispatch proves it is still live.
+    let still = harness
+        .registered_workers()
+        .into_iter()
+        .find(|candidate| candidate.id() == worker_id)
+        .ok_or_else(|| {
+            test_error(
+                "the worker tore its healthy connection down after a long activity: the \
+                 dead-man switch counted execution time as silence",
+            )
+        })?;
+    let response = push_dispatch(&still, "still-here")?;
+    assert_eq!(response, r#"{"ran":"still-here"}"#);
+    assert_eq!(worker.executions(), 2);
+
+    worker.stop();
+    harness.shutdown()
+}
+
 // ------------------------------------------------------------- harness ----
 
 /// A running liminal listener with the aion notifier, the liveness probe, and
@@ -312,6 +373,15 @@ impl Harness {
 /// Pushes one real dispatch to a registered worker over its liminal connection
 /// and returns the worker's result string.
 fn push_dispatch(handle: &WorkerHandle, label: &str) -> Result<String, TestError> {
+    push_dispatch_holding(handle, label, 0)
+}
+
+/// [`push_dispatch`], but the worker's handler blocks for `hold_ms` first.
+fn push_dispatch_holding(
+    handle: &WorkerHandle,
+    label: &str,
+    hold_ms: u64,
+) -> Result<String, TestError> {
     let WorkerDelivery::Liminal(delivery) = handle.delivery() else {
         return Err(test_error("the registered worker is not liminal-delivered"));
     };
@@ -324,6 +394,7 @@ fn push_dispatch(handle: &WorkerHandle, label: &str) -> Result<String, TestError
         idempotency_key: "dead-man-switch-key".to_owned(),
         input: serde_json::to_vec(&CheckInput {
             label: label.to_owned(),
+            hold_ms,
         })
         .map_err(test_error)?,
         attempt: 1,
@@ -366,6 +437,13 @@ impl WorkerThread {
                     let counter = Arc::clone(&counter);
                     Box::pin(async move {
                         counter.fetch_add(1, Ordering::SeqCst);
+                        // A plain activity runs INLINE on the serve loop, so
+                        // this hold is exactly the "worker is busy, not silent"
+                        // condition the dead-man switch must not mistake for a
+                        // dead link.
+                        if input.hold_ms > 0 {
+                            tokio::time::sleep(Duration::from_millis(input.hold_ms)).await;
+                        }
                         Ok(CheckOutput { ran: input.label })
                     })
                 })

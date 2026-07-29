@@ -1,0 +1,7 @@
+   Compiling aion-rs v0.10.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/dead-man-switch/crates/aion)
+   Compiling aion-worker v0.10.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/dead-man-switch/crates/aion-worker)
+   Compiling aion-server v0.10.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/dead-man-switch/crates/aion-server)
+   Compiling aion-client v0.10.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/dead-man-switch/crates/aion-client)
+   Compiling aion-integration-cli v0.10.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/dead-man-switch/crates/aion-integration-cli)
+   Compiling million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/dead-man-switch/benchmarks/million-processes)
+   Compiling aion-cli v0.10.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/dead-man-switch/crates/aion-cli)

@@ -1,0 +1,12 @@
+failures:
+
+---- a_long_activity_is_not_mistaken_for_a_dead_link stdout ----
+Error: "the worker tore its healthy connection down after a long activity: the dead-man switch counted execution time as silence"
+
+
+failures:
+    a_long_activity_is_not_mistaken_for_a_dead_link
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 12.05s
+
+error: test failed, to rerun pass `-p aion-server --test dead_man_switch_e2e`
