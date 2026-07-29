@@ -134,10 +134,44 @@ configurable values and says to discuss values before implementing.
 Pre-existing, not introduced here, and changing them alters running behaviour —
 so flagged rather than silently changed.
 
-## Still open on #29 proper
+## Closed: no agent worker could be served without writing a Rust crate
 
-Even after the above, **no agent worker can be served without writing a Rust
-crate**. `aion worker` has exactly one subcommand, `Shell`. All eleven agent
+**Landed `945873a7`** — `aion worker agent <file.awl>`. Same document-derived
+descriptor seam as Finding 2, shared through `worker_surface` rather than copied,
+so `worker_shell` now calls it instead of carrying its own version of the rule.
+
+Verified rather than assumed, because the transport constraint decides the whole
+flag vocabulary: the harness seam is **liminal-only**. `AgentHarnessConfig`,
+`serve_with_redial`, and `RedialTiming` are exported from `aion-worker` solely
+under `liminal-transport`; the gRPC `WorkerBuilder` API has no harness parameter
+anywhere in `worker.rs`, `runtime/loop_.rs`, or `protocol/*`; and the server's
+only attempt-to-owner binding sits inside `send_liminal_activity_task`. So the
+verb dials `--liminal-address` candidates, never the global gRPC `--endpoint`.
+A latent packaging gap surfaced on the way: `aion-cli`'s `liminal-transport`
+feature forwarded to `aion-server` but **not** to `aion-worker`, so a plain
+`cargo build -p aion-cli` had no liminal worker client at all.
+
+Live-proven against a scratch server, including the case that justifies deriving
+from the document: a worker run against a **stale** document was refused at
+registration naming the exact field —
+`action 'review' field 'input_schema.properties.brief.type' expected "string"
+but worker advertised "integer"`.
+
+`aion_integration_norn::registration_capabilities()` publishes what the adapter
+can honour, because a worker advertises capabilities at **registration**, before
+any agent process exists to be asked. A registration set and a per-session
+handshake set can disagree in **both** directions — an older binary advertising
+fewer makes the session gate a control registration promised; one advertising
+more passes the session gate and is then refused by the translation. Both surface
+as an attempt-scoped `CapabilityNotSupported` naming the primitive, neither is
+silent, and neither is resolvable at registration time. Advertising the adapter's
+ceiling is therefore the honest choice. A test drives all five neutral primitives
+and asserts published-set ⇔ translatable-set, so adding one to either side alone
+fails.
+
+### Historical: the gap as it stood
+
+`aion worker` had exactly one subcommand, `Shell`. All eleven agent
 workers in `examples/` are bespoke `main.rs` files hand-rolling
 `composed_agent_harness()`. The `aion` binary's composition root builds
 `default_agent_harness()` and immediately **drops** it
@@ -214,3 +248,75 @@ a refusal.
 `serve acp`, `--acp=true`, `agent stdio`,
 `exec --output-format acp-daemon`, and no-arg-at-all all occur across the 38
 agents in the registry. Command and args are configuration; nothing is inferred.
+
+## Findings routed, not fixed here
+
+Each was found by reading code this work touched. None is a regression from it.
+
+1. **`WorkerConfigBuilder` demands three values the liminal transport ignores.**
+   `endpoint` is read only by `protocol/session.rs` (`GeneratedClient::connect`)
+   and one gRPC tracing field — verified, nothing on the liminal path reads it;
+   `max_concurrency` is read only by the gRPC `loop_.rs` semaphore; and the redial
+   loop takes no attempt bound. A builder that refuses to build without three
+   settings one of its two transports cannot use is a real wart. Named in the
+   value itself (`UNUSED_GRPC_ENDPOINT`) rather than accepting a flag for
+   something that provably cannot matter.
+
+2. **`aion worker shell` still installs no tracing subscriber**, so the redial
+   driver's refused-dial warning — the one signal distinguishing "being turned
+   away" from "idle" — is dropped on the floor. The agent verb installs the
+   product's own subscriber; shell was out of scope to change. Belongs with #58.
+
+3. **A deploy refused because the `[deploy]` surface is disabled renders as
+   `error[backend]: failed to deploy package: wire error code is missing`** — an
+   unrenderable wire error in place of the actual reason.
+
+4. **The liminal redial loop is unbounded**: a worker dialing a wrong address
+   retries forever (loudly, with an escalating counter). Existing semantics, worth
+   a ruling alongside item 1.
+
+5. **The TypeScript caller SDK has the Python SDK's disease** via a hand-written
+   mirror: no `src/proto/`, no `routing_key`/`task_queue`, no reopen/pause/resume,
+   and `src/errors.ts:250 numericWireCode()` is the identical fossil stopping at
+   case 10 — **and there is no TypeScript CI lane at all**, so nothing there is
+   gated by anything.
+
+6. **The client conformance harness would not have caught any of it**, on two
+   counts: nothing sets `AION_SERVER_URL`, and `conformance/aion-clients/scenarios.json`
+   has no `taskQueue`/`routingKey`/reopen/pause/resume steps. New scenarios are
+   needed, and adding them will red both the Rust and TS harnesses — which is the
+   point, but it is a lane, not a drive-by.
+
+7. **`sdks/python/aion-worker` has the same install-then-explode floor mismatch**
+   Python's caller SDK just had: `grpcio>=1.68` against stubs demanding 1.83.0.
+
+8. **`aion-integration-norn` carried the bypasses CLAUDE.md says void the work** —
+   `#[allow(clippy::unwrap_used, expect_used, panic)]` on two test modules and as a
+   crate-level attribute in `tests/norn_e2e.rs`, plus `#[ignore]` at
+   `norn_e2e.rs:116`. Also `RUSTDOCFLAGS="-D warnings" cargo doc -p
+   aion-integration-norn` fails (~10 unresolved intra-doc links, and public
+   documentation linking the private `PARTIAL_OUTPUT_MESSAGE_BYTES`). Being fixed,
+   not deferred.
+
+## `preserve_order`: investigated, benign
+
+`agent-client-protocol-schema` enables `serde_json/preserve_order`, and Cargo
+feature unification turns that on **workspace-wide** — `serde_json::Map` becomes
+insertion-ordered instead of sorted. Confirmed on: `indexmap` appears under
+`serde_json` in the resolved feature tree, which only happens with that feature.
+
+It does **not** move package identity. `content_hash_with_contract` — the `.v4`/`.v5`
+digest behind Load-Bearing Invariant 5's `logical_name$hash` — encodes the contract
+through `contract.rs::encode_json`, which explicitly sorts object entries by key
+(`entries.sort_by_key(|(left, _)| *left)`) and sorts `required`/`enum` arrays. It is
+order-independent **by construction**, which is exactly why it was written that way.
+
+The digest that *can* shift is `Manifest::canonical_digest` (SHA-256 over
+`serde_json::to_vec(self)`, whose `input_schema`/`output_schema` are raw `Value`s).
+That one is never persisted: its only comparison is resident-vs-incoming inside a
+single running process (`aion/src/loader/catalog_load.rs:252`), so both sides shift
+together and nothing compares an old digest to a new one. No archive is invalidated.
+
+Worth knowing rather than acting on — but a digest named "canonical" that depends on
+a transitive dependency's feature unification is worth making order-independent by
+construction on its own merits, the way the contract encoder already is.
