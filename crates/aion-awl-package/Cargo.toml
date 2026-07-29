@@ -20,3 +20,8 @@ thiserror.workspace = true
 [dev-dependencies]
 beamr.workspace = true
 sha2.workspace = true
+# TEST ONLY: the sealing test must open a real assembled archive, rewrite the
+# declared command inside it, and prove the loader refuses the result. Nothing
+# short of editing the bytes proves that the seal holds.
+zip.workspace = true
+serde_json.workspace = true
