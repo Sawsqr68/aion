@@ -104,7 +104,8 @@ pub struct TransportLossLedger {
 }
 
 impl Default for TransportLossLedger {
-    /// A ledger with a ZERO budget: the first transport loss is immediately
+    /// A ledger with a ZERO budget: an execution site gets exactly ONE
+    /// re-dispatchable loss (its first, at elapsed zero) and the next one is
     /// exhaustion.
     ///
     /// Only reachable in wirings that never supply a heartbeat window (isolated

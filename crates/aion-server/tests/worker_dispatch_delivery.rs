@@ -364,7 +364,7 @@ async fn activity_completing_after_long_delay_round_trips() -> Result<(), TestEr
 /// with the retryable lost-worker classification the engine's retry policy
 /// acts on — rather than the workflow hanging forever.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn worker_death_mid_activity_fails_dispatch_with_retryable_lost_worker()
+async fn worker_death_mid_activity_fails_dispatch_with_the_transport_loss_class()
 -> Result<(), TestError> {
     let mut harness = Harness::start().await?;
     let dispatcher = Arc::new(harness.dispatcher());
@@ -384,9 +384,14 @@ async fn worker_death_mid_activity_fails_dispatch_with_retryable_lost_worker()
     let result = dispatch_task.await.map_err(|error| error.to_string())?;
     let failure_latency = died_at.elapsed();
     let error = result.err().ok_or("expected a lost-worker failure")?;
+    // TRANSPORT domain. The old `retryable:` assertion's stated intent — "so the
+    // engine can re-dispatch" — was never delivered by that class: the engine
+    // retries only under an AUTHORED policy, so an activity without one turned
+    // worker death into a terminal failure. The `lost:` class re-dispatches.
     assert!(
-        error.starts_with("retryable:"),
-        "worker loss must be retryable so the engine can re-dispatch: {error}"
+        error.starts_with(aion_server::worker::WORKER_LOST_REASON_PREFIX),
+        "worker loss must carry the transport-loss class so the engine \
+         re-dispatches it: {error}"
     );
     assert!(
         error.contains("lost before reporting activity result"),

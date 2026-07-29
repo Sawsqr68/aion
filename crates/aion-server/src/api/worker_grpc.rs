@@ -847,11 +847,18 @@ mod tests {
         Ok(())
     }
 
-    /// Regression pin: WITHOUT drain, the teardown path is byte-identical to
-    /// before #207 — the waiter resolves with the retryable lost-worker
-    /// failure, so the engine's retry policy still governs genuine worker death.
+    /// Regression pin: WITHOUT drain, the teardown path still resolves the
+    /// waiter with a lost-worker failure — but in the TRANSPORT domain, not the
+    /// action's.
+    ///
+    /// The old contract here was `retryable:`, and that framing was the Hit D
+    /// defect: an authored retry policy governs how often the ACTION may fail,
+    /// and an activity with no policy (the SDK default) turned a worker death
+    /// into a TERMINAL failure. Worker loss now carries the `lost:` class, which
+    /// the engine re-dispatches attempt-neutrally.
     #[test]
-    fn teardown_without_drain_still_fails_with_retryable_lost_worker() -> Result<(), TestError> {
+    fn teardown_without_drain_fails_with_the_transport_domain_lost_worker_class()
+    -> Result<(), TestError> {
         let fixture = fixture()?;
 
         teardown_worker_stream(
@@ -865,8 +872,9 @@ mod tests {
         let resolved = fixture.rx.recv_timeout(Duration::from_millis(200))?;
         let reason = resolved.err().ok_or("expected a lost-worker failure")?;
         assert!(
-            reason.starts_with("retryable:"),
-            "a mid-run teardown must stay a retryable failure: {reason}"
+            reason.starts_with(crate::worker::WORKER_LOST_REASON_PREFIX),
+            "a mid-run teardown must surface the TRANSPORT-domain loss class, never the \
+             action's retry vocabulary: {reason}"
         );
         assert!(
             reason.contains("lost before reporting activity result"),
@@ -894,8 +902,8 @@ mod tests {
         assert!(
             first
                 .err()
-                .is_some_and(|reason| reason.starts_with("retryable:")),
-            "worker A loss must release attempt 1 as retryable"
+                .is_some_and(|reason| reason.starts_with(crate::worker::WORKER_LOST_REASON_PREFIX)),
+            "worker A loss must release attempt 1 in the transport-loss class"
         );
 
         let (retry_token, retry_rx) = fixture

@@ -595,12 +595,12 @@ async fn dispatch_outliving_heartbeat_window_survives_the_sweeper() -> Result<()
 
 /// THE LOST-WORKER SIDE (the reply router's Disconnected arm): a worker whose
 /// connection dies while its dispatch is in flight resolves the dispatch
-/// promptly with the SAME retryable lost-worker failure the gRPC teardown
+/// promptly with the SAME TRANSPORT-domain lost-worker class the gRPC teardown
 /// sweep reports — never a hang. The fake worker is a REAL liminal push client
 /// that registers in-band, receives the pushed dispatch frame, and then drops
 /// its connection without replying (a mid-activity `kill -9` at the wire).
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn worker_lost_mid_dispatch_fails_retryable_lost_worker() -> Result<(), TestError> {
+async fn worker_lost_mid_dispatch_fails_with_the_transport_loss_class() -> Result<(), TestError> {
     let server = RunningServer::start(DEFAULT_WINDOW)?;
 
     let registration = liminal::protocol::WorkerRegistration {
@@ -639,12 +639,18 @@ async fn worker_lost_mid_dispatch_fails_retryable_lost_worker() -> Result<(), Te
     let reason = result.err().ok_or_else(|| {
         test_error("a dispatch whose worker died mid-flight must fail, not succeed")
     })?;
+    // TRANSPORT domain, not the action's. The old contract here was
+    // `retryable:`, and that framing WAS the Hit D defect: it named itself
+    // retryable while the engine's retry loop, which only retries under an
+    // AUTHORED policy, delivered it as a terminal failure whenever the activity
+    // had none. The `lost:` class is re-dispatched attempt-neutrally instead.
     assert!(
-        reason.starts_with("retryable:"),
-        "worker loss must surface as a retryable failure, got: {reason}"
+        reason.starts_with(aion_server::worker::WORKER_LOST_REASON_PREFIX),
+        "worker loss must surface in the transport-loss class, never the action's \
+         retry vocabulary, got: {reason}"
     );
     assert!(
-        reason.contains("lost"),
+        reason.contains("lost before reporting activity result"),
         "the failure must be the lost-worker vocabulary, got: {reason}"
     );
     // The failed dispatch cleared its in-flight tracking (the router's

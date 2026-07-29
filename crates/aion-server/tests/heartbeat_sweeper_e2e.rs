@@ -338,9 +338,15 @@ async fn silent_worker_with_open_stream_is_expired_and_deregistered_by_the_sweep
     let expiry_latency = wedged_at.elapsed();
 
     let error = result.err().ok_or("expected a lost-worker failure")?;
+    // TRANSPORT domain. The intent of the old `retryable:` assertion — "so the
+    // engine can re-dispatch" — is exactly what `retryable:` did NOT deliver:
+    // the engine only retries under an AUTHORED policy, so an activity without
+    // one turned every heartbeat expiry into a terminal failure. The `lost:`
+    // class is what actually re-dispatches, attempt-neutrally.
     assert!(
-        error.starts_with("retryable:"),
-        "heartbeat expiry must be retryable so the engine can re-dispatch: {error}"
+        error.starts_with(aion_server::worker::WORKER_LOST_REASON_PREFIX),
+        "heartbeat expiry must carry the transport-loss class so the engine \
+         re-dispatches it: {error}"
     );
     assert!(
         error.contains("lost before reporting activity result"),
