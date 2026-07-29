@@ -452,7 +452,8 @@ fn maybe_spawn_outbox_dispatcher(
                   the in-memory store does not provide"
             .to_owned(),
     })?;
-    let (row_dispatch, worker_listener) = select_outbox_row_dispatch(state, outbox_config)?;
+    let (row_dispatch, worker_listener) =
+        select_outbox_row_dispatch(state, outbox_config, shutdown_rx)?;
     // LSUB-2: share the engine's advisory wake so the stage seam pulses this
     // dispatcher the instant a fan-out row commits, dispatching in ~RTT instead of
     // up to one poll interval. The wake is always-on and free; the interval poll is
@@ -586,6 +587,7 @@ fn maybe_spawn_cluster_supervisor(
 fn select_outbox_row_dispatch(
     state: &ServerState,
     outbox_config: &OutboxConfig,
+    shutdown_rx: &tokio::sync::watch::Receiver<bool>,
 ) -> Result<(Arc<dyn OutboxRowDispatch>, OutboxWorkerListener), ServerError> {
     match outbox_config.transport {
         OutboxTransport::Grpc => {
@@ -606,7 +608,7 @@ fn select_outbox_row_dispatch(
             );
             Ok((dispatch, OutboxWorkerListener::default()))
         }
-        OutboxTransport::Liminal => build_liminal_row_dispatch(state, outbox_config),
+        OutboxTransport::Liminal => build_liminal_row_dispatch(state, outbox_config, shutdown_rx),
     }
 }
 
@@ -647,6 +649,7 @@ fn select_outbox_row_dispatch(
 fn build_liminal_row_dispatch(
     state: &ServerState,
     outbox_config: &OutboxConfig,
+    shutdown_rx: &tokio::sync::watch::Receiver<bool>,
 ) -> Result<(Arc<dyn OutboxRowDispatch>, OutboxWorkerListener), ServerError> {
     use liminal_server::config::ServerConfig as LiminalServerConfig;
     use liminal_server::config::{LimitsConfig, ServicesConfig};
@@ -750,6 +753,16 @@ fn build_liminal_row_dispatch(
             message: "liminal notifier supervisor handle was already bound during boot".to_owned(),
         });
     }
+    // (5b) Commission the connection dead-man switch over the SAME notifier. It
+    // pings every connected worker on a derived quarter-window cadence: the
+    // answers keep a healthy IDLE connection's lease alive (so the idle expiry
+    // cannot fire on a live worker), and the pings themselves are what a worker
+    // measures silence against (so a wedged half-open socket becomes a declared,
+    // logged death on the worker side instead of an unbounded blind wait). Not
+    // opt-in: liveness detection is a correctness property of this transport.
+    // The handle is detached — dropping a tokio `JoinHandle` never cancels the
+    // task — exactly as the heartbeat sweeper is spawned.
+    drop(state.spawn_liminal_liveness_probe(notifier.clone(), shutdown_rx.clone()));
     // (6) Bind the listener on the configured address — workers connect IN here.
     let listener =
         ServerListener::bind(&liminal_config, supervisor).map_err(|error| ServerError::Config {
@@ -799,6 +812,7 @@ fn build_liminal_row_dispatch(
 fn build_liminal_row_dispatch(
     _state: &ServerState,
     _outbox_config: &OutboxConfig,
+    _shutdown_rx: &tokio::sync::watch::Receiver<bool>,
 ) -> Result<(Arc<dyn OutboxRowDispatch>, OutboxWorkerListener), ServerError> {
     Err(ServerError::Config {
         message: "outbox.transport=liminal requires the aion-server `liminal-transport` \

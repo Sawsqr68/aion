@@ -73,6 +73,7 @@ use crate::protocol::ActivityTask;
 use crate::runtime::agent::spawn_dyn_agent;
 use crate::runtime::intervention::{ControlRegistry, SessionKey};
 use crate::runtime::liminal_drain::{DrainBinding, LiveWriter, spawn_event_drain};
+use crate::runtime::liminal_liveness::{LivenessPing, LivenessPong, SilenceMonitor};
 use crate::runtime::liminal_redial::{RedialBackoff, ServeResult};
 use crate::runtime::loop_::{ActivityDispatcher, DispatchOutcome};
 
@@ -349,6 +350,17 @@ pub struct LiminalActivityWorker {
     /// with during an outage, seeded from the worker's reconnect config so the
     /// drain and the dispatch redial share one coherent schedule.
     drain_backoff: RedialBackoff,
+    /// The liminal listen address this connection was dialed on, kept so every
+    /// connection-level log line (a declared link death, a failed redial) names
+    /// WHICH endpoint it is talking about rather than leaving the operator to
+    /// guess from a candidate list.
+    address: String,
+    /// The connection dead-man switch: armed by the server's liveness pings and
+    /// re-armed by every inbound frame. Once armed, silence past the
+    /// server-declared window is a DECLARED link death — the detection that
+    /// turns a wedged half-open socket from an unbounded blind wait into a
+    /// logged teardown plus a redial.
+    silence: SilenceMonitor,
 }
 
 impl std::fmt::Debug for LiminalActivityWorker {
@@ -449,6 +461,8 @@ impl LiminalActivityWorker {
             agent_capabilities: InterventionCapabilities::none(),
             live_writer,
             drain_backoff,
+            address: address.to_owned(),
+            silence: SilenceMonitor::new(),
         })
     }
 
@@ -547,6 +561,10 @@ impl LiminalActivityWorker {
     pub async fn serve_one(&self) -> Result<bool, WorkerError> {
         match self.client.recv_timeout(RECV_POLL) {
             Ok(frame) => {
+                // ANY inbound frame is proof the link is alive: a dispatch, an
+                // intervention, or a liveness ping all re-arm the dead-man
+                // switch, so a busy connection is never declared dead.
+                self.silence.record_inbound();
                 self.handle_pushed_frame(frame).await?;
                 Ok(true)
             }
@@ -605,6 +623,19 @@ impl LiminalActivityWorker {
         self.announce_capabilities();
         while !stop() {
             self.serve_one().await?;
+            // A single-connection serve has no survivor to migrate to, so a
+            // declared link death surfaces as the transport error it is rather
+            // than blocking forever on a socket nobody is on the other end of.
+            if let Some(silent_for) = self.declared_link_death() {
+                return Err(WorkerError::Transport {
+                    source: tonic::Status::unavailable(format!(
+                        "liminal worker connection to {} went silent for {}ms past the \
+                         server-declared liveness window",
+                        self.address,
+                        u64::try_from(silent_for.as_millis()).unwrap_or(u64::MAX)
+                    )),
+                });
+            }
         }
         Ok(())
     }
@@ -635,6 +666,13 @@ impl LiminalActivityWorker {
                 // migrates to the next candidate and re-registers there.
                 Err(_) => return ServeResult::Dropped { served_work },
             }
+            // A CLOSED socket surfaces above as a receive error. A merely DEAD
+            // one (peer gone without a FIN, a wedged path) never does — every
+            // read times out benignly — so the dead-man switch is what turns it
+            // into a drop, and hence into a redial + re-registration.
+            if self.declared_link_death().is_some() {
+                return ServeResult::Dropped { served_work };
+            }
         }
         ServeResult::Stopped
     }
@@ -652,6 +690,16 @@ impl LiminalActivityWorker {
     /// is decoded as a dispatch (preserving the existing dispatch path exactly).
     async fn handle_pushed_frame(&self, frame: PushedFrame) -> Result<(), WorkerError> {
         let correlation_id = frame.correlation_id();
+        // A liveness ping is tried FIRST and is the cheapest frame on the wire:
+        // it carries the server's silence window (arming this connection's
+        // dead-man switch) and is answered immediately, so the server's own
+        // connection lease is refreshed by an IDLE-but-alive worker. Its unique
+        // required `liveness_ping` field appears on no other pushed frame, and it
+        // carries none of the required fields the other two need, so the three
+        // decode disjointly.
+        if let Ok(ping) = serde_json::from_slice::<LivenessPing>(frame.payload()) {
+            return self.answer_liveness_ping(correlation_id, &ping);
+        }
         if let Ok(request) = serde_json::from_slice::<InterventionRequest>(frame.payload()) {
             let outcome = self.control.deliver(request.intervention).await;
             let reply = InterventionReply { outcome };
@@ -691,6 +739,56 @@ impl LiminalActivityWorker {
         self.client
             .reply(correlation_id, payload)
             .map_err(|error| transport_error(&error))
+    }
+
+    /// Arms this connection's dead-man switch with the window the server just
+    /// declared and answers the ping on the same connection.
+    ///
+    /// The answer is what proves the worker→server leg to the SERVER: its
+    /// arrival refreshes the connection lease, so an idle-but-alive worker is
+    /// never expired as silent. A reply that cannot be written is a transport
+    /// error like any other — it tears the connection down into the redial loop
+    /// rather than leaving a worker that believes it answered.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkerError::Encode`] when the answer cannot be encoded and
+    /// [`WorkerError::Transport`] when it cannot be written to the socket.
+    fn answer_liveness_ping(
+        &self,
+        correlation_id: u64,
+        ping: &LivenessPing,
+    ) -> Result<(), WorkerError> {
+        self.silence
+            .arm(Duration::from_millis(ping.silence_window_ms));
+        let answer = LivenessPong {
+            liveness_pong: ping.liveness_ping,
+        };
+        let payload = serde_json::to_vec(&answer).map_err(WorkerError::encode)?;
+        self.client
+            .reply(correlation_id, payload)
+            .map_err(|error| transport_error(&error))
+    }
+
+    /// The declared link death, when this connection has been silent past the
+    /// server's window — logged LOUDLY exactly once, at the moment of the
+    /// verdict, naming the endpoint, the silence, and the window it broke.
+    ///
+    /// `None` means the link is alive (or the switch is not yet armed), which is
+    /// the overwhelmingly common case and emits nothing.
+    fn declared_link_death(&self) -> Option<Duration> {
+        let silent_for = self.silence.silent_for()?;
+        tracing::warn!(
+            address = %self.address,
+            silent_ms = u64::try_from(silent_for.as_millis()).unwrap_or(u64::MAX),
+            window_ms = self
+                .silence
+                .window()
+                .map_or(0, |window| u64::try_from(window.as_millis()).unwrap_or(u64::MAX)),
+            "liminal worker connection is DEAD: no server frame arrived within the \
+             server-declared liveness window; tearing the connection down and redialing"
+        );
+        Some(silent_for)
     }
 
     /// Spawns an agent dispatch as a background task so the serve loop stays free to

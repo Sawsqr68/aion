@@ -119,7 +119,12 @@ where
     // new connection's writer, so an observability drain spawned against an earlier
     // (now-dead) connection re-resolves the survivor instead of a dead socket (#254).
     let live_writer = LiveWriter::default();
+    // Every dial attempt is counted so a refused worker's log escalates visibly
+    // instead of repeating one indistinguishable line: the operator reads
+    // `attempt=417` and knows this is not a transient blip.
+    let mut attempt = 0_u64;
     let connect = |address: &str| -> Result<LiminalActivityWorker, WorkerError> {
+        attempt = attempt.saturating_add(1);
         // Install the composed harness on EVERY connection (including a redial), so
         // a worker that migrates to a survivor still drives its agent activities AND
         // re-advertises the agent types in that connection's registration; `None`
@@ -136,6 +141,28 @@ where
             worker
                 .with_agent_config(agent.cloned())
                 .with_live_writer(live_writer.clone())
+        })
+        // A failed dial is NEVER silent. Before this line the redial driver
+        // absorbed every retryable connect error into its backoff without a
+        // word, so a worker the server refused on every dial — a contract
+        // mismatch, a wrong address, a closed port — was invisible from BOTH
+        // sides: the whole process looked asleep. The error text carries the
+        // server's structured refusal reason verbatim (the SDK maps a `Rejected`
+        // registration ack to an error carrying the reason), so a
+        // contract-mismatched worker names its own refusal in its own log on the
+        // FIRST dial.
+        //
+        // Log volume needs no separate rate limiter: the driver's bounded
+        // exponential backoff already paces the loop from `initial_backoff` up
+        // to `max_backoff`, and the attempt counter above supplies the
+        // escalation an operator reads severity from.
+        .inspect_err(|error| {
+            tracing::warn!(
+                address = %address,
+                attempt,
+                %error,
+                "liminal worker dial failed; backing off and trying the next candidate"
+            );
         })
     };
     let serve = |worker: LiminalActivityWorker| -> ServeResult {

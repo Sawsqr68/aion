@@ -16,6 +16,11 @@ pub mod liminal;
 /// publishing to a dead socket forever.
 #[cfg(feature = "liminal-transport")]
 pub mod liminal_drain;
+/// Connection dead-man switch for the liminal worker transport: the server's
+/// liveness ping/pong wire pair and the armed silence monitor that turns a
+/// wedged half-open socket into a declared, logged link death plus a redial.
+#[cfg(feature = "liminal-transport")]
+pub mod liminal_liveness;
 /// Candidate-cycling redial driver for liminal worker reconnect-to-survivor
 /// (G-1, #112): the transport-free cursor + backoff + loop the liminal worker
 /// uses to migrate from a dead owner to a survivor's listener.
@@ -41,6 +46,8 @@ pub use liminal::{
     AgentHarnessConfig, DispatchRequest, DispatchResponse, InterventionReply, InterventionRequest,
     LiminalActivityWorker,
 };
+#[cfg(feature = "liminal-transport")]
+pub use liminal_liveness::{LivenessPing, LivenessPong};
 #[cfg(feature = "liminal-transport")]
 pub use liminal_serve::{RedialTiming, serve_with_redial};
 pub use loop_::{

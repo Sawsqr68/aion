@@ -16,6 +16,11 @@ pub mod heartbeat;
 /// Server-side mid-run intervention routing (NOI-6): capability gate + attempt
 /// owner resolution + push to the owning worker over a pluggable transport.
 pub mod intervention;
+/// Server half of the liminal connection dead-man switch: the liveness ping/pong
+/// wire pair and the probe that keeps a healthy idle connection's lease alive
+/// while making a dead one loud on both sides.
+#[cfg(feature = "liminal-transport")]
+pub mod liminal_liveness;
 /// Cross-node outbox dispatch over the liminal bus (#13-0 spike, feature-gated).
 #[cfg(feature = "liminal-transport")]
 pub mod liminal_transport;
@@ -41,6 +46,9 @@ pub mod quota_broadcast;
 pub mod quota_cache;
 /// Connected-worker registry and handles.
 pub mod registry;
+/// Transport-domain classification and re-dispatch budget for activities whose
+/// worker died before reporting a result.
+pub mod transport_loss;
 
 pub use backpressure::{Backpressure, OwnedShardFraction};
 pub use bridge::{OutboxDeliveryCallback, PendingActivities, WorkerActivityDispatcher};
@@ -54,6 +62,8 @@ pub use heartbeat::{
     TaskLiveness, sweep_interval,
 };
 pub use intervention::{AttemptKey, AttemptOwnerIndex, InterventionRouter, InterventionTransport};
+#[cfg(feature = "liminal-transport")]
+pub use liminal_liveness::{LivenessPing, LivenessPong, LivenessProbe, LivenessTarget};
 #[cfg(feature = "liminal-transport")]
 pub use liminal_transport::{
     DispatchRequest, DispatchResponse, InterventionReply, InterventionRequest,
@@ -79,4 +89,9 @@ pub use quota_broadcast::QuotaBroadcaster;
 pub use quota_cache::QuotaCache;
 pub use registry::{
     ConnectedWorkerRegistry, WorkerDelivery, WorkerHandle, WorkerId, WorkerRegistration,
+};
+pub use transport_loss::{
+    TRANSPORT_EXHAUSTED_REASON_PREFIX, TRANSPORT_LOSS_BUDGET_WINDOWS, TransportLossLedger,
+    TransportLossVerdict, WORKER_LOST_REASON_PREFIX, is_transport_domain_reason,
+    worker_lost_detail,
 };

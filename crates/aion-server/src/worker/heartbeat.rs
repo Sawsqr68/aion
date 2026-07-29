@@ -12,7 +12,7 @@ use aion_proto::{ProtoHeartbeat, WireError};
 use crate::error::ServerError;
 use crate::shutdown::DrainState;
 use crate::worker::dispatch::{
-    ActivityCompletion, ActivityCompletionOutcome, ActivityCompletionSink, lost_worker_error,
+    ActivityCompletion, ActivityCompletionOutcome, ActivityCompletionSink,
 };
 use crate::worker::envelope::CompletionToken;
 use crate::worker::registry::{ConnectedWorkerRegistry, WorkerId};
@@ -64,6 +64,13 @@ pub struct LostWorkerReport {
     /// recovery (nothing recorded, nothing delivered) on the graceful-drain
     /// `park_*` paths (#207).
     pub tasks: Vec<InFlightActivity>,
+    /// Task queue the lost worker was serving, captured from the registry
+    /// BEFORE deregistration (afterwards the handle is gone and the queue is
+    /// unknowable). `None` when the worker was already absent from the registry.
+    ///
+    /// This is what lets the deregistration log name the queue an operator has
+    /// to act on, rather than an opaque worker id.
+    pub task_queue: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -506,6 +513,7 @@ impl HeartbeatTracker {
         sink: &impl ActivityCompletionSink,
         reason: aion_core::WorkerDeathReason,
     ) -> Result<LostWorkerReport, ServerError> {
+        let task_queue = task_queue_of(registry, worker_id);
         registry.deregister_with_reason(worker_id, reason)?;
         self.state()?.connections.remove(&worker_id);
         let tasks = self.remove_worker_tasks(worker_id)?;
@@ -518,7 +526,11 @@ impl HeartbeatTracker {
                 "activity parked for restart recovery"
             );
         }
-        Ok(LostWorkerReport { worker_id, tasks })
+        Ok(LostWorkerReport {
+            worker_id,
+            tasks,
+            task_queue,
+        })
     }
 
     fn fail_lost_worker(
@@ -536,6 +548,9 @@ impl HeartbeatTracker {
         // collection and the deregistration is never failed by anyone.)
         // This is the liveness-timeout sweep: the proven reason is Timeout, the
         // one finer-grained WS3 distinction this call site can honestly assert.
+        // The queue is read BEFORE the deregistration below, because afterwards
+        // the handle is gone and the log could no longer name it.
+        let task_queue = task_queue_of(registry, worker_id);
         registry.deregister_with_reason(worker_id, aion_core::WorkerDeathReason::Timeout)?;
         self.state()?.connections.remove(&worker_id);
         let tasks = self.remove_worker_tasks(worker_id)?;
@@ -545,10 +560,18 @@ impl HeartbeatTracker {
                 activity_id: task.activity_id.clone(),
                 run_id: None,
                 completion_token: task.completion_token.clone(),
-                outcome: ActivityCompletionOutcome::Failed(lost_worker_error(worker_id)),
+                // A TRANSPORT-domain loss, not an activity failure: the
+                // activity never executed to a result. The sink classifies it
+                // (and applies the transport's own re-dispatch budget); this
+                // sweep only reports what it observed.
+                outcome: ActivityCompletionOutcome::WorkerLost { worker_id },
             })?;
         }
-        Ok(LostWorkerReport { worker_id, tasks })
+        Ok(LostWorkerReport {
+            worker_id,
+            tasks,
+            task_queue,
+        })
     }
 
     fn remove_worker_tasks(
@@ -634,6 +657,11 @@ pub struct HeartbeatSweeper<S> {
     drain: DrainState,
     heartbeat_window: Duration,
     interval: Duration,
+    /// Live unserved-queue state, read only to state the CONSEQUENCE of a
+    /// deregistration in the same log line as its cause: how many dispatches are
+    /// already parked on the queue the reaped worker was serving. Default-empty
+    /// in wirings that have no queue service, where the count reads zero.
+    queue_state: crate::worker::QueueServiceState,
 }
 
 impl<S> HeartbeatSweeper<S>
@@ -659,7 +687,19 @@ where
             drain,
             heartbeat_window,
             interval,
+            queue_state: crate::worker::QueueServiceState::default(),
         }
+    }
+
+    /// Share the live unserved-queue state so a deregistration log can state how
+    /// many dispatches are already parked on the queue the reaped worker served.
+    ///
+    /// Without it the count reads zero — honest for a wiring with no queue
+    /// service, and never a reason to withhold the deregistration itself.
+    #[must_use]
+    pub fn with_queue_state(mut self, queue_state: crate::worker::QueueServiceState) -> Self {
+        self.queue_state = queue_state;
+        self
     }
 
     /// Run the expiry sweep until `shutdown` flips to `true`.
@@ -714,15 +754,37 @@ where
             }
         };
         for report in &reports {
+            let task_queue = report.task_queue.as_deref().unwrap_or("<unregistered>");
+            // The consequence, stated with the cause: a queue whose worker just
+            // died and which already holds parked dispatches is an alertable
+            // condition, and the operator should not have to join two log lines
+            // to see it. A read failure reports `None` rather than suppressing
+            // the deregistration line.
+            let parked = report
+                .task_queue
+                .as_deref()
+                .map(|queue| self.queue_state.parked_on_queue(queue))
+                .transpose()
+                .unwrap_or_else(|error| {
+                    error!(%error, "could not read parked-dispatch count for a reaped worker");
+                    None
+                })
+                .unwrap_or(0);
             if report.tasks.is_empty() {
                 warn!(
                     worker_id = ?report.worker_id,
+                    task_queue,
+                    parked_dispatches = parked,
+                    heartbeat_window_ms = self.heartbeat_window.as_millis(),
                     "idle worker connection lease expired; worker deregistered"
                 );
             } else {
                 warn!(
                     worker_id = ?report.worker_id,
+                    task_queue,
+                    parked_dispatches = parked,
                     failed_tasks = report.tasks.len(),
+                    heartbeat_window_ms = self.heartbeat_window.as_millis(),
                     "worker heartbeat window expired with in-flight activities; \
                      deregistered and surfaced as retryable lost-worker failures"
                 );
@@ -778,6 +840,18 @@ impl TryFrom<ProtoHeartbeat> for DecodedHeartbeat {
     }
 }
 
+/// The task queue a still-registered worker serves, for the deregistration log.
+///
+/// A registry read failure (poisoned lock) yields `None` rather than aborting
+/// the sweep: losing the queue NAME must never stop a dead worker being reaped.
+fn task_queue_of(registry: &ConnectedWorkerRegistry, worker_id: WorkerId) -> Option<String> {
+    registry
+        .worker_by_id(worker_id)
+        .ok()
+        .flatten()
+        .map(|handle| handle.task_queue().to_owned())
+}
+
 fn is_expired(liveness: &TaskLiveness, now: Instant) -> bool {
     now.checked_duration_since(liveness.last_heartbeat_at)
         .is_some_and(|elapsed| elapsed > liveness.heartbeat_window)
@@ -793,7 +867,7 @@ fn wire_error(message: &'static str) -> ServerError {
 mod tests {
     use std::sync::Mutex;
 
-    use aion_core::{ActivityErrorKind, ContentType};
+    use aion_core::ContentType;
     use aion_proto::{ProtoActivityId, ProtoPayload, ProtoWorkflowId};
     use serde_json::json;
     use uuid::Uuid;
@@ -948,13 +1022,18 @@ mod tests {
         assert_eq!(completions.len(), 1);
         assert_eq!(completions[0].workflow_id, workflow_id);
         assert_eq!(completions[0].activity_id, activity_id);
+        // The sweep reports a TRANSPORT-domain loss, not an activity failure:
+        // the activity never executed to a result, so the sink (not this sweep)
+        // classifies it and applies the transport's own re-dispatch budget.
+        // Before this distinction existed the sweep synthesized a `Retryable`
+        // `ActivityError` that the engine then delivered as a TERMINAL failure
+        // whenever the activity carried no authored retry policy.
         match &completions[0].outcome {
-            ActivityCompletionOutcome::Failed(error) => {
-                assert_eq!(error.kind, ActivityErrorKind::Retryable);
-                assert!(error.is_retryable());
+            ActivityCompletionOutcome::WorkerLost { worker_id: lost } => {
+                assert_eq!(*lost, worker_id);
             }
-            ActivityCompletionOutcome::Succeeded(_) => {
-                return Err("expected lost-worker failure".into());
+            other => {
+                return Err(format!("expected a lost-worker outcome, got {other:?}").into());
             }
         }
         Ok(())
@@ -1003,8 +1082,7 @@ mod tests {
         assert_eq!(completions.len(), 2);
         assert!(completions.iter().all(|completion| matches!(
             &completion.outcome,
-            ActivityCompletionOutcome::Failed(error)
-                if error.kind == ActivityErrorKind::Retryable && error.is_retryable()
+            ActivityCompletionOutcome::WorkerLost { .. }
         )));
         Ok(())
     }

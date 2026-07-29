@@ -197,6 +197,28 @@ impl QueueServiceState {
             .collect())
     }
 
+    /// How many dispatches are currently parked across every address on
+    /// `task_queue`, in any namespace.
+    ///
+    /// Read by the worker-expiry sweep so the deregistration of a dead worker
+    /// states the operational consequence in the same breath as the cause: "this
+    /// worker is gone AND seven dispatches are already parked on the queue it
+    /// was serving" is an alertable sentence; "worker deregistered" alone is
+    /// not. Queue-scoped rather than address-scoped because a worker serves a
+    /// whole queue, not one activity type on it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if the state lock is poisoned.
+    pub fn parked_on_queue(&self, task_queue: &str) -> Result<usize, ServerError> {
+        Ok(self
+            .state()?
+            .iter()
+            .filter(|(key, _)| key.task_queue == task_queue)
+            .map(|(_, entry)| entry.waiting.len())
+            .sum())
+    }
+
     /// Whether one run's activity is currently parked on an unserved queue.
     ///
     /// # Errors

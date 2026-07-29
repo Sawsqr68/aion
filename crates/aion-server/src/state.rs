@@ -889,8 +889,38 @@ impl ServerState {
             self.inner.pending_activities.clone(),
             self.inner.drain_state.clone(),
             self.inner.runtime.worker.heartbeat_window,
-        );
+        )
+        // The SAME queue-service state the bridge parks dispatches into, so a
+        // deregistration names how many dispatches are already stranded on the
+        // queue the dead worker was serving.
+        .with_queue_state(self.inner.queue_service_state.clone());
         tokio::spawn(sweeper.run(shutdown))
+    }
+
+    /// Spawn the liminal connection dead-man switch (the liveness probe) over
+    /// `notifier`.
+    ///
+    /// Always spawned on a boot that hosts the liminal worker listener:
+    /// connection liveness is a correctness property of the transport, not an
+    /// opt-in feature. Both timings derive from the operator's
+    /// `worker.heartbeat_window` — see
+    /// [`LivenessProbe`](crate::worker::LivenessProbe) — so there is no separate
+    /// knob. The task exits when `shutdown` flips to `true`, exactly like the
+    /// heartbeat sweeper and the transports.
+    #[cfg(feature = "liminal-transport")]
+    #[must_use]
+    pub fn spawn_liminal_liveness_probe(
+        &self,
+        notifier: std::sync::Arc<crate::worker::LiminalConnectionNotifier>,
+        shutdown: tokio::sync::watch::Receiver<bool>,
+    ) -> tokio::task::JoinHandle<()> {
+        let probe = crate::worker::LivenessProbe::new(
+            notifier,
+            self.inner.heartbeat_tracker.clone(),
+            self.inner.worker_registry.clone(),
+            self.inner.runtime.worker.heartbeat_window,
+        );
+        tokio::spawn(probe.run(shutdown))
     }
 
     /// Spawn the SS-5b cluster supervisor: a background task that watches every
@@ -1145,7 +1175,12 @@ fn build_worker_seams(
     };
     WorkerSeams {
         worker_registry,
-        pending_activities: PendingActivities::default(),
+        // The transport-loss budget derives from the operator's heartbeat
+        // window (the one value declaring what silence means), so a worker that
+        // keeps dying under an activity is re-dispatched attempt-neutrally for
+        // a bounded span and then terminates naming the TRANSPORT.
+        pending_activities: PendingActivities::default()
+            .with_heartbeat_window(runtime.worker.heartbeat_window),
         heartbeat_tracker: HeartbeatTracker::new(runtime.worker.heartbeat_window),
         drain_state: DrainState::default(),
         queue_declarations: crate::worker::QueueDeclarationSource::default(),

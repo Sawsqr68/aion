@@ -657,6 +657,32 @@ impl LiminalWorkerDelivery {
             })
     }
 
+    /// Push already-encoded `payload` out on the worker's connection, returning
+    /// the awaiter for its correlated reply.
+    ///
+    /// The raw push primitive behind the typed pushes above, used by the
+    /// connection liveness probe
+    /// ([`LivenessProbe`](super::liminal_liveness::LivenessProbe)) so the
+    /// dead-man switch rides the SAME server-push leg a dispatch does — a ping
+    /// that reaches the worker proves the exact path a dispatch would take, not
+    /// a parallel one that could be healthy while the real one is not.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::WorkerConnectionLost`] when the connection process
+    /// is no longer live at push time (a push-enqueue failure has exactly one
+    /// cause in liminal — the worker is already gone).
+    pub fn push_payload(&self, payload: Vec<u8>) -> Result<PushReplyAwaiter, ServerError> {
+        self.supervisor
+            .push_to_connection(self.pid, payload)
+            .map_err(|error| {
+                ServerError::worker_connection_lost(
+                    "liminal-push",
+                    format!("push to worker failed: {error}"),
+                )
+            })
+    }
+
     /// Push one neutral intervention command out on the worker's connection and
     /// block for its correlated ack reply (NOI-6, §6.2).
     ///
@@ -1304,6 +1330,37 @@ impl LiminalConnectionNotifier {
         self.supervisor.set(supervisor).is_ok()
     }
 
+    /// Snapshot of every live liminal connection the dead-man switch must ping:
+    /// its pid, the worker it registered, and the push leg to reach it.
+    ///
+    /// Built from the SAME guard map that owns each connection's registration,
+    /// so a connection that has closed (its guard removed) is structurally
+    /// absent from the snapshot and is never pinged. A poisoned guard map is
+    /// recovered rather than skipped: silently returning no targets would turn
+    /// the dead-man switch off exactly when the server is already unhealthy.
+    #[must_use]
+    pub fn liveness_targets(&self) -> Vec<super::liminal_liveness::LivenessTarget> {
+        let Some(supervisor) = self.supervisor.get() else {
+            return Vec::new();
+        };
+        let guards = match self.guards.lock() {
+            Ok(guards) => guards,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        guards
+            .iter()
+            .filter_map(|(pid, guard)| {
+                guard
+                    .worker_id()
+                    .map(|worker_id| super::liminal_liveness::LivenessTarget {
+                        pid: *pid,
+                        worker_id,
+                        delivery: LiminalWorkerDelivery::new(supervisor.clone(), *pid),
+                    })
+            })
+            .collect()
+    }
+
     /// Refresh one worker's in-flight task stamp from a [`WorkerLivenessBeat`]
     /// published on [`WORKER_LIVENESS_CHANNEL`].
     ///
@@ -1450,10 +1507,17 @@ impl LiminalConnectionNotifier {
             message: error.to_string(),
         })
     }
-}
 
-impl ConnectionNotifier for LiminalConnectionNotifier {
-    fn on_worker_registered(
+    /// Admit one connecting worker, or refuse it with a structured reason.
+    ///
+    /// Split out of [`ConnectionNotifier::on_worker_registered`] so EVERY
+    /// refusal — contract mismatch, unbound supervisor, registry error, lease
+    /// failure — funnels through exactly one place that logs it. Before this
+    /// split the rejection reason was carried in the `Rejected` ack and logged
+    /// NOWHERE: on 2026-07-29 a worker whose `.v4` contract field-mismatched was
+    /// refused on every single dial with the server silent on all of them, and
+    /// the refused process looked merely asleep.
+    fn admit_registration(
         &self,
         pid: u64,
         registration: &WireWorkerRegistration,
@@ -1537,6 +1601,31 @@ impl ConnectionNotifier for LiminalConnectionNotifier {
             "registered liminal worker in-band"
         );
         Ok(())
+    }
+}
+
+impl ConnectionNotifier for LiminalConnectionNotifier {
+    fn on_worker_registered(
+        &self,
+        pid: u64,
+        registration: &WireWorkerRegistration,
+    ) -> Result<(), LiminalServerError> {
+        // Every refusal is NAMED on the server, at WARN, with the queue, the
+        // worker build identity, and the structured reason — the same reason
+        // that rides back in the `Rejected` ack, so both sides' logs carry
+        // identical text and a refused worker can be diagnosed from either end.
+        self.admit_registration(pid, registration)
+            .inspect_err(|error| {
+                tracing::warn!(
+                    connection_pid = pid,
+                    identity = %registration.identity,
+                    task_queue = %registration.task_queue,
+                    namespaces = ?registration.namespaces,
+                    activity_types = ?registration.activity_types,
+                    reason = %error,
+                    "REFUSED liminal worker registration"
+                );
+            })
     }
 
     fn on_worker_unregistered(&self, pid: u64) {
