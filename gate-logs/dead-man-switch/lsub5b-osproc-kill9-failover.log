@@ -1,10 +1,10 @@
    Compiling aion-cli v0.10.0 (/Users/tom/Developer/ablative/stack/aion/.worktrees/dead-man-switch/crates/aion-cli)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.68s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.32s
      Running tests/lsub5b_osproc_kill9_failover_e2e.rs (target/debug/deps/lsub5b_osproc_kill9_failover_e2e-9809b6a87add4201)
 
 running 1 test
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.29s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s
 test osproc_kill9_liminal_failover_completes_exactly_once ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 15.43s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 38.53s
 

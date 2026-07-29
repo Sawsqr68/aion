@@ -384,7 +384,7 @@ SIGTERM mid-round costs at most one cadence at runtime drop.
 
 ---
 
-## Battery — at the committed tree (`e7d50822`)
+## Battery — at the committed tree (`c3709681`)
 
 All logs + `.exit` files under `gate-logs/dead-man-switch/`.
 
@@ -393,8 +393,8 @@ All logs + `.exit` files under `gate-logs/dead-man-switch/`.
 | `cargo fmt --all --check` | clean | `0` |
 | `cargo clippy --workspace --all-targets -- -D warnings` | clean | `0` |
 | `cargo test --workspace --no-fail-fast` | **3070 passed, 0 failed, 6 ignored** across 224 suites | `0` |
-| `lsub5b_osproc_failover_e2e` (alone, `--ignored`) | `test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 65.82s` | `0` |
-| `lsub5b_osproc_kill9_failover_e2e` (alone, `--ignored`) | `osproc_kill9_liminal_failover_completes_exactly_once ... ok` — `test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 15.43s` | `0` |
+| `lsub5b_osproc_failover_e2e` (alone, `--ignored`) | `osproc_liminal_listener_accepts_real_worker_connection ... ok` — `test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 41.84s` | `0` |
+| `lsub5b_osproc_kill9_failover_e2e` (alone, `--ignored`) | `osproc_kill9_liminal_failover_completes_exactly_once ... ok` — `test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 38.53s` | `0` |
 
 Both osproc gates ran ALONE, after the workspace battery released the machine,
 per their harness law — real 3-OS-process clusters, their own logs, their own
@@ -408,7 +408,12 @@ the workspace's current `0.10.0`) and refreshed the transitive graph. Running th
 gates is what wrote it; committing the tree carried it. Recorded here so nothing
 in the lane is unaccounted for.
 
-### The first battery run found five old-contract pins
+### Two earlier battery runs, and what each caught
+
+Recorded because each did work a green run cannot show.
+
+**At `00754854`: `3065 passed, 5 failed`.** Every failure was a test still
+pinning `retryable:` for worker loss.
 
 An earlier battery at `00754854` came back `3065 passed, 5 failed`. Every failure
 was a test still pinning `retryable:` for worker loss — the exact framing Hit D
@@ -416,8 +421,15 @@ deletes — and in each case the test's own doc comment stated the intent that
 string never delivered ("retryable so the engine can re-dispatch"). All five now
 pin the transport-loss class through the shared constant; three were renamed,
 because a test called `..._fails_retryable_lost_worker` teaches the wrong
-contract to the next reader. Landed in `e7d50822`; the battery above is the
-re-run at that tree.
+contract to the next reader. Landed in `e7d50822`.
+
+**At `e7d50822`: green (3070/0/6), and still not the final word.** Byte review of
+that tree found three things a passing battery cannot see: a ZERO transport-loss
+budget on all four embedder `from_parts*` constructors (an embedder-booted server
+got one re-dispatchable loss, then transport-exhausted), the deleted `retryable:`
+vocabulary still live in two operator-facing WARN lines and a dozen doc comments,
+and a stale ratification block in this document. Fixed in `c3709681`; the table
+above is the re-run at that tree. Green is a floor, not a verdict.
 
 ## Laws
 
