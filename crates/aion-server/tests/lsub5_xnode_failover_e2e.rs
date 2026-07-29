@@ -236,6 +236,9 @@ fn fixture_action_contract(name: &str) -> Result<ActionContract, TestError> {
         timeout: None,
         retry: None,
         advisory: false,
+        // Out-of-band worker fixture: the connected worker serves the action, so the
+        // declaration carries no body.
+        body: None,
     })
 }
 

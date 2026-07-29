@@ -159,6 +159,9 @@ fn write_package_archive(dir: &std::path::Path) -> Result<PathBuf, TestError> {
                     timeout: None,
                     retry: None,
                     advisory: false,
+                    // Out-of-band worker: the raw worker in this fixture serves the action, so
+                    // the declaration carries no body.
+                    body: None,
                 })
                 .collect(),
         }],

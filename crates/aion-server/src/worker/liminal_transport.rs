@@ -2026,6 +2026,7 @@ mod tests {
             attempt: 0,
             visible_after: Utc::now(),
             claimed_at: None,
+            failure_delivered: false,
         }
     }
 

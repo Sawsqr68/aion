@@ -5,8 +5,8 @@ use std::{path::PathBuf, sync::Arc};
 use aion_store::{
     ClaimScope, Event, MintOutcome, NamespaceOrigin, NamespacePlacement, NamespaceRecord,
     NamespaceStore, OutboxRow, OutboxStore, PackageRecord, PackageRouteRecord, PackageStore,
-    ReadableEventStore, RunSummary, StoreError, TimerEntry, TimerId, WorkflowFilter, WorkflowId,
-    WorkflowSummary, WritableEventStore, WriteToken,
+    ReadableEventStore, RedriveMode, RedriveOutcome, RunSummary, StoreError, TimerEntry, TimerId,
+    WorkflowFilter, WorkflowId, WorkflowSummary, WritableEventStore, WriteToken,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -367,6 +367,33 @@ impl OutboxStore for LibSqlStore {
 
     async fn fail_outbox_row(&self, dispatch_key: &str) -> Result<(), StoreError> {
         crate::outbox::fail_outbox_row(self.connection(), dispatch_key).await
+    }
+
+    async fn record_outbox_failure_delivered(
+        &self,
+        dispatch_key: &str,
+    ) -> Result<bool, StoreError> {
+        crate::outbox::record_outbox_failure_delivered(self.connection(), dispatch_key).await
+    }
+
+    async fn list_dead_lettered_outbox_rows(
+        &self,
+        workflow_id: &WorkflowId,
+    ) -> Result<Vec<OutboxRow>, StoreError> {
+        crate::outbox::list_dead_lettered_outbox_rows(self.connection(), workflow_id).await
+    }
+
+    async fn redrive_outbox_row(
+        &self,
+        dispatch_key: &str,
+        visible_after: DateTime<Utc>,
+        mode: RedriveMode,
+    ) -> Result<RedriveOutcome, StoreError> {
+        // Serialised with every other IMMEDIATE-transaction writer on this single connection, the
+        // same way the workflow-terminal settle is.
+        let _guard = self.transaction_lock.lock().await;
+        crate::outbox::redrive_outbox_row(self.connection(), dispatch_key, visible_after, mode)
+            .await
     }
 
     async fn count_inflight_outbox_rows(&self, namespace: &str) -> Result<u64, StoreError> {

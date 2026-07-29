@@ -20,6 +20,7 @@ use super::dev_ui::{dev_register_mock, dev_replay_run, dev_trigger_run};
 use super::events::subscribe_events_socket;
 use super::history::{fetch_event, fetch_history};
 use super::intervene::{intervene, list_attempts};
+use super::outbox::list_dead_letters;
 use super::schedules::{
     create_schedule, delete_schedule, describe_schedule, list_schedules, pause_schedule,
     resume_schedule, update_schedule,
@@ -228,6 +229,7 @@ pub fn workflow_router(state: ServerState) -> Router {
         .route("/workflows/transcripts", post(list_transcript_streams))
         .route("/events/stream", get(subscribe_events_socket))
         .route("/cluster/command", post(cluster_command))
+        .route("/outbox/dead-letters", post(list_dead_letters))
         .route("/workers/{worker_id}/drain", post(drain_worker))
         .route("/workers/{worker_id}/stop", post(stop_worker))
         .route("/schedules", post(create_schedule).get(list_schedules))

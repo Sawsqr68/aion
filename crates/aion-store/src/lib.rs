@@ -58,7 +58,10 @@ pub use observability::{
     ActivityRecord, ActivityStreamKey, ActivityStreamSummary, InMemoryObservabilityStore,
     ObservabilityStore,
 };
-pub use outbox::{ClaimScope, DEFAULT_OUTBOX_ROUTE, OutboxRow, OutboxStatus, OutboxStore};
+pub use outbox::{
+    ClaimScope, DEFAULT_OUTBOX_ROUTE, OutboxRow, OutboxStatus, OutboxStore, RedriveMode,
+    RedriveOutcome, RedriveRefusal,
+};
 pub use package::{PackageRecord, PackageRouteRecord, PackageStore};
 pub use store::{EventStore, ReadableEventStore, RunSummary, WritableEventStore, WriteToken};
 pub use timer::TimerEntry;

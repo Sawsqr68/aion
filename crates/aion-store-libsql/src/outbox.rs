@@ -14,22 +14,25 @@ use libsql::{Connection, Row, Transaction, TransactionBehavior, Value, params, p
 
 mod transitions;
 pub(crate) use transitions::{
-    complete_outbox_row, fail_outbox_row, retry_outbox_row, settle_outbox_row_cancelled,
+    complete_outbox_row, fail_outbox_row, record_outbox_failure_delivered, redrive_outbox_row,
+    retry_outbox_row, settle_outbox_row_cancelled,
 };
 
 const INSERT_OUTBOX_SQL: &str = "
 INSERT OR IGNORE INTO outbox
-    (dispatch_key, workflow_id, ordinal, activity_type, input, status, attempt, visible_after, claimed_at, run_id, namespace, task_queue, node)
-VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)";
+    (dispatch_key, workflow_id, ordinal, activity_type, input, status, attempt, visible_after, claimed_at, run_id, namespace, task_queue, node, failure_delivered)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)";
 
+// The reopen re-stage returns the row to `pending`, so it must also clear the dead-letter judgment
+// marker: a resurrected row is live work again, never a judged dead letter.
 const REARM_OUTBOX_SQL: &str = "
 INSERT INTO outbox
     (dispatch_key, workflow_id, ordinal, activity_type, input, status, attempt, visible_after, claimed_at, namespace, task_queue, node)
 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, ?9, ?10, ?11)
-ON CONFLICT(dispatch_key) DO UPDATE SET status = 'pending', visible_after = ?8, claimed_at = NULL";
+ON CONFLICT(dispatch_key) DO UPDATE SET status = 'pending', visible_after = ?8, claimed_at = NULL, failure_delivered = 0";
 
 const SELECT_CLAIMABLE_SQL: &str = "
-SELECT dispatch_key, workflow_id, ordinal, activity_type, input, status, attempt, visible_after, claimed_at, run_id, namespace, task_queue, node
+SELECT dispatch_key, workflow_id, ordinal, activity_type, input, status, attempt, visible_after, claimed_at, run_id, namespace, task_queue, node, failure_delivered
 FROM outbox
 WHERE status = 'pending' AND visible_after <= ?1
 ORDER BY visible_after ASC, dispatch_key ASC
@@ -42,7 +45,7 @@ LIMIT ?2";
 // stop once `limit` claimable rows are taken — held rows cost one decode each, never
 // a claim slot.
 const SELECT_CLAIMABLE_UNBOUNDED_SQL: &str = "
-SELECT dispatch_key, workflow_id, ordinal, activity_type, input, status, attempt, visible_after, claimed_at, run_id, namespace, task_queue, node
+SELECT dispatch_key, workflow_id, ordinal, activity_type, input, status, attempt, visible_after, claimed_at, run_id, namespace, task_queue, node, failure_delivered
 FROM outbox
 WHERE status = 'pending' AND visible_after <= ?1
 ORDER BY visible_after ASC, dispatch_key ASC";
@@ -52,7 +55,7 @@ ORDER BY visible_after ASC, dispatch_key ASC";
 // that node OR unpinned rows (`node IS NULL`); a node-less scope claims only unpinned rows. This is
 // the byte-identical due/order/limit claim with an extra WHERE conjunction.
 const SELECT_CLAIMABLE_SCOPED_PREFIX_SQL: &str = "
-SELECT dispatch_key, workflow_id, ordinal, activity_type, input, status, attempt, visible_after, claimed_at, run_id, namespace, task_queue, node
+SELECT dispatch_key, workflow_id, ordinal, activity_type, input, status, attempt, visible_after, claimed_at, run_id, namespace, task_queue, node, failure_delivered
 FROM outbox
 WHERE status = 'pending' AND visible_after <= ?1 AND namespace = ?3 AND task_queue = ?4";
 
@@ -102,7 +105,7 @@ FROM outbox
 WHERE status = 'pending' AND visible_after <= ?1";
 
 const SELECT_STALE_CLAIMED_SQL: &str = "
-SELECT dispatch_key, workflow_id, ordinal, activity_type, input, status, attempt, visible_after, claimed_at, run_id, namespace, task_queue, node
+SELECT dispatch_key, workflow_id, ordinal, activity_type, input, status, attempt, visible_after, claimed_at, run_id, namespace, task_queue, node, failure_delivered
 FROM outbox
 WHERE status = 'claimed' AND claimed_at IS NOT NULL AND claimed_at < ?1
 ORDER BY claimed_at ASC, dispatch_key ASC
@@ -130,6 +133,21 @@ ORDER BY workflow_id ASC";
 const REARM_STALE_CLAIMED_ROW_SQL: &str = "
 UPDATE outbox SET status = 'pending', visible_after = ?2, claimed_at = NULL
 WHERE dispatch_key = ?1 AND status = 'claimed'";
+
+// Dead-letter enumeration (redrive discovery): every dead-lettered row of one workflow, ordered by
+// the ordinal the operator sees in history. Read-only; the `failure_delivered` column on each row
+// tells the operator which dead letters are redrivable and which were already judged.
+const SELECT_DEAD_LETTERED_FOR_WORKFLOW_SQL: &str = "
+SELECT dispatch_key, workflow_id, ordinal, activity_type, input, status, attempt, visible_after, claimed_at, run_id, namespace, task_queue, node, failure_delivered
+FROM outbox
+WHERE workflow_id = ?1 AND status = 'failed'
+ORDER BY ordinal ASC";
+
+// Single-row read by idempotency key, used to return a redrive's post-state row.
+const SELECT_ROW_BY_KEY_SQL: &str = "
+SELECT dispatch_key, workflow_id, ordinal, activity_type, input, status, attempt, visible_after, claimed_at, run_id, namespace, task_queue, node, failure_delivered
+FROM outbox
+WHERE dispatch_key = ?1";
 
 /// Insert a single outbox row inside an existing transaction.
 ///
@@ -160,7 +178,8 @@ pub(crate) async fn insert_outbox_row(tx: &Transaction, row: &OutboxRow) -> Resu
             row.run_id.as_ref().map(ToString::to_string),
             row.namespace.clone(),
             row.task_queue.clone(),
-            row.node.clone()
+            row.node.clone(),
+            i64::from(row.failure_delivered)
         ],
     )
     .await
@@ -755,6 +774,58 @@ pub(crate) async fn settle_workflow_outbox_rows_cancelled(
     Ok(settled)
 }
 
+/// Read every dead-lettered row of `workflow_id`, ordered by ordinal.
+///
+/// # Errors
+///
+/// Returns `StoreError::Backend` for libSQL boundary failures and `StoreError::Serialization` when
+/// a stored row cannot be decoded.
+pub(crate) async fn list_dead_lettered_outbox_rows(
+    conn: &Connection,
+    workflow_id: &WorkflowId,
+) -> Result<Vec<OutboxRow>, StoreError> {
+    let mut rows = conn
+        .query(
+            SELECT_DEAD_LETTERED_FOR_WORKFLOW_SQL,
+            params![workflow_id.to_string()],
+        )
+        .await
+        .map_err(|error| crate::error::libsql_error(&error))?;
+    let mut dead_letters = Vec::new();
+    while let Some(row) = rows
+        .next()
+        .await
+        .map_err(|error| crate::error::libsql_error(&error))?
+    {
+        dead_letters.push(decode_row(&row)?);
+    }
+    Ok(dead_letters)
+}
+
+/// Read one outbox row by `dispatch_key` inside an existing transaction.
+///
+/// # Errors
+///
+/// Returns `StoreError::Backend` for libSQL boundary failures and `StoreError::Serialization` when
+/// the stored row cannot be decoded.
+pub(crate) async fn select_row_by_key(
+    tx: &Transaction,
+    dispatch_key: &str,
+) -> Result<Option<OutboxRow>, StoreError> {
+    let mut rows = tx
+        .query(SELECT_ROW_BY_KEY_SQL, params![dispatch_key.to_string()])
+        .await
+        .map_err(|error| crate::error::libsql_error(&error))?;
+    match rows
+        .next()
+        .await
+        .map_err(|error| crate::error::libsql_error(&error))?
+    {
+        Some(row) => Ok(Some(decode_row(&row)?)),
+        None => Ok(None),
+    }
+}
+
 async fn select_and_settle_workflow_rows(
     tx: &Transaction,
     workflow_id: &WorkflowId,
@@ -1036,6 +1107,12 @@ fn decode_row(row: &Row) -> Result<OutboxRow, StoreError> {
     let node: Option<String> = row
         .get(12)
         .map_err(|error| crate::error::libsql_error(&error))?;
+    // Dead-letter judgment marker. The column is `NOT NULL DEFAULT 0`, so a legacy row backfilled
+    // by the migration reads back `0` = "the workflow was never told" — historically accurate,
+    // because the pre-redrive dead-letter path delivered no failure at all.
+    let failure_delivered: i64 = row
+        .get(13)
+        .map_err(|error| crate::error::libsql_error(&error))?;
 
     Ok(OutboxRow {
         dispatch_key,
@@ -1053,6 +1130,7 @@ fn decode_row(row: &Row) -> Result<OutboxRow, StoreError> {
         namespace: namespace.unwrap_or_else(|| String::from(DEFAULT_OUTBOX_ROUTE)),
         task_queue: task_queue.unwrap_or_else(|| String::from(DEFAULT_OUTBOX_ROUTE)),
         node,
+        failure_delivered: failure_delivered != 0,
     })
 }
 

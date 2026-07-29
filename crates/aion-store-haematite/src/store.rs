@@ -50,7 +50,8 @@ use aion_store::{
     ActivityRecord, ActivityStreamKey, ActivityStreamSummary, ClaimScope, MintOutcome,
     NamespaceOrigin, NamespacePlacement, NamespaceRecord, NamespaceStore, ObservabilityStore,
     OutboxRow, OutboxStatus, OutboxStore, PackageRecord, PackageRouteRecord, PackageStore,
-    ReadableEventStore, RunSummary, StoreError, TimerEntry, WritableEventStore, WriteToken,
+    ReadableEventStore, RedriveMode, RedriveOutcome, RedriveRefusal, RunSummary, StoreError,
+    TimerEntry, WritableEventStore, WriteToken,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -1138,6 +1139,11 @@ struct StoredOutboxRow {
     visible_after: String,
     #[serde(default)]
     claimed_at: Option<String>,
+    /// Dead-letter judgment marker. An absent field (rows persisted before redrive existed)
+    /// decodes to `false` = "the workflow was never told", which is historically accurate: the
+    /// pre-redrive dead-letter path delivered no failure to the workflow at all.
+    #[serde(default)]
+    failure_delivered: bool,
 }
 
 fn default_outbox_route() -> String {
@@ -1159,6 +1165,7 @@ fn encode_outbox(row: &OutboxRow) -> Result<Vec<u8>, StoreError> {
         attempt: row.attempt,
         visible_after: encode_instant(row.visible_after),
         claimed_at: row.claimed_at.map(encode_instant),
+        failure_delivered: row.failure_delivered,
     };
     serde_json::to_vec(&stored).map_err(|error| serde_error(&error))
 }
@@ -1184,6 +1191,7 @@ fn decode_outbox(bytes: &[u8]) -> Result<OutboxRow, StoreError> {
             .as_deref()
             .map(decode_instant)
             .transpose()?,
+        failure_delivered: stored.failure_delivered,
     })
 }
 
@@ -1800,12 +1808,16 @@ impl WritableEventStore for HaematiteStore {
                             attempt: prior.attempt,
                             visible_after: row.visible_after,
                             claimed_at: None,
+                            // The reopen re-stage makes the row live work again, so the
+                            // dead-letter judgment marker of any earlier terminal is cleared.
+                            failure_delivered: false,
                             ..prior
                         }
                     }
                     None => OutboxRow {
                         status: OutboxStatus::Pending,
                         claimed_at: None,
+                        failure_delivered: false,
                         ..row.clone()
                     },
                 };
@@ -1820,13 +1832,17 @@ impl WritableEventStore for HaematiteStore {
     }
 
     async fn settle_outbox_row_cancelled(&self, dispatch_key: &str) -> Result<(), StoreError> {
-        self.transition_outbox(dispatch_key, |row| match row.status {
-            OutboxStatus::Pending | OutboxStatus::Claimed => OutboxRow {
-                status: OutboxStatus::Cancelled,
-                claimed_at: None,
-                ..row
-            },
-            OutboxStatus::Done | OutboxStatus::Failed | OutboxStatus::Cancelled => row,
+        self.transition_outbox(dispatch_key, |row| match row {
+            Some(row) if is_inflight(row.status) => (
+                Some(OutboxRow {
+                    status: OutboxStatus::Cancelled,
+                    claimed_at: None,
+                    ..row
+                }),
+                (),
+            ),
+            // Absent, or already terminal (Done/Failed/Cancelled): never touched.
+            _ => (None, ()),
         })
         .await
     }
@@ -2216,10 +2232,15 @@ impl OutboxStore for HaematiteStore {
     }
 
     async fn complete_outbox_row(&self, dispatch_key: &str) -> Result<(), StoreError> {
-        self.transition_outbox(dispatch_key, |row| OutboxRow {
-            status: OutboxStatus::Done,
-            claimed_at: None,
-            ..row
+        self.transition_outbox(dispatch_key, |row| {
+            (
+                row.map(|row| OutboxRow {
+                    status: OutboxStatus::Done,
+                    claimed_at: None,
+                    ..row
+                }),
+                (),
+            )
         })
         .await
     }
@@ -2230,21 +2251,132 @@ impl OutboxStore for HaematiteStore {
         next_attempt: u32,
         visible_after: DateTime<Utc>,
     ) -> Result<(), StoreError> {
-        self.transition_outbox(dispatch_key, move |row| OutboxRow {
-            status: OutboxStatus::Pending,
-            attempt: next_attempt,
-            visible_after,
-            claimed_at: None,
-            ..row
+        self.transition_outbox(dispatch_key, move |row| {
+            (
+                row.map(|row| OutboxRow {
+                    status: OutboxStatus::Pending,
+                    attempt: next_attempt,
+                    visible_after,
+                    claimed_at: None,
+                    ..row
+                }),
+                (),
+            )
         })
         .await
     }
 
     async fn fail_outbox_row(&self, dispatch_key: &str) -> Result<(), StoreError> {
-        self.transition_outbox(dispatch_key, |row| OutboxRow {
-            status: OutboxStatus::Failed,
-            claimed_at: None,
-            ..row
+        self.transition_outbox(dispatch_key, |row| {
+            (
+                row.map(|row| OutboxRow {
+                    status: OutboxStatus::Failed,
+                    claimed_at: None,
+                    // Dead-lettering opens a FRESH judgment cycle: a row redriven after an
+                    // earlier judged dead letter must not carry the stale marker into this one.
+                    failure_delivered: false,
+                    ..row
+                }),
+                (),
+            )
+        })
+        .await
+    }
+
+    async fn record_outbox_failure_delivered(
+        &self,
+        dispatch_key: &str,
+    ) -> Result<bool, StoreError> {
+        self.transition_outbox(dispatch_key, |row| match row {
+            // Status-guarded: only a row that is STILL a dead letter is marked, so a concurrent
+            // reopen/re-arm that already moved it on is never silently annotated.
+            Some(row) if row.status == OutboxStatus::Failed => (
+                Some(OutboxRow {
+                    failure_delivered: true,
+                    ..row
+                }),
+                true,
+            ),
+            _ => (None, false),
+        })
+        .await
+    }
+
+    async fn redrive_outbox_row(
+        &self,
+        dispatch_key: &str,
+        visible_after: DateTime<Utc>,
+        mode: RedriveMode,
+    ) -> Result<RedriveOutcome, StoreError> {
+        let key = dispatch_key.to_owned();
+        // The guard lives INSIDE the read-modify-write the transition performs, so the status and
+        // judgment classification that decides the outcome is the same durable read the write is
+        // derived from — a row that is Done, Cancelled, or live is never written.
+        self.transition_outbox(dispatch_key, move |row| {
+            let Some(row) = row else {
+                return (
+                    None,
+                    RedriveOutcome::Refused(RedriveRefusal::NoSuchRow { dispatch_key: key }),
+                );
+            };
+            if row.status != OutboxStatus::Failed {
+                return (
+                    None,
+                    RedriveOutcome::Refused(RedriveRefusal::NotDeadLettered {
+                        dispatch_key: key,
+                        status: row.status,
+                    }),
+                );
+            }
+            if row.failure_delivered && !mode.admits_judged() {
+                return (
+                    None,
+                    RedriveOutcome::Refused(RedriveRefusal::AlreadyJudged { dispatch_key: key }),
+                );
+            }
+            let was_judged = row.failure_delivered;
+            let redriven = OutboxRow {
+                status: OutboxStatus::Pending,
+                attempt: 0,
+                visible_after,
+                claimed_at: None,
+                failure_delivered: false,
+                ..row
+            };
+            (
+                Some(redriven.clone()),
+                RedriveOutcome::Redriven {
+                    row: Box::new(redriven),
+                    was_judged,
+                },
+            )
+        })
+        .await
+    }
+
+    async fn list_dead_lettered_outbox_rows(
+        &self,
+        workflow_id: &WorkflowId,
+    ) -> Result<Vec<OutboxRow>, StoreError> {
+        // Owned-shard scoped exactly like every other outbox enumeration; read-only.
+        let scope = self.owned_shard_scope();
+        let workflow_id = workflow_id.clone();
+        self.blocking(move |store| {
+            let mut dead_letters: Vec<OutboxRow> = scan_prefix_scoped(
+                store,
+                keyspace::OUTBOX_PREFIX,
+                scope.as_deref(),
+                |_, value| decode_outbox(value),
+            )?
+            .into_iter()
+            .filter(|row| row.workflow_id == workflow_id && row.status == OutboxStatus::Failed)
+            .collect();
+            dead_letters.sort_by(|left, right| {
+                left.ordinal
+                    .cmp(&right.ordinal)
+                    .then_with(|| left.dispatch_key.cmp(&right.dispatch_key))
+            });
+            Ok(dead_letters)
         })
         .await
     }
@@ -2417,14 +2549,21 @@ impl HaematiteStore {
         .await
     }
 
-    /// Apply `transition` to the row at `dispatch_key`; an absent key is a no-op.
-    async fn transition_outbox<F>(
+    /// Apply `transition` to the row at `dispatch_key`, returning the transition's report.
+    ///
+    /// `transition` sees `None` when no row exists for the key, and returns the row to persist
+    /// (`None` = write nothing) alongside a report value the caller keeps. Every outbox mutation
+    /// that keys off a single `dispatch_key` runs through here, so the shard routing, the
+    /// read-modify-write, and the commit are written exactly once — a status guard is expressed
+    /// INSIDE the transition closure, which is the only place that has seen the durable row.
+    async fn transition_outbox<F, T>(
         &self,
         dispatch_key: &str,
         transition: F,
-    ) -> Result<(), StoreError>
+    ) -> Result<T, StoreError>
     where
-        F: FnOnce(OutboxRow) -> OutboxRow + Send + 'static,
+        F: FnOnce(Option<OutboxRow>) -> (Option<OutboxRow>, T) + Send + 'static,
+        T: Send + 'static,
     {
         let dispatch_key = dispatch_key.to_owned();
         self.blocking(move |store| {
@@ -2444,18 +2583,22 @@ impl HaematiteStore {
             let workflow_id = parse_workflow_id(workflow_text)?;
             let route_key = keyspace::event_stream_key(&workflow_id);
             let key = keyspace::outbox_key(&dispatch_key);
-            let Some(existing) = database
+            let current = database
                 .get_routed(&route_key, &key)
                 .map_err(|error| database_error(&error))?
-            else {
-                return Ok(());
-            };
-            let updated = transition(decode_outbox(&existing)?);
-            database
-                .put_routed(&route_key, key, encode_outbox(&updated)?)
-                .map_err(|error| database_error(&error))?;
-            database.commit().map_err(|error| database_error(&error))?;
-            Ok(())
+                .as_deref()
+                .map(decode_outbox)
+                .transpose()?;
+            let (updated, report) = transition(current);
+            // A transition that declines to write (an absent key, or a status guard that refused)
+            // leaves the durable row exactly as it was and commits nothing.
+            if let Some(updated) = updated {
+                database
+                    .put_routed(&route_key, key, encode_outbox(&updated)?)
+                    .map_err(|error| database_error(&error))?;
+                database.commit().map_err(|error| database_error(&error))?;
+            }
+            Ok(report)
         })
         .await
     }

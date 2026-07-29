@@ -88,6 +88,19 @@ where
     outbox_settlement::rearm_and_claim_never_touch_cancelled_rows(make_store().await?).await?;
     outbox_settlement::reopen_rearm_resurrects_a_cancelled_row(make_store().await?).await?;
     outbox_settlement::writer_seam_settle_matches_the_outbox_twin(make_store().await?).await?;
+    outbox_settlement::redrive_returns_an_unjudged_dead_letter_to_pending(make_store().await?)
+        .await?;
+    outbox_settlement::redrive_refuses_every_non_dead_lettered_row(make_store().await?).await?;
+    outbox_settlement::redrive_refuses_a_judged_dead_letter_unless_forced(make_store().await?)
+        .await?;
+    outbox_settlement::judgment_marker_is_status_guarded_and_reset_by_a_new_dead_letter(
+        make_store().await?,
+    )
+    .await?;
+    outbox_settlement::dead_letter_enumeration_is_scoped_to_the_workflow_and_to_failed_rows(
+        make_store().await?,
+    )
+    .await?;
     Ok(())
 }
 

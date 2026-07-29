@@ -383,6 +383,7 @@ fn pending_row(sleep_ms: u64, tag: &str, ordinal: u64) -> Result<OutboxRow, Test
         attempt: 0,
         visible_after: Utc::now(),
         claimed_at: None,
+        failure_delivered: false,
     })
 }
 

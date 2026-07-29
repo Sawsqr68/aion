@@ -113,7 +113,9 @@ ON namespaces (created_at, name)";
 /// `INSERT OR IGNORE`. `status` is one of `pending`/`claimed`/`done`/`failed`; `visible_after`
 /// fences retry backoff so a row is not re-claimed before its delay elapses; nullable
 /// `claimed_at` records the durable claim instant for live stale-claim reconciliation; nullable
-/// `run_id` records the concrete run that staged the row when known.
+/// `run_id` records the concrete run that staged the row when known. `failure_delivered` is the
+/// dead-letter judgment marker (`0`/`1`): `1` means the row's infrastructure failure reached the
+/// owning workflow, which has already reacted, so redrive refuses it by default.
 pub const CREATE_OUTBOX_TABLE: &str = "
 CREATE TABLE IF NOT EXISTS outbox (
     dispatch_key TEXT NOT NULL UNIQUE,
@@ -126,6 +128,7 @@ CREATE TABLE IF NOT EXISTS outbox (
     visible_after TEXT NOT NULL,
     run_id TEXT,
     claimed_at TEXT,
+    failure_delivered INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (dispatch_key)
 )";
 
@@ -178,6 +181,7 @@ pub async fn ensure_schema(conn: &libsql::Connection) -> Result<(), StoreError> 
     ensure_outbox_namespace_column(conn).await?;
     ensure_outbox_task_queue_column(conn).await?;
     ensure_outbox_node_column(conn).await?;
+    ensure_outbox_failure_delivered_column(conn).await?;
     conn.execute(CREATE_OUTBOX_CLAIMED_INDEX, ())
         .await
         .map_err(|error| crate::error::libsql_error(&error))?;
@@ -238,6 +242,28 @@ async fn ensure_outbox_node_column(conn: &libsql::Connection) -> Result<(), Stor
         .await
         .map(|_| ())
         .map_err(|error| crate::error::libsql_error(&error))
+}
+
+/// Add the dead-letter judgment marker column (`failure_delivered`) when it is absent.
+///
+/// `NOT NULL DEFAULT 0` is exactly right for rows persisted before the column existed: the
+/// pre-redrive dead-letter path delivered no failure to the workflow at all, so "the workflow was
+/// never told" is the historically accurate value for every legacy dead letter — and it is also the
+/// value that makes those rows redrivable, which is what an operator inspecting them wants.
+async fn ensure_outbox_failure_delivered_column(
+    conn: &libsql::Connection,
+) -> Result<(), StoreError> {
+    if outbox_column_exists(conn, "failure_delivered").await? {
+        return Ok(());
+    }
+
+    conn.execute(
+        "ALTER TABLE outbox ADD COLUMN failure_delivered INTEGER NOT NULL DEFAULT 0",
+        (),
+    )
+    .await
+    .map(|_| ())
+    .map_err(|error| crate::error::libsql_error(&error))
 }
 
 async fn outbox_column_exists(

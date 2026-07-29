@@ -46,6 +46,12 @@ pub enum OutboxStatus {
     Cancelled,
 }
 
+impl std::fmt::Display for OutboxStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 impl OutboxStatus {
     /// Returns the canonical lowercase token persisted in the `status` column.
     #[must_use]
@@ -195,6 +201,107 @@ pub struct OutboxRow {
     pub visible_after: DateTime<Utc>,
     /// Durable instant at which the row was claimed; absent unless `status` is `Claimed`.
     pub claimed_at: Option<DateTime<Utc>>,
+    /// Whether this dead letter's infrastructure failure was DELIVERED to the owning workflow —
+    /// the durable judgment marker redrive is gated on.
+    ///
+    /// A dead-lettered row ([`OutboxStatus::Failed`]) has one of two very different meanings, and
+    /// nothing else on the row distinguishes them:
+    ///
+    /// - `false` — the workflow was **never told**. Either no delivery callback was installed, the
+    ///   callback found no live workflow to accept the failure, or the delivery itself errored. The
+    ///   workflow is still waiting on an activity that will never arrive; the work was never
+    ///   judged, so [`OutboxStore::redrive_outbox_row`] may return the row to the pending claim
+    ///   path.
+    /// - `true` — the failure reached the owning workflow, which has already reacted under its own
+    ///   retry/failure semantics, and that reaction is recorded history. Re-driving such a row
+    ///   would re-execute a possibly non-idempotent activity whose failure is already judged, so
+    ///   redrive REFUSES it ([`RedriveRefusal::AlreadyJudged`]) unless an operator explicitly
+    ///   forces the redrive with [`RedriveMode::Forced`].
+    ///
+    /// Only [`OutboxStore::record_outbox_failure_delivered`] ever sets it, and only on a row that
+    /// is already [`OutboxStatus::Failed`]. [`OutboxStore::fail_outbox_row`] clears it, so a
+    /// redriven row that dead-letters again starts a fresh judgment cycle. Rows persisted before
+    /// this field existed read back `false`: the pre-redrive dead-letter path had no failure
+    /// delivery at all, so "never told" is the historically accurate value.
+    pub failure_delivered: bool,
+}
+
+/// Whether a redrive may resurrect a dead letter whose failure was already judged.
+///
+/// [`Self::Eligible`] is the ONLY safe default: it redrives exclusively rows whose failure
+/// delivery did not reach the workflow. [`Self::Forced`] is an explicit operator override that
+/// knowingly re-executes an activity whose failure is recorded history; callers must log it
+/// loudly.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RedriveMode {
+    /// Redrive only an un-judged dead letter (`failure_delivered == false`).
+    Eligible,
+    /// Redrive even a judged dead letter (`failure_delivered == true`) — operator override.
+    Forced,
+}
+
+impl RedriveMode {
+    /// Whether this mode admits a dead letter whose failure was already delivered.
+    #[must_use]
+    pub fn admits_judged(self) -> bool {
+        matches!(self, Self::Forced)
+    }
+}
+
+/// Terminal outcome of [`OutboxStore::redrive_outbox_row`].
+///
+/// Never a silent no-op: either the row moved back to the pending claim path (and the post-state
+/// row is returned), or the store reports exactly WHY it refused.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RedriveOutcome {
+    /// The dead letter returned to [`OutboxStatus::Pending`].
+    Redriven {
+        /// The row's post-state: `Pending`, attempt reset, judgment marker cleared.
+        row: Box<OutboxRow>,
+        /// Whether the row's failure had ALREADY been delivered to the workflow before this
+        /// redrive moved it — i.e. whether this was a [`RedriveMode::Forced`] override of a
+        /// judged dead letter.
+        ///
+        /// Reported from the store's own atomic pre-state because the post-state row always has
+        /// the marker cleared, so it could not otherwise be observed. Callers MUST log a `true`
+        /// loudly: it means an activity whose failure is recorded history is about to run again.
+        was_judged: bool,
+    },
+    /// The row was not eligible; nothing was written.
+    Refused(RedriveRefusal),
+}
+
+/// Typed reason a redrive was refused, so no caller has to infer one from an empty result.
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum RedriveRefusal {
+    /// No row exists for the supplied `dispatch_key`.
+    #[error("no outbox row exists for dispatch key {dispatch_key}")]
+    NoSuchRow {
+        /// The dispatch key that matched nothing.
+        dispatch_key: String,
+    },
+    /// The row exists but is not a dead letter, so there is nothing to redrive. `Done`,
+    /// `Cancelled`, and a live `Pending`/`Claimed` row all land here and are left untouched.
+    #[error(
+        "outbox row {dispatch_key} is '{status}', not a dead letter; only a failed row may be redriven"
+    )]
+    NotDeadLettered {
+        /// The dispatch key that was targeted.
+        dispatch_key: String,
+        /// The status the row is actually in.
+        status: OutboxStatus,
+    },
+    /// The row IS a dead letter, but its failure was already delivered to the workflow, which has
+    /// reacted; redriving would re-execute an activity whose failure is recorded history. Only
+    /// [`RedriveMode::Forced`] overrides this.
+    #[error(
+        "outbox row {dispatch_key} dead-lettered and its failure was already delivered to the \
+         workflow; redriving it would re-execute an activity whose failure is recorded history"
+    )]
+    AlreadyJudged {
+        /// The dispatch key that was targeted.
+        dispatch_key: String,
+    },
 }
 
 impl OutboxRow {
@@ -234,6 +341,7 @@ impl OutboxRow {
             attempt: 0,
             visible_after: now,
             claimed_at: None,
+            failure_delivered: false,
         }
     }
 
@@ -521,12 +629,123 @@ pub trait OutboxStore: Send + Sync + 'static {
 
     /// Marks the row identified by `dispatch_key` as [`OutboxStatus::Failed`] (dead letter).
     ///
+    /// [`OutboxRow::failure_delivered`] is CLEARED by this transition: dead-lettering opens a fresh
+    /// judgment cycle, so a row that was redriven after an earlier judged dead letter never carries
+    /// the stale marker into its new one.
+    ///
     /// An absent `dispatch_key` is a no-op.
     ///
     /// # Errors
     ///
     /// Returns [`StoreError::Backend`] for backend boundary failures.
     async fn fail_outbox_row(&self, dispatch_key: &str) -> Result<(), StoreError>;
+
+    /// Durably records that a dead letter's failure REACHED the owning workflow, returning whether
+    /// the marker was written.
+    ///
+    /// This is the write half of the judgment distinction documented on
+    /// [`OutboxRow::failure_delivered`]: the dispatcher calls it immediately after a delivery
+    /// callback accepted the failure into a live workflow, and redrive then refuses that row by
+    /// default. Status-guarded inside the backend's own operation: ONLY a row already in
+    /// [`OutboxStatus::Failed`] is marked, so a concurrent reopen/re-arm that moved the row on
+    /// cannot be silently annotated.
+    ///
+    /// Returns `false` when nothing was marked (no such row, or the row is no longer a dead
+    /// letter). That is a genuine signal, not a no-op: callers MUST log it, because it means the
+    /// row moved underneath the dead-letter path.
+    ///
+    /// No silently-succeeding default: a store that cannot record the marker would leave every
+    /// judged dead letter looking redrivable.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Backend`] for backend boundary failures (including a store that has
+    /// not implemented the marker) and [`StoreError::Serialization`] when a stored row cannot be
+    /// decoded.
+    async fn record_outbox_failure_delivered(
+        &self,
+        dispatch_key: &str,
+    ) -> Result<bool, StoreError> {
+        let _ = dispatch_key;
+        Err(StoreError::Backend(String::from(
+            "this outbox store does not support the dead-letter judgment marker; \
+             refusing to silently drop it (override OutboxStore::record_outbox_failure_delivered)",
+        )))
+    }
+
+    /// Returns every dead-lettered ([`OutboxStatus::Failed`]) row of `workflow_id`, ordered by
+    /// `ordinal`.
+    ///
+    /// The operator's discovery primitive for redrive: a workflow that is still `Running` while an
+    /// activity never returned has its evidence here, each row carrying
+    /// [`OutboxRow::failure_delivered`] so the operator can see which dead letters are redrivable
+    /// and which were already judged. Read-only; scoped to this node's owned shards like every
+    /// other outbox enumeration.
+    ///
+    /// No silently-empty default, for the same reason as
+    /// [`OutboxStore::list_stale_claimed_outbox_rows`]: an empty answer from a store that never
+    /// looked would tell an operator there is nothing to redrive.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Backend`] for backend boundary failures (including a store that has
+    /// not implemented the enumeration) and [`StoreError::Serialization`] when a stored row cannot
+    /// be decoded.
+    async fn list_dead_lettered_outbox_rows(
+        &self,
+        workflow_id: &WorkflowId,
+    ) -> Result<Vec<OutboxRow>, StoreError> {
+        let _ = workflow_id;
+        Err(StoreError::Backend(String::from(
+            "this outbox store does not support dead-letter enumeration; \
+             refusing to report an empty set (override OutboxStore::list_dead_lettered_outbox_rows)",
+        )))
+    }
+
+    /// Returns a DEAD-LETTERED row to the pending claim path, or reports why it refused.
+    ///
+    /// The transition is status-guarded inside the backend's own atomic operation, exactly like
+    /// [`OutboxStore::rearm_stale_claimed_outbox_rows`]: a row moves ONLY from
+    /// [`OutboxStatus::Failed`]. A [`OutboxStatus::Done`], [`OutboxStatus::Cancelled`], or live
+    /// [`OutboxStatus::Pending`]/[`OutboxStatus::Claimed`] row is never touched — it is refused
+    /// with [`RedriveRefusal::NotDeadLettered`], so a redrive can never resurrect a completed,
+    /// settled, or in-flight dispatch.
+    ///
+    /// A redriven row returns to [`OutboxStatus::Pending`] with its attempt budget RESET to zero
+    /// (the retry budget was spent on infrastructure failures the workflow never learned about),
+    /// `visible_after` set to the supplied instant, `claimed_at` cleared, and
+    /// [`OutboxRow::failure_delivered`] cleared.
+    ///
+    /// # Judgment gate
+    ///
+    /// `mode` decides what happens to a dead letter whose failure WAS delivered
+    /// ([`OutboxRow::failure_delivered`]): [`RedriveMode::Eligible`] refuses it
+    /// ([`RedriveRefusal::AlreadyJudged`]) because the workflow already reacted to that failure and
+    /// re-running the activity would re-execute non-idempotent work behind recorded history;
+    /// [`RedriveMode::Forced`] redrives it anyway as an explicit operator override that the caller
+    /// must log loudly.
+    ///
+    /// No silently-succeeding default: a store that cannot redrive must refuse loudly rather than
+    /// let an operator believe work was re-queued.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Backend`] for backend boundary failures (including a store that has
+    /// not implemented redrive) and [`StoreError::Serialization`] when a stored row cannot be
+    /// decoded. An ineligible row is NOT an error: it comes back as
+    /// [`RedriveOutcome::Refused`] with a typed reason.
+    async fn redrive_outbox_row(
+        &self,
+        dispatch_key: &str,
+        visible_after: DateTime<Utc>,
+        mode: RedriveMode,
+    ) -> Result<RedriveOutcome, StoreError> {
+        let _ = (dispatch_key, visible_after, mode);
+        Err(StoreError::Backend(String::from(
+            "this outbox store does not support dead-letter redrive; \
+             refusing to report a redrive that never happened (override OutboxStore::redrive_outbox_row)",
+        )))
+    }
 
     /// Returns the count of in-flight outbox rows for `namespace` (CP2-Q1.5).
     ///

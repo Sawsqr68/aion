@@ -25,6 +25,7 @@ mod error;
 mod events;
 mod history;
 mod intervene;
+mod outbox;
 mod payload;
 mod router;
 mod schedules;

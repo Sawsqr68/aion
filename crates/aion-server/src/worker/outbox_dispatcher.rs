@@ -655,60 +655,21 @@ impl OutboxDispatcher<Arc<dyn OutboxRowDispatch>> {
         }
     }
 
+    /// Retire the row as a dead letter and surface the failure to its workflow.
+    ///
+    /// The whole decision — including the durable judgment marker that decides whether an operator
+    /// may later redrive the row — lives in
+    /// [`outbox_dead_letter`](crate::worker::outbox_dead_letter).
     async fn dead_letter(&self, row: &OutboxRow, dispatch_error: &ServerError, attempted: u32) {
-        warn!(
-            dispatch_key = %row.dispatch_key,
-            attempt = row.attempt,
-            max_attempts = self.config.max_attempts,
-            error = %dispatch_error,
-            "outbox dispatch exhausted retry budget; dead-lettering row"
-        );
-        match self.store.fail_outbox_row(&row.dispatch_key).await {
-            Err(error) => {
-                error!(dispatch_key = %row.dispatch_key, %error, "outbox dispatcher failed to dead-letter row");
-            }
-            Ok(()) => {
-                if let Some(callback) = &self.failure_callback {
-                    let activity_id = ActivityId::from_sequence_position(row.ordinal);
-                    let reason = format!(
-                        "infrastructure: delivery to worker failed after {attempted} attempts: {dispatch_error}"
-                    );
-                    match callback.deliver_failure(
-                        &row.workflow_id,
-                        &activity_id,
-                        row.run_id.as_ref(),
-                        reason,
-                    ) {
-                        Ok(true) => {
-                            warn!(
-                                dispatch_key = %row.dispatch_key,
-                                attempt = row.attempt,
-                                "outbox dead-letter failure delivered to workflow"
-                            );
-                        }
-                        Ok(false) => {
-                            warn!(
-                                dispatch_key = %row.dispatch_key,
-                                attempt = row.attempt,
-                                "outbox dead-letter failure reached callback but no live workflow accepted it"
-                            );
-                        }
-                        Err(error) => {
-                            error!(
-                                dispatch_key = %row.dispatch_key,
-                                %error,
-                                "outbox row dead-lettered but failure delivery to workflow failed"
-                            );
-                        }
-                    }
-                } else {
-                    warn!(
-                        dispatch_key = %row.dispatch_key,
-                        "outbox row dead-lettered without a workflow delivery callback"
-                    );
-                }
-            }
-        }
+        crate::worker::outbox_dead_letter::dead_letter_row(
+            &self.store,
+            self.failure_callback.as_ref(),
+            row,
+            dispatch_error,
+            attempted,
+            self.config.max_attempts,
+        )
+        .await;
     }
 
     /// Apply the retry budget after a failed dispatch.

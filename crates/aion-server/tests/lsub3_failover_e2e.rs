@@ -462,6 +462,7 @@ fn pending_row() -> Result<OutboxRow, TestError> {
         attempt: 0,
         visible_after: Utc::now(),
         claimed_at: None,
+        failure_delivered: false,
     })
 }
 

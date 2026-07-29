@@ -143,6 +143,9 @@ fn fixture_contract(manifest: &Manifest) -> Result<PackageContract, TestError> {
             timeout: None,
             retry: None,
             advisory: false,
+            // A connected worker serves this fixture's queue, so the
+            // declaration carries no body of its own.
+            body: None,
         });
     }
     let mut contract = PackageContract::from_manifest(manifest);

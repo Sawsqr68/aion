@@ -8,7 +8,10 @@
 
 use chrono::{Duration, Utc};
 
-use crate::{OutboxRow, OutboxStore, StoreError, WorkflowId, WritableEventStore};
+use crate::{
+    OutboxRow, OutboxStatus, OutboxStore, RedriveMode, RedriveOutcome, RedriveRefusal, StoreError,
+    WorkflowId, WritableEventStore,
+};
 
 use super::contract_error;
 
@@ -291,6 +294,332 @@ where
         vec![OutboxRow::dispatch_key_for(&workflow, 0)],
         "rearm_outbox_pending must resurrect the Cancelled row to claimable Pending \
          (reopen supersedes the terminal settle)",
+    )
+}
+
+/// Dead-letter a claimed row and return it.
+async fn append_claim_and_dead_letter<S>(
+    store: &S,
+    workflow_id: &WorkflowId,
+    ordinal: u64,
+) -> Result<OutboxRow, StoreError>
+where
+    S: OutboxStore + WritableEventStore,
+{
+    let row = append_and_claim(store, workflow_id, ordinal).await?;
+    store.fail_outbox_row(&row.dispatch_key).await?;
+    Ok(row)
+}
+
+fn keys_of(rows: &[OutboxRow]) -> Vec<String> {
+    rows.iter()
+        .map(|row| row.dispatch_key.clone())
+        .collect::<Vec<_>>()
+}
+
+/// Redrive returns an UNJUDGED dead letter to the pending claim path with its attempt budget reset,
+/// and the redriven row is claimable again.
+pub(super) async fn redrive_returns_an_unjudged_dead_letter_to_pending<S>(
+    store: S,
+) -> Result<(), StoreError>
+where
+    S: OutboxStore + WritableEventStore,
+{
+    let workflow = super::workflow_id();
+    let row = append_and_claim(&store, &workflow, 0).await?;
+    // Spend part of the retry budget, then dead-letter the row from a claimed state — the exact
+    // shape the dispatcher produces when delivery fails on the final attempt.
+    store
+        .retry_outbox_row(&row.dispatch_key, 4, Utc::now())
+        .await?;
+    let claimed = append_and_claim_existing(&store, &row.dispatch_key).await?;
+    super::expect_eq(
+        claimed.attempt,
+        4,
+        "the re-claimed row must carry the spent attempt budget",
+    )?;
+    store.fail_outbox_row(&row.dispatch_key).await?;
+
+    let outcome = store
+        .redrive_outbox_row(&row.dispatch_key, Utc::now(), RedriveMode::Eligible)
+        .await?;
+    let redriven = match outcome {
+        RedriveOutcome::Redriven { row, was_judged } => {
+            if was_judged {
+                return Err(contract_error(
+                    "an unjudged dead letter must not report a judged redrive",
+                ));
+            }
+            *row
+        }
+        RedriveOutcome::Refused(refusal) => {
+            return Err(contract_error(&format!(
+                "an unjudged dead letter must redrive, got refusal: {refusal}"
+            )));
+        }
+    };
+    super::expect_eq(
+        redriven.status,
+        OutboxStatus::Pending,
+        "a redriven row must return to Pending",
+    )?;
+    super::expect_eq(
+        redriven.attempt,
+        0,
+        "a redriven row must have its attempt budget reset",
+    )?;
+    if redriven.claimed_at.is_some() {
+        return Err(contract_error(
+            "a redriven row must have its claim instant cleared",
+        ));
+    }
+
+    super::expect_eq(
+        keys_of(&store.claim_outbox_rows(16).await?),
+        vec![row.dispatch_key.clone()],
+        "the redriven row must be claimable again",
+    )?;
+    super::expect_empty(
+        store.list_dead_lettered_outbox_rows(&workflow).await?,
+        "a redriven row must no longer enumerate as a dead letter",
+    )
+}
+
+/// Claim the single claimable row and assert it is `dispatch_key`.
+async fn append_and_claim_existing<S>(
+    store: &S,
+    dispatch_key: &str,
+) -> Result<OutboxRow, StoreError>
+where
+    S: OutboxStore + WritableEventStore,
+{
+    let claimed = store.claim_outbox_rows(1).await?;
+    match claimed.into_iter().next() {
+        Some(row) if row.dispatch_key == dispatch_key => Ok(row),
+        other => Err(contract_error(&format!(
+            "expected to re-claim {dispatch_key}, got {other:?}"
+        ))),
+    }
+}
+
+/// The status guard: redrive moves a row ONLY from the dead-lettered state. A `Done`, `Cancelled`,
+/// or live `Claimed` row is refused with a typed reason and left byte-identical, and an unknown key
+/// is an explicit refusal rather than a silent no-op.
+pub(super) async fn redrive_refuses_every_non_dead_lettered_row<S>(
+    store: S,
+) -> Result<(), StoreError>
+where
+    S: OutboxStore + WritableEventStore,
+{
+    let workflow = super::workflow_id();
+    let done = append_and_claim(&store, &workflow, 0).await?;
+    store.complete_outbox_row(&done.dispatch_key).await?;
+    let cancelled = append_and_claim(&store, &workflow, 1).await?;
+    store.cancel_outbox_rows_for_workflow(&workflow).await?;
+    let live = append_and_claim(&store, &workflow, 2).await?;
+
+    for (dispatch_key, expected) in [
+        (done.dispatch_key.clone(), OutboxStatus::Done),
+        (cancelled.dispatch_key.clone(), OutboxStatus::Cancelled),
+        (live.dispatch_key.clone(), OutboxStatus::Claimed),
+    ] {
+        match store
+            .redrive_outbox_row(&dispatch_key, Utc::now(), RedriveMode::Forced)
+            .await?
+        {
+            RedriveOutcome::Refused(RedriveRefusal::NotDeadLettered { status, .. })
+                if status == expected => {}
+            other => {
+                return Err(contract_error(&format!(
+                    "redrive of a '{expected}' row must be refused as NotDeadLettered, got {other:?}"
+                )));
+            }
+        }
+    }
+
+    // Not even a forced redrive may resurrect any of them.
+    super::expect_empty(
+        store.claim_outbox_rows(16).await?,
+        "no Done/Cancelled/Claimed row may become claimable through a redrive",
+    )?;
+
+    let absent = OutboxRow::dispatch_key_for(&super::workflow_id(), 7);
+    match store
+        .redrive_outbox_row(&absent, Utc::now(), RedriveMode::Forced)
+        .await?
+    {
+        RedriveOutcome::Refused(RedriveRefusal::NoSuchRow { dispatch_key }) => super::expect_eq(
+            dispatch_key,
+            absent,
+            "the NoSuchRow refusal must name the key it could not find",
+        ),
+        other => Err(contract_error(&format!(
+            "redrive of an unknown key must be an explicit NoSuchRow refusal, got {other:?}"
+        ))),
+    }
+}
+
+/// THE judgment gate: a dead letter whose failure was DELIVERED to the workflow is refused by an
+/// eligible redrive (the workflow already reacted; re-running would re-execute an activity whose
+/// failure is recorded history) and moves only under an explicit forced redrive. A dead letter
+/// whose failure was NOT delivered redrives normally.
+pub(super) async fn redrive_refuses_a_judged_dead_letter_unless_forced<S>(
+    store: S,
+) -> Result<(), StoreError>
+where
+    S: OutboxStore + WritableEventStore,
+{
+    let workflow = super::workflow_id();
+    let judged = append_claim_and_dead_letter(&store, &workflow, 0).await?;
+    if !store
+        .record_outbox_failure_delivered(&judged.dispatch_key)
+        .await?
+    {
+        return Err(contract_error(
+            "the judgment marker must be recorded on a dead-lettered row",
+        ));
+    }
+
+    let dead_letters = store.list_dead_lettered_outbox_rows(&workflow).await?;
+    match dead_letters.as_slice() {
+        [row] if row.failure_delivered => {}
+        other => {
+            return Err(contract_error(&format!(
+                "the dead-letter enumeration must report the judgment marker, got {other:?}"
+            )));
+        }
+    }
+
+    match store
+        .redrive_outbox_row(&judged.dispatch_key, Utc::now(), RedriveMode::Eligible)
+        .await?
+    {
+        RedriveOutcome::Refused(RedriveRefusal::AlreadyJudged { .. }) => {}
+        other => {
+            return Err(contract_error(&format!(
+                "an eligible redrive must refuse a judged dead letter, got {other:?}"
+            )));
+        }
+    }
+    super::expect_empty(
+        store.claim_outbox_rows(16).await?,
+        "a refused redrive must leave the judged dead letter unclaimable",
+    )?;
+
+    match store
+        .redrive_outbox_row(&judged.dispatch_key, Utc::now(), RedriveMode::Forced)
+        .await?
+    {
+        // The store reports the PRE-state judgment so a forced override is auditable: the
+        // post-state row always has the marker cleared.
+        RedriveOutcome::Redriven { row, was_judged } if !row.failure_delivered && was_judged => {}
+        other => {
+            return Err(contract_error(&format!(
+                "a forced redrive must move the judged row, clear its marker, and report that it                  was judged, got {other:?}"
+            )));
+        }
+    }
+    super::expect_eq(
+        keys_of(&store.claim_outbox_rows(16).await?),
+        vec![judged.dispatch_key],
+        "the forcibly redriven row must be claimable again",
+    )
+}
+
+/// The judgment marker is status-guarded and reset by a fresh dead letter.
+pub(super) async fn judgment_marker_is_status_guarded_and_reset_by_a_new_dead_letter<S>(
+    store: S,
+) -> Result<(), StoreError>
+where
+    S: OutboxStore + WritableEventStore,
+{
+    let workflow = super::workflow_id();
+    let live = append_and_claim(&store, &workflow, 0).await?;
+    if store
+        .record_outbox_failure_delivered(&live.dispatch_key)
+        .await?
+    {
+        return Err(contract_error(
+            "the judgment marker must never be recorded on a live (Claimed) row",
+        ));
+    }
+    let absent = OutboxRow::dispatch_key_for(&super::workflow_id(), 9);
+    if store.record_outbox_failure_delivered(&absent).await? {
+        return Err(contract_error(
+            "the judgment marker must report false for an unknown dispatch key",
+        ));
+    }
+
+    // Mark it, redrive it, dead-letter it again: the new dead letter starts a fresh judgment cycle.
+    store.fail_outbox_row(&live.dispatch_key).await?;
+    if !store
+        .record_outbox_failure_delivered(&live.dispatch_key)
+        .await?
+    {
+        return Err(contract_error(
+            "the judgment marker must be recorded on the dead-lettered row",
+        ));
+    }
+    match store
+        .redrive_outbox_row(&live.dispatch_key, Utc::now(), RedriveMode::Forced)
+        .await?
+    {
+        RedriveOutcome::Redriven { was_judged, .. } if was_judged => {}
+        other => {
+            return Err(contract_error(&format!(
+                "the forced redrive must move the judged row and report it as judged, got {other:?}"
+            )));
+        }
+    }
+    store.fail_outbox_row(&live.dispatch_key).await?;
+    let dead_letters = store.list_dead_lettered_outbox_rows(&workflow).await?;
+    match dead_letters.as_slice() {
+        [row] if !row.failure_delivered => {}
+        other => {
+            return Err(contract_error(&format!(
+                "a fresh dead letter must clear the earlier judgment marker, got {other:?}"
+            )));
+        }
+    }
+    // …and therefore redrives again without a force.
+    match store
+        .redrive_outbox_row(&live.dispatch_key, Utc::now(), RedriveMode::Eligible)
+        .await?
+    {
+        RedriveOutcome::Redriven { was_judged, .. } if !was_judged => Ok(()),
+        other => Err(contract_error(&format!(
+            "the re-dead-lettered row must be eligible for redrive again as unjudged, got {other:?}"
+        ))),
+    }
+}
+
+/// The dead-letter enumeration reports exactly the target workflow's `Failed` rows.
+pub(super) async fn dead_letter_enumeration_is_scoped_to_the_workflow_and_to_failed_rows<S>(
+    store: S,
+) -> Result<(), StoreError>
+where
+    S: OutboxStore + WritableEventStore,
+{
+    let workflow = super::workflow_id();
+    let other = super::workflow_id();
+    let first = append_claim_and_dead_letter(&store, &workflow, 1).await?;
+    let second = append_claim_and_dead_letter(&store, &workflow, 0).await?;
+    let done = append_and_claim(&store, &workflow, 2).await?;
+    store.complete_outbox_row(&done.dispatch_key).await?;
+    let foreign = append_claim_and_dead_letter(&store, &other, 0).await?;
+    store
+        .append_outbox_batch(&[pending_row(&workflow, 3)?])
+        .await?;
+
+    super::expect_eq(
+        keys_of(&store.list_dead_lettered_outbox_rows(&workflow).await?),
+        vec![second.dispatch_key, first.dispatch_key],
+        "the enumeration must return only this workflow's dead letters, ordered by ordinal",
+    )?;
+    super::expect_eq(
+        keys_of(&store.list_dead_lettered_outbox_rows(&other).await?),
+        vec![foreign.dispatch_key],
+        "another workflow's dead letters must never bleed into the enumeration",
     )
 }
 
