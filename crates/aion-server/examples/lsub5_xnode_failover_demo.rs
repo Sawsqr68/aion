@@ -677,12 +677,16 @@ impl OwnerServer {
             .build()
             .map_err(demo_error)?;
         let callback: Arc<dyn OutboxDeliveryCallback> = Arc::new(NoopDeliveryCallback);
+        let outbox_store: Arc<dyn OutboxStore> = Arc::clone(&node.store) as Arc<dyn OutboxStore>;
+        let dispatcher_builder = OutboxDispatcher::new(outbox_store, dispatcher_config);
         let dispatch: Arc<dyn OutboxRowDispatch> = Arc::new(RegistryLiminalDispatch::new(
             liminal.registry.clone(),
-            callback,
+            Arc::clone(&callback),
+            dispatcher_builder.delivery_gate(),
         ));
-        let outbox_store: Arc<dyn OutboxStore> = Arc::clone(&node.store) as Arc<dyn OutboxStore>;
-        let dispatcher = OutboxDispatcher::new(outbox_store, dispatch, dispatcher_config);
+        let dispatcher = dispatcher_builder
+            .with_dispatch(dispatch)
+            .with_delivery_callback(callback);
         let (dispatcher_shutdown, shutdown_rx) = tokio::sync::watch::channel(false);
         runtime.spawn(dispatcher.run(shutdown_rx));
         Ok(Self {
@@ -756,10 +760,16 @@ impl Server {
         let engine = Arc::new(engine);
         let callback: Arc<dyn OutboxDeliveryCallback> =
             Arc::new(ServerOutboxDeliveryCallback::new(Arc::clone(&engine)));
-        let dispatch: Arc<dyn OutboxRowDispatch> =
-            Arc::new(RegistryLiminalDispatch::new(registry, callback));
         let outbox_store: Arc<dyn OutboxStore> = Arc::clone(&node.store) as Arc<dyn OutboxStore>;
-        let dispatcher = OutboxDispatcher::new(outbox_store, dispatch, dispatcher_config);
+        let dispatcher_builder = OutboxDispatcher::new(outbox_store, dispatcher_config);
+        let dispatch: Arc<dyn OutboxRowDispatch> = Arc::new(RegistryLiminalDispatch::new(
+            registry,
+            Arc::clone(&callback),
+            dispatcher_builder.delivery_gate(),
+        ));
+        let dispatcher = dispatcher_builder
+            .with_dispatch(dispatch)
+            .with_delivery_callback(callback);
         let (dispatcher_shutdown, shutdown_rx) = tokio::sync::watch::channel(false);
         runtime.spawn(dispatcher.run(shutdown_rx));
         Ok(Self {

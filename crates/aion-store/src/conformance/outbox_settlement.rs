@@ -152,7 +152,12 @@ where
     )?;
 
     let rearmed = store
-        .rearm_stale_claimed_outbox_rows(older_than, Utc::now(), 16)
+        .rearm_stale_claimed_outbox_rows(
+            older_than,
+            Utc::now(),
+            16,
+            &std::collections::HashSet::new(),
+        )
         .await?;
     let mut rearmed_keys = keys_of(&rearmed);
     rearmed_keys.sort();
@@ -176,6 +181,51 @@ where
     )
 }
 
+/// A live delivery key is excluded inside the same status-guarded operation
+/// that re-arms other stale claims. The excluded row remains Claimed while a
+/// non-excluded peer re-arms to Pending.
+pub(super) async fn stale_rearm_excludes_live_delivery_keys<S>(store: S) -> Result<(), StoreError>
+where
+    S: OutboxStore + WritableEventStore,
+{
+    let workflow = super::workflow_id();
+    let held = append_and_claim(&store, &workflow, 0).await?;
+    let recoverable = append_and_claim(&store, &workflow, 1).await?;
+    let older_than = Utc::now() + Duration::hours(1);
+    let excluded = std::collections::HashSet::from([held.dispatch_key.clone()]);
+
+    let rearmed = store
+        .rearm_stale_claimed_outbox_rows(older_than, Utc::now(), 16, &excluded)
+        .await?;
+    super::expect_eq(
+        rearmed
+            .iter()
+            .map(|row| row.dispatch_key.clone())
+            .collect::<Vec<_>>(),
+        vec![recoverable.dispatch_key.clone()],
+        "the non-excluded stale row must re-arm while the live delivery stays claimed",
+    )?;
+
+    let still_stale = store.list_stale_claimed_outbox_rows(older_than, 16).await?;
+    super::expect_eq(
+        still_stale
+            .iter()
+            .map(|row| row.dispatch_key.clone())
+            .collect::<Vec<_>>(),
+        vec![held.dispatch_key],
+        "the excluded live delivery must remain Claimed after the guarded re-arm",
+    )?;
+    let claimed = store.claim_outbox_rows(16).await?;
+    super::expect_eq(
+        claimed
+            .iter()
+            .map(|row| row.dispatch_key.clone())
+            .collect::<Vec<_>>(),
+        vec![recoverable.dispatch_key],
+        "only the non-excluded row may return to the pending claim path",
+    )
+}
+
 /// Pin: neither the stale re-arm nor the claim path ever touches a Cancelled
 /// row — the contract the reconciler's settle-then-rearm ordering depends on.
 pub(super) async fn rearm_and_claim_never_touch_cancelled_rows<S>(
@@ -195,7 +245,12 @@ where
 
     super::expect_empty(
         store
-            .rearm_stale_claimed_outbox_rows(Utc::now() + Duration::hours(1), Utc::now(), 16)
+            .rearm_stale_claimed_outbox_rows(
+                Utc::now() + Duration::hours(1),
+                Utc::now(),
+                16,
+                &std::collections::HashSet::new(),
+            )
             .await?,
         "the stale re-arm must never resurrect a Cancelled row",
     )?;

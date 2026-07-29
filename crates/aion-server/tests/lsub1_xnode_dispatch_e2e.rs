@@ -39,8 +39,8 @@ use std::time::{Duration, Instant};
 use aion_core::{ActivityId, RunId, WorkflowId};
 use aion_server::ServerError;
 use aion_server::worker::{
-    ConnectedWorkerRegistry, LiminalConnectionNotifier, OutboxDeliveryCallback, OutboxRowDispatch,
-    RegistryLiminalDispatch,
+    ConnectedWorkerRegistry, DeliveryGate, LiminalConnectionNotifier, OutboxDeliveryCallback,
+    OutboxRowDispatch, RegistryLiminalDispatch,
 };
 use aion_store::{ClaimScope, OutboxRow, OutboxStatus, OutboxStore};
 use aion_store_libsql::LibSqlStore;
@@ -404,9 +404,14 @@ async fn xnode_inband_dispatch_routes_executes_and_completes() -> Result<(), Tes
     // DISPATCH: select the worker by (ns, tq, type, node), push the request to its
     // connection, execute, and re-enter the result through the shared callback.
     let callback = Arc::new(RecordingCallback::default());
+    let delivery_gate = DeliveryGate::default();
+    let _delivery_guard = delivery_gate
+        .begin(&claimed_row.dispatch_key)
+        .ok_or_else(|| test_error("manual dispatch could not acquire delivery gate"))?;
     let dispatch = RegistryLiminalDispatch::new(
         registry.clone(),
         Arc::clone(&callback) as Arc<dyn OutboxDeliveryCallback>,
+        delivery_gate,
     );
     dispatch
         .dispatch(&claimed_row)
@@ -482,9 +487,14 @@ async fn dispatch_for_a_different_pool_is_not_delivered() -> Result<(), TestErro
     let other_row = pending_row("other", "cpu", None, 0)?;
 
     let callback = Arc::new(RecordingCallback::default());
+    let delivery_gate = DeliveryGate::default();
+    let _delivery_guard = delivery_gate
+        .begin(&other_row.dispatch_key)
+        .ok_or_else(|| test_error("manual dispatch could not acquire delivery gate"))?;
     let dispatch = RegistryLiminalDispatch::new(
         registry.clone(),
         Arc::clone(&callback) as Arc<dyn OutboxDeliveryCallback>,
+        delivery_gate,
     );
     let result = dispatch.dispatch(&other_row).await;
     assert!(

@@ -61,7 +61,9 @@
 //! outbox table; it must not be commissioned on a server that relies on fan-out
 //! completions reaching history.
 
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use aion_core::ActivityId;
@@ -72,7 +74,103 @@ use tokio::sync::watch;
 use tracing::{error, info, warn};
 
 use crate::error::ServerError;
-use crate::worker::{ActivityDispatcher, ScheduledActivity};
+use crate::worker::{ActivityDispatcher, OutboxDeliveryCallback, ScheduledActivity};
+
+/// Shared ownership gate for claimed rows whose delivery tasks are still live.
+///
+/// The dispatcher guard, liminal held wait, and stale-claim reconciler all use
+/// clones of the same handle. A key is present exactly while its spawned row
+/// task owns a [`DeliveryGuard`].
+#[derive(Clone, Debug, Default)]
+pub struct DeliveryGate {
+    inner: Arc<DeliveryGateInner>,
+}
+
+#[derive(Debug, Default)]
+struct DeliveryGateInner {
+    keys: Mutex<HashSet<String>>,
+    draining: AtomicBool,
+}
+
+impl DeliveryGate {
+    /// Begin delivery for `key`, returning `None` when it is already held, the
+    /// dispatcher is draining, or the gate lock is poisoned.
+    #[must_use]
+    pub fn begin(&self, key: &str) -> Option<DeliveryGuard> {
+        if self.is_draining() {
+            return None;
+        }
+        let mut keys = match self.inner.keys.lock() {
+            Ok(keys) => keys,
+            Err(error) => {
+                error!(%error, dispatch_key = %key, "delivery gate lock poisoned; refusing to begin delivery");
+                return None;
+            }
+        };
+        if self.is_draining() || !keys.insert(key.to_owned()) {
+            return None;
+        }
+        Some(DeliveryGuard {
+            gate: self.clone(),
+            key: key.to_owned(),
+        })
+    }
+
+    /// Whether `key` is still owned by a live delivery task.
+    #[must_use]
+    pub fn holds(&self, key: &str) -> bool {
+        match self.inner.keys.lock() {
+            Ok(keys) => keys.contains(key),
+            Err(error) => {
+                error!(%error, dispatch_key = %key, "delivery gate lock poisoned; abandoning held wait");
+                false
+            }
+        }
+    }
+
+    /// Prevent new deliveries and tell held waits to abandon at their next poll.
+    pub fn drain(&self) {
+        self.inner.draining.store(true, Ordering::Release);
+    }
+
+    /// Whether dispatcher drain has begun.
+    #[must_use]
+    pub fn is_draining(&self) -> bool {
+        self.inner.draining.load(Ordering::Acquire)
+    }
+
+    /// Snapshot keys that stale reconciliation must not re-arm.
+    #[must_use]
+    pub fn snapshot_keys(&self) -> HashSet<String> {
+        match self.inner.keys.lock() {
+            Ok(keys) => keys.clone(),
+            Err(error) => {
+                error!(%error, "delivery gate lock poisoned; preserving known stale-rearm exclusions");
+                error.into_inner().clone()
+            }
+        }
+    }
+}
+
+/// RAII ownership of one dispatch key in a [`DeliveryGate`].
+#[derive(Debug)]
+pub struct DeliveryGuard {
+    gate: DeliveryGate,
+    key: String,
+}
+
+impl Drop for DeliveryGuard {
+    fn drop(&mut self) {
+        match self.gate.inner.keys.lock() {
+            Ok(mut keys) => {
+                keys.remove(&self.key);
+            }
+            Err(error) => {
+                error!(%error, dispatch_key = %self.key, "delivery gate lock poisoned; failed to release delivery key");
+            }
+        }
+    }
+}
 
 /// Resolved, non-optional outbox dispatcher settings.
 ///
@@ -252,14 +350,18 @@ impl OutboxRowDispatch for WorkerOutboxDispatch {
     }
 }
 
+/// Typestate marking a dispatcher whose required row sink is not installed yet.
+#[derive(Debug)]
+pub struct MissingDispatch;
+
 /// Non-replayed background dispatcher for pending outbox rows.
 ///
 /// See the module docs for the full contract. Construct with [`Self::new`] and
 /// drive with [`Self::run`]; the loop exits cleanly when the shared shutdown
 /// watch flips to `true`, mirroring the server's transport shutdown signal.
-pub struct OutboxDispatcher {
+pub struct OutboxDispatcher<D = MissingDispatch> {
     store: Arc<dyn OutboxStore>,
-    dispatch: Arc<dyn OutboxRowDispatch>,
+    dispatch: D,
     config: OutboxDispatcherConfig,
     /// Advisory wake (LSUB-2): an in-process `Notify` the engine's stage seam
     /// pulses when a pending outbox row is committed, so the run loop sweeps
@@ -286,9 +388,14 @@ pub struct OutboxDispatcher {
     /// purely resume plus the next sweep. When absent (the default, every
     /// pre-#204 construction and test) the claim is byte-identical to before.
     paused_runs: Option<aion::lifecycle::PausedRuns>,
+    /// Shared ownership of rows currently executing in spawned delivery tasks.
+    delivery_gate: DeliveryGate,
+    /// Optional callback that makes a genuine terminal delivery failure visible
+    /// to the owning workflow after the row is durably dead-lettered.
+    failure_callback: Option<Arc<dyn OutboxDeliveryCallback>>,
 }
 
-impl std::fmt::Debug for OutboxDispatcher {
+impl<D> std::fmt::Debug for OutboxDispatcher<D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OutboxDispatcher")
             .field("config", &self.config)
@@ -296,30 +403,55 @@ impl std::fmt::Debug for OutboxDispatcher {
     }
 }
 
-impl OutboxDispatcher {
-    /// Build a dispatcher over the outbox store and a row-dispatch sink.
+impl OutboxDispatcher<MissingDispatch> {
+    /// Begin building a dispatcher and create its shared delivery gate.
     #[must_use]
-    pub fn new(
-        store: Arc<dyn OutboxStore>,
-        dispatch: Arc<dyn OutboxRowDispatch>,
-        config: OutboxDispatcherConfig,
-    ) -> Self {
+    pub fn new(store: Arc<dyn OutboxStore>, config: OutboxDispatcherConfig) -> Self {
         Self {
             store,
-            dispatch,
+            dispatch: MissingDispatch,
             config,
-            // Default to a private, never-pulsed wake so an unwired dispatcher is
-            // a pure poll. Callers that share the engine's stage seam install the
-            // real handle with `with_wake`.
             wake: Arc::new(tokio::sync::Notify::new()),
-            // Default to no backpressure: the sweep is one unscoped claim,
-            // byte-identical to the pre-Phase-2 dispatcher. `with_backpressure`
-            // attaches the keyed per-tenant claim shaping.
             backpressure: None,
-            // Default to no dispatch-hold: byte-identical claim. `with_paused_runs`
-            // attaches the pause exclusion.
             paused_runs: None,
+            delivery_gate: DeliveryGate::default(),
+            failure_callback: None,
         }
+    }
+
+    /// Install the required row sink, transitioning to a runnable dispatcher.
+    #[must_use]
+    pub fn with_dispatch(
+        self,
+        dispatch: Arc<dyn OutboxRowDispatch>,
+    ) -> OutboxDispatcher<Arc<dyn OutboxRowDispatch>> {
+        OutboxDispatcher {
+            store: self.store,
+            dispatch,
+            config: self.config,
+            wake: self.wake,
+            backpressure: self.backpressure,
+            paused_runs: self.paused_runs,
+            delivery_gate: self.delivery_gate,
+            failure_callback: self.failure_callback,
+        }
+    }
+}
+
+impl<D> OutboxDispatcher<D> {
+    /// Return the dispatcher-owned gate shared with transport and reconciler.
+    #[must_use]
+    pub fn delivery_gate(&self) -> DeliveryGate {
+        self.delivery_gate.clone()
+    }
+}
+
+impl OutboxDispatcher<Arc<dyn OutboxRowDispatch>> {
+    /// Attach the callback used to surface a dead-letter as workflow failure.
+    #[must_use]
+    pub fn with_delivery_callback(mut self, callback: Arc<dyn OutboxDeliveryCallback>) -> Self {
+        self.failure_callback = Some(callback);
+        self
     }
 
     /// Attach the durable pause dispatch-hold set (#204).
@@ -363,20 +495,21 @@ impl OutboxDispatcher {
 
     /// Run the claim/dispatch loop until `shutdown` flips to `true`.
     ///
-    /// Each tick claims up to `batch_size` pending rows and dispatches them in
-    /// order. A backend error claiming rows is logged and the loop waits for the
+    /// Each tick claims up to `batch_size` pending rows and spawns an independent
+    /// delivery task for each one. A backend error claiming rows is logged and the loop waits for the
     /// next tick rather than tearing the task down — a transient store failure
     /// must not silently stop the dispatcher. Shutdown is observed both while
     /// waiting for the next tick and is re-checked before each sweep, so a
     /// drain never blocks on an in-progress wait.
     pub async fn run(self, mut shutdown: watch::Receiver<bool>) {
+        let this = Arc::new(self);
         info!(
-            poll_interval_ms = self.config.poll_interval.as_millis(),
-            batch_size = self.config.batch_size,
-            max_attempts = self.config.max_attempts,
+            poll_interval_ms = this.config.poll_interval.as_millis(),
+            batch_size = this.config.batch_size,
+            max_attempts = this.config.max_attempts,
             "outbox dispatcher started"
         );
-        let mut interval = tokio::time::interval(self.config.poll_interval);
+        let mut interval = tokio::time::interval(this.config.poll_interval);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             tokio::select! {
@@ -384,7 +517,7 @@ impl OutboxDispatcher {
                     if *shutdown.borrow() {
                         break;
                     }
-                    self.sweep_once().await;
+                    Self::sweep_once(&this).await;
                 }
                 // LSUB-2 advisory wake: a stage-seam pulse interrupts the sleep so
                 // a newly-staged row dispatches in ~RTT instead of up to one poll
@@ -392,11 +525,11 @@ impl OutboxDispatcher {
                 // so a wake never races a drain. The interval tick above is left
                 // untouched, so the poll stays the correctness backstop: a dropped
                 // or coalesced wake just costs poll latency, never a lost dispatch.
-                () = self.wake.notified() => {
+                () = this.wake.notified() => {
                     if *shutdown.borrow() {
                         break;
                     }
-                    self.sweep_once().await;
+                    Self::sweep_once(&this).await;
                 }
                 changed = shutdown.changed() => {
                     // A send error means every sender dropped; treat that as a
@@ -407,11 +540,12 @@ impl OutboxDispatcher {
                 }
             }
         }
+        this.delivery_gate.drain();
         info!("outbox dispatcher stopped");
     }
 
-    /// Claim one batch of pending rows and drive each to its terminal state.
-    async fn sweep_once(&self) {
+    /// Claim one batch and spawn an independent delivery task for every row.
+    async fn sweep_once(self: &Arc<Self>) {
         // LSUB-4-3 / Fork-A2 seam: ownership is NOT enforced on this claim. The
         // claim path is an UNFENCED local `put_routed` scoped by `owned_shard_scope()`
         // — it simply returns `Ok` with only the rows on shards this node owns and
@@ -428,8 +562,35 @@ impl OutboxDispatcher {
                 return;
             }
         };
+        #[cfg(test)]
+        let mut tasks = Vec::new();
         for row in rows {
-            self.process_row(&row).await;
+            let Some(guard) = self.delivery_gate.begin(&row.dispatch_key) else {
+                warn!(
+                    dispatch_key = %row.dispatch_key,
+                    draining = self.delivery_gate.is_draining(),
+                    "outbox row is already in flight or delivery gate is unavailable; leaving it claimed"
+                );
+                continue;
+            };
+            let task = Arc::clone(self);
+            let handle = tokio::spawn(async move {
+                task.process_row(&row).await;
+                drop(guard);
+            });
+            #[cfg(test)]
+            tasks.push(handle);
+            #[cfg(not(test))]
+            drop(handle);
+        }
+        #[cfg(test)]
+        for task in tasks {
+            if let Err(error) = task.await {
+                error!(
+                    %error,
+                    "outbox dispatcher row task failed while a unit test awaited the spawned sweep"
+                );
+            }
         }
     }
 
@@ -471,6 +632,13 @@ impl OutboxDispatcher {
     async fn process_row(&self, row: &OutboxRow) {
         match self.dispatch.dispatch(row).await {
             Ok(()) => self.mark_done(row).await,
+            Err(error) if self.delivery_gate.is_draining() => {
+                warn!(
+                    dispatch_key = %row.dispatch_key,
+                    %error,
+                    "outbox delivery abandoned during shutdown; leaving row claimed for recovery"
+                );
+            }
             Err(error) => self.handle_dispatch_error(row, &error).await,
         }
     }
@@ -484,6 +652,62 @@ impl OutboxDispatcher {
                 %error,
                 "outbox dispatcher dispatched a row but failed to mark it done"
             );
+        }
+    }
+
+    async fn dead_letter(&self, row: &OutboxRow, dispatch_error: &ServerError, attempted: u32) {
+        warn!(
+            dispatch_key = %row.dispatch_key,
+            attempt = row.attempt,
+            max_attempts = self.config.max_attempts,
+            error = %dispatch_error,
+            "outbox dispatch exhausted retry budget; dead-lettering row"
+        );
+        match self.store.fail_outbox_row(&row.dispatch_key).await {
+            Err(error) => {
+                error!(dispatch_key = %row.dispatch_key, %error, "outbox dispatcher failed to dead-letter row");
+            }
+            Ok(()) => {
+                if let Some(callback) = &self.failure_callback {
+                    let activity_id = ActivityId::from_sequence_position(row.ordinal);
+                    let reason = format!(
+                        "infrastructure: delivery to worker failed after {attempted} attempts: {dispatch_error}"
+                    );
+                    match callback.deliver_failure(
+                        &row.workflow_id,
+                        &activity_id,
+                        row.run_id.as_ref(),
+                        reason,
+                    ) {
+                        Ok(true) => {
+                            warn!(
+                                dispatch_key = %row.dispatch_key,
+                                attempt = row.attempt,
+                                "outbox dead-letter failure delivered to workflow"
+                            );
+                        }
+                        Ok(false) => {
+                            warn!(
+                                dispatch_key = %row.dispatch_key,
+                                attempt = row.attempt,
+                                "outbox dead-letter failure reached callback but no live workflow accepted it"
+                            );
+                        }
+                        Err(error) => {
+                            error!(
+                                dispatch_key = %row.dispatch_key,
+                                %error,
+                                "outbox row dead-lettered but failure delivery to workflow failed"
+                            );
+                        }
+                    }
+                } else {
+                    warn!(
+                        dispatch_key = %row.dispatch_key,
+                        "outbox row dead-lettered without a workflow delivery callback"
+                    );
+                }
+            }
         }
     }
 
@@ -506,18 +730,36 @@ impl OutboxDispatcher {
     /// unbounded re-dispatch loop. A genuine reply timeout (the worker is alive but
     /// slow) and every other error keep the normal exponential backoff unchanged.
     async fn handle_dispatch_error(&self, row: &OutboxRow, dispatch_error: &ServerError) {
-        let attempted = row.attempt.saturating_add(1);
-        if attempted >= self.config.max_attempts {
+        // A connection cap is a typed refusal before the worker accepted this
+        // dispatch. It is congestion, not a failed delivery attempt, so it must
+        // never consume the genuine-failure retry budget or dead-letter work.
+        if dispatch_error.is_worker_busy() {
+            let backoff = self.config.backoff_base;
+            let visible_after = Utc::now() + chrono_duration(backoff);
             warn!(
                 dispatch_key = %row.dispatch_key,
                 attempt = row.attempt,
-                max_attempts = self.config.max_attempts,
+                backoff_ms = backoff.as_millis(),
                 error = %dispatch_error,
-                "outbox dispatch exhausted retry budget; dead-lettering row"
+                "outbox worker is busy; re-arming without consuming an attempt"
             );
-            if let Err(error) = self.store.fail_outbox_row(&row.dispatch_key).await {
-                error!(dispatch_key = %row.dispatch_key, %error, "outbox dispatcher failed to dead-letter row");
+            if let Err(error) = self
+                .store
+                .retry_outbox_row(&row.dispatch_key, row.attempt, visible_after)
+                .await
+            {
+                error!(
+                    dispatch_key = %row.dispatch_key,
+                    %error,
+                    "outbox dispatcher failed to re-arm worker-busy row"
+                );
             }
+            return;
+        }
+
+        let attempted = row.attempt.saturating_add(1);
+        if attempted >= self.config.max_attempts {
+            self.dead_letter(row, dispatch_error, attempted).await;
             return;
         }
         // LSUB-3 fast failover: a lost worker connection re-arms for immediate
@@ -684,8 +926,10 @@ mod tests {
         paused_runs.insert(workflow_id.clone());
 
         let dispatch = Arc::new(RecordingDispatch::new(true));
-        let dispatcher = OutboxDispatcher::new(store.clone(), dispatch.clone(), config())
+        let dispatcher = OutboxDispatcher::new(store.clone(), config())
+            .with_dispatch(dispatch.clone())
             .with_paused_runs(paused_runs.clone());
+        let dispatcher = Arc::new(dispatcher);
 
         // Sweep repeatedly while paused: the row is never claimed, never
         // dispatched, and remains Pending the whole window.
@@ -734,7 +978,9 @@ mod tests {
             .await?;
 
         let dispatch = Arc::new(RecordingDispatch::new(true));
-        let dispatcher = OutboxDispatcher::new(store.clone(), dispatch.clone(), config());
+        let dispatcher =
+            OutboxDispatcher::new(store.clone(), config()).with_dispatch(dispatch.clone());
+        let dispatcher = Arc::new(dispatcher);
         // Drive a single sweep directly (no timer) for deterministic assertions.
         dispatcher.sweep_once().await;
 
@@ -770,7 +1016,8 @@ mod tests {
 
         let before = Utc::now();
         let dispatch = Arc::new(RecordingDispatch::new(false));
-        let dispatcher = OutboxDispatcher::new(store.clone(), dispatch, config());
+        let dispatcher = OutboxDispatcher::new(store.clone(), config()).with_dispatch(dispatch);
+        let dispatcher = Arc::new(dispatcher);
         dispatcher.sweep_once().await;
 
         let state = store
@@ -787,6 +1034,43 @@ mod tests {
         );
         // The backoff fence holds the row out of the claimable set right now.
         assert!(store.claim_outbox_rows(10).await?.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn shutdown_abandonment_leaves_row_claimed_for_recovery()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let store = open_store("shutdown-claimed").await?;
+        let workflow_id = WorkflowId::new_v4();
+        let row = pending_row(&workflow_id, 0);
+        store
+            .append_outbox_batch(std::slice::from_ref(&row))
+            .await?;
+        let claimed = store
+            .claim_outbox_rows(1)
+            .await?
+            .into_iter()
+            .next()
+            .ok_or("row must be claimed before dispatch")?;
+
+        let dispatcher = OutboxDispatcher::new(store.clone(), config())
+            .with_dispatch(Arc::new(RecordingDispatch::new(false)));
+        dispatcher.delivery_gate().drain();
+        dispatcher.process_row(&claimed).await;
+
+        let state = store
+            .outbox_row_state(&row.dispatch_key)
+            .await?
+            .ok_or("abandoned row must still exist")?;
+        assert_eq!(
+            state.status,
+            OutboxStatus::Claimed,
+            "shutdown must leave an abandoned delivery claimed for reconciler recovery"
+        );
+        assert_eq!(
+            state.attempt, row.attempt,
+            "shutdown abandonment must not consume an attempt"
+        );
         Ok(())
     }
 
@@ -820,8 +1104,9 @@ mod tests {
             .await?;
 
         let before = Utc::now();
-        let dispatcher =
-            OutboxDispatcher::new(store.clone(), Arc::new(ConnectionLostDispatch), config());
+        let dispatcher = OutboxDispatcher::new(store.clone(), config())
+            .with_dispatch(Arc::new(ConnectionLostDispatch));
+        let dispatcher = Arc::new(dispatcher);
         dispatcher.sweep_once().await;
         let after = Utc::now();
 
@@ -868,8 +1153,9 @@ mod tests {
             .append_outbox_batch(std::slice::from_ref(&row))
             .await?;
 
-        let dispatcher =
-            OutboxDispatcher::new(store.clone(), Arc::new(ConnectionLostDispatch), config());
+        let dispatcher = OutboxDispatcher::new(store.clone(), config())
+            .with_dispatch(Arc::new(ConnectionLostDispatch));
+        let dispatcher = Arc::new(dispatcher);
         dispatcher.sweep_once().await;
 
         assert_eq!(
@@ -897,7 +1183,8 @@ mod tests {
             .await?;
 
         let dispatch = Arc::new(RecordingDispatch::new(false));
-        let dispatcher = OutboxDispatcher::new(store.clone(), dispatch, config());
+        let dispatcher = OutboxDispatcher::new(store.clone(), config()).with_dispatch(dispatch);
+        let dispatcher = Arc::new(dispatcher);
         dispatcher.sweep_once().await;
 
         assert_eq!(
@@ -965,6 +1252,7 @@ mod tests {
                 _older_than: DateTime<Utc>,
                 _visible_after: DateTime<Utc>,
                 _limit: u32,
+                _excluded: &std::collections::HashSet<String>,
             ) -> Result<Vec<OutboxRow>, StoreError> {
                 Ok(Vec::new())
             }
@@ -1010,7 +1298,9 @@ mod tests {
             other_terminal: AtomicBool::new(false),
         });
         let dispatch = Arc::new(RecordingDispatch::new(true));
-        let dispatcher = OutboxDispatcher::new(store.clone(), dispatch.clone(), config());
+        let dispatcher =
+            OutboxDispatcher::new(store.clone(), config()).with_dispatch(dispatch.clone());
+        let dispatcher = Arc::new(dispatcher);
         // Sweep: claims the row, dispatches it (succeeds), then complete fails.
         dispatcher.sweep_once().await;
 
@@ -1070,7 +1360,8 @@ mod tests {
         slow_poll.poll_interval = Duration::from_secs(10);
         let wake = Arc::new(tokio::sync::Notify::new());
         let dispatch = Arc::new(RecordingDispatch::new(true));
-        let dispatcher = OutboxDispatcher::new(store.clone(), dispatch.clone(), slow_poll)
+        let dispatcher = OutboxDispatcher::new(store.clone(), slow_poll)
+            .with_dispatch(dispatch.clone())
             .with_wake(Arc::clone(&wake));
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
         let handle = tokio::spawn(dispatcher.run(shutdown_rx));
@@ -1115,7 +1406,8 @@ mod tests {
         // Short (10ms) poll, and a wake handle that is installed but never pulsed.
         let wake = Arc::new(tokio::sync::Notify::new());
         let dispatch = Arc::new(RecordingDispatch::new(true));
-        let dispatcher = OutboxDispatcher::new(store.clone(), dispatch.clone(), config())
+        let dispatcher = OutboxDispatcher::new(store.clone(), config())
+            .with_dispatch(dispatch.clone())
             .with_wake(Arc::clone(&wake));
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
         let handle = tokio::spawn(dispatcher.run(shutdown_rx));
@@ -1151,7 +1443,8 @@ mod tests {
             .await?;
 
         let dispatch = Arc::new(RecordingDispatch::new(true));
-        let dispatcher = OutboxDispatcher::new(store.clone(), dispatch.clone(), config());
+        let dispatcher =
+            OutboxDispatcher::new(store.clone(), config()).with_dispatch(dispatch.clone());
         let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
         let handle = tokio::spawn(dispatcher.run(shutdown_rx));
 

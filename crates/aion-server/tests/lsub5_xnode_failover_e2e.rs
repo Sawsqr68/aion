@@ -720,12 +720,16 @@ impl OwnerServer {
             .build()
             .map_err(test_error)?;
         let callback: Arc<dyn OutboxDeliveryCallback> = Arc::new(NoopDeliveryCallback);
+        let outbox_store: Arc<dyn OutboxStore> = Arc::clone(&node.store) as Arc<dyn OutboxStore>;
+        let dispatcher_builder = OutboxDispatcher::new(outbox_store, dispatcher_config);
         let dispatch: Arc<dyn OutboxRowDispatch> = Arc::new(RegistryLiminalDispatch::new(
             liminal.registry.clone(),
-            callback,
+            Arc::clone(&callback),
+            dispatcher_builder.delivery_gate(),
         ));
-        let outbox_store: Arc<dyn OutboxStore> = Arc::clone(&node.store) as Arc<dyn OutboxStore>;
-        let dispatcher = OutboxDispatcher::new(outbox_store, dispatch, dispatcher_config);
+        let dispatcher = dispatcher_builder
+            .with_dispatch(dispatch)
+            .with_delivery_callback(callback);
         let (dispatcher_shutdown, shutdown_rx) = tokio::sync::watch::channel(false);
         runtime.spawn(dispatcher.run(shutdown_rx));
         Ok(Self {
@@ -801,14 +805,20 @@ impl Server {
         // completion lands in this engine's (shard's) workflow history.
         let callback: Arc<dyn OutboxDeliveryCallback> =
             Arc::new(ServerOutboxDeliveryCallback::new(Arc::clone(&engine)));
-        let liminal_dispatch: Arc<dyn OutboxRowDispatch> =
-            Arc::new(RegistryLiminalDispatch::new(registry, callback));
+        let outbox_store: Arc<dyn OutboxStore> = Arc::clone(&node.store) as Arc<dyn OutboxStore>;
+        let dispatcher_builder = OutboxDispatcher::new(outbox_store, dispatcher_config);
+        let liminal_dispatch: Arc<dyn OutboxRowDispatch> = Arc::new(RegistryLiminalDispatch::new(
+            registry,
+            Arc::clone(&callback),
+            dispatcher_builder.delivery_gate(),
+        ));
 
         // The dispatcher claims through the SAME concrete store the engine owns:
         // both share the store's Arc<RwLock<owned_shards>>, so adopt_shards'
         // extend_owned_shards refreshes the dispatcher's claim scope (the CRUX).
-        let outbox_store: Arc<dyn OutboxStore> = Arc::clone(&node.store) as Arc<dyn OutboxStore>;
-        let dispatcher = OutboxDispatcher::new(outbox_store, liminal_dispatch, dispatcher_config);
+        let dispatcher = dispatcher_builder
+            .with_dispatch(liminal_dispatch)
+            .with_delivery_callback(callback);
         let (dispatcher_shutdown, shutdown_rx) = tokio::sync::watch::channel(false);
         runtime.spawn(dispatcher.run(shutdown_rx));
 

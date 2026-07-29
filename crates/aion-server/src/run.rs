@@ -22,8 +22,9 @@ use crate::{
     observability,
     shutdown::{self, ShutdownOutcome},
     worker::{
-        ActivityDispatcher, OutboxDispatcher, OutboxDispatcherConfig, OutboxReconciler,
-        OutboxReconcilerConfig, OutboxRowDispatch, WorkerOutboxDispatch,
+        ActivityDispatcher, DeliveryGate, OutboxDeliveryCallback, OutboxDispatcher,
+        OutboxDispatcherConfig, OutboxReconciler, OutboxReconcilerConfig, OutboxRowDispatch,
+        ServerOutboxDeliveryCallback, WorkerOutboxDispatch,
     },
 };
 
@@ -453,8 +454,18 @@ fn maybe_spawn_outbox_dispatcher(
                   the in-memory store does not provide"
             .to_owned(),
     })?;
-    let (row_dispatch, worker_listener) =
-        select_outbox_row_dispatch(state, outbox_config, shutdown_rx)?;
+    let dispatcher_builder = OutboxDispatcher::new(Arc::clone(&outbox_store), dispatcher_config);
+    let delivery_gate = dispatcher_builder.delivery_gate();
+    let engine = state.engine()?;
+    let delivery_callback: Arc<dyn OutboxDeliveryCallback> =
+        Arc::new(ServerOutboxDeliveryCallback::new(engine));
+    let (row_dispatch, worker_listener) = select_outbox_row_dispatch(
+        state,
+        outbox_config,
+        shutdown_rx,
+        delivery_gate.clone(),
+        Arc::clone(&delivery_callback),
+    )?;
     // LSUB-2: share the engine's advisory wake so the stage seam pulses this
     // dispatcher the instant a fan-out row commits, dispatching in ~RTT instead of
     // up to one poll interval. The wake is always-on and free; the interval poll is
@@ -472,10 +483,11 @@ fn maybe_spawn_outbox_dispatcher(
     );
     let backpressure =
         crate::worker::Backpressure::new(quota_cache.clone(), backpressure_settings.fraction);
-    let mut dispatcher =
-        OutboxDispatcher::new(Arc::clone(&outbox_store), row_dispatch, dispatcher_config)
-            .with_wake(state.outbox_wake())
-            .with_backpressure(backpressure);
+    let mut dispatcher = dispatcher_builder
+        .with_dispatch(row_dispatch)
+        .with_delivery_callback(delivery_callback)
+        .with_wake(state.outbox_wake())
+        .with_backpressure(backpressure);
     // #204: attach the engine's durable pause dispatch-hold so a held (paused)
     // run's rows are never claimed. The hold set is rebuilt from `list_paused`
     // BEFORE this spawn (see `run_server`), so the dispatcher's first claim
@@ -519,7 +531,8 @@ fn maybe_spawn_outbox_dispatcher(
         // workflow status from the engine's event store before any re-arm, so
         // a terminal workflow's stranded row settles instead of redelivering.
         let event_store = state.engine()?.store();
-        let reconciler = OutboxReconciler::new(outbox_store, event_store, reconciler_config);
+        let reconciler = OutboxReconciler::new(outbox_store, event_store, reconciler_config)
+            .with_delivery_gate(delivery_gate);
         tokio::spawn(reconciler.run(shutdown_rx.clone()));
         info!("outbox reconciler commissioned (terminal-workflow liveness gate active)");
     } else if clustered {
@@ -589,6 +602,8 @@ fn select_outbox_row_dispatch(
     state: &ServerState,
     outbox_config: &OutboxConfig,
     shutdown_rx: &tokio::sync::watch::Receiver<bool>,
+    delivery_gate: DeliveryGate,
+    delivery_callback: Arc<dyn OutboxDeliveryCallback>,
 ) -> Result<(Arc<dyn OutboxRowDispatch>, OutboxWorkerListener), ServerError> {
     match outbox_config.transport {
         OutboxTransport::Grpc => {
@@ -609,7 +624,13 @@ fn select_outbox_row_dispatch(
             );
             Ok((dispatch, OutboxWorkerListener::default()))
         }
-        OutboxTransport::Liminal => build_liminal_row_dispatch(state, outbox_config, shutdown_rx),
+        OutboxTransport::Liminal => build_liminal_row_dispatch(
+            state,
+            outbox_config,
+            shutdown_rx,
+            delivery_gate,
+            delivery_callback,
+        ),
     }
 }
 
@@ -651,15 +672,15 @@ fn build_liminal_row_dispatch(
     state: &ServerState,
     outbox_config: &OutboxConfig,
     shutdown_rx: &tokio::sync::watch::Receiver<bool>,
+    delivery_gate: DeliveryGate,
+    callback: Arc<dyn OutboxDeliveryCallback>,
 ) -> Result<(Arc<dyn OutboxRowDispatch>, OutboxWorkerListener), ServerError> {
     use liminal_server::config::ServerConfig as LiminalServerConfig;
     use liminal_server::config::{LimitsConfig, ServicesConfig};
     use liminal_server::server::connection::{ConnectionSupervisor, LiminalConnectionServices};
     use liminal_server::server::listener::ServerListener;
 
-    use crate::worker::{
-        LiminalConnectionNotifier, RegistryLiminalDispatch, ServerOutboxDeliveryCallback,
-    };
+    use crate::worker::{LiminalConnectionNotifier, RegistryLiminalDispatch};
 
     let listen_address = outbox_config
         .liminal_listen_address
@@ -772,9 +793,6 @@ fn build_liminal_row_dispatch(
     // (7) Reuse the SAME completion callback the gRPC completion path uses, over
     // the live engine, so a liminal completion re-enters aion through the
     // identical terminal-recording seam (`record_fan_out_completion`).
-    let engine = state.engine()?;
-    let callback: Arc<dyn crate::worker::OutboxDeliveryCallback> =
-        Arc::new(ServerOutboxDeliveryCallback::new(engine));
     // (8) The registry-backed dispatch builds its LiminalCompletionSource from the
     // shared callback internally. Attach the SAME short-TTL placement cache the
     // gRPC arm installs (Control-Plane Phase 2, P2-P3), so an unpinned row in a
@@ -789,7 +807,7 @@ fn build_liminal_row_dispatch(
     // router resolves through, so each dispatched agent attempt binds its owning
     // worker and a pushed command reaches the worker this dispatcher sent it to.
     let dispatch: Arc<dyn OutboxRowDispatch> = Arc::new(
-        RegistryLiminalDispatch::new(registry, callback)
+        RegistryLiminalDispatch::new(registry, callback, delivery_gate)
             .with_placement_cache(placement_cache)
             .with_attempt_owners(state.attempt_owners().clone()),
     );
@@ -814,6 +832,8 @@ fn build_liminal_row_dispatch(
     _state: &ServerState,
     _outbox_config: &OutboxConfig,
     _shutdown_rx: &tokio::sync::watch::Receiver<bool>,
+    _delivery_gate: DeliveryGate,
+    _delivery_callback: Arc<dyn OutboxDeliveryCallback>,
 ) -> Result<(Arc<dyn OutboxRowDispatch>, OutboxWorkerListener), ServerError> {
     Err(ServerError::Config {
         message: "outbox.transport=liminal requires the aion-server `liminal-transport` \

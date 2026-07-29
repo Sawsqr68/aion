@@ -590,16 +590,16 @@ async fn failover_redispatches_to_survivor_fast() -> Result<(), TestError> {
         .map_err(test_error)?;
 
     let callback = Arc::new(RecordingCallback::default());
+    let dispatcher_builder = OutboxDispatcher::new(store.clone(), dispatcher_config());
     let registry_dispatch = RegistryLiminalDispatch::new(
         server.registry.clone(),
         Arc::clone(&callback) as Arc<dyn OutboxDeliveryCallback>,
+        dispatcher_builder.delivery_gate(),
     );
     let dispatch = Arc::new(RecordingDispatch::new(registry_dispatch));
-    let dispatcher = OutboxDispatcher::new(
-        store.clone(),
-        Arc::clone(&dispatch) as Arc<dyn OutboxRowDispatch>,
-        dispatcher_config(),
-    );
+    let dispatcher = dispatcher_builder
+        .with_dispatch(Arc::clone(&dispatch) as Arc<dyn OutboxRowDispatch>)
+        .with_delivery_callback(Arc::clone(&callback) as Arc<dyn OutboxDeliveryCallback>);
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
     let started = Instant::now();

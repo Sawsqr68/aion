@@ -72,7 +72,7 @@ pub use liminal_transport::{
 };
 pub use outbox_delivery::ServerOutboxDeliveryCallback;
 pub use outbox_dispatcher::{
-    OutboxDispatcher, OutboxDispatcherConfig, OutboxRowDispatch, WorkerOutboxDispatch,
+    DeliveryGate, OutboxDispatcher, OutboxDispatcherConfig, OutboxRowDispatch, WorkerOutboxDispatch,
 };
 pub use outbox_reconciler::{OutboxReconciler, OutboxReconcilerConfig};
 pub use outbox_settle::settle_terminal_outbox_rows;

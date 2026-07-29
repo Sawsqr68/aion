@@ -258,7 +258,12 @@ async fn stale_claim_rearm_touches_only_old_claimed_rows_and_preserves_attempt()
     .await?;
 
     let rearmed = store
-        .rearm_stale_claimed_outbox_rows(instant(100)?, instant(200)?, 10)
+        .rearm_stale_claimed_outbox_rows(
+            instant(100)?,
+            instant(200)?,
+            10,
+            &std::collections::HashSet::new(),
+        )
         .await?;
     assert_eq!(rearmed.len(), 1);
     assert_eq!(rearmed[0].dispatch_key, stale.dispatch_key);
@@ -346,7 +351,12 @@ async fn settle_cancelled_is_idempotent_and_terminal() -> Result<(), StoreError>
         "cancelling a claimed row clears claimed_at"
     );
     let rearmed = store
-        .rearm_stale_claimed_outbox_rows(Utc::now() + chrono::Duration::hours(1), instant(200)?, 10)
+        .rearm_stale_claimed_outbox_rows(
+            Utc::now() + chrono::Duration::hours(1),
+            instant(200)?,
+            10,
+            &std::collections::HashSet::new(),
+        )
         .await?;
     assert!(
         !rearmed

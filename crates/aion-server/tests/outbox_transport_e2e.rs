@@ -585,7 +585,8 @@ async fn outbox_cutover_completes_through_the_real_server_sink() -> Result<(), T
         .with_drain_state(state.drain_state().clone())
         .with_completion_fences(state.pending_activities().completion_fences());
     let row_dispatch = Arc::new(WorkerOutboxDispatch::new(push));
-    let dispatcher = OutboxDispatcher::new(outbox_store, row_dispatch, outbox_dispatcher_config());
+    let dispatcher =
+        OutboxDispatcher::new(outbox_store, outbox_dispatcher_config()).with_dispatch(row_dispatch);
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     let dispatcher_task = tokio::spawn(dispatcher.run(shutdown_rx));
 
@@ -828,11 +829,10 @@ async fn boot_sweep_settles_terminal_workflow_rows_before_any_dispatch() -> Resu
         .with_drain_state(state.drain_state().clone())
         .with_completion_fences(state.pending_activities().completion_fences());
     let row_dispatch = Arc::new(WorkerOutboxDispatch::new(push));
-    let dispatcher = OutboxDispatcher::new(
-        Arc::clone(&outbox_store),
-        row_dispatch,
-        outbox_dispatcher_config(),
-    );
+    let dispatcher_builder =
+        OutboxDispatcher::new(Arc::clone(&outbox_store), outbox_dispatcher_config());
+    let delivery_gate = dispatcher_builder.delivery_gate();
+    let dispatcher = dispatcher_builder.with_dispatch(row_dispatch);
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     let dispatcher_task = tokio::spawn(dispatcher.run(shutdown_rx.clone()));
     // Generous stale_after: this test's reconciler must only prove it never
@@ -846,7 +846,8 @@ async fn boot_sweep_settles_terminal_workflow_rows_before_any_dispatch() -> Resu
             stale_after: Duration::from_secs(5),
             batch_size: 16,
         },
-    );
+    )
+    .with_delivery_gate(delivery_gate);
     let reconciler_task = tokio::spawn(reconciler.run(shutdown_rx));
 
     assert_no_task_delivered(&mut worker, Duration::from_millis(800)).await?;
@@ -921,11 +922,10 @@ async fn reconciler_gate_settles_stranded_row_of_terminal_workflow() -> Result<(
         .with_drain_state(state.drain_state().clone())
         .with_completion_fences(state.pending_activities().completion_fences());
     let row_dispatch = Arc::new(WorkerOutboxDispatch::new(push));
-    let dispatcher = OutboxDispatcher::new(
-        Arc::clone(&outbox_store),
-        row_dispatch,
-        outbox_dispatcher_config(),
-    );
+    let dispatcher_builder =
+        OutboxDispatcher::new(Arc::clone(&outbox_store), outbox_dispatcher_config());
+    let delivery_gate = dispatcher_builder.delivery_gate();
+    let dispatcher = dispatcher_builder.with_dispatch(row_dispatch);
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     let dispatcher_task = tokio::spawn(dispatcher.run(shutdown_rx.clone()));
     let reconciler = aion_server::worker::OutboxReconciler::new(
@@ -936,7 +936,8 @@ async fn reconciler_gate_settles_stranded_row_of_terminal_workflow() -> Result<(
             stale_after: Duration::from_millis(100),
             batch_size: 16,
         },
-    );
+    )
+    .with_delivery_gate(delivery_gate);
     let reconciler_task = tokio::spawn(reconciler.run(shutdown_rx));
 
     // Within a few sweeps the claim goes stale, the gate projects the

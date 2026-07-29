@@ -393,6 +393,7 @@ mod tests {
             _older_than: DateTime<Utc>,
             _visible_after: DateTime<Utc>,
             _limit: u32,
+            _excluded: &std::collections::HashSet<String>,
         ) -> Result<Vec<OutboxRow>, StoreError> {
             Ok(Vec::new())
         }

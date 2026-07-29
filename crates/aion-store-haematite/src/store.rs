@@ -2159,11 +2159,13 @@ impl OutboxStore for HaematiteStore {
         older_than: DateTime<Utc>,
         visible_after: DateTime<Utc>,
         limit: u32,
+        excluded: &std::collections::HashSet<String>,
     ) -> Result<Vec<OutboxRow>, StoreError> {
         if limit == 0 {
             return Ok(Vec::new());
         }
         let scope = self.owned_shard_scope();
+        let excluded = excluded.clone();
         self.blocking(move |store| {
             let mut stale: Vec<OutboxRow> = scan_prefix_scoped(
                 store,
@@ -2174,6 +2176,7 @@ impl OutboxStore for HaematiteStore {
             .into_iter()
             .filter(|row| {
                 row.status == OutboxStatus::Claimed
+                    && !excluded.contains(&row.dispatch_key)
                     && row
                         .claimed_at
                         .is_some_and(|claimed_at| claimed_at < older_than)
@@ -3572,7 +3575,12 @@ mod tests {
             Some(OutboxStatus::Cancelled)
         );
         let rearmed = store
-            .rearm_stale_claimed_outbox_rows(Utc::now() + Duration::hours(1), past, 10)
+            .rearm_stale_claimed_outbox_rows(
+                Utc::now() + Duration::hours(1),
+                past,
+                10,
+                &std::collections::HashSet::new(),
+            )
             .await?;
         assert!(
             !rearmed

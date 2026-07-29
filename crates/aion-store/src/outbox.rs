@@ -474,8 +474,10 @@ pub trait OutboxStore: Send + Sync + 'static {
     /// [`OutboxStatus::Claimed`] and whose durable `claimed_at` timestamp is older than
     /// `older_than`, then transition only those rows back to [`OutboxStatus::Pending`] with
     /// `visible_after` set to the supplied instant. The existing `attempt` value is preserved and
-    /// `claimed_at` is cleared. Rows in `Done` or `Failed` are terminal and must never be touched.
-    /// Rows in `Cancelled` are also terminal and must never be touched.
+    /// `claimed_at` is cleared. Keys in `excluded` remain claimed even when stale; this atomically
+    /// protects rows whose live delivery task still owns them from reconciliation races. Rows in
+    /// `Done` or `Failed` are terminal and must never be touched. Rows in `Cancelled` are also
+    /// terminal and must never be touched.
     ///
     /// Claimed rows without a durable `claimed_at` value are deliberately ignored: the caller asked
     /// for rows older than a supplied instant, and `NULL` cannot satisfy that predicate safely.
@@ -489,6 +491,7 @@ pub trait OutboxStore: Send + Sync + 'static {
         older_than: DateTime<Utc>,
         visible_after: DateTime<Utc>,
         limit: u32,
+        excluded: &std::collections::HashSet<String>,
     ) -> Result<Vec<OutboxRow>, StoreError>;
 
     /// Marks the row identified by `dispatch_key` as [`OutboxStatus::Done`].

@@ -84,6 +84,7 @@ where
     outbox_settlement::settle_flips_only_live_rows_and_is_idempotent(make_store().await?).await?;
     outbox_settlement::stale_probe_is_readonly_and_matches_rearm_selection(make_store().await?)
         .await?;
+    outbox_settlement::stale_rearm_excludes_live_delivery_keys(make_store().await?).await?;
     outbox_settlement::rearm_and_claim_never_touch_cancelled_rows(make_store().await?).await?;
     outbox_settlement::reopen_rearm_resurrects_a_cancelled_row(make_store().await?).await?;
     outbox_settlement::writer_seam_settle_matches_the_outbox_twin(make_store().await?).await?;

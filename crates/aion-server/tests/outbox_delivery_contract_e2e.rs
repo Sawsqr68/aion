@@ -107,11 +107,11 @@ struct RecordingCallback {
 
 impl RecordingCallback {
     fn completion_count(&self) -> usize {
-        self.completions.lock().map(|c| c.len()).unwrap_or(usize::MAX)
+        self.completions.lock().map_or(usize::MAX, |c| c.len())
     }
 
     fn failure_count(&self) -> usize {
-        self.failures.lock().map(|f| f.len()).unwrap_or(usize::MAX)
+        self.failures.lock().map_or(usize::MAX, |f| f.len())
     }
 }
 
@@ -174,10 +174,12 @@ impl ExecutionLedger {
     }
 
     fn executions_of(&self, tag: &str) -> usize {
-        self.started
-            .lock()
-            .map(|started| started.iter().filter(|t| t.as_str() == tag).count())
-            .unwrap_or(usize::MAX)
+        self.started.lock().map_or(usize::MAX, |started| {
+            started
+                .iter()
+                .filter(|started_tag| started_tag.as_str() == tag)
+                .count()
+        })
     }
 }
 
@@ -364,10 +366,9 @@ fn dispatcher_config(max_attempts: u32) -> OutboxDispatcherConfig {
 fn pending_row(sleep_ms: u64, tag: &str, ordinal: u64) -> Result<OutboxRow, TestError> {
     let workflow_id = WorkflowId::new(Uuid::new_v4());
     let dispatch_key = format!("{workflow_id}:{ordinal}");
-    let input = aion_core::Payload::from_json(
-        &serde_json::json!({ "sleep_ms": sleep_ms, "tag": tag }),
-    )
-    .map_err(test_error)?;
+    let input =
+        aion_core::Payload::from_json(&serde_json::json!({ "sleep_ms": sleep_ms, "tag": tag }))
+            .map_err(test_error)?;
     Ok(OutboxRow {
         dispatch_key,
         workflow_id,
@@ -412,16 +413,13 @@ struct PinRig {
 impl PinRig {
     /// Stand the rig up. With `with_worker = false` the pool has no worker at
     /// all (the genuine-delivery-failure arm of the honesty pin).
-    async fn start(
-        name: &str,
-        max_attempts: u32,
-        with_worker: bool,
-    ) -> Result<Self, TestError> {
+    async fn start(name: &str, max_attempts: u32, with_worker: bool) -> Result<Self, TestError> {
         let server = RunningServer::start()?;
         let ledger = Arc::new(ExecutionLedger::default());
         let worker = if with_worker {
             let registry = worker_registry(Arc::clone(&ledger))?;
-            let worker = WorkerThread::spawn(server.address.to_string(), worker_config()?, registry);
+            let worker =
+                WorkerThread::spawn(server.address.to_string(), worker_config()?, registry);
             server.wait_for_registered_worker()?;
             Some(worker)
         } else {
@@ -430,15 +428,18 @@ impl PinRig {
 
         let store = open_store(name).await?;
         let callback = Arc::new(RecordingCallback::default());
+        let dispatcher_builder = OutboxDispatcher::new(
+            Arc::clone(&store) as Arc<dyn OutboxStore>,
+            dispatcher_config(max_attempts),
+        );
         let dispatch = RegistryLiminalDispatch::new(
             server.registry.clone(),
             Arc::clone(&callback) as Arc<dyn OutboxDeliveryCallback>,
+            dispatcher_builder.delivery_gate(),
         );
-        let dispatcher = OutboxDispatcher::new(
-            Arc::clone(&store) as Arc<dyn OutboxStore>,
-            Arc::new(dispatch) as Arc<dyn OutboxRowDispatch>,
-            dispatcher_config(max_attempts),
-        );
+        let dispatcher = dispatcher_builder
+            .with_dispatch(Arc::new(dispatch) as Arc<dyn OutboxRowDispatch>)
+            .with_delivery_callback(Arc::clone(&callback) as Arc<dyn OutboxDeliveryCallback>);
         let (shutdown, shutdown_rx) = watch::channel(false);
         let handle = tokio::spawn(dispatcher.run(shutdown_rx));
         Ok(Self {
@@ -453,7 +454,10 @@ impl PinRig {
     }
 
     async fn stage(&self, rows: &[OutboxRow]) -> Result<(), TestError> {
-        self.store.append_outbox_batch(rows).await.map_err(test_error)
+        self.store
+            .append_outbox_batch(rows)
+            .await
+            .map_err(test_error)
     }
 
     async fn row_status(&self, dispatch_key: &str) -> Result<Option<OutboxStatus>, TestError> {
@@ -653,11 +657,15 @@ async fn dead_letter_is_genuine_and_loud() -> Result<(), TestError> {
     // Never executed, never completed: there was no worker.
     if rig.ledger.total() != 0 {
         rig.teardown().await?;
-        return Err(test_error("no worker existed, yet an execution was recorded"));
+        return Err(test_error(
+            "no worker existed, yet an execution was recorded",
+        ));
     }
     if rig.callback.completion_count() != 0 {
         rig.teardown().await?;
-        return Err(test_error("no worker existed, yet a completion was recorded"));
+        return Err(test_error(
+            "no worker existed, yet a completion was recorded",
+        ));
     }
 
     // LOUD: the workflow is told. RED today — dead-letter reaches the store

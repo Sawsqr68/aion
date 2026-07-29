@@ -10,7 +10,7 @@ use aion_store::{
     WorkflowId,
 };
 use chrono::{DateTime, SecondsFormat, Utc};
-use libsql::{Connection, Row, Transaction, TransactionBehavior, params};
+use libsql::{Connection, Row, Transaction, TransactionBehavior, Value, params, params_from_iter};
 
 mod transitions;
 pub(crate) use transitions::{
@@ -575,6 +575,7 @@ pub(crate) async fn rearm_stale_claimed_outbox_rows(
     older_than: DateTime<Utc>,
     visible_after: DateTime<Utc>,
     limit: u32,
+    excluded: &std::collections::HashSet<String>,
 ) -> Result<Vec<OutboxRow>, StoreError> {
     if limit == 0 {
         return Ok(Vec::new());
@@ -585,7 +586,9 @@ pub(crate) async fn rearm_stale_claimed_outbox_rows(
         .await
         .map_err(|error| crate::error::libsql_error(&error))?;
 
-    let rows = match select_and_rearm_stale_claimed(&tx, older_than, visible_after, limit).await {
+    let rows = match select_and_rearm_stale_claimed(&tx, older_than, visible_after, limit, excluded)
+        .await
+    {
         Ok(rows) => rows,
         Err(error) => {
             rollback(tx).await?;
@@ -605,12 +608,31 @@ async fn select_and_rearm_stale_claimed(
     older_than: DateTime<Utc>,
     visible_after: DateTime<Utc>,
     limit: u32,
+    excluded: &std::collections::HashSet<String>,
 ) -> Result<Vec<OutboxRow>, StoreError> {
+    let mut excluded: Vec<&String> = excluded.iter().collect();
+    excluded.sort_unstable();
+    let exclusion_clause = if excluded.is_empty() {
+        String::new()
+    } else {
+        let placeholders = (3..excluded.len() + 3)
+            .map(|index| format!("?{index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(" AND dispatch_key NOT IN ({placeholders})")
+    };
+    let sql = SELECT_STALE_CLAIMED_SQL.replacen(
+        "\nORDER BY claimed_at ASC",
+        &format!("{exclusion_clause}\nORDER BY claimed_at ASC"),
+        1,
+    );
+    let mut bindings = vec![
+        Value::Text(encode_instant(older_than)),
+        Value::Integer(i64::from(limit)),
+    ];
+    bindings.extend(excluded.into_iter().cloned().map(Value::Text));
     let mut rows = tx
-        .query(
-            SELECT_STALE_CLAIMED_SQL,
-            params![encode_instant(older_than), i64::from(limit)],
-        )
+        .query(&sql, params_from_iter(bindings))
         .await
         .map_err(|error| crate::error::libsql_error(&error))?;
 

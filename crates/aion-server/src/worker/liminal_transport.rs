@@ -79,7 +79,7 @@ use serde::{Deserialize, Serialize};
 
 use super::bridge::OutboxDeliveryCallback;
 use super::envelope::{CompletionFences, CompletionToken, idempotency_key};
-use super::outbox_dispatcher::OutboxRowDispatch;
+use super::outbox_dispatcher::{DeliveryGate, OutboxRowDispatch};
 use super::registry::{ConnectedWorkerRegistry, WorkerDelivery, WorkerHandle, WorkerRegistration};
 use crate::error::ServerError;
 
@@ -508,8 +508,18 @@ impl LiminalCompletionSource {
             &activity_id,
             response.completion_token.clone(),
         )?;
-        self.completion_fences
-            .accept(&response.workflow_id, &activity_id, &completion_token)?;
+        if let Err(error) =
+            self.completion_fences
+                .accept(&response.workflow_id, &activity_id, &completion_token)
+        {
+            tracing::warn!(
+                workflow_id = %response.workflow_id,
+                %activity_id,
+                %error,
+                "liminal completion fence rejected a late or stale reply"
+            );
+            return Err(error);
+        }
         match &response.outcome {
             Ok(result) => self.callback.deliver_completion(
                 &response.workflow_id,
@@ -581,13 +591,15 @@ impl LiminalWorkerDelivery {
     ///
     /// # Error classification (LSUB-3)
     ///
-    /// Two of the failure paths mean the chosen worker's connection is GONE, and
-    /// they surface the typed [`ServerError::WorkerConnectionLost`] so the outbox
-    /// can fail over immediately rather than waiting out the retry backoff:
+    /// A connection that is gone surfaces the typed
+    /// [`ServerError::WorkerConnectionLost`] so the outbox can fail over
+    /// immediately rather than waiting out retry backoff. A distinct typed
+    /// connection-cap refusal surfaces [`ServerError::WorkerBusy`]: the worker is
+    /// still live, but cannot admit another held push yet.
     ///
-    /// - `push_to_connection` returns `Err` only when the connection process is no
-    ///   longer live (the connection was already gone at push time). It has no
-    ///   other failure mode, so that whole arm is connection-lost.
+    /// - `push_to_connection` can return either a connection failure or
+    ///   `ConnectionCapReached`; [`classify_push_error`] distinguishes them by
+    ///   typed variant.
     /// - `awaiter.receive` returns the typed liminal
     ///   `ServerError::PushReplyDisconnected` when the connection closed before a
     ///   correlated reply arrived (after Stage A this wakes PROMPTLY instead of
@@ -626,20 +638,35 @@ impl LiminalWorkerDelivery {
         decode_dispatch_response(&reply)
     }
 
-    /// Serialize and push one dispatch out on the worker's connection, returning
-    /// the awaiter for its correlated reply — the shared push half of both
-    /// dispatch waits: [`Self::dispatch`] (the outbox path, bounded by
-    /// [`PUSH_REPLY_TIMEOUT`] because the outbox's retry loop re-drives an
-    /// undelivered row) and the engine-seam bridge dispatcher (which owns the
-    /// UNBOUNDED wait of [`receive_bridge_reply`], matching the gRPC bridge
-    /// contract). One frame format, one push primitive, two wait policies.
+    /// Push one outbox dispatch and wait without an activity-duration bound,
+    /// abandoning only when `keep_waiting` becomes false at a poll boundary.
     ///
     /// # Errors
     ///
-    /// Returns [`ServerError::WorkerConnectionLost`] when the connection process
-    /// is no longer live at push time (a push-enqueue failure has exactly one
-    /// cause in liminal — the worker is already gone), and
-    /// [`ServerError::WorkerDispatch`] when the request cannot be serialized.
+    /// Returns the same typed push, receive, and decode failures as the shared
+    /// bridge wait.
+    pub fn dispatch_held(
+        &self,
+        request: &DispatchRequest,
+        keep_waiting: impl Fn() -> bool,
+    ) -> Result<Option<DispatchResponse>, ServerError> {
+        let awaiter = self.push_dispatch(request)?;
+        receive_bridge_reply(&awaiter, keep_waiting)
+    }
+
+    /// Serialize and push one dispatch out on the worker's connection, returning
+    /// the awaiter for its correlated reply — the shared push half of both
+    /// unbounded waits: [`Self::dispatch_held`] on the outbox path and the
+    /// engine-seam bridge dispatcher both use [`receive_bridge_reply`], matching
+    /// the gRPC bridge contract. One frame format, one push primitive, one held
+    /// wait policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::WorkerBusy`] when liminal's typed connection cap
+    /// refuses admission, [`ServerError::WorkerConnectionLost`] for every other
+    /// push-enqueue failure, and [`ServerError::WorkerDispatch`] when the request
+    /// cannot be serialized.
     pub(crate) fn push_dispatch(
         &self,
         request: &DispatchRequest,
@@ -649,12 +676,7 @@ impl LiminalWorkerDelivery {
         })?;
         self.supervisor
             .push_to_connection(self.pid, payload)
-            .map_err(|error| {
-                ServerError::worker_connection_lost(
-                    "liminal-push",
-                    format!("push to worker failed: {error}"),
-                )
-            })
+            .map_err(|error| classify_push_error(&error))
     }
 
     /// Push already-encoded `payload` out on the worker's connection, returning
@@ -669,18 +691,13 @@ impl LiminalWorkerDelivery {
     ///
     /// # Errors
     ///
-    /// Returns [`ServerError::WorkerConnectionLost`] when the connection process
-    /// is no longer live at push time (a push-enqueue failure has exactly one
-    /// cause in liminal — the worker is already gone).
+    /// Returns [`ServerError::WorkerBusy`] when liminal's typed connection cap
+    /// refuses admission, and [`ServerError::WorkerConnectionLost`] for every
+    /// other push-enqueue failure.
     pub fn push_payload(&self, payload: Vec<u8>) -> Result<PushReplyAwaiter, ServerError> {
         self.supervisor
             .push_to_connection(self.pid, payload)
-            .map_err(|error| {
-                ServerError::worker_connection_lost(
-                    "liminal-push",
-                    format!("push to worker failed: {error}"),
-                )
-            })
+            .map_err(|error| classify_push_error(&error))
     }
 
     /// Push one neutral intervention command out on the worker's connection and
@@ -822,6 +839,26 @@ fn is_connection_closed_reply_error(error: &LiminalServerError) -> bool {
     matches!(error, LiminalServerError::PushReplyDisconnected { .. })
 }
 
+/// Classify a typed liminal push refusal without relying on error text.
+fn classify_push_error(error: &LiminalServerError) -> ServerError {
+    if is_connection_cap_error(error) {
+        ServerError::worker_busy(
+            "liminal-push",
+            format!("worker connection push cap reached: {error}"),
+        )
+    } else {
+        ServerError::worker_connection_lost(
+            "liminal-push",
+            format!("push to worker failed: {error}"),
+        )
+    }
+}
+
+/// Liminal's typed admission refusal when a connection has too many held pushes.
+fn is_connection_cap_error(error: &LiminalServerError) -> bool {
+    matches!(error, LiminalServerError::ConnectionCapReached { .. })
+}
+
 /// Cross-node [`OutboxRowDispatch`] that selects a liminal worker from the
 /// connected-worker registry and pushes the row to it.
 ///
@@ -838,6 +875,7 @@ fn is_connection_closed_reply_error(error: &LiminalServerError) -> bool {
 pub struct RegistryLiminalDispatch {
     registry: ConnectedWorkerRegistry,
     completion: LiminalCompletionSource,
+    delivery_gate: DeliveryGate,
     /// Optional short-TTL per-namespace placement cache (Control-Plane Phase 2,
     /// P2-P3), the SAME cache the gRPC
     /// [`WorkerOutboxDispatch`](crate::worker::WorkerOutboxDispatch) is given. When
@@ -874,10 +912,12 @@ impl RegistryLiminalDispatch {
     pub fn new(
         registry: ConnectedWorkerRegistry,
         callback: Arc<dyn OutboxDeliveryCallback>,
+        delivery_gate: DeliveryGate,
     ) -> Self {
         Self {
             registry,
             completion: LiminalCompletionSource::new(callback),
+            delivery_gate,
             placement_cache: None,
             attempt_owners: None,
         }
@@ -990,6 +1030,17 @@ impl RegistryLiminalDispatch {
         }
         Ok(None)
     }
+
+    fn revoke_completion(
+        &self,
+        row: &OutboxRow,
+        activity_id: &ActivityId,
+        completion_token: &CompletionToken,
+    ) -> Result<(), ServerError> {
+        self.completion
+            .completion_fences
+            .revoke(&row.workflow_id, activity_id, completion_token)
+    }
 }
 
 #[async_trait]
@@ -1051,22 +1102,53 @@ impl OutboxRowDispatch for RegistryLiminalDispatch {
             .completion_fences
             .issue(&row.workflow_id, &activity_id)?;
         let request = request_for_row(row, run_id, &completion_token);
-        let dispatched = tokio::task::spawn_blocking(move || delivery.dispatch(&request))
-            .await
-            .map_err(|error| {
-                dispatch_error(
-                    &channel_for_row(row),
-                    format!("dispatch task join failed: {error}"),
-                )
-            });
+        let gate = self.delivery_gate.clone();
+        let dispatch_key = row.dispatch_key.clone();
+        let registry = self.registry.clone();
+        let worker_id = worker.id();
+        let dispatched = tokio::task::spawn_blocking(move || {
+            delivery.dispatch_held(&request, || {
+                if gate.is_draining() || !gate.holds(&dispatch_key) {
+                    return false;
+                }
+                match registry.worker_by_id(worker_id) {
+                    Ok(Some(_)) => true,
+                    Ok(None) => false,
+                    Err(error) => {
+                        tracing::warn!(
+                            %error,
+                            %dispatch_key,
+                            "delivery wait could not verify worker registration; abandoning"
+                        );
+                        false
+                    }
+                }
+            })
+        })
+        .await
+        .map_err(|error| {
+            dispatch_error(
+                &channel_for_row(row),
+                format!("dispatch task join failed: {error}"),
+            )
+        });
         let response = match dispatched {
-            Ok(Ok(response)) => response,
+            Ok(Ok(Some(response))) => response,
+            Ok(Ok(None)) => {
+                tracing::warn!(
+                    dispatch_key = %row.dispatch_key,
+                    workflow_id = %row.workflow_id,
+                    %activity_id,
+                    "delivery wait abandoned; late reply will be discarded"
+                );
+                self.revoke_completion(row, &activity_id, &completion_token)?;
+                return Err(dispatch_error(
+                    &channel_for_row(row),
+                    "delivery wait abandoned before worker reply".to_owned(),
+                ));
+            }
             Ok(Err(error)) | Err(error) => {
-                self.completion.completion_fences.revoke(
-                    &row.workflow_id,
-                    &activity_id,
-                    &completion_token,
-                )?;
+                self.revoke_completion(row, &activity_id, &completion_token)?;
                 return Err(error);
             }
         };
@@ -1076,11 +1158,7 @@ impl OutboxRowDispatch for RegistryLiminalDispatch {
         // unchanged). The dispatch itself succeeded — the row's terminal state is
         // recorded by the completion callback, exactly as in the gRPC path.
         if let Err(error) = self.completion.deliver(&response) {
-            self.completion.completion_fences.revoke(
-                &row.workflow_id,
-                &activity_id,
-                &completion_token,
-            )?;
+            self.revoke_completion(row, &activity_id, &completion_token)?;
             return Err(error);
         }
         Ok(())
@@ -2108,9 +2186,9 @@ mod tests {
         };
 
         use crate::error::ServerError;
-        use crate::worker::PlacementCache;
         use crate::worker::bridge::OutboxDeliveryCallback;
         use crate::worker::registry::{ConnectedWorkerRegistry, WorkerMessage, WorkerRegistration};
+        use crate::worker::{DeliveryGate, PlacementCache};
 
         use super::super::RegistryLiminalDispatch;
 
@@ -2223,8 +2301,12 @@ mod tests {
             ns_store: Arc<dyn NamespaceStore>,
         ) -> RegistryLiminalDispatch {
             let cache = PlacementCache::new(ns_store, Duration::ZERO);
-            RegistryLiminalDispatch::new(registry.clone(), Arc::new(NoopCallback))
-                .with_placement_cache(cache)
+            RegistryLiminalDispatch::new(
+                registry.clone(),
+                Arc::new(NoopCallback),
+                DeliveryGate::default(),
+            )
+            .with_placement_cache(cache)
         }
 
         /// #163 (prefer): an unpinned row in a `Prefer{n1}` namespace selects the
@@ -2441,7 +2523,11 @@ mod tests {
             let registry = ConnectedWorkerRegistry::default();
             let _n2 = register_node_worker(&registry, "t", "n2")?;
             // No `.with_placement_cache(...)`: the pre-#163 construction.
-            let dispatch = RegistryLiminalDispatch::new(registry.clone(), Arc::new(NoopCallback));
+            let dispatch = RegistryLiminalDispatch::new(
+                registry.clone(),
+                Arc::new(NoopCallback),
+                DeliveryGate::default(),
+            );
 
             let selected = dispatch
                 .select_liminal_worker(&unpinned_row("t"))

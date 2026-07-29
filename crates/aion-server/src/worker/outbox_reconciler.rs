@@ -27,6 +27,7 @@ use chrono::Utc;
 use tokio::sync::watch;
 use tracing::{error, info};
 
+use super::outbox_dispatcher::DeliveryGate;
 use super::outbox_settle::is_settle_terminal;
 
 /// Resolved, non-optional live outbox reconciliation settings.
@@ -47,6 +48,9 @@ pub struct OutboxReconciler {
     /// candidate's workflow status from recorded history before any re-arm.
     event_store: Arc<dyn EventStore>,
     config: OutboxReconcilerConfig,
+    /// Optional live-delivery ownership gate. Its snapshot is excluded inside
+    /// the store's status-guarded stale-rearm operation.
+    delivery_gate: Option<DeliveryGate>,
 }
 
 impl std::fmt::Debug for OutboxReconciler {
@@ -70,7 +74,15 @@ impl OutboxReconciler {
             store,
             event_store,
             config,
+            delivery_gate: None,
         }
+    }
+
+    /// Attach the exact gate owned by the dispatcher this reconciler repairs.
+    #[must_use]
+    pub fn with_delivery_gate(mut self, delivery_gate: DeliveryGate) -> Self {
+        self.delivery_gate = Some(delivery_gate);
+        self
     }
 
     /// Run reconciliation until `shutdown` flips to true.
@@ -121,9 +133,13 @@ impl OutboxReconciler {
             );
             return;
         }
+        let excluded = self
+            .delivery_gate
+            .as_ref()
+            .map_or_else(std::collections::HashSet::new, DeliveryGate::snapshot_keys);
         match self
             .store
-            .rearm_stale_claimed_outbox_rows(older_than, now, self.config.batch_size)
+            .rearm_stale_claimed_outbox_rows(older_than, now, self.config.batch_size, &excluded)
             .await
         {
             Ok(rows) if rows.is_empty() => {}
@@ -307,6 +323,7 @@ mod tests {
             older_than: DateTime<Utc>,
             visible_after: DateTime<Utc>,
             limit: u32,
+            excluded: &std::collections::HashSet<String>,
         ) -> Result<Vec<OutboxRow>, StoreError> {
             {
                 let mut calls = self
@@ -327,6 +344,7 @@ mod tests {
                 // Cancelled is contractually untouchable here — only stale
                 // Claimed rows re-arm, exactly like the durable backends.
                 if row.status == OutboxStatus::Claimed
+                    && !excluded.contains(&row.dispatch_key)
                     && row
                         .claimed_at
                         .is_some_and(|claimed_at| claimed_at < older_than)

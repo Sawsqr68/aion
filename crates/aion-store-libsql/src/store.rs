@@ -313,6 +313,7 @@ impl OutboxStore for LibSqlStore {
         older_than: DateTime<Utc>,
         visible_after: DateTime<Utc>,
         limit: u32,
+        excluded: &std::collections::HashSet<String>,
     ) -> Result<Vec<OutboxRow>, StoreError> {
         let _guard = self.transaction_lock.lock().await;
         crate::outbox::rearm_stale_claimed_outbox_rows(
@@ -320,6 +321,7 @@ impl OutboxStore for LibSqlStore {
             older_than,
             visible_after,
             limit,
+            excluded,
         )
         .await
     }

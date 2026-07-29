@@ -234,9 +234,7 @@ impl ServerError {
             Self::WorkerConnectionLost { .. } => {
                 WireError::backend("worker connection lost during dispatch")
             }
-            Self::WorkerBusy { .. } => {
-                WireError::backend("worker connection busy during dispatch")
-            }
+            Self::WorkerBusy { .. } => WireError::backend("worker connection busy during dispatch"),
             Self::Namespace { message } => WireError::namespace_denied(message.clone()),
             Self::EngineCall { source } => wire_from_engine(source),
             Self::StoreBackend { source } => wire_from_store(source),
