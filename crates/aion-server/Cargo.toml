@@ -31,6 +31,12 @@ aion-store = { version = "0.10.0", path = "../aion-store" }
 # `haematite-backend` feature, which lights up the `backend = haematite` arm.
 aion-store-haematite = { version = "0.10.0", path = "../aion-store-haematite", optional = true }
 aion-package = { version = "0.10.0", path = "../aion-package" }
+# The declared-command executor (`aion_worker::shell`): the server runs an
+# action whose body is declared in its deployed contract WITHOUT a connected
+# worker, through the same argv-substitution/process-group containment the
+# worker SDK uses. Runtime dependency deliberately — the executor must be one
+# implementation, not a server-side copy that can drift from the SDK's.
+aion-worker = { version = "0.10.0", path = "../aion-worker" }
 # Server-side authoring toolchain. It embeds NO Gleam compiler — it only
 # spawns the external `gleam` binary — so depending on it adds no compiler to
 # aion-server (CN7/C15). The authoring endpoints stay dark unless

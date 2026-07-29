@@ -58,6 +58,7 @@ name = "aion-awl"
 version = "0.10.0"
 dependencies = [
  "aion-package",
+ "aion-worker",
  "beamr",
  "flate2",
  "gleam-types",

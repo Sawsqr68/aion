@@ -7,6 +7,8 @@ pub mod backpressure;
 pub mod bridge;
 /// Worker contract admission shared by every registration transport.
 pub mod contracts;
+/// Server-side execution of declared action bodies (no worker required).
+pub mod declared_body;
 /// Activity completion handling and dispatch abstractions.
 pub mod dispatch;
 /// Task-envelope generation, idempotency keys, and completion fencing.
@@ -24,12 +26,17 @@ pub mod liminal_liveness;
 /// Cross-node outbox dispatch over the liminal bus (#13-0 spike, feature-gated).
 #[cfg(feature = "liminal-transport")]
 pub mod liminal_transport;
+/// The outbox dead-letter path: retire the row, tell the workflow, record whether it was told.
+pub(crate) mod outbox_dead_letter;
 /// Server-side outbox completion delivery into live workflows.
 pub mod outbox_delivery;
 /// Non-replayed durable-outbox fan-out dispatcher (dormant unless commissioned).
 pub mod outbox_dispatcher;
 /// Live stale-claim outbox reconciler (dormant unless commissioned).
 pub mod outbox_reconciler;
+/// Operator-driven redrive of dead-lettered outbox rows, gated on workflow liveness and on
+/// whether the dead letter's failure was already judged.
+pub mod outbox_redrive;
 /// Terminal-workflow outbox settlement sweep for boot and shard adoption (#253).
 pub mod outbox_settle;
 /// Short-TTL per-namespace placement cache for the dispatcher (Control-Plane
@@ -52,6 +59,10 @@ pub mod transport_loss;
 
 pub use backpressure::{Backpressure, OwnedShardFraction};
 pub use bridge::{OutboxDeliveryCallback, PendingActivities, WorkerActivityDispatcher};
+pub use declared_body::{
+    DeclaredBodies, DeclaredBodyLookup, DeclaredBodySource, DeclaredCommandDispatcher,
+    EngineDeclaredBodies,
+};
 pub use dispatch::{
     ActivityCompletion, ActivityCompletionOutcome, ActivityCompletionSink, ActivityDispatcher,
     ScheduledActivity, handle_activity_result,
@@ -75,6 +86,7 @@ pub use outbox_dispatcher::{
     DeliveryGate, OutboxDispatcher, OutboxDispatcherConfig, OutboxRowDispatch, WorkerOutboxDispatch,
 };
 pub use outbox_reconciler::{OutboxReconciler, OutboxReconcilerConfig};
+pub use outbox_redrive::{RedriveRefused, list_dead_letters, redrive_dead_lettered_row};
 pub use outbox_settle::settle_terminal_outbox_rows;
 pub use placement_cache::{
     PlacementCache, WorkerSelection, preferred_node_order, worker_selection_for,

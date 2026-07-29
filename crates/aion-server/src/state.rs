@@ -234,9 +234,8 @@ impl ServerState {
             &connected.namespace_store,
             mint_routing,
         );
-        let (dispatcher, attempt_owners) = build_bridge_dispatcher(&runtime, &seams);
-        let (activity_dispatcher, activity_mock_registry) =
-            decorate_activity_dispatcher(dispatcher, runtime.dev.enabled);
+        let (activity_dispatcher, activity_mock_registry, attempt_owners) =
+            build_decorated_dispatcher(&runtime, &seams);
 
         let engine = build_engine(EngineAssembly {
             instrumented_store: &instrumented_store,
@@ -249,8 +248,7 @@ impl ServerState {
         })
         .await?;
         let engine = Arc::new(engine);
-        install_outbox_delivery(&seams.pending_activities, &engine, runtime.outbox.enabled);
-        install_queue_declarations(&seams.queue_declarations, &engine);
+        install_engine_backed_seams(&seams, &engine, runtime.outbox.enabled);
         let resolver = NamespaceResolver::from_config(runtime.namespace.clone(), engine);
         #[cfg(feature = "auth")]
         let jwks_cache = build_jwks_cache(&runtime).await?;
@@ -1181,6 +1179,7 @@ struct WorkerSeams {
     drain_state: DrainState,
     queue_declarations: crate::worker::QueueDeclarationSource,
     queue_service_state: crate::worker::QueueServiceState,
+    declared_bodies: crate::worker::DeclaredBodySource,
 }
 
 /// Build the worker-side seams: the connected-worker registry (WS3 topology
@@ -1217,6 +1216,7 @@ fn build_worker_seams(
         drain_state: DrainState::default(),
         queue_declarations: crate::worker::QueueDeclarationSource::default(),
         queue_service_state: crate::worker::QueueServiceState::default(),
+        declared_bodies: crate::worker::DeclaredBodySource::default(),
     }
 }
 
@@ -1233,6 +1233,33 @@ fn install_queue_declarations(
     queue_declarations.install(Arc::new(crate::worker::EngineQueueDeclarations::new(
         Arc::clone(engine),
     )));
+}
+
+/// Point the declared-body executor at the engine's live workflow catalog.
+///
+/// Installed only after the engine exists, exactly like the queue-declaration
+/// reader above: the dispatcher already holds a clone of this handle. Until
+/// this runs, every lookup answers `None` and every dispatch takes the worker
+/// path — nothing is deployed before the engine exists, so no declared body
+/// can be missed.
+fn install_declared_bodies(
+    declared_bodies: &crate::worker::DeclaredBodySource,
+    engine: &Arc<aion::Engine>,
+) {
+    declared_bodies.install(Arc::new(crate::worker::EngineDeclaredBodies::new(
+        Arc::clone(engine),
+    )));
+}
+
+/// Hand every engine-backed seam its reader once the engine exists.
+///
+/// One boot-path step for the three handles built before the engine and
+/// filled in after it: outbox completion delivery, the R1 queue-declaration
+/// classifier, and the declared-body executor.
+fn install_engine_backed_seams(seams: &WorkerSeams, engine: &Arc<aion::Engine>, outbox: bool) {
+    install_outbox_delivery(&seams.pending_activities, engine, outbox);
+    install_queue_declarations(&seams.queue_declarations, engine);
+    install_declared_bodies(&seams.declared_bodies, engine);
 }
 
 /// Decorate the worker activity dispatcher with the per-run activity-mock layer
@@ -1267,16 +1294,46 @@ fn build_bridge_dispatcher(
     (dispatcher, attempt_owners)
 }
 
+/// Build the production bridge dispatcher and its decoration stack in one
+/// step: declared-body execution always, the dev mock when commissioned.
+fn build_decorated_dispatcher(
+    runtime: &RuntimeConfig,
+    seams: &WorkerSeams,
+) -> (
+    Arc<dyn ActivityDispatcher>,
+    Option<ActivityMockRegistry>,
+    crate::worker::AttemptOwnerIndex,
+) {
+    let (dispatcher, attempt_owners) = build_bridge_dispatcher(runtime, seams);
+    let (activity_dispatcher, activity_mock_registry) = decorate_activity_dispatcher(
+        dispatcher,
+        seams.declared_bodies.clone(),
+        runtime.dev.enabled,
+    );
+    (activity_dispatcher, activity_mock_registry, attempt_owners)
+}
+
 fn decorate_activity_dispatcher(
     dispatcher: WorkerActivityDispatcher,
+    declared_bodies: crate::worker::DeclaredBodySource,
     dev_enabled: bool,
 ) -> (Arc<dyn ActivityDispatcher>, Option<ActivityMockRegistry>) {
+    // The declared-body layer wraps the production dispatcher UNCONDITIONALLY:
+    // an action whose deployed contract declares a body executes at the
+    // server, everything else falls through to the worker path untouched. The
+    // dev mock (when commissioned) stays outermost so a mocked activity
+    // short-circuits before either real execution path.
+    let declared = crate::worker::DeclaredCommandDispatcher::new(
+        Arc::new(dispatcher),
+        declared_bodies,
+        tokio::runtime::Handle::current(),
+    );
     if dev_enabled {
         let registry = ActivityMockRegistry::new();
-        let decorated = DevMockingDispatcher::new(Arc::new(dispatcher), registry.clone());
+        let decorated = DevMockingDispatcher::new(Arc::new(declared), registry.clone());
         (Arc::new(decorated), Some(registry))
     } else {
-        (Arc::new(dispatcher), None)
+        (Arc::new(declared), None)
     }
 }
 
