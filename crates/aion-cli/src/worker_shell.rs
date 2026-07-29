@@ -6,8 +6,10 @@
 //! the workflow decoder exactly as it is for every other worker.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
+
+use aion_package::ActivityDescriptor;
 
 use aion_worker::{
     ActivityContext, ActivityFailure, CancellableCommandOutput, ProcessGroupError, Worker,
@@ -24,6 +26,15 @@ pub struct ShellArgs {
     /// Strict TOML shell-worker manifest generated from checked AWL.
     #[arg(long)]
     manifest: PathBuf,
+    /// The `.awl` document the manifest was generated from.
+    ///
+    /// Required, not defaulted. The manifest deliberately carries wiring only —
+    /// types live in the document — so the document is the only place the
+    /// worker's advertised schemas can come from. Without it the worker
+    /// advertises nothing and every queue carrying a deployed contract refuses
+    /// it, which is the failure this flag exists to make impossible.
+    #[arg(long)]
+    awl: PathBuf,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -61,11 +72,126 @@ pub async fn run(args: &ShellArgs, endpoint: &str) -> Result<()> {
     let source = std::fs::read_to_string(&args.manifest)
         .with_context(|| format!("failed to read shell manifest {}", args.manifest.display()))?;
     let manifest = parse_manifest(&source)?;
-    build_worker(manifest, endpoint)?.run().await?;
+    let descriptors = declared_descriptors(&args.awl, &manifest)?;
+    build_worker(manifest, descriptors, endpoint)?.run().await?;
     Ok(())
 }
 
-fn build_worker(manifest: ShellManifest, endpoint: &str) -> Result<Worker> {
+/// Derives the typed action surface this worker must advertise from the `.awl`
+/// document, keyed by action name.
+///
+/// The schemas come from the document through the SAME `aion_awl::compile` seam
+/// the deploy path uses, so the worker's advertisement and the server's stored
+/// contract are two independent derivations of one source. That is what lets
+/// contract admission catch a worker still running an older document — a check
+/// that reads the contract back off the server instead would only compare the
+/// server against itself.
+///
+/// Serving is all-or-nothing across the queue. A partial advertisement gets the
+/// worker admitted on some actions and then dispatched one it never declared, so
+/// a mismatch either way is refused here, by name, before the worker dials.
+fn declared_descriptors(
+    document: &Path,
+    manifest: &ShellManifest,
+) -> Result<BTreeMap<String, ActivityDescriptor>> {
+    let source = std::fs::read_to_string(document)
+        .with_context(|| format!("failed to read AWL document {}", document.display()))?;
+    let compiled =
+        aion_awl::compile(&source, crate::awl::document_root(document)).map_err(|error| {
+            anyhow::anyhow!(
+                "{} does not compile, so no action surface can be derived from it:\n{}",
+                document.display(),
+                crate::awl::compile_diagnostics(document, &error).join("\n")
+            )
+        })?;
+
+    let queue = manifest.worker.task_queue.as_str();
+    let Some(worker) = compiled
+        .contract
+        .workers
+        .iter()
+        .find(|candidate| candidate.task_queue == queue)
+    else {
+        let declared = compiled
+            .contract
+            .workers
+            .iter()
+            .map(|candidate| candidate.task_queue.as_str())
+            .collect::<Vec<_>>();
+        bail!(
+            "manifest serves queue `{queue}` but {} declares no such worker (it declares: {})",
+            document.display(),
+            if declared.is_empty() {
+                "none".to_owned()
+            } else {
+                declared.join(", ")
+            }
+        );
+    };
+
+    // An action whose body the document carries is executed by the server, so it
+    // is not this worker's to serve or to advertise.
+    let mut declared = worker
+        .actions
+        .iter()
+        .filter(|action| action.body.is_none())
+        .map(|action| {
+            (
+                action.name.clone(),
+                ActivityDescriptor {
+                    name: action.name.clone(),
+                    input_schema: action.input_schema.clone(),
+                    output_schema: action.output_schema.clone(),
+                },
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    let mut descriptors = BTreeMap::new();
+    for action in &manifest.action {
+        let Some(descriptor) = declared.remove(&action.name) else {
+            let carries_body = worker
+                .actions
+                .iter()
+                .any(|declared| declared.name == action.name && declared.body.is_some());
+            if carries_body {
+                bail!(
+                    "manifest wires action `{}`, but `{}` declares a body for it: \
+                     the server runs a declared body itself and no worker serves it",
+                    action.name,
+                    document.display()
+                );
+            }
+            bail!(
+                "manifest wires action `{}`, which queue `{queue}` in {} does not declare",
+                action.name,
+                document.display()
+            );
+        };
+        descriptors.insert(action.name.clone(), descriptor);
+    }
+    if !declared.is_empty() {
+        let unserved = declared.keys().cloned().collect::<Vec<_>>().join(", ");
+        bail!(
+            "queue `{queue}` in {} declares {} that the manifest does not wire; \
+             a worker must serve its whole queue or none of it, because a partial \
+             advertisement is admitted and then dispatched an action it never declared",
+            document.display(),
+            if unserved.contains(", ") {
+                format!("actions {unserved}")
+            } else {
+                format!("action `{unserved}`")
+            }
+        );
+    }
+    Ok(descriptors)
+}
+
+fn build_worker(
+    manifest: ShellManifest,
+    mut descriptors: BTreeMap<String, ActivityDescriptor>,
+    endpoint: &str,
+) -> Result<Worker> {
     let config = WorkerConfig::builder()
         .endpoint(endpoint)
         .task_queue(&manifest.worker.task_queue)
@@ -78,10 +204,17 @@ fn build_worker(manifest: ShellManifest, endpoint: &str) -> Result<Worker> {
     let mut builder = Worker::builder(config);
     for action in manifest.action {
         let name = action.name.clone();
-        builder = builder.register_activity(name, move |input: Value, context| {
-            let action = action.clone();
-            Box::pin(async move { execute(&action, &input, context).await })
+        let descriptor = descriptors.remove(&name).with_context(|| {
+            format!("no derived descriptor for action `{name}`; the action surface is incomplete")
         })?;
+        builder = builder.register_activity_with_descriptor(
+            name,
+            descriptor,
+            move |input: Value, context| {
+                let action = action.clone();
+                Box::pin(async move { execute(&action, &input, context).await })
+            },
+        )?;
     }
     builder.build().map_err(Into::into)
 }
@@ -289,10 +422,177 @@ result = "text"
         assert!(failure.is_err());
     }
 
+    /// The document the manifest above is wired from: one queue `greeter`, one
+    /// bodyless action `greet` whose types the document owns.
+    const DOCUMENT: &str = r"//! greeter: the document the shell worker derives its advertised surface from.
+workflow greeter_flow
+  input name: String
+
+  outcome greeted: type Greeting, route success
+
+/// What the greeting carries back.
+type Greeting {
+  message: String,
+}
+
+/// The queue a shell worker serves.
+worker greeter
+  action greet(name: String) -> Greeting
+
+step do_greet
+  name |> greet |> route greeted
+";
+
+    /// Writes `source` to a uniquely named document so concurrent tests in this
+    /// binary never read each other's fixture.
+    fn write_document(label: &str, source: &str) -> Result<PathBuf, Box<dyn Error>> {
+        let dir =
+            std::env::temp_dir().join(format!("aion-shell-worker-{}-{label}", std::process::id()));
+        std::fs::create_dir_all(&dir)?;
+        let path = dir.join("document.awl");
+        std::fs::write(&path, source)?;
+        Ok(path)
+    }
+
+    /// THE REGRESSION THAT MATTERS. A worker advertising an empty action surface
+    /// is refused by contract admission on every queue carrying a deployed
+    /// contract — and AWL emits a contract for every worker block, so that is
+    /// every queue a scaffolded shell worker exists to serve. The advertised
+    /// surface must carry the document's own schemas.
+    #[test]
+    fn the_worker_advertises_the_documents_action_surface() -> TestResult {
+        let document = write_document("advertises", DOCUMENT)?;
+        let manifest = parse_manifest(MANIFEST)?;
+        let descriptors = declared_descriptors(&document, &manifest)?;
+        let worker = build_worker(manifest, descriptors, "http://127.0.0.1:50051")?;
+
+        let advertised = worker.activity_descriptors();
+        assert_eq!(
+            advertised.len(),
+            1,
+            "expected the one declared action to be advertised, got {advertised:?}"
+        );
+        assert_eq!(advertised[0].name, "greet");
+        // The schemas are the document's, not a permissive stand-in: `greet`
+        // takes a named `name` parameter and returns a record with `message`.
+        assert_eq!(
+            advertised[0].input_schema["properties"]["name"]["type"],
+            json!("string")
+        );
+        // A declared record return is advertised in its `$ref` + `$defs` form,
+        // which is what the server's subset check resolves.
+        assert_eq!(
+            advertised[0].output_schema["$ref"],
+            json!("#/$defs/Greeting")
+        );
+        assert_eq!(
+            advertised[0].output_schema["$defs"]["Greeting"]["properties"]["message"]["type"],
+            json!("string")
+        );
+        Ok(())
+    }
+
+    /// A manifest wiring an action the document does not declare would be
+    /// admitted for it and then dispatched a call the document never described.
+    #[test]
+    fn an_undeclared_action_is_refused_by_name() -> TestResult {
+        let document = write_document("undeclared", DOCUMENT)?;
+        let manifest = parse_manifest(&MANIFEST.replace("name = \"greet\"", "name = \"shout\""))?;
+        let Err(error) = declared_descriptors(&document, &manifest) else {
+            return Err("an action absent from the document must be refused".into());
+        };
+        let error = error.to_string();
+        assert!(
+            error.contains("shout") && error.contains("does not declare"),
+            "refusal must name the action and the reason, got: {error}"
+        );
+        Ok(())
+    }
+
+    /// An action whose body the document carries is run by the server. A worker
+    /// claiming it would shadow the declared body with a different one.
+    #[test]
+    fn an_action_with_a_declared_body_is_refused() -> TestResult {
+        // A `run` body's outcome members are fixed by the language, so this needs
+        // its own document rather than a patch of the shared one: the action's
+        // return type, and the outcome it routes to, both follow the body.
+        let bodied = r#"//! bodied: the queue whose action the document implements itself.
+workflow bodied_flow
+  input name: String
+
+  outcome ran: type RunOutcome, route success
+
+/// What a declared command reported.
+type RunOutcome { exit_code: Int, stdout: String, stderr: String }
+
+/// The server runs this action; no worker serves it.
+worker greeter
+  action greet(name: String) -> RunOutcome
+    run "printf %s $name"
+
+step do_greet
+  name |> greet |> route ran
+"#;
+        let document = write_document("bodied", bodied)?;
+        let manifest = parse_manifest(MANIFEST)?;
+        let Err(error) = declared_descriptors(&document, &manifest) else {
+            return Err("a declared body is the server's to run, not a worker's".into());
+        };
+        let error = error.to_string();
+        assert!(
+            error.contains("declares a body"),
+            "refusal must explain that the server runs a declared body, got: {error}"
+        );
+        Ok(())
+    }
+
+    /// Serving is all-or-nothing: a manifest that wires only some of a queue's
+    /// actions gets the worker admitted and then dispatched one it cannot serve.
+    #[test]
+    fn a_partially_wired_queue_is_refused() -> TestResult {
+        let two_actions = DOCUMENT.replace(
+            "  action greet(name: String) -> Greeting",
+            "  action greet(name: String) -> Greeting\n  action shout(name: String) -> Greeting",
+        );
+        let document = write_document("partial", &two_actions)?;
+        let manifest = parse_manifest(MANIFEST)?;
+        let Err(error) = declared_descriptors(&document, &manifest) else {
+            return Err("a queue must be served whole or not at all".into());
+        };
+        let error = error.to_string();
+        assert!(
+            error.contains("shout") && error.contains("whole queue or none"),
+            "refusal must name the unserved action and the rule, got: {error}"
+        );
+        Ok(())
+    }
+
+    /// A manifest pointed at the wrong document cannot derive anything, and
+    /// saying so beats advertising nothing and being refused remotely.
+    #[test]
+    fn a_queue_the_document_does_not_declare_is_refused() -> TestResult {
+        let document = write_document("wrongqueue", DOCUMENT)?;
+        let manifest = parse_manifest(
+            &MANIFEST.replace("task_queue = \"greeter\"", "task_queue = \"other\""),
+        )?;
+        let Err(error) = declared_descriptors(&document, &manifest) else {
+            return Err("a queue absent from the document must be refused".into());
+        };
+        let error = error.to_string();
+        assert!(
+            error.contains("other") && error.contains("greeter"),
+            "refusal must name both the wired queue and what the document declares, got: {error}"
+        );
+        Ok(())
+    }
+
     #[tokio::test]
     async fn process_boundary_round_trips_text_and_json() -> Result<()> {
         let manifest = parse_manifest(MANIFEST)?;
-        let worker = build_worker(manifest.clone(), "http://127.0.0.1:50051")?;
+        let document = write_document("roundtrip", DOCUMENT)
+            .map_err(|error| anyhow::anyhow!("fixture: {error}"))?;
+        let descriptors = declared_descriptors(&document, &manifest)?;
+        let worker = build_worker(manifest.clone(), descriptors, "http://127.0.0.1:50051")?;
         assert_eq!(worker.activity_types(), &["greet"]);
         let (context, _cancellation) =
             ActivityContext::new(ActivityId::from_sequence_position(1), 1);

@@ -186,6 +186,52 @@ impl ActivityRegistry {
         Ok(self)
     }
 
+    /// Registers a typed handler together with an EXPLICIT wire descriptor.
+    ///
+    /// For an activity whose schemas are owned by a declaration rather than by
+    /// Rust types, [`Self::register_activity_with_contract`] cannot help: there
+    /// is no `schemars` type to derive from, because the types live in the
+    /// `.awl` document. The handler is therefore untyped (`serde_json::Value`
+    /// in and out) while the advertisement is exact, supplied by whoever read
+    /// the declaration.
+    ///
+    /// Registering a handler with no descriptor is what makes a worker invisible
+    /// to contract admission — it advertises nothing, and a queue carrying any
+    /// deployed contract refuses it. This is the path that keeps a
+    /// declaration-driven worker admissible.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkerError::Registration`] when the name is already
+    /// registered, or when `descriptor` names a different activity than
+    /// `activity_type` — a descriptor advertised under the wrong name would
+    /// promise one action's schema for another's handler.
+    pub fn register_activity_with_descriptor<Input, Output, Handler>(
+        mut self,
+        activity_type: impl Into<String>,
+        descriptor: aion_package::ActivityDescriptor,
+        handler: Handler,
+    ) -> Result<Self, WorkerError>
+    where
+        Input: Serialize + DeserializeOwned + Send + Sync + 'static,
+        Output: Serialize + Send + Sync + 'static,
+        Handler: for<'context> Fn(Input, &'context ActivityContext) -> HandlerFuture<'context, Output>
+            + Send
+            + Sync
+            + 'static,
+    {
+        let activity_type = activity_type.into();
+        if descriptor.name != activity_type {
+            return Err(WorkerError::registration(DescriptorNameMismatch {
+                activity_type,
+                descriptor: descriptor.name,
+            }));
+        }
+        self = self.register_activity(activity_type.clone(), handler)?;
+        self.descriptors.insert(activity_type, descriptor);
+        Ok(self)
+    }
+
     /// Returns true when no activity handlers have been registered.
     #[must_use]
     pub fn is_empty(&self) -> bool {
@@ -396,6 +442,23 @@ fn panic_message(panic: &Box<dyn Any + Send>) -> String {
 pub struct DuplicateActivityType {
     /// Duplicate activity type name.
     pub activity_type: String,
+}
+
+/// Error returned when an explicit descriptor names a different activity than
+/// the one it is registered under.
+///
+/// Advertising a schema under the wrong name promises one action's shape for
+/// another action's handler, which contract admission would then accept — so
+/// the mismatch is refused at registration instead.
+#[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
+#[error(
+    "activity type `{activity_type}` was registered with a descriptor naming `{descriptor}`; a descriptor must name the activity it describes"
+)]
+pub struct DescriptorNameMismatch {
+    /// The name the handler is registered under.
+    pub activity_type: String,
+    /// The name the supplied descriptor carries.
+    pub descriptor: String,
 }
 
 #[cfg(test)]

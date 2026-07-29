@@ -61,13 +61,21 @@ result = "text"
 Run it only against an explicitly selected server:
 
 ```sh
-aion --endpoint HOST:PORT worker shell --manifest worker.toml
+aion --endpoint HOST:PORT worker shell --manifest worker.toml --awl your_document.awl
 ```
 
 Manifest facts:
 
 - Unknown TOML fields are rejected.
 - `worker.name`, `worker.task_queue`, and at least one action are required.
+- `--awl` is required and must be the document the manifest was generated from.
+  The manifest carries wiring only, so the document is the only source for the
+  schemas the worker advertises — and a worker advertising nothing is refused by
+  any queue carrying a deployed contract.
+- A queue is served whole or not at all. An action in the manifest that the
+  document does not declare, an action the document declares that the manifest
+  does not wire, and an action whose body the document carries (the server runs
+  those itself) are each refused by name before the worker connects.
 - Action names must be unique and command arrays nonempty.
 - `command` is an argv array; it is not interpreted by an implicit shell.
 - `{input}` expands to the complete JSON input. `{input.field}` projects one

@@ -86,6 +86,39 @@ impl WorkerBuilder {
         Ok(self)
     }
 
+    /// Registers one activity with an EXPLICIT wire descriptor, for schemas
+    /// owned by a declaration rather than by Rust types.
+    ///
+    /// See [`ActivityRegistry::register_activity_with_descriptor`]: this is how a
+    /// declaration-driven worker (one whose types live in an `.awl` document)
+    /// advertises a real action surface instead of an empty one.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkerError::Registration`] for a duplicate activity name or a
+    /// descriptor naming a different activity.
+    pub fn register_activity_with_descriptor<Input, Output, Handler>(
+        mut self,
+        activity_type: impl Into<String>,
+        descriptor: aion_package::ActivityDescriptor,
+        handler: Handler,
+    ) -> Result<Self, WorkerError>
+    where
+        Input: Serialize + DeserializeOwned + Send + Sync + 'static,
+        Output: Serialize + Send + Sync + 'static,
+        Handler: for<'context> Fn(Input, &'context ActivityContext) -> HandlerFuture<'context, Output>
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.activities = self.activities.register_activity_with_descriptor(
+            activity_type,
+            descriptor,
+            handler,
+        )?;
+        Ok(self)
+    }
+
     /// Builds the worker after validating that it has at least one activity.
     ///
     /// # Errors

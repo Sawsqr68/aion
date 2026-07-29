@@ -60,8 +60,8 @@ pub mod shell;
 pub mod worker;
 
 pub use activity::{
-    ActivityFailure, ActivityRegistry, Classification, DuplicateActivityType, HandlerFuture,
-    activity_descriptor,
+    ActivityFailure, ActivityRegistry, Classification, DescriptorNameMismatch,
+    DuplicateActivityType, HandlerFuture, activity_descriptor,
 };
 pub use config::{
     ReconnectConfig, TransportCredentials, WorkerConfig, WorkerConfigBuildError,

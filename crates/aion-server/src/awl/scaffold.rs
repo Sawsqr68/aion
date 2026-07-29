@@ -119,7 +119,7 @@ fn shell_files(
             ),
         );
     }
-    let readme = "Run: `aion worker shell --manifest worker.toml --endpoint <server>`\n\nResult encoding is derived wiring; the type contract lives in the .awl and is enforced by the workflow's decoder, as for every worker.\n";
+    let readme = "Run: `aion worker shell --manifest worker.toml --awl <your-document>.awl --endpoint <server>`\n\nResult encoding is derived wiring; the type contract lives in the .awl and is enforced by the workflow's decoder, as for every worker.\n\nThe `--awl` document is required, and pointing at the one this manifest was generated from is the whole of it. The manifest carries wiring only, so the document is the only place the worker's advertised schemas can come from — and a worker that advertises nothing is refused by every queue carrying a deployed contract, which is every queue AWL deploys. Serving is all-or-nothing across a queue: if the manifest and the document disagree about which actions exist, the worker says so by name before it connects.\n";
     Ok(BTreeMap::from([
         ("worker.toml".to_owned(), manifest),
         ("README.md".to_owned(), readme.to_owned()),

@@ -287,7 +287,7 @@ fn beam_sidecar(compiled: &CompiledWorkflow) -> serde_json::Value {
 /// <message>` diagnostic lines the emit surface uses. Span-anchored stages
 /// (parse, check, schema, unsupported, lower) carry a source position; the
 /// span-free planning and backend stages render as a file-level diagnostic.
-fn compile_diagnostics(file: &Path, error: &CompileError) -> Vec<String> {
+pub(crate) fn compile_diagnostics(file: &Path, error: &CompileError) -> Vec<String> {
     match error {
         CompileError::Parse(parse) => vec![diagnostic(file, parse.span, &parse.message)],
         CompileError::Check(errors) => errors
@@ -396,7 +396,7 @@ fn write_entry_sidecar(
 }
 
 /// The directory schema imports resolve against: the document's own.
-fn document_root(file: &Path) -> &Path {
+pub(crate) fn document_root(file: &Path) -> &Path {
     match file.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
         _ => Path::new("."),
