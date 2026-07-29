@@ -1,0 +1,15 @@
+//! The program to execute is a parameter, so a caller-supplied value would
+//! choose which program runs.
+workflow notify_once
+  input message: String
+  outcome sent: type Receipt, route success
+
+type Receipt { exit_code: Int, stdout: String, stderr: String }
+
+worker notifier
+  action send_message(message: String, tool: String) -> Receipt
+    run "$tool --body $message"
+
+step send
+  send_message(message: message, tool: message) -> receipt
+  receipt |> route sent

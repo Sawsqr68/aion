@@ -13,7 +13,14 @@ use crate::fixtures;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 /// The exact covered corpus size (`aion-awl/src/mir/covered.rs`).
-const COVERED_COUNT: usize = 83;
+///
+/// 84 since declarative action bodies: `declarations/valid/action_run_bodies`
+/// joined the corpus because a `run` body is a property of the ACTION
+/// DECLARATION, not of the flow — the call site lowers exactly as a bodyless
+/// action's does and the body rides the package contract, so both backends
+/// must still produce byte-identical trails. Verified by running the
+/// differential, not asserted from the reasoning.
+const COVERED_COUNT: usize = 84;
 
 /// Out-of-oracle (r2 finding 3): bare signal-wait fixtures whose durable park
 /// boundary is NOT observable through any engine surface without racy sampling.
@@ -125,6 +132,11 @@ const EXPECTED_SUCCEEDED: &[&str] = &[
     "dag-fork/valid/fork_sequential_route",
     "dag-fork/valid/runtime_sized_fork",
     "dag-fork/valid/sit_one",
+    // A declared `run` body rides the package CONTRACT, not the flow, so the
+    // call site must lower exactly as a bodyless action's does. This entry is
+    // the proof rather than the claim: the fixture completes on both backends
+    // with byte-identical normalized trails and zero divergences.
+    "declarations/valid/action_run_bodies",
     // R5: an advisory side channel that always fails. It SUCCEEDS on both
     // backends — that is the whole point of the class, and the differential
     // proves the direct and Gleam lowerings route around the fault arm

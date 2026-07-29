@@ -159,12 +159,20 @@ fn zero_further_attempts_is_one_total_execution() -> TestResult {
 
 /// Contract identity is the number the AUTHOR wrote.
 ///
-/// `RetryContract::count` carries the declared count verbatim into the `.v4`
-/// `canonical_bytes`; only the runtime translation of that count moved. The
-/// committed golden beside this file is the hex of [`EVERY_THREE`]'s compiled
-/// `PackageContract::canonical_bytes`, captured BEFORE the mapping change and
-/// byte-unchanged by it — a `retry`-declaring package that redeploys with no
-/// source edit keeps its contract identity.
+/// `RetryContract::count` carries the declared count verbatim into the
+/// canonical bytes; the runtime translation of that count never touches
+/// them. The committed golden beside this file is the hex of
+/// [`EVERY_THREE`]'s compiled `PackageContract::canonical_bytes`, and a
+/// `retry`-declaring package that redeploys with no source edit keeps its
+/// contract identity.
+///
+/// The golden was re-captured ONCE, for the identity-domain bump that added
+/// the declarative-body block to `ActionContract::canonical_bytes` (see the
+/// LAW comment there): every action record grew by the body discriminant
+/// byte, `0` for the bodyless action this fixture declares. That bump moved
+/// every contract in the workspace by design and is not a retry-count
+/// regression — the retry block itself is byte-identical either side of it.
+/// Nothing else may move this golden.
 #[test]
 fn declared_count_is_the_identity_and_does_not_move() -> TestResult {
     let golden_path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -174,7 +182,7 @@ fn declared_count_is_the_identity_and_does_not_move() -> TestResult {
     assert_eq!(
         hex(&compiled.contract.canonical_bytes()),
         golden.trim(),
-        "the `.v4` canonical bytes of a `retry 3` declaration must not move \
+        "the canonical bytes of a `retry 3` declaration must not move \
          (golden: {})",
         golden_path.display()
     );

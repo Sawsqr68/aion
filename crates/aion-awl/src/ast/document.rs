@@ -286,6 +286,38 @@ pub struct ActionDecl {
     pub returns: TypeRef,
     /// Optional per-action config line (`node …, timeout …, retry …`).
     pub config: Option<ConfigLine>,
+    /// The declarative implementation, when the document carries one.
+    ///
+    /// `None` is a first-class, permanent case: the action is a pure
+    /// REQUIREMENT on the queue, satisfied by an out-of-band worker build
+    /// (the Rust, Python or TypeScript worker SDKs). A body makes the
+    /// document itself the implementation.
+    pub body: Option<ActionBody>,
+}
+
+/// The declarative implementation of an action, written under its
+/// declaration.
+///
+/// An enum because the language will grow further body kinds; today the one
+/// kind is a shell command line.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActionBody {
+    /// `run "<command>"` — one shell command line. The command may
+    /// reference the action's declared parameters with `$name` / `${name}`;
+    /// `$$` is a literal dollar sign. See [`super::segment_command`].
+    Run {
+        /// Span from the `run` keyword through the command literal.
+        span: Span,
+        /// Leading trivia before the body line.
+        lead: Vec<Lead>,
+        /// Same-line trailing comment.
+        trailing: Option<Comment>,
+        /// The command text exactly as authored, after string-escape
+        /// processing and before `$` interpolation is interpreted.
+        command: String,
+        /// Source span of the command string literal, quotes included.
+        command_span: Span,
+    },
 }
 
 /// One typed parameter of an action or child declaration.

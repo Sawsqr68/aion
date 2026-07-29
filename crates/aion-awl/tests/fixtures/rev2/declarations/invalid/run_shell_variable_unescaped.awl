@@ -1,0 +1,14 @@
+//! A shell variable written bare: inside `run` the dollar belongs to AWL,
+//! so `$HOME` must be escaped as `$$HOME` to reach the command itself.
+workflow notify_once
+  input message: String
+  outcome sent: type Receipt, route success
+
+type Receipt { exit_code: Int, stdout: String, stderr: String }
+
+worker notifier
+  action send_message(message: String) -> Receipt
+    run "notify --home $HOME --body $message"
+
+step send
+  message |> send_message |> route sent

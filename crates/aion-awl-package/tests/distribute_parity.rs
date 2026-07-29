@@ -142,6 +142,7 @@ fn with_children(entries: Vec<SynthesizedWorkflowEntry>) -> CompiledWorkflow {
             additional_workflows: Vec::new(),
             unscoped_activities: Vec::new(),
         },
+        action_bodies: Vec::new(),
         actions: Vec::new(),
         sidecar_bytes: Vec::new(),
         synthesized_workflows: entries,

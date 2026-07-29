@@ -97,7 +97,7 @@ fn parse_action(
     let params = parse_params(stream, "action")?;
     let returns = parse_returns(stream, keyword.span, name_span, "action")?;
     let trailing = stream.end_line()?;
-    let config = parse_config_block(stream)?;
+    let (config, body) = super::action_body::parse_action_block(stream)?;
     Ok(ActionDecl {
         span: join_span(keyword.span, name_span),
         lead,
@@ -108,6 +108,7 @@ fn parse_action(
         params,
         returns,
         config,
+        body,
     })
 }
 
@@ -223,7 +224,10 @@ pub(super) fn parse_config_block(stream: &mut Stream) -> Result<Option<ConfigLin
     Ok(Some(config))
 }
 
-fn parse_config_line(stream: &mut Stream, lead: Vec<Lead>) -> Result<ConfigLine, ParseError> {
+pub(super) fn parse_config_line(
+    stream: &mut Stream,
+    lead: Vec<Lead>,
+) -> Result<ConfigLine, ParseError> {
     let start = stream.peek_span();
     let mut advisory = None;
     let mut node = None;

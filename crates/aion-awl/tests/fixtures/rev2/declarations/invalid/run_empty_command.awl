@@ -1,0 +1,13 @@
+//! The declared command is whitespace, so it names no program to execute.
+workflow notify_once
+  input message: String
+  outcome sent: type Receipt, route success
+
+type Receipt { exit_code: Int, stdout: String, stderr: String }
+
+worker notifier
+  action send_message(message: String) -> Receipt
+    run "   "
+
+step send
+  message |> send_message |> route sent

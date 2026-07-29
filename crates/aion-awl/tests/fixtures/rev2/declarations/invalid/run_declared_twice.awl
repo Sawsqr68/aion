@@ -1,0 +1,14 @@
+//! One action, two declared commands: which one would execute?
+workflow notify_once
+  input message: String
+  outcome sent: type Receipt, route success
+
+type Receipt { exit_code: Int, stdout: String, stderr: String }
+
+worker notifier
+  action send_message(message: String) -> Receipt
+    run "notify --body $message"
+    run "notify --body $message"
+
+step send
+  message |> send_message |> route sent

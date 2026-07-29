@@ -9,12 +9,12 @@ use std::path::Path;
 use std::time::Duration;
 
 use aion_package::{
-    ActionContract, AdditionalWorkflowContract, ChildContract, PackageContract, RetryContract,
-    SignalContract, WorkerContract,
+    ActionBodyContract, ActionContract, AdditionalWorkflowContract, ChildContract, PackageContract,
+    RetryContract, SignalContract, WorkerContract,
 };
 use serde_json::Value;
 
-use crate::ast::{Document, PipeStage, RetrySpec, Statement, Step};
+use crate::ast::{ActionBody, Document, PipeStage, RetrySpec, Statement, Step, scan_command};
 use crate::mir::{LowerError, lower, project_sidecar, select, verify};
 use crate::{CheckError, ParseError, SchemaError, Span};
 
@@ -39,6 +39,10 @@ pub struct CompiledWorkflow {
     pub contract: PackageContract,
     /// Effective action requirements, one row per distinct node requirement.
     pub actions: Vec<ActionRequirement>,
+    /// The declarative action implementations the document carries, one row
+    /// per action that declares a body, in declaration order. Actions
+    /// absent from this list are requirements on an out-of-band worker.
+    pub action_bodies: Vec<ActionImplementation>,
     /// `.gleam_types` sidecar bytes (deterministic).
     pub sidecar_bytes: Vec<u8>,
     /// Synthesized same-package workflow entries (one per implicit per-item
@@ -61,6 +65,38 @@ pub struct ActionRequirement {
     pub action: String,
     /// Effective node requirement, `None` when unpinned.
     pub node: Option<String>,
+}
+
+/// One action the document implements itself: the queue it is declared on,
+/// the action name, and the declarative body a runtime must execute in
+/// place of an out-of-band worker.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ActionImplementation {
+    /// Worker (task queue) name the action is declared on.
+    pub task_queue: String,
+    /// Action name.
+    pub action: String,
+    /// The compiled body.
+    pub body: CompiledActionBody,
+}
+
+/// A compiled declarative action body: what a runtime needs to execute the
+/// action with no source document in hand.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CompiledActionBody {
+    /// One declared command.
+    Run {
+        /// The declared command, exactly as authored. This is the
+        /// authoritative form: the executor parses it into a fixed argv
+        /// itself and substitutes each parameter as one whole argument. It
+        /// is never spliced back into a command string.
+        command: String,
+        /// The action parameters the command references, sorted and
+        /// deduplicated — the binding a runtime must supply. Checked
+        /// against the declaration, so every name here is a declared
+        /// parameter of the action.
+        parameters: Vec<String>,
+    },
 }
 
 /// A compile failure at any pipeline stage, carrying the existing
@@ -161,6 +197,7 @@ pub fn compile(source: &str, schema_root: &Path) -> Result<CompiledWorkflow, Com
     let output_schema =
         crate::schema_for_outcomes_in(&document, schema_root).map_err(CompileError::Schema)?;
     let actions = action_requirements(&document);
+    let action_bodies = action_implementations(&document)?;
     let synthesized_workflows = synthesized_workflow_entries(&document, schema_root)?;
     let contract = package_contract(
         &document,
@@ -198,9 +235,47 @@ pub fn compile(source: &str, schema_root: &Path) -> Result<CompiledWorkflow, Com
         output_schema,
         contract,
         actions,
+        action_bodies,
         sidecar_bytes,
         synthesized_workflows,
     })
+}
+
+/// Compile every declarative action body in the document.
+///
+/// The checker has already ruled on interpolation, so a malformed command
+/// cannot reach here; if one ever did it is a checker defect, and it is
+/// reported as a span-anchored lowering failure rather than swallowed.
+fn action_implementations(document: &Document) -> Result<Vec<ActionImplementation>, CompileError> {
+    let mut implementations = Vec::new();
+    for worker in &document.workers {
+        for action in &worker.actions {
+            let Some(ActionBody::Run {
+                command,
+                command_span,
+                ..
+            }) = &action.body
+            else {
+                continue;
+            };
+            let scanned = scan_command(command).map_err(|error| CompileError::Lower {
+                message: format!(
+                    "action `{}` has a malformed `run` command that passed the checker: {error}",
+                    action.name
+                ),
+                span: *command_span,
+            })?;
+            implementations.push(ActionImplementation {
+                task_queue: worker.name.clone(),
+                action: action.name.clone(),
+                body: CompiledActionBody::Run {
+                    command: command.clone(),
+                    parameters: scanned.parameters(),
+                },
+            });
+        }
+    }
+    Ok(implementations)
 }
 
 fn package_contract(
@@ -240,6 +315,14 @@ fn package_contract(
                 .config
                 .as_ref()
                 .is_some_and(|config| config.advisory.is_some());
+            // The declarative body rides into package identity: a document
+            // that says what an action DOES is a different promise from one
+            // that only says an action exists.
+            let body = action.body.as_ref().map(|body| match body {
+                ActionBody::Run { command, .. } => ActionBodyContract::Run {
+                    command: command.clone(),
+                },
+            });
             actions.push(ActionContract {
                 name: action.name.clone(),
                 input_schema,
@@ -248,6 +331,7 @@ fn package_contract(
                 timeout,
                 retry,
                 advisory,
+                body,
             });
         }
         workers.push(WorkerContract {

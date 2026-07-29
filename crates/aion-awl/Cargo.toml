@@ -23,4 +23,11 @@ serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+# TEST ONLY, and deliberately one-directional: the worker SDK owns the
+# executor that parses a declared command into an argv. The differential
+# test in `tests/action_body_executor_parity.rs` pins that the checker never
+# accepts a command the executor would refuse, and that both bind exactly
+# the same parameter names. `aion-worker` does not depend on `aion-awl`, so
+# this creates no cycle, and nothing in `src/` may ever import it.
+aion-worker = { version = "0.10.0", path = "../aion-worker" }
 flate2 = "1.1"

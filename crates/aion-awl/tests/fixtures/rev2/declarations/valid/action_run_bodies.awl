@@ -1,0 +1,33 @@
+//! Two actions on one queue: one the document implements itself with a
+//! declared command, one it only requires of an out-of-band worker.
+workflow greet_by_hand
+  input name: String
+  outcome greeted: type Greeting, route success
+
+type Greeting   { text: String }
+type RunOutcome { exit_code: Int, stdout: String, stderr: String }
+type Stdout     { stdout: String }
+
+worker greeter
+  /// The document IS the implementation: no worker build serves this one,
+  /// and the result is the outcome object the command produces.
+  action greet(name: String) -> RunOutcome
+    run "echo hello $name"
+  /// Same queue, no body: an out-of-band worker must serve this one, so its
+  /// result type is its own business.
+  action polish(text: String) -> Greeting
+  /// A body and a config line coexist; the config line prints first. The
+  /// result names a SUBSET of the outcome members, which is allowed.
+  action shout(text: String, mark: String) -> Stdout
+    node shell, timeout 30s
+    run "printf %s%s ${text} $mark"
+
+step greet
+  greet(name: name) -> greeting
+
+step polish after greet
+  polish(text: greeting.stdout) -> polished
+
+step shout after polish
+  shout(text: polished.text, mark: name) -> shouted
+  route greeted(text: shouted.stdout)

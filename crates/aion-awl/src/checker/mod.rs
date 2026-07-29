@@ -8,6 +8,7 @@ mod anchor;
 mod args;
 mod avail;
 mod blocks;
+mod bodies;
 mod calls;
 mod collections;
 mod consts;

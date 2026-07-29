@@ -1,0 +1,17 @@
+//! A bodied action returns the command's outcome object, so a result type
+//! naming a member that outcome never carries could never be filled.
+workflow notify_once
+  input message: String
+  outcome sent: type Receipt, route success
+
+type Receipt { stdout: String }
+
+type Wrong { transcript: String }
+
+worker notifier
+  action send_message(message: String) -> Wrong
+    run "notify --body $message"
+
+step send
+  send_message(message: message) -> receipt
+  route sent(stdout: message)

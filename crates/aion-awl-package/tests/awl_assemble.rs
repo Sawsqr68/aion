@@ -99,8 +99,14 @@ fn assembling_twice_yields_byte_identical_archives() -> TestResult {
 /// the archive bytes changed with the ARCHIVE FORMAT, not with any workflow
 /// source edit; `assembling_twice_yields_byte_identical_archives` proves the
 /// new bytes remain deterministic.
+/// Repinned on 2026-07-30: declarative action bodies made every
+/// `ActionContract` record end with an always-encoded body block, under the
+/// bumped `aion.package.version.worker-contract.v5` identity domain. Both
+/// inputs to the embedded contract record changed by construction, so the
+/// archive bytes changed with the ARCHIVE FORMAT again, not with any
+/// workflow source edit — and determinism still holds (that test passes).
 const FIXED_INPUT_ARCHIVE_SHA256: &str =
-    "6182bbb85ce9aadc213cbc97b9a0550b913c5f9886930c1de870e43e391ee725";
+    "15fa28b0206a48276283df2f34e2f7af45f982ed9780ddb0fa8fb5856fe59642";
 
 /// Proof 1b — cross-process determinism: a fully fixed input assembles to
 /// pinned archive bytes.
@@ -415,6 +421,7 @@ fn hand_built(name: &str) -> CompiledWorkflow {
             additional_workflows: Vec::new(),
             unscoped_activities: Vec::new(),
         },
+        action_bodies: Vec::new(),
         actions: vec![ActionRequirement {
             task_queue: "q".to_owned(),
             action: "act".to_owned(),

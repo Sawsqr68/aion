@@ -24,6 +24,10 @@ pub(super) const COVERED: &[&str] = &[
     // BC-4 adversarial: a runtime-sized fork over a plain input list.
     "dag-fork/valid/runtime_sized_fork",
     "dag-fork/valid/sit_one",
+    // A declared `run` body is a property of the ACTION DECLARATION, not of
+    // the flow: the calls lower exactly as a bodyless action's do, and the
+    // body rides the package contract instead.
+    "declarations/valid/action_run_bodies",
     // R5: an advisory side channel lowers past the fault arm.
     "declarations/valid/advisory_side_channel",
     "declarations/valid/call_site_override",

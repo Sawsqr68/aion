@@ -1,0 +1,300 @@
+module greet_by_hand source=greet_by_hand.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_greet:
+    aion@activity:task_queue/2 [activities] (v1, lit#16)
+    aion@workflow:run/1 [activities] (v2)
+  step_polish:
+    aion@activity:task_queue/2 [activities] (v3, lit#17)
+    aion@workflow:run/1 [activities] (v4)
+  step_shout:
+    aion@activity:timeout/2 [activities] (v3, v4)
+    aion@activity:task_queue/2 [activities] (v5, lit#18)
+    aion@activity:node/2 [activities] (v6, lit#19)
+    aion@workflow:run/1 [activities] (v7)
+== durable families == activities
+== atoms ==
+  [0] greeting
+  [1] run_outcome
+  [2] stdout
+  [3] greet_input
+  [4] polish_input
+  [5] shout_input
+  [6] greet_by_hand_input
+  [7] greeted_outcome
+  [8] ok
+== literals ==
+  [0] "text"
+  [1] "exit_code"
+  [2] "stdout"
+  [3] "stderr"
+  [4] "stdout"
+  [5] "name"
+  [6] "text"
+  [7] "text"
+  [8] "mark"
+  [9] "name"
+  [10] "greeted"
+  [11] "outcome"
+  [12] ""
+  [13] "GreetByHandOutcome"
+  [14] "greeted"
+  [15] "payload"
+  [16] "greeter"
+  [17] "greeter"
+  [18] "greeter"
+  [19] "shell"
+== types ==
+  record Greeting tag=greeting
+    text: string
+  record RunOutcome tag=run_outcome
+    exit_code: int
+    stdout: string
+    stderr: string
+  record Stdout tag=stdout
+    stdout: string
+  record GreetInput tag=greet_input
+    name: string
+  record PolishInput tag=polish_input
+    text: string
+  record ShoutInput tag=shout_input
+    text: string
+    mark: string
+  record GreetByHandInput tag=greet_by_hand_input
+    name: string
+  union GreetByHandOutcome
+    greeted -> greeted_outcome(ref(Greeting))
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=greet_by_hand_input_codec output=greet_by_hand_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(greet_by_hand.GreetByHandInput, greet_by_hand.GreetByHandOutcome, AwlError)
+  T-DEF name="greet_by_hand" input=greet_by_hand_input_codec output=greet_by_hand_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (greet_by_hand.GreetByHandInput) -> Result(greet_by_hand.GreetByHandOutcome, AwlError)
+  T-EXEC fields=[name:String] entry=step_greet args=[0]
+== fn greeting_codec/0 origin=codec_template(RecordTrio, Greeting, record#0) ==
+  sig: () -> Codec(greet_by_hand.Greeting)
+  v0 = make_closure greeting_to_json captures=[]
+  v1 = call_local greeting_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn greeting_to_json/1 origin=codec_template(RecordTrio, Greeting, record#0) ==
+  sig: (greet_by_hand.Greeting) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"text": v1|>awlc.string_to_json}
+  return v2
+== fn greeting_decoder/0 origin=codec_template(RecordTrio, Greeting, record#0) ==
+  sig: () -> Decoder(greet_by_hand.Greeting)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure greeting_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn greeting_decoder$0/1 origin=lifted(greeting_decoder, #0) ==
+  sig: (String) -> Decoder(greet_by_hand.Greeting)
+  v1 = record(greeting, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn run_outcome_codec/0 origin=codec_template(RecordTrio, RunOutcome, record#1) ==
+  sig: () -> Codec(greet_by_hand.RunOutcome)
+  v0 = make_closure run_outcome_to_json captures=[]
+  v1 = call_local run_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn run_outcome_to_json/1 origin=codec_template(RecordTrio, RunOutcome, record#1) ==
+  sig: (greet_by_hand.RunOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = field(v0, 3)
+  v4 = json_obj {"exit_code": v1|>awlc.int_to_json, "stdout": v2|>awlc.string_to_json, "stderr": v3|>awlc.string_to_json}
+  return v4
+== fn run_outcome_decoder/0 origin=codec_template(RecordTrio, RunOutcome, record#1) ==
+  sig: () -> Decoder(greet_by_hand.RunOutcome)
+  v0 = call_rt aion@awl@codec:int_decoder/0()
+  v1 = make_closure run_outcome_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v0, v1)
+== fn run_outcome_decoder$0/1 origin=lifted(run_outcome_decoder, #0) ==
+  sig: (Int) -> Decoder(greet_by_hand.RunOutcome)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure run_outcome_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v1, v2)
+== fn run_outcome_decoder$1/2 origin=lifted(run_outcome_decoder, #1) ==
+  sig: (String, Int) -> Decoder(greet_by_hand.RunOutcome)
+  v2 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0, v1]
+  v3 = make_closure run_outcome_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v2, v3)
+== fn run_outcome_decoder$2/3 origin=lifted(run_outcome_decoder, #2) ==
+  sig: (String, Int, String) -> Decoder(greet_by_hand.RunOutcome)
+  v3 = record(run_outcome, [v1, v2, v0])
+  tail_rt gleam@dynamic@decode:success/1(v3)
+== fn stdout_codec/0 origin=codec_template(RecordTrio, Stdout, record#2) ==
+  sig: () -> Codec(greet_by_hand.Stdout)
+  v0 = make_closure stdout_to_json captures=[]
+  v1 = call_local stdout_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn stdout_to_json/1 origin=codec_template(RecordTrio, Stdout, record#2) ==
+  sig: (greet_by_hand.Stdout) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"stdout": v1|>awlc.string_to_json}
+  return v2
+== fn stdout_decoder/0 origin=codec_template(RecordTrio, Stdout, record#2) ==
+  sig: () -> Decoder(greet_by_hand.Stdout)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure stdout_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+== fn stdout_decoder$0/1 origin=lifted(stdout_decoder, #0) ==
+  sig: (String) -> Decoder(greet_by_hand.Stdout)
+  v1 = record(stdout, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn greet_input_codec/0 origin=codec_template(RecordTrio, GreetInput, record#3) ==
+  sig: () -> Codec(greet_by_hand.GreetInput)
+  v0 = make_closure greet_input_to_json captures=[]
+  v1 = call_local greet_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn greet_input_to_json/1 origin=codec_template(RecordTrio, GreetInput, record#3) ==
+  sig: (greet_by_hand.GreetInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"name": v1|>awlc.string_to_json}
+  return v2
+== fn greet_input_decoder/0 origin=codec_template(RecordTrio, GreetInput, record#3) ==
+  sig: () -> Decoder(greet_by_hand.GreetInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure greet_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#5, v0, v1)
+== fn greet_input_decoder$0/1 origin=lifted(greet_input_decoder, #0) ==
+  sig: (String) -> Decoder(greet_by_hand.GreetInput)
+  v1 = record(greet_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn polish_input_codec/0 origin=codec_template(RecordTrio, PolishInput, record#4) ==
+  sig: () -> Codec(greet_by_hand.PolishInput)
+  v0 = make_closure polish_input_to_json captures=[]
+  v1 = call_local polish_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn polish_input_to_json/1 origin=codec_template(RecordTrio, PolishInput, record#4) ==
+  sig: (greet_by_hand.PolishInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"text": v1|>awlc.string_to_json}
+  return v2
+== fn polish_input_decoder/0 origin=codec_template(RecordTrio, PolishInput, record#4) ==
+  sig: () -> Decoder(greet_by_hand.PolishInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure polish_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
+== fn polish_input_decoder$0/1 origin=lifted(polish_input_decoder, #0) ==
+  sig: (String) -> Decoder(greet_by_hand.PolishInput)
+  v1 = record(polish_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn shout_input_codec/0 origin=codec_template(RecordTrio, ShoutInput, record#5) ==
+  sig: () -> Codec(greet_by_hand.ShoutInput)
+  v0 = make_closure shout_input_to_json captures=[]
+  v1 = call_local shout_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn shout_input_to_json/1 origin=codec_template(RecordTrio, ShoutInput, record#5) ==
+  sig: (greet_by_hand.ShoutInput) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"text": v1|>awlc.string_to_json, "mark": v2|>awlc.string_to_json}
+  return v3
+== fn shout_input_decoder/0 origin=codec_template(RecordTrio, ShoutInput, record#5) ==
+  sig: () -> Decoder(greet_by_hand.ShoutInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure shout_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#7, v0, v1)
+== fn shout_input_decoder$0/1 origin=lifted(shout_input_decoder, #0) ==
+  sig: (String) -> Decoder(greet_by_hand.ShoutInput)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure shout_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#8, v1, v2)
+== fn shout_input_decoder$1/2 origin=lifted(shout_input_decoder, #1) ==
+  sig: (String, String) -> Decoder(greet_by_hand.ShoutInput)
+  v2 = record(shout_input, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn greet_by_hand_input_codec/0 origin=codec_template(RecordTrio, GreetByHandInput, record#6) ==
+  sig: () -> Codec(greet_by_hand.GreetByHandInput)
+  v0 = make_closure greet_by_hand_input_to_json captures=[]
+  v1 = call_local greet_by_hand_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn greet_by_hand_input_to_json/1 origin=codec_template(RecordTrio, GreetByHandInput, record#6) ==
+  sig: (greet_by_hand.GreetByHandInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"name": v1|>awlc.string_to_json}
+  return v2
+== fn greet_by_hand_input_decoder/0 origin=codec_template(RecordTrio, GreetByHandInput, record#6) ==
+  sig: () -> Decoder(greet_by_hand.GreetByHandInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure greet_by_hand_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#9, v0, v1)
+== fn greet_by_hand_input_decoder$0/1 origin=lifted(greet_by_hand_input_decoder, #0) ==
+  sig: (String) -> Decoder(greet_by_hand.GreetByHandInput)
+  v1 = record(greet_by_hand_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn greet_by_hand_outcome_codec/0 origin=codec_template(UnionTrio, GreetByHandOutcome, union#7) ==
+  sig: () -> Codec(greet_by_hand.GreetByHandOutcome)
+  v0 = make_closure greet_by_hand_outcome_to_json captures=[]
+  v1 = call_local greet_by_hand_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn greet_by_hand_outcome_to_json/1 origin=codec_template(UnionTrio, GreetByHandOutcome, union#7) ==
+  sig: (greet_by_hand.GreetByHandOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#10|>awlc.string_to_json, "payload": v1|>greeting_to_json}
+  return v2
+== fn greet_by_hand_outcome_decoder/0 origin=codec_template(UnionTrio, GreetByHandOutcome, union#7) ==
+  sig: () -> Decoder(greet_by_hand.GreetByHandOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure greet_by_hand_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#11, v0, v1)
+== fn greet_by_hand_outcome_decoder$outcome/1 origin=lifted(greet_by_hand_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(greet_by_hand.GreetByHandOutcome)
+  if cmp Eq v0 lit#14:
+    v3 = call_local greeting_decoder()
+    v4 = make_closure greet_by_hand_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#15, v3, v4)
+  else:
+    v1 = record(greeting, [lit#12])
+    v2 = record(greeted_outcome, [v1])
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#13)
+== fn greet_by_hand_outcome_decoder$arm0/1 origin=lifted(greet_by_hand_outcome_decoder, #1) ==
+  sig: (greet_by_hand.Greeting) -> Decoder(greet_by_hand.GreetByHandOutcome)
+  v1 = record(greeted_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn greet_activity/1 origin=activity_wrapper(greet, raw=false) ==
+  sig: (String) -> Activity(greet_by_hand.GreetInput, greet_by_hand.RunOutcome)
+  T-ACT action=greet input_codec=greet_input_codec return=run_outcome_codec
+== fn polish_activity/1 origin=activity_wrapper(polish, raw=false) ==
+  sig: (String) -> Activity(greet_by_hand.PolishInput, greet_by_hand.Greeting)
+  T-ACT action=polish input_codec=polish_input_codec return=greeting_codec
+== fn shout_activity/2 origin=activity_wrapper(shout, raw=false) ==
+  sig: (String, String) -> Activity(greet_by_hand.ShoutInput, greet_by_hand.Stdout)
+  T-ACT action=shout input_codec=shout_input_codec return=stdout_codec
+== fn step_greet/1 origin=region(greet) ==
+  sig: (String) -> Result(greet_by_hand.GreetByHandOutcome, AwlError)
+  v1 = call_local greet_activity(v0) live_after=[v0]
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#16) live_after=[v0]
+  v3 = call_rt aion@workflow:run/1(v2) live_after=[v0]
+  v4 = call_rt aion@awl@error:map_activity_error/1(v3) live_after=[v0]
+  v5 = try_bind v4 live_after=[v0]
+  tail_local step_polish(v5, v0)
+== fn step_polish/2 origin=chain_step(greet.polish) ==
+  sig: (greet_by_hand.RunOutcome, String) -> Result(greet_by_hand.GreetByHandOutcome, AwlError)
+  v2 = field(v0, 2)
+  v3 = call_local polish_activity(v2) live_after=[v1]
+  v4 = call_rt aion@activity:task_queue/2(v3, lit#17) live_after=[v1]
+  v5 = call_rt aion@workflow:run/1(v4) live_after=[v1]
+  v6 = call_rt aion@awl@error:map_activity_error/1(v5) live_after=[v1]
+  v7 = try_bind v6 live_after=[v1]
+  tail_local step_shout(v1, v7)
+== fn step_shout/2 origin=chain_step(greet.shout) ==
+  sig: (String, greet_by_hand.Greeting) -> Result(greet_by_hand.GreetByHandOutcome, AwlError)
+  v2 = field(v1, 1)
+  v3 = call_local shout_activity(v2, v0)
+  v4 = call_rt aion@duration:milliseconds/1(30000) live_after=[v3]
+  v5 = call_rt aion@activity:timeout/2(v3, v4)
+  v6 = call_rt aion@activity:task_queue/2(v5, lit#18)
+  v7 = call_rt aion@activity:node/2(v6, lit#19)
+  v8 = call_rt aion@workflow:run/1(v7)
+  v9 = call_rt aion@awl@error:map_activity_error/1(v8)
+  v10 = try_bind v9
+  v11 = field(v10, 1)
+  v12 = record(greeting, [v11])
+  v13 = record(greeted_outcome, [v12])
+  v14 = record(ok, [v13])
+  return v14
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD

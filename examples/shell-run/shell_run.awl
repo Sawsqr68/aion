@@ -1,0 +1,16 @@
+//! The first AWL action that RUNS with no Rust worker: the `run` body below
+//! is executed by the server itself — the command is sealed into the
+//! package's identity at deploy, and the caller's `text` arrives as one
+//! whole argument (never through a shell, so nothing in it can execute).
+workflow shell_run
+  input text: String
+  outcome stamped: type RunOutcome, route success
+
+type RunOutcome { exit_code: Int, stdout: String, stderr: String }
+
+worker shell_box
+  action stamp(text: String) -> RunOutcome
+    run "echo $text"
+
+step stamp_it
+  text |> stamp |> route stamped

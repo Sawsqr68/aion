@@ -43,7 +43,10 @@ impl Token {
 ///
 /// This is the complete reserved inventory from the AWL-2 spec plus the
 /// flow-vocabulary rev-3 words (`subflow`, `distribute`, `sequence`,
-/// `collect`, `visits`). Words that
+/// `collect`, `visits`). The declarative action-body word `run` is
+/// deliberately ABSENT: it is recognised positionally, as a plain
+/// identifier inside an action's block, so that `step run`, `input run` and
+/// every other existing use of the word keeps working unchanged. Words that
 /// were keywords in AWL-0/1 but are gone from rev-2 (`about`, `do`, `as`,
 /// `each`, `repeat`, `finish`, `match`, `case`, `parallel`, `race`,
 /// `output`, `error`, `up`, `to`, `in`, `order`, `queue`, `fail`) lex as

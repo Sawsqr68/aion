@@ -200,6 +200,7 @@ mod tests {
             input_schema: json!({ "type": "object" }),
             output_schema: json!({ "type": "object" }),
             contract: PackageContract::default(),
+            action_bodies: Vec::new(),
             actions: vec![
                 ActionRequirement {
                     task_queue: "q".to_owned(),

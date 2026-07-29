@@ -3,11 +3,11 @@
 //! children. `parse ∘ print = id`; `print ∘ parse ∘ print = print`.
 
 use crate::ast::{
-    ActionDecl, ChildDecl, Comment, ConfigLine, DocLine, Document, FieldDecl, Lead, OutcomeDecl,
-    ParamDecl, RouteDirection, TypeBody, TypeDecl, WorkerDecl,
+    ActionBody, ActionDecl, ChildDecl, Comment, ConfigLine, DocLine, Document, FieldDecl, Lead,
+    OutcomeDecl, ParamDecl, RouteDirection, TypeBody, TypeDecl, WorkerDecl,
 };
 
-use super::exprs::{duration_text, retry_text, type_ref_text, width};
+use super::exprs::{duration_text, retry_text, string_literal, type_ref_text, width};
 use super::steps::print_step;
 
 /// Maximum canonical line width in characters. Group-alignment padding is
@@ -385,6 +385,30 @@ fn print_action(printer: &mut Printer, action: &ActionDecl) {
     );
     if let Some(config) = &action.config {
         print_config_line(printer, 2, config);
+    }
+    if let Some(body) = &action.body {
+        print_action_body(printer, 2, body);
+    }
+}
+
+/// Print an action's declarative body. The canonical order inside an
+/// action's block is the config line first, then the body: the config
+/// describes how the action is delivered, the body what it does.
+fn print_action_body(printer: &mut Printer, indent: usize, body: &ActionBody) {
+    match body {
+        ActionBody::Run {
+            lead,
+            trailing,
+            command,
+            ..
+        } => {
+            printer.leads(indent, lead);
+            printer.line(
+                indent,
+                &format!("run {}", string_literal(command)),
+                trailing.as_ref(),
+            );
+        }
     }
 }
 

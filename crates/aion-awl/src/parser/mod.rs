@@ -1,6 +1,7 @@
 //! The rev-2 parser: token stream in, canonical workflow model out, with
 //! compiler-quality diagnostics on source-correct spans.
 
+mod action_body;
 mod args;
 mod document;
 mod error;
