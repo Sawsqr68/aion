@@ -324,6 +324,38 @@ mod tests {
         assert!(contract_diffs("abc", &contract, &advertised).is_empty());
     }
 
+    /// `$comment` is non-validating by specification — draft 2020-12 reserves it
+    /// for schema authors and forbids any effect on validation. But the subset
+    /// check requires an unrecognised key on the CONTRACT side to appear
+    /// identically on the worker's side, so leaving `$comment` in place made a
+    /// commented schema satisfiable only by a worker that reproduced the comment
+    /// byte for byte. A remark to a human reader must never decide admission.
+    #[test]
+    fn a_comment_in_a_declared_schema_does_not_have_to_be_reproduced() {
+        let contract = contract(
+            json!({
+                "type":"object",
+                "$comment":"amount is in the smallest currency unit",
+                "properties":{"amount":{"type":"integer","$comment":"cents"}},
+                "required":["amount"]
+            }),
+            json!({"type":"boolean","$comment":"true when the charge settled"}),
+        );
+        let advertised = advertised(
+            json!({
+                "type":"object",
+                "properties":{"amount":{"type":"integer"}},
+                "required":["amount"]
+            }),
+            json!({"type":"boolean"}),
+        );
+
+        assert!(
+            contract_diffs("abc", &contract, &advertised).is_empty(),
+            "a non-validating comment must not decide contract admission"
+        );
+    }
+
     /// An action whose body the DECLARATION carries is executed by the server,
     /// not by a registering worker, so no worker can advertise it and none
     /// should be required to. Requiring it makes a queue that mixes a declared

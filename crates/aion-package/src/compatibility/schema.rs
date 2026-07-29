@@ -58,12 +58,28 @@ fn normalize_node(value: &Value, root: &Value, resolving: &mut BTreeSet<String>)
     }
 }
 
+/// Keys that carry no validation meaning and so must not influence a subset
+/// decision.
+///
+/// `$comment` is here because draft 2020-12 reserves it for schema authors and
+/// forbids it from affecting validation. That matters more than it looks:
+/// [`schema_is_subset`] requires an unrecognised key on the `sup` side to appear
+/// identically on `sub`, so a retained `$comment` on a declared schema would be
+/// satisfiable only by a worker that reproduced the comment byte for byte. A
+/// remark addressed to a human reader must never decide admission.
+///
+/// `format` is deliberately NOT here. It is annotation-only by default in
+/// 2020-12, but implementations do assert it, and dropping it would weaken the
+/// check rather than correct it. `$dynamicAnchor` is likewise absent: this
+/// normalizer does not resolve `$dynamicRef`, and discarding one half of that
+/// pair would be worse than keeping both.
 fn is_annotation(key: &str) -> bool {
     matches!(
         key,
         "$schema"
             | "$id"
             | "$anchor"
+            | "$comment"
             | "title"
             | "description"
             | "default"
