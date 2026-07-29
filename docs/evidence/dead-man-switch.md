@@ -365,6 +365,33 @@ SIGTERM mid-round costs at most one cadence at runtime drop.
 
 ---
 
+## Battery — at the committed tree (`e7d50822`)
+
+All logs + `.exit` files under `gate-logs/dead-man-switch/`.
+
+| gate | verdict (the log's own result line) | exit |
+| --- | --- | --- |
+| `cargo fmt --all --check` | clean | `0` |
+| `cargo clippy --workspace --all-targets -- -D warnings` | clean | `0` |
+| `cargo test --workspace --no-fail-fast` | **3070 passed, 0 failed, 6 ignored** across 224 suites | `0` |
+| `lsub5b_osproc_failover_e2e` (alone, `--ignored`) | `test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 65.82s` | `0` |
+| `lsub5b_osproc_kill9_failover_e2e` (alone, `--ignored`) | `osproc_kill9_liminal_failover_completes_exactly_once ... ok` — `test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 15.43s` | `0` |
+
+Both osproc gates ran ALONE, after the workspace battery released the machine,
+per their harness law — real 3-OS-process clusters, their own logs, their own
+`.exit` files.
+
+### The first battery run found five old-contract pins
+
+An earlier battery at `00754854` came back `3065 passed, 5 failed`. Every failure
+was a test still pinning `retryable:` for worker loss — the exact framing Hit D
+deletes — and in each case the test's own doc comment stated the intent that
+string never delivered ("retryable so the engine can re-dispatch"). All five now
+pin the transport-loss class through the shared constant; three were renamed,
+because a test called `..._fails_retryable_lost_worker` teaches the wrong
+contract to the next reader. Landed in `e7d50822`; the battery above is the
+re-run at that tree.
+
 ## Laws
 
 * No `#[allow]`, no `#[ignore]`, no `unwrap`/`expect`/`panic` outside `cfg(test)`.
