@@ -58,7 +58,16 @@ pub fn contract_diffs(
         .iter()
         .map(|activity| (activity.name.as_str(), activity))
         .collect::<BTreeMap<_, _>>();
-    let mut expected = contract.actions.iter().collect::<Vec<_>>();
+    // An action whose body the DECLARATION carries is executed by the server
+    // itself, so no registering worker serves it and none can advertise it.
+    // Demanding one would make a queue that mixes a declared body with a
+    // bodyless action unservable — the worker doing its whole job would be
+    // refused for omitting an action that was never its job.
+    let mut expected = contract
+        .actions
+        .iter()
+        .filter(|action| action.body.is_none())
+        .collect::<Vec<_>>();
     expected.sort_by(|left, right| left.name.cmp(&right.name));
     let mut diffs = Vec::new();
     for action in expected {
@@ -313,5 +322,52 @@ mod tests {
         );
 
         assert!(contract_diffs("abc", &contract, &advertised).is_empty());
+    }
+
+    /// An action whose body the DECLARATION carries is executed by the server,
+    /// not by a registering worker, so no worker can advertise it and none
+    /// should be required to. Requiring it makes a queue that mixes a declared
+    /// body with a bodyless action unservable: the worker serving the bodyless
+    /// action is refused for omitting an action that was never its job.
+    #[test]
+    fn a_declared_body_is_not_required_of_a_worker() {
+        let contract = WorkerContract {
+            task_queue: "python_box".to_owned(),
+            actions: vec![
+                ActionContract {
+                    name: "inspect".to_owned(),
+                    input_schema: json!({"type":"object"}),
+                    output_schema: json!({"type":"boolean"}),
+                    node: None,
+                    timeout: None,
+                    retry: None,
+                    advisory: false,
+                    body: None,
+                },
+                ActionContract {
+                    name: "snapshot".to_owned(),
+                    input_schema: json!({"type":"object"}),
+                    output_schema: json!({"type":"boolean"}),
+                    node: None,
+                    timeout: None,
+                    retry: None,
+                    advisory: false,
+                    body: Some(crate::ActionBodyContract::Run {
+                        command: "git rev-parse HEAD".to_owned(),
+                    }),
+                },
+            ],
+        };
+        // The worker serves only the bodyless action — the whole of its job.
+        let advertised = vec![ActivityDescriptor {
+            name: "inspect".to_owned(),
+            input_schema: json!({"type":"object"}),
+            output_schema: json!({"type":"boolean"}),
+        }];
+
+        assert!(
+            contract_diffs("abc", &contract, &advertised).is_empty(),
+            "a server-executed declared body must not be demanded of a worker"
+        );
     }
 }
