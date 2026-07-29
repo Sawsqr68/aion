@@ -134,6 +134,24 @@ pub enum ServerError {
         detail: String,
     },
 
+    /// The worker connection chosen for a dispatch refused admission because it
+    /// already holds its pending-push cap — the worker is ALIVE and WORKING,
+    /// its connection is simply full of held dispatches.
+    ///
+    /// DISTINCT from both [`Self::WorkerDispatch`] (which consumes a retry
+    /// attempt on backoff) and [`Self::WorkerConnectionLost`] (immediate
+    /// attempt-consuming failover): a busy worker is neither slow to reply nor
+    /// gone, so the outbox re-arms the row ATTEMPT-NEUTRALLY after a short
+    /// backoff — capacity pressure must never spend the retry budget that
+    /// prices genuine delivery failures, and must never dead-letter work.
+    #[error("worker connection busy during dispatch on {channel}: {detail}")]
+    WorkerBusy {
+        /// Row-derived dispatch channel for operator diagnostics.
+        channel: String,
+        /// Redacted, operator-facing description of the admission refusal.
+        detail: String,
+    },
+
     /// A worker result did not prove ownership of the current execution
     /// generation and was refused before reaching workflow state.
     #[error(
@@ -215,6 +233,9 @@ impl ServerError {
             Self::WorkerDispatch { .. } => WireError::backend("worker dispatch failed"),
             Self::WorkerConnectionLost { .. } => {
                 WireError::backend("worker connection lost during dispatch")
+            }
+            Self::WorkerBusy { .. } => {
+                WireError::backend("worker connection busy during dispatch")
             }
             Self::Namespace { message } => WireError::namespace_denied(message.clone()),
             Self::EngineCall { source } => wire_from_engine(source),
@@ -322,6 +343,27 @@ impl ServerError {
         matches!(self, Self::WorkerConnectionLost { .. })
     }
 
+    /// Construct a worker-busy error for a dispatch refused at push admission
+    /// because the worker's connection already holds its pending-push cap.
+    #[must_use]
+    pub fn worker_busy(channel: impl Into<String>, detail: impl Into<String>) -> Self {
+        Self::WorkerBusy {
+            channel: channel.into(),
+            detail: detail.into(),
+        }
+    }
+
+    /// Return true when this is a busy-worker admission refusal.
+    ///
+    /// The outbox dispatcher keys its ATTEMPT-NEUTRAL re-arm on this: a full
+    /// connection means the worker is alive and holding earlier dispatches, so
+    /// the row waits for capacity without spending the retry budget that prices
+    /// genuine delivery failures.
+    #[must_use]
+    pub const fn is_worker_busy(&self) -> bool {
+        matches!(self, Self::WorkerBusy { .. })
+    }
+
     /// Construct a lock-poison error at the lock boundary.
     #[must_use]
     pub const fn lock_poisoned(resource: &'static str) -> Self {
@@ -389,6 +431,11 @@ impl ServerError {
             },
             Self::WorkerConnectionLost { detail, .. } => ErrorTraceFields {
                 error_type: Cow::Borrowed("WorkerConnectionLost"),
+                store_error_type: None,
+                reason: detail,
+            },
+            Self::WorkerBusy { detail, .. } => ErrorTraceFields {
+                error_type: Cow::Borrowed("WorkerBusy"),
                 store_error_type: None,
                 reason: detail,
             },

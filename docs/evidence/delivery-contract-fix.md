@@ -156,14 +156,53 @@ Every claim below was verified by reading the named source this session.
   correct recovery).
 - NO new config. NO wire change. NO worker change.
 
-### 2.3 `outbox_reconciler.rs` — in-flight exemption (~40L)
+### 2.3 `outbox_reconciler.rs` — in-flight exemption (~40L + store change)
 
-- Builder `.with_in_flight(set)`. The sweep currently bulk-calls
-  `rearm_stale_claimed_outbox_rows`; change the flow to
-  `list_stale_claimed_outbox_rows` → drop rows in the in-flight set → settle/
-  re-arm the remainder individually (`retry_outbox_row`), preserving the #253
-  liveness gate. Without this the reconciler re-creates the duplicate-push bug
-  on a longer fuse.
+- ⚠️ REFINEMENT (race found during implementation): re-arming individually via
+  `retry_outbox_row` after a `list_stale` is UNSAFE — a row that completes
+  (`mark_done`) between the list and the re-arm would be flipped Done→Pending
+  and re-executed. The re-arm must stay a STATUS-GUARDED bulk store operation.
+- Therefore: change the store trait method to
+  `rearm_stale_claimed_outbox_rows(older_than, now, batch, excluded:
+  &HashSet<String>)` (replace, don't add alongside — no-compat rule; mirrors
+  the existing `claim_outbox_rows_excluding` precedent). Memory backend:
+  filter; libsql: `AND dispatch_key NOT IN`; haematite: filter in its rearm
+  path. Conformance test: an excluded stale claimed row is not re-armed, a
+  non-excluded one is.
+- Reconciler builder gains `.with_delivery_gate(gate)`; sweep passes
+  `gate.snapshot_keys()` (or empty set when absent) as the exclusion. #253
+  liveness gate unchanged.
+
+### 2.x Implementation state (updated as edits land)
+
+- ✅ `error.rs`: `WorkerBusy` variant + constructor + `is_worker_busy()` +
+  wire arm + trace-fields arm — DONE in worktree.
+- `DeliveryGate` (new type, lives in `outbox_dispatcher.rs`): clonable Arc
+  handle — `begin(key) -> Option<DeliveryGuard>` (None = already in flight or
+  poisoned; guard removes on Drop), `holds(key) -> bool` (poison → false =
+  abandon, logged), `drain()`/`is_draining()` (AtomicBool),
+  `snapshot_keys() -> HashSet<String>`. Dispatcher CREATES it in `new()` and
+  exposes `delivery_gate()` so state.rs/tests hand the SAME gate to
+  `RegistryLiminalDispatch` (new 3rd ctor arg — update lsub1/lsub3/lsub5/pins
+  construction sites) and the reconciler.
+- Dispatcher `run(self)`: wrap self in `Arc::new`, sweep spawns
+  `tokio::spawn` per claimed row holding the gate guard; `gate.drain()` on
+  run-exit. `sweep_once` becomes `async fn sweep_once(this: &Arc<Self>)`.
+- `handle_dispatch_error`: busy arm BEFORE the budget check → attempt-neutral
+  `retry_outbox_row(key, row.attempt, now + backoff_base)` + WARN. Dead-letter
+  arm: after `fail_outbox_row`, `failure_callback.deliver_failure(...,
+  "infrastructure: ...")` via new optional builder
+  `.with_delivery_callback(cb)`.
+- Transport: `is_connection_cap_error` helper matching liminal
+  `ServerError::ConnectionCapReached{..}` BY TYPE; `push_dispatch` +
+  `push_payload` map cap→`ServerError::worker_busy`, everything else stays
+  connection-lost. `dispatch_held(request, keep_waiting)` = `push_dispatch` +
+  `receive_bridge_reply`. `RegistryLiminalDispatch::dispatch`: spawn_blocking
+  runs `dispatch_held` with `keep_waiting = !gate.is_draining() &&
+  gate.holds(key) && registry.worker_by_id(id).map(|w|w.is_some()).unwrap_or(false)`
+  (poison → abandon); `Ok(None)` → revoke token + WARN abandonment + return
+  WorkerDispatch error. Fence-rejection WARN at
+  `LiminalCompletionSource::deliver` (`accept` error → WARN before `?`).
 
 ### 2.4 Dead-letter honesty + redrive (riders 1–2, pin (c))
 
