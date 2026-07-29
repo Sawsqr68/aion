@@ -24,8 +24,15 @@
 //!   [`aion_core::ActivityEvent`]s, [`AgentSession::intervene`] maps a neutral command onto an
 //!   `intervene/*` request (capability-gated), and [`AgentSession::wait_result`] returns the
 //!   id-matched `run/execute` Response as the terminal [`aion_core::Payload`].
+//! - [`registration_capabilities`] publishes the neutral [`InterventionCapabilities`] this adapter
+//!   can honour, for a worker that must advertise them when it REGISTERS — before any `norn`
+//!   process exists to be asked. It is the adapter's translation ceiling, not a guess about a
+//!   binary; the per-session handshake reads what the spawned binary actually advertises, and the
+//!   function's own documentation is explicit about how the two can disagree.
 //! - [`protocol`] names Norn's wire contract; [`translate`] is the pure, independently tested
 //!   translation between that contract and the neutral types.
+//!
+//! [`InterventionCapabilities`]: aion_core::InterventionCapabilities
 //!
 //! [`AgentHarness`]: aion_integrations::AgentHarness
 //! [`AgentSession`]: aion_integrations::AgentSession
@@ -44,5 +51,5 @@ pub mod session;
 /// The pure §3.4 translation between Norn's wire shapes and the neutral `aion-core` types.
 pub mod translate;
 
-pub use harness::NornHarness;
+pub use harness::{NornHarness, registration_capabilities};
 pub use session::NornSession;

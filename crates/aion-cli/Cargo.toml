@@ -66,8 +66,23 @@ clap = { workspace = true, features = ["derive"] }
 jsonschema = { version = "0.46.6", default-features = false }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+# `aion worker agent` emits its serve-loop narration through tracing, on the same
+# subscriber (and the same `AION_LOG`/`RUST_LOG` policy) the server installs — the
+# worker SDK's redial driver logs a refused dial through tracing too, and without a
+# subscriber installed that signal would be dropped silently.
+tracing = { workspace = true }
 toml_edit = { workspace = true, features = ["serde"] }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "net"] }
+# `signal` and `sync` are for `aion worker agent`: the served worker drains on the
+# same SIGTERM/SIGINT the server does, and the blocking liminal serve loop reports
+# its outcome back to the awaiting task over a oneshot.
+tokio = { workspace = true, features = [
+    "macros",
+    "rt-multi-thread",
+    "time",
+    "net",
+    "signal",
+    "sync",
+] }
 uuid = { workspace = true }
 
 [dev-dependencies]
@@ -108,7 +123,12 @@ haematite-backend = ["aion-server/haematite-backend"]
 # `aion` binary is byte-identical and never links liminal-sdk/liminal-server;
 # without it, selecting `outbox.transport = liminal` at runtime is a boot-time
 # configuration error rather than a silent fall-through to gRPC.
-liminal-transport = ["aion-server/liminal-transport"]
+#
+# It ALSO compiles the worker SDK's liminal client, which is what `aion worker
+# agent` serves over: the agent-harness seam (`AgentHarnessConfig` threaded through
+# `serve_with_redial`) exists only on that transport, so without it the binary can
+# derive an agent worker's action surface but cannot serve it, and says so.
+liminal-transport = ["aion-server/liminal-transport", "aion-worker/liminal-transport"]
 # Composes the first-party Norn adapter (`aion-integration-norn`) into the `aion`
 # binary so the shipped default product drives Norn agents OUT-OF-BOX — the same
 # "our complete experience is the default" thread as `haematite-backend` /

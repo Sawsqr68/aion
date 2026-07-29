@@ -21,6 +21,8 @@ use serde::Deserialize;
 use serde_json::Value;
 use tokio::process::Command;
 
+use crate::worker_surface::{self, ServingSource};
+
 #[derive(Debug, Args)]
 pub struct ShellArgs {
     /// Strict TOML shell-worker manifest generated from checked AWL.
@@ -77,114 +79,39 @@ pub async fn run(args: &ShellArgs, endpoint: &str) -> Result<()> {
     Ok(())
 }
 
+/// How a refusal names a shell worker's manifest as the thing that chose which of
+/// the queue's actions get served.
+const MANIFEST_SOURCE: ServingSource = ServingSource {
+    subject: "manifest",
+    serves: "wires",
+    omits: "does not wire",
+};
+
 /// Derives the typed action surface this worker must advertise from the `.awl`
 /// document, keyed by action name.
 ///
-/// The schemas come from the document through the SAME `aion_awl::compile` seam
-/// the deploy path uses, so the worker's advertisement and the server's stored
-/// contract are two independent derivations of one source. That is what lets
-/// contract admission catch a worker still running an older document — a check
-/// that reads the contract back off the server instead would only compare the
-/// server against itself.
-///
-/// Serving is all-or-nothing across the queue. A partial advertisement gets the
-/// worker admitted on some actions and then dispatched one it never declared, so
-/// a mismatch either way is refused here, by name, before the worker dials.
+/// The manifest names the queue and the actions it wires; the document owns the
+/// schemas and the all-or-nothing rule. Both derivation and reconciliation live in
+/// [`crate::worker_surface`], shared with the agent worker — see that module for why
+/// the surface must come from the document rather than from the server, and why a
+/// queue is served whole or not at all.
 fn declared_descriptors(
     document: &Path,
     manifest: &ShellManifest,
 ) -> Result<BTreeMap<String, ActivityDescriptor>> {
-    let source = std::fs::read_to_string(document)
-        .with_context(|| format!("failed to read AWL document {}", document.display()))?;
-    let compiled =
-        aion_awl::compile(&source, crate::awl::document_root(document)).map_err(|error| {
-            anyhow::anyhow!(
-                "{} does not compile, so no action surface can be derived from it:\n{}",
-                document.display(),
-                crate::awl::compile_diagnostics(document, &error).join("\n")
-            )
-        })?;
-
-    let queue = manifest.worker.task_queue.as_str();
-    let Some(worker) = compiled
-        .contract
-        .workers
+    let contract = worker_surface::compile_contract(document)?;
+    let worker = worker_surface::select_worker(
+        document,
+        &contract,
+        Some(manifest.worker.task_queue.as_str()),
+        "manifest",
+    )?;
+    let wired = manifest
+        .action
         .iter()
-        .find(|candidate| candidate.task_queue == queue)
-    else {
-        let declared = compiled
-            .contract
-            .workers
-            .iter()
-            .map(|candidate| candidate.task_queue.as_str())
-            .collect::<Vec<_>>();
-        bail!(
-            "manifest serves queue `{queue}` but {} declares no such worker (it declares: {})",
-            document.display(),
-            if declared.is_empty() {
-                "none".to_owned()
-            } else {
-                declared.join(", ")
-            }
-        );
-    };
-
-    // An action whose body the document carries is executed by the server, so it
-    // is not this worker's to serve or to advertise.
-    let mut declared = worker
-        .actions
-        .iter()
-        .filter(|action| action.body.is_none())
-        .map(|action| {
-            (
-                action.name.clone(),
-                ActivityDescriptor {
-                    name: action.name.clone(),
-                    input_schema: action.input_schema.clone(),
-                    output_schema: action.output_schema.clone(),
-                },
-            )
-        })
-        .collect::<BTreeMap<_, _>>();
-
-    let mut descriptors = BTreeMap::new();
-    for action in &manifest.action {
-        let Some(descriptor) = declared.remove(&action.name) else {
-            let carries_body = worker
-                .actions
-                .iter()
-                .any(|declared| declared.name == action.name && declared.body.is_some());
-            if carries_body {
-                bail!(
-                    "manifest wires action `{}`, but `{}` declares a body for it: \
-                     the server runs a declared body itself and no worker serves it",
-                    action.name,
-                    document.display()
-                );
-            }
-            bail!(
-                "manifest wires action `{}`, which queue `{queue}` in {} does not declare",
-                action.name,
-                document.display()
-            );
-        };
-        descriptors.insert(action.name.clone(), descriptor);
-    }
-    if !declared.is_empty() {
-        let unserved = declared.keys().cloned().collect::<Vec<_>>().join(", ");
-        bail!(
-            "queue `{queue}` in {} declares {} that the manifest does not wire; \
-             a worker must serve its whole queue or none of it, because a partial \
-             advertisement is admitted and then dispatched an action it never declared",
-            document.display(),
-            if unserved.contains(", ") {
-                format!("actions {unserved}")
-            } else {
-                format!("action `{unserved}`")
-            }
-        );
-    }
-    Ok(descriptors)
+        .map(|action| action.name.clone())
+        .collect::<BTreeSet<_>>();
+    worker_surface::reconcile(document, worker, &wired, MANIFEST_SOURCE)
 }
 
 fn build_worker(

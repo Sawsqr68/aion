@@ -35,6 +35,32 @@ pub fn compiled_harness_name() -> Option<&'static str> {
     COMPILED_HARNESS
 }
 
+/// The neutral intervention primitives the compiled-in harness advertises when a
+/// worker REGISTERS — an empty set when no harness is compiled in.
+///
+/// A worker must declare its capabilities at registration, because the server routes
+/// an operator command only for a primitive the worker advertised, and registration
+/// happens long before any agent session exists to be asked. The concrete adapter
+/// PUBLISHES the set it can honour (`aion_integration_norn::registration_capabilities`),
+/// which is why nothing here guesses: the composition root injects which adapter is
+/// compiled in, and the adapter says what it can do. Read that function's own
+/// documentation for how a registration-time set and a per-session handshake set can
+/// disagree, and why an honest advertisement is still the adapter's ceiling.
+///
+/// The empty set is a first-class advertisement, not a degenerate one: a build with
+/// no harness supports no interventions, and the ops console offers none.
+#[must_use]
+pub fn compiled_harness_capabilities() -> aion_core::InterventionCapabilities {
+    #[cfg(feature = "norn")]
+    {
+        aion_integration_norn::registration_capabilities()
+    }
+    #[cfg(not(feature = "norn"))]
+    {
+        aion_core::InterventionCapabilities::none()
+    }
+}
+
 /// Announces the composed agent harness at server start.
 ///
 /// Constructs the default harness when one is compiled in (proving the
@@ -66,11 +92,33 @@ pub fn announce_composed_harness() {
 
 #[cfg(feature = "norn")]
 pub use with_norn::default_agent_harness;
+#[cfg(all(feature = "norn", feature = "liminal-transport"))]
+pub use with_norn::default_dyn_agent_harness;
 
 #[cfg(feature = "norn")]
 mod with_norn {
     use aion_integration_norn::NornHarness;
     use aion_integrations::AgentHarness;
+    #[cfg(feature = "liminal-transport")]
+    use std::sync::Arc;
+
+    #[cfg(feature = "liminal-transport")]
+    use aion_integrations::DynAgentHarness;
+
+    /// The default agent harness ERASED behind a trait object, for the worker serve
+    /// path that must HOLD it (`aion_worker::AgentHarnessConfig` takes an
+    /// `Arc<dyn DynAgentHarness>`, the typed trait not being object-safe).
+    ///
+    /// The erasure happens HERE, at the composition root, because it is the only
+    /// place allowed to name the concrete adapter; the worker drives whatever comes
+    /// back through the neutral seam. Gated on the liminal transport as well as the
+    /// harness, because that erased form exists to be threaded through
+    /// `serve_with_redial` and nothing else needs it.
+    #[cfg(feature = "liminal-transport")]
+    #[must_use]
+    pub fn default_dyn_agent_harness() -> Arc<dyn DynAgentHarness> {
+        Arc::new(NornHarness::new())
+    }
 
     /// The default agent harness the worker drives when the `norn` feature is on:
     /// a [`NornHarness`] invoking `norn` from `PATH` in its `--protocol jsonrpc`

@@ -16,6 +16,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 
+use aion_core::{InterventionCapabilities, InterventionPrimitive};
 use aion_integrations::contract::AgentHarness;
 use aion_integrations::jsonrpc::{IncomingMessage, JsonRpcConnection, JsonRpcId, JsonRpcRequest};
 use aion_integrations::{AgentRunSpec, HarnessError};
@@ -29,6 +30,56 @@ use crate::translate::{self, EventIdentity};
 
 /// The default binary name used when no explicit path is configured: `norn` on `PATH`.
 const DEFAULT_NORN_BINARY: &str = "norn";
+
+/// The neutral intervention primitives this adapter can honour, published for a
+/// worker's REGISTRATION-time advertisement.
+///
+/// # Why the adapter publishes this, and why it is not a guess
+///
+/// A worker must declare its [`InterventionCapabilities`] when it REGISTERS —
+/// the server routes an operator command only for a primitive the worker
+/// advertised — and registration happens before any `norn` process exists, so
+/// the handshake cannot supply it. Without a published set every composition
+/// root hardcodes its own idea of what Norn supports, and each copy is a place
+/// the truth can rot.
+///
+/// This set is a fact about the ADAPTER, not a prediction about a binary:
+/// [`translate::intervention_to_request`] can build a Norn request for exactly
+/// [`InterventionPrimitive::InjectMessage`] and [`InterventionPrimitive::Cancel`]
+/// (`intervene/injectMessage` and `intervene/cancel`), and answers every other
+/// primitive with [`HarnessError::capability_not_supported`]. So this is the
+/// ceiling on what any command routed here could possibly achieve.
+///
+/// # The registration set and the session set can disagree
+///
+/// [`NornSession::capabilities`] carries the set the SPAWNED binary advertised in
+/// its `initialize` result, and the session gates each command on that. The two
+/// sets are read from different places and can differ in both directions:
+///
+/// * A binary advertising FEWER primitives (an older build, or one with
+///   interventions disabled) makes the session gate a command this registration
+///   promised: the operator is offered a control and the attempt refuses it.
+/// * A binary advertising MORE (say `pause_resume`) passes the session's gate
+///   and is then refused by the translation, because this adapter has no request
+///   to send for it.
+///
+/// Neither case is silent — both surface as an attempt-scoped
+/// [`HarnessError::CapabilityNotSupported`] naming the primitive — and neither can
+/// be resolved at registration time, because the binary that will answer is not
+/// running yet. Advertising the adapter's ceiling is therefore the honest choice:
+/// it never hides a control that would work, and a control that will not work
+/// says so, by name, on the attempt that asked for it.
+///
+/// [`NornSession::capabilities`]: aion_integrations::AgentSession::capabilities
+/// [`HarnessError::capability_not_supported`]: aion_integrations::HarnessError::capability_not_supported
+/// [`HarnessError::CapabilityNotSupported`]: aion_integrations::HarnessError::CapabilityNotSupported
+#[must_use]
+pub fn registration_capabilities() -> InterventionCapabilities {
+    InterventionCapabilities::from_primitives([
+        InterventionPrimitive::InjectMessage,
+        InterventionPrimitive::Cancel,
+    ])
+}
 
 #[derive(Clone, Debug)]
 enum NornArgument {
@@ -336,7 +387,9 @@ mod tests {
 
     use aion_core::{ActivityId, ContentType, Payload, WorkflowId};
 
-    use super::{AgentRunSpec, NornHarness, expand_arg, prompt_from_spec};
+    use super::{
+        AgentRunSpec, NornHarness, expand_arg, prompt_from_spec, registration_capabilities,
+    };
 
     type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
@@ -363,6 +416,49 @@ mod tests {
             .map(|arg| arg.to_str().map(str::to_owned).ok_or("argv is not UTF-8"))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(decoded)
+    }
+
+    /// The PUBLISHED registration set must be exactly the set this adapter can
+    /// translate — no wider, no narrower. A wider set advertises a control the
+    /// translation would refuse; a narrower one hides a control that works.
+    ///
+    /// Driven over EVERY primitive the neutral enum has, so adding a variant to
+    /// [`translate::intervention_to_request`] without publishing it (or the
+    /// reverse) fails here rather than at an operator's desk.
+    #[test]
+    fn the_published_set_is_exactly_what_the_adapter_can_translate() {
+        use aion_core::{ApprovalDecision, InjectPriority, InterventionKind};
+
+        use crate::translate::intervention_to_request;
+
+        let every_primitive = [
+            InterventionKind::InjectMessage {
+                text: "steer".to_owned(),
+                priority: InjectPriority::Interrupt,
+            },
+            InterventionKind::Cancel {
+                reason: "stop".to_owned(),
+            },
+            InterventionKind::PauseResume { paused: true },
+            InterventionKind::UpdateBudget {
+                max_tokens: Some(1),
+                max_turns: None,
+            },
+            InterventionKind::RespondToApproval {
+                call_id: "call-1".to_owned(),
+                decision: ApprovalDecision::Approve,
+                note: None,
+            },
+        ];
+        let published = registration_capabilities();
+        for kind in &every_primitive {
+            let primitive = kind.primitive();
+            assert_eq!(
+                published.supports_primitive(primitive),
+                intervention_to_request(kind).is_ok(),
+                "the published registration set disagrees with the translation for {primitive:?}"
+            );
+        }
     }
 
     #[test]

@@ -35,7 +35,9 @@ mod package;
 mod payload;
 mod render;
 mod server;
+mod worker_agent;
 mod worker_shell;
+mod worker_surface;
 
 const DEFAULT_ENDPOINT: &str = "127.0.0.1:50051";
 const DEFAULT_NAMESPACE: &str = "default";
@@ -119,6 +121,33 @@ enum Command {
 enum WorkerCommand {
     /// Serve strict manifest-wired shell commands on an Aion task queue.
     Shell(worker_shell::ShellArgs),
+    /// Serve the agent harness compiled into this binary on the queue an `.awl`
+    /// document declares — an agent worker without writing a crate.
+    ///
+    /// The document is authoritative and is the only source of the advertised
+    /// schemas: an agent activity's output is decided by the agent, so there is
+    /// no Rust type to derive one from. The task queue is the `worker` block's
+    /// name — derived when the document declares exactly one block, selected with
+    /// `--task-queue` when it declares several — and every action on that queue
+    /// whose body the document does NOT carry is served. An action WITH a body is
+    /// run by the server from the deployed contract, so no worker serves it.
+    /// Serving is all-or-nothing: a partial advertisement is admitted on some
+    /// actions and then dispatched one it never declared, so a queue is served
+    /// whole or the verb refuses, by name.
+    ///
+    /// The worker dials LIMINAL candidate addresses (`--liminal-address`,
+    /// repeatable for redial candidates), not the global gRPC `--endpoint`: the
+    /// agent-harness seam exists only on the liminal worker transport. Every
+    /// connection setting comes from a flag or from the named environment
+    /// variable, the flag wins, and nothing is invented — a missing setting is
+    /// reported by name, with all of them listed at once.
+    ///
+    /// `--check` prints the exact action surface this worker would advertise, and
+    /// the harness that would drive it, then exits without connecting. Those
+    /// descriptors are the whole admission decision on a queue carrying a
+    /// deployed contract, so reading them beforehand turns a remote
+    /// contract-mismatch refusal into something checkable at the desk.
+    Agent(worker_agent::AgentArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -429,6 +458,9 @@ async fn main() -> ExitCode {
         Command::Worker { ref command } => {
             let result = match command {
                 WorkerCommand::Shell(args) => worker_shell::run(args, &cli.endpoint).await,
+                // The agent worker registers into the namespace the global flag
+                // names, and dials liminal candidates rather than `--endpoint`.
+                WorkerCommand::Agent(args) => worker_agent::run(args, &cli.namespace).await,
             };
             match result {
                 Ok(()) => ExitCode::SUCCESS,
@@ -1653,6 +1685,86 @@ mod tests {
         assert!(help.contains("--debounce-ms"));
         assert!(help.contains("no engine restart"));
         assert!(help.contains("in-flight"));
+        Ok(())
+    }
+
+    #[test]
+    fn worker_agent_parses_the_document_and_repeatable_liminal_addresses() -> anyhow::Result<()> {
+        let cli = Cli::try_parse_from([
+            "aion",
+            "worker",
+            "agent",
+            "flows/review.awl",
+            "--liminal-address",
+            "127.0.0.1:50061",
+            "--liminal-address",
+            "127.0.0.1:50062",
+            "--identity",
+            "reviewer-worker",
+            "--concurrency",
+            "4",
+            "--task-queue",
+            "reviewers",
+        ])?;
+        let Command::Worker {
+            command: super::WorkerCommand::Agent(args),
+        } = cli.command
+        else {
+            anyhow::bail!("expected worker agent command");
+        };
+        assert_eq!(args.awl, Path::new("flows/review.awl"));
+        // Repeating the flag builds an ordered candidate list, which is what lets a
+        // worker migrate to a survivor after its server dies.
+        assert_eq!(
+            args.liminal_addresses,
+            vec![
+                String::from("127.0.0.1:50061"),
+                String::from("127.0.0.1:50062")
+            ]
+        );
+        assert_eq!(args.identity.as_deref(), Some("reviewer-worker"));
+        assert_eq!(args.task_queue.as_deref(), Some("reviewers"));
+        assert!(!args.check);
+
+        // The document is mandatory: there is nothing to derive a surface from
+        // without it, and nothing else is defaulted in its place.
+        assert!(Cli::try_parse_from(["aion", "worker", "agent"]).is_err());
+
+        // Every connection setting is optional at PARSE time — the environment may
+        // supply it — and `--check` needs none of them.
+        let cli = Cli::try_parse_from(["aion", "worker", "agent", "flows/review.awl", "--check"])?;
+        let Command::Worker {
+            command: super::WorkerCommand::Agent(args),
+        } = cli.command
+        else {
+            anyhow::bail!("expected worker agent command");
+        };
+        assert!(args.check);
+        assert!(args.liminal_addresses.is_empty());
+        assert!(args.identity.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn worker_agent_help_documents_the_model_it_serves() -> anyhow::Result<()> {
+        let mut command = Cli::command();
+        let Some(worker) = command.find_subcommand_mut("worker") else {
+            anyhow::bail!("worker subcommand should be registered");
+        };
+        let Some(agent) = worker.find_subcommand_mut("agent") else {
+            anyhow::bail!("worker agent subcommand should be registered");
+        };
+        let help = agent.render_long_help().to_string();
+
+        assert!(help.contains("--liminal-address"));
+        assert!(help.contains("--task-queue"));
+        assert!(help.contains("--check"));
+        // The model, not just the flags: where the queue and the schemas come from,
+        // which actions are the server's, and that a queue is served whole.
+        assert!(help.contains("worker` block's name"));
+        assert!(help.contains("all-or-nothing"));
+        assert!(help.contains("liminal worker transport"));
+        assert!(help.contains("nothing is invented"));
         Ok(())
     }
 
