@@ -24,6 +24,7 @@ fn action(name: &str, field: &str) -> ActionContract {
             max: Duration::from_secs(8),
         }),
         advisory: false,
+        body: None,
     }
 }
 
@@ -133,19 +134,99 @@ fn v4_identity_ignores_json_object_and_set_array_order() -> Result<(), Box<dyn s
 /// the flag is true, so every package already deployed keeps the identity it
 /// was deployed under — adding the class mints no redeploy wave. This pin is
 /// what makes that claim checkable rather than asserted.
-const PRE_ADVISORY_V4_IDENTITY: &str =
+/// The identity this exact contract hashed to under the superseded `.v4`
+/// domain, recorded when `.v5` replaced it. Kept as the negative pin below.
+const SUPERSEDED_V4_IDENTITY: &str =
     "eef121798ea576fbf700b50d3fd79c3f7a979b5fcc7c85b8a02c1a71cfef1672";
 
 #[test]
-fn advisory_free_contracts_keep_their_pre_advisory_v4_identity() -> Result<(), PackageError> {
+fn the_v5_domain_supersedes_every_v4_identity() -> Result<(), PackageError> {
+    // Deliberate, not incidental: the `.v5` domain always encodes the action
+    // body block, so no `.v4`-minted identity can verify again and every
+    // deployed package re-mints on redeploy. If this hash ever matches, the
+    // domain separation has been lost and a `.v4` archive could load with an
+    // unverified body.
     let beams = BeamSet::new(vec![BeamModule::new("workflow/order", vec![1, 2, 3])])?;
     let hash = content_hash_with_contract(&beams, &manifest(), &contract(false));
-    assert_eq!(
+    assert_ne!(
         hash.to_string(),
-        PRE_ADVISORY_V4_IDENTITY,
-        "a contract with no advisory action must hash exactly as it did before the \
-         advisory class existed"
+        SUPERSEDED_V4_IDENTITY,
+        "a `.v5` identity must never collide with the superseded `.v4` domain"
     );
+    Ok(())
+}
+
+#[test]
+fn a_declared_body_is_identity_bearing() -> Result<(), PackageError> {
+    let beams = BeamSet::new(vec![BeamModule::new("workflow/order", vec![1, 2, 3])])?;
+    let plain = contract(false);
+    let mut bodied = contract(false);
+    bodied.workers[0].actions[0].body = Some(crate::ActionBodyContract::Run {
+        command: "echo $amount".to_owned(),
+    });
+
+    assert_ne!(
+        plain.canonical_bytes(),
+        bodied.canonical_bytes(),
+        "a declared body is executable authority and must be committed to the record"
+    );
+    assert_ne!(
+        content_hash_with_contract(&beams, &manifest(), &plain),
+        content_hash_with_contract(&beams, &manifest(), &bodied),
+        "declaring a body changes what the package IS, so it must change identity"
+    );
+    Ok(())
+}
+
+#[test]
+fn editing_a_declared_command_changes_identity() -> Result<(), PackageError> {
+    // The tamper case the binding exists for: same names, same schemas, one
+    // byte of command text different — the package identity must move.
+    let beams = BeamSet::new(vec![BeamModule::new("workflow/order", vec![1, 2, 3])])?;
+    let mut first = contract(false);
+    first.workers[0].actions[0].body = Some(crate::ActionBodyContract::Run {
+        command: "echo safe".to_owned(),
+    });
+    let mut second = contract(false);
+    second.workers[0].actions[0].body = Some(crate::ActionBodyContract::Run {
+        command: "echo saf3".to_owned(),
+    });
+
+    assert_ne!(
+        content_hash_with_contract(&beams, &manifest(), &first),
+        content_hash_with_contract(&beams, &manifest(), &second),
+        "a rewritten command under an unchanged identity would execute unvouched"
+    );
+    Ok(())
+}
+
+#[test]
+fn advisory_and_body_cannot_be_confused_in_the_record() -> Result<(), PackageError> {
+    // The advisory marker is conditional and the body block follows it
+    // unconditionally; these four corners must all be distinct records.
+    let beams = BeamSet::new(vec![BeamModule::new("workflow/order", vec![1, 2, 3])])?;
+    let mut corners = Vec::new();
+    for advisory in [false, true] {
+        for body in [
+            None,
+            Some(crate::ActionBodyContract::Run {
+                command: "echo x".to_owned(),
+            }),
+        ] {
+            let mut candidate = contract(false);
+            candidate.workers[0].actions[0].advisory = advisory;
+            candidate.workers[0].actions[0].body = body;
+            corners.push(content_hash_with_contract(&beams, &manifest(), &candidate));
+        }
+    }
+    for (left_index, left) in corners.iter().enumerate() {
+        for right in &corners[left_index + 1..] {
+            assert_ne!(
+                left, right,
+                "every advisory/body corner must have its own identity"
+            );
+        }
+    }
     Ok(())
 }
 

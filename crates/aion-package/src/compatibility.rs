@@ -214,6 +214,7 @@ mod tests {
                 timeout: None,
                 retry: None,
                 advisory: false,
+                body: None,
             }],
         }
     }

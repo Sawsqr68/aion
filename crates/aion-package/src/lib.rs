@@ -56,8 +56,9 @@ pub use codegen::{
 };
 pub use compatibility::{ContractDiff, contract_diffs};
 pub use contract::{
-    ActionContract, ActivityDescriptor, AdditionalWorkflowContract, ChildContract,
-    ContractIdentityError, PackageContract, RetryContract, SignalContract, WorkerContract,
+    ActionBodyContract, ActionContract, ActivityDescriptor, AdditionalWorkflowContract,
+    ChildContract, ContractIdentityError, PackageContract, RetryContract, SignalContract,
+    WorkerContract,
 };
 pub use error::PackageError;
 pub use extraction::ExtractionLimits;

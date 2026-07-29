@@ -11,7 +11,13 @@ const DIGEST_LEN: usize = 32;
 const TEXT_LEN: usize = DIGEST_LEN * 2;
 const WORKFLOW_TIMEOUT_DOMAIN: &[u8] = b"aion.package.version.workflow-timeout.v1";
 const WORKFLOW_TIMEOUTS_DOMAIN: &[u8] = b"aion.package.version.workflow-timeouts.v3";
-const WORKER_CONTRACT_DOMAIN: &[u8] = b"aion.package.version.worker-contract.v4";
+// `.v5` because `ActionContract` records now always end with a declarative
+// body block. The `.v4` domain's records ended with an OPTIONAL advisory
+// marker — its one injective tail-append — so the body block required a new
+// domain rather than a second conditional suffix. Archives hashed under
+// `.v4` refuse to load and must be redeployed; this build carries no
+// compatibility shims by policy.
+const WORKER_CONTRACT_DOMAIN: &[u8] = b"aion.package.version.worker-contract.v5";
 
 /// A SHA-256 package version identity.
 ///
@@ -199,10 +205,24 @@ pub(crate) fn verified_content_hash_with_contract(
     contract: Option<&PackageContract>,
 ) -> Result<ContentHash, PackageError> {
     if let Some(contract) = contract {
-        let v4_hash = content_hash_with_contract(beams, manifest, contract);
-        if manifest.version.as_str() == v4_hash.to_string() {
-            return Ok(v4_hash);
+        let contract_hash = content_hash_with_contract(beams, manifest, contract);
+        if manifest.version.as_str() == contract_hash.to_string() {
+            return Ok(contract_hash);
         }
+        // A contract-bearing archive whose stored identity matches neither
+        // the current `.v5` recompute nor any legacy form is refused with
+        // the CONTRACT-BEARING hash in the report: an archive minted under
+        // the superseded `.v4` domain lands here, and the cure — redeploy
+        // under the current identity — is the same as for tampering. This
+        // build carries no `.v4` encoder by policy, so the two causes are
+        // indistinguishable and both refuse.
+        return verified_content_hash(beams, manifest).map_err(|error| match error {
+            PackageError::IntegrityMismatch { expected, .. } => PackageError::IntegrityMismatch {
+                expected,
+                computed: contract_hash.to_string(),
+            },
+            other => other,
+        });
     }
     verified_content_hash(beams, manifest)
 }

@@ -199,6 +199,33 @@ pub struct ActionContract {
     /// what the package promises a caller.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub advisory: bool,
+    /// The declarative body the action carries, when it declares one.
+    ///
+    /// `None` is a requirement on an out-of-band worker: the action's name
+    /// and schemas are the whole promise, and something must connect to
+    /// serve it. `Some` means the package itself says what the action DOES,
+    /// so the host can execute it with no worker connected.
+    ///
+    /// Identity-bound deliberately: the body is executable authority, and an
+    /// authority that did not participate in the package hash could be
+    /// rewritten in storage without changing what the deployment claims to
+    /// be. A body edit is a new package, always.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<ActionBodyContract>,
+}
+
+/// A declarative action body committed into package identity.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ActionBodyContract {
+    /// One command line, executed directly with argv-element parameter
+    /// substitution — never through a shell. The text is the authored form
+    /// with `$` interpolation intact; the executor parses it and substitutes
+    /// each referenced parameter as one whole argument.
+    Run {
+        /// The authored command text.
+        command: String,
+    },
 }
 
 impl ActionContract {
@@ -224,19 +251,31 @@ impl ActionContract {
             }
         }
         // ADVISORY is encoded ONLY when true: a single marker byte appended
-        // after the retry block, and nothing at all when false. Every
-        // contract written before this field therefore hashes to the same
-        // bytes it always did, so adding the advisory class mints no
-        // redeploy wave. It is injective because absence and the marker
-        // cannot be confused at the end of a positional record.
-        //
-        // CEILING — this consumes `ActionContract`'s ONE trailing-append
-        // slot. A second optional tail would not be injective (two absent
-        // fields and one present are indistinguishable from the tail), so
-        // any future field must ALWAYS encode, under a bumped identity
-        // domain, and never as another optional tail.
+        // after the retry block, and nothing at all when false. It is
+        // injective because absence and the marker cannot be confused at the
+        // end of a positional record — the block that FOLLOWS it always
+        // begins with a body discriminant (`0`/`1`), never `ADVISORY_MARKER`.
         if self.advisory {
             bytes.push(ADVISORY_MARKER);
+        }
+        // The BODY block always encodes — a discriminant byte, then the
+        // command text for `Run`. Adding it consumed the record's optional
+        // tail (the advisory marker was the one tail-append the previous
+        // domain could injectively absorb), which is why this encoding lives
+        // under the bumped `.v5` identity domain rather than as a second
+        // conditional suffix: two optional tails are not injective, and a
+        // contract identity that two different declarations can share is a
+        // spoofable deployment.
+        //
+        // LAW for the next field: encode it UNCONDITIONALLY after this
+        // block and bump the identity domain again. Never append another
+        // optional tail.
+        match &self.body {
+            None => bytes.push(0),
+            Some(ActionBodyContract::Run { command }) => {
+                bytes.push(1);
+                encode_text(&mut bytes, command);
+            }
         }
         bytes
     }
