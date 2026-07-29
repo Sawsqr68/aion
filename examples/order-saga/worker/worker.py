@@ -14,6 +14,7 @@ import os
 from collections.abc import Awaitable, Callable, Iterable
 
 from aion_worker import (
+    ActivityDescriptor,
     ActivityExecutionContext,
     ActivityTask,
     DispatchOutcome,
@@ -116,6 +117,137 @@ def worker_config() -> WorkerConfig:
     )
 
 
+# The declared value-type schemas, rendered from the package's Gleam types
+# module. `VALUE_TYPE_SCHEMAS` is keyed by the declared type name and holds the
+# JSON Schema text verbatim; a type used by several activities appears once.
+#
+# These are the same shapes the generated codecs encode and `schemas/*.json`
+# documents, so what this worker advertises cannot drift from what the workflow
+# actually sends and decodes.
+VALUE_TYPE_SCHEMAS: dict[str, str] = {
+    "OrderInput": """{
+      "type": "object",
+      "required": ["order_id", "item", "quantity", "amount"],
+      "additionalProperties": false,
+      "properties": {
+        "order_id": { "type": "string" },
+        "item": { "type": "string" },
+        "quantity": { "type": "integer" },
+        "amount": { "type": "integer" }
+      }
+    }""",
+    "InventoryReservation": """{
+      "type": "object",
+      "required": ["order_id", "reservation_id", "item", "quantity"],
+      "additionalProperties": false,
+      "properties": {
+        "order_id": { "type": "string" },
+        "reservation_id": { "type": "string" },
+        "item": { "type": "string" },
+        "quantity": { "type": "integer" }
+      }
+    }""",
+    "PaymentReceipt": """{
+      "type": "object",
+      "required": ["order_id", "payment_id", "amount"],
+      "additionalProperties": false,
+      "properties": {
+        "order_id": { "type": "string" },
+        "payment_id": { "type": "string" },
+        "amount": { "type": "integer" }
+      }
+    }""",
+    "Shipment": """{
+      "type": "object",
+      "required": ["order_id", "shipment_id"],
+      "additionalProperties": false,
+      "properties": {
+        "order_id": { "type": "string" },
+        "shipment_id": { "type": "string" }
+      }
+    }""",
+    "ReleaseInventoryInput": """{
+      "type": "object",
+      "required": ["order_id", "reservation_id", "item", "quantity"],
+      "additionalProperties": false,
+      "properties": {
+        "order_id": { "type": "string" },
+        "reservation_id": { "type": "string" },
+        "item": { "type": "string" },
+        "quantity": { "type": "integer" }
+      }
+    }""",
+    "CompensationOutput": """{
+      "type": "object",
+      "required": ["status", "detail"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string" },
+        "detail": { "type": "string" }
+      }
+    }""",
+    "RefundPaymentInput": """{
+      "type": "object",
+      "required": ["order_id", "payment_id", "amount"],
+      "additionalProperties": false,
+      "properties": {
+        "order_id": { "type": "string" },
+        "payment_id": { "type": "string" },
+        "amount": { "type": "integer" }
+      }
+    }""",
+    "CancelShipmentInput": """{
+      "type": "object",
+      "required": ["order_id", "shipment_id"],
+      "additionalProperties": false,
+      "properties": {
+        "order_id": { "type": "string" },
+        "shipment_id": { "type": "string" }
+      }
+    }""",
+}
+
+# The typed action surface advertised in `RegisterWorker.activities`.
+#
+# This is what proves the worker serves the contract a deployed package
+# requires: the server checks each advertised input schema contravariantly and
+# each output schema covariantly against the deployed contract. An empty or
+# absent surface reads as "this worker predates contract commitment" and is
+# refused, so every declared activity is advertised with both real schemas.
+ACTIVITY_DESCRIPTORS: tuple[ActivityDescriptor, ...] = (
+    ActivityDescriptor(
+        name="reserve_inventory",
+        input_schema_json=VALUE_TYPE_SCHEMAS["OrderInput"],
+        output_schema_json=VALUE_TYPE_SCHEMAS["InventoryReservation"],
+    ),
+    ActivityDescriptor(
+        name="charge_payment",
+        input_schema_json=VALUE_TYPE_SCHEMAS["OrderInput"],
+        output_schema_json=VALUE_TYPE_SCHEMAS["PaymentReceipt"],
+    ),
+    ActivityDescriptor(
+        name="ship_order",
+        input_schema_json=VALUE_TYPE_SCHEMAS["OrderInput"],
+        output_schema_json=VALUE_TYPE_SCHEMAS["Shipment"],
+    ),
+    ActivityDescriptor(
+        name="release_inventory",
+        input_schema_json=VALUE_TYPE_SCHEMAS["ReleaseInventoryInput"],
+        output_schema_json=VALUE_TYPE_SCHEMAS["CompensationOutput"],
+    ),
+    ActivityDescriptor(
+        name="refund_payment",
+        input_schema_json=VALUE_TYPE_SCHEMAS["RefundPaymentInput"],
+        output_schema_json=VALUE_TYPE_SCHEMAS["CompensationOutput"],
+    ),
+    ActivityDescriptor(
+        name="cancel_shipment",
+        input_schema_json=VALUE_TYPE_SCHEMAS["CancelShipmentInput"],
+        output_schema_json=VALUE_TYPE_SCHEMAS["CompensationOutput"],
+    ),
+)
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     config = worker_config()
@@ -124,6 +256,7 @@ async def main() -> None:
         config=config,
         connect=lambda: GrpcWorkerSession.connect(config),
         dispatcher=dispatcher,
+        descriptors=ACTIVITY_DESCRIPTORS,
     )
 
 

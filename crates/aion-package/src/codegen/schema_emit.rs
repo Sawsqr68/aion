@@ -181,13 +181,40 @@ fn render_schema(package_name: &str, boundary: &BoundaryType) -> String {
         out,
         "  \"$comment\": \"{MARKER_PREFIX}{package_name}_io.gleam — do not edit; run `aion generate`.\","
     );
-    match boundary.defs.first() {
-        Some(TypeDef::Record(record)) => render_record_body(&mut out, record, &boundary.defs, 1),
-        Some(TypeDef::Enum(definition)) => render_enum_body(&mut out, definition, 1),
-        None => {}
-    }
+    render_body(&mut out, boundary);
     out.push_str("}\n");
     out
+}
+
+/// Renders one boundary type's schema document **without** the `$comment`
+/// origin marker, for a worker's advertised typed action surface.
+///
+/// The marker is deliberately absent, not merely tidied away. A worker's
+/// advertised input schema is the *superset* side of
+/// `aion_package::contract_diffs`, and that check requires every key it does
+/// not recognise as a validating constraint to appear identically on the
+/// deployed contract. `$comment` is not a recognised constraint and is not
+/// stripped as a presentation annotation, so advertising it would make the
+/// worker's input schema unsatisfiable against any contract that does not
+/// carry the byte-identical marker. Structure is the whole advertisement;
+/// provenance prose belongs only in the on-disk `schemas/*.json`.
+pub(super) fn render_advertised_schema(boundary: &BoundaryType) -> String {
+    let mut out = String::new();
+    out.push_str("{\n");
+    render_body(&mut out, boundary);
+    out.push_str("}\n");
+    out
+}
+
+/// Renders a boundary type's members (the surrounding braces are the
+/// caller's), shared by the on-disk artifact and the advertised surface so the
+/// two can never describe different shapes.
+fn render_body(out: &mut String, boundary: &BoundaryType) {
+    match boundary.defs.first() {
+        Some(TypeDef::Record(record)) => render_record_body(out, record, &boundary.defs, 1),
+        Some(TypeDef::Enum(definition)) => render_enum_body(out, definition, 1),
+        None => {}
+    }
 }
 
 /// Renders a record's `type`/`required`/`additionalProperties`/`properties`

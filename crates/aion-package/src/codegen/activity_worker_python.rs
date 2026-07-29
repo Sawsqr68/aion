@@ -17,10 +17,24 @@
 //! parameters. Every required value is read from the environment so the
 //! do-not-edit file stays byte-stable across hosts, and a missing variable
 //! fails loud (no invented default is supplied anywhere; ADR-001).
+//!
+//! The module also emits the worker's **typed action surface**: one
+//! `ActivityDescriptor` per declared activity, carrying the JSON Schema of the
+//! declared input and output value types. `RegisterWorker.activities` is what
+//! proves a worker serves the contract a deployed package requires, so it is
+//! not optional and never empty — an empty surface reads as "this worker
+//! predates contract commitment" and is refused by any contract-bearing
+//! deployment. The schemas are rendered by [`super::schema_emit`] from the same
+//! boundary types that produce the codecs and the on-disk `schemas/*.json`, so
+//! what the worker advertises cannot drift from what the workflow sends and
+//! decodes.
 
+use std::collections::HashSet;
 use std::fmt::Write as _;
 
 use super::activity_model::ResolvedActivity;
+use super::model::BoundaryType;
+use super::schema_emit::render_advertised_schema;
 
 /// Python do-not-edit banner (`#`-comment form; the Gleam `////` header is not
 /// valid Python). `aion generate --check` byte-compares the whole file, so the
@@ -40,6 +54,7 @@ import os
 from collections.abc import Awaitable, Callable, Iterable
 
 from aion_worker import (
+    ActivityDescriptor,
     ActivityExecutionContext,
     ActivityTask,
     DispatchOutcome,
@@ -148,8 +163,34 @@ def worker_config() -> WorkerConfig:
     )
 "#;
 
+/// Header comment introducing the advertised typed action surface. It states
+/// why the surface exists at all, so a reader of the generated file knows the
+/// descriptors are load-bearing and not decoration.
+const ADVERTISEMENT_DOC: &str = r"
+
+# The declared value-type schemas, rendered from the package's Gleam types
+# module. `VALUE_TYPE_SCHEMAS` is keyed by the declared type name and holds the
+# JSON Schema text verbatim; a type used by several activities appears once.
+#
+# These are the same shapes the generated codecs encode and `schemas/*.json`
+# documents, so what this worker advertises cannot drift from what the workflow
+# actually sends and decodes.
+";
+
+/// Header comment introducing the descriptor tuple.
+const DESCRIPTORS_DOC: &str = r#"
+# The typed action surface advertised in `RegisterWorker.activities`.
+#
+# This is what proves the worker serves the contract a deployed package
+# requires: the server checks each advertised input schema contravariantly and
+# each output schema covariantly against the deployed contract. An empty or
+# absent surface reads as "this worker predates contract commitment" and is
+# refused, so every declared activity is advertised with both real schemas.
+"#;
+
 /// Emits `worker/worker.py` serving `activities` (all `RemotePython`), routing
-/// each engine activity name to `handlers.<name>` in declaration order.
+/// each engine activity name to `handlers.<name>` in declaration order and
+/// advertising the typed action surface derived from the declared value types.
 pub(crate) fn emit(package_name: &str, activities: &[&ResolvedActivity]) -> String {
     let class_name = format!("{}Dispatcher", to_pascal(package_name));
 
@@ -186,16 +227,76 @@ pub(crate) fn emit(package_name: &str, activities: &[&ResolvedActivity]) -> Stri
     out.push_str(CONFIG_HELPERS);
     out.push_str(WORKER_CONFIG);
 
+    emit_advertisement(&mut out, activities);
+
     let _ = write!(
         out,
         "\n\nasync def main() -> None:\n    logging.basicConfig(level=logging.INFO)\n    \
          config = worker_config()\n    dispatcher = {class_name}()\n    \
          await connect_register_replay_and_serve(\n        config=config,\n        \
          connect=lambda: GrpcWorkerSession.connect(config),\n        \
-         dispatcher=dispatcher,\n    )\n\n\nif __name__ == \"__main__\":\n    asyncio.run(main())\n"
+         dispatcher=dispatcher,\n        descriptors=ACTIVITY_DESCRIPTORS,\n    )\n\n\n\
+         if __name__ == \"__main__\":\n    asyncio.run(main())\n"
     );
 
     out
+}
+
+/// Emits the value-type schema table and the `ActivityDescriptor` tuple built
+/// from it, in declaration order.
+fn emit_advertisement(out: &mut String, activities: &[&ResolvedActivity]) {
+    out.push_str(ADVERTISEMENT_DOC);
+    out.push_str("VALUE_TYPE_SCHEMAS: dict[str, str] = {\n");
+    for (type_name, boundary) in ordered_value_types(activities) {
+        let _ = writeln!(
+            out,
+            "    \"{type_name}\": \"\"\"{}\"\"\",",
+            indented_schema(boundary)
+        );
+    }
+    out.push_str("}\n");
+
+    out.push_str(DESCRIPTORS_DOC);
+    out.push_str("ACTIVITY_DESCRIPTORS: tuple[ActivityDescriptor, ...] = (\n");
+    for activity in activities {
+        let _ = write!(
+            out,
+            "    ActivityDescriptor(\n        name=\"{}\",\n        \
+             input_schema_json=VALUE_TYPE_SCHEMAS[\"{}\"],\n        \
+             output_schema_json=VALUE_TYPE_SCHEMAS[\"{}\"],\n    ),\n",
+            activity.declaration.name, activity.input.gleam_type, activity.output.gleam_type
+        );
+    }
+    out.push_str(")\n");
+}
+
+/// The declared value types every activity carries, as a deterministic,
+/// deduplicated sequence: declaration order, input before output, first
+/// occurrence wins. Type names are globally unique (the schema name registry
+/// guarantees it), so deduplicating by name is sound.
+fn ordered_value_types<'a>(
+    activities: &[&'a ResolvedActivity<'a>],
+) -> Vec<(&'a str, &'a BoundaryType)> {
+    let mut seen: HashSet<&str> = HashSet::new();
+    let mut types: Vec<(&str, &BoundaryType)> = Vec::new();
+    for activity in activities {
+        for resolved in [&activity.input, &activity.output] {
+            if seen.insert(resolved.gleam_type.as_str()) {
+                types.push((resolved.gleam_type.as_str(), resolved.boundary));
+            }
+        }
+    }
+    types
+}
+
+/// Renders a boundary type's advertised schema for embedding in a Python
+/// triple-quoted literal: the opening brace stays on the literal's first line
+/// and every following line is shifted one level right, so the block reads as
+/// part of the surrounding dict. JSON ignores the added leading whitespace, so
+/// the embedded text parses to exactly the rendered document.
+fn indented_schema(boundary: &BoundaryType) -> String {
+    let rendered = render_advertised_schema(boundary);
+    rendered.trim_end_matches('\n').replace('\n', "\n    ")
 }
 
 /// `aion_order_saga` → `AionOrderSaga`.
@@ -213,22 +314,42 @@ fn to_pascal(snake: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    use serde_json::Value;
 
     use super::{emit, to_pascal};
     use crate::codegen::activity_model::{ResolvedActivity, ResolvedType};
     use crate::codegen::declaration::{ActivityDeclaration, Tier};
-    use crate::codegen::model::{BoundaryType, GleamType};
+    use crate::codegen::model::{BoundaryType, Field, GleamType, RecordDef, TypeDef};
+    use crate::project::fixture;
+    use crate::{ActionContract, ActivityDescriptor, WorkerContract, contract_diffs};
 
-    fn artifact() -> BoundaryType {
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    fn field(wire: &str, ty: GleamType, required: bool) -> Field {
+        Field {
+            wire: wire.to_owned(),
+            ty,
+            required,
+        }
+    }
+
+    fn record(type_name: &str, fields: Vec<Field>) -> BoundaryType {
+        let stem = type_name.to_lowercase();
         BoundaryType {
-            file: PathBuf::from("schemas/placeholder.json"),
-            stem: "placeholder".to_owned(),
+            file: PathBuf::from(format!("schemas/{stem}.json")),
+            stem: stem.clone(),
             root: GleamType::Named {
-                type_name: "Placeholder".to_owned(),
-                fn_prefix: "placeholder".to_owned(),
+                type_name: type_name.to_owned(),
+                fn_prefix: stem.clone(),
             },
-            defs: Vec::new(),
+            defs: vec![TypeDef::Record(RecordDef {
+                type_name: type_name.to_owned(),
+                fn_prefix: stem,
+                fields,
+            })],
         }
     }
 
@@ -243,21 +364,115 @@ mod tests {
 
     fn resolved<'a>(
         declaration: &'a ActivityDeclaration,
-        art: &'a BoundaryType,
+        input: &'a BoundaryType,
+        output: &'a BoundaryType,
     ) -> ResolvedActivity<'a> {
         ResolvedActivity {
             declaration,
             input: ResolvedType {
                 gleam_type: declaration.input_type.clone(),
                 fn_prefix: declaration.input_type.to_lowercase(),
-                boundary: art,
+                boundary: input,
             },
             output: ResolvedType {
                 gleam_type: declaration.output_type.clone(),
                 fn_prefix: declaration.output_type.to_lowercase(),
-                boundary: art,
+                boundary: output,
             },
         }
+    }
+
+    /// The JSON text of one `VALUE_TYPE_SCHEMAS` entry in an emitted module.
+    fn schema_literal<'a>(module: &'a str, type_name: &str) -> Option<&'a str> {
+        let opening = format!("\"{type_name}\": \"\"\"");
+        let start = module.find(&opening)? + opening.len();
+        let rest = &module[start..];
+        let end = rest.find("\"\"\"")?;
+        Some(&rest[..end])
+    }
+
+    /// The parsed schema advertised for `type_name`, failing the test with a
+    /// readable reason rather than an `unwrap` when the entry is missing or is
+    /// not JSON.
+    fn advertised_schema(module: &str, type_name: &str) -> Result<Value, String> {
+        let literal = schema_literal(module, type_name)
+            .ok_or_else(|| format!("no VALUE_TYPE_SCHEMAS entry for `{type_name}`"))?;
+        serde_json::from_str(literal)
+            .map_err(|error| format!("`{type_name}` schema is not valid JSON: {error}"))
+    }
+
+    /// Asserts a schema is a real structural object schema — the only form the
+    /// covariant output check accepts. `true` (anything), `false` (nothing),
+    /// and `{}` are each a lie in one direction or the other.
+    fn assert_is_a_real_schema(schema: &Value, label: &str) -> Result<(), String> {
+        if schema.is_boolean() {
+            return Err(format!("{label} advertises the boolean schema {schema}"));
+        }
+        let object = schema
+            .as_object()
+            .ok_or_else(|| format!("{label} is not an object schema: {schema}"))?;
+        if object.get("type") != Some(&Value::String("object".to_owned())) {
+            return Err(format!("{label} does not declare `\"type\": \"object\"`"));
+        }
+        if !object.contains_key("properties") {
+            return Err(format!("{label} declares no properties"));
+        }
+        Ok(())
+    }
+
+    /// The Python interpreter to syntax-check generated modules with, or `None`
+    /// when this host has none. `AION_PYTHON` overrides the search.
+    ///
+    /// A candidate must both spawn successfully and identify itself as Python.
+    /// Exit status alone is not enough: a name on `PATH` can resolve to
+    /// something that is not a runnable interpreter at all (a wrong-platform
+    /// binary, a broken shim), and admitting one would turn this gate into a
+    /// silent pass instead of an honest skip.
+    fn python_interpreter() -> Option<String> {
+        let candidates = match std::env::var("AION_PYTHON") {
+            Ok(explicit) if !explicit.trim().is_empty() => vec![explicit],
+            _ => vec!["python3".to_owned(), "python".to_owned()],
+        };
+        candidates.into_iter().find(|candidate| {
+            Command::new(candidate)
+                .arg("--version")
+                .output()
+                .is_ok_and(|output| {
+                    output.status.success()
+                        && (String::from_utf8_lossy(&output.stdout).starts_with("Python ")
+                            || String::from_utf8_lossy(&output.stderr).starts_with("Python "))
+                })
+        })
+    }
+
+    /// Compiles `path` with `interpreter -m py_compile`, returning the
+    /// interpreter's diagnostics on failure.
+    fn py_compile(interpreter: &str, path: &Path) -> Result<(), String> {
+        let output = Command::new(interpreter)
+            .arg("-m")
+            .arg("py_compile")
+            .arg(path)
+            .output()
+            .map_err(|error| format!("could not run `{interpreter} -m py_compile`: {error}"))?;
+        if output.status.success() {
+            return Ok(());
+        }
+        Err(format!(
+            "`{interpreter} -m py_compile` rejected the generated module:\n{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        ))
+    }
+
+    fn order_input() -> BoundaryType {
+        record(
+            "OrderInput",
+            vec![
+                field("order_id", GleamType::String, true),
+                field("quantity", GleamType::Int, true),
+                field("note", GleamType::String, false),
+            ],
+        )
     }
 
     #[test]
@@ -268,10 +483,21 @@ mod tests {
 
     #[test]
     fn routes_each_activity_to_its_handler_in_order() {
-        let art = artifact();
+        let order = order_input();
+        let reservation = record(
+            "InventoryReservation",
+            vec![field("reservation_id", GleamType::String, true)],
+        );
+        let receipt = record(
+            "PaymentReceipt",
+            vec![field("payment_id", GleamType::String, true)],
+        );
         let d1 = declaration("reserve_inventory", "OrderInput", "InventoryReservation");
         let d2 = declaration("charge_payment", "OrderInput", "PaymentReceipt");
-        let activities = [resolved(&d1, &art), resolved(&d2, &art)];
+        let activities = [
+            resolved(&d1, &order, &reservation),
+            resolved(&d2, &order, &receipt),
+        ];
         let refs: Vec<&ResolvedActivity> = activities.iter().collect();
 
         let module = emit("demo", &refs);
@@ -299,5 +525,239 @@ mod tests {
         // namespace/subject defer to the library's dataclass defaults.
         assert!(!module.contains("AION_NAMESPACE"));
         assert!(!module.contains("AION_SUBJECT"));
+    }
+
+    #[test]
+    fn serve_call_passes_the_advertised_descriptors() {
+        let order = order_input();
+        let receipt = record(
+            "PaymentReceipt",
+            vec![field("payment_id", GleamType::String, true)],
+        );
+        let charge = declaration("charge_payment", "OrderInput", "PaymentReceipt");
+        let activities = [resolved(&charge, &order, &receipt)];
+        let refs: Vec<&ResolvedActivity> = activities.iter().collect();
+
+        let module = emit("demo", &refs);
+
+        // `descriptors` is a required parameter of the serve entry point; a
+        // three-argument call is a startup `TypeError`, so the argument must be
+        // present and must name the emitted surface.
+        assert!(
+            module.contains(
+                "    await connect_register_replay_and_serve(\n        config=config,\n        \
+                 connect=lambda: GrpcWorkerSession.connect(config),\n        \
+                 dispatcher=dispatcher,\n        descriptors=ACTIVITY_DESCRIPTORS,\n    )\n"
+            ),
+            "the serve call must pass every required argument:\n{module}"
+        );
+        assert!(
+            module.contains("ActivityDescriptor,\n"),
+            "the descriptor type must be imported"
+        );
+    }
+
+    #[test]
+    fn every_activity_advertises_real_input_and_output_schemas() -> TestResult {
+        let order = order_input();
+        let reservation = record(
+            "InventoryReservation",
+            vec![field("reservation_id", GleamType::String, true)],
+        );
+        let receipt = record(
+            "PaymentReceipt",
+            vec![
+                field("payment_id", GleamType::String, true),
+                field("captured", GleamType::Bool, true),
+            ],
+        );
+        let d1 = declaration("reserve_inventory", "OrderInput", "InventoryReservation");
+        let d2 = declaration("charge_payment", "OrderInput", "PaymentReceipt");
+        let activities = [
+            resolved(&d1, &order, &reservation),
+            resolved(&d2, &order, &receipt),
+        ];
+        let refs: Vec<&ResolvedActivity> = activities.iter().collect();
+
+        let module = emit("demo", &refs);
+
+        // The advertised surface is non-empty and names every declared
+        // activity, in declaration order.
+        assert!(module.contains("ACTIVITY_DESCRIPTORS: tuple[ActivityDescriptor, ...] = (\n"));
+        assert_eq!(module.matches("    ActivityDescriptor(\n").count(), 2);
+        let reserve_at = module.find("name=\"reserve_inventory\",");
+        let charge_at = module.find("name=\"charge_payment\",");
+        assert!(reserve_at.is_some() && charge_at.is_some() && reserve_at < charge_at);
+        assert!(module.contains(
+            "        name=\"reserve_inventory\",\n        \
+             input_schema_json=VALUE_TYPE_SCHEMAS[\"OrderInput\"],\n        \
+             output_schema_json=VALUE_TYPE_SCHEMAS[\"InventoryReservation\"],\n"
+        ));
+        assert!(module.contains(
+            "        name=\"charge_payment\",\n        \
+             input_schema_json=VALUE_TYPE_SCHEMAS[\"OrderInput\"],\n        \
+             output_schema_json=VALUE_TYPE_SCHEMAS[\"PaymentReceipt\"],\n"
+        ));
+
+        // A type carried by two activities is advertised once.
+        assert_eq!(module.matches("\"OrderInput\": \"\"\"").count(), 1);
+
+        // Every advertised schema is a real structural schema. The output
+        // direction is the strict one: the worker's output schema is the
+        // SUBSET side of the server's check, so `true` is refused outright and
+        // `false` — "produces nothing" — sneaks past while lying.
+        for type_name in ["OrderInput", "InventoryReservation", "PaymentReceipt"] {
+            let schema = advertised_schema(&module, type_name)?;
+            assert_is_a_real_schema(&schema, type_name)?;
+        }
+
+        // The advertised OUTPUT schemas carry the real declared fields.
+        let receipt_schema = advertised_schema(&module, "PaymentReceipt")?;
+        assert_eq!(receipt_schema["properties"]["payment_id"]["type"], "string");
+        assert_eq!(receipt_schema["properties"]["captured"]["type"], "boolean");
+        assert_eq!(
+            receipt_schema["required"],
+            serde_json::json!(["payment_id", "captured"])
+        );
+
+        // The advertised INPUT schema keeps optional fields out of `required`.
+        let order_schema = advertised_schema(&module, "OrderInput")?;
+        assert_eq!(
+            order_schema["required"],
+            serde_json::json!(["order_id", "quantity"])
+        );
+        assert_eq!(order_schema["properties"]["note"]["type"], "string");
+
+        // The `$comment` origin marker the on-disk `schemas/*.json` carries is
+        // NOT advertised: it is not a validating constraint and is not stripped
+        // as a presentation annotation, so an advertised input schema carrying
+        // it could not satisfy any contract without the identical marker.
+        assert!(
+            !module.contains("$comment"),
+            "an advertised schema must carry no provenance annotation:\n{module}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn the_advertised_surface_satisfies_a_contract_over_the_same_declared_types() -> TestResult {
+        let order = order_input();
+        let receipt = record(
+            "PaymentReceipt",
+            vec![
+                field("payment_id", GleamType::String, true),
+                field("captured", GleamType::Bool, true),
+            ],
+        );
+        let charge = declaration("charge_payment", "OrderInput", "PaymentReceipt");
+        let activities = [resolved(&charge, &order, &receipt)];
+        let refs: Vec<&ResolvedActivity> = activities.iter().collect();
+
+        let module = emit("demo", &refs);
+        let advertised = vec![ActivityDescriptor {
+            name: "charge_payment".to_owned(),
+            input_schema: advertised_schema(&module, "OrderInput")?,
+            output_schema: advertised_schema(&module, "PaymentReceipt")?,
+        }];
+
+        // The deployed contract a package declares over these same value types.
+        let contract = WorkerContract {
+            task_queue: "orders".to_owned(),
+            actions: vec![ActionContract {
+                name: "charge_payment".to_owned(),
+                input_schema: advertised_schema(&module, "OrderInput")?,
+                output_schema: advertised_schema(&module, "PaymentReceipt")?,
+                node: None,
+                timeout: None,
+                retry: None,
+                advisory: false,
+                body: None,
+            }],
+        };
+        let diffs = contract_diffs("demo.v5", &contract, &advertised);
+        assert!(
+            diffs.is_empty(),
+            "the generated worker must satisfy a contract over its own declared types: {diffs:?}"
+        );
+
+        // The check is not vacuous. A permissive output schema — the shrug a
+        // worker with nothing honest to say would advertise — is refused by the
+        // covariant output direction against the very same contract.
+        let shrugging = vec![ActivityDescriptor {
+            name: "charge_payment".to_owned(),
+            input_schema: advertised_schema(&module, "OrderInput")?,
+            output_schema: Value::Bool(true),
+        }];
+        let refused = contract_diffs("demo.v5", &contract, &shrugging);
+        assert!(
+            refused
+                .iter()
+                .any(|diff| diff.field.starts_with("output_schema")),
+            "a permissive output advertisement must be refused: {refused:?}"
+        );
+
+        // An on-disk `schemas/*.json` document carries the `$comment` origin
+        // marker. `normalize_schema` does not strip it, and the INPUT direction
+        // makes the worker's schema the superset side — where every key the
+        // check does not recognise as a validating constraint must appear
+        // identically on the contract. A marker-free advertisement therefore
+        // still satisfies a contract read straight off the emitted artifact,
+        // which is exactly why the marker is omitted from the advertisement.
+        let mut marked_input = advertised_schema(&module, "OrderInput")?;
+        let marked = marked_input
+            .as_object_mut()
+            .ok_or("the advertised input schema must be an object")?;
+        marked.insert(
+            "$comment".to_owned(),
+            Value::String("Generated by aion generate from src/demo_io.gleam".to_owned()),
+        );
+        let from_artifact = WorkerContract {
+            task_queue: "orders".to_owned(),
+            actions: vec![ActionContract {
+                name: "charge_payment".to_owned(),
+                input_schema: marked_input,
+                ..contract
+                    .actions
+                    .first()
+                    .ok_or("the contract must declare its action")?
+                    .clone()
+            }],
+        };
+        let diffs = contract_diffs("demo.v5", &from_artifact, &advertised);
+        assert!(
+            diffs.is_empty(),
+            "a marker-free advertisement must satisfy an artifact-derived contract: {diffs:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn emitted_module_is_syntactically_valid_python() -> TestResult {
+        let order = order_input();
+        let kind = record("Shipment", vec![field("tracking", GleamType::String, true)]);
+        let ship = declaration("ship_order", "OrderInput", "Shipment");
+        let activities = [resolved(&ship, &order, &kind)];
+        let refs: Vec<&ResolvedActivity> = activities.iter().collect();
+        let module = emit("aion_order_saga", &refs);
+
+        let Some(interpreter) = python_interpreter() else {
+            // Gated at RUNTIME, never with `#[ignore]`: a host without an
+            // interpreter reports the skip and the lane stays green, while any
+            // host that has one actually compiles the emitted template.
+            tracing::info!(
+                "skipping generated-worker syntax check: no Python interpreter on this host (set AION_PYTHON to one)"
+            );
+            return Ok(());
+        };
+
+        let root = fixture::temp_project("python-worker-syntax", &[])?;
+        let path = root.join("worker.py");
+        std::fs::write(&path, &module)?;
+        let result = py_compile(&interpreter, &path);
+        std::fs::remove_dir_all(&root)?;
+        result?;
+        Ok(())
     }
 }
