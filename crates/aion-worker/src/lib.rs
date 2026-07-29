@@ -54,6 +54,8 @@ pub mod process;
 pub mod protocol;
 /// Activity dispatch and task-serving loops.
 pub mod runtime;
+/// Declared commands as activities — an action that runs without a Rust crate.
+pub mod shell;
 /// High-level worker builder and run loop.
 pub mod worker;
 
