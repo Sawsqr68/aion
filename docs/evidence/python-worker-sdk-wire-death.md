@@ -100,9 +100,9 @@ gives the SDK a working gRPC client for the first time, and carries the same
 regenerate-and-byte-compare gate — demonstrated red twice, on a one-character
 change and on a re-introduced hand-written file among generated neighbours.
 
-**TypeScript is not live-proven.** Its frames are byte-correct against the same
-`.proto` the server compiles and its 119 tests pass, but no TypeScript worker
-has registered against a running server. That claim is not made here.
+**TypeScript is live-proven too** — see below. That was not true when this
+section was first written, and the gap was recorded rather than glossed until
+the run existed.
 
 ### 3. No typed action surface
 
@@ -276,6 +276,34 @@ FAILED_PRECONDITION  WORKER_CONTRACT_MISMATCH: worker build `missing-fields` que
 The Python SDK surfaced that in full, which is the other half of the fix: the
 old redial loop would have swallowed it and retried forever.
 
+### The same proof, taken for TypeScript
+
+Run started at a moment when no worker of any kind existed — the Python workers
+had been stopped and no TypeScript worker had ever connected. It sat `Running`.
+A Node worker built on the SDK then registered against the same queue and it
+completed:
+
+```json
+{"type":"ActivityCompleted","data":{"result":{
+  "bytes":73,"format":"png","height":2,"width":3,"path":"/.../red.png"}}}
+{"type":"WorkflowCompleted","data":{"result":{"outcome":"inspected",…}}}
+```
+
+The worker read the IHDR chunk itself in Node (`readUInt32BE` at offsets 16 and
+20), so the dimensions are measured, not echoed.
+
+**Attributed by control, not by elimination.** No Python worker process existed
+(`pgrep` confirmed zero), but "nothing else was running" is an argument, not a
+demonstration — and the server does not log which worker registered, so the log
+cannot settle it either. So the TypeScript worker was killed and an identical
+run started: it stayed `Running`. The queue is served when the TypeScript worker
+is up and unserved when it is down, which is the demonstration.
+
+One observability note found in passing: the TypeScript worker printed nothing
+at all across the whole successful run. The Python host logs connection,
+registration, each task, and each completion. That asymmetry is not a defect in
+the wire work, but an operator watching a TypeScript worker has nothing to watch.
+
 ### A second badly-designed test of my own, recorded
 
 My first adversarial worker added an **extra** output field (`exfiltrated_secret`)
@@ -286,6 +314,16 @@ satisfies everything the contract promises, plus a field the consumer ignores.
 Producing more than you promised is sound covariance. Only a *missing* or
 *wrong-typed* field breaks the contract, which is what the test above had to
 show. The system was right and my test was wrong.
+
+## The sweep for other instances
+
+Two other places in this repo hold committed generated code.
+
+**The ops console's ts-rs wire types already comply.** `.github/workflows/ops-console-embed.yml` regenerates them and runs `git diff --exit-code`, unconditionally on every push and pull request. So the house pattern existed and was correct, and these SDKs were simply outside it with no CI lane at all. That is a different finding from "we have no gate": one calls for design, the other for enrolment.
+
+**The `aion-client` Python SDK is fossilized too, but differently.** Regenerating and comparing (normalizing the known import patch) shows semantic drift, not banner noise: `StartWorkflowRequest` is missing `routing_key` and `task_queue`, and the entire namespace-minting surface — `NamespaceMintOrigin`, `MintNamespaceRequest`, `MintNamespaceResponse` — is absent.
+
+The distinction is worth holding. The client is **feature-dead, not wire-dead**: proto3 is additive-tolerant, so everything it does send is still valid and existing calls still work. Nothing is broken today. What is broken is *reach* — every capability added since the stubs froze is invisible to Python callers, silently, with nothing to notice. The worker SDKs failed loudly the moment the fossil was removed; this one will keep working and keep being incomplete, which is the harder failure to find. Recorded as task #63 with the measurement, not fixed here.
 
 ## Handed off, not fixed here
 
