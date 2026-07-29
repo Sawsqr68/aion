@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "remote_gates: hand a repository and a branch to a machine that is not yours, and get the whole gate battery back as data. The clone is resolved to a real tip commit, the four Rust legs fan out over that one working tree at once, and every leg returns its real exit code with the diagnostics that produced it — file, line, column, lint. A red gate names itself; nothing here claims a pass.",
+  "properties": {
+    "branch": {
+      "type": "string"
+    },
+    "repo": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "repo",
+    "branch"
+  ],
+  "type": "object"
+}

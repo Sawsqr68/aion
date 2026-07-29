@@ -1,0 +1,24 @@
+# Workflow packaging descriptor consumed by `aion package`.
+# `src/remote_gates.gleam` is generated from `remote_gates.awl` by
+# `aion awl emit` and committed, so packaging does not require the AWL
+# toolchain. Regenerate it whenever the .awl changes; never edit it by hand.
+
+[[workflow]]
+entry_module = "remote_gates"
+entry_function = "run"
+# Derived from the .awl's own per-action timeouts, not invented: the clone
+# (10m) runs before the fork, the fork is bounded by its slowest leg (nextest,
+# 45m), and notify (2m) runs after — 57m of declared work, with the remainder
+# as the margin a loaded gate host needs between activities.
+timeout_seconds = 5400
+input_schema = "schemas/input.json"
+output_schema = "schemas/output.json"
+activities = [
+  "clone_repo",
+  "run_check",
+  "run_clippy",
+  "run_nextest",
+  "run_fmt_check",
+  "notify_result",
+]
+output = "remote-gates.aion"
