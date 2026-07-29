@@ -446,3 +446,19 @@ above is the re-run at that tree. Green is a floor, not a verdict.
   minimum seam wiring (`push_payload`, `liveness_targets`, the refusal-log split,
   the `WorkerLost` arm). **Extracting either is a pre-existing debt this lane
   does not discharge** — flagged, not smuggled.
+
+---
+
+## Closing — why the defective runs stay on the record
+
+This document keeps its red battery and its defective green battery alongside
+the final one, and that is deliberate. Twice today a green run concealed real
+defects from anyone who read only the verdict line: the `e7d50822` battery here
+was green over a zero budget on every embedder boot path, and the live gate rig
+was declared healthy by its own logs right up until it stranded eight legs. A
+record that shows only the final green teaches the next reader that green was
+always the state of things; a record that shows what each run failed to catch
+teaches them what a battery is actually for. The builder chose to keep the
+defective runs on the page rather than tidy them away, and the choice is named
+here so it survives as practice, not accident: **evidence is the history of how
+the tree got clean, not the claim that it always was.**
