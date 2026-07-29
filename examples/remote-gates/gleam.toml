@@ -1,0 +1,10 @@
+name = "remote_gates"
+version = "0.1.0"
+target = "erlang"
+description = "AWL-authored workflow that clones a repository off-device and runs the Rust gate battery over it."
+licences = ["MIT"]
+
+[dependencies]
+aion_flow = { path = "../../gleam/aion_flow" }
+gleam_stdlib = ">= 0.34.0 and < 2.0.0"
+gleam_json = ">= 2.0.0 and < 4.0.0"

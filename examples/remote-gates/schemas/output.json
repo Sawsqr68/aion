@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The remote_gates outcome envelope. Both outcomes carry every leg result, passed flags included: the VM cannot build a failed-only sublist from named-fork bindings.",
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "required": ["leg", "level", "file", "code", "message"],
+      "properties": {
+        "leg": { "type": "string" },
+        "level": { "type": "string" },
+        "file": { "type": "string" },
+        "line": { "type": "integer" },
+        "column": { "type": "integer" },
+        "code": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    },
+    "leg_result": {
+      "type": "object",
+      "required": [
+        "leg",
+        "exit_code",
+        "passed",
+        "findings",
+        "denominator",
+        "log_path",
+        "output_tail"
+      ],
+      "properties": {
+        "leg": { "type": "string" },
+        "exit_code": { "type": "integer" },
+        "passed": { "type": "boolean" },
+        "findings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/finding" }
+        },
+        "denominator": { "type": "integer" },
+        "log_path": { "type": "string" },
+        "output_tail": { "type": "string" }
+      }
+    },
+    "verdict": {
+      "type": "object",
+      "required": ["commit", "legs"],
+      "properties": {
+        "commit": { "type": "string" },
+        "legs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/leg_result" }
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["outcome", "payload"],
+      "properties": {
+        "outcome": { "const": "clean" },
+        "payload": { "$ref": "#/$defs/verdict" }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["outcome", "payload"],
+      "properties": {
+        "outcome": { "const": "failing" },
+        "payload": { "$ref": "#/$defs/verdict" }
+      }
+    }
+  ]
+}

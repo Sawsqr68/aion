@@ -1,0 +1,92 @@
+//! remote_gates: hand a repository and a branch to a machine that is not yours,
+//! and get the whole gate battery back as data. The clone is resolved to a real
+//! tip commit, the four Rust legs fan out over that one working tree at once, and
+//! every leg returns its real exit code with the diagnostics that produced it —
+//! file, line, column, lint. A red gate names itself; nothing here claims a pass.
+workflow remote_gates
+  input repo: String
+  input branch: String
+
+  outcome clean:   type Clean,   route success
+  outcome failing: type Failing, route failure
+
+/// One diagnostic lifted from a leg's machine-readable stream: a compiler
+/// message's primary span, or a failed test's name and captured output.
+type Finding {
+  leg: String,
+  level: String,
+  file: String,
+  line: Int?,
+  column: Int?,
+  code: String,
+  message: String,
+}
+
+/// One leg's actual result. `denominator` is how many well-formed records the
+/// leg's stream yielded: zero findings with a zero denominator is a broken
+/// stream, not a green gate, and the leg fails on that ground alone.
+type LegResult {
+  leg: String,
+  exit_code: Int,
+  passed: Bool,
+  findings: [Finding],
+  denominator: Int,
+  log_path: String,
+  output_tail: String,
+}
+
+/// The working tree the legs actually ran over, resolved to its tip commit so
+/// every finding is bound to a commit rather than to a branch name.
+type Checkout {
+  path: String,
+  commit: String,
+  branch: String,
+  fetched_fresh: Bool,
+  free_disk_bytes: Int,
+}
+
+/// What the side channel did with the summary — including an honest skip.
+type NotifyResult { delivered: Bool, detail: String }
+
+type Clean { commit: String, legs: [LegResult] }
+/// Carries ALL leg results, passed flags included — the VM cannot build a
+/// failed-only sublist from named-fork bindings (cargo-gates workbench finding).
+type Failing { commit: String, legs: [LegResult] }
+
+worker remote_gates
+  action clone_repo(repo: String, branch: String) -> Checkout
+    node shell, timeout 10m
+  action run_check(path: String) -> LegResult
+    node shell, timeout 15m
+  action run_clippy(path: String) -> LegResult
+    node shell, timeout 15m
+  action run_nextest(path: String) -> LegResult
+    node shell, timeout 45m
+  action run_fmt_check(path: String) -> LegResult
+    node shell, timeout 5m
+  /// A side channel: an unreachable notifier must never sink a gate run.
+  action notify_result(summary: String) -> NotifyResult
+    advisory, node shell, timeout 2m
+
+step fetch_source
+  clone_repo(repo: repo, branch: branch) -> checkout
+
+step run_legs after fetch_source
+  fork
+    run_check(path: checkout.path) -> check_leg
+    run_clippy(path: checkout.path) -> clippy_leg
+    run_nextest(path: checkout.path) -> nextest_leg
+    run_fmt_check(path: checkout.path) -> fmt_leg
+  join
+
+  outcome all_green: when check_leg.passed and clippy_leg.passed and nextest_leg.passed and fmt_leg.passed,
+    route announce_clean
+  outcome any_red: otherwise, route announce_failing
+
+step announce_clean
+  notify_result(summary: "remote_gates CLEAN " + repo + "@" + branch + " " + checkout.commit)
+  route clean(commit: checkout.commit, legs: [check_leg, clippy_leg, nextest_leg, fmt_leg])
+
+step announce_failing
+  notify_result(summary: "remote_gates FAILING " + repo + "@" + branch + " " + checkout.commit)
+  route failing(commit: checkout.commit, legs: [check_leg, clippy_leg, nextest_leg, fmt_leg])
