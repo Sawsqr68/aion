@@ -104,6 +104,26 @@ document, or a bodyless document action absent from the manifest, is refused by
 name. A partial advertisement gets the worker admitted on some actions and then
 dispatched one it never declared.
 
+### A limitation of this fix, stated rather than discovered later
+
+`validate_worker_contracts` iterates **every** retained `.v4` contract for the
+queue and requires the worker to satisfy all of them. A worker derived from one
+document therefore advertises exactly one version's schemas, so if two package
+versions with differing schemas are concurrently deployed on the same queue, that
+worker satisfies at most one of them and is refused.
+
+`contract_diffs`' own doc comment anticipates the multi-version case — "a worker
+may advertise additional actions because one process can serve several
+concurrently deployed package versions" — but *additional actions* is the case it
+solves. Differing schemas for the *same* action name across live versions is not
+something a single `--awl` document can express.
+
+This is inherent to deriving from one document, not introduced here, and it is
+the right trade for now: the alternative is advertising a union, which would mean
+claiming to accept inputs the worker's actual command wiring cannot handle. Worth
+knowing before someone relies on rolling two schema-incompatible versions of a
+queue at once.
+
 ## Finding 3 — hardcoded values in the shipped shell worker (flagged, not changed)
 
 `worker_shell.rs` hardcodes `max_concurrency(4)`,
