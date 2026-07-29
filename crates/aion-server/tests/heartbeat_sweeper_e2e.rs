@@ -304,7 +304,7 @@ impl Harness {
 
 /// THE #176 regression proof: a worker that receives a task and then goes
 /// silent — stream OPEN, no heartbeats, no result — is expired by the sweeper:
-/// its blocked dispatch fails with the retryable lost-worker error, it is
+/// its blocked dispatch fails with the transport-loss class, it is
 /// deregistered from the routing registry, and the WS3 delta carries the
 /// provable `Timeout` reason (only the sweep asserts it; the teardown path
 /// would say `Disconnect`, and the stream never ended here anyway).

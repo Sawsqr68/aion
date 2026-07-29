@@ -318,6 +318,14 @@ impl ServerState {
         namespace_store: Arc<dyn NamespaceStore>,
     ) -> Self {
         let heartbeat_tracker = HeartbeatTracker::new(runtime.worker.heartbeat_window);
+        // Bound here, beside the tracker, for the same reason: `runtime` moves
+        // into the state below, and the transport-loss budget must be read from
+        // the operator's heartbeat window BEFORE it does. A default ledger here
+        // would give an embedder-booted server a ZERO budget — exactly one
+        // re-dispatchable worker loss, then transport-exhausted — while the
+        // full-boot path got the real one.
+        let pending_activities =
+            PendingActivities::default().with_heartbeat_window(runtime.worker.heartbeat_window);
         // Computed before `runtime` moves into the state: the retention bounds
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
@@ -327,7 +335,7 @@ impl ServerState {
                 namespace_guard: NamespaceGuard::new(namespace_resolver),
                 runtime,
                 worker_registry: ConnectedWorkerRegistry::default(),
-                pending_activities: PendingActivities::default(),
+                pending_activities,
                 heartbeat_tracker,
                 drain_state: DrainState::default(),
                 metrics: None,
@@ -384,6 +392,14 @@ impl ServerState {
         jwks_cache: JwksCache,
     ) -> Self {
         let heartbeat_tracker = HeartbeatTracker::new(runtime.worker.heartbeat_window);
+        // Bound here, beside the tracker, for the same reason: `runtime` moves
+        // into the state below, and the transport-loss budget must be read from
+        // the operator's heartbeat window BEFORE it does. A default ledger here
+        // would give an embedder-booted server a ZERO budget — exactly one
+        // re-dispatchable worker loss, then transport-exhausted — while the
+        // full-boot path got the real one.
+        let pending_activities =
+            PendingActivities::default().with_heartbeat_window(runtime.worker.heartbeat_window);
         // Computed before `runtime` moves into the state: the retention bounds
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
@@ -393,7 +409,7 @@ impl ServerState {
                 namespace_guard: NamespaceGuard::new(namespace_resolver),
                 runtime,
                 worker_registry: ConnectedWorkerRegistry::default(),
-                pending_activities: PendingActivities::default(),
+                pending_activities,
                 heartbeat_tracker,
                 drain_state: DrainState::default(),
                 metrics: None,
@@ -445,6 +461,14 @@ impl ServerState {
         jwks_cache: JwksCache,
     ) -> Self {
         let heartbeat_tracker = HeartbeatTracker::new(runtime.worker.heartbeat_window);
+        // Bound here, beside the tracker, for the same reason: `runtime` moves
+        // into the state below, and the transport-loss budget must be read from
+        // the operator's heartbeat window BEFORE it does. A default ledger here
+        // would give an embedder-booted server a ZERO budget — exactly one
+        // re-dispatchable worker loss, then transport-exhausted — while the
+        // full-boot path got the real one.
+        let pending_activities =
+            PendingActivities::default().with_heartbeat_window(runtime.worker.heartbeat_window);
         // Computed before `runtime` moves into the state: the retention bounds
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
@@ -454,7 +478,7 @@ impl ServerState {
                 namespace_guard: NamespaceGuard::new(namespace_resolver),
                 runtime,
                 worker_registry: ConnectedWorkerRegistry::default(),
-                pending_activities: PendingActivities::default(),
+                pending_activities,
                 heartbeat_tracker,
                 drain_state: DrainState::default(),
                 metrics: None,
@@ -505,6 +529,14 @@ impl ServerState {
         worker_registry: ConnectedWorkerRegistry,
     ) -> Self {
         let heartbeat_tracker = HeartbeatTracker::new(runtime.worker.heartbeat_window);
+        // Bound here, beside the tracker, for the same reason: `runtime` moves
+        // into the state below, and the transport-loss budget must be read from
+        // the operator's heartbeat window BEFORE it does. A default ledger here
+        // would give an embedder-booted server a ZERO budget — exactly one
+        // re-dispatchable worker loss, then transport-exhausted — while the
+        // full-boot path got the real one.
+        let pending_activities =
+            PendingActivities::default().with_heartbeat_window(runtime.worker.heartbeat_window);
         // Computed before `runtime` moves into the state: the retention bounds
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
@@ -514,7 +546,7 @@ impl ServerState {
                 namespace_guard: NamespaceGuard::new(namespace_resolver),
                 runtime,
                 worker_registry,
-                pending_activities: PendingActivities::default(),
+                pending_activities,
                 heartbeat_tracker,
                 drain_state: DrainState::default(),
                 metrics: None,

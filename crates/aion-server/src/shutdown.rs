@@ -164,7 +164,7 @@ async fn wait_for_drain_or_timeout(
         Err(_elapsed) => {
             // #207 drain-timeout backstop: PARK the remaining in-flight
             // dispatches for restart recovery instead of synthesizing
-            // retryable lost-worker failures. Nothing is recorded, so the
+            // transport-loss failures. Nothing is recorded, so the
             // durable log converges on the kill -9 shape and post-restart
             // replay re-dispatches every parked ordinal. A park that itself
             // fails leaves in-flight state unhanded — the one remaining

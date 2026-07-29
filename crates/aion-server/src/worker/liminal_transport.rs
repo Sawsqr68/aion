@@ -766,7 +766,7 @@ fn decode_dispatch_response(reply: &[u8]) -> Result<DispatchResponse, ServerErro
 /// - **worker loss** — the connection closed before replying: the awaiter wakes
 ///   PROMPTLY with liminal's typed Disconnected error, surfaced as
 ///   [`ServerError::WorkerConnectionLost`] so the bridge reports the same
-///   retryable lost-worker failure the gRPC teardown sweep does;
+///   TRANSPORT-loss class the gRPC teardown sweep does;
 /// - **an unrecognized receive fault or a decode failure** — surfaced as
 ///   [`ServerError::WorkerDispatch`].
 ///

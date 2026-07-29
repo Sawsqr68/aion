@@ -229,7 +229,8 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     // feature. It is the production caller of `fail_expired_workers`: a worker
     // whose stream stays open while its process wedges (stops heartbeating
     // without disconnecting) is expired, deregistered with the provable Timeout
-    // reason, and its in-flight tasks surface as retryable lost-worker failures.
+    // reason, and its in-flight tasks surface as TRANSPORT losses, re-dispatched
+    // attempt-neutrally rather than charged to the action's retry budget.
     // Cadence derives from `worker.heartbeat_window` (quarter-window, clamped to
     // [1s, window]; the default 30s window sweeps every 7.5s) — deliberately no
     // separate config knob. It drains on the same shutdown watch as the

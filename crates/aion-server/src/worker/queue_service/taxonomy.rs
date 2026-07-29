@@ -400,7 +400,7 @@ mod tests {
 
     #[test]
     fn an_ordinary_failure_is_not_read_as_a_queue_service_refusal() {
-        assert_eq!(WorkerUnavailable::parse("retryable:worker lost"), None);
+        assert_eq!(WorkerUnavailable::parse("lost:worker lost"), None);
         assert_eq!(WorkerUnavailable::parse("terminal:boom"), None);
         assert_eq!(WorkerUnavailable::parse("parked:server-draining"), None);
     }

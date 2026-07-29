@@ -33,12 +33,16 @@
 //!   delivers it through [`ActivityCompletionSink::complete_activity`].
 //! - **Worker loss** — the worker's gRPC stream ends (process death,
 //!   disconnect, expired token); the stream teardown sweeps the worker's
-//!   in-flight tasks through the same sink as retryable lost-worker
-//!   failures ([`HeartbeatTracker::fail_disconnected_worker`]). A
-//!   liminal-delivered worker's loss is observed by its reply router thread
-//!   instead (the correlated-reply awaiter wakes the moment the connection
-//!   closes) and resolves the dispatch with the same retryable lost-worker
-//!   failure.
+//!   in-flight tasks through the same sink as every other TRANSPORT loss
+//!   ([`HeartbeatTracker::fail_disconnected_worker`]). A liminal-delivered
+//!   worker's loss is observed by its reply router thread instead (the
+//!   correlated-reply awaiter wakes the moment the connection closes) and
+//!   resolves the dispatch with the same transport-loss class. Both are
+//!   classified by [`transport_loss`](crate::worker::transport_loss): `lost:`
+//!   while the transport still has budget to deliver the activity (the engine
+//!   re-dispatches the SAME attempt, recording nothing), `transport-exhausted:`
+//!   once that budget is spent. Neither ever wears the action's retry
+//!   vocabulary — the activity never ran.
 //! - **Graceful-drain park (#207)** — during a drain, a worker stream ending
 //!   (or the drain-timeout backstop) PARKS the worker's in-flight tasks
 //!   through [`ActivityCompletionSink::park_activity`]: the waiter resolves

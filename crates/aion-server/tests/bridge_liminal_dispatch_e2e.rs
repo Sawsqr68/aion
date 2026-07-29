@@ -35,9 +35,9 @@
 //!   automatic liveness beats over the liminal wire keep the tracked dispatch
 //!   alive, the worker is NOT deregistered, and the activity executes exactly
 //!   once (no duplicate from a false lost-worker retry).
-//! - `worker_lost_mid_dispatch_fails_retryable_lost_worker` — a worker whose
-//!   connection dies while its dispatch is in flight resolves the dispatch
-//!   promptly with the SAME retryable lost-worker failure the gRPC teardown
+//! - `worker_lost_mid_dispatch_fails_with_the_transport_loss_class` — a worker
+//!   whose connection dies while its dispatch is in flight resolves the
+//!   dispatch promptly with the SAME TRANSPORT-loss class the gRPC teardown
 //!   sweep reports (the reply router's Disconnected arm), and its in-flight
 //!   tracking is cleared.
 //! - `concurrent_dispatches_correlate_replies_to_their_ordinals` — two
@@ -536,8 +536,8 @@ async fn bridge_dispatch_reaches_liminal_worker_and_resolves() -> Result<(), Tes
 /// automatic liveness beats over the liminal wire keep the tracked dispatch
 /// alive, exactly as the gRPC runtime's quarter-window liveness pump does.
 /// Without the liminal liveness path this fails in under a second: the sweeper
-/// declares the healthy worker lost, the dispatch resolves retryable
-/// lost-worker while the handler keeps running, and the worker is deregistered.
+/// declares the healthy worker lost, the dispatch resolves as a transport
+/// loss while the handler keeps running, and the worker is deregistered.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn dispatch_outliving_heartbeat_window_survives_the_sweeper() -> Result<(), TestError> {
     let server = RunningServer::start(SHORT_WINDOW)?;

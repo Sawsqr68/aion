@@ -227,15 +227,27 @@ registration.
   > `the worker tore its healthy connection down after a long activity: the dead-man switch counted execution time as silence`
 * **GREEN on the lane:** `test a_long_activity_is_not_mistaken_for_a_dead_link ... ok`
 
-> **⚠ Residual, reported not hidden.** The pump is armed by the FIRST ping, which
-> arrives within a quarter window of registration. A dispatch that both lands
-> inside that first quarter window AND outruns the whole window would still lose
-> its lease. Closing it needs a ruling between (a) spawning plain liminal
-> dispatches off the serve loop the way agent dispatches already are — which
-> changes per-worker concurrency semantics, and is not this lane's to decide —
-> or (b) a worker-initiated connection beat on a protocol-constant cadence until
-> the window is learned, which D1 permits but which adds a second liveness half.
-> **Not improvised here.**
+> **⚠ Residual — LEDGERED 2026-07-29, closes in its own lane.** The pump is armed
+> by the FIRST ping, which arrives within a quarter window of registration. A
+> dispatch that both lands inside that first quarter window AND outruns the whole
+> window would still lose its lease.
+>
+> **Preferred close (Waffles, ruling update 11:28Z): the server sends its first
+> liveness ping IMMEDIATELY on registration** rather than waiting for the next
+> probe tick. That shrinks the unarmed gap from one quarter-window to roughly one
+> round trip, adds no new mechanism, and changes no semantics.
+>
+> **Fallback: off-serve-loop spawn of plain liminal dispatches**, the way agent
+> dispatches already are. This was the original direction; it demotes because it
+> is a per-worker concurrency-semantics change and needs its own lane.
+>
+> The reasoning of record: the off-loop direction existed to keep the cure
+> in-repo. First-ping-at-registration is *also* in-repo and is strictly less
+> mechanism — and when a cheaper cure appears inside the same constraint that
+> motivated a ruling, the ruling follows the constraint, not its earlier
+> conclusion.
+>
+> **Recorded, not built.** Nothing in this lane implements either option.
 
 ## Hit D — retryable-but-never-retried on worker loss
 
@@ -296,11 +308,18 @@ budget and there is no new knob. A quarter/quadruple relation to that window is
 the established derivation in this crate: `sweep_interval` is `window / 4` for
 the same reason and is likewise underived by any separate setting.
 
-> **⚠ Ratification pending.** The multiplier `4` is a design value and is offered
-> for review, with the alternative on the table: a **count**-based ceiling
-> (N consecutive losses). Wall clock was chosen because it composes with the
-> operator's declared window and does not assume anything about how fast a link
-> flaps.
+> **✓ RATIFIED — Waffles, 2026-07-29 10:49Z.** The wall-clock ceiling stands, on
+> the condition (met) that the derivation lives next to the constant: the
+> rationale above sits in `transport_loss.rs`'s module docs, immediately beside
+> `TRANSPORT_LOSS_BUDGET_WINDOWS`, so the number cannot drift away from its
+> reason.
+>
+> The **count**-based alternative (N consecutive losses) was considered and
+> **declined**: wall clock composes with the operator's own declared
+> `worker.heartbeat_window`, so shortening the window shortens the budget with
+> no second thing to configure, whereas a loss count assumes something about how
+> fast a link flaps — a fast flap and a slow one would get wildly different real
+> budgets from the same integer.
 
 Book-keeping: a resolution OUTSIDE the transport domain (a real result, a real
 action failure) retires the budget; a transport-domain resolution deliberately
@@ -380,6 +399,14 @@ All logs + `.exit` files under `gate-logs/dead-man-switch/`.
 Both osproc gates ran ALONE, after the workspace battery released the machine,
 per their harness law — real 3-OS-process clusters, their own logs, their own
 `.exit` files.
+
+**One unexplained diff, now explained:** `spike/liminal-fan-worker/Cargo.lock`
+(+521 lines) rode `e7d50822` without a word in its commit message. It is not a
+change this lane authored — the lsub5b gates build that spike worker via
+`build_worker_binary`, and doing so realigned its stale path-dep pins (`0.8.0` →
+the workspace's current `0.10.0`) and refreshed the transitive graph. Running the
+gates is what wrote it; committing the tree carried it. Recorded here so nothing
+in the lane is unaccounted for.
 
 ### The first battery run found five old-contract pins
 

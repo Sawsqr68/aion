@@ -638,8 +638,9 @@ pub fn sweep_interval(heartbeat_window: Duration) -> Duration {
 /// This interval task expires every silent connection or task, deregistering it
 /// with the provable
 /// [`WorkerDeathReason::Timeout`](aion_core::WorkerDeathReason::Timeout) and
-/// surfacing its tasks as retryable lost-worker failures through the shared
-/// completion sink. It shares the server's shutdown watch, so it drains with
+/// surfacing its tasks as TRANSPORT losses through the shared completion sink
+/// — the `lost:` class the engine re-dispatches attempt-neutrally, never the
+/// action's retry vocabulary. It shares the server's shutdown watch, so it drains with
 /// the transports (mirroring
 /// [`OutboxDispatcher::run`](crate::worker::OutboxDispatcher::run)).
 ///
@@ -786,7 +787,8 @@ where
                     failed_tasks = report.tasks.len(),
                     heartbeat_window_ms = self.heartbeat_window.as_millis(),
                     "worker heartbeat window expired with in-flight activities; \
-                     deregistered and surfaced as retryable lost-worker failures"
+                     deregistered and surfaced as transport losses, to be \
+                     re-dispatched attempt-neutrally"
                 );
             }
         }

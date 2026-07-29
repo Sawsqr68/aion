@@ -361,8 +361,8 @@ async fn activity_completing_after_long_delay_round_trips() -> Result<(), TestEr
 /// Worker death mid-activity: the worker receives the task, then its stream
 /// ends without ever reporting a result. Because the dispatch wait is
 /// unbounded, the stream teardown sweep is what must unblock it — promptly,
-/// with the retryable lost-worker classification the engine's retry policy
-/// acts on — rather than the workflow hanging forever.
+/// with the TRANSPORT-loss classification the engine re-dispatches
+/// attempt-neutrally — rather than the workflow hanging forever.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn worker_death_mid_activity_fails_dispatch_with_the_transport_loss_class()
 -> Result<(), TestError> {

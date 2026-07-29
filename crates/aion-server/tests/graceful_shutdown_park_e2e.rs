@@ -4,7 +4,18 @@
 //! `ActivityFailed` for every in-flight activity; without a retry policy the
 //! failure was delivered to the workflow as terminal → `WorkflowFailed` →
 //! excluded from `list_active` respawn forever. A kill -9 — which records
-//! nothing — recovered cleanly. These tests drive the REAL drain coordinator
+//! nothing — recovered cleanly.
+//!
+//! That "retryable failure delivered as terminal" step is HISTORY twice over
+//! now, and the wording above is preserved deliberately as the incident record.
+//! #207 stopped the drain synthesizing anything at all (it parks, which is what
+//! these tests prove); the dead-man-switch lane then removed the step itself,
+//! because worker loss no longer wears the action's retry vocabulary — it
+//! carries the transport-loss class, which is re-dispatched attempt-neutrally
+//! whether or not a retry policy exists. Neither path can reach the outcome
+//! described above.
+//!
+//! These tests drive the REAL drain coordinator
 //! (`shutdown::drain_after_first_signal`, the exact function the SIGTERM
 //! listener calls) over a full `ServerState` with an engine, a real libSQL
 //! store, a real workflow whose remote activity a real gRPC worker stream

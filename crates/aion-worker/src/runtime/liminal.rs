@@ -903,8 +903,10 @@ impl LiminalActivityWorker {
             Ok(outcome) => wire_outcome(outcome),
             // A worker-level dispatch fault (e.g. a missing handler) is a
             // retryable fault: another worker in the pool may serve the type,
-            // matching the gRPC contract where such a session error ends in a
-            // retryable lost-worker sweep, never a terminal.
+            // matching the gRPC contract where such a session error is an
+            // ACTION failure the retry policy governs, never a terminal. This is
+            // deliberately NOT the transport-loss class: the harness was
+            // reached and it errored, so the attempt genuinely happened.
             Err(error) => Err(format!("retryable:{error}")),
         };
         Ok(DispatchResponse {

@@ -277,7 +277,8 @@ fn teardown_worker_stream(
                     worker_id = ?worker_id,
                     failed_tasks = report.tasks.len(),
                     "worker disconnected with in-flight activities; \
-                     surfaced as retryable lost-worker failures"
+                     surfaced as transport losses, to be re-dispatched \
+                     attempt-neutrally"
                 );
             }
             Err(error) => {

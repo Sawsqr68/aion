@@ -470,7 +470,9 @@ mod tests {
     fn parked_classification_is_prefix_scoped_and_disjoint_from_retryable() {
         assert!(is_parked_reason(PARKED_ACTIVITY_REASON));
         assert!(is_parked_reason("parked:other-drain-vocabulary"));
-        assert!(!is_parked_reason("retryable:worker lost"));
+        assert!(!is_parked_reason(
+            "lost:worker lost before reporting a result"
+        ));
         assert!(!is_parked_reason("terminal:boom"));
         assert!(!is_parked_reason("unprefixed engine failure"));
         assert!(!is_retryable_reason(PARKED_ACTIVITY_REASON));
