@@ -46,11 +46,28 @@ pub enum FailureMode {
     Terminal,
 }
 
+/// The one environment variable a declared command inherits from its host.
+///
+/// A declared command runs with the host's environment CLEARED. That is a
+/// security boundary, not tidiness: the host process legitimately holds
+/// credentials — store URLs, signing keys, cloud tokens — and a deployed
+/// package must never be able to read them by declaring `run "env"`. Nothing
+/// crosses unless an operator names it.
+///
+/// `PATH` is the sole exception, and only because resolving a bare program
+/// name requires it: `run "echo hi"` must find `echo`. Its value is the
+/// host's, unmodified. An action that will not tolerate even that names its
+/// program by absolute path and passes an environment that overrides `PATH`
+/// to whatever it wants.
+const INHERITED_VARIABLE: &str = "PATH";
+
 /// A declared command, ready to run as an activity.
 #[derive(Debug, Clone)]
 pub struct ShellAction {
     template: CommandTemplate,
     failure_mode: FailureMode,
+    environment: BTreeMap<String, String>,
+    working_directory: Option<std::path::PathBuf>,
 }
 
 impl ShellAction {
@@ -65,6 +82,8 @@ impl ShellAction {
         Ok(Self {
             template: CommandTemplate::parse(command)?,
             failure_mode: FailureMode::default(),
+            environment: BTreeMap::new(),
+            working_directory: None,
         })
     }
 
@@ -72,6 +91,31 @@ impl ShellAction {
     #[must_use]
     pub const fn with_failure_mode(mut self, failure_mode: FailureMode) -> Self {
         self.failure_mode = failure_mode;
+        self
+    }
+
+    /// Supply the environment the command runs with.
+    ///
+    /// Additive to nothing: the host's environment is cleared regardless, so
+    /// these entries plus [`INHERITED_VARIABLE`] are the command's whole
+    /// environment. An entry named `PATH` here replaces the inherited one.
+    #[must_use]
+    pub fn with_environment(mut self, environment: BTreeMap<String, String>) -> Self {
+        self.environment = environment;
+        self
+    }
+
+    /// Run the command in `directory` instead of wherever the host happens to
+    /// be.
+    ///
+    /// Worth setting whenever a command names a relative path. Absent, the
+    /// command inherits the host process's working directory, which is a
+    /// property of how the host was launched and not something a package
+    /// author can see — so a relative path in a declared command means
+    /// something the author cannot predict.
+    #[must_use]
+    pub fn with_working_directory(mut self, directory: impl Into<std::path::PathBuf>) -> Self {
+        self.working_directory = Some(directory.into());
         self
     }
 
@@ -116,6 +160,25 @@ impl ShellAction {
 
         let mut command = Command::new(program);
         command.args(rest);
+        // stdin is CLOSED, never inherited. A declared command that reads
+        // standard input would otherwise be reading the host process's — a
+        // terminal on an interactive boot, or another activity's leftovers —
+        // and would block the activity forever waiting for a line nobody is
+        // going to type.
+        command.stdin(std::process::Stdio::null());
+        // The host's environment does not cross into a declared command. See
+        // `INHERITED_VARIABLE`: only PATH does, and only so a bare program
+        // name resolves.
+        command.env_clear();
+        if let Some(path) = std::env::var_os(INHERITED_VARIABLE) {
+            command.env(INHERITED_VARIABLE, path);
+        }
+        for (name, value) in &self.environment {
+            command.env(name, value);
+        }
+        if let Some(directory) = &self.working_directory {
+            command.current_dir(directory);
+        }
 
         match run_cancellable_command(command, context.cancelled()).await {
             Ok(CancellableCommandOutput::Completed(output)) => {
@@ -334,6 +397,134 @@ mod tests {
         };
         assert_eq!(failure.classification(), &Classification::Terminal);
         assert!(failure.message().contains("cancelled"));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn the_hosts_environment_does_not_cross_into_a_declared_command() -> TestResult {
+        // A host process legitimately holds credentials. A deployed package
+        // must not be able to read them by declaring `run "env"`. This is the
+        // test that catches a regression to inherited environment.
+        //
+        // It reads a variable the host ALREADY has rather than setting one:
+        // `std::env::set_var` is `unsafe` (process-global, racy against every
+        // other thread) and the workspace denies unsafe outright. Any existing
+        // variable other than the deliberately-inherited PATH proves the same
+        // property.
+        let Some(present) = std::env::vars_os()
+            .filter_map(|(name, _)| name.into_string().ok())
+            .find(|name| name != "PATH" && !name.is_empty() && !name.contains('='))
+        else {
+            tracing::info!(
+                "skipping: the host has no environment variable besides PATH to prove \
+                 non-inheritance with"
+            );
+            return Ok(());
+        };
+        let action = ShellAction::new(&format!("sh -c 'echo \"[${{{present}:-absent}}]\"'"))?;
+        let (context, _handle) = context();
+        let outcome = action.run(&BTreeMap::new(), &context).await?;
+        assert_eq!(
+            outcome.stdout, "[absent]",
+            "the host's `{present}` leaked into a declared command"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn an_operator_supplied_variable_does_reach_the_command() -> TestResult {
+        // The other half: clearing must not make the environment unusable.
+        let mut environment = BTreeMap::new();
+        environment.insert("DECLARED_GREETING".to_owned(), "supplied".to_owned());
+        let action = ShellAction::new("sh -c 'echo \"[$DECLARED_GREETING]\"'")?
+            .with_environment(environment);
+        let (context, _handle) = context();
+        let outcome = action.run(&BTreeMap::new(), &context).await?;
+        assert_eq!(outcome.stdout, "[supplied]");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_command_runs_in_its_declared_working_directory() -> TestResult {
+        let action = ShellAction::new("pwd")?.with_working_directory("/");
+        let (context, _handle) = context();
+        let outcome = action.run(&BTreeMap::new(), &context).await?;
+        assert_eq!(outcome.stdout, "/");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_command_reading_stdin_gets_end_of_file_rather_than_the_hosts() -> TestResult {
+        // Inherited stdin would hang the activity forever on an interactive
+        // boot. Closed stdin makes `cat` finish immediately with nothing.
+        let action = ShellAction::new("cat")?;
+        let (context, _handle) = context();
+        let outcome = action.run(&BTreeMap::new(), &context).await?;
+        assert_eq!(outcome.exit_code, 0);
+        assert_eq!(outcome.stdout, "");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn awkward_values_survive_as_exactly_one_argument_each() -> TestResult {
+        // Cally's misparse question, not the injection one: a value that a
+        // careless argv build would split, truncate, or lose entirely. Each is
+        // printed back with a delimiter so a silent split is visible.
+        for (value, expected) in [
+            ("two\nlines", "[two\nlines]"),
+            ("", "[]"),
+            ("   leading and trailing   ", "[   leading and trailing   ]"),
+            ("tab\there", "[tab\there]"),
+            ("quote\"inside", "[quote\"inside]"),
+            ("single'inside", "[single'inside]"),
+            ("back\\slash", "[back\\slash]"),
+        ] {
+            let action = ShellAction::new("printf [%s] $value")?;
+            let (context, _handle) = context();
+            let outcome = action
+                .run(&arguments(&[("value", serde_json::json!(value))]), &context)
+                .await?;
+            assert_eq!(
+                outcome.stdout, expected,
+                "value {value:?} did not arrive as exactly one argument"
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_value_that_looks_like_a_flag_is_still_passed_as_a_value() -> TestResult {
+        // A leading `-` is the misparse Apollo's law points at: the ARGV is
+        // correct (one element), but the PROGRAM may read it as an option.
+        // The executor cannot fix that — only the author can, by writing
+        // `--` in the declaration. Both halves are pinned here so the
+        // behaviour is recorded rather than discovered.
+        let exposed = ShellAction::new("printf %s $value")?;
+        let (exposed_context, _exposed_handle) = context();
+        let outcome = exposed
+            .run(
+                &arguments(&[("value", serde_json::json!("-n"))]),
+                &exposed_context,
+            )
+            .await;
+        // `printf %s -n` — the program's own parse decides; the executor
+        // delivered exactly what was declared either way.
+        assert!(
+            outcome.is_ok(),
+            "the executor must deliver the value and let the program parse it"
+        );
+
+        // With `--` the author has told the program where options end, and the
+        // value is unambiguously a value.
+        let guarded = ShellAction::new("printf -- [%s] $value")?;
+        let (guarded_context, _guarded_handle) = context();
+        let guarded_outcome = guarded
+            .run(
+                &arguments(&[("value", serde_json::json!("-n"))]),
+                &guarded_context,
+            )
+            .await?;
+        assert_eq!(guarded_outcome.stdout, "[-n]");
         Ok(())
     }
 

@@ -1,0 +1,15 @@
+//! Probe: what can a declared command see of the server it runs inside?
+//! Deployed and run against a server started with a secret in its
+//! environment, this must report the secret as absent.
+workflow env_probe
+  input variable: String
+  outcome probed: type RunOutcome, route success
+
+type RunOutcome { exit_code: Int, stdout: String, stderr: String }
+
+worker shell_box
+  action peek(variable: String) -> RunOutcome
+    run "printenv $variable"
+
+step peek_it
+  variable |> peek |> route probed
