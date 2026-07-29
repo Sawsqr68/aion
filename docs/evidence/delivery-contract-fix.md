@@ -105,4 +105,109 @@ The timings themselves confirm the mechanism: every duplicate lands right
 where the 30-second bounded awaiter predicts it. The defect is pinned at the
 bytes; fix code may now be written.
 
-## Phase 2 — the fix (in progress)
+## Phase 2 — the fix: FULL DESIGN (verified at the bytes, ready to implement)
+
+Every claim below was verified by reading the named source this session.
+
+### 2.1 `liminal_transport.rs` — the held wait (~40L)
+
+- New `LiminalWorkerDelivery::dispatch_held(request, keep_waiting) ->
+  Result<Option<DispatchResponse>, ServerError>`: `push_dispatch()` then
+  `receive_bridge_reply(&awaiter, keep_waiting)` — literally SHARES the bridge
+  wait loop at `:780`. "Two wait policies" becomes "two callers of one policy."
+- `RegistryLiminalDispatch::dispatch` (`:997`): replace the bounded
+  `delivery.dispatch(&request)` inside `spawn_blocking` with `dispatch_held`.
+  `keep_waiting = !shutdown_flag && in_flight.contains(dispatch_key) &&
+  registry.worker_by_id(worker.id())?.is_some()` — ALL SYNC-callable from the
+  blocking thread (`worker_by_id` exists, `registry.rs:775`; registry locks are
+  sync). `Ok(None)` (abandoned) → revoke fence token, WARN loudly (rider 3
+  half 1: "delivery wait abandoned; late reply will be discarded"), return
+  WorkerDispatch error so outbox policy re-drives.
+- **Cap classification fix**: `push_dispatch`'s error mapping currently maps
+  EVERY `push_to_connection` error to `WorkerConnectionLost` ("exactly one
+  cause" — FALSE in liminal 0.5.0: `ServerError::ConnectionCapReached { cap:
+  "max_pending_pushes_per_connection" }` is a distinct typed refusal,
+  supervisor.rs:2416). Map cap-reached to a new typed `worker busy` error;
+  everything else stays connection-lost. Without this, stacked held pushes at
+  the cap would masquerade as worker death → attempt-consuming immediate
+  re-arm churn.
+- Rider 3 half 2: WARN at `LiminalCompletionSource::deliver` (`:498`) on fence
+  rejection (Stale/NoCurrentGeneration) — a late reply that does arrive is
+  logged, never silently swallowed.
+
+### 2.2 `outbox_dispatcher.rs` — per-row delivery + in-flight set (~120L)
+
+- `InFlightSet = Arc<Mutex<HashSet<String>>>` shared dispatcher⇄reconciler⇄
+  dispatch impl. RAII guard: insert before spawn, remove when the row's task
+  finishes (every path).
+- `sweep_once`: skip any claimed row already in-flight (defense vs reconciler
+  re-arm races); otherwise insert + `tokio::spawn(self_arc.process_row(row))`.
+  `run()` wraps self in `Arc` for task cloning. Concurrency: unbounded per
+  claimed row — the worker's serial execution + liminal's 32-push cap bound
+  reality; cap refusal is now typed busy (below), so over-cap is honest wait,
+  not dead-letter fuel.
+- `handle_dispatch_error`: NEW ARM — worker-busy → **attempt-NEUTRAL** re-arm:
+  `retry_outbox_row(key, row.attempt /*unchanged*/, now + backoff_base)`,
+  WARN. Mirrors the connection-lost arm's shape (which stays
+  attempt-consuming per its documented policy).
+- Shutdown: dispatcher sets an `Arc<AtomicBool>` when `run` exits; the flag is
+  part of `keep_waiting`, so held waits abandon on drain. Rows stay Claimed;
+  post-restart the reconciler re-arms them (in-flight set is empty then —
+  correct recovery).
+- NO new config. NO wire change. NO worker change.
+
+### 2.3 `outbox_reconciler.rs` — in-flight exemption (~40L)
+
+- Builder `.with_in_flight(set)`. The sweep currently bulk-calls
+  `rearm_stale_claimed_outbox_rows`; change the flow to
+  `list_stale_claimed_outbox_rows` → drop rows in the in-flight set → settle/
+  re-arm the remainder individually (`retry_outbox_row`), preserving the #253
+  liveness gate. Without this the reconciler re-creates the duplicate-push bug
+  on a longer fuse.
+
+### 2.4 Dead-letter honesty + redrive (riders 1–2, pin (c))
+
+- Dead-letter arm gains failure delivery: after `fail_outbox_row`, call
+  `callback.deliver_failure(wf, activity, run, "infrastructure: delivery to
+  worker failed after N attempts: <error>")` → engine
+  `deliver_outbox_failure` → recorded activity failure → the workflow's OWN
+  retry/failure semantics take over. That IS the explicit
+  infrastructure-failed state: never a silent `Running`. Dispatcher gains the
+  callback via builder (`.with_delivery_callback`), wired where the server
+  builds the dispatcher (state.rs).
+- **Redrive semantics resolved this session**: after a SUCCESSFUL failure
+  delivery, judgment has passed — auto-redrive would re-execute a
+  non-idempotent activity whose failure is recorded (late result would be
+  dedup-dropped but side effects would run) → NO auto-redrive of
+  failure-delivered rows. Redrive covers rows whose failure delivery FAILED
+  (workflow untold, still Running). ⚠️ OPEN ITEM before implementing rider 1:
+  read `crates/aion-server/src/worker/outbox_settle.rs` — a settlement seam
+  for terminal rows already exists (`list_unsettled_outbox_workflow_ids`) and
+  may already carry half of this; do not build a parallel mechanism.
+- Store-trait addition for redrive (three backends + conformance) sized ~1
+  session; sequence it AFTER the core fix greens the four pins.
+
+### 2.5 Verification sequence
+
+1. Core fix (2.1–2.3) → pins (a), (b), (d) green + (c) guard half.
+2. Rider 2 (2.4 failure delivery) → pin (c) fully green.
+3. `cargo clippy --workspace --all-targets -- -D warnings` + `cargo fmt` clean
+   on Dean's box.
+4. Rider 1 (redrive) with its own store-conformance tests.
+5. Battery via Seth's slot (LANE/VENUE/SHAPE/DURATION/READY-STATE format).
+6. Acceptance: wake-prompt shakedown re-run (needs the rig redeployed from
+   the fixed tree — coordinate with Waffles; compute placement per the
+   coordinate-only doctrine).
+
+### Execution state (resume anchor)
+
+- Local worktree `.worktrees/delivery-fix`, branch `fix/delivery-contract`
+  @ a70e8e5d (pins + evidence + red log, PUSHED to origin).
+- Dean's box `~/aion-gates/aion` on branch `fix/delivery-contract` with the
+  pin file rsynced (its git state is behind local — sync files, not commits;
+  land from the LOCAL branch only).
+- Iteration loop: edit locally → `rsync` changed files →
+  `ssh … cargo check/nextest` on Dean's box. Nothing compiles on Tom's box.
+- Doctrine: progress → LANE TOPIC (task 83c6dbc6, respond); DMs to
+  Cally/Waffles = decisions/blockers only. Every evidence line: machine +
+  operator ("Dean's box, Vesper").
