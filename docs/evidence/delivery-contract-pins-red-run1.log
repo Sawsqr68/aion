@@ -1,0 +1,135 @@
+   Compiling tokio v1.52.3
+   Compiling beamr v0.16.2
+   Compiling toml_parser v1.1.2+spec-1.1.0
+   Compiling tungstenite v0.29.0
+   Compiling serde_spanned v1.1.1
+   Compiling toml_writer v1.1.1+spec-1.1.0
+   Compiling rustls v0.23.40
+   Compiling toml v1.1.2+spec-1.1.0
+   Compiling aion-package v0.10.0 (/Users/deanwhiting/aion-gates/aion/crates/aion-package)
+   Compiling rustls-platform-verifier v0.7.0
+   Compiling tokio-util v0.7.18
+   Compiling tokio-stream v0.1.18
+   Compiling tokio-tungstenite v0.29.0
+   Compiling tokio-io-timeout v1.2.1
+   Compiling tokio-rustls v0.25.0
+   Compiling tokio-rustls v0.26.4
+   Compiling aion-integrations v0.10.0 (/Users/deanwhiting/aion-gates/aion/crates/aion-integrations)
+   Compiling aion-toolchain v0.10.0 (/Users/deanwhiting/aion-gates/aion/crates/aion-toolchain)
+   Compiling h2 v0.4.14
+   Compiling h2 v0.3.27
+   Compiling tower v0.5.3
+   Compiling tower v0.4.13
+   Compiling tower-http v0.6.11
+   Compiling tower-http v0.4.4
+   Compiling hyper v0.14.32
+   Compiling hyper v1.10.1
+   Compiling hyper-util v0.1.20
+   Compiling hyper-timeout v0.5.2
+   Compiling axum v0.8.9
+   Compiling hyper-rustls v0.27.9
+   Compiling reqwest v0.13.4
+   Compiling hyper-timeout v0.4.1
+   Compiling axum v0.6.20
+   Compiling hyper-rustls v0.25.0
+   Compiling aion-awl v0.10.0 (/Users/deanwhiting/aion-gates/aion/crates/aion-awl)
+   Compiling aion-rs v0.10.0 (/Users/deanwhiting/aion-gates/aion/crates/aion)
+   Compiling tonic v0.14.6
+   Compiling tonic v0.11.0
+   Compiling tonic-prost v0.14.5
+   Compiling aion-proto-generated v0.10.0 (/Users/deanwhiting/aion-gates/aion/crates/aion-proto-generated)
+   Compiling libsql_replication v0.9.30
+   Compiling tonic-web v0.11.0
+   Compiling haematite v0.7.0
+   Compiling aion-awl-package v0.10.0 (/Users/deanwhiting/aion-gates/aion/crates/aion-awl-package)
+   Compiling libsql v0.9.30
+   Compiling aion-proto v0.10.0 (/Users/deanwhiting/aion-gates/aion/crates/aion-proto)
+   Compiling liminal-rs v0.5.0
+   Compiling aion-store-haematite v0.10.0 (/Users/deanwhiting/aion-gates/aion/crates/aion-store-haematite)
+   Compiling aion-store-libsql v0.10.0 (/Users/deanwhiting/aion-gates/aion/crates/aion-store-libsql)
+   Compiling liminal-sdk v0.5.0
+   Compiling liminal-server v0.5.0
+   Compiling aion-worker v0.10.0 (/Users/deanwhiting/aion-gates/aion/crates/aion-worker)
+   Compiling aion-server v0.10.0 (/Users/deanwhiting/aion-gates/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 17s
+────────────
+ Nextest run ID fae918c3-2b6b-4055-a7e7-4240e76212c7 with nextest profile: default
+    Starting 4 tests across 1 binary
+        FAIL [   0.573s] (1/4) aion-server::outbox_delivery_contract_e2e dead_letter_is_genuine_and_loud
+  stdout ───
+
+    running 1 test
+    test dead_letter_is_genuine_and_loud ... FAILED
+
+    failures:
+
+    failures:
+        dead_letter_is_genuine_and_loud
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.56s
+
+  stderr ───
+    Error: "SILENT DEAD-LETTER: the row dead-lettered but nothing reached the delivery callback — the workflow reports Running forever (the liveness lie); dead-letter must surface an explicit infrastructure failure to the workflow"
+
+        SLOW [> 60.000s] (───) aion-server::outbox_delivery_contract_e2e re_push_while_executing_never_re_executes
+        SLOW [> 60.000s] (───) aion-server::outbox_delivery_contract_e2e wedge_shape_regression_0756ecd5
+        SLOW [> 60.000s] (───) aion-server::outbox_delivery_contract_e2e ninety_second_activity_delivers_exactly_once
+        FAIL [  60.416s] (2/4) aion-server::outbox_delivery_contract_e2e re_push_while_executing_never_re_executes
+  stdout ───
+
+    running 1 test
+    test re_push_while_executing_never_re_executes has been running for over 60 seconds
+    test re_push_while_executing_never_re_executes ... FAILED
+
+    failures:
+
+    failures:
+        re_push_while_executing_never_re_executes
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 60.40s
+
+  stderr ───
+    Error: "DUPLICATE EXECUTION: leg 'minimal-overrun' started 2 times — the outbox re-pushed a dispatch the worker was already executing (unfenced at-least-once execution)"
+
+        FAIL [  90.659s] (3/4) aion-server::outbox_delivery_contract_e2e ninety_second_activity_delivers_exactly_once
+  stdout ───
+
+    running 1 test
+    test ninety_second_activity_delivers_exactly_once has been running for over 60 seconds
+    test ninety_second_activity_delivers_exactly_once ... FAILED
+
+    failures:
+
+    failures:
+        ninety_second_activity_delivers_exactly_once
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 90.64s
+
+  stderr ───
+    Error: "DUPLICATE EXECUTION: leg 'ninety' started 2 times — the outbox re-pushed a dispatch the worker was already executing (unfenced at-least-once execution)"
+
+        SLOW [>120.000s] (───) aion-server::outbox_delivery_contract_e2e wedge_shape_regression_0756ecd5
+        FAIL [ 125.236s] (4/4) aion-server::outbox_delivery_contract_e2e wedge_shape_regression_0756ecd5
+  stdout ───
+
+    running 1 test
+    test wedge_shape_regression_0756ecd5 has been running for over 60 seconds
+    test wedge_shape_regression_0756ecd5 ... FAILED
+
+    failures:
+
+    failures:
+        wedge_shape_regression_0756ecd5
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 125.22s
+
+  stderr ───
+    Error: "DUPLICATE EXECUTION: leg 'long-clippy' started 2 times — the outbox re-pushed a dispatch the worker was already executing (unfenced at-least-once execution)"
+
+────────────
+     Summary [ 125.237s] 4 tests run: 0 passed, 4 failed, 0 skipped
+        FAIL [   0.573s] (1/4) aion-server::outbox_delivery_contract_e2e dead_letter_is_genuine_and_loud
+        FAIL [  60.416s] (2/4) aion-server::outbox_delivery_contract_e2e re_push_while_executing_never_re_executes
+        FAIL [  90.659s] (3/4) aion-server::outbox_delivery_contract_e2e ninety_second_activity_delivers_exactly_once
+        FAIL [ 125.236s] (4/4) aion-server::outbox_delivery_contract_e2e wedge_shape_regression_0756ecd5
+error: test run failed

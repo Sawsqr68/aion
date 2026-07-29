@@ -68,10 +68,41 @@ it.
   to pin verdicts; timing-shaped battery reds are suspect and re-run
   clean-box serialized via Seth.
 
-## Phase 1 — red pins (next)
+## Phase 1 — red pins: ALL FOUR SHOWN RED (Dean's box, Vesper)
 
-(a) 90-second activity through the outbox liminal path delivered exactly once
-and completed — expected red today: dead-letters at ~2.5 min. (b) duplicate
-execution on re-push while executing. (c) dead-letter only on genuine delivery
-failure. (d) wedge-shape regression from exhibit `0756ecd5`. Red outputs to be
-recorded here verbatim before any fix code.
+Pin file: `crates/aion-server/tests/outbox_delivery_contract_e2e.rs`
+(branch `fix/delivery-contract`). First red run on the UNFIXED tree
+(main `e958ca28` + pins only): Dean's box, operator Vesper, nextest run ID
+`fae918c3-2b6b-4055-a7e7-4240e76212c7`, log
+`~/aion-gates/pins-red-run1.log` on that box (copy committed alongside this
+doc). Completion marker present:
+
+```
+Summary [ 125.237s] 4 tests run: 0 passed, 4 failed, 0 skipped
+  FAIL [   0.573s] dead_letter_is_genuine_and_loud
+  FAIL [  60.416s] re_push_while_executing_never_re_executes
+  FAIL [  90.659s] ninety_second_activity_delivers_exactly_once
+  FAIL [ 125.236s] wedge_shape_regression_0756ecd5
+```
+
+Every red is a NAMED-DEFECT ASSERTION, not a timeout:
+
+- **(c) 0.573s** — `SILENT DEAD-LETTER: the row dead-lettered but nothing
+  reached the delivery callback — the workflow reports Running forever (the
+  liveness lie)`. The guard half held: the genuinely-undeliverable row did
+  dead-letter; the loud half is the red.
+- **(b) 60.416s** — `DUPLICATE EXECUTION: leg 'minimal-overrun' started 2
+  times — the outbox re-pushed a dispatch the worker was already executing`.
+- **(a) 90.659s** — `DUPLICATE EXECUTION: leg 'ninety' started 2 times` —
+  the 90-second contract pin trips on the duplicate (t≈90s, the moment the
+  serial worker finishes leg one and dequeues the doomed re-push), before the
+  dead-letter it was also racing toward.
+- **(d) 125.236s** — `DUPLICATE EXECUTION: leg 'long-clippy' started 2
+  times` — the wedge shape reproduced: fast leg fine, long legs re-pushed
+  against a live serial worker, exactly the exhibit's mechanics.
+
+The timings themselves confirm the mechanism: every duplicate lands right
+where the 30-second bounded awaiter predicts it. The defect is pinned at the
+bytes; fix code may now be written.
+
+## Phase 2 — the fix (in progress)
