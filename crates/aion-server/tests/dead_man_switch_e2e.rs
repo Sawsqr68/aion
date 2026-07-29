@@ -401,7 +401,13 @@ fn push_dispatch_holding(
         labels: std::collections::BTreeMap::new(),
         heartbeat_window_ms: 0,
     };
-    let response = delivery.dispatch(&request).map_err(test_error)?;
+    let deadline = Instant::now() + OBSERVE;
+    let response = delivery
+        .dispatch_held(&request, || Instant::now() < deadline)
+        .map_err(test_error)?
+        .ok_or_else(|| {
+            test_error("the dispatch reply wait was abandoned at the test observation deadline")
+        })?;
     response
         .outcome
         .map_err(|reason| test_error(format!("the worker failed the dispatch: {reason}")))

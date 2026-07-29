@@ -421,7 +421,11 @@ async fn live_agent_streams_transcript_and_takes_intervention() -> Result<(), Te
     // event drain. Run the blocking push off-thread (it does not return until the run
     // is released, so it stays parked until we complete the session at the end).
     let dispatch_state = server.state.clone();
-    let push_task = tokio::task::spawn_blocking(move || push_dispatch(&dispatch_state, worker_id));
+    let run_held = Arc::new(AtomicBool::new(true));
+    let dispatch_run_held = Arc::clone(&run_held);
+    let push_task = tokio::task::spawn_blocking(move || {
+        push_dispatch(&dispatch_state, worker_id, dispatch_run_held.as_ref());
+    });
 
     // GATE 1: the session emits a transcript event the instant it starts; it must
     // reach the O-keyspace AND the live broadcast MID-RUN (the run is still blocked on
@@ -468,6 +472,7 @@ async fn live_agent_streams_transcript_and_takes_intervention() -> Result<(), Te
     // End the run and assert the finished attempt is the too-late no-op.
     drop(events_tx);
     release.notify_one();
+    run_held.store(false, Ordering::SeqCst);
     assert_finished_attempt_is_stale(&server).await?;
 
     // The parked push returns now that the run completed; join it so nothing leaks.
@@ -607,9 +612,13 @@ async fn assert_finished_attempt_is_stale(server: &RunningServer) -> Result<(), 
     }
 }
 
-/// Push a `DispatchRequest` to `worker_id` over its liminal connection, mirroring the
-/// production dispatch push (`LiminalWorkerDelivery::dispatch`).
-fn push_dispatch(state: &ServerState, worker_id: aion_server::worker::WorkerId) {
+/// Push a `DispatchRequest` to `worker_id` over its liminal connection, mirroring
+/// the production held dispatch push (`LiminalWorkerDelivery::dispatch_held`).
+fn push_dispatch(
+    state: &ServerState,
+    worker_id: aion_server::worker::WorkerId,
+    run_held: &AtomicBool,
+) {
     use aion_server::worker::{DispatchRequest, WorkerDelivery};
     let handle = state
         .worker_registry()
@@ -631,9 +640,10 @@ fn push_dispatch(state: &ServerState, worker_id: aion_server::worker::WorkerId) 
         labels: std::collections::BTreeMap::new(),
         heartbeat_window_ms: 0,
     };
-    // The push blocks for the reply (which arrives only when the run is released), so
-    // this runs on a spawned blocking task and its result is not awaited here.
-    let _ = delivery.dispatch(&request);
+    // The held push blocks while the run is held (the reply arrives only when the
+    // run is released), so this runs on a spawned blocking task and its result is
+    // deliberately ignored here.
+    let _ = delivery.dispatch_held(&request, || run_held.load(Ordering::SeqCst));
 }
 
 /// THE PRODUCTION-SERVE WIRING TEST (NOI-5b/NOI-6): prove the reconnect-to-survivor
@@ -707,7 +717,11 @@ async fn serve_with_redial_installs_the_composed_harness() -> Result<(), TestErr
     server.state.attempt_owners().bind(attempt_key, worker_id);
 
     let dispatch_state = server.state.clone();
-    let push_task = tokio::task::spawn_blocking(move || push_dispatch(&dispatch_state, worker_id));
+    let run_held = Arc::new(AtomicBool::new(true));
+    let dispatch_run_held = Arc::clone(&run_held);
+    let push_task = tokio::task::spawn_blocking(move || {
+        push_dispatch(&dispatch_state, worker_id, dispatch_run_held.as_ref());
+    });
 
     // THE PROOF: the harness (installed by `serve_with_redial`) ran, so its transcript
     // event reaches the live broadcast mid-run. An unwired harness would have routed to
@@ -730,6 +744,7 @@ async fn serve_with_redial_installs_the_composed_harness() -> Result<(), TestErr
 
     drop(events_tx);
     release.notify_one();
+    run_held.store(false, Ordering::SeqCst);
     let _ = push_task.await;
     stop.store(true, Ordering::SeqCst);
     worker_thread.join().ok();

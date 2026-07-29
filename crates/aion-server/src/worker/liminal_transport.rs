@@ -83,10 +83,9 @@ use super::outbox_dispatcher::{DeliveryGate, OutboxRowDispatch};
 use super::registry::{ConnectedWorkerRegistry, WorkerDelivery, WorkerHandle, WorkerRegistration};
 use crate::error::ServerError;
 
-/// Upper bound on how long a server-initiated dispatch push waits for the
-/// worker's correlated reply before the row is treated as undelivered and the
-/// outbox retries. Generous because an activity may legitimately run a while; the
-/// outbox's own retry/reconcile loop is the real liveness backstop.
+/// Upper bound on how long a server-initiated intervention push waits for the
+/// worker's correlated control-plane acknowledgement. Activity dispatch replies
+/// use an unbounded held wait because an activity may legitimately run a while.
 const PUSH_REPLY_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Re-arm cadence for the engine-seam bridge's UNBOUNDED reply wait
@@ -553,9 +552,9 @@ pub fn payload_from_request(request: &DispatchRequest) -> Payload {
 /// the SAME way as a gRPC worker (`select_worker` on `(namespace, task_queue,
 /// node)`); this is the delivery leg the registry holds for it. It pairs the
 /// [`ConnectionSupervisor`] that owns the worker's connection with that
-/// connection's beamr `pid`, so [`Self::dispatch`] can push a [`DispatchRequest`]
-/// out on the worker's existing socket (the LSUB-0 server-push primitive) and
-/// block for the correlated [`DispatchResponse`].
+/// connection's beamr `pid`, so [`Self::dispatch_held`] can push a
+/// [`DispatchRequest`] out on the worker's existing socket (the LSUB-0
+/// server-push primitive) and block for the correlated [`DispatchResponse`].
 #[derive(Clone)]
 pub struct LiminalWorkerDelivery {
     supervisor: ConnectionSupervisor,
@@ -582,60 +581,6 @@ impl LiminalWorkerDelivery {
     #[must_use]
     pub const fn pid(&self) -> u64 {
         self.pid
-    }
-
-    /// Push one dispatch out on the worker's connection and block for its reply.
-    ///
-    /// Serializes `request`, pushes it via [`ConnectionSupervisor::push_to_connection`],
-    /// and decodes the worker's correlated [`DispatchResponse`] reply.
-    ///
-    /// # Error classification (LSUB-3)
-    ///
-    /// A connection that is gone surfaces the typed
-    /// [`ServerError::WorkerConnectionLost`] so the outbox can fail over
-    /// immediately rather than waiting out retry backoff. A distinct typed
-    /// connection-cap refusal surfaces [`ServerError::WorkerBusy`]: the worker is
-    /// still live, but cannot admit another held push yet.
-    ///
-    /// - `push_to_connection` can return either a connection failure or
-    ///   `ConnectionCapReached`; [`classify_push_error`] distinguishes them by
-    ///   typed variant.
-    /// - `awaiter.receive` returns the typed liminal
-    ///   `ServerError::PushReplyDisconnected` when the connection closed before a
-    ///   correlated reply arrived (after Stage A this wakes PROMPTLY instead of
-    ///   blocking the full [`PUSH_REPLY_TIMEOUT`]), and `PushReplyTimeout` when the
-    ///   worker is alive but slow. [`is_connection_closed_reply_error`] matches the
-    ///   Disconnected variant BY TYPE; the Timeout variant (and anything else)
-    ///   stays on the existing [`ServerError::WorkerDispatch`] backoff path — the
-    ///   two are never collapsed.
-    ///
-    /// Every other failure (serialize, decode, or any unrecognized reply error)
-    /// remains a [`ServerError::WorkerDispatch`] so the outbox's unchanged
-    /// backoff/dead-letter path drives the row.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ServerError::WorkerConnectionLost`] when the worker connection was
-    /// gone at push time or closed before replying; returns
-    /// [`ServerError::WorkerDispatch`] when the request cannot be serialized, the
-    /// reply does not arrive within [`PUSH_REPLY_TIMEOUT`] (slow worker), or the
-    /// reply cannot be decoded.
-    pub fn dispatch(&self, request: &DispatchRequest) -> Result<DispatchResponse, ServerError> {
-        let awaiter = self.push_dispatch(request)?;
-        let reply = awaiter.receive(PUSH_REPLY_TIMEOUT).map_err(|error| {
-            // Disconnected (worker died mid-flight) => connection-lost => immediate
-            // failover. Timeout (worker alive but slow) and anything unrecognized
-            // => WorkerDispatch => unchanged backoff. Never collapse the two.
-            if is_connection_closed_reply_error(&error) {
-                ServerError::worker_connection_lost(
-                    "liminal-push",
-                    format!("worker connection closed before reply: {error}"),
-                )
-            } else {
-                dispatch_error("liminal-push", format!("worker reply failed: {error}"))
-            }
-        })?;
-        decode_dispatch_response(&reply)
     }
 
     /// Push one outbox dispatch and wait without an activity-duration bound,
@@ -703,8 +648,8 @@ impl LiminalWorkerDelivery {
     /// Push one neutral intervention command out on the worker's connection and
     /// block for its correlated ack reply (NOI-6, §6.2).
     ///
-    /// Mirrors [`Self::dispatch`] but carries an [`InterventionRequest`] and decodes
-    /// an [`InterventionReply`], so an intervention rides the SAME server-push
+    /// Uses the same connection as activity dispatch but carries an
+    /// [`InterventionRequest`] and decodes an [`InterventionReply`], so it rides the SAME server-push
     /// channel as an activity dispatch. The push is a blocking, thread-based liminal
     /// call; the async router runs it off the runtime.
     ///
@@ -754,7 +699,7 @@ impl LiminalWorkerDelivery {
 
 /// Decodes one correlated reply payload as a [`DispatchResponse`].
 ///
-/// Shared by the outbox wait ([`LiminalWorkerDelivery::dispatch`]) and the
+/// Shared by the outbox wait ([`LiminalWorkerDelivery::dispatch_held`]) and the
 /// bridge wait ([`receive_bridge_reply`]) so the two paths can never diverge on
 /// the wire's reply shape.
 fn decode_dispatch_response(reply: &[u8]) -> Result<DispatchResponse, ServerError> {
@@ -1236,8 +1181,8 @@ fn normalize_wire_node(node: Option<&str>) -> Option<String> {
 ///
 /// # Construction-order cycle (notifier <-> supervisor)
 ///
-/// [`Self::dispatch`'s delivery] needs a [`ConnectionSupervisor`] handle to push
-/// to the worker's connection, but the supervisor is itself constructed WITH this
+/// [`LiminalWorkerDelivery`] needs a [`ConnectionSupervisor`] handle to push to
+/// the worker's connection, but the supervisor is itself constructed WITH this
 /// notifier ([`ConnectionSupervisor::with_services_and_notifier`]) — a cycle. The
 /// notifier therefore holds the supervisor behind a [`OnceLock`], populated
 /// IMMEDIATELY after the supervisor is built via [`Self::bind_supervisor`]. The
