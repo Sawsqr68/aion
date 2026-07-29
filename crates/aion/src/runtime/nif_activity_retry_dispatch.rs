@@ -163,6 +163,27 @@ pub(super) async fn dispatch_with_retries(
             }
             Err(reason) => reason,
         };
+        // TRANSPORT-domain worker loss: the activity never executed to a result,
+        // so it is re-dispatched at the SAME attempt with NOTHING recorded —
+        // attempt-neutral. The prior behaviour delivered this as a terminal
+        // failure whenever the activity carried no authored retry policy (the
+        // SDK's run-exactly-once default), so every infrastructure death read to
+        // the operator as a red action.
+        //
+        // The loop cannot spin: the re-dispatch goes through the same
+        // unserved-queue park a first dispatch does, so it waits for a worker
+        // rather than failing fast, and the server stops sending this class once
+        // its transport-loss budget is spent (a `transport-exhausted:` reason
+        // that no arm here recognises, so it falls through to the terminal
+        // below). A terminal recorded elsewhere mid-loop still wins — checked
+        // before every re-dispatch, because this arm records nothing and would
+        // otherwise never notice.
+        if super::nif_activity_retry::is_worker_lost_reason(&reason) {
+            match worker_loss_stand_down(seam, request, &reason, attempt).await {
+                Some(terminal) => return RetryLoopOutcome { attempt, terminal },
+                None => continue,
+            }
+        }
         if let Some(terminal) = failure_stand_down(policy.as_ref(), &reason, attempt) {
             if matches!(terminal, RetryLoopTerminal::Failed(_)) {
                 record_advisory_exhaustion(seam, request, &reason, attempt).await;
@@ -215,18 +236,7 @@ pub(super) async fn dispatch_with_retries(
                 };
             }
         }
-        let delay = policy.backoff.delay_after(attempt);
-        tracing::warn!(
-            workflow_id = %request.workflow_id,
-            activity_id = %request.activity_id,
-            activity_type = %request.name,
-            attempt,
-            max_attempts = policy.max_attempts,
-            retry_in_ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX),
-            reason = %reason,
-            "activity attempt failed with a retryable error; re-dispatching"
-        );
-        tokio::time::sleep(delay).await;
+        announce_and_back_off(policy, request, &reason, attempt).await;
         attempt += 1;
         // Record the retry delivery's `ActivityStarted` before it goes on the
         // wire, so history and the worker wire agree on the attempt (NOI-0) —
@@ -255,6 +265,80 @@ pub(super) async fn dispatch_with_retries(
             }
         }
     }
+}
+
+/// Announce a retryable action failure and sleep out its backoff before the next
+/// attempt goes on the wire.
+///
+/// Split out of the loop body purely for size; the sleep is deliberately
+/// task-local rather than a durable timer (an engine crash mid-backoff recovers
+/// through replay, whose dangling retryable failure re-dispatches live).
+async fn announce_and_back_off(
+    policy: &super::nif_activity_retry::RetryPolicy,
+    request: &ActivityDispatch,
+    reason: &str,
+    attempt: u32,
+) {
+    let delay = policy.backoff.delay_after(attempt);
+    tracing::warn!(
+        workflow_id = %request.workflow_id,
+        activity_id = %request.activity_id,
+        activity_type = %request.name,
+        attempt,
+        max_attempts = policy.max_attempts,
+        retry_in_ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX),
+        reason = %reason,
+        "activity attempt failed with a retryable error; re-dispatching"
+    );
+    tokio::time::sleep(delay).await;
+}
+
+/// Decide what an attempt-neutral worker-loss re-dispatch does: stand the loop
+/// down when the ordinal was settled elsewhere, or `None` to re-dispatch the
+/// SAME attempt, recording nothing.
+///
+/// The settlement read is load-bearing precisely BECAUSE this path records
+/// nothing: every other arm of the loop rides `record_retry_event`'s settlement
+/// check, and without this one a re-dispatch could outlive a `with_timeout`
+/// expiry (or a workflow terminal) that already decided the ordinal.
+async fn worker_loss_stand_down(
+    seam: &RetryRecorderSeam,
+    request: &ActivityDispatch,
+    reason: &str,
+    attempt: u32,
+) -> Option<RetryLoopTerminal> {
+    if activity_settled_elsewhere(seam, request).await {
+        return Some(RetryLoopTerminal::SettledElsewhere);
+    }
+    tracing::warn!(
+        workflow_id = %request.workflow_id,
+        activity_id = %request.activity_id,
+        activity_type = %request.name,
+        attempt,
+        reason = %reason,
+        "activity's worker was lost before it reported a result; re-dispatching the same \
+         attempt (transport loss consumes no authored retry budget)"
+    );
+    None
+}
+
+/// Whether this ordinal (within its run) already carries a recorded terminal.
+///
+/// The attempt-neutral worker-loss re-dispatch records NOTHING, so it has no
+/// `record_retry_event` settle check to ride on; without this read it could
+/// re-dispatch an ordinal a `with_timeout` expiry (or a workflow terminal)
+/// already settled. A read failure answers `false` — the loop then re-dispatches
+/// and the recorder's own guards still refuse a post-terminal append, which is
+/// strictly safer than standing an activity down on an unreadable history.
+async fn activity_settled_elsewhere(seam: &RetryRecorderSeam, request: &ActivityDispatch) -> bool {
+    let recorder = seam.recorder.lock().await;
+    let Ok(history) = recorder.read_history().await else {
+        return false;
+    };
+    let Ok(history) = crate::durability::current_run_segment(history, &seam.run_id) else {
+        return false;
+    };
+    super::nif_activity_retry::activity_settled(&history, &request.activity_id)
 }
 
 /// Record the R5 warning when an ADVISORY activity's attempt budget is spent

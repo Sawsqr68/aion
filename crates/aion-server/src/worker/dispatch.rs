@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use aion_core::{ActivityError, ActivityErrorKind, ActivityId, Payload, RunId, WorkflowId};
+use aion_core::{ActivityError, ActivityId, Payload, RunId, WorkflowId};
 use aion_proto::{
     ProtoActivityId, ProtoActivityResult, ProtoActivityTask, ProtoPayload, ProtoRunId,
     ProtoWorkflowId, WireError, proto_activity_result,
@@ -462,6 +462,20 @@ pub enum ActivityCompletionOutcome {
     Succeeded(Payload),
     /// Activity failed, preserving retryability classification for the engine.
     Failed(ActivityError),
+    /// The worker was lost BEFORE the activity reported any result — a
+    /// TRANSPORT-domain loss, not an activity failure.
+    ///
+    /// A distinct variant rather than a `Failed` wearing a retryable kind,
+    /// because the two are different failure domains and were being conflated:
+    /// a synthesized `retryable:worker ... lost` was delivered verbatim as a
+    /// TERMINAL failure whenever the activity carried no authored retry policy,
+    /// so every infrastructure death read as a red action. The classification
+    /// and the transport's own re-dispatch budget live in
+    /// [`transport_loss`](crate::worker::transport_loss).
+    WorkerLost {
+        /// The worker that died holding this activity.
+        worker_id: crate::worker::registry::WorkerId,
+    },
 }
 
 /// Correlated activity completion handed to the engine-owned activity contract.
@@ -563,20 +577,6 @@ pub fn handle_activity_result(
     result: ProtoActivityResult,
 ) -> Result<(), ServerError> {
     sink.complete_activity(ActivityCompletion::try_from(result)?)
-}
-
-/// Build the retryable failure reported when a worker loses ownership of an in-flight task.
-///
-/// The retryable classification models worker loss as infrastructure failure: aion-server
-/// only reports the failure to the engine activity contract; the engine remains responsible
-/// for applying the activity retry policy.
-#[must_use]
-pub fn lost_worker_error(worker_id: crate::worker::registry::WorkerId) -> ActivityError {
-    ActivityError {
-        kind: ActivityErrorKind::Retryable,
-        message: format!("worker {worker_id:?} lost before reporting activity result"),
-        details: None,
-    }
 }
 
 fn wire_error(message: &'static str) -> ServerError {
@@ -932,7 +932,7 @@ mod tests {
                 assert_eq!(error.kind, ActivityErrorKind::Retryable);
                 assert!(error.is_retryable());
             }
-            ActivityCompletionOutcome::Succeeded(_) => return Err("expected failed outcome".into()),
+            other => return Err(format!("expected failed outcome, got {other:?}").into()),
         }
         Ok(())
     }

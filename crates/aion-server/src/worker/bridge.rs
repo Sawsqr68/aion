@@ -160,6 +160,12 @@ pub struct PendingActivities {
     pending: Arc<DashMap<PendingActivityKey, SyncSender>>,
     completion_fences: CompletionFences,
     outbox_delivery: Arc<OnceLock<Arc<dyn OutboxDeliveryCallback>>>,
+    /// The transport's OWN re-dispatch budget for activities whose worker died
+    /// before reporting (see [`transport_loss`](crate::worker::transport_loss)).
+    /// Shared across clones, so every loss for one execution site lands in one
+    /// budget. Zero-budget by default (a wiring that was never told the
+    /// operator's heartbeat window must not invent one).
+    transport_losses: super::transport_loss::TransportLossLedger,
 }
 
 impl std::fmt::Debug for PendingActivities {
@@ -172,6 +178,7 @@ impl std::fmt::Debug for PendingActivities {
                 "outbox_delivery_installed",
                 &self.outbox_delivery.get().is_some(),
             )
+            .field("transport_losses", &self.transport_losses)
             .finish()
     }
 }
@@ -291,7 +298,107 @@ impl PendingActivities {
                     "activity completion rejected by execution-generation fence"
                 );
             })?;
+        // A resolution OUTSIDE the transport domain — a real result, or a real
+        // action failure — retires this execution site's transport-loss budget,
+        // so a run that survived one blip does not carry it forward. A
+        // transport-domain resolution deliberately does not: the running budget
+        // is exactly what bounds a flapping link.
+        let transport_domain = result
+            .as_ref()
+            .err()
+            .is_some_and(|reason| super::transport_loss::is_transport_domain_reason(reason));
+        if !transport_domain {
+            if let Err(error) = self.transport_losses.clear(workflow_id, activity_id) {
+                tracing::warn!(
+                    workflow_id = %workflow_id,
+                    activity_id = %activity_id,
+                    %error,
+                    "failed to retire the transport-loss budget for a resolved activity"
+                );
+            }
+        }
         Ok(self.complete(workflow_id, activity_id, run_id, result))
+    }
+
+    /// Install the operator's heartbeat window so the transport-loss ledger
+    /// derives its budget from it (see
+    /// [`transport_loss`](crate::worker::transport_loss)).
+    ///
+    /// Called once at boot on the shared instance; clones made afterwards
+    /// observe it because the ledger's state is shared, and the builder replaces
+    /// the whole ledger before any dispatch runs.
+    #[must_use]
+    pub fn with_heartbeat_window(mut self, heartbeat_window: std::time::Duration) -> Self {
+        self.transport_losses = super::transport_loss::TransportLossLedger::new(heartbeat_window);
+        self
+    }
+
+    /// The transport-loss ledger this sink classifies worker deaths through.
+    #[must_use]
+    pub const fn transport_losses(&self) -> &super::transport_loss::TransportLossLedger {
+        &self.transport_losses
+    }
+
+    /// Classify one worker loss for `(workflow_id, activity_id)` into the
+    /// transport-domain reason the engine seam consumes.
+    ///
+    /// A ledger failure (poisoned lock) is reported as transport exhaustion
+    /// rather than as a re-dispatchable loss: with no trustworthy budget the
+    /// only safe answer is the one that terminates, because an unbounded
+    /// re-dispatch is the failure mode the budget exists to prevent.
+    fn classify_worker_loss(
+        &self,
+        workflow_id: &WorkflowId,
+        activity_id: &ActivityId,
+        worker_id: crate::worker::registry::WorkerId,
+    ) -> String {
+        let detail = super::transport_loss::worker_lost_detail(worker_id);
+        match self
+            .transport_losses
+            .record_loss(workflow_id, activity_id, &detail)
+        {
+            Ok(verdict) => {
+                if verdict.exhausted {
+                    tracing::error!(
+                        operation = "activity_complete",
+                        workflow_id = %workflow_id,
+                        activity_id = %activity_id,
+                        worker_id = ?worker_id,
+                        error_type = "TransportExhausted",
+                        losses = verdict.losses,
+                        budget_ms = self.transport_losses.budget().as_millis(),
+                        "activity abandoned: the transport kept losing its worker past the \
+                         transport-loss budget"
+                    );
+                } else {
+                    tracing::warn!(
+                        operation = "activity_complete",
+                        workflow_id = %workflow_id,
+                        activity_id = %activity_id,
+                        worker_id = ?worker_id,
+                        error_type = "WorkerLost",
+                        losses = verdict.losses,
+                        budget_ms = self.transport_losses.budget().as_millis(),
+                        "worker lost before reporting an activity result; the activity never ran \
+                         and will be re-dispatched attempt-neutrally"
+                    );
+                }
+                verdict.reason
+            }
+            Err(error) => {
+                tracing::error!(
+                    workflow_id = %workflow_id,
+                    activity_id = %activity_id,
+                    %error,
+                    "transport-loss ledger is unreadable; abandoning the activity rather than \
+                     re-dispatching it without a budget"
+                );
+                format!(
+                    "{}{detail} (transport-loss budget unreadable: {error})",
+                    super::transport_loss::TRANSPORT_EXHAUSTED_REASON_PREFIX
+                )
+            }
+        }
     }
 }
 
@@ -357,6 +464,15 @@ impl ActivityCompletionSink for PendingActivities {
                 );
                 Err(format!("{prefix}:{}", error.message))
             }
+            // A TRANSPORT-domain loss: the activity never executed to a result,
+            // so it is classified by the transport's own ledger (re-dispatchable
+            // while its budget holds, transport-exhausted once it is spent) and
+            // NEVER by the action's retry vocabulary.
+            ActivityCompletionOutcome::WorkerLost { worker_id } => Err(self.classify_worker_loss(
+                &completion.workflow_id,
+                &completion.activity_id,
+                worker_id,
+            )),
         };
         self.complete_fenced(
             &completion.workflow_id,
@@ -1005,9 +1121,14 @@ impl WorkerActivityDispatcher {
                     context.activity_id,
                     &context.completion_token,
                 );
-                let reason = format!(
-                    "retryable:{}",
-                    super::dispatch::lost_worker_error(context.worker_id).message
+                // TRANSPORT domain, classified through the shared ledger: the
+                // activity never executed, so the failure never wears the
+                // action's retry vocabulary and is re-dispatched
+                // attempt-neutrally until the transport's own budget is spent.
+                let reason = self.pending.classify_worker_loss(
+                    context.workflow_id,
+                    context.activity_id,
+                    context.worker_id,
                 );
                 log_worker_error(
                     "WorkerLost",
@@ -1305,10 +1426,10 @@ fn route_liminal_reply(
         Err(error) if error.is_worker_connection_lost() => (
             None,
             current_token.clone(),
-            Err(format!(
-                "retryable:{}",
-                super::dispatch::lost_worker_error(worker_id).message
-            )),
+            // TRANSPORT domain (the worker's connection closed before it
+            // replied): classified through the shared ledger, never as an
+            // action failure.
+            Err(pending.classify_worker_loss(workflow_id, activity_id, worker_id)),
             true,
         ),
         Err(error) => (

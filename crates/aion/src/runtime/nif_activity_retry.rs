@@ -57,6 +57,36 @@ pub fn is_parked_reason(reason: &str) -> bool {
     reason.starts_with(PARKED_REASON_PREFIX)
 }
 
+/// Reason prefix of a TRANSPORT-domain worker loss (`aion-server`'s
+/// `worker::transport_loss::WORKER_LOST_REASON_PREFIX`): the worker died before
+/// the activity reported any result, so the activity NEVER RAN.
+///
+/// It is deliberately not the `retryable:` class. An authored `retry N` prices
+/// the probability that the ACTION fails; a transport death is a different
+/// failure domain that produced no result at all, and charging it against the
+/// action's budget would make authored semantics weather-dependent — `retry 2`
+/// meaning less on a bad network day. So this class is ATTEMPT-NEUTRAL: it
+/// consumes no authored budget, records nothing, and re-dispatches the SAME
+/// attempt (see [`is_worker_lost_reason`]'s use in the retry loop).
+///
+/// The transport carries its own ceiling on that neutrality: once the server's
+/// transport-loss budget is spent it stops sending this class and sends its
+/// `transport-exhausted:` reason instead, which no retry path recognises, so
+/// the composed system always terminates.
+const WORKER_LOST_REASON_PREFIX: &str = "lost:";
+
+/// Whether a dispatcher failure reason is a transport-domain worker loss.
+///
+/// True exactly when the reason carries the `lost:` prefix, mirroring
+/// [`is_retryable_reason`]'s prefix classification. Checked BEFORE the retry
+/// policy — a worker death must never consume an authored retry budget, and
+/// must never be delivered as an activity failure while the transport still has
+/// budget to deliver the activity.
+#[must_use]
+pub fn is_worker_lost_reason(reason: &str) -> bool {
+    reason.starts_with(WORKER_LOST_REASON_PREFIX)
+}
+
 /// Whether a dispatcher failure reason is retryable-class.
 ///
 /// True exactly when the reason carries the `retryable:` prefix — the string
