@@ -138,6 +138,10 @@ aion-integrations = { version = "0.10.0", path = "../aion-integrations" }
 # build dir; these dev-deps back that helper for the haematite test build.
 aion-package = { version = "0.10.0", path = "../aion-package", features = ["test-support"] }
 fs4 = { workspace = true }
+# The dead-man-switch refusal pin registers a contract-CARRYING activity on a real
+# worker (`register_activity_with_contract`), which derives its wire schema from
+# the concrete serde types — so the test's activity types need `JsonSchema`.
+schemars = { workspace = true }
 libsql = { workspace = true }
 reqwest = { workspace = true }
 tempfile = { workspace = true }

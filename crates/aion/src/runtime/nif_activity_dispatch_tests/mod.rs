@@ -4,6 +4,7 @@ mod blocking_support;
 mod retry_outcomes;
 mod retry_parking;
 mod retry_support;
+mod retry_worker_loss;
 mod support;
 
 pub(super) use await_support::*;

@@ -1,0 +1,20 @@
+running 2 tests
+test a_wedged_link_is_detected_and_redialed ... FAILED
+test idle_worker_survives_past_the_old_lease_window ... FAILED
+
+failures:
+
+---- a_wedged_link_is_detected_and_redialed stdout ----
+Error: "the worker never noticed its link was dead: no redial, no re-registration. A wedged connection is indistinguishable from an idle one unless something is expected to arrive on it"
+
+---- idle_worker_survives_past_the_old_lease_window stdout ----
+Error: "the idle worker was deregistered: its connection lease expired while it was alive and connected — nothing kept the lease alive on an idle connection"
+
+
+failures:
+    a_wedged_link_is_detected_and_redialed
+    idle_worker_survives_past_the_old_lease_window
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 33.13s
+
+error: test failed, to rerun pass `-p aion-server --test dead_man_switch_e2e`

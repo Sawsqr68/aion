@@ -1,0 +1,25 @@
+
+thread 'runtime::nif_activity_dispatch::tests::retry_worker_loss::a_worker_loss_consumes_no_authored_budget_and_records_nothing' (12151217) panicked at crates/aion/src/runtime/nif_activity_dispatch_tests/retry_worker_loss.rs:93:5:
+two transport deaths under a 3-attempt policy must still complete
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- runtime::nif_activity_dispatch::tests::retry_worker_loss::a_settled_ordinal_stops_the_worker_loss_redispatch stdout ----
+
+thread 'runtime::nif_activity_dispatch::tests::retry_worker_loss::a_settled_ordinal_stops_the_worker_loss_redispatch' (12151216) panicked at crates/aion/src/runtime/nif_activity_dispatch_tests/retry_worker_loss.rs:222:5:
+an ordinal already settled elsewhere must stand the loop down
+
+---- runtime::nif_activity_dispatch::tests::retry_worker_loss::a_flapping_link_terminates_naming_the_transport_not_the_action stdout ----
+
+thread 'runtime::nif_activity_dispatch::tests::retry_worker_loss::a_flapping_link_terminates_naming_the_transport_not_the_action' (12151215) panicked at crates/aion/src/runtime/nif_activity_dispatch_tests/retry_worker_loss.rs:164:13:
+the terminal must name the transport domain: lost:worker WorkerId(2) lost before reporting activity result
+
+
+failures:
+    runtime::nif_activity_dispatch::tests::retry_worker_loss::a_flapping_link_terminates_naming_the_transport_not_the_action
+    runtime::nif_activity_dispatch::tests::retry_worker_loss::a_settled_ordinal_stops_the_worker_loss_redispatch
+    runtime::nif_activity_dispatch::tests::retry_worker_loss::a_worker_loss_consumes_no_authored_budget_and_records_nothing
+    runtime::nif_activity_dispatch::tests::retry_worker_loss::a_worker_loss_redispatches_even_with_no_authored_retry_policy
+
+test result: FAILED. 1 passed; 4 failed; 0 ignored; 0 measured; 582 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p aion-rs --lib`
