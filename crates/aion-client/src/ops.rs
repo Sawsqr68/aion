@@ -120,6 +120,8 @@ impl Client {
                 namespace.clone(),
                 workflow_type.clone(),
                 &input,
+                routing_key.clone(),
+                task_queue.clone(),
                 key.clone(),
             )
         });
@@ -535,12 +537,24 @@ impl Client {
     }
 }
 
+/// What a start request is keyed by for SDK-boundary idempotency: the namespace,
+/// the workflow type, the payload's content type and bytes, and BOTH routing
+/// dimensions.
+///
+/// The routing fields are part of the key because they change where the workflow
+/// runs and which queue its activities go to. Replaying a cached handle for a key
+/// reused with a different `task_queue` would silently discard the caller's
+/// second, different intent and hand back the first workflow as though it had
+/// honoured it. The Python SDK keys the same six values, and the cross-SDK
+/// conformance contract requires the two to agree on what a key *means*.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct StartFingerprint {
     namespace: String,
     workflow_type: String,
     content_type: aion_core::ContentType,
     bytes: Vec<u8>,
+    routing_key: Option<String>,
+    task_queue: Option<String>,
     idempotency_key: String,
 }
 
@@ -549,6 +563,8 @@ impl StartFingerprint {
         namespace: String,
         workflow_type: String,
         input: &Payload,
+        routing_key: Option<String>,
+        task_queue: Option<String>,
         idempotency_key: String,
     ) -> Self {
         Self {
@@ -556,6 +572,8 @@ impl StartFingerprint {
             workflow_type,
             content_type: input.content_type().clone(),
             bytes: input.bytes().to_vec(),
+            routing_key,
+            task_queue,
             idempotency_key,
         }
     }
@@ -931,6 +949,48 @@ mod tests {
             matches!(conflict, Err(ClientError::AlreadyExists { .. })),
             "got {conflict:?}"
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn start_idempotency_treats_a_changed_route_as_a_different_request()
+    -> Result<(), ClientError> {
+        for (label, second) in [
+            (
+                "task_queue",
+                StartOptions {
+                    task_queue: Some(String::from("payments")),
+                    ..StartOptions::default()
+                },
+            ),
+            (
+                "routing_key",
+                StartOptions {
+                    routing_key: Some(String::from("tenant-7")),
+                    ..StartOptions::default()
+                },
+            ),
+        ] {
+            let stub = Arc::new(StubTransport::default());
+            let client = client_with(Arc::clone(&stub));
+            let key = Some(String::from("retry-key"));
+            let first = StartOptions {
+                idempotency_key: key.clone(),
+                ..StartOptions::default()
+            };
+            let second = StartOptions {
+                idempotency_key: key,
+                ..second
+            };
+
+            client.start("checkout", payload("input"), first).await?;
+            let conflict = client.start("checkout", payload("input"), second).await;
+
+            assert!(
+                matches!(conflict, Err(ClientError::AlreadyExists { .. })),
+                "reusing a key with a different {label} must conflict, got {conflict:?}"
+            );
+        }
         Ok(())
     }
 
