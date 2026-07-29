@@ -131,3 +131,66 @@ An agent activity's output is harness-owned, so it has no Rust type to derive
 from either — which is why `AgentHarnessConfig::with_activity_descriptors`
 exists. The descriptor seam built for Finding 2 is the same seam the agent path
 needs. Build it once, use it for both.
+
+## ACP: the facts, and the rulings taken from them
+
+Established from primary sources on 2026-07-30 (the spec site, the schema
+`meta.json`, and the crate sources — not from recollection), so this does not
+need re-researching.
+
+**The protocol.** Wire version is the integer **`1`** — a uint16, not a string,
+not semver, and unrelated to the crate version (which is at 2.0.0). Transport is
+newline-delimited JSON-RPC 2.0 over the agent subprocess's stdio, UTF-8, no
+`Content-Length` framing; the **client spawns the agent**; the channel is
+bidirectional. That is exactly what `aion-integrations`' existing
+`JsonRpcConnection` already provides, so the adapter writes no new framing.
+
+The project has moved out of `zed-industries` to `agentclientprotocol/`, and the
+Rust SDK now lives in its own repo.
+
+`session/prompt` stays open for the whole turn and its Response carries
+`stopReason` (`end_turn`, `max_tokens`, `max_turn_requests`, `refusal`,
+`cancelled`). That is structurally the same shape `NornSession` already handles —
+hand the outstanding request id to the session and let its reader pump capture
+that Response as the terminal result.
+
+**Dependency ruling.** Depend on `agent-client-protocol-schema = "=1.5.0"` for
+the wire types and drive them with our own transport. NOT the full
+`agent-client-protocol` SDK: it is a builder-based rewrite (no `Agent`/`Client`
+traits any more) carrying its own async stack — `async-io`, `async-process`,
+`blocking` — and would drag a second runtime into a tokio codebase.
+
+Taking the types from the crate rather than hand-writing them is the anti-fossil
+choice, and that is the point. A hand-written mirror of a moving external
+protocol is precisely the shape that went stale in the SDKs: a version bump
+should be a compile error, not a silent wire mismatch.
+
+⚠️ **MSRV.** That crate requires Rust **1.88.0** / edition 2024, and the
+workspace declares `rust-version = "1.85"`. Handled with a `rust-version` on the
+ACP crate alone. Raising the workspace value changes what every published crate
+claims to support, which is a policy call and was not taken here.
+
+**Capability ruling — we are the ACP client, but we are not an editor.** ACP's
+`fs/read_text_file`, `fs/write_text_file`, and the five `terminal/*` methods
+exist so an editor can serve unsaved buffers and embedded terminals to the agent.
+An Aion worker has no buffers, and the agent is a subprocess with direct
+filesystem access, so it reads and writes the disk itself. Advertising all three
+capabilities as `false` is therefore correct for this consumer rather than a
+degradation — and ACP v2 removes the entire surface in favour of MCP, which
+confirms the direction. It also keeps a security-sensitive host-I/O surface out
+of the first cut.
+
+An inbound `fs/*` or `terminal/*` request must still be **answered** (`-32601`),
+never ignored. An unanswered peer request blocks the agent forever.
+
+**Permission ruling.** `session/request_permission` is a request, and leaving it
+unanswered wedges the run — while an Aion activity is unattended by default. So
+the policy is explicit and **required**, with no invented default, and every
+permission request is emitted as an `ActivityEvent` *before* it is answered. A
+silent auto-approval that an operator cannot audit afterwards would be worse than
+a refusal.
+
+**Launch commands are not standardised** — `--acp`, `acp`, `acp serve`,
+`serve acp`, `--acp=true`, `agent stdio`,
+`exec --output-format acp-daemon`, and no-arg-at-all all occur across the 38
+agents in the registry. Command and args are configuration; nothing is inferred.
