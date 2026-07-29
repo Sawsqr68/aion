@@ -61,14 +61,16 @@ cargo build --release --manifest-path worker/Cargo.toml
 scp worker/target/release/remote-gates-worker <user>@<gate-host>:~/bin/
 ```
 
-The workflow package is deployed to the SERVER, not to the gate host:
+The workflow is deployed to the SERVER, not to the gate host — and it is
+deployed as the `.awl` document DIRECTLY. The zip-package path (`gleam build` +
+`aion package --build` + deploying the `.aion`) drops the document's queue
+declaration, and every dispatch is then refused at start with
+`NO_QUEUE_DECLARATION` (proven live 2026-07-29):
 
 ```sh
 # wherever the server is reachable from
 cd examples/remote-gates
-gleam build
-aion package --build .
-aion deploy remote-gates.aion
+aion deploy remote_gates.awl
 ```
 
 ## Prepare the workspace root
@@ -177,7 +179,7 @@ the exit code.
 
 | symptom | what it means | what to do |
 | --- | --- | --- |
-| worker exits with `WORKER_CONTRACT_MISMATCH` | the deployed package declares actions this binary does not advertise, or a different queue | rebuild the worker from the same commit as the deployed package; check `--task-queue` matches the `worker` block in the `.awl` |
+| worker exits with `WORKER_CONTRACT_MISMATCH` | the deployed workflow declares actions this binary does not advertise, or a different queue | rebuild the worker from the same commit as the deployed `.awl`; check `--task-queue` matches the `worker` block in the `.awl` |
 | leg result with `missing-tool` | `cargo nextest` is absent on the gate host | `cargo install cargo-nextest --locked` |
 | leg result with `stream-integrity` | the leg's stream yielded nothing at all — a broken invocation, not a green | read the leg's log at `log_path`; the exit code is in the result |
 | leg result with `spawn-failure` | `cargo` could not be started in the checkout | confirm `cargo` is on the worker's `PATH`, not just your login shell's |

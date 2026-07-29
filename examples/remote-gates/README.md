@@ -86,18 +86,16 @@ both remotes. It never re-clones over somebody else's checkout.
 Every command's log holds its exact `argv`, its working directory, both output
 streams, and its exit code. Nothing is discarded.
 
-## Build and package
+## Build
 
 From this directory:
 
 ```sh
-gleam build
-aion package --build .
 cargo build --release --manifest-path worker/Cargo.toml
 ```
 
-`aion package` writes `remote-gates.aion`. `src/remote_gates.gleam` is generated
-and committed, never edited by hand; regenerate it after any change to the `.awl`:
+`src/remote_gates.gleam` is generated and committed, never edited by hand;
+regenerate it after any change to the `.awl`:
 
 ```sh
 aion awl check remote_gates.awl
@@ -105,15 +103,20 @@ aion awl fmt remote_gates.awl
 aion awl emit remote_gates.awl --output src/remote_gates.gleam
 ```
 
-The worker is a separate binary. Both the archive and a running worker must be
-present for the workflow to make progress.
+The worker is a separate binary. Both the deployed workflow and a running worker
+must be present for the workflow to make progress.
 
 ## Deploy and run
 
-Deploy the package, start the worker, then start a run:
+Deploy the `.awl` document DIRECTLY — `aion deploy` compiles and deploys it with
+its queue contract intact. Do **not** deploy via `gleam build` +
+`aion package --build`: the zip-package path drops the `.awl`'s queue
+declaration, and every activity dispatch is then refused at start with
+`NO_QUEUE_DECLARATION` (proven live 2026-07-29). Then start the worker, then
+start a run:
 
 ```sh
-aion deploy remote-gates.aion
+aion deploy remote_gates.awl
 
 remote-gates-worker \
   --address 127.0.0.1:50061 \
@@ -129,7 +132,7 @@ Every switch that describes the gate host is required and has no default:
 | switch | required | meaning |
 | --- | --- | --- |
 | `--address` | yes | liminal worker endpoint; repeat it to give redial candidates |
-| `--task-queue` | yes | queue to serve; the deployed package declares `remote_gates` |
+| `--task-queue` | yes | queue to serve; the deployed workflow declares `remote_gates` |
 | `--workspace-dir` | yes | root the worker owns for checkouts and logs |
 | `--progress-interval` | yes | seconds between progress heartbeats during a leg |
 | `--notify-channel` | no | side channel for the verdict; unset means notify skips |
@@ -164,7 +167,7 @@ action run_nextest(path: String) -> LegResult
 ```
 
 Clone 10m, check 15m, clippy 15m, nextest 45m, fmt 5m, notify 2m. An operator who
-needs different bounds edits the `.awl`, re-emits, re-packages, and re-deploys.
+needs different bounds edits the `.awl`, re-emits, and re-deploys the document.
 
 ## Scope
 
