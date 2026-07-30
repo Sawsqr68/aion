@@ -31,9 +31,9 @@ version is live-proven.
 | `aion awl check examples/assistant/awl/assistant.awl` | ok (2 steps) |
 | `aion awl fmt` | applied, and idempotent on a second run |
 | `aion awl emit` | exit 0 — the document compiles end to end, nested wait-loop included |
-| `cargo test -p aion-awl` | exit 0 |
+| `cargo test -p aion-awl` | exit 0, 473 passed / 0 failed |
 | agent-dev worker `cargo clippy --all-targets -- -D warnings` | exit 0, zero diagnostics |
-| agent-dev worker `cargo test` | exit 0, 71 passed / 0 failed |
+| agent-dev worker `cargo test` | exit 0, 79 passed / 0 failed |
 | agent-dev worker `cargo build --release` | exit 0 |
 | `cargo clippy -p aion-awl -p aion-core -p aion-package --all-targets -- -D warnings` | exit 0 |
 
@@ -330,26 +330,19 @@ event history, which names the activity.
 
 ---
 
-## Open risk: worker contract admission — MEASURED, and the worker is at fault
+## Worker contract admission — DIAGNOSED AND FIXED
 
-`assistant_spike.awl` was live-proven at the DISPATCH level — the worker really
-did serve those actions and returned a real agent reply. It was **not**
-exercised at the ADMISSION level: the worker registered before the spike was
-deployed, and dispatch does not re-check. This full port declares the same two
-actions and will face a real contract check.
+The observed refusal read as a contradiction: `worker advertised <missing>` for
+`assistant`, in a log record whose `activity_types` list contained `assistant`.
+It is not a contradiction. **The two lines report two different proto fields,
+and the gate is right.**
 
-The observed refusal reads as a contradiction — `worker advertised <missing>`
-for `assistant`, in a log record whose `activity_types` list contains
-`assistant`. It is not a contradiction. **The two lines report two different
-proto fields, and the gate is right.**
-
-A worker registration carries names and typed descriptors independently:
+A registration carries names and typed descriptors independently:
 
 - names → `activity_types`, `crates/aion-worker/src/runtime/liminal.rs:1134`
   (registry) and `:423-427` (agent types)
-- typed descriptors → `activities`,
-  `crates/aion-worker/src/runtime/liminal.rs:1136-1144` (registry) and
-  `:428-444` (agent)
+- typed descriptors → `activities`, `:1136-1144` (registry) and `:428-444`
+  (agent)
 
 Nothing synthesizes a descriptor from a name. Admission reads ONLY the
 descriptor list (`crates/aion-server/src/worker/liminal_transport.rs:1495-1529`
@@ -357,40 +350,98 @@ builds `advertised` exclusively from `registration.activities`); the name list
 is used only for registry membership (`:1574`). The refusal WARN then logs
 `registration.activity_types` (`:1640-1652`) — the field the gate never saw.
 
-**The measured fact for `agent-dev-worker`: it advertises 8 activity names and
-ZERO typed descriptors.**
+**The measured fault: `agent-dev-worker` advertised 8 names and ZERO
+descriptors.** `register_activity` inserts a handler only
+(`crates/aion-worker/src/activity.rs:136-159`, whose doc comment says so
+outright at `:196-199`), and `AgentHarnessConfig::new` initialises
+`activity_descriptors: Vec::new()` (`liminal.rs:256-266`) which `main.rs` never
+filled.
 
-- `examples/agent-dev/worker/src/registry.rs:72-79` registers all four plain
-  activities with `register_activity`, which inserts into `handlers` only and
-  never touches `descriptors` (`crates/aion-worker/src/activity.rs:136-159`).
-  That API's own doc comment says it outright (`activity.rs:196-199`):
-  "Registering a handler with no descriptor is what makes a worker invisible to
-  contract admission."
-- `AgentHarnessConfig::new` initialises `activity_descriptors: Vec::new()`
-  (`crates/aion-worker/src/runtime/liminal.rs:256-266`), and
-  `examples/agent-dev/worker/src/main.rs` never calls
-  `.with_activity_descriptors(...)`.
+FIXED in `examples/agent-dev/worker/src/descriptors.rs`: the surface is derived
+from the embedded `assistant.awl` and split between the agent harness and the
+registry, each half advertised through the path that executes it. Hand-written
+schemas were rejected deliberately — they are claims about a contract they
+cannot see, and drift is refused with the same message as absence.
 
-So every required action produces an `advertised: None` diff
-(`crates/aion-package/src/compatibility.rs:80-90`) and the whole connection is
-refused. **This is the worker's fault, not the gate's** — the gate is doing
-exactly what it should.
+One hazard worth recording for anyone reusing this API:
+`with_activity_descriptors` EXTENDS the agent activity-type set with every
+descriptor name (`liminal.rs:276-292`). Handing it a mixed surface routes plain
+registry actions to the agent harness — here it would have sent
+`assistant_provision`, which clones a git workspace, to norn as a prompt.
 
-The admissible shape already exists in this repo for comparison:
-`crates/aion-cli/src/worker_agent/serve.rs:185` calls
-`.with_activity_descriptors(surface.descriptors.clone())`, and
-`register_activity_with_descriptor` (`crates/aion-worker/src/activity.rs:209-238`)
-is the typed registration path for AWL-declared schemas.
+**Still open, and not this worker's to fix:** the refusal diagnostic should
+report the field it actually compared, or say "0 typed descriptors advertised".
+As it stands it tells an operator the worker advertised something it did not,
+and that reading costs hours.
 
-**Not fixed here** — reported as requested, and it is a prerequisite for
-live-proving this port. Two things want doing, and they are independent:
+## 12. An AWL agent activity delivers a JSON-WRAPPED prompt — open defect
 
-1. The worker must advertise typed descriptors for the actions its AWL
-   documents declare.
-2. The refusal diagnostic should report the field it actually compared (or
-   state "0 typed descriptors advertised"), because as it stands it tells an
-   operator the worker advertised something it did not, and that reading costs
-   hours.
+Traced end to end, at the bytes. This affects every AWL-authored agent action
+in the repository, not only this workflow.
+
+AWL synthesizes an input RECORD for every declared action, unconditionally,
+with no arity-1 unwrap (`crates/aion-awl/src/emitter/context.rs:155-159`), and
+its codec serializes an object (`crates/aion-awl/src/emitter/codecs.rs:279-291`).
+So `action assistant(prompt: String) -> String` puts `{"prompt":"..."}` on the
+wire — confirmed in the emitted Gleam, `assistant_input2_to_json` builds
+`json.object([#("prompt", ...)])`.
+
+The worker's agent path passes the payload bytes through unchanged
+(`crates/aion-worker/src/runtime/liminal.rs:962-970`), and the norn adapter
+unwraps ONLY a bare JSON string (`crates/aion-integration-norn/src/harness.rs:242-255`):
+
+```rust
+match serde_json::from_str::<Value>(&text) {
+    Ok(Value::String(inner)) => Ok(inner),
+    _ => Ok(text),
+}
+```
+
+An object falls to `_ => Ok(text)`. **The agent therefore receives the literal
+text `{"prompt":"You are the aion AWL authoring assistant: ..."}` as its
+prompt.** It does not fail, and it is not unwrapped — the pass-through is
+deliberate and pinned by a test (`harness.rs:519-527`), on the stated ground
+that "inventing a projection here would lose information".
+
+The output direction is CORRECT: the harness returns a bare JSON string, which
+matches the AWL contract's `{"type":"string"}`. Only the input side is wrapped.
+
+This is why the spike appeared to work: an agent handed a JSON blob still
+answers. It was degraded, not correct, and nothing said so.
+
+It does NOT block admission — the descriptor derived from the document matches
+the contract either way — so the live restoration can proceed. But every round's
+prompt is JSON-wrapped until this is fixed.
+
+The fix is not in this worker's gift. Two options, and the adapter authors have
+already ruled out the second:
+
+1. AWL emits a bare-string input codec for a single-`String`-param action bound
+   to an agent activity type — but AWL does not currently know which actions are
+   agent-routed, so this needs a language-level answer.
+2. A prompt projection at the harness seam — explicitly rejected in the adapter
+   as information-losing.
+
+**Recommendation: (1), and it needs a decision before AWL agent authoring is
+called finished.**
+
+## 13. The spike and the full port cannot share a queue
+
+Measured with the real gate and asserted in
+`examples/agent-dev/worker/src/descriptors_tests.rs`:
+
+```
+action `assistant_provision` field `input_schema.required`
+  expected ["repo_path","run_id"] but worker advertised ["repo_path","run_id","objective"]
+```
+
+Input compatibility is contravariant, so a worker that REQUIRES `objective`
+narrows the spike's contract and is refused by it. With both deployed and
+reachable on `default`, this worker is refused outright and NEITHER document
+runs. The `assistant` action itself is identical in both and does not conflict.
+
+**Operational consequence: `assistant_spike.awl` must be undeployed before the
+full port is deployed.** The spike has served its purpose.
 
 ## Adjacent defects found, out of scope for this port
 
