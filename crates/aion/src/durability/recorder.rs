@@ -627,7 +627,12 @@ impl Recorder {
         .await
     }
 
-    /// Records activity start.
+    /// Records that the engine DISPATCHED an activity attempt to its task queue.
+    ///
+    /// Not "a worker started it": every caller invokes this BEFORE the dispatch
+    /// reaches the dispatcher, so no worker has been selected when the append
+    /// happens. See [`Event::ActivityStarted`] for the full account and for the
+    /// pending rename.
     ///
     /// # Errors
     ///

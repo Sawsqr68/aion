@@ -270,11 +270,42 @@ pub enum Event {
         #[serde(default)]
         node: Option<String>,
     },
-    /// An activity worker started executing an activity attempt.
+    /// The engine DISPATCHED an activity attempt to its task queue.
+    ///
+    /// **This does NOT mean a worker has taken the work.** The event is written
+    /// by the engine at dispatch time, in the SAME atomic append as its
+    /// [`Event::ActivityScheduled`] and under the same `recorded_at`, before any
+    /// worker has been selected — let alone leased the attempt. Worker selection
+    /// happens afterwards, in the server, and may wait indefinitely: a dispatch
+    /// to a task queue nobody serves records this event and then nothing, so a
+    /// run parked forever and a run a worker is actively executing have
+    /// identical history shapes and both project
+    /// [`WorkflowStatus::Running`](crate::WorkflowStatus::Running). That is not
+    /// a projection bug — history genuinely holds no terminal event — but it
+    /// means this event alone can never answer "is anyone working on it".
+    ///
+    /// Every producing seam behaves this way: the single-dispatch and in-VM
+    /// seams (`aion::runtime::nif_activity_dispatch`,
+    /// `aion::runtime::nif_activity_in_vm`), the retry delivery
+    /// (`aion::runtime::nif_activity_retry_dispatch`, which records the next
+    /// attempt's start "before it goes on the wire"), and the fan-out batch
+    /// (`aion::durability::recorder::fan_out`).
+    ///
+    /// The name is therefore wrong and the behaviour is not. A rename to
+    /// `ActivityDispatched` is PROPOSED and PENDING an owner ruling, together
+    /// with the question of whether a separate lease-time event should exist;
+    /// see `docs/design/aion-authoring/ACTIVITY-STARTED-SEMANTICS-DECISION.md`.
+    /// Deferring THIS event to lease time is recommended against there, because
+    /// it would silently change what every already-recorded `ActivityStarted`
+    /// meant.
+    ///
+    /// To ask whether an in-flight activity can still reach a worker, join its
+    /// recorded address to the live fleet — `aion_server`'s
+    /// `worker::ActivityReachability`, surfaced on `POST /workflows/describe`.
     ActivityStarted {
         /// Recording metadata for this event.
         envelope: EventEnvelope,
-        /// Activity being executed.
+        /// Activity that was dispatched.
         activity_id: ActivityId,
         /// One-based activity attempt number this start belongs to (NOI-0).
         ///
