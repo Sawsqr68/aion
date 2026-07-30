@@ -63,11 +63,19 @@ view models.
 Regenerate after changing exported Aion wire shapes:
 
 ```sh
-cargo test -p aion-core export_ops_console_wire_types
+AION_UPDATE_BINDINGS=1 cargo test -p aion-core export_ops_console_wire_types
 ```
 
-The repository-level `just gen-types` task should call the same ts-rs export path when the house
-justfile is present.
+**The environment variable is required, and the same command without it does the opposite.**
+That test is the drift gate: by default it regenerates in memory, compares against the committed
+file, and FAILS WITHOUT WRITING when they differ. It writes only under `AION_UPDATE_BINDINGS`.
+
+It works that way because it used to write unconditionally and assert nothing, so an ordinary
+`cargo test` mutated a tracked file behind the developer's back — and the committed bindings could
+be arbitrarily wrong while the whole Rust battery was green. They were.
+
+`cargo xtask build-ops-console` is the other sanctioned regeneration path and sets the variable
+itself.
 
 The generation target for this app is `apps/aion-ops-console/src/types/generated/`. The public
 `src/types/index.ts` file is only a barrel over generated wire types; local UI-only models belong in
