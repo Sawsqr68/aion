@@ -58,6 +58,27 @@ pub struct StartWorkflowContext {
     pub monitor_tokio_handle: tokio::runtime::Handle,
 }
 
+/// Whether a start's input is measured against the resolved package's declared
+/// input schema before anything is recorded.
+///
+/// The distinction is the boundary itself. `Declared` belongs to a start whose
+/// input came from OUTSIDE the engine — the public start API every transport
+/// calls — because that is where an operator's value enters the system and the
+/// only place a refusal costs nothing. `Trusted` belongs to engine-internal
+/// re-entry (child spawn, continue-as-new, retry restart, schedule trigger,
+/// recovery respawn), whose input was produced by workflow code that already
+/// type-checked against this same contract; refusing there would kill a live
+/// run, which is the exact failure class this admission exists to prevent.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum InputAdmission {
+    /// Engine-internal re-entry: the input is already contract-shaped.
+    #[default]
+    Trusted,
+    /// Externally-originated start: the input is measured against the declared
+    /// input schema and a mismatch is refused before any append.
+    Declared,
+}
+
 /// Optional identifiers used by internal start callers such as continue-as-new.
 #[derive(Clone, Debug, Default)]
 pub struct StartWorkflowOptions {
@@ -77,6 +98,9 @@ pub struct StartWorkflowOptions {
     pub search_attributes: HashMap<String, SearchAttributeValue>,
     /// Namespace that owns this workflow execution; defaults to `"default"`.
     pub namespace: Option<String>,
+    /// Whether this start's input is admitted against the declared input
+    /// schema of the package it resolves to. See [`InputAdmission`].
+    pub input_admission: InputAdmission,
 }
 
 /// Starts a loaded workflow execution and returns its active handle.
@@ -122,6 +146,14 @@ pub async fn start_workflow_with_options(
         options.loaded_version.as_ref(),
     )?;
     let loaded = pinned.workflow();
+    // BOUNDARY ADMISSION: an externally-supplied input is measured against the
+    // resolved package's declared input schema HERE — before an id is minted,
+    // before the recorder exists, before a process is spawned. A refusal at
+    // this point is free; the same mismatch discovered inside the run is a
+    // dead workflow.
+    if options.input_admission == InputAdmission::Declared {
+        admission::admit_declared_input(loaded, &input)?;
+    }
     let (workflow_id, initial_head) =
         admission::workflow_identity(&context.store, options.workflow_id).await?;
     let run_id = RunId::new_v4();

@@ -259,6 +259,7 @@ name = "aion-package"
 version = "0.10.0"
 dependencies = [
  "aion-core",
+ "jsonschema",
  "serde",
  "serde_json",
  "sha2 0.11.0",

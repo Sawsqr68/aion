@@ -492,6 +492,8 @@ fn engine_trace_fields(source: &EngineError) -> ErrorTraceFields<'_> {
         EngineError::NoQueueDeclaration { .. } => {
             simple_engine_fields("NoQueueDeclaration", source)
         }
+        EngineError::StartInputRefused { .. } => simple_engine_fields("StartInputRefused", source),
+        EngineError::SignalRefused { .. } => simple_engine_fields("SignalRefused", source),
         EngineError::Schedule { .. } => simple_engine_fields("Schedule", source),
         EngineError::Runtime { .. } => simple_engine_fields("Runtime", source),
         EngineError::Gate3BifReplacementMissing { .. } => {
@@ -610,6 +612,8 @@ fn wire_from_engine(source: &EngineError) -> WireError {
         EngineError::Package(_) => WireError::backend_with_type("Package", source.to_string()),
         E::ContractIdentity { .. } => engine::contract_refusal_wire("ContractIdentity", source),
         E::NoQueueDeclaration { .. } => engine::contract_refusal_wire("NoQueueDeclaration", source),
+        E::StartInputRefused { .. } => engine::declared_contract_wire("StartInputRefused", source),
+        E::SignalRefused { .. } => engine::declared_contract_wire("SignalRefused", source),
         EngineError::Schedule { .. } => backend("Schedule", source),
         EngineError::Runtime { .. } => WireError::backend_with_type("Runtime", source.to_string()),
         E::Gate3BifReplacementMissing { .. } => backend("Gate3BifReplacementMissing", source),

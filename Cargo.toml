@@ -50,6 +50,10 @@ todo = "warn"
 serde = "1.0"
 serde_json = "1.0"
 schemars = "1.0"
+# Draft 2020-12 validation of declared contract schemas. `default-features =
+# false` drops the network/file schema resolvers: a package's declared schemas
+# are self-contained by construction, and admission must never reach outward.
+jsonschema = { version = "0.46.6", default-features = false }
 clap = "4"
 thiserror = "2.0"
 anyhow = "1.0"

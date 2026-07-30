@@ -122,6 +122,20 @@ reaches for.
 
 ## 3. An undecodable signal payload FAILS the run — it is NOT tolerated
 
+> **AMENDED 2026-07-30 — FIXED. Read the rest of this section as the finding
+> that produced the fix, not as current behaviour.** The declared signal type
+> is now enforced AT THE BOUNDARY, in `Engine::signal`, before anything is
+> recorded and before the arrival can be consumed: a payload that does not
+> satisfy the declared type is refused to the CALLER (`POST /workflows/signal`
+> → HTTP 400, naming the field), the target run's history is byte-identical
+> afterwards, and it stays parked on the same wait. An undeclared signal name
+> is refused the same way. The declared workflow input schema is enforced at
+> the start boundary alongside it. Proven live on both a pre-fix and a
+> post-fix server; see
+> `BRIEF-DECLARED-CONTRACT-AT-THE-BOUNDARY.md` and the commit that closes
+> tasks #95 + #97-A. The mitigation described at the end of this section (make
+> the payload hard to fail) is no longer the only defence.
+
 The Gleam module is explicit that this must never happen:
 
 > A payload that does not decode at all is ALSO tolerated as a no-op — an

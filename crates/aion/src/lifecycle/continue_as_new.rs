@@ -135,6 +135,9 @@ pub async fn continue_as_new(
             // the replacement run's projection; nothing new is recorded here.
             search_attributes: std::collections::HashMap::new(),
             namespace: Some(handle.namespace().to_owned()),
+            // Engine-internal re-entry: the successor's input is the value the
+            // predecessor's own workflow code produced, not a caller's.
+            input_admission: start::InputAdmission::Trusted,
         },
     )
     .await?;

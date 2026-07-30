@@ -536,55 +536,70 @@ async fn stacked_dev_gate_completes_through_the_entrypoint_shim()
     Ok(())
 }
 
-/// The migrated garbage-input edge: an input the gate's codec rejects fails
-/// the run with the SDK's documented `aion_error: input_decode` envelope as
-/// the failure details (previously a hand-rolled `GateStageFailed`).
+/// The garbage-input edge, now settled AT THE BOUNDARY.
+///
+/// `examples/stacked-dev/schemas/gate_input.json` is an authored, strict
+/// declaration (`required`, `additionalProperties: false`, enums), and the
+/// package commits it into its `.v4` identity. The engine's public start API
+/// therefore refuses `{"unexpected": true}` before an id is minted, naming
+/// every property that did not match — nothing is recorded and no process is
+/// spawned.
+///
+/// This SUPERSEDES the previous assertion that the same input reached the run
+/// and failed it with the SDK's `aion_error: input_decode` envelope. For a
+/// package whose declared schema is at least as strict as its codec — which
+/// this one's is, by construction, since the codec is generated from the
+/// schema — that envelope is no longer reachable through a caller's start. It
+/// remains the failure shape for engine-internal re-entry and for packages
+/// that declare nothing, and the previous behaviour (a dead run with a
+/// well-formed post-mortem) is strictly worse than this one (a refusal the
+/// caller can act on).
 #[tokio::test]
-async fn stacked_dev_gate_records_the_input_decode_envelope_on_garbage_input()
+async fn stacked_dev_gate_refuses_garbage_input_at_the_start_boundary()
 -> Result<(), Box<dyn std::error::Error>> {
     if crate::gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
     let package = example_build::built_package("examples/stacked-dev", "gate")?;
+    let store: Arc<dyn aion_store::EventStore> = Arc::new(aion_store::InMemoryStore::default());
     let engine = gate_engine_builder(Arc::new(GateDispatcher))
+        .store_arc(Arc::clone(&store))
         .load_workflows(package)
         .build()
         .await?;
 
-    let input = Payload::from_json(&json!({ "unexpected": true }))?;
-    let handle = engine
-        .start_workflow(
+    let workflow_id = aion_core::WorkflowId::new_v4();
+    let error = engine
+        .start_workflow_with_id(
             "gate",
-            input,
+            Payload::from_json(&json!({ "unexpected": true }))?,
             std::collections::HashMap::new(),
             String::from("default"),
+            Some(workflow_id.clone()),
+            None,
         )
-        .await?;
-    let result = engine.result(handle.workflow_id(), handle.run_id()).await?;
-    let error = match result {
-        Ok(payload) => {
-            return Err(format!(
-                "garbage input must fail the gate, got completion: {:?}",
-                std::str::from_utf8(payload.bytes())
-            )
-            .into());
-        }
-        Err(error) => error,
-    };
+        .await
+        .err()
+        .ok_or("garbage input must be refused at the start boundary")?;
 
-    let details = error
-        .details
-        .clone()
-        .ok_or_else(|| format!("failure must carry details: {error:?}"))?;
-    let envelope: serde_json::Value = serde_json::from_slice(details.bytes())?;
-    assert_eq!(envelope["aion_error"], json!("input_decode"));
+    let aion::EngineError::StartInputRefused { reason, .. } = &error else {
+        return Err(format!("expected a declared-input refusal, got: {error}").into());
+    };
+    for absent in ["workspace", "files_touched", "scope"] {
+        assert!(
+            reason.contains(absent),
+            "the refusal must name the missing declared property `{absent}`: {reason}"
+        );
+    }
     assert!(
-        envelope["reason"].as_str().is_some_and(|r| !r.is_empty()),
-        "envelope carries a decode reason: {envelope}"
+        reason.contains("unexpected"),
+        "the refusal must name the property the declaration forbids: {reason}"
     );
     assert!(
-        envelope["path"].is_array(),
-        "envelope carries the decode path: {envelope}"
+        aion_store::ReadableEventStore::read_history(store.as_ref(), &workflow_id)
+            .await?
+            .is_empty(),
+        "a refused start must record nothing at all"
     );
 
     engine.shutdown()?;

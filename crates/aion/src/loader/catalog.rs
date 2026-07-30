@@ -11,6 +11,9 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, RwLock};
 
+/// Declared-signal admission against an exact retained package identity.
+#[path = "catalog_admission.rs"]
+pub mod catalog_admission;
 #[path = "catalog_load.rs"]
 mod catalog_load;
 #[path = "catalog_snapshot.rs"]

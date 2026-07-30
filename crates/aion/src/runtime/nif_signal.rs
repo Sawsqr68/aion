@@ -368,6 +368,15 @@ fn receive_signal_impl(
 /// between router delivery and the durable record re-routes the send on
 /// recovery, so delivery is at-least-once across that window. Closing it
 /// would require an outbox / two-phase record.
+///
+/// DELIBERATELY NOT a declared-contract boundary. `Engine::signal` admits a
+/// caller's signal against the target's declared payload type before anything
+/// is recorded, because a refusal there costs the caller a retry and the
+/// target nothing. This path is workflow code signalling workflow code: a
+/// refusal here would surface as an error inside the SENDING run and kill it,
+/// converting one bad payload into a dead workflow — the exact failure class
+/// the boundary admission exists to prevent. A typed cross-package check
+/// belongs at compile time, not here.
 fn send_signal_impl(
     bridge: &Arc<SignalNifBridge>,
     target: &str,

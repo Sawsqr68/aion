@@ -229,9 +229,19 @@ impl EventPublisher for DeferredEventPublisher {
 impl Engine {
     /// Send a signal to a live workflow run through the AT routing seam.
     ///
+    /// The signal is admitted against the signal type declared by the EXACT
+    /// package identity the target run is pinned to, BEFORE anything is
+    /// recorded and before the arrival can be consumed. A refused signal
+    /// therefore leaves the run's history byte-identical and the run parked on
+    /// exactly the wait it was parked on — the refusal reaches the caller, not
+    /// the run.
+    ///
     /// # Errors
     ///
-    /// Returns [`EngineError::WorkflowNotFound`] when the `(workflow, run)` pair is unknown,
+    /// Returns [`EngineError::SignalRefused`] when the name is not declared by
+    /// the target's package or the payload does not satisfy the declared type
+    /// (nothing recorded, nothing consumed),
+    /// [`EngineError::WorkflowNotFound`] when the `(workflow, run)` pair is unknown,
     /// [`SignalRouterError::Terminal`] when it is durably terminal, or other typed errors from
     /// the configured signal seam.
     pub async fn signal(
@@ -241,7 +251,16 @@ impl Engine {
         name: impl Into<String>,
         payload: Payload,
     ) -> Result<(), EngineError> {
+        let name = name.into();
         let handle = if let Some(handle) = self.registry().get(id, run)? {
+            // BOUNDARY ADMISSION (resident): the live handle carries the exact
+            // identity this run resolved at start, so it is the ruler here.
+            crate::signal::admission::admit_against_handle(
+                self.workflow_catalog(),
+                &handle,
+                &name,
+                &payload,
+            )?;
             handle
         } else {
             let history = self.store().read_history(id).await?;
@@ -252,6 +271,19 @@ impl Engine {
                 }
                 .into());
             }
+            // BOUNDARY ADMISSION (non-resident): the recorded `WorkflowStarted`
+            // pins the same identity the live handle would have carried. This
+            // runs before BOTH remaining record paths below — the paused
+            // one-shot recorder and the birth-window handle's router — so no
+            // branch out of here can record a refused payload.
+            crate::signal::admission::admit_against_history(
+                self.workflow_catalog(),
+                id,
+                run,
+                &history,
+                &name,
+                &payload,
+            )?;
             // Paused-but-not-resident (crashed while paused, #204): the run is
             // durably non-terminal but was deliberately excluded from respawn, so
             // no live handle exists and handle_after_birth_window would time out
@@ -268,7 +300,7 @@ impl Engine {
                     crate::durability::Recorder::resume_at(id.clone(), self.store(), head)
                         .with_visibility(run.clone(), self.visibility_store());
                 recorder
-                    .record_signal_received(chrono::Utc::now(), name.into(), payload)
+                    .record_signal_received(chrono::Utc::now(), name, payload)
                     .await?;
                 return Ok(());
             }
@@ -278,7 +310,7 @@ impl Engine {
         };
         self.delegated()
             .signal_router()
-            .route(&handle, name.into(), payload)
+            .route(&handle, name, payload)
             .await
     }
 

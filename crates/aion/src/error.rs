@@ -125,6 +125,51 @@ pub enum EngineError {
         activities: String,
     },
 
+    /// A start's input did not satisfy the declared input schema of the exact
+    /// package identity the start resolved to.
+    ///
+    /// Returned at the start boundary BEFORE any history is appended and
+    /// before any process is spawned, so a refused start leaves no trace: the
+    /// caller sees their own mistake at the moment they made it, with nothing
+    /// to clean up.
+    #[error(
+        "start input for workflow `{workflow_type}` does not satisfy the input type declared by package version `{version}`: {reason}"
+    )]
+    StartInputRefused {
+        /// Workflow type selected for the start.
+        workflow_type: String,
+        /// Exact `.v4` package identity the start resolved to.
+        version: ContentHash,
+        /// What did not match, naming every field that failed.
+        reason: String,
+    },
+
+    /// A signal was refused at the boundary: its name is not declared by the
+    /// target run's package, or its payload did not satisfy the declared
+    /// payload type.
+    ///
+    /// Returned BEFORE anything is recorded and before the arrival can be
+    /// consumed, so the target run's history is unchanged and it stays parked
+    /// on exactly the wait it was parked on. That ordering is the whole point:
+    /// a signal decoded after being consumed destroys a durable run that a
+    /// refusal merely inconveniences.
+    #[error(
+        "signal `{signal_name}` was refused for workflow `{workflow_id}` run `{run_id}` against the contract declared by package version `{version}`: {reason}"
+    )]
+    SignalRefused {
+        /// Workflow execution the signal targeted.
+        workflow_id: WorkflowId,
+        /// Concrete run the signal targeted.
+        run_id: RunId,
+        /// Signal name the caller sent.
+        signal_name: String,
+        /// Exact `.v4` package identity the target run is pinned to.
+        version: ContentHash,
+        /// Why the signal was refused — an undeclared name, or the fields of
+        /// the payload that did not match the declared type.
+        reason: String,
+    },
+
     /// The embedded runtime returned an error.
     #[error("runtime error: {reason}")]
     Runtime {

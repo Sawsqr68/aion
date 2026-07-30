@@ -17,6 +17,17 @@ pub(super) fn contract_refusal_wire(error_type: &'static str, source: &EngineErr
     WireError::invalid_state(source.to_string()).with_error_type(error_type)
 }
 
+/// Wire mapping for a declared-contract boundary refusal — a start input or a
+/// signal payload that did not satisfy the type the package declared.
+///
+/// These are the CALLER's to fix and cost the target run nothing: the refusal
+/// is returned before anything is recorded and before any arrival is consumed.
+/// So they are invalid input (HTTP 400), never a backend fault and never a
+/// state conflict.
+pub(super) fn declared_contract_wire(error_type: &'static str, source: &EngineError) -> WireError {
+    WireError::invalid_input(source.to_string()).with_error_type(error_type)
+}
+
 pub(super) const fn store_error_type(source: &StoreError) -> &'static str {
     match source {
         StoreError::SequenceConflict { .. } => "SequenceConflict",

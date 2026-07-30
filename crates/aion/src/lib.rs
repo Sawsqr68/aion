@@ -87,8 +87,8 @@ pub use engine::{
 pub use engine_seam::EngineHandle;
 pub use error::{EngineError, PinHolder, SignalRouterError};
 pub use loader::{
-    ActivityServing, DeployedWorkerContract, LoadOutcome, LoadedWorkflow, WorkflowCatalog,
-    WorkflowVersionInfo,
+    ActivityServing, DeployedWorkerContract, LoadOutcome, LoadedWorkflow, SignalRefusalReason,
+    WorkflowCatalog, WorkflowVersionInfo,
 };
 pub use publish::{BroadcastEventPublisher, PublishError, PublishingEventStore};
 pub use query::{ConcreteQueryService, QueryError};

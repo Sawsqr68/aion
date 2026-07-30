@@ -16,6 +16,7 @@ pub mod persistence;
 /// Serde-ready listing record for loaded workflow versions.
 pub mod version_info;
 
+pub use catalog::catalog_admission::SignalRefusalReason;
 pub use catalog::{ActivityServing, PinnedWorkflow, WorkflowCatalog};
 pub use declared_queues::DeclaredQueues;
 pub use load::{DeployedWorkerContract, LoadOutcome, LoadedWorkflow};

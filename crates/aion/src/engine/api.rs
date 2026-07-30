@@ -287,6 +287,10 @@ impl Engine {
                 search_attributes,
                 workflow_id,
                 routing_key,
+                // THE start boundary: every transport (HTTP, gRPC, WebSocket,
+                // CLI, in-process client) reaches the engine through here, and
+                // this is the only start path whose input came from outside.
+                input_admission: start::InputAdmission::Declared,
                 ..start::StartWorkflowOptions::default()
             },
         )

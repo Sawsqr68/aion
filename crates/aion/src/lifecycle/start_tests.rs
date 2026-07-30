@@ -550,6 +550,7 @@ async fn start_with_existing_workflow_id_resumes_history_sequence()
             loaded_version: None,
             search_attributes: std::collections::HashMap::new(),
             namespace: None,
+            input_admission: super::InputAdmission::Trusted,
         },
     )
     .await?;

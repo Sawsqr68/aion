@@ -244,6 +244,10 @@ async fn start_continuation_replacement(
             // Recorded attributes carry into the replacement run's projection.
             search_attributes: std::collections::HashMap::new(),
             namespace: Some(handle.namespace().to_owned()),
+            // Engine-internal re-entry: this input was already produced by the
+            // predecessor run's own workflow code. Re-admitting it here could
+            // only kill a live continuation, never protect one.
+            input_admission: start::InputAdmission::Trusted,
         },
     )
     .await?;
