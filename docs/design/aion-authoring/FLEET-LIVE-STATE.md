@@ -55,10 +55,66 @@ Evidence chain, all verified at my seat:
   funcidNN" at 07:25:52 (44), 08:06:08 (45), **08:06:17.845 (46)**. But
   `grep` of `beamr-0.16.2/src/jit` finds NO NIF call sites at all.
 
-An Opus agent is root-causing with orders to build a DETERMINISTIC repro first
-(an hour-long flake is not evidence) and to rule Aion-defect vs beamr-defect
-explicitly. beamr work coordinates with Artemis Peach; do NOT patch the
-vendored registry copy.
+### ✅ SOLVED — it is a BEAMR defect. We are BLOCKED on a beamr release.
+
+beamr 0.16.2's JIT re-enters the interpreter for ANY external call made from
+compiled code, and BOTH re-entry edges construct a fresh
+`NativeServices::default()` — every facility `None`:
+
+- `jit/runtime.rs:165` `jit_call_interpreted` (external-call edge)
+- `jit/runtime_closure.rs:197` `call_interpreted_closure` (closure edge)
+- `interpreter/mod.rs:210-217` `run_with_registry` builds the empty bundle
+
+`JitRuntimeContext` (`process/types.rs:269`) carries module/registry/jit_cache
+but NOT the services, so those edges have nothing to restore.
+
+**Trigger shape: JIT'd F → bytecode G → NIF.** A direct `Native` import is SAFE
+(`jit/runtime.rs:139-145` deopts on `ResolvedImportTarget::Native`). That is
+exactly why the two earlier fork/joins and the plain `fold_phase` call worked —
+nothing had been compiled yet.
+
+The JIT correlation is now DEMONSTRATED CAUSE, from the log itself: funcid46's
+Cranelift IR at `~/.aion/server.log:120` is a one-arity function whose ENTIRE
+body is `call fn6(v1, 2141, 5, 1, v0)`, and `fn6`'s signature
+`(i64,i64,i64,i64,i64)->(i8,i64)` is precisely
+`jit_call_interpreted(process, module_index, import_index, arity, args)`.
+
+🔴 **BLAST RADIUS IS FAR WIDER THAN OUR NIF.** The same empty bundle drops
+`atom_table`, `spawn_facility`, `link_facility`, `local_send`, `timers`,
+`ets_facility`, `supervision_facility` and **`replay_driver`**. Any BEAM code
+below a JIT frame that sends, spawns, monitors or compares atoms is running on
+a gutted VM — and the replay_driver hole means a JIT'd frame could take a LIVE
+path during replay. That is a durability violation, not a crash. We were lucky
+it shouted instead of going quiet.
+
+**Repro + patch PUSHED: branch `defect/beamr-jit-loses-native-services`.**
+`crates/aion/src/runtime/jit_nif_boundary_tests.rs` is a DIFFERENTIAL — two
+tests, identical three-module graph, the ONLY variable is whether compiled code
+is in the scheduler's JIT cache; compilation goes through `JitCompiler::compile`
+on `Module::function_instructions`, byte-identical to `CompilationJob::run`, no
+faked entry. 0.32 seconds. VERIFIED AT MY OWN SEAT: control ok, JIT case FAILED
+0 vs 1. `beamr-jit-services.patch` (5 files, ~70 lines) proven on an isolated
+0.16.2 copy: pure-beamr repro 1p/1f → **2p/0f**, beamr's own `cargo test --lib`
+**1726 passed / 0 failed**, non-regressive.
+
+🔴 **The pin is RED and stays red until beamr ships. It is deliberately NOT on
+main** — a red test blocks every gate. Branch only.
+
+**NO AION-SIDE DEFENCE EXISTS in 0.16.2.** Every lever checked: `jit` is a
+MISLABELLED optional feature (`scheduler/mod.rs:214` gates the `use` on
+`threads`, not `jit`) so it cannot be turned off; `SchedulerServices` offers no
+JIT choice; `dirty_cpu_threads: Some(0)` is a non-starter because we register
+five production dirty NIFs (`engine_nifs.rs:129-153`); and
+`jit_threshold = u32::MAX` is a MITIGATION not a gate — the counter saturates
+and still fires — as well as an arbitrary limit. Deliberately NOT applied.
+
+Sent to **Artemis Peach** with the three riders they should own: the mislabelled
+`jit` feature, `tune_threshold` (`jit/profiler.rs:203`) having no production
+callers, and a dirty NIF below a JIT frame mapping `DirtyCall` to a bare deopt
+that discards the partially-executed compiled frame.
+
+🔴 **DO NOT RE-RUN THARSIS before the beamr fix lands.** It dies in the same
+place and costs another hour.
 
 **The gates did their job on the way past.** Decoded gate result for
 `d1-project-foundations`: `gate scope-fence exited 1` listing `.github/
@@ -96,9 +152,41 @@ schema + a repo to read) took 15 min. Big requests are shed first.
 
 ## COMMITTED THIS SESSION (local on main, NOTHING PUSHED)
 
+Everything below the divider that used to say "UNCOMMITTED" is now COMMITTED.
+The sections are kept for their reasoning; ignore their staging language.
+
 - `8416af54` docs(fleet) — earlier state + #80/#81.
-- `d2b32d84` **#79 item-stage fix**, VERIFIED AT MY SEAT: clippy exit 0 zero
-  diagnostics, **176 passed / 0 failed / 0 ignored** (was 154).
+- `d2b32d84` **#79 item-stage fix** — clippy exit 0, 176 passed / 0 / 0.
+- `45fdaaee` docs(fleet) — the pre-compaction bank.
+- `be0112bf` **feat(awl): send** — the whole signals lane + 8 aion-server Send
+  arms + 3 console sites. aion-awl clippy 0 / **467 passed / 0 / 0**.
+- `e78f4b44` **fix(server): #81 chmod** — 8 cases, 3 auto-repaired, 5 still
+  refusing by design. clippy 0 / **658 passed / 0 / 0**.
+- `93e961f6` **fix(awl): swallowed rollback** — my rider. clippy 0 /
+  awl::documents **7 passed / 0 / 0**.
+- `b355fc41` docs(fleet) — the #82 evidence chain.
+- `5008a747` **fix(staged-rounds): verify_integration rider** — gated in the
+  REAL tree this time: clippy 0 / **178 passed / 0 / 0** across 8 suites.
+  #79 now CLOSED, both halves.
+- `9e544085` + `eff9bd88` docs(fleet) — `THARSIS-RUN-1-POSTMORTEM.md`, what the
+  three agents actually built, and the re-run checklist.
+
+**Worker release binary REBUILT** (exit 0). The RUNNING worker pid 49833 still
+executes the old code from its own inode and MUST be restarted before run #2.
+`target/release/aion` is still MISSING — rebuild it after #82 lands, not before
+(the fix changes `crates/aion`, so building now is wasted work).
+
+**Canvas VERIFIED live, not assumed:** `/awl/documents` lists `staged_rounds.awl`;
+`/awl/check` returns **0 diagnostics, 12 steps, 11 edges, 32 statement nodes**,
+and the `execute` step projects the loop with all four nested parallel forks and
+their join bindings in the right order. The server hands the canvas everything
+it needs; I cannot verify the browser render from here.
+
+**THREE AGENTS IN FLIGHT:** #82 NIF root-cause (`crates/aion/src/runtime/`,
+already scaffolding `jit_nif_boundary_tests`), the worker-scaffold lane
+(`crates/aion-package/src/codegen/awl_worker/` — 10 files, all under 500 lines,
+and the 135-line `emit_declaration` that was failing workspace clippy is gone,
+longest fn now 71), and #80 admission (`aion-server` + `aion-package`).
 
 ## UNCOMMITTED, IN THE TREE RIGHT NOW — needs one combined gate then commit
 
