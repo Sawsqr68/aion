@@ -1,0 +1,156 @@
+//! The assistant workflow: an operator-paced aion-authoring chat session,
+//! authored in AWL.
+//!
+//! Pure orchestration over two recorded worker actions:
+//!
+//!   assistant_provision -> [ assistant round ; await operator ]*   [bounded]
+//!
+//! Round one dispatches the `assistant` agent action with the opening prompt
+//! the provisioning action composed — the full working contract plus the
+//! operator's objective. Every later round is the operator's continuation
+//! message VERBATIM, dispatched into the SAME norn session (the worker pins
+//! `{workflow_id}-assistant` + `--resume-if-exists`, so repeated dispatches of
+//! the one action type resume one conversation and the contract is never
+//! re-sent).
+//!
+//! Between rounds the session parks on the ONE control signal,
+//! `assistant_continue`. Continue and end share the signal name and
+//! discriminate in the payload: `end: true` finishes cleanly, a non-blank
+//! `message` starts the next round, and a blank message is a no-op nudge that
+//! is absorbed by the inner wait loop without spending a round.
+//!
+//! WHY THIS EXISTS: the Gleam-authored `assistant` package cannot start at all
+//! under queue-routed serving. A project manifest's `DeclaredActivity` has one
+//! field, so every activity is committed UNSCOPED and start is refused with
+//! `NO_QUEUE_DECLARATION` (docs/design/aion-authoring/
+//! GLEAM-PATH-CANNOT-START-FINDING.md). AWL emits a scoped contract, so it is
+//! the only surface that can author this workflow. The differences between
+//! this document and the Gleam original are recorded in full in
+//! docs/design/aion-authoring/ASSISTANT-AWL-PORT.md — read it before changing
+//! anything here.
+//!
+//! DELIBERATE OMISSION — no `timeout` in the header. An agent round carries no
+//! timeout by design (a wedged round is cancelled or intervened, never timed
+//! out), and the session itself is operator-paced: a real run has parked on
+//! this signal for 28 days and resumed healthy. A workflow timeout would kill
+//! exactly the sessions this workflow exists to keep alive.
+workflow assistant
+  // The operator's opening ask. Must not be blank — there is nothing to open
+  // the session with. AWL has no input-validation construct, so unlike the
+  // Gleam original this is documented rather than enforced (see the ledger).
+  input objective: String
+  // The aion repository the session grounds its answers in: a local path or
+  // clone URL. Empty is the documented "no repository, scratch workspace"
+  // mode — the assistant then says what it cannot verify.
+  input repo_path: String
+  // The session's agent-round budget. The product decision is 50; AWL has no
+  // input defaults, so the caller states it. Spending it is the
+  // `RoundCapExhausted` disposition — an outcome, never an error.
+  input max_rounds: Int
+  // How many consecutive blank nudges one round will absorb before the
+  // session gives up waiting. AWL requires every loop to be bounded, so the
+  // Gleam version's unbounded "keep waiting" cannot be reproduced; this is
+  // the explicit ceiling that replaces it.
+  input max_nudges: Int
+
+  // The ONE control signal the session listens on. Both fields are REQUIRED
+  // on the wire: AWL cannot read the value of an optional `Bool?` or compare
+  // an optional `String?`, only test presence, so optional fields would make
+  // `end: false` indistinguishable from ending and a blank message
+  // undetectable. Send `{"message": "...", "end": false}` to continue and
+  // `{"message": "", "end": true}` to finish.
+  signal assistant_continue: Continuation
+
+  outcome ended:   type Session, route success
+  outcome capped:  type Session, route success
+  outcome stalled: type Session, route success
+
+/// Payload of the `assistant_continue` signal.
+type Continuation {
+  /// The operator's next prompt, sent to the agent verbatim. Blank is a no-op
+  /// nudge that does not spend a round.
+  message: String,
+  /// True finishes the session cleanly as `OperatorEnded`.
+  end: Bool,
+}
+
+/// How the session ended. All three are CLEAN completions — the operator
+/// ended it, or one of the two explicit budgets was spent. None is an error.
+type Disposition = OperatorEnded | RoundCapExhausted | NudgeCapExhausted
+
+/// The provisioned session workspace and the prompt that opens the session.
+/// The opening prompt is composed WORKER-SIDE, by the same handler that
+/// creates this workspace and materializes the skill documents the prompt
+/// points at — AWL cannot branch a 4KB contract on whether a repository was
+/// attached, and a prompt composed away from the workspace could only restate
+/// facts it cannot check.
+type Workspace { path: String, opening_prompt: String }
+
+/// The one value the round loop threads, and the ONLY thing readable after
+/// the loop: the prompt the next round will send, the last reply received,
+/// and whether the operator ended the session.
+///
+/// `prompt` doubles as the exhaustion discriminator. A binding made inside the
+/// nested wait loop is not guaranteed on every path out of the outer loop, so
+/// the continuation itself cannot be read after the loop — everything the
+/// outcomes need has to be folded into this value while it is still in scope.
+/// A blank `prompt` with `ended` false can only mean the wait loop left
+/// without a message, i.e. the nudge budget was spent.
+type Round { prompt: String, reply: String, ended: Bool }
+
+/// The session's recorded result: how it ended, how many agent rounds ran, the
+/// final agent reply, and the workspace path (which persists for inspection).
+type Session { disposition: Disposition, rounds: Int, last_reply: String, workspace_path: String }
+
+worker default
+  /// Materialises the session workspace at `<root>/<run_id>/repo` and composes
+  /// the round-one prompt for it. `run_id` must be the workflow's own id: it
+  /// keys the worker-side directory AND must equal the id the agent-harness
+  /// `--workspace-root` template expands to, or the agent works somewhere
+  /// other than where it was provisioned.
+  action assistant_provision(repo_path: String, run_id: String, objective: String) -> Workspace
+
+  /// One agent round under the norn-harness contract: ONE prompt string in,
+  /// ONE terminal-text string out. NO timeout, by design. The worker pins one
+  /// norn session per action type per run, so repeated dispatches resume one
+  /// conversation.
+  action assistant(prompt: String) -> String
+
+step provision
+  assistant_provision(repo_path: repo_path, run_id: workflow.id, objective: objective) -> session
+
+step session after provision
+  // The outer loop is one agent round plus the operator wait, bounded by the
+  // round budget. The body runs at least once, so a session always gets one
+  // round even at `max_rounds` of 1.
+  //
+  // The inner loop is the operator wait, and it is where the nudge tolerance
+  // lives: it re-parks on `assistant_continue` until the operator either ends
+  // the session or sends a non-blank message, absorbing blank nudges without
+  // spending an agent round. AWL demands a bound on it, so the tolerance is
+  // finite where the Gleam version's was not.
+  loop round = Round(prompt: session.opening_prompt, reply: "", ended: false) counting rounds
+    assistant(prompt: round.prompt) -> reply
+    loop nudge = Continuation(message: "", end: false)
+      wait assistant_continue -> nudge
+      until nudge.end or nudge.message != ""
+      max max_nudges
+    Round(prompt: nudge.message, reply: reply, ended: nudge.end) -> round
+    until round.ended
+    max max_rounds
+
+  // Three ways out, all read off the threaded value — see `Round` for why the
+  // continuation itself is not readable here.
+  outcome operator_ended: when round.ended,
+    route ended(disposition: OperatorEnded, rounds: rounds, last_reply: round.reply,
+      workspace_path: session.path)
+  // The wait loop spent its nudge budget: it left with a blank message and no
+  // end flag, so nothing was ever sent to the agent.
+  outcome nudges_spent: when round.prompt == "",
+    route stalled(disposition: NudgeCapExhausted, rounds: rounds, last_reply: round.reply,
+      workspace_path: session.path)
+  // The round budget is spent. An OUTCOME, never an error: the operator reads
+  // the transcript and starts a fresh session.
+  outcome rounds_spent: otherwise,
+    route capped(disposition: RoundCapExhausted, rounds: rounds, last_reply: round.reply,
+      workspace_path: session.path)
