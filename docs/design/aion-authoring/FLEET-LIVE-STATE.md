@@ -1,6 +1,51 @@
 # Fleet + lanes: LIVE STATE (resume point)
 
-## 🔴 RESUME HERE — 2026-07-31 midday. main `4ea6e510`, PUSHED.
+## 🔴 RESUME HERE — 2026-07-31 midday. main `e16b5962`.
+
+### PICK UP HERE, IN THIS ORDER
+
+1. **PUSH FIRST.** `e16b5962` (the `agent`-marker WIP) may be unpushed. Check
+   `git status` and `git log origin/main..HEAD` before anything else.
+2. **FINISH #98, the `agent` marker.** `e16b5962` is HALF DONE and labelled so.
+   Done: keyword, `ConfigLine.agent: Option<Span>`, parser (with duplicate
+   refusal), canonical printer. aion-awl green, round trip holds. **NOT done,
+   and it must not be called landed until both are:**
+   - the checker must REFUSE `agent` on an action that is not arity-1
+     `String -> String`. Until then the marker is accepted anywhere and means
+     nothing, which is the dormant-surface shape the change exists to remove.
+   - delete `AGENT_ACTIVITY_TYPES` at `examples/agent-dev/worker/src/main.rs:50`
+     (also used at :106 and :255). That deletion is the whole payoff.
+   Design is ruled in `RULING-AGENT-ACTION-WIRE-FORM.md`.
+3. **Then #97-B**: bare optional scalars never narrow. The `narrow` slot exists
+   at `checker/exprs.rs:14-23`; `blocks.rs:102` and `walk.rs:291` pass `None`,
+   so it never reaches a statement body.
+
+### Verification standing at this point
+
+- `cargo test --workspace` **exit 0, 240 suites, 3818 passed, 0 failed** (run
+  at `bfaa42b9`-era tree, before the dispatch and agent-marker commits).
+- `cargo clippy --workspace --all-targets -D warnings` exit 0.
+- `cargo test -p aion-server` was mid-run at the compaction — 26 suites green,
+  0 failed, NOT complete. **Re-run it; the dispatch change is not fully gated
+  until it finishes.**
+- aion-awl green after the agent-marker WIP.
+
+### Coordination
+
+- **Callisto** may take the #95/#97-A boundary lane (`16ba5157`, preserved,
+  NOT verified). She stood down on 2026-07-30 because accepting it would settle
+  an open question of Tom's by doing it. If she starts: she is in
+  `aion-awl`/`aion-package`/the signal boundary, so **tell her to rebase** —
+  I added `schema_is_usable` to `aion-package/src/admission.rs` and the
+  `agent` marker to `aion-awl`.
+- **ONE FULL AION BATTERY AT A TIME ON THIS BOX.** Coordinate before starting.
+- **I owe Cally the disk measurement unprompted** whenever it moves materially.
+  She named me as the party owing the clearing observation rather than polling.
+
+---
+
+## Earlier 2026-07-31 — main `4ea6e510`
+
 
 ### 🔴 READ THIS FIRST: the box, and Tom's server
 
