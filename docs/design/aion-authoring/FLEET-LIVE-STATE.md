@@ -165,6 +165,55 @@ composition decision stands on the better reason (the worker already
 materializes the resources the prompt describes), but the stated reason was
 wrong and it checked rather than designing around it.
 
+## 🔴 RESTORATION SEQUENCE — do this in order, nothing else restores the queue
+
+Queue `default` is DOWN for **two independent reasons**, and fixing one alone
+changes nothing.
+
+1. **Agent B's work must be committed and its gates re-run on the committed
+   tree.** It reported green (clippy 0/0 diagnostics, 1919 passed/0 failed) but
+   committed NOTHING — every crates/ change was loose in the working tree. It
+   has been sent back to commit. **Verify at the bytes; do not take the report.**
+2. **Rebuild `target/release/aion`** so the server carries B's refusal fix.
+3. **`assistant_spike` must stop demanding the OLD `assistant_provision`
+   signature (task #99).** The port added `objective`; input compatibility is
+   contravariant, so a worker requiring it is refused by the spike's
+   two-argument contract. With both deployed NEITHER runs. A route-active
+   version cannot be unloaded, so the only path is: update or retire the spike →
+   deploy it → the old hash becomes unreachable → `/deploy/unload` accepts it.
+   **Consider retiring the spike outright** — its job was to prove the seam, the
+   port exists, and all it does now is conflict.
+4. **Then** deploy `assistant.awl` and restart the worker:
+   ```
+   ./examples/agent-dev/worker/target/release/agent-dev-worker \
+       --address 127.0.0.1:50061 --norn-account default
+   ```
+
+## ⚠️ THE "LIVE PROVEN" CLAIM IN `e819b96a` NEEDS TWO QUALIFICATIONS
+
+Both found by Agent A, neither by me. The asparagus run happened and the reply
+was real. But:
+
+- **Admission was never exercised** — the worker registered at 10:24, the spike
+  deployed at 10:37, and dispatch does not re-check.
+- **The prompt arrived JSON-WRAPPED (task #98).** AWL synthesizes an input
+  record with no arity-1 unwrap, so `assistant(prompt: String)` puts
+  `{"prompt":"..."}` on the wire, and the norn adapter unwraps only a BARE JSON
+  string. The agent literally received
+  `{"prompt":"You are the aion AWL authoring assistant: …"}` and coped. It is
+  degraded, not broken, which is exactly why nothing surfaced it.
+
+It worked *despite* being wrong, and I reported it as proof. Any live proof
+taken before #98 is settled is a proof of the DEGRADED path and must be
+described that way.
+
+**I was right about the nudge defect** — Agent A confirmed it at the lowering
+(`emitter/loops.rs:83-121` computes ONE exit expression used by both the `until`
+and the exhaustion arm, so an exhausted inner loop just continues the outer
+body) and fixed it in `b7cd6425`. It proved the fix by evaluating the document's
+own loop conditions over the whole domain, and **verified by mutation** that
+restoring the old condition fails the test.
+
 **Still owed:** the staged-rounds worker (pid 49833) is still an old binary.
 
 **Do not tell Tom any of this as status.** Fix it, prove it live, then tell him
