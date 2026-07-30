@@ -1,18 +1,31 @@
-//! staged_rounds: supplied material goes in; merged, reviewed work comes
-//! out. One planner agent reads the material and returns a typed, phased
-//! plan of scope-fenced work items. Bounded rounds then fan the released
-//! items out — one worktree, one dev agent, and one reviewer per item, in
-//! parallel — and fold_phase moves accepted items to done, keeps rejected
-//! items pending with the reviewer's feedback attached, and releases
+//! staged_rounds: supplied material goes in; merged, gated, panel-reviewed
+//! work comes out. One planner agent reads the material and returns a typed,
+//! phased plan of scope-fenced work items. Bounded rounds then fan the
+//! released items out — one worktree and one dev agent per item, in parallel —
+//! then run the mechanical gate battery per item AUTHORITATIVELY, then fan a
+//! REVIEW PANEL over every (item x lens) pair. fold_phase moves items that
+//! passed both the battery and every lens to done, keeps the rest pending with
+//! the gate output and the reviewers' feedback attached, and releases
 //! newly-unblocked next-phase items. A released dependent's worktree is
-//! provisioned with its depends_on items' accepted branches merged in, so
-//! it really starts from their work. Accepted branches merge; conflicts
-//! feed a bounded remediation cycle whose agent RESUMES the planner's
-//! session — the persistent coordinator judges its own plan's conflicts.
+//! provisioned with its depends_on items' accepted branches merged in, so it
+//! really starts from their work.
+//!
+//! Accepted branches merge into one integration branch; conflicts feed a
+//! bounded remediation cycle whose agent RESUMES the planner's session — the
+//! persistent coordinator judges its own plan's conflicts. The merged branch
+//! is then VERIFIED by re-running the battery on the integration worktree,
+//! because N individually-green branches can merge cleanly and still produce a
+//! red project: two items touching the same callers, a test that only fails in
+//! combination, a lint that only fires on the union. A red integration feeds
+//! its own bounded fix cycle, and exhausting that cycle is a terminal
+//! disposition — never a silent success.
 //!
 //! Operator notes: work item ids must be git-ref-safe slugs (they name
-//! branches); a terminal per-item activity failure fails the run (the
-//! parallel fan-out is engine-owned fail-fast).
+//! branches); a terminal per-item activity failure fails the run (the parallel
+//! fan-out is engine-owned fail-fast). The integration verification appears
+//! twice — once after a clean merge, once after a repaired one — because an
+//! AWL binding exists only on the path that bound it, so a single shared step
+//! could name neither merge result.
 workflow staged_rounds
   timeout 12h
   input material: Material
@@ -20,24 +33,31 @@ workflow staged_rounds
   outcome completed:  type Completed,  route success
   outcome exhausted:  type Exhausted,  route failure
   outcome conflicted: type Conflicted, route failure
+  outcome unverified: type Unverified, route failure
 
 /// What the planner reads: a title, the large brief, and repo pointers.
 type Material { title: String, brief: String, pointers: [String] }
 
 type GateCommand { name: String, argv: [String] }
 
+/// One adversarial review lens: a name that keys its verdict, and the charter
+/// that is its marching orders. Lenses are blind to each other's verdicts.
+type Lens { name: String, charter: String }
+
 /// Run configuration. Every field is explicit — no defaults.
 type RunConfig {
   repo_root: String,
   base_branch: String,
   gates: [GateCommand],
+  lenses: [Lens],
   max_rounds: Int,
   max_merge_rounds: Int,
+  max_integration_rounds: Int,
 }
 
 /// One planned work item: scope fences, a phase tag, and dependency ids.
-/// `feedback` starts empty; fold_phase writes rejected items' reviewer
-/// feedback into it for the next round's dev turn.
+/// `feedback` starts empty; fold_phase writes the round's gate failures and
+/// rejecting verdicts into it for the next round's dev turn.
 type WorkItem {
   id: String,
   title: String,
@@ -71,12 +91,39 @@ type DevItemResult {
   report: ItemReport,
 }
 
+/// One gate command's recorded execution. The exit status is DATA, not a
+/// failure: a red gate is evidence the pipeline acts on, never an exception.
+type GateRun { name: String, argv: [String], exit_code: Int, passed: Bool, output_tail: String }
+
+/// The battery's verdict over one worktree, plus the diff the reviewers read.
+type GateOutcome { pass: Bool, runs: [GateRun], diff: String, diagnostics: String }
+
+/// A dev result with the battery actually run against it. Nothing reaches
+/// review, and nothing reaches `done`, without one of these.
+type GatedItem {
+  item: WorkItem,
+  workspace_path: String,
+  branch: String,
+  base_commit: String,
+  report: ItemReport,
+  gate: GateOutcome,
+}
+
+/// One panel seat: a lens paired with the gated item it must examine. The
+/// item x lens product is flattened into a list so the single-level `fork`
+/// covers the whole panel, and so the console shows one flat set of
+/// concurrent reviewers.
+type ReviewTask { lens: Lens, work: GatedItem }
+
 type Finding { severity: String, title: String, evidence: String }
 
-/// One item verdict: severity is "blocking" or "advisory", overall is
-/// "accept" or "reject".
+/// One item verdict from one lens. severity is "blocking" or "advisory",
+/// overall is "accept" or "reject". `overall` is DERIVED from findings by
+/// fold_phase — any blocking finding rejects — and an asserted value that
+/// disagrees with the derivation is recorded as its own violation.
 type ItemVerdict {
   item_id: String,
+  lens: String,
   overall: String,
   findings: [Finding],
   /// Present when the verdict rejects.
@@ -100,9 +147,11 @@ type Completed {
   plan: String,
   rounds: Int,
   merge_rounds: Int,
+  integration_rounds: Int,
   done: [DoneItem],
   integration_branch: String,
   merged: [String],
+  verification: GateOutcome,
   evidence: String,
 }
 
@@ -123,6 +172,20 @@ type Conflicted {
   evidence: String,
 }
 
+/// The merge succeeded and the project still does not build. Every item was
+/// green on its own branch; the union is not. This is a terminal disposition
+/// with the failing battery attached, never a success.
+type Unverified {
+  rounds: Int,
+  merge_rounds: Int,
+  integration_rounds: Int,
+  done: [DoneItem],
+  integration_branch: String,
+  merged: [String],
+  verification: GateOutcome,
+  evidence: String,
+}
+
 worker staged_rounds
   action planner(material: Material, repo_root: String, workspace_path: String) -> Plan
     node planner
@@ -130,19 +193,35 @@ worker staged_rounds
     node shell
   action dev_item(work: ProvisionedItem, gates: [GateCommand]) -> DevItemResult
     node developer
-  action review_item(work: DevItemResult) -> ItemVerdict
+  /// Runs the battery in the item's worktree and records every exit code as
+  /// data. An item cannot be accepted on a red battery no matter what its dev
+  /// agent claimed, and the diff this produces is what the panel reads.
+  action gate_item(work: DevItemResult, gates: [GateCommand]) -> GatedItem
+    node shell
+  /// Flattens gated items x lenses into one panel list. Pure.
+  action plan_reviews(gated: [GatedItem], lenses: [Lens]) -> [ReviewTask]
+    node shell
+  action review_item(task: ReviewTask) -> ItemVerdict
     node reviewer
-  action fold_phase(prior: PhaseState, incoming: [WorkItem], dev: [DevItemResult], verdicts: [ItemVerdict]) -> PhaseState
+  action fold_phase(prior: PhaseState, incoming: [WorkItem], gated: [GatedItem], verdicts: [ItemVerdict], lenses: [Lens]) -> PhaseState
     node shell
   action merge_branches(run_root: String, repo_root: String, base_branch: String, done: [DoneItem], prior_evidence: String, remediation: String) -> MergeState
     node shell
   action remediate(merge: MergeState, plan: Plan, workspace_path: String) -> RemediationReport
     node remediation
+  /// Re-runs the battery on the merged integration worktree. This is the only
+  /// evidence that the project — not just each branch — is green.
+  action verify_integration(run_root: String, repo_root: String, integration_branch: String, gates: [GateCommand]) -> GateOutcome
+    node shell
+  /// Repairs a red integration on the integration worktree, resuming the
+  /// planner's session so the coordinator answers for its own decomposition.
+  action fix_integration(verify: GateOutcome, plan: Plan, integration_branch: String, workspace_path: String) -> RemediationReport
+    node remediation
 
 step plan
   config.repo_root + "/.staged-rounds/" + workflow.id -> run_root
   planner(material: material, repo_root: config.repo_root, workspace_path: config.repo_root) -> plan
-  fold_phase(prior: PhaseState(ready: [], blocked: [], done: [], evidence: ""), incoming: plan.items, dev: [], verdicts: []) -> seeded
+  fold_phase(prior: PhaseState(ready: [], blocked: [], done: [], evidence: ""), incoming: plan.items, gated: [], verdicts: [], lenses: config.lenses) -> seeded
 
 step execute
   loop state = seeded counting rounds
@@ -153,9 +232,13 @@ step execute
       dev_item(work: p, gates: config.gates)
     join -> dev_results
     fork d in dev_results
-      review_item(work: d)
+      gate_item(work: d, gates: config.gates)
+    join -> gated
+    plan_reviews(gated: gated, lenses: config.lenses) -> panel
+    fork task in panel
+      review_item(task: task)
     join -> verdicts
-    fold_phase(prior: state, incoming: [], dev: dev_results, verdicts: verdicts) -> state
+    fold_phase(prior: state, incoming: [], gated: gated, verdicts: verdicts, lenses: config.lenses) -> state
     until state.ready is empty and state.blocked is empty
     max config.max_rounds
 
@@ -164,7 +247,7 @@ step execute
 
 step merge_once
   merge_branches(run_root: run_root, repo_root: config.repo_root, base_branch: config.base_branch, done: state.done, prior_evidence: state.evidence, remediation: "") -> attempt
-  outcome clean: when attempt.conflicts is empty, route finish_clean
+  outcome clean: when attempt.conflicts is empty, route verify_clean
   outcome dirty: otherwise, route fix_conflicts
 
 step fix_conflicts
@@ -174,17 +257,45 @@ step fix_conflicts
     until mstate.conflicts is empty
     max config.max_merge_rounds
 
-  outcome merged: when mstate.conflicts is empty, route finish_fixed
+  outcome merged: when mstate.conflicts is empty, route verify_fixed
   outcome stuck: otherwise, route wrap_conflicted
 
+step verify_clean
+  verify_integration(run_root: run_root, repo_root: config.repo_root, integration_branch: attempt.integration_branch, gates: config.gates) -> first_clean
+  loop vclean = first_clean counting integration_rounds_clean
+    fix_integration(verify: vclean, plan: plan, integration_branch: attempt.integration_branch, workspace_path: attempt.workspace_path) -> repair_clean
+    verify_integration(run_root: run_root, repo_root: config.repo_root, integration_branch: attempt.integration_branch, gates: config.gates) -> vclean
+    until vclean.pass
+    max config.max_integration_rounds
+
+  outcome green: when vclean.pass, route finish_clean
+  outcome red: otherwise, route wrap_unverified_clean
+
+step verify_fixed
+  verify_integration(run_root: run_root, repo_root: config.repo_root, integration_branch: mstate.integration_branch, gates: config.gates) -> first_fixed
+  loop vfixed = first_fixed counting integration_rounds_fixed
+    fix_integration(verify: vfixed, plan: plan, integration_branch: mstate.integration_branch, workspace_path: mstate.workspace_path) -> repair_fixed
+    verify_integration(run_root: run_root, repo_root: config.repo_root, integration_branch: mstate.integration_branch, gates: config.gates) -> vfixed
+    until vfixed.pass
+    max config.max_integration_rounds
+
+  outcome green: when vfixed.pass, route finish_fixed
+  outcome red: otherwise, route wrap_unverified_fixed
+
 step finish_clean
-  route completed(plan: plan.summary, rounds: rounds, merge_rounds: 0, done: state.done, integration_branch: attempt.integration_branch, merged: attempt.merged, evidence: state.evidence)
+  route completed(plan: plan.summary, rounds: rounds, merge_rounds: 0, integration_rounds: integration_rounds_clean, done: state.done, integration_branch: attempt.integration_branch, merged: attempt.merged, verification: vclean, evidence: state.evidence)
 
 step finish_fixed
-  route completed(plan: plan.summary, rounds: rounds, merge_rounds: merge_rounds, done: state.done, integration_branch: mstate.integration_branch, merged: mstate.merged, evidence: mstate.evidence)
+  route completed(plan: plan.summary, rounds: rounds, merge_rounds: merge_rounds, integration_rounds: integration_rounds_fixed, done: state.done, integration_branch: mstate.integration_branch, merged: mstate.merged, verification: vfixed, evidence: mstate.evidence)
 
 step wrap_exhausted
   route exhausted(rounds: rounds, ready: state.ready, blocked: state.blocked, done: state.done, evidence: state.evidence)
 
 step wrap_conflicted
   route conflicted(rounds: rounds, merge_rounds: merge_rounds, done: state.done, integration_branch: mstate.integration_branch, conflicts: mstate.conflicts, evidence: mstate.evidence)
+
+step wrap_unverified_clean
+  route unverified(rounds: rounds, merge_rounds: 0, integration_rounds: integration_rounds_clean, done: state.done, integration_branch: attempt.integration_branch, merged: attempt.merged, verification: vclean, evidence: state.evidence)
+
+step wrap_unverified_fixed
+  route unverified(rounds: rounds, merge_rounds: merge_rounds, integration_rounds: integration_rounds_fixed, done: state.done, integration_branch: mstate.integration_branch, merged: mstate.merged, verification: vfixed, evidence: mstate.evidence)

@@ -1,0 +1,55 @@
+{
+  "material": {
+    "title": "Tharsis v1: agent-native virtual filesystem on haematite, served over NFSv3 loopback",
+    "brief": "You are the coordinator of a whole-project build of Tharsis, a Rust project at /Users/tom/Developer/ablative/dev-ops/tharsis. Your job on this first turn is to read the project's OWN plan and return it as a typed, phased, dependency-ordered set of scope-fenced work items. Do not invent a plan. The plan exists and is good; your job is to convert it faithfully and to phase it correctly.\n\nWHAT THARSIS IS. Workspaces are durable, branchable, attributed state, backed by haematite (a content-addressed, quorum-replicated prolly-tree store) and served to ordinary tools over NFSv3 on loopback — no kernel extensions, no FUSE. The four claimed differentiators are: a workspace IS execution state (a layer root lives in the same store as workflow history, so a run replays including its filesystem); workspaces fail over across cluster nodes mid-edit; writes carry provenance (tharsis blame answers which agent, tool call, activity and transcript moment wrote a byte); and O(1) forks with structural diffs. Read docs/VISION.md, docs/POSITIONING.md and README.md before planning.\n\nWHERE THE PLAN IS. docs/ROADMAP.md is authoritative on ordering and gates. docs/briefs/README.md indexes 19 self-contained work briefs and states the working rules. docs/REQUIREMENTS.md numbers R1-R17 and N1-N5 with five acceptance demos A1-A5. Each brief is self-contained and names the requirement IDs it satisfies. Read the roadmap and the brief index in full, then read each brief you intend to emit as an item.\n\nFOUR JOB KINDS, by ID prefix. D = Decision (produces a written record). E = Engine (lands in the HAEMATITE repo). S = Spike (lands in spikes/, done only with a measured answer). B = Build (lands in crates/).\n\nHARD SCOPE FENCES — these are not negotiable and you must not emit items that violate them:\n\n1. E1, E2, E3 and E4 land in the haematite repository, NOT in tharsis. This run operates on the tharsis repo only. DO NOT emit them. If a build item genuinely cannot proceed without an engine change, say so in that item's goal and phase the item behind a spike that measures the need, rather than emitting engine work this run cannot do.\n\n2. S7 (failover rehearsal) is BLOCKED on haematite issue #157. Do not emit it.\n\n3. B5 (aion integration) is half in the aion repository. Do not emit it.\n\n4. Track 1 is STRICTLY ORDERED: S1 then S2 then S3 then S7, and the roadmap is explicit that each one invalidates everything after it if it fails. Encode that ordering with phase numbers and depends_on. S2 must not be in the same phase as S1. Anything that depends on the transport decision must sit behind S1's gate.\n\n5. Track 0 is fully parallel and unblocked today. S1-lite — a read-only NFS export of an already-committed haematite root — is named in the roadmap as the single highest-leverage de-risk in the project and needs zero engine changes. It belongs in phase 1.\n\n6. 30 of the 35 pub fns in crates/ are todo!(\"<brief id>\"). Several module docs say explicitly, for example crates/tharsis-nfs/src/lib.rs: do not fill in the todo!()s ahead of the spikes that decide their shape. Honour that. Build items whose shape a spike decides must be phased BEHIND that spike, not beside it.\n\n7. Replace todo!()s; do not rearrange the existing skeleton. The type and domain model, the Error enum, the CLI dispatch skeleton and the build-lock state machine in crates/tharsis-server/src/build_lock.rs are already implemented and are load-bearing. If a brief's shape genuinely requires changing the skeleton, that is scope creep: name it in the item's goal rather than absorbing it.\n\nWORK THAT IS REAL BUT NOT IN THE BRIEFS. The repo is missing infrastructure that a whole-project build needs, and it is legitimate first-phase work: there is no CI configuration at all, no rust-toolchain.toml, no rustfmt.toml, no clippy configuration, no docs/decisions/ directory (D1's output path does not exist), and no spikes/s1..s8/ directories even though spikes/README.md requires a run.sh harness per spike. Emit these as small phase-1 items where they unblock later work. Keep them genuinely small.\n\nHOW TO SIZE AN ITEM. One item is one branch, one dev agent, one worktree, and one gate battery run. It must be completable and verifiable on its own. B1 tharsis-core is marked effort L and its brief describes three milestones — emit it as its milestones, not as one item, and phase them. An item that cannot pass cargo test on its own branch is too big or too vague.\n\nITEM IDS. Git-ref-safe lowercase slugs matching [a-z0-9-], no leading or trailing hyphen: they name branches. Use the brief id as the prefix where one applies, for example s1-lite-readonly-export or b1-m1-core-types.\n\nSCOPE FENCES PER ITEM. scope_in lists the paths the item may change. scope_out lists the hard walls: frozen surfaces, files that must not be reorganised, other items' territory. Be specific with paths. Two items in the same phase must not have overlapping scope_in, because they run in parallel on separate branches and will be merged.\n\nDEFINITION OF DONE for v1, quoted from docs/ROADMAP.md: all five acceptance demos pass on a 2-node cluster; the unsupported-POSIX list (N5) is documented and tested; tharsis blame answers in under 100 ms; and the three benchmarks nobody else can run — fork-under-load, failover-mid-edit, blame-query — are published. Per POSITIONING, never a syscall benchmark as a headline. A 2-node cluster is out of reach for this run; scope the acceptance work to what a single machine can prove and say so in the item goals.\n\nRETURN a plan whose summary states the phasing strategy in a few sentences and whose items are the decomposition. Every item needs a real goal an engineer could act on without reading your mind. You will be asked again on later rounds; on those turns you are judging your own plan's merge conflicts, so decompose in a way you would want to integrate.",
+    "pointers": [
+      "docs/ROADMAP.md",
+      "docs/briefs/README.md",
+      "docs/REQUIREMENTS.md",
+      "docs/ARCHITECTURE.md",
+      "docs/SPIKES.md",
+      "docs/HAEMATITE-NOTES.md",
+      "docs/VISION.md",
+      "docs/POSITIONING.md",
+      "README.md",
+      "spikes/README.md",
+      "Cargo.toml",
+      "crates/tharsis-core/src/lib.rs",
+      "crates/tharsis-nfs/src/lib.rs",
+      "crates/tharsis-server/src/build_lock.rs",
+      "crates/tharsis-cli/src/main.rs"
+    ]
+  },
+  "config": {
+    "repo_root": "/Users/tom/Developer/ablative/dev-ops/tharsis",
+    "base_branch": "main",
+    "gates": [
+      { "name": "fmt", "argv": ["cargo", "fmt", "--all"] },
+      { "name": "build", "argv": ["cargo", "build", "--workspace", "--all-targets"] },
+      { "name": "clippy", "argv": ["cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings"] },
+      { "name": "test", "argv": ["cargo", "test", "--workspace"] },
+      { "name": "scope-fence", "argv": ["git", "diff", "--exit-code", "--no-ext-diff", "{base_commit}", "--", ":(exclude)docs", ":(exclude)README.md"] }
+    ],
+    "lenses": [
+      {
+        "name": "correctness",
+        "charter": "Hunt defects in the change itself: logic errors, unhandled cases, broken invariants, concurrency hazards, silent failure paths. Assume the change is wrong and try to construct the concrete input or state that breaks it. This repo runs a filesystem: a wrong attribute, a stale cache, or a lost write is a data-loss defect, not a style nit."
+      },
+      {
+        "name": "regressions",
+        "charter": "Hunt collateral damage: behaviour the diff changes that the item did not ask to change. Read the surrounding code and its callers. The type model, the Error enum, the CLI dispatch skeleton and the build-lock state machine are already implemented and load-bearing — name the existing behaviour at risk and the concrete scenario that regresses it."
+      },
+      {
+        "name": "brief_compliance",
+        "charter": "Hold the diff to the item, adversarially: every stated goal either demonstrably met or a blocking finding; every scope_out boundary respected; every claimed deviation actually declared. Pass-and-still-wrong is the failure class here — do not accept a claim without evidence in the diff or the gate output. Check specifically that no todo!() was filled in ahead of the spike that decides its shape, and that the existing skeleton was not rearranged."
+      },
+      {
+        "name": "spec_fidelity",
+        "charter": "Hold the diff to the project's OWN documents, which are unusually load-bearing here. Each source file names its brief and the requirement IDs it satisfies. Check the change against docs/REQUIREMENTS.md (R1-R17, N1-N5) and the item's brief under docs/briefs/. A change that satisfies the item's prose but violates a numbered requirement or a stated non-goal is a blocking finding. N5 in particular: an unsupported POSIX operation must degrade loudly and be documented, never silently."
+      }
+    ],
+    "max_rounds": 8,
+    "max_merge_rounds": 3,
+    "max_integration_rounds": 3
+  }
+}

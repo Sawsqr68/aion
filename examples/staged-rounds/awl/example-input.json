@@ -2,20 +2,60 @@
   "material": {
     "title": "Example: split a module",
     "brief": "Split src/lib.rs into focused modules while preserving the public API. The design notes in docs/DESIGN.md name the intended seams; keep each new module under 500 code lines and re-export the existing surface from lib.rs.",
-    "pointers": ["src/lib.rs", "docs/DESIGN.md"]
+    "pointers": [
+      "src/lib.rs",
+      "docs/DESIGN.md"
+    ]
   },
   "config": {
     "repo_root": "/abs/path/to/target/repo",
     "base_branch": "main",
     "gates": [
-      { "name": "fmt", "argv": ["cargo", "fmt", "--all"] },
+      {
+        "name": "fmt",
+        "argv": [
+          "cargo",
+          "fmt",
+          "--all"
+        ]
+      },
       {
         "name": "clippy",
-        "argv": ["cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]
+        "argv": [
+          "cargo",
+          "clippy",
+          "--workspace",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ]
       },
-      { "name": "test", "argv": ["cargo", "test", "--workspace"] }
+      {
+        "name": "test",
+        "argv": [
+          "cargo",
+          "test",
+          "--workspace"
+        ]
+      }
+    ],
+    "lenses": [
+      {
+        "name": "correctness",
+        "charter": "Hunt defects in the change itself: logic errors, unhandled cases, broken invariants, concurrency hazards, silent failure paths. Assume the change is wrong and try to construct the concrete input or state that breaks it."
+      },
+      {
+        "name": "regressions",
+        "charter": "Hunt collateral damage: behaviour the diff changes that the item did not ask to change. Read the surrounding code and its callers; name the existing behaviour at risk and the concrete scenario that regresses it."
+      },
+      {
+        "name": "brief_compliance",
+        "charter": "Hold the diff to the item, adversarially: every stated goal either demonstrably met or a blocking finding; every scope_out boundary respected; every claimed deviation actually declared. Pass-and-still-wrong is the failure class here - do not accept a claim without evidence in the diff or gate output."
+      }
     ],
     "max_rounds": 3,
-    "max_merge_rounds": 2
+    "max_merge_rounds": 2,
+    "max_integration_rounds": 2
   }
 }
