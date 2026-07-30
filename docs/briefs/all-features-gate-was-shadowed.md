@@ -56,6 +56,46 @@ Two further facts a fix must not paper over:
   Establish whether that is simply "nothing was pushed" or whether the schedule
   has also stopped firing — do not assume.
 
+## 🔴 R0 — established 2026-07-30: GitHub Actions is DISABLED on this repository
+
+The instruction above said do not assume, so it was checked. The answer is neither
+option it offered:
+
+```
+$ gh api repos/ablative-io/aion/actions/permissions
+{"enabled":false,"sha_pinning_required":false}
+```
+
+Actions is switched off at the repository level. Both workflows report `active`, and
+that is a red herring — a workflow's own state is irrelevant while Actions is
+disabled for the repo, because **no run is ever created, for any event**. Proof: 18
+commits were pushed to `main` on 2026-07-30 and `gh run list` shows no run for any
+of them; the newest run of any kind remains the 2026-07-26 schedule. The last
+push-triggered runs were 2026-07-25 22:29Z, so Actions went off somewhere between
+those two timestamps.
+
+The repository is **public**, so Actions minutes are free and a billing cap is an
+unlikely cause — this reads as a deliberate toggle. Whoever turned it off may have
+had a reason, so **re-enabling is an owner decision, not a repair.** It is one API
+call (`gh api -X PUT repos/ablative-io/aion/actions/permissions -f enabled=true`)
+and must not be made on the owner's behalf.
+
+**This supersedes the framing of R1 without invalidating its work.** R1 was real and
+correct — the all-features step genuinely was sequenced behind a brittle test in a
+shared job, and it is now its own job. But R1 fixed the wiring of a gate whose power
+is off. Until Actions is re-enabled, **no CI lane in this repository can catch
+anything**, including every lane added on 2026-07-30 (all-features test, all-features
+clippy, `typescript-sdks`, `typescript-proto-drift`). Local batteries are currently
+the only gate this project has.
+
+The honest record of how this finding evolved, because the shape of the error is
+instructive: first recorded as "`libsql-backend` has no gate" (wrong — one existed),
+corrected to "the gate exists and has never run" (true, and the cause of the four
+stale failures), now corrected again to "and nothing else runs either, because
+Actions is off". **Each layer was found by checking the next assumption down instead
+of stopping at a satisfying explanation.** The first two answers were both plausible
+enough to have closed the investigation.
+
 ## R1 — the all-features gate becomes its own job
 
 Split `cargo test --workspace --all-features` into a separate job so no failure
