@@ -42,3 +42,10 @@ aion.db
 # Testing
 aion-data/
 .lifecycle-pass/
+
+# Local scratch that must never reach a commit. `.worktrees/` in particular
+# contains embedded git repositories: an untargeted `git add -A` will happily
+# commit one as a gitlink, which clones cannot resolve.
+/.worktrees
+/.dev-flow
+/publish-*.log
