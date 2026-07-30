@@ -1,4 +1,51 @@
-# Fleet + lanes: LIVE STATE at 2026-07-30 ~08:00Z (resume point)
+# Fleet + lanes: LIVE STATE (resume point)
+
+## 🔴 RESUME HERE — state at compaction, 2026-07-30 ~09:25Z
+
+**ONE AGENT STILL IN FLIGHT: #80 worker admission.** Its uncommitted footprint:
+`crates/aion-server/src/worker/contracts.rs`, `crates/aion/src/engine/{mod,reload}.rs`,
+`crates/aion/src/lib.rs`, `crates/aion/src/loader/{catalog,load}.rs`. It reaches
+into `crates/aion` because the "which versions have LIVE workflows" query lives
+in the engine/catalog. Do NOT duplicate its work. Wait for its notification.
+
+**THE SEQUENCE, IN ORDER:**
+1. #80 lands → verify at my own seat (bytes + bypass scan + gates), as with the
+   other three lanes.
+2. Run ONE combined gate: `cargo clippy --workspace --all-targets -- -D warnings`,
+   `cargo test`, and the console (`bun run typecheck`, `bun test`).
+3. **PUSH.** main is 10 commits ahead of origin and NOTHING is pushed.
+4. Then put the restart decision to Tom (below).
+
+**PENDING DECISION FOR TOM — do not take it unilaterally.** His running server
+(pid 47610) and worker (pid 49833) are BOTH still old binaries. Everything landed
+today — the chmod fix, `send` on the canvas, the scaffold command — is on disk
+but not in the processes he is using. A restart gives him all of it in one motion
+and there is no run to interrupt (tharsis is blocked on beamr regardless). BUT
+`target/release/aion` was DELETED by an agent's cargo activity and must be rebuilt
+first — a long build; do not start it while another lane holds the compiler. The
+worker release binary IS already rebuilt (exit 0) and carries both halves of #79.
+
+**COMMITTED THIS SESSION, ALL GATED AT MY OWN SEAT, NONE PUSHED (10 on main):**
+`be0112bf` AWL send · `e78f4b44` #81 chmod · `93e961f6` swallowed rollback ·
+`5008a747` #79 integration half · `c1c74f4d` awl scaffold · plus `d2b32d84`,
+`45fdaaee`, `b355fc41`, `9e544085`, `eff9bd88`, `d08a83a6`, `38612892` docs.
+
+**Pushed separately:** branch `defect/beamr-jit-loses-native-services`
+(`fd2330b9`) — the #82 repro, the beamr patch, and the standalone pure-beamr
+wall. **ARTEMIS HAS CLOSED THEIR GATE ON IT.** Reviewed at their bytes, verified
+on beamr `main`, blocker reported cleared to the stack lead so a release slot can
+be found. An executor builds red-first against the repro, then their review at
+the bytes. They will ping for a real-workload run when there is a candidate.
+**NOTHING IS OWED BY ME ON #82.**
+
+**Verified by running it myself, not on report:** `aion awl scaffold` against the
+real `examples/staged-rounds/awl/staged_rounds.awl` → exit 0, 11 actions across
+5 connections (planner, shell, developer, reviewer, remediation), matching the
+hand-written worker exactly. Console: typecheck exit 0, **580 pass / 0 fail**.
+
+---
+
+# (historical) LIVE STATE at 2026-07-30 ~08:00Z
 
 Supersedes the earlier revision of this file. `FLEET-SMOKE-STATE.md` remains the
 record of the first smoke flight.
