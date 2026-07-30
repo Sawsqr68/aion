@@ -6,7 +6,9 @@
 //! the hermetic test suites drive the same handler functions directly with
 //! fake-CLI shims on a private `PATH`.
 
+pub mod advising_harness;
 pub mod handlers;
+pub mod norn_invocation;
 pub mod registry;
 pub mod shell;
 pub mod types;

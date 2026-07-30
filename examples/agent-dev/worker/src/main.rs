@@ -26,13 +26,16 @@
 //! Usage:
 //!   agent-dev-worker --address 127.0.0.1:PORT [--address 127.0.0.1:PORT2 ...]
 //!                    [--identity <id>] [--ready-file <path>] [--norn-bin <path>]
+//!                    --norn-account <alias> [--norn-allow-degraded-session]
 
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
+use agent_dev_worker::advising_harness::AdvisingHarness;
 use agent_dev_worker::handlers;
+use agent_dev_worker::norn_invocation::norn_args;
 use agent_dev_worker::registry::build_registry;
 use agent_dev_worker::shell::Shell;
 use aion_integration_norn::NornHarness;
@@ -71,36 +74,31 @@ const REDIAL_MAX_BACKOFF: Duration = Duration::from_millis(500);
 /// adapter's intervention translation supports today (`InjectMessage` +
 /// `Cancel`); advertising more would promise interventions the harness
 /// rejects.
+///
+/// The argv itself is built by
+/// [`norn_args`](agent_dev_worker::norn_invocation::norn_args) so it can be
+/// asserted directly, and the composed harness is wrapped in
+/// [`AdvisingHarness`] so norn's degraded-session refusal reaches the operator
+/// with the flag that gets past it.
 fn composed_agent_harness(
     norn_bin: &str,
     norn_account: &str,
     workspace_root: &Path,
+    allow_degraded_session: bool,
 ) -> AgentHarnessConfig {
     // The run's own clone — the ONE template both the file-tool confinement
     // (--workspace-root) and the tool-execution cwd (-C) point at.
     let run_clone = format!("{}/{{workflow_id}}/repo", workspace_root.display());
-    let harness: Arc<dyn DynAgentHarness> = Arc::new(
-        NornHarness::with_binary(norn_bin)
-            .with_arg("--workspace-root")
-            .with_arg(run_clone.clone())
-            .with_arg("-C")
-            .with_arg(run_clone)
-            .with_arg("--session-id")
-            .with_arg("{workflow_id}-{activity_type}")
-            .with_arg("--resume-if-exists")
-            // Required BECAUSE of --resume-if-exists above: norn refuses to
-            // resume, fork, or open an existing OAuth session without an
-            // account alias. Without it every agent activity fails with
-            // `norn: auth error: authentication failed`, retries to its cap,
-            // and fails the workflow — while the worker itself logs
-            // "connected and registered; serving dispatches" and looks well.
-            .with_arg("--account")
-            .with_arg(norn_account)
-            .with_arg("--fast")
-            // Force the `ChatGPT` OAuth login: the project does not use API
-            // keys, and a stray ambient key would take precedence and fail.
-            .without_env("OPENAI_API_KEY"),
-    );
+    let mut norn = NornHarness::with_binary(norn_bin);
+    for arg in norn_args(&run_clone, norn_account, allow_degraded_session) {
+        norn = norn.with_arg(arg);
+    }
+    let harness: Arc<dyn DynAgentHarness> = Arc::new(AdvisingHarness::new(
+        // Force the `ChatGPT` OAuth login: the project does not use API keys,
+        // and a stray ambient key would take precedence and fail.
+        Arc::new(norn.without_env("OPENAI_API_KEY")),
+        allow_degraded_session,
+    ));
     AgentHarnessConfig::new(
         harness,
         AGENT_ACTIVITY_TYPES,
@@ -131,6 +129,16 @@ struct Args {
     /// turn a clear startup error into three retried activity failures and a
     /// failed workflow, which is exactly how this was found.
     norn_account: String,
+    /// Whether to pass norn `--allow-degraded-session`.
+    ///
+    /// OPT-IN, with no default. A durable session can park far longer than the
+    /// agent provider's epoch — one real run parked 28 days, and the engine
+    /// resumed it perfectly — and when the epoch has moved on norn refuses to
+    /// reopen the session without approval, so every round of that session
+    /// fails. Allowing it resumes from a fresh provider epoch because the exact
+    /// provider transcript cannot be replayed: a real fidelity tradeoff, and
+    /// therefore the operator's call rather than this worker's.
+    allow_degraded_session: bool,
 }
 
 /// Parse `--address` (repeatable), `--identity`, `--ready-file`, `--norn-bin` from the process
@@ -157,6 +165,7 @@ fn parse_args_from(
     let mut ready_file: Option<String> = None;
     let mut norn_bin = default_norn_bin;
     let mut norn_account: Option<String> = None;
+    let mut allow_degraded_session = false;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -180,6 +189,10 @@ fn parse_args_from(
                 Some(value) => norn_account = Some(value),
                 None => anyhow::bail!("--norn-account requires a value"),
             },
+            // A bare switch: it takes no value, because there is nothing to
+            // configure — either the operator accepts the fidelity tradeoff
+            // for this worker's sessions or they do not.
+            "--norn-allow-degraded-session" => allow_degraded_session = true,
             other => anyhow::bail!("unknown argument `{other}`"),
         }
     }
@@ -200,6 +213,7 @@ fn parse_args_from(
         ready_file,
         norn_bin,
         norn_account,
+        allow_degraded_session,
     })
 }
 
@@ -223,6 +237,7 @@ fn main() -> anyhow::Result<()> {
         identity = %args.identity,
         norn_bin = %args.norn_bin,
         workspace_root = %workspace_root.display(),
+        allow_degraded_session = args.allow_degraded_session,
         "agent-dev-worker starting"
     );
 
@@ -239,7 +254,12 @@ fn main() -> anyhow::Result<()> {
 
     let shell = Shell::inherited();
     let registry = build_registry(&shell, &workspace_root)?;
-    let agent = composed_agent_harness(&args.norn_bin, &args.norn_account, &workspace_root);
+    let agent = composed_agent_harness(
+        &args.norn_bin,
+        &args.norn_account,
+        &workspace_root,
+        args.allow_degraded_session,
+    );
 
     // Never stop on our own; the operator ends the worker with a signal.
     let stop = AtomicBool::new(false);
@@ -311,6 +331,36 @@ mod tests {
         assert_eq!(args.ready_file, None);
         assert_eq!(args.norn_bin, "norn-default");
         assert_eq!(args.norn_account, "default");
+        Ok(())
+    }
+
+    /// The negative control for the degraded-resume opt-in. Defaulting it on
+    /// would silently accept a provider-fidelity tradeoff on the operator's
+    /// behalf, which is exactly the kind of assumption this codebase forbids.
+    #[test]
+    fn degraded_session_resume_is_off_unless_asked_for() -> anyhow::Result<()> {
+        let args = parse(&["--norn-account", "default"])?;
+        assert!(
+            !args.allow_degraded_session,
+            "the degraded-resume opt-in must never default on"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_degraded_session_switch_takes_no_value() -> anyhow::Result<()> {
+        // A bare switch: the argument after it must still parse as its own
+        // flag, not be swallowed as this one's value.
+        let args = parse(&[
+            "--norn-allow-degraded-session",
+            "--norn-account",
+            "default",
+            "--identity",
+            "worker-a",
+        ])?;
+        assert!(args.allow_degraded_session);
+        assert_eq!(args.norn_account, "default");
+        assert_eq!(args.identity, "worker-a");
         Ok(())
     }
 
