@@ -34,8 +34,11 @@
 //!
 //! 1. **`Cancel` is the only intervention primitive advertised.** It is the only one ACP v1 can
 //!    actually deliver; the other four have no protocol mechanism, and advertising a control that
-//!    silently does nothing would be worse than advertising none. See
-//!    [`translate::negotiated_capabilities`].
+//!    silently does nothing would be worse than advertising none. A live session gates on
+//!    [`translate::negotiated_capabilities`]; a composition root advertising this adapter at worker
+//!    REGISTRATION — before any agent process exists — publishes the same ceiling through
+//!    [`registration_capabilities`], which is documented with why the two coincide for ACP and
+//!    pinned against what [`translate::intervention_to_notification`] can actually build.
 //! 2. **The permission policy is required, with no default.** An unanswered
 //!    `session/request_permission` blocks the agent until the activity times out, and an Aion
 //!    activity is unattended, so the answer is decided when the harness is built. See
@@ -106,6 +109,6 @@ pub mod translate;
 #[cfg(test)]
 mod wire_tests;
 
-pub use harness::AcpHarness;
+pub use harness::{AcpHarness, registration_capabilities};
 pub use permission::PermissionPolicy;
 pub use session::AcpSession;

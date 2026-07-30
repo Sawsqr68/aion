@@ -117,6 +117,7 @@ dependencies = [
  "aion-awl-package",
  "aion-client",
  "aion-core",
+ "aion-integration-acp",
  "aion-integration-norn",
  "aion-integrations",
  "aion-package",

@@ -12,6 +12,9 @@
 //! - **HANDSHAKE:** [`gate_protocol_version`] enforces the negotiated protocol version and
 //!   [`negotiated_capabilities`] states which neutral intervention primitives an ACP session can
 //!   actually deliver.
+//! - **IN:** [`intervention_to_notification`] maps a neutral [`InterventionKind`] onto the ACP frame
+//!   that carries it. Only [`InterventionKind::Cancel`] has one; every other primitive is refused
+//!   with [`HarnessError::CapabilityNotSupported`] and never reaches the wire.
 //!
 //! # Nothing is dropped
 //!
@@ -49,11 +52,15 @@
 //!
 //! [`ActivityEvent`]: aion_core::ActivityEvent
 //! [`ActivityEventKind`]: aion_core::ActivityEventKind
+//! [`HarnessError::CapabilityNotSupported`]: aion_integrations::HarnessError::CapabilityNotSupported
+//! [`InterventionKind`]: aion_core::InterventionKind
+//! [`InterventionKind::Cancel`]: aion_core::InterventionKind::Cancel
 //! [`ActivityEventKind::Raw`]: aion_core::ActivityEventKind::Raw
 //! [`StopKind`]: aion_core::StopKind
 //! [`StopReason`]: agent_client_protocol_schema::v1::StopReason
 //! [`ToolKind`]: agent_client_protocol_schema::v1::ToolKind
 //! [`gate_protocol_version`]: crate::translate::gate_protocol_version
+//! [`intervention_to_notification`]: crate::translate::intervention_to_notification
 //! [`is_success`]: crate::translate::is_success
 //! [`negotiated_capabilities`]: crate::translate::negotiated_capabilities
 //! [`permission_decision_kind`]: crate::translate::permission_decision_kind
@@ -65,12 +72,12 @@
 
 use agent_client_protocol_schema::ProtocolVersion;
 use agent_client_protocol_schema::v1::{
-    PermissionOption, RequestPermissionOutcome, RequestPermissionRequest, SessionUpdate,
-    StopReason, ToolCall, ToolCallStatus, ToolCallUpdate,
+    CancelNotification, PermissionOption, RequestPermissionOutcome, RequestPermissionRequest,
+    SessionId, SessionUpdate, StopReason, ToolCall, ToolCallStatus, ToolCallUpdate,
 };
 use aion_core::{
-    ActivityEvent, ActivityEventKind, ActivityId, InterventionCapabilities, InterventionPrimitive,
-    StopKind, WorkflowId,
+    ActivityEvent, ActivityEventKind, ActivityId, InterventionCapabilities, InterventionKind,
+    InterventionPrimitive, StopKind, WorkflowId,
 };
 use aion_integrations::HarnessError;
 use aion_integrations::jsonrpc::JsonRpcResponse;
@@ -177,6 +184,81 @@ pub fn gate_protocol_version(received: ProtocolVersion) -> Result<(), HarnessErr
 #[must_use]
 pub fn negotiated_capabilities() -> InterventionCapabilities {
     InterventionCapabilities::from_primitives([InterventionPrimitive::Cancel])
+}
+
+/// The ACP frame a neutral intervention maps onto: a method name plus its params.
+///
+/// Only the one primitive ACP can deliver produces a frame, so a frame is never built for a
+/// primitive the protocol has no mechanism for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AcpNotification {
+    /// The ACP method name, from [`crate::protocol`] — never a literal spelled at a call site.
+    pub method: &'static str,
+    /// The encoded params for that method.
+    pub params: Value,
+}
+
+/// Maps a neutral [`InterventionKind`] onto the ACP notification that carries it for `session`.
+///
+/// [`InterventionKind::Cancel`] → the `session/cancel` notification. The other four primitives have
+/// no ACP mechanism at all (see [`negotiated_capabilities`] for the per-primitive reasoning) and are
+/// refused with [`HarnessError::CapabilityNotSupported`] naming the primitive, so nothing is
+/// fabricated onto the wire.
+///
+/// This is the SINGLE authority on what an intervention can put on an ACP connection:
+/// [`crate::session`] gates on the negotiated set and then sends whatever this returns, so there is
+/// no second list of deliverable primitives anywhere that could drift from this one. That is what
+/// makes the published registration set checkable against the adapter's real ceiling
+/// ([`crate::harness::registration_capabilities`]).
+///
+/// The operator's cancellation `reason` is deliberately NOT carried: ACP's `session/cancel` params
+/// are `{ sessionId }` and nothing else, so the reason is traced by the session instead of being
+/// attached to a protocol field that does not exist.
+///
+/// # Errors
+///
+/// Returns [`HarnessError::CapabilityNotSupported`] for a primitive ACP cannot deliver, and
+/// [`HarnessError::Protocol`] when the params cannot be encoded (a `serde_json` failure on a
+/// schema-owned type, which would mean the pinned schema crate changed under the adapter).
+pub fn intervention_to_notification(
+    session: &SessionId,
+    kind: &InterventionKind,
+) -> Result<AcpNotification, HarnessError> {
+    match kind {
+        InterventionKind::Cancel { .. } => {
+            let params = serde_json::to_value(CancelNotification::new(session.clone())).map_err(
+                |source| {
+                    HarnessError::protocol(format!(
+                        "session/cancel params are not encodable: {source}"
+                    ))
+                },
+            )?;
+            Ok(AcpNotification {
+                method: protocol::METHOD_SESSION_CANCEL,
+                params,
+            })
+        }
+        InterventionKind::InjectMessage { .. }
+        | InterventionKind::PauseResume { .. }
+        | InterventionKind::UpdateBudget { .. }
+        | InterventionKind::RespondToApproval { .. } => Err(
+            HarnessError::capability_not_supported(primitive_label(kind.primitive())),
+        ),
+    }
+}
+
+/// The neutral `snake_case` label naming a primitive in a refusal.
+///
+/// Written out rather than derived from `Debug`, so an operator reading a rejection sees the same
+/// spelling the neutral capability vocabulary uses.
+pub(crate) fn primitive_label(primitive: InterventionPrimitive) -> &'static str {
+    match primitive {
+        InterventionPrimitive::InjectMessage => "inject_message",
+        InterventionPrimitive::Cancel => "cancel",
+        InterventionPrimitive::PauseResume => "pause_resume",
+        InterventionPrimitive::UpdateBudget => "update_budget",
+        InterventionPrimitive::RespondToApproval => "respond_to_approval",
+    }
 }
 
 /// Whether an ACP stop reason means the turn COMPLETED and its output is a usable activity result.

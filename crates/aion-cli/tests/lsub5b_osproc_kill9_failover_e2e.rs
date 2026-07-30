@@ -402,11 +402,11 @@ fn drive_failover(nodes: &mut Vec<Node>, ports: &[(u16, u16, u16)]) -> Result<()
     let mut final_description: Option<Value> = None;
     let completed = wait_until(FAILOVER_DEADLINE, || {
         for endpoint in &survivor_grpc {
-            if let Some(description) = describe(endpoint, &workflow_id) {
-                if status_of(&description) == Some("Completed") {
-                    final_description = Some(description);
-                    return true;
-                }
+            if let Some(description) = describe(endpoint, &workflow_id)
+                && status_of(&description) == Some("Completed")
+            {
+                final_description = Some(description);
+                return true;
             }
         }
         false

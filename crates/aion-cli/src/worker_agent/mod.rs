@@ -13,7 +13,14 @@
 //! * [`surface`] derives the typed action surface from the document (through
 //!   [`crate::worker_surface`], shared with `aion worker shell`) and renders it for
 //!   `--check`.
-//! * [`serve`] composes the harness and runs the liminal serve loop.
+//! * [`serve`] resolves WHICH harness to compose, honours `--check`, and runs the
+//!   liminal serve loop.
+//!
+//! The verb is harness-NEUTRAL: `--harness` and the per-harness configuration flags are
+//! flattened in from [`crate::harness`], the composition root, so nothing here names a
+//! concrete adapter. A build carrying one harness derives it, a build carrying several
+//! refuses until one is selected, and a build carrying none still reports the surface and
+//! then refuses to serve.
 
 mod args;
 mod serve;

@@ -2,7 +2,13 @@
 name = "aion-cli"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
+# NOT the workspace floor (1.85): the default feature set composes the ACP adapter in,
+# and `aion-integration-acp` requires 1.88.0 for the `agent-client-protocol-schema`
+# wire types. A default `cargo build -p aion-cli` therefore needs 1.88.0, so this
+# package states that rather than letting cargo fail deep inside a dependency. Every
+# other crate keeps the workspace floor; only the binary that links the adapter
+# inherits its requirement.
+rust-version = "1.88.0"
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
@@ -40,6 +46,12 @@ aion-core = { version = "0.10.0", path = "../aion-core" }
 # build drops it entirely and the platform crates carry zero Norn code, enforced
 # by the `no-norn-in-platform` gate (`cargo xtask no-norn-in-platform`).
 aion-integration-norn = { version = "0.10.0", path = "../aion-integration-norn", optional = true }
+# The first-party Agent Client Protocol adapter, composed in at the binary root behind
+# the default-on `acp` feature — one adapter that reaches every agent with an ACP mode
+# (Claude Code, Codex, Gemini CLI, OpenCode, …). OPTIONAL and depended on ONLY here,
+# for the same hygiene reason as the Norn adapter: a platform library crate must never
+# name a concrete harness.
+aion-integration-acp = { version = "0.10.0", path = "../aion-integration-acp", optional = true }
 # The harness-integration SDK (the trait the worker drives). Present so the
 # composition root can name the neutral `AgentHarness` seam the injected
 # `NornHarness` satisfies; carries no concrete adapter.
@@ -99,7 +111,7 @@ tokio-stream = { workspace = true, features = ["net"] }
 # backend and the liminal transport, so `backend = "haematite"` is selectable
 # without a special flag and the runtime default backend is haematite. The slim
 # opt-out is `--no-default-features --features libsql-backend`.
-default = ["haematite-backend", "liminal-transport", "norn"]
+default = ["haematite-backend", "liminal-transport", "norn", "acp"]
 # Forwarded to the embedded server. Off by default, matching the feature set
 # the standalone `aion-server` binary shipped with.
 auth = ["aion-server/auth"]
@@ -139,5 +151,21 @@ liminal-transport = ["aion-server/liminal-transport", "aion-worker/liminal-trans
 # only decides which concrete adapter the binary compiles in.
 norn = [
     "dep:aion-integration-norn",
+    "dep:aion-integrations",
+]
+# Composes the first-party ACP adapter (`aion-integration-acp`) into the `aion` binary,
+# so the shipped default product can serve ANY agent that speaks the Agent Client
+# Protocol out-of-box — the same "our complete experience is the default" thread as
+# `haematite-backend` / `liminal-transport` / `norn`. ON by default.
+#
+# With both `norn` and `acp` compiled in, `aion worker agent` requires `--harness` to
+# select one: two adapters means there is something to choose, and choosing for the
+# operator would silently run their agent through a harness they did not ask for.
+#
+# NOTE: this feature raises the build's minimum rustc to 1.88.0 (see the package's
+# `rust-version`), which is why the adapter is a separate crate carrying that floor
+# rather than code in a platform crate.
+acp = [
+    "dep:aion-integration-acp",
     "dep:aion-integrations",
 ]

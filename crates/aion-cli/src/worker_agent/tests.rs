@@ -10,8 +10,10 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use super::args::{self, AgentArgs, Environment};
+use super::args::{self, AgentArgs};
 use super::surface;
+use crate::harness::HarnessArgs;
+use crate::settings::Environment;
 use crate::worker_surface::{self, ServingSource};
 
 type TestResult = Result<(), Box<dyn Error>>;
@@ -62,6 +64,7 @@ fn args_for(document: &Path) -> AgentArgs {
         reconnect_max_attempts: None,
         node: None,
         check: false,
+        harness: HarnessArgs::default(),
     }
 }
 
@@ -253,10 +256,15 @@ fn a_document_that_does_not_compile_is_refused_with_its_diagnostics() -> TestRes
 /// Every connection setting must be supplied. A worker started from a shell should
 /// need ONE correction, not seven — so every missing setting is named at once, by
 /// both the flag and the variable that could supply it.
+///
+/// Resolved with NO harness, which isolates the connection contract: a build compiling
+/// no adapter in demands no harness configuration, and the harness settings have their
+/// own coverage in [`crate::harness`]. That the two groups share ONE refusal is pinned
+/// by `a_missing_harness_setting_joins_the_connection_report` below.
 #[test]
 fn missing_settings_are_reported_by_name_and_all_at_once() -> TestResult {
     let document = write_document("missing", DOCUMENT)?;
-    let Err(error) = args::resolve(&args_for(&document), &Environment::default()) else {
+    let Err(error) = args::resolve(&args_for(&document), &Environment::default(), None) else {
         return Err("resolution with nothing supplied must be refused".into());
     };
     let report = error.to_string();
@@ -295,7 +303,11 @@ fn the_environment_supplies_settings_and_the_flag_wins() -> TestResult {
         ("AION_TASK_QUEUE", "reviewers"),
     ]);
 
-    let resolved = args::resolve(&args_for(&document), &environment)?;
+    let (resolved, harness) = args::resolve(&args_for(&document), &environment, None)?;
+    assert_eq!(
+        harness, None,
+        "no harness resolved means no harness configuration"
+    );
     assert_eq!(
         resolved.addresses,
         vec![
@@ -315,7 +327,7 @@ fn the_environment_supplies_settings_and_the_flag_wins() -> TestResult {
     arguments.identity = Some(String::from("from-flag"));
     arguments.liminal_addresses = vec![String::from("127.0.0.1:50099")];
     arguments.task_queue = Some(String::from("from-flag-queue"));
-    let resolved = args::resolve(&arguments, &environment)?;
+    let (resolved, _) = args::resolve(&arguments, &environment, None)?;
     assert_eq!(resolved.identity, "from-flag");
     assert_eq!(resolved.addresses, vec![String::from("127.0.0.1:50099")]);
     assert_eq!(
@@ -334,7 +346,7 @@ fn a_blank_environment_value_counts_as_missing() -> TestResult {
         ("AION_WORKER_LIMINAL_ADDRESSES", "  ,  "),
         ("AION_WORKER_IDENTITY", "   "),
     ]);
-    let Err(error) = args::resolve(&args_for(&document), &environment) else {
+    let Err(error) = args::resolve(&args_for(&document), &environment, None) else {
         return Err("blank values must be refused as missing".into());
     };
     let report = error.to_string();
@@ -359,7 +371,7 @@ fn an_unusable_setting_value_is_refused_by_name() -> TestResult {
     };
     let arguments = args_for(&document);
 
-    let Err(error) = args::resolve(&arguments, &supplied("0", "1")) else {
+    let Err(error) = args::resolve(&arguments, &supplied("0", "1"), None) else {
         return Err("a zero concurrency must be refused".into());
     };
     assert!(
@@ -367,7 +379,7 @@ fn an_unusable_setting_value_is_refused_by_name() -> TestResult {
         "the refusal must name the setting, got: {error}"
     );
 
-    let Err(error) = args::resolve(&arguments, &supplied("4", "nonsense")) else {
+    let Err(error) = args::resolve(&arguments, &supplied("4", "nonsense"), None) else {
         return Err("a non-numeric backoff must be refused".into());
     };
     let message = error.to_string();
@@ -381,12 +393,16 @@ fn an_unusable_setting_value_is_refused_by_name() -> TestResult {
 /// `--check` prints the exact surface — every action, both schemas — plus the harness
 /// that would drive it, and connects to nothing. It is written to an injected writer
 /// here, which is the same call the verb makes against stdout.
+///
+/// Driven over EVERY harness this build carries, plus the no-harness report, because the
+/// report is what an operator reads instead of a remote refusal: the harness name and
+/// the capability set beside it are what the server routes operator commands on.
 #[test]
 fn check_prints_the_surface_without_connecting() -> TestResult {
     let document = write_document("check", DOCUMENT)?;
     let surface = surface::derive(&document, None)?;
     let mut rendered = Vec::new();
-    surface::print(&mut rendered, &surface)?;
+    surface::print(&mut rendered, &surface, None)?;
 
     let report: Value = serde_json::from_slice(&rendered)?;
     assert_eq!(report["task_queue"], json!("reviewers"));
@@ -403,37 +419,99 @@ fn check_prints_the_surface_without_connecting() -> TestResult {
         actions[0]["output_schema"]["$defs"]["Review"]["properties"]["detail"]["type"],
         json!("string")
     );
-    // The harness is reported so a build that cannot serve is visible BEFORE a
-    // dial: `null` under `--no-default-features`, named otherwise.
+    // With no harness resolved the report says so rather than naming one: that is the
+    // `--no-default-features` build, and it must be visible BEFORE a dial.
+    assert_eq!(report["harness"], Value::Null);
     assert_eq!(
-        report["harness"],
-        serde_json::to_value(crate::harness::compiled_harness_name())?
+        report["intervention_capabilities"]["supported"],
+        json!([]),
+        "a build with no harness advertises no controls"
     );
+
+    // And once a harness is resolved, the report names it and carries the ADAPTER's own
+    // published registration set — not an empty set, which would leave the ops console
+    // offering no controls at all for a live agent.
+    for harness in crate::harness::catalogue::compiled() {
+        let mut rendered = Vec::new();
+        surface::print(&mut rendered, &surface, Some(harness))?;
+        let report: Value = serde_json::from_slice(&rendered)?;
+        assert_eq!(report["harness"], json!(harness.name()));
+        assert_eq!(
+            report["intervention_capabilities"],
+            serde_json::to_value(crate::harness::registration_capabilities(Some(harness)))?
+        );
+        let Some(supported) = report["intervention_capabilities"]["supported"].as_array() else {
+            return Err("the capability set must carry a supported array".into());
+        };
+        assert!(
+            !supported.is_empty(),
+            "`{}` must advertise the controls its adapter can honour",
+            harness.name()
+        );
+    }
+    Ok(())
+}
+
+/// The ACP harness's `--check` report names `cancel` and nothing else — the one
+/// intervention primitive ACP v1 can actually deliver. This is the operator-visible end
+/// of the adapter's published ceiling.
+#[cfg(feature = "acp")]
+#[test]
+fn the_acp_check_report_advertises_exactly_cancel() -> TestResult {
+    let document = write_document("acpcheck", DOCUMENT)?;
+    let surface = surface::derive(&document, None)?;
+    let mut rendered = Vec::new();
+    surface::print(
+        &mut rendered,
+        &surface,
+        Some(crate::harness::HarnessKind::Acp),
+    )?;
+    let report: Value = serde_json::from_slice(&rendered)?;
+    assert_eq!(report["harness"], json!("acp"));
     assert_eq!(
-        report["intervention_capabilities"],
-        serde_json::to_value(crate::harness::compiled_harness_capabilities())?
+        report["intervention_capabilities"]["supported"],
+        json!([{ "primitive": "Cancel" }]),
+        "ACP can deliver exactly one primitive, so exactly one is advertised"
     );
     Ok(())
 }
 
-/// With the default (`norn`) feature on, the surface reports a named harness and the
-/// registration-time capability set the adapter publishes — not an empty set, which
-/// would leave the ops console offering no controls for a Norn agent.
-#[cfg(feature = "norn")]
+/// A missing HARNESS setting appears in the SAME refusal as a missing connection
+/// setting. One shell invocation with two mistakes is one mistake to correct, and this
+/// is the acceptance the whole shared-resolution contract exists for.
+#[cfg(feature = "acp")]
 #[test]
-fn the_default_build_reports_a_harness_and_its_published_capabilities() -> TestResult {
-    use aion_core::InterventionPrimitive;
+fn a_missing_harness_setting_joins_the_connection_report() -> TestResult {
+    let document = write_document("bothmissing", DOCUMENT)?;
+    let mut arguments = args_for(&document);
+    // Everything the ACP harness needs EXCEPT the permission policy, which has no
+    // default because it is a security decision.
+    arguments.harness.acp_command = Some(String::from("opencode"));
+    arguments.harness.acp_cwd = Some(String::from("/srv/workspace"));
+    arguments.harness.acp_exit_grace = Some(String::from("2"));
+    // ... and a connection setting supplied, so the report has to carry both halves.
+    arguments.identity = Some(String::from("reviewer-worker"));
 
-    let Some(name) = crate::harness::compiled_harness_name() else {
-        return Err("the default build must compile a harness in".into());
+    let Err(error) = args::resolve(
+        &arguments,
+        &Environment::default(),
+        Some(crate::harness::HarnessKind::Acp),
+    ) else {
+        return Err("an ACP worker with no permission policy must be refused".into());
     };
-    assert!(name.contains("norn"), "got {name}");
-    let capabilities = crate::harness::compiled_harness_capabilities();
+    let report = error.to_string();
     assert!(
-        capabilities.supports_primitive(InterventionPrimitive::InjectMessage)
-            && capabilities.supports_primitive(InterventionPrimitive::Cancel),
-        "the published registration set must carry what the adapter can translate, got \
-         {capabilities:?}"
+        report.contains("--acp-permission or $AION_ACP_PERMISSION"),
+        "the report must name the missing security decision, got:\n{report}"
+    );
+    assert!(
+        report.contains("--liminal-address or $AION_WORKER_LIMINAL_ADDRESSES")
+            && report.contains("--concurrency or $AION_WORKER_CONCURRENCY"),
+        "the report must name the missing connection settings in the SAME message, got:\n{report}"
+    );
+    assert!(
+        !report.contains("--identity"),
+        "a setting that WAS supplied must not be reported missing, got:\n{report}"
     );
     Ok(())
 }
@@ -442,16 +520,20 @@ fn the_default_build_reports_a_harness_and_its_published_capabilities() -> TestR
 /// from its activity types and its descriptor names — must be exactly the document's
 /// serviceable actions. A divergence would register a worker for a type it will not
 /// route, or route one it never announced.
-#[cfg(all(feature = "norn", feature = "liminal-transport"))]
+#[cfg(all(any(feature = "norn", feature = "acp"), feature = "liminal-transport"))]
 #[test]
 fn the_composed_config_advertises_exactly_the_documents_surface() -> TestResult {
     let document = write_document("composed", &two_action_document())?;
     let surface = surface::derive(&document, None)?;
     let advertised = surface.names();
+    let Some(harness) = crate::harness::catalogue::compiled().first().copied() else {
+        return Err("a build with liminal transport and a harness feature must carry one".into());
+    };
+    let config = harness.test_config();
     let agent = aion_worker::AgentHarnessConfig::new(
-        crate::harness::default_dyn_agent_harness(),
+        crate::harness::compose::build(&config),
         advertised.iter().cloned(),
-        crate::harness::compiled_harness_capabilities(),
+        crate::harness::registration_capabilities(Some(harness)),
     )
     .with_activity_descriptors(surface.descriptors.clone());
 

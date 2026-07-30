@@ -11,7 +11,17 @@
 //! than seven. That is the same contract the Python worker host publishes, and the
 //! variable names are the ones the rest of the product already reads, so a
 //! deployment that runs an Aion worker today can run this one with the same
-//! environment.
+//! environment. The mechanics of that contract live in [`crate::settings`], shared
+//! with the harness configuration so ONE refusal covers both.
+//!
+//! # Why the harness settings are not declared here
+//!
+//! `--harness` and the per-harness configuration (`--acp-command`, `--norn-binary`, …)
+//! are flattened in from [`crate::harness`], the composition root. This verb is
+//! harness-NEUTRAL: it derives a surface, resolves a connection, and serves whatever
+//! harness was composed. Declaring a concrete adapter's flags here would put the name
+//! `acp` in a verb that must not know which adapters exist — so the flags live with the
+//! code that names those adapters anyway, and this module only carries them through.
 //!
 //! # Why the address is not `--endpoint`
 //!
@@ -23,12 +33,14 @@
 //! redial driver an ordered candidate list, so a worker whose server is `kill -9`'d
 //! migrates to a survivor and re-registers there.
 
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
 use clap::Args;
+
+use crate::harness::{HarnessArgs, HarnessKind, ResolvedHarness};
+use crate::settings::{self, Environment, Missing};
 
 /// Ordered liminal candidate addresses, comma-separated.
 const LIMINAL_ADDRESSES_ENV: &str = "AION_WORKER_LIMINAL_ADDRESSES";
@@ -102,20 +114,14 @@ pub(crate) struct AgentArgs {
     /// refusal into something readable at the desk.
     #[arg(long)]
     pub(crate) check: bool,
-}
-
-/// One setting with no value, named by both the ways it could have been supplied.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct Missing {
-    /// The flag that supplies it.
-    flag: &'static str,
-    /// The environment variable that supplies it when the flag is absent.
-    variable: &'static str,
+    /// Which agent harness to serve, and how to launch it.
+    #[command(flatten)]
+    pub(crate) harness: HarnessArgs,
 }
 
 /// Every connection setting, resolved from flags and environment.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Settings {
+pub(crate) struct ConnectionSettings {
     /// Ordered liminal candidate addresses the redial driver cycles.
     pub(crate) addresses: Vec<String>,
     /// The worker's advertised identity.
@@ -138,114 +144,81 @@ impl AgentArgs {
     /// `None` leaves the queue to be DERIVED from the document, which is
     /// unambiguous only when the document declares exactly one `worker` block.
     pub(crate) fn requested_queue(&self, environment: &Environment) -> Option<String> {
-        self.task_queue
-            .clone()
-            .or_else(|| environment.read(TASK_QUEUE_ENV))
+        settings::optional(self.task_queue.clone(), TASK_QUEUE_ENV, environment)
     }
 }
 
-/// The environment a resolution reads, injected so tests never mutate the
-/// process's own variables (which no test can do safely while others run).
-#[derive(Clone, Debug, Default)]
-pub(crate) struct Environment {
-    /// The variables this resolution can see.
-    variables: BTreeMap<String, String>,
-}
-
-impl Environment {
-    /// The real process environment.
-    pub(crate) fn from_process() -> Self {
-        Self {
-            variables: std::env::vars().collect(),
-        }
-    }
-
-    /// An explicit environment, for tests and for a caller that must not inherit.
-    #[cfg(test)]
-    pub(crate) fn from_pairs<'pair>(
-        pairs: impl IntoIterator<Item = (&'pair str, &'pair str)>,
-    ) -> Self {
-        Self {
-            variables: pairs
-                .into_iter()
-                .map(|(name, value)| (name.to_owned(), value.to_owned()))
-                .collect(),
-        }
-    }
-
-    /// The variable's value, treating blank as absent — an exported-but-empty
-    /// variable is a deployment mistake, not a setting.
-    fn read(&self, name: &str) -> Option<String> {
-        self.variables
-            .get(name)
-            .map(|value| value.trim().to_owned())
-            .filter(|value| !value.is_empty())
-    }
-}
-
-/// Resolves every connection setting from `args` and `environment`.
+/// Resolves every connection setting from `args` and `environment`, plus the
+/// configuration of the already-resolved `harness`.
 ///
 /// Flags win over the environment. `node` falls through to the worker SDK's own
 /// documented hostname default when absent, because that default is the library's
 /// and not one invented here; every other setting must be supplied.
 ///
+/// The two groups are resolved together on purpose: a shell invocation missing both
+/// `--identity` and `--acp-permission` is one mistake with two parts, and an operator
+/// should see both parts at once rather than discover the second only after fixing the
+/// first. `harness` is `None` for a build that compiles no adapter in, which demands no
+/// harness configuration at all — the serve path then refuses, naming the build.
+///
 /// # Errors
 ///
 /// Returns an error listing EVERY setting that has no source, each named by its
 /// flag and its variable; or one naming the single setting whose supplied value is
-/// unusable (not a number, or not greater than zero).
-pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<Settings> {
+/// unusable (not a number, not greater than zero, a relative ACP working directory, an
+/// unknown permission policy).
+pub(crate) fn resolve(
+    args: &AgentArgs,
+    environment: &Environment,
+    harness: Option<HarnessKind>,
+) -> Result<(ConnectionSettings, Option<ResolvedHarness>)> {
     let mut missing = Vec::new();
     let addresses = resolve_addresses(args, environment, &mut missing);
-    let identity = resolve_one(
+    let identity = settings::resolve_one(
         args.identity.clone(),
         IDENTITY_ENV,
         "--identity",
         environment,
         &mut missing,
     );
-    let concurrency = resolve_one(
+    let concurrency = settings::resolve_one(
         args.concurrency.clone(),
         CONCURRENCY_ENV,
         "--concurrency",
         environment,
         &mut missing,
     );
-    let initial_backoff = resolve_one(
+    let initial_backoff = settings::resolve_one(
         args.reconnect_initial_backoff.clone(),
         INITIAL_BACKOFF_ENV,
         "--reconnect-initial-backoff",
         environment,
         &mut missing,
     );
-    let max_backoff = resolve_one(
+    let max_backoff = settings::resolve_one(
         args.reconnect_max_backoff.clone(),
         MAX_BACKOFF_ENV,
         "--reconnect-max-backoff",
         environment,
         &mut missing,
     );
-    let max_attempts = resolve_one(
+    let max_attempts = settings::resolve_one(
         args.reconnect_max_attempts.clone(),
         MAX_ATTEMPTS_ENV,
         "--reconnect-max-attempts",
         environment,
         &mut missing,
     );
-    if !missing.is_empty() {
-        missing.sort_unstable();
-        let listed = missing
-            .iter()
-            .map(|item| format!("  {} or ${}", item.flag, item.variable))
-            .collect::<Vec<_>>()
-            .join("\n");
-        bail!(
-            "these connection settings have no value; supply each as a flag or an \
-             environment variable:\n{listed}"
-        );
-    }
+    let supplied_harness = harness.map(|kind| {
+        (
+            kind,
+            args.harness
+                .collect(kind.settings(), environment, &mut missing),
+        )
+    });
+    settings::refuse_if_missing(missing)?;
 
-    // Every value below is present: `missing` was empty, so each `resolve_one`
+    // Every value below is present: the missing-list was empty, so each `resolve_one`
     // returned `Some`. The `let else` refusals name the setting rather than
     // unwrapping, so a future edit that drops one from the missing-list is a
     // reported fault instead of a panic.
@@ -257,19 +230,35 @@ pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<Set
     else {
         bail!("every reconnect setting must be resolved before use");
     };
-    Ok(Settings {
+    let settings = ConnectionSettings {
         addresses,
         identity,
-        concurrency: positive_usize(&concurrency, "--concurrency", CONCURRENCY_ENV)?,
-        initial_backoff: positive_seconds(
+        concurrency: settings::positive_usize(&concurrency, "--concurrency", CONCURRENCY_ENV)?,
+        initial_backoff: settings::positive_seconds(
             &initial_backoff,
             "--reconnect-initial-backoff",
             INITIAL_BACKOFF_ENV,
         )?,
-        max_backoff: positive_seconds(&max_backoff, "--reconnect-max-backoff", MAX_BACKOFF_ENV)?,
-        max_attempts: positive_usize(&max_attempts, "--reconnect-max-attempts", MAX_ATTEMPTS_ENV)?,
+        max_backoff: settings::positive_seconds(
+            &max_backoff,
+            "--reconnect-max-backoff",
+            MAX_BACKOFF_ENV,
+        )?,
+        max_attempts: settings::positive_usize(
+            &max_attempts,
+            "--reconnect-max-attempts",
+            MAX_ATTEMPTS_ENV,
+        )?,
         node: args.node.clone(),
-    })
+    };
+    let harness = supplied_harness
+        .map(|(kind, supplied)| {
+            supplied
+                .parse()
+                .map(|config| ResolvedHarness { kind, config })
+        })
+        .transpose()?;
+    Ok((settings, harness))
 }
 
 /// The ordered liminal candidates: the repeated flag when given, otherwise the
@@ -307,49 +296,4 @@ fn resolve_addresses(
         });
     }
     from_environment
-}
-
-/// One setting from its flag, else its variable, recording a miss by name.
-fn resolve_one(
-    flag_value: Option<String>,
-    variable: &'static str,
-    flag: &'static str,
-    environment: &Environment,
-    missing: &mut Vec<Missing>,
-) -> Option<String> {
-    let resolved = flag_value
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
-        .or_else(|| environment.read(variable));
-    if resolved.is_none() {
-        missing.push(Missing { flag, variable });
-    }
-    resolved
-}
-
-/// A whole number greater than zero, or a refusal naming the setting and the value.
-fn positive_usize(raw: &str, flag: &str, variable: &str) -> Result<usize> {
-    let value: usize = raw
-        .parse()
-        .map_err(|_| anyhow::anyhow!("{flag} / ${variable} must be a whole number, got `{raw}`"))?;
-    if value == 0 {
-        bail!("{flag} / ${variable} must be greater than zero, got {value}");
-    }
-    Ok(value)
-}
-
-/// A duration in seconds, greater than zero, or a refusal naming the setting.
-///
-/// Fractional seconds are accepted: a reconnect backoff under a second is a
-/// legitimate operator choice, and the Python host's own settings are floats.
-fn positive_seconds(raw: &str, flag: &str, variable: &str) -> Result<Duration> {
-    let seconds: f64 = raw
-        .parse()
-        .map_err(|_| anyhow::anyhow!("{flag} / ${variable} must be a number, got `{raw}`"))?;
-    if !seconds.is_finite() || seconds <= 0.0 {
-        bail!("{flag} / ${variable} must be a finite number greater than zero, got `{raw}`");
-    }
-    Duration::try_from_secs_f64(seconds).map_err(|source| {
-        anyhow::anyhow!("{flag} / ${variable} is not a representable duration: {source}")
-    })
 }

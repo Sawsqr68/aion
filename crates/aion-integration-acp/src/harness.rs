@@ -78,6 +78,60 @@ use crate::protocol;
 use crate::session::{AcpSession, SessionStart, refuse_peer_request};
 use crate::translate::{self, EventIdentity};
 
+/// The neutral intervention primitives this adapter can honour, published for a worker's
+/// REGISTRATION-time advertisement: exactly [`InterventionPrimitive::Cancel`].
+///
+/// # Why the adapter publishes this, and why it is not a guess
+///
+/// A worker must declare its [`InterventionCapabilities`] when it REGISTERS — the server routes an
+/// operator command only for a primitive the worker advertised — and registration happens before any
+/// agent process exists, so the per-session handshake cannot supply it. Without a published set every
+/// composition root hardcodes its own idea of what an ACP agent supports, and each copy is a place
+/// the truth can rot.
+///
+/// This set is a fact about the ADAPTER's translation ceiling, not a prediction about a binary:
+/// [`translate::intervention_to_notification`] can build an ACP frame for exactly `Cancel`
+/// (`session/cancel`) and answers every other primitive with
+/// [`HarnessError::capability_not_supported`]. So it is the ceiling on what any command routed here
+/// could possibly achieve, and the bidirectional test beside it fails if either side moves alone.
+///
+/// # Why it DELEGATES to the negotiated set instead of restating it
+///
+/// [`translate::negotiated_capabilities`] is the set a live [`AcpSession`] gates each command on, and
+/// for ACP the two sets are the same value by construction — the intervention surface is fixed by the
+/// PROTOCOL VERSION, which the handshake has already gated, rather than by anything an individual
+/// agent advertises. That is the substantive difference from `aion-integration-norn`, where the
+/// spawned binary reports its own set and the two can genuinely differ in both directions. Returning
+/// the same function's value rather than repeating the literal is what keeps the equality true: a
+/// future protocol version that made the negotiated set version-dependent cannot leave the
+/// registration advertisement silently behind.
+///
+/// # The registration set can still be wrong about a particular agent, and that is honest
+///
+/// `session/cancel` is baseline in ACP v1: it is not capability-gated, and the spec REQUIRES the
+/// agent to answer the still-open `session/prompt` with `stopReason: "cancelled"`. An agent that
+/// ignores it is non-conforming, and registration has no way to know — the agent is not running yet,
+/// and even a handshake would not tell us, because there is no capability flag for cancellation to
+/// advertise. So the advertisement is the protocol's promise, and a non-conforming agent surfaces as
+/// a turn that does not stop, on the attempt that asked, rather than as a control the console hid.
+/// The converse — an agent that supports something richer than ACP can express — is refused by
+/// [`translate::intervention_to_notification`] with a [`HarnessError::CapabilityNotSupported`] naming
+/// the primitive, because this adapter has no frame to send for it.
+///
+/// Neither case is silent, and neither can be resolved at registration time. Advertising the
+/// adapter's ceiling is therefore the honest choice: it never hides a control that would work, and a
+/// control that will not work says so, by name, on the attempt that asked for it.
+///
+/// [`AcpSession`]: crate::session::AcpSession
+/// [`HarnessError::capability_not_supported`]: aion_integrations::HarnessError::capability_not_supported
+/// [`HarnessError::CapabilityNotSupported`]: aion_integrations::HarnessError::CapabilityNotSupported
+/// [`InterventionCapabilities`]: aion_core::InterventionCapabilities
+/// [`InterventionPrimitive::Cancel`]: aion_core::InterventionPrimitive::Cancel
+#[must_use]
+pub fn registration_capabilities() -> aion_core::InterventionCapabilities {
+    translate::negotiated_capabilities()
+}
+
 /// A harness that runs each activity attempt as one ACP agent subprocess.
 ///
 /// Holds the harness-specific settings — the launch command, its arguments, the session working
@@ -590,10 +644,67 @@ mod tests {
     use aion_core::{ActivityId, ContentType, Payload, WorkflowId};
     use aion_integrations::HarnessError;
 
-    use super::{AcpHarness, AgentRunSpec, prompt_from_spec};
+    use super::{AcpHarness, AgentRunSpec, prompt_from_spec, registration_capabilities};
     use crate::permission::PermissionPolicy;
 
     type TestResult<T = ()> = Result<T, Box<dyn Error>>;
+
+    /// The PUBLISHED registration set must be exactly the set this adapter can translate — no wider,
+    /// no narrower. A wider set advertises a control the translation would refuse; a narrower one
+    /// hides a control that works.
+    ///
+    /// Driven over EVERY primitive the neutral enum has, so adding a variant to
+    /// [`crate::translate::intervention_to_notification`] without publishing it (or the reverse)
+    /// fails here rather than at an operator's desk. The session sends exactly what that function
+    /// returns, so "translatable" here is the same thing as "deliverable on a live turn".
+    #[test]
+    fn the_published_set_is_exactly_what_the_adapter_can_translate() {
+        use agent_client_protocol_schema::v1::SessionId;
+        use aion_core::{ApprovalDecision, InjectPriority, InterventionKind};
+
+        use crate::translate::intervention_to_notification;
+
+        let every_primitive = [
+            InterventionKind::InjectMessage {
+                text: "steer".to_owned(),
+                priority: InjectPriority::Interrupt,
+            },
+            InterventionKind::Cancel {
+                reason: "stop".to_owned(),
+            },
+            InterventionKind::PauseResume { paused: true },
+            InterventionKind::UpdateBudget {
+                max_tokens: Some(1),
+                max_turns: None,
+            },
+            InterventionKind::RespondToApproval {
+                call_id: "call-1".to_owned(),
+                decision: ApprovalDecision::Approve,
+                note: None,
+            },
+        ];
+        let session = SessionId::new("sess-1");
+        let published = registration_capabilities();
+        for kind in &every_primitive {
+            let primitive = kind.primitive();
+            assert_eq!(
+                published.supports_primitive(primitive),
+                intervention_to_notification(&session, kind).is_ok(),
+                "the published registration set disagrees with the translation for {primitive:?}"
+            );
+        }
+    }
+
+    /// The registration-time set and the per-session set are the SAME value for ACP, because the
+    /// intervention surface is fixed by the protocol version rather than by an individual agent's
+    /// advertisement. Pinned so that a change to either one has to be a deliberate change to both.
+    #[test]
+    fn the_registration_set_is_the_negotiated_set() {
+        assert_eq!(
+            registration_capabilities(),
+            crate::translate::negotiated_capabilities()
+        );
+    }
 
     /// The shutdown grace these configuration tests are built with. Nothing here spawns a process,
     /// so the value only has to be a real one an operator could choose.

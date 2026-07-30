@@ -35,6 +35,7 @@ mod package;
 mod payload;
 mod render;
 mod server;
+mod settings;
 mod worker_agent;
 mod worker_shell;
 mod worker_surface;
@@ -121,7 +122,7 @@ enum Command {
 enum WorkerCommand {
     /// Serve strict manifest-wired shell commands on an Aion task queue.
     Shell(worker_shell::ShellArgs),
-    /// Serve the agent harness compiled into this binary on the queue an `.awl`
+    /// Serve an agent harness compiled into this binary on the queue an `.awl`
     /// document declares — an agent worker without writing a crate.
     ///
     /// The document is authoritative and is the only source of the advertised
@@ -142,12 +143,30 @@ enum WorkerCommand {
     /// variable, the flag wins, and nothing is invented — a missing setting is
     /// reported by name, with all of them listed at once.
     ///
-    /// `--check` prints the exact action surface this worker would advertise, and
-    /// the harness that would drive it, then exits without connecting. Those
-    /// descriptors are the whole admission decision on a queue carrying a
-    /// deployed contract, so reading them beforehand turns a remote
-    /// contract-mismatch refusal into something checkable at the desk.
-    Agent(worker_agent::AgentArgs),
+    /// WHICH harness is `--harness`, resolved over the adapters this binary was
+    /// built with: a build carrying exactly one derives it, a build carrying
+    /// several refuses until one is selected and names every choice, and a name
+    /// this build does not carry is refused naming what it does. The default
+    /// build carries `norn` and `acp`, so it requires the flag.
+    ///
+    /// Each harness is configured by its own settings, demanded only when it is
+    /// the resolved one. The `acp` harness needs `--acp-command`, `--acp-cwd`
+    /// (absolute), `--acp-permission` (`deny` or `allow-once`, no default —
+    /// it decides whether an unattended agent may write files and run commands)
+    /// and `--acp-exit-grace`, plus repeatable `--acp-arg` / `--acp-env`; ACP has
+    /// no standard launch flag, so nothing about the command is inferred from an
+    /// agent's name. The `norn` harness takes an optional `--norn-binary`. A flag
+    /// configuring a harness this invocation is not serving is REFUSED, never
+    /// ignored: a flag that silently does nothing is how an operator comes to
+    /// believe a policy is in force when it is not.
+    ///
+    /// `--check` prints the exact action surface this worker would advertise, the
+    /// resolved harness, and the intervention controls that harness advertises,
+    /// then exits without connecting. Those descriptors are the whole admission
+    /// decision on a queue carrying a deployed contract, so reading them
+    /// beforehand turns a remote contract-mismatch refusal into something
+    /// checkable at the desk.
+    Agent(Box<worker_agent::AgentArgs>),
 }
 
 #[derive(Debug, Subcommand)]
@@ -1705,6 +1724,22 @@ mod tests {
             "4",
             "--task-queue",
             "reviewers",
+            "--harness",
+            "acp",
+            "--acp-command",
+            "npx",
+            "--acp-arg",
+            "@google/gemini-cli",
+            "--acp-arg",
+            "--acp",
+            "--acp-cwd",
+            "/srv/workspace",
+            "--acp-permission",
+            "deny",
+            "--acp-exit-grace",
+            "2",
+            "--acp-env",
+            "KEY=value",
         ])?;
         let Command::Worker {
             command: super::WorkerCommand::Agent(args),
@@ -1725,6 +1760,20 @@ mod tests {
         assert_eq!(args.identity.as_deref(), Some("reviewer-worker"));
         assert_eq!(args.task_queue.as_deref(), Some("reviewers"));
         assert!(!args.check);
+        // The harness settings are flattened in from the composition root, so the verb
+        // parses them without knowing which adapters exist.
+        assert_eq!(args.harness.harness.as_deref(), Some("acp"));
+        assert_eq!(args.harness.acp_command.as_deref(), Some("npx"));
+        // Repeated, ORDER PRESERVED: an ACP agent's argv is exactly what was configured,
+        // because there is no standard launch flag to infer one from.
+        assert_eq!(
+            args.harness.acp_args,
+            vec![String::from("@google/gemini-cli"), String::from("--acp")]
+        );
+        assert_eq!(args.harness.acp_cwd.as_deref(), Some("/srv/workspace"));
+        assert_eq!(args.harness.acp_permission.as_deref(), Some("deny"));
+        assert_eq!(args.harness.acp_exit_grace.as_deref(), Some("2"));
+        assert_eq!(args.harness.acp_env, vec![String::from("KEY=value")]);
 
         // The document is mandatory: there is nothing to derive a surface from
         // without it, and nothing else is defaulted in its place.
@@ -1742,6 +1791,11 @@ mod tests {
         assert!(args.check);
         assert!(args.liminal_addresses.is_empty());
         assert!(args.identity.is_none());
+        // Including the harness settings: `--check` reports what a build carries and
+        // demands no configuration to do it.
+        assert!(args.harness.harness.is_none());
+        assert!(args.harness.acp_command.is_none());
+        assert!(args.harness.acp_args.is_empty());
         Ok(())
     }
 
@@ -1765,6 +1819,24 @@ mod tests {
         assert!(help.contains("all-or-nothing"));
         assert!(help.contains("liminal worker transport"));
         assert!(help.contains("nothing is invented"));
+        // Harness selection and per-harness configuration: an operator must be able to
+        // read WHICH harness will run, and what an ACP one needs, off the help alone.
+        for expected in [
+            "--harness",
+            "--norn-binary",
+            "--acp-command",
+            "--acp-arg",
+            "--acp-cwd",
+            "--acp-permission",
+            "--acp-env",
+            "--acp-exit-grace",
+        ] {
+            assert!(help.contains(expected), "help must document `{expected}`");
+        }
+        // And the two rulings an operator cannot afford to learn by surprise: the
+        // security decision has no default, and a flag for another harness is refused.
+        assert!(help.contains("no default"));
+        assert!(help.contains("REFUSED"));
         Ok(())
     }
 

@@ -686,14 +686,14 @@ impl ExtractionLock {
 
 impl Drop for ExtractionLock {
     fn drop(&mut self) {
-        if let Err(error) = fs::remove_file(&self.path) {
-            if self.path.exists() {
-                eprintln!(
-                    "warning: failed to remove the manifest-extraction lock {}: {error}; \
-                     delete it manually before the next `aion generate`",
-                    self.path.display()
-                );
-            }
+        if let Err(error) = fs::remove_file(&self.path)
+            && self.path.exists()
+        {
+            eprintln!(
+                "warning: failed to remove the manifest-extraction lock {}: {error}; \
+                 delete it manually before the next `aion generate`",
+                self.path.display()
+            );
         }
     }
 }
@@ -737,15 +737,14 @@ impl ExtractionScratch {
 
 impl Drop for ExtractionScratch {
     fn drop(&mut self) {
-        if let Some(probe) = self.probe.take() {
-            if let Err(error) = fs::remove_file(&probe) {
-                if probe.exists() {
-                    eprintln!(
-                        "warning: failed to remove manifest probe {}: {error}",
-                        probe.display()
-                    );
-                }
-            }
+        if let Some(probe) = self.probe.take()
+            && let Err(error) = fs::remove_file(&probe)
+            && probe.exists()
+        {
+            eprintln!(
+                "warning: failed to remove manifest probe {}: {error}",
+                probe.display()
+            );
         }
         for (aside, original) in self.renamed.drain(..) {
             if let Err(error) = fs::rename(&aside, &original) {

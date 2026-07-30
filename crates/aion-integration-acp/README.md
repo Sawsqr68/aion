@@ -20,7 +20,9 @@ Codex, Gemini CLI, OpenCode, and whatever ships next.
 
 1. **`Cancel` is the only intervention primitive advertised.** It is the only one ACP v1 can deliver.
    The other four have no protocol mechanism, and a control that silently does nothing is worse than
-   no control.
+   no control. A live session gates on that set; a composition root advertising this adapter when a
+   worker REGISTERS — before any agent process exists — publishes the same ceiling through
+   `registration_capabilities()`, which is pinned against what the adapter can actually translate.
 2. **The permission policy is required and has no default.** An unanswered
    `session/request_permission` blocks the agent until the activity times out, and an Aion activity
    is unattended, so the answer is decided when the harness is built. Every request and every
@@ -51,16 +53,40 @@ configuration and never guessed. This table is documentation for whoever writes 
 it is not consulted by any code path, so a future rename here is a stale doc rather than a broken run.
 
 ```rust,no_run
+use std::time::Duration;
+
 use aion_integration_acp::{AcpHarness, PermissionPolicy};
 
 let harness = AcpHarness::new(
     "npx",
     ["@google/gemini-cli", "--acp"],
-    "/srv/workspace",          // absolute: `session/new` requires it
-    PermissionPolicy::Deny,    // required: an unattended run must always answer
+    "/srv/workspace",             // absolute: `session/new` requires it
+    PermissionPolicy::Deny,       // required: an unattended run must always answer
+    Duration::from_secs(5),       // required: the grace before a lingering agent is killed
 )
 .with_env("GEMINI_API_KEY", "…");
 ```
+
+## Serving it without writing a crate
+
+The `aion` binary composes this adapter in behind its default-on `acp` cargo feature, so an operator
+serves an ACP agent on the queue an `.awl` document declares with no Rust at all:
+
+```text
+aion worker agent flows/review.awl \
+  --harness acp \
+  --acp-command npx --acp-arg @google/gemini-cli --acp-arg --acp \
+  --acp-cwd /srv/workspace \
+  --acp-permission deny \
+  --acp-exit-grace 5 \
+  --liminal-address 127.0.0.1:50061 --identity reviewer-worker --concurrency 4 \
+  --reconnect-initial-backoff 1 --reconnect-max-backoff 30 --reconnect-max-attempts 10
+```
+
+Every one of those settings can come from its `AION_*` environment variable instead, except the two
+repeatable ones (`--acp-arg`, `--acp-env`), which have no safe single-variable encoding. Add `--check`
+to print the exact action surface, the resolved harness, and the intervention controls it advertises
+without connecting to anything. `aion worker agent --help` is the full contract.
 
 ## Wire types
 

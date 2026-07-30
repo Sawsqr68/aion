@@ -14,6 +14,7 @@ use aion_package::{ActivityDescriptor, CanonicalJson};
 use anyhow::{Context, Result, bail};
 use serde_json::json;
 
+use crate::harness::HarnessKind;
 use crate::worker_surface::{self, ServingSource};
 
 /// How a refusal names an agent worker as the thing serving a queue's actions.
@@ -96,18 +97,28 @@ pub(crate) fn derive(document: &Path, requested_queue: Option<&str>) -> Result<A
 /// would drive it, as JSON.
 ///
 /// The descriptors ARE the admission decision on a contract-bearing queue, and the
-/// compiled-in harness decides whether the worker can serve at all — so both belong
+/// RESOLVED harness decides whether the worker can serve at all — so both belong
 /// in a report an operator reads instead of a remote refusal.
+///
+/// `harness` is the harness this invocation resolved, `None` when the build compiles
+/// none in. It is reported by the short name `--harness` accepts, beside the
+/// registration-time capability set that harness's adapter publishes: those two
+/// together are what the server will route operator commands on, so a build or a
+/// selection that would offer the wrong controls is visible before the worker dials.
 ///
 /// # Errors
 ///
 /// Returns an error when the surface cannot be encoded or the writer cannot be
 /// written to (a closed pipe).
-pub(crate) fn print(writer: &mut impl Write, surface: &AdvertisedSurface) -> Result<()> {
+pub(crate) fn print(
+    writer: &mut impl Write,
+    surface: &AdvertisedSurface,
+    harness: Option<HarnessKind>,
+) -> Result<()> {
     let report = json!({
         "task_queue": surface.task_queue,
-        "harness": crate::harness::compiled_harness_name(),
-        "intervention_capabilities": crate::harness::compiled_harness_capabilities(),
+        "harness": harness.map(HarnessKind::name),
+        "intervention_capabilities": crate::harness::registration_capabilities(harness),
         "actions": surface
             .descriptors
             .iter()

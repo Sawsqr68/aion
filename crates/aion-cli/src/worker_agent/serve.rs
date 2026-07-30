@@ -1,4 +1,4 @@
-//! Composing the harness and serving it on the derived queue.
+//! Composing the selected harness and serving it on the derived queue.
 //!
 //! # Why liminal, and not the global `--endpoint`
 //!
@@ -10,6 +10,23 @@
 //! *because* the harness seam is liminal-only. So this verb dials liminal
 //! candidates, and the gRPC endpoint plays no part in it.
 //!
+//! # The order the preparation happens in, and why
+//!
+//! 1. **The action surface**, from the document. It comes first because `--check` must
+//!    work on a build that could not serve, and a document fault must never hide behind
+//!    a missing-configuration complaint.
+//! 2. **The harness selection**, over the adapters compiled into this binary — plus the
+//!    refusal of any harness flag belonging to a harness other than the resolved one.
+//!    Both are part of the `--check` report: which harness would drive the surface is
+//!    exactly as load-bearing as the surface itself, and a flag that cannot take effect
+//!    should be refused before anything runs rather than at the next deploy.
+//! 3. **Every remaining setting** — the connection settings and the resolved harness's
+//!    own configuration, resolved together so one refusal names every missing one.
+//!
+//! `--check` stops after (2), demanding no settings at all. That is the same line the
+//! verb already drew for the connection settings: a report that connects to nothing must
+//! not require the configuration of a connection it will not make.
+//!
 //! # Why the serve loop gets its own thread
 //!
 //! `serve_with_redial` is SYNCHRONOUS: the liminal push client is thread-based, and
@@ -20,27 +37,37 @@
 //!
 //! # Build configurations
 //!
-//! Serving needs both a compiled-in harness (`norn`) and the transport that can
-//! carry one (`liminal-transport`). A build missing either derives and reports the
-//! surface exactly as a complete build does, then refuses to serve — naming which
-//! piece is absent, and naming what it would otherwise have served, so the operator
-//! can see the request was understood and only the build is wrong.
+//! Serving needs both a compiled-in harness (`norn` and/or `acp`) and the transport
+//! that can carry one (`liminal-transport`). A build missing either derives and reports
+//! the surface exactly as a complete build does, then refuses to serve — naming which
+//! piece is absent, and naming what it would otherwise have served, so the operator can
+//! see the request was understood and only the build is wrong.
 
 use anyhow::{Context, Result};
 
-use super::args::{self, AgentArgs, Environment, Settings};
+use super::args::{self, AgentArgs, ConnectionSettings};
 use super::surface::{self, AdvertisedSurface};
+use crate::harness::ResolvedHarness;
+use crate::settings::Environment;
 
-/// The surface to serve and the settings to serve it with, or `None` when `--check`
-/// has already reported and there is nothing left to do.
-type Prepared = Option<(AdvertisedSurface, Settings)>;
+/// Everything a serve needs, resolved — or `None` when `--check` has already reported
+/// and there is nothing left to do.
+type Prepared = Option<Plan>;
 
-/// Derives the action surface, honours `--check`, and resolves every connection
-/// setting.
+/// The resolved plan for one served worker.
+struct Plan {
+    /// The typed action surface to advertise.
+    surface: AdvertisedSurface,
+    /// The connection settings to register with.
+    connection: ConnectionSettings,
+    /// The selected and configured harness, `None` when this build compiles none in.
+    harness: Option<ResolvedHarness>,
+}
+
+/// Derives the action surface, resolves the harness, honours `--check`, and resolves
+/// every remaining setting.
 ///
-/// The surface comes FIRST, before any setting is demanded: `--check` must work on a
-/// build that could not serve, and a document fault must never hide behind a
-/// missing-configuration complaint.
+/// See the module documentation for why the steps happen in this order.
 ///
 /// The derivation runs on a blocking thread because compiling an `.awl` document is
 /// real CPU work — parse, typecheck, schema derivation, lowering — and belongs off
@@ -49,7 +76,9 @@ type Prepared = Option<(AdvertisedSurface, Settings)>;
 /// # Errors
 ///
 /// Returns an error when the surface cannot be derived, when the derivation task
-/// does not complete, or when a connection setting has no source.
+/// does not complete, when the harness selection is ambiguous or names a harness this
+/// build does not carry, when a harness flag configures a harness that is not the
+/// resolved one, or when a setting has no source.
 async fn prepare(args: &AgentArgs) -> Result<Prepared> {
     let environment = Environment::from_process();
     let document = args.awl.clone();
@@ -58,29 +87,45 @@ async fn prepare(args: &AgentArgs) -> Result<Prepared> {
         tokio::task::spawn_blocking(move || surface::derive(&document, requested.as_deref()))
             .await
             .context("the action-surface derivation task did not complete")??;
+    let harness = args.harness.select(&environment)?;
     if args.check {
         let mut stdout = std::io::stdout().lock();
-        surface::print(&mut stdout, &surface)?;
+        surface::print(&mut stdout, &surface, harness)?;
         return Ok(None);
     }
-    let settings = args::resolve(args, &environment)?;
-    Ok(Some((surface, settings)))
+    let (connection, harness) = args::resolve(args, &environment, harness)?;
+    Ok(Some(Plan {
+        surface,
+        connection,
+        harness,
+    }))
 }
 
-/// Serves the compiled-in agent harness on the queue `args.awl` declares.
+/// Serves the selected agent harness on the queue `args.awl` declares.
 ///
 /// # Errors
 ///
-/// Returns an error when the surface cannot be derived, when a connection setting
-/// has no source, when the composed harness would advertise something other than
-/// the document's surface, or when the serve loop ends for any reason other than a
-/// shutdown request.
-#[cfg(all(feature = "norn", feature = "liminal-transport"))]
+/// Returns an error when the surface cannot be derived, when the harness cannot be
+/// resolved, when a setting has no source, when the composed harness would advertise
+/// something other than the document's surface, or when the serve loop ends for any
+/// reason other than a shutdown request.
+#[cfg(all(any(feature = "norn", feature = "acp"), feature = "liminal-transport"))]
 pub(crate) async fn run(args: &AgentArgs, namespace: &str) -> Result<()> {
-    let Some((surface, settings)) = prepare(args).await? else {
+    let Some(plan) = prepare(args).await? else {
         return Ok(());
     };
-    serve(&surface, &settings, namespace).await
+    // A build that compiles a harness in can still be handed `harness: None` — that is
+    // the shape of a build with NO adapter, and it cannot happen here, because the
+    // selection derives or refuses over a non-empty catalogue. Reported rather than
+    // unwrapped so the impossible case names itself instead of panicking.
+    let Some(harness) = plan.harness else {
+        anyhow::bail!(
+            "this `aion` build compiles an agent harness in, but none was resolved for queue \
+             `{}`; the harness selection must resolve before a worker can serve",
+            plan.surface.task_queue
+        );
+    };
+    serve(&plan.surface, &plan.connection, &harness, namespace).await
 }
 
 /// Derives and reports the surface exactly as a complete build does, then refuses
@@ -88,15 +133,20 @@ pub(crate) async fn run(args: &AgentArgs, namespace: &str) -> Result<()> {
 ///
 /// # Errors
 ///
-/// Returns an error when the surface cannot be derived or a connection setting has
-/// no source, and always returns one when there is a surface to serve: this build
-/// cannot serve an agent worker.
-#[cfg(not(all(feature = "norn", feature = "liminal-transport")))]
+/// Returns an error when the surface cannot be derived or a setting has no source, and
+/// always returns one when there is a surface to serve: this build cannot serve an
+/// agent worker.
+#[cfg(not(all(any(feature = "norn", feature = "acp"), feature = "liminal-transport")))]
 pub(crate) async fn run(args: &AgentArgs, namespace: &str) -> Result<()> {
-    let Some((surface, settings)) = prepare(args).await? else {
+    let Some(plan) = prepare(args).await? else {
         return Ok(());
     };
-    Err(unservable(&surface, &settings, namespace))
+    Err(unservable(
+        &plan.surface,
+        &plan.connection,
+        plan.harness.as_ref(),
+        namespace,
+    ))
 }
 
 /// `WorkerConfigBuilder::build` requires a gRPC `endpoint`, and the liminal
@@ -105,11 +155,11 @@ pub(crate) async fn run(args: &AgentArgs, namespace: &str) -> Result<()> {
 /// field. Accepting a flag for a value that could not affect anything would be worse
 /// than naming the gap, so the gap is named in the value itself — where any
 /// diagnostic that prints the config repeats it.
-#[cfg(all(feature = "norn", feature = "liminal-transport"))]
+#[cfg(all(any(feature = "norn", feature = "acp"), feature = "liminal-transport"))]
 const UNUSED_GRPC_ENDPOINT: &str =
     "unused: an agent worker dials liminal candidates, not a gRPC endpoint";
 
-/// Composes the compiled-in harness over the document's surface and checks that what
+/// Composes the configured harness over the document's surface and checks that what
 /// would actually be REGISTERED is exactly that surface.
 ///
 /// The set the server sees is the config's UNION of its activity types and its
@@ -117,13 +167,20 @@ const UNUSED_GRPC_ENDPOINT: &str =
 /// what gets advertised: a worker registered for a type it will not route, or routing
 /// one it never announced, is caught before it dials instead of by a dispatch that
 /// finds no owner.
-#[cfg(all(feature = "norn", feature = "liminal-transport"))]
-fn compose(surface: &AdvertisedSurface) -> Result<aion_worker::AgentHarnessConfig> {
+///
+/// The advertised intervention capabilities come from the harness that was actually
+/// resolved, not from the build: a binary carrying two adapters would otherwise
+/// advertise the wrong controls for whichever one it is serving.
+#[cfg(all(any(feature = "norn", feature = "acp"), feature = "liminal-transport"))]
+fn compose(
+    surface: &AdvertisedSurface,
+    harness: &ResolvedHarness,
+) -> Result<aion_worker::AgentHarnessConfig> {
     let advertised = surface.names();
     let agent = aion_worker::AgentHarnessConfig::new(
-        crate::harness::default_dyn_agent_harness(),
+        crate::harness::compose::build(&harness.config),
         advertised.iter().cloned(),
-        crate::harness::compiled_harness_capabilities(),
+        crate::harness::registration_capabilities(Some(harness.kind)),
     )
     .with_activity_descriptors(surface.descriptors.clone());
     if agent.agent_activity_types() != &advertised {
@@ -144,10 +201,10 @@ fn compose(surface: &AdvertisedSurface) -> Result<aion_worker::AgentHarnessConfi
 /// `node` is the one setting left to the SDK when the operator supplies none: the
 /// hostname default is the library's own documented behaviour, not a value invented
 /// here.
-#[cfg(all(feature = "norn", feature = "liminal-transport"))]
+#[cfg(all(any(feature = "norn", feature = "acp"), feature = "liminal-transport"))]
 fn worker_config(
     surface: &AdvertisedSurface,
-    settings: &Settings,
+    settings: &ConnectionSettings,
     namespace: &str,
 ) -> Result<aion_worker::WorkerConfig> {
     let mut builder = aion_worker::WorkerConfig::builder()
@@ -167,8 +224,13 @@ fn worker_config(
 
 /// Composes the harness, registers the derived surface, and serves until a shutdown
 /// signal arrives.
-#[cfg(all(feature = "norn", feature = "liminal-transport"))]
-async fn serve(surface: &AdvertisedSurface, settings: &Settings, namespace: &str) -> Result<()> {
+#[cfg(all(any(feature = "norn", feature = "acp"), feature = "liminal-transport"))]
+async fn serve(
+    surface: &AdvertisedSurface,
+    settings: &ConnectionSettings,
+    harness: &ResolvedHarness,
+    namespace: &str,
+) -> Result<()> {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -183,7 +245,7 @@ async fn serve(surface: &AdvertisedSurface, settings: &Settings, namespace: &str
     aion_server::observability::tracing::init()?;
 
     let advertised = surface.names();
-    let agent = compose(surface)?;
+    let agent = compose(surface, harness)?;
     let config = worker_config(surface, settings, namespace)?;
     // The harness owns every action on this queue, so the typed registry is EMPTY:
     // an agent activity is executed by driving the harness, never by a registered
@@ -235,7 +297,7 @@ async fn serve(surface: &AdvertisedSurface, settings: &Settings, namespace: &str
         task_queue = %queue,
         identity = %settings.identity,
         namespace = %namespace,
-        harness = crate::harness::compiled_harness_name(),
+        harness = harness.kind.name(),
         "agent worker dialing liminal candidates"
     );
     // A shutdown signal flips the shared stop flag; the serve loop checks it between
@@ -280,7 +342,7 @@ async fn serve(surface: &AdvertisedSurface, settings: &Settings, namespace: &str
 
 /// Awaits SIGTERM or SIGINT (Ctrl-C off Unix), mirroring the server's own shutdown
 /// listener so a worker and a server drain on the same signals.
-#[cfg(all(feature = "norn", feature = "liminal-transport"))]
+#[cfg(all(any(feature = "norn", feature = "acp"), feature = "liminal-transport"))]
 async fn shutdown_signal() -> Result<()> {
     #[cfg(unix)]
     {
@@ -306,13 +368,20 @@ async fn shutdown_signal() -> Result<()> {
 
 /// The refusal for a build with NO agent harness compiled in, naming exactly what it
 /// would otherwise have served.
-#[cfg(not(feature = "norn"))]
-fn unservable(surface: &AdvertisedSurface, settings: &Settings, namespace: &str) -> anyhow::Error {
+#[cfg(not(any(feature = "norn", feature = "acp")))]
+fn unservable(
+    surface: &AdvertisedSurface,
+    settings: &ConnectionSettings,
+    harness: Option<&ResolvedHarness>,
+    namespace: &str,
+) -> anyhow::Error {
     anyhow::anyhow!(
         "this `aion` build has NO agent harness compiled in (--no-default-features without \
-         `norn`), so it cannot serve queue `{}` ({}) as `{}` in namespace `{namespace}` on {}. \
-         Rebuild with the default features, or with `--features norn`.",
+         `norn`/`acp`), so it cannot serve queue `{}`{} ({}) as `{}` in namespace `{namespace}` \
+         on {}. Rebuild with the default features, or with `--features norn` / \
+         `--features acp`.",
         surface.task_queue,
+        describe_harness(harness),
         describe_actions(surface),
         settings.identity,
         settings.addresses.join(", ")
@@ -321,23 +390,48 @@ fn unservable(surface: &AdvertisedSurface, settings: &Settings, namespace: &str)
 
 /// The refusal for a build that composes a harness but carries no transport able to
 /// carry one — the agent-harness seam exists only on the liminal worker transport.
-#[cfg(all(feature = "norn", not(feature = "liminal-transport")))]
-fn unservable(surface: &AdvertisedSurface, settings: &Settings, namespace: &str) -> anyhow::Error {
+#[cfg(all(
+    any(feature = "norn", feature = "acp"),
+    not(feature = "liminal-transport")
+))]
+fn unservable(
+    surface: &AdvertisedSurface,
+    settings: &ConnectionSettings,
+    harness: Option<&ResolvedHarness>,
+    namespace: &str,
+) -> anyhow::Error {
     anyhow::anyhow!(
         "this `aion` build composes an agent harness but has NO liminal worker transport \
-         compiled in, and the agent-harness seam exists only on that transport — so queue `{}` \
+         compiled in, and the agent-harness seam exists only on that transport — so queue `{}`{} \
          ({}) cannot be served as `{}` in namespace `{namespace}` on {}. Rebuild with the \
          default features, or add `--features liminal-transport`.",
         surface.task_queue,
+        describe_harness(harness),
         describe_actions(surface),
         settings.identity,
         settings.addresses.join(", ")
     )
 }
 
+/// The harness clause a refusal carries: which harness the invocation resolved and
+/// configured, when it resolved one.
+///
+/// Empty in a build with NO adapter compiled in, where [`ResolvedHarness`] is uninhabited
+/// and there is nothing to name. Non-empty in a build that composes an adapter but
+/// carries no transport able to drive it — which is the difference between "this build
+/// cannot serve an agent worker" and "this build cannot serve THAT harness", and the
+/// second is what tells an operator their configuration was understood before the build
+/// was blamed.
+#[cfg(not(all(any(feature = "norn", feature = "acp"), feature = "liminal-transport")))]
+fn describe_harness(harness: Option<&ResolvedHarness>) -> String {
+    harness.map_or_else(String::new, |resolved| {
+        format!(" with the `{}` harness", resolved.kind.name())
+    })
+}
+
 /// The action surface a refusal names, so an operator sees the work that was
 /// understood and not merely the missing feature.
-#[cfg(not(all(feature = "norn", feature = "liminal-transport")))]
+#[cfg(not(all(any(feature = "norn", feature = "acp"), feature = "liminal-transport")))]
 fn describe_actions(surface: &AdvertisedSurface) -> String {
     format!(
         "{} action(s): {}",

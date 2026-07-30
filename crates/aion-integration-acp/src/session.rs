@@ -41,10 +41,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use agent_client_protocol_schema::v1::{CancelNotification, SessionId};
+use agent_client_protocol_schema::v1::SessionId;
 use aion_core::{
-    ActivityEvent, InterventionCapabilities, InterventionCommand, InterventionKind,
-    InterventionPrimitive, Payload,
+    ActivityEvent, InterventionCapabilities, InterventionCommand, InterventionKind, Payload,
 };
 use aion_integrations::HarnessError;
 use aion_integrations::contract::AgentSession;
@@ -269,21 +268,31 @@ where
     }
 
     async fn intervene(&self, cmd: InterventionCommand) -> Result<(), HarnessError> {
-        // Capability-gate FIRST: an unadvertised primitive is rejected before anything is written,
-        // so the four primitives ACP cannot deliver never reach the wire.
+        // Capability-gate FIRST, against the set this session ADVERTISED: an unadvertised primitive
+        // is rejected before anything is written, so the four primitives ACP cannot deliver never
+        // reach the wire even if a caller ignores the advertisement.
         if !self.capabilities.supports(&cmd.kind) {
-            return Err(HarnessError::capability_not_supported(primitive_label(
-                &cmd.kind,
-            )));
+            return Err(HarnessError::capability_not_supported(
+                translate::primitive_label(cmd.kind.primitive()),
+            ));
         }
-        match &cmd.kind {
-            InterventionKind::Cancel { reason } => self.cancel(reason).await,
-            // Unreachable while `Cancel` is the only advertised primitive, and it stays correct if
-            // the advertised set ever grows without a matching wire mapping.
-            other => Err(HarnessError::capability_not_supported(primitive_label(
-                other,
-            ))),
+        // `Cancel` carries an obligation beyond its frame: from the moment a client cancels it must
+        // answer every pending `session/request_permission` with `cancelled`, so the flag is raised
+        // BEFORE the notification is written. It is done here, at the decision, rather than inside a
+        // send helper, so the ordering the spec requires is visible where the choice is made.
+        if let InterventionKind::Cancel { reason } = &cmd.kind {
+            self.cancelled.store(true, Ordering::SeqCst);
+            tracing::info!(
+                session = %self.session_id,
+                reason,
+                "acp adapter: cancelling the prompt turn"
+            );
         }
+        // The translation is the single authority on what this adapter can put on the wire, so a
+        // primitive with no ACP mechanism is refused BY it, by name — there is no second list here
+        // that could drift from the one the published capability set is pinned against.
+        let notification = translate::intervention_to_notification(&self.session_id, &cmd.kind)?;
+        self.send(notification).await
     }
 
     async fn wait_result(mut self) -> Result<Payload, HarnessError> {
@@ -300,47 +309,18 @@ where
     R: AsyncRead + Unpin + Send,
     W: AsyncWrite + Unpin + Send,
 {
-    /// Sends `session/cancel` for this session.
+    /// Writes one translated intervention frame to the agent.
     ///
-    /// The cancelled flag is raised BEFORE the notification is written, so any
-    /// `session/request_permission` the agent sends from here on is answered `cancelled` — the second
-    /// half of the client's cancellation obligation. `reason` is recorded in the trace: ACP's
-    /// `session/cancel` carries only a `sessionId`, and attaching the operator's reason to a
-    /// protocol field that does not exist would be fabrication.
-    async fn cancel(&self, reason: &str) -> Result<(), HarnessError> {
-        self.cancelled.store(true, Ordering::SeqCst);
-        tracing::info!(
-            session = %self.session_id,
-            reason,
-            "acp adapter: cancelling the prompt turn"
-        );
-        // Cancelling a session whose result has already been taken is a stale target, not a
-        // transport fault: the turn is over and the channel is deliberately closed.
+    /// Intervening on a session whose result has already been taken is a stale target, not a
+    /// transport fault: the turn is over and the connection was deliberately released.
+    async fn send(&self, notification: translate::AcpNotification) -> Result<(), HarnessError> {
         let connection = self.connection.as_ref().ok_or_else(|| {
             HarnessError::stale_target(
-                "the ACP session has already been shut down; there is no turn left to cancel",
+                "the ACP session has already been shut down; there is no turn left to intervene in",
             )
         })?;
-        let params = serde_json::to_value(CancelNotification::new(self.session_id.clone()))
-            .map_err(|source| {
-                HarnessError::protocol(format!("session/cancel params are not encodable: {source}"))
-            })?;
-        let notification = JsonRpcNotification::new(protocol::METHOD_SESSION_CANCEL, Some(params));
-        connection.send_notification(&notification).await
-    }
-}
-
-/// The neutral `snake_case` label naming a primitive in a capability-gate rejection.
-///
-/// Written out rather than derived from `Debug`, so the rejection an operator reads uses the same
-/// spelling the neutral capability vocabulary does.
-fn primitive_label(kind: &InterventionKind) -> &'static str {
-    match kind.primitive() {
-        InterventionPrimitive::InjectMessage => "inject_message",
-        InterventionPrimitive::Cancel => "cancel",
-        InterventionPrimitive::PauseResume => "pause_resume",
-        InterventionPrimitive::UpdateBudget => "update_budget",
-        InterventionPrimitive::RespondToApproval => "respond_to_approval",
+        let frame = JsonRpcNotification::new(notification.method, Some(notification.params));
+        connection.send_notification(&frame).await
     }
 }
 

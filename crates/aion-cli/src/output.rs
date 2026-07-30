@@ -114,10 +114,10 @@ where
 }
 
 fn decode_payloads_in_history(value: &mut Value) {
-    if let Value::Object(object) = value {
-        if let Some(history) = object.get_mut("history") {
-            decode_payloads_in_value(history);
-        }
+    if let Value::Object(object) = value
+        && let Some(history) = object.get_mut("history")
+    {
+        decode_payloads_in_value(history);
     }
 }
 
@@ -152,10 +152,10 @@ fn payload_display_value(object: &Map<String, Value>) -> Option<Value> {
         }));
     }
 
-    if content_type == "Json" {
-        if let Ok(decoded) = serde_json::from_slice::<Value>(&bytes) {
-            return Some(decoded);
-        }
+    if content_type == "Json"
+        && let Ok(decoded) = serde_json::from_slice::<Value>(&bytes)
+    {
+        return Some(decoded);
     }
 
     Some(json!({

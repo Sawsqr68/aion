@@ -94,10 +94,10 @@ fn wait_for_boot(child: &mut Child, http_port: u16) -> Result<(), TestError> {
         if let Some(status) = child.try_wait()? {
             return Err(format!("server exited during boot with {status}").into());
         }
-        if let Some(response) = http_get_live(http_port) {
-            if response.starts_with("HTTP/1.1 200") {
-                return Ok(());
-            }
+        if let Some(response) = http_get_live(http_port)
+            && response.starts_with("HTTP/1.1 200")
+        {
+            return Ok(());
         }
         if started.elapsed() > BOOT_DEADLINE {
             child.kill()?;

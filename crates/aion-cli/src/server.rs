@@ -1,5 +1,5 @@
 //! The `aion server` subcommand: argument surface for running the full Aion
-//! workflow server in-process via [`aion_server::run`].
+//! workflow server in-process via [`aion_server::run()`].
 
 use std::net::SocketAddr;
 use std::num::{NonZeroU64, NonZeroUsize};
