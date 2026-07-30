@@ -135,7 +135,7 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     observability::tracing::init()?;
 
     let loaded = ServerConfig::load_resolved(&cli)?;
-    loaded.resolution.validate_private_home()?;
+    loaded.resolution.ensure_private_home()?;
     loaded.resolution.log_startup();
     let config = loaded.config;
     reject_auth_without_feature(&config)?;

@@ -1,56 +1,14 @@
 //! Focused regressions for Aion-home config discovery and state roots.
 
-use std::{
-    fs,
-    io::{self, Write},
-    path::Path,
-    process::Command,
-    sync::{Arc, Mutex},
-};
-
-use tracing_subscriber::fmt::MakeWriter;
+use std::{fs, path::Path, process::Command};
 
 use crate::config::ConfigSource;
+use crate::test_support::CapturedLogs;
 
 use super::{CliOverrides, ServerConfig, aion_home};
 
 const HOME_PROBE: &str = "AION_HOME_TEST_PROBE";
 const HOME_EXPECTED: &str = "AION_HOME_TEST_EXPECTED";
-
-#[derive(Clone, Default)]
-struct CapturedLogs(Arc<Mutex<Vec<u8>>>);
-
-struct CapturedWriter(Arc<Mutex<Vec<u8>>>);
-
-impl Write for CapturedWriter {
-    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
-        let mut bytes = self
-            .0
-            .lock()
-            .map_err(|_| io::Error::other("captured log lock poisoned"))?;
-        bytes.extend_from_slice(buffer);
-        Ok(buffer.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-impl<'writer> MakeWriter<'writer> for CapturedLogs {
-    type Writer = CapturedWriter;
-
-    fn make_writer(&'writer self) -> Self::Writer {
-        CapturedWriter(Arc::clone(&self.0))
-    }
-}
-
-impl CapturedLogs {
-    fn text(&self) -> Result<String, Box<dyn std::error::Error>> {
-        let bytes = self.0.lock().map_err(|_| "captured log lock poisoned")?;
-        Ok(String::from_utf8(bytes.clone())?)
-    }
-}
 
 fn write(path: &Path, contents: &str) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(parent) = path.parent() {
@@ -177,13 +135,7 @@ fn legacy_directories_guard_only_unconfigured_defaults() -> Result<(), Box<dyn s
         assert!(line.contains(&working_dir.display().to_string()));
     }
 
-    let captured = CapturedLogs::default();
-    let subscriber = tracing_subscriber::fmt()
-        .without_time()
-        .with_ansi(false)
-        .with_writer(captured.clone())
-        .finish();
-    tracing::subscriber::with_default(subscriber, || loaded.resolution.log_startup());
+    let (captured, ()) = CapturedLogs::capture(|| loaded.resolution.log_startup());
     let logs = captured.text()?;
     assert!(logs.contains("Aion home legacy-directory migration guard active"));
     assert!(logs.contains("AION HOME MIGRATION REQUIRED"));

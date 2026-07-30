@@ -1824,8 +1824,12 @@ fn build_haematite_store_with_hook(
     use aion_store_haematite::{ClusterBootstrap, HaematiteStore};
 
     // Acquire the data root through the same no-follow component walk used by
-    // authoring. New components are 0700 on Unix and a permissive existing root
-    // is a loud startup failure.
+    // authoring. New components are created 0700 on Unix, and an existing root
+    // that the server's own user owns is tightened to 0700 rather than refused —
+    // provisioning our own directory is Aion's job, not the operator's. Only a
+    // root Aion cannot make safe (foreign owner, a filesystem without Unix
+    // modes) is a loud startup failure here; an unsafe ANCESTOR is caught
+    // separately below and is never repaired.
     let private_root = crate::filesystem::ConfinedDir::open_or_create(std::path::Path::new(
         data_dir,
     ))

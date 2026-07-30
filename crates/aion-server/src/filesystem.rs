@@ -6,26 +6,56 @@
 //! after validation, but the operation remains relative to an already-open parent
 //! descriptor: it can redirect a name within that held directory, never expand the
 //! operation's authority beyond the configured root.
+//!
+//! These roots are Aion's own, so Aion provisions them: a missing root is
+//! created owner-only in a single `mkdir`, and an existing root the server's
+//! user owns is tightened to owner-only rather than refused. The operator is
+//! never handed a `chmod` command for a directory the server could fix itself.
+//! What Aion cannot make safe — a foreign owner, a symlinked component, a
+//! filesystem without Unix modes, or an unsafe ANCESTOR (see `ancestors`) —
+//! still refuses, naming the path, the problem, and the remedy.
 
 use std::ffi::{OsStr, OsString};
 use std::io::{self, Read, Write};
 use std::path::{Component, Path, PathBuf};
 
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+mod ancestors;
 #[cfg(target_os = "macos")]
 mod darwin_acl;
+
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+pub(crate) use ancestors::{DataRootAncestorError, validate_ambient_backend_ancestors};
 
 use cap_fs_ext::{DirExt, FollowSymlinks, OpenOptionsFollowExt};
 use cap_std::ambient_authority;
 use cap_std::fs::{Dir, DirBuilder, OpenOptions};
 #[cfg(unix)]
-use cap_std::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+use cap_std::fs::{DirBuilderExt, MetadataExt as _, OpenOptionsExt, PermissionsExt};
 #[cfg(all(unix, not(target_os = "macos")))]
 use std::os::fd::AsRawFd as _;
 #[cfg(target_os = "macos")]
 use std::os::unix::ffi::OsStringExt as _;
 
+/// Owner-only mode for every directory Aion owns. This is a security constant,
+/// not a tunable: these roots hold workflow payloads, signal arguments, and
+/// authored source, so group and world get nothing. It is never read from
+/// configuration and there is no override.
 const PRIVATE_DIR_MODE: u32 = 0o700;
+
+/// Owner-only mode for every file Aion writes under those roots. Same reasoning,
+/// same absence of an override.
 const PRIVATE_FILE_MODE: u32 = 0o600;
+
+/// [`PRIVATE_DIR_MODE`] in the form `rustix` takes for a direct `fchmod` on a
+/// held descriptor. The two constants are pinned to the same literal below so
+/// they can never drift apart.
+#[cfg(unix)]
+const PRIVATE_DIR_MODE_BITS: rustix::fs::Mode = rustix::fs::Mode::RWXU;
+#[cfg(unix)]
+const _: () = assert!(PRIVATE_DIR_MODE == 0o700);
+#[cfg(unix)]
+const _: () = assert!(PRIVATE_DIR_MODE_BITS.bits() == 0o700);
 
 /// A held directory descriptor confining all subsequent operations beneath it.
 pub(crate) struct ConfinedDir {
@@ -33,21 +63,23 @@ pub(crate) struct ConfinedDir {
 }
 
 impl ConfinedDir {
-    /// Open an existing real directory without following any path component.
+    /// Open an existing real directory without following any path component,
+    /// bringing it to owner-only mode if it is ours and too permissive.
     pub(crate) fn open(path: &Path) -> io::Result<Self> {
         let root = Self {
             dir: open_absolute(path, false)?,
         };
-        root.require_private_mode(path)?;
+        root.ensure_private_mode(path)?;
         Ok(root)
     }
 
-    /// Open or create a real directory, creating every missing component privately.
+    /// Open or create a real directory, creating every missing component
+    /// privately and bringing an existing root to owner-only mode.
     pub(crate) fn open_or_create(path: &Path) -> io::Result<Self> {
         let root = Self {
             dir: open_absolute(path, true)?,
         };
-        root.require_private_mode(path)?;
+        root.ensure_private_mode(path)?;
         Ok(root)
     }
 
@@ -176,20 +208,94 @@ impl ConfinedDir {
         Ok(())
     }
 
-    fn require_private_mode(&self, path: &Path) -> io::Result<()> {
+    /// Bring the held root to owner-only mode, tightening it ourselves when it
+    /// is ours to tighten.
+    ///
+    /// The operator must never be told to go and hand-run `chmod 700` on a
+    /// directory Aion created, or would have created, before Aion will start.
+    /// That refusal was a real and repeated defect: a `~/.aion` left at 0755 by
+    /// a permissive umask stopped a stock server, and the only cure the message
+    /// offered was a shell command the server could have run itself. Loosening
+    /// the requirement would have been the wrong fix — the directory holds
+    /// workflow payloads — so the server now performs the repair instead.
+    ///
+    /// Every decision is taken against the ALREADY-OPEN descriptor: `fstat` and
+    /// `fchmod` on the held fd, never a second resolution of `path`. That
+    /// closes the check-then-act window — there is no interval in which a
+    /// concurrent rename could point the inspection at one inode and the repair
+    /// at another, because both name the same open file description. `path` is
+    /// carried purely to make the log and error text nameable.
+    ///
+    /// Refusal is reserved for what Aion genuinely cannot repair: a directory
+    /// owned by another principal (not ours to change, and `fchmod` would fail
+    /// anyway), and a filesystem that will not carry Unix modes.
+    fn ensure_private_mode(&self, path: &Path) -> io::Result<()> {
         #[cfg(unix)]
         {
-            let mode = self.metadata()?.permissions().mode() & 0o777;
-            if mode & 0o077 != 0 {
+            let metadata = self.metadata()?;
+            let mode = metadata.permissions().mode() & 0o777;
+            let grants_group_or_world = mode & 0o077 != 0;
+            if !grants_group_or_world {
+                return Ok(());
+            }
+
+            let owner = metadata.uid();
+            let effective = rustix::process::geteuid().as_raw();
+            if owner != effective {
                 return Err(io::Error::new(
                     io::ErrorKind::PermissionDenied,
                     format!(
-                        "sensitive root `{}` has mode {mode:04o}; run `chmod 700 {}`",
-                        path.display(),
+                        "sensitive root `{}` has mode {mode:04o}, which grants group or world \
+                         access, and is owned by uid {owner} rather than the uid {effective} this \
+                         server runs as. Aion will not change another principal's directory. \
+                         Either run the server as uid {owner}, or point this root at a directory \
+                         owned by uid {effective}.",
                         path.display()
                     ),
                 ));
             }
+
+            rustix::fs::fchmod(&self.dir, PRIVATE_DIR_MODE_BITS).map_err(|errno| {
+                io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!(
+                        "sensitive root `{}` has mode {mode:04o}, which grants group or world \
+                         access, and Aion could not tighten it to 0700: {errno}. Move this root \
+                         onto a filesystem that carries Unix permissions, or pre-create it with \
+                         mode 0700.",
+                        path.display()
+                    ),
+                )
+            })?;
+
+            // Re-stat the same descriptor rather than assume the write took.
+            // Filesystems exist that accept `fchmod` and discard it (network
+            // and FAT-family mounts among them); without this the server would
+            // log that it had made the root private while the payloads stayed
+            // world-readable.
+            let applied = self.metadata()?.permissions().mode() & 0o777;
+            if applied & 0o077 != 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!(
+                        "sensitive root `{}` still reports mode {applied:04o} after Aion set it \
+                         to 0700, so this filesystem does not honour Unix permissions and Aion \
+                         cannot keep workflow state private here. Move this root onto a \
+                         filesystem that does.",
+                        path.display()
+                    ),
+                ));
+            }
+
+            let previous_mode = format!("{mode:04o}");
+            let applied_mode = format!("{PRIVATE_DIR_MODE:04o}");
+            tracing::info!(
+                sensitive_root = %path.display(),
+                %previous_mode,
+                %applied_mode,
+                "tightened a sensitive root to owner-only: it granted group or world access and \
+                 the server's own user owns it"
+            );
         }
         #[cfg(not(unix))]
         let _ = path;
@@ -386,128 +492,22 @@ fn invalid_relative() -> io::Error {
     )
 }
 
-/// An unsafe component in a path-ambient backend's resolved ancestor chain.
-#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
-#[derive(Debug)]
-pub(crate) struct DataRootAncestorError {
-    component: PathBuf,
-    reason: String,
-}
-
-#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
-impl DataRootAncestorError {
-    fn new(component: PathBuf, reason: impl Into<String>) -> Self {
-        Self {
-            component,
-            reason: reason.into(),
-        }
-    }
-
-    pub(crate) fn into_parts(self) -> (PathBuf, String) {
-        (self.component, self.reason)
-    }
-}
-
-#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
-impl std::fmt::Display for DataRootAncestorError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            formatter,
-            "ancestor `{}` is not owner-controlled: {}",
-            self.component.display(),
-            self.reason
-        )
-    }
-}
-
-#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
-impl std::error::Error for DataRootAncestorError {}
-
-/// Require every component of a path-ambient Haematite root to be controlled by
-/// the server's effective user (or by root for the immutable system prefix) and
-/// to deny group/world writes. On macOS, each component's extended ACL is read
-/// without following its final name. An allow ACE for any principal other than
-/// the effective user is refused when it grants directory traversal, entry
-/// creation/removal, child deletion, or ACL/owner mutation. Deny ACEs remain
-/// acceptable because they cannot confer the rename authority this gate removes;
-/// in particular, this admits the stock macOS home `everyone deny delete` ACE.
-///
-/// This forecloses another principal renaming a parent after startup, replacing
-/// the old name with a symlink, and redirecting Haematite's ambient `DiskStore`
-/// reads and commits. Linux and Android are exempt because their
-/// `/proc/self/fd/N/...` backend path stays descriptor-authoritative while the
-/// retained directory fd lives. Descriptor-relative backend I/O is the long-term
-/// Haematite-side fix; until then, Unix platforms without traversable procfs fd
-/// paths must fail closed on a renameable ancestor. Sticky directories such as
-/// `/tmp` are intentionally refused because the sticky bit does not make an
-/// ambient child pathname descriptor-authoritative. A macOS ACL that cannot be
-/// read or interpreted is likewise refused rather than treated as absent.
-#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
-pub(crate) fn validate_ambient_backend_ancestors(
-    data_root: &Path,
-) -> Result<(), DataRootAncestorError> {
-    use std::os::unix::fs::MetadataExt as _;
-
-    if !data_root.is_absolute() {
-        return Err(DataRootAncestorError::new(
-            data_root.to_path_buf(),
-            "descriptor-resolved backend path is not absolute",
-        ));
-    }
-
-    let effective_uid = rustix::process::geteuid().as_raw();
-    let mut component_path = PathBuf::new();
-    for component in data_root.components() {
-        component_path.push(component.as_os_str());
-        let metadata = std::fs::symlink_metadata(&component_path).map_err(|error| {
-            DataRootAncestorError::new(
-                component_path.clone(),
-                format!("could not inspect ownership and mode: {error}"),
-            )
-        })?;
-        if !metadata.is_dir() || metadata.file_type().is_symlink() {
-            return Err(DataRootAncestorError::new(
-                component_path,
-                "component is not a real directory",
-            ));
-        }
-
-        let mode = metadata.mode() & 0o7777;
-        if mode & 0o022 != 0 {
-            return Err(DataRootAncestorError::new(
-                component_path,
-                format!(
-                    "mode {mode:04o} grants group/world write access (sticky bit is not accepted)"
-                ),
-            ));
-        }
-
-        let owner_uid = metadata.uid();
-        if owner_uid != effective_uid && owner_uid != 0 {
-            return Err(DataRootAncestorError::new(
-                component_path,
-                format!("owner uid {owner_uid} is neither server euid {effective_uid} nor root"),
-            ));
-        }
-
-        #[cfg(target_os = "macos")]
-        darwin_acl::validate_extended_acl(&component_path, effective_uid)?;
-    }
-    Ok(())
-}
-
 #[cfg(all(test, target_os = "macos"))]
 pub(crate) fn darwin_user_uuid_for_test(uid: u32) -> io::Result<uuid::Uuid> {
     darwin_acl::user_uuid_for_test(uid)
 }
 
-/// Refuse an existing sensitive root that grants any Unix group/world access.
+/// Verify that an existing sensitive root is a real directory, on the targets
+/// where Aion cannot express or install an owner-only ACL.
 ///
-/// On non-Unix targets this function verifies only that an existing root is a
-/// real directory. The configuration-resolution boundary separately refuses
-/// default roots and warns for explicitly configured roots because ACL privacy
-/// is not implemented or claimed here.
-pub(crate) fn validate_private_root(path: &Path, label: &str) -> io::Result<()> {
+/// Unix does not use this: there, [`ConfinedDir::open_or_create`] both creates
+/// the root privately and repairs an existing loose one, so there is nothing
+/// left for a separate pathname inspection to do. Non-Unix targets have no mode
+/// Aion can set, so the configuration boundary additionally refuses default
+/// roots, requires the operator to pre-provision and name the directory, and
+/// warns that ACL privacy is not verified.
+#[cfg(not(unix))]
+pub(crate) fn validate_real_directory_root(path: &Path, label: &str) -> io::Result<()> {
     let metadata = match std::fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
@@ -518,20 +518,6 @@ pub(crate) fn validate_private_root(path: &Path, label: &str) -> io::Result<()> 
             io::ErrorKind::InvalidInput,
             format!("{label} `{}` is not a real directory", path.display()),
         ));
-    }
-    #[cfg(unix)]
-    {
-        let mode = std::os::unix::fs::PermissionsExt::mode(&metadata.permissions()) & 0o777;
-        if mode & 0o077 != 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!(
-                    "{label} `{}` has mode {mode:04o}; run `chmod 700 {}` before starting Aion",
-                    path.display(),
-                    path.display()
-                ),
-            ));
-        }
     }
     Ok(())
 }
@@ -590,21 +576,193 @@ mod tests {
         Ok(())
     }
 
+    /// A root that does not exist yet is created owner-only, in one step. The
+    /// umask probe above proves the mode comes from the `mkdir` itself rather
+    /// than a follow-up `chmod`, so there is no window in which the directory
+    /// exists while still group-readable.
     #[test]
-    fn permissive_existing_root_fails_with_precise_remediation()
+    fn a_missing_root_is_created_owner_only() -> Result<(), Box<dyn std::error::Error>> {
+        let sandbox = crate::test_support::private_tempdir()?;
+        let root = sandbox.path().join("nested").join("aion-home");
+
+        let (captured, opened) = crate::test_support::CapturedLogs::capture(|| {
+            ConfinedDir::open_or_create(&root).map(drop)
+        });
+        opened?;
+
+        assert_eq!(
+            std::fs::metadata(&root)?.permissions().mode() & 0o777,
+            0o700
+        );
+        assert!(
+            !captured.text()?.contains("tightened a sensitive root"),
+            "a freshly created root must not need tightening"
+        );
+        Ok(())
+    }
+
+    /// The defect this whole surface exists to close: a `~/.aion` left at 0755
+    /// by a conventional umask used to refuse startup and hand the operator a
+    /// `chmod` command. It is our directory and our user owns it, so we fix it.
+    #[test]
+    fn a_permissive_root_we_own_is_tightened_and_logged() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let sandbox = crate::test_support::private_tempdir()?;
+        let root = sandbox.path().join("aion-home");
+        std::fs::create_dir(&root)?;
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o755))?;
+
+        let (captured, opened) =
+            crate::test_support::CapturedLogs::capture(|| ConfinedDir::open(&root).map(drop));
+        opened?;
+
+        assert_eq!(
+            std::fs::metadata(&root)?.permissions().mode() & 0o777,
+            0o700
+        );
+        let logs = captured.text()?;
+        assert!(logs.contains("tightened a sensitive root to owner-only"));
+        assert!(logs.contains(&root.display().to_string()));
+        assert!(logs.contains("0755"), "the previous mode was not logged");
+        assert!(logs.contains("0700"), "the applied mode was not logged");
+        Ok(())
+    }
+
+    /// World-writable is the same defect one notch worse, and gets the same
+    /// answer. The leaf being world-writable is repairable; only an unsafe
+    /// ANCESTOR is not (pinned in `ancestors::tests`).
+    #[test]
+    fn a_world_writable_root_we_own_is_tightened() -> Result<(), Box<dyn std::error::Error>> {
+        let sandbox = crate::test_support::private_tempdir()?;
+        let root = sandbox.path().join("aion-data");
+        std::fs::create_dir(&root)?;
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o777))?;
+
+        ConfinedDir::open_or_create(&root)?;
+
+        assert_eq!(
+            std::fs::metadata(&root)?.permissions().mode() & 0o777,
+            0o700
+        );
+        Ok(())
+    }
+
+    /// An already-private root is left exactly as found, and says nothing.
+    #[test]
+    fn an_already_private_root_is_untouched_and_silent() -> Result<(), Box<dyn std::error::Error>> {
+        let sandbox = crate::test_support::private_tempdir()?;
+        let root = sandbox.path().join("aion-home");
+        std::fs::create_dir(&root)?;
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))?;
+
+        let (captured, opened) =
+            crate::test_support::CapturedLogs::capture(|| ConfinedDir::open(&root).map(drop));
+        opened?;
+
+        assert_eq!(
+            std::fs::metadata(&root)?.permissions().mode() & 0o777,
+            0o700
+        );
+        assert!(captured.text()?.is_empty());
+        Ok(())
+    }
+
+    /// A permissive root owned by someone else is refused, not repaired: it is
+    /// not ours to change, and `fchmod` would fail regardless. The refusal has
+    /// to carry the path, the mode, both uids, and what the operator can do.
+    ///
+    /// `/usr` is a stable stand-in for "root-owned and group/world readable" on
+    /// every Unix. The euid guard is not decoration: running as root, the
+    /// ownership branch would not fire and the test would try to tighten a
+    /// system directory. Gated at runtime rather than with `#[ignore]` so the
+    /// skip is visible in the log.
+    #[test]
+    fn a_permissive_root_owned_by_another_user_refuses_with_remediation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let effective = rustix::process::geteuid().as_raw();
+        if effective == 0 {
+            tracing::info!(
+                "skipping the foreign-owner refusal pin: running as root, which owns every \
+                 candidate directory"
+            );
+            return Ok(());
+        }
+        let foreign = Path::new("/usr");
+        let metadata = std::fs::symlink_metadata(foreign)?;
+        let owner = std::os::unix::fs::MetadataExt::uid(&metadata);
+        let mode = metadata.permissions().mode() & 0o777;
+        let grants_group_or_world = mode & 0o077 != 0;
+        if owner == effective || !grants_group_or_world {
+            tracing::info!(
+                path = %foreign.display(),
+                "skipping the foreign-owner refusal pin: this system's /usr is not a \
+                 foreign-owned, group/world-readable directory"
+            );
+            return Ok(());
+        }
+
+        let error = ConfinedDir::open(foreign)
+            .err()
+            .ok_or("a permissive foreign-owned root was accepted")?;
+        let message = error.to_string();
+        assert!(message.contains("/usr"), "the path was not named");
+        assert!(
+            message.contains(&format!("mode {mode:04o}")),
+            "the offending mode was not named"
+        );
+        assert!(message.contains(&format!("uid {owner}")));
+        assert!(message.contains(&format!("uid {effective}")));
+        assert!(message.contains("run the server as"), "no remediation");
+        assert_eq!(
+            std::fs::symlink_metadata(foreign)?.permissions().mode() & 0o777,
+            mode,
+            "a foreign-owned directory must never be modified"
+        );
+        Ok(())
+    }
+
+    /// A symlinked root refuses rather than resolving. Aion's privacy claim is
+    /// about an inode it opened by no-follow walk; honouring a link would let
+    /// whoever can write the link's parent redirect the entire root, and
+    /// tightening the link's target would be modifying a directory we were
+    /// never pointed at directly.
+    #[test]
+    fn a_symlinked_root_refuses_and_leaves_its_target_alone()
     -> Result<(), Box<dyn std::error::Error>> {
         let sandbox = crate::test_support::private_tempdir()?;
-        let home = sandbox.path().join("aion-home");
-        std::fs::create_dir(&home)?;
-        std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o755))?;
+        let target = sandbox.path().join("elsewhere");
+        let link = sandbox.path().join("aion-home");
+        std::fs::create_dir(&target)?;
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o755))?;
+        std::os::unix::fs::symlink(&target, &link)?;
 
-        let error = validate_private_root(&home, "Aion home")
+        let error = ConfinedDir::open(&link)
             .err()
-            .ok_or("expected permissive home refusal")?;
-        let message = error.to_string();
-        assert!(message.contains("mode 0755"));
-        assert!(message.contains("chmod 700"));
-        assert!(ConfinedDir::open(&home).is_err());
+            .ok_or("a symlinked root was accepted")?;
+        assert!(
+            error.to_string().contains("aion-home"),
+            "the refusal did not name the offending component"
+        );
+        assert!(ConfinedDir::open_or_create(&link).is_err());
+        assert_eq!(
+            std::fs::metadata(&target)?.permissions().mode() & 0o777,
+            0o755,
+            "a symlink target must never be tightened"
+        );
+        Ok(())
+    }
+
+    /// A root whose name is taken by a file is refused, not silently replaced.
+    #[test]
+    fn a_root_occupied_by_a_file_refuses() -> Result<(), Box<dyn std::error::Error>> {
+        let sandbox = crate::test_support::private_tempdir()?;
+        let occupied = sandbox.path().join("aion-home");
+        std::fs::write(&occupied, b"not a directory")?;
+
+        let error = ConfinedDir::open_or_create(&occupied)
+            .err()
+            .ok_or("a file standing in for a root was accepted")?;
+        assert!(error.to_string().contains("aion-home"));
         Ok(())
     }
 }

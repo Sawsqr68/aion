@@ -80,16 +80,27 @@ pub(crate) struct ConfigResolution {
 }
 
 impl ConfigResolution {
-    /// Emit config provenance, resolved roots, and any migration guards in the
-    /// server's existing structured startup-log style.
-    pub(crate) fn validate_private_home(&self) -> Result<(), ServerError> {
+    /// Provision the resolved Aion home as an owner-only directory, refusing
+    /// only what the server cannot make safe on the operator's behalf.
+    pub(crate) fn ensure_private_home(&self) -> Result<(), ServerError> {
         #[cfg(unix)]
         {
-            crate::filesystem::validate_private_root(&self.home, "Aion home").map_err(|error| {
-                ServerError::Config {
-                    message: format!("unsafe Aion home: {error}"),
-                }
-            })?;
+            // The Aion home is Aion's own directory, so Aion provisions it:
+            // created owner-only when absent, tightened when a permissive umask
+            // (or an earlier tool) left it group- or world-readable. Telling the
+            // operator to go and run `chmod 700 ~/.aion` before his own server
+            // would start was the defect this replaces — it is a step the server
+            // could always have taken itself.
+            //
+            // Doing it here, rather than leaving it to whichever surface writes
+            // first, means the home is correct even on a boot whose store and
+            // authoring surfaces never touch the disk. The capability is dropped
+            // immediately; only its construction side effects are wanted.
+            crate::filesystem::ConfinedDir::open_or_create(&self.home)
+                .map(drop)
+                .map_err(|error| ServerError::Config {
+                    message: format!("unsafe Aion home `{}`: {error}", self.home.display()),
+                })?;
         }
         #[cfg(not(unix))]
         {
@@ -169,8 +180,10 @@ fn require_explicit_non_unix_root(
     path: &Path,
 ) -> Result<(), ServerError> {
     require_explicit_root_selection(explicit, label, configuration, path)?;
-    crate::filesystem::validate_private_root(path, label).map_err(|error| ServerError::Config {
-        message: format!("unsafe explicitly configured {label}: {error}"),
+    crate::filesystem::validate_real_directory_root(path, label).map_err(|error| {
+        ServerError::Config {
+            message: format!("unsafe explicitly configured {label}: {error}"),
+        }
     })
 }
 
@@ -275,6 +288,87 @@ fn path_to_string(path: &Path, field: &str) -> Result<String, ServerError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    fn resolution_for(home: PathBuf) -> ConfigResolution {
+        ConfigResolution {
+            home,
+            source: ConfigSource::BuiltInDefaults,
+            data_dir: None,
+            authoring_workspace: None,
+            migrations: Vec::new(),
+        }
+    }
+
+    /// Startup provisions its own home. A first run on a clean machine must not
+    /// require the operator to `mkdir` anything.
+    #[cfg(unix)]
+    #[test]
+    fn a_missing_home_is_created_owner_only() -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let scratch = crate::test_support::private_tempdir()?;
+        let home = scratch.path().join("nested").join(".aion");
+
+        resolution_for(home.clone()).ensure_private_home()?;
+
+        assert_eq!(
+            std::fs::metadata(&home)?.permissions().mode() & 0o777,
+            0o700
+        );
+        Ok(())
+    }
+
+    /// The exact complaint: `~/.aion` sitting at 0755 under a conventional
+    /// umask used to stop a stock server and hand back a `chmod` command.
+    #[cfg(unix)]
+    #[test]
+    fn a_permissive_home_is_tightened_instead_of_refused() -> Result<(), Box<dyn std::error::Error>>
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let scratch = crate::test_support::private_tempdir()?;
+        let home = scratch.path().join(".aion");
+        std::fs::create_dir(&home)?;
+        std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o755))?;
+
+        let resolution = resolution_for(home.clone());
+        let (captured, outcome) =
+            crate::test_support::CapturedLogs::capture(|| resolution.ensure_private_home());
+        outcome?;
+
+        assert_eq!(
+            std::fs::metadata(&home)?.permissions().mode() & 0o777,
+            0o700
+        );
+        assert!(
+            captured
+                .text()?
+                .contains("tightened a sensitive root to owner-only")
+        );
+        Ok(())
+    }
+
+    /// A home Aion cannot make safe still refuses, and the refusal names the
+    /// home, not just the inner filesystem error.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlinked_home_refuses_naming_the_path() -> Result<(), Box<dyn std::error::Error>> {
+        let scratch = crate::test_support::private_tempdir()?;
+        let target = scratch.path().join("elsewhere");
+        let home = scratch.path().join(".aion");
+        std::fs::create_dir(&target)?;
+        std::os::unix::fs::symlink(&target, &home)?;
+
+        let error = resolution_for(home.clone())
+            .ensure_private_home()
+            .err()
+            .ok_or("a symlinked Aion home was accepted")?;
+        let message = error.to_string();
+        assert!(message.contains("unsafe Aion home"));
+        assert!(message.contains(&home.display().to_string()));
+        Ok(())
+    }
 
     #[test]
     fn non_unix_default_sensitive_roots_fail_with_explicit_acl_remediation()
