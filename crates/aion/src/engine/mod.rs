@@ -1,5 +1,7 @@
 //! Engine API, builder, and delegated seam surfaces.
 
+/// Which deployed package versions bind a registering worker.
+pub mod admission;
 /// High-level workflow engine API.
 pub mod api;
 /// Engine durable-schedule API surface and coordinator assembly.
@@ -23,6 +25,9 @@ pub(crate) mod startup;
 /// Crash-window repair sweeps run by startup recovery.
 mod startup_sweeps;
 
+pub use admission::{
+    AdmissionReason, QueueAdmission, ReasonCensus, RequiredContract, UnreachableContract,
+};
 pub use api::Engine;
 pub use api_schedule::schedule_coordinator_workflow_id;
 pub use builder::EngineBuilder;

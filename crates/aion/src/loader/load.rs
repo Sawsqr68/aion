@@ -28,12 +28,27 @@ pub struct LoadOutcome {
 }
 
 /// One queue contract retained under an exact `.v4` package identity.
+///
+/// Content-hash namespacing means several versions of the same logical package
+/// are retained side by side, so a queue's retained contracts are a SET, not a
+/// single current shape. Whether any given one still binds a registering worker
+/// depends on reachability, which is why the record carries the routing and
+/// membership facts the admission gate decides on rather than the contract
+/// alone.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeployedWorkerContract {
     /// Exact package identity requiring the queue surface.
     pub package_version: ContentHash,
     /// Queue-scoped action declarations from the durable contract record.
     pub contract: WorkerContract,
+    /// Every workflow type this exact package version implements, sorted. A
+    /// package archive can carry several entry modules, and each is a distinct
+    /// catalog entry under the SAME content hash.
+    pub workflow_types: Vec<String>,
+    /// Whether any of those workflow types currently routes new starts at this
+    /// version. A route-active version can be started at any moment, so it
+    /// always binds a registering worker.
+    pub route_active: bool,
 }
 
 /// Workflow package entrypoint registered in the embedded runtime.

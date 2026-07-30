@@ -102,8 +102,13 @@ impl Engine {
 
     /// Returns every retained `.v4` package contract declaring `task_queue`.
     ///
-    /// Registration uses this exact-version set so a worker cannot be accepted
-    /// when it would violate any concurrently deployable workflow contract.
+    /// This is the RAW retained set, which under content-hash namespacing holds
+    /// every coexisting version — including ones nothing can reach any more.
+    /// Worker admission must not be decided from it directly; use
+    /// [`Engine::worker_contracts_for_admission`], which splits it into the
+    /// reachable versions that bind a connection and the unreachable ones that
+    /// bind nobody. Demanding the raw set of one connection is what made a
+    /// queue with a single stale version permanently unservable.
     ///
     /// # Errors
     ///
@@ -193,7 +198,8 @@ impl Engine {
     /// route-inactive is required (the route-active version of a type can
     /// never be unloaded), no in-flight start may pin it, no live registry
     /// handle may run on it, and no recoverable instance in the store —
-    /// including a recorded-but-never-started child — may be pinned to it.
+    /// running, durably paused, or a recorded-but-never-started child — may be
+    /// pinned to it.
     ///
     /// The engine owns the mechanism; the embedding platform owns *when* to
     /// unload. There is no automatic garbage collection.
@@ -312,7 +318,16 @@ impl Engine {
 
         let recorded = crate::loader::package_version_of(version);
         let store = self.store();
-        for workflow_id in store.list_active().await? {
+        // `list_active` projects `Running` ONLY — a durably-`Paused` run is
+        // non-terminal, is not respawned by startup recovery (so it holds no
+        // registry handle either), and an operator `resume` puts it straight
+        // back on this exact version. Scanning the active set alone therefore
+        // let an unload delete the module a paused run would resume into,
+        // stranding it permanently. Both projections are scanned; a workflow in
+        // both sets is simply checked twice.
+        let mut recoverable = store.list_active().await?;
+        recoverable.extend(store.list_paused().await?);
+        for workflow_id in recoverable {
             let history = store.read_history(&workflow_id).await?;
             let current_run_pin = history.iter().rev().find_map(|event| match event {
                 Event::WorkflowStarted {

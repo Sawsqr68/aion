@@ -293,6 +293,13 @@ impl WorkflowCatalog {
     /// Every retained `.v4` contract that declares `task_queue`, once per
     /// package identity and in stable identity order.
     ///
+    /// Each record carries the workflow types implemented by that exact package
+    /// version and whether any of them is route-active, because worker
+    /// admission decides which retained versions still bind a connection from
+    /// exactly those facts (see [`Engine::worker_contracts_for_admission`]).
+    ///
+    /// [`Engine::worker_contracts_for_admission`]: crate::Engine::worker_contracts_for_admission
+    ///
     /// # Errors
     ///
     /// Returns [`EngineError::CatalogPoisoned`] when the snapshot lock is poisoned.
@@ -301,8 +308,8 @@ impl WorkflowCatalog {
         task_queue: &str,
     ) -> Result<Vec<DeployedWorkerContract>, EngineError> {
         let snapshot = self.current()?;
-        let mut contracts = BTreeMap::new();
-        for entry in snapshot.by_version.values() {
+        let mut contracts: BTreeMap<String, DeployedWorkerContract> = BTreeMap::new();
+        for ((workflow_type, version), entry) in &snapshot.by_version {
             let Ok(package_contract) = entry.workflow.contract() else {
                 continue;
             };
@@ -313,15 +320,49 @@ impl WorkflowCatalog {
             else {
                 continue;
             };
-            let version = entry.workflow.version().clone();
-            contracts
-                .entry(version.to_string())
-                .or_insert_with(|| DeployedWorkerContract {
-                    package_version: version,
-                    contract: worker.clone(),
-                });
+            let deployed =
+                contracts
+                    .entry(version.to_string())
+                    .or_insert_with(|| DeployedWorkerContract {
+                        package_version: version.clone(),
+                        contract: worker.clone(),
+                        workflow_types: Vec::new(),
+                        route_active: false,
+                    });
+            deployed.workflow_types.push(workflow_type.clone());
+            // Any member type of the archive group routing here makes the whole
+            // version startable, so the flag is a union over the group.
+            deployed.route_active |= snapshot.routed.get(workflow_type) == Some(version);
+        }
+        for deployed in contracts.values_mut() {
+            // `by_version` is a `HashMap`, so the membership list is only stable
+            // once sorted — and this text is rendered into operator-facing
+            // refusals that must not change wording run to run.
+            deployed.workflow_types.sort();
         }
         Ok(contracts.into_values().collect())
+    }
+
+    /// Every `(workflow type, version)` an in-flight start currently pins.
+    ///
+    /// A start that has resolved its version but not yet registered a run
+    /// handle is invisible to the registry, so admission reads this alongside
+    /// it: the run is coming, and the version it will run on binds a worker
+    /// registering in that same window.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EngineError::CatalogPoisoned`] when the pin lock is poisoned.
+    pub fn pinned_start_versions(&self) -> Result<Vec<(String, ContentHash)>, EngineError> {
+        let pins = self
+            .pinned_starts
+            .lock()
+            .map_err(|_| EngineError::CatalogPoisoned)?;
+        Ok(pins
+            .iter()
+            .filter(|(_, count)| **count > 0)
+            .map(|(key, _)| key.clone())
+            .collect())
     }
 
     /// One read of the task queues declared by the retained contracts.
