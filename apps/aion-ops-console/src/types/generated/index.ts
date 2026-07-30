@@ -362,7 +362,7 @@ node: string | null, } } | { "type": "ActivityStarted", "data": {
  */
 envelope: EventEnvelope, 
 /**
- * Activity being executed.
+ * Activity that was dispatched.
  */
 activity_id: ActivityId, 
 /**
@@ -670,6 +670,66 @@ workflow_id: WorkflowId,
  */
 run_id: RunId, } };
 
+export type UnservedActivity = { 
+/**
+ * Activity ordinal recorded in history.
+ */
+activity_id: ActivityId, 
+/**
+ * Activity type the dispatch needs served.
+ */
+activity_type: string, 
+/**
+ * Task queue the dispatch was recorded against.
+ */
+task_queue: string, 
+/**
+ * Node affinity recorded on the dispatch, if any.
+ */
+node: string | null, 
+/**
+ * One-based delivery attempt recorded on the `ActivityStarted`.
+ */
+attempt: number, 
+/**
+ * When the engine recorded the dispatch — NOT when a worker took it, which
+ * is precisely the thing that never happened.
+ */
+dispatched_at: string, 
+/**
+ * Canonical queue-service reason (`NO_QUEUE_DECLARATION`,
+ * `NO_LIVE_POLLERS`, `POLLERS_INCOMPATIBLE`), in the same vocabulary the
+ * dispatch refusals and the server logs use.
+ */
+reason: string, 
+/**
+ * One sentence naming what an operator has to fix.
+ */
+detail: string, 
+/**
+ * Workers connected for the `(namespace, task_queue)` pool, whatever they
+ * serve.
+ */
+workers_in_pool: number, 
+/**
+ * Of those, workers advertising this activity type.
+ */
+workers_serving_activity: number, 
+/**
+ * Of those, workers that also satisfy the dispatch's node pin.
+ */
+compatible_workers: number, 
+/**
+ * Whether THIS server process is currently holding the dispatch in its
+ * selection wait.
+ *
+ * False with a non-empty verdict is its own signal: history says the
+ * activity is in flight, the fleet cannot serve it, and no selection in
+ * this process is even waiting for it — the shape a run left behind by a
+ * restart takes.
+ */
+dispatch_parked: boolean, };
+
 export type DescribeWorkflowResponse = { 
 /**
  * Workflow summary projected from authoritative history, when the workflow
@@ -679,7 +739,18 @@ summary: WorkflowSummary | null,
 /**
  * The run's event history as plain serialized events.
  */
-history: Array<Event>, };
+history: Array<Event>, 
+/**
+ * Every activity this run's history records as dispatched and unterminated
+ * that the fleet cannot currently serve.
+ *
+ * EMPTY is the healthy answer, and it is the only healthy answer: an
+ * activity a live compatible worker could take is never listed here. A
+ * non-empty list is the difference between "a worker is working on it" and
+ * "it is parked with nobody to take it", which the projected
+ * [`crate::WorkflowStatus`] alone cannot express — `Running` covers both.
+ */
+unserved: Array<UnservedActivity>, };
 
 export type ClusterEventMeta = { 
 /**

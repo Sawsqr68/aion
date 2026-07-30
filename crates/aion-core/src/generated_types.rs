@@ -1,5 +1,24 @@
 //! TypeScript export tests for the ops console generated-types pipeline.
+//!
+//! # The registry is manual, so it can be incomplete
+//!
+//! [`ops_console_wire_types`] is a hand-maintained list of `push_type::<T>`
+//! calls. Adding a field of a NEW type to an already-listed type emits a
+//! reference to that new type without emitting its declaration, and the result
+//! is a generated file that does not compile — `error TS2304: Cannot find name`.
+//!
+//! That happened on 2026-07-30: `DescribeWorkflowResponse` gained
+//! `unserved: Vec<UnservedActivity>` and nothing added `UnservedActivity` to the
+//! list. `cargo test --workspace` was fully green, because this file's export
+//! test only WRITES the output and never inspected it. The break surfaced only
+//! when someone ran the console's own `bun run typecheck`.
+//!
+//! [`assert_every_dependency_is_exported`] closes that: the check is computed
+//! from ts-rs's OWN dependency graph for each pushed type, so it cannot drift
+//! from what the emitter actually references, and it needs no hand-maintained
+//! second list to stay true.
 
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 
@@ -13,8 +32,9 @@ use crate::{
     InterventionCommand, InterventionKind, InterventionOutcome, InterventionPrimitive, MessageRole,
     NamespacePlacementWire, OverlapPolicy, PackageVersion, Payload, PayloadElision, ProgressDetail,
     RunId, ScheduleConfig, ScheduleId, SearchAttributeType, SearchAttributeValue, StopKind,
-    TimerCancelCause, TimerId, TimerIdKind, TriggerSpec, WithTimeoutOutcome, WorkerDeathReason,
-    WorkerTransport, WorkflowError, WorkflowFilter, WorkflowId, WorkflowStatus, WorkflowSummary,
+    TimerCancelCause, TimerId, TimerIdKind, TriggerSpec, UnservedActivity, WithTimeoutOutcome,
+    WorkerDeathReason, WorkerTransport, WorkflowError, WorkflowFilter, WorkflowId, WorkflowStatus,
+    WorkflowSummary,
 };
 
 const OPS_CONSOLE_GENERATED_DIR: &str = "../../apps/aion-ops-console/src/types/generated";
@@ -38,81 +58,143 @@ fn export_ops_console_wire_types() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn ops_console_wire_types() -> Result<String, ts_rs::ExportError> {
-    let config = Config::new().with_out_dir(".").with_large_int("number");
-    let mut output = String::from(GENERATED_HEADER);
+/// Names declared by hand in the output rather than by a `push_type` call.
+///
+/// `Namespace` is a bare alias with no Rust type behind it, so ts-rs has nothing
+/// to export for it and it is written as a literal below. Anything added here
+/// must be genuinely emitted by the literal pushes, or the dependency check
+/// stops meaning anything.
+const MANUALLY_DECLARED: [&str; 1] = ["Namespace"];
 
-    push_type::<WorkflowId>(&config, &mut output)?;
-    push_type::<RunId>(&config, &mut output)?;
-    push_type::<PackageVersion>(&config, &mut output)?;
-    push_type::<ScheduleId>(&config, &mut output)?;
-    push_type::<ActivityId>(&config, &mut output)?;
-    push_type::<TimerIdKind>(&config, &mut output)?;
-    push_type::<TimerId>(&config, &mut output)?;
-    push_type::<TimerCancelCause>(&config, &mut output)?;
-    output.push_str("export type Namespace = string;\n\n");
-    push_type::<ContentType>(&config, &mut output)?;
-    push_type::<PayloadElision>(&config, &mut output)?;
-    push_type::<Payload>(&config, &mut output)?;
-    push_type::<TriggerSpec>(&config, &mut output)?;
-    push_type::<OverlapPolicy>(&config, &mut output)?;
-    push_type::<CatchUpPolicy>(&config, &mut output)?;
-    push_type::<ScheduleConfig>(&config, &mut output)?;
-    push_type::<WorkflowError>(&config, &mut output)?;
-    push_type::<ActivityErrorKind>(&config, &mut output)?;
-    push_type::<ActivityError>(&config, &mut output)?;
-    push_type::<WorkflowStatus>(&config, &mut output)?;
-    push_type::<WorkflowFilter>(&config, &mut output)?;
-    push_type::<WorkflowSummary>(&config, &mut output)?;
-    push_type::<SearchAttributeType>(&config, &mut output)?;
-    push_type::<SearchAttributeValue>(&config, &mut output)?;
-    push_type::<EventEnvelope>(&config, &mut output)?;
-    push_type::<WithTimeoutOutcome>(&config, &mut output)?;
-    push_type::<Event>(&config, &mut output)?;
-    push_type::<DescribeWorkflowResponse>(&config, &mut output)?;
+/// The emitter's accumulating state: the text so far, plus the two name sets
+/// reconciled at the end.
+struct Pipeline {
+    config: Config,
+    output: String,
+    /// Every type this pipeline DECLARES.
+    exported: BTreeSet<String>,
+    /// Every type those declarations REFERENCE, per ts-rs's own dependency
+    /// graph.
+    required: BTreeSet<String>,
+}
+
+fn ops_console_wire_types() -> Result<String, ts_rs::ExportError> {
+    let mut pipeline = Pipeline {
+        config: Config::new().with_out_dir(".").with_large_int("number"),
+        output: String::from(GENERATED_HEADER),
+        exported: BTreeSet::from(MANUALLY_DECLARED.map(String::from)),
+        required: BTreeSet::new(),
+    };
+
+    push_type::<WorkflowId>(&mut pipeline)?;
+    push_type::<RunId>(&mut pipeline)?;
+    push_type::<PackageVersion>(&mut pipeline)?;
+    push_type::<ScheduleId>(&mut pipeline)?;
+    push_type::<ActivityId>(&mut pipeline)?;
+    push_type::<TimerIdKind>(&mut pipeline)?;
+    push_type::<TimerId>(&mut pipeline)?;
+    push_type::<TimerCancelCause>(&mut pipeline)?;
+    pipeline
+        .output
+        .push_str("export type Namespace = string;\n\n");
+    push_type::<ContentType>(&mut pipeline)?;
+    push_type::<PayloadElision>(&mut pipeline)?;
+    push_type::<Payload>(&mut pipeline)?;
+    push_type::<TriggerSpec>(&mut pipeline)?;
+    push_type::<OverlapPolicy>(&mut pipeline)?;
+    push_type::<CatchUpPolicy>(&mut pipeline)?;
+    push_type::<ScheduleConfig>(&mut pipeline)?;
+    push_type::<WorkflowError>(&mut pipeline)?;
+    push_type::<ActivityErrorKind>(&mut pipeline)?;
+    push_type::<ActivityError>(&mut pipeline)?;
+    push_type::<WorkflowStatus>(&mut pipeline)?;
+    push_type::<WorkflowFilter>(&mut pipeline)?;
+    push_type::<WorkflowSummary>(&mut pipeline)?;
+    push_type::<SearchAttributeType>(&mut pipeline)?;
+    push_type::<SearchAttributeValue>(&mut pipeline)?;
+    push_type::<EventEnvelope>(&mut pipeline)?;
+    push_type::<WithTimeoutOutcome>(&mut pipeline)?;
+    push_type::<Event>(&mut pipeline)?;
+    push_type::<UnservedActivity>(&mut pipeline)?;
+    push_type::<DescribeWorkflowResponse>(&mut pipeline)?;
 
     // WS3 cluster real-time channel wire types. The aion-proto frame envelopes
     // (StreamedClusterEvent etc.) are intentionally NOT exported here — like StreamedEvent on the
     // workflow path, the outer frame wrappers are hand-decoded on the TS side; only these inner
     // aion-core payload types cross the ts-rs boundary.
-    push_type::<ClusterEventMeta>(&config, &mut output)?;
-    push_type::<WorkerTransport>(&config, &mut output)?;
-    push_type::<WorkerDeathReason>(&config, &mut output)?;
-    push_type::<NamespacePlacementWire>(&config, &mut output)?;
-    push_type::<ClusterEvent>(&config, &mut output)?;
-    push_type::<ClusterPeer>(&config, &mut output)?;
-    push_type::<ClusterShard>(&config, &mut output)?;
-    push_type::<ClusterWorker>(&config, &mut output)?;
-    push_type::<ClusterSnapshot>(&config, &mut output)?;
-    push_type::<ClusterCommand>(&config, &mut output)?;
-    push_type::<ClusterStreamError>(&config, &mut output)?;
+    push_type::<ClusterEventMeta>(&mut pipeline)?;
+    push_type::<WorkerTransport>(&mut pipeline)?;
+    push_type::<WorkerDeathReason>(&mut pipeline)?;
+    push_type::<NamespacePlacementWire>(&mut pipeline)?;
+    push_type::<ClusterEvent>(&mut pipeline)?;
+    push_type::<ClusterPeer>(&mut pipeline)?;
+    push_type::<ClusterShard>(&mut pipeline)?;
+    push_type::<ClusterWorker>(&mut pipeline)?;
+    push_type::<ClusterSnapshot>(&mut pipeline)?;
+    push_type::<ClusterCommand>(&mut pipeline)?;
+    push_type::<ClusterStreamError>(&mut pipeline)?;
 
     // Agent-observability + intervention real-time channel wire types. Like the cluster
     // channel, only these inner aion-core payload types cross the ts-rs boundary; any outer
     // frame envelopes are hand-decoded on the TS side.
-    push_type::<MessageRole>(&config, &mut output)?;
-    push_type::<ProgressDetail>(&config, &mut output)?;
-    push_type::<StopKind>(&config, &mut output)?;
-    push_type::<ActivityEventKind>(&config, &mut output)?;
-    push_type::<ActivityEvent>(&config, &mut output)?;
-    push_type::<InjectPriority>(&config, &mut output)?;
-    push_type::<ApprovalDecision>(&config, &mut output)?;
-    push_type::<InterventionPrimitive>(&config, &mut output)?;
-    push_type::<InterventionKind>(&config, &mut output)?;
-    push_type::<InterventionCommand>(&config, &mut output)?;
-    push_type::<InterventionCapabilities>(&config, &mut output)?;
-    push_type::<InterventionOutcome>(&config, &mut output)?;
+    push_type::<MessageRole>(&mut pipeline)?;
+    push_type::<ProgressDetail>(&mut pipeline)?;
+    push_type::<StopKind>(&mut pipeline)?;
+    push_type::<ActivityEventKind>(&mut pipeline)?;
+    push_type::<ActivityEvent>(&mut pipeline)?;
+    push_type::<InjectPriority>(&mut pipeline)?;
+    push_type::<ApprovalDecision>(&mut pipeline)?;
+    push_type::<InterventionPrimitive>(&mut pipeline)?;
+    push_type::<InterventionKind>(&mut pipeline)?;
+    push_type::<InterventionCommand>(&mut pipeline)?;
+    push_type::<InterventionCapabilities>(&mut pipeline)?;
+    push_type::<InterventionOutcome>(&mut pipeline)?;
 
-    Ok(output)
+    assert_every_dependency_is_exported(&pipeline);
+    Ok(pipeline.output)
 }
 
-fn push_type<T>(config: &Config, output: &mut String) -> Result<(), ts_rs::ExportError>
+/// Every type the emitted declarations reference must ALSO be declared here.
+///
+/// The required set is ts-rs's own `dependencies()` for each pushed type, so it
+/// is derived from the same graph the emitter walks rather than from a second
+/// list somebody has to remember to update. A name in `required` but not in
+/// `exported` is exactly the `error TS2304: Cannot find name` the console's
+/// typecheck reports, caught here instead — in the Rust battery that changed the
+/// type, by the person who changed it.
+///
+/// # Panics
+///
+/// Panics naming every missing type. A generated file that cannot compile is not
+/// a warning: emitting it would hand a broken surface to the console and to
+/// every consumer of these bindings.
+fn assert_every_dependency_is_exported(pipeline: &Pipeline) {
+    let missing = pipeline
+        .required
+        .difference(&pipeline.exported)
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(
+        missing.is_empty(),
+        "the ops-console bindings reference {} type(s) they never declare: {}. \
+         Add a `push_type::<T>` call for each in `ops_console_wire_types`; without it the \
+         generated index.ts fails to compile with `Cannot find name`.",
+        missing.len(),
+        missing.join(", "),
+    );
+}
+
+fn push_type<T>(pipeline: &mut Pipeline) -> Result<(), ts_rs::ExportError>
 where
     T: TS + 'static,
 {
-    let declaration = T::export_to_string(config)?;
-    output.push_str(strip_ts_rs_prelude(&declaration));
-    output.push('\n');
+    let declaration = T::export_to_string(&pipeline.config)?;
+    pipeline.output.push_str(strip_ts_rs_prelude(&declaration));
+    pipeline.output.push('\n');
+    pipeline.exported.insert(T::ident(&pipeline.config));
+    for dependency in T::dependencies(&pipeline.config) {
+        pipeline.required.insert(dependency.ts_name);
+    }
     Ok(())
 }
 
