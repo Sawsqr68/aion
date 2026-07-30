@@ -88,7 +88,9 @@ fn opens_action_block(stream: &mut Stream) -> bool {
 fn is_config_key(kind: &TokenKind) -> bool {
     matches!(
         kind,
-        TokenKind::Keyword(Keyword::Node | Keyword::Timeout | Keyword::Retry | Keyword::Advisory)
+        TokenKind::Keyword(
+            Keyword::Node | Keyword::Timeout | Keyword::Retry | Keyword::Advisory | Keyword::Agent,
+        )
     )
 }
 

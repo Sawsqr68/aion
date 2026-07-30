@@ -419,6 +419,20 @@ pub struct ConfigLine {
     /// the action is a side channel — its failure warns on the run and
     /// never faults the calling step (RUNTIME-OPERATIONS.md R5).
     pub advisory: Option<Span>,
+    /// The `agent` marker, carrying its own source span.
+    ///
+    /// Declaration-only, like `advisory`: an action IS an agent seam or is
+    /// not. It says the action's one `String` parameter carries a prompt and
+    /// its `String` result carries the reply, which is the whole of what an
+    /// adapter needs to know to hand the call to a harness instead of running
+    /// it as an ordinary activity.
+    ///
+    /// It exists because that fact was previously carried in a Rust constant
+    /// listing action names by hand (`AGENT_ACTIVITY_TYPES`), so the language
+    /// could declare an agent call and the worker could not know it had. A
+    /// list of names in another language is not a contract; a marker on the
+    /// declaration is.
+    pub agent: Option<Span>,
     /// Optional `node <name>` routing key.
     pub node: Option<ConfigValue>,
     /// Optional `timeout <duration>` key.

@@ -110,6 +110,9 @@ pub enum Keyword {
     Retry,
     /// `advisory`.
     Advisory,
+    /// `agent` — the action's single String input is an agent prompt and its
+    /// single String output is the agent's reply.
+    Agent,
     /// `every`.
     Every,
     /// `backoff`.
@@ -205,6 +208,7 @@ impl Keyword {
             Self::Timeout => "timeout",
             Self::Retry => "retry",
             Self::Advisory => "advisory",
+            Self::Agent => "agent",
             Self::Every => "every",
             Self::Backoff => "backoff",
             Self::Node => "node",
@@ -268,6 +272,7 @@ impl Keyword {
             "timeout" => Some(Self::Timeout),
             "retry" => Some(Self::Retry),
             "advisory" => Some(Self::Advisory),
+            "agent" => Some(Self::Agent),
             "every" => Some(Self::Every),
             "backoff" => Some(Self::Backoff),
             "node" => Some(Self::Node),

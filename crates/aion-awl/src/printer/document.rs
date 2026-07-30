@@ -440,6 +440,12 @@ pub(super) fn print_config_line(printer: &mut Printer, indent: usize, config: &C
     if config.advisory.is_some() {
         parts.push("advisory".to_owned());
     }
+    // `agent` sits with `advisory` for the same reason: both classify the
+    // action rather than configure its delivery, and the keys after them
+    // configure how that class is delivered.
+    if config.agent.is_some() {
+        parts.push("agent".to_owned());
+    }
     if let Some(node) = &config.node {
         parts.push(format!("node {}", node.name));
     }

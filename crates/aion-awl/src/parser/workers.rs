@@ -208,7 +208,11 @@ pub(super) fn parse_config_block(stream: &mut Stream) -> Result<Option<ConfigLin
             matches!(
                 token.kind,
                 TokenKind::Keyword(
-                    Keyword::Node | Keyword::Timeout | Keyword::Retry | Keyword::Advisory
+                    Keyword::Node
+                        | Keyword::Timeout
+                        | Keyword::Retry
+                        | Keyword::Advisory
+                        | Keyword::Agent
                 )
             )
         });
@@ -232,6 +236,7 @@ pub(super) fn parse_config_line(
     let mut advisory = None;
     let mut node = None;
     let mut timeout = None;
+    let mut agent = None;
     let mut retry = None;
     loop {
         match stream.peek() {
@@ -244,6 +249,13 @@ pub(super) fn parse_config_line(
                             return Err(ParseError::new(key_span, "duplicate `advisory` key"));
                         }
                         advisory = Some(key_span);
+                    }
+                    TokenKind::Keyword(Keyword::Agent) => {
+                        stream.next();
+                        if agent.is_some() {
+                            return Err(ParseError::new(key_span, "duplicate `agent` key"));
+                        }
+                        agent = Some(key_span);
                     }
                     TokenKind::Keyword(Keyword::Node) => {
                         stream.next();
@@ -299,6 +311,7 @@ pub(super) fn parse_config_line(
         }
         let trailing = stream.end_line()?;
         return Ok(ConfigLine {
+            agent,
             span: start,
             lead,
             trailing,

@@ -432,6 +432,7 @@ pub(super) fn soft_keyword(keyword: crate::Keyword) -> bool {
             | K::Timeout
             | K::Retry
             | K::Advisory
+            | K::Agent
             | K::Every
             | K::Backoff
             | K::Empty
