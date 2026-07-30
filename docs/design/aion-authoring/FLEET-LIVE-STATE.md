@@ -1,5 +1,59 @@
 # Fleet + lanes: LIVE STATE (resume point)
 
+## ✅✅ RESTORATION DONE — 2026-07-30 12:41Z. THE FULL AWL ASSISTANT RAN.
+
+**The restoration sequence banked at `9fb28133` is executed and complete.**
+Everything below it that describes the restoration as "staged but NOT done"
+is now historical — read this block first.
+
+Queue `default` is **up**: `available: true`, `connected_workers: 1`, worker
+`registered liminal worker in-band` at 12:34:48Z with no refusal after it.
+The 974 refusals in `~/.aion/server.log` all predate 11:08Z.
+
+**What is deployed and route-active right now** (`GET /deploy/versions`):
+
+| type | hash | source |
+|---|---|---|
+| `assistant` | `d9774285e352824b` | `examples/assistant/awl/assistant.awl` — the full port |
+| `assistant_spike` | `256ceddad674c60c` | the agreeing 3-arg spike |
+| `agent_dev` | `8186d26d2e60d702` | unchanged |
+| `shell_run` | `b2177c0d64272337` | unchanged |
+| `staged_rounds` | `5f0f3bf19ed9b6d2` | unchanged |
+
+Five superseded versions (four `assistant`, one `assistant_spike`) were
+unloaded — a stale version is still a reachable contract and still gates
+admission, which is what took the queue down in the first place.
+
+**Both documents were deployed through `PUT /awl/documents/{path}` +
+`POST /awl/deploy`, i.e. the studio path, not the CLI** — deliberately, because
+a CLI deploy leaves the document invisible in the studio (#91). Tom can see
+both in the authoring workspace.
+
+**The live proof:** workflow `1b3afbde-823e-4374-8910-7e3fa3a83fae`, 14
+events, provision → round 1 → signal → round 2 → signal → `WorkflowCompleted`
+with `{"outcome":"ended","disposition":"OperatorEnded","rounds":2, …}` — every
+field exact. Round 2's dispatch carried the operator's message verbatim into
+the same norn session and the agent answered from memory of round 1.
+**Full record with the recorded bytes: `ASSISTANT-AWL-LIVE-PROOF.md`.**
+
+**What it does NOT prove, stated there and repeated here:** the `stalled` and
+`capped` budget-exhaustion paths never executed (covered analytically by
+`crates/aion-awl/tests/assistant_example.rs`, not live); the degraded-session
+resume path never executed (fresh session — the epoch fix is proven by hand,
+separately); and the prompt is still JSON-wrapped on the wire (#98).
+
+**Live processes:** server pid 99844 (`./target/release/aion server`, the
+20:13 release binary — deliberately NOT rebuilt). Worker pid 35591
+(`agent-dev-worker --address 127.0.0.1:50061 --norn-account default
+--norn-allow-degraded-session`), logging to `~/.aion/worker-assistant.log`.
+
+**Two new seams found while proving it, both filed:** `/workflows/start`
+demands `content_type: "application/json"` while `/workflows/history` returns
+`"Json"` for the same payload (read and write disagree, so a payload read off
+a run cannot be resubmitted); and history elides payload bytes over a default
+limit unless `payload_limit_bytes: 0` is passed, hiding exactly the agent
+replies an operator wants to read.
+
 ## ✅ PUSHED — 2026-07-30 ~10:10Z. Board clear, nothing in flight.
 
 **`origin/main` is `c443d584`.** 29 commits pushed (`8fb4c153..c443d584`);
