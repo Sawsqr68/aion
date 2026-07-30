@@ -4,7 +4,6 @@ use std::error::Error;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use super::{emitted_archived_exam, emitted_fixture};
 
@@ -141,23 +140,12 @@ fn compile_generated_modules(
             module_source,
         )?;
     }
-    let output = Command::new("gleam")
-        .arg("build")
-        .current_dir(&project)
-        .output()
-        .map_err(|error| {
-            io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("gleam binary is required for AWL emitter compile-proof tests: {error}"),
-            )
-        })?;
-    assert!(
-        output.status.success(),
-        "gleam build failed\nstatus: {}\nstdout:\n{}\nstderr:\n{}",
-        output.status,
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
+    // The proof is the `.beam` per module, not merely a zero exit: this test
+    // cannot pass without having compiled every emitted module. A failure in
+    // `gleam`'s own dependency layer is retried and then named as an
+    // infrastructure failure; a rejected module fails immediately.
+    let module_names: Vec<&str> = modules.iter().map(|(name, _)| *name).collect();
+    crate::gleam_test_support::compile_project(&project, &module_names)?;
     Ok(())
 }
 

@@ -102,33 +102,12 @@ pub(crate) fn gleam_build(modules: &[(&str, &str)]) -> Result<Vec<PathBuf>, Box<
     for (name, source) in modules {
         fs::write(project.join("src").join(format!("{name}.gleam")), source)?;
     }
-    let output = Command::new("gleam")
-        .arg("build")
-        .current_dir(&project)
-        .output()
-        .map_err(|error| {
-            io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("gleam binary is required for the runtime codec proof: {error}"),
-            )
-        })?;
-    if !output.status.success() {
-        return Err(format!(
-            "gleam build failed\nstdout:\n{}\nstderr:\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
-    }
-    let mut ebins = Vec::new();
-    let packages = project.join("build/dev/erlang");
-    for entry in fs::read_dir(&packages)? {
-        let ebin = entry?.path().join("ebin");
-        if ebin.is_dir() {
-            ebins.push(ebin);
-        }
-    }
-    Ok(ebins)
+    // The shared runner proves a `.beam` per module (so no proof can pass
+    // without having compiled), retries a Hex-registry failure, and names an
+    // infrastructure failure as one instead of blaming the emitter.
+    Ok(crate::gleam_test_support::compile_project(
+        &project, &names,
+    )?)
 }
 
 /// Build the production FFI namespace used by the cross-module child proof.

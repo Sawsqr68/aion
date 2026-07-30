@@ -148,6 +148,68 @@ with stdout and stderr interpolated (`compile.rs:154`), so the failure text is
 available to classify on — no new plumbing needed. Pick one, state why, and make
 the skip path impossible to confuse with a pass.
 
+### R2 decision — a fetch failure is a bounded retry, then a NAMED FAILURE
+
+**Decided: the fourth option — classify, retry a bounded number of times, and if
+every attempt fails, FAIL, with the message naming an infrastructure failure as
+one. A fetch failure is never a skip.** Landed in
+`crates/aion-awl/tests/test_support/gleam.rs`, used by all four `gleam build`
+call sites in the crate (`tests/emitter/compile.rs`,
+`tests/flow_vocab_compile_proof.rs`, `tests/flow_vocab_b4_compile_proof.rs`,
+`tests/runtime_codecs/harness.rs`), which all carried the same
+copy-pasted bare `assert!`.
+
+Why this and not the others:
+
+- **Not a skip.** A tolerated fetch failure is exactly the vacuity this cycle is
+  about: the proof would report `ok` having compiled nothing.
+- **Not vendoring.** It removes the fetch, but it means committing and then
+  maintaining `gleam_stdlib` and `gleam_json` sources against a version range the
+  emitted code is deliberately loose about (`>= 0.34.0 and < 2.0.0`,
+  `>= 2.0.0 and < 4.0.0`). It buys hermeticity at the cost of pinning the proof
+  to one resolution of a range whose whole point is that it floats — and the CI
+  failure it prevents is transient anyway.
+- **Retry cannot weaken the assertion.** Classification decides only *whether to
+  retry* and *what the message calls the failure*. Both branches still end in a
+  failed test, so a misclassification can never turn red into green. That is why
+  an *unrecognised* failure is classified as an emitter defect: the safe polarity
+  is "blame the code, make a human look".
+
+How the three cases are now distinguished, all three observed:
+
+| case | verdict | log |
+| --- | --- | --- |
+| `gleam` absent | skip, `Ok(())` | `SKIPPED (PROVES NOTHING): … at crates/aion-awl/tests/emitter/compile.rs:15 compiled nothing` |
+| `gleam` rejects the sources | FAILED, no retry | `AWL EMITTER DEFECT: gleam rejected the generated Gleam (1 attempt(s), …)` |
+| dependency layer fails, recovers | PASSED after retries | 2 × `attempt n/5 … failed in its dependency layer (the Hex registry), not on the generated Gleam; retrying`, then `COMPILED 2 module(s) … in 3 attempt(s)` |
+| dependency layer fails throughout | FAILED, named | `INFRASTRUCTURE FAILURE, NOT AN AWL DEFECT: gleam build failed inside its own dependency layer (the Hex registry) on all 5 attempt(s). The emitted Gleam was never compiled, so this run proves nothing about the emitter` |
+
+Mechanics, and where each number came from:
+
+- **Classification** matches only `gleam`'s own `error: <Title>` lines against its
+  dependency-layer error titles (`Failed to download package`,
+  `Failure opening tar archive` — the CI failure — `Hex API failure`,
+  `HTTP error`). A quoted source snippet in a compile error therefore cannot be
+  mistaken for a registry failure. `Dependency resolution failed` is ambiguous —
+  it covers both an unreachable registry and a genuinely unsatisfiable
+  requirement — so it counts as infrastructure only when the body also names the
+  registry endpoint or the transport (`repo.hex.pm`, `error sending request`).
+- **5 attempts, `50ms × attempt` backoff** are not invented defaults: they match
+  the repository's only bounded-retry-of-a-transient-external-failure precedent
+  in a test, `crates/aion-server/tests/outbox_transport_e2e.rs`
+  (`for attempt in 0..5`, retrying only the transient classification, asserting
+  on the final attempt).
+- **Non-vacuity is now structural, not conventional.** A zero exit from
+  `gleam build` is no longer accepted as proof: the runner requires a `.beam` for
+  every module it wrote, under `build/dev/erlang/*/ebin`. Removing a module from
+  the compile set while leaving it in the expected list fails the test.
+- **The skip is visible.** The gate writes to the process's real `stderr` handle,
+  which `libtest` does not capture (it captures only the `print!`/`eprint!`
+  macros). The old `println!` was shown *only for a failing test*, so a skip and
+  a pass were the same two characters — `ok` — in the log. `tracing::info!` was
+  rejected for the opposite reason: no test binary in the crate installs a
+  subscriber, so the line would have vanished entirely.
+
 ## R3 — only then, the four libsql failures
 
 Once R1 lands, the four `libsql-backend` failures become visible and can be fixed

@@ -9,9 +9,7 @@ mod gleam_test_support;
 
 use std::error::Error;
 use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use aion_awl::{check_in, emit_in, parse};
 
@@ -58,22 +56,6 @@ fn flow_vocab_b1_fixture_compiles_under_gleam() -> Result<(), Box<dyn Error>> {
     )?;
     fs::write(project.join("src/flow_vocab_b1.gleam"), generated)?;
 
-    let output = Command::new("gleam")
-        .arg("build")
-        .current_dir(&project)
-        .output()
-        .map_err(|error| {
-            io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("gleam binary is required for AWL emitter compile-proof tests: {error}"),
-            )
-        })?;
-    assert!(
-        output.status.success(),
-        "gleam build failed\nstatus: {}\nstdout:\n{}\nstderr:\n{}",
-        output.status,
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
+    crate::gleam_test_support::compile_project(&project, &["flow_vocab_b1"])?;
     Ok(())
 }
