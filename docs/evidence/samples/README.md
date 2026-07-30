@@ -41,8 +41,35 @@ The binary sampled predates HEAD (its symbol is `park_for_workers`, plural, whic
 longer exists), but the hazard is unchanged in today's `park_for_worker(None)`. This
 is not a stale-binary artefact.
 
-The observed process was pid 15202 on Tom's box. It was left **running** rather
-than killed, so whoever takes #72 can attach to a real hung instance; it holds a
-store writer lock on a throwaway proof data directory only, so killing it is safe
-at any time and costs nothing but the live reproduction. It will not survive a
-reboot.
+The observed process was pid 15202 on Tom's box, left **running** so whoever took
+#72 could attach to a real hung instance.
+
+## Closed, and how the corpse itself said goodbye
+
+Fixed in `953f9fd9`. `DrainState`'s latch became a `watch` channel with an
+awaitable `wait_for_drain()`, and the arrival wait races it in both arms — so the
+park ends on the drain instead of only on a worker that may never come.
+
+pid 15202 was released after the fix landed, and its last act was one more
+demonstration of the defect it had been kept for. It had then been wedged for
+**4 hours 49 minutes**:
+
+```
+$ kill -TERM 15202     # → still alive 3s later
+$ kill -9 15202        # → reaped
+```
+
+That is the whole incident in two lines. A graceful stop did nothing, because the
+process had long since finished shutting down and could not leave; only SIGKILL
+could end it. An operator doing exactly what the manual says — signal, wait,
+redeploy — waits forever.
+
+Two honest limits on what is proven. The pin
+(`crates/aion-server/tests/shutdown_process_exit_e2e.rs`) exercises a real child
+process, a real SIGTERM, and the real drain coordinator, and it fails by hanging
+for 30s when the race is removed. What it does not measure is the **release
+binary** and the writer lock: the lock is released as a consequence of the process
+ending, which the pin proves, but the running `aion server` on this box is still
+the old binary. **Until it is rebuilt and redeployed, Tom's redeploy flow is fixed
+in the tree and not on his machine** — and redeploying his live server is his call,
+not one to make for him.
