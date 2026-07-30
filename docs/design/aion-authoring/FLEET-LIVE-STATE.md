@@ -114,6 +114,21 @@ triggered it, and it is down now and was not before. No clean workaround:
 `/deploy/unload` correctly refuses it and there is nothing to re-point to. The
 fix is the restoration.
 
+🔴 **`agent-dev-worker` IS NOT RUNNING — I stopped it (task #94).** Refused, it
+re-dialled every 500ms forever and the server re-logged the full ~1.5KB refusal
+each time: **100KB of server.log per 30 seconds, ~12MB/hour**, 300 of the last
+300 lines identical. SIGTERM froze the log instantly, which is the proof. A
+CONTRACT refusal is permanent until a human changes something, so retrying it
+2/s cannot ever succeed and buries every other line.
+
+**After #93 lands, the restart command is:**
+```
+./examples/agent-dev/worker/target/release/agent-dev-worker \
+    --address 127.0.0.1:50061 --norn-account default
+```
+(plus whatever `--allow-degraded-session` opt-in Agent A adds, which is what
+makes the owner's parked assistant sessions resumable at all — task #89.)
+
 **Still owed:** the staged-rounds worker (pid 49833) is still an old binary.
 
 **Do not tell Tom any of this as status.** Fix it, prove it live, then tell him
