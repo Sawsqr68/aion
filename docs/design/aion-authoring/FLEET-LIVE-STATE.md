@@ -1,5 +1,118 @@
 # Fleet + lanes: LIVE STATE (resume point)
 
+## 🔴 RESUME HERE — 2026-07-31 late morning. main `c5260d39`, PUSHED.
+
+Four commits landed today, all pushed. Workspace clippy exit 0 throughout.
+Nothing is in flight at my hand; one read-only scout is mapping the empty-queue
+dispatch path for condition 3.
+
+### THE BUILD LIST IS NO LONGER MINE TO INFER
+
+Waffles STATED what "completely ready" means for Manifold (via Cally, 22:31Z
+30 Jul). Five conditions, none of them a feature. Full text in task #105.
+
+| # | Condition | State |
+|---|---|---|
+| 1 | AWL authoring proven end to end, scoped contract admitted under queue-routed serving | believed discharged (#93/#99 + `ASSISTANT-AWL-LIVE-PROOF.md`) — verify the wording, then close |
+| 2 | Definition-iteration story — unload/GC **or** a sanctioned throwaway-server pattern, **my choice** | ✅ ANSWERED: unload is already landed. Visibility half BUILT (`1a2551de`). Prune option NOT built; when it comes it defaults OFF and says so. |
+| 3 | Empty-queue dispatch fails loudly or parks VISIBLY (#87) | **NEXT. A build, not a ruling.** Now a release condition. |
+| 4 | Cancel semantics stated as a CONTRACT, even if "no cascade" | ✅ DISCHARGED `c5260d39` — `docs/CANCELLATION-CONTRACT.md` |
+| 5 | beamr JIT re-entry fix pushed and tagged (#82) | Artemis' `4e94cec` is on beamr main but UNPUSHED, held on Tom's box. Not mine. |
+
+**Gleam (#88) is OFF Manifold's critical path but the estate question is still
+Tom's and still OPEN. Cally's instruction, repeated twice and unchanged: do NOT
+write the Gleam limitation up as a deliberate boundary. A boundary that becomes
+true because nobody answered is not a decision.**
+
+### What landed today
+
+1. **`241b1a06` — the differential scored its own agreement as noise.** The
+   harness generated `"x"` for every string witness including one whose schema
+   declares `minLength: 3`, so `import_constraints` had been starting with
+   input its own contract forbids for the whole life of the harness. When the
+   boundary work made enforcement real, BOTH backends refused identically —
+   agreement, the one signal the differential exists to produce — and
+   `fold_runs` scored it `INFRA: engine run error`. Now: the generator honours
+   the constraint keywords; every witness is judged against the schema it was
+   generated for; identical refusals are an AGREED-REFUSAL bucket pinned empty,
+   and a one-sided or differing refusal is a DIVERGENCE (it was noise before
+   too). Package hashes aliased out of the comparison.
+
+2. **`bfaa42b9` — a contract nothing could compile validated nothing,
+   silently.** The witness check immediately found two fixtures whose DERIVED
+   contract `jsonschema` cannot compile. The engine's answer to a schema it
+   cannot compile is to log a warning and admit the payload UNCHECKED
+   (`catalog_admission.rs:134-143`) — so those workflows ran with input
+   validation off and every signal said fine.
+   *Cause one:* a schema door is a complete document rooted at ITS root; the
+   deriver pasted it in verbatim as a nested definition, silently changing what
+   `#` means, so every internal `$ref` pointed at nothing. The checker had it
+   right (`checker/project.rs:272-283`); only the deriver disagreed. Fixed by
+   re-rooting a door's internal pointers under wherever the door lands —
+   positional, nothing renamed, no collisions.
+   *Cause two:* `^{[0-9]+}$` is legal ECMA-262 and rejected by the engine's
+   regex engine.
+   *The general guard:* `aion awl check` now proves the contract it DERIVES
+   compiles, via `aion_package::schema_is_usable` — the same compilation the
+   engine performs at admission. Previously `check` was parse-and-typecheck
+   only and could say ok over a hollow contract. **This guard has its observed
+   red** (two uncompilable fixtures + one fixture restored to a real bucket),
+   which satisfies Waffles' new no-observed-red-no-gate-promotion law.
+
+3. **`1a2551de` — deploy now names the versions it superseded.** See the
+   correction below.
+
+4. **`c5260d39` — the cancellation contract, written down.**
+
+### 🔴 I KILLED ONE OF MY OWN FINDINGS. #101 WAS WRONG.
+
+I had recorded, and Cally had RELAYED TO WAFFLES, that deploy is a one-way door
+with no way to remove a version. **False.** `Engine::unload_workflow_version`
+(`crates/aion/src/engine/reload.rs:221-273`) exists, is wired to
+`POST /deploy/unload` and `aion unload <type> <hash>`, refuses on five ordered
+liveness pins, rolls the catalog back on failure, and deletes the persisted
+archive so the version cannot resurrect at restart. It was a RULED design —
+decision record #62 D2: manual unload, the PLATFORM owns *when*, deliberately
+no auto-GC inside aion.
+
+What is actually true is narrower and still real: **the route-active version of
+a type can never be unloaded and there is no route-retire path**, so version
+accumulation is bounded by what an operator prunes and TYPE accumulation is not
+bounded at all.
+
+The gap was ergonomics, not capability: yesterday's queue-unservable incident
+was RESOLVED by that verb, and what cost a morning is that nothing told the
+operator it existed. Hence `superseded_versions` on the deploy response.
+
+**Lesson worth keeping: a limitation nobody re-checks is indistinguishable from
+a fact, and mine was being designed around.**
+
+### Open, in order
+
+1. **Condition 3 / #87** — empty-queue dispatch. Scout mapping in flight.
+2. Condition 1 — verify the wording and close.
+3. #98 the `agent` marker (RULED, `47078711`); then #97-B (bare optional
+   scalars never narrow; `narrow` slot exists at `checker/exprs.rs:14-23`,
+   `blocks.rs:102` and `walk.rs:291` pass `None`).
+4. ADR-004 itself (build the parent-close policy) — needs parent→children
+   linkage first, which does not exist.
+5. Re-run the whole battery; `ts-worker:test` red 3 still undiagnosed
+   (`reconnect > completes an unaborted default sleep and leaves no timer
+   behind`), and `rust:test` red 1 was OOM under contention, not a defect.
+
+### Process notes
+
+- `git add -A` swept `.worktrees/` (an embedded git repo) into a commit. Caught
+  in my own review, reset, re-committed path-scoped. Now gitignored, so the
+  mistake is unavailable rather than discouraged.
+- Two seats were in this repo at once overnight (Artemis, sanctioned, in an
+  isolated worktree). Anyone measuring during that window measured a moving
+  tree.
+
+---
+
+## Historical — the state before today
+
 ## 🔴🔴 RESUME HERE — 2026-07-31. Both lanes DEAD (usage limit). HEAD `16ba5157`.
 
 **Both Opus lanes were terminated mid-run by the weekly usage limit**, not by
