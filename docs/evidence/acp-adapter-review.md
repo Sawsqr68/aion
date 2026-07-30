@@ -97,6 +97,40 @@ calls, so they are not re-litigated:
 - **House rules**: no bypass attribute anywhere; largest non-test file is `harness.rs`
   at 319 code lines.
 
+## What the fix lane closed, verified at the reviewer's hands
+
+Committed as `11759502`. The gates were re-run independently of the lane's
+report — 97 tests, clippy `-D warnings`, `RUSTDOCFLAGS="-D warnings" cargo doc`,
+`cargo fmt --check` — plus the checks a report cannot substitute for: no bypass
+attribute or panic-class call anywhere, every non-test file under 500 code lines,
+no construction of `AcpHarness` outside the crate (so `exit_grace` becoming a
+required parameter breaks nothing), and every `Cargo.lock` addition traceable to
+this crate's dependency tree.
+
+The critical finding is closed at the pump: `event_tx` moved into `PumpState` as
+an `Option` and set to `None` immediately after the terminal Response is fully
+handled — flush, verbatim frame, `Stop`, outcome, *then* drop. The order matters:
+the outcome is in the oneshot before the stream ends, so a driver that sees
+`None` and calls `wait_result` finds the result waiting.
+
+**Two paths proven against real subprocesses, with the fixtures committed so
+neither proof is one-off** (`crates/aion-integration-acp/tests/fixtures/`):
+
+- `persistent_agent.py` — answers the turn, prints the non-JSON banner mid-turn,
+  and keeps running. Turn completes in 0.30s; the agent's own stderr shows it
+  shutting down on stdin EOF.
+- `deaf_agent.py` — answers the turn and then ignores stdin EOF. With a 2s grace
+  the run completes in 2.04s with no orphan process left. This was the **one
+  branch the lane could only reason-verify**; it is the branch that stops a deaf
+  agent hanging a worker forever, so it is now measured. The live test's terminal
+  result is bounded by `grace + margin` rather than a flat timeout, which is what
+  makes the bound the assertion.
+
+The recoverable-protocol-error claim was checked at the seam rather than taken on
+trust: `JsonRpcConnection::recv` calls `next_line()` before it fails, so the
+offending line is already consumed and the framing stays aligned — the loop
+cannot spin on the same bad line. The documented claim is true.
+
 ## Known limitations, stated rather than discovered later
 
 - **`cwd` is per-harness, not per-attempt.** Concurrent agent activities on one worker
@@ -108,9 +142,17 @@ calls, so they are not re-litigated:
 - **The real-agent path remains unexercised.** No ACP agent binary is installed on this
   box, so actual frame ordering from Claude Code / Gemini CLI / OpenCode, real
   permission-option shapes, and whether any of them chunk user messages or churn
-  `messageId` are all unverified. The probe agent was hand-written: it validates the
-  adapter's logic and the subprocess path and proves nothing about real-agent
-  conformance.
+  `messageId` are all unverified. The committed fixtures are hand-written: they validate
+  the adapter's logic and the subprocess path and prove nothing about real-agent
+  conformance. **`--check` passing is not a turn**, and a fixture turn is not a
+  third-party turn — the first real-agent run is still owed.
+
+## Routed elsewhere, second entry
+
+`JsonRpcConnection::recv` (`jsonrpc/transport.rs:114`) drops the offending line and
+reports only serde's message, so no adapter can put a bad frame's actual text on a
+transcript. The ACP pump records the rejection instead and says so at the site. Fixing it
+means changing the shared seam, and it belongs with the `id: null` wedge below.
 
 ## Routed elsewhere
 
