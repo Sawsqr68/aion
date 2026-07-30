@@ -13,7 +13,9 @@ in the engine/catalog. Do NOT duplicate its work. Wait for its notification.
    other three lanes.
 2. Run ONE combined gate: `cargo clippy --workspace --all-targets -- -D warnings`,
    `cargo test`, and the console (`bun run typecheck`, `bun test`).
-3. **PUSH.** main is 10 commits ahead of origin and NOTHING is pushed.
+3. **PUSH.** `git rev-list --count origin/main..main` = **26**, measured, not
+   estimated. Twelve of those are this session's; the other fourteen predate it
+   and have never been pushed either. The push carries all 26.
 4. Then put the restart decision to Tom (below).
 
 **PENDING DECISION FOR TOM — do not take it unilaterally.** His running server
@@ -25,10 +27,11 @@ and there is no run to interrupt (tharsis is blocked on beamr regardless). BUT
 first — a long build; do not start it while another lane holds the compiler. The
 worker release binary IS already rebuilt (exit 0) and carries both halves of #79.
 
-**COMMITTED THIS SESSION, ALL GATED AT MY OWN SEAT, NONE PUSHED (10 on main):**
+**COMMITTED THIS SESSION, ALL GATED AT MY OWN SEAT, NONE PUSHED (12 on main):**
 `be0112bf` AWL send · `e78f4b44` #81 chmod · `93e961f6` swallowed rollback ·
 `5008a747` #79 integration half · `c1c74f4d` awl scaffold · plus `d2b32d84`,
-`45fdaaee`, `b355fc41`, `9e544085`, `eff9bd88`, `d08a83a6`, `38612892` docs.
+`45fdaaee`, `b355fc41`, `9e544085`, `eff9bd88`, `d08a83a6`, `38612892`,
+`f7745bc3` docs.
 
 **Pushed separately:** branch `defect/beamr-jit-loses-native-services`
 (`fd2330b9`) — the #82 repro, the beamr patch, and the standalone pure-beamr

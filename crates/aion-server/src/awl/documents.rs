@@ -421,9 +421,11 @@ mod tests {
 
         let error = match outcome {
             Ok(()) => {
-                return Err("a rollback that could not remove the document reported success — \
+                return Err(
+                    "a rollback that could not remove the document reported success — \
                             this is the swallowed error the fix exists to stop"
-                    .into());
+                        .into(),
+                );
             }
             Err(error) => error,
         };
