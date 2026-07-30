@@ -246,6 +246,7 @@ fn assistant_provision_input(repo_path: &str, run_id: &str) -> AssistantProvisio
     AssistantProvisionInput {
         repo_path: repo_path.to_owned(),
         run_id: run_id.to_owned(),
+        objective: "explain how aion signals work".to_owned(),
     }
 }
 
@@ -279,6 +280,23 @@ async fn assistant_provision_clones_into_the_run_keyed_layout() -> TestResult {
         !log.contains("init"),
         "a clone session must not also git init; got log: {log}"
     );
+    // The composed opening prompt must describe the workspace this handler
+    // ACTUALLY created — that agreement is the whole reason composition moved
+    // worker-side, so it is asserted against the real provisioned path.
+    assert!(
+        workspace.opening_prompt.contains(&workspace.path),
+        "the opening prompt must name the provisioned workspace"
+    );
+    assert!(
+        workspace.opening_prompt.contains("/repos/aion"),
+        "an attached repository must be named in the prompt"
+    );
+    assert!(
+        workspace
+            .opening_prompt
+            .contains("explain how aion signals work"),
+        "the operator's objective must reach the prompt"
+    );
     Ok(())
 }
 
@@ -311,6 +329,18 @@ async fn assistant_provision_empty_repo_path_inits_a_scratch_workspace() -> Test
     assert!(
         !log.contains("clone"),
         "an empty repo_path must not clone; got log: {log}"
+    );
+    // The other prompt branch, against a real scratch provision: it must not
+    // claim a repository that was never cloned.
+    assert!(
+        workspace.opening_prompt.contains("scratch git workspace"),
+        "a scratch provision must produce the no-repository prompt"
+    );
+    assert!(
+        !workspace
+            .opening_prompt
+            .contains("Your workspace IS a clone"),
+        "a scratch provision must not claim to be a repository clone"
     );
     Ok(())
 }

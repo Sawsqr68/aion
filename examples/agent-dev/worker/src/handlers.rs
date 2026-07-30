@@ -26,8 +26,10 @@ use std::path::{Path, PathBuf};
 
 use aion_worker::{ActivityContext, ActivityFailure};
 
+mod opening_prompt;
 mod skill_resources;
 
+use opening_prompt::opening_prompt;
 #[cfg(test)]
 use skill_resources::SKILL_RESOURCES;
 use skill_resources::materialize_skill_resources;
@@ -240,7 +242,13 @@ pub async fn provision(
 /// session workspace at `<root>/<run_id>/repo` — `git clone` of `repo_path`
 /// when given (a local path or URL), a fresh `git init` scratch workspace
 /// when empty, so the assistant always has a real, versionable working
-/// directory for the norn harness's `--workspace-root`/`-C` template.
+/// directory for the norn harness's `--workspace-root`/`-C` template — then
+/// compose the session's round-one prompt against the workspace it just made.
+///
+/// The prompt is composed HERE, not in the workflow, because this handler is
+/// the thing that knows the workspace and materializes the skill documents the
+/// prompt points at (see [`opening_prompt`]). The workflow dispatches the
+/// returned `opening_prompt` as round one and composes nothing itself.
 ///
 /// Same #175 discipline as [`provision`]: the path is recorded in durable
 /// workflow history, so it lives under the stable resolved `root`, keyed by
@@ -258,7 +266,11 @@ pub async fn assistant_provision(
     input: AssistantProvisionInput,
     context: ActivityContext,
 ) -> Result<AssistantWorkspace, ActivityFailure> {
-    let AssistantProvisionInput { repo_path, run_id } = input;
+    let AssistantProvisionInput {
+        repo_path,
+        run_id,
+        objective,
+    } = input;
     std::fs::create_dir_all(root).map_err(|source| {
         ActivityFailure::terminal(format!(
             "cannot create workspace root {}: {source}",
@@ -289,7 +301,11 @@ pub async fn assistant_provision(
     }
     materialize_skill_resources(Path::new(&repo_dir))?;
 
-    Ok(AssistantWorkspace { path: repo_dir })
+    let opening_prompt = opening_prompt(&objective, &repo_path, &repo_dir);
+    Ok(AssistantWorkspace {
+        path: repo_dir,
+        opening_prompt,
+    })
 }
 
 /// Claim `<root>/<run_id>` for this provision attempt. A collision is this

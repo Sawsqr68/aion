@@ -111,28 +111,43 @@ fn land_result_matches_the_gleam_codec() -> TestResult {
     )
 }
 
-/// Shape from the `assistant` package's `provision_input_to_json`:
-/// `repo_path`, `run_id` (codec source:
-/// `examples/assistant/src/assistant_codecs.gleam`).
+/// Shape of the `assistant_provision` ACTION INPUT declared in
+/// `examples/assistant/awl/assistant.awl`:
+/// `assistant_provision(repo_path: String, run_id: String, objective: String)`.
+///
+/// CONTRACT SOURCE CHANGE, deliberate: for the `assistant` workflow the AWL
+/// document is now the contract, not the Gleam package. The Gleam package
+/// cannot start at all under queue-routed serving
+/// (`docs/design/aion-authoring/GLEAM-PATH-CANNOT-START-FINDING.md`), so
+/// pinning this shape to a codec no live run can reach would pin the worker to
+/// a contract nothing speaks. Field order here is the AWL parameter order —
+/// a reorder or rename in the `.awl` document must fail HERE, not at the first
+/// live dispatch.
 #[test]
-fn assistant_provision_input_matches_the_gleam_codec() -> TestResult {
+fn assistant_provision_input_matches_the_awl_action_declaration() -> TestResult {
     assert_wire(
-        r#"{"repo_path":"/Users/tom/Developer/ablative/aion","run_id":"0b81e178-56ff-4b2c-9f3f-2c1f42fd3a11"}"#,
+        r#"{"repo_path":"/Users/tom/Developer/ablative/aion","run_id":"0b81e178-56ff-4b2c-9f3f-2c1f42fd3a11","objective":"explain how aion signals work"}"#,
         &AssistantProvisionInput {
             repo_path: "/Users/tom/Developer/ablative/aion".to_owned(),
             run_id: "0b81e178-56ff-4b2c-9f3f-2c1f42fd3a11".to_owned(),
+            objective: "explain how aion signals work".to_owned(),
         },
     )
 }
 
-/// Shape from the `assistant` package's `workspace_to_json`: `path` only —
-/// the assistant workspace carries no branch.
+/// Shape of the AWL `Workspace` type: `path`, `opening_prompt`. No branch —
+/// an assistant session works on one workspace, not a feature branch.
+///
+/// `opening_prompt` is the seam that moved prompt composition worker-side: the
+/// handler that creates the workspace and materializes the skill documents is
+/// the one that describes them.
 #[test]
-fn assistant_workspace_matches_the_gleam_codec() -> TestResult {
+fn assistant_workspace_matches_the_awl_type_declaration() -> TestResult {
     assert_wire(
-        r#"{"path":"/Users/tom/.aion/clones/0b81e178-56ff-4b2c-9f3f-2c1f42fd3a11/repo"}"#,
+        r#"{"path":"/Users/tom/.aion/clones/0b81e178-56ff-4b2c-9f3f-2c1f42fd3a11/repo","opening_prompt":"You are the aion AWL authoring assistant..."}"#,
         &AssistantWorkspace {
             path: "/Users/tom/.aion/clones/0b81e178-56ff-4b2c-9f3f-2c1f42fd3a11/repo".to_owned(),
+            opening_prompt: "You are the aion AWL authoring assistant...".to_owned(),
         },
     )
 }

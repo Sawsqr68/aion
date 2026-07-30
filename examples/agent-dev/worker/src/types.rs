@@ -40,7 +40,14 @@ pub struct Workspace {
 
 /// Input of the `assistant_provision` activity (the `assistant` workflow
 /// package): materialise the session workspace at `<root>/<run_id>/repo` — a
-/// clone of `repo_path` when given, a fresh scratch git workspace when empty.
+/// clone of `repo_path` when given, a fresh scratch git workspace when empty —
+/// and compose the session's round-one prompt for it.
+///
+/// CONTRACT SOURCE: `examples/assistant/awl/assistant.awl`, not the Gleam
+/// package. The AWL port carries `objective` here because the opening prompt
+/// is composed worker-side (see [`crate::handlers`]); the Gleam `Input` type
+/// never sent it, and the Gleam workflow cannot start at all under queue-routed
+/// serving (`docs/design/aion-authoring/GLEAM-PATH-CANNOT-START-FINDING.md`).
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AssistantProvisionInput {
     /// The repository the session grounds its answers in: a local path or
@@ -49,14 +56,23 @@ pub struct AssistantProvisionInput {
     /// The workflow id string, passed IN THE ACTIVITY INPUT by the workflow.
     /// Keys the per-run workspace directory `<root>/<run_id>/repo`.
     pub run_id: String,
+    /// The operator's opening ask, appended to the composed working contract
+    /// as the round-one prompt.
+    pub objective: String,
 }
 
 /// Output of the `assistant_provision` activity: the provisioned session
-/// workspace.
+/// workspace and the round-one prompt to open it with.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AssistantWorkspace {
     /// Absolute path of the session workspace (`<root>/<run_id>/repo`).
     pub path: String,
+    /// The composed round-one prompt: the assistant's full working contract
+    /// (workspace, ground truth, authoring method, honesty rules) followed by
+    /// the operator's objective. The workflow dispatches it as the first
+    /// `assistant` round and composes nothing itself; every later round is the
+    /// operator's message verbatim into the same pinned norn session.
+    pub opening_prompt: String,
 }
 
 /// Input of the `gate` activity: the workspace to check. Per the contract,
