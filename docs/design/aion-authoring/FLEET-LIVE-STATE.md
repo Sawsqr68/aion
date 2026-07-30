@@ -1,37 +1,49 @@
 # Fleet + lanes: LIVE STATE (resume point)
 
-## 🔴 RESUME HERE — state at compaction, 2026-07-30 ~09:25Z
+## ✅ PUSHED — 2026-07-30 ~10:10Z. Board clear, nothing in flight.
 
-**ONE AGENT STILL IN FLIGHT: #80 worker admission.** Its uncommitted footprint:
-`crates/aion-server/src/worker/contracts.rs`, `crates/aion/src/engine/{mod,reload}.rs`,
-`crates/aion/src/lib.rs`, `crates/aion/src/loader/{catalog,load}.rs`. It reaches
-into `crates/aion` because the "which versions have LIVE workflows" query lives
-in the engine/catalog. Do NOT duplicate its work. Wait for its notification.
+**`origin/main` is `c443d584`.** 29 commits pushed (`8fb4c153..c443d584`);
+the count had been misrecorded as 10, was measured at 26, and grew to 29 with
+this turn's three landings. Nothing is uncommitted and no agent is running.
 
-**THE SEQUENCE, IN ORDER:**
-1. #80 lands → verify at my own seat (bytes + bypass scan + gates), as with the
-   other three lanes.
-2. Run ONE combined gate: `cargo clippy --workspace --all-targets -- -D warnings`,
-   `cargo test`, and the console (`bun run typecheck`, `bun test`).
-3. **PUSH.** `git rev-list --count origin/main..main` = **26**, measured, not
-   estimated. Twelve of those are this session's; the other fourteen predate it
-   and have never been pushed either. The push carries all 26.
-4. Then put the restart decision to Tom (below).
+**The battery that backs it, on the exact pushed tree:**
+`cargo clippy --workspace --all-targets -- -D warnings` exit 0, zero
+diagnostics · `cargo test --workspace` **`CARGO_TEST_EXIT=0`, 238 suites,
+3759 passed, 0 failed, 5 ignored** · console `bun run typecheck` exit 0,
+`bun test` 580 pass / 0 fail.
+
+⚠️ **Read the exit code, not the summary.** The first attempt at this battery
+reported "exit code 0" while a test had actually failed — the command ended in
+`echo`, so the captured status was the echo's. The real value was 101. The log
+now carries `CARGO_TEST_EXIT=` written by the runner itself. A summarised exit
+is never citable.
+
+⚠️ **3759 passed does NOT include the failover proofs.** Five tests are
+`#[ignore]`d (task #86) and three of them are the durability evidence: the
+cross-node kill-9 failover, the parked-timer hard-kill, and the real-worker
+OS-process test. A green battery is silent about them.
+
+**THIS TURN'S LANDINGS:**
+`e3c4a3ff` #80 admission + the paused-run unload strand fix ·
+`a4a7afde` BC-4 ratchet (my own red, see below) · `c443d584` fmt + count.
+
+**I left main RED and reported the lane green.** `be0112bf` added
+`step-bodies/valid/send_signal.awl` without bumping `COVERED_COUNT`, so
+`covered_set_is_byte_identical` failed on every run from that commit until
+`a4a7afde`. The #80 agent found it, not me. The lesson is not "bump the
+ratchet" — it is that a per-crate gate (`cargo test -p aion-awl`, which I ran
+and which passed) cannot see a cross-crate ratchet, and I cited it as if it
+could.
 
 **PENDING DECISION FOR TOM — do not take it unilaterally.** His running server
-(pid 47610) and worker (pid 49833) are BOTH still old binaries. Everything landed
-today — the chmod fix, `send` on the canvas, the scaffold command — is on disk
-but not in the processes he is using. A restart gives him all of it in one motion
-and there is no run to interrupt (tharsis is blocked on beamr regardless). BUT
-`target/release/aion` was DELETED by an agent's cargo activity and must be rebuilt
-first — a long build; do not start it while another lane holds the compiler. The
-worker release binary IS already rebuilt (exit 0) and carries both halves of #79.
-
-**COMMITTED THIS SESSION, ALL GATED AT MY OWN SEAT, NONE PUSHED (12 on main):**
-`be0112bf` AWL send · `e78f4b44` #81 chmod · `93e961f6` swallowed rollback ·
-`5008a747` #79 integration half · `c1c74f4d` awl scaffold · plus `d2b32d84`,
-`45fdaaee`, `b355fc41`, `9e544085`, `eff9bd88`, `d08a83a6`, `38612892`,
-`f7745bc3` docs.
+(pid 47610) and worker (pid 49833) are BOTH still old binaries. Everything
+landed today — the chmod fix, `send` on the canvas, the scaffold command, the
+admission fix — is on disk and pushed but not in the processes he is using. A
+restart gives him all of it in one motion and there is no run to interrupt
+(tharsis is blocked on beamr regardless). BUT `target/release/aion` was DELETED
+by an agent's cargo activity and must be rebuilt first — a long build. The
+worker release binary IS already rebuilt (exit 0) and carries both halves of
+#79.
 
 **Pushed separately:** branch `defect/beamr-jit-loses-native-services`
 (`fd2330b9`) — the #82 repro, the beamr patch, and the standalone pure-beamr
