@@ -20,7 +20,7 @@ use staged_rounds_worker::handlers::{
 };
 use staged_rounds_worker::shell::Shell;
 use staged_rounds_worker::types::{
-    DevItemResult, GateCommand, GateItemInput, GateOutcome, GatedItem, ItemReport,
+    DevItemResult, DoneItem, GateCommand, GateItemInput, GateOutcome, GatedItem, ItemReport,
     MergeBranchesInput, VerifyIntegrationInput,
 };
 
@@ -121,21 +121,67 @@ fn run_gates_with(
     .map_err(|error| anyhow::anyhow!(error.message().to_owned()))
 }
 
-/// Create the run's integration worktree exactly as the pipeline does (a merge
-/// pass over an empty done set), and return its path and branch.
-fn integration_worktree(repo: &str, run_root: &str) -> anyhow::Result<(String, String)> {
+/// Commit one file (creating its parent directories) on a branch through its
+/// provisioned worktree, simulating the machinery's dev commit for a nested
+/// path.
+fn commit_nested(workspace: &str, file: &str, content: &str) -> anyhow::Result<()> {
+    let path = Path::new(workspace).join(file);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&path, content)?;
+    git(workspace, &["add", "-A"])?;
+    git(workspace, &["commit", "-m", &format!("add {file}")])?;
+    Ok(())
+}
+
+/// Provision `id`, commit `file` on its branch, and return the `DoneItem` the
+/// merge pass consumes — one accepted item of a run.
+fn accepted_item(
+    repo: &str,
+    run_root: &str,
+    id: &str,
+    file: &str,
+    content: &str,
+) -> anyhow::Result<DoneItem> {
+    let provisioned = provision_item(
+        &Shell::inherited(),
+        provision_input(repo, run_root, item(id), vec![]),
+    )
+    .map_err(|error| anyhow::anyhow!(error.message().to_owned()))?;
+    commit_nested(&provisioned.workspace_path, file, content)?;
+    Ok(DoneItem {
+        item_id: id.to_owned(),
+        branch: provisioned.branch,
+        base_commit: provisioned.base_commit,
+        summary: format!("did {id}"),
+    })
+}
+
+/// Create the run's integration worktree exactly as the pipeline does — an
+/// ordered merge pass over `done` — and return its path and branch.
+fn integration_worktree(
+    repo: &str,
+    run_root: &str,
+    done: Vec<DoneItem>,
+) -> anyhow::Result<(String, String)> {
     let state = merge_branches(
         &Shell::inherited(),
         MergeBranchesInput {
             run_root: run_root.to_owned(),
             repo_root: repo.to_owned(),
             base_branch: "main".to_owned(),
-            done: vec![],
+            done,
             prior_evidence: String::new(),
             remediation: String::new(),
         },
     )
     .map_err(|error| anyhow::anyhow!(error.message().to_owned()))?;
+    anyhow::ensure!(
+        state.conflicts.is_empty(),
+        "the fixture merge conflicted: {:?}",
+        state.conflicts
+    );
     Ok((state.workspace_path, state.integration_branch))
 }
 
@@ -145,12 +191,23 @@ fn verify(
     branch: &str,
     gates: Vec<GateCommand>,
 ) -> anyhow::Result<GateOutcome> {
+    verify_with_base(repo, run_root, "main", branch, gates)
+}
+
+fn verify_with_base(
+    repo: &str,
+    run_root: &str,
+    base_branch: &str,
+    branch: &str,
+    gates: Vec<GateCommand>,
+) -> anyhow::Result<GateOutcome> {
     verify_integration(
         &Shell::inherited(),
         &SilentProgress,
         VerifyIntegrationInput {
             run_root: run_root.to_owned(),
             repo_root: repo.to_owned(),
+            base_branch: base_branch.to_owned(),
             integration_branch: branch.to_owned(),
             gates,
         },
@@ -479,7 +536,7 @@ fn every_gate_commands_start_and_result_is_reported_as_progress() -> anyhow::Res
 #[test]
 fn a_green_integration_battery_passes_on_a_clean_tree() -> anyhow::Result<()> {
     let (_dir, repo, run_root) = scratch_repo()?;
-    let (_workspace, branch) = integration_worktree(&repo, &run_root)?;
+    let (_workspace, branch) = integration_worktree(&repo, &run_root, vec![])?;
     let outcome = verify(&repo, &run_root, &branch, vec![gate("build", "true")])?;
 
     assert!(outcome.pass, "{}", outcome.diagnostics);
@@ -491,14 +548,16 @@ fn a_green_integration_battery_passes_on_a_clean_tree() -> anyhow::Result<()> {
         outcome.diagnostics
     );
     assert!(
-        outcome.diagnostics.contains("has no per-item base commit"),
-        "the honest account of what `{{base_commit}}` resolves to here must be \
-         recorded, not silently implied: {}",
+        outcome
+            .diagnostics
+            .contains("The run's integration base is"),
+        "the resolved base and how it was derived must be recorded, not silently \
+         implied: {}",
         outcome.diagnostics
     );
     assert!(
         outcome.diff.is_empty(),
-        "a clean verification leaves nothing dirtied to show: {}",
+        "this fixture merged nothing, so the run's project change is empty: {}",
         outcome.diff
     );
     Ok(())
@@ -511,7 +570,7 @@ fn a_green_integration_battery_passes_on_a_clean_tree() -> anyhow::Result<()> {
 #[test]
 fn a_red_integration_battery_does_not_pass() -> anyhow::Result<()> {
     let (_dir, repo, run_root) = scratch_repo()?;
-    let (_workspace, branch) = integration_worktree(&repo, &run_root)?;
+    let (_workspace, branch) = integration_worktree(&repo, &run_root, vec![])?;
     let outcome = verify(
         &repo,
         &run_root,
@@ -543,7 +602,7 @@ fn a_red_integration_battery_does_not_pass() -> anyhow::Result<()> {
 #[test]
 fn a_gate_that_dirties_the_integration_tree_is_itself_a_failure() -> anyhow::Result<()> {
     let (_dir, repo, run_root) = scratch_repo()?;
-    let (workspace, branch) = integration_worktree(&repo, &run_root)?;
+    let (workspace, branch) = integration_worktree(&repo, &run_root, vec![])?;
     let head_before = git(&workspace, &["rev-parse", "HEAD"])?;
 
     let outcome = verify(
@@ -570,8 +629,15 @@ fn a_gate_that_dirties_the_integration_tree_is_itself_a_failure() -> anyhow::Res
         outcome.diagnostics
     );
     assert!(
+        outcome.diagnostics.contains("README.md"),
+        "the diagnostics must NAME the paths the gate left changed, so the \
+         mutation is unambiguous inside a worktree-vs-base diff: {}",
+        outcome.diagnostics
+    );
+    assert!(
         outcome.diff.contains("+rewritten"),
-        "the diff must carry exactly what the gate changed: {}",
+        "the diff is worktree-vs-base, so it carries the gate's uncommitted \
+         mutation too: {}",
         outcome.diff
     );
     assert_eq!(
@@ -587,7 +653,7 @@ fn a_gate_that_dirties_the_integration_tree_is_itself_a_failure() -> anyhow::Res
 #[test]
 fn a_dirty_integration_tree_going_in_fails_the_verification() -> anyhow::Result<()> {
     let (_dir, repo, run_root) = scratch_repo()?;
-    let (workspace, branch) = integration_worktree(&repo, &run_root)?;
+    let (workspace, branch) = integration_worktree(&repo, &run_root, vec![])?;
     std::fs::write(Path::new(&workspace).join("stray.txt"), "left behind\n")?;
 
     let outcome = verify(&repo, &run_root, &branch, vec![gate("build", "true")])?;
@@ -614,6 +680,7 @@ fn verifying_a_missing_or_wrong_branch_worktree_is_terminal() -> anyhow::Result<
         VerifyIntegrationInput {
             run_root: run_root.clone(),
             repo_root: repo.clone(),
+            base_branch: "main".to_owned(),
             integration_branch: "staged/wf-1/integration".to_owned(),
             gates: vec![],
         },
@@ -627,13 +694,14 @@ fn verifying_a_missing_or_wrong_branch_worktree_is_terminal() -> anyhow::Result<
     );
 
     // Now it exists, but the workflow names a different branch.
-    integration_worktree(&repo, &run_root)?;
+    integration_worktree(&repo, &run_root, vec![])?;
     let Err(error) = verify_integration(
         &Shell::inherited(),
         &SilentProgress,
         VerifyIntegrationInput {
             run_root,
             repo_root: repo,
+            base_branch: "main".to_owned(),
             integration_branch: "staged/other-run/integration".to_owned(),
             gates: vec![],
         },
@@ -650,11 +718,207 @@ fn verifying_a_missing_or_wrong_branch_worktree_is_terminal() -> anyhow::Result<
     Ok(())
 }
 
+/// THE integration base: `merge-base(base_branch, HEAD)` — the commit the
+/// integration branch was cut from, before any accepted branch merged in. It
+/// resolves `{base_commit}` in every gate argv, and it is what makes an
+/// integration fence mean anything.
+#[test]
+fn the_integration_base_is_the_merge_base_with_the_base_branch() -> anyhow::Result<()> {
+    let (_dir, repo, run_root) = scratch_repo()?;
+    let done = vec![accepted_item(
+        &repo,
+        &run_root,
+        "it-a",
+        "src/a.txt",
+        "alpha\n",
+    )?];
+    let (workspace, branch) = integration_worktree(&repo, &run_root, done)?;
+
+    let expected = git(&workspace, &["merge-base", "main", "HEAD"])?;
+    let head = git(&workspace, &["rev-parse", "HEAD"])?;
+    assert_ne!(
+        expected, head,
+        "the fixture must have MOVED the integration head off the base, or this \
+         test could not tell a merge-base from a HEAD"
+    );
+
+    let outcome = verify(
+        &repo,
+        &run_root,
+        &branch,
+        vec![gate("echo-base", "echo {base_commit}")],
+    )?;
+    assert!(outcome.pass, "{}", outcome.diagnostics);
+    assert_eq!(
+        outcome.runs[0].argv,
+        vec!["sh".to_owned(), "-c".to_owned(), format!("echo {expected}")],
+        "the RESOLVED argv must carry the merge-base, not the token and not HEAD"
+    );
+    assert!(
+        outcome.runs[0].output_tail.contains(&expected),
+        "the gate process must really have received the merge-base: {}",
+        outcome.runs[0].output_tail
+    );
+    assert!(
+        outcome.diagnostics.contains(&format!(
+            "The run's integration base is {expected} — the merge-base of main"
+        )),
+        "the diagnostics must name the resolved base and how it was derived: {}",
+        outcome.diagnostics
+    );
+    Ok(())
+}
+
+/// `GateOutcome.diff` at this stage is the run's REAL project change — every
+/// accepted branch's work in one place, which is what lands in
+/// `Completed.verification.diff`.
+#[test]
+fn the_integration_diff_is_the_whole_runs_project_change() -> anyhow::Result<()> {
+    let (_dir, repo, run_root) = scratch_repo()?;
+    let done = vec![
+        accepted_item(&repo, &run_root, "it-a", "src/a.txt", "alpha\n")?,
+        accepted_item(&repo, &run_root, "it-b", "src/b.txt", "beta\n")?,
+    ];
+    let (_workspace, branch) = integration_worktree(&repo, &run_root, done)?;
+
+    let outcome = verify(&repo, &run_root, &branch, vec![gate("build", "true")])?;
+    assert!(outcome.pass, "{}", outcome.diagnostics);
+    for expected in ["src/a.txt", "+alpha", "src/b.txt", "+beta"] {
+        assert!(
+            outcome.diff.contains(expected),
+            "the project diff must carry EVERY item's work ({expected} missing): {}",
+            outcome.diff
+        );
+    }
+    Ok(())
+}
+
+/// The pin that the integration fence is MEANINGFUL, not merely plumbed: a
+/// scope-fence gate written against `{base_commit}` goes RED when the merged
+/// tree changed a path the fence excludes, and green when it did not.
+///
+/// This is the whole point of resolving a real base. With `{base_commit}`
+/// resolved to HEAD, `git diff --name-only HEAD` over a clean tree is EMPTY, so
+/// the fence would find nothing and report green no matter what the run did.
+const DOCS_FENCE: &str = "if git diff --name-only --no-ext-diff {base_commit} | grep -q '^docs/'; \
+     then echo FENCE_VIOLATION_DOCS; exit 1; fi";
+
+#[test]
+fn an_integration_scope_fence_gate_goes_red_on_a_path_the_fence_excludes() -> anyhow::Result<()> {
+    let (_dir, repo, run_root) = scratch_repo()?;
+    // The run's merged work reaches into docs/, which the fence excludes.
+    let done = vec![
+        accepted_item(&repo, &run_root, "it-a", "src/a.txt", "alpha\n")?,
+        accepted_item(&repo, &run_root, "it-b", "docs/leak.md", "leaked\n")?,
+    ];
+    let (_workspace, branch) = integration_worktree(&repo, &run_root, done)?;
+
+    let outcome = verify(&repo, &run_root, &branch, vec![gate("fence", DOCS_FENCE)])?;
+    assert!(
+        !outcome.pass,
+        "the fence must catch the union's out-of-fence change: {}",
+        outcome.diagnostics
+    );
+    assert_eq!(outcome.runs[0].exit_code, 1);
+    assert!(
+        outcome.runs[0].output_tail.contains("FENCE_VIOLATION_DOCS"),
+        "{}",
+        outcome.runs[0].output_tail
+    );
+    Ok(())
+}
+
+#[test]
+fn an_integration_scope_fence_gate_stays_green_when_the_union_respects_it() -> anyhow::Result<()> {
+    let (_dir, repo, run_root) = scratch_repo()?;
+    // The same fence, over a run whose merged work stayed inside src/.
+    let done = vec![
+        accepted_item(&repo, &run_root, "it-a", "src/a.txt", "alpha\n")?,
+        accepted_item(&repo, &run_root, "it-b", "src/b.txt", "beta\n")?,
+    ];
+    let (_workspace, branch) = integration_worktree(&repo, &run_root, done)?;
+
+    let outcome = verify(&repo, &run_root, &branch, vec![gate("fence", DOCS_FENCE)])?;
+    assert!(
+        outcome.pass,
+        "a run that respected the fence must pass it: {}",
+        outcome.diagnostics
+    );
+    assert_eq!(outcome.runs[0].exit_code, 0);
+    // And the fence really had something to look at — it was not green because
+    // the diff was empty.
+    assert!(
+        outcome.diff.contains("src/a.txt") && outcome.diff.contains("src/b.txt"),
+        "the fence must have been fencing a NON-empty change: {}",
+        outcome.diff
+    );
+    Ok(())
+}
+
+/// An unresolvable integration base is TERMINAL, naming the branch and the
+/// reason. There is no fallback to HEAD: a HEAD-relative fence over a clean tree
+/// compares nothing and reports green, which would silently turn the operator's
+/// scope fence into a rubber stamp.
+#[test]
+fn an_unresolvable_integration_base_is_terminal_not_a_head_fallback() -> anyhow::Result<()> {
+    let (_dir, repo, run_root) = scratch_repo()?;
+    let (_workspace, branch) = integration_worktree(&repo, &run_root, vec![])?;
+
+    let Err(error) = verify_with_base(
+        &repo,
+        &run_root,
+        "no-such-base-branch",
+        &branch,
+        vec![gate("fence", DOCS_FENCE)],
+    ) else {
+        anyhow::bail!("an unresolvable integration base was silently tolerated");
+    };
+    let message = error.to_string();
+    assert!(
+        message.contains("cannot resolve the run's integration base"),
+        "{message}"
+    );
+    assert!(
+        message.contains("no-such-base-branch"),
+        "the refusal must name the branch: {message}"
+    );
+    assert!(
+        message.contains("fallback to HEAD"),
+        "the refusal must say why it is not a fallback: {message}"
+    );
+    Ok(())
+}
+
+/// A base branch that exists but shares no history with the integration branch
+/// is refused the same way — `merge-base` exits non-zero with nothing to say.
+#[test]
+fn a_base_branch_with_no_common_ancestor_is_terminal() -> anyhow::Result<()> {
+    let (_dir, repo, run_root) = scratch_repo()?;
+    let (_workspace, branch) = integration_worktree(&repo, &run_root, vec![])?;
+    // An orphan branch: a real ref with a disjoint history.
+    git(&repo, &["checkout", "--orphan", "unrelated"])?;
+    std::fs::write(Path::new(&repo).join("unrelated.txt"), "disjoint\n")?;
+    git(&repo, &["add", "-A"])?;
+    git(&repo, &["commit", "-m", "unrelated root"])?;
+    git(&repo, &["checkout", "main"])?;
+
+    let Err(error) = verify_with_base(&repo, &run_root, "unrelated", &branch, vec![]) else {
+        anyhow::bail!("a base branch with no common ancestor was silently tolerated");
+    };
+    let message = error.to_string();
+    assert!(
+        message.contains("cannot resolve the run's integration base"),
+        "{message}"
+    );
+    assert!(message.contains("unrelated"), "{message}");
+    Ok(())
+}
+
 /// An empty battery at the integration stage is a vacuous pass too, and says so.
 #[test]
 fn an_empty_integration_battery_is_a_diagnosed_vacuous_pass() -> anyhow::Result<()> {
     let (_dir, repo, run_root) = scratch_repo()?;
-    let (_workspace, branch) = integration_worktree(&repo, &run_root)?;
+    let (_workspace, branch) = integration_worktree(&repo, &run_root, vec![])?;
     let outcome = verify(&repo, &run_root, &branch, vec![])?;
     assert!(outcome.pass);
     assert!(

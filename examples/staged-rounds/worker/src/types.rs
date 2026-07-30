@@ -390,6 +390,12 @@ pub struct VerifyIntegrationInput {
     pub run_root: String,
     /// The repository the integration worktree belongs to.
     pub repo_root: String,
+    /// The branch the integration branch was cut from. Its merge-base with the
+    /// integration head IS the run's base commit: it resolves `{base_commit}`
+    /// in every gate argv (so a scope-fence gate fences the union of the run's
+    /// work) and it is the base of the recorded project diff. An unresolvable
+    /// merge-base is terminal — never a silent fallback to HEAD.
+    pub base_branch: String,
     /// The integration branch the worktree must be on — asserted, never
     /// assumed: a battery run on the wrong tree would be a false verdict.
     pub integration_branch: String,

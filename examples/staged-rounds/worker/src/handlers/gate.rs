@@ -124,12 +124,17 @@ pub(super) fn run_gate_battery(
     Ok(raw)
 }
 
-/// Whether the workspace tree is clean (`git status --porcelain` empty).
-pub(super) fn worktree_clean(
+/// The workspace's outstanding changes: the trimmed `git status --porcelain`
+/// text, EMPTY when the tree is clean. Both batteries read this — one to decide
+/// whether a gate re-dirtied an item worktree, one to decide whether a gate
+/// mutated the merged tree — and the caller that reports a failure also names
+/// the offending paths, so a tree assertion is never a bare boolean in the
+/// evidence.
+pub(super) fn worktree_status(
     shell: &Shell,
     workspace: &str,
     context: &str,
-) -> Result<bool, ActivityFailure> {
+) -> Result<String, ActivityFailure> {
     let status = require_run(
         shell,
         "git",
@@ -137,7 +142,7 @@ pub(super) fn worktree_clean(
         workspace,
         context,
     )?;
-    Ok(status.stdout.trim().is_empty())
+    Ok(status.stdout.trim().to_owned())
 }
 
 /// The change the panel reads: worktree vs `base_commit`, so committed AND
@@ -217,11 +222,13 @@ pub fn gate_item(
                 "the normalization commit moved HEAD — re-running the FULL battery against it",
             );
             let rerun = run_gate_battery(shell, progress, workspace, base_commit, &gates)?;
-            if !worktree_clean(
+            if !worktree_status(
                 shell,
                 workspace,
                 "git status (post-normalization clean assertion)",
-            )? {
+            )?
+            .is_empty()
+            {
                 redirtied = true;
                 notes.push(
                     "a gate command re-dirtied the worktree on the post-normalization \

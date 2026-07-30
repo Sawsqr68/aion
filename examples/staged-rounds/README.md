@@ -97,7 +97,13 @@ staged_rounds                       (awl/staged_rounds.awl, direct-compiled)
       ├── verify_integration (SHELL: the battery on the MERGED tree; clean
       │                       asserted before AND after; deliberately no
       │                       normalization commit — a gate that dirties the
-      │                       integration tree is itself a failure)
+      │                       integration tree is itself a failure.
+      │                       {base_commit} and the recorded diff both resolve
+      │                       to merge-base(base_branch, HEAD) — where the run
+      │                       started — so a scope-fence gate fences the UNION
+      │                       of the run's work and Completed.verification.diff
+      │                       is the whole project change. An unresolvable
+      │                       merge-base is terminal, never a HEAD fallback)
       └── fix_integration    (AGENT — also resumes the planner's session, so
                               the coordinator answers for its own
                               decomposition, with the failing battery attached)
@@ -218,11 +224,6 @@ parallel fan-out is engine-owned fail-fast.
 
 ## Known limits
 
-- **`{base_commit}` at the integration stage is the integration worktree's own
-  HEAD**, because `verify_integration` is not passed a base. A scope-fence gate
-  written against `{base_commit}` is therefore meaningful per item and VACUOUS
-  at integration. The handler states this in its `diagnostics` so a reader
-  cannot mistake it for a fence that fenced something.
 - **`aion describe` dies on histories over 4 MiB** ("decoded message length too
   large"). A whole-project run will exceed this. Watch terminal state with
   `aion list` instead, and read per-item detail from the run's evidence.

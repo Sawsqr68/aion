@@ -211,7 +211,7 @@ worker staged_rounds
     node remediation
   /// Re-runs the battery on the merged integration worktree. This is the only
   /// evidence that the project — not just each branch — is green.
-  action verify_integration(run_root: String, repo_root: String, integration_branch: String, gates: [GateCommand]) -> GateOutcome
+  action verify_integration(run_root: String, repo_root: String, base_branch: String, integration_branch: String, gates: [GateCommand]) -> GateOutcome
     node shell
   /// Repairs a red integration on the integration worktree, resuming the
   /// planner's session so the coordinator answers for its own decomposition.
@@ -261,10 +261,10 @@ step fix_conflicts
   outcome stuck: otherwise, route wrap_conflicted
 
 step verify_clean
-  verify_integration(run_root: run_root, repo_root: config.repo_root, integration_branch: attempt.integration_branch, gates: config.gates) -> first_clean
+  verify_integration(run_root: run_root, repo_root: config.repo_root, base_branch: config.base_branch, integration_branch: attempt.integration_branch, gates: config.gates) -> first_clean
   loop vclean = first_clean counting integration_rounds_clean
     fix_integration(verify: vclean, plan: plan, integration_branch: attempt.integration_branch, workspace_path: attempt.workspace_path) -> repair_clean
-    verify_integration(run_root: run_root, repo_root: config.repo_root, integration_branch: attempt.integration_branch, gates: config.gates) -> vclean
+    verify_integration(run_root: run_root, repo_root: config.repo_root, base_branch: config.base_branch, integration_branch: attempt.integration_branch, gates: config.gates) -> vclean
     until vclean.pass
     max config.max_integration_rounds
 
@@ -272,10 +272,10 @@ step verify_clean
   outcome red: otherwise, route wrap_unverified_clean
 
 step verify_fixed
-  verify_integration(run_root: run_root, repo_root: config.repo_root, integration_branch: mstate.integration_branch, gates: config.gates) -> first_fixed
+  verify_integration(run_root: run_root, repo_root: config.repo_root, base_branch: config.base_branch, integration_branch: mstate.integration_branch, gates: config.gates) -> first_fixed
   loop vfixed = first_fixed counting integration_rounds_fixed
     fix_integration(verify: vfixed, plan: plan, integration_branch: mstate.integration_branch, workspace_path: mstate.workspace_path) -> repair_fixed
-    verify_integration(run_root: run_root, repo_root: config.repo_root, integration_branch: mstate.integration_branch, gates: config.gates) -> vfixed
+    verify_integration(run_root: run_root, repo_root: config.repo_root, base_branch: config.base_branch, integration_branch: mstate.integration_branch, gates: config.gates) -> vfixed
     until vfixed.pass
     max config.max_integration_rounds
 
