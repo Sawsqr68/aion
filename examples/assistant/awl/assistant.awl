@@ -88,15 +88,22 @@ type Workspace { path: String, opening_prompt: String }
 
 /// The one value the round loop threads, and the ONLY thing readable after
 /// the loop: the prompt the next round will send, the last reply received,
-/// and whether the operator ended the session.
+/// whether the operator ended the session, and whether the wait loop gave up.
 ///
-/// `prompt` doubles as the exhaustion discriminator. A binding made inside the
-/// nested wait loop is not guaranteed on every path out of the outer loop, so
-/// the continuation itself cannot be read after the loop — everything the
-/// outcomes need has to be folded into this value while it is still in scope.
-/// A blank `prompt` with `ended` false can only mean the wait loop left
-/// without a message, i.e. the nudge budget was spent.
-type Round { prompt: String, reply: String, ended: Bool }
+/// A binding made inside the nested wait loop is not guaranteed on every path
+/// out of the outer loop, so the continuation itself cannot be read after the
+/// loop — everything the outcomes need has to be folded into this value while
+/// it is still in scope.
+///
+/// `stalled` is LOAD-BEARING, not bookkeeping. An AWL loop exits identically
+/// whether `until` came true or `max` was reached — the lowering returns
+/// `Ok(var)` on both paths (`crates/aion-awl/src/emitter/loops.rs:86-121`),
+/// with no flag and no error. So a wait loop that exhausts its nudge budget
+/// falls out holding a blank message, and WITHOUT this field the outer
+/// `until` would be false and the session would dispatch another agent round
+/// on an empty prompt, over and over, until the round budget was spent.
+/// `stalled` is the only thing that makes the two exits distinguishable.
+type Round { prompt: String, reply: String, ended: Bool, stalled: Bool }
 
 /// The session's recorded result: how it ended, how many agent rounds ran, the
 /// final agent reply, and the workspace path (which persists for inspection).
@@ -129,24 +136,32 @@ step session after provision
   // the session or sends a non-blank message, absorbing blank nudges without
   // spending an agent round. AWL demands a bound on it, so the tolerance is
   // finite where the Gleam version's was not.
-  loop round = Round(prompt: session.opening_prompt, reply: "", ended: false) counting rounds
+  //
+  // `stalled` folds the inner loop's give-up into the threaded value, and the
+  // outer `until` tests it. Both halves are required: an AWL loop cannot
+  // report WHY it exited, so without this the exhausted wait would fall
+  // through and the next iteration would dispatch an agent round on an empty
+  // prompt. See `Round`.
+  loop round = Round(prompt: session.opening_prompt, reply: "", ended: false, stalled: false) counting rounds
     assistant(prompt: round.prompt) -> reply
     loop nudge = Continuation(message: "", end: false)
       wait assistant_continue -> nudge
       until nudge.end or nudge.message != ""
       max max_nudges
-    Round(prompt: nudge.message, reply: reply, ended: nudge.end) -> round
-    until round.ended
+    Round(prompt: nudge.message, reply: reply, ended: nudge.end, stalled: not nudge.end and nudge.message == "") -> round
+    until round.ended or round.stalled
     max max_rounds
 
   // Three ways out, all read off the threaded value — see `Round` for why the
-  // continuation itself is not readable here.
+  // continuation itself is not readable here. Ordered deliberately: an
+  // operator who ends with a blank message sets BOTH `ended` and the blank
+  // condition, and their intent wins.
   outcome operator_ended: when round.ended,
     route ended(disposition: OperatorEnded, rounds: rounds, last_reply: round.reply,
       workspace_path: session.path)
-  // The wait loop spent its nudge budget: it left with a blank message and no
-  // end flag, so nothing was ever sent to the agent.
-  outcome nudges_spent: when round.prompt == "",
+  // The wait loop spent its nudge budget without the operator ever deciding,
+  // so the session ends here rather than dispatching another round.
+  outcome nudges_spent: when round.stalled,
     route stalled(disposition: NudgeCapExhausted, rounds: rounds, last_reply: round.reply,
       workspace_path: session.path)
   // The round budget is spent. An OUTCOME, never an error: the operator reads
