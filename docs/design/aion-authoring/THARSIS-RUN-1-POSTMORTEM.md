@@ -89,9 +89,13 @@ unproven. Do not repeat it as fact.
 
 1. **#82 must be fixed.** Re-running into the same engine fault burns another
    hour for the same ending.
-2. **Rebuild the worker.** The live binary (pid 49833) PREDATES both halves of
-   the #79 staging fix (`d2b32d84`, `5008a747`). Without a rebuild the fix is
-   not in the loop and the scope-fence gate will keep failing items for
+2. ~~**Rebuild the worker.**~~ **DONE** — `cargo build --release` exit 0 at
+   2026-07-30 18:56 local, so
+   `examples/staged-rounds/worker/target/release/staged-rounds-worker` now
+   carries both halves of the #79 staging fix (`d2b32d84`, `5008a747`).
+   **The RUNNING worker (pid 49833) is still the old code** and holds its own
+   inode; it must be restarted to pick this up. Without that restart the fix
+   is not in the loop and the scope-fence gate will keep failing items for
    committing their own build output.
 3. **Rebuild `target/release/aion`** — it is currently MISSING, removed by an
    agent's cargo activity mid-session. The running server holds its own inode,
