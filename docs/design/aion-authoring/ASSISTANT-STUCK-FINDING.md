@@ -68,6 +68,22 @@ they are certainly indistinguishable in the console.
    authored workflow timeout is wired to nothing; this is that gap with a
    24-day receipt attached.
 
+   **And the receipt is exact.** `examples/assistant/workflow.toml` declares
+   `timeout_seconds = 604800` — seven days, and its comment says so in words:
+   *"The timeout sizes the longest legitimate session: an operator conversation
+   left open across a working week."* The run started 2026-07-06 and is still
+   `Running` on 2026-07-30. The authored bound was exceeded by **17 days** and
+   nothing happened. This is no longer "the timeout is not wired" as a code
+   reading; it is a declared seven-day bound, measurably ignored, on the
+   operator's own machine.
+
+   Note the same file draws a deliberate distinction that must be preserved by
+   any fix: *"Individual agent rounds carry no step timeout by design — a
+   wedged round is cancelled/intervened, never timed out."* So the ROUND is
+   correctly unbounded; the SESSION was supposed to be bounded and was not.
+   A fix that bounds rounds would break the design; a fix that bounds the
+   workflow is what was already specified.
+
 3. **Restart re-arms it silently and forever.** Three re-arms today alone
    (02:55, 02:58, 07:08), each on a server start. Each one makes the workflow
    look freshly active. A run that has been dead for three weeks presents as
