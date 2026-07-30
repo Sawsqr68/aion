@@ -1,6 +1,102 @@
 # Fleet + lanes: LIVE STATE (resume point)
 
-## 🔴 TWO LANES IN FLIGHT RIGHT NOW — 2026-07-30 ~13:20Z. `origin/main` = `7bbe947f`.
+## 🔴🔴 RESUME HERE — 2026-07-31. Both lanes DEAD (usage limit). HEAD `16ba5157`.
+
+**Both Opus lanes were terminated mid-run by the weekly usage limit**, not by
+failure. Limit resets **Mon 3 Aug 2pm Melbourne**. Fan-out is constrained until
+then; solo work is fine.
+
+### What landed
+
+- **AWL query surface — COMMITTED `d00cb80b`.** `query <name>: <Type>` header
+  decl + `answer <name>(…)` statement. `examples/assistant/awl/assistant.awl`
+  now answers `assistant_status` with phase/round, re-registered per loop pass.
+  #96 closed in substance.
+- **Boundary lane (#95 + #97-A) — PRESERVED as `16ba5157`, a WIP commit I made
+  because the agent died before committing.** 27 files, incl. new
+  `crates/aion-package/src/admission.rs`, `crates/aion/src/signal/admission.rs`,
+  `crates/aion/src/loader/catalog_admission.rs`, and a 504-line
+  `crates/aion/tests/declared_contract_boundary.rs` carrying the exact ordering
+  test the brief demanded. **NOT verified, NOT claimed green.**
+
+### 🔴 THE FIRST WHOLE-REPO BATTERY EVER RUN — 8/11 green, 3685 tests passed
+
+`bash scripts/battery.sh`, log at the scratchpad `battery.log`. Manifest:
+
+```
+PASS rust:fmt · rust:clippy · console:typecheck · console:test
+PASS python:aion-worker (125) · python:aion-client (124)
+PASS ts-worker:proto-drift · ts-worker:typecheck
+FAIL rust:test (101) · rust:test-all-features (101) · ts-worker:test (1)
+```
+
+**None of the three reds is a product defect. All three diagnosed:**
+
+1. `aion-package --test awl_worker_build` →
+   `the_generated_worker_compiles_lints_and_proves_its_advertisement`.
+   Cause: **`signal: 9, SIGKILL`** on a dozen dependency crates. The test
+   spawns a NESTED cargo build in a temp dir while the battery is itself
+   compiling — memory contention, the box OOM-killing rustc. This is the
+   contended-red-is-not-red law. Re-run it alone to confirm.
+2. `aion-rs --test awl_bc4_differential` → `covered::covered_set_is_byte_identical`.
+   Report reads **`0 DIVERGENCES, 1 INFRA`** — the backends AGREE perfectly.
+   The INFRA line is `schema-doors/valid/import_constraints`, where BOTH
+   backends refused the start with the identical message:
+   `/profile/handle: "x" is shorter than 3 characters`.
+   **ROOT CAUSE (found, fix NOT yet written):** the witness generator
+   `example_with_defs` at `crates/aion/tests/awl_bc4_differential/fixtures.rs:147`
+   emits `Value::String("x")` for ANY string and ignores every constraint
+   keyword. `profile.schema.json` declares `minLength: 3`, `maxLength: 32`,
+   `pattern: ^[a-z][a-z0-9_]*$`, `age` `minimum: 0`/`maximum: 150`. The
+   generator's own doc-comment at `fixtures.rs:103-107` CLAIMS it "satisfies
+   schema" — it does not, and nothing caught that until the boundary lane made
+   start-input validation real. So this red is the boundary lane WORKING.
+   **Fix shape, ruled:** (a) honour minLength/maxLength/minimum/maximum/minItems
+   in the generator so witnesses are valid and the fixture regains its real
+   coverage — a start-refused fixture tests nothing about lowering; (b) assert
+   the produced witness against the schema (`jsonschema` is already a workspace
+   dep, used by `aion-package`) so an unsatisfiable witness fails LOUDLY at the
+   fixture instead of surfacing as infra noise; (c) `fold_runs` at
+   `driver.rs:292-311` classifies ANY engine run error as INFRA — a both-sides
+   identical refusal is AGREEMENT and should be scored as such, not as noise.
+3. `ts-worker:test` → `reconnect > completes an unaborted default sleep and
+   leaves no timer behind`. NOT diagnosed. Fake-timer test; could be a real
+   reconnect bug or a flake. Owed.
+
+### 🔴 #95 IS ANSWERED: input schema was genuinely UNENFORCED at start
+
+The differential red above is the proof: a fixture ran for months with an input
+violating its own declared `minLength`. It now refuses. So the start-boundary
+hole was real, and the boundary lane closed it.
+
+### Queued, ruled, ready to dispatch when the limit resets
+
+#98 the `agent` marker (`RULING-AGENT-ACTION-WIRE-FORM.md`), then #97-B (a bare
+optional scalar never narrows; the `narrow` machinery is half-built —
+`checker/exprs.rs:14-23` carries the slot, `blocks.rs:102` and `walk.rs:291`
+pass `None`).
+
+### Answered to Cally 2026-07-31 (full text in the Meridian DM)
+
+**The tharsis/`staged_rounds` flight test: NOT norn, NOT aion — beamr.** Ran
+07:10:44→08:06:17 on 30 Jul. Every piece of real work SUCCEEDED (planner, 3×
+provision, 3× dev with real commits on three branches, 3× gate, 54–61 KB
+results). Died 14 ms after the last gate. beamr 0.16.2's JIT re-enters the
+interpreter for any external call from compiled code and BOTH edges build a
+fresh `NativeServices::default()` — `jit/runtime.rs:165`,
+`jit/runtime_closure.rs:197`, `interpreter/mod.rs:210-217`.
+`JitRuntimeContext` (`process/types.rs:269`) carries module/registry/jit_cache
+but not services. Trigger: JIT'd F → bytecode G → NIF; a direct `Native` import
+deopts and is safe, which is why the first two fork/joins worked. Artemis owns
+it; branch `defect/beamr-jit-loses-native-services`. **`replay_driver` is in
+the dropped set — that is a durability violation presenting as silence.**
+
+**Open question put to Tom via Cally:** is Gleam a supported authoring surface,
+or is AWL the only one? Gleam packages build and deploy cleanly and then cannot
+start (#88). Silence-default: AWL is the path, and I write the Gleam limit up
+as a deliberate documented boundary rather than a bug.
+
+## 🔴 TWO LANES IN FLIGHT RIGHT NOW — 2026-07-30 ~13:20Z (HISTORICAL). `origin/main` = `7bbe947f`.
 
 Both are Opus agents working DIRECTLY in this tree (no worktrees, per Tom).
 They were briefed into disjoint crates and told to stage only their own paths
