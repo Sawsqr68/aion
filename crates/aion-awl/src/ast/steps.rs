@@ -70,6 +70,8 @@ pub enum Statement {
     Wait(WaitStmt),
     /// Durable signal send: `send signal(payload…) to <workflow id>`.
     Send(SendStmt),
+    /// Query answer registration: `answer query(field: expr, …)`.
+    Answer(AnswerStmt),
     /// Durable timer: `sleep D`.
     Sleep(SleepStmt),
     /// Intra-step parallelism: `fork … join`.
@@ -380,6 +382,57 @@ impl SendStmt {
     #[must_use]
     pub fn payload_args(&self) -> &[Arg] {
         match &self.payload {
+            Some(RoutePayload::Args(args)) => args,
+            _ => &[],
+        }
+    }
+}
+
+/// An `answer <query>[(<value>)]` statement: register what the named query
+/// reports from here on.
+///
+/// The value is computed AT THE STATEMENT, from the bindings in scope at that
+/// point, and the resulting VALUE is registered — not a closure over live
+/// state. That is what keeps AWL deterministic: replay re-executes the
+/// statement and re-registers the same value, and nothing is evaluated at an
+/// arbitrary engine yield point.
+///
+/// The statement may appear anywhere a statement may, including inside a
+/// loop, where it re-registers each iteration. That per-pass re-registration
+/// is how a running workflow reports live progress, and it is the direct
+/// analogue of the Gleam SDK's per-stage `query.handler` re-registration.
+///
+/// An `answer` records NO event: registration is not an effect and never
+/// appears in history. It is still fallible — registration talks to the
+/// engine — and a failed registration faults the step exactly like a failed
+/// send, rather than leaving a query silently unanswerable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnswerStmt {
+    /// Span from `answer` through the value.
+    pub span: Span,
+    /// Leading trivia before the statement.
+    pub lead: Vec<Lead>,
+    /// Same-line trailing comment.
+    pub trailing: Option<Comment>,
+    /// Query name (checked against the header's `query` declarations).
+    pub query: String,
+    /// Source span of the query name.
+    pub query_span: Span,
+    /// The answer value, in the same two forms a route payload takes: named
+    /// fields for a record answer type, one bare expression otherwise.
+    /// `None` is the value-less form, legal only for a `Nil` answer.
+    pub value: Option<RoutePayload>,
+    /// Span of the parenthesised value, for diagnostics that point at the
+    /// value rather than the whole statement.
+    pub value_span: Option<Span>,
+}
+
+impl AnswerStmt {
+    /// The constructed answer's named fields — empty for the bare and
+    /// single-value forms, which carry no named fields.
+    #[must_use]
+    pub fn value_args(&self) -> &[Arg] {
+        match &self.value {
             Some(RoutePayload::Args(args)) => args,
             _ => &[],
         }

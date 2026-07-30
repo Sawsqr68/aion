@@ -27,6 +27,9 @@ pub struct Document {
     pub signals: Vec<SignalDecl>,
     /// `send` declarations in source order — the OUTBOUND signal surface.
     pub sends: Vec<SendDecl>,
+    /// `query` declarations in source order — the READ-ONLY surface an
+    /// operator may ask of a running instance.
+    pub queries: Vec<QueryDecl>,
     /// Workflow `outcome` declarations in source order (at least one).
     pub outcomes: Vec<OutcomeDecl>,
     /// `const` declarations in source order.
@@ -121,6 +124,37 @@ pub struct SendDecl {
     /// Source span of the signal name.
     pub name_span: Span,
     /// Declared payload type.
+    pub ty: TypeRef,
+}
+
+/// One `query name: Type` declaration in the workflow header: a question an
+/// operator may ask a RUNNING instance of this workflow, answered from live
+/// in-memory state without appending an event.
+///
+/// The declared type is the query's ANSWER type — what a caller receives —
+/// which is why this is a separate declaration from [`SignalDecl`] and
+/// [`SendDecl`] rather than a third direction of one: a signal's type is what
+/// crosses the wire INTO or OUT OF the run as an effect, and a query's is what
+/// the run reports about itself when asked.
+///
+/// A declaration alone answers nothing. The value is registered by the
+/// `answer` statement, and a declared query that no `answer` ever registers is
+/// a check error — an operator querying such a name would get `UnknownQuery`
+/// from the engine, which reads as "this workflow has no such query" when the
+/// truth is "the author declared it and never set it".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueryDecl {
+    /// Span covering the declaration line.
+    pub span: Span,
+    /// Leading trivia before the declaration.
+    pub lead: Vec<Lead>,
+    /// Same-line trailing comment.
+    pub trailing: Option<Comment>,
+    /// Query name — the name an operator dispatches on.
+    pub name: String,
+    /// Source span of the query name.
+    pub name_span: Span,
+    /// Declared ANSWER type.
     pub ty: TypeRef,
 }
 

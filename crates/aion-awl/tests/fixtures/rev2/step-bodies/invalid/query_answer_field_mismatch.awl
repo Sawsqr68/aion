@@ -1,0 +1,13 @@
+//! Refuse an answer whose field set is not the declared answer type's: the
+//! operator would receive a shape the document never promised.
+workflow wrong_fields
+  input item_id: String
+  query review_status: Status
+  outcome done: type Done, route success
+
+type Done   { item: String }
+type Status { phase: String, note: String }
+
+step gate
+  answer review_status(phase: "gating", stage: "two")
+  route done(item: item_id)

@@ -91,6 +91,35 @@ pub fn schema_for_outcomes_in(document: &Document, root: &Path) -> Result<Value,
     Deriver::new(document, Some(root)).envelope_schema()
 }
 
+/// Derive the workflow's read-only surface: one object whose properties are
+/// the declared query names and whose values are their answer schemas, with
+/// schema imports unresolvable (no document directory). Prefer
+/// [`schema_for_queries_in`] when the `.awl` file's directory is known.
+///
+/// # Errors
+///
+/// Returns [`SchemaError`] when an answer type is undeclared, or when its
+/// schema door cannot be resolved or parsed.
+pub fn schema_for_queries(document: &Document) -> Result<Value, SchemaError> {
+    Deriver::new(document, None).queries_schema()
+}
+
+/// Derive the workflow's read-only surface — every declared query name paired
+/// with the schema of the answer an operator receives — resolving schema
+/// imports relative to `root` (the document's directory).
+///
+/// A workflow declaring no queries derives an empty `properties` object, which
+/// is the honest answer: the run reports nothing. Query answers are never
+/// `required`; whether a query has been answered yet is a runtime fact.
+///
+/// # Errors
+///
+/// Returns [`SchemaError`] when an answer type is undeclared, or when its
+/// schema door cannot be resolved or parsed.
+pub fn schema_for_queries_in(document: &Document, root: &Path) -> Result<Value, SchemaError> {
+    Deriver::new(document, Some(root)).queries_schema()
+}
+
 /// Derive an object schema over callable parameters, resolving schema imports
 /// relative to `root`.
 ///
@@ -184,6 +213,35 @@ impl<'a> Deriver<'a> {
         }
         object.insert("properties".to_owned(), Value::Object(properties));
         object.insert("required".to_owned(), Value::Array(required));
+        if !defs.is_empty() {
+            object.insert("$defs".to_owned(), Value::Object(defs));
+        }
+        Ok(Value::Object(object))
+    }
+
+    fn queries_schema(&self) -> Result<Value, SchemaError> {
+        let mut defs = Map::new();
+        let mut properties = Map::new();
+        for query in &self.document.queries {
+            let mut visited = BTreeSet::new();
+            let schema = self.type_ref_schema(&query.ty, "", &mut defs, &mut visited)?;
+            properties.insert(query.name.clone(), schema);
+        }
+        let mut object = Map::new();
+        object.insert(
+            "$schema".to_owned(),
+            json!("https://json-schema.org/draft/2020-12/schema"),
+        );
+        object.insert(
+            "description".to_owned(),
+            Value::String(format!(
+                "The {} read-only surface: each query an operator may ask a running \
+                 instance, with the answer it reports.",
+                self.document.name
+            )),
+        );
+        object.insert("type".to_owned(), json!("object"));
+        object.insert("properties".to_owned(), Value::Object(properties));
         if !defs.is_empty() {
             object.insert("$defs".to_owned(), Value::Object(defs));
         }

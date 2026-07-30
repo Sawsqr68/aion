@@ -111,6 +111,16 @@ fn print_document(printer: &mut Printer, document: &Document) {
             send.trailing.as_ref(),
         );
     }
+    // The read-only surface prints after both signal directions: a reader
+    // sees what a workflow receives, what it sends, and what it reports.
+    for query in &document.queries {
+        printer.leads(1, &query.lead);
+        printer.line(
+            1,
+            &format!("query {}: {}", query.name, type_ref_text(&query.ty)),
+            query.trailing.as_ref(),
+        );
+    }
     print_outcome_decls(printer, &document.outcomes);
     for decl in &document.consts {
         print_const_decl(printer, decl);

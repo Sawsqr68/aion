@@ -50,6 +50,10 @@ impl Token {
 /// sender's `send` and `to` are absent for the same reason and are read the
 /// same way (`parser/send.rs`): the corpus carries `action send(to: String,
 /// …)` and `step send` today, and reserving either word would break them.
+/// The read-only surface's `query` and `answer` are absent for the same
+/// reason and read the same way (`parser/query.rs`): the corpus carries
+/// `action parse_output(…, query: String)` and `wait decision -> answer`
+/// today.
 /// Words that
 /// were keywords in AWL-0/1 but are gone from rev-2 (`about`, `do`, `as`,
 /// `each`, `repeat`, `finish`, `match`, `case`, `parallel`, `race`,

@@ -429,6 +429,16 @@ impl Liveness<'_, '_> {
                         self.add_expr(value, node, defined);
                     }
                 }
+                // An answer defines nothing and READS every value expression
+                // it registers: those names must stay live into it.
+                Statement::Answer(answer) => {
+                    for arg in answer.value_args() {
+                        self.add_expr(&arg.value, node, defined);
+                    }
+                    if let Some(RoutePayload::Value(value)) = &answer.value {
+                        self.add_expr(value, node, defined);
+                    }
+                }
                 Statement::Fork(fork) => self.collect_fork(fork, node, defined),
                 Statement::Loop(looped) => self.collect_loop(looped, node, defined),
                 Statement::Route(route) => self.collect_route(route, node, defined),
@@ -569,6 +579,7 @@ fn collect_route_targets<'a>(
             | Statement::Spawn(_)
             | Statement::Wait(_)
             | Statement::Send(_)
+            | Statement::Answer(_)
             | Statement::Sleep(_)
             | Statement::SubStep(_)
             | Statement::Distribute(_)

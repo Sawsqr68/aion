@@ -1,0 +1,18 @@
+//! Refuse an answer that reads a binding not in scope AT THE STATEMENT: the
+//! value is computed here, so a name written before its writer runs is not a
+//! late read — it is a name that does not exist yet.
+workflow early_answer
+  input item_id: String
+  query review_status: Status
+  outcome done: type Done, route success
+
+type Done   { item: String }
+type Status { phase: String }
+
+worker gates
+  action evaluate(item: String) -> Status
+
+step gate
+  answer review_status(phase: assessment.phase)
+  evaluate(item: item_id) -> assessment
+  route done(item: item_id)

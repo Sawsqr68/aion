@@ -131,6 +131,28 @@ fn check_header(ctx: &mut Ctx<'_>) {
             );
         }
     }
+    // The read-only surface. Independent of both signal directions: a run may
+    // receive `status`, send `status`, and report `status` without any of the
+    // three declarations lying about the others.
+    for query in &doc.queries {
+        if !is_snake_case(&query.name) {
+            ctx.error(
+                query.name_span,
+                format!(
+                    "query name `{}` must be snake_case ([a-z][a-z0-9_]*)",
+                    query.name
+                ),
+            );
+        }
+        let ty = ctx.resolve_type_ref(&query.ty);
+        ctx.semantic.ty(query.name_span, &ty.to_string());
+        if ctx.queries.insert(query.name.clone(), ty).is_some() {
+            ctx.error(
+                query.name_span,
+                format!("duplicate query declaration `{}`", query.name),
+            );
+        }
+    }
     for outcome in &doc.outcomes {
         if !is_snake_case(&outcome.name) {
             ctx.error(

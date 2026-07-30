@@ -31,6 +31,13 @@ pub enum DeclarationKind {
     /// go-to-definition would silently go blank on exactly the relay
     /// documents the feature exists for.
     Send,
+    /// A query this workflow ANSWERS (`query <name>: <Type>`).
+    ///
+    /// A distinct category from both signal directions for the same reason
+    /// they are distinct from each other: one document may declare the same
+    /// name as a signal and as a query, and a shared category would make the
+    /// reference from an `answer` statement ambiguous.
+    Query,
     /// A workflow outcome.
     Outcome,
     /// A document-level `const`.
@@ -68,6 +75,7 @@ impl DeclarationKind {
             // The AWL keyword, so hover renders the declaration line the
             // author actually wrote.
             Self::Send => "send",
+            Self::Query => "query",
             Self::Outcome => "outcome",
             Self::Const => "const",
             Self::Type => "type",
@@ -249,29 +257,7 @@ impl Builder {
             declarations: Vec::new(),
             steps: Vec::new(),
         };
-        builder.declare(
-            document.name_span,
-            &document.name,
-            DeclarationKind::Workflow,
-            &document.narration,
-        );
-        for input in &document.inputs {
-            builder.declare(input.name_span, &input.name, DeclarationKind::Input, &[]);
-        }
-        for signal in &document.signals {
-            builder.declare(signal.name_span, &signal.name, DeclarationKind::Signal, &[]);
-        }
-        for send in &document.sends {
-            builder.declare(send.name_span, &send.name, DeclarationKind::Send, &[]);
-        }
-        for outcome in &document.outcomes {
-            builder.declare(
-                outcome.name_span,
-                &outcome.name,
-                DeclarationKind::Outcome,
-                &[],
-            );
-        }
+        builder.header_decls(document);
         builder.const_decls(document);
         for declared in &document.types {
             builder.declare(
@@ -442,8 +428,44 @@ impl Builder {
                 Statement::Collect(collect) => {
                     self.binding_declaration(collect.bind.span, &collect.bind.name);
                 }
-                Statement::Send(_) | Statement::Sleep(_) | Statement::Route(_) => {}
+                Statement::Send(_)
+                | Statement::Answer(_)
+                | Statement::Sleep(_)
+                | Statement::Route(_) => {}
             }
+        }
+    }
+
+    /// The workflow header's own declarations, in the order the document
+    /// states them: the workflow itself, then each surface it declares —
+    /// inputs, the two signal directions, the read-only queries, and the
+    /// outcomes.
+    fn header_decls(&mut self, document: &Document) {
+        self.declare(
+            document.name_span,
+            &document.name,
+            DeclarationKind::Workflow,
+            &document.narration,
+        );
+        for input in &document.inputs {
+            self.declare(input.name_span, &input.name, DeclarationKind::Input, &[]);
+        }
+        for signal in &document.signals {
+            self.declare(signal.name_span, &signal.name, DeclarationKind::Signal, &[]);
+        }
+        for send in &document.sends {
+            self.declare(send.name_span, &send.name, DeclarationKind::Send, &[]);
+        }
+        for query in &document.queries {
+            self.declare(query.name_span, &query.name, DeclarationKind::Query, &[]);
+        }
+        for outcome in &document.outcomes {
+            self.declare(
+                outcome.name_span,
+                &outcome.name,
+                DeclarationKind::Outcome,
+                &[],
+            );
         }
     }
 

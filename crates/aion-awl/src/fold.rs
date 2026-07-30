@@ -264,6 +264,7 @@ impl Folder<'_> {
                     self.fold_payload(&mut send.payload)?;
                     self.fold_expr(&mut send.target)?;
                 }
+                Statement::Answer(answer) => self.fold_payload(&mut answer.value)?,
                 Statement::Wait(_) | Statement::Sleep(_) | Statement::Collect(_) => {}
             }
         }
@@ -275,7 +276,7 @@ impl Folder<'_> {
     }
 
     /// Fold a payload in either of its two forms — the shared body of route
-    /// payloads and `send` payloads.
+    /// payloads, `send` payloads, and `answer` values.
     fn fold_payload(
         &mut self,
         payload: &mut Option<crate::ast::RoutePayload>,

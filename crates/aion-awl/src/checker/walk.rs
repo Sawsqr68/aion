@@ -14,6 +14,7 @@ use super::context::{Ctx, Flow};
 use super::exprs::View;
 use super::graph::StepGraph;
 use super::outcomes::{Env, check_clauses, check_route};
+use super::queries::walk_answer;
 use super::sends::walk_send;
 use super::stages::walk_pipe;
 use super::types::{Ty, assignable, same_ty};
@@ -245,6 +246,7 @@ fn statement_span(statement: &Statement) -> Span {
         Statement::Pipe(pipe) => pipe.span,
         Statement::Wait(wait) => wait.span,
         Statement::Send(send) => send.span,
+        Statement::Answer(answer) => answer.span,
         Statement::Sleep(sleep) => sleep.span,
         Statement::Fork(fork) => fork.span,
         Statement::Loop(looped) => looped.span,
@@ -272,6 +274,12 @@ fn walk_statement(
         // only outcome is success or a fault on the step.
         Statement::Send(send) => {
             walk_send(w, scope, send);
+            None
+        }
+        // An answer binds nothing and produces no value: it registers what a
+        // query reports and either succeeds or faults the step.
+        Statement::Answer(answer) => {
+            walk_answer(w, scope, answer);
             None
         }
         Statement::Sleep(_) => None,

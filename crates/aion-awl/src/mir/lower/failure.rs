@@ -115,6 +115,11 @@ fn refuse_uninventoried(ctx: &Ctx<'_>, on_failure: &OnFailure) -> Result<(), Low
             | Statement::Spawn(_)
             | Statement::Wait(_)
             | Statement::Send(_)
+            // An `answer` draws its two lifted functions from the DYNAMIC
+            // pool at the tail of the module (like a collection predicate),
+            // never from a reserved inventory, so it cannot misalign a
+            // `FnRef` by lowering outside the slot traversal.
+            | Statement::Answer(_)
             | Statement::Fork(_)
             | Statement::Loop(_) => continue,
         };

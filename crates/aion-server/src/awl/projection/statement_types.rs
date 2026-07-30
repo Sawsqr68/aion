@@ -88,6 +88,8 @@ pub enum ProjectionStatementKind {
     Wait,
     /// Durable signal send.
     Send,
+    /// Query answer registration (records no event).
+    Answer,
     /// Durable timer.
     Sleep,
     /// Parallel collection fan-out.

@@ -1,0 +1,12 @@
+//! Refuse an answer whose query the header never declares: the name would be
+//! registered with the engine and no caller would ever ask for it.
+workflow stray_answer
+  input item_id: String
+  outcome done: type Done, route success
+
+type Done   { item: String }
+type Status { phase: String }
+
+step gate
+  answer review_status(phase: "gating")
+  route done(item: item_id)

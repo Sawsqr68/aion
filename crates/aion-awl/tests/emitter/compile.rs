@@ -134,6 +134,26 @@ fn signal_sender_fixture_compiles_under_gleam() -> Result<(), Box<dyn Error>> {
     )
 }
 
+/// Query-surface compile proof: the emitted `query.handler(…)` call, its
+/// answer-type codec argument, the reply thunk, and the `Result`
+/// discrimination are real Gleam against the local SDK — not merely
+/// well-formed text. This is the proof that catches an arity or
+/// argument-order drift against `aion/query.gleam`, which no AWL-side test
+/// could see.
+#[test]
+fn query_surface_fixture_compiles_under_gleam() -> Result<(), Box<dyn Error>> {
+    if crate::gleam_test_support::skip_if_unavailable() {
+        return Ok(());
+    }
+    compile_generated_modules(
+        "query_surface",
+        &[(
+            "gated_review",
+            emitted_fixture("step-bodies/valid/query_answer.awl")?,
+        )],
+    )
+}
+
 fn compile_generated_modules(
     project_name: &str,
     modules: &[(&str, String)],

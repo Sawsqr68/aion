@@ -44,6 +44,34 @@ pub(super) fn print_step(printer: &mut Printer, indent: usize, step: &Step) {
     }
 }
 
+/// The two effect statements that name a header declaration and construct
+/// its payload from named fields. Lifted out of `print_statement` because
+/// they render identically apart from the keyword and the trailing address.
+fn print_send(printer: &mut Printer, indent: usize, send: &crate::ast::SendStmt) {
+    printer.leads(indent, &send.lead);
+    printer.line(
+        indent,
+        &format!(
+            "send {} to {}",
+            payload_text(&send.signal, send.payload.as_ref()),
+            expr_text(&send.target)
+        ),
+        send.trailing.as_ref(),
+    );
+}
+
+fn print_answer(printer: &mut Printer, indent: usize, answer: &crate::ast::AnswerStmt) {
+    printer.leads(indent, &answer.lead);
+    printer.line(
+        indent,
+        &format!(
+            "answer {}",
+            payload_text(&answer.query, answer.value.as_ref())
+        ),
+        answer.trailing.as_ref(),
+    );
+}
+
 fn print_statement(printer: &mut Printer, indent: usize, statement: &Statement) {
     match statement {
         Statement::Call(call) => {
@@ -78,18 +106,8 @@ fn print_statement(printer: &mut Printer, indent: usize, statement: &Statement) 
             let _ = write!(text, " -> {}", wait.bind.name);
             printer.line(indent, &text, wait.trailing.as_ref());
         }
-        Statement::Send(send) => {
-            printer.leads(indent, &send.lead);
-            printer.line(
-                indent,
-                &format!(
-                    "send {} to {}",
-                    payload_text(&send.signal, send.payload.as_ref()),
-                    expr_text(&send.target)
-                ),
-                send.trailing.as_ref(),
-            );
-        }
+        Statement::Send(send) => print_send(printer, indent, send),
+        Statement::Answer(answer) => print_answer(printer, indent, answer),
         Statement::Sleep(sleep) => {
             printer.leads(indent, &sleep.lead);
             printer.line(

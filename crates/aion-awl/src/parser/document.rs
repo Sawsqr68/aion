@@ -15,6 +15,12 @@ use super::stream::{Stream, describe};
 use super::types::{parse_type_decl, parse_type_ref, type_ref_span};
 use super::workers::{expect_duration, parse_child, parse_worker};
 
+/// The declaration words a workflow header admits, as they read in the
+/// "found something else" diagnostic. One constant so the two arms that raise
+/// it can never drift apart as the header grows.
+const HEADER_EXPECTATION: &str = "expected `timeout`, `input`, `signal`, `send`, `query`, or \
+     `outcome` in the workflow header";
+
 /// Parse a complete rev-2 AWL document.
 ///
 /// # Errors
@@ -70,6 +76,7 @@ pub fn parse(source: &str) -> Result<Document, ParseError> {
         inputs: Vec::new(),
         signals: Vec::new(),
         sends: Vec::new(),
+        queries: Vec::new(),
         outcomes: Vec::new(),
         consts: Vec::new(),
         types: Vec::new(),
@@ -125,8 +132,9 @@ fn parse_narration(stream: &mut Stream) -> Result<Vec<DocLine>, ParseError> {
     Ok(narration)
 }
 
-/// Parse the indented header block: `timeout`, `input`, `signal`, `send`, and
-/// `outcome` declarations in any order (the printer canonicalizes the order).
+/// Parse the indented header block: `timeout`, `input`, `signal`, `send`,
+/// `query`, and `outcome` declarations in any order (the printer canonicalizes
+/// the order).
 fn parse_header_block(stream: &mut Stream, document: &mut Document) -> Result<(), ParseError> {
     let leads = stream.take_leads()?;
     if !stream.open_block() {
@@ -193,23 +201,21 @@ fn parse_header_block(stream: &mut Stream, document: &mut Document) -> Result<()
                     .sends
                     .push(super::send::parse_declaration(stream, lead, span)?);
             }
+            // `query` is positional for the same reason (`parser/query.rs`).
+            TokenKind::Identifier(word) if super::query::heads_declaration(word) => {
+                document
+                    .queries
+                    .push(super::query::parse_declaration(stream, lead, span)?);
+            }
             TokenKind::Identifier(word) => {
-                let message = gone_keyword_hint(word).unwrap_or_else(|| {
-                    format!(
-                        "expected `timeout`, `input`, `signal`, `send`, or `outcome` in the \
-                         workflow header, found `{word}`"
-                    )
-                });
+                let message = gone_keyword_hint(word)
+                    .unwrap_or_else(|| format!("{HEADER_EXPECTATION}, found `{word}`"));
                 return Err(ParseError::new(span, message));
             }
             other => {
                 return Err(ParseError::new(
                     span,
-                    format!(
-                        "expected `timeout`, `input`, `signal`, `send`, or `outcome` in the \
-                         workflow header, found {}",
-                        describe(other)
-                    ),
+                    format!("{HEADER_EXPECTATION}, found {}", describe(other)),
                 ));
             }
         }

@@ -167,7 +167,10 @@ fn collect_statement_routes(
             // statement. Drawing an edge for it would assert a transfer of
             // control the document does not make, and there is no in-document
             // node to draw it to.
+            // An answer transfers no control either: it registers a value and
+            // the next statement runs.
             Statement::Send(_)
+            | Statement::Answer(_)
             | Statement::Call(_)
             | Statement::Spawn(_)
             | Statement::Wait(_)

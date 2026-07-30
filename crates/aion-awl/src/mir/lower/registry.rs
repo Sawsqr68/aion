@@ -196,8 +196,8 @@ impl Ctx<'_> {
 
     /// Every wire position a composite shape can be reached from: workflow
     /// inputs, outcome payloads, signal payloads, action params/returns,
-    /// child params/returns, and declared/projected record fields
-    /// (`emitter/composites.rs:15-48`).
+    /// child params/returns, query answer types, and declared/projected
+    /// record fields (`emitter/composites.rs`).
     fn composite_roots(&self) -> Vec<GType> {
         let emitter = self.emitter;
         let mut roots: Vec<GType> = Vec::new();
@@ -212,6 +212,9 @@ impl Ctx<'_> {
         }
         for send in &emitter.document.sends {
             roots.push(type_ref_to_g(&send.ty));
+        }
+        for query in &emitter.document.queries {
+            roots.push(type_ref_to_g(&query.ty));
         }
         for worker in &emitter.document.workers {
             for action in &worker.actions {

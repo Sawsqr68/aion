@@ -154,6 +154,11 @@ pub(super) struct Ctx<'a> {
     /// directions of the workflow's surface, and only `signals` is what the
     /// engine can route INTO this run.
     pub(super) sends: BTreeMap<String, Ty>,
+    /// Declared queries (`query <name>: <Type>`): name → ANSWER type. A third
+    /// table rather than a flag on either signal direction: a query is not an
+    /// effect at all, and the same name may legitimately be a signal and a
+    /// query of the same run.
+    pub(super) queries: BTreeMap<String, Ty>,
     /// Workflow outcomes: name → payload type.
     pub(super) outcome_types: BTreeMap<String, Ty>,
     /// Semantic facts retained from checker computations.
@@ -179,6 +184,7 @@ impl<'a> Ctx<'a> {
             inputs: BTreeMap::new(),
             signals: BTreeMap::new(),
             sends: BTreeMap::new(),
+            queries: BTreeMap::new(),
             outcome_types: BTreeMap::new(),
             semantic: Builder::new(doc),
             errors: Vec::new(),

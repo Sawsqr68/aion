@@ -72,6 +72,7 @@ fn rename_statements(statements: &mut [Statement], spans: &BTreeSet<(usize, usiz
                 wait.bind.name.clone_from(&to.to_owned());
             }
             Statement::Send(send) => rename_send(send, spans, to),
+            Statement::Answer(answer) => rename_answer(answer, spans, to),
             Statement::Wait(_) | Statement::Sleep(_) => {}
             Statement::Fork(fork) => {
                 if let aion_awl::ForkHeader::Collection {
@@ -152,6 +153,18 @@ fn rename_send(send: &mut aion_awl::SendStmt, spans: &BTreeSet<(usize, usize)>, 
         None => {}
     }
     rename_expr(&mut send.target, spans, to);
+}
+
+fn rename_answer(answer: &mut aion_awl::AnswerStmt, spans: &BTreeSet<(usize, usize)>, to: &str) {
+    match &mut answer.value {
+        Some(aion_awl::RoutePayload::Args(args)) => {
+            for arg in args {
+                rename_arg(arg, spans, to);
+            }
+        }
+        Some(aion_awl::RoutePayload::Value(value)) => rename_expr(value, spans, to),
+        None => {}
+    }
 }
 
 fn rename_target(target: &mut aion_awl::RouteTarget, spans: &BTreeSet<(usize, usize)>, to: &str) {

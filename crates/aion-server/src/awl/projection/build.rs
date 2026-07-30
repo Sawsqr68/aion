@@ -232,15 +232,16 @@ impl<'a> Context<'a> {
                         groups,
                     );
                 }
-                // A send carries no nested statement list, so this scan — which
-                // exists only to descend into fork and loop bodies — has
-                // nothing to recurse into.
+                // A send and an answer carry no nested statement list, so this
+                // scan — which exists only to descend into fork and loop
+                // bodies — has nothing to recurse into.
                 Statement::SubStep(_)
                 | Statement::Call(_)
                 | Statement::Spawn(_)
                 | Statement::Pipe(_)
                 | Statement::Wait(_)
                 | Statement::Send(_)
+                | Statement::Answer(_)
                 | Statement::Sleep(_)
                 | Statement::Route(_)
                 | Statement::Distribute(_)
@@ -306,7 +307,10 @@ fn collect_waits(statements: &[Statement], found: &mut bool) {
             // SUSPENDS, and a send does not: it hands the payload to the signal
             // bridge and the step carries straight on. Only `wait` (and the
             // matching receiver in the target document) suspends.
+            // An answer suspends nothing either: it registers a value and the
+            // step carries straight on.
             Statement::Send(_)
+            | Statement::Answer(_)
             | Statement::Call(_)
             | Statement::Spawn(_)
             | Statement::Pipe(_)
@@ -341,7 +345,10 @@ fn collect_activities(statements: &[Statement], names: &mut BTreeSet<String>) {
             // A send names a SIGNAL, not an activity: it is executed by the
             // engine's signal bridge and never dispatched to a worker, so it
             // must not appear in the activity set a queue is expected to serve.
+            // An answer names a QUERY, not an activity, and dispatches to no
+            // worker.
             Statement::Send(_)
+            | Statement::Answer(_)
             | Statement::Pipe(_)
             | Statement::Wait(_)
             | Statement::Sleep(_)
@@ -407,6 +414,7 @@ fn collect_child_calls(
             // by a runtime id, so there is no declared child relationship for
             // the projection to record.
             Statement::Send(_)
+            | Statement::Answer(_)
             | Statement::Wait(_)
             | Statement::Sleep(_)
             | Statement::Route(_)

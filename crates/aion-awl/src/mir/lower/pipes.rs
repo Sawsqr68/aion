@@ -217,11 +217,11 @@ fn projection_closure(
     stmts: &mut Vec<Stmt>,
 ) -> Result<(Var, GType), LowerError> {
     let (index, field_ty) = field_index(ctx, elem, field, span)?;
-    let (ordinal, reference) = ctx.take_predicate()?;
+    let (ordinal, reference) = ctx.take_dynamic()?;
     let saved = ctx.swap_var_counter(0);
     let built = build_projection_fn(ctx, ordinal, elem, index, &field_ty, span);
     ctx.swap_var_counter(saved);
-    ctx.finish_predicate(ordinal, MirFn::Flow(built));
+    ctx.finish_dynamic(ordinal, MirFn::Flow(built));
     let closure = ctx.fresh_var();
     stmts.push(Stmt::MakeClosure {
         dst: closure,
@@ -274,11 +274,11 @@ fn compare_closure(
     stmts: &mut Vec<Stmt>,
 ) -> Result<Var, LowerError> {
     let (index, _) = field_index(ctx, elem, field, span)?;
-    let (ordinal, reference) = ctx.take_predicate()?;
+    let (ordinal, reference) = ctx.take_dynamic()?;
     let saved = ctx.swap_var_counter(0);
     let built = build_compare_fn(ctx, ordinal, elem, index, compare, span);
     ctx.swap_var_counter(saved);
-    ctx.finish_predicate(ordinal, MirFn::Flow(built));
+    ctx.finish_dynamic(ordinal, MirFn::Flow(built));
     let closure = ctx.fresh_var();
     stmts.push(Stmt::MakeClosure {
         dst: closure,

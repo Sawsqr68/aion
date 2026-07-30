@@ -116,6 +116,9 @@ pub(super) fn parse_statement(
             if super::send::heads_statement(stream, &name) {
                 return super::send::parse_statement(stream, lead, span);
             }
+            if super::query::heads_statement(stream, &name) {
+                return super::query::parse_statement(stream, lead, span);
+            }
             parse_value_statement(stream, lead, span, &name)
         }
         // A statement may start with any expression: a literal (including

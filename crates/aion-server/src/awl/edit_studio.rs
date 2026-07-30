@@ -382,6 +382,10 @@ fn statement_uses_field(statement: &Statement, name: &str) -> bool {
         Statement::Send(send) => {
             route_uses_field(send.payload.as_ref(), name) || expr_uses_field(&send.target, name)
         }
+        // An answer reads fields in the value it registers, for the same
+        // reason a send does: a rename that reported "nothing uses it" would
+        // leave a document that no longer compiles.
+        Statement::Answer(answer) => route_uses_field(answer.value.as_ref(), name),
         Statement::Route(route) => route_uses_field(route.target.payload.as_ref(), name),
         Statement::SubStep(step) => step_uses_field(step, name),
         Statement::Distribute(distribute) => expr_uses_field(&distribute.collection, name),

@@ -205,6 +205,7 @@ fn remove_statement_locals(bindings: &mut BTreeMap<String, GType>, statements: &
             }
             Statement::Spawn(_)
             | Statement::Send(_)
+            | Statement::Answer(_)
             | Statement::Sleep(_)
             | Statement::Route(_)
             | Statement::Distribute(_) => {}
@@ -384,6 +385,7 @@ fn collect_statements(
             // knows the region shape; the rest bind nothing.
             Statement::Spawn(_)
             | Statement::Send(_)
+            | Statement::Answer(_)
             | Statement::Sleep(_)
             | Statement::Route(_)
             | Statement::Distribute(_)

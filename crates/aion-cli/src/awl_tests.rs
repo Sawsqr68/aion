@@ -284,7 +284,7 @@ worker files\n\
 \n\
 step keep_note\n\
 \x20 note |> keep |> route kept\n";
-    let schema = schema_source(Path::new("note.awl"), source, Some("Note"))
+    let schema = schema_source(Path::new("note.awl"), source, Some("Note"), false)
         .map_err(|diagnostics| anyhow::anyhow!("unexpected diagnostics: {diagnostics:?}"))?;
     let value: serde_json::Value = serde_json::from_str(&schema)?;
     assert_eq!(value["type"], "object");
@@ -309,7 +309,7 @@ worker greeter\n\
 \n\
 step greet\n\
 \x20 name |> greet |> route done\n";
-    let schema = schema_source(Path::new("greeter.awl"), source, None)
+    let schema = schema_source(Path::new("greeter.awl"), source, None, false)
         .map_err(|diagnostics| anyhow::anyhow!("unexpected diagnostics: {diagnostics:?}"))?;
     let value: serde_json::Value = serde_json::from_str(&schema)?;
     assert_eq!(value["properties"]["name"]["type"], "string");
@@ -331,7 +331,8 @@ worker probe\n\
 \n\
 step one\n\
 \x20 token |> make |> route done\n";
-    let Err(diagnostics) = schema_source(Path::new("probe.awl"), source, Some("Brief")) else {
+    let Err(diagnostics) = schema_source(Path::new("probe.awl"), source, Some("Brief"), false)
+    else {
         anyhow::bail!("expected a typecheck diagnostic");
     };
     assert!(!diagnostics.is_empty());

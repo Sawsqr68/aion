@@ -1,0 +1,463 @@
+module gated_review source=gated_review.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  gate_loop_0:
+    aion@activity:task_queue/2 [activities] (v8, lit#24)
+    aion@workflow:run/1 [activities] (v9)
+== durable families == activities
+== atoms ==
+  [0] decision
+  [1] done
+  [2] status
+  [3] evaluate_input
+  [4] gated_review_input
+  [5] done_outcome
+  [6] some
+  [7] none
+  [8] ok
+  [9] awl_failed
+  [10] error
+  [11] false
+  [12] awl_outcome_failure
+== literals ==
+  [0] "approved"
+  [1] "item"
+  [2] "phase"
+  [3] "note"
+  [4] "phase"
+  [5] "note"
+  [6] "item"
+  [7] "item_id"
+  [8] "max_passes"
+  [9] "done"
+  [10] "outcome"
+  [11] ""
+  [12] "GatedReviewOutcome"
+  [13] "done"
+  [14] "payload"
+  [15] "announcing"
+  [16] "no reviewer has looked yet"
+  [17] "review_status"
+  [18] "passes_left"
+  [19] "heartbeat"
+  [20] "notes"
+  [21] "last_note"
+  [22] "reviewing"
+  [23] "review_status"
+  [24] "gates"
+  [25] "settled"
+  [26] "review_status"
+  [27] "gave_up"
+  [28] "failed"
+  [29] "the gate faulted"
+  [30] "review_status"
+  [31] "gave_up"
+== types ==
+  record Decision tag=decision
+    approved: bool
+  record Done tag=done
+    item: string
+  record Status tag=status
+    phase: string
+    note: nullable(string) optional
+  record EvaluateInput tag=evaluate_input
+    item: string
+  record GatedReviewInput tag=gated_review_input
+    item_id: string
+    max_passes: int
+  union GatedReviewOutcome
+    done -> done_outcome(ref(Done))
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=gated_review_input_codec output=gated_review_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(gated_review.GatedReviewInput, gated_review.GatedReviewOutcome, AwlError)
+  T-DEF name="gated_review" input=gated_review_input_codec output=gated_review_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (gated_review.GatedReviewInput) -> Result(gated_review.GatedReviewOutcome, AwlError)
+  T-EXEC fields=[item_id:String, max_passes:Int] entry=step_announce args=[0, 1]
+== fn decision_codec/0 origin=codec_template(RecordTrio, Decision, record#0) ==
+  sig: () -> Codec(gated_review.Decision)
+  v0 = make_closure decision_to_json captures=[]
+  v1 = call_local decision_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn decision_to_json/1 origin=codec_template(RecordTrio, Decision, record#0) ==
+  sig: (gated_review.Decision) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"approved": v1|>awlc.bool_to_json}
+  return v2
+== fn decision_decoder/0 origin=codec_template(RecordTrio, Decision, record#0) ==
+  sig: () -> Decoder(gated_review.Decision)
+  v0 = call_rt aion@awl@codec:bool_decoder/0()
+  v1 = make_closure decision_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn decision_decoder$0/1 origin=lifted(decision_decoder, #0) ==
+  sig: (Bool) -> Decoder(gated_review.Decision)
+  v1 = record(decision, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn done_codec/0 origin=codec_template(RecordTrio, Done, record#1) ==
+  sig: () -> Codec(gated_review.Done)
+  v0 = make_closure done_to_json captures=[]
+  v1 = call_local done_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn done_to_json/1 origin=codec_template(RecordTrio, Done, record#1) ==
+  sig: (gated_review.Done) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"item": v1|>awlc.string_to_json}
+  return v2
+== fn done_decoder/0 origin=codec_template(RecordTrio, Done, record#1) ==
+  sig: () -> Decoder(gated_review.Done)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure done_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v0, v1)
+== fn done_decoder$0/1 origin=lifted(done_decoder, #0) ==
+  sig: (String) -> Decoder(gated_review.Done)
+  v1 = record(done, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn status_codec/0 origin=codec_template(RecordTrio, Status, record#2) ==
+  sig: () -> Codec(gated_review.Status)
+  v0 = make_closure status_to_json captures=[]
+  v1 = call_local status_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn status_to_json/1 origin=codec_template(RecordTrio, Status, record#2) ==
+  sig: (gated_review.Status) -> Json
+  v1 = field(v0, 1)
+  v2 = call_rt aion@awl@codec:string_to_json/1(v1) live_after=[v0]
+  v3 = tuple([lit#2, v2])
+  v4 = list([v3])
+  v5 = field(v0, 2)
+  v6 = call_local status_to_json$field1(v5) live_after=[v4]
+  v7 = list([v4, v6])
+  v8 = call_rt gleam@list:flatten/1(v7)
+  tail_rt gleam@json:object/1(v8)
+== fn status_decoder/0 origin=codec_template(RecordTrio, Status, record#2) ==
+  sig: () -> Decoder(gated_review.Status)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure status_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+== fn status_to_json$field1/1 origin=lifted(status_to_json, #0) ==
+  sig: (Option(String)) -> List(#(String, Json))
+  if is_tagged v0 some/2:
+    v1 = field(v0, 1)
+    v2 = call_rt aion@awl@codec:string_to_json/1(v1)
+    v3 = tuple([lit#3, v2])
+    v4 = list([v3])
+    return v4
+  else:
+    return nil
+== fn status_decoder$some/1 origin=lifted(status_decoder, #0) ==
+  sig: (Dynamic) -> Option(Dynamic)
+  v1 = record(some, [v0])
+  return v1
+== fn status_decoder$0/1 origin=lifted(status_decoder, #1) ==
+  sig: (String) -> Decoder(gated_review.Status)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure status_decoder$some captures=[]
+  v3 = call_rt gleam@dynamic@decode:map/2(v1, v2) live_after=[v0]
+  v4 = make_closure status_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:optional_field/4(lit#5, 'none', v3, v4)
+== fn status_decoder$1/2 origin=lifted(status_decoder, #2) ==
+  sig: (Option(String), String) -> Decoder(gated_review.Status)
+  v2 = record(status, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn evaluate_input_codec/0 origin=codec_template(RecordTrio, EvaluateInput, record#3) ==
+  sig: () -> Codec(gated_review.EvaluateInput)
+  v0 = make_closure evaluate_input_to_json captures=[]
+  v1 = call_local evaluate_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn evaluate_input_to_json/1 origin=codec_template(RecordTrio, EvaluateInput, record#3) ==
+  sig: (gated_review.EvaluateInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"item": v1|>awlc.string_to_json}
+  return v2
+== fn evaluate_input_decoder/0 origin=codec_template(RecordTrio, EvaluateInput, record#3) ==
+  sig: () -> Decoder(gated_review.EvaluateInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure evaluate_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
+== fn evaluate_input_decoder$0/1 origin=lifted(evaluate_input_decoder, #0) ==
+  sig: (String) -> Decoder(gated_review.EvaluateInput)
+  v1 = record(evaluate_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn gated_review_input_codec/0 origin=codec_template(RecordTrio, GatedReviewInput, record#4) ==
+  sig: () -> Codec(gated_review.GatedReviewInput)
+  v0 = make_closure gated_review_input_to_json captures=[]
+  v1 = call_local gated_review_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn gated_review_input_to_json/1 origin=codec_template(RecordTrio, GatedReviewInput, record#4) ==
+  sig: (gated_review.GatedReviewInput) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"item_id": v1|>awlc.string_to_json, "max_passes": v2|>awlc.int_to_json}
+  return v3
+== fn gated_review_input_decoder/0 origin=codec_template(RecordTrio, GatedReviewInput, record#4) ==
+  sig: () -> Decoder(gated_review.GatedReviewInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure gated_review_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#7, v0, v1)
+== fn gated_review_input_decoder$0/1 origin=lifted(gated_review_input_decoder, #0) ==
+  sig: (String) -> Decoder(gated_review.GatedReviewInput)
+  v1 = call_rt aion@awl@codec:int_decoder/0() live_after=[v0]
+  v2 = make_closure gated_review_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#8, v1, v2)
+== fn gated_review_input_decoder$1/2 origin=lifted(gated_review_input_decoder, #1) ==
+  sig: (Int, String) -> Decoder(gated_review.GatedReviewInput)
+  v2 = record(gated_review_input, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn gated_review_outcome_codec/0 origin=codec_template(UnionTrio, GatedReviewOutcome, union#5) ==
+  sig: () -> Codec(gated_review.GatedReviewOutcome)
+  v0 = make_closure gated_review_outcome_to_json captures=[]
+  v1 = call_local gated_review_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn gated_review_outcome_to_json/1 origin=codec_template(UnionTrio, GatedReviewOutcome, union#5) ==
+  sig: (gated_review.GatedReviewOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#9|>awlc.string_to_json, "payload": v1|>done_to_json}
+  return v2
+== fn gated_review_outcome_decoder/0 origin=codec_template(UnionTrio, GatedReviewOutcome, union#5) ==
+  sig: () -> Decoder(gated_review.GatedReviewOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure gated_review_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#10, v0, v1)
+== fn gated_review_outcome_decoder$outcome/1 origin=lifted(gated_review_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(gated_review.GatedReviewOutcome)
+  if cmp Eq v0 lit#13:
+    v3 = call_local done_decoder()
+    v4 = make_closure gated_review_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#14, v3, v4)
+  else:
+    v1 = record(done, [lit#11])
+    v2 = record(done_outcome, [v1])
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#12)
+== fn gated_review_outcome_decoder$arm0/1 origin=lifted(gated_review_outcome_decoder, #1) ==
+  sig: (gated_review.Done) -> Decoder(gated_review.GatedReviewOutcome)
+  v1 = record(done_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn list_string_codec/0 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: () -> Codec(List(String))
+  v0 = make_closure list_string_to_json captures=[]
+  v1 = call_local list_string_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn list_string_to_json/1 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: (List(String)) -> Json
+  v1 = make_closure list_string_to_json$item captures=[]
+  tail_rt gleam@json:array/2(v0, v1)
+== fn list_string_decoder/0 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: () -> Decoder(List(String))
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  tail_rt gleam@dynamic@decode:list/1(v0)
+== fn list_string_to_json$item/1 origin=lifted(list_string_to_json, #0) ==
+  sig: (String) -> Json
+  tail_rt aion@awl@codec:string_to_json/1(v0)
+== fn option_string_codec/0 origin=codec_template(CompositeTrio, Option(String), composite(nullable(string))) ==
+  sig: () -> Codec(Option(String))
+  v0 = make_closure option_string_to_json captures=[]
+  v1 = call_local option_string_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn option_string_to_json/1 origin=codec_template(CompositeTrio, Option(String), composite(nullable(string))) ==
+  sig: (Option(String)) -> Json
+  v1 = make_closure option_string_to_json$item captures=[]
+  tail_rt gleam@json:nullable/2(v0, v1)
+== fn option_string_decoder/0 origin=codec_template(CompositeTrio, Option(String), composite(nullable(string))) ==
+  sig: () -> Decoder(Option(String))
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  tail_rt gleam@dynamic@decode:optional/1(v0)
+== fn option_string_to_json$item/1 origin=lifted(option_string_to_json, #0) ==
+  sig: (String) -> Json
+  tail_rt aion@awl@codec:string_to_json/1(v0)
+== fn evaluate_activity/1 origin=activity_wrapper(evaluate, raw=false) ==
+  sig: (String) -> Activity(gated_review.EvaluateInput, gated_review.Decision)
+  T-ACT action=evaluate input_codec=evaluate_input_codec return=decision_codec
+== fn step_announce/2 origin=region(announce) ==
+  sig: (String, Int) -> Result(gated_review.GatedReviewOutcome, AwlError)
+  v2 = record(some, [lit#16])
+  v3 = record(status, [lit#15, v2])
+  v4 = make_closure awl_answer_reply_0 captures=[v3]
+  v5 = call_local awl_answer_1(v4) live_after=[v0, v1]
+  v6 = try_bind v5 live_after=[v0, v1]
+  v7 = make_closure awl_answer_reply_2 captures=[v1]
+  v8 = call_local awl_answer_3(v7) live_after=[v0, v1]
+  v9 = try_bind v8 live_after=[v0, v1]
+  v10 = make_closure awl_answer_reply_4 captures=[nil]
+  v11 = call_local awl_answer_5(v10) live_after=[v0, v1]
+  v12 = try_bind v11 live_after=[v0, v1]
+  v13 = list([v0])
+  v14 = make_closure awl_answer_reply_6 captures=[v13]
+  v15 = call_local awl_answer_7(v14) live_after=[v0, v1]
+  v16 = try_bind v15 live_after=[v0, v1]
+  v17 = record(some, [v0])
+  v18 = make_closure awl_answer_reply_8 captures=[v17]
+  v19 = call_local awl_answer_9(v18) live_after=[v0, v1]
+  v20 = try_bind v19 live_after=[v0, v1]
+  tail_local step_gate(v0, v1)
+== fn step_gate/2 origin=chain_step(announce.gate) ==
+  sig: (String, Int) -> Result(gated_review.GatedReviewOutcome, AwlError)
+  v2 = record(decision, ['false'])
+  v3 = call_local gate_loop_0(v2, 0, v1, v0) live_after=[v0, v1]
+  if is_tagged v3 ok/2:
+    v4 = field(v3, 1)
+    v5 = record(some, [v0])
+    v6 = record(status, [lit#25, v5])
+    v7 = make_closure awl_answer_reply_12 captures=[v6]
+    v8 = call_local awl_answer_13(v7) live_after=[v0, v1, v4]
+    if is_tagged v8 ok/2:
+      v9 = field(v8, 1)
+      v10 = field(v4, 1)
+      if is_true v10:
+        v11 = record(done, [v0])
+        v12 = record(done_outcome, [v11])
+        v13 = record(ok, [v12])
+        return v13
+      else:
+        v14 = record(done, [v0])
+        v15 = call_local done_to_json(v14)
+        v16 = call_rt gleam@json:to_string/1(v15)
+        v17 = record(awl_outcome_failure, [lit#27, v16])
+        v18 = record(error, [v17])
+        return v18
+    else:
+      tail_local gate_on_failure(v0, v1)
+  else:
+    tail_local gate_on_failure(v0, v1)
+== fn gate_loop_0/4 origin=loop(gate#0) ==
+  sig: (gated_review.Decision, Int, Int, String) -> Result(gated_review.Decision, AwlError)
+  v4 = record(status, [lit#22, 'none'])
+  v5 = make_closure awl_answer_reply_10 captures=[v4]
+  v6 = call_local awl_answer_11(v5) live_after=[v1, v2, v3]
+  v7 = try_bind v6 live_after=[v1, v2, v3]
+  v8 = call_local evaluate_activity(v3) live_after=[v1, v2, v3]
+  v9 = call_rt aion@activity:task_queue/2(v8, lit#24) live_after=[v1, v2, v3]
+  v10 = call_rt aion@workflow:run/1(v9) live_after=[v1, v2, v3]
+  v11 = call_rt aion@awl@error:map_activity_error/1(v10) live_after=[v1, v2, v3]
+  v12 = try_bind v11 live_after=[v1, v2, v3]
+  v13 = increment v1
+  v15 = field(v12, 1)
+  if is_true v15:
+    v14 = record(ok, [v12])
+    return v14
+  else:
+    if cmp Ge v13 v2:
+      v14 = record(ok, [v12])
+      return v14
+    else:
+      tail_local gate_loop_0(v12, v13, v2, v3)
+== fn gate_on_failure/2 origin=compensation(gate) ==
+  sig: (String, Int) -> Result(gated_review.GatedReviewOutcome, AwlError)
+  v21 = record(some, [lit#29])
+  v22 = record(status, [lit#28, v21])
+  v23 = make_closure awl_answer_reply_14 captures=[v22]
+  v24 = call_local awl_answer_15(v23) live_after=[v19]
+  v25 = try_bind v24 live_after=[v19]
+  v26 = record(done, [v19])
+  v27 = call_local done_to_json(v26)
+  v28 = call_rt gleam@json:to_string/1(v27)
+  v29 = record(awl_outcome_failure, [lit#31, v28])
+  v30 = record(error, [v29])
+  return v30
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD
+== fn awl_answer_reply_0/1 origin=query_answer(review_status/reply#0) ==
+  sig: (gated_review.Status) -> gated_review.Status
+  return v0
+== fn awl_answer_1/1 origin=query_answer(review_status/register#1) ==
+  sig: (fn() -> gated_review.Status) -> Result(Nil, AwlError)
+  v1 = call_local status_codec() live_after=[v0]
+  v2 = call_rt aion@query:handler/3(lit#17, v1, v0)
+  if is_tagged v2 ok/2:
+    v3 = record(ok, [nil])
+    return v3
+  else:
+    v4 = record(error, ['awl_failed'])
+    return v4
+== fn awl_answer_reply_2/1 origin=query_answer(passes_left/reply#2) ==
+  sig: (Int) -> Int
+  return v0
+== fn awl_answer_3/1 origin=query_answer(passes_left/register#3) ==
+  sig: (fn() -> Int) -> Result(Nil, AwlError)
+  v1 = call_rt aion@awl@codec:int_codec/0() live_after=[v0]
+  v2 = call_rt aion@query:handler/3(lit#18, v1, v0)
+  if is_tagged v2 ok/2:
+    v3 = record(ok, [nil])
+    return v3
+  else:
+    v4 = record(error, ['awl_failed'])
+    return v4
+== fn awl_answer_reply_4/1 origin=query_answer(heartbeat/reply#4) ==
+  sig: (Nil) -> Nil
+  return v0
+== fn awl_answer_5/1 origin=query_answer(heartbeat/register#5) ==
+  sig: (fn() -> Nil) -> Result(Nil, AwlError)
+  v1 = call_rt aion@awl@codec:nil_codec/0() live_after=[v0]
+  v2 = call_rt aion@query:handler/3(lit#19, v1, v0)
+  if is_tagged v2 ok/2:
+    v3 = record(ok, [nil])
+    return v3
+  else:
+    v4 = record(error, ['awl_failed'])
+    return v4
+== fn awl_answer_reply_6/1 origin=query_answer(notes/reply#6) ==
+  sig: (List(String)) -> List(String)
+  return v0
+== fn awl_answer_7/1 origin=query_answer(notes/register#7) ==
+  sig: (fn() -> List(String)) -> Result(Nil, AwlError)
+  v1 = call_local list_string_codec() live_after=[v0]
+  v2 = call_rt aion@query:handler/3(lit#20, v1, v0)
+  if is_tagged v2 ok/2:
+    v3 = record(ok, [nil])
+    return v3
+  else:
+    v4 = record(error, ['awl_failed'])
+    return v4
+== fn awl_answer_reply_8/1 origin=query_answer(last_note/reply#8) ==
+  sig: (Option(String)) -> Option(String)
+  return v0
+== fn awl_answer_9/1 origin=query_answer(last_note/register#9) ==
+  sig: (fn() -> Option(String)) -> Result(Nil, AwlError)
+  v1 = call_local option_string_codec() live_after=[v0]
+  v2 = call_rt aion@query:handler/3(lit#21, v1, v0)
+  if is_tagged v2 ok/2:
+    v3 = record(ok, [nil])
+    return v3
+  else:
+    v4 = record(error, ['awl_failed'])
+    return v4
+== fn awl_answer_reply_10/1 origin=query_answer(review_status/reply#10) ==
+  sig: (gated_review.Status) -> gated_review.Status
+  return v0
+== fn awl_answer_11/1 origin=query_answer(review_status/register#11) ==
+  sig: (fn() -> gated_review.Status) -> Result(Nil, AwlError)
+  v1 = call_local status_codec() live_after=[v0]
+  v2 = call_rt aion@query:handler/3(lit#23, v1, v0)
+  if is_tagged v2 ok/2:
+    v3 = record(ok, [nil])
+    return v3
+  else:
+    v4 = record(error, ['awl_failed'])
+    return v4
+== fn awl_answer_reply_12/1 origin=query_answer(review_status/reply#12) ==
+  sig: (gated_review.Status) -> gated_review.Status
+  return v0
+== fn awl_answer_13/1 origin=query_answer(review_status/register#13) ==
+  sig: (fn() -> gated_review.Status) -> Result(Nil, AwlError)
+  v1 = call_local status_codec() live_after=[v0]
+  v2 = call_rt aion@query:handler/3(lit#26, v1, v0)
+  if is_tagged v2 ok/2:
+    v3 = record(ok, [nil])
+    return v3
+  else:
+    v4 = record(error, ['awl_failed'])
+    return v4
+== fn awl_answer_reply_14/1 origin=query_answer(review_status/reply#14) ==
+  sig: (gated_review.Status) -> gated_review.Status
+  return v0
+== fn awl_answer_15/1 origin=query_answer(review_status/register#15) ==
+  sig: (fn() -> gated_review.Status) -> Result(Nil, AwlError)
+  v1 = call_local status_codec() live_after=[v0]
+  v2 = call_rt aion@query:handler/3(lit#30, v1, v0)
+  if is_tagged v2 ok/2:
+    v3 = record(ok, [nil])
+    return v3
+  else:
+    v4 = record(error, ['awl_failed'])
+    return v4

@@ -126,9 +126,10 @@ pub(super) struct FnPlan {
     /// The fixed child witness function passed to string-name child spawns,
     /// present exactly when a reachable child spawn form needs it.
     pub(super) child_witness: Option<FnRef>,
-    /// First dynamically allocated collection-predicate closure, after all
-    /// fixed helpers so existing modules retain byte-identical function refs.
-    pub(super) predicate_start: FnRef,
+    /// First DYNAMICALLY allocated lifted function — collection-predicate
+    /// closures and query-answer functions — after all fixed helpers, so
+    /// existing modules retain byte-identical function refs.
+    pub(super) dynamic_start: FnRef,
 }
 
 /// The assembled module skeleton, ready for region-body filling.
@@ -254,7 +255,7 @@ pub(super) fn skeleton(ctx: &mut Ctx<'_>) -> Result<Skeleton, LowerError> {
         next += 1;
     }
     let slots = super::plan_slots::plan_flow_slots(ctx, &mut next)?;
-    let (child_witness, predicate_start) = super::plan_slots::fixed_helper_refs(
+    let (child_witness, dynamic_start) = super::plan_slots::fixed_helper_refs(
         next,
         !activities.is_empty(),
         slots.child_witness_needed,
@@ -278,7 +279,7 @@ pub(super) fn skeleton(ctx: &mut Ctx<'_>) -> Result<Skeleton, LowerError> {
         waits: slots.waits,
         compensations: slots.compensations,
         child_witness,
-        predicate_start,
+        dynamic_start,
     };
 
     // Build functions in slot order.

@@ -1,0 +1,13 @@
+//! Refuse a query the document declares and never answers: an operator asking
+//! for it would be told the workflow has no such query, which is not what this
+//! document says.
+workflow silent_query
+  input item_id: String
+  query review_status: Status
+  outcome done: type Done, route success
+
+type Done   { item: String }
+type Status { phase: String }
+
+step gate
+  route done(item: item_id)

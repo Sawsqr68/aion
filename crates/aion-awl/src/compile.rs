@@ -513,6 +513,7 @@ fn statement_nodes(
             Statement::Spawn(_)
             | Statement::Wait(_)
             | Statement::Send(_)
+            | Statement::Answer(_)
             | Statement::Sleep(_)
             | Statement::Route(_)
             | Statement::Distribute(_)

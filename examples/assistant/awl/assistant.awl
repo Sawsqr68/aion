@@ -61,6 +61,13 @@ workflow assistant
   // `{"message": "", "end": true}` to finish.
   signal assistant_continue: Continuation
 
+  // The read-only surface: what an operator gets back from
+  // `POST /workflows/query {"query_name": "assistant_status"}`. It reads live
+  // in-memory state, appends no event, and answers instantly — the one thing
+  // that proves a session parked for weeks is alive rather than wedged. Same
+  // name and same shape as the Gleam original's query.
+  query assistant_status: AssistantStatus
+
   outcome ended:   type Session, route success
   outcome capped:  type Session, route success
   outcome stalled: type Session, route success
@@ -77,6 +84,20 @@ type Continuation {
 /// How the session ended. All three are CLEAN completions — the operator
 /// ended it, or one of the two explicit budgets was spent. None is an error.
 type Disposition = OperatorEnded | RoundCapExhausted | NudgeCapExhausted
+
+/// What the `assistant_status` query reports: which stage the session is in,
+/// and how many agent rounds it has run.
+///
+/// `round` is OPTIONAL where the Gleam original's is not, and the difference is
+/// a language fact, not a choice. A loop's `counting` binding is readable only
+/// AFTER the loop (`crates/aion-awl/src/emitter/loops.rs` removes it from the
+/// body scope, and the checker refuses a body reference as "bound on some path
+/// but not guaranteed"), and AWL has no arithmetic, so a round index cannot be
+/// threaded through the loop either. Reporting `0` from inside the loop would
+/// tell an operator that a session in round three is in round zero, which is
+/// worse than saying nothing: absent means "this document cannot prove it
+/// here", and every round number it DOES report is true.
+type AssistantStatus { phase: String, round: Int? }
 
 /// The provisioned session workspace and the prompt that opens the session.
 /// The opening prompt is composed WORKER-SIDE, by the same handler that
@@ -124,6 +145,10 @@ worker default
   action assistant(prompt: String) -> String
 
 step provision
+  // Registered BEFORE the activity dispatch: provisioning clones a repository
+  // and materializes skill documents, so it is the first stretch of a run long
+  // enough for an operator to ask about, and zero rounds have run.
+  answer assistant_status(phase: "provisioning", round: 0)
   assistant_provision(repo_path: repo_path, run_id: workflow.id, objective: objective) -> session
 
 step session after provision
@@ -143,7 +168,14 @@ step session after provision
   // through and the next iteration would dispatch an agent round on an empty
   // prompt. See `Round`.
   loop round = Round(prompt: session.opening_prompt, reply: "", ended: false, stalled: false) counting rounds
+    // Re-registered every pass, which is what makes the answer LIVE: the value
+    // is computed here, from the bindings in scope here, and replay re-runs the
+    // statement rather than evaluating anything at a yield point.
+    answer assistant_status(phase: "working")
     assistant(prompt: round.prompt) -> reply
+    // The long park. A real session has sat on this signal for 28 days; this is
+    // the answer that says so.
+    answer assistant_status(phase: "awaiting_operator")
     loop nudge = Continuation(message: "", end: false)
       wait assistant_continue -> nudge
       until nudge.end or nudge.message != ""
@@ -151,6 +183,9 @@ step session after provision
     Round(prompt: nudge.message, reply: reply, ended: nudge.end, stalled: not nudge.end and nudge.message == "") -> round
     until round.ended or round.stalled
     max max_rounds
+  // Past the loop the counter IS readable, so the final answer carries the
+  // real round count — the one point in the run where both fields are provable.
+  answer assistant_status(phase: "settled", round: rounds)
 
   // Three ways out, all read off the threaded value — see `Round` for why the
   // continuation itself is not readable here. Ordered deliberately: an

@@ -295,6 +295,7 @@ fn collect_from_statements<'a>(statements: &'a [Statement], found: &mut impl FnM
             | Statement::Spawn(_)
             | Statement::Wait(_)
             | Statement::Send(_)
+            | Statement::Answer(_)
             | Statement::Sleep(_)
             | Statement::SubStep(_)
             | Statement::Distribute(_)

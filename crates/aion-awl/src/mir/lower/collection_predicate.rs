@@ -105,7 +105,7 @@ pub(super) fn lower_predicate_over(
         .into_iter()
         .filter(|name| scope.contains_key(name))
         .collect();
-    let (ordinal, predicate_ref) = ctx.take_predicate()?;
+    let (ordinal, predicate_ref) = ctx.take_dynamic()?;
     let fallible = crate::emitter::predicate_is_fallible(predicate);
     let saved = ctx.swap_var_counter(0);
     let built = build_predicate_fn(
@@ -122,7 +122,7 @@ pub(super) fn lower_predicate_over(
         },
     );
     ctx.swap_var_counter(saved);
-    ctx.finish_predicate(ordinal, MirFn::Flow(built?));
+    ctx.finish_dynamic(ordinal, MirFn::Flow(built?));
 
     let host_captures = captures
         .iter()

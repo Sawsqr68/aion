@@ -72,6 +72,14 @@ fn render_origin(module: &MirModule, origin: &FnOrigin) -> String {
                 render_trio(params)
             )
         }
+        FnOrigin::QueryAnswer {
+            query,
+            index,
+            reply,
+        } => {
+            let role = if *reply { "reply" } else { "register" };
+            format!("query_answer({query}/{role}#{index})")
+        }
         FnOrigin::LiftedClosure { host, index } => {
             format!("lifted({}, #{index})", fn_name(module, *host))
         }

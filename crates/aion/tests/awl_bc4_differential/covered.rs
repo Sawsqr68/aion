@@ -26,7 +26,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// backends must lower identically, so it belongs in the differential and not
 /// merely in aion-awl's own ratchet. Its bucket below was read off the run, not
 /// predicted.
-const COVERED_COUNT: usize = 85;
+const COVERED_COUNT: usize = 86;
 
 /// Out-of-oracle (r2 finding 3): bare signal-wait fixtures whose durable park
 /// boundary is NOT observable through any engine surface without racy sampling.
@@ -122,6 +122,17 @@ const EXPECTED_FAILED: &[&str] = &[
     "step-bodies/valid/index_and_concat",
     "step-bodies/valid/literal_forms",
     "step-bodies/valid/predicates_and_operators",
+    // The read-only surface. It runs its real body — five answers in
+    // `announce`, one re-registered per loop pass — and then takes the
+    // data-driven `rejected` route, because the harness's canned `evaluate`
+    // returns `approved: false` and the loop exhausts its bound. What this pin
+    // asserts is what the differential measures: both backends REACH that
+    // outcome and record byte-identical normalized trails with the answers in
+    // the body, so neither lowering of `answer` faults, reorders, or diverges.
+    // That an answer appends no EVENT is a separate property, proven where it
+    // is decidable — `RuntimeFn::QueryHandler` belongs to no durable family
+    // (`aion-awl`'s `query_handler_is_not_a_durable_effect`).
+    "step-bodies/valid/query_answer",
     // Fails on its FIRST statement, `send heartbeat to coordinator_id`, because
     // the harness input supplies `coordinator_id: "x"` — not a live run. Read
     // off the trail, not inferred: the run reaches `WorkflowFailed` at seq 3

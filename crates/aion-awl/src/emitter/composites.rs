@@ -28,6 +28,9 @@ pub(super) fn composite_codecs(emitter: &mut Emitter<'_>) {
     for send in &emitter.document.sends {
         roots.push(type_ref_to_g(&send.ty));
     }
+    for query in &emitter.document.queries {
+        roots.push(type_ref_to_g(&query.ty));
+    }
     for worker in &emitter.document.workers {
         for action in &worker.actions {
             for param in &action.params {

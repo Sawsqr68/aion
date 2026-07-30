@@ -131,6 +131,7 @@ fn collect_statement_names(statements: &[Statement], names: &mut BTreeSet<String
             }
             Statement::Spawn(_)
             | Statement::Send(_)
+            | Statement::Answer(_)
             | Statement::Sleep(_)
             | Statement::Route(_) => {}
         }

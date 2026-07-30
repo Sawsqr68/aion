@@ -120,6 +120,11 @@ const fn projection_kind(kind: StatementKind) -> ProjectionStatementKind {
         // outward effect they must be able to see; collapsing it into another
         // kind would make it invisible on the canvas while it still executed.
         StatementKind::Send => ProjectionStatementKind::Send,
+        // Distinct on the canvas for the same reason a send is: an answer is
+        // the operator-visible surface of the run, and collapsing it into
+        // another kind would hide the one statement that makes a query
+        // answerable while it still executed.
+        StatementKind::Answer => ProjectionStatementKind::Answer,
         StatementKind::Sleep => ProjectionStatementKind::Sleep,
         StatementKind::ParallelFork => ProjectionStatementKind::ParallelFork,
         StatementKind::SequentialFork => ProjectionStatementKind::SequentialFork,

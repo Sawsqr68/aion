@@ -109,6 +109,10 @@ pub(super) const COVERED: &[&str] = &[
     "step-bodies/valid/literal_forms",
     "step-bodies/valid/pipe_chain_stages",
     "step-bodies/valid/predicates_and_operators",
+    // The read-only surface: header `query` declarations, all three answer
+    // forms, an answer re-registered inside a loop, and one inside an
+    // `on failure` block.
+    "step-bodies/valid/query_answer",
     // The signal SENDER: header `send` declarations, all three payload
     // forms, and both addressing shapes an id-valued expression allows.
     "step-bodies/valid/send_signal",

@@ -67,6 +67,8 @@ pub enum RuntimeFn {
     SignalNew,
     SignalSend,
     ChildAwait,
+    // aion@query
+    QueryHandler,
     // gleam@json
     JObject,
     JString,
@@ -181,6 +183,7 @@ impl RuntimeFn {
             Self::SignalNew => ("aion@signal", "new", 2),
             Self::SignalSend => ("aion@signal", "send", 3),
             Self::ChildAwait => ("aion@child", "await", 1),
+            Self::QueryHandler => ("aion@query", "handler", 3),
             Self::JObject => ("gleam@json", "object", 1),
             Self::JString => ("gleam@json", "string", 1),
             Self::JArray => ("gleam@json", "array", 2),
@@ -287,6 +290,7 @@ fn all_runtime_fns() -> Vec<RuntimeFn> {
         RuntimeFn::SignalNew,
         RuntimeFn::SignalSend,
         RuntimeFn::ChildAwait,
+        RuntimeFn::QueryHandler,
         RuntimeFn::JObject,
         RuntimeFn::JString,
         RuntimeFn::JArray,
@@ -394,41 +398,42 @@ mod tests {
             RuntimeFn::SignalNew => 32,
             RuntimeFn::SignalSend => 33,
             RuntimeFn::ChildAwait => 34,
-            RuntimeFn::JObject => 35,
-            RuntimeFn::JString => 36,
-            RuntimeFn::JArray => 37,
-            RuntimeFn::JNullable => 38,
-            RuntimeFn::JToString => 39,
-            RuntimeFn::DField => 40,
-            RuntimeFn::DOptionalField => 41,
-            RuntimeFn::DSuccess => 42,
-            RuntimeFn::DFailure => 43,
-            RuntimeFn::DThen => 44,
-            RuntimeFn::DMap => 45,
-            RuntimeFn::DList => 46,
-            RuntimeFn::DOptional => 47,
-            RuntimeFn::LFlatten => 48,
-            RuntimeFn::LFilter => 49,
-            RuntimeFn::LMap => 50,
-            RuntimeFn::LAny => 51,
-            RuntimeFn::LAll => 52,
-            RuntimeFn::LSort => 53,
-            RuntimeFn::LLength => 54,
-            RuntimeFn::LTryFold => 55,
-            RuntimeFn::LFold => 56,
-            RuntimeFn::LReverse => 57,
-            RuntimeFn::LIsEmpty => 58,
-            RuntimeFn::OIsSome => 59,
-            RuntimeFn::OIsNone => 60,
-            RuntimeFn::CmpInt => 61,
-            RuntimeFn::CmpFloat => 62,
-            RuntimeFn::CmpString => 63,
-            RuntimeFn::StrAppend => 64,
-            RuntimeFn::ResultTry => 65,
-            RuntimeFn::IntAdd => 66,
-            RuntimeFn::LeafCodec(leaf) => 67 + 3 * leaf_ordinal(leaf),
-            RuntimeFn::LeafToJson(leaf) => 68 + 3 * leaf_ordinal(leaf),
-            RuntimeFn::LeafDecoder(leaf) => 69 + 3 * leaf_ordinal(leaf),
+            RuntimeFn::QueryHandler => 35,
+            RuntimeFn::JObject => 36,
+            RuntimeFn::JString => 37,
+            RuntimeFn::JArray => 38,
+            RuntimeFn::JNullable => 39,
+            RuntimeFn::JToString => 40,
+            RuntimeFn::DField => 41,
+            RuntimeFn::DOptionalField => 42,
+            RuntimeFn::DSuccess => 43,
+            RuntimeFn::DFailure => 44,
+            RuntimeFn::DThen => 45,
+            RuntimeFn::DMap => 46,
+            RuntimeFn::DList => 47,
+            RuntimeFn::DOptional => 48,
+            RuntimeFn::LFlatten => 49,
+            RuntimeFn::LFilter => 50,
+            RuntimeFn::LMap => 51,
+            RuntimeFn::LAny => 52,
+            RuntimeFn::LAll => 53,
+            RuntimeFn::LSort => 54,
+            RuntimeFn::LLength => 55,
+            RuntimeFn::LTryFold => 56,
+            RuntimeFn::LFold => 57,
+            RuntimeFn::LReverse => 58,
+            RuntimeFn::LIsEmpty => 59,
+            RuntimeFn::OIsSome => 60,
+            RuntimeFn::OIsNone => 61,
+            RuntimeFn::CmpInt => 62,
+            RuntimeFn::CmpFloat => 63,
+            RuntimeFn::CmpString => 64,
+            RuntimeFn::StrAppend => 65,
+            RuntimeFn::ResultTry => 66,
+            RuntimeFn::IntAdd => 67,
+            RuntimeFn::LeafCodec(leaf) => 68 + 3 * leaf_ordinal(leaf),
+            RuntimeFn::LeafToJson(leaf) => 69 + 3 * leaf_ordinal(leaf),
+            RuntimeFn::LeafDecoder(leaf) => 70 + 3 * leaf_ordinal(leaf),
         }
     }
 
@@ -443,12 +448,12 @@ mod tests {
         }
     }
 
-    /// `all_runtime_fns` enumerates every variant exactly once: 67 plain
+    /// `all_runtime_fns` enumerates every variant exactly once: 68 plain
     /// variants plus 3 leaf-parametrised rows over the 5 leaves.
     #[test]
     fn enumeration_covers_every_variant_exactly_once() {
         let all = all_runtime_fns();
-        let expected = 67 + 3 * ALL_LEAVES.len();
+        let expected = 68 + 3 * ALL_LEAVES.len();
         assert_eq!(all.len(), expected);
         let mut seen = vec![false; expected];
         for function in all {
@@ -461,6 +466,30 @@ mod tests {
             seen[ordinal] = true;
         }
         assert!(seen.iter().all(|covered| *covered));
+    }
+
+    /// Query registration is NOT a durable effect: it appends no event, is not
+    /// a park point, and belongs to no [`DurableFamily`]. Asserted against the
+    /// classification of the calls that ARE durable rather than against a
+    /// hardcoded `None`, so the day a durable family is added the control
+    /// still holds the line: no signal-family membership sneaks in because
+    /// `query.handler` sits next to `signal.send` in the SDK.
+    #[test]
+    fn query_handler_is_not_a_durable_effect() {
+        assert_eq!(RuntimeFn::QueryHandler.durable_family(), None);
+        // The control: the neighbouring SDK calls that ARE durable classify,
+        // so the assertion above measures a real distinction rather than a
+        // uniformly-`None` table.
+        let durable: Vec<RuntimeFn> = all_runtime_fns()
+            .into_iter()
+            .filter(|function| function.durable_family().is_some())
+            .collect();
+        assert!(
+            durable.contains(&RuntimeFn::SignalSend) && durable.contains(&RuntimeFn::WfRun),
+            "the durable classification is empty or has drifted: {:?}",
+            durable.iter().map(|f| f.label()).collect::<Vec<_>>()
+        );
+        assert!(!durable.contains(&RuntimeFn::QueryHandler));
     }
 
     /// The projected surface carries one row per enumerated function, in

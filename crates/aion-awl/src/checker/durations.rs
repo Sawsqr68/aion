@@ -52,6 +52,7 @@ fn check_statements(statements: &[Statement], out_of_range: &mut Vec<Span>) {
             Statement::SubStep(step) => check_steps(std::slice::from_ref(step), out_of_range),
             Statement::Spawn(_)
             | Statement::Send(_)
+            | Statement::Answer(_)
             | Statement::Pipe(_)
             | Statement::Route(_)
             | Statement::Distribute(_)

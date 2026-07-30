@@ -8,7 +8,7 @@ use crate::semantic::SemanticAnalysis;
 
 use super::context::{Ctx, Flow};
 use super::error::CheckError;
-use super::{consts, decls, durations, graph, subflows, walk};
+use super::{consts, decls, durations, graph, queries, subflows, walk};
 
 /// Typecheck a parsed document with no document directory: schema imports
 /// (`type X = schema("file")`) cannot resolve and are reported as errors.
@@ -48,6 +48,7 @@ fn run(document: &Document, root: Option<&Path>) -> (Vec<CheckError>, crate::sem
     durations::run(&mut ctx);
     decls::run(&mut ctx);
     consts::run(&mut ctx);
+    queries::check_declared_answers(&mut ctx);
     subflows::run(&mut ctx);
     // Every flow — the workflow's own steps, then each subflow's — gets the
     // full graph pass and flow walk over its own inputs and outcomes.

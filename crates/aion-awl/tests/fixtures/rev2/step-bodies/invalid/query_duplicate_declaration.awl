@@ -1,0 +1,14 @@
+//! Refuse two declarations of one query name: the second silently decides what
+//! the answer type is, and every answer is checked against the wrong shape.
+workflow twice_declared
+  input item_id: String
+  query review_status: Status
+  query review_status: Done
+  outcome done: type Done, route success
+
+type Done   { item: String }
+type Status { phase: String }
+
+step gate
+  answer review_status(phase: "gating")
+  route done(item: item_id)

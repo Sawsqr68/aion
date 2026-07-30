@@ -198,6 +198,16 @@ pub enum FnOrigin {
         host: FnRef,
         index: u32,
     },
+    /// One of the two lifted functions an `answer` statement builds
+    /// (`lower/query.rs`): the nullary reply thunk (`reply: true`) whose
+    /// capture is the registered answer value, or the registrar that calls
+    /// `aion@query:handler/3` and discriminates its `Result`. `index` is the
+    /// function's ordinal in the module's dynamic lifted-function pool.
+    QueryAnswer {
+        query: String,
+        index: u32,
+        reply: bool,
+    },
 }
 
 /// A flow function: a body drawn from the closed op set, with liveness params

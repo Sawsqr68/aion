@@ -191,8 +191,9 @@ fn for_each_step(flow: &FlowWalk<'_>, mut f: impl FnMut(&Step)) {
     }
 }
 
-/// T-DEAD precedes T-WIT; dynamically generated predicates follow both. This
-/// preserves every existing function reference when a module has no predicate.
+/// T-DEAD precedes T-WIT; the dynamic lifted-function pool (predicate
+/// closures, query-answer functions) follows both. This preserves every
+/// existing function reference when a module uses none of them.
 pub(super) fn fixed_helper_refs(
     next: u32,
     has_activity: bool,

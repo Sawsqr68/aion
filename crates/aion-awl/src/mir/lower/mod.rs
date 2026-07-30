@@ -28,6 +28,7 @@ mod nested;
 mod outcome;
 mod pipes;
 mod plan_slots;
+mod query;
 mod registry;
 mod route;
 mod send;

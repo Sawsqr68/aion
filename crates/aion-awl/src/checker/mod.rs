@@ -24,6 +24,7 @@ mod graph;
 mod operators;
 mod outcomes;
 mod project;
+mod queries;
 mod regions;
 mod sends;
 mod stages;

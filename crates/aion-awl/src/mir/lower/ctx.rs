@@ -22,8 +22,13 @@ pub(super) struct Ctx<'a> {
     pub(super) atoms: Vec<String>,
     pub(super) literals: Vec<MirLiteral>,
     var_counter: u32,
-    predicate_start: Option<FnRef>,
-    predicates: Vec<Option<MirFn>>,
+    /// Base ref of the DYNAMIC lifted-function pool at the tail of the
+    /// module: collection-predicate closures and query-answer functions draw
+    /// from it in the order lowering encounters them. Dynamic rather than
+    /// slot-inventoried precisely so a new lifted-function kind cannot
+    /// misalign a reserved `FnRef`.
+    dynamic_start: Option<FnRef>,
+    dynamic: Vec<Option<MirFn>>,
 }
 
 impl<'a> Ctx<'a> {
@@ -36,8 +41,8 @@ impl<'a> Ctx<'a> {
             atoms: Vec::new(),
             literals: Vec::new(),
             var_counter: 0,
-            predicate_start: None,
-            predicates: Vec::new(),
+            dynamic_start: None,
+            dynamic: Vec::new(),
         }
     }
 
@@ -87,33 +92,34 @@ impl<'a> Ctx<'a> {
         var
     }
 
-    pub(super) fn set_predicate_start(&mut self, start: FnRef) {
-        self.predicate_start = Some(start);
+    pub(super) fn set_dynamic_start(&mut self, start: FnRef) {
+        self.dynamic_start = Some(start);
     }
 
-    pub(super) fn take_predicate(&mut self) -> Result<(usize, FnRef), LowerError> {
-        let ordinal = self.predicates.len();
-        let start = self.predicate_start.ok_or_else(|| LowerError::Planning {
-            message: "predicate function base was not initialized".to_owned(),
+    /// Reserve the next dynamic lifted-function slot.
+    pub(super) fn take_dynamic(&mut self) -> Result<(usize, FnRef), LowerError> {
+        let ordinal = self.dynamic.len();
+        let start = self.dynamic_start.ok_or_else(|| LowerError::Planning {
+            message: "dynamic lifted-function base was not initialized".to_owned(),
         })?;
         let offset = u32::try_from(ordinal).map_err(|_| LowerError::Planning {
-            message: "too many predicate functions".to_owned(),
+            message: "too many dynamic lifted functions".to_owned(),
         })?;
-        self.predicates.push(None);
+        self.dynamic.push(None);
         Ok((ordinal, FnRef(start.0.saturating_add(offset))))
     }
 
-    pub(super) fn finish_predicate(&mut self, ordinal: usize, function: MirFn) {
-        if let Some(slot) = self.predicates.get_mut(ordinal) {
+    pub(super) fn finish_dynamic(&mut self, ordinal: usize, function: MirFn) {
+        if let Some(slot) = self.dynamic.get_mut(ordinal) {
             *slot = Some(function);
         }
     }
 
-    pub(super) fn take_predicates(&mut self) -> Result<Vec<MirFn>, LowerError> {
-        let mut completed = Vec::with_capacity(self.predicates.len());
-        for (ordinal, slot) in std::mem::take(&mut self.predicates).into_iter().enumerate() {
+    pub(super) fn take_dynamic_fns(&mut self) -> Result<Vec<MirFn>, LowerError> {
+        let mut completed = Vec::with_capacity(self.dynamic.len());
+        for (ordinal, slot) in std::mem::take(&mut self.dynamic).into_iter().enumerate() {
             let function = slot.ok_or_else(|| LowerError::Planning {
-                message: format!("predicate function slot {ordinal} was not completed"),
+                message: format!("dynamic lifted-function slot {ordinal} was not completed"),
             })?;
             completed.push(function);
         }

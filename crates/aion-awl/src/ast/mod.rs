@@ -12,16 +12,17 @@ mod command_tests;
 pub use command::{CommandError, CommandReference, ScannedCommand, scan_command};
 pub use document::{
     ActionBody, ActionDecl, ChildDecl, ConfigLine, ConfigValue, ConstDecl, Document, EnumVariant,
-    FieldDecl, InputDecl, OutcomeDecl, ParamDecl, RetrySpec, RouteDirection, SendDecl, SignalDecl,
-    SubflowDecl, SubflowOutcome, TypeBody, TypeDecl, TypeRef, WorkerDecl, WorkflowTimeoutDecl,
+    FieldDecl, InputDecl, OutcomeDecl, ParamDecl, QueryDecl, RetrySpec, RouteDirection, SendDecl,
+    SignalDecl, SubflowDecl, SubflowOutcome, TypeBody, TypeDecl, TypeRef, WorkerDecl,
+    WorkflowTimeoutDecl,
 };
 pub(crate) use expr::join_span;
 pub use expr::{Arg, BinaryOp, DurationLiteral, Expr, PredicateKind, Quantifier};
 pub use steps::{
-    AfterRef, Binding, Call, CallStmt, CollectStmt, CombinatorCall, CombinatorKind, DeliveryVerb,
-    DistributeStmt, ForkHeader, ForkStmt, Guard, JoinLine, LoopStmt, LoopTail, MaxVisits,
-    OnFailure, OutcomeClause, PipeEnd, PipeStage, PipeStmt, RoutePayload, RouteStmt, RouteTarget,
-    SendStmt, SleepStmt, SpawnStmt, Statement, Step, WaitStmt,
+    AfterRef, AnswerStmt, Binding, Call, CallStmt, CollectStmt, CombinatorCall, CombinatorKind,
+    DeliveryVerb, DistributeStmt, ForkHeader, ForkStmt, Guard, JoinLine, LoopStmt, LoopTail,
+    MaxVisits, OnFailure, OutcomeClause, PipeEnd, PipeStage, PipeStmt, RoutePayload, RouteStmt,
+    RouteTarget, SendStmt, SleepStmt, SpawnStmt, Statement, Step, WaitStmt,
 };
 pub(crate) use trivia::doc_text;
 pub use trivia::{Comment, DocLine, Lead};

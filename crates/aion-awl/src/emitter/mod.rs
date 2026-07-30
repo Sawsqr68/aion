@@ -23,6 +23,7 @@ mod names;
 mod outcomes;
 mod pipes;
 mod project;
+mod queries;
 mod sends;
 mod steps;
 mod stmts;

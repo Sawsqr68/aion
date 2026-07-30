@@ -5,7 +5,9 @@
 use std::collections::BTreeMap;
 use std::mem;
 
-use crate::ast::{ActionDecl, ChildDecl, Document, RouteDirection, SendDecl, SignalDecl};
+use crate::ast::{
+    ActionDecl, ChildDecl, Document, QueryDecl, RouteDirection, SendDecl, SignalDecl,
+};
 
 use super::error::EmitError;
 use super::flowshape::{RegionShape, SubflowShape};
@@ -30,6 +32,10 @@ pub(crate) struct OutcomeInfo {
 pub(crate) struct Flags {
     pub(crate) uses_list_module: bool,
     pub(crate) uses_child_module: bool,
+    /// Whether the document declares any query, and therefore whether the
+    /// generated module imports `aion/query`. Conditional because Gleam
+    /// refuses an unused import.
+    pub(crate) uses_query_module: bool,
     /// `gleam/<module>` comparator imports a `sort` stage needs.
     pub(crate) compare_modules: std::collections::BTreeSet<&'static str>,
     /// Actions dispatched from a heterogeneous parallel group: each needs a
@@ -47,6 +53,9 @@ pub(crate) struct Emitter<'a> {
     pub(crate) signals: BTreeMap<&'a str, &'a SignalDecl>,
     /// Declared OUTBOUND signals by name (`send <name>: <Type>`).
     pub(crate) sends: BTreeMap<&'a str, &'a SendDecl>,
+    /// Declared queries by name (`query <name>: <Type>`), the read-only
+    /// surface an `answer` statement registers a value for.
+    pub(crate) queries: BTreeMap<&'a str, &'a QueryDecl>,
     /// The host flow's collapsed per-item regions, by synthetic step name.
     pub(crate) host_regions: &'a BTreeMap<String, RegionShape>,
     /// Shaped subflow declarations, in declaration order.
@@ -124,6 +133,7 @@ impl<'a> Emitter<'a> {
         }
         let signals = signal_table(document)?;
         let sends = send_table(document)?;
+        let queries = query_table(document)?;
 
         let workflow_pascal = pascal(&document.name);
         let input_type = env.names.fresh(&format!("{workflow_pascal}Input"));
@@ -171,6 +181,7 @@ impl<'a> Emitter<'a> {
             children,
             signals,
             sends,
+            queries,
             host_regions,
             subflow_shapes,
             subflows,
@@ -310,6 +321,20 @@ fn send_table(document: &Document) -> Result<BTreeMap<&str, &SendDecl>, EmitErro
         }
     }
     Ok(sends)
+}
+
+/// The query table, refusing a duplicate name.
+fn query_table(document: &Document) -> Result<BTreeMap<&str, &QueryDecl>, EmitError> {
+    let mut queries = BTreeMap::new();
+    for query in &document.queries {
+        if queries.insert(query.name.as_str(), query).is_some() {
+            return Err(EmitError::new(
+                query.name_span,
+                format!("query `{}` is declared more than once", query.name),
+            ));
+        }
+    }
+    Ok(queries)
 }
 
 fn region_input_types(

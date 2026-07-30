@@ -75,6 +75,93 @@ fn the_assistant_example_compiles() -> TestResult {
     Ok(())
 }
 
+/// The read-only surface is the acceptance case for task #96: the AWL port
+/// answers `assistant_status` with the same name and the same `{phase, round}`
+/// shape as the Gleam original, so the port is no longer a capability
+/// regression on the one axis an operator cares about — can I ask a running
+/// session what it is doing.
+///
+/// The control is the SAME document with every `query`/`answer` line stripped:
+/// it must compile to a module that registers nothing. Without it this test
+/// would prove only that the pipeline CAN register a query, not that this
+/// document is the reason it does.
+#[test]
+fn the_assistant_example_answers_the_status_query() -> TestResult {
+    let path = example();
+    let source = fs::read_to_string(&path)?;
+    let root = path.parent().ok_or("the example has a directory")?;
+    let document = parse(&source)?;
+
+    let query = document
+        .queries
+        .iter()
+        .find(|query| query.name == "assistant_status")
+        .ok_or("the example must declare the `assistant_status` query")?;
+    assert_eq!(
+        document.queries.len(),
+        1,
+        "the port mirrors the Gleam original's single query"
+    );
+    let aion_awl::TypeRef::Named { name, .. } = &query.ty else {
+        return Err("the answer type must be a declared record".into());
+    };
+    let fields = document
+        .types
+        .iter()
+        .find(|declared| &declared.name == name)
+        .and_then(|declared| match &declared.body {
+            aion_awl::TypeBody::Record { fields } => Some(fields),
+            _ => None,
+        })
+        .ok_or("the answer type must be a declared record")?;
+    let field_names: Vec<&str> = fields.iter().map(|field| field.name.as_str()).collect();
+    assert_eq!(
+        field_names,
+        ["phase", "round"],
+        "the answer shape must match the Gleam original's `{{phase, round}}`"
+    );
+
+    let answers = source
+        .lines()
+        .filter(|line| line.trim_start().starts_with("answer assistant_status"))
+        .count();
+    assert!(
+        answers >= 3,
+        "the session must report live state, not just its start: found {answers} answers"
+    );
+
+    // The document compiles, and its module names the query SDK module.
+    let compiled = compile(&source, root)?;
+    assert!(byte_search(&compiled.beam_bytes, b"aion@query"));
+    assert!(byte_search(&compiled.beam_bytes, b"assistant_status"));
+
+    // The control: the same document with the surface removed registers none.
+    let mut stripped = String::new();
+    for line in source.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("query assistant_status")
+            || trimmed.starts_with("answer assistant_status")
+        {
+            continue;
+        }
+        stripped.push_str(line);
+        stripped.push('\n');
+    }
+    let control = compile(&stripped, root)?;
+    assert!(
+        !byte_search(&control.beam_bytes, b"aion@query"),
+        "a document without the surface must not name the query SDK module"
+    );
+    assert_ne!(compiled.beam_bytes, control.beam_bytes);
+    Ok(())
+}
+
+fn byte_search(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
+}
+
 // --- the control-flow proof --------------------------------------------------
 
 /// A value in the tiny evaluation domain: AWL's own two scalar kinds, which is

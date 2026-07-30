@@ -569,6 +569,7 @@ fn route_names_in<'a>(statements: &'a [Statement], found: &mut Vec<&'a str>) {
             | Statement::Spawn(_)
             | Statement::Wait(_)
             | Statement::Send(_)
+            | Statement::Answer(_)
             | Statement::Sleep(_)
             | Statement::SubStep(_)
             | Statement::Distribute(_)

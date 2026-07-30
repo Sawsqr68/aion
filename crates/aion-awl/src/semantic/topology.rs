@@ -61,6 +61,8 @@ pub enum StatementKind {
     Wait,
     /// A durable signal send to another workflow.
     Send,
+    /// A query answer registration (records no event).
+    Answer,
     /// A durable timer.
     Sleep,
     /// A collection fork whose branches execute in parallel.

@@ -22,6 +22,7 @@ fn statement_info(ctx: &Ctx<'_>, statement: &Statement) -> StatementInfo {
         Statement::Pipe(pipe) => pipe_info(ctx, pipe),
         Statement::Wait(wait) => wait_info(wait),
         Statement::Send(send) => send_info(send),
+        Statement::Answer(answer) => answer_info(answer),
         Statement::Sleep(sleep) => info(
             sleep.span,
             StatementKind::Sleep,
@@ -130,6 +131,17 @@ fn send_info(send: &crate::ast::SendStmt) -> StatementInfo {
         StatementKind::Send,
         format!("send {}", send.signal),
         Some(format!("to {}", expr_text(&send.target))),
+        None,
+        Vec::new(),
+    )
+}
+
+fn answer_info(answer: &crate::ast::AnswerStmt) -> StatementInfo {
+    info(
+        answer.span,
+        StatementKind::Answer,
+        format!("answer {}", answer.query),
+        None,
         None,
         Vec::new(),
     )

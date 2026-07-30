@@ -59,6 +59,7 @@ pub(super) fn defined_in_statements(statements: &[Statement], names: &mut BTreeS
             Statement::SubStep(sub) => defined_in_statements(&sub.body, names),
             Statement::Spawn(_)
             | Statement::Send(_)
+            | Statement::Answer(_)
             | Statement::Sleep(_)
             | Statement::Route(_) => {}
         }
@@ -155,6 +156,7 @@ pub(super) fn origins_in_statements(statements: &[Statement], origins: &mut Orig
             Statement::SubStep(substep) => origins_in_statements(&substep.body, origins),
             Statement::Spawn(_)
             | Statement::Send(_)
+            | Statement::Answer(_)
             | Statement::Sleep(_)
             | Statement::Route(_) => {}
         }

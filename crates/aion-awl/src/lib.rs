@@ -32,15 +32,15 @@ mod spanned;
 mod unlowered;
 
 pub use ast::{
-    ActionBody, ActionDecl, AfterRef, Arg, BinaryOp, Binding, Call, CallStmt, ChildDecl,
-    CollectStmt, CombinatorCall, CombinatorKind, CommandError, CommandReference, Comment,
-    ConfigLine, ConfigValue, ConstDecl, DeliveryVerb, DistributeStmt, DocLine, Document,
+    ActionBody, ActionDecl, AfterRef, AnswerStmt, Arg, BinaryOp, Binding, Call, CallStmt,
+    ChildDecl, CollectStmt, CombinatorCall, CombinatorKind, CommandError, CommandReference,
+    Comment, ConfigLine, ConfigValue, ConstDecl, DeliveryVerb, DistributeStmt, DocLine, Document,
     DurationLiteral, EnumVariant, Expr, FieldDecl, ForkHeader, ForkStmt, Guard, InputDecl,
     JoinLine, Lead, LoopStmt, LoopTail, MaxVisits, OnFailure, OutcomeClause, OutcomeDecl,
-    ParamDecl, PipeEnd, PipeStage, PipeStmt, PredicateKind, Quantifier, RetrySpec, RouteDirection,
-    RoutePayload, RouteStmt, RouteTarget, ScannedCommand, SendDecl, SendStmt, SignalDecl,
-    SleepStmt, SpawnStmt, Statement, Step, SubflowDecl, SubflowOutcome, TypeBody, TypeDecl,
-    TypeRef, WaitStmt, WorkerDecl, WorkflowTimeoutDecl, scan_command,
+    ParamDecl, PipeEnd, PipeStage, PipeStmt, PredicateKind, Quantifier, QueryDecl, RetrySpec,
+    RouteDirection, RoutePayload, RouteStmt, RouteTarget, ScannedCommand, SendDecl, SendStmt,
+    SignalDecl, SleepStmt, SpawnStmt, Statement, Step, SubflowDecl, SubflowOutcome, TypeBody,
+    TypeDecl, TypeRef, WaitStmt, WorkerDecl, WorkflowTimeoutDecl, scan_command,
 };
 pub use checker::{CheckError, check, check_in};
 pub use compile::{
@@ -56,7 +56,7 @@ pub use parser::{ParseError, parse};
 pub use printer::{expr_text, print};
 pub use schema::{
     SchemaError, schema_for_outcomes, schema_for_outcomes_in, schema_for_params_in,
-    schema_for_type, schema_for_type_in, schema_for_type_ref_in, schema_for_workflow,
-    schema_for_workflow_in,
+    schema_for_queries, schema_for_queries_in, schema_for_type, schema_for_type_in,
+    schema_for_type_ref_in, schema_for_workflow, schema_for_workflow_in,
 };
 pub use spanned::Spanned;

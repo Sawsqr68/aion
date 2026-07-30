@@ -27,6 +27,9 @@ pub(super) fn header(emitter: &mut Emitter<'_>) {
     emitter.line("import aion/codec.{type Codec}");
     emitter.line("import aion/duration");
     emitter.line("import aion/error");
+    if emitter.flags.uses_query_module {
+        emitter.line("import aion/query");
+    }
     emitter.line("import aion/signal");
     emitter.line("import aion/workflow");
     if emitter.flags.compare_modules.contains("bool") {

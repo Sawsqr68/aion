@@ -1,0 +1,58 @@
+//! The read-only surface: what an operator gets back when they ask a RUNNING
+//! instance what it is doing. `query` declares the answer's type; `answer`
+//! registers the value, computed from the bindings in scope at that point.
+//!
+//! Every form the surface admits appears here: a record answer built from
+//! named fields, a bare value answer, a `Nil` answer written without
+//! parentheses, an answer re-registered inside a loop (which is what makes a
+//! long-running run report live progress), and an answer inside an
+//! `on failure` block. The composite answer types (`[String]`, `String?`) are
+//! here because a query is a WIRE position: its list and option shapes need
+//! codec trios, and nothing else in the corpus would notice if the registry
+//! stopped discovering them.
+//!
+//! The review loop turns on the ACTION's verdict and waits on no signal, so
+//! the run terminates: this fixture is in the BC-4 differential corpus, which
+//! executes both backends end to end and compares their trails, and a document
+//! that parks forever has no outcome to compare.
+workflow gated_review
+  input item_id: String
+  input max_passes: Int
+  query review_status: Status
+  query passes_left: Int
+  query heartbeat: Nil
+  query notes: [String]
+  query last_note: String?
+  outcome done:    type Done, route success
+  outcome gave_up: type Done, route failure
+
+type Decision { approved: Bool }
+type Done     { item: String }
+type Status   { phase: String, note: String? }
+
+worker gates
+  action evaluate(item: String) -> Decision
+
+step announce
+  answer review_status(phase: "announcing", note: "no reviewer has looked yet")
+  answer passes_left(max_passes)
+  answer heartbeat
+  // Composite answer types: the query surface is a wire position, so its
+  // list/option shapes must reach the codec registry like any other.
+  answer notes([item_id])
+  answer last_note(item_id)
+
+step gate after announce
+  loop verdict = Decision(approved: false)
+    answer review_status(phase: "reviewing")
+    evaluate(item: item_id) -> verdict
+    until verdict.approved
+    max max_passes
+  answer review_status(phase: "settled", note: item_id)
+  on failure
+    answer review_status(phase: "failed", note: "the gate faulted")
+    route gave_up(item: item_id)
+  outcome approved: when verdict.approved,
+    route done(item: item_id)
+  outcome rejected: otherwise,
+    route gave_up(item: item_id)

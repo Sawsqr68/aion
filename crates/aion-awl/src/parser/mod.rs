@@ -8,6 +8,7 @@ mod error;
 mod exprs;
 mod flow;
 mod hints;
+mod query;
 mod send;
 mod statements;
 mod steps;

@@ -126,8 +126,12 @@ pub(crate) enum AwlCommand {
         /// Path to the `.awl` document.
         file: PathBuf,
         /// Declared type to derive; omitted, emits the workflow's start contract (its inputs).
-        #[arg(long)]
+        #[arg(long, conflicts_with = "queries")]
         r#type: Option<String>,
+        /// Emit the read-only surface instead: every declared `query` name
+        /// with the schema of the answer an operator receives.
+        #[arg(long, conflicts_with = "type")]
+        queries: bool,
     },
     /// Run the AWL language server over stdio for editor integration.
     Lsp,
@@ -161,7 +165,11 @@ pub(crate) fn run(command: &AwlCommand) -> ExitCode {
             worker,
             aion_crates,
         } => crate::awl_scaffold::run(file, out, worker.as_deref(), aion_crates.as_deref()),
-        AwlCommand::Schema { file, r#type } => schema_command(file, r#type.as_deref()),
+        AwlCommand::Schema {
+            file,
+            r#type,
+            queries,
+        } => schema_command(file, r#type.as_deref(), *queries),
         AwlCommand::Lsp => match aion_awl_lsp::run_stdio() {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
@@ -358,11 +366,11 @@ pub(crate) fn compile_diagnostics(file: &Path, error: &CompileError) -> Vec<Stri
     }
 }
 
-fn schema_command(file: &Path, type_name: Option<&str>) -> ExitCode {
+fn schema_command(file: &Path, type_name: Option<&str>, queries: bool) -> ExitCode {
     let Some(source) = read_source(file) else {
         return ExitCode::FAILURE;
     };
-    match schema_source(file, &source, type_name) {
+    match schema_source(file, &source, type_name, queries) {
         Ok(schema) => {
             print!("{schema}");
             ExitCode::SUCCESS
@@ -456,6 +464,7 @@ fn schema_source(
     file: &Path,
     source: &str,
     requested_type: Option<&str>,
+    queries: bool,
 ) -> Result<String, Vec<String>> {
     let document = aion_awl::parse(source)
         .map_err(|error| vec![diagnostic(file, error.span, &error.message)])?;
@@ -467,12 +476,13 @@ fn schema_source(
             .map(|error| diagnostic(file, error.span, &error.message))
             .collect());
     }
-    let schema = requested_type
-        .map_or_else(
-            || aion_awl::schema_for_workflow_in(&document, root),
-            |name| aion_awl::schema_for_type_in(&document, root, name),
-        )
-        .map_err(|error| vec![diagnostic(file, error.span(), &error.to_string())])?;
+    let derived = match (requested_type, queries) {
+        (Some(name), _) => aion_awl::schema_for_type_in(&document, root, name),
+        (None, true) => aion_awl::schema_for_queries_in(&document, root),
+        (None, false) => aion_awl::schema_for_workflow_in(&document, root),
+    };
+    let schema =
+        derived.map_err(|error| vec![diagnostic(file, error.span(), &error.to_string())])?;
     // Canonically encoded: `aion awl schema` output is an artifact operators
     // and agents diff and commit, so its key order is the document's, sorted,
     // and never the build's map representation.
