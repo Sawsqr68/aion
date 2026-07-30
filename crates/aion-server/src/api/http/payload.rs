@@ -56,7 +56,13 @@ pub(crate) fn describe_response_to_ops_console(
         .iter()
         .map(decode_event_envelope)
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(DescribeWorkflowResponse { summary, history })
+    // The unserved verdict is a LIVE-fleet read, not a decode of the wire
+    // response, so it is attached by the handler that holds the server state.
+    Ok(DescribeWorkflowResponse {
+        summary,
+        history,
+        unserved: Vec::new(),
+    })
 }
 
 fn decode_summary_envelope(

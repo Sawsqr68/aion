@@ -92,10 +92,11 @@ pub use placement_cache::{
     PlacementCache, WorkerSelection, preferred_node_order, worker_selection_for,
 };
 pub use queue_service::{
-    DeliveryRefusal, EngineQueueDeclarations, ExpiredClock, PoolCensus, QueueDeclaration,
-    QueueDeclarationSource, QueueDeclarations, QueueServiceConfig, QueueServiceOverride,
-    QueueServicePolicy, QueueServiceReason, QueueServiceState, ServiceAddress, UnavailableSummary,
-    UnservedDispatch, UnservedKey, UnservedQueue, WorkerUnavailable,
+    ActivityReachability, DeliveryRefusal, EngineQueueDeclarations, ExpiredClock, OpenActivity,
+    PoolCensus, QueueDeclaration, QueueDeclarationSource, QueueDeclarations, QueueServiceConfig,
+    QueueServiceOverride, QueueServicePolicy, QueueServiceReason, QueueServiceState,
+    ServiceAddress, UnavailableSummary, UnservedDispatch, UnservedKey, UnservedQueue,
+    WorkerUnavailable, open_activities_in_active_segment,
 };
 pub use quota_broadcast::QuotaBroadcaster;
 pub use quota_cache::QuotaCache;

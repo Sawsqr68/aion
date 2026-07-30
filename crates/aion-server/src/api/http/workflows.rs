@@ -21,6 +21,7 @@ use super::clean_dtos::{
 use super::error::{HttpStartError, HttpWireError};
 use super::payload::describe_response_to_ops_console;
 use super::visibility::{VisibilityQuery, scope_visibility_filter};
+use crate::worker::ActivityReachability;
 use crate::{NamespaceOperation, ServerError, ServerState, api::handlers};
 
 pub(crate) async fn start_workflow(
@@ -184,16 +185,39 @@ pub(crate) async fn count_workflows(
     Ok(Json(CountWorkflowsBody { count }))
 }
 
+/// `POST /workflows/describe`.
+///
+/// Returns the summary, the (optional) history, AND the run's unserved-activity
+/// verdict.
+///
+/// The verdict is not an extra the caller opts into, because the question it
+/// answers is one an operator does not know to ask: a projected `Running` covers
+/// both "a worker is working on it" and "it was dispatched to a queue nobody
+/// serves and has sat there since July". History cannot tell those apart —
+/// `ActivityStarted` is recorded at dispatch, before any worker leases the work
+/// — so the live fleet is consulted here, through the same census and the same
+/// classification the dispatcher's own selection wait uses.
+///
+/// An empty `unserved` is the healthy answer and is produced by construction: an
+/// address with a live compatible worker is never classified.
 pub(crate) async fn describe_workflow(
     State(state): State<ServerState>,
     HttpCaller(caller): HttpCaller,
     Json(request): Json<DescribeWorkflowRequest>,
 ) -> Result<Json<aion_core::DescribeWorkflowResponse>, HttpWireError> {
     let request = request.try_into().map_err(HttpWireError)?;
-    let response = handlers::describe(state.namespace_guard(), &caller, request)
+    let outcome = handlers::describe(state.namespace_guard(), &caller, request)
         .await
         .map_err(HttpWireError)?;
-    describe_response_to_ops_console(&response).map(Json)
+    let mut described = describe_response_to_ops_console(&outcome.response)?;
+    described.unserved = ActivityReachability {
+        registry: state.worker_registry(),
+        declarations: state.queue_declarations(),
+        state: state.queue_service_state(),
+    }
+    .unserved(&outcome.namespace, &outcome.workflow_id, &outcome.history)
+    .map_err(|error| HttpWireError(error.to_wire_error()))?;
+    Ok(Json(described))
 }
 
 /// List the namespaces the caller can select, sorted.

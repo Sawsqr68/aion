@@ -64,6 +64,46 @@ impl QueueServiceReason {
         matches!(self, Self::NoQueueDeclaration)
     }
 
+    /// The operator-facing sentence for this reason at `address`: what has to
+    /// be fixed, in words.
+    ///
+    /// This is the single source of that sentence. The dispatch refusal's human
+    /// tail ([`WorkerUnavailable::explain`]) and the describe projection's
+    /// `detail` both read it here, so a queue that is unserved cannot be
+    /// explained one way in a refusal and another way in a read.
+    #[must_use]
+    pub fn explain(self, address: &ServiceAddress) -> String {
+        let ServiceAddress {
+            namespace,
+            task_queue,
+            activity_type,
+            node,
+        } = address;
+        let node = node
+            .as_ref()
+            .map_or_else(String::new, |node| format!(" pinned to node `{node}`"));
+        match self {
+            Self::NoQueueDeclaration => format!(
+                "no deployed contract declares task queue `{task_queue}`, \
+                 so activity `{activity_type}` in namespace `{namespace}` \
+                 can never be served{node}"
+            ),
+            Self::NoLivePollers => format!(
+                "no worker is connected for `{namespace}`/`{task_queue}`, \
+                 so activity `{activity_type}` is unserved{node}"
+            ),
+            Self::PollersIncompatible => format!(
+                "workers are connected for `{namespace}`/`{task_queue}` but \
+                 none serves activity `{activity_type}`{node}"
+            ),
+            Self::Saturated => format!(
+                "a worker serving `{namespace}`/`{task_queue}` activity \
+                 `{activity_type}`{node} would not accept the task before the \
+                 schedule-to-start timeout"
+            ),
+        }
+    }
+
     /// Read a reason back from its canonical spelling.
     #[must_use]
     pub fn parse(text: &str) -> Option<Self> {
@@ -241,35 +281,7 @@ impl fmt::Display for WorkerUnavailable {
 impl WorkerUnavailable {
     /// The human tail of the failure string: what an operator has to fix.
     fn explain(&self) -> String {
-        let ServiceAddress {
-            namespace,
-            task_queue,
-            activity_type,
-            node,
-        } = &self.address;
-        let node = node
-            .as_ref()
-            .map_or_else(String::new, |node| format!(" pinned to node `{node}`"));
-        match self.reason {
-            QueueServiceReason::NoQueueDeclaration => format!(
-                "no deployed contract declares task queue `{task_queue}`, \
-                 so activity `{activity_type}` in namespace `{namespace}` \
-                 can never be served{node}"
-            ),
-            QueueServiceReason::NoLivePollers => format!(
-                "no worker is connected for `{namespace}`/`{task_queue}`, \
-                 so activity `{activity_type}` is unserved{node}"
-            ),
-            QueueServiceReason::PollersIncompatible => format!(
-                "workers are connected for `{namespace}`/`{task_queue}` but \
-                 none serves activity `{activity_type}`{node}"
-            ),
-            QueueServiceReason::Saturated => format!(
-                "a worker serving `{namespace}`/`{task_queue}` activity \
-                 `{activity_type}`{node} would not accept the task before the \
-                 schedule-to-start timeout"
-            ),
-        }
+        self.reason.explain(&self.address)
     }
 }
 

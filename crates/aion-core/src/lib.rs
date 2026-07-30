@@ -48,7 +48,7 @@ pub use cluster_event::{
     ClusterCommand, ClusterEvent, ClusterEventMeta, ClusterPeer, ClusterShard, ClusterSnapshot,
     ClusterStreamError, ClusterWorker, NamespacePlacementWire, WorkerDeathReason, WorkerTransport,
 };
-pub use describe::DescribeWorkflowResponse;
+pub use describe::{DescribeWorkflowResponse, UnservedActivity};
 pub use error::{ActivityError, ActivityErrorKind, WorkflowError};
 pub use event::{
     DEFAULT_TASK_QUEUE, Event, EventEnvelope, START_TIME_TASK_QUEUE_ATTRIBUTE, TimerCancelCause,

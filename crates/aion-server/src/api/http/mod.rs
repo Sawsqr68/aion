@@ -11,6 +11,7 @@
 //! - `auth` — caller-identity extraction from request headers.
 //! - `visibility` — visibility query-string parsing and namespace scoping.
 //! - `payload` — HTTP body/payload encode-decode shapes and conversions.
+//! - `queues` — the fleet-wide unserved-queue read.
 //! - `clean_dtos` — clean JSON request/response DTOs for the workflow POST endpoints.
 //! - `error` — wire-error-to-HTTP response mapping.
 
@@ -27,6 +28,7 @@ mod history;
 mod intervene;
 mod outbox;
 mod payload;
+mod queues;
 mod router;
 mod schedules;
 mod transcripts;

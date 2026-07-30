@@ -457,14 +457,14 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         request: Request<generated::DescribeWorkflowRequest>,
     ) -> Result<Response<generated::DescribeWorkflowResponse>, Status> {
         let caller = self.caller(&request).await?;
-        let response = handlers::describe(
+        let outcome = handlers::describe(
             self.state.namespace_guard(),
             &caller,
             decode_describe_request(request.into_inner()),
         )
         .await
         .map_err(status_from_wire_error)?;
-        Ok(Response::new(encode_describe_response(response)))
+        Ok(Response::new(encode_describe_response(outcome.response)))
     }
 
     async fn create_schedule(

@@ -8,6 +8,8 @@ pub mod declarations;
 pub mod delivery;
 /// Service policies (`strict` / `durable_pending`) and the two service clocks.
 pub mod policy;
+/// Whether an in-flight activity can still reach a worker.
+pub mod reachability;
 /// The live, queryable unserved-queue state.
 pub mod state;
 /// The four-way taxonomy and the typed `WorkerUnavailable` dispatch failure.
@@ -21,6 +23,7 @@ pub use declarations::{
 };
 pub use delivery::{DeliveryRefusal, PARK_POLL_INTERVAL, deliver_within_schedule_to_start};
 pub use policy::{QueueServiceConfig, QueueServiceOverride, QueueServicePolicy};
+pub use reachability::{ActivityReachability, OpenActivity, open_activities_in_active_segment};
 pub use state::{Parked, QueueServiceState, UnservedDispatch, UnservedKey, UnservedQueue};
 pub use taxonomy::{
     ExpiredClock, QueueServiceReason, ServiceAddress, UnavailableSummary, WorkerUnavailable,

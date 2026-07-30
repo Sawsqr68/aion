@@ -388,7 +388,10 @@ async fn terminal_workflow_query_is_a_not_running_outcome_error() -> Result<(), 
         },
     )
     .await?;
-    let summary = described.summary.ok_or("describe summary missing")?;
+    let summary = described
+        .response
+        .summary
+        .ok_or("describe summary missing")?;
     let summary = aion_proto::convert::decode_workflow_summary(&summary)?;
     assert_eq!(summary.status, WorkflowStatus::Completed);
 

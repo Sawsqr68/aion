@@ -316,14 +316,20 @@ async fn workflow_namespace_enforcement_survives_restart() -> Result<(), TestErr
         describe_request(TENANT_A, &workflow_a),
     )
     .await?;
-    assert_eq!(described_status(&described_a)?, WorkflowStatus::Completed);
+    assert_eq!(
+        described_status(&described_a.response)?,
+        WorkflowStatus::Completed
+    );
     let described_b = handlers::describe(
         &restarted.guard,
         &bob,
         describe_request(TENANT_B, &workflow_b),
     )
     .await?;
-    assert_eq!(described_status(&described_b)?, WorkflowStatus::Completed);
+    assert_eq!(
+        described_status(&described_b.response)?,
+        WorkflowStatus::Completed
+    );
 
     // (b) A granted caller probing the other tenant's id gets the anti-leak
     // NotFound, byte-identical to probing an id that never existed.
@@ -530,7 +536,10 @@ async fn child_workflow_namespace_enforcement_survives_restart() -> Result<(), T
         describe_request(TENANT_A, &child_id),
     )
     .await?;
-    assert_eq!(described_status(&described)?, WorkflowStatus::Completed);
+    assert_eq!(
+        described_status(&described.response)?,
+        WorkflowStatus::Completed
+    );
 
     // (b) A foreign tenant's probe of the child id is byte-identical to a
     // probe of an id that never existed.
