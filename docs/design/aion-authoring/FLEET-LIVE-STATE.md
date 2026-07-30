@@ -79,13 +79,46 @@ body is `call fn6(v1, 2141, 5, 1, v0)`, and `fn6`'s signature
 `(i64,i64,i64,i64,i64)->(i8,i64)` is precisely
 `jit_call_interpreted(process, module_index, import_index, arity, args)`.
 
-🔴 **BLAST RADIUS IS FAR WIDER THAN OUR NIF.** The same empty bundle drops
-`atom_table`, `spawn_facility`, `link_facility`, `local_send`, `timers`,
-`ets_facility`, `supervision_facility` and **`replay_driver`**. Any BEAM code
-below a JIT frame that sends, spawns, monitors or compares atoms is running on
-a gutted VM — and the replay_driver hole means a JIT'd frame could take a LIVE
-path during replay. That is a durability violation, not a crash. We were lucky
-it shouted instead of going quiet.
+🔴 **BLAST RADIUS IS FAR WIDER THAN OUR NIF: 33 FIELDS.** I first reported 8;
+Artemis counted the struct. Beyond the obvious ones (`atom_table`,
+`spawn_facility`, `link_facility`, `local_send`, `timers`, `ets_facility`,
+`supervision_facility`, `replay_driver`) it also drops `bif_registry`,
+`capability_audit_sink`, `capability_violation_handler`, the io / file_io /
+tcp_io / pg / readiness facilities, `code_management_facility` and
+`suspension_registrar`.
+
+### Artemis VERIFIED all of it on beamr `main` (689c092) — NOT fixed forward
+
+Any cut inherits it. Three things they added, two of which change the story:
+
+1. **The replay danger has a line and a mechanism.**
+   `interpreter/opcodes/native_call.rs` guards the ExternalIo/Entropy
+   interception on
+   `… && let Some(svc) = ctx.services && let Some(driver) = &svc.replay_driver`.
+   With services empty that guard is FALSE and **the interception is skipped
+   entirely** — the call takes the live path. So it is not that replay
+   misbehaves; replay interception is CONDITIONAL ON A FIELD THE JIT EDGE
+   GUARANTEES IS ABSENT.
+2. **There is NO capability bypass.** They went looking specifically so the
+   worst reading could be retired. `granted` is computed from
+   `process.capabilities()`, never from services, so enforcement is intact
+   below a JIT frame: a denied call is still denied. What is lost is
+   `capability_audit_sink` (the audit event is never recorded) and the
+   embedder's violation handler (falls back to stderr). **A hole in the
+   evidence, not in the gate.**
+3. `bif_registry: None` reproduces a defect class beamr has ALREADY diagnosed
+   in a different consumer — an empty BIF registry makes `erlang:'+'` resolve
+   Deferred and then get refused as a guard BIF. Two doors into one hole makes
+   this a design question about WHO MAY CONSTRUCT a `NativeServices`, not a
+   missing field on a struct.
+
+Agreed landing shape: fold `services` into `JitRuntimeContext::new` at all 10
+call sites (8 are tests, passing an explicit empty and saying so) so a
+services-less context cannot be reached by defaulting.
+
+⚠️ **beamr 0.16.3 IS published** (Artemis probed it) while this tree still
+declares 0.16.2. It does NOT carry this fix. Take the step with the 0.17.0
+bump, not before — one thing at a time.
 
 **Repro + patch PUSHED: branch `defect/beamr-jit-loses-native-services`.**
 `crates/aion/src/runtime/jit_nif_boundary_tests.rs` is a DIFFERENTIAL — two
