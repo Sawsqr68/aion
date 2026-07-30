@@ -627,6 +627,29 @@ impl WorkerActivityDispatcher {
 }
 
 impl WorkerActivityDispatcher {
+    /// The drain gate for one dispatch, and the single place a draining server's
+    /// refusal is turned into a reason the engine acts on.
+    ///
+    /// The reason handed back is the #207 parked sentinel
+    /// ([`aion::PARKED_ACTIVITY_REASON`]), NOT the gate's own message. A
+    /// dispatch the drain refused never reached a worker and never ran, which is
+    /// precisely the state that sentinel was minted for: record nothing, deliver
+    /// nothing, and let post-restart replay re-dispatch the dangling ordinal —
+    /// the kill -9 convergence `shutdown::ShutdownOutcome::Parked` documents.
+    ///
+    /// Both alternatives are wrong here, and neither is a style preference:
+    ///
+    /// - the *unprefixed* gate message this used to return is classified as a
+    ///   terminal action failure, so a routine deploy records `ActivityFailed`
+    ///   (and, with no authored retry, `WorkflowFailed`) for work nobody
+    ///   attempted — the synthesized failure #207 exists to abolish;
+    /// - the TRANSPORT-loss class (`lost:`) is attempt-neutral but re-dispatches
+    ///   the SAME attempt live and in-process, which on a draining server means
+    ///   refuse → re-dispatch → refuse, spinning against the very gate that
+    ///   refused it while the process is trying to exit.
+    ///
+    /// The operator-facing detail is not lost: the gate's own message is what is
+    /// logged here. Only the engine-facing classification is the sentinel.
     fn ensure_accepting(
         &self,
         namespace: &str,
@@ -638,7 +661,6 @@ impl WorkerActivityDispatcher {
         self.drain_state
             .ensure_accepting(namespace, activity_type)
             .map_err(|error| {
-                let reason = error.to_string();
                 log_worker_error(
                     "WorkerDispatch",
                     namespace,
@@ -646,9 +668,9 @@ impl WorkerActivityDispatcher {
                     workflow_id,
                     activity_id,
                     worker_id,
-                    &reason,
+                    &error.to_string(),
                 );
-                reason
+                aion::PARKED_ACTIVITY_REASON.to_owned()
             })
     }
 
@@ -707,10 +729,33 @@ impl WorkerActivityDispatcher {
         })
     }
 
-    /// Wait once for a worker arrival, bounded by `budget` when one is given.
+    /// Wait once for a worker arrival — bounded by `budget` when one is given,
+    /// and bounded in BOTH arms by the server's own shutdown.
     ///
-    /// `None` is the pre-R1 wait, unchanged: block until the registry signals
-    /// an arrival (or, with no runtime in reach, sleep one park interval).
+    /// The arrival wait races the drain latch, and that race is the whole point.
+    /// Without it a `None` budget — the default, because no schedule-to-start
+    /// deadline is configured unless an operator writes one — parked this
+    /// dispatch on a `spawn_blocking` thread with nothing left that could ever
+    /// wake it: the drain gate is consulted once per selection iteration, and
+    /// the iteration was stuck inside this wait. Tokio's runtime `Drop` joins
+    /// the blocking pool, so `aion server` could not exit even after `main`
+    /// returned an exit code — it kept the store's writer lock and blocked the
+    /// next deploy into the same data directory. The captured stack of a real
+    /// one is `docs/evidence/samples/aion-server-hang-after-drain-15202.sample`.
+    /// The `Some(budget)` arm carried the same defect at the scale of the
+    /// budget: exit was delayed by up to the whole availability deadline.
+    ///
+    /// Racing the latch is the fix rather than capping the wait, because the
+    /// wait is legitimately unbounded while the server runs: a queue no worker
+    /// serves yet is a fleet condition an operator resolves by starting a
+    /// worker, and a deadline invented here would refuse work nobody asked to
+    /// have refused.
+    ///
+    /// Waking on the latch decides nothing by itself. The selection loop
+    /// re-selects, misses, and consults the SAME drain gate it always
+    /// consulted — [`Self::ensure_accepting`] — which is where the refusal and
+    /// its classification are produced. This seam gains no second opinion about
+    /// draining; it only stops being unwakeable.
     fn park_for_worker(&self, budget: Option<Duration>) {
         let handle = self
             .tokio_handle
@@ -719,18 +764,26 @@ impl WorkerActivityDispatcher {
         let Some(handle) = handle else {
             // No runtime in reach (a plain OS thread in an isolated test):
             // sleep the seam's park interval, clamped to the remaining budget.
+            // Bounded by construction, so the loop re-consults the drain gate
+            // within one interval and needs no signal to race.
             std::thread::sleep(
                 budget.map_or(PARK_POLL_INTERVAL, |budget| budget.min(PARK_POLL_INTERVAL)),
             );
             return;
         };
         handle.block_on(async {
+            let arrival = async {
+                tokio::select! {
+                    () = self.registry.wait_for_worker() => {}
+                    () = self.drain_state.wait_for_drain() => {}
+                }
+            };
             match budget {
-                None => self.registry.wait_for_worker().await,
+                None => arrival.await,
                 Some(budget) => {
                     // Timeout is not failure here: the caller re-classifies and
                     // decides whether the clock has run out.
-                    drop(tokio::time::timeout(budget, self.registry.wait_for_worker()).await);
+                    drop(tokio::time::timeout(budget, arrival).await);
                 }
             }
         });

@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use aion::{ActivityDispatch, ActivityDispatcher as _};
 use aion_core::{ActivityId, ContentType, Payload, RunId, WorkflowId};
+use aion_server::shutdown::DrainState;
 use aion_server::worker::queue_service::{
     QueueServiceConfig, QueueServiceOverride, QueueServicePolicy, QueueServiceState,
 };
@@ -405,5 +406,145 @@ fn the_recorded_failure_reason_is_typed_and_never_reads_as_a_park() -> Result<()
         failure.contains("nobody-serves-this") && failure.contains("greet"),
         "the recorded reason does not name the address: {failure}"
     );
+    Ok(())
+}
+
+/// One drain-gated seam: the shipped default queue-service settings (`strict`,
+/// NEITHER clock set — so the park is unbounded), a real tokio runtime for the
+/// park to block on, and the drain gate the shutdown coordinator flips.
+struct DrainingSeam {
+    drain: DrainState,
+    state: QueueServiceState,
+    dispatcher: Arc<WorkerActivityDispatcher>,
+    /// Held for the seam's lifetime: the dispatcher parks by `block_on`-ing this
+    /// runtime's handle, exactly as it does on a live server.
+    runtime: tokio::runtime::Runtime,
+}
+
+fn draining_seam() -> Result<DrainingSeam, TestError> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()?;
+    let drain = DrainState::default();
+    let state = QueueServiceState::default();
+    let dispatcher = Arc::new(
+        WorkerActivityDispatcher::new(
+            ConnectedWorkerRegistry::default(),
+            "default",
+            HeartbeatTracker::new(Duration::from_secs(5)),
+        )
+        .with_drain_state(drain.clone())
+        .with_tokio_handle(runtime.handle().clone())
+        .with_queue_state(state.clone()),
+    );
+    Ok(DrainingSeam {
+        drain,
+        state,
+        dispatcher,
+        runtime,
+    })
+}
+
+/// Poll a dispatch thread to completion within `budget`, so a wedged park is
+/// reported instead of hanging the suite (`JoinHandle` has no timed join).
+fn join_within(
+    dispatch: std::thread::JoinHandle<Result<String, String>>,
+    budget: Duration,
+) -> Result<Result<String, String>, TestError> {
+    let started = Instant::now();
+    while !dispatch.is_finished() {
+        if started.elapsed() >= budget {
+            return Err(format!("the dispatch was still parked after {budget:?}").into());
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    dispatch
+        .join()
+        .map_err(|_| TestError::from("the dispatch thread panicked"))
+}
+
+/// Every drain refusal at this seam wears the #207 parked class.
+///
+/// Attempt-neutral by construction: the parked class records nothing, delivers
+/// nothing, consumes no authored retry budget, and leaves post-restart replay to
+/// re-dispatch the dangling ordinal. The two classes it must NOT be are pinned
+/// here because both are actively harmful — an unprefixed reason is recorded as
+/// a terminal action failure for work nobody attempted (the #207 incident), and
+/// the transport-loss class would re-dispatch the same attempt live against the
+/// gate that just refused it, spinning while the process tries to exit.
+#[test]
+fn a_dispatch_refused_by_the_drain_wears_the_parked_class() -> Result<(), TestError> {
+    let seam = draining_seam()?;
+    assert!(seam.drain.begin());
+
+    let failure = seam
+        .dispatcher
+        .dispatch(dispatch_to_unserved_queue())
+        .err()
+        .ok_or("a draining server must refuse the dispatch")?;
+
+    assert_eq!(failure, aion::PARKED_ACTIVITY_REASON);
+    assert!(aion::is_parked_reason(&failure));
+    assert!(
+        !failure.starts_with("retryable:") && !failure.starts_with("terminal:"),
+        "a drain refusal must not wear the action's retry vocabulary: {failure}"
+    );
+    assert!(
+        !failure.starts_with("lost:") && !failure.starts_with("transport-exhausted:"),
+        "no transport was involved in a drain refusal: {failure}"
+    );
+    assert!(
+        WorkerUnavailable::parse(&failure).is_none(),
+        "a drain refusal is not a queue-service verdict about the fleet: {failure}"
+    );
+    assert!(seam.state.unserved()?.is_empty());
+    drop(seam.runtime);
+    Ok(())
+}
+
+/// #72: the drain releases a park that is ALREADY in flight.
+///
+/// The unbounded park is the shipped default — no schedule-to-start deadline is
+/// configured unless an operator writes one — and before this it could only end
+/// when a worker arrived. The drain gate is consulted between waits, never
+/// during one, so a drain could not reach a dispatch already inside the wait:
+/// on the blocking pool tokio's runtime `Drop` joins, that made the server
+/// unexitable. The park must therefore end on the drain, and end with the same
+/// parked class every other drain refusal carries.
+#[test]
+fn the_drain_releases_a_park_already_waiting_for_a_worker() -> Result<(), TestError> {
+    let seam = draining_seam()?;
+    let request = dispatch_to_unserved_queue();
+    let workflow_id = request.workflow_id.clone();
+    let activity_id = request.activity_id.clone();
+    let dispatcher = Arc::clone(&seam.dispatcher);
+    let parked = std::thread::spawn(move || dispatcher.dispatch(request));
+
+    // Armed only once the dispatch is observably inside the wait, published in
+    // the same live state the ops console reads.
+    let armed = Instant::now();
+    while !seam.state.is_unserved(&workflow_id, &activity_id)? {
+        if armed.elapsed() >= Duration::from_secs(10) {
+            return Err("the dispatch never parked on the unserved queue".into());
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(
+        !parked.is_finished(),
+        "with no deadline configured the dispatch must still be waiting"
+    );
+
+    assert!(seam.drain.begin());
+    let failure = join_within(parked, Duration::from_secs(20))?
+        .err()
+        .ok_or("the released park must refuse, not succeed")?;
+
+    assert_eq!(failure, aion::PARKED_ACTIVITY_REASON);
+    assert!(
+        seam.state.unserved()?.is_empty(),
+        "a released dispatch must leave the unserved state"
+    );
+    drop(seam.runtime);
     Ok(())
 }

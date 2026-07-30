@@ -2,10 +2,9 @@
 
 use std::process::ExitCode;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use tokio::sync::Notify;
+use tokio::sync::{Notify, watch};
 use tracing::{error, info, warn};
 
 use crate::ServerState;
@@ -50,23 +49,64 @@ pub struct DrainState {
     inner: Arc<DrainStateInner>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct DrainStateInner {
-    draining: AtomicBool,
+    /// The drain latch, held in a `watch` rather than an `AtomicBool` because
+    /// one gated seam cannot poll a flag: the bridge's park for an arriving
+    /// worker BLOCKS until a worker appears, so it needs this same latch in
+    /// awaitable form to stop blocking when the server starts draining.
+    ///
+    /// One latch answering both questions is the point. Two independent notions
+    /// of "we are shutting down" inside the dispatch path is exactly how a
+    /// drain gate and a dispatch parked behind it come to disagree — and the
+    /// disagreement is unobservable until a process refuses to exit.
+    draining: watch::Sender<bool>,
     empty: Notify,
+}
+
+impl Default for DrainStateInner {
+    fn default() -> Self {
+        Self {
+            draining: watch::Sender::new(false),
+            empty: Notify::default(),
+        }
+    }
 }
 
 impl DrainState {
     /// Return whether drain has begun and new workflow/activity starts must be rejected.
     #[must_use]
     pub fn is_draining(&self) -> bool {
-        self.inner.draining.load(Ordering::Acquire)
+        *self.inner.draining.borrow()
     }
 
     /// Mark the server draining. Returns true for the first caller that changed the state.
     #[must_use]
     pub fn begin(&self) -> bool {
-        !self.inner.draining.swap(true, Ordering::AcqRel)
+        // Sets the latch AND wakes every awaiting seam in one write, so a park
+        // released by drain can never observe a latch that has not been set
+        // yet.
+        !self.inner.draining.send_replace(true)
+    }
+
+    /// Resolve as soon as drain has begun — [`Self::is_draining`] in awaitable
+    /// form, over the same latch.
+    ///
+    /// For the seam that must block on an external arrival (a worker
+    /// registering) and therefore cannot re-read a flag between iterations.
+    /// Waking here decides nothing on its own: the woken caller re-runs its
+    /// normal loop and meets [`Self::ensure_accepting`], which is still the only
+    /// place a drain refusal is produced.
+    pub async fn wait_for_drain(&self) {
+        let mut draining = self.inner.draining.subscribe();
+        while !*draining.borrow_and_update() {
+            if draining.changed().await.is_err() {
+                // Unreachable while this handle lives — it owns the `Arc` the
+                // sender sits in — but a closed latch must read as "drained"
+                // rather than block forever on a state that cannot recover.
+                break;
+            }
+        }
     }
 
     /// Reject a new unit of work if drain has already begun.
@@ -206,8 +246,15 @@ fn log_parked_workers(reports: &[LostWorkerReport]) {
 #[cfg(test)]
 mod tests {
     use std::process::ExitCode;
+    use std::time::Duration;
 
     use super::{DrainState, ShutdownOutcome};
+
+    /// How long a woken waiter is allowed to take. Generous, and not a
+    /// behavioural bound: a correct latch resolves in microseconds and a broken
+    /// one never resolves, so this only decides how long a failure takes to
+    /// report.
+    const WAKE_BUDGET: Duration = Duration::from_secs(5);
 
     #[test]
     fn begin_is_idempotent_and_sets_draining() {
@@ -217,6 +264,44 @@ mod tests {
         assert!(drain.begin());
         assert!(drain.is_draining());
         assert!(!drain.begin());
+    }
+
+    /// #72: a waiter already parked on the latch is woken by `begin`.
+    ///
+    /// This is the ordering the bridge's park depends on and the one a
+    /// notification-only signal gets wrong: the waiter registers first and the
+    /// latch flips afterwards, so nothing it could poll has changed yet. If the
+    /// wake is ever lost here, a dispatch parked for a worker becomes
+    /// unwakeable and the process cannot exit.
+    #[tokio::test]
+    async fn begin_wakes_a_waiter_that_registered_before_the_latch_flipped() {
+        let drain = DrainState::default();
+        let waiting = drain.clone();
+        let waiter = tokio::spawn(async move { waiting.wait_for_drain().await });
+        // Let the waiter reach its await before the latch is touched.
+        tokio::task::yield_now().await;
+        assert!(!drain.is_draining());
+        assert!(drain.begin());
+
+        let woken = tokio::time::timeout(WAKE_BUDGET, waiter).await;
+        assert!(
+            matches!(woken, Ok(Ok(()))),
+            "a waiter registered before `begin` was not woken: {woken:?}"
+        );
+    }
+
+    /// The other half of the same race: a waiter arriving AFTER the latch
+    /// flipped must not wait for a notification that has already been sent.
+    #[tokio::test]
+    async fn wait_for_drain_resolves_at_once_once_drain_has_begun() {
+        let drain = DrainState::default();
+        assert!(drain.begin());
+
+        let resolved = tokio::time::timeout(WAKE_BUDGET, drain.wait_for_drain()).await;
+        assert!(
+            resolved.is_ok(),
+            "a waiter arriving after `begin` blocked instead of resolving"
+        );
     }
 
     /// #207 exit contract: a fully-parked drain is a SUCCESS (parked state is

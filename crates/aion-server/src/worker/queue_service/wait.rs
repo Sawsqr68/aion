@@ -14,6 +14,11 @@
 //! What did NOT change: the drain gate still runs first and still wins, and a
 //! server with no configured deadline still waits — loudly, and with a state an
 //! operator can read.
+//!
+//! That wait is unbounded only while the server is accepting work. The drain
+//! gate here is consulted once per iteration, so it can only refuse a dispatch
+//! that is *between* waits; releasing one that is already inside a wait is the
+//! caller's `park` contract below, and the caller owes it (#72).
 
 use std::time::{Duration, Instant};
 
@@ -81,9 +86,15 @@ pub struct ServiceWait<'a> {
 /// Select a worker for the address, or refuse with a typed reason.
 ///
 /// `accepting` is the drain gate, consulted exactly where it always was —
-/// before anything else on a selection miss. `park` performs one bounded wait
-/// for a worker arrival: `Some(budget)` must return by `budget` at the latest,
-/// `None` may wait indefinitely (the caller owns the runtime plumbing).
+/// before anything else on a selection miss. `park` performs one wait for a
+/// worker arrival: `Some(budget)` must return by `budget` at the latest, `None`
+/// may wait indefinitely (the caller owns the runtime plumbing).
+///
+/// `park` must ALSO return once the server stops accepting work, in both arms.
+/// This loop cannot enforce that itself: it consults `accepting` between waits,
+/// never during one, so a `park` that only ends on a worker arrival makes a
+/// dispatch to an unserved queue unrefusable and — on the blocking pool tokio's
+/// runtime `Drop` joins — unexitable (#72).
 ///
 /// # Errors
 ///
