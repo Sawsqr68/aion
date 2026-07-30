@@ -1,37 +1,50 @@
 //! Pure phase-state folding boundary for the AWL-authored round loop.
 //!
 //! AWL loops thread exactly one value, so this activity partitions the plan's
-//! items into ready/blocked/done, applies the round's verdicts under the
-//! DERIVE-AND-CHECK rule (any blocking finding rejects; an asserted overall
-//! that disagrees is itself a violation treated as reject), attaches
-//! reviewer feedback to rejected items for their resumed dev session, and
-//! releases newly-unblocked items. It performs no shell I/O and owns no
-//! workflow disposition — the loop's `until` reads the returned partitions.
+//! items into ready/blocked/done, applies the round's BATTERY OUTCOMES and
+//! PANEL VERDICTS through [`super::judge`], attaches the resulting feedback to
+//! rejected items for their resumed dev session, and releases newly-unblocked
+//! items. It performs no shell I/O and owns no workflow disposition — the
+//! loop's `until` reads the returned partitions.
+//!
+//! The acceptance rule itself (red gate ⇒ ineligible; every configured lens
+//! must have reported; derive-and-check per verdict) lives in
+//! [`super::judge`], next to the feedback rendering it feeds.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use aion_worker::ActivityFailure;
 
-use crate::types::{
-    DevItemResult, DoneItem, FoldPhaseInput, ItemVerdict, Overall, PhaseState, Severity, WorkItem,
-};
+use crate::types::{DoneItem, FoldPhaseInput, PhaseState, WorkItem};
+
+use super::judge::judge_round;
+use super::panel::require_panel;
 
 /// Fold one completed round (or the plan seed) into the loop-carried
 /// [`PhaseState`].
 ///
 /// # Errors
 ///
-/// Terminal on protocol violations that must never pass silently: duplicate
-/// item ids, a dev result without a verdict (or vice versa), a dangling
+/// Terminal on protocol violations that must never pass silently: an unusable
+/// review panel (empty, duplicated, or an unusable lens name — checked on the
+/// SEED call too, so a run that could never accept anything fails before its
+/// first agent turn), duplicate item ids, a verdict naming an ungated item or
+/// an unconfigured lens, a gated result matching no ready item, a dangling
 /// `depends_on` id naming no known item, or a dependency deadlock that would
 /// leave `blocked` non-empty with `ready` empty.
 pub fn fold_phase(input: FoldPhaseInput) -> Result<PhaseState, ActivityFailure> {
     let FoldPhaseInput {
         prior,
         incoming,
-        dev,
+        gated,
         verdicts,
+        lenses,
     } = input;
+
+    // The panel is checked on EVERY call, seed included: a run configured with
+    // no lenses can never accept an item, and the honest place to say so is
+    // before any worktree is provisioned.
+    require_panel(&lenses)?;
 
     // The working pool: prior ready items plus every newly planned item.
     let mut pool: Vec<WorkItem> = prior.ready;
@@ -43,14 +56,13 @@ pub fn fold_phase(input: FoldPhaseInput) -> Result<PhaseState, ActivityFailure> 
     require_known_dependencies(&pool, &blocked, &done)?;
 
     let mut round_lines: Vec<String> = Vec::new();
-    let judged = judge_round(&dev, &verdicts)?;
-    for judgement in judged {
+    for judgement in judge_round(gated, &verdicts, &lenses)? {
         let Some(position) = pool
             .iter()
             .position(|item| item.id == judgement.result.item.id)
         else {
             return Err(ActivityFailure::terminal(format!(
-                "dev result for item {} does not correspond to any ready item",
+                "gated result for item {} does not correspond to any ready item",
                 judgement.result.item.id
             )));
         };
@@ -63,8 +75,12 @@ pub fn fold_phase(input: FoldPhaseInput) -> Result<PhaseState, ActivityFailure> 
                 summary: judgement.result.report.summary.clone(),
             });
         } else {
-            item.feedback.clone_from(&judgement.feedback);
-            round_lines.push(format!("item {} rejected: {}", item.id, judgement.feedback));
+            round_lines.push(format!(
+                "item {} not accepted: {}",
+                item.id,
+                one_line(&judgement.feedback)
+            ));
+            item.feedback = judgement.feedback;
             pool.push(item);
         }
         round_lines.extend(judgement.violations);
@@ -100,128 +116,17 @@ pub fn fold_phase(input: FoldPhaseInput) -> Result<PhaseState, ActivityFailure> 
     })
 }
 
-/// One judged dev result: accepted or rejected, with rendered feedback and
-/// any derive-and-check violations observed on its verdict.
-struct Judgement {
-    result: DevItemResult,
-    accepted: bool,
-    feedback: String,
-    violations: Vec<String>,
-}
-
-/// Match dev results to verdicts by `item_id` and apply derive-and-check.
-/// A dev result with no verdict, a verdict with no dev result, or a
-/// duplicated id on either side is a terminal input failure.
-fn judge_round(
-    dev: &[DevItemResult],
-    verdicts: &[ItemVerdict],
-) -> Result<Vec<Judgement>, ActivityFailure> {
-    let mut by_id: BTreeMap<&str, &ItemVerdict> = BTreeMap::new();
-    for verdict in verdicts {
-        if by_id.insert(verdict.item_id.as_str(), verdict).is_some() {
-            return Err(ActivityFailure::terminal(format!(
-                "duplicate verdict for item {}",
-                verdict.item_id
-            )));
-        }
-    }
-    let mut seen: BTreeSet<&str> = BTreeSet::new();
-    let mut judged = Vec::with_capacity(dev.len());
-    for result in dev {
-        let id = result.item.id.as_str();
-        if !seen.insert(id) {
-            return Err(ActivityFailure::terminal(format!(
-                "duplicate dev result for item {id}"
-            )));
-        }
-        let Some(verdict) = by_id.remove(id) else {
-            return Err(ActivityFailure::terminal(format!(
-                "dev result for item {id} has no matching verdict"
-            )));
-        };
-        judged.push(judge(result.clone(), verdict));
-    }
-    if let Some((orphan, _)) = by_id.into_iter().next() {
-        return Err(ActivityFailure::terminal(format!(
-            "verdict for item {orphan} has no matching dev result"
-        )));
-    }
-    Ok(judged)
-}
-
-/// DERIVE-AND-CHECK one verdict: the derived overall is reject iff any
-/// finding is blocking. A verdict whose asserted overall disagrees, or a
-/// rejection missing its `reject_reason` or a substantiating blocking
-/// finding, is treated as REJECT and the violation is recorded.
-fn judge(result: DevItemResult, verdict: &ItemVerdict) -> Judgement {
-    let has_blocking = verdict
-        .findings
-        .iter()
-        .any(|finding| finding.severity == Severity::Blocking);
-    let derived = if has_blocking {
-        Overall::Reject
-    } else {
-        Overall::Accept
-    };
-    let mut violations = Vec::new();
-    if verdict.overall != derived {
-        violations.push(format!(
-            "item {}: asserted overall {:?} disagrees with the derived {:?} — \
-             treated as reject",
-            verdict.item_id, verdict.overall, derived
-        ));
-    }
-    let rejecting = derived == Overall::Reject || verdict.overall == Overall::Reject;
-    let reason_missing = rejecting
-        && verdict
-            .reject_reason
-            .as_deref()
-            .is_none_or(|reason| reason.trim().is_empty());
-    if reason_missing {
-        violations.push(format!(
-            "item {}: rejection carries no reject_reason",
-            verdict.item_id
-        ));
-    }
-    if verdict.overall == Overall::Reject && !has_blocking {
-        violations.push(format!(
-            "item {}: rejection carries no substantiating blocking finding",
-            verdict.item_id
-        ));
-    }
-    let accepted = !rejecting && violations.is_empty();
-    let feedback = if accepted {
-        String::new()
-    } else {
-        render_feedback(verdict)
-    };
-    Judgement {
-        result,
-        accepted,
-        feedback,
-        violations,
-    }
-}
-
-/// Render a rejected verdict as the feedback line the next round's dev turn
-/// reads: the reason plus every blocking finding's title.
-fn render_feedback(verdict: &ItemVerdict) -> String {
-    let reason = verdict
-        .reject_reason
-        .as_deref()
-        .filter(|reason| !reason.trim().is_empty())
-        .unwrap_or("(no reject_reason given)");
-    let blocking_titles: Vec<&str> = verdict
-        .findings
-        .iter()
-        .filter(|finding| finding.severity == Severity::Blocking)
-        .map(|finding| finding.title.as_str())
-        .collect();
-    if blocking_titles.is_empty() {
-        reason.to_owned()
-    } else {
-        format!("{reason} [blocking: {}]", blocking_titles.join("; "))
-    }
+/// The evidence string is a single `; `-joined line, so a multi-paragraph
+/// feedback body is collapsed to its first line there. The FULL text still
+/// rides on the item's `feedback` for the next dev turn — this is the index,
+/// not the record.
+fn one_line(feedback: &str) -> String {
+    feedback
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or("(no feedback rendered)")
+        .to_owned()
 }
 
 fn dependencies_satisfied(item: &WorkItem, done_ids: &BTreeSet<&str>) -> bool {

@@ -1,38 +1,43 @@
 //! Composition root for the staged-rounds worker.
 //!
-//! It serves seven activity types on ONE task queue (`staged_rounds`) across
+//! It serves ELEVEN activity types on ONE task queue (`staged_rounds`) across
 //! FIVE liminal connections in this single process, each connection
 //! registered on its OWN node (the third routing dimension: namespace ×
 //! `task_queue` × node) so the server — which routes by those three
 //! dimensions only, never by activity type — can land every dispatched
-//! activity on the one connection that holds its handler. The node strings
-//! here MUST equal the `node` lines in `../awl/staged_rounds.awl` — the
-//! document itself is the authoritative node table:
+//! activity on a connection that holds its handler. The node strings here MUST
+//! equal the `node` lines in `../awl/staged_rounds.awl` — the document itself
+//! is the authoritative node table:
 //!
-//! - four DRIVEN AGENT connections (`planner`, `developer`, `reviewer`,
-//!   `remediation`), each registered on its role's node, each with its OWN
-//!   composed [`ProfiledNornHarness`]: a distinct `--output-schema`, a
-//!   per-run DERIVED `--session-id` (`<workflow_id>-<suffix>` — the arg
-//!   template cannot express per-item ids, so the wrapper appends it at
-//!   start), a per-run `--workspace-root` read from the activity input, and
-//!   the role's profile markdown (loaded once at startup from
-//!   `--profiles-dir`) assembled with the per-run context by the role's ONE
-//!   prompt function.
+//! - FOUR DRIVEN AGENT connections (`planner`, `developer`, `reviewer`,
+//!   `remediation`) carrying FIVE activity types, each with its OWN composed
+//!   [`ProfiledNornHarness`]: a distinct `--output-schema`, a per-run DERIVED
+//!   `--session-id` (`<workflow_id>-<suffix>` — the arg template cannot
+//!   express per-item ids, so the wrapper appends it at start), a per-run
+//!   `--workspace-root` read from the activity input, and the role's profile
+//!   markdown (loaded once at startup from `--profiles-dir`) assembled with
+//!   the per-run context by that activity's ONE prompt function. The
+//!   `remediation` connection serves TWO activity types (`remediate` and
+//!   `fix_integration`) because the document pins both to that node — see
+//!   [`connections`] for why one connection per NODE is the only correct
+//!   grouping.
 //! - one SHELL connection, registered on node `shell`, serving
-//!   `provision_item`, `merge_branches`, and the pure `fold_phase` from a
-//!   typed registry, with no harness.
+//!   `provision_item`, `gate_item`, the pure `plan_reviews` and `fold_phase`,
+//!   `merge_branches`, and `verify_integration` from a typed registry, with no
+//!   harness.
 //!
 //! PARALLELISM: the engine fans items out via `workflow.map`; genuine
 //! N-wide execution is this worker's `max_concurrency` on the developer and
 //! reviewer connections (`--max-parallel`, default 4) — the SDK holds a
-//! semaphore permit per dispatched activity.
+//! semaphore permit per dispatched activity. The reviewer connection now
+//! carries the whole PANEL (item × lens), so its concurrency bounds
+//! `items × lenses` concurrent reviewers, not `items`.
 //!
-//! SESSION TOPOLOGY: the planner runs once per workflow
-//! (`{workflow_id}-planner`); each item's dev agent is `-dev-<item id>`
-//! (resumed across that item's feedback rounds); each item's reviewer is
-//! `-review-<item id>`; and the remediator keys `{workflow_id}-planner` —
-//! it RESUMES the planner's session, so the persistent coordinator judges
-//! its own plan's merge conflicts.
+//! SESSION TOPOLOGY: see `harness/context.rs`, which owns it in one place —
+//! the planner runs once per workflow, each item's dev agent resumes across
+//! that item's feedback rounds, each PANEL SEAT is its own session
+//! (`review-<item>-<lens>`, so concurrent lenses over one item never collide),
+//! and the remediator AND the integration fixer both key the planner's session.
 //!
 //! Norn runs with `OPENAI_API_KEY` REMOVED from its child environment so it
 //! uses the operator's `ChatGPT` OAuth login, exactly like the dev-brief
@@ -50,21 +55,23 @@ use aion_worker::{
     ActivityRegistry, AgentHarnessConfig, RedialTiming, WorkerConfig, WorkerConfigBuildError,
 };
 
-use staged_rounds_worker::harness;
-use staged_rounds_worker::harness::{ExtractFn, ProfiledNornHarness};
+use staged_rounds_worker::harness::ProfiledNornHarness;
 use staged_rounds_worker::profiles::{self, Profiles};
-use staged_rounds_worker::prompts;
-use staged_rounds_worker::schemas;
 use staged_rounds_worker::shell::Shell;
 
 #[path = "main_args.rs"]
 mod args;
+#[path = "main_connections.rs"]
+mod connections_table;
 #[path = "main_shell_node.rs"]
 mod shell_node;
 
 use args::{Args, parse_args};
 #[cfg(test)]
 use args::{DEFAULT_ADDRESS, parse_args_from};
+#[cfg(test)]
+use connections_table::Role;
+use connections_table::{Connection, connections, roles};
 use shell_node::shell_registry;
 
 /// The one task queue every staged-rounds activity is dispatched on. MUST
@@ -82,36 +89,12 @@ const READ_ONLY_DISALLOWED_TOOLS: &str = "write,edit,apply_patch";
 /// Concurrency for the planner and remediation connections (single-flight
 /// roles; 2 leaves headroom for a retry overlapping a redial).
 const COORDINATOR_CONCURRENCY: usize = 2;
-/// Concurrency for the shell connection (cheap git/pure handlers).
+/// Concurrency for the shell connection. It serves the cheap git/pure handlers
+/// AND the per-item gate battery, which fans out as wide as the dev fan-out
+/// did, so it must not be narrower than the developer connection.
 const SHELL_CONCURRENCY: usize = 8;
 const REDIAL_INITIAL_BACKOFF: Duration = Duration::from_millis(100);
 const REDIAL_MAX_BACKOFF: Duration = Duration::from_secs(5);
-
-/// One driven-agent role: its activity type, the node its connection
-/// registers, its output schema, the profile doctrine, the prompt assembly
-/// function, the context extractor (workspace root, per-run session suffix,
-/// and mechanical-git plan), its Norn tool deny-list, and its connection
-/// concurrency.
-struct Role {
-    activity_type: &'static str,
-    node: &'static str,
-    output_schema: &'static str,
-    profile: String,
-    assemble: prompts::AssembleFn,
-    /// Derives the per-run workspace root, session suffix, and post-run
-    /// mechanical-git plan from each activity input (the template cannot
-    /// express per-item values).
-    extract: ExtractFn,
-    /// The comma-separated Norn tool deny-list this role's sessions run
-    /// with (`--disallowed-tools`), or `None` for no deny-list. `Some` for
-    /// the planner and reviewer (read-only roles); `None` for the developer
-    /// and remediator (they must write).
-    disallowed_tools: Option<&'static str>,
-    /// This role's connection `max_concurrency` — the developer and
-    /// reviewer take the operator's `--max-parallel` (the genuine
-    /// parallelism knob); the coordinator roles stay narrow.
-    max_concurrency: usize,
-}
 
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -124,27 +107,27 @@ fn main() -> anyhow::Result<()> {
     let args = parse_args()?;
     let profiles =
         profiles::load(Path::new(&args.profiles_dir)).map_err(|error| anyhow::anyhow!(error))?;
+    let connections = agent_connections(profiles, args.max_parallel)?;
     tracing::info!(
         candidates = ?args.candidates,
         norn_bin = %args.norn_bin,
         profiles_dir = %args.profiles_dir,
         max_parallel = args.max_parallel,
         task_queue = TASK_QUEUE,
-        "staged-rounds-worker starting: 4 driven agent roles + 3 shell activities across 5 connections"
+        agent_connections = connections.len(),
+        "staged-rounds-worker starting: 5 driven agent activities + 6 shell activities"
     );
 
-    let roles = roles(profiles, args.max_parallel);
-
-    // Spawn one connection thread per agent role. Each owns its config, an
+    // Spawn one connection thread per agent node. Each owns its config, an
     // empty registry, its stop flag, and its composed harness, and blocks in
     // serve_with_redial (redialling internally) until the process is killed.
     let mut threads = Vec::new();
-    for role in roles {
+    for connection in connections {
         let candidates = args.candidates.clone();
         let norn_bin = args.norn_bin.clone();
-        let identity = format!("{}-{}", args.identity_prefix, role.activity_type);
+        let identity = format!("{}-{}", args.identity_prefix, connection.node);
         threads.push(thread::spawn(move || {
-            serve_agent_role(&candidates, &identity, &norn_bin, &role);
+            serve_agent_connection(&candidates, &identity, &norn_bin, &connection);
         }));
     }
 
@@ -159,60 +142,24 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// The four agent roles. Each roots its Norn session at the worktree its
-/// extractor reads from the activity input: the planner and remediator at
-/// the top-level `workspace_path` (the repo / the integration worktree),
-/// the developer and reviewer at `work.workspace_path` (the item's own
-/// worktree).
-fn roles(profiles: Profiles, max_parallel: usize) -> Vec<Role> {
-    vec![
-        Role {
-            activity_type: "planner",
-            node: "planner",
-            output_schema: schemas::PLAN,
-            profile: profiles.planner,
-            assemble: prompts::planner,
-            extract: harness::planner_context,
-            disallowed_tools: Some(READ_ONLY_DISALLOWED_TOOLS),
-            max_concurrency: COORDINATOR_CONCURRENCY,
-        },
-        Role {
-            activity_type: "dev_item",
-            node: "developer",
-            output_schema: schemas::ITEM_REPORT,
-            profile: profiles.developer,
-            assemble: prompts::dev_item,
-            extract: harness::dev_item_context,
-            disallowed_tools: None,
-            max_concurrency: max_parallel,
-        },
-        Role {
-            activity_type: "review_item",
-            node: "reviewer",
-            output_schema: schemas::ITEM_VERDICT,
-            profile: profiles.reviewer,
-            assemble: prompts::review_item,
-            extract: harness::review_item_context,
-            disallowed_tools: Some(READ_ONLY_DISALLOWED_TOOLS),
-            max_concurrency: max_parallel,
-        },
-        Role {
-            activity_type: "remediate",
-            node: "remediation",
-            output_schema: schemas::REMEDIATION,
-            profile: profiles.remediator,
-            assemble: prompts::remediate,
-            extract: harness::remediate_context,
-            disallowed_tools: None,
-            max_concurrency: COORDINATOR_CONCURRENCY,
-        },
-    ]
+/// The agent connections: the role table folded to one connection per node.
+/// A disagreement between two roles sharing a node is a STARTUP failure, not a
+/// silent mis-wiring at run time.
+fn agent_connections(profiles: Profiles, max_parallel: usize) -> anyhow::Result<Vec<Connection>> {
+    connections(roles(profiles, max_parallel, COORDINATOR_CONCURRENCY))
+        .map_err(|error| anyhow::anyhow!(error))
 }
 
-/// Compose one role's harness and serve it on its own liminal connection,
-/// registered on the role's node so only this role's activity is routed here.
-fn serve_agent_role(candidates: &[String], identity: &str, norn_bin: &str, role: &Role) {
-    let config = match worker_config(identity, role.node, role.max_concurrency) {
+/// Compose one connection's harness and serve it on its own liminal
+/// connection, registered on the connection's node so only the activities
+/// pinned to that node are routed here.
+fn serve_agent_connection(
+    candidates: &[String],
+    identity: &str,
+    norn_bin: &str,
+    connection: &Connection,
+) {
+    let config = match worker_config(identity, connection.node, connection.max_concurrency) {
         Ok(config) => config,
         Err(error) => {
             tracing::error!(%identity, %error, "could not build agent worker config");
@@ -220,9 +167,15 @@ fn serve_agent_role(candidates: &[String], identity: &str, norn_bin: &str, role:
         }
     };
     let registry = Arc::new(ActivityRegistry::new());
-    let agent = composed_agent_harness(norn_bin, role);
+    let agent = composed_agent_harness(norn_bin, connection);
     let stop = AtomicBool::new(false);
-    let role_name = role.activity_type;
+    let node = connection.node;
+    let served = connection
+        .activities
+        .iter()
+        .map(|activity| activity.activity_type)
+        .collect::<Vec<_>>()
+        .join(", ");
     if let Err(error) = aion_worker::serve_with_redial(
         candidates.to_vec(),
         &config,
@@ -230,30 +183,32 @@ fn serve_agent_role(candidates: &[String], identity: &str, norn_bin: &str, role:
         RedialTiming::new(REDIAL_INITIAL_BACKOFF, REDIAL_MAX_BACKOFF),
         &stop,
         Some(&agent),
-        move || tracing::info!(role = role_name, "agent connection registered"),
+        move || tracing::info!(%node, %served, "agent connection registered"),
     ) {
-        tracing::error!(role = role_name, %error, "agent connection ended");
+        tracing::error!(%node, %error, "agent connection ended");
     }
 }
 
-/// Build the composed harness for one role: the inner [`NornHarness`]
-/// carries the driven-mode wiring (`--output-schema`, the role's profile as
-/// its `--append-system-prompt` doctrine, env hygiene); the
-/// [`ProfiledNornHarness`] wrapper assembles the per-turn context into the
-/// prompt and appends the per-run `--workspace-root` and derived
-/// `--session-id` at start. This is the ONE place a concrete adapter is
-/// named per role; the serve path drives it only through the erased
-/// [`DynAgentHarness`] trait.
-fn composed_agent_harness(norn_bin: &str, role: &Role) -> AgentHarnessConfig {
+/// Build the composed harness for one connection: the inner [`NornHarness`]
+/// carries the driven-mode wiring (`--output-schema`, the connection's profile
+/// as its `--append-system-prompt` doctrine, env hygiene); the
+/// [`ProfiledNornHarness`] wrapper dispatches on the activity type, assembles
+/// that activity's per-turn context into the prompt, and appends the per-run
+/// `--workspace-root` and derived `--session-id` at start. This is the ONE
+/// place a concrete adapter is named; the serve path drives it only through
+/// the erased [`DynAgentHarness`] trait.
+fn composed_agent_harness(norn_bin: &str, connection: &Connection) -> AgentHarnessConfig {
     let harness = ProfiledNornHarness::new(
-        inner_norn_harness(norn_bin, role),
-        role.assemble,
-        role.extract,
+        inner_norn_harness(norn_bin, connection),
+        connection.activities.clone(),
     );
     let erased: Arc<dyn DynAgentHarness> = Arc::new(harness);
     AgentHarnessConfig::new(
         erased,
-        [role.activity_type],
+        connection
+            .activities
+            .iter()
+            .map(|activity| activity.activity_type),
         InterventionCapabilities::from_primitives([
             InterventionPrimitive::InjectMessage,
             InterventionPrimitive::Cancel,
@@ -261,40 +216,65 @@ fn composed_agent_harness(norn_bin: &str, role: &Role) -> AgentHarnessConfig {
     )
 }
 
-/// Build the inner [`NornHarness`] for one role: the driven-mode wiring plus
-/// the role's profile passed via `--append-system-prompt`, which APPENDS the
-/// doctrine to Norn's own system instructions (never `--system-prompt`,
-/// which would OVERWRITE them). `--fast` / `--reasoning-effort high` are the
-/// operator's speed/effort settings.
+/// The exact norn argv one connection's inner harness is composed from, in
+/// order.
 ///
-/// NEITHER `--session-id` NOR `--workspace-root` is set here: both are
+/// Kept as a typed list rather than assembled inline so the composition-root
+/// tests can assert on the REAL argument structure — which flags are set, and
+/// which value follows which flag — instead of scraping a `Debug` rendering
+/// that changes whenever the adapter's internals do.
+///
+/// `--fast` / `--reasoning-effort high` are the operator's speed/effort
+/// settings. The profile rides as `--append-system-prompt`, which APPENDS the
+/// doctrine to Norn's own system instructions (never `--system-prompt`, which
+/// would OVERWRITE them).
+///
+/// NEITHER `--session-id` NOR `--workspace-root` appears here: both are
 /// per-run data the [`ProfiledNornHarness`] derives from each activity input
 /// and appends at start time (the arg template expands only `{workflow_id}`
-/// and `{activity_type}`, which cannot express a per-item session id).
-fn inner_norn_harness(norn_bin: &str, role: &Role) -> NornHarness {
-    let mut harness = NornHarness::with_binary(norn_bin)
-        .with_arg("--fast")
-        .with_arg("--reasoning-effort")
-        .with_arg("high")
-        .with_arg("--append-system-prompt")
-        .with_arg(role.profile.clone())
-        .with_arg("--output-schema")
-        .with_arg(role.output_schema.trim_start());
-    if let Some(disallowed) = role.disallowed_tools {
-        harness = harness.with_arg("--disallowed-tools").with_arg(disallowed);
+/// and `{activity_type}`, which cannot express a per-item — let alone a
+/// per-item-per-lens — session id).
+fn connection_norn_args(connection: &Connection) -> Vec<String> {
+    let mut args = vec![
+        "--fast".to_owned(),
+        "--reasoning-effort".to_owned(),
+        "high".to_owned(),
+        "--append-system-prompt".to_owned(),
+        connection.profile.clone(),
+        "--output-schema".to_owned(),
+        connection.output_schema.trim_start().to_owned(),
+    ];
+    if let Some(disallowed) = connection.disallowed_tools {
+        args.push("--disallowed-tools".to_owned());
+        args.push(disallowed.to_owned());
     }
-    // Force the ChatGPT OAuth login: a stray ambient API key would take
-    // precedence and fail. No secret is ever set here.
+    args
+}
+
+/// Build the inner [`NornHarness`] for one connection from
+/// [`connection_norn_args`], plus the env hygiene that forces the `ChatGPT`
+/// OAuth login: a stray ambient API key would take precedence and fail. No
+/// secret is ever set here.
+fn inner_norn_harness(norn_bin: &str, connection: &Connection) -> NornHarness {
+    let mut harness = NornHarness::with_binary(norn_bin);
+    for arg in connection_norn_args(connection) {
+        harness = harness.with_arg(arg);
+    }
     harness.without_env("OPENAI_API_KEY")
 }
 
-/// Serve the three shell-node activities from a typed registry on one
+/// Serve the six shell-node activities from a typed registry on one
 /// connection, registered on the `shell` node so only shell activities are
 /// routed here.
 fn serve_shell(args: &Args) -> anyhow::Result<()> {
     let identity = format!("{}-shell", args.identity_prefix);
     let config = worker_config(&identity, SHELL_NODE, SHELL_CONCURRENCY)?;
     let registry = Arc::new(shell_registry(Shell::inherited())?);
+    let served = registry
+        .activity_types()
+        .iter()
+        .cloned()
+        .collect::<Vec<_>>();
     let stop = AtomicBool::new(false);
     let ready_file = args.ready_file.clone();
     aion_worker::serve_with_redial(
@@ -310,9 +290,7 @@ fn serve_shell(args: &Args) -> anyhow::Result<()> {
             {
                 tracing::error!(%error, "failed to write worker readiness file");
             }
-            tracing::info!(
-                "shell connection registered; serving provision_item/merge_branches/fold_phase"
-            );
+            tracing::info!(served = %served.join(", "), "shell connection registered");
         },
     )?;
     Ok(())

@@ -1,11 +1,11 @@
 //! Harness-seam tests: per-role workspace-root + session-suffix extraction
-//! (incl. loud failures), the assembled-prompt path, and the
-//! `ConcludeMerge` mechanic proven BY EXECUTION against a real conflicted
-//! repo in a tempdir.
+//! (incl. loud failures), the activity-table dispatch a shared-node connection
+//! depends on, the assembled-prompt path, and the `ConcludeMerge` mechanic
+//! proven BY EXECUTION against a real conflicted repo in a tempdir.
 
 use super::{
-    PostRunPlan, ProfiledNornHarness, dev_item_context, planner_context, remediate_context,
-    review_item_context,
+    AgentActivity, PostRunPlan, ProfiledNornHarness, dev_item_context, fix_integration_context,
+    planner_context, remediate_context, review_item_context,
 };
 use crate::commit::{ConcludeOutcome, conclude_merge};
 use crate::shell::Shell;
@@ -23,6 +23,25 @@ const DEV_INPUT: &str = r#"{
         "base_commit": "abc"
     },
     "gates": []
+}"#;
+
+/// A panel-seat input: one lens over one gated item.
+const REVIEW_INPUT: &str = r#"{
+    "task": {
+        "lens": { "name": "correctness", "charter": "hunt defects in the change" },
+        "work": {
+            "item": {
+                "id": "it-2", "title": "t", "goal": "g",
+                "scope_in": [], "scope_out": [],
+                "phase": 1, "depends_on": [], "feedback": ""
+            },
+            "workspace_path": "/ws/it-2",
+            "branch": "b",
+            "base_commit": "c",
+            "report": { "item_id": "it-2", "summary": "s", "commits": [], "claims": [] },
+            "gate": { "pass": true, "runs": [], "diff": "", "diagnostics": "all green" }
+        }
+    }
 }"#;
 
 #[test]
@@ -49,16 +68,71 @@ fn the_developer_roots_at_the_item_worktree_with_a_per_item_session() -> anyhow:
 }
 
 #[test]
-fn the_reviewer_roots_at_the_item_worktree_with_a_per_item_session() -> anyhow::Result<()> {
-    let context = review_item_context(
-        "{\"work\":{\"item\":{\"id\":\"it-2\",\"title\":\"t\",\"goal\":\"g\",\"phase\":1,\
-         \"feedback\":\"\"},\"workspace_path\":\"/ws/it-2\",\"branch\":\"b\",\
-         \"base_commit\":\"c\",\"report\":{\"item_id\":\"it-2\",\"summary\":\"s\"}}}",
+fn the_reviewer_roots_at_the_item_worktree_with_a_per_seat_session() -> anyhow::Result<()> {
+    let context = review_item_context(REVIEW_INPUT).map_err(anyhow::Error::msg)?;
+    assert_eq!(context.workspace_root, "/ws/it-2");
+    assert_eq!(
+        context.session_suffix, "review-it-2-correctness",
+        "the panel seat's session must name the LENS as well as the item — \
+         concurrent lenses over one item would otherwise collide onto one session"
+    );
+    assert_eq!(
+        context.plan,
+        Some(PostRunPlan::StampVerdict {
+            item_id: "it-2".to_owned(),
+            lens: "correctness".to_owned(),
+        })
+    );
+    Ok(())
+}
+
+#[test]
+fn two_lenses_over_one_item_get_distinct_sessions() -> anyhow::Result<()> {
+    let first = review_item_context(REVIEW_INPUT).map_err(anyhow::Error::msg)?;
+    let second = review_item_context(&REVIEW_INPUT.replace("correctness", "regressions"))
+        .map_err(anyhow::Error::msg)?;
+    assert_ne!(
+        first.session_suffix, second.session_suffix,
+        "two lenses over ONE item must not share a Norn session — one would \
+         resume and read the other's transcript"
+    );
+    Ok(())
+}
+
+#[test]
+fn a_panel_seat_with_an_unusable_lens_name_is_refused() -> anyhow::Result<()> {
+    for bad in ["\"\"", "\"  \"", "\"a/b\""] {
+        let input = REVIEW_INPUT.replace("\"correctness\"", bad);
+        let Err(error) = review_item_context(&input) else {
+            anyhow::bail!("lens name {bad} unexpectedly resolved into a session id");
+        };
+        assert!(error.contains("lens"), "error was: {error}");
+    }
+    Ok(())
+}
+
+#[test]
+fn the_integration_fixer_resumes_the_planner_and_owes_a_commit() -> anyhow::Result<()> {
+    let context = fix_integration_context(
+        "{\"verify\":{\"pass\":false},\"plan\":{},\
+         \"integration_branch\":\"staged/wf/integration\",\
+         \"workspace_path\":\"/run/integration\"}",
     )
     .map_err(anyhow::Error::msg)?;
-    assert_eq!(context.workspace_root, "/ws/it-2");
-    assert_eq!(context.session_suffix, "review-it-2");
-    assert_eq!(context.plan, None);
+    assert_eq!(context.workspace_root, "/run/integration");
+    assert_eq!(
+        context.session_suffix, "planner",
+        "the integration fixer MUST key the planner's session — the resumed \
+         coordinator answers for its own decomposition"
+    );
+    assert_eq!(
+        context.plan,
+        Some(PostRunPlan::IntegrationFix {
+            workspace_path: "/run/integration".to_owned()
+        }),
+        "the agent runs no git, so the repair must be committed by the machinery \
+         or the next verification discards it"
+    );
     Ok(())
 }
 
@@ -99,6 +173,10 @@ fn a_missing_workspace_path_is_a_loud_error() -> anyhow::Result<()> {
     for (extract, json) in [
         (planner_context as super::ExtractFn, "{\"material\":{}}"),
         (remediate_context as super::ExtractFn, "{\"merge\":{}}"),
+        (
+            fix_integration_context as super::ExtractFn,
+            "{\"verify\":{}}",
+        ),
     ] {
         let Err(error) = extract(json) else {
             anyhow::bail!("a missing workspace_path unexpectedly resolved");
@@ -108,19 +186,84 @@ fn a_missing_workspace_path_is_a_loud_error() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// The activity table one connection serves, mirroring the `remediation`
+/// connection's real shape: two activity types on one harness.
+fn shared_node_harness() -> ProfiledNornHarness {
+    ProfiledNornHarness::new(
+        NornHarness::new(),
+        vec![
+            AgentActivity {
+                activity_type: "remediate",
+                assemble: crate::prompts::remediate,
+                extract: remediate_context,
+            },
+            AgentActivity {
+                activity_type: "fix_integration",
+                assemble: crate::prompts::fix_integration,
+                extract: fix_integration_context,
+            },
+        ],
+    )
+}
+
 #[test]
-fn the_assembled_prompt_is_the_role_function_applied_to_the_context() {
+fn a_shared_node_harness_dispatches_on_the_activity_type() -> anyhow::Result<()> {
+    let harness = shared_node_harness();
+    let context = "{\"verify\":{},\"merge\":{},\"plan\":{},\"workspace_path\":\"/w\"}";
+    let remediate = harness
+        .assembled_prompt("remediate", context)
+        .map_err(anyhow::Error::msg)?;
+    let fix = harness
+        .assembled_prompt("fix_integration", context)
+        .map_err(anyhow::Error::msg)?;
+    assert!(
+        remediate.contains("conflicted merge IN"),
+        "the remediate prompt must frame the conflicted merge:\n{remediate}"
+    );
+    assert!(
+        fix.contains("union of your items is red"),
+        "the fix_integration prompt must frame the red union:\n{fix}"
+    );
+    assert_ne!(
+        remediate, fix,
+        "two activity types on ONE connection must not receive the same prompt"
+    );
+    Ok(())
+}
+
+#[test]
+fn an_unserved_activity_type_is_a_loud_refusal_not_a_default_role() -> anyhow::Result<()> {
+    let Err(error) = shared_node_harness().activity("dev_item") else {
+        anyhow::bail!("an activity this connection does not serve was accepted");
+    };
+    assert!(error.contains("dev_item"), "error was: {error}");
+    assert!(error.contains("remediate"), "error was: {error}");
+    assert!(error.contains("fix_integration"), "error was: {error}");
+    Ok(())
+}
+
+#[test]
+fn the_assembled_prompt_is_the_activity_function_applied_to_the_context() -> anyhow::Result<()> {
     let harness = ProfiledNornHarness::new(
         NornHarness::new(),
-        crate::prompts::review_item,
-        review_item_context,
+        vec![AgentActivity {
+            activity_type: "review_item",
+            assemble: crate::prompts::review_item,
+            extract: review_item_context,
+        }],
     );
-    let prompt = harness.assembled_prompt("{\"work\":{\"base_commit\":\"x\"}}");
+    let prompt = harness
+        .assembled_prompt(
+            "review_item",
+            "{\"task\":{\"work\":{\"base_commit\":\"x\"}}}",
+        )
+        .map_err(anyhow::Error::msg)?;
     // The per-turn prompt is context only — the profile doctrine is the
     // inner harness's `--append-system-prompt` text, never folded in here.
     assert!(!prompt.contains("# Adversarial"));
     assert!(prompt.contains("```json"));
     assert!(prompt.contains("\"base_commit\":\"x\""));
+    Ok(())
 }
 
 // --- ConcludeMerge, proven by execution --------------------------------------

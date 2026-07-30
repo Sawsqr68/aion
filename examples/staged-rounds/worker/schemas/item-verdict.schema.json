@@ -1,12 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "item verdict",
-  "description": "One item's adversarial review verdict. DERIVE-AND-CHECK: the fold derives the overall from the findings (any `blocking` finding rejects) and treats a verdict whose asserted overall disagrees as a rejection — consistency is checked, never trusted. A rejection requires a reject_reason AND at least one blocking finding to substantiate it.",
+  "description": "ONE review lens's verdict on one item's round. `item_id` and `lens` are rewritten by the WORKER from the panel seat it dispatched — an agent-asserted identity never survives. DERIVE-AND-CHECK: the fold derives the overall from the findings (any `blocking` finding rejects) and treats a verdict whose asserted overall disagrees as a rejection — consistency is checked, never trusted. A rejection requires a reject_reason AND at least one blocking finding to substantiate it. Every configured lens must report and accept before an item is accepted.",
   "type": "object",
-  "required": ["item_id", "overall", "findings"],
+  "required": ["item_id", "lens", "overall", "findings"],
   "additionalProperties": false,
   "properties": {
     "item_id": { "type": "string", "minLength": 1 },
+    "lens": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The lens name from your run context's panel seat. Rewritten by the worker from the dispatched seat, so echo it rather than inventing one."
+    },
     "overall": {
       "type": "string",
       "enum": ["accept", "reject"],
@@ -14,7 +19,7 @@
     },
     "findings": {
       "type": "array",
-      "description": "Concrete findings only: a constructed failure scenario or quoted evidence, never a vibe. Empty means the reviewer hunted and found nothing. A scope_out violation is always blocking.",
+      "description": "Concrete findings only: a constructed failure scenario or quoted evidence, never a vibe. Empty means this lens hunted through its charter and found nothing. A scope_out violation is always blocking, whatever the charter.",
       "items": {
         "type": "object",
         "required": ["severity", "title", "evidence"],
@@ -44,6 +49,6 @@
     "properties": { "overall": { "const": "reject" } }
   },
   "then": {
-    "required": ["item_id", "overall", "findings", "reject_reason"]
+    "required": ["item_id", "lens", "overall", "findings", "reject_reason"]
   }
 }

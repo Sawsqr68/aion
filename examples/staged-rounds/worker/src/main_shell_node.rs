@@ -1,18 +1,48 @@
 //! Typed registry and worker-SDK adapters for shell-node activities.
+//!
+//! Three adapter shapes, because the handlers genuinely differ:
+//!
+//! - [`blocking`] — a synchronous handler that shells out, moved onto the
+//!   blocking pool.
+//! - [`blocking_with_progress`] — the same, PLUS the activity's heartbeat
+//!   progress channel. The two gate batteries (`gate_item`,
+//!   `verify_integration`) run the operator's real `cargo build` /
+//!   `cargo clippy` / `cargo test`, which on a whole-project run dominate
+//!   wall-clock. Without this an operator would see the activity start and
+//!   then nothing at all until it finished many minutes later; with it, every
+//!   gate command's start and its exit status arrive as progress detail. The
+//!   context is CLONED into the blocking task because the battery reports from
+//!   the blocking thread, not from the async adapter.
+//! - [`immediate`] — a pure handler, run without consuming a blocking-pool
+//!   thread.
 
 use aion_worker::{ActivityContext, ActivityRegistry, HandlerFuture};
 use staged_rounds_worker::handlers;
+use staged_rounds_worker::handlers::progress::{GateProgress, HeartbeatProgress};
 use staged_rounds_worker::shell::Shell;
 
-/// The three shell-node activities served by the binary.
+/// The six shell-node activities served by the binary, in the document's
+/// action order.
 pub(super) fn shell_registry(shell: Shell) -> Result<ActivityRegistry, aion_worker::WorkerError> {
     ActivityRegistry::new()
         .register_activity(
             "provision_item",
             blocking(shell.clone(), handlers::provision_item),
         )?
-        .register_activity("merge_branches", blocking(shell, handlers::merge_branches))?
-        .register_activity("fold_phase", immediate(handlers::fold_phase))
+        .register_activity(
+            "gate_item",
+            blocking_with_progress(shell.clone(), handlers::gate_item),
+        )?
+        .register_activity("plan_reviews", immediate(handlers::plan_reviews))?
+        .register_activity("fold_phase", immediate(handlers::fold_phase))?
+        .register_activity(
+            "merge_branches",
+            blocking(shell.clone(), handlers::merge_branches),
+        )?
+        .register_activity(
+            "verify_integration",
+            blocking_with_progress(shell, handlers::verify_integration),
+        )
 }
 
 /// Move a synchronous shell handler onto the blocking thread pool.
@@ -27,17 +57,36 @@ where
     Input: Send + 'static,
     Output: Send + 'static,
 {
-    move |input: Input, context: &ActivityContext| {
-        let _ = context;
+    move |input: Input, _context: &ActivityContext| {
         let shell = shell.clone();
         Box::pin(async move {
             tokio::task::spawn_blocking(move || body(&shell, input))
                 .await
-                .map_err(|join_error| {
-                    aion_worker::ActivityFailure::terminal(format!(
-                        "activity handler task did not complete: {join_error}"
-                    ))
-                })?
+                .map_err(|join_error| join_failure(&join_error))?
+        })
+    }
+}
+
+/// Move a synchronous shell handler onto the blocking thread pool WITH the
+/// activity's heartbeat progress channel, for the long gate batteries.
+fn blocking_with_progress<Input, Output>(
+    shell: Shell,
+    body: fn(&Shell, &dyn GateProgress, Input) -> Result<Output, aion_worker::ActivityFailure>,
+) -> impl for<'context> Fn(Input, &'context ActivityContext) -> HandlerFuture<'context, Output>
++ Send
++ Sync
++ 'static
+where
+    Input: Send + 'static,
+    Output: Send + 'static,
+{
+    move |input: Input, context: &ActivityContext| {
+        let shell = shell.clone();
+        let progress = HeartbeatProgress::new(context.clone());
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || body(&shell, &progress, input))
+                .await
+                .map_err(|join_error| join_failure(&join_error))?
         })
     }
 }
@@ -53,8 +102,13 @@ where
     Input: Send + 'static,
     Output: Send + 'static,
 {
-    move |input: Input, context: &ActivityContext| {
-        let _ = context;
-        Box::pin(async move { body(input) })
-    }
+    move |input: Input, _context: &ActivityContext| Box::pin(async move { body(input) })
+}
+
+/// A blocking task that did not complete is an activity failure naming why —
+/// never a silently dropped result.
+fn join_failure(join_error: &tokio::task::JoinError) -> aion_worker::ActivityFailure {
+    aion_worker::ActivityFailure::terminal(format!(
+        "activity handler task did not complete: {join_error}"
+    ))
 }

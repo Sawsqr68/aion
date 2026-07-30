@@ -1,17 +1,26 @@
-//! Mechanical post-turn git for the agent roles.
+//! Mechanical git for the agent roles and the gate battery.
 //!
 //! DOCTRINE: agents do not run git — the worker machinery does the
-//! mechanical git around them. Two mechanical steps live here:
+//! mechanical git around them. Four mechanical steps live here, each under
+//! its OWN scoped committer identity so the branch history says exactly which
+//! piece of machinery produced each commit:
 //!
 //! - [`commit_dev_work`] (developer role): commit the round's work in the
-//!   item worktree on the item branch under a scoped machinery identity.
-//!   Without it the item branch retains nothing the dev agent did and the
-//!   reviewer diffs an empty change. The harness then assembles the
-//!   `DevItemResult` activity payload around the agent's report with
-//!   [`assemble_dev_item_result`] — REALITY WINS on `report.commits` (the
-//!   agent never ran git, so an asserted hash is fabricated by construction)
-//!   and on `report.item_id` (the machinery knows which item this turn
-//!   served).
+//!   item worktree on the item branch. Without it the item branch retains
+//!   nothing the dev agent did and the panel diffs an empty change. The
+//!   harness then assembles the `DevItemResult` activity payload around the
+//!   agent's report with [`crate::agent_output::assemble_dev_item_result`].
+//! - [`commit_gate_normalization`] (the `gate_item` battery): commit what a
+//!   WRITE-MODE gate command left in the tree (a formatter is the expected
+//!   case) so the branch stays complete and nothing dirty ever skips green.
+//!   `gate_item` re-runs the FULL battery when this moves HEAD — the
+//!   reviewed commit must never be recorded green on a verdict it never
+//!   earned.
+//! - [`commit_integration_fix`] (the `fix_integration` role): commit the
+//!   repair the agent made to the integration worktree after a red
+//!   integration battery. Distinct from the remediation identity below
+//!   because it answers for a different failure: the merge was CLEAN and the
+//!   union is still red.
 //! - [`conclude_merge`] (remediator role): in the integration worktree,
 //!   conclude the in-progress merge the remediator resolved (`git add -A` +
 //!   `git commit --no-edit`), or commit a dirty tree as a remediation fix,
@@ -23,12 +32,11 @@
 //!   integration content. The refusal keeps the merge in progress and
 //!   fails the activity loudly instead.
 //!
-//! Both commit under scoped machinery identities via `-c`, so they are
-//! attributable without touching the workspace's git config, and both are
+//! All commit under scoped machinery identities via `-c`, so they are
+//! attributable without touching the workspace's git config, and all are
 //! idempotent across activity retries (nothing staged skips green).
 
 use crate::shell::{CliRun, Shell};
-use crate::types::ProvisionedItem;
 
 /// The developer commit's scoped committer name — machinery identity, not
 /// an agent, not the operator.
@@ -36,6 +44,18 @@ pub const DEVELOPER_COMMIT_NAME: &str = "staged-rounds-developer";
 
 /// The developer commit's scoped committer email.
 pub const DEVELOPER_COMMIT_EMAIL: &str = "developer@staged-rounds.local";
+
+/// The gate-normalization commit's scoped committer name.
+pub const GATES_COMMIT_NAME: &str = "staged-rounds-gates";
+
+/// The gate-normalization commit's scoped committer email.
+pub const GATES_COMMIT_EMAIL: &str = "gates@staged-rounds.local";
+
+/// The integration-fix commit's scoped committer name.
+pub const INTEGRATION_COMMIT_NAME: &str = "staged-rounds-integration";
+
+/// The integration-fix commit's scoped committer email.
+pub const INTEGRATION_COMMIT_EMAIL: &str = "integration@staged-rounds.local";
 
 /// The remediation commit's scoped committer name.
 pub const REMEDIATION_COMMIT_NAME: &str = "staged-rounds-remediator";
@@ -100,6 +120,61 @@ pub fn commit_dev_work(
         &format!("chore(staged dev): item {item_id} round work"),
         "no changes in the worktree; nothing to commit (already committed, \
          or the round changed nothing)",
+    )
+}
+
+/// Commit whatever the GATE COMMANDS left in `workspace_path`: `git add -A`
+/// then one commit under the gate machinery identity, message
+/// `chore(staged gates): mechanical normalization from gate commands`.
+///
+/// A write-mode formatter used as a gate (Tom's standing rule — never
+/// format-CHECK, always autoformat) leaves normalization the dev agent never
+/// saw. That change belongs on the branch: without this commit the branch is
+/// incomplete, the panel's diff disagrees with the branch head, and the
+/// item's next re-provisioning refuses a dirty worktree. A clean tree skips
+/// green with the unchanged head.
+///
+/// # Errors
+///
+/// `git` unable to run, or any staging/commit command exiting non-zero.
+pub fn commit_gate_normalization(
+    shell: &Shell,
+    workspace_path: &str,
+) -> Result<FixCommitOutcome, String> {
+    stage_all_and_commit(
+        shell,
+        workspace_path,
+        GATES_COMMIT_NAME,
+        GATES_COMMIT_EMAIL,
+        "chore(staged gates): mechanical normalization from gate commands",
+        "gate commands left the worktree clean; nothing to commit",
+    )
+}
+
+/// Commit the integration repair the `fix_integration` agent made in the
+/// integration worktree: `git add -A` then one commit under the integration
+/// machinery identity, message
+/// `fix(staged integration): repair the red integration battery`.
+///
+/// The agent runs no git, so without this the repair would be discarded by
+/// the very next `verify_integration` (which asserts a clean tree). A clean
+/// tree skips green: an agent turn that changed nothing is reported honestly
+/// rather than manufacturing an empty commit.
+///
+/// # Errors
+///
+/// `git` unable to run, or any staging/commit command exiting non-zero.
+pub fn commit_integration_fix(
+    shell: &Shell,
+    workspace_path: &str,
+) -> Result<FixCommitOutcome, String> {
+    stage_all_and_commit(
+        shell,
+        workspace_path,
+        INTEGRATION_COMMIT_NAME,
+        INTEGRATION_COMMIT_EMAIL,
+        "fix(staged integration): repair the red integration battery",
+        "the integration fix turn left the worktree clean; nothing to commit",
     )
 }
 
@@ -252,71 +327,6 @@ fn contains_conflict_markers(bytes: &[u8]) -> bool {
     })
 }
 
-/// Assemble the `dev_item` activity RESULT from the agent's report output:
-/// decode the report (unwrapping the double-encoded string envelope when
-/// present), rewrite `item_id` to the item the machinery served and
-/// `commits` to the ONE real branch head, then wrap it in the
-/// `DevItemResult` record the workflow's type table declares (the item and
-/// worktree coordinates come from the activity INPUT, never from agent
-/// assertions). The envelope form is preserved.
-///
-/// # Errors
-///
-/// Returns a message when the output is not a JSON object document or the
-/// result cannot be encoded.
-pub fn assemble_dev_item_result(
-    bytes: &[u8],
-    work: &ProvisionedItem,
-    head: &str,
-) -> Result<Vec<u8>, String> {
-    let (mut report, double_encoded) = output_json(bytes, "dev_item")?;
-    let serde_json::Value::Object(ref mut fields) = report else {
-        return Err("dev_item output is not a JSON object; cannot assemble the result".to_owned());
-    };
-    fields.insert(
-        "item_id".to_owned(),
-        serde_json::Value::String(work.item.id.clone()),
-    );
-    fields.insert(
-        "commits".to_owned(),
-        serde_json::Value::Array(vec![serde_json::Value::String(head.to_owned())]),
-    );
-    let item = serde_json::to_value(&work.item)
-        .map_err(|error| format!("work item is not encodable: {error}"))?;
-    let result = serde_json::json!({
-        "item": item,
-        "workspace_path": work.workspace_path,
-        "branch": work.branch,
-        "base_commit": work.base_commit,
-        "report": report,
-    });
-    let encoded = if double_encoded {
-        let inner = serde_json::to_string(&result)
-            .map_err(|error| format!("assembled dev result is not encodable: {error}"))?;
-        serde_json::to_vec(&serde_json::Value::String(inner))
-    } else {
-        serde_json::to_vec(&result)
-    };
-    encoded.map_err(|error| format!("assembled dev result is not encodable: {error}"))
-}
-
-/// Decode an agent output payload to its JSON value, unwrapping the
-/// double-encoded string form when present. Returns the value and whether
-/// it was double-encoded (so a rewrite can preserve the envelope).
-fn output_json(bytes: &[u8], role: &str) -> Result<(serde_json::Value, bool), String> {
-    let value: serde_json::Value = serde_json::from_slice(bytes)
-        .map_err(|error| format!("{role} output is not JSON: {error}"))?;
-    match value {
-        serde_json::Value::String(inner) => {
-            let unwrapped = serde_json::from_str(&inner).map_err(|error| {
-                format!("{role} output string does not hold a JSON document: {error}")
-            })?;
-            Ok((unwrapped, true))
-        }
-        other => Ok((other, false)),
-    }
-}
-
 fn stage_all_and_commit(
     shell: &Shell,
     workspace_path: &str,
@@ -413,75 +423,5 @@ fn require_git_ok(
             run.exit_status,
             run.output.trim()
         ))
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::assemble_dev_item_result;
-    use crate::types::{ProvisionedItem, WorkItem};
-
-    fn work() -> ProvisionedItem {
-        ProvisionedItem {
-            item: WorkItem {
-                id: "it-1".to_owned(),
-                title: "t".to_owned(),
-                goal: "g".to_owned(),
-                scope_in: vec!["src/".to_owned()],
-                scope_out: vec![],
-                phase: 1,
-                depends_on: vec![],
-                feedback: String::new(),
-            },
-            workspace_path: "/repo/.staged-rounds/wf/items/it-1".to_owned(),
-            branch: "staged/wf/it-1".to_owned(),
-            base_commit: "basehead".to_owned(),
-        }
-    }
-
-    #[test]
-    fn assembly_wraps_the_report_with_real_coordinates() -> anyhow::Result<()> {
-        let assembled = assemble_dev_item_result(
-            b"{\"item_id\":\"fabricated\",\"summary\":\"s\",\"commits\":[\"fake\"],\"claims\":[]}",
-            &work(),
-            "realhead",
-        )
-        .map_err(anyhow::Error::msg)?;
-        let value: serde_json::Value = serde_json::from_slice(&assembled)?;
-        assert_eq!(value["item"]["id"], "it-1");
-        assert_eq!(
-            value["workspace_path"],
-            "/repo/.staged-rounds/wf/items/it-1"
-        );
-        assert_eq!(value["branch"], "staged/wf/it-1");
-        assert_eq!(value["base_commit"], "basehead");
-        assert_eq!(value["report"]["item_id"], "it-1");
-        assert_eq!(value["report"]["commits"], serde_json::json!(["realhead"]));
-        assert_eq!(value["report"]["summary"], "s");
-        Ok(())
-    }
-
-    #[test]
-    fn assembly_preserves_the_double_encoded_envelope() -> anyhow::Result<()> {
-        let inner = "{\"item_id\":\"it-1\",\"summary\":\"s\",\"commits\":[],\"claims\":[]}";
-        let outer = serde_json::to_vec(&serde_json::Value::String(inner.to_owned()))?;
-        let assembled =
-            assemble_dev_item_result(&outer, &work(), "realhead").map_err(anyhow::Error::msg)?;
-        let value: serde_json::Value = serde_json::from_slice(&assembled)?;
-        let serde_json::Value::String(inner_encoded) = value else {
-            anyhow::bail!("the double-encoded envelope was not preserved");
-        };
-        let inner_value: serde_json::Value = serde_json::from_str(&inner_encoded)?;
-        assert_eq!(
-            inner_value["report"]["commits"],
-            serde_json::json!(["realhead"])
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn a_non_object_report_is_a_loud_fault() {
-        let result = assemble_dev_item_result(b"[1,2]", &work(), "head");
-        assert!(result.is_err());
     }
 }

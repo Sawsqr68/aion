@@ -96,8 +96,7 @@ fn merge_branches_reports_a_conflict_and_leaves_the_merge_in_progress() -> anyho
                 &["rev-parse", "-q", "--verify", "MERGE_HEAD"],
                 &state.workspace_path,
             )
-            .map(|run| run.succeeded())
-            .unwrap_or(false);
+            .is_ok_and(|run| run.succeeded());
     assert!(
         merge_head,
         "MERGE_HEAD must exist in the integration worktree"

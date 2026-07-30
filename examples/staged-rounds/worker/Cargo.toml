@@ -3,28 +3,38 @@
 # Standalone (NOT a workspace member) so it builds from a plain `cargo build`
 # in this directory, mirroring the `dev-brief` example worker.
 #
-# It serves SEVEN activity types on ONE task queue (`staged_rounds`):
+# It serves ELEVEN activity types on ONE task queue (`staged_rounds`) across
+# FIVE connections — one per NODE, because the server routes by (namespace,
+# task_queue, node) and never by activity type:
 #
-# - FOUR DRIVEN AGENT activities (`planner`, `dev_item`, `review_item`,
-#   `remediate`) — each routed through its OWN composed harness: a
-#   `ProfiledNornHarness` that assembles the prompt as {the role's profile
-#   markdown, loaded at startup from `--profiles-dir`} + {the activity's
-#   structured context JSON}, then delegates to a `NornHarness` (driven mode,
-#   jsonrpc) carrying the role's `--output-schema` and a per-run derived
-#   `--session-id`, over the liminal server-push transport
-#   (`serve_with_redial`). One connection per role. The remediator RESUMES
-#   the planner's session (same `--session-id` suffix) — the persistent
-#   coordinator judges its own plan's merge conflicts.
-# - THREE SHELL-NODE activities (`provision_item`, `merge_branches`, and the
-#   pure `fold_phase` boundary) — typed registry handlers for per-item
-#   worktree provisioning, ordered branch merging, and phase-state folding,
-#   on a fifth connection with no harness.
+# - FIVE DRIVEN AGENT activities (`planner`, `dev_item`, `review_item`,
+#   `remediate`, `fix_integration`) on FOUR connections — each routed through
+#   its connection's OWN composed harness: a `ProfiledNornHarness` that
+#   dispatches on the activity type, assembles the prompt from the activity's
+#   structured context JSON, and delegates to a `NornHarness` (driven mode,
+#   jsonrpc) carrying the connection's `--output-schema`, its profile markdown
+#   (loaded at startup from `--profiles-dir`) as `--append-system-prompt`, and
+#   a per-run derived `--session-id`, over the liminal server-push transport
+#   (`serve_with_redial`). `remediate` and `fix_integration` SHARE the
+#   `remediation` node and connection: both RESUME the planner's session (same
+#   `--session-id` suffix), so the persistent coordinator answers for its own
+#   plan — for its items' merge conflicts, and for a merged union that is red
+#   when every branch was green. Each `review_item` PANEL SEAT is its own
+#   session (`review-<item>-<lens>`), so concurrent lenses over one item stay
+#   blind to each other.
+# - SIX SHELL-NODE activities (`provision_item`, `gate_item`, `plan_reviews`,
+#   `fold_phase`, `merge_branches`, `verify_integration`) — typed registry
+#   handlers for per-item worktree provisioning, the AUTHORITATIVE per-item
+#   gate battery, the item × lens panel flattening, phase-state folding,
+#   ordered branch merging, and the merged-tree battery re-run, on a fifth
+#   connection with no harness. The two batteries report each gate command's
+#   start and exit status on the activity's heartbeat progress channel.
 [package]
 name = "staged-rounds-worker"
 version = "0.1.0"
 edition = "2024"
 publish = false
-description = "Rust worker serving seven staged-rounds activities: four driven Norn agent roles and three shell-node handlers."
+description = "Rust worker serving eleven staged-rounds activities: five driven Norn agent roles and six shell-node handlers."
 
 [[bin]]
 name = "staged-rounds-worker"

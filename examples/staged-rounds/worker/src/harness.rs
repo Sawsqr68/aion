@@ -1,33 +1,41 @@
 //! [`ProfiledNornHarness`] — the thin harness wrapper that assembles the
-//! role prompt and derives the per-run session identity before delegating to
-//! the real [`NornHarness`].
+//! role prompt, derives the per-run session identity, and performs the
+//! post-turn mechanical step, delegating everything else to the real
+//! [`NornHarness`].
 //!
 //! WHY A WRAPPER: the per-turn prompt is the activity's per-run context
-//! JSON, rendered by the role's assembly function; the role's profile
+//! JSON, rendered by the activity's assembly function; the role's profile
 //! markdown is the session's `--append-system-prompt` doctrine on the inner
 //! harness (composed in `main.rs`). The wrapper intercepts exactly one seam:
-//! it reads the spec's input payload, runs the role's ONE assembly function
+//! it reads the spec's input payload, runs the activity's ONE assembly function
 //! (`crate::prompts`), and hands the inner harness the same spec with its
 //! input replaced by the assembled prompt as a JSON string.
 //!
+//! ONE CONNECTION MAY SERVE SEVERAL ACTIVITY TYPES. The server routes by
+//! (namespace, `task_queue`, node) ONLY — never by activity type — so every
+//! activity the document pins to one node must be served by ONE connection, or
+//! the server will land an activity on a connection that has no handler for it.
+//! `remediate` and `fix_integration` are both pinned to node `remediation`, so
+//! this wrapper holds a TABLE of [`AgentActivity`] and dispatches on
+//! `spec.activity_type`. A spec naming an activity this harness does not serve
+//! is a loud protocol error, never a fallback to some default role.
+//!
 //! PER-RUN SESSION IDENTITY (the mechanic dev-brief's template could not
 //! express): the norn arg template expands only `{workflow_id}` and
-//! `{activity_type}`, so a per-ITEM session id cannot ride the template.
-//! The wrapper therefore appends `--session-id <workflow_id>-<suffix>` and
-//! `--resume-if-exists` per run in `start()`, deriving the suffix from the
-//! role's extractor over the input JSON — `dev-<item id>` and
-//! `review-<item id>` for the per-item roles, and the constant `planner`
-//! for BOTH the planner and the remediator: the remediator RESUMES the
-//! planner's session, so the persistent coordinator judges its own plan's
-//! merge conflicts. `--workspace-root` is appended the same way (dev-brief's
-//! proven per-run-append seam).
+//! `{activity_type}`, so a per-ITEM (let alone per-item-per-LENS) session id
+//! cannot ride the template. The wrapper therefore appends `--session-id
+//! <workflow_id>-<suffix>` and `--resume-if-exists` per run in `start()`,
+//! deriving the suffix from the activity's extractor over the input JSON (see
+//! [`context`] for the whole session topology). `--workspace-root` is appended
+//! the same way (dev-brief's proven per-run-append seam).
 //!
-//! THE MECHANICAL-GIT SEAM (doctrine: agents do not run git — the machinery
-//! does): the developer role commits the round's work in the item worktree
-//! and the activity result is ASSEMBLED around the agent's report with the
-//! real coordinates and the real head ([`crate::commit`]); the remediator
-//! role's session concludes the in-progress merge it resolved. The planner
-//! and reviewer write nothing and commit nothing.
+//! THE POST-TURN SEAM (doctrine: agents do not run git, and agents do not
+//! assert their own identity — the machinery does both): the developer role
+//! commits the round's work and its result is ASSEMBLED around the agent's
+//! report with the real coordinates and the real head; the reviewer role's
+//! verdict is STAMPED with the panel seat that was dispatched; the remediator
+//! concludes the in-progress merge it resolved; and the integration fixer's
+//! repair is committed. See [`crate::commit`] and [`crate::agent_output`].
 
 use aion_integration_norn::NornHarness;
 use aion_integrations::contract::{AgentHarness, AgentSession};
@@ -37,80 +45,98 @@ use aion_integrations::{
 };
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use serde::Deserialize;
 use serde_json::Value;
 
+use crate::agent_output;
 use crate::commit;
 use crate::prompts::AssembleFn;
 use crate::shell::Shell;
 use crate::types::ProvisionedItem;
 
-/// Which mechanical git step a role's session performs after a successful
-/// turn, with the context it resolved from the activity input BEFORE the
-/// run (an input that cannot name its workspace must fail before an
-/// expensive agent turn, not after).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PostRunPlan {
-    /// Commit the dev round's work in the item worktree and assemble the
-    /// `DevItemResult` payload around the agent's report (developer role).
-    DevWork {
-        /// The provisioned item coordinates from the activity input
-        /// (boxed: the item rides its whole `WorkItem`, which dwarfs the
-        /// other variant).
-        work: Box<ProvisionedItem>,
-    },
-    /// Conclude the in-progress merge in the integration worktree
-    /// (remediator role).
-    ConcludeMerge {
-        /// The integration worktree from the activity input.
-        workspace_path: String,
-    },
+#[path = "harness/context.rs"]
+mod context;
+
+pub use context::{
+    ExtractFn, PostRunPlan, RoleContext, dev_item_context, fix_integration_context,
+    planner_context, remediate_context, review_item_context,
+};
+
+/// One agent activity type a connection serves: the activity-type name the
+/// server dispatches, the per-turn prompt assembly, and the context extractor.
+///
+/// Deliberately NOT `PartialEq`: two of its three fields are function
+/// pointers, whose addresses are not guaranteed unique, so equality on them
+/// would be a meaningless answer dressed up as a real one. Compare
+/// `activity_type` — the identity that actually matters — and exercise the
+/// function fields by CALLING them.
+#[derive(Clone, Debug)]
+pub struct AgentActivity {
+    /// The dispatched activity-type name (must equal an `action` name in
+    /// `../awl/staged_rounds.awl`).
+    pub activity_type: &'static str,
+    /// The per-turn prompt assembly function for this activity.
+    pub assemble: AssembleFn,
+    /// The context extractor for this activity.
+    pub extract: ExtractFn,
 }
 
-/// What a role's extractor derives from one activity input.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RoleContext {
-    /// The worktree the session is rooted at (`--workspace-root`).
-    pub workspace_root: String,
-    /// The per-run session suffix (`--session-id <workflow_id>-<suffix>`).
-    pub session_suffix: String,
-    /// The mechanical git step after a successful turn, when the role has
-    /// one.
-    pub plan: Option<PostRunPlan>,
-}
-
-/// The signature every role's context extractor shares.
-pub type ExtractFn = fn(&str) -> Result<RoleContext, String>;
-
-/// A per-role harness: the composed inner [`NornHarness`] (which already
-/// carries the role's profile as its `--append-system-prompt` doctrine),
-/// the role's per-turn context-assembly function, and the role's context
-/// extractor.
+/// A per-connection harness: the composed inner [`NornHarness`] (which already
+/// carries the connection's profile as its `--append-system-prompt` doctrine
+/// and its `--output-schema`), plus the table of activity types it serves.
 #[derive(Clone, Debug)]
 pub struct ProfiledNornHarness {
     inner: NornHarness,
-    assemble: AssembleFn,
-    extract: ExtractFn,
+    activities: Vec<AgentActivity>,
 }
 
 impl ProfiledNornHarness {
-    /// Wrap a composed inner harness with the role's context-assembly and
-    /// context-extraction functions.
+    /// Wrap a composed inner harness with the activity table this connection
+    /// serves.
     #[must_use]
-    pub fn new(inner: NornHarness, assemble: AssembleFn, extract: ExtractFn) -> Self {
-        Self {
-            inner,
-            assemble,
-            extract,
-        }
+    pub fn new(inner: NornHarness, activities: Vec<AgentActivity>) -> Self {
+        Self { inner, activities }
+    }
+
+    /// The served activity, or a message naming what was dispatched and what
+    /// this connection actually serves. Never a fallback: routing an unknown
+    /// activity onto some default role would run the wrong prompt, the wrong
+    /// session, and the wrong post-turn step.
+    ///
+    /// # Errors
+    ///
+    /// A message when `activity_type` is not in this harness's table.
+    pub fn activity(&self, activity_type: &str) -> Result<&AgentActivity, String> {
+        self.activities
+            .iter()
+            .find(|activity| activity.activity_type == activity_type)
+            .ok_or_else(|| {
+                format!(
+                    "this agent connection does not serve activity {activity_type:?} \
+                     — it serves [{}]; the server routes by (namespace, task_queue, \
+                     node) only, so a mismatch means the worker's node table and the \
+                     document's action table have drifted",
+                    self.activities
+                        .iter()
+                        .map(|activity| activity.activity_type)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })
     }
 
     /// Assemble the per-turn context prompt this harness would send for
-    /// `context_json` — exposed so tests exercise the exact production
-    /// assembly path.
-    #[must_use]
-    pub fn assembled_prompt(&self, context_json: &str) -> String {
-        (self.assemble)(context_json)
+    /// `context_json` on `activity_type` — exposed so tests exercise the exact
+    /// production assembly path.
+    ///
+    /// # Errors
+    ///
+    /// A message when this connection does not serve `activity_type`.
+    pub fn assembled_prompt(
+        &self,
+        activity_type: &str,
+        context_json: &str,
+    ) -> Result<String, String> {
+        Ok((self.activity(activity_type)?.assemble)(context_json))
     }
 }
 
@@ -119,18 +145,23 @@ impl AgentHarness for ProfiledNornHarness {
     type Session = ProfiledSession;
 
     async fn start(&self, mut spec: AgentRunSpec) -> Result<Self::Session, HarnessError> {
+        // Which activity this connection was asked to run. A type it does not
+        // serve is a loud protocol error before anything is spawned.
+        let activity = self
+            .activity(&spec.activity_type)
+            .map_err(HarnessError::protocol)?;
         // The input payload is the workflow-encoded context JSON (an object).
         let context_json = std::str::from_utf8(spec.input.bytes())
             .map_err(|source| {
                 HarnessError::protocol(format!("run input is not valid UTF-8: {source}"))
             })?
             .to_owned();
-        // Resolve the workspace root, session suffix, and commit plan BEFORE
+        // Resolve the workspace root, session suffix, and post-run plan BEFORE
         // the run — loudly, never with a fallback that would unconfine the
-        // session or lose a mechanical commit.
-        let context = (self.extract)(&context_json).map_err(HarnessError::protocol)?;
+        // session or lose a mechanical step.
+        let context = (activity.extract)(&context_json).map_err(HarnessError::protocol)?;
         let session_id = format!("{}-{}", spec.workflow_id, context.session_suffix);
-        let prompt = self.assembled_prompt(&context_json);
+        let prompt = (activity.assemble)(&context_json);
         // Re-encode as a JSON string so the inner harness's prompt
         // derivation unwraps it to the exact assembled text.
         spec.input = Payload::from_json(&Value::String(prompt)).map_err(|source| {
@@ -156,134 +187,12 @@ impl AgentHarness for ProfiledNornHarness {
     }
 }
 
-// --- the per-role context extractors -----------------------------------------
-
-/// Planner input slice: `workspace_path` at the top level (the repo root —
-/// the planner reads the actual tree).
-#[derive(Debug, Deserialize)]
-struct TopLevelWorkspace {
-    #[serde(default)]
-    workspace_path: String,
-}
-
-/// Dev-item input slice: the provisioned item under `work`.
-#[derive(Debug, Deserialize)]
-struct DevItemInput {
-    work: ProvisionedItem,
-}
-
-/// Review-item input slice: item id + worktree under `work` (extra
-/// `DevItemResult` fields are ignored).
-#[derive(Debug, Deserialize)]
-struct ReviewItemInput {
-    work: ReviewWorkSlice,
-}
-
-#[derive(Debug, Deserialize)]
-struct ReviewWorkSlice {
-    item: ReviewItemSlice,
-    #[serde(default)]
-    workspace_path: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct ReviewItemSlice {
-    #[serde(default)]
-    id: String,
-}
-
-fn require_non_blank(value: &str, what: &str) -> Result<(), String> {
-    if value.trim().is_empty() {
-        return Err(format!(
-            "agent activity input carries an empty {what} — the harness \
-             cannot root or key the session on an unnamed value"
-        ));
-    }
-    Ok(())
-}
-
-/// The planner's extractor: rooted at the input's `workspace_path` (the
-/// repo), session suffix `planner`.
-///
-/// # Errors
-///
-/// A message when the input carries no non-empty `workspace_path`.
-pub fn planner_context(context_json: &str) -> Result<RoleContext, String> {
-    let parsed: TopLevelWorkspace = serde_json::from_str(context_json)
-        .map_err(|error| format!("planner input does not parse: {error}"))?;
-    require_non_blank(&parsed.workspace_path, "workspace_path")?;
-    Ok(RoleContext {
-        workspace_root: parsed.workspace_path,
-        session_suffix: "planner".to_owned(),
-        plan: None,
-    })
-}
-
-/// The developer's extractor: rooted at `work.workspace_path`, session
-/// suffix `dev-<item id>`, with the [`PostRunPlan::DevWork`] commit plan.
-///
-/// # Errors
-///
-/// A message when the input carries no provisioned item, or blank
-/// coordinates.
-pub fn dev_item_context(context_json: &str) -> Result<RoleContext, String> {
-    let parsed: DevItemInput = serde_json::from_str(context_json)
-        .map_err(|error| format!("dev_item input does not carry a provisioned item: {error}"))?;
-    require_non_blank(&parsed.work.workspace_path, "work.workspace_path")?;
-    require_non_blank(&parsed.work.item.id, "work.item.id")?;
-    Ok(RoleContext {
-        workspace_root: parsed.work.workspace_path.clone(),
-        session_suffix: format!("dev-{}", parsed.work.item.id),
-        plan: Some(PostRunPlan::DevWork {
-            work: Box::new(parsed.work),
-        }),
-    })
-}
-
-/// The reviewer's extractor: rooted at `work.workspace_path`, session
-/// suffix `review-<item id>`, no commit plan (the reviewer writes nothing).
-///
-/// # Errors
-///
-/// A message when the input carries no item id or worktree.
-pub fn review_item_context(context_json: &str) -> Result<RoleContext, String> {
-    let parsed: ReviewItemInput = serde_json::from_str(context_json)
-        .map_err(|error| format!("review_item input does not carry the reviewed work: {error}"))?;
-    require_non_blank(&parsed.work.workspace_path, "work.workspace_path")?;
-    require_non_blank(&parsed.work.item.id, "work.item.id")?;
-    Ok(RoleContext {
-        workspace_root: parsed.work.workspace_path,
-        session_suffix: format!("review-{}", parsed.work.item.id),
-        plan: None,
-    })
-}
-
-/// The remediator's extractor: rooted at the input's top-level
-/// `workspace_path` (the integration worktree), session suffix `planner` —
-/// THE mechanic: the remediator resumes the planner's session — with the
-/// [`PostRunPlan::ConcludeMerge`] plan.
-///
-/// # Errors
-///
-/// A message when the input carries no non-empty `workspace_path`.
-pub fn remediate_context(context_json: &str) -> Result<RoleContext, String> {
-    let parsed: TopLevelWorkspace = serde_json::from_str(context_json)
-        .map_err(|error| format!("remediate input does not parse: {error}"))?;
-    require_non_blank(&parsed.workspace_path, "workspace_path")?;
-    Ok(RoleContext {
-        workspace_root: parsed.workspace_path.clone(),
-        session_suffix: "planner".to_owned(),
-        plan: Some(PostRunPlan::ConcludeMerge {
-            workspace_path: parsed.workspace_path,
-        }),
-    })
-}
-
 // --- the wrapper session ------------------------------------------------------
 
 /// The wrapper session: everything delegates to the inner Norn session; for
-/// the developer and remediator roles, [`AgentSession::wait_result`]
-/// additionally performs the mechanical git step (see [`crate::commit`]).
+/// the roles that owe one, [`AgentSession::wait_result`] additionally performs
+/// the post-turn mechanical step (see [`crate::commit`] and
+/// [`crate::agent_output`]).
 pub struct ProfiledSession {
     inner: <NornHarness as AgentHarness>::Session,
     plan: Option<PostRunPlan>,
@@ -309,8 +218,14 @@ impl AgentSession for ProfiledSession {
         match plan {
             None => Ok(payload),
             Some(PostRunPlan::DevWork { work }) => commit_and_assemble(*work, payload).await,
+            Some(PostRunPlan::StampVerdict { item_id, lens }) => {
+                stamp_verdict(&item_id, &lens, &payload)
+            }
             Some(PostRunPlan::ConcludeMerge { workspace_path }) => {
                 conclude(workspace_path, payload).await
+            }
+            Some(PostRunPlan::IntegrationFix { workspace_path }) => {
+                commit_integration_fix(workspace_path, payload).await
             }
         }
     }
@@ -326,29 +241,25 @@ async fn commit_and_assemble(
 ) -> Result<Payload, HarnessError> {
     let workspace_path = work.workspace_path.clone();
     let item_id = work.item.id.clone();
-    // The git commands block; hop to the blocking pool (the worker drives
-    // this session inside its async runtime).
-    let outcome = tokio::task::spawn_blocking(move || {
-        commit::commit_dev_work(&Shell::inherited(), &workspace_path, &item_id)
-    })
-    .await
-    .map_err(|join_error| {
-        HarnessError::harness(format!(
-            "dev-work commit task did not complete: {join_error}"
-        ))
-    })?
-    .map_err(|error| HarnessError::harness(format!("dev-work commit failed: {error}")))?;
-    match &outcome {
-        commit::FixCommitOutcome::Committed { commit, paths } => {
-            tracing::info!(%commit, ?paths, "dev work committed on the item branch");
-        }
-        commit::FixCommitOutcome::Skipped { head, reason } => {
-            tracing::info!(%head, %reason, "dev-work commit skipped");
-        }
-    }
-    let assembled = commit::assemble_dev_item_result(payload.bytes(), &work, outcome.head())
+    let outcome = blocking_commit(
+        move || commit::commit_dev_work(&Shell::inherited(), &workspace_path, &item_id),
+        "dev-work commit",
+    )
+    .await?;
+    log_commit_outcome(&outcome, "dev work committed on the item branch");
+    let assembled = agent_output::assemble_dev_item_result(payload.bytes(), &work, outcome.head())
         .map_err(HarnessError::harness)?;
     Ok(Payload::new(ContentType::Json, assembled))
+}
+
+/// The reviewer's post-turn step: stamp the verdict's `item_id` and `lens`
+/// from the panel seat the machinery dispatched. No git — the reviewer is
+/// read-only — but its IDENTITY is still the machinery's to assert.
+fn stamp_verdict(item_id: &str, lens: &str, payload: &Payload) -> Result<Payload, HarnessError> {
+    let stamped = agent_output::stamp_item_verdict(payload.bytes(), item_id, lens)
+        .map_err(HarnessError::harness)?;
+    tracing::info!(%item_id, %lens, "verdict stamped with the dispatched panel seat");
+    Ok(Payload::new(ContentType::Json, stamped))
 }
 
 /// The remediator's post-turn step: conclude the in-progress merge (or
@@ -377,6 +288,57 @@ async fn conclude(workspace_path: String, payload: Payload) -> Result<Payload, H
         }
     }
     Ok(payload)
+}
+
+/// The integration fixer's post-turn step: commit the repair it made to the
+/// integration worktree. Without it the very next `verify_integration` — which
+/// asserts a clean tree — would discard the repair and record a failure the
+/// agent had already fixed. The report payload passes through unchanged.
+async fn commit_integration_fix(
+    workspace_path: String,
+    payload: Payload,
+) -> Result<Payload, HarnessError> {
+    let outcome = blocking_commit(
+        move || commit::commit_integration_fix(&Shell::inherited(), &workspace_path),
+        "integration-fix commit",
+    )
+    .await?;
+    log_commit_outcome(
+        &outcome,
+        "integration repair committed on the integration branch",
+    );
+    Ok(payload)
+}
+
+/// Run one blocking mechanical commit on the blocking pool (the worker drives
+/// this session inside its async runtime), mapping both the join failure and
+/// the commit failure to activity failures — neither is ever swallowed.
+async fn blocking_commit<Body>(
+    body: Body,
+    what: &str,
+) -> Result<commit::FixCommitOutcome, HarnessError>
+where
+    Body: FnOnce() -> Result<commit::FixCommitOutcome, String> + Send + 'static,
+{
+    tokio::task::spawn_blocking(body)
+        .await
+        .map_err(|join_error| {
+            HarnessError::harness(format!("{what} task did not complete: {join_error}"))
+        })?
+        .map_err(|error| HarnessError::harness(format!("{what} failed: {error}")))
+}
+
+/// Log what a mechanical commit did — a skip is reported as loudly as a
+/// commit, because "nothing to commit" is a real and meaningful outcome here.
+fn log_commit_outcome(outcome: &commit::FixCommitOutcome, committed_message: &str) {
+    match outcome {
+        commit::FixCommitOutcome::Committed { commit, paths } => {
+            tracing::info!(%commit, ?paths, "{committed_message}");
+        }
+        commit::FixCommitOutcome::Skipped { head, reason } => {
+            tracing::info!(%head, %reason, "mechanical commit skipped");
+        }
+    }
 }
 
 #[cfg(test)]

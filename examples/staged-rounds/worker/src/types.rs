@@ -4,7 +4,7 @@
 //! record declarations in `../awl/staged_rounds.awl` — the document is the
 //! authoritative contract (field names in `snake_case`, `String?` optionals
 //! OMITTED from JSON when absent, lists tolerated missing on decode). The
-//! four DRIVEN AGENT activities need no wire types here beyond what the
+//! five DRIVEN AGENT activities need no wire types here beyond what the
 //! commit/harness seams read: their input is the structured context JSON the
 //! workflow encoded (assembled into the prompt by
 //! [`crate::harness::ProfiledNornHarness`]) and their output is produced by
@@ -37,8 +37,28 @@ pub enum Overall {
 pub struct GateCommand {
     /// The operator's name for the command (rides in diagnostics).
     pub name: String,
-    /// The argv to execute (`argv[0]` is the executable).
+    /// The argv to execute (`argv[0]` is the executable). The literal token
+    /// `{base_commit}` in ANY element is replaced with the run's recorded
+    /// base commit before execution.
     pub argv: Vec<String>,
+}
+
+/// One adversarial review lens: a name that keys its verdict, and the charter
+/// that is its marching orders. Lenses are blind to each other's verdicts.
+///
+/// [`Default`] is the both-fields-empty lens. It exists only so the reviewer's
+/// prompt composer can render a tolerant placeholder for a malformed context
+/// instead of failing over a rendering concern; the empty lens never passes
+/// [`crate::lens::require_lens_name`], so it can never reach a real panel.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Lens {
+    /// The lens name. It keys the lens's verdict in `fold_phase` and rides in
+    /// the reviewer's per-run session id, so it is validated as a safe token
+    /// (see [`crate::lens::require_lens_name`]).
+    pub name: String,
+    /// The lens's marching orders, carried in the reviewer's PROMPT (one
+    /// reviewer connection serves every lens).
+    pub charter: String,
 }
 
 /// One planned work item: scope fences, a phase tag, and dependency ids.
@@ -164,6 +184,68 @@ pub struct DevItemResult {
     pub report: ItemReport,
 }
 
+/// One gate command's recorded execution. The exit status is DATA, not a
+/// failure: a red gate is evidence the pipeline acts on, never an exception.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GateRun {
+    /// The gate command's configured name.
+    pub name: String,
+    /// The RESOLVED argv actually executed (post `{base_commit}`
+    /// substitution) — the evidence shows the real command, never the
+    /// template.
+    pub argv: Vec<String>,
+    /// The process exit status.
+    pub exit_code: i64,
+    /// Whether the command exited zero.
+    pub passed: bool,
+    /// Clipped combined output.
+    pub output_tail: String,
+}
+
+/// The battery's verdict over one worktree, plus the diff the reviewers read.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GateOutcome {
+    /// True only when every run passed AND the tree was not re-dirtied.
+    pub pass: bool,
+    /// Every command's recorded execution, in configured order.
+    #[serde(default)]
+    pub runs: Vec<GateRun>,
+    /// The change the battery judged.
+    #[serde(default)]
+    pub diff: String,
+    /// The human-readable account of what happened — never empty, and never
+    /// silent about a vacuous pass.
+    #[serde(default)]
+    pub diagnostics: String,
+}
+
+/// A dev result with the battery actually run against it. Nothing reaches
+/// review, and nothing reaches `done`, without one of these.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GatedItem {
+    /// The item the result covers.
+    pub item: WorkItem,
+    /// The item worktree the work and the battery happened in.
+    pub workspace_path: String,
+    /// The item branch.
+    pub branch: String,
+    /// The base commit the diff is taken against.
+    pub base_commit: String,
+    /// The dev agent's report.
+    pub report: ItemReport,
+    /// The battery's recorded verdict over this worktree.
+    pub gate: GateOutcome,
+}
+
+/// One panel seat: a lens paired with the gated item it must examine.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReviewTask {
+    /// The lens this seat reviews through.
+    pub lens: Lens,
+    /// The gated item under review.
+    pub work: GatedItem,
+}
+
 /// One concrete finding in an [`ItemVerdict`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Finding {
@@ -175,11 +257,23 @@ pub struct Finding {
     pub evidence: String,
 }
 
-/// One item's review verdict.
+/// One item verdict from ONE lens.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ItemVerdict {
-    /// The item the verdict covers.
+    /// The item the verdict covers — REWRITTEN by the machinery from the
+    /// panel task (reality wins; the agent's assertion is never trusted).
     pub item_id: String,
+    /// The lens this verdict came from — REWRITTEN by the machinery from the
+    /// panel task, exactly as `item_id` is: the panel is machine-generated,
+    /// so an agent-asserted lens name could only ever be noise.
+    ///
+    /// Tolerated MISSING on decode (defaulting to `""`) deliberately: a verdict
+    /// that somehow arrives unstamped then fails in `fold_phase` with a message
+    /// naming the item and the unconfigured lens, which is far more useful than
+    /// serde's bare "missing field `lens`". It is never silently accepted — the
+    /// empty name matches no configured lens, so the fold refuses.
+    #[serde(default)]
+    pub lens: String,
     /// The reviewer's asserted overall.
     pub overall: Overall,
     /// The reviewer's concrete findings.
@@ -243,6 +337,30 @@ pub struct ProvisionItemInput {
     pub done: Vec<DoneItem>,
 }
 
+/// Named-argument input to `gate_item`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GateItemInput {
+    /// The dev round the battery judges (its `workspace_path` is the
+    /// worktree and its `base_commit` resolves `{base_commit}`).
+    pub work: DevItemResult,
+    /// The battery to run, in order. An EMPTY battery is honoured as an
+    /// explicitly-diagnosed vacuous pass, never a silent one.
+    #[serde(default)]
+    pub gates: Vec<GateCommand>,
+}
+
+/// Named-argument input to `plan_reviews`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanReviewsInput {
+    /// The round's gated items.
+    #[serde(default)]
+    pub gated: Vec<GatedItem>,
+    /// The run's configured review panel. An EMPTY panel is a terminal
+    /// error: it could never accept anything.
+    #[serde(default)]
+    pub lenses: Vec<Lens>,
+}
+
 /// Named-argument input to `fold_phase`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FoldPhaseInput {
@@ -251,12 +369,33 @@ pub struct FoldPhaseInput {
     /// Newly planned items to partition into ready/blocked (the plan seed).
     #[serde(default)]
     pub incoming: Vec<WorkItem>,
-    /// This round's dev fan-out results.
+    /// This round's gated dev results — the battery outcome per item.
     #[serde(default)]
-    pub dev: Vec<DevItemResult>,
-    /// This round's verdicts, matched to `dev` by `item_id`.
+    pub gated: Vec<GatedItem>,
+    /// This round's panel verdicts, matched to `gated` by `item_id` and to
+    /// the configured panel by `lens`.
     #[serde(default)]
     pub verdicts: Vec<ItemVerdict>,
+    /// The run's configured review panel. EVERY lens must have reported for
+    /// an item before it can reach `done`.
+    #[serde(default)]
+    pub lenses: Vec<Lens>,
+}
+
+/// Named-argument input to `verify_integration`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VerifyIntegrationInput {
+    /// The run's root directory (the integration worktree lives at
+    /// `<run_root>/integration`, exactly where `merge_branches` created it).
+    pub run_root: String,
+    /// The repository the integration worktree belongs to.
+    pub repo_root: String,
+    /// The integration branch the worktree must be on — asserted, never
+    /// assumed: a battery run on the wrong tree would be a false verdict.
+    pub integration_branch: String,
+    /// The battery to re-run on the merged tree, in order.
+    #[serde(default)]
+    pub gates: Vec<GateCommand>,
 }
 
 /// Named-argument input to `merge_branches`.

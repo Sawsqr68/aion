@@ -38,7 +38,7 @@ fn staged_rounds_document_compiles_and_assembles_on_the_direct_path() -> anyhow:
     );
     assert_eq!(
         prepared.compiled.timeout,
-        Some(Duration::from_secs(12 * 60 * 60)),
+        Some(Duration::from_hours(12)),
         "the declared 12h workflow timeout rides through compilation"
     );
     assert!(
@@ -52,8 +52,32 @@ fn staged_rounds_document_compiles_and_assembles_on_the_direct_path() -> anyhow:
     Ok(())
 }
 
+/// The document's ELEVEN actions and the node each pins, in document order.
+/// This is the CONTRACT the worker's composition root mirrors (`main.rs`'s
+/// `roles` + `main_shell_node.rs`'s registry, guarded from the worker side by
+/// `node_mapping_is_exhaustive_and_injective`): the server routes by
+/// (namespace, `task_queue`, node) and matches these strings blindly, so a
+/// drift on either side strands activities on handlerless connections.
+///
+/// Note that `remediate` and `fix_integration` deliberately SHARE node
+/// `remediation` — both resume the planner's session — which is exactly why the
+/// worker must serve both from ONE connection registered on that node.
+const EXPECTED_ACTIONS: [(&str, &str); 11] = [
+    ("planner", "planner"),
+    ("provision_item", "shell"),
+    ("dev_item", "developer"),
+    ("gate_item", "shell"),
+    ("plan_reviews", "shell"),
+    ("review_item", "reviewer"),
+    ("fold_phase", "shell"),
+    ("merge_branches", "shell"),
+    ("remediate", "remediation"),
+    ("verify_integration", "shell"),
+    ("fix_integration", "remediation"),
+];
+
 #[test]
-fn the_seven_actions_pin_their_nodes() -> anyhow::Result<()> {
+fn the_eleven_actions_pin_their_nodes() -> anyhow::Result<()> {
     let (source, doc_dir) = document_source()?;
     let prepared = compile_and_assemble_awl(&source, &doc_dir)?;
     let rows: Vec<(String, String, Option<String>)> = prepared
@@ -68,27 +92,19 @@ fn the_seven_actions_pin_their_nodes() -> anyhow::Result<()> {
             )
         })
         .collect();
-    let expected: Vec<(String, String, Option<String>)> = [
-        ("planner", "planner"),
-        ("provision_item", "shell"),
-        ("dev_item", "developer"),
-        ("review_item", "reviewer"),
-        ("fold_phase", "shell"),
-        ("merge_branches", "shell"),
-        ("remediate", "remediation"),
-    ]
-    .into_iter()
-    .map(|(action, node)| {
-        (
-            "staged_rounds".to_owned(),
-            action.to_owned(),
-            Some(node.to_owned()),
-        )
-    })
-    .collect();
+    let expected: Vec<(String, String, Option<String>)> = EXPECTED_ACTIONS
+        .into_iter()
+        .map(|(action, node)| {
+            (
+                "staged_rounds".to_owned(),
+                action.to_owned(),
+                Some(node.to_owned()),
+            )
+        })
+        .collect();
     assert_eq!(
         rows, expected,
-        "every action pins exactly the node table main.rs registers"
+        "every action pins exactly the node table the worker registers"
     );
     Ok(())
 }

@@ -1,5 +1,11 @@
-//! The norn `--output-schema` documents for the four driven agent roles,
+//! The norn `--output-schema` documents the driven agent connections run with,
 //! embedded at compile time with `include_str!`.
+//!
+//! FOUR documents serve FIVE agent activities: `remediate` and
+//! `fix_integration` share [`REMEDIATION`], because they share a node (and so
+//! one connection, and so one `--output-schema`) and both answer with the same
+//! `RemediationReport` — see `main_connections.rs`, which refuses at startup if
+//! two activities on one node ever disagree about it.
 //!
 //! The files under `../schemas/` are this package's own contract; the
 //! shell handlers' serde types in [`crate::types`] decode exactly these

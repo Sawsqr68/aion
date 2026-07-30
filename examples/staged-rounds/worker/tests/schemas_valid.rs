@@ -88,6 +88,7 @@ fn the_item_verdict_schema_requires_a_reason_on_reject() -> anyhow::Result<()> {
     let validator = validator(schemas::ITEM_VERDICT)?;
     let accept = serde_json::json!({
         "item_id": "split-core",
+        "lens": "correctness",
         "overall": "accept",
         "findings": []
     });
@@ -95,6 +96,7 @@ fn the_item_verdict_schema_requires_a_reason_on_reject() -> anyhow::Result<()> {
 
     let reject_without_reason = serde_json::json!({
         "item_id": "split-core",
+        "lens": "correctness",
         "overall": "reject",
         "findings": [{"severity": "blocking", "title": "t", "evidence": "e"}]
     });
@@ -105,11 +107,39 @@ fn the_item_verdict_schema_requires_a_reason_on_reject() -> anyhow::Result<()> {
 
     let reject_with_reason = serde_json::json!({
         "item_id": "split-core",
+        "lens": "correctness",
         "overall": "reject",
         "findings": [{"severity": "blocking", "title": "t", "evidence": "e"}],
         "reject_reason": "wrong seam"
     });
     anyhow::ensure!(validator.is_valid(&reject_with_reason));
+    Ok(())
+}
+
+/// The verdict schema must match the AWL type, which gained `lens`: one item
+/// carries one verdict PER LENS, and the fold keys them by that name.
+#[test]
+fn the_item_verdict_schema_requires_the_lens() -> anyhow::Result<()> {
+    let validator = validator(schemas::ITEM_VERDICT)?;
+    let without_lens = serde_json::json!({
+        "item_id": "split-core",
+        "overall": "accept",
+        "findings": []
+    });
+    anyhow::ensure!(
+        !validator.is_valid(&without_lens),
+        "a verdict with no lens must fail the schema"
+    );
+    let blank_lens = serde_json::json!({
+        "item_id": "split-core",
+        "lens": "",
+        "overall": "accept",
+        "findings": []
+    });
+    anyhow::ensure!(
+        !validator.is_valid(&blank_lens),
+        "a blank lens name must fail the schema"
+    );
     Ok(())
 }
 
