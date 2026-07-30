@@ -34,6 +34,7 @@ use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use agent_dev_worker::advising_harness::AdvisingHarness;
+use agent_dev_worker::descriptors::advertised_surface;
 use agent_dev_worker::handlers;
 use agent_dev_worker::norn_invocation::norn_args;
 use agent_dev_worker::registry::build_registry;
@@ -85,6 +86,7 @@ fn composed_agent_harness(
     norn_account: &str,
     workspace_root: &Path,
     allow_degraded_session: bool,
+    agent_descriptors: &[aion_package::ActivityDescriptor],
 ) -> AgentHarnessConfig {
     // The run's own clone — the ONE template both the file-tool confinement
     // (--workspace-root) and the tool-execution cwd (-C) point at.
@@ -107,6 +109,10 @@ fn composed_agent_harness(
             InterventionPrimitive::Cancel,
         ]),
     )
+    // The whole admission decision. Without these the registration carries
+    // names and no schemas, and every contract-bearing queue refuses the
+    // connection while the refusal log shows the names it DID send.
+    .with_activity_descriptors(agent_descriptors.to_vec())
 }
 
 /// Parsed command-line arguments.
@@ -241,10 +247,24 @@ fn main() -> anyhow::Result<()> {
         "agent-dev-worker starting"
     );
 
+    // Derive the advertised surface BEFORE anything dials, and before the queue
+    // is chosen — the document decides both. A document that does not compile is
+    // a startup failure carrying the compiler's own diagnosis, not a remote
+    // WORKER_CONTRACT_MISMATCH an operator has to decode from a log.
+    let surface = advertised_surface()?;
+    let split = surface.split(&AGENT_ACTIVITY_TYPES);
+    tracing::info!(
+        task_queue = %surface.task_queue,
+        advertised = ?surface.names(),
+        agent_served = ?split.agent.iter().map(|d| &d.name).collect::<Vec<_>>(),
+        registry_served = ?split.plain.iter().map(|d| &d.name).collect::<Vec<_>>(),
+        "advertising the typed action surface declared by the embedded assistant document"
+    );
+
     let config = WorkerConfig::builder()
         .endpoint("unused-direct-address")
         .namespace("default")
-        .task_queue("default")
+        .task_queue(&surface.task_queue)
         .identity(&args.identity)
         .max_concurrency(4)
         .reconnect_initial_backoff(REDIAL_INITIAL_BACKOFF)
@@ -253,12 +273,13 @@ fn main() -> anyhow::Result<()> {
         .build()?;
 
     let shell = Shell::inherited();
-    let registry = build_registry(&shell, &workspace_root)?;
+    let registry = build_registry(&shell, &workspace_root, &split.plain)?;
     let agent = composed_agent_harness(
         &args.norn_bin,
         &args.norn_account,
         &workspace_root,
         args.allow_degraded_session,
+        &split.agent,
     );
 
     // Never stop on our own; the operator ends the worker with a signal.

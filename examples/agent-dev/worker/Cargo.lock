@@ -23,9 +23,11 @@ dependencies = [
 name = "agent-dev-worker"
 version = "0.1.0"
 dependencies = [
+ "aion-awl",
  "aion-core",
  "aion-integration-norn",
  "aion-integrations",
+ "aion-package",
  "aion-worker",
  "anyhow",
  "async-trait",
@@ -34,6 +36,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -60,6 +63,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ddd31a130427c27518df266943a5308ed92d4b226cc639f5a8f1002816174301"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "aion-awl"
+version = "0.10.0"
+dependencies = [
+ "aion-package",
+ "beamr",
+ "gleam-types",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

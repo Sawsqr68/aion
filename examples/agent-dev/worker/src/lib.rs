@@ -7,6 +7,7 @@
 //! fake-CLI shims on a private `PATH`.
 
 pub mod advising_harness;
+pub mod descriptors;
 pub mod handlers;
 pub mod norn_invocation;
 pub mod registry;
