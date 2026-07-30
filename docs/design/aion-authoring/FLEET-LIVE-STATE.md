@@ -80,10 +80,41 @@ neither of them in the durable engine.**
 `{"kind":"Terminal","message":"retryable:…"}`. The kind flips, the prefix
 doesn't. A lie in an event that can never be rewritten.
 
-**Still owed and NOT done:** the server (pid 47610) and staged-rounds worker
-(pid 49833) are still old binaries. Deliberately held until Agent A's worker
-fix lands, so the restart carries it and Tom's assistant can be repaired in one
-motion instead of two disruptions.
+**SERVER RESTARTED — and it exposed a P0 that is DOWN RIGHT NOW (task #93).**
+
+Old server pid 47610 (started 17:08, running a binary older than the one on
+disk) was SIGTERM'd and exited cleanly in 2 seconds — #72 verified on his own
+box, not just in tests. New server is **pid 99844**, same invocation, same cwd,
+`nohup`+`disown`. WAL recovery clean on every shard (`corrupted_tail=false`,
+`replayed_mutations=0`). All 20 workflows, 5 routed versions and both authoring
+documents survived.
+
+🔴 **But `agent-dev-worker` can no longer register, so queue `default` has ZERO
+workers.** `/awl/workers/availability` → `available:false, connected_workers:0`.
+The refusal contradicts itself inside one log record: it lists `assistant` in
+`activity_types` and simultaneously reports it `<missing>`. Traced: the log
+prints `registration.activity_types` (names, `liminal_transport.rs:1648`) while
+admission reads `registration.activities` (typed descriptors,
+`liminal_transport.rs:1495-1522` → `compatibility.rs:62-90`). Two different
+fields. Full evidence in task #93; dispatched to Agent B as its priority.
+
+**NOT a regression from #80** — the worker registered at 10:24, `assistant_spike`
+deployed at 10:37, so its contract had never faced admission. The restart is the
+first time it ever did.
+
+⚠️ **Correction to `e819b96a`'s claim.** "AWL drives the agent worker end to end
+— LIVE PROVEN" is true at the DISPATCH level and was NEVER exercised at the
+ADMISSION level. The run and its reply were real; the contract check was
+bypassed by registration ordering.
+
+⚠️ **My cost:** before the restart the worker was registered and the queue
+worked. The state was fragile — any reconnect would have done this — but I
+triggered it, and it is down now and was not before. No clean workaround:
+`assistant_spike` is the only version of its type and is route-active, so
+`/deploy/unload` correctly refuses it and there is nothing to re-point to. The
+fix is the restoration.
+
+**Still owed:** the staged-rounds worker (pid 49833) is still an old binary.
 
 **Do not tell Tom any of this as status.** Fix it, prove it live, then tell him
 with the working thing attached — he has asked repeatedly not to be given
