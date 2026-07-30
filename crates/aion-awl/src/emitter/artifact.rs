@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 
+use aion_package::CanonicalJson;
 use serde_json::{Map, Value, json};
 
 use super::types::{GType, NamedDef, TypeEnv};
@@ -40,8 +41,14 @@ pub struct EmittedArtifact {
 
 impl EmittedArtifact {
     /// Stable JSON sidecar consumed by project packaging.
+    ///
+    /// Returned as a [`CanonicalJson`] rather than a bare [`Value`] so that
+    /// every writer — this crate's, the CLI's, and the engine end-to-end
+    /// harnesses' — emits the same bytes: object keys sorted at every depth,
+    /// independent of the `serde_json` map representation the build resolved.
+    /// Use [`CanonicalJson::as_value`] to inspect the document structurally.
     #[must_use]
-    pub fn project_metadata(&self) -> Value {
+    pub fn project_metadata(&self) -> CanonicalJson {
         let entries = self
             .synthesized_workflows
             .iter()
@@ -59,11 +66,11 @@ impl EmittedArtifact {
                 })
             })
             .collect::<Vec<_>>();
-        json!({
+        CanonicalJson::new(json!({
             "format_version": 1,
             "entry_module": self.entry_module,
             "synthesized_workflows": entries,
-        })
+        }))
     }
 }
 

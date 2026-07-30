@@ -3,6 +3,7 @@
 //! already-registered ones because Gleam is nominal where the checker is
 //! structural.
 
+use aion_package::canonical::sorted_entries;
 use serde_json::{Map, Value};
 
 use crate::Span;
@@ -124,7 +125,11 @@ impl<'e> Projector<'e> {
             .unwrap_or_default();
         let mut fields = Vec::new();
         if let Some(properties) = object.get("properties").and_then(Value::as_object) {
-            for (property, schema) in properties {
+            // Key order, never `Map` iteration order: this decides the
+            // generated Gleam record's field order, its decoder's field
+            // sequence, and the MIR literal pool — program structure, not
+            // layout. See `aion_package::canonical::sorted_entries`.
+            for (property, schema) in sorted_entries(properties) {
                 let nested_hint = format!("{hint}{}", pascal(property));
                 let mut ty = self.project(schema, &nested_hint, depth + 1)?;
                 if !required.contains(&property.as_str()) && !matches!(ty, GType::Option(_)) {

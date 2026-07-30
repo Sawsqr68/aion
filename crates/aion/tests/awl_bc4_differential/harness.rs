@@ -23,7 +23,8 @@ use aion_awl::{
     action_requirements, emit_artifact_in, schema_for_outcomes_in, schema_for_workflow_in,
 };
 use aion_package::{
-    BeamModule, BeamSet, ExtractionLimits, Package, PackageBuilder, PackageOptions, package_project,
+    BeamModule, BeamSet, CanonicalJson, ExtractionLimits, Package, PackageBuilder, PackageOptions,
+    package_project,
 };
 use serde_json::Value;
 
@@ -39,7 +40,9 @@ pub struct RefEntry {
     /// Emitted Gleam source.
     pub source: String,
     /// Generated-workflow sidecar (`project_metadata`), for child entries.
-    pub awl_json: Value,
+    /// Canonically encoded, so the written bytes are the emitter's contract
+    /// rather than the build's `serde_json` map representation.
+    pub awl_json: CanonicalJson,
     /// Derived input JSON schema.
     pub input_schema: Value,
     /// Derived output JSON schema.

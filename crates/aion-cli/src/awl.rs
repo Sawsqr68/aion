@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use aion_awl::{CompileError, CompiledWorkflow, Span};
+use aion_package::CanonicalJson;
 use clap::{Subcommand, ValueEnum};
 
 /// The `aion awl` authoring subcommands.
@@ -245,7 +246,10 @@ fn write_beam_artifact(
 /// construction from the Gleam `project_metadata` shape: it carries the derived
 /// start/outcome contracts, the effective action requirements, the synthesized
 /// child workflow entries, and the document-declared timeout.
-fn beam_sidecar(compiled: &CompiledWorkflow) -> serde_json::Value {
+///
+/// Canonically encoded, like the Gleam sidecar: the same document emits the
+/// same bytes whatever `serde_json` map representation the build resolved.
+fn beam_sidecar(compiled: &CompiledWorkflow) -> CanonicalJson {
     let actions = compiled
         .actions
         .iter()
@@ -272,7 +276,7 @@ fn beam_sidecar(compiled: &CompiledWorkflow) -> serde_json::Value {
             })
         })
         .collect::<Vec<_>>();
-    serde_json::json!({
+    CanonicalJson::new(serde_json::json!({
         "target": "beam",
         "workflow_name": compiled.workflow_name,
         "timeout_seconds": compiled.timeout.map(|timeout| timeout.as_secs()),
@@ -280,7 +284,7 @@ fn beam_sidecar(compiled: &CompiledWorkflow) -> serde_json::Value {
         "output_schema": compiled.output_schema,
         "actions": actions,
         "synthesized_workflows": synthesized,
-    })
+    }))
 }
 
 /// Renders a [`CompileError`] into the same `<file>:<line>:<column>: error:
@@ -424,7 +428,10 @@ fn schema_source(
             |name| aion_awl::schema_for_type_in(&document, root, name),
         )
         .map_err(|error| vec![diagnostic(file, error.span(), &error.to_string())])?;
-    serde_json::to_string_pretty(&schema)
+    // Canonically encoded: `aion awl schema` output is an artifact operators
+    // and agents diff and commit, so its key order is the document's, sorted,
+    // and never the build's map representation.
+    serde_json::to_string_pretty(&CanonicalJson::new(schema))
         .map(|json| format!("{json}\n"))
         .map_err(|error| vec![diagnostic(file, document.span, &error.to_string())])
 }

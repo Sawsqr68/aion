@@ -8,6 +8,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
+use aion_package::CanonicalJson;
+
 use crate::Span;
 use crate::ast::{
     BinaryOp, ConstDecl, Document, Expr, ForkHeader, PipeEnd, PipeStage, RouteTarget, Statement,
@@ -175,6 +177,12 @@ impl Folder<'_> {
     }
 
     /// The compact JSON text of the named type's derived schema.
+    ///
+    /// Encoded canonically (object keys sorted at every depth): this text is
+    /// frozen into the emitted Gleam source and therefore into the compiled
+    /// BEAM bytes the package content hash covers, so it must reproduce from
+    /// the same document regardless of which `serde_json` map representation
+    /// the build resolved.
     fn schema_string(&self, name: &str, span: Span) -> Result<String, FoldError> {
         let derived = match self.root {
             Some(root) => crate::schema::schema_for_type_in(self.document, root, name),
@@ -184,7 +192,7 @@ impl Folder<'_> {
             span,
             message: format!("cannot derive `schema of {name}`: {error}"),
         })?;
-        serde_json::to_string(&derived).map_err(|error| FoldError {
+        serde_json::to_string(&CanonicalJson::new(derived)).map_err(|error| FoldError {
             span,
             message: format!("cannot serialize `schema of {name}`: {error}"),
         })

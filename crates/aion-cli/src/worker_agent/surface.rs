@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 use std::io::Write;
 use std::path::Path;
 
-use aion_package::ActivityDescriptor;
+use aion_package::{ActivityDescriptor, CanonicalJson};
 use anyhow::{Context, Result, bail};
 use serde_json::json;
 
@@ -120,7 +120,10 @@ pub(crate) fn print(writer: &mut impl Write, surface: &AdvertisedSurface) -> Res
             })
             .collect::<Vec<_>>(),
     });
-    serde_json::to_writer_pretty(&mut *writer, &report)
+    // Canonically encoded: the advertised schemas are documents an operator
+    // diffs against a package contract, so their key order is the schemas' own
+    // content and never the build's `serde_json` map representation.
+    serde_json::to_writer_pretty(&mut *writer, &CanonicalJson::new(report))
         .context("failed to encode the advertised action surface")?;
     writeln!(writer).context("failed to write the advertised action surface")?;
     Ok(())

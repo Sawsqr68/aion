@@ -11,6 +11,7 @@ use std::fs;
 use std::path::{Component, Path};
 use std::rc::Rc;
 
+use aion_package::canonical::sorted_entries;
 use serde_json::{Map, Value};
 
 use crate::Span;
@@ -299,7 +300,10 @@ impl Projector<'_, '_, '_> {
             .unwrap_or_default();
         let mut fields = Vec::new();
         if let Some(properties) = object.get("properties").and_then(Value::as_object) {
-            for (property, schema) in properties {
+            // Key order, never `Map` iteration order: the field sequence
+            // reaches diagnostics and must mirror the emitter's projection
+            // exactly. See `aion_package::canonical::sorted_entries`.
+            for (property, schema) in sorted_entries(properties) {
                 path.push(property.clone());
                 let mut ty = self.project(schema, path, None, depth + 1);
                 path.pop();

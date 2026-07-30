@@ -137,7 +137,10 @@ impl SkeletonBuilder<'_> {
 
         let properties_pointer = join(pointer, "properties");
         let mut skeleton = Map::new();
-        for (property, child) in properties {
+        // Key order, never `Map` iteration order: the skeleton is printed for an
+        // operator to edit and commit, so its property order must be the
+        // schema's content and not the build's `serde_json` map representation.
+        for (property, child) in crate::canonical::sorted_entries(properties) {
             // Optional properties are omitted: the generated decoder reads an
             // absent optional as `None`, so leaving it out is the no-default form.
             if !required.iter().any(|name| name == property) {

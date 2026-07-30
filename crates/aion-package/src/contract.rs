@@ -24,8 +24,10 @@ pub enum ContractIdentityError {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PackageContract {
     /// Primary workflow input schema.
+    #[serde(serialize_with = "crate::canonical::serialize_value")]
     pub input_schema: Value,
     /// Primary workflow output schema.
+    #[serde(serialize_with = "crate::canonical::serialize_value")]
     pub output_schema: Value,
     /// Queue-scoped activity declarations.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -170,8 +172,10 @@ pub struct ActivityDescriptor {
     /// Activity type.
     pub name: String,
     /// Schema accepted by the worker.
+    #[serde(serialize_with = "crate::canonical::serialize_value")]
     pub input_schema: Value,
     /// Schema produced by the worker.
+    #[serde(serialize_with = "crate::canonical::serialize_value")]
     pub output_schema: Value,
 }
 
@@ -181,8 +185,10 @@ pub struct ActionContract {
     /// Activity type.
     pub name: String,
     /// Object schema over the activity parameters.
+    #[serde(serialize_with = "crate::canonical::serialize_value")]
     pub input_schema: Value,
     /// Activity result schema.
+    #[serde(serialize_with = "crate::canonical::serialize_value")]
     pub output_schema: Value,
     /// Declared node selector.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -315,8 +321,10 @@ pub struct ChildContract {
     /// Child workflow type.
     pub name: String,
     /// Object schema over child parameters.
+    #[serde(serialize_with = "crate::canonical::serialize_value")]
     pub input_schema: Value,
     /// Child result schema.
+    #[serde(serialize_with = "crate::canonical::serialize_value")]
     pub output_schema: Value,
 }
 
@@ -336,6 +344,7 @@ pub struct SignalContract {
     /// Signal name.
     pub name: String,
     /// Signal payload schema.
+    #[serde(serialize_with = "crate::canonical::serialize_value")]
     pub input_schema: Value,
 }
 
@@ -345,8 +354,10 @@ pub struct AdditionalWorkflowContract {
     /// Routing workflow type.
     pub workflow_type: String,
     /// Entry input schema.
+    #[serde(serialize_with = "crate::canonical::serialize_value")]
     pub input_schema: Value,
     /// Entry output schema.
+    #[serde(serialize_with = "crate::canonical::serialize_value")]
     pub output_schema: Value,
 }
 

@@ -20,6 +20,8 @@
 pub mod beam;
 /// Archive builder utilities for tests and packaging tools.
 pub mod builder;
+/// Canonical JSON text encoding for emitted artifacts.
+pub mod canonical;
 /// Gleam type and JSON codec generation from project schemas.
 pub mod codegen;
 /// Worker advertisement compatibility and field-level differences.
@@ -48,6 +50,7 @@ pub mod version;
 
 pub use beam::{BeamModule, BeamSet, RESERVED_MODULE_NAMES};
 pub use builder::PackageBuilder;
+pub use canonical::{CanonicalJson, serialize_value, sorted_entries};
 pub use codegen::{
     ActivityArtifact, ActivityDeclaration, ActivityReport, BoundaryType, CodecReport, CodegenError,
     CodegenMode, SchemaEmitReport, TestScaffoldReport, Tier, boundary_types_from_interface,

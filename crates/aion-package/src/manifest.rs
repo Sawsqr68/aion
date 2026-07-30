@@ -90,8 +90,10 @@ pub struct WorkflowEntry {
     /// Exported engine entry function.
     pub entry_function: String,
     /// JSON Schema for the entry's input payload.
+    #[serde(serialize_with = "crate::canonical::serialize_value")]
     pub input_schema: serde_json::Value,
     /// JSON Schema for the entry's result payload.
+    #[serde(serialize_with = "crate::canonical::serialize_value")]
     pub output_schema: serde_json::Value,
     /// Explicitly authored workflow execution timeout, or `None` when the entry
     /// declared none. Serialised only when present, so a manifest written for an
@@ -120,10 +122,16 @@ pub struct Manifest {
     #[serde(rename = "entry_function")]
     pub entry_function: String,
     /// Stable `input_schema` key containing a JSON-Schema document for input payloads.
-    #[serde(rename = "input_schema")]
+    #[serde(
+        rename = "input_schema",
+        serialize_with = "crate::canonical::serialize_value"
+    )]
     pub input_schema: serde_json::Value,
     /// Stable `output_schema` key containing a JSON-Schema document for result payloads.
-    #[serde(rename = "output_schema")]
+    #[serde(
+        rename = "output_schema",
+        serialize_with = "crate::canonical::serialize_value"
+    )]
     pub output_schema: serde_json::Value,
     /// Stable `timeout` key: the explicitly authored workflow timeout, or absent.
     ///
@@ -178,6 +186,11 @@ impl Manifest {
     /// semantic difference — entry function, schemas, timeout, declared
     /// activities — produces a different digest even when the beam set (and
     /// therefore the content hash) is unchanged.
+    ///
+    /// The embedded schema documents serialize through
+    /// [`crate::canonical::serialize_value`], so the digest depends on the
+    /// schemas' content and not on the `serde_json` map representation the
+    /// build happened to resolve.
     ///
     /// # Errors
     ///

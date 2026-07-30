@@ -49,7 +49,7 @@ fn same_shape_parents_receive_distinct_reserved_child_types()
             .starts_with("aion_internal_awl_child_beta_flow_")
     );
     assert_eq!(
-        left.project_metadata()["synthesized_workflows"][0]["workflow_type"],
+        left.project_metadata().as_value()["synthesized_workflows"][0]["workflow_type"],
         left_child.workflow_type
     );
     Ok(())
