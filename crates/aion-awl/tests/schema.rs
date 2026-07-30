@@ -226,3 +226,98 @@ fn unknown_types_are_refused_by_name() -> TestResult {
     assert!(error.to_string().contains("Ghost"));
     Ok(())
 }
+
+/// A schema door is a COMPLETE JSON Schema document written on its own terms,
+/// so its internal `$ref`s are rooted at ITS root. Composed into a workflow's
+/// start contract the door lands at `#/$defs/<Type>`, and an unrebased
+/// `#/$defs/Line` then points at the CONTRACT's root, where there is no such
+/// entry.
+///
+/// The consequence is not a loud one, which is why this test asserts the
+/// compiled validator rather than only the pointer text: the engine's answer
+/// to a schema it cannot compile is to log and admit the payload UNCHECKED
+/// (`aion/src/loader/catalog_admission.rs`). An unresolvable contract is
+/// therefore a workflow running with its input validation silently off.
+#[test]
+fn an_imported_schemas_internal_refs_survive_composition() -> TestResult {
+    let (document, dir) = parse_fixture("schema-doors/valid/import_nested_defs.awl")?;
+    let schema = aion_awl::schema_for_workflow_in(&document, &dir)?;
+
+    let door = schema
+        .pointer("/$defs/Order")
+        .ok_or("the imported door lands at #/$defs/Order")?;
+    assert_eq!(
+        door.pointer("/properties/lines/items/$ref")
+            .and_then(Value::as_str),
+        Some("#/$defs/Order/$defs/Line"),
+        "the door's own `#/$defs/Line` must be re-rooted under where the door \
+         now lives, not left pointing at the contract root:\n{schema:#}"
+    );
+    assert!(
+        schema.pointer("/$defs/Order/$defs/Line").is_some(),
+        "the target the rebased pointer names must actually be there:\n{schema:#}"
+    );
+
+    // The property this whole thing exists for: the derived contract compiles
+    // into a validator, so the engine can actually enforce it.
+    aion_package::schema_is_usable(&schema)
+        .map_err(|reason| format!("derived contract does not compile: {reason}"))?;
+
+    // Non-vacuity: the assertion above would pass on a contract with no refs
+    // at all, so prove the pointer being resolved is one the door really wrote.
+    let raw: Value = serde_json::from_str(&fs::read_to_string(dir.join("order.schema.json"))?)?;
+    assert_eq!(
+        raw.pointer("/properties/lines/items/$ref")
+            .and_then(Value::as_str),
+        Some("#/$defs/Line"),
+        "the fixture must still be the door-rooted form this rebases FROM"
+    );
+    Ok(())
+}
+
+/// A door whose regex the engine's validator cannot compile is refused when
+/// the document is checked, rather than deploying and validating nothing.
+#[test]
+fn a_door_the_validator_cannot_compile_is_refused_at_check() -> TestResult {
+    let source = "\
+//! A door whose pattern the engine cannot compile.
+workflow uncompilable_pattern
+  input reading: Reading
+  outcome filed: type Filed, route success
+
+type Reading = schema {
+  \"type\": \"object\",
+  \"required\": [\"tag\"],
+  \"properties\": { \"tag\": { \"type\": \"string\", \"pattern\": \"^{[0-9]+}$\" } }
+}
+
+type Filed { note: String }
+
+worker doors
+  action file_reading(reading: Reading) -> Filed
+
+step file
+  reading |> file_reading |> route filed
+";
+    let document = parse(source)?;
+    let errors = aion_awl::check(&document);
+    assert!(
+        errors.iter().any(|error| error
+            .message
+            .contains("cannot be compiled into a validator")),
+        "an uncompilable door must be a check-time diagnostic, not a silent \
+         deploy: {errors:?}"
+    );
+
+    // Control: the SAME document with the braces escaped checks clean, so the
+    // refusal is about the pattern and not about the surrounding shape.
+    let escaped = source.replace("^{[0-9]+}$", "^\\\\{[0-9]+\\\\}$");
+    assert_ne!(escaped, source, "the control must actually differ");
+    let ok_document = parse(&escaped)?;
+    assert!(
+        aion_awl::check(&ok_document).is_empty(),
+        "the escaped control must check clean: {:?}",
+        aion_awl::check(&ok_document)
+    );
+    Ok(())
+}

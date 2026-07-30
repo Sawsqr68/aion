@@ -59,6 +59,16 @@ fn run(document: &Document, root: Option<&Path>) -> (Vec<CheckError>, crate::sem
         check_flow(&mut ctx, &flow);
     }
     let mut errors = ctx.errors;
+    // The contract this document DERIVES has to be enforceable, not merely
+    // well-typed. A derived schema no validator can compile does not fail at
+    // the server — admission logs a warning and lets the payload through
+    // unchecked — so the only place an author can meet it is here. Run it
+    // last, and only over an otherwise-clean document: derivation reports one
+    // failure at a time, and it would otherwise crowd out the specific type
+    // errors that are far more likely to be the real cause.
+    if errors.is_empty() {
+        errors.extend(contract_derivation_errors(document, root));
+    }
     errors.sort_by(|a, b| {
         a.span
             .start
@@ -67,6 +77,38 @@ fn run(document: &Document, root: Option<&Path>) -> (Vec<CheckError>, crate::sem
     });
     errors.dedup();
     (errors, ctx.semantic)
+}
+
+/// Derives every schema this document publishes as its contract and reports
+/// any that cannot be compiled into a validator.
+///
+/// Without a document directory a schema IMPORT cannot be read, so import
+/// failures here would be an artefact of how the checker was called rather
+/// than anything about the document. Those are left to the caller that has the
+/// directory; a schema that is unusable is reported either way.
+fn contract_derivation_errors(document: &Document, root: Option<&Path>) -> Vec<CheckError> {
+    let derived = match root {
+        Some(root) => vec![
+            crate::schema_for_workflow_in(document, root),
+            crate::schema_for_outcomes_in(document, root),
+            crate::schema_for_queries_in(document, root),
+        ],
+        None => vec![
+            crate::schema_for_workflow(document),
+            crate::schema_for_outcomes(document),
+            crate::schema_for_queries(document),
+        ],
+    };
+    derived
+        .into_iter()
+        .filter_map(|result| match result {
+            Err(error @ crate::SchemaError::UnusableSchema { .. }) => Some(CheckError {
+                span: error.span(),
+                message: error.to_string(),
+            }),
+            Ok(_) | Err(_) => None,
+        })
+        .collect()
 }
 
 /// Run the graph pass and (when the `after` edges are acyclic) the flow

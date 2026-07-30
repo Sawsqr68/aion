@@ -56,6 +56,32 @@ pub fn declares_nothing(schema: &Value) -> bool {
     }
 }
 
+/// Checks that `schema` can be compiled into a validator at all, describing
+/// why when it cannot.
+///
+/// An uncompilable declared schema is not a harmless one. [`admit_value`] can
+/// only answer [`AdmissionError::UnusableSchema`], and the engine's response to
+/// that is to admit the value UNCHECKED and log a warning — so a schema that
+/// does not compile silently switches admission off for everything it declares.
+/// Authoring and packaging tools call this so the author meets the problem at
+/// the door, where it is a diagnostic, instead of at a running server, where it
+/// is an absence.
+///
+/// A schema that declares nothing ([`declares_nothing`]) is usable by
+/// definition: admission is skipped for it deliberately, not by failure.
+///
+/// # Errors
+///
+/// Returns the compiler's own reason when `schema` is not a usable validator.
+pub fn schema_is_usable(schema: &Value) -> Result<(), String> {
+    if declares_nothing(schema) {
+        return Ok(());
+    }
+    jsonschema::validator_for(schema)
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 /// Checks `value` against the declared JSON Schema `schema`.
 ///
 /// Every violation is reported, each prefixed with the JSON-pointer location

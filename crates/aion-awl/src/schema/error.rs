@@ -41,6 +41,20 @@ pub enum SchemaError {
         /// Span of the declaration.
         span: Span,
     },
+    /// The derived schema is well-formed JSON but is not a schema any
+    /// validator can compile, so nothing could ever be checked against it.
+    #[error(
+        "the schema derived for `{name}` cannot be compiled into a validator, \
+         so nothing would be checked against it: {detail}"
+    )]
+    UnusableSchema {
+        /// The workflow or type the schema was derived for.
+        name: String,
+        /// The schema compiler's own reason.
+        detail: String,
+        /// Span of the declaration.
+        span: Span,
+    },
 }
 
 impl SchemaError {
@@ -51,7 +65,8 @@ impl SchemaError {
             Self::UnknownType { span, .. }
             | Self::ImportUnresolved { span, .. }
             | Self::ImportUnreadable { span, .. }
-            | Self::InvalidJson { span, .. } => *span,
+            | Self::InvalidJson { span, .. }
+            | Self::UnusableSchema { span, .. } => *span,
         }
     }
 }

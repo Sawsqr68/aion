@@ -5,13 +5,23 @@
 //! Shorthand records and enums derive structurally; `///` doc lines flow to
 //! `description`s; `?` maps to "not in `required`". Schema-door types
 //! (inline `schema { … }` and `schema("file")`) re-emit their source JSON
-//! verbatim, so constraint keywords ride through untouched.
+//! verbatim, so constraint keywords ride through untouched — with their
+//! internal `$ref`s rebased for the position the door lands in.
+//!
+//! Every derived schema is proven COMPILABLE before it is returned, against
+//! the very validator the engine admits payloads with. A declared schema the
+//! engine cannot compile does not fail loudly there: admission logs a warning
+//! and lets the payload through unchecked, so an uncompilable schema silently
+//! switches validation off for whatever it declares. Refusing it here turns
+//! that silence into a diagnostic at `aion awl check`, where it is the
+//! author's to fix.
 
 use std::collections::BTreeSet;
 use std::path::Path;
 
 use serde_json::{Map, Value, json};
 
+use crate::Span;
 use crate::ast::{Document, ParamDecl, TypeBody, TypeDecl, TypeRef, doc_text};
 
 use super::error::SchemaError;
@@ -150,6 +160,23 @@ pub fn schema_for_type_ref_in(
     Deriver::new(document, Some(root)).standalone_type_ref_schema(ty)
 }
 
+/// Refuses a derived schema that cannot be compiled into a validator.
+///
+/// The check runs through `aion_package::schema_is_usable`, which is the same
+/// `jsonschema` compilation the engine performs at admission — so a schema
+/// that passes here is one the engine can actually enforce, not merely one
+/// that looks well-formed.
+fn verified(schema: Value, name: &str, span: Span) -> Result<Value, SchemaError> {
+    match aion_package::schema_is_usable(&schema) {
+        Ok(()) => Ok(schema),
+        Err(detail) => Err(SchemaError::UnusableSchema {
+            name: name.to_owned(),
+            detail,
+            span,
+        }),
+    }
+}
+
 struct Deriver<'a> {
     document: &'a Document,
     root: Option<&'a Path>,
@@ -183,7 +210,7 @@ impl<'a> Deriver<'a> {
         {
             object.insert("$defs".to_owned(), Value::Object(defs));
         }
-        Ok(schema)
+        verified(schema, name, decl.name_span)
     }
 
     fn workflow_schema(&self) -> Result<Value, SchemaError> {
@@ -216,7 +243,11 @@ impl<'a> Deriver<'a> {
         if !defs.is_empty() {
             object.insert("$defs".to_owned(), Value::Object(defs));
         }
-        Ok(Value::Object(object))
+        verified(
+            Value::Object(object),
+            &self.document.name,
+            self.document.name_span,
+        )
     }
 
     fn queries_schema(&self) -> Result<Value, SchemaError> {
@@ -245,7 +276,11 @@ impl<'a> Deriver<'a> {
         if !defs.is_empty() {
             object.insert("$defs".to_owned(), Value::Object(defs));
         }
-        Ok(Value::Object(object))
+        verified(
+            Value::Object(object),
+            &self.document.name,
+            self.document.name_span,
+        )
     }
 
     fn params_schema(&self, params: &[ParamDecl]) -> Result<Value, SchemaError> {
@@ -271,7 +306,11 @@ impl<'a> Deriver<'a> {
         if !defs.is_empty() {
             object.insert("$defs".to_owned(), Value::Object(defs));
         }
-        Ok(Value::Object(object))
+        verified(
+            Value::Object(object),
+            &self.document.name,
+            self.document.name_span,
+        )
     }
 
     fn standalone_type_ref_schema(&self, ty: &TypeRef) -> Result<Value, SchemaError> {
@@ -283,7 +322,7 @@ impl<'a> Deriver<'a> {
         {
             object.insert("$defs".to_owned(), Value::Object(defs));
         }
-        Ok(schema)
+        verified(schema, &self.document.name, self.document.name_span)
     }
 
     fn envelope_schema(&self) -> Result<Value, SchemaError> {
@@ -416,11 +455,14 @@ impl<'a> Deriver<'a> {
                 Ok(Value::Object(object))
             }
             TypeBody::SchemaInline { body, .. } => {
-                serde_json::from_str(body).map_err(|error| SchemaError::InvalidJson {
-                    name: decl.name.clone(),
-                    detail: error.to_string(),
-                    span: decl.name_span,
-                })
+                let mut door: Value =
+                    serde_json::from_str(body).map_err(|error| SchemaError::InvalidJson {
+                        name: decl.name.clone(),
+                        detail: error.to_string(),
+                        span: decl.name_span,
+                    })?;
+                rebase_door_refs(&mut door, &decl.name, root_name);
+                Ok(door)
             }
             TypeBody::SchemaImport { path, path_span } => {
                 let Some(root) = self.root else {
@@ -436,11 +478,14 @@ impl<'a> Deriver<'a> {
                         span: *path_span,
                     }
                 })?;
-                serde_json::from_str(&text).map_err(|error| SchemaError::InvalidJson {
-                    name: decl.name.clone(),
-                    detail: error.to_string(),
-                    span: *path_span,
-                })
+                let mut door: Value =
+                    serde_json::from_str(&text).map_err(|error| SchemaError::InvalidJson {
+                        name: decl.name.clone(),
+                        detail: error.to_string(),
+                        span: *path_span,
+                    })?;
+                rebase_door_refs(&mut door, &decl.name, root_name);
+                Ok(door)
             }
         }
     }
@@ -482,6 +527,67 @@ impl<'a> Deriver<'a> {
                 self.type_ref_schema(inner, root_name, defs, visited)
             }
         }
+    }
+}
+
+/// Rebases a schema door's own internal `$ref` pointers for the position the
+/// door document is about to occupy.
+///
+/// A door is a COMPLETE JSON Schema document written on its own terms, so its
+/// internal references are rooted at ITS root: `order.schema.json` says
+/// `"$ref": "#/$defs/Line"` and carries a matching `$defs/Line`. When that
+/// document is folded in as `#/$defs/Order` of a derived contract, `#` stops
+/// meaning the door and starts meaning the WHOLE contract — where there is no
+/// `$defs/Line`. The composed schema was then unresolvable, and the engine's
+/// response to a schema it cannot compile is to log a warning and admit the
+/// payload unchecked (`aion/src/loader/catalog_admission.rs`). So a door with
+/// an internal `$ref` silently turned its workflow's input validation OFF.
+///
+/// The rebase is positional and total: `#` becomes the door's new home, and
+/// every other document-local pointer is re-rooted underneath it. Nothing is
+/// renamed and nothing is hoisted, so two doors can carry the same `$defs`
+/// name without colliding. External `$ref`s are left exactly as written.
+///
+/// `root_name` is the type the derivation is rooted AT. When the door is that
+/// type it stays at the document root, its pointers already mean what they say,
+/// and rebasing them would break the thing it is meant to fix.
+fn rebase_door_refs(door: &mut Value, door_name: &str, root_name: &str) {
+    if door_name == root_name {
+        return;
+    }
+    rebase_refs_under(door, &format!("#/$defs/{door_name}"));
+}
+
+/// Rewrites every document-local `$ref` in a schema tree to sit under `home`.
+fn rebase_refs_under(value: &mut Value, home: &str) {
+    match value {
+        Value::Object(object) => {
+            if let Some(Value::String(target)) = object.get("$ref") {
+                let rebased = if target == "#" {
+                    Some(home.to_owned())
+                } else {
+                    target
+                        .strip_prefix("#/")
+                        .map(|rest| format!("{home}/{rest}"))
+                };
+                if let Some(rebased) = rebased {
+                    object.insert("$ref".to_owned(), Value::String(rebased));
+                }
+            }
+            for (key, inner) in object.iter_mut() {
+                // `$ref` was just rewritten in place; recursing into a string
+                // is a no-op, but skipping it keeps the intent obvious.
+                if key != "$ref" {
+                    rebase_refs_under(inner, home);
+                }
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                rebase_refs_under(item, home);
+            }
+        }
+        _ => {}
     }
 }
 
