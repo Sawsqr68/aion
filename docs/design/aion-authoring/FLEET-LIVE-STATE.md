@@ -129,6 +129,42 @@ CONTRACT refusal is permanent until a human changes something, so retrying it
 (plus whatever `--allow-degraded-session` opt-in Agent A adds, which is what
 makes the owner's parked assistant sessions resumable at all — task #89.)
 
+**AGENT A LANDED 4 COMMITS** (`d4a2578b` degraded-session fix · `241c9094`
+worker-side prompt composition · `c75e61b3` the full `assistant.awl` ·
+`0d7fbb2e` the differences ledger). Zero files under `crates/` — the territory
+split held. It is now resumed on two follow-ups: the worker descriptor fix
+(below) and a suspected loop defect I sent it.
+
+**#93 IS ANSWERED — the GATE IS RIGHT, the WORKER IS BROKEN.** `agent-dev-worker`
+advertises 8 activity NAMES and ZERO typed descriptors: `registry.rs:72-79`
+uses plain `register_activity`, whose own doc says registering a handler with
+no descriptor "is what makes a worker invisible to contract admission", and
+`AgentHarnessConfig::new` sets `activity_descriptors: Vec::new()` with
+`main.rs` never calling `.with_activity_descriptors(...)`. The admissible shape
+already exists at `crates/aion-cli/src/worker_agent/serve.rs:185`. **Do not
+loosen the gate.** Agent B's #93 scope is now the contradictory LOGGING only.
+
+**SUSPECTED DEFECT sent back to Agent A, unresolved:** in `assistant.awl:132-140`,
+if the inner nudge loop exits via `max max_nudges` it leaves `nudge.message ==
+""` and `nudge.end == false`, so `until round.ended` stays false and the outer
+loop dispatches `assistant(prompt: "")` — empty prompts to a real agent until
+the round cap. The file's own line 148 says the opposite. **Not confirmed** —
+I may be misreading AWL's `max` semantics and asked for evidence either way.
+
+**Four findings filed from the port:** #95 an AWL `input_schema` may not be
+enforced at start (a validation hole in EVERY AWL workflow — establish the fact
+first) · #96 AWL has no `query` surface at all, so the live-state query that
+proved the 28-day run healthy cannot be authored · #97 an undecodable signal
+payload KILLS the run, and optionals cannot be read — which forced the control
+signal's fields to be REQUIRED, so the documented `{"end": true}` payload is
+now invalid and callers need updating · #94 the refusal flood.
+
+⚠️ **I told Agent A "AWL cannot compose strings" as fact and it is FALSE** —
+`dev_brief.awl` concatenates runtime bindings in production. The worker-side
+composition decision stands on the better reason (the worker already
+materializes the resources the prompt describes), but the stated reason was
+wrong and it checked rather than designing around it.
+
 **Still owed:** the staged-rounds worker (pid 49833) is still an old binary.
 
 **Do not tell Tom any of this as status.** Fix it, prove it live, then tell him
