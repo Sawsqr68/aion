@@ -3,6 +3,28 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## Unreleased
+
+- **Aion provisions its own sensitive roots instead of asking the operator
+  to.** The Aion home, the haematite data root, and the AWL authoring root are
+  Aion's directories, so the server creates them owner-only (`0700`, from the
+  `mkdir` itself, never a create-then-chmod window) and, when one already
+  exists but grants group or world access and the server's own user owns it,
+  tightens it in place and logs the change at INFO with the previous and
+  applied modes. The previous behaviour — refusing startup with `chmod 700`
+  remediation for a `~/.aion` that a conventional umask had left at `0755` — is
+  gone; it made the operator hand-run a step the server could always take
+  itself. No security property was relaxed to get there. A root Aion cannot
+  make safe still refuses, now naming the path, the exact problem, and the
+  remedy: a root owned by another uid (Aion will not modify another
+  principal's directory), a symlinked root or component, a name occupied by a
+  non-directory, and a filesystem that will not carry Unix modes (detected by
+  re-reading the descriptor after the `fchmod` rather than assuming it took).
+  The path-ambient backend's ancestor gate is untouched and still fails closed:
+  a data root under a world-writable ancestor such as `/private/tmp` is refused
+  outright, because tightening the leaf would not close that hole and the
+  ancestor is not Aion's to change.
+
 ## 0.10.0 — 2026-07-23
 
 Family convergence release: the whole stack moves to the current

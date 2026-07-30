@@ -52,10 +52,12 @@ pub use beam::{BeamModule, BeamSet, RESERVED_MODULE_NAMES};
 pub use builder::PackageBuilder;
 pub use canonical::{CanonicalJson, serialize_value, sorted_entries};
 pub use codegen::{
-    ActivityArtifact, ActivityDeclaration, ActivityReport, BoundaryType, CodecReport, CodegenError,
-    CodegenMode, SchemaEmitReport, TestScaffoldReport, Tier, boundary_types_from_interface,
-    build_input_skeleton, emit_schemas, generate_activities, generate_codecs,
-    generate_test_scaffold, parse_declarations,
+    ActivityArtifact, ActivityDeclaration, ActivityReport, AionDependency, AwlScaffoldError,
+    AwlWorkerScaffold, BoundaryType, CodecReport, CodegenError, CodegenMode, Connection,
+    ConnectionPlan, DocumentRoot, FileOwnership, ScaffoldedFile, SchemaEmitReport, ServableAction,
+    TestScaffoldReport, Tier, WorkerScaffold, boundary_types_from_interface, build_input_skeleton,
+    emit_schemas, generate_activities, generate_codecs, generate_test_scaffold, parse_declarations,
+    scaffold_awl_worker,
 };
 pub use compatibility::{ContractDiff, contract_diffs};
 pub use contract::{

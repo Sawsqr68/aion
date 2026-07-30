@@ -21,6 +21,7 @@ use crate::payload::{
 };
 
 mod awl;
+mod awl_scaffold;
 mod check_deterministic;
 mod deploy;
 mod dev;

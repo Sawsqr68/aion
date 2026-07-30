@@ -11,10 +11,13 @@
 //! non-zero. `aion awl schema` derives draft 2020-12 JSON Schema from the same
 //! checked document through the public `aion-awl` derivation. Schema imports
 //! (`type X = schema("file")`) resolve relative to the document's directory.
+//! `aion awl scaffold` generates a compiling Rust worker crate for the
+//! document's declared worker(s) from the same compiled contract the deploy
+//! path admits against (see [`crate::awl_scaffold`]).
 //!
-//! All three commands run entirely locally and own their own compiler-style
-//! reporting contract (diagnostics to stderr, a one-line summary to stdout)
-//! instead of the client commands' JSON rendering.
+//! Every one of these commands runs entirely locally and owns its own
+//! compiler-style reporting contract (diagnostics to stderr, a one-line
+//! summary to stdout) instead of the client commands' JSON rendering.
 
 use std::ffi::OsString;
 use std::fs;
@@ -82,6 +85,42 @@ pub(crate) enum AwlCommand {
         #[arg(long, value_enum, default_value_t = EmitTarget::Gleam)]
         target: EmitTarget,
     },
+    /// Generate a compiling Rust worker crate for the document's declared
+    /// worker(s).
+    ///
+    /// The document is compiled through the SAME `aion_awl::compile` seam the
+    /// deploy path uses, and every wire descriptor the generated worker
+    /// advertises is taken from the contract that compile returns — the very
+    /// bytes the server deploys and admits against. Deriving those schemas
+    /// from the handlers' Rust types instead would be a second, independent
+    /// rendering of the same shapes, which is exactly the drift the server's
+    /// contract gate exists to catch.
+    ///
+    /// The emitted crate opens ONE CONNECTION PER NODE (the server routes by
+    /// namespace × task queue × node and never by activity type), registers a
+    /// descriptor with every handler, serves no action that carries a
+    /// declarative `body` (the server executes those itself), and fails every
+    /// un-implemented activity loudly.
+    ///
+    /// One crate is written per `worker` block, at `<out>/<queue>-worker`.
+    /// `src/handlers.rs` is yours from the moment it exists: re-running
+    /// rewrites the generated files and never that one.
+    Scaffold {
+        /// Path to the `.awl` document.
+        file: PathBuf,
+        /// Directory the generated crate(s) are written into.
+        #[arg(long)]
+        out: PathBuf,
+        /// Scaffold only this `worker` block; omitted, every block is
+        /// scaffolded.
+        #[arg(long)]
+        worker: Option<String>,
+        /// Path to a local aion checkout's `crates/` directory. Given, the
+        /// generated crate depends on the aion SDK BY PATH; omitted, it
+        /// depends on the published crates at this binary's own version.
+        #[arg(long)]
+        aion_crates: Option<PathBuf>,
+    },
     /// Emit JSON Schema draft 2020-12 for a declared AWL type.
     Schema {
         /// Path to the `.awl` document.
@@ -116,6 +155,12 @@ pub(crate) fn run(command: &AwlCommand) -> ExitCode {
             output,
             target,
         } => emit_command(file, output.as_deref(), *target),
+        AwlCommand::Scaffold {
+            file,
+            out,
+            worker,
+            aion_crates,
+        } => crate::awl_scaffold::run(file, out, worker.as_deref(), aion_crates.as_deref()),
         AwlCommand::Schema { file, r#type } => schema_command(file, r#type.as_deref()),
         AwlCommand::Lsp => match aion_awl_lsp::run_stdio() {
             Ok(()) => ExitCode::SUCCESS,
@@ -446,14 +491,14 @@ fn diagnostic(file: &Path, span: Span, message: &str) -> String {
     )
 }
 
-fn report(diagnostics: &[String]) -> ExitCode {
+pub(crate) fn report(diagnostics: &[String]) -> ExitCode {
     for line in diagnostics {
         eprintln!("{line}");
     }
     ExitCode::FAILURE
 }
 
-fn read_source(file: &Path) -> Option<String> {
+pub(crate) fn read_source(file: &Path) -> Option<String> {
     match fs::read_to_string(file) {
         Ok(source) => Some(source),
         Err(error) => {

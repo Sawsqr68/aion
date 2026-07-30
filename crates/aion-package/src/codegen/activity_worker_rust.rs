@@ -240,7 +240,10 @@ fn rust_field_ident(wire: &str) -> (String, bool) {
 /// Whether a lowercase wire name collides with a Rust strict or reserved
 /// keyword. `Self` is excluded: wire names never start with an uppercase
 /// letter.
-fn is_rust_keyword(word: &str) -> bool {
+///
+/// Shared with the AWL worker scaffold ([`super::awl_worker`]), which escapes
+/// a keyword ACTION name into a raw identifier for the same reason.
+pub(super) fn is_rust_keyword(word: &str) -> bool {
     matches!(
         word,
         "as" | "break"

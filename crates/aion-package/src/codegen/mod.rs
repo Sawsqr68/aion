@@ -18,6 +18,7 @@ mod activity_project;
 mod activity_worker_python;
 mod activity_worker_rust;
 mod activity_wrappers;
+mod awl_worker;
 mod codec_module;
 mod declaration;
 mod error;
@@ -32,6 +33,10 @@ mod test_scaffold;
 pub use activity_project::{
     ActivityArtifact, ActivityReport, CodecReport, TestScaffoldReport, generate_activities,
     generate_codecs, generate_test_scaffold,
+};
+pub use awl_worker::{
+    AionDependency, AwlScaffoldError, AwlWorkerScaffold, Connection, ConnectionPlan, DocumentRoot,
+    FileOwnership, ScaffoldedFile, ServableAction, WorkerScaffold, scaffold_awl_worker,
 };
 pub use declaration::{ActivityDeclaration, Tier, parse_declarations};
 pub use error::CodegenError;
