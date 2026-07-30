@@ -165,6 +165,33 @@ composition decision stands on the better reason (the worker already
 materializes the resources the prompt describes), but the stated reason was
 wrong and it checked rather than designing around it.
 
+## ✅ MY OWN BATTERY, on the pushed tree `dc87e91a` — not a report, my run
+
+```
+FMT_EXIT=0                # cargo fmt --all --check
+CLIPPY_EXIT=0             # --workspace --all-targets -D warnings
+CLIPPY_DIAGNOSTICS=0
+CARGO_TEST_EXIT=0         # cargo test --workspace
+238 suites · 3785 passed · 0 failed · 5 ignored
+```
+
+Up from 3759 at session start. The 5 ignored are still task #86, and three of
+them are the failover proofs — a green battery remains silent about those.
+
+🔴 **AND THE BATTERY MISSED A BREAK (task #100).** `cargo test` regenerates the
+console's TypeScript through ts-rs. The new `unserved` field landed referencing
+`UnservedActivity`, **a type ts-rs never emitted** — it appears exactly once in
+the generated file, at the reference. `bun run typecheck` → `TS2304: Cannot find
+name 'UnservedActivity'`, `TSC_EXIT=2`, while every Rust gate was green.
+
+Three defects there and the third is the one that matters: generated output is
+NOT committed (so the tree is simultaneously stale AND broken, and any
+`cargo test` flips it from one to the other), and **`cargo test --workspace` is
+structurally blind to the console.** With Actions disabled on this repo, a
+cross-language break can be reported green by two agents AND a full battery.
+Neither agent ran `--workspace` at all — one ran three `-p` crates, the other
+one. Caught only because the battery was re-run at this seat.
+
 ## 🔴 RESTORATION SEQUENCE — do this in order, nothing else restores the queue
 
 Queue `default` is DOWN for **two independent reasons**, and fixing one alone
