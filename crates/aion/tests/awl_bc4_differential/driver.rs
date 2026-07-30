@@ -472,3 +472,126 @@ fn fold_runs(
         Disposition::Stuck => report.record_infra(name, "unreachable stuck classification"),
     }
 }
+
+/// The classification arms proven by construction, because the situations they
+/// exist for are ones a healthy corpus never produces.
+///
+/// This is the control arm for a guard that has never been observed to fire.
+/// `fold_runs` learned to tell an AGREEMENT on refusal apart from a backend
+/// SPLIT in the same change that removed the corpus's only refusing fixture —
+/// so on every real run since, both arms have been dead code that reads as
+/// working. A branch nobody has watched execute is indistinguishable from one
+/// that cannot.
+#[cfg(test)]
+mod classification_tests {
+    use super::{Report, alias_run_identities, fold_runs};
+
+    /// One backend's run outcome, exactly as `fold_runs` receives it.
+    type RunResult = Result<crate::run::RunOutcome, Box<dyn std::error::Error>>;
+
+    /// Two runs that failed with the same reason, differing only in the
+    /// package hash each backend necessarily carries.
+    fn refusals(reason: &str) -> (RunResult, RunResult) {
+        (
+            Err(format!("{reason} `{}`", "a".repeat(64)).into()),
+            Err(format!("{reason} `{}`", "b".repeat(64)).into()),
+        )
+    }
+
+    #[test]
+    fn identical_refusals_are_agreement_not_infrastructure_noise() {
+        let mut report = Report::default();
+        let (reference, direct) = refusals("start input does not satisfy version");
+        fold_runs(&mut report, "fixture/one", reference, direct);
+
+        assert_eq!(
+            report.agreed_refusal_fixtures(),
+            vec![String::from("fixture/one")],
+            "two identical refusals are the differential AGREEING"
+        );
+        assert!(
+            report.infra.is_empty(),
+            "agreement must not be scored as infrastructure noise: {:?}",
+            report.infra
+        );
+        assert!(
+            report.divergences.is_empty(),
+            "agreement is not a divergence"
+        );
+        assert!(
+            report.agreed_refusals[0].1.contains("<id>"),
+            "the per-backend package hash must be aliased out, or two identical \
+             refusals could never compare equal: {:?}",
+            report.agreed_refusals[0].1
+        );
+    }
+
+    #[test]
+    fn a_one_sided_refusal_is_a_divergence() {
+        let mut report = Report::default();
+        let (reference, _) = refusals("start input does not satisfy version");
+        fold_runs(
+            &mut report,
+            "fixture/two",
+            reference,
+            Ok(crate::run::RunOutcome {
+                trail: Vec::new(),
+                disposition: crate::run::Disposition::Completed,
+                pending_timers: Vec::new(),
+            }),
+        );
+
+        assert_eq!(
+            report.diverged,
+            vec![String::from("fixture/two")],
+            "one backend refusing and the other running is a behavioural SPLIT"
+        );
+        assert!(
+            report.agreed_refusals.is_empty(),
+            "a one-sided refusal is not agreement"
+        );
+        assert!(report.infra.is_empty(), "nor is it infrastructure noise");
+    }
+
+    #[test]
+    fn refusals_for_different_reasons_are_a_divergence() {
+        let mut report = Report::default();
+        fold_runs(
+            &mut report,
+            "fixture/three",
+            Err("input is too short".into()),
+            Err("input is the wrong type".into()),
+        );
+
+        assert_eq!(
+            report.diverged,
+            vec![String::from("fixture/three")],
+            "two backends refusing for DIFFERENT reasons disagree"
+        );
+        assert!(report.agreed_refusals.is_empty());
+    }
+
+    /// The aliaser must erase identities without erasing the reason, or every
+    /// pair of refusals would compare equal and every split would read as
+    /// agreement.
+    #[test]
+    fn aliasing_erases_identities_and_nothing_else() {
+        let hashed = alias_run_identities(&format!("version `{}` refused", "0123abcd".repeat(8)));
+        assert_eq!(hashed, "version `<id>` refused");
+
+        let uuid = alias_run_identities("run 550e8400-e29b-41d4-a716-446655440000 failed");
+        assert_eq!(uuid, "run <id> failed");
+
+        // Ordinary words built from hex letters must survive: `deadbeef` and
+        // `added` are shorter than any identity and carry meaning.
+        assert_eq!(
+            alias_run_identities("deadbeef added to the cafe"),
+            "deadbeef added to the cafe"
+        );
+        assert_ne!(
+            alias_run_identities("input is too short"),
+            alias_run_identities("input is the wrong type"),
+            "aliasing must not collapse two different reasons into one"
+        );
+    }
+}
