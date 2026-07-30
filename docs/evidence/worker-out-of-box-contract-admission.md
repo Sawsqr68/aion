@@ -338,6 +338,40 @@ same claim as "the output bytes are safe". I verified the first and wrote down t
 second. A dependency-level change to a serialization library needs the whole-tree
 battery, not a targeted argument about the hashes you happened to think of.
 
+### Closed in `8cf9f495`, by construction, with the goldens unmodified
+
+`aion-package/src/canonical.rs` makes canonicality a **type** rather than a calling
+convention: `CanonicalJson`'s `Serialize` impl sorts each object's entries at every
+depth and drives `serialize_map` from the sorted vector, so `Map`'s iteration order
+cannot reach the output and no call site can forget. `serialize_value` is the same
+recursion as a `#[serde(serialize_with)]` target; `sorted_entries` serves code that
+*walks* an object to build something order-sensitive. Arrays stay verbatim — element
+order is content.
+
+One thing the first analysis got right is now re-verified independently, because
+being wrong about it would have moved every deployed package version:
+`PackageContract::canonical_bytes` is entirely hand-rolled (`encode_json`,
+`encode_text`, `encode_len`, explicit sorting) and never touches serde's `Serialize`,
+so adding `serialize_with` to the contract structs changes the archive's
+`contract.json` representation without touching the `.v4`/`.v5` identity. **Load-Bearing
+Invariant 5 did not move.** The archive bytes are not covered by the content hash, so
+existing archives still resolve to the same version and nothing must be re-deployed.
+
+Two sites turned out to be program *structure*, not layout, which is why the first
+failure masked the second: the emitter walked a `Map` to set the generated Gleam
+record's field order, its decoder's field sequence, and the MIR literal pool, and the
+checker walked it again for diagnostics that must mirror the emitter.
+
+**A configuration distinction worth keeping in mind from here on:** with the ACP crate
+in the workspace, `cargo test --workspace` resolves `preserve_order` **ON** while
+`cargo test -p <crate>` has it **off**. Per-crate green and workspace green are now
+genuinely different runs, and both were required here.
+
+The pins are non-vacuous, proven by breaking them rather than asserted: replacing
+`sorted_entries`' body with unsorted iteration turns all five new pins in
+`aion-awl/tests/canonical_emission.rs` and `mir::tests::lowers_cover_and_golden` red
+under `preserve_order`. A pin nobody has watched fail is not a pin.
+
 ### The original analysis, correct as far as it went
 
 
@@ -362,3 +396,30 @@ together and nothing compares an old digest to a new one. No archive is invalida
 Worth knowing rather than acting on — but a digest named "canonical" that depends on
 a transitive dependency's feature unification is worth making order-independent by
 construction on its own merits, the way the contract encoder already is.
+
+## Closed: the outbox e2e suite does not write into the operator's live store
+
+Raised as an open worry because `run_server_outbox_e2e` logs
+`data_root: /Users/tom/.aion/data` at boot, and a data-directory loss has cost this
+estate before. Settled two ways rather than argued:
+
+**Traced.** The suite's store URL is `TempDir/aion.db`
+(`run_server_outbox_e2e.rs:39`), passed explicitly into the generated config as
+`[store] url`. The child server is spawned with **every** `AION_*` variable removed
+and only `AION_RUN_SERVER_CHILD` and `AION_RUN_SERVER_CONFIG` set, so nothing leaks in
+from the parent environment. The logged data root comes from `fill_home_defaults`,
+which *resolves and logs* it unconditionally, but `data_root_required` is true only
+when `store.backend == Haematite` (`config/load.rs:133`) — and this config selects
+libsql. Nothing in the production config path creates the home data directory; the
+only `create_dir` calls are in tests.
+
+**Measured.** `find ~/.aion | sort` before and after a full run of the suite: 36942
+paths both times, zero diff, and `find ~/.aion -newermt '-5 minutes' -type f` empty.
+
+So the log line is resolution-and-logging, not use. Worth noting the trap for the next
+reader: a startup line naming a path is not evidence that the path is touched.
+
+The run also re-confirmed the separate, pre-existing failure behind that suite — three
+tests refused with `HTTP 409 NO_QUEUE_DECLARATION` because the committed Gleam-scaffold
+fixture declares unscoped activities. That is the `libsql-backend`-has-no-gate finding,
+not a data-safety issue.
