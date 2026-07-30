@@ -21,6 +21,19 @@ pub(super) struct Args {
     /// `max_concurrency` for the developer and reviewer connections: how
     /// many item agents may run at once.
     pub(super) max_parallel: usize,
+    /// The Norn OAuth account every agent run is pinned to — required.
+    ///
+    /// Every agent activity here runs with `--session-id` and
+    /// `--resume-if-exists`, and Norn refuses a resumed, forked or
+    /// open-or-resume run without an explicit `--account`, deliberately, so
+    /// that credential affinity can never change silently underneath a
+    /// long-lived session. So this worker cannot serve a SINGLE agent activity
+    /// without one, and a missing value is a startup refusal rather than a
+    /// failure on first dispatch — on 2026-07-30 the omission cost a whole
+    /// first flight, every connection registered and the run dying on the
+    /// planner with `norn: auth error`. Use `default` for Norn's
+    /// compatibility slot.
+    pub(super) norn_account: String,
 }
 
 pub(super) fn parse_args() -> anyhow::Result<Args> {
@@ -39,6 +52,7 @@ pub(super) fn parse_args_from(
     let mut ready_file = None;
     let mut norn_bin = default_norn_bin;
     let mut profiles_dir = None;
+    let mut norn_account = None;
     let mut max_parallel = DEFAULT_MAX_PARALLEL;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
@@ -48,6 +62,7 @@ pub(super) fn parse_args_from(
             "--ready-file" => ready_file = Some(next_value(&mut args, "--ready-file")?),
             "--norn-bin" => norn_bin = next_value(&mut args, "--norn-bin")?,
             "--profiles-dir" => profiles_dir = Some(next_value(&mut args, "--profiles-dir")?),
+            "--norn-account" => norn_account = Some(next_value(&mut args, "--norn-account")?),
             "--max-parallel" => {
                 let value = next_value(&mut args, "--max-parallel")?;
                 max_parallel = value.parse().map_err(|error| {
@@ -66,6 +81,16 @@ pub(super) fn parse_args_from(
     let profiles_dir = profiles_dir.ok_or_else(|| {
         anyhow::anyhow!("--profiles-dir is required (point it at this package's worker/profiles/)")
     })?;
+    let norn_account = norn_account.ok_or_else(|| {
+        anyhow::anyhow!(
+            "--norn-account is required: every agent activity runs with --session-id and \
+             --resume-if-exists, and Norn refuses a resumed or open-or-resume run without an \
+             explicit --account so credential affinity cannot change silently under a \
+             long-lived session. Without it this worker registers fine and then fails every \
+             single agent dispatch. Use `default` for Norn's compatibility slot, or an account \
+             alias."
+        )
+    })?;
     Ok(Args {
         candidates,
         identity_prefix,
@@ -73,6 +98,7 @@ pub(super) fn parse_args_from(
         norn_bin,
         profiles_dir,
         max_parallel,
+        norn_account,
     })
 }
 

@@ -6,11 +6,33 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    COORDINATOR_CONCURRENCY, Connection, DEFAULT_ADDRESS, Profiles, Role, SHELL_NODE, Shell,
-    connection_norn_args, connections, inner_norn_harness, parse_args_from, roles, shell_registry,
+    COORDINATOR_CONCURRENCY, Connection, DEFAULT_ADDRESS, Declaration, Profiles, Role, SHELL_NODE,
+    Shell, connection_norn_args, connections, inner_norn_harness, parse_args_from, roles,
+    shell_registry,
 };
 
+/// The compiled declaration, or a loud test failure. Every shell registration
+/// takes its advertised descriptor from it.
+pub(super) fn declaration() -> anyhow::Result<Declaration> {
+    Declaration::compile().map_err(anyhow::Error::msg)
+}
+
+/// The production shell registry, advertising the document's declared schemas.
+pub(super) fn shell(declaration: &Declaration) -> anyhow::Result<aion_worker::ActivityRegistry> {
+    shell_registry(Shell::inherited(), declaration)
+}
+
+/// Parse with the now-required `--norn-account` already supplied, so every
+/// existing case still exercises what it was written to exercise. Cases about
+/// the account flag itself use [`parse_raw`].
 fn parse(args: &[&str]) -> anyhow::Result<super::Args> {
+    let mut with_account = vec!["--norn-account", "test-account"];
+    with_account.extend_from_slice(args);
+    parse_raw(&with_account)
+}
+
+/// Parse EXACTLY the given arguments, adding nothing.
+fn parse_raw(args: &[&str]) -> anyhow::Result<super::Args> {
     parse_args_from(
         args.iter().map(|arg| (*arg).to_owned()),
         "norn-default".to_owned(),
@@ -71,6 +93,7 @@ fn minimal_arguments_yield_the_defaults() -> anyhow::Result<()> {
     assert_eq!(args.norn_bin, "norn-default");
     assert_eq!(args.profiles_dir, "/pkg/profiles");
     assert_eq!(args.max_parallel, 4);
+    assert_eq!(args.norn_account, "test-account");
     Ok(())
 }
 
@@ -95,9 +118,10 @@ fn every_value_taking_flag_bails_when_missing() {
         "--norn-bin",
         "--profiles-dir",
         "--max-parallel",
+        "--norn-account",
     ] {
         assert_eq!(
-            parse(&[flag]).err().map(|error| error.to_string()),
+            parse_raw(&[flag]).err().map(|error| error.to_string()),
             Some(format!("{flag} requires a value")),
         );
     }
@@ -288,7 +312,10 @@ fn the_profile_rides_as_append_system_prompt_byte_identical() {
     // And the argument list is really what the composed harness carries: every
     // argument survives into the built NornHarness. Asserted per-argument so
     // it cannot rot on a change to the adapter's Debug shape.
-    let composed = format!("{:?}", inner_norn_harness("norn", &connection));
+    let composed = format!(
+        "{:?}",
+        inner_norn_harness("norn", "test-account", &connection)
+    );
     for arg in &args {
         assert!(
             composed.contains(arg.as_str()),
@@ -393,7 +420,7 @@ fn node_mapping_is_exhaustive_and_injective() -> anyhow::Result<()> {
         "an agent connection reuses the shell connection's node"
     );
 
-    let registry = shell_registry(Shell::inherited())?;
+    let registry = shell(&declaration()?)?;
     let mut activity_to_node: BTreeMap<String, &str> = BTreeMap::new();
     for activity_type in registry.activity_types() {
         assert!(
@@ -445,6 +472,7 @@ fn node_mapping_is_exhaustive_and_injective() -> anyhow::Result<()> {
 #[test]
 fn node_ids_mirror_the_document_table() -> anyhow::Result<()> {
     assert_eq!(SHELL_NODE, "shell");
+    let shell_activities = shell(&declaration()?)?.activity_types();
     let connections = connection_table(4)?;
     for (activity_type, node) in [
         ("planner", "planner"),
@@ -461,9 +489,7 @@ fn node_ids_mirror_the_document_table() -> anyhow::Result<()> {
     ] {
         if node == SHELL_NODE {
             assert!(
-                shell_registry(Shell::inherited())?
-                    .activity_types()
-                    .contains(activity_type),
+                shell_activities.contains(activity_type),
                 "shell activity `{activity_type}` is not registered"
             );
             continue;
@@ -474,5 +500,60 @@ fn node_ids_mirror_the_document_table() -> anyhow::Result<()> {
             "activity `{activity_type}` must be served on node `{node}`"
         );
     }
+    Ok(())
+}
+
+/// THE RECURRENCE GUARD. Every agent run this worker starts carries
+/// `--session-id` and `--resume-if-exists`, and Norn refuses an open-or-resume
+/// run with no `--account` so a long-lived session's credential affinity cannot
+/// change silently. Omitting it does not fail at startup by itself — the worker
+/// registers all five connections cleanly and then fails EVERY agent dispatch
+/// with `norn: auth error`, which is precisely how the 2026-07-30 first flight
+/// died on the planner activity after the wiring was otherwise correct. So the
+/// flag is required, and the refusal explains the consequence rather than just
+/// naming the flag.
+#[test]
+fn norn_account_is_required_because_every_run_resumes_a_session() -> anyhow::Result<()> {
+    let Err(error) = parse_raw(&["--profiles-dir", "/pkg/profiles"]) else {
+        anyhow::bail!("arguments unexpectedly parsed without --norn-account");
+    };
+    let message = error.to_string();
+    assert!(message.contains("--norn-account"), "error: {message}");
+    assert!(
+        message.contains("--resume-if-exists"),
+        "the refusal must say WHY the account is unavoidable: {message}"
+    );
+    Ok(())
+}
+
+/// The account must reach Norn's argv as `--account <alias>`, adjacent and in
+/// that order — an account that never reaches the command line is the same
+/// failure as never having configured one.
+#[test]
+fn the_norn_account_reaches_the_argv_as_an_adjacent_account_flag() -> anyhow::Result<()> {
+    let table = role_table(2);
+    let connection = connections(table)
+        .map_err(anyhow::Error::msg)?
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("the role table yielded no connection"))?;
+    let composed = format!(
+        "{:?}",
+        inner_norn_harness("norn", "tom-oauth-alias", &connection)
+    );
+    assert!(
+        composed.contains("--account"),
+        "the --account flag did not reach the harness:\n{composed}"
+    );
+    assert!(
+        composed.contains("tom-oauth-alias"),
+        "the account alias did not reach the harness:\n{composed}"
+    );
+    // A template argument would expand `{...}` placeholders in an
+    // operator-supplied alias; the account must arrive exactly as typed.
+    assert!(
+        composed.contains("Literal(\"tom-oauth-alias\")"),
+        "the alias must be a LITERAL argument, never a template:\n{composed}"
+    );
     Ok(())
 }

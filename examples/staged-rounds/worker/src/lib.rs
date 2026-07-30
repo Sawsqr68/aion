@@ -1,8 +1,9 @@
-//! Library surface of the staged-rounds worker: the shell-activity wire
-//! types, the typed git/command shell boundary, the embedded agent output
-//! schemas, the startup-loaded role profiles, the per-role prompt assembly,
-//! the profile-injecting harness wrapper, the reality-wins agent-output
-//! rewrites, and the six shell-activity handler bodies.
+//! Library surface of the staged-rounds worker: the embedded AWL DECLARATION
+//! every advertisement is derived from, the shell-activity wire types, the
+//! typed git/command shell boundary, the embedded agent output schemas, the
+//! startup-loaded role profiles, the per-role prompt assembly, the
+//! profile-injecting harness wrapper, the reality-wins agent-output rewrites,
+//! and the six shell-activity handler bodies.
 //!
 //! The binary (`main.rs`) is the composition root: it groups the FIVE driven
 //! agent roles (planner, developer, reviewer, remediator, and the integration
@@ -13,6 +14,7 @@
 
 pub mod agent_output;
 pub mod commit;
+pub mod declaration;
 pub mod handlers;
 pub mod harness;
 pub mod lens;

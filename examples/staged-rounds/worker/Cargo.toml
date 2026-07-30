@@ -65,6 +65,17 @@ todo = "warn"
 aion-worker = { path = "../../../crates/aion-worker", features = ["liminal-transport"] }
 aion-integration-norn = { path = "../../../crates/aion-integration-norn" }
 aion-integrations = { path = "../../../crates/aion-integrations" }
+# The AWL document embedded in `src/declaration.rs` is the ONE source of the
+# wire schemas this worker advertises, so its compiler is a production
+# dependency, not a test one: `aion_awl::compile` runs once at startup and every
+# registered descriptor comes from the contract it returns. Deriving those
+# schemas from the Rust types instead would create a second rendering of the
+# same shapes — exactly the drift the server's contract gate exists to catch.
+aion-awl = { path = "../../../crates/aion-awl" }
+# `ActivityDescriptor`/`WorkerContract` (the advertisement types) and
+# `contract_diffs` (the server's own admission function, which the composition
+# root's tests admit against).
+aion-package = { path = "../../../crates/aion-package" }
 anyhow = "1"
 async-trait = "0.1"
 # The harness wrapper implements `AgentSession` itself (to run the

@@ -15,34 +15,68 @@
 //!   the blocking thread, not from the async adapter.
 //! - [`immediate`] — a pure handler, run without consuming a blocking-pool
 //!   thread.
+//!
+//! EVERY handler is registered WITH ITS DECLARED WIRE DESCRIPTOR, taken from the
+//! compiled AWL document (see [`staged_rounds_worker::declaration`]). A handler
+//! committed with no descriptor advertises nothing, and the server's contract
+//! gate then refuses the whole connection with `WORKER_CONTRACT_MISMATCH`
+//! naming every action as `<missing>`. The handlers stay TYPED — the descriptor
+//! decides only what is advertised, never how the payload is decoded.
 
 use aion_worker::{ActivityContext, ActivityRegistry, HandlerFuture};
+use staged_rounds_worker::declaration::Declaration;
 use staged_rounds_worker::handlers;
 use staged_rounds_worker::handlers::progress::{GateProgress, HeartbeatProgress};
 use staged_rounds_worker::shell::Shell;
 
 /// The six shell-node activities served by the binary, in the document's
-/// action order.
-pub(super) fn shell_registry(shell: Shell) -> Result<ActivityRegistry, aion_worker::WorkerError> {
-    ActivityRegistry::new()
-        .register_activity(
+/// action order, each advertising the schemas the document declares for it.
+///
+/// # Errors
+///
+/// A registration failure from the SDK, or the declaration guard's message when
+/// the document declares no action of a registered name, or declares one pinned
+/// to a node other than the shell connection's.
+pub(super) fn shell_registry(
+    shell: Shell,
+    declaration: &Declaration,
+) -> anyhow::Result<ActivityRegistry> {
+    let declared = |action: &str| {
+        declaration
+            .descriptor(action, super::SHELL_NODE)
+            .map_err(anyhow::Error::msg)
+    };
+    Ok(ActivityRegistry::new()
+        .register_activity_with_descriptor(
             "provision_item",
+            declared("provision_item")?,
             blocking(shell.clone(), handlers::provision_item),
         )?
-        .register_activity(
+        .register_activity_with_descriptor(
             "gate_item",
+            declared("gate_item")?,
             blocking_with_progress(shell.clone(), handlers::gate_item),
         )?
-        .register_activity("plan_reviews", immediate(handlers::plan_reviews))?
-        .register_activity("fold_phase", immediate(handlers::fold_phase))?
-        .register_activity(
+        .register_activity_with_descriptor(
+            "plan_reviews",
+            declared("plan_reviews")?,
+            immediate(handlers::plan_reviews),
+        )?
+        .register_activity_with_descriptor(
+            "fold_phase",
+            declared("fold_phase")?,
+            immediate(handlers::fold_phase),
+        )?
+        .register_activity_with_descriptor(
             "merge_branches",
+            declared("merge_branches")?,
             blocking(shell.clone(), handlers::merge_branches),
         )?
-        .register_activity(
+        .register_activity_with_descriptor(
             "verify_integration",
+            declared("verify_integration")?,
             blocking_with_progress(shell, handlers::verify_integration),
-        )
+        )?)
 }
 
 /// Move a synchronous shell handler onto the blocking thread pool.

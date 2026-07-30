@@ -42,7 +42,19 @@
 //! Norn runs with `OPENAI_API_KEY` REMOVED from its child environment so it
 //! uses the operator's `ChatGPT` OAuth login, exactly like the dev-brief
 //! worker. No secret is ever read, stored, or passed by this worker.
+//!
+//! THE ADVERTISEMENT. Every one of the eleven activities is registered with the
+//! wire DESCRIPTOR the document declares for it — the shell handlers through
+//! `register_activity_with_descriptor`, the agent activities through
+//! `AgentHarnessConfig::with_activity_descriptors`. Both sets come from
+//! [`Declaration`], which compiles the embedded document once at startup, so the
+//! schemas this worker advertises are the very bytes the server deployed and
+//! admits against. A handler committed with no descriptor advertises nothing and
+//! the server refuses the connection outright (`WORKER_CONTRACT_MISMATCH ... but
+//! worker advertised <missing>`), which is exactly how all five connections were
+//! refused on every dial on 2026-07-30.
 
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -51,10 +63,12 @@ use std::time::Duration;
 
 use aion_integration_norn::NornHarness;
 use aion_integrations::{DynAgentHarness, InterventionCapabilities, InterventionPrimitive};
+use aion_package::ActivityDescriptor;
 use aion_worker::{
     ActivityRegistry, AgentHarnessConfig, RedialTiming, WorkerConfig, WorkerConfigBuildError,
 };
 
+use staged_rounds_worker::declaration::{Declaration, TASK_QUEUE};
 use staged_rounds_worker::harness::ProfiledNornHarness;
 use staged_rounds_worker::profiles::{self, Profiles};
 use staged_rounds_worker::shell::Shell;
@@ -74,10 +88,6 @@ use connections_table::Role;
 use connections_table::{Connection, connections, roles};
 use shell_node::shell_registry;
 
-/// The one task queue every staged-rounds activity is dispatched on. MUST
-/// equal the document's first `worker` name (`compile.rs` makes it the
-/// deploy task queue).
-const TASK_QUEUE: &str = "staged_rounds";
 /// The node id the SHELL connection registers (see the module doc: the node
 /// strings mirror the `node` lines in `../awl/staged_rounds.awl`).
 const SHELL_NODE: &str = "shell";
@@ -107,7 +117,13 @@ fn main() -> anyhow::Result<()> {
     let args = parse_args()?;
     let profiles =
         profiles::load(Path::new(&args.profiles_dir)).map_err(|error| anyhow::anyhow!(error))?;
+    // The declaration is compiled BEFORE anything is served: it is the source of
+    // every advertised schema, and both startup guards read it.
+    let declaration = Declaration::compile().map_err(|error| anyhow::anyhow!(error))?;
     let connections = agent_connections(profiles, args.max_parallel)?;
+    let advertised = agent_advertisements(&declaration, &connections)?;
+    let shell = Arc::new(shell_registry(Shell::inherited(), &declaration)?);
+    require_every_declared_action_served(&declaration, &connections, &shell)?;
     tracing::info!(
         candidates = ?args.candidates,
         norn_bin = %args.norn_bin,
@@ -115,26 +131,36 @@ fn main() -> anyhow::Result<()> {
         max_parallel = args.max_parallel,
         task_queue = TASK_QUEUE,
         agent_connections = connections.len(),
+        declared_actions = declaration.contract().actions.len(),
         "staged-rounds-worker starting: 5 driven agent activities + 6 shell activities"
     );
 
     // Spawn one connection thread per agent node. Each owns its config, an
-    // empty registry, its stop flag, and its composed harness, and blocks in
-    // serve_with_redial (redialling internally) until the process is killed.
+    // empty registry, its stop flag, its composed harness, and the declared
+    // descriptors it advertises, and blocks in serve_with_redial (redialling
+    // internally) until the process is killed.
     let mut threads = Vec::new();
-    for connection in connections {
+    for (connection, descriptors) in connections.into_iter().zip(advertised) {
         let candidates = args.candidates.clone();
         let norn_bin = args.norn_bin.clone();
+        let norn_account = args.norn_account.clone();
         let identity = format!("{}-{}", args.identity_prefix, connection.node);
         threads.push(thread::spawn(move || {
-            serve_agent_connection(&candidates, &identity, &norn_bin, &connection);
+            serve_agent_connection(
+                &candidates,
+                &identity,
+                &norn_bin,
+                &norn_account,
+                &connection,
+                descriptors,
+            );
         }));
     }
 
     // Serve the shell activities on the main thread; it writes the readiness
     // file once connected (a signal the whole worker is up enough to accept
     // work — the agent connections come up alongside it).
-    serve_shell(&args)?;
+    serve_shell(&args, &shell)?;
 
     for handle in threads {
         let _ = handle.join();
@@ -150,6 +176,63 @@ fn agent_connections(profiles: Profiles, max_parallel: usize) -> anyhow::Result<
         .map_err(|error| anyhow::anyhow!(error))
 }
 
+/// The DECLARED descriptors each agent connection advertises, one list per
+/// connection in connection order.
+///
+/// GUARD ONE lives here: an activity this binary serves that the document
+/// declares no matching action for — on that connection's node — is a startup
+/// failure naming the activity, never a handler registered with no
+/// advertisement.
+fn agent_advertisements(
+    declaration: &Declaration,
+    connections: &[Connection],
+) -> anyhow::Result<Vec<Vec<ActivityDescriptor>>> {
+    connections
+        .iter()
+        .map(|connection| connection_advertisement(declaration, connection))
+        .collect()
+}
+
+/// The declared descriptors for ONE agent connection's activity table.
+fn connection_advertisement(
+    declaration: &Declaration,
+    connection: &Connection,
+) -> anyhow::Result<Vec<ActivityDescriptor>> {
+    connection
+        .activities
+        .iter()
+        .map(|activity| {
+            declaration
+                .descriptor(activity.activity_type, connection.node)
+                .map_err(|error| anyhow::anyhow!(error))
+        })
+        .collect()
+}
+
+/// GUARD TWO: every action the document declares WITHOUT a body requires an
+/// out-of-band worker, and this binary is it. One that no connection and no
+/// shell handler serves is a startup failure naming the action and its declared
+/// node — never a queue with a permanently parked dispatch.
+///
+/// Actions that DO carry a declarative body are executed by the server itself,
+/// so no worker serves them; the declaration excludes them, mirroring the
+/// `body.is_none()` filter `aion_package::contract_diffs` admits with.
+fn require_every_declared_action_served(
+    declaration: &Declaration,
+    connections: &[Connection],
+    shell: &ActivityRegistry,
+) -> anyhow::Result<()> {
+    let mut served: BTreeSet<String> = shell.activity_types();
+    for connection in connections {
+        for activity in &connection.activities {
+            served.insert(activity.activity_type.to_owned());
+        }
+    }
+    declaration
+        .require_every_bodyless_action_served(&served)
+        .map_err(|error| anyhow::anyhow!(error))
+}
+
 /// Compose one connection's harness and serve it on its own liminal
 /// connection, registered on the connection's node so only the activities
 /// pinned to that node are routed here.
@@ -157,7 +240,9 @@ fn serve_agent_connection(
     candidates: &[String],
     identity: &str,
     norn_bin: &str,
+    norn_account: &str,
     connection: &Connection,
+    descriptors: Vec<ActivityDescriptor>,
 ) {
     let config = match worker_config(identity, connection.node, connection.max_concurrency) {
         Ok(config) => config,
@@ -167,7 +252,7 @@ fn serve_agent_connection(
         }
     };
     let registry = Arc::new(ActivityRegistry::new());
-    let agent = composed_agent_harness(norn_bin, connection);
+    let agent = composed_agent_harness(norn_bin, norn_account, connection, descriptors);
     let stop = AtomicBool::new(false);
     let node = connection.node;
     let served = connection
@@ -197,9 +282,20 @@ fn serve_agent_connection(
 /// `--workspace-root` and derived `--session-id` at start. This is the ONE
 /// place a concrete adapter is named; the serve path drives it only through
 /// the erased [`DynAgentHarness`] trait.
-fn composed_agent_harness(norn_bin: &str, connection: &Connection) -> AgentHarnessConfig {
+///
+/// `descriptors` are the DECLARED wire schemas for this connection's activities
+/// (see [`connection_advertisement`]). An agent activity's concrete output is
+/// harness-owned, so this is the only path by which its advertisement can be
+/// exact — without it the connection registers a set of activity NAMES and no
+/// schemas, and the server's contract gate refuses it.
+fn composed_agent_harness(
+    norn_bin: &str,
+    norn_account: &str,
+    connection: &Connection,
+    descriptors: Vec<ActivityDescriptor>,
+) -> AgentHarnessConfig {
     let harness = ProfiledNornHarness::new(
-        inner_norn_harness(norn_bin, connection),
+        inner_norn_harness(norn_bin, norn_account, connection),
         connection.activities.clone(),
     );
     let erased: Arc<dyn DynAgentHarness> = Arc::new(harness);
@@ -214,6 +310,7 @@ fn composed_agent_harness(norn_bin: &str, connection: &Connection) -> AgentHarne
             InterventionPrimitive::Cancel,
         ]),
     )
+    .with_activity_descriptors(descriptors)
 }
 
 /// The exact norn argv one connection's inner harness is composed from, in
@@ -255,21 +352,34 @@ fn connection_norn_args(connection: &Connection) -> Vec<String> {
 /// [`connection_norn_args`], plus the env hygiene that forces the `ChatGPT`
 /// OAuth login: a stray ambient API key would take precedence and fail. No
 /// secret is ever set here.
-fn inner_norn_harness(norn_bin: &str, connection: &Connection) -> NornHarness {
+fn inner_norn_harness(norn_bin: &str, norn_account: &str, connection: &Connection) -> NornHarness {
     let mut harness = NornHarness::with_binary(norn_bin);
     for arg in connection_norn_args(connection) {
         harness = harness.with_arg(arg);
     }
-    harness.without_env("OPENAI_API_KEY")
+    // Every run this harness starts carries `--session-id` and
+    // `--resume-if-exists` (appended per run in `ProfiledNornHarness::start`),
+    // and Norn refuses an open-or-resume run with no `--account` so that a
+    // long-lived session's credential affinity can never change silently. The
+    // account is therefore not optional here: without it the connection
+    // registers cleanly and then fails EVERY agent dispatch with an auth
+    // error, which is exactly how the 2026-07-30 first flight died on the
+    // planner. It is a LITERAL argument, never a template: an operator-supplied
+    // alias must reach Norn as typed, not be expanded as a placeholder.
+    harness
+        .with_arg("--account")
+        .with_literal_arg(norn_account)
+        .without_env("OPENAI_API_KEY")
 }
 
 /// Serve the six shell-node activities from a typed registry on one
 /// connection, registered on the `shell` node so only shell activities are
-/// routed here.
-fn serve_shell(args: &Args) -> anyhow::Result<()> {
+/// routed here. The registry is built (and its descriptors taken from the
+/// declaration) before any connection is served, so a mis-declared handler is a
+/// startup failure rather than a refused dial.
+fn serve_shell(args: &Args, registry: &Arc<ActivityRegistry>) -> anyhow::Result<()> {
     let identity = format!("{}-shell", args.identity_prefix);
     let config = worker_config(&identity, SHELL_NODE, SHELL_CONCURRENCY)?;
-    let registry = Arc::new(shell_registry(Shell::inherited())?);
     let served = registry
         .activity_types()
         .iter()
@@ -280,7 +390,7 @@ fn serve_shell(args: &Args) -> anyhow::Result<()> {
     aion_worker::serve_with_redial(
         args.candidates.clone(),
         &config,
-        &registry,
+        registry,
         RedialTiming::new(REDIAL_INITIAL_BACKOFF, REDIAL_MAX_BACKOFF),
         &stop,
         None,
@@ -324,3 +434,7 @@ fn worker_config(
 #[cfg(test)]
 #[path = "main_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "main_advertisement_tests.rs"]
+mod advertisement_tests;
