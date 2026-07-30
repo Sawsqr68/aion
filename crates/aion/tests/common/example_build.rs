@@ -16,7 +16,6 @@
 //! release-integrity backstop, and it must stay that way.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use aion_package::{Package, PackageOptions, ProjectReport, package_project};
 
@@ -31,8 +30,9 @@ use aion_package::{Package, PackageOptions, ProjectReport, package_project};
 /// # Errors
 ///
 /// Fails when the `gleam` CLI cannot be spawned (not installed / not on
-/// PATH), when `gleam build` exits non-zero, or when packaging fails. There
-/// is deliberately no skip path.
+/// PATH), when `gleam build` exits non-zero, when it exits zero without
+/// having produced a `.beam` for every module the project declares, or when
+/// packaging fails. There is deliberately no skip path.
 pub fn build_project(relative: &str) -> Result<ProjectReport, Box<dyn std::error::Error>> {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let project_root = repo_root.join(relative);
@@ -83,25 +83,12 @@ pub fn built_package(
 }
 
 fn build_and_package(project_root: &Path) -> Result<ProjectReport, Box<dyn std::error::Error>> {
-    let status = Command::new("gleam")
-        .arg("build")
-        .current_dir(project_root)
-        .status()
-        .map_err(|error| {
-            format!(
-                "the from-source archive gate requires the `gleam` CLI on PATH \
-                 (failed to spawn `gleam build` in {}: {error}). This gate fails \
-                 loudly by design — never reintroduce a skip: stale prebuilt \
-                 archives are how unvalidated SDK binaries shipped",
-                project_root.display()
-            )
-        })?;
-    if !status.success() {
-        return Err(format!(
-            "`gleam build` failed in {} with {status}",
-            project_root.display()
-        )
-        .into());
-    }
+    // The shared runner (`test_support/gleam.rs`) replaces a bare exit-status
+    // check. It proves a `.beam` exists for every module the project declares —
+    // a zero-exit `gleam build` that compiled nothing would otherwise let this
+    // builder package a stale `build/` tree, which is the 0.2.0 failure in a new
+    // costume — and it names a dead Hex registry as an infrastructure failure
+    // rather than as a broken example. Still never a skip: both classes FAIL.
+    crate::gleam_test_support::compile_whole_project(project_root)?;
     Ok(package_project(project_root, &PackageOptions::default())?)
 }

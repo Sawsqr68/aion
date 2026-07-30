@@ -10,10 +10,14 @@
 //! - `aion input <workflow_type>` emits a skeleton that round-trips through the
 //!   workflow's real input codec without a decode error (C30).
 //!
-//! The Gleam-driven legs are runtime-gated: if `gleam` is not on PATH they print
-//! a skip line and pass, so the suite is green on a machine without the
-//! toolchain rather than silently asserting nothing. The pure-CLI determinism
-//! leg needs no toolchain and always runs.
+//! The Gleam-driven legs are runtime-gated through the shared gate in
+//! `tests/test_support/gleam.rs`: if `gleam` is not on PATH they announce the
+//! skip on the real stderr handle and pass, so the suite is green on a machine
+//! without the toolchain and the skip is still visible in a plain `cargo test`
+//! log. The pure-CLI determinism leg needs no toolchain and always runs.
+
+#[path = "test_support/gleam.rs"]
+mod gleam_test_support;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -23,15 +27,6 @@ type TestError = Box<dyn std::error::Error>;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-/// Whether the Gleam toolchain is available; legs that drive it skip (with a
-/// printed line) when it is not, rather than failing on a toolchain-less host.
-fn gleam_available() -> bool {
-    Command::new("gleam")
-        .arg("--version")
-        .output()
-        .is_ok_and(|output| output.status.success())
 }
 
 /// Copies `examples/order-saga` into a fresh temp dir, rewriting the `aion_flow`
@@ -89,8 +84,7 @@ fn run_aion(args: &[&str]) -> Result<(bool, String), TestError> {
 
 #[test]
 fn generated_test_scaffold_compiles_under_gleam_build() -> Result<(), TestError> {
-    if !gleam_available() {
-        println!("skipping: `gleam` is not on PATH; the test-scaffold compile leg is gated");
+    if crate::gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
     let (_temp, project) = stage_order_saga()?;
@@ -119,21 +113,10 @@ fn generated_test_scaffold_compiles_under_gleam_build() -> Result<(), TestError>
     assert!(body.contains("testing.assert_replay(env, fn()"));
     assert!(body.contains("workflow_under_test.execute("));
 
-    // The whole project (including the scaffold) compiles under `gleam build`.
-    let build = Command::new("gleam")
-        .arg("build")
-        .current_dir(&project)
-        .output()
-        .map_err(|error| format!("failed to run `gleam build`: {error}"))?;
-    let build_output = format!(
-        "{}{}",
-        String::from_utf8_lossy(&build.stdout),
-        String::from_utf8_lossy(&build.stderr)
-    );
-    assert!(
-        build.status.success(),
-        "the generated scaffold did not compile under `gleam build`:\n{build_output}"
-    );
+    // The whole project (including the scaffold) compiles under `gleam build`,
+    // and a `.beam` is proven for every module the project declares — a zero
+    // exit that compiled nothing is not evidence the scaffold is valid Gleam.
+    crate::gleam_test_support::compile_whole_project(&project)?;
     Ok(())
 }
 
@@ -194,10 +177,7 @@ fn input_skeleton_round_trips_through_the_workflow_input_codec() -> Result<(), T
         "the input skeleton must be a JSON object: {skeleton}"
     );
 
-    if !gleam_available() {
-        println!(
-            "skipping codec round-trip: `gleam` is not on PATH; the structural skeleton check ran"
-        );
+    if crate::gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
 
@@ -237,10 +217,15 @@ fn input_skeleton_round_trips_through_the_workflow_input_codec() -> Result<(), T
         .current_dir(&project)
         .output()
         .map_err(|error| format!("failed to run `gleam test`: {error}"))?;
-    let test_output = format!(
-        "{}{}",
-        String::from_utf8_lossy(&test_run.stdout),
-        String::from_utf8_lossy(&test_run.stderr)
+    let test_output = crate::gleam_test_support::combined_output(&test_run);
+    // `gleam test` resolves dependencies too, so a dead Hex registry would
+    // otherwise be reported as a codec that failed to round-trip. Name the
+    // infrastructure failure for what it is; either way the test FAILS.
+    assert!(
+        !crate::gleam_test_support::is_dependency_layer_failure(&test_output)
+            || test_run.status.success(),
+        "INFRASTRUCTURE FAILURE, NOT A CODEC DEFECT: `gleam test` died in its dependency layer \
+         (the Hex registry), so the input codec was never exercised:\n{test_output}"
     );
     assert!(
         test_run.status.success(),

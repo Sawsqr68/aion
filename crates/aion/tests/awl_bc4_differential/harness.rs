@@ -16,7 +16,6 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use aion_awl::mir::select;
 use aion_awl::{
@@ -347,25 +346,12 @@ fn write_workflow_toml(
     Ok(())
 }
 
+/// Compile the BC-4 reference project, proving a `.beam` per declared module.
+///
+/// The `gleam` CLI is required — this gate fails loudly by design, never a
+/// skip — and a dead Hex registry is named as an infrastructure failure rather
+/// than as a differential mismatch.
 fn run_gleam_build(project: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let output = Command::new("gleam")
-        .arg("build")
-        .current_dir(project)
-        .output()
-        .map_err(|error| {
-            format!(
-                "the BC-4 reference backend requires the `gleam` CLI on PATH \
-                 (failed to spawn `gleam build`: {error}). This gate fails loudly \
-                 by design — never a skip"
-            )
-        })?;
-    if !output.status.success() {
-        return Err(format!(
-            "reference `gleam build` failed\nstdout:\n{}\nstderr:\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
-    }
+    crate::gleam_test_support::compile_whole_project(project)?;
     Ok(())
 }

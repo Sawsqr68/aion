@@ -14,7 +14,6 @@ mod gleam_test_support;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
@@ -501,18 +500,7 @@ fn gleam_package() -> Result<Package, Box<dyn std::error::Error>> {
             repo.join("gleam/aion_flow").display()
         ),
     )?;
-    let output = Command::new("gleam")
-        .arg("build")
-        .current_dir(&root)
-        .output()?;
-    if !output.status.success() {
-        return Err(format!(
-            "parity Gleam project did not build:\n{}\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
-    }
+    crate::gleam_test_support::compile_whole_project(&root)?;
     let mut report = package_project(&root, &PackageOptions::default())?;
     let packaged = report
         .packages

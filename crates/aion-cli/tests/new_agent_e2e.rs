@@ -19,6 +19,9 @@
 
 #![cfg(unix)]
 
+#[path = "test_support/gleam.rs"]
+mod gleam_test_support;
+
 mod common;
 
 use std::io::{Read, Write};
@@ -35,16 +38,6 @@ const EXIT_DEADLINE: Duration = Duration::from_secs(60);
 
 /// The project name used throughout this gate.
 const PROJECT: &str = "agent_demo";
-
-/// Returns whether an executable resolves on the current `PATH`.
-fn tool_on_path(tool: &str) -> bool {
-    Command::new(tool)
-        .arg("--version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
-}
 
 fn reserve_port() -> Result<u16, TestError> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
@@ -230,11 +223,10 @@ fn start_is_refused_no_queue_declaration(project: &Path, endpoint: &str) -> Resu
 
 #[test]
 fn scaffolded_agent_deploys_but_start_is_refused_unscoped() -> Result<(), TestError> {
-    if !tool_on_path("gleam") {
-        eprintln!(
-            "skipping new_agent_e2e: the agent scaffold gate needs `gleam` on PATH for \
-             `gleam build`; it is absent, so this run is skipped"
-        );
+    // `eprintln!` is captured by libtest and shown only for a FAILING test, so
+    // the skip this replaced was indistinguishable from a pass in the log. The
+    // shared gate writes to the real stderr handle instead.
+    if crate::gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
 

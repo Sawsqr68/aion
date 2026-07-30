@@ -8,10 +8,14 @@
 //!
 //! The loop spawns the external `gleam` binary to rebuild on save and fetches
 //! the `aion_flow` hex package, so the test is gated at runtime on a usable
-//! `gleam` toolchain: when it is absent the test prints a skip line and passes,
-//! never `#[ignore]`.
+//! `gleam` toolchain through the shared gate in `tests/test_support/gleam.rs`:
+//! when it is absent the test announces the skip on the real stderr handle and
+//! passes, never `#[ignore]`.
 
 #![cfg(unix)]
+
+#[path = "test_support/gleam.rs"]
+mod gleam_test_support;
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -23,17 +27,6 @@ type TestError = Box<dyn std::error::Error>;
 
 const BOOT_DEADLINE: Duration = Duration::from_secs(60);
 const RELOAD_DEADLINE: Duration = Duration::from_secs(180);
-
-/// Whether a usable `gleam` binary is on PATH. The dev loop cannot rebuild
-/// without it, so its absence gates this test at runtime.
-fn gleam_available() -> bool {
-    Command::new("gleam")
-        .arg("--version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|status| status.success())
-}
 
 fn reserve_port() -> Result<u16, TestError> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
@@ -155,13 +148,11 @@ fn loaded_hashes(
 
 #[test]
 fn dev_hot_loads_a_new_content_hash_version_on_edit_without_restart() -> Result<(), TestError> {
-    if !gleam_available() {
-        // Runtime gate: the dev loop spawns `gleam`; without it there is nothing
-        // to exercise. Skip loudly and pass, never `#[ignore]`.
-        eprintln!(
-            "skipping dev_hot_loads_a_new_content_hash_version_on_edit_without_restart: \
-             gleam binary not available"
-        );
+    // Runtime gate: the dev loop spawns `gleam`; without it there is nothing to
+    // exercise. `eprintln!` was captured by libtest and shown only for a
+    // FAILING test, so the skip it replaced looked exactly like a pass; the
+    // shared gate writes to the real stderr handle. Never `#[ignore]`.
+    if crate::gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
 

@@ -294,6 +294,18 @@ fn gleam_run_round_trip(project: &Path) -> Result<(), TestError> {
         })?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     if !output.status.success() || !stdout.contains("round-trip ok") {
+        // `gleam run` resolves Hex dependencies first, so a dead registry would
+        // otherwise be reported as codecs that failed to round-trip. Either way
+        // this FAILS; classification only decides what it blames.
+        let combined = crate::gleam_test_support::combined_output(&output);
+        if crate::gleam_test_support::is_dependency_layer_failure(&combined) {
+            return Err(format!(
+                "INFRASTRUCTURE FAILURE, NOT A CODEC DEFECT: `gleam run -m codegen_round_trip` \
+                 died in its dependency layer (the Hex registry), so the generated codecs were \
+                 never exercised:\n{combined}"
+            )
+            .into());
+        }
         return Err(format!(
             "generated codecs must round-trip; `gleam run -m codegen_round_trip` \
              exited with {} — stdout: {stdout} stderr: {}",

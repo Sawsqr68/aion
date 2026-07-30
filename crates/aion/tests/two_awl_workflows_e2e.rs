@@ -7,7 +7,6 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::Arc;
 
 use aion::signal::ConcreteSignalRouter;
@@ -124,18 +123,7 @@ async fn same_shape_workflows_package_deploy_and_restart_together() -> TestResul
             repo.join("gleam/aion_flow").display()
         ),
     )?;
-    let build = Command::new("gleam")
-        .arg("build")
-        .current_dir(&root)
-        .output()?;
-    if !build.status.success() {
-        return Err(format!(
-            "two-workflow project did not build:\n{}\n{}",
-            String::from_utf8_lossy(&build.stdout),
-            String::from_utf8_lossy(&build.stderr)
-        )
-        .into());
-    }
+    crate::gleam_test_support::compile_whole_project(&root)?;
     let report = package_project(&root, &PackageOptions::default())?;
     assert_eq!(report.packages.len(), 2);
 

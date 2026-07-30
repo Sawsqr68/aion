@@ -16,9 +16,7 @@ mod gleam_test_support;
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use aion_awl_package::{sdk_closure_modules, sdk_closure_version};
 use beamr::atom::AtomTable;
@@ -79,24 +77,12 @@ fn committed_closure_matches_a_fresh_oracle_harvest() -> TestResult {
     }
     let root = workspace_root();
     let oracle = root.join("examples/awl-hello");
-    let output = Command::new("gleam")
-        .arg("build")
-        .current_dir(&oracle)
-        .output()
-        .map_err(|error| {
-            io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("gleam binary is required for the SDK closure freshness guard: {error}"),
-            )
-        })?;
-    if !output.status.success() {
-        return Err(format!(
-            "oracle `gleam build` failed:\n{}\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
-    }
+    // Proves the oracle's own modules were really compiled, retries a
+    // transient Hex registry, and names an unreachable registry as
+    // infrastructure instead of as a stale-closure verdict. A zero exit that
+    // compiled nothing would otherwise let this guard compare the committed
+    // closure against a stale `build/` tree.
+    crate::gleam_test_support::compile_whole_project(&oracle)?;
 
     let manifest = fs::read_to_string(oracle.join("manifest.toml"))?;
     assert_eq!(

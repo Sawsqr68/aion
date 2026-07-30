@@ -51,11 +51,31 @@ fn write_project(
     Ok(())
 }
 
-fn gleam_build(path: &Path) -> Result<Output, Box<dyn Error>> {
-    Ok(Command::new("gleam")
+/// Run `gleam build` where the build is *expected* to be refused.
+///
+/// This one call site cannot go through the shared runner, because the shared
+/// runner treats any refusal as a failure and here a refusal is the proof. It
+/// still classifies the refusal: a dead Hex registry would otherwise satisfy
+/// "the build failed" and let the negative probe pass without the compiler ever
+/// having seen the module.
+fn gleam_build_expecting_refusal(path: &Path) -> Result<Output, Box<dyn Error>> {
+    let output = Command::new("gleam")
         .arg("build")
         .current_dir(path)
-        .output()?)
+        .output()?;
+    if !output.status.success() {
+        let combined = crate::gleam_test_support::combined_output(&output);
+        if crate::gleam_test_support::is_dependency_layer_failure(&combined) {
+            return Err(format!(
+                "INFRASTRUCTURE FAILURE, NOT AN SDK BOUNDARY DEFECT: `gleam build` died in its \
+                 dependency layer (the Hex registry) for the probe at {}, so the boundary was \
+                 never compiled and this run proves nothing:\n{combined}",
+                path.display()
+            )
+            .into());
+        }
+    }
+    Ok(output)
 }
 
 #[test]
@@ -93,7 +113,7 @@ pub fn dispatch_without_await() {
 }
 "#,
     )?;
-    let denied = gleam_build(&negative)?;
+    let denied = gleam_build_expecting_refusal(&negative)?;
     if denied.status.success() {
         return Err("external package unexpectedly called raw activity dispatch".into());
     }
@@ -121,13 +141,10 @@ pub fn run_public_activity() {
 }
 "#,
     )?;
-    let allowed = gleam_build(&positive)?;
-    if !allowed.status.success() {
-        return Err(format!(
-            "public workflow.run probe did not compile:\n{}",
-            String::from_utf8_lossy(&allowed.stderr)
-        )
-        .into());
-    }
+    // The positive probe MUST compile, so it goes through the shared runner: a
+    // `.beam` is required for the probe module (a zero exit that compiled
+    // nothing proved nothing about the public boundary), and a transient
+    // registry is retried rather than read as a boundary regression.
+    crate::gleam_test_support::compile_whole_project(&positive)?;
     Ok(())
 }

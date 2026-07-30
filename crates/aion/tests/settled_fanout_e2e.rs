@@ -21,7 +21,6 @@ mod gleam_test_support;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
@@ -125,23 +124,13 @@ fn fixture_root() -> PathBuf {
 
 fn fixture_beams() -> Result<Vec<BeamModule>, Box<dyn std::error::Error>> {
     let root = fixture_root();
-    let output = Command::new("gleam")
-        .arg("build")
-        .current_dir(&root)
-        .output()?;
-    if !output.status.success() {
-        return Err(format!(
-            "real settled fixture did not compile:\n{}",
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
-    }
+    // The shared runner proves a `.beam` per module the fixture declares, so a
+    // zero-exit build that compiled nothing cannot feed this loop a stale tree,
+    // and it hands back the `ebin` directories it produced rather than making
+    // this gate re-walk them.
+    let ebins = crate::gleam_test_support::compile_whole_project(&root)?;
     let mut beams = Vec::new();
-    for package in fs::read_dir(root.join("build/dev/erlang"))? {
-        let ebin = package?.path().join("ebin");
-        if !ebin.is_dir() {
-            continue;
-        }
+    for ebin in ebins {
         for entry in fs::read_dir(ebin)? {
             let path = entry?.path();
             if path.extension().and_then(|value| value.to_str()) != Some("beam") {

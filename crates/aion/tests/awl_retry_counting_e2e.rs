@@ -24,7 +24,6 @@ mod gleam_test_support;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -199,18 +198,7 @@ fn direct_package(reference: &Package, entry: &str) -> Result<Package, Box<dyn s
 }
 
 fn run_gleam_build(project: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let output = Command::new("gleam")
-        .arg("build")
-        .current_dir(project)
-        .output()?;
-    if !output.status.success() {
-        return Err(format!(
-            "the retry-counting reference project did not build\nstdout:\n{}\nstderr:\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
-    }
+    crate::gleam_test_support::compile_whole_project(project)?;
     Ok(())
 }
 

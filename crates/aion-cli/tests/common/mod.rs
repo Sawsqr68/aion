@@ -79,27 +79,17 @@ pub fn patch_aion_flow_to_workspace(project: &Path) -> Result<(), TestError> {
     Ok(())
 }
 
-/// Builds the generated Gleam project from source.
+/// Builds the generated Gleam project from source, proving every module it
+/// declares was really compiled.
+///
+/// Delegates to the shared runner (`tests/test_support/gleam.rs`), so every
+/// binary that reaches this helper must declare that module as
+/// `gleam_test_support`. A zero exit is not accepted as proof, a transient Hex
+/// registry is retried and — if it never recovers — reported as an
+/// infrastructure failure rather than as a broken scaffold, and neither
+/// outcome is ever a skip.
 pub fn gleam_build(project: &Path) -> Result<(), TestError> {
-    let status = Command::new("gleam")
-        .arg("build")
-        .current_dir(project)
-        .status()
-        .map_err(|error| {
-            format!(
-                "the scaffold gate requires the `gleam` CLI on PATH (failed to \
-                 spawn `gleam build` in {}: {error}); this gate fails loudly by \
-                 design — never reintroduce a skip",
-                project.display()
-            )
-        })?;
-    if !status.success() {
-        return Err(format!(
-            "`gleam build` failed in {} with {status}: the scaffolded project must compile",
-            project.display()
-        )
-        .into());
-    }
+    crate::gleam_test_support::compile_whole_project(project)?;
     Ok(())
 }
 

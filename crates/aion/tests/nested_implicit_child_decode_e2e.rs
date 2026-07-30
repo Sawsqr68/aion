@@ -102,12 +102,20 @@ fn run_checked(command: &mut Command, description: &str) -> TestResult {
     if output.status.success() {
         return Ok(());
     }
-    Err(format!(
-        "{description} failed:\n{}\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    )
-    .into())
+    // `gleam run` resolves the project's Hex dependencies before it compiles
+    // and runs anything, so a dead registry would otherwise be reported as the
+    // codec probe disagreeing with the emitter. Name the infrastructure failure
+    // for what it is; either way this FAILS, never skips.
+    let combined = crate::gleam_test_support::combined_output(&output);
+    if crate::gleam_test_support::is_dependency_layer_failure(&combined) {
+        return Err(format!(
+            "INFRASTRUCTURE FAILURE, NOT A CODEC DEFECT: `{description}` died in `gleam`'s \
+             dependency layer (the Hex registry), so the probe never ran and this run proves \
+             nothing:\n{combined}"
+        )
+        .into());
+    }
+    Err(format!("{description} failed:\n{combined}").into())
 }
 
 fn render_failure(error: &WorkflowError) -> String {

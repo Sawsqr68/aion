@@ -298,14 +298,26 @@ fn dev_pipeline_template_builds_packages_and_passes_its_tests() -> Result<(), Te
 
     // The scaffolded hermetic suite (real workflow bodies, real CLI-shelling
     // locals, fake-CLI shims on a private PATH) must pass as generated.
-    let status = Command::new("gleam")
+    // Captured, not `.status()`: `gleam test` resolves Hex dependencies before
+    // it runs anything, and a bare exit status carries no text to tell a dead
+    // registry apart from a scaffold whose suite genuinely fails. Both FAIL —
+    // classification only decides which one the message blames.
+    let output = Command::new("gleam")
         .arg("test")
         .current_dir(&project)
-        .status()
+        .output()
         .map_err(|error| format!("failed to spawn `gleam test`: {error}"))?;
+    let combined = crate::gleam_test_support::combined_output(&output);
     assert!(
-        status.success(),
-        "the scaffolded test suite must pass; `gleam test` exited with {status}"
+        output.status.success()
+            || !crate::gleam_test_support::is_dependency_layer_failure(&combined),
+        "INFRASTRUCTURE FAILURE, NOT A SCAFFOLD DEFECT: `gleam test` died in its dependency layer \
+         (the Hex registry), so the scaffolded suite never ran:\n{combined}"
+    );
+    assert!(
+        output.status.success(),
+        "the scaffolded test suite must pass; `gleam test` exited with {}:\n{combined}",
+        output.status
     );
     Ok(())
 }

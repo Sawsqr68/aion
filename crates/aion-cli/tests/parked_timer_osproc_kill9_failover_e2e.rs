@@ -98,6 +98,9 @@
 
 #![cfg(all(unix, feature = "haematite-backend", feature = "liminal-transport"))]
 
+#[path = "test_support/gleam.rs"]
+mod gleam_test_support;
+
 use std::fmt::Write as _;
 use std::io::{Read, Write as _IoWrite};
 use std::net::{TcpListener, TcpStream};
@@ -260,21 +263,11 @@ fn build_sleep_query_archive(dir: &Path) -> Result<PathBuf, TestError> {
         .join("../aion/tests/fixtures/sleep_query")
         .canonicalize()?;
 
-    let gleam = Command::new("gleam")
-        .arg("build")
-        .current_dir(&fixture)
-        .status()
-        .map_err(|error| {
-            format!(
-                "the parked-timer OS-process gate requires the `gleam` CLI on PATH \
-                 (failed to spawn `gleam build` in {}: {error}); this gate fails \
-                 loudly by design — never reintroduce a skip",
-                fixture.display()
-            )
-        })?;
-    if !gleam.success() {
-        return Err(format!("`gleam build` failed in {} with {gleam}", fixture.display()).into());
-    }
+    // The shared runner proves a `.beam` for every module the fixture declares
+    // (a zero exit that compiled nothing would let the cluster load a stale
+    // beam), retries a transient Hex registry, and names an unrecoverable one
+    // as infrastructure rather than as a broken fixture. Still never a skip.
+    crate::gleam_test_support::compile_whole_project(&fixture)?;
 
     let package = Command::new(env!("CARGO_BIN_EXE_aion"))
         .args(["package", "."])
