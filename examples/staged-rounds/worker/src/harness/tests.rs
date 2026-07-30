@@ -327,7 +327,7 @@ fn conclude_merge_concludes_a_resolved_in_progress_merge() -> anyhow::Result<()>
     std::fs::write(dir.path().join("file.txt"), "resolved\n")?;
 
     let outcome = conclude_merge(&Shell::inherited(), &root).map_err(anyhow::Error::msg)?;
-    let ConcludeOutcome::Concluded { commit } = outcome else {
+    let ConcludeOutcome::Concluded { commit, .. } = outcome else {
         anyhow::bail!("expected the in-progress merge to be concluded, got {outcome:?}");
     };
     assert!(!commit.is_empty());
@@ -407,7 +407,7 @@ fn conclude_merge_refuses_a_partial_resolution_naming_the_unresolved_file() -> a
     // Resolving the remaining file makes the SAME conclusion succeed.
     std::fs::write(dir.path().join("b.txt"), "resolved too\n")?;
     let outcome = conclude_merge(&Shell::inherited(), &root).map_err(anyhow::Error::msg)?;
-    let ConcludeOutcome::Concluded { commit } = outcome else {
+    let ConcludeOutcome::Concluded { commit, .. } = outcome else {
         anyhow::bail!("expected the fully-resolved merge to conclude, got {outcome:?}");
     };
     assert!(!commit.is_empty());
@@ -447,7 +447,7 @@ fn conclude_merge_refuses_markers_in_a_git_quoted_non_ascii_filename() -> anyhow
     // deletion check still sees the real on-disk path through -z output.
     std::fs::write(dir.path().join("café.txt"), "resolved\n")?;
     let outcome = conclude_merge(&Shell::inherited(), &root).map_err(anyhow::Error::msg)?;
-    let ConcludeOutcome::Concluded { commit } = outcome else {
+    let ConcludeOutcome::Concluded { commit, .. } = outcome else {
         anyhow::bail!("expected the resolved merge to conclude, got {outcome:?}");
     };
     assert!(!commit.is_empty());
@@ -471,7 +471,7 @@ fn conclude_merge_commits_a_dirty_tree_when_no_merge_is_in_progress() -> anyhow:
     std::fs::write(dir.path().join("file.txt"), "fixed\n")?;
 
     let outcome = conclude_merge(&Shell::inherited(), &root).map_err(anyhow::Error::msg)?;
-    let ConcludeOutcome::Committed { commit } = outcome else {
+    let ConcludeOutcome::Committed { commit, .. } = outcome else {
         anyhow::bail!("expected a remediation fix commit, got {outcome:?}");
     };
     assert!(!commit.is_empty());
@@ -490,7 +490,7 @@ fn conclude_merge_skips_green_on_a_clean_tree() -> anyhow::Result<()> {
     git(&root, &["commit", "-m", "base"])?;
 
     let outcome = conclude_merge(&Shell::inherited(), &root).map_err(anyhow::Error::msg)?;
-    let ConcludeOutcome::Skipped { head } = outcome else {
+    let ConcludeOutcome::Skipped { head, .. } = outcome else {
         anyhow::bail!("expected a clean skip, got {outcome:?}");
     };
     assert!(!head.is_empty());

@@ -130,6 +130,20 @@ pub fn planner(context_json: &str) -> String {
          dependent's worktree is provisioned from the base branch WITH \
          those items' accepted branches merged in, so it really starts from \
          their work), and `feedback: \"\"`.\n\n\
+         ## scope_in is MANDATORY on every item, and it is mechanical\n\n\
+         `scope_in` must never be empty, and it must actually cover \
+         everything the item will write, including files that do not exist \
+         yet. It is not documentation: after the dev agent's turn the \
+         machinery commits the round by staging every change to a file that \
+         ALREADY exists, plus NEW files only where they fall inside that \
+         item's `scope_in` (exact path, or anything under a directory you \
+         name — there is no globbing, so `src/parser.rs` and `src/` both \
+         work but `src/*.rs` matches nothing). A new file outside the fence \
+         is left off the branch and reported by name. An item whose \
+         `scope_in` is empty, or which creates its real work outside the \
+         paths it declared, therefore produces a round the panel reviews as \
+         an empty change — and a plan with any unfenced item is REJECTED \
+         outright, before a single worktree is created.\n\n\
          Items in the same phase run IN PARALLEL in separate worktrees \
          against the same base branch — they MUST NOT touch the same files. \
          A later item sees an earlier item's work ONLY through `depends_on`: \

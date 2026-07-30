@@ -282,3 +282,24 @@ fn the_planner_prompt_states_the_parallel_safety_rule() {
     assert!(prompt.contains("IN PARALLEL"), "{prompt}");
     assert!(prompt.contains("git-ref-safe slug"), "{prompt}");
 }
+
+/// The planner must not be able to innocently produce a plan the fold refuses.
+/// `scope_in` is mechanical — it decides which NEW files the machinery commits
+/// — so the prompt says that in those terms, says it is mandatory, and says
+/// what happens to a plan that omits it.
+#[test]
+fn the_planner_prompt_states_that_scope_in_is_mandatory_and_mechanical() {
+    let prompt = planner("{\"material\":{},\"repo_root\":\"/r\",\"workspace_path\":\"/r\"}");
+    for expected in [
+        "scope_in is MANDATORY",
+        "must never be empty",
+        "NEW files only where they fall inside",
+        "no globbing",
+        "REJECTED",
+    ] {
+        assert!(
+            prompt.contains(expected),
+            "the planner prompt must say {expected:?}:\n{prompt}"
+        );
+    }
+}

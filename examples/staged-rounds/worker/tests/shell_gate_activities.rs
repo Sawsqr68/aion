@@ -376,6 +376,13 @@ fn an_empty_argv_is_a_terminal_error_naming_the_gate() -> anyhow::Result<()> {
 /// saw. It is committed mechanically under the gate identity, and because that
 /// commit MOVED HEAD the FULL battery is re-run against it — proven by a gate
 /// that appends one line per invocation to a file outside the repo.
+///
+/// The formatter here REWRITES A TRACKED FILE, which is the real normalization
+/// case and the one the staging rule covers unconditionally: a change to a
+/// file that already exists is always staged, fence or no fence. A gate that
+/// CREATES an untracked file outside the item's fence is a different thing
+/// entirely — build output far more often than work — and has its own test
+/// below.
 #[test]
 fn a_write_mode_formatter_gets_a_normalization_commit_and_a_full_battery_rerun()
 -> anyhow::Result<()> {
@@ -386,11 +393,12 @@ fn a_write_mode_formatter_gets_a_normalization_commit_and_a_full_battery_rerun()
     let gated = run_gates(
         &work,
         vec![
-            // Idempotent formatter: writes the file only when it is not already
-            // there, so the post-normalization re-run leaves the tree clean.
+            // Idempotent formatter over the tracked file the dev round wrote:
+            // it normalizes once, so the post-normalization re-run leaves the
+            // tree clean.
             gate(
                 "fmt",
-                "[ -s formatted.txt ] || echo normalized > formatted.txt",
+                "grep -q normalized it-a.txt || echo normalized > it-a.txt",
             ),
             gate("count", &format!("printf 'pass\\n' >> {counter}")),
         ],
@@ -426,8 +434,13 @@ fn a_write_mode_formatter_gets_a_normalization_commit_and_a_full_battery_rerun()
             &work.workspace_path,
             &["show", "--stat", "--format=", "HEAD"]
         )?
-        .contains("formatted.txt"),
+        .contains("it-a.txt"),
         "the formatter's output must be in the commit"
+    );
+    assert_eq!(
+        git(&work.workspace_path, &["show", "HEAD:it-a.txt"])?,
+        "normalized",
+        "the branch must carry what the formatter actually left"
     );
 
     // The tree is clean afterwards, so the branch head IS the directory.
@@ -460,9 +473,9 @@ fn a_gate_that_redirties_the_tree_fails_even_with_every_command_green() -> anyho
     let (_dir, _repo, _run_root, work) = dev_round()?;
     let gated = run_gates(
         &work,
-        // Appends every single run, so the tree is dirty again after the
-        // post-normalization re-run.
-        vec![gate("churn", "printf 'x' >> churn.txt")],
+        // Appends to a TRACKED file on every single run, so the tree really
+        // does not equal the branch head after the post-normalization re-run.
+        vec![gate("churn", "printf 'x' >> it-a.txt")],
     )?;
 
     assert!(
@@ -476,6 +489,103 @@ fn a_gate_that_redirties_the_tree_fails_even_with_every_command_green() -> anyho
     );
     assert!(
         gated.gate.diagnostics.contains("re-dirtied the worktree"),
+        "{}",
+        gated.gate.diagnostics
+    );
+    assert!(
+        gated.gate.diagnostics.contains("it-a.txt"),
+        "the diagnostics must NAME what was left changed: {}",
+        gated.gate.diagnostics
+    );
+    Ok(())
+}
+
+/// THE REGRESSION PIN at the battery level. A gate battery on a repository
+/// that does not gitignore its build output leaves an untracked `target/`
+/// behind. That output must not reach the item's commit — which is what made
+/// every review lens reject the item for breaching its own scope fence on the
+/// live run of 2026-07-29 — and it must not be read as a re-dirtied worktree
+/// either, which would fail the battery for the same reason wearing a
+/// different hat. It IS recorded, by name, in the diagnostics the reviewers
+/// read.
+#[test]
+fn build_output_outside_the_fence_is_neither_committed_nor_a_redirty() -> anyhow::Result<()> {
+    let (_dir, _repo, _run_root, work) = dev_round()?;
+    let head_before = git(&work.workspace_path, &["rev-parse", "HEAD"])?;
+
+    let gated = run_gates(
+        &work,
+        vec![gate(
+            "build",
+            "mkdir -p target/debug && echo junk > target/debug/libthing.rlib",
+        )],
+    )?;
+
+    assert!(
+        gated.gate.pass,
+        "untracked build output outside the fence must not fail the battery: {}",
+        gated.gate.diagnostics
+    );
+    assert_eq!(
+        git(&work.workspace_path, &["rev-parse", "HEAD"])?,
+        head_before,
+        "there was nothing stageable, so no normalization commit may exist"
+    );
+    for expected in [
+        "target/debug/libthing.rlib",
+        "were NOT staged",
+        "scope_in = [it-a.txt]",
+    ] {
+        assert!(
+            gated.gate.diagnostics.contains(expected),
+            "the exclusion must be recorded in the diagnostics ({expected:?} \
+             missing): {}",
+            gated.gate.diagnostics
+        );
+    }
+    // Proven by execution: git still considers it untracked, and no commit
+    // anywhere on the branch carries it.
+    let log = git(
+        &work.workspace_path,
+        &[
+            "log",
+            "--name-only",
+            "--format=",
+            &format!("{head_before}~1.."),
+        ],
+    )?;
+    assert!(!log.contains("target/"), "{log}");
+    Ok(())
+}
+
+/// The same rule, with real work beside the junk: the tracked normalization IS
+/// committed, the untracked out-of-fence output is not, and the exclusion is
+/// still recorded on the commit path (not only on the skip path).
+#[test]
+fn a_normalization_commit_carries_the_tracked_change_and_records_the_exclusion()
+-> anyhow::Result<()> {
+    let (_dir, _repo, _run_root, work) = dev_round()?;
+    let gated = run_gates(
+        &work,
+        vec![gate(
+            "fmt-and-build",
+            "grep -q normalized it-a.txt || echo normalized > it-a.txt; \
+             mkdir -p target && echo junk > target/artifact.bin",
+        )],
+    )?;
+
+    assert!(gated.gate.pass, "{}", gated.gate.diagnostics);
+    let committed = git(
+        &work.workspace_path,
+        &["show", "--stat", "--format=", "HEAD"],
+    )?;
+    assert!(committed.contains("it-a.txt"), "{committed}");
+    assert!(
+        !committed.contains("target/"),
+        "the build output must not ride along with the normalization: {committed}"
+    );
+    assert!(
+        gated.gate.diagnostics.contains("target/artifact.bin"),
         "{}",
         gated.gate.diagnostics
     );

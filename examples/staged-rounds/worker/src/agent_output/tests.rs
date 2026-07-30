@@ -2,7 +2,7 @@
 //! agent's report with the MACHINERY's coordinates, and the verdict is
 //! stamped with the panel seat the machinery dispatched.
 
-use super::{assemble_dev_item_result, stamp_item_verdict};
+use super::{assemble_dev_item_result, note_in_summary, stamp_item_verdict};
 use crate::types::{ProvisionedItem, WorkItem};
 
 fn work() -> ProvisionedItem {
@@ -29,6 +29,7 @@ fn assembly_wraps_the_report_with_real_coordinates() -> anyhow::Result<()> {
         b"{\"item_id\":\"fabricated\",\"summary\":\"s\",\"commits\":[\"fake\"],\"claims\":[]}",
         &work(),
         "realhead",
+        None,
     )
     .map_err(anyhow::Error::msg)?;
     let value: serde_json::Value = serde_json::from_slice(&assembled)?;
@@ -50,7 +51,7 @@ fn assembly_preserves_the_double_encoded_envelope() -> anyhow::Result<()> {
     let inner = "{\"item_id\":\"it-1\",\"summary\":\"s\",\"commits\":[],\"claims\":[]}";
     let outer = serde_json::to_vec(&serde_json::Value::String(inner.to_owned()))?;
     let assembled =
-        assemble_dev_item_result(&outer, &work(), "realhead").map_err(anyhow::Error::msg)?;
+        assemble_dev_item_result(&outer, &work(), "realhead", None).map_err(anyhow::Error::msg)?;
     let value: serde_json::Value = serde_json::from_slice(&assembled)?;
     let serde_json::Value::String(inner_encoded) = value else {
         anyhow::bail!("the double-encoded envelope was not preserved");
@@ -65,8 +66,73 @@ fn assembly_preserves_the_double_encoded_envelope() -> anyhow::Result<()> {
 
 #[test]
 fn a_non_object_report_is_a_loud_fault() {
-    let result = assemble_dev_item_result(b"[1,2]", &work(), "head");
+    let result = assemble_dev_item_result(b"[1,2]", &work(), "head", None);
     assert!(result.is_err());
+}
+
+/// The machinery's own record reaches the PANEL, not just the worker log: the
+/// excluded-path note is appended to the report summary the reviewers read,
+/// under a heading that says it is not the agent's words.
+#[test]
+fn the_machinery_note_is_appended_to_the_report_summary() -> anyhow::Result<()> {
+    let assembled = assemble_dev_item_result(
+        b"{\"item_id\":\"it-1\",\"summary\":\"added the parser\",\"commits\":[],\"claims\":[]}",
+        &work(),
+        "realhead",
+        Some("2 untracked path(s) were NOT staged: target/a, target/b"),
+    )
+    .map_err(anyhow::Error::msg)?;
+    let value: serde_json::Value = serde_json::from_slice(&assembled)?;
+    let summary = value["report"]["summary"].as_str().unwrap_or_default();
+    assert!(
+        summary.starts_with("added the parser"),
+        "the agent's own summary must survive intact: {summary}"
+    );
+    assert!(
+        summary.contains("MACHINERY RECORD"),
+        "the note must be attributed to the machinery: {summary}"
+    );
+    assert!(summary.contains("target/a"), "{summary}");
+    Ok(())
+}
+
+/// The remediation-side payloads pass through untouched except for the same
+/// record, and the double-encoded envelope survives it.
+#[test]
+fn a_remediation_report_carries_the_machinery_note_through_the_envelope() -> anyhow::Result<()> {
+    let inner = "{\"summary\":\"resolved both sides\",\"resolved\":[\"src/a.rs\"]}";
+    let outer = serde_json::to_vec(&serde_json::Value::String(inner.to_owned()))?;
+    let noted = note_in_summary(&outer, "remediate", "left target/junk untracked")
+        .map_err(anyhow::Error::msg)?;
+    let value: serde_json::Value = serde_json::from_slice(&noted)?;
+    let serde_json::Value::String(inner_encoded) = value else {
+        anyhow::bail!("the double-encoded envelope was not preserved");
+    };
+    let inner_value: serde_json::Value = serde_json::from_str(&inner_encoded)?;
+    let summary = inner_value["summary"].as_str().unwrap_or_default();
+    assert!(summary.starts_with("resolved both sides"), "{summary}");
+    assert!(summary.contains("left target/junk untracked"), "{summary}");
+    assert_eq!(inner_value["resolved"], serde_json::json!(["src/a.rs"]));
+    Ok(())
+}
+
+/// A payload with no `summary` at all is already off-schema; the note is still
+/// recorded rather than dropped on top of a fault.
+#[test]
+fn a_report_without_a_summary_still_gets_the_note() -> anyhow::Result<()> {
+    let noted = note_in_summary(b"{\"resolved\":[]}", "remediate", "nothing was adopted")
+        .map_err(anyhow::Error::msg)?;
+    let value: serde_json::Value = serde_json::from_slice(&noted)?;
+    let summary = value["summary"].as_str().unwrap_or_default();
+    assert!(summary.contains("MACHINERY RECORD"), "{summary}");
+    assert!(summary.contains("nothing was adopted"), "{summary}");
+    Ok(())
+}
+
+#[test]
+fn a_non_object_remediation_report_is_a_loud_fault() {
+    assert!(note_in_summary(b"[1,2]", "remediate", "note").is_err());
+    assert!(note_in_summary(b"not json", "remediate", "note").is_err());
 }
 
 #[test]

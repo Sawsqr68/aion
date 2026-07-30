@@ -42,8 +42,9 @@
           },
           "scope_in": {
             "type": "array",
+            "minItems": 1,
             "items": { "type": "string", "minLength": 1 },
-            "description": "Files/dirs the item MAY touch."
+            "description": "Files/dirs the item MAY touch — MANDATORY and never empty. It is mechanical, not documentation: the machinery commits a round by staging every change to a file that already exists, plus NEW files only where they fall inside this fence (exact path, or anything under a directory named here; no globbing). Anything new outside it is left off the branch and reported by name, and a plan with an unfenced item is rejected before any worktree is created."
           },
           "scope_out": {
             "type": "array",

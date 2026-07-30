@@ -189,6 +189,16 @@ fn panel_diff(
 /// 4. An EMPTY battery is the operator's explicit choice: a recorded VACUOUS
 ///    pass, named in `diagnostics`, never silent.
 ///
+/// THE FENCE, and why the re-dirty assertion asks the staging rule rather than
+/// `git status`. Normalization stages every tracked change plus untracked files
+/// inside the item's own `scope_in` (see [`crate::commit`]); a gate battery's
+/// build output is untracked and outside it, so it is left alone and named in
+/// `diagnostics`. The post-normalization assertion therefore has to ask the
+/// SAME question the commit answered — "is anything the rule would stage still
+/// sitting in the tree?" — because a bare `git status --porcelain` would see
+/// that deliberately-untouched build output, call it a re-dirtied worktree, and
+/// fail every battery in exactly the repositories this fence exists to unblock.
+///
 /// # Errors
 ///
 /// Terminal only when a gate has an empty argv, a command cannot RUN at all,
@@ -201,17 +211,24 @@ pub fn gate_item(
     let GateItemInput { work, gates } = input;
     let workspace = work.workspace_path.as_str();
     let base_commit = work.base_commit.as_str();
+    let fence = commit::ScopeFence::new(&work.item.scope_in);
 
     // Judge the dev agent's HEAD.
     let raw = run_gate_battery(shell, progress, workspace, base_commit, &gates)?;
 
-    let normalization =
-        commit::commit_gate_normalization(shell, workspace).map_err(ActivityFailure::terminal)?;
+    let normalization = commit::commit_gate_normalization(shell, workspace, &fence)
+        .map_err(ActivityFailure::terminal)?;
 
     let mut notes: Vec<String> = Vec::new();
+    push_exclusion_note(
+        &mut notes,
+        "the gate-normalization commit",
+        &fence,
+        normalization.excluded(),
+    );
     let mut redirtied = false;
     let raw = match &normalization {
-        commit::FixCommitOutcome::Committed { commit, paths } => {
+        commit::FixCommitOutcome::Committed { commit, paths, .. } => {
             notes.push(format!(
                 "gate commands normalized the tree; committed mechanically as {commit} \
                  ({} path(s))",
@@ -222,22 +239,29 @@ pub fn gate_item(
                 "the normalization commit moved HEAD — re-running the FULL battery against it",
             );
             let rerun = run_gate_battery(shell, progress, workspace, base_commit, &gates)?;
-            if !worktree_status(
-                shell,
-                workspace,
-                "git status (post-normalization clean assertion)",
-            )?
-            .is_empty()
-            {
+            let survey = commit::survey_worktree(shell, workspace, &fence)
+                .map_err(ActivityFailure::terminal)?;
+            if survey.diverges() {
                 redirtied = true;
-                notes.push(
+                notes.push(format!(
                     "a gate command re-dirtied the worktree on the post-normalization \
                      re-run (a non-idempotent formatter): the reviewed commit does not \
                      embody these changes — recorded as a gate failure, looping back to \
-                     the dev agent"
-                        .to_owned(),
-                );
+                     the dev agent. Paths left changed:\n{}",
+                    survey
+                        .divergent()
+                        .iter()
+                        .map(|path| format!("  {path}"))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                ));
             }
+            push_exclusion_note(
+                &mut notes,
+                "the post-normalization clean assertion",
+                &fence,
+                survey.excluded(),
+            );
             if pre_green && !rerun.iter().all(RawGateRun::passed) {
                 notes.push(
                     "the post-normalization re-run flipped a gate RED — the dev agent's \
@@ -265,6 +289,22 @@ pub fn gate_item(
         report: work.report,
         gate,
     })
+}
+
+/// Record, in the battery's own notes, every untracked path the staging fence
+/// turned away — on a SKIP as loudly as on a commit. `summarize` guarantees
+/// `diagnostics` is never empty and carries every note whether the battery
+/// passed or not, so this is the recorded outcome the reviewers read, not a
+/// log line they never see.
+fn push_exclusion_note(
+    notes: &mut Vec<String>,
+    step: &str,
+    fence: &commit::ScopeFence,
+    excluded: &[String],
+) {
+    if let Some(note) = commit::exclusion_note(step, fence, excluded) {
+        notes.push(note);
+    }
 }
 
 /// Fold the raw battery records, the stage's notes, and the diff into the

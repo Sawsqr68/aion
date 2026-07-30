@@ -479,6 +479,49 @@ fn an_empty_lens_list_fails_loudly_even_on_the_seed() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// THE BOUNDARY THE STAGING RULE DEPENDS ON. The dev commit stages untracked
+/// files only inside an item's declared `scope_in`, so an item that declares
+/// none would have every new file its agent wrote left off the branch: green
+/// activities, an empty diff for the panel, and a loop that can never
+/// converge. The plan is refused where it arrives, naming the offending ids,
+/// before a single worktree exists.
+#[test]
+fn a_plan_item_with_an_empty_scope_in_is_refused_by_id() -> anyhow::Result<()> {
+    let unfenced = WorkItem {
+        scope_in: vec![],
+        ..item("it-unfenced")
+    };
+    let blank = WorkItem {
+        scope_in: vec!["   ".to_owned()],
+        ..item("it-blank")
+    };
+
+    let Err(error) = fold_phase(seed(empty_state(), vec![item("it-ok"), unfenced, blank])) else {
+        anyhow::bail!("a plan with an unfenced item was accepted");
+    };
+    let message = error.message();
+    assert!(message.contains("it-unfenced"), "{message}");
+    assert!(
+        message.contains("it-blank"),
+        "a whitespace-only entry fences nothing, so it is no declaration at \
+         all: {message}"
+    );
+    assert!(
+        !message.contains("it-ok"),
+        "only the offending items may be named: {message}"
+    );
+    assert!(message.contains("scope_in"), "{message}");
+
+    // The same plan with a fence on every item is accepted.
+    let state = fold_phase(seed(
+        empty_state(),
+        vec![item("it-ok"), item("it-unfenced"), item("it-blank")],
+    ))
+    .map_err(|error| anyhow::anyhow!(error.message().to_owned()))?;
+    assert_eq!(state.ready.len(), 3);
+    Ok(())
+}
+
 #[test]
 fn a_duplicated_or_unusable_lens_name_fails_loudly() -> anyhow::Result<()> {
     let Err(error) = fold_phase(FoldPhaseInput {

@@ -28,10 +28,11 @@ use super::panel::require_panel;
 /// Terminal on protocol violations that must never pass silently: an unusable
 /// review panel (empty, duplicated, or an unusable lens name — checked on the
 /// SEED call too, so a run that could never accept anything fails before its
-/// first agent turn), duplicate item ids, a verdict naming an ungated item or
-/// an unconfigured lens, a gated result matching no ready item, a dangling
-/// `depends_on` id naming no known item, or a dependency deadlock that would
-/// leave `blocked` non-empty with `ready` empty.
+/// first agent turn), an incoming item that declares no `scope_in`, duplicate
+/// item ids, a verdict naming an ungated item or an unconfigured lens, a gated
+/// result matching no ready item, a dangling `depends_on` id naming no known
+/// item, or a dependency deadlock that would leave `blocked` non-empty with
+/// `ready` empty.
 pub fn fold_phase(input: FoldPhaseInput) -> Result<PhaseState, ActivityFailure> {
     let FoldPhaseInput {
         prior,
@@ -45,6 +46,13 @@ pub fn fold_phase(input: FoldPhaseInput) -> Result<PhaseState, ActivityFailure> 
     // no lenses can never accept an item, and the honest place to say so is
     // before any worktree is provisioned.
     require_panel(&lenses)?;
+
+    // Every item entering the run is checked HERE, where the planner's plan
+    // arrives, and nowhere else is needed: an item can only reach a dev turn
+    // through this activity's `ready` output, and the only way into the pool is
+    // `incoming` or a previous call's `ready`, so checking `incoming` on every
+    // call makes it an invariant of every item the fan-out ever sees.
+    require_scope_fences(&incoming)?;
 
     // The working pool: prior ready items plus every newly planned item.
     let mut pool: Vec<WorkItem> = prior.ready;
@@ -133,6 +141,41 @@ fn dependencies_satisfied(item: &WorkItem, done_ids: &BTreeSet<&str>) -> bool {
     item.depends_on
         .iter()
         .all(|dependency| done_ids.contains(dependency.as_str()))
+}
+
+/// Every planned item must declare a non-empty `scope_in`.
+///
+/// This is the boundary the mechanical staging rule depends on. The dev commit
+/// stages UNTRACKED files only inside the item's declared fence (see
+/// [`crate::commit`]), so an item that declares no fence would have every new
+/// source file its agent wrote silently left off the branch — a loop that can
+/// never converge, and one that would look green at every activity. The whole
+/// design is scope-fenced (the plan schema, the dev prompt, and both review
+/// lenses all enforce it), so the honest place to refuse is here, before a
+/// worktree is provisioned, naming the items the planner has to fix.
+///
+/// A whitespace-only entry counts as no entry: it fences nothing, and treating
+/// it as a declaration would put the run back in exactly the state this check
+/// exists to prevent.
+fn require_scope_fences(incoming: &[WorkItem]) -> Result<(), ActivityFailure> {
+    let unfenced: Vec<&str> = incoming
+        .iter()
+        .filter(|item| item.scope_in.iter().all(|entry| entry.trim().is_empty()))
+        .map(|item| item.id.as_str())
+        .collect();
+    if unfenced.is_empty() {
+        return Ok(());
+    }
+    Err(ActivityFailure::terminal(format!(
+        "the plan declares {} item(s) with an empty scope_in: {unfenced:?}. Every \
+         item MUST name the files or directories it may touch: the machinery \
+         commits a dev round by staging every tracked change plus the untracked \
+         files inside that fence, so an unfenced item would have every NEW file \
+         its agent wrote left off the branch — the round would report green, the \
+         panel would review an empty change, and the run could never converge. \
+         Re-plan with a scope_in on each of those items.",
+        unfenced.len()
+    )))
 }
 
 /// Every item id across the partitions must be unique — a duplicate would

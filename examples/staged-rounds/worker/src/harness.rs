@@ -235,20 +235,46 @@ impl AgentSession for ProfiledSession {
 /// the `DevItemResult` payload around the agent's report with the real head
 /// (reality wins — the agent never ran git). Any refusal is an activity
 /// failure.
+///
+/// The commit stages every tracked change plus the untracked files inside the
+/// ITEM'S OWN `scope_in` (see [`crate::commit`]); anything untracked outside
+/// it is recorded by name in the report the panel reads, never dropped.
 async fn commit_and_assemble(
     work: ProvisionedItem,
     payload: Payload,
 ) -> Result<Payload, HarnessError> {
     let workspace_path = work.workspace_path.clone();
     let item_id = work.item.id.clone();
+    let fence = commit::ScopeFence::new(&work.item.scope_in);
+    let staging_fence = fence.clone();
     let outcome = blocking_commit(
-        move || commit::commit_dev_work(&Shell::inherited(), &workspace_path, &item_id),
+        move || {
+            commit::commit_dev_work(
+                &Shell::inherited(),
+                &workspace_path,
+                &item_id,
+                &staging_fence,
+            )
+        },
         "dev-work commit",
     )
     .await?;
     log_commit_outcome(&outcome, "dev work committed on the item branch");
-    let assembled = agent_output::assemble_dev_item_result(payload.bytes(), &work, outcome.head())
-        .map_err(HarnessError::harness)?;
+    let note = commit::exclusion_note(
+        &format!("the dev-work commit for item {}", work.item.id),
+        &fence,
+        outcome.excluded(),
+    );
+    if let Some(note) = &note {
+        tracing::warn!(item = %work.item.id, "{note}");
+    }
+    let assembled = agent_output::assemble_dev_item_result(
+        payload.bytes(),
+        &work,
+        outcome.head(),
+        note.as_deref(),
+    )
+    .map_err(HarnessError::harness)?;
     Ok(Payload::new(ContentType::Json, assembled))
 }
 
@@ -263,8 +289,9 @@ fn stamp_verdict(item_id: &str, lens: &str, payload: &Payload) -> Result<Payload
 }
 
 /// The remediator's post-turn step: conclude the in-progress merge (or
-/// commit a dirty tree, or record a clean skip). The agent's report payload
-/// passes through unchanged. Any refusal is an activity failure.
+/// commit a dirty tree, or record a skip). The agent's report payload passes
+/// through with only the machinery's own record appended. Any refusal is an
+/// activity failure.
 async fn conclude(workspace_path: String, payload: Payload) -> Result<Payload, HarnessError> {
     let outcome = tokio::task::spawn_blocking(move || {
         commit::conclude_merge(&Shell::inherited(), &workspace_path)
@@ -277,23 +304,53 @@ async fn conclude(workspace_path: String, payload: Payload) -> Result<Payload, H
     })?
     .map_err(|error| HarnessError::harness(format!("merge conclusion failed: {error}")))?;
     match &outcome {
-        commit::ConcludeOutcome::Concluded { commit } => {
+        commit::ConcludeOutcome::Concluded { commit, .. } => {
             tracing::info!(%commit, "in-progress merge concluded with the remediator's resolutions");
         }
-        commit::ConcludeOutcome::Committed { commit } => {
+        commit::ConcludeOutcome::Committed { commit, .. } => {
             tracing::info!(%commit, "remediation fix committed (no merge was in progress)");
         }
-        commit::ConcludeOutcome::Skipped { head } => {
-            tracing::info!(%head, "remediation left the tree clean; nothing to conclude");
+        commit::ConcludeOutcome::Skipped { head, .. } => {
+            tracing::info!(%head, "the remediation turn left nothing stageable; nothing to conclude");
         }
     }
-    Ok(payload)
+    record_exclusions(
+        payload,
+        outcome.excluded(),
+        "the merge conclusion",
+        "remediate",
+    )
+}
+
+/// Put a tracked-only step's excluded untracked paths where the run can see
+/// them: a `tracing` line for the operator watching the worker, and the
+/// activity's own recorded outcome for everyone reading history afterwards.
+/// Nothing excluded leaves the payload untouched.
+fn record_exclusions(
+    payload: Payload,
+    excluded: &[String],
+    step: &str,
+    role: &str,
+) -> Result<Payload, HarnessError> {
+    // The fence is reconstructed rather than threaded back: both call sites
+    // are tracked-only BY CONSTRUCTION (see `crate::commit`), so there is one
+    // possible fence here and it has no state to lose.
+    let Some(note) = commit::exclusion_note(step, &commit::ScopeFence::tracked_only(), excluded)
+    else {
+        return Ok(payload);
+    };
+    tracing::warn!("{note}");
+    let annotated = agent_output::note_in_summary(payload.bytes(), role, &note)
+        .map_err(HarnessError::harness)?;
+    Ok(Payload::new(ContentType::Json, annotated))
 }
 
 /// The integration fixer's post-turn step: commit the repair it made to the
 /// integration worktree. Without it the very next `verify_integration` — which
 /// asserts a clean tree — would discard the repair and record a failure the
-/// agent had already fixed. The report payload passes through unchanged.
+/// agent had already fixed. The report payload passes through with only the
+/// machinery's own record appended (this step is tracked-only, so anything
+/// untracked it declined to adopt is named in the report rather than dropped).
 async fn commit_integration_fix(
     workspace_path: String,
     payload: Payload,
@@ -307,7 +364,12 @@ async fn commit_integration_fix(
         &outcome,
         "integration repair committed on the integration branch",
     );
-    Ok(payload)
+    record_exclusions(
+        payload,
+        outcome.excluded(),
+        "the integration-fix commit",
+        "fix_integration",
+    )
 }
 
 /// Run one blocking mechanical commit on the blocking pool (the worker drives
@@ -332,11 +394,19 @@ where
 /// commit, because "nothing to commit" is a real and meaningful outcome here.
 fn log_commit_outcome(outcome: &commit::FixCommitOutcome, committed_message: &str) {
     match outcome {
-        commit::FixCommitOutcome::Committed { commit, paths } => {
-            tracing::info!(%commit, ?paths, "{committed_message}");
+        commit::FixCommitOutcome::Committed {
+            commit,
+            paths,
+            excluded,
+        } => {
+            tracing::info!(%commit, ?paths, ?excluded, "{committed_message}");
         }
-        commit::FixCommitOutcome::Skipped { head, reason } => {
-            tracing::info!(%head, %reason, "mechanical commit skipped");
+        commit::FixCommitOutcome::Skipped {
+            head,
+            reason,
+            excluded,
+        } => {
+            tracing::info!(%head, %reason, ?excluded, "mechanical commit skipped");
         }
     }
 }

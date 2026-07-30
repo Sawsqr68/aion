@@ -59,11 +59,22 @@ fn the_plan_schema_accepts_a_canonical_plan_and_rejects_a_bad_slug() -> anyhow::
         "a non-slug id must fail the plan schema"
     );
 
-    let mut bad_feedback = good;
+    let mut bad_feedback = good.clone();
     bad_feedback["items"][0]["feedback"] = serde_json::json!("prefilled");
     anyhow::ensure!(
         !validator.is_valid(&bad_feedback),
         "a planner-prefilled feedback must fail the plan schema"
+    );
+
+    // The staging boundary, enforced at the earliest possible point: an item
+    // with no scope_in would have every NEW file its dev agent writes left off
+    // the branch, so the planner is not allowed to emit one at all. `fold_phase`
+    // refuses it again on arrival — this is the schema Norn enforces first.
+    let mut unfenced = good;
+    unfenced["items"][0]["scope_in"] = serde_json::json!([]);
+    anyhow::ensure!(
+        !validator.is_valid(&unfenced),
+        "an item with an empty scope_in must fail the plan schema"
     );
     Ok(())
 }
