@@ -609,7 +609,16 @@ fn select_outbox_row_dispatch(
         OutboxTransport::Grpc => {
             let push_dispatcher = ActivityDispatcher::new(state.worker_registry().clone())
                 .with_drain_state(state.drain_state().clone())
-                .with_completion_fences(state.pending_activities().completion_fences());
+                .with_completion_fences(state.pending_activities().completion_fences())
+                // Share the SAME queue-service seams the direct dispatch path
+                // uses, so a row parked on this leg reaches `GET
+                // /queues/unserved` and `describe`'s `unserved` list rather
+                // than being invisible to both.
+                .with_queue_service(
+                    state.queue_declarations().clone(),
+                    state.queue_service_state().clone(),
+                    state.runtime_config().worker.queue_service.clone(),
+                );
             // Control-Plane Phase 2 (P2-P3): attach the short-TTL placement cache
             // so an unpinned row in a `Prefer{L}` namespace prefers an L-labelled
             // worker (spilling to any live worker). The cache front-runs a per-row

@@ -141,37 +141,17 @@ pub fn select_worker_or_refuse(
                 if let Err(reason) = accepting() {
                     break Err(SelectionRefusal::NotAccepting { reason });
                 }
-                let census = match wait.registry.pool_census(
-                    &address.namespace,
-                    &address.task_queue,
-                    &address.activity_type,
-                    address.node.as_deref(),
-                ) {
-                    Ok(census) => census,
-                    Err(error) => {
-                        break Err(SelectionRefusal::Registry {
-                            reason: format!("registry error: {error}"),
-                        });
-                    }
-                };
-                let declaration = wait.declarations.declaration_for(&address.task_queue);
-                let Some(reason) = classify(declaration, &census) else {
-                    // A worker arrived between the miss and the census: the
-                    // state we would report is already untrue, so re-select
-                    // rather than announce it.
-                    continue;
-                };
-                mark_unserved(wait, reason, policy, census);
                 let waited = started_at.elapsed();
-                report(&Report {
-                    wait,
-                    reason,
-                    policy,
-                    census,
-                    waited,
-                    deadline,
-                    repeat: reported == Some(reason),
-                });
+                let observed =
+                    match observe_selection_miss(wait, policy, deadline, waited, reported) {
+                        Ok(Some(observed)) => observed,
+                        // A worker arrived between the miss and the census: the
+                        // state we would report is already untrue, so re-select
+                        // rather than announce it.
+                        Ok(None) => continue,
+                        Err(refusal) => break Err(refusal),
+                    };
+                let (reason, census) = (observed.reason, observed.census);
                 reported = Some(reason);
                 if reason.is_structural() {
                     // Unconditional: no policy admits work onto a queue no
@@ -206,6 +186,77 @@ pub fn select_worker_or_refuse(
     };
     clear_unserved(wait);
     outcome
+}
+
+/// What one classified selection miss turned out to be.
+pub struct ObservedMiss {
+    /// The classified reason this address is not being served.
+    pub reason: QueueServiceReason,
+    /// The live poller census the classification was made against.
+    pub census: PoolCensus,
+}
+
+/// Classify one selection miss, publish it to the queryable unserved state, and
+/// state it in the log.
+///
+/// This is the whole of "park VISIBLY", factored out so it has exactly ONE
+/// implementation. There are two dispatch loops in this server — the blocking
+/// selection wait below, and the async gRPC outbox leg — and the second was
+/// written before this machinery existed and never adopted it. A dispatch that
+/// parked there was invisible: no state to query, one `info!` line, and no
+/// reachable dead-letter path. Duplicating the classification to fix that would
+/// have guaranteed the two drifted, so both call this.
+///
+/// It deliberately decides NOTHING about whether to keep waiting. Bounding an
+/// unserved dispatch is a semantics decision that belongs to the operator, and
+/// a bound invented here would refuse work nobody asked to have refused.
+///
+/// `Ok(None)` means a worker arrived between the miss and the census, so there
+/// is nothing true left to report — the caller should re-select rather than
+/// announce a state that is already untrue.
+///
+/// # Errors
+///
+/// Returns [`SelectionRefusal::Registry`] when the census itself cannot be read.
+pub fn observe_selection_miss(
+    wait: &ServiceWait<'_>,
+    policy: QueueServicePolicy,
+    deadline: Option<Duration>,
+    waited: Duration,
+    reported: Option<QueueServiceReason>,
+) -> Result<Option<ObservedMiss>, SelectionRefusal> {
+    let address = wait.address;
+    let census = wait
+        .registry
+        .pool_census(
+            &address.namespace,
+            &address.task_queue,
+            &address.activity_type,
+            address.node.as_deref(),
+        )
+        .map_err(|error| SelectionRefusal::Registry {
+            reason: format!("registry error: {error}"),
+        })?;
+    let declaration = wait.declarations.declaration_for(&address.task_queue);
+    let Some(reason) = classify(declaration, &census) else {
+        return Ok(None);
+    };
+    mark_unserved(wait, reason, policy, census);
+    report(&Report {
+        wait,
+        reason,
+        policy,
+        census,
+        waited,
+        deadline,
+        repeat: reported == Some(reason),
+    });
+    Ok(Some(ObservedMiss { reason, census }))
+}
+
+/// Clear one dispatch's unserved entry once it is served or refused.
+pub fn clear_selection_miss(wait: &ServiceWait<'_>) {
+    clear_unserved(wait);
 }
 
 fn unavailable(

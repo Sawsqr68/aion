@@ -11,6 +11,13 @@ use aion_proto::{
 use crate::error::ServerError;
 use crate::shutdown::DrainState;
 use crate::worker::envelope::{CompletionFences, CompletionToken, idempotency_key};
+use crate::worker::queue_service::declarations::QueueDeclarationSource;
+use crate::worker::queue_service::policy::QueueServiceConfig;
+use crate::worker::queue_service::state::QueueServiceState;
+use crate::worker::queue_service::taxonomy::{QueueServiceReason, ServiceAddress};
+use crate::worker::queue_service::wait::{
+    ServiceWait, clear_selection_miss, observe_selection_miss,
+};
 use crate::worker::registry::{ConnectedWorkerRegistry, WorkerMessage};
 use tracing::{Instrument, info_span};
 
@@ -95,6 +102,17 @@ pub struct ActivityDispatcher {
     registry: ConnectedWorkerRegistry,
     drain_state: DrainState,
     completion_fences: CompletionFences,
+    /// Deployed queue declarations, live unserved state, and the operator's
+    /// queue-service policy — the three things a selection miss must be
+    /// classified against for the park to be visible rather than silent.
+    ///
+    /// Defaulted like `drain_state` above, and shared with the rest of the
+    /// server by `with_queue_service`. An unshared default still classifies
+    /// and still logs; what it loses is only the queryable state, which is why
+    /// the loud half of the report can never be switched off by wiring.
+    queue_declarations: QueueDeclarationSource,
+    queue_service_state: QueueServiceState,
+    queue_service_config: QueueServiceConfig,
 }
 
 impl ActivityDispatcher {
@@ -105,7 +123,25 @@ impl ActivityDispatcher {
             registry,
             drain_state: DrainState::default(),
             completion_fences: CompletionFences::default(),
+            queue_declarations: QueueDeclarationSource::default(),
+            queue_service_state: QueueServiceState::default(),
+            queue_service_config: QueueServiceConfig::default(),
         }
+    }
+
+    /// Share the queue-service seams so a park on this path reaches the same
+    /// `GET /queues/unserved` and `describe` surfaces the direct path feeds.
+    #[must_use]
+    pub fn with_queue_service(
+        mut self,
+        declarations: QueueDeclarationSource,
+        state: QueueServiceState,
+        config: QueueServiceConfig,
+    ) -> Self {
+        self.queue_declarations = declarations;
+        self.queue_service_state = state;
+        self.queue_service_config = config;
+        self
     }
 
     /// Share the server drain gate.
@@ -346,27 +382,76 @@ impl ActivityDispatcher {
         node: Option<&str>,
         span_fields: &tracing::Span,
     ) -> Result<(), ServerError> {
+        // The wait is unbounded, deliberately and unchanged: bounding a dispatch
+        // to an unserved queue is a semantics decision that is the operator's,
+        // and inventing one here would refuse work nobody asked to have refused.
+        // What changes is that the park is now VISIBLE. This loop used to emit
+        // one `info!` and block, so a permanently parked row had no state to
+        // query, `dispatch_parked` read false while it was in fact parked
+        // forever, and — because `dispatch` never returns — the outbox row sat
+        // `claimed` where dead-letter and redrive could not see it either.
+        let address = ServiceAddress {
+            namespace: activity.namespace.clone(),
+            task_queue: activity.task_queue.clone(),
+            activity_type: activity.activity_type.clone(),
+            node: node.map(ToOwned::to_owned),
+        };
+        let wait = ServiceWait {
+            registry: &self.registry,
+            declarations: &self.queue_declarations,
+            config: &self.queue_service_config,
+            state: &self.queue_service_state,
+            address: &address,
+            workflow_id: &activity.workflow_id,
+            activity_id: &activity.activity_id,
+        };
+        let policy = self
+            .queue_service_config
+            .policy_for(&activity.namespace, &activity.task_queue);
+        let started_at = std::time::Instant::now();
+        let mut reported: Option<QueueServiceReason> = None;
         let workers = loop {
             self.drain_state
-                .ensure_accepting(&activity.namespace, &activity.activity_type)?;
-            let candidates = self.registry.workers_for(
-                &activity.namespace,
-                &activity.task_queue,
-                &activity.activity_type,
-                node,
-            )?;
+                .ensure_accepting(&activity.namespace, &activity.activity_type)
+                .inspect_err(|_| clear_selection_miss(&wait))?;
+            let candidates = self
+                .registry
+                .workers_for(
+                    &activity.namespace,
+                    &activity.task_queue,
+                    &activity.activity_type,
+                    node,
+                )
+                .inspect_err(|_| clear_selection_miss(&wait))?;
             if !candidates.is_empty() {
+                if let Some(reason) = reported {
+                    tracing::info!(
+                        namespace = %activity.namespace,
+                        task_queue = %activity.task_queue,
+                        activity_type = %activity.activity_type,
+                        workflow_id = %activity.workflow_id,
+                        activity_id = %activity.activity_id,
+                        queue_service_reason = reason.as_str(),
+                        "queue service restored; the parked dispatch has a worker"
+                    );
+                }
+                clear_selection_miss(&wait);
                 break candidates;
             }
-            tracing::info!(
-                namespace = %activity.namespace,
-                task_queue = %activity.task_queue,
-                node = node,
-                activity_type = %activity.activity_type,
-                workflow_id = %activity.workflow_id,
-                activity_id = %activity.activity_id,
-                "no connected worker; waiting for a matching worker to register"
-            );
+            match observe_selection_miss(&wait, policy, None, started_at.elapsed(), reported) {
+                // A worker arrived between the miss and the census: re-select
+                // rather than announce a state that is already untrue.
+                Ok(None) => continue,
+                Ok(Some(observed)) => reported = Some(observed.reason),
+                Err(refusal) => {
+                    clear_selection_miss(&wait);
+                    return Err(ServerError::worker_dispatch(
+                        activity.namespace.clone(),
+                        activity.activity_type.clone(),
+                        refusal.reason_string(),
+                    ));
+                }
+            }
             self.registry.wait_for_worker().await;
         };
         match self
@@ -680,6 +765,107 @@ mod tests {
 
         dispatch_handle.await??;
         assert!(rx.recv().await.is_some());
+        Ok(())
+    }
+
+    /// The park on this leg must be VISIBLE — queryable, not merely logged.
+    ///
+    /// This loop predates the queue-service taxonomy and never adopted it, so a
+    /// dispatch parked here published no state at all: `GET /queues/unserved`
+    /// and `describe`'s `unserved` list both read empty while a row sat parked
+    /// forever, and because `dispatch` never returns, the outbox row stayed
+    /// `claimed` where dead-letter and redrive could not see it either. Three
+    /// surfaces, all reading "nothing to see".
+    ///
+    /// The wait is deliberately still unbounded. Bounding it is the operator's
+    /// decision, not this function's.
+    #[tokio::test]
+    async fn a_dispatch_with_no_worker_publishes_its_park_and_clears_on_arrival()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let registry = ConnectedWorkerRegistry::default();
+        let state = QueueServiceState::default();
+        let dispatcher = ActivityDispatcher::new(registry.clone()).with_queue_service(
+            QueueDeclarationSource::default(),
+            state.clone(),
+            QueueServiceConfig::default(),
+        );
+        let scheduled = ScheduledActivity {
+            namespace: String::from("tenant-a"),
+            task_queue: String::from("default"),
+            activity_type: String::from("charge-card"),
+            node: None,
+            workflow_id: workflow_id(),
+            activity_id: activity_id(),
+            run_id: Some(RunId::new_v4()),
+            input: Payload::new(ContentType::Json, b"{}".to_vec()),
+            attempt: 1,
+            labels: std::collections::BTreeMap::new(),
+        };
+
+        // Nothing is parked before the dispatch: the assertion below would pass
+        // vacuously against a state that reported everything as unserved.
+        assert!(
+            state.unserved()?.is_empty(),
+            "no dispatch has been made yet"
+        );
+
+        // CONTROL ARM, built for this promotion. A dispatcher that does NOT
+        // share the queue-service seams behaves exactly as this loop did before
+        // the change: it parks, and the shared state learns nothing. Running it
+        // first proves the assertion below detects the ABSENCE of publishing
+        // rather than passing on any state at all.
+        let unwired = ActivityDispatcher::new(registry.clone());
+        let unwired_handle = tokio::spawn({
+            let scheduled = scheduled.clone();
+            async move { unwired.dispatch(&scheduled).await }
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(
+            state.unserved()?.is_empty(),
+            "an unshared dispatcher must publish nothing HERE — that is the \
+             defect this test exists to catch, reproduced on purpose"
+        );
+        unwired_handle.abort();
+
+        let dispatch_handle = tokio::spawn({
+            let dispatcher = dispatcher.clone();
+            let scheduled = scheduled.clone();
+            async move { dispatcher.dispatch(&scheduled).await }
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert!(!dispatch_handle.is_finished(), "dispatch should be waiting");
+
+        let unserved = state.unserved()?;
+        assert_eq!(
+            unserved.len(),
+            1,
+            "the parked dispatch must be queryable, not just logged: {unserved:?}"
+        );
+        assert_eq!(unserved[0].key.task_queue, "default");
+        assert_eq!(
+            unserved[0].reason,
+            QueueServiceReason::NoLivePollers,
+            "an empty pool must be classified, not reported as a bare miss"
+        );
+        assert_eq!(
+            state.parked_on_queue("default")?,
+            1,
+            "the run parked on the queue must be attributable to the queue"
+        );
+
+        // A worker arrives: the dispatch completes AND the state clears, so an
+        // operator is not left reading a park that has already resolved.
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        let activity_types = [String::from("charge-card")];
+        let _registration = registry.register("tenant-a", activity_types.iter(), tx)?;
+
+        dispatch_handle.await??;
+        assert!(rx.recv().await.is_some(), "the task must be delivered");
+        assert!(
+            state.unserved()?.is_empty(),
+            "a served dispatch must not be left published as unserved: {:?}",
+            state.unserved()?
+        );
         Ok(())
     }
 
