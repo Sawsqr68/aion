@@ -1,0 +1,57 @@
+[package]
+name = "aion-integration-acp"
+version.workspace = true
+edition.workspace = true
+# The `agent-client-protocol-schema` wire types require Rust 1.88.0 / edition 2024. This crate
+# carries the raised floor ALONE — the workspace `rust-version` stays where it is, so no other
+# crate inherits a toolchain requirement it does not need.
+rust-version = "1.88.0"
+description = "The first-party Agent Client Protocol (ACP) adapter for Aion: implements the aion-integrations AgentHarness trait against any ACP agent subprocess over newline-delimited JSON-RPC 2.0 stdio."
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/aion-integration-acp"
+readme = "README.md"
+keywords = ["aion", "agent", "harness", "acp", "integration"]
+categories = ["api-bindings", "asynchronous"]
+
+[lints]
+workspace = true
+
+[dependencies]
+aion-core = { version = "0.10.0", path = "../aion-core" }
+aion-integrations = { version = "0.10.0", path = "../aion-integrations" }
+# Pinned EXACTLY: these are the on-wire types of an external, moving protocol. A version bump must
+# be a deliberate act that surfaces as a compile error, never a silent wire drift.
+agent-client-protocol-schema = "=1.5.0"
+async-trait = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, features = [
+    "io-util",
+    "macros",
+    "process",
+    "rt",
+    "sync",
+    # The agent's shutdown grace is a bounded wait on the child's exit: a worker must not be hung by
+    # an agent that ignores stdin EOF.
+    "time",
+] }
+uuid = { workspace = true }
+
+[dev-dependencies]
+chrono = { workspace = true }
+futures = { workspace = true }
+tokio = { workspace = true, features = [
+    "io-util",
+    "macros",
+    "process",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+uuid = { workspace = true }

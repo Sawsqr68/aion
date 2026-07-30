@@ -1,0 +1,782 @@
+//! [`AcpHarness`] — the [`AgentHarness`] implementation that drives any ACP agent subprocess.
+//!
+//! [`AgentHarness::start`] spawns the configured command with piped stdin/stdout (stderr is
+//! **inherited**, so the agent's human logs go straight to the parent's stderr and never into the
+//! structured channel), performs the versioned `initialize` handshake gating on ACP protocol version
+//! `1`, creates a session with `session/new`, issues the one long-running `session/prompt` request
+//! carrying the spec's input as a `text` content block, and hands that outstanding request's id to an
+//! [`AcpSession`] whose reader pump captures its Response as the terminal result.
+//!
+//! # The launch command is configuration, never inference
+//!
+//! There is no standard ACP launch flag, and there is no way to derive one:
+//!
+//! | agent | invocation |
+//! |---|---|
+//! | Claude Code | `npx @agentclientprotocol/claude-agent-acp` (no args) |
+//! | Codex | `npx @agentclientprotocol/codex-acp` (no args) |
+//! | Gemini CLI | `npx @google/gemini-cli --acp` |
+//! | `OpenCode` | `opencode acp` |
+//! | others | `acp serve`, `serve acp`, `--acp=true`, `agent stdio`, … |
+//!
+//! So the command and its arguments are taken verbatim from the harness configuration and never
+//! guessed at. A wrong guess would spawn the agent in its interactive mode, which speaks no JSON-RPC
+//! at all and hangs the handshake until the activity times out.
+//!
+//! # What this adapter deliberately does not do
+//!
+//! - **It does not authenticate.** ACP's `authenticate` request drives an interactive flow (a browser
+//!   login, a terminal prompt); an unattended activity cannot complete one. An agent that answers
+//!   `-32000` gets a harness failure naming the authentication methods it advertised, so the operator
+//!   can supply credentials through the harness environment instead of the adapter inventing them.
+//! - **It offers no filesystem or terminal callbacks.** See [`crate::protocol`] for the ruling.
+//!
+//! # KNOWN LIMITATION: `cwd` is per-harness, never per-attempt
+//!
+//! [`AcpHarness`] holds ONE `cwd`, and every session it starts is rooted there. A worker running two
+//! agent activities concurrently through the same harness therefore gives both agents **the same
+//! workspace root**, with no isolation whatsoever: two agents can edit the same file, and the second
+//! writer wins. The same is true of two attempts of the same activity if a retry overlaps its
+//! predecessor.
+//!
+//! This is stated rather than fixed because the fix is not a smaller `cwd`: per-attempt workspace
+//! provisioning is its own design (where the workspace comes from, whether it is a copy, a clone or a
+//! fresh checkout, what is carried between attempts, and who cleans it up), and inventing a
+//! convention here — a subdirectory named after the attempt, say — would silently change where every
+//! operator's agent runs. Until that design lands, an operator who needs isolation constructs one
+//! harness per workspace root.
+//!
+//! [`AgentHarness`]: aion_integrations::AgentHarness
+//! [`AgentHarness::start`]: aion_integrations::AgentHarness::start
+//!
+//! [`AcpHarness`]: crate::harness::AcpHarness
+//! [`AcpSession`]: crate::session::AcpSession
+
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::sync::Arc;
+use std::time::Duration;
+
+use agent_client_protocol_schema::v1::{
+    AuthMethod, ContentBlock, InitializeRequest, InitializeResponse, NewSessionRequest,
+    NewSessionResponse, PromptRequest, SessionId, TextContent,
+};
+use aion_integrations::contract::AgentHarness;
+use aion_integrations::jsonrpc::{
+    IncomingMessage, JsonRpcConnection, JsonRpcId, JsonRpcNotification, JsonRpcRequest,
+};
+use aion_integrations::{AgentRunSpec, HarnessError};
+use async_trait::async_trait;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+use serde_json::Value;
+use tokio::process::{ChildStdin, ChildStdout, Command};
+
+use crate::permission::PermissionPolicy;
+use crate::protocol;
+use crate::session::{AcpSession, SessionStart, refuse_peer_request};
+use crate::translate::{self, EventIdentity};
+
+/// A harness that runs each activity attempt as one ACP agent subprocess.
+///
+/// Holds the harness-specific settings — the launch command, its arguments, the session working
+/// directory, the child environment, the permission policy, and the shutdown grace — so the
+/// [`AgentRunSpec`] stays harness-blind: the spec never carries ACP configuration.
+#[derive(Clone, Debug)]
+pub struct AcpHarness {
+    command: PathBuf,
+    args: Vec<OsString>,
+    env: Vec<(String, String)>,
+    env_removed: Vec<String>,
+    cwd: PathBuf,
+    additional_directories: Vec<PathBuf>,
+    permission_policy: PermissionPolicy,
+    exit_grace: Duration,
+}
+
+/// What the transport-independent opening of a turn produces.
+///
+/// Grouped rather than returned as a tuple so the deferred notifications cannot be silently dropped
+/// at a call site that only wanted the two ids.
+pub(crate) struct OpenedTurn {
+    /// The session `session/new` minted.
+    pub(crate) session_id: SessionId,
+    /// The id of the outstanding `session/prompt` request.
+    pub(crate) prompt_id: JsonRpcId,
+    /// Notifications read during the handshake, before the transcript pump existed.
+    pub(crate) deferred: Vec<JsonRpcNotification>,
+}
+
+impl AcpHarness {
+    /// A harness that launches `command` with `args`, sessions rooted at `cwd`, answering permission
+    /// requests from `permission_policy`, and allowing the agent `exit_grace` to shut down.
+    ///
+    /// Every argument is required, and none of them has a default, because none of them can be
+    /// inferred without guessing:
+    ///
+    /// - `command` / `args` — there is no standard ACP launch flag (see the module docs). They are
+    ///   passed to the child exactly as given.
+    /// - `cwd` — `session/new` **requires** an absolute working directory, and it is the root the
+    ///   agent reads and writes under. Defaulting it to the worker's own current directory would
+    ///   silently scope an agent to whatever directory the worker happened to be started in. See the
+    ///   module docs for the known limitation that it is per-harness, not per-attempt.
+    /// - `permission_policy` — `session/request_permission` blocks the agent until answered, and an
+    ///   unattended activity has no operator to ask, so the answer must be decided up front. See
+    ///   [`crate::permission`] for why there is no default.
+    /// - `exit_grace` — how long the agent may take to exit on its own once the turn is over and its
+    ///   stdin has closed, before it is killed. How long a given agent needs to flush its logs and
+    ///   release what it holds is a property of that agent, so the value is the operator's; a
+    ///   "sensible default" here would be a guess about somebody else's process. [`Duration::ZERO`]
+    ///   is a legitimate setting and means "close stdin, then kill at once". There is no
+    ///   wait-forever setting: a worker must not be hung by an agent that ignores EOF.
+    ///
+    /// `cwd` is validated as absolute at [`AgentHarness::start`], where the failure can be reported
+    /// as a [`HarnessError`] rather than swallowed by an infallible constructor.
+    #[must_use]
+    pub fn new(
+        command: impl Into<PathBuf>,
+        args: impl IntoIterator<Item = impl Into<OsString>>,
+        cwd: impl Into<PathBuf>,
+        permission_policy: PermissionPolicy,
+        exit_grace: Duration,
+    ) -> Self {
+        Self {
+            command: command.into(),
+            args: args.into_iter().map(Into::into).collect(),
+            env: Vec::new(),
+            env_removed: Vec::new(),
+            cwd: cwd.into(),
+            additional_directories: Vec::new(),
+            permission_policy,
+            exit_grace,
+        }
+    }
+
+    /// Sets an environment variable on every spawned agent process.
+    ///
+    /// Applied to the CHILD only (never the parent), so a harness can supply an agent's credentials
+    /// or model configuration without mutating shared process state.
+    #[must_use]
+    pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.env.push((key.into(), value.into()));
+        self
+    }
+
+    /// Removes an environment variable from every spawned agent process.
+    ///
+    /// Applied to the CHILD only, so a harness can strip ambient configuration an agent must not
+    /// inherit — an ambient API key that would otherwise take precedence over the operator's chosen
+    /// credentials, say. Removals are applied AFTER the [`Self::with_env`] sets, so removing a key
+    /// wins over setting the same key.
+    #[must_use]
+    pub fn without_env(mut self, key: impl Into<String>) -> Self {
+        self.env_removed.push(key.into());
+        self
+    }
+
+    /// Adds a workspace root beyond `cwd` for every session this harness creates.
+    ///
+    /// ACP's `additionalDirectories` expands the session's filesystem scope without moving `cwd`,
+    /// which stays the base for relative paths. Each path must be absolute; a relative one is
+    /// refused at [`AgentHarness::start`] rather than resolved against an unstated base.
+    #[must_use]
+    pub fn with_additional_directory(mut self, directory: impl Into<PathBuf>) -> Self {
+        self.additional_directories.push(directory.into());
+        self
+    }
+
+    /// Builds the launch command: the configured argv, the configured child-environment sets and
+    /// removals, piped stdin/stdout, and inherited stderr.
+    ///
+    /// The child's working directory is set to the session `cwd` as well as being sent in
+    /// `session/new`: an agent that resolves a relative path itself must land in the same place the
+    /// protocol says the session is rooted.
+    fn command(&self) -> Command {
+        let mut command = Command::new(&self.command);
+        command
+            .args(&self.args)
+            .current_dir(&self.cwd)
+            .envs(self.env.iter().map(|(key, value)| (key, value)))
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            // Inherited, never piped: an agent's human-readable log lines must not be mistaken for
+            // protocol frames, and a full unread stderr pipe would deadlock the agent.
+            .stderr(Stdio::inherit())
+            .kill_on_drop(true);
+        // Removals AFTER the sets, so `without_env` wins over `with_env` for the same key.
+        for key in &self.env_removed {
+            command.env_remove(key);
+        }
+        command
+    }
+
+    /// Spawns the agent for one run.
+    fn spawn(&self) -> Result<tokio::process::Child, HarnessError> {
+        self.command().spawn().map_err(|source| {
+            HarnessError::transport(format!(
+                "failed to spawn the ACP agent `{}`: {source} — the command and its arguments are \
+                 harness configuration (ACP has no standard launch flag) and must name a real \
+                 executable",
+                self.command.display()
+            ))
+        })
+    }
+
+    /// Refuses any configured path that is not absolute.
+    ///
+    /// ACP requires `cwd` and every `additionalDirectories` entry to be absolute. Resolving a
+    /// relative path here would silently root the agent at the worker's current directory, which is
+    /// not a place any operator chose.
+    fn validate_paths(&self) -> Result<(), HarnessError> {
+        require_absolute("cwd", &self.cwd)?;
+        for directory in &self.additional_directories {
+            require_absolute("additionalDirectories entry", directory)?;
+        }
+        Ok(())
+    }
+}
+
+/// Refuses a relative path, naming which setting it came from.
+fn require_absolute(label: &str, path: &Path) -> Result<(), HarnessError> {
+    if path.is_absolute() {
+        return Ok(());
+    }
+    Err(HarnessError::protocol(format!(
+        "the ACP {label} must be an absolute path, got `{}` — the protocol requires absolute \
+         session paths and this adapter will not resolve one against an unstated base",
+        path.display()
+    )))
+}
+
+/// Reads the prompt text an [`AgentRunSpec`] carries in its input payload.
+///
+/// Deliberate decoding semantics — the activity input is a serialized [`aion_core::Payload`], not raw
+/// prompt text, so a `String`-typed activity input arrives as its JSON encoding (surrounding quotes
+/// plus `\n` / `\"` escapes):
+///
+/// - JSON content type, bytes parse as a JSON **string** → unwrap to the inner string, so the agent
+///   receives the exact text the workflow passed and multi-line prompts survive verbatim.
+/// - JSON content type, bytes parse as any **other** JSON value → the raw JSON text passes through
+///   unchanged; a structured payload is a legitimate prompt, and inventing a projection would lose
+///   information.
+/// - JSON content type, bytes are **not** valid JSON → the raw UTF-8 text passes through unchanged
+///   ([`aion_core::Payload`] is a dumb carrier that does not validate on construction).
+/// - Non-JSON content types → the bytes decoded as UTF-8 text.
+///
+/// A non-UTF-8 input is a mismatch surfaced honestly in every case: ACP frames are UTF-8 JSON, so
+/// there is no way to put arbitrary bytes in a `text` content block.
+fn prompt_from_spec(spec: &AgentRunSpec) -> Result<String, HarnessError> {
+    let text = std::str::from_utf8(spec.input.bytes())
+        .map(str::to_owned)
+        .map_err(|source| {
+            HarnessError::protocol(format!("the run input is not valid UTF-8: {source}"))
+        })?;
+    if !matches!(spec.input.content_type(), aion_core::ContentType::Json) {
+        return Ok(text);
+    }
+    match serde_json::from_str::<Value>(&text) {
+        Ok(Value::String(inner)) => Ok(inner),
+        _ => Ok(text),
+    }
+}
+
+/// Takes the child's piped stdout + stdin, or a transport error if either was not piped.
+fn take_child_io(
+    child: &mut tokio::process::Child,
+) -> Result<(ChildStdout, ChildStdin), HarnessError> {
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| HarnessError::transport("the spawned ACP agent has no piped stdout"))?;
+    let stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| HarnessError::transport("the spawned ACP agent has no piped stdin"))?;
+    Ok((stdout, stdin))
+}
+
+/// Sends one request and reads its typed result.
+///
+/// The generic call/reply used for the pre-prompt handshake: allocate an id, write the request, read
+/// until the id-matched Response, and decode its `result`. Only `session/prompt` is left outstanding
+/// past this point, which is what makes the session's terminal-result capture unambiguous.
+///
+/// `deferred` collects any notification read along the way, for the session's pump to replay.
+///
+/// # Errors
+///
+/// [`HarnessError::Protocol`] when the params cannot be encoded, the reply cannot be decoded, or a
+/// Response arrives for an id this client never sent; [`HarnessError::Harness`] when the agent
+/// answers with a JSON-RPC error; [`HarnessError::Transport`] on I/O failure or a channel that closed
+/// mid-handshake.
+async fn call<Req, Res, R, W>(
+    connection: &JsonRpcConnection<R, W>,
+    method: &str,
+    params: &Req,
+    deferred: &mut Vec<JsonRpcNotification>,
+) -> Result<Res, HarnessError>
+where
+    Req: Serialize,
+    Res: DeserializeOwned,
+    R: tokio::io::AsyncRead + Unpin + Send,
+    W: tokio::io::AsyncWrite + Unpin + Send,
+{
+    let id = connection.next_request_id();
+    let encoded = serde_json::to_value(params).map_err(|source| {
+        HarnessError::protocol(format!("`{method}` params are not encodable: {source}"))
+    })?;
+    let request = JsonRpcRequest::new(id.clone(), method, Some(encoded));
+    connection.send_request(&request).await?;
+    let result = read_result_for(connection, method, &id, deferred).await?;
+    serde_json::from_value(result.clone()).map_err(|source| {
+        HarnessError::protocol(format!(
+            "the `{method}` result is not the shape ACP specifies ({source}): {result}"
+        ))
+    })
+}
+
+/// Reads inbound frames until the Response for `expected_id` arrives, returning its `result`.
+///
+/// A conforming agent sends nothing else during the handshake, but the read is defensive on every
+/// arm because the alternative to handling a frame is dropping it:
+///
+/// - a **notification** is logged at `warn` (nothing has happened yet that an agent should be
+///   reporting) and **pushed onto `deferred`**, for the session's pump to replay onto the transcript
+///   as its first events. It is not recorded here because there is no transcript yet — and it is not
+///   dropped either, which is what the handshake used to do and what the crate's "nothing is
+///   dropped" rule forbids. This closes the window: the only frames read before the pump exists are
+///   read by this function, and every one of them is now either answered or carried forward,
+/// - a peer **request** is refused with `-32601` and the read continues, because leaving it
+///   unanswered would block the agent before the run started,
+/// - a Response for another id is a peer bug and fails the handshake rather than being taken as this
+///   one's answer.
+async fn read_result_for<R, W>(
+    connection: &JsonRpcConnection<R, W>,
+    method: &str,
+    expected_id: &JsonRpcId,
+    deferred: &mut Vec<JsonRpcNotification>,
+) -> Result<Value, HarnessError>
+where
+    R: tokio::io::AsyncRead + Unpin + Send,
+    W: tokio::io::AsyncWrite + Unpin + Send,
+{
+    loop {
+        let message = connection.recv().await?.ok_or_else(|| {
+            HarnessError::transport(format!(
+                "the ACP agent closed the channel while `{method}` was outstanding — it exited \
+                 before answering (its own diagnostics are on this process's stderr)"
+            ))
+        })?;
+        match message {
+            IncomingMessage::Response(response) if &response.id == expected_id => {
+                if let Some(error) = response.error {
+                    return Err(agent_error(method, &error));
+                }
+                return response.result.ok_or_else(|| {
+                    HarnessError::protocol(format!(
+                        "the `{method}` response carried neither result nor error"
+                    ))
+                });
+            }
+            IncomingMessage::Response(_) => {
+                return Err(HarnessError::protocol(format!(
+                    "the ACP agent answered an id this client never requested while `{method}` was \
+                     outstanding"
+                )));
+            }
+            IncomingMessage::Notification(note) => {
+                tracing::warn!(
+                    method = %note.method,
+                    during = %method,
+                    "acp adapter: unexpected notification during the handshake; deferred to the \
+                     transcript"
+                );
+                deferred.push(note);
+            }
+            IncomingMessage::Request(request) => {
+                refuse_peer_request(connection, request).await?;
+            }
+        }
+    }
+}
+
+/// Turns a handshake JSON-RPC error into the harness error it is.
+///
+/// `-32000` is ACP's "authentication required": it is the agent asking the client to call
+/// `authenticate`, which an unattended activity cannot do, so the message says so plainly instead of
+/// reporting an opaque code.
+fn agent_error(method: &str, error: &aion_integrations::jsonrpc::JsonRpcError) -> HarnessError {
+    if error.code == protocol::auth_required_code() {
+        return HarnessError::harness(format!(
+            "the ACP agent requires authentication before `{method}` (code {}): {} — an unattended \
+             activity cannot complete an interactive `authenticate` flow; supply the agent's \
+             credentials through the harness environment",
+            error.code, error.message
+        ));
+    }
+    HarnessError::harness(format!(
+        "`{method}` failed (code {}): {}",
+        error.code, error.message
+    ))
+}
+
+/// Performs the `initialize` handshake and gates on the negotiated protocol version.
+///
+/// # Errors
+///
+/// [`HarnessError::Protocol`] when the agent answers with a version this adapter cannot speak, plus
+/// every error [`call`] can return.
+async fn initialize<R, W>(
+    connection: &JsonRpcConnection<R, W>,
+    deferred: &mut Vec<JsonRpcNotification>,
+) -> Result<InitializeResponse, HarnessError>
+where
+    R: tokio::io::AsyncRead + Unpin + Send,
+    W: tokio::io::AsyncWrite + Unpin + Send,
+{
+    let request = InitializeRequest::new(protocol::PROTOCOL_VERSION)
+        .client_capabilities(protocol::client_capabilities())
+        .client_info(protocol::client_info());
+    let response: InitializeResponse =
+        call(connection, protocol::METHOD_INITIALIZE, &request, deferred).await?;
+    translate::gate_protocol_version(response.protocol_version)?;
+    tracing::debug!(
+        version = response.protocol_version.as_u16(),
+        agent = ?response.agent_info,
+        capabilities = ?response.agent_capabilities,
+        auth_methods = ?auth_method_ids(&response.auth_methods),
+        "acp adapter: initialize negotiated"
+    );
+    Ok(response)
+}
+
+/// The ids of the authentication methods an agent advertised, for diagnostics.
+///
+/// Recorded so an operator whose run fails with `-32000` can see which methods were on offer without
+/// re-running the agent by hand.
+fn auth_method_ids(methods: &[AuthMethod]) -> Vec<String> {
+    methods
+        .iter()
+        .map(|method| method.id().to_string())
+        .collect()
+}
+
+impl AcpHarness {
+    /// Runs the whole transport-independent opening of a turn over an already-connected channel:
+    /// the `initialize` handshake, `session/new`, then the outstanding `session/prompt`.
+    ///
+    /// Split out from [`AgentHarness::start`] so the protocol conversation is exercised over any
+    /// [`tokio::io::AsyncRead`] / [`tokio::io::AsyncWrite`] pair, not only a spawned child's stdio.
+    ///
+    /// # Errors
+    ///
+    /// Every error [`initialize`] and [`Self::open_turn`] can return.
+    pub(crate) async fn connect<R, W>(
+        &self,
+        connection: &JsonRpcConnection<R, W>,
+        prompt: String,
+    ) -> Result<OpenedTurn, HarnessError>
+    where
+        R: tokio::io::AsyncRead + Unpin + Send,
+        W: tokio::io::AsyncWrite + Unpin + Send,
+    {
+        let mut deferred = Vec::new();
+        initialize(connection, &mut deferred).await?;
+        self.open_turn(connection, prompt, deferred).await
+    }
+
+    /// Creates the session and issues the prompt, returning the session id, the outstanding
+    /// `session/prompt` request id, and the notifications read before the pump could exist.
+    async fn open_turn<R, W>(
+        &self,
+        connection: &JsonRpcConnection<R, W>,
+        prompt: String,
+        mut deferred: Vec<JsonRpcNotification>,
+    ) -> Result<OpenedTurn, HarnessError>
+    where
+        R: tokio::io::AsyncRead + Unpin + Send,
+        W: tokio::io::AsyncWrite + Unpin + Send,
+    {
+        // `mcpServers` is REQUIRED by `session/new`, so it must appear on the wire. This call sets
+        // the value; it is the SCHEMA that guarantees the key's presence — the field carries no
+        // `skip_serializing_if`, so an empty list serialises as `"mcpServers": []` whether or not
+        // this call is made. It is written explicitly anyway, so the empty list is a stated decision
+        // rather than a reliance on the schema's default, and `wire_tests` asserts the key is there.
+        let new_session = NewSessionRequest::new(self.cwd.clone())
+            .mcp_servers(Vec::new())
+            .additional_directories(self.additional_directories.clone());
+        let session: NewSessionResponse = call(
+            connection,
+            protocol::METHOD_SESSION_NEW,
+            &new_session,
+            &mut deferred,
+        )
+        .await?;
+        tracing::debug!(
+            session = %session.session_id,
+            modes = ?session.modes,
+            "acp adapter: session created"
+        );
+
+        // `text` is one of the two content-block types every ACP agent MUST support (the other being
+        // `resource_link`); the rest are gated on `promptCapabilities`, so a text block needs no
+        // capability check.
+        let prompt_request = PromptRequest::new(
+            session.session_id.clone(),
+            vec![ContentBlock::Text(TextContent::new(prompt))],
+        );
+        let params = serde_json::to_value(&prompt_request).map_err(|source| {
+            HarnessError::protocol(format!("session/prompt params are not encodable: {source}"))
+        })?;
+        // This id is the ONLY id the terminal result is captured under: the request stays open for
+        // the whole turn and its Response carries the stop reason.
+        let prompt_id = connection.next_request_id();
+        let frame = JsonRpcRequest::new(
+            prompt_id.clone(),
+            protocol::METHOD_SESSION_PROMPT,
+            Some(params),
+        );
+        connection.send_request(&frame).await?;
+        Ok(OpenedTurn {
+            session_id: session.session_id,
+            prompt_id,
+            deferred,
+        })
+    }
+}
+
+#[async_trait]
+impl AgentHarness for AcpHarness {
+    type Session = AcpSession<ChildStdout, ChildStdin>;
+
+    async fn start(&self, spec: AgentRunSpec) -> Result<Self::Session, HarnessError> {
+        self.validate_paths()?;
+        let prompt = prompt_from_spec(&spec)?;
+        let mut child = self.spawn()?;
+        let (stdout, stdin) = take_child_io(&mut child)?;
+        let connection = Arc::new(JsonRpcConnection::new(stdout, stdin));
+
+        // The handshake, the session, and the prompt whose id the session captures the result under.
+        let opened = self.connect(connection.as_ref(), prompt).await?;
+
+        let identity = EventIdentity {
+            workflow_id: spec.workflow_id,
+            activity_id: spec.activity_id,
+            attempt: spec.attempt,
+        };
+        Ok(AcpSession::start(SessionStart {
+            connection,
+            session_id: opened.session_id,
+            prompt_id: opened.prompt_id,
+            policy: self.permission_policy,
+            identity,
+            deferred: opened.deferred,
+            child: Some(child),
+            exit_grace: self.exit_grace,
+        }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Fast unit tests of the configuration, the path validation, and the prompt decoding — no
+    //! process is spawned; the built [`Command`]'s argv is inspected directly (that argv is exactly
+    //! what a spawn would exec).
+
+    use std::error::Error;
+    use std::time::Duration;
+
+    use aion_core::{ActivityId, ContentType, Payload, WorkflowId};
+    use aion_integrations::HarnessError;
+
+    use super::{AcpHarness, AgentRunSpec, prompt_from_spec};
+    use crate::permission::PermissionPolicy;
+
+    type TestResult<T = ()> = Result<T, Box<dyn Error>>;
+
+    /// The shutdown grace these configuration tests are built with. Nothing here spawns a process,
+    /// so the value only has to be a real one an operator could choose.
+    const GRACE: Duration = Duration::from_secs(2);
+
+    fn spec_with_input(input: Payload) -> AgentRunSpec {
+        AgentRunSpec::new(
+            WorkflowId::new_v4(),
+            ActivityId::from_sequence_position(1),
+            1,
+            "agent",
+            input,
+        )
+    }
+
+    /// A harness configured the way a Gemini CLI launch needs (`--acp` as an argument).
+    fn harness() -> AcpHarness {
+        AcpHarness::new(
+            "/usr/local/bin/gemini",
+            ["--acp"],
+            "/srv/workspace",
+            PermissionPolicy::Deny,
+            GRACE,
+        )
+    }
+
+    /// The argv the built command would exec, decoded as UTF-8 strings.
+    fn argv(harness: &AcpHarness) -> TestResult<Vec<String>> {
+        let decoded = harness
+            .command()
+            .as_std()
+            .get_args()
+            .map(|arg| arg.to_str().map(str::to_owned).ok_or("argv is not UTF-8"))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(decoded)
+    }
+
+    #[test]
+    fn the_configured_command_and_args_are_passed_through_verbatim() -> TestResult {
+        // ACP has no standard launch flag, so the argv must be exactly what the operator configured
+        // — nothing added, nothing reordered.
+        assert_eq!(argv(&harness())?, vec!["--acp".to_owned()]);
+
+        let no_args = AcpHarness::new(
+            "opencode",
+            Vec::<String>::new(),
+            "/srv/workspace",
+            PermissionPolicy::AllowOnce,
+            GRACE,
+        );
+        assert!(argv(&no_args)?.is_empty(), "no args configured, none sent");
+
+        let two_args = AcpHarness::new(
+            "npx",
+            ["@agentclientprotocol/claude-agent-acp", "--verbose"],
+            "/srv/workspace",
+            PermissionPolicy::AllowOnce,
+            GRACE,
+        );
+        assert_eq!(
+            argv(&two_args)?,
+            vec![
+                "@agentclientprotocol/claude-agent-acp".to_owned(),
+                "--verbose".to_owned()
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_child_runs_in_the_session_cwd() -> TestResult {
+        let command = harness().command();
+        let directory = command
+            .as_std()
+            .get_current_dir()
+            .ok_or("the child's working directory is set to the session cwd")?;
+        assert_eq!(directory, std::path::Path::new("/srv/workspace"));
+        Ok(())
+    }
+
+    #[test]
+    fn removed_env_vars_are_expressed_as_child_removals() {
+        let harness = harness()
+            .with_env("ANTHROPIC_API_KEY", "stray-ambient-key")
+            .without_env("ANTHROPIC_API_KEY");
+        let command = harness.command();
+
+        // On std's Command an env REMOVAL is a `(key, None)` entry: the child will not inherit the
+        // variable even when the parent carries it, and the removal wins over a set of the same key.
+        let removal_expressed = command
+            .as_std()
+            .get_envs()
+            .any(|(key, value)| key == "ANTHROPIC_API_KEY" && value.is_none());
+        assert!(
+            removal_expressed,
+            "without_env must express a child-side env removal on the spawned command"
+        );
+    }
+
+    #[test]
+    fn a_relative_cwd_is_refused_naming_the_setting() -> TestResult {
+        let harness = AcpHarness::new("agent", ["acp"], "workspace", PermissionPolicy::Deny, GRACE);
+        let error = harness
+            .validate_paths()
+            .err()
+            .ok_or("a relative cwd must be refused")?;
+        assert!(
+            matches!(error, HarnessError::Protocol { .. }),
+            "got {error:?}"
+        );
+        let message = error.to_string();
+        assert!(
+            message.contains("cwd") && message.contains("absolute"),
+            "the refusal names the setting and the requirement: {message}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_relative_additional_directory_is_refused() -> TestResult {
+        let harness = AcpHarness::new("agent", ["acp"], "/srv", PermissionPolicy::Deny, GRACE)
+            .with_additional_directory("shared");
+        let error = harness
+            .validate_paths()
+            .err()
+            .ok_or("a relative additional directory must be refused")?;
+        assert!(
+            error.to_string().contains("additionalDirectories"),
+            "the refusal names the setting: {error}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn absolute_paths_pass_validation() -> Result<(), HarnessError> {
+        harness()
+            .with_additional_directory("/srv/shared")
+            .validate_paths()
+    }
+
+    #[test]
+    fn json_string_input_unwraps_to_the_exact_inner_text() -> TestResult {
+        // A String-typed activity input arrives as its JSON encoding: surrounding quotes plus
+        // \n / \" escapes. The prompt must be the exact multi-line text, not the encoding.
+        let encoded = serde_json::to_vec(&serde_json::json!("line one\nsay \"hi\"\nline three"))?;
+        let spec = spec_with_input(Payload::new(ContentType::Json, encoded));
+        assert_eq!(prompt_from_spec(&spec)?, "line one\nsay \"hi\"\nline three");
+        Ok(())
+    }
+
+    #[test]
+    fn json_object_input_passes_through_as_its_json_text() -> TestResult {
+        // A structured payload is a legitimate prompt: it must reach the agent as its raw JSON text,
+        // not be rejected or reshaped.
+        let raw = r#"{"task":"build","steps":[1,2]}"#;
+        let spec = spec_with_input(Payload::new(ContentType::Json, raw.as_bytes().to_vec()));
+        assert_eq!(prompt_from_spec(&spec)?, raw);
+        Ok(())
+    }
+
+    #[test]
+    fn json_tagged_plain_text_input_passes_through_unchanged() -> TestResult {
+        // Payload is a dumb carrier that does not validate on construction, so JSON-tagged bytes
+        // that are NOT valid JSON keep the UTF-8 pass-through behaviour.
+        let spec = spec_with_input(Payload::new(
+            ContentType::Json,
+            b"plain prompt, not json".to_vec(),
+        ));
+        assert_eq!(prompt_from_spec(&spec)?, "plain prompt, not json");
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_utf8_input_is_refused() -> TestResult {
+        // ACP frames are UTF-8 JSON: there is no way to put arbitrary bytes in a text block.
+        let spec = spec_with_input(Payload::new(ContentType::Json, vec![0xff, 0xfe, 0xfd]));
+        let error = prompt_from_spec(&spec)
+            .err()
+            .ok_or("non-UTF-8 input must be refused")?;
+        assert!(
+            error.to_string().contains("not valid UTF-8"),
+            "the error names the UTF-8 mismatch, got: {error}"
+        );
+        Ok(())
+    }
+}

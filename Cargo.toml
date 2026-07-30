@@ -20,6 +20,7 @@ members = [
     "crates/aion-integrations",
     "crates/aion-integration-norn",
     "crates/aion-integration-cli",
+    "crates/aion-integration-acp",
     "crates/aion-cli",
     "benchmarks/million-processes",
     "xtask",
