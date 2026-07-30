@@ -92,7 +92,21 @@ present and whose fetch fails. Distinguish the two:
   treating a fetch failure as a skip makes the test able to pass while proving
   nothing, which is the failure mode this whole cycle has been about.
 
-Pick one, state why, and make the skip path impossible to confuse with a pass.
+A fourth option, found by reading `compile_generated_modules` rather than reasoning
+about it, and probably the right one: the generated project's `gleam.toml` pins
+`aion_flow` by **path** but takes `gleam_stdlib = ">= 0.34.0 and < 2.0.0"` and
+`gleam_json = ">= 2.0.0 and < 4.0.0"` from Hex, so **every run of this test resolves
+and downloads two packages over the network**. A bounded retry on a
+fetch-classified failure costs nothing in rigour — it does not weaken the assertion
+at all, it only tolerates a transient registry — and it is far lighter than
+vendoring. Combine it with classification so the final message names an
+infrastructure failure as one, and nobody reads "Failure opening tar archive" as an
+AWL emitter defect.
+
+Whichever is chosen: `gleam build`'s exit status currently reaches a bare `assert!`
+with stdout and stderr interpolated (`compile.rs:154`), so the failure text is
+available to classify on — no new plumbing needed. Pick one, state why, and make
+the skip path impossible to confuse with a pass.
 
 ## R3 — only then, the four libsql failures
 
