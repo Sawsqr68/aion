@@ -70,10 +70,17 @@ Expect: `agent_dev` appears in the workflow/version list.
 
 ```bash
 ./examples/agent-dev/worker/target/debug/agent-dev-worker \
-    --address 127.0.0.1:50061
+    --address 127.0.0.1:50061 \
+    --norn-account default
 # add --norn-bin ~/Developer/ablative/norn/target/release/norn if norn on
 # PATH is not the hardened build
 ```
+
+`--norn-account` is required and has no default. The harness runs norn with
+`--resume-if-exists`, and norn refuses to resume or open an existing OAuth
+session without an account alias. Omitting it used to start the worker
+perfectly happily and then fail every agent activity with
+`norn: auth error: authentication failed`; it now refuses at startup instead.
 
 Expect: a startup line naming the resolved workspace root, then
 `connected and registered; serving` — and the worker appearing in the

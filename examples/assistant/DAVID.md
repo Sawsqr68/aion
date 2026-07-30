@@ -63,9 +63,15 @@ Expect `assistant` in the workflow/version list.
 ## 4. Start the worker
 
 ```bash
-./examples/agent-dev/worker/target/debug/agent-dev-worker --address 127.0.0.1:50061
+./examples/agent-dev/worker/target/debug/agent-dev-worker \
+    --address 127.0.0.1:50061 --norn-account default
 # add --norn-bin /path/to/norn if norn on PATH is not the hardened build
 ```
+
+`--norn-account` is required and has no default — the harness resumes norn
+sessions, and norn refuses to resume without an account alias. Without it the
+worker starts and registers normally, then fails every assistant round with
+`norn: auth error: authentication failed`.
 
 Expect a startup line naming the resolved workspace root, then
 `connected and registered; serving dispatches`.

@@ -71,7 +71,11 @@ const REDIAL_MAX_BACKOFF: Duration = Duration::from_millis(500);
 /// adapter's intervention translation supports today (`InjectMessage` +
 /// `Cancel`); advertising more would promise interventions the harness
 /// rejects.
-fn composed_agent_harness(norn_bin: &str, workspace_root: &Path) -> AgentHarnessConfig {
+fn composed_agent_harness(
+    norn_bin: &str,
+    norn_account: &str,
+    workspace_root: &Path,
+) -> AgentHarnessConfig {
     // The run's own clone — the ONE template both the file-tool confinement
     // (--workspace-root) and the tool-execution cwd (-C) point at.
     let run_clone = format!("{}/{{workflow_id}}/repo", workspace_root.display());
@@ -84,6 +88,14 @@ fn composed_agent_harness(norn_bin: &str, workspace_root: &Path) -> AgentHarness
             .with_arg("--session-id")
             .with_arg("{workflow_id}-{activity_type}")
             .with_arg("--resume-if-exists")
+            // Required BECAUSE of --resume-if-exists above: norn refuses to
+            // resume, fork, or open an existing OAuth session without an
+            // account alias. Without it every agent activity fails with
+            // `norn: auth error: authentication failed`, retries to its cap,
+            // and fails the workflow — while the worker itself logs
+            // "connected and registered; serving dispatches" and looks well.
+            .with_arg("--account")
+            .with_arg(norn_account)
             .with_arg("--fast")
             // Force the `ChatGPT` OAuth login: the project does not use API
             // keys, and a stray ambient key would take precedence and fail.
@@ -110,6 +122,15 @@ struct Args {
     ready_file: Option<String>,
     /// Path to the `norn` binary (default: `NORN_BIN` env, else `norn` on PATH).
     norn_bin: String,
+    /// The norn OAuth account alias passed as `--account`.
+    ///
+    /// Required, with no default. The harness runs norn with
+    /// `--resume-if-exists`, and norn refuses to resume, fork, or open an
+    /// existing OAuth session without an account — so this is an input the
+    /// worker cannot supply for the operator. Guessing `default` here would
+    /// turn a clear startup error into three retried activity failures and a
+    /// failed workflow, which is exactly how this was found.
+    norn_account: String,
 }
 
 /// Parse `--address` (repeatable), `--identity`, `--ready-file`, `--norn-bin` from the process
@@ -135,6 +156,7 @@ fn parse_args_from(
     let mut identity = "agent-dev-worker".to_owned();
     let mut ready_file: Option<String> = None;
     let mut norn_bin = default_norn_bin;
+    let mut norn_account: Option<String> = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -154,17 +176,30 @@ fn parse_args_from(
                 Some(value) => norn_bin = value,
                 None => anyhow::bail!("--norn-bin requires a value"),
             },
+            "--norn-account" => match args.next() {
+                Some(value) => norn_account = Some(value),
+                None => anyhow::bail!("--norn-account requires a value"),
+            },
             other => anyhow::bail!("unknown argument `{other}`"),
         }
     }
     if candidates.is_empty() {
         candidates.push("127.0.0.1:50061".to_owned());
     }
+    let Some(norn_account) = norn_account else {
+        anyhow::bail!(
+            "--norn-account <alias|default> is required: the agent harness runs norn with \
+             --resume-if-exists, and norn refuses to resume or open an existing OAuth session \
+             without an account. Omitting it does not fail here — it fails inside every agent \
+             activity, three retries deep, as `norn: auth error: authentication failed`"
+        );
+    };
     Ok(Args {
         candidates,
         identity,
         ready_file,
         norn_bin,
+        norn_account,
     })
 }
 
@@ -204,7 +239,7 @@ fn main() -> anyhow::Result<()> {
 
     let shell = Shell::inherited();
     let registry = build_registry(&shell, &workspace_root)?;
-    let agent = composed_agent_harness(&args.norn_bin, &workspace_root);
+    let agent = composed_agent_harness(&args.norn_bin, &args.norn_account, &workspace_root);
 
     // Never stop on our own; the operator ends the worker with a signal.
     let stop = AtomicBool::new(false);
@@ -244,13 +279,38 @@ mod tests {
         )
     }
 
+    /// The account has NO default on purpose. Before this was required the
+    /// worker started cleanly, logged "connected and registered; serving
+    /// dispatches", and then failed every agent activity three times with
+    /// `norn: auth error` — a healthy-looking worker that could not do its
+    /// job. Failing at parse time is the whole fix.
     #[test]
-    fn no_arguments_yields_the_defaults() -> anyhow::Result<()> {
-        let args = parse(&[])?;
+    fn no_arguments_bails_because_the_norn_account_has_no_default() {
+        let outcome = parse(&[]).err().map(|error| error.to_string());
+        assert!(
+            outcome.is_some(),
+            "a missing --norn-account must bail, not default"
+        );
+        let error = outcome.unwrap_or_default();
+        assert!(
+            error.contains("--norn-account <alias|default> is required"),
+            "the refusal must name the flag and its shape, got: {error}"
+        );
+        assert!(
+            error.contains("norn: auth error"),
+            "the refusal must name the failure it prevents, so an operator \
+             who has already seen that error connects the two, got: {error}"
+        );
+    }
+
+    #[test]
+    fn the_other_flags_still_default_once_the_account_is_supplied() -> anyhow::Result<()> {
+        let args = parse(&["--norn-account", "default"])?;
         assert_eq!(args.candidates, vec!["127.0.0.1:50061".to_owned()]);
         assert_eq!(args.identity, "agent-dev-worker");
         assert_eq!(args.ready_file, None);
         assert_eq!(args.norn_bin, "norn-default");
+        assert_eq!(args.norn_account, "default");
         Ok(())
     }
 
@@ -267,6 +327,8 @@ mod tests {
             "/tmp/ready",
             "--norn-bin",
             "/opt/norn",
+            "--norn-account",
+            "work-alias",
         ])?;
         assert_eq!(
             args.candidates,
@@ -275,12 +337,24 @@ mod tests {
         assert_eq!(args.identity, "worker-a");
         assert_eq!(args.ready_file.as_deref(), Some("/tmp/ready"));
         assert_eq!(args.norn_bin, "/opt/norn");
+        assert_eq!(args.norn_account, "work-alias");
         Ok(())
     }
 
+    /// NOTE: this list is an enumeration, so it only covers the flags someone
+    /// remembered to add. A new value-taking flag joins the parser without
+    /// joining this list and is silently untested — which is exactly how
+    /// `--norn-account` came to be missing from the harness invocation in the
+    /// first place. Add the flag here whenever you add one to `parse_args_from`.
     #[test]
     fn every_value_taking_flag_bails_when_its_value_is_missing() {
-        for flag in ["--address", "--identity", "--ready-file", "--norn-bin"] {
+        for flag in [
+            "--address",
+            "--identity",
+            "--ready-file",
+            "--norn-bin",
+            "--norn-account",
+        ] {
             assert_eq!(
                 parse(&[flag]).err().map(|error| error.to_string()),
                 Some(format!("{flag} requires a value")),
