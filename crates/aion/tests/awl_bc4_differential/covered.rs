@@ -20,7 +20,13 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// action's does and the body rides the package contract, so both backends
 /// must still produce byte-identical trails. Verified by running the
 /// differential, not asserted from the reasoning.
-const COVERED_COUNT: usize = 84;
+///
+/// 85 since outbound signals: `step-bodies/valid/send_signal` joined the corpus
+/// with the `send` statement. A send is a durable outward effect that both
+/// backends must lower identically, so it belongs in the differential and not
+/// merely in aion-awl's own ratchet. Its bucket below was read off the run, not
+/// predicted.
+const COVERED_COUNT: usize = 85;
 
 /// Out-of-oracle (r2 finding 3): bare signal-wait fixtures whose durable park
 /// boundary is NOT observable through any engine surface without racy sampling.
@@ -116,6 +122,20 @@ const EXPECTED_FAILED: &[&str] = &[
     "step-bodies/valid/index_and_concat",
     "step-bodies/valid/literal_forms",
     "step-bodies/valid/predicates_and_operators",
+    // Fails on its FIRST statement, `send heartbeat to coordinator_id`, because
+    // the harness input supplies `coordinator_id: "x"` — not a live run. Read
+    // off the trail, not inferred: the run reaches `WorkflowFailed` at seq 3
+    // with NO `ActivityScheduled` at all, so the fault is the send's
+    // unresolvable target and not the `evaluate` action below it. Both backends
+    // record it byte-identically, which is what pins an outbound signal's
+    // failure as a real durable effect rather than a silent no-op.
+    //
+    // Its recorded detail is a bare `{"tag":"AwlFailed"}` — no signal name, no
+    // target, no cause — where an authored failure route records
+    // `AwlOutcomeFailure` with its outcome and payload. That asymmetry is a
+    // diagnosis gap tracked separately; it is NOT what this pin asserts, and
+    // this comment exists so nobody reads the bucket as a blessing of it.
+    "step-bodies/valid/send_signal",
 ];
 
 /// The covered fixtures that COMPLETE their real path (`WorkflowCompleted`).

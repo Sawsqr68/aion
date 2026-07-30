@@ -369,7 +369,20 @@ fn fold_runs(
     }
     match reference.disposition {
         Disposition::Completed => report.record_succeeded(name),
-        Disposition::Failed => report.record_failed(name),
+        Disposition::Failed => {
+            // A fixture landing in the failed bucket is only a correct pin if it
+            // fails for the DESIGNED reason, and the bucket name alone cannot
+            // tell you which. `BC4_DUMP_FAILED=<fixture name>` prints that
+            // fixture's reference trail so the recorded failure can be read
+            // rather than inferred — the difference between pinning a property
+            // and fossilising a defect as expected behaviour.
+            if std::env::var("BC4_DUMP_FAILED").is_ok_and(|wanted| wanted == name) {
+                for event in &reference.trail {
+                    eprintln!("TRAIL {event:?}");
+                }
+            }
+            report.record_failed(name);
+        }
         Disposition::Cancelled => report.record_cancelled(name),
         Disposition::Parked => report.record_parked_timer(name, reference_timers),
         // `Stuck` was handled above as infra.
