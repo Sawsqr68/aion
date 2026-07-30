@@ -19,7 +19,55 @@ record of the first smoke flight.
 - Canvas: `staged_rounds.awl` (302 lines) loaded into the studio, on disk at
   `~/.aion/authoring/staged_rounds.awl`. Console route **/authoring**.
 
-## 🔴 THE THARSIS RUN IS EXECUTING
+## 🔴🔴 THE THARSIS RUN DIED AT 08:06:17Z — AND THE FAULT IS OURS (task #82)
+
+Read this section first. It supersedes the "IS EXECUTING" section below.
+
+**Every piece of real work succeeded.** Planner, 3x `provision_item`,
+3x `dev_item` (real commits on three item branches), 3x `gate_item` — all
+`ActivityCompleted`, gate results 54-61 KB each. Then, 14 ms after the last
+gate landed, the workflow failed:
+
+```
+WorkflowFailed seq 37 @ 2026-07-30T08:06:17.859413Z
+  message: "workflow 3 returned error"
+  details: {"tag":"AwlActivityFailed",
+            "message":"activity engine failure: engine NIF state is not installed for this runtime"}
+```
+
+Evidence chain, all verified at my seat:
+- `"workflow {pid} returned error"` — `crates/aion/src/runtime/outcome.rs:116`.
+  pid 3 = the top-level workflow's beamr process.
+- `"engine NIF state is not installed for this runtime"` —
+  `crates/aion/src/runtime/nif_state.rs:432`, `ctx.nif_private_data()` was `None`.
+- `"activity engine failure: …"` — the AWL error wrapper, so it was hit inside
+  an ACTIVITY-dispatching NIF.
+- Aion installs the data ONCE: `crates/aion/src/runtime/handle.rs:141`
+  (`SchedulerConfig::nif_private_data`).
+- beamr 0.16.2 has exactly THREE sites that put it on a `ProcessContext`:
+  `interpreter/opcodes/native_call.rs:169` (**gated on `if let Some(svc) =
+  ctx.services`**), `interpreter/opcodes/trampoline.rs:166`,
+  `scheduler/execution/core.rs:1507`. `native/context/mod.rs:557` and `:616`
+  both default it to `None`.
+- Failing call site: `plan_reviews(...)` at `staged_rounds.awl:237` — the plain
+  activity call right after the THIRD `fork…join` in the `execute` loop.
+- JIT correlation, NOT yet a cause: `~/.aion/server.log` "defining function
+  funcidNN" at 07:25:52 (44), 08:06:08 (45), **08:06:17.845 (46)**. But
+  `grep` of `beamr-0.16.2/src/jit` finds NO NIF call sites at all.
+
+An Opus agent is root-causing with orders to build a DETERMINISTIC repro first
+(an hour-long flake is not evidence) and to rule Aion-defect vs beamr-defect
+explicitly. beamr work coordinates with Artemis Peach; do NOT patch the
+vendored registry copy.
+
+**The gates did their job on the way past.** Decoded gate result for
+`d1-project-foundations`: `gate scope-fence exited 1` listing `.github/
+workflows/ci.yml`, `clippy.toml`, `rust-toolchain.toml`, `rustfmt.toml`,
+`spikes/s*/run.sh`. That is the fence catching a real out-of-scope write — the
+loop was working, and the item would have gone to the review panel and been
+folded back as blocked. The engine died before the panel ran.
+
+## THE RUN AS IT EXECUTED (historical)
 
 Workflow `9da28cf9-5eaa-45b8-9b3d-eccc194dceed`, run
 `8fed4511-401c-49dc-b2e7-44d3624dffdf`, started **07:10:44Z**, status `Running`.
@@ -101,14 +149,66 @@ Verified: `cargo clippy -p aion-server --all-targets -- -D warnings` **exit 0**;
 console `bun run typecheck` clean; `bun test` **580 pass / 0 fail** (92 files);
 `bun run lint` 9 pre-existing warnings, 0 errors.
 
+## #81 PERMISSIONS — LANDED IN THE TREE (uncommitted), Tom's repeat complaint
+
+Root: `ConfinedDir::require_private_mode` (`filesystem.rs:183`) and
+`validate_private_root` (`:525`) refused on `mode & 0o077` telling the operator
+to `chmod 700` — while `harden_tree` (`:334`) ALREADY chmods the whole data
+tree to 0700/0600. It just ran AFTER the refusal that made it unreachable.
+
+Fix: `ConfinedDir::ensure_private_mode` tightens in place when the server's euid
+owns the root, decided entirely against the ALREADY-OPEN descriptor (`fstat` via
+`dir_metadata`, `fchmod` via `rustix::fs::fchmod`) so there is no second path
+resolution and no TOCTOU window; the applied mode is re-read from the descriptor
+because some filesystems accept a chmod and discard it. `ensure_private_home`
+now goes through `open_or_create`, so `~/.aion` is CREATED owner-only if absent
+(it previously returned `Ok` on NotFound and created nothing).
+`filesystem.rs` split: `filesystem/ancestors.rs` holds the ancestor gate — a real
+seam, roots we own and may repair vs ancestors we must never touch. 369 + 75 lines.
+
+Still refusing, deliberately, each pinned: world-writable ancestor, foreign-owned
+ancestor, macOS ACL granting a foreign principal, symlinked root (target's mode
+explicitly left alone), foreign-owned root (its own message now, naming path /
+mode / owner uid / server uid — the old one named a `chmod` that would have
+failed for the operator too).
+
+Gates: `cargo clippy -p aion-server --all-targets -- -D warnings` exit 0;
+`cargo test -p aion-server` **658 passed / 0 failed / 0 ignored**; fmt clean.
+
+`RELEASE-0.9.2.md` — I withdrew the "run `chmod 700 ~/.aion`, that's the privacy
+gate doing its job" paragraph. That was the sentence Tom actually read.
+
+## MY OWN RIDER ON TOP (uncommitted): the swallowed rollback
+
+`awl/documents.rs:128` had `if let Ok(workspace) = ConfinedDir::open(root)` and
+`let _ = workspace.remove_file(…)` — TWO swallowed errors in the rollback that
+removes a document whose first revision failed to store. Cost of the swallow is
+not a stray file: the orphan makes every retry of that create fail with `Exists`
+for a document that was never created, with nothing anywhere saying why. It also
+ran raw sync I/O inline on the async runtime while every other call in the module
+goes through `blocking`.
+
+Fixed: new `rollback_created_document` on the blocking pool, NotFound-tolerant
+(nothing to undo is not a failure), and a new `DocumentError::CreateRollbackFailed
+{ path, reason, rollback }` carrying BOTH causes — plus its own
+`DocumentCreateRollbackFailed` HTTP error type, because a caller that cannot tell
+it from a plain I/O error cannot explain it to the operator.
+
+Three tests, all passing, incl. the one that pins the ACTUAL defect
+(`a_rollback_that_cannot_remove_the_document_reports_it` — chmods the workspace
+0500 so `remove_file` fails with PermissionDenied and asserts it propagates;
+root-guarded at RUNTIME with a logged skip, never `#[ignore]`).
+`awl::documents` **7 passed / 0 failed / 0 ignored**; `cargo clippy -p aion-server
+--all-targets -- -D warnings` **exit 0, zero diagnostics**. 249 code lines.
+
 ## STILL OUT / BLOCKING THE COMBINED GATE
 
 - **Scaffold agent** (`crates/aion-package/src/codegen/awl_worker/`,
   `aion-cli`) — still running. Its `declaration_rs.rs:168 emit_declaration` is
   135/100 lines and currently FAILS workspace clippy. Not fallout from the
   other lanes.
-- **#81 permissions agent** (`crates/aion-server/src/{config,filesystem}.rs`) —
-  still running. Disjoint from my `awl/` edits.
+- **#82 NIF root-cause agent** (`crates/aion/`) — just dispatched. Disjoint from
+  the `aion-server` work above.
 
 **SEQUENCE WHEN THEY LAND:** run ONE combined gate over the whole workspace
 (`cargo clippy --workspace --all-targets -- -D warnings`, `cargo test`, console
