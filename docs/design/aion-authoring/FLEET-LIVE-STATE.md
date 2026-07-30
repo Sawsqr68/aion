@@ -1,5 +1,36 @@
 # Fleet + lanes: LIVE STATE (resume point)
 
+## 🔴 TWO LANES IN FLIGHT RIGHT NOW — 2026-07-30 ~13:20Z. `origin/main` = `7bbe947f`.
+
+Both are Opus agents working DIRECTLY in this tree (no worktrees, per Tom).
+They were briefed into disjoint crates and told to stage only their own paths
+by name — never `git add -A`. **If you are resuming and they are gone, check
+`git status` before doing anything: uncommitted work in `crates/aion-awl` or
+`crates/aion`+`crates/aion-server` is theirs, and a `reset --hard` destroys it.**
+
+| lane | brief | crates it owns | task |
+|---|---|---|---|
+| AWL query surface | `BRIEF-AWL-QUERY-SURFACE.md` | `crates/aion-awl` | #96 |
+| Contract at the boundary | `BRIEF-DECLARED-CONTRACT-AT-THE-BOUNDARY.md` | `crates/aion`, `crates/aion-server` | #95 + #97-A |
+
+**Queued behind the AWL lane, ruled and ready to dispatch the moment
+`crates/aion-awl` is free:** #98, the `agent` marker on an action declaration
+(`RULING-AGENT-ACTION-WIRE-FORM.md`), then #97-B (a bare optional scalar never
+narrows, so `T?` is write-only — the `narrow` machinery is half-built, see the
+end of the boundary brief).
+
+**Landed by me this session, pushed:** the live restoration (below), the
+bindings-gate verification, the console README correction, both briefs and the
+ruling, and `scripts/battery.sh`.
+
+**OWED:** one end-to-end run of `scripts/battery.sh`. It has NOT been run whole
+— only its self-test (`AION_BATTERY_SELF_TEST=1`, exits 1 correctly), its
+`gate_in` mechanism, and the four non-Rust gates by hand (console typecheck 0,
+python worker 125 passed, python client 124 passed, ts check:proto matched).
+The Rust gates were skipped deliberately: two lanes are mid-build and a red
+would have been theirs, not the script's. Run it once the tree is theirs no
+longer.
+
 ## ✅✅ RESTORATION DONE — 2026-07-30 12:41Z. THE FULL AWL ASSISTANT RAN.
 
 **The restoration sequence banked at `9fb28133` is executed and complete.**
