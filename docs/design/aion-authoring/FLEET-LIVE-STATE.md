@@ -35,6 +35,51 @@ ratchet" — it is that a per-crate gate (`cargo test -p aion-awl`, which I ran
 and which passed) cannot see a cross-crate ratchet, and I cited it as if it
 could.
 
+## 🔴 RESUME HERE — 2026-07-30 ~10:55Z. `origin/main` = `e819b96a`, tree clean.
+
+**NOTHING IS IN FLIGHT.** No agents, no background builds. Everything below is
+committed and pushed.
+
+**THE NEXT STEP, unambiguous:** port `examples/assistant` to AWL — the full
+workflow, not the spike. The seam is PROVEN (see below), so this is now a
+straight port rather than a risk. Source of truth for behaviour:
+`examples/assistant/src/assistant.gleam` (305 lines), whose module doc states
+the whole contract: `assistant_provision -> [ assistant round; await operator ]*`
+bounded at `max_rounds = 50`; ONE control signal `assistant_continue` where
+`{"message": "..."}` continues and `{"end": true}` ends cleanly as
+`OperatorEnded`; an undecodable or blank payload is a TOLERATED no-op nudge
+because an operator typo must never kill a live session; a spent budget is the
+`RoundCapExhausted` disposition and NOT an error; agent rounds carry NO timeout
+by design. Prompt composition lives in `assistant/prompts`. Keep the Gleam
+version in place until the AWL one is live-proven.
+
+**✅ THE SEAM IS PROVEN, LIVE, ON TOM'S SERVER.**
+`examples/assistant/awl/assistant_spike.awl` — `awl check` clean (2 steps), then
+
+```
+aion run … --input '{"objective":"Reply with exactly one word: asparagus","repo_path":""}'
+{"outcome":"answered","payload":{"reply":"asparagus",
+ "workspace_path":"/Users/tom/.aion/clones/5b86b02e…/repo"}}
+```
+
+provision → agent round → typed outcome, through the real agent-dev worker on
+the real norn harness. Action shapes mirror what the worker advertises
+(`assistant_provision(repo_path, run_id) -> Workspace{path}`,
+`assistant(prompt: String) -> String`); `workflow.id` is available in AWL and
+MUST be passed as `run_id` or the agent works somewhere other than where it was
+provisioned.
+
+**HIS PROCESSES, as I leave them:** server pid 47610 and staged-rounds worker
+pid 49833 are STILL THE OLD BINARIES (restart not yet done — it was pending
+Tom's word and then overtaken by the investigation). `target/release/aion` IS
+now rebuilt (0.10.0, exit 0). A NEW process is running that I started:
+`agent-dev-worker --address 127.0.0.1:50061 --norn-account default`, which is
+what makes queue `default` servable at all.
+
+**AWAITING TOM** on #88 — recommended option 2+3 (move examples to AWL, stop
+claiming the Gleam path is first-class, make it refuse loudly). Option 3 is
+DONE and landed (`6cae9127`). Silence-default was to proceed with 2.
+
 ## 🔴 LIVE-SERVER INVESTIGATION, 2026-07-30 ~10:30Z — READ BEFORE TOUCHING HIS BOX
 
 Checking whether a restart was safe turned into the answer to Tom's "it just
