@@ -425,23 +425,97 @@ already ruled out the second:
 **Recommendation: (1), and it needs a decision before AWL agent authoring is
 called finished.**
 
-## 13. The spike and the full port cannot share a queue
+## 13. Shared-queue agreement — RESOLVED, and why the spike survives
 
-Measured with the real gate and asserted in
-`examples/agent-dev/worker/src/descriptors_tests.rs`:
+Measured with the real gate: the spike declared
+`assistant_provision(repo_path, run_id)` and the port added `objective`. Input
+compatibility is contravariant, so a worker requiring `objective` narrowed the
+spike's contract and was refused by it. Admission holds a worker against EVERY
+reachable contract on a queue at once, so the refusal was total: **neither**
+document could run. That is what took queue `default` down.
 
-```
-action `assistant_provision` field `input_schema.required`
-  expected ["repo_path","run_id"] but worker advertised ["repo_path","run_id","objective"]
-```
+RESOLVED by bringing the spike into agreement rather than retiring it — and the
+reason is finding 14, not sentiment. A deployed workflow type cannot be removed
+from a running server, so "retiring" the spike would still have left an
+`assistant_spike` type routed and served forever, with its source deleted. A
+deployed workflow with no source is worse than a maintained minimal example.
 
-Input compatibility is contravariant, so a worker that REQUIRES `objective`
-narrows the spike's contract and is refused by it. With both deployed and
-reachable on `default`, this worker is refused outright and NEITHER document
-runs. The `assistant` action itself is identical in both and does not conflict.
+The fix also corrected a real defect in the spike: it sent the bare `objective`
+as its prompt, opening the session with no working contract at all. It now
+sends `session.opening_prompt`.
 
-**Operational consequence: `assistant_spike.awl` must be undeployed before the
-full port is deployed.** The spike has served its purpose.
+The invariant is pinned in
+`examples/agent-dev/worker/src/descriptors_tests.rs` —
+`every_document_on_this_queue_agrees_with_the_advertised_surface` runs
+`contract_diffs` for every document on the queue. This is a permanent coupling:
+any future signature change to one document must be mirrored in the other, or
+the queue goes down again.
+
+## 14. Deploy is a ONE-WAY DOOR — no workflow type can ever be removed
+
+Confirmed at the bytes, and a genuine platform gap.
+
+The entire deploy surface is four verbs — `LoadPackage`, `ListVersions`,
+`RouteVersion`, `UnloadVersion`
+(`crates/aion-proto-generated/proto/deploy.proto:11-16`, mirrored exactly in
+HTTP at `crates/aion-server/src/api/http/router.rs:151-156` and in the CLI at
+`crates/aion-cli/src/main.rs:270-301`). There is no `undeploy`, `delete`,
+`remove`, `retire`, or `archive` on any transport.
+
+The dead end is structural, from three facts:
+
+1. Every load inserts a route for every member type
+   (`crates/aion/src/loader/catalog_load.rs:207-212`), so a type can never exist
+   without a route.
+2. `route_version` can only MOVE the route to an already-loaded version
+   (`crates/aion/src/loader/catalog.rs:531-553`). There is no `routed.remove`,
+   `clear_route`, or `unroute` anywhere in `crates/`.
+3. Unload refuses the route-active version
+   (`crates/aion/src/loader/catalog.rs:598-605`).
+
+Therefore **exactly one version of every loaded type is always route-active, and
+zero versions is unreachable.** The error text says "route another version
+first", which is only actionable when another version exists — at N=1 it is
+advice that cannot be taken. `docs/errors.md:69` repeats the same impossible
+instruction.
+
+Not even an embedder can work around it: `Engine::workflow_catalog()` is `pub`,
+but every mutating catalog method is `pub(crate)`; the only `pub` mutator is
+`load_package`.
+
+The only exit today is offline surgery — `DELETE FROM packages WHERE
+workflow_type = ...` plus a restart. That does work, because reload tolerates
+and skips a route pointer naming an unloaded version
+(`crates/aion/src/loader/persistence.rs:176-186`), leaving the stale
+`package_routes` row inert. It is unsupported surgery, not a procedure, and
+there is no documented removal process anywhere.
+
+### What the missing operation needs to look like
+
+A `RemoveWorkflowType` verb, in one deploy mutation:
+
+- Delete `routed[workflow_type]` — the primitive that does not exist.
+- Swap out every version of the type, bypassing the route check only because the
+  route is deleted in the same commit; unregister modules whose hashes no longer
+  back any surviving group.
+- Durably: `delete_package` per version, plus a NEW
+  `PackageStore::delete_package_route` — absent today
+  (`crates/aion-store/src/package.rs:50-105`), and `DELETE_PACKAGE_SQL` touches
+  only the `packages` table.
+
+It must refuse on the same pin set unload already uses, union'd over ALL versions
+rather than one: in-flight start pins, live non-terminal handles,
+`list_active()` ∪ `list_paused()` runs whose `WorkflowStarted` names the type,
+and recorded-but-unstarted children. Keeping BOTH scans matters — `list_active()`
+projects `Running` only, so dropping the paused scan would strand paused runs.
+
+It must not break: multi-entry archive groups (removing one member must not
+orphan a sibling sharing the group's beams), long-lived runs pinned to old
+versions, or status-is-a-projection — catalog and package state only, no history
+deletion, no synthesized terminal events, and the durable delete must precede
+module unregistration so a failure cannot leave a version gone from the process
+but resurrected next boot.
+
 
 ## Adjacent defects found, out of scope for this port
 
