@@ -1,6 +1,73 @@
 # Fleet + lanes: LIVE STATE (resume point)
 
-## 🔴 RESUME HERE — 2026-07-31 late morning. main `c5260d39`, PUSHED.
+## 🔴 RESUME HERE — 2026-07-31 midday. main `4ea6e510`, PUSHED.
+
+### 🔴 READ THIS FIRST: the box, and Tom's server
+
+- **Disk was at 96% (43Gi free of 926Gi) with `aion/target` at 78G.** Cleared
+  `target/debug` only — now **112Gi free at 88%**, target back to ~6G.
+- **Tom's live server (pid 99844) was running from a DELETED inode.** `lsof`
+  said it was executing `target/release/aion`; `ls` said no such file. Something
+  had removed `target/release` while a process was executing out of it, so the
+  estate's authoring server was irreplaceable. **A spare binary now exists**
+  (rebuilt 09:13, `aion 0.10.0`, verified by running it). The running image is
+  58,087,280 bytes and the on-disk file is 57,939,600 — DIFFERENT FILES, which
+  is the proof the running one is still the old inode. It is now safe to
+  restart. See #108.
+- **Law worth keeping:** a derived artefact is safe to delete only if nothing is
+  currently executing it. "Derived" is exactly the property that makes people
+  skip the check, because derived reads as reproducible and reproducible reads
+  as disposable. It is reproducible. It is not disposable while it is running.
+  `cargo clean` would NOT have freed the inode, would NOT have helped, and
+  **would have looked like it worked**.
+- **Never `git add -A` on this tree.** It sweeps `.worktrees/` (an embedded git
+  repo) into the commit. Now gitignored.
+
+### Manifold conditions — 4 of 5 discharged
+
+| # | Condition | State |
+|---|---|---|
+| 1 | AWL end to end, scoped contract under queue-routed serving | ✅ verified LIVE: `default` available, 1 connected worker, `assistant` route-active |
+| 2 | Definition iteration | ✅ answered (unload already landed) + visibility built `1a2551de`. Live: 6 resident versions / 5 types / 1 superseded |
+| 3 | Empty-queue dispatch visible | ✅ BUILT `4ea6e510` — visibility half only, wait still unbounded |
+| 4 | Cancel contract written | ✅ `c5260d39` — `docs/CANCELLATION-CONTRACT.md` |
+| 5 | beamr JIT pushed + tagged | ⏳ Artemis' `4e94cec`, unpushed, not mine |
+
+**Condition 3, what it actually was:** the R1 queue-service taxonomy landed for
+the DIRECT dispatch path and never reached the second one. `dispatch_to_node`
+(`aion-server/src/worker/dispatch.rs`), production-wired as the gRPC leg of the
+outbox dispatcher, was the pre-R1 loop verbatim. Three surfaces read "nothing
+to see" simultaneously: `/queues/unserved` empty, `dispatch_parked` FALSE for a
+parked dispatch, and the outbox row stuck `claimed` where dead-letter and
+redrive could not see it because `dispatch()` never returned. Fixed by
+factoring `observe_selection_miss` OUT of the selection wait so both loops call
+one implementation. **The wait is still unbounded on purpose — bounding it is
+Tom's decision and implementing it would have been a way of making it.**
+
+### Corrections I made to my own record today
+
+- **#101 was WRONG.** Versions CAN be unloaded. Only a type's ROUTE-ACTIVE
+  version cannot, and there is no route-retire path. Cally had already relayed
+  my wrong version to Waffles, who was designing around it.
+- **#42/#45 was WRONG.** The authored workflow timeout is NOT wired to nothing.
+  It is wired and gated end to end (`crates/aion/tests/workflow_timeout_e2e.rs`).
+  The real cause is that a Gleam `workflow.toml` does not opt into the
+  timeout-bearing identity, so it reads as not-declared. (Found by Callisto,
+  verified by me at the file header.)
+- **A limitation nobody re-checks is indistinguishable from a fact.**
+
+### New findings logged today
+
+- **#107** — there is NO parent→children relation. The system cannot answer
+  "what are this workflow's children". Bigger than cancel; blocks ADR-004.
+- **#106** — a derived schema that cannot compile means input validation is
+  silently absent.
+- **#108** — the deleted-binary incident.
+
+---
+
+## Earlier today — main `c5260d39`
+
 
 Four commits landed today, all pushed. Workspace clippy exit 0 throughout.
 Nothing is in flight at my hand; one read-only scout is mapping the empty-queue
