@@ -1,39 +1,57 @@
-//! SPIKE — proves one thing and nothing else: that an AWL document can drive
-//! the agent-dev worker's `assistant` agent action end to end on a real
-//! server. Provision a session workspace, run ONE agent round, return the
-//! reply. No loop, no operator signal, no round budget — those belong to the
-//! real port, and building them before this seam is proven would be building
-//! on an assumption.
+//! The MINIMAL assistant session: provision a workspace, run ONE agent round,
+//! return the reply. No loop, no operator signal, no round budget — those are
+//! the full session's job (`assistant.awl`), and this document exists to show
+//! the agent seam with nothing else in the frame.
 //!
-//! It exists because the Gleam-authored `assistant` package cannot start at
-//! all under queue-routed serving (docs/design/aion-authoring/
+//! It began as a spike proving that an AWL document could drive the agent-dev
+//! worker end to end, which it did, on a real server. It is kept — and kept in
+//! agreement — for a reason that is operational rather than sentimental:
+//!
+//!   THIS DOCUMENT SHARES QUEUE `default` WITH `assistant.awl`, AND THE TWO
+//!   MUST DECLARE THE SHARED ACTIONS IDENTICALLY.
+//!
+//! Worker contract admission holds a registering worker against EVERY
+//! reachable contract on its queue, and input compatibility is contravariant.
+//! When this document declared `assistant_provision(repo_path, run_id)` and
+//! the full session declared it with `objective` as well, the worker could
+//! satisfy only one of them — so it was refused outright and NEITHER document
+//! could run. That took queue `default` down.
+//!
+//! A deployed workflow type cannot be removed from a running server (a
+//! route-active version refuses to unload, and there is no operation that
+//! clears the route), so this type is served for as long as the server lives.
+//! Deleting the source would leave a deployed workflow with no source at all.
+//! It is therefore maintained, and
+//! `examples/agent-dev/worker/src/descriptors_tests.rs` asserts the agreement
+//! so a future edit to either document cannot quietly break the queue again.
+//!
+//! It also exists because the Gleam-authored `assistant` package cannot start
+//! at all under queue-routed serving (docs/design/aion-authoring/
 //! GLEAM-PATH-CANNOT-START-FINDING.md): a project manifest has no field for a
 //! task queue, so every activity is committed unscoped and start is refused.
 //! AWL declares its worker queue, so it is the only surface that can.
-//!
-//! The action shapes below are NOT invented — they mirror what the agent-dev
-//! worker advertises (`examples/assistant/src/assistant_io.gleam`:
-//! `ProvisionInput(repo_path, run_id)` -> `Workspace(path)`, and the agent
-//! round as one prompt string in, one terminal-text string out). A shape that
-//! disagrees is refused at worker registration with WORKER_CONTRACT_MISMATCH.
 workflow assistant_spike
   timeout 1h
   input objective: String
   input repo_path: String
   outcome answered: type Answered, route success
 
-/// The provisioned session workspace, materialised at `<root>/<run_id>/repo`.
-type Workspace { path: String }
+/// The provisioned session workspace, materialised at `<root>/<run_id>/repo`,
+/// and the composed round-one prompt. Declared exactly as `assistant.awl`
+/// declares it — see the module note on shared-queue agreement.
+type Workspace { path: String, opening_prompt: String }
 
 /// What one proven round returns: the agent's reply and where it worked.
 type Answered { reply: String, workspace_path: String }
 
 worker default
-  /// Materialises the session workspace. `run_id` must be the workflow's own
-  /// run id: it keys the worker-side directory AND must equal the id the
-  /// agent-harness `--workspace-root` template expands to, or the agent works
-  /// somewhere other than where it was provisioned.
-  action assistant_provision(repo_path: String, run_id: String) -> Workspace
+  /// Materialises the session workspace and composes the round-one prompt.
+  /// `run_id` must be the workflow's own run id: it keys the worker-side
+  /// directory AND must equal the id the agent-harness `--workspace-root`
+  /// template expands to, or the agent works somewhere other than where it was
+  /// provisioned. The signature is IDENTICAL to `assistant.awl`'s by
+  /// requirement, not by coincidence.
+  action assistant_provision(repo_path: String, run_id: String, objective: String) -> Workspace
 
   /// One agent round under the norn-harness contract: ONE prompt string in,
   /// ONE terminal-text string out. The worker pins one norn session per
@@ -41,8 +59,11 @@ worker default
   action assistant(prompt: String) -> String
 
 step provision
-  assistant_provision(repo_path: repo_path, run_id: workflow.id) -> session
+  assistant_provision(repo_path: repo_path, run_id: workflow.id, objective: objective) -> session
 
 step round after provision
-  assistant(prompt: objective) -> reply
+  // The prompt is the one the worker composed: the full working contract plus
+  // the operator's objective. Sending the bare objective instead would open
+  // the session with no contract at all.
+  assistant(prompt: session.opening_prompt) -> reply
   route answered(reply: reply, workspace_path: session.path)

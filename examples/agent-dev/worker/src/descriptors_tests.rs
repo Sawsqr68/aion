@@ -159,52 +159,78 @@ fn the_embedded_document_is_the_shipped_one() -> TestResult {
     Ok(())
 }
 
-/// The SPIKE contract, measured — and the reason the two documents cannot both
-/// be deployed on `default` at once.
+/// THE INVARIANT, replacing the test that pinned the conflict.
 ///
-/// `assistant_spike.awl` declares the same two action names on the same queue
-/// with a NARROWER `assistant_provision` input: `repo_path`, `run_id`, and no
-/// `objective`. Input compatibility is contravariant — every value the workflow
-/// may send must be accepted by the worker — so a worker that REQUIRES
-/// `objective` narrows the spike's contract and is refused by it.
+/// Every AWL document deployed to this worker's queue must declare the shared
+/// actions identically, because contract admission holds a registering worker
+/// against EVERY reachable contract on that queue at once. One document that
+/// disagrees does not degrade gracefully — the worker is refused outright and
+/// NONE of the documents on the queue can run. That is what took `default`
+/// down: the spike declared `assistant_provision(repo_path, run_id)` while the
+/// full session added `objective`, and input compatibility is contravariant, so
+/// no single worker could satisfy both.
 ///
-/// This is asserted rather than merely observed because it is an operational
-/// constraint, not a curiosity: with both deployed and reachable on `default`,
-/// this worker is refused outright and neither document runs. The spike has
-/// served its purpose and the full port supersedes it; it must be undeployed.
-/// If someone later makes the two compatible, this test is where they find out
-/// the constraint is gone.
+/// This asserts the property that must hold FOREVER, not the accident that the
+/// two once disagreed. A new `.awl` document sharing this queue belongs in the
+/// list below, and if it disagrees this test says so before a deploy does.
+///
+/// Note the deliberate asymmetry with `assistant.awl`: a document may declare a
+/// SUBSET of the queue's actions, but every action it does declare must match.
+/// The worker advertises the union, so extra advertised actions are fine —
+/// admission permits a worker to serve more than one contract needs.
 #[test]
-fn the_spike_contract_and_the_full_port_cannot_share_a_queue() -> TestResult {
-    let spike = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../assistant/awl/assistant_spike.awl"
-    ))?;
-    let contract = contract_of(&spike)?;
+fn every_document_on_this_queue_agrees_with_the_advertised_surface() -> TestResult {
+    // Every AWL document deployed to queue `default` and served by this worker.
+    let documents = [
+        ("assistant.awl", ASSISTANT_DOCUMENT),
+        (
+            "assistant_spike.awl",
+            include_str!("../../../assistant/awl/assistant_spike.awl"),
+        ),
+    ];
     let surface = advertised_surface()?;
-    let diffs = contract_diffs("assistant-spike", &contract, None, &surface.descriptors);
-    let rendered = diffs
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join("\n");
-    assert!(
-        !diffs.is_empty(),
-        "the spike and the full port were expected to conflict on \
-         `assistant_provision`; if they no longer do, this constraint has been \
-         lifted and the operational note in ASSISTANT-AWL-PORT.md is stale"
+    for (name, source) in documents {
+        let contract = contract_of(source)?;
+        assert_eq!(
+            contract.task_queue, surface.task_queue,
+            "{name} declares queue `{}`, but this worker serves `{}`; a document on \
+             another queue does not belong in this list",
+            contract.task_queue, surface.task_queue
+        );
+        let diffs = contract_diffs(name, &contract, None, &surface.descriptors);
+        assert!(
+            diffs.is_empty(),
+            "{name} disagrees with the advertised surface, so this worker would be \
+             refused and NO document on queue `{}` could run:\n{}",
+            surface.task_queue,
+            diffs
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    }
+    Ok(())
+}
+
+/// The non-vacuity guard for the invariant above: it must be checking more than
+/// one document, or it has quietly become a restatement of
+/// `the_advertised_surface_is_admitted_by_the_assistant_contract`.
+#[test]
+fn the_shared_queue_invariant_covers_more_than_one_document() -> TestResult {
+    let spike = include_str!("../../../assistant/awl/assistant_spike.awl");
+    assert_ne!(
+        spike, ASSISTANT_DOCUMENT,
+        "the two documents must be distinct for the shared-queue invariant to mean anything"
     );
+    let spike_contract = contract_of(spike)?;
     assert!(
-        rendered.contains("assistant_provision") && rendered.contains("objective"),
-        "the conflict must be the `objective` parameter the port added; got:\n{rendered}"
-    );
-    // The AGENT action is identical in both documents, so it must NOT conflict:
-    // if it did, the disagreement would be something other than the one this
-    // test claims to describe.
-    assert!(
-        !diffs.iter().any(|diff| diff.action == "assistant"),
-        "`assistant` is declared identically in both documents and must not \
-         conflict; got:\n{rendered}"
+        spike_contract
+            .actions
+            .iter()
+            .any(|action| action.name == "assistant_provision"),
+        "the spike must still declare the action the two documents share, or it no \
+         longer exercises the invariant"
     );
     Ok(())
 }
