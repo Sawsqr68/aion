@@ -35,6 +35,53 @@ ratchet" — it is that a per-crate gate (`cargo test -p aion-awl`, which I ran
 and which passed) cannot see a cross-crate ratchet, and I cited it as if it
 could.
 
+## 🔴 LIVE-SERVER INVESTIGATION, 2026-07-30 ~10:30Z — READ BEFORE TOUCHING HIS BOX
+
+Checking whether a restart was safe turned into the answer to Tom's "it just
+stopped". Three findings, each with its own file, all pushed:
+
+1. **`ASSISTANT-STUCK-FINDING.md` / task #87.** His assistant stopped on
+   6 July. `assistant_provision` was started four times and completed zero
+   times over 24 days, re-armed once per server restart, on a queue with zero
+   connected workers — while the status read `Running` the whole time. The
+   healthy control (workflow `f9b062c2`) is ALSO `Running`, correctly, because
+   a long-lived assistant idles awaiting a signal. One status covers "waiting
+   for you" and "dead for three weeks". **I misread the healthy one as stuck on
+   first look, which is the point.**
+   Also the exact #42 receipt: the workflow declares `timeout_seconds =
+   604800` (seven days, explained in words in its own comment) and was 17 days
+   past it, still `Running`.
+
+2. **The agent-dev worker never passed `--account`** (fixed, `3a14be8f`). It
+   composes norn with `--resume-if-exists`, which norn refuses without an
+   account alias, so every agent round failed three times while the worker
+   logged "connected and registered; serving dispatches". `--norn-account` is
+   now REQUIRED — defaulting it would only move the failure. `RUNBOOK.md` and
+   `DAVID.md` documented the broken invocation; both corrected. DAVID.md's
+   preflight (`norn -p --fast "say ok"`) does not resume a session, so it
+   passes while the real invocation fails — a preflight that structurally
+   cannot catch the bug it precedes.
+
+3. **`GLEAM-PATH-CANNOT-START-FINDING.md` / task #88 — the big one.** A
+   Gleam-authored package with ANY activity cannot start under queue-routed
+   serving. `DeclaredActivity` has exactly one field (`activity_type`), so the
+   manifest has nowhere to record a queue; `from_manifest` marks every activity
+   unscoped; `start_admission` refuses anything unscoped. Only AWL emits a
+   scoped contract. `activity.task_queue()` LOOKS like the fix and is not —
+   its value never reaches the manifest (verified: rebuilt, redeployed,
+   identical refusal). Deploy SUCCEEDS; only start refuses, so a broken package
+   is indistinguishable from a working one until used. This contradicts
+   CLAUDE.md's "two first-class surfaces".
+
+**PROVEN GOOD, incidentally:** the durable dispatch held a parked activity for
+24 days and delivered it the instant a worker connected (attempt 4, completed
+in under a second). The waiting machinery is sound; the reporting around it is
+not.
+
+**AWAITING TOM:** recommended option 2+3 on #88 (move examples to AWL, stop
+claiming the Gleam path is first-class, and make it refuse loudly), which means
+authoring the assistant in AWL. Silence-default is to start on it.
+
 **PENDING DECISION FOR TOM — do not take it unilaterally.** His running server
 (pid 47610) and worker (pid 49833) are BOTH still old binaries. Everything
 landed today — the chmod fix, `send` on the canvas, the scaffold command, the
