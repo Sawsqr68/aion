@@ -124,27 +124,6 @@ pub(super) fn run_gate_battery(
     Ok(raw)
 }
 
-/// The workspace's outstanding changes: the trimmed `git status --porcelain`
-/// text, EMPTY when the tree is clean. Both batteries read this — one to decide
-/// whether a gate re-dirtied an item worktree, one to decide whether a gate
-/// mutated the merged tree — and the caller that reports a failure also names
-/// the offending paths, so a tree assertion is never a bare boolean in the
-/// evidence.
-pub(super) fn worktree_status(
-    shell: &Shell,
-    workspace: &str,
-    context: &str,
-) -> Result<String, ActivityFailure> {
-    let status = require_run(
-        shell,
-        "git",
-        &["-C", workspace, "status", "--porcelain"],
-        workspace,
-        context,
-    )?;
-    Ok(status.stdout.trim().to_owned())
-}
-
 /// The change the panel reads: worktree vs `base_commit`, so committed AND
 /// any residual uncommitted work are both visible.
 ///
@@ -296,7 +275,10 @@ pub fn gate_item(
 /// `diagnostics` is never empty and carries every note whether the battery
 /// passed or not, so this is the recorded outcome the reviewers read, not a
 /// log line they never see.
-fn push_exclusion_note(
+///
+/// Shared with [`super::verify`] deliberately: both stages must say the same
+/// thing, in the same words, about the same fact.
+pub(super) fn push_exclusion_note(
     notes: &mut Vec<String>,
     step: &str,
     fence: &commit::ScopeFence,

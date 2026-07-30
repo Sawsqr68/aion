@@ -760,11 +760,15 @@ fn a_gate_that_dirties_the_integration_tree_is_itself_a_failure() -> anyhow::Res
 
 /// A tree that was already dirty going in did not equal the branch head, so the
 /// battery did not test what merges. Recorded as a failure, never a green.
+///
+/// The dirt is a TRACKED modification: that is what "the directory does not
+/// equal the branch head" means once the integration stage asks the same
+/// question its commits answer. The untracked case is the complement below.
 #[test]
 fn a_dirty_integration_tree_going_in_fails_the_verification() -> anyhow::Result<()> {
     let (_dir, repo, run_root) = scratch_repo()?;
     let (workspace, branch) = integration_worktree(&repo, &run_root, vec![])?;
-    std::fs::write(Path::new(&workspace).join("stray.txt"), "left behind\n")?;
+    std::fs::write(Path::new(&workspace).join("README.md"), "left behind\n")?;
 
     let outcome = verify(&repo, &run_root, &branch, vec![gate("build", "true")])?;
     assert!(!outcome.pass, "{}", outcome.diagnostics);
@@ -772,6 +776,90 @@ fn a_dirty_integration_tree_going_in_fails_the_verification() -> anyhow::Result<
         outcome.diagnostics.contains("NOT clean going in"),
         "{}",
         outcome.diagnostics
+    );
+    assert!(
+        outcome.diagnostics.contains("README.md"),
+        "the diagnostics must NAME what was outstanding: {}",
+        outcome.diagnostics
+    );
+    Ok(())
+}
+
+/// THE COMPLEMENT, and the integration-stage half of the 2026-07-29 defect. An
+/// untracked-and-not-ignored path is NOT a verification failure: the
+/// integration stage adopts no untracked file at all, so such a path was never
+/// part of what merges. It is recorded by name instead. A bare `git status`
+/// here failed every run whose battery builds anything.
+#[test]
+fn an_untracked_artefact_going_in_does_not_fail_verification_and_is_named()
+-> anyhow::Result<()> {
+    let (_dir, repo, run_root) = scratch_repo()?;
+    let (workspace, branch) = integration_worktree(&repo, &run_root, vec![])?;
+    let target = Path::new(&workspace).join("target/debug");
+    std::fs::create_dir_all(&target)?;
+    std::fs::write(target.join("libthing.rlib"), "binary junk\n")?;
+
+    let outcome = verify(&repo, &run_root, &branch, vec![gate("build", "true")])?;
+
+    assert!(
+        outcome.pass,
+        "untracked build output must not fail the merged-tree verification: {}",
+        outcome.diagnostics
+    );
+    for expected in [
+        "target/debug/libthing.rlib",
+        "were NOT staged",
+        "pre-battery clean assertion",
+    ] {
+        assert!(
+            outcome.diagnostics.contains(expected),
+            "the untracked path must be recorded by name ({expected:?} missing): {}",
+            outcome.diagnostics
+        );
+    }
+    Ok(())
+}
+
+/// The same rule for output the BATTERY ITSELF creates, which is the case every
+/// real run hits: `cargo build` leaves an untracked `target/` behind, and that
+/// must not be read as "a gate DIRTIED the merged tree".
+#[test]
+fn a_gate_that_only_leaves_untracked_build_output_still_verifies() -> anyhow::Result<()> {
+    let (_dir, repo, run_root) = scratch_repo()?;
+    let (workspace, branch) = integration_worktree(&repo, &run_root, vec![])?;
+    let head_before = git(&workspace, &["rev-parse", "HEAD"])?;
+
+    let outcome = verify(
+        &repo,
+        &run_root,
+        &branch,
+        vec![gate(
+            "build",
+            "mkdir -p target/debug && echo junk > target/debug/libthing.rlib",
+        )],
+    )?;
+
+    assert!(
+        outcome.pass,
+        "a battery that only builds must be able to verify a merged tree: {}",
+        outcome.diagnostics
+    );
+    assert!(
+        !outcome.diagnostics.contains("DIRTIED"),
+        "untracked build output is not a mutation of the merged tree: {}",
+        outcome.diagnostics
+    );
+    for expected in ["target/debug/libthing.rlib", "post-battery clean assertion"] {
+        assert!(
+            outcome.diagnostics.contains(expected),
+            "it must still be recorded by name ({expected:?} missing): {}",
+            outcome.diagnostics
+        );
+    }
+    assert_eq!(
+        git(&workspace, &["rev-parse", "HEAD"])?,
+        head_before,
+        "the integration stage must still commit nothing"
     );
     Ok(())
 }

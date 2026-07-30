@@ -18,6 +18,24 @@
 //! the gates tested exactly what merges; clean after means no gate mutated it.
 //! Both must hold for `pass`.
 //!
+//! WHAT "CLEAN" MEANS HERE, and why it is not `git status --porcelain`. This
+//! assertion asks [`crate::commit::survey_worktree`] under the same
+//! tracked-only fence the integration commits use, so it can never disagree
+//! with what those commits actually do. TRACKED divergence — a gate rewriting
+//! a file of the merged tree — is a verification failure exactly as before.
+//! Untracked-and-not-ignored paths are RECORDED BY NAME and are not a failure.
+//!
+//! That is not a relaxation, it is the same rule the rest of this worker was
+//! rebuilt around on 2026-07-30, and having two answers to one question inside
+//! one codebase would be worse than either answer alone. A bare `git status`
+//! here saw the `target/` any real battery creates, called the merged tree
+//! dirty, and burned every integration round on it — the same non-convergence
+//! the item-stage fence exists to kill, one stage later and far more expensive,
+//! because the run has already spent its item rounds getting here. Nothing is
+//! lost: the integration stage adopts no untracked file at all, so an untracked
+//! path was never part of what merges, and it is still named in `diagnostics`
+//! for the operator and the fix cycle to judge.
+//!
 //! THE INTEGRATION BASE — `{base_commit}` AND THE DIFF. The document passes
 //! `base_branch`, and the base this stage resolves is `git merge-base
 //! <base_branch> HEAD` in the integration worktree: the commit the integration
@@ -38,10 +56,11 @@ use std::path::Path;
 
 use aion_worker::ActivityFailure;
 
+use crate::commit::{ScopeFence, WorktreeSurvey, survey_worktree};
 use crate::shell::Shell;
 use crate::types::{GateOutcome, VerifyIntegrationInput};
 
-use super::gate::{run_gate_battery, summarize, worktree_status};
+use super::gate::{push_exclusion_note, run_gate_battery, summarize};
 use super::progress::GateProgress;
 use super::support::{clip, require_can_run, require_run};
 
@@ -92,38 +111,52 @@ pub fn verify_integration(
          and the recorded diff is the WHOLE run's project change against it."
     )];
 
-    let pre_status = worktree_status(
-        shell,
-        &workspace,
-        "git status (integration pre-clean assertion)",
-    )?;
-    if !pre_status.is_empty() {
+    // The integration steps commit TRACKED-ONLY by ruling (see
+    // `crate::commit::commit_integration_fix`), so the fence at this assertion
+    // is the empty one and `survey.divergent()` is exactly its tracked half —
+    // `admitted` is the empty set here by construction. Spelled out because
+    // `ScopeFence::tracked_only()` at an ASSERTION site could read as a policy
+    // choice made here: it is not. It is the same fence the integration commits
+    // stage under, asked the same way, so this assertion cannot disagree with
+    // what they do.
+    let fence = ScopeFence::tracked_only();
+
+    let pre = require_survey(shell, &workspace, &fence, "integration pre-battery")?;
+    if pre.diverges() {
         notes.push(format!(
-            "the integration worktree was NOT clean going in (git status --porcelain \
-             was not empty) — the directory did not equal the branch head, so this \
-             battery did not test exactly what merges; recorded as a verification \
+            "the integration worktree was NOT clean going in — tracked files differ \
+             from the branch head, so the directory did not equal what merges and \
+             this battery did not test exactly that; recorded as a verification \
              failure. Outstanding paths:\n{}",
-            clip(&pre_status)
+            clip(&listed(&pre.divergent()))
         ));
     }
+    push_exclusion_note(
+        &mut notes,
+        "the integration pre-battery clean assertion",
+        &fence,
+        pre.excluded(),
+    );
 
     let raw = run_gate_battery(shell, progress, &workspace, &base, &gates)?;
 
-    let post_status = worktree_status(
-        shell,
-        &workspace,
-        "git status (integration post-clean assertion)",
-    )?;
-    if !post_status.is_empty() {
+    let post = require_survey(shell, &workspace, &fence, "integration post-battery")?;
+    if post.diverges() {
         notes.push(format!(
             "a gate command DIRTIED the integration worktree — there is no \
-             normalization commit at this stage, so a gate that mutates the merged \
-             tree is itself a verification failure. Paths left \
+             normalization commit at this stage, so a gate that mutates a TRACKED \
+             file of the merged tree is itself a verification failure. Paths left \
              changed:\n{}\nThe recorded diff is worktree-vs-base, so it carries this \
              uncommitted mutation on top of the run's committed change.",
-            clip(&post_status)
+            clip(&listed(&post.divergent()))
         ));
     }
+    push_exclusion_note(
+        &mut notes,
+        "the integration post-battery clean assertion",
+        &fence,
+        post.excluded(),
+    );
 
     // The run's real project diff: everything the whole run changed, against the
     // commit it started from. This is what lands in
@@ -136,9 +169,34 @@ pub fn verify_integration(
     Ok(summarize(
         &raw,
         notes,
-        !pre_status.is_empty() || !post_status.is_empty(),
+        pre.diverges() || post.diverges(),
         diff,
     ))
+}
+
+/// Survey the integration worktree, or fail the ACTIVITY. A `git` that cannot
+/// answer this question is infrastructure failure, never a verdict: reporting
+/// "clean" because the survey broke would be the silent pass this whole stage
+/// exists to prevent.
+fn require_survey(
+    shell: &Shell,
+    workspace: &str,
+    fence: &ScopeFence,
+    when: &str,
+) -> Result<WorktreeSurvey, ActivityFailure> {
+    survey_worktree(shell, workspace, fence).map_err(|error| {
+        ActivityFailure::terminal(format!("{when} clean assertion could not be made: {error}"))
+    })
+}
+
+/// Render a path list for the diagnostics, one indented path per line — the
+/// same shape the exclusion notes use, so an operator reads one format.
+fn listed(paths: &[String]) -> String {
+    paths
+        .iter()
+        .map(|path| format!("  {path}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// The run's integration base: `git merge-base <base_branch> HEAD` in the
