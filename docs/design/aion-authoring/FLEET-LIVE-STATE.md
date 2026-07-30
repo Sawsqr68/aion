@@ -192,6 +192,60 @@ cross-language break can be reported green by two agents AND a full battery.
 Neither agent ran `--workspace` at all — one ran three `-p` crates, the other
 one. Caught only because the battery was re-run at this seat.
 
+## 🔴🔴 RESUME HERE FIRST — 2026-07-30 ~22:20. `origin/main` = `b6853187`, pushed.
+
+**BATTERY GREEN AT MY SEAT on `b6853187`** (my run, not a report):
+`FMT_EXIT=0` · `CLIPPY_EXIT=0` / 0 diagnostics · `CARGO_TEST_EXIT=0` ·
+**238 suites, 3785 passed, 0 failed, 5 ignored** · console `tsc` 0 ·
+`bun test` 580/0 · **and zero TS drift after a full test run** (the thing that
+was broken).
+
+**THE RESTORATION IS NOT DONE. Everything is ready to do it. Steps, in order:**
+
+1. **Deploy the updated spike** — `cargo run --bin aion -- deploy
+   examples/assistant/awl/assistant_spike.awl`. It now declares the 3-arg
+   `assistant_provision(repo_path, run_id, objective)` and agrees with the
+   worker. This is what unblocks admission.
+2. **Unload the OLD spike hash** `93971008e5511edfec8469271a49e1ab8626f4591eace35a37b987d09a910224`
+   via `POST /deploy/unload` — it only becomes unloadable once the new version
+   is route-active.
+3. **Deploy `examples/assistant/awl/assistant.awl`** (the full port).
+4. **Start the worker** — its binary was rebuilt 22:13 WITH the descriptor fix:
+   ```
+   ./examples/agent-dev/worker/target/release/agent-dev-worker \
+       --address 127.0.0.1:50061 --norn-account default
+   ```
+   Add Agent A's `--norn-allow-degraded-session` opt-in if resuming a parked
+   session (task #89).
+5. **Verify**: `POST /awl/workers/availability {namespace, task_queue}` must
+   report `available: true` with a connected worker, and the server log must
+   carry NO `REFUSED liminal worker registration`.
+6. **Live-prove** a run — and describe it as a proof of the DEGRADED path until
+   #98 (the JSON-wrapped prompt) is settled.
+
+**I did NOT rebuild `target/release/aion`.** The server (pid **99844**) still
+runs the 20:13 binary, which predates Agent B's #93 refusal fix. That is
+DELIBERATE: Agent B is back in `crates/` with uncommitted edits and a release
+build would compile a half-edited tree. Rebuild and restart the server only
+once Agent B has landed and the tree is verified clean. **The restoration does
+not need it** — the queue was blocked by the worker descriptors and the spike
+contract, both now fixed.
+
+**`agent-dev-worker` is NOT running** (I stopped it, task #94).
+
+**Agent B is IN FLIGHT** on the expect-test gate ruling (hole 2 of #100): fail
+without writing on any committed-vs-regenerated mismatch, regenerate only under
+an explicit env opt-in matching whatever convention already exists — do NOT
+invent a third. Plus the same two questions asked of `aion-proto-generated`.
+
+**Tasks filed this session:** #89 durable-session epoch (fix proven) · #90
+`retryable:` on a Terminal · #91 CLI deploy invisible in studio · #92 tharsis
+second blocker · #93 admission field mismatch (ANSWERED: gate right, worker
+broken; fixed) · #94 refusal flood · #95 input_schema maybe unenforced · #96 no
+AWL query surface · #97 AWL signal semantics · #98 JSON-wrapped prompt · #99
+spike/port conflict (RESOLVED) · #100 cross-language gate hole · #101 deploy is
+a one-way door (CONFIRMED).
+
 ## 🔴 RESTORATION SEQUENCE — do this in order, nothing else restores the queue
 
 Queue `default` is DOWN for **two independent reasons**, and fixing one alone
