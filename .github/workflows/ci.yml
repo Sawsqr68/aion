@@ -67,7 +67,7 @@ jobs:
         run: cargo fmt --all --check
 
   clippy:
-    name: clippy (-D warnings, default + all-features)
+    name: clippy (-D warnings, default features)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -75,6 +75,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: cargo clippy --workspace --all-targets -- -D warnings
         run: cargo clippy --workspace --all-targets -- -D warnings
+
+  # SEPARATE JOB, deliberately — see the comment on `test-all-features` below.
+  # Non-default features are their own coverage dimension and get their own status.
+  clippy-all-features:
+    name: clippy (-D warnings, --all-features)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: cargo clippy --workspace --all-targets --all-features -- -D warnings
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
@@ -131,15 +141,26 @@ jobs:
       - name: cargo build
         working-directory: ${{ matrix.crate }}
         run: cargo build
+      # `!cancelled()` rather than separate jobs, and the difference from
+      # `test-all-features` is the point: these three steps ask about the SAME code
+      # under the SAME features, so one status per crate is the honest granularity —
+      # what was missing is that an earlier failure hid the later results entirely.
+      # Run 30192212491 showed exactly that for examples/stacked-dev-remote/worker:
+      # `X cargo clippy` / `- cargo test`, so that crate's test result is unknown to
+      # this day. Splitting these into jobs would recompile the crate three times to
+      # answer questions that share one verdict; making them always run answers all
+      # three in one pass.
       - name: cargo clippy --all-targets -- -D warnings
+        if: ${{ !cancelled() }}
         working-directory: ${{ matrix.crate }}
         run: cargo clippy --all-targets -- -D warnings
       - name: cargo test
+        if: ${{ !cancelled() }}
         working-directory: ${{ matrix.crate }}
         run: cargo test
 
   test:
-    name: test (workspace, default + all-features)
+    name: test (workspace, default features)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -153,6 +174,30 @@ jobs:
           gleam-version: '1.17.0'
       - name: cargo test --workspace
         run: cargo test --workspace
+
+  # SEPARATE JOB, not a second step of `test`. This is the ONLY lane in the whole
+  # workflow that compiles a non-default feature — `libsql-backend` among them —
+  # and as a trailing step of `test` it never ran: Actions stops a job at its
+  # first failing step, so a single brittle default-feature test silently deleted
+  # this entire coverage dimension while reporting itself as the only failure.
+  # That is how four `libsql-backend` tests stayed red for 91 commits: the lane
+  # that looks never got to look.
+  #
+  # `continue-on-error` / `if: always()` would NOT be the fix here. They keep both
+  # results fused into one job status, so a genuine all-features failure still
+  # reads as "that flaky default-feature test again". A coverage dimension nobody
+  # can see the status of is not gated.
+  test-all-features:
+    name: test (workspace, --all-features)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: '27'
+          gleam-version: '1.17.0'
       - name: cargo test --workspace --all-features
         run: cargo test --workspace --all-features
 
@@ -279,15 +324,21 @@ jobs:
         with:
           otp-version: '27'
           gleam-version: '1.17.0'
+      # Three INDEPENDENT failover guarantees. Sequenced steps rather than jobs
+      # because they share one expensive build, but `!cancelled()` so the first one
+      # failing does not hide whether the other two hold — which is the whole
+      # question this lane exists to answer.
       - name: lsub5b kill-9 reconnect-to-survivor failover
         run: >-
           cargo test -p aion-cli --features haematite-backend,liminal-transport
           --test lsub5b_osproc_kill9_failover_e2e -- --ignored --nocapture
       - name: parked-timer kill-9 failover
+        if: ${{ !cancelled() }}
         run: >-
           cargo test -p aion-cli --features haematite-backend,liminal-transport
           --test parked_timer_osproc_kill9_failover_e2e -- --ignored --nocapture
       - name: lsub5b graceful osproc failover (non-kill9 — no fast lane runs it)
+        if: ${{ !cancelled() }}
         run: >-
           cargo test -p aion-cli --features haematite-backend,liminal-transport
           --test lsub5b_osproc_failover_e2e -- --ignored --nocapture
