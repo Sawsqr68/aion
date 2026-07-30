@@ -1,181 +1,177 @@
-# Fleet smoke: live state, 2026-07-30 ~05:35Z
+# Fleet smoke: THE PIPELINE FLEW. State at 2026-07-30 ~06:00Z
 
-The resume point for the fleet-workflow first flight. Supersedes the ~05:10Z
-revision of this file; the blocker recorded there has been resolved and TWO
-further layers were found underneath it by actually flying the thing.
+Supersedes the ~05:35Z revision. Written immediately before a context
+compaction; this is the resume point.
 
-## What is proven, and what is not
+## WHAT IS PROVEN (live, on a real server — not inferred)
 
-PROVEN on a real server: the AWL document deploys, is visible in the authoring
-surface, and its per-node contract is admitted correctly (see #78 below).
-NOT YET PROVEN: a single activity has ever executed. No run has been started.
-The worker has never completed a registration, so nothing has been served.
+The staged-rounds fleet pipeline **executed end to end for the first time**.
+Workflow `01fba187-f224-4a21-b1e7-72dfcf70429d`, run
+`84f959f9-d915-4512-ab1f-91414d8902fa`, on the scratch server.
 
-## Commits landed (all on main, NOT pushed)
+All five worker connections registered (`registered liminal worker in-band` ×5
+in the server log at 05:47:12, ZERO `WORKER_CONTRACT_MISMATCH`). Then 16
+dispatches, every one `ActivityCompleted`, in this order:
 
-- `e6bf8679` — AWL contract change (gate_item / plan_reviews /
-  verify_integration / fix_integration, Lens + GatedItem + ReviewTask types, the
-  `unverified` disposition), `tharsis-input.json`, `FLEET-BUILD-DESIGN.md`.
-- (worker commit) — the eleven-action worker serving that contract.
-- `036f976d` — the integration scope fence compared a tree to itself; the
-  document now passes `base_branch` and the worker resolves
-  `merge-base(base_branch, HEAD)`.
-- `3ac1b3ec` — the previous revision of this file.
-- Unrelated, same session: `9a44483c` (deploy errors discarded the server's real
-  message), `3c79535f` (the gleam test gate's invisible skips, four crates).
-
-## UNCOMMITTED IN THE TREE — my #78 fix, gates green, awaiting commit
-
-Files: `crates/aion-package/src/compatibility.rs`,
-`crates/aion-server/src/worker/contracts.rs`,
-`crates/aion-server/src/worker/registry.rs`,
-`crates/aion-server/src/api/worker_grpc.rs`,
-`crates/aion-server/src/worker/liminal_transport.rs`,
-`crates/aion-server/tests/worker_contract_registration.rs`.
-
-Gates at my own seat: aion-package lib 11/11 on the compatibility module;
-`aion-server --test worker_contract_registration` 4/4; `aion-server --lib
-worker::` 211 passed / 0 failed / 0 ignored. Workspace clippy NOT yet re-run
-over these — OWED before commit.
-
-## 🔴 #78 (FIXED, live-proven): admission demanded the WHOLE queue of every connection
-
-`aion_package::contract_diffs` demanded every bodyless action of the queue's
-contract from EVERY registering connection, ignoring the node dimension —
-although `ActionContract` carries `node` and `ProtoRegisterWorker` carries it on
-proto tag 4. The server routes by (namespace × task_queue × node), so a worker
-serving several nodes MUST open one connection per node advertising only that
-node's actions. Each connection was therefore refused for omitting the OTHER
-connections' actions. Every dial refused; the queue unservable; the process
-looking merely asleep.
-
-Fix: `contract_diffs` takes the connection's `worker_node` and demands exactly
-the REACHABLE set, via `dispatch_can_reach` — the admission-side mirror of the
-registry's `worker_matches_node` (an unpinned action reaches every worker; a
-pinned one reaches only that node's connections). `validate_worker_contracts`
-threads the node through BOTH transports and reuses the registry's own
-`optional_node` normalization rather than restating it. The gate keeps its
-teeth: any action a dispatch could land on a connection is still demanded of it.
-
-The refusal text was also misleading — `expected "declared"` read as if a
-declared body were wanted, and sent me hunting through the unrelated #65 fix. It
-now names why the connection owed the action: ``advertised: the action is pinned
-to node `shell` `` or "the action is unpinned, so every worker in the pool must
-serve it".
-
-LIVE PROOF that the filter works: before the fix, the `planner` connection was
-refused for dev_item, fix_integration, fold_phase, gate_item, merge_branches …
-(the whole queue, alphabetically). After it, the `planner` connection is refused
-for `planner` alone and the `developer` connection for `dev_item` alone — each
-connection now judged only on its own node's actions.
-
-## 🔴 THE REMAINING BLOCKER: the example worker advertises NOTHING
-
-All five connections are still refused, now on their own node's actions only,
-every diff reading `but worker advertised <missing>`. Cause is entirely inside
-`examples/staged-rounds/worker`: it registers all eleven activities through
-`ActivityRegistry::register_activity`, which commits a handler but NO wire
-descriptor. The SDK says so outright in the doc comment on
-`register_activity_with_descriptor` (`crates/aion-worker/src/activity.rs` ~189):
-"Registering a handler with no descriptor is what makes a worker invisible to
-contract admission — it advertises nothing, and a queue carrying any deployed
-contract refuses it."
-
-THE FIX IN FLIGHT (delegated, uncommitted when written): the advertisement must
-come from the DECLARATION, never from Rust types. `aion_awl::compile(source,
-schema_root)` returns `CompiledWorkflow { contract: PackageContract, .. }` whose
-`workers[].actions[]` carry the exact `input_schema`/`output_schema` the server
-deployed and admits against. The worker embeds the `.awl` with `include_str!`,
-compiles it once at startup, and registers every handler through
-`register_activity_with_descriptor` with its declared descriptor — handlers keep
-their concrete Rust types, only the advertisement becomes exact, and drift is
-structurally impossible. Deriving with `schemars` was considered and REJECTED:
-it reintroduces precisely the drift the contract gate exists to catch.
-
-Two startup guards are part of the fix, both loud and named: a registered
-handler the document declares no action for, and a declared bodyless action with
-no handler (actions carrying a declarative `body` are server-executed and must be
-excluded, exactly as `contract_diffs` excludes them).
-
-## The scratch server IS UP — do not touch Tom's pid 23302
-
-- pid **16798**, running `./target/release/aion` REBUILT at 15:29 with the #78 fix
-- `AION_HOME=/Users/tom/.aion-fleet-smoke` (700, `hdata/` 700)
-- config `<scratchpad>/fleet-smoke/server.toml`, log `<scratchpad>/fleet-smoke/server.log`
-  (the pre-fix log is kept as `server.log.pre-nodefix` — it holds the original
-  whole-queue refusals, which are the evidence for #78)
-- HTTP 127.0.0.1:**8099** (health 200), gRPC **50099**, liminal **50161** — all
-  three CONFIRMED listening via lsof
-- haematite store at `~/.aion-fleet-smoke/hdata`; deploy enabled
-- `staged_rounds` deployed, hash
-  `5f0f3bf19ed9b6d240eb87bfcb3fe55a6d2c10988c84b448f2c240e7b53fd5a3`
-  (redeploy after restart returned `freshly_loaded: false` — the durable store
-  carried it across the restart, which is itself worth knowing)
-
-`<scratchpad>` =
-`/private/tmp/claude-501/-Users-tom-Developer-ablative-stack-aion/5849e0d8-4802-4869-8e0f-9f7fd187e198/scratchpad`.
-
-CLEAN UP WHEN DONE: kill 16798, `rm -rf ~/.aion-fleet-smoke` (this also removes
-the throwaway smoke repo below). Only Tom's :8080 console is meant to be live.
-
-## Tom's server still cannot attach a worker — HIS CALL, untouched
-
-pid 23302 listens on 127.0.0.1:8080 and 127.0.0.1:50051 ONLY. No outbox liminal
-listener, so no worker can connect and no activity can be served there. Needs,
-in a config FILE:
-
-```toml
-[outbox]
-enabled = true
-transport = "liminal"
-liminal_listen_address = "127.0.0.1:50061"
+```
+05:51:45 planner
+05:52:46 fold_phase        05:52:46 provision_item   05:52:47 dev_item
+05:54:14 gate_item         05:54:15 plan_reviews
+05:54:15 review_item       05:54:15 review_item   <-- the panel, genuinely parallel
+05:55:15 fold_phase        (round 1 rejected -> item cycled WITH feedback)
+05:55:15 provision_item    05:55:15 dev_item
+05:57:03 gate_item         05:57:04 plan_reviews
+05:57:05 review_item       05:57:05 review_item
+05:57:45 fold_phase        -> outcome `spent` -> wrap_exhausted (max_rounds = 2)
 ```
 
-plus a restart. He also has a pending decision about swapping that server, so
-this has NOT been done.
+Concretely proven by that run: a real Norn planner turn decomposed the brief
+into phased items; `provision_item` created a real git worktree and branch
+(`staged/01fba187…/add-sub-function`); a dev agent wrote real code; the gate
+battery ran the operator's REAL `cargo fmt`/`build`/`clippy`/`test` in the
+item's worktree and recorded `test subtracts_two_numbers ... ok` plus a real
+diff; a two-lens panel ran concurrently and returned verdicts; `fold_phase`
+judged, rejected, and cycled the item with the rejection attached; the second
+round ran the whole shape again; and the bounded loop then reported the honest
+`exhausted` disposition rather than a false success.
 
-Facts established while proving it:
+## WHAT IS NOT PROVEN
 
-- **There is no `AION_OUTBOX_TRANSPORT` env override.** The set is ENABLED /
-  POLL_INTERVAL_MS / BATCH_SIZE / MAX_ATTEMPTS / BACKOFF_BASE_MS /
-  BACKOFF_MULTIPLIER / BACKOFF_MAX_MS / RECONCILE_INTERVAL_MS /
-  RECONCILE_STALE_AFTER_MS / LIMINAL_LISTEN_ADDRESS. The address can be set by
-  env, the transport cannot — so env alone can never enable the listener. Worth
-  its own task.
-- `outbox.enabled = true` is refused with `store.backend = "memory"`, honestly,
-  naming the fix.
-- `store.backend = "libsql"` is refused by the RELEASE BINARY: it lacks the
-  `libsql-backend` feature. `haematite` works.
-- The path-safety gate refuses a `data_dir` under `/private/tmp` (ancestor mode
-  1777, "sticky bit is not accepted"). The data dir needs an owner-only chain.
-- A project-local `./aion.toml` and the legacy `./aion-data` directory SHADOW
-  `AION_HOME`. Anything hermetic must set `store.data_dir` explicitly or it will
-  quietly attach to Tom's real state.
+No run has reached `completed`. Nothing has merged, so `merge_once`,
+`fix_conflicts`, `verify_integration` and `fix_integration` have NEVER executed.
+The tharsis whole-project run has not been started.
 
-## The throwaway smoke target
+## Commits landed this session (all on main, NOT pushed)
 
-`/Users/tom/.aion-fleet-smoke/smoke-repo`, git-init'd on `main`, one commit
-`815a120`: a tiny `smoke-target` crate with `add()` and a README asking for `sub`
-and `mul` with unit tests. Fly THIS before tharsis — the first flight must prove
-the wiring, not the plan.
+- `798677ee` — **#78**: contract admission demanded the whole queue of every
+  connection (the P0 that made the queue unservable).
+- `a78734d3` — the AWL signal-sender design + the previous state doc.
+- `00bddc26` — `smoke-input.json`, the throwaway first-flight input.
+- `5f722697` — **the worker advertised nothing, and never sent Norn an
+  account** (both faults, see below).
+- Earlier, unrelated: `9a44483c`, `3c79535f`, `e6bf8679`, `036f976d`,
+  `3ac1b3ec`, plus the original worker commit.
+
+Gates re-run at my own seat, never taken on report: worker `cargo clippy
+--all-targets -- -D warnings` exit 0; worker `cargo test` **154 passed / 0
+failed / 0 ignored** (was 136); `cargo clippy -p aion-package -p aion-server
+--all-targets -- -D warnings` exit 0; aion-package lib compatibility 11/11;
+aion-server `worker_contract_registration` 4/4; aion-server `--lib worker::`
+211 passed / 0 failed / 0 ignored.
+
+## The three faults that had to be fixed to fly, in the order they surfaced
+
+1. **#78 — admission demanded the WHOLE queue of every connection.** The server
+   routes by (namespace × task_queue × node), so a worker serving several nodes
+   opens one connection per node advertising only that node's actions; admission
+   ignored node entirely and refused each connection for omitting the others'
+   actions. Fixed with `dispatch_can_reach`, the admission-side mirror of the
+   registry's `worker_matches_node`, threaded through both transports and reusing
+   the registry's own `optional_node`. Refusal text also fixed: `expected
+   "declared"` misled me into the wrong fix for a while; it now names why the
+   connection owed the action.
+2. **The worker advertised nothing.** All eleven activities registered handlers
+   with no wire descriptor. Two different mechanisms: the six shell handlers via
+   bare `register_activity`, and the five agent roles never touch the registry at
+   all (they reach registration through `AgentHarnessConfig`, whose descriptor
+   list was empty). Now sourced from the AWL DOCUMENT — `include_str!` +
+   `aion_awl::compile` at startup — so the bytes advertised are the bytes
+   deployed. `schemars` derivation was rejected: it is a second independent
+   rendering, which is the drift the gate exists to catch.
+3. **No Norn account.** Every agent run carries `--session-id` and
+   `--resume-if-exists`, and Norn refuses an open-or-resume run with no
+   `--account`. The worker never passed one, so all five connections registered
+   cleanly and then EVERY agent dispatch died `norn: auth error`. `--norn-account`
+   is now REQUIRED with a refusal that explains the consequence, passed as a
+   LITERAL argument so an alias is never template-expanded. **This is a
+   recurrence of a trap this estate already paid for once** (see the
+   preflight-production-argv memory).
+
+## 🔴 #79 — THE ONE BLOCKING CONVERGENCE (filed, NOT fixed)
+
+The gate battery runs `cargo build`/`test` in the item's worktree, which creates
+`target/`, and the worker's commit of the round's work is UNBOUNDED — it commits
+whatever the battery left. Measured: `git diff --name-only main..staged/<id>/…`
+= **96 files, 94 of them `target/`**, plus `Cargo.lock` and the one legitimate
+`src/lib.rs`.
+
+Both lenses then correctly rejected the item, both rounds, for breaching its
+scope fence ("still contains 95 committed files outside the sole allowed path").
+The review layer WORKED PERFECTLY; the bug is upstream of it. No repository
+whose build output is not already gitignored can converge, and it is invisible
+from outside: every activity green, the agent correct, the run still
+`exhausted`.
+
+Two candidate sites, to be attributed before fixing: `src/commit.rs` (the dev
+role's post-turn commit) and `src/handlers/gate.rs` (the normalization commit
+that is documented as committing a write-mode formatter's mutations). Task #79
+carries the full options analysis; the recommendation is a TRACKED-ONLY commit
+for the gate battery (a formatter only ever mutates tracked files, so no
+heuristic is needed) and a scope-fenced or loudly-refusing commit for the dev
+turn. The clean-tree assertion also cannot currently distinguish "a gate mutated
+tracked files" (a real failure) from "a gate created untracked build output"
+(normal) — that distinction is what makes the tracked-only fix safe.
+
+FIXTURE CAVEAT: the smoke repo has no `.gitignore`, which is what surfaced this
+so fast. Adding one makes that repo converge but is a WORKAROUND — the worker
+behaviour is repo-independent and must still be fixed.
+
+## SECOND FINDING FROM THE RUN (not yet filed): a terminal outcome reads as a crash
+
+The run's status is `Failed` with `failure_reason: "workflow 2 returned error"`.
+The structured detail is right there and is perfectly clear —
+`{"tag":"AwlOutcomeFailure","outcome":"exhausted","payload":{…rounds:2, ready:[…
+with the full rejection feedback …]}}` — but the human-facing reason is opaque
+and indistinguishable from a genuine crash. `exhausted` is a DECLARED terminal
+disposition of this document, not an error. An operator cannot tell "ran
+correctly, ran out of rounds" from "blew up". This belongs with task #34's
+"opaque parent failure_reason" and should name the outcome and summarise the
+payload.
+
+## Live processes — DELIBERATELY LEFT RUNNING
+
+- **Scratch server pid 16798**, `./target/release/aion server --config
+  <scratchpad>/fleet-smoke/server.toml`, `AION_HOME=/Users/tom/.aion-fleet-smoke`
+  (mode 700). HTTP 127.0.0.1:**8099**, gRPC **50099**, liminal **50161**, all
+  confirmed listening. haematite store at `~/.aion-fleet-smoke/hdata`. Deploy
+  enabled. `staged_rounds` deployed, hash
+  `5f0f3bf19ed9b6d240eb87bfcb3fe55a6d2c10988c84b448f2c240e7b53fd5a3`.
+- **Worker pid 99712**, the release binary, five connections registered.
+- Logs: `<scratchpad>/fleet-smoke/{server.log,worker.log}`;
+  `server.log.pre-nodefix` holds the original whole-queue refusals, which are the
+  evidence for #78.
+- `<scratchpad>` =
+  `/private/tmp/claude-501/-Users-tom-Developer-ablative-stack-aion/5849e0d8-4802-4869-8e0f-9f7fd187e198/scratchpad`
+
+CLEAN UP WHEN DONE: kill 99712 and 16798, `rm -rf ~/.aion-fleet-smoke` (that
+also removes the smoke repo). Only Tom's :8080 console is meant to be live.
+
+## Tom's server — still HIS call, still untouched
+
+pid 23302 listens on 8080 and 50051 only; no outbox liminal listener, so no
+worker can attach there. Needs `[outbox] enabled/transport/liminal_listen_address`
+in a config FILE plus a restart, and he has a pending decision about swapping
+that server anyway. Facts established while proving this: there is NO
+`AION_OUTBOX_TRANSPORT` env override (so env alone can never enable the
+listener — worth its own task); `outbox.enabled` is refused with the memory
+store; `store.backend = "libsql"` is refused by the release binary for lacking
+the `libsql-backend` feature, haematite works; the path gate refuses a
+`data_dir` under `/private/tmp` (ancestor mode 1777); and a project-local
+`./aion.toml` plus the legacy `./aion-data` directory SHADOW `AION_HOME`, so
+anything hermetic must set `store.data_dir` explicitly.
 
 ## Next steps, in order
 
-1. Review and land the delegated worker-advertisement fix; rebuild the worker
-   release binary.
-2. Re-run workspace clippy over the #78 files, then commit #78.
-3. Start the worker against the scratch liminal port and CONFIRM REGISTRATION —
-   the ready file appears AND the server log shows five connections registered,
-   one per node. Do not proceed on the ready file alone; it has appeared before
-   while every connection was being refused in a retry loop.
-4. Start a run against the smoke repo. Preflight with the exact production argv.
-5. Only then the tharsis run:
-   `aion --endpoint 127.0.0.1:50099 start staged_rounds --input-file examples/staged-rounds/awl/tharsis-input.json`
+1. Fix #79 (needs the design ruling in the task, do not guess). Re-fly the smoke
+   run and prove it reaches `completed` — that is what exercises `merge_once`,
+   `verify_integration` and the integration loop for the first time.
+2. File the opaque-terminal-outcome finding against #34.
+3. Only then the tharsis run:
+   `./target/release/aion --endpoint 127.0.0.1:50099 start staged_rounds \
+      --input-file examples/staged-rounds/awl/tharsis-input.json`
+4. Push. Nothing is pushed yet; everything is local on main.
 
-Watch terminal state with `aion list`, NOT `aion describe` — describe dies over
-4 MiB of history and a whole-project run will exceed it.
-
-Worker start line:
+Worker start line (the `--norn-account` is now mandatory):
 
 ```sh
 cd examples/staged-rounds/worker
@@ -183,56 +179,35 @@ cd examples/staged-rounds/worker
   --address 127.0.0.1:50161 \
   --profiles-dir ./profiles \
   --identity fleet-smoke \
+  --norn-account default \
   --max-parallel 4 \
   --ready-file <scratchpad>/fleet-smoke/worker.ready
 ```
 
-`--profiles-dir` is REQUIRED and must hold planner.md, developer.md, reviewer.md
-and remediator.md (all four present). `norn` is on PATH at
-`/Users/tom/.cargo/bin/norn` (0.1.0) and must be logged in through ChatGPT OAuth
-— the worker STRIPS `OPENAI_API_KEY` from the child environment.
+Watch with `aion list`. `aion describe` DID work on this run (16 dispatches) and
+is how both findings above were read — but it still dies over 4 MiB of history,
+so it will not survive the tharsis run.
 
-## Tom's open asks
+## Tom's other two asks
 
-1. **The full-flight stress test.** He is out and said explicitly not to wait:
-   "I've been waiting three days now so what's another half an hour."
-2. **The AWL worker language / worker stuff** (task #30). Note what already
-   exists: an `action` may carry a `run "<command>"` body executed by the SERVER
-   with no worker at all, but its result type is constrained to a subset of
-   `{exit_code, stdout, stderr}` — which is exactly why a rich gate battery needs
-   a worker action rather than a declared body. The declared-body exclusion in
-   contract admission is the same seam.
-3. **SIGNALS — he believes they are not represented in AWL. THEY ARE.**
-   `signal <name>: <Type>` in the header and
-   `wait <signal> [timeout <duration>] -> <binding>` in a step; with a timeout the
-   binding is `T?`, so absence is branchable. What does NOT exist is any
-   in-language SENDER — no `send`/`emit` anywhere in the lexer, parser or AST.
-   Signals arrive only from outside via
-   `aion signal <workflow_id> <signal_name> --payload <json>`. A human approval
-   gate is fully expressible today; agent-to-agent or workflow-to-child
-   signalling is not. Task #24 is mis-titled as if the whole feature were
-   missing and should be narrowed to the sender.
+- **AWL worker language (#30)** — gap MEASURED, not guessed: worker scaffold
+  generators already exist (`aion-package/src/codegen/activity_worker_rust.rs`,
+  `…_python.rs`) and the Rust one emits a `register_activity_with_contract`
+  chain. But `aion generate` is GLEAM-PROJECT-ONLY: its source of truth is
+  `src/<package>_io.gleam` and it drives the Gleam toolchain twice. So on the
+  `.awl` direct path nothing reaches those generators. Full detail on the task.
+- **Signals (#24)** — the sender EXISTS in the engine (`Command::SendSignal`,
+  correlation-keyed so replay-correct) and in the Gleam SDK (`signal.send`).
+  Only the AWL surface lacks it, so this is a language-surface job over a
+  finished mechanism. The hard part is ADDRESSING: `workflow.id` (self) is the
+  only builtin and `spawn` yields no handle. Design:
+  `SIGNAL-SENDER-DESIGN.md`.
 
-## Known limits to carry
+## Process lesson, carried forward deliberately
 
-- `aion describe` dies over 4 MiB of history (runbook task #249).
-- Shell activities report per-gate-command progress, but a single 10-minute
-  `cargo test` is one beat, not a stream.
-- Evidence is clipped at 16 KiB with an explicit TRUNCATED marker.
-- `verify.diff` is the whole project change and the `fix_integration` prompt
-  embeds the entire verify object — bounded by the clip, but worth knowing on a
-  whole-project run.
-- The direct-deploy path REFUSES subflows, substeps, value route payloads,
-  dependency-parallel step layers, and any collection-fork body beyond one
-  unbound call. `staged_rounds` stays inside that set; the older `dev_brief.awl`
-  does not, which is why it still will not direct-deploy.
-
-## Process lesson banked this session
-
-A compaction can carry FORWARD a fix while STRIPPING the evidence for it, so a
-seat can honestly disown numbers it genuinely produced. Tonight I could not
-attest to a battery result my own transcript showed my seat sending four hours
-earlier (line 62556, 01:56:11Z). The defence is to resolve the artifact, not the
-memory — and, for my own summaries, to carry battery results and any
-deliberately-left running process forward explicitly. Hence the "what is proven"
-section at the top of this file.
+A compaction can carry a FIX forward while stripping the EVIDENCE for it, so a
+seat can honestly disown numbers it genuinely produced. That happened tonight
+(transcript line 62556, 01:56:11Z). Defence: resolve the artifact, not the
+memory — and in my own summaries carry battery numbers and every deliberately
+left-running process forward explicitly. Hence the top two sections and the live
+process list in this file.
