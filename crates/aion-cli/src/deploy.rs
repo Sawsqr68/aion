@@ -182,11 +182,34 @@ pub(crate) async fn unload(
 /// Surfaces the typed `WireError` detail riding a deploy status so the
 /// renderer can branch on `deploy_denied` / `version_pinned`; statuses
 /// without a decodable detail keep the tonic code and message.
+///
+/// The empty-details check is load-bearing and must not be folded into the
+/// `decode` call: protobuf decoding of an EMPTY buffer SUCCEEDS and yields an
+/// all-defaults message, so a status carrying no typed detail — the ordinary
+/// case for every error the deploy path does not classify — decoded to
+/// `code: Unspecified` and was then rejected by `WireError::try_from` as "wire
+/// error code is missing". That string REPLACED the server's real message, so
+/// the one thing an operator needed was the one thing discarded. Absence of a
+/// detail is not a decode failure, and only an explicit emptiness test can tell
+/// them apart.
+///
+/// Matches [`aion_client`]'s own seam, which already guards this way.
 fn deploy_status_error(status: &tonic::Status) -> anyhow::Error {
-    match ProtoWireError::decode(status.details()) {
+    let details = status.details();
+    if details.is_empty() {
+        return anyhow::anyhow!("grpc {:?}: {}", status.code(), status.message());
+    }
+    match ProtoWireError::decode(details) {
         Ok(proto) => match WireError::try_from(proto) {
             Ok(wire) => anyhow::Error::new(wire),
-            Err(fallback) => anyhow::Error::new(fallback),
+            // A detail was present and structurally decodable but carried no
+            // code. Report the conversion failure AND the status it rode on,
+            // so a malformed detail can never hide the message either.
+            Err(fallback) => anyhow::Error::new(fallback).context(format!(
+                "grpc {:?}: {}",
+                status.code(),
+                status.message()
+            )),
         },
         Err(_) => anyhow::anyhow!("grpc {:?}: {}", status.code(), status.message()),
     }
