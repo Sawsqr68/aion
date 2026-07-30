@@ -103,6 +103,10 @@ pub(crate) async fn deploy_bytes(target: &DeployTarget, archive: Vec<u8>) -> Res
         "entry_function": response.entry_function,
         "freshly_loaded": response.freshly_loaded,
         "route_changed": response.route_changed,
+        // Named even when empty: an absent key reads as "not reported", and
+        // the whole point of this field is that accumulation stops being
+        // invisible.
+        "superseded_versions": response.superseded_versions,
     }))
 }
 

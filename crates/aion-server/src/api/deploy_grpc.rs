@@ -90,6 +90,7 @@ impl generated::deploy_service_server::DeployService for DeployGrpcService {
             entry_function: response.entry_function,
             freshly_loaded: response.freshly_loaded,
             route_changed: response.route_changed,
+            superseded_versions: response.superseded_versions,
         }))
     }
 

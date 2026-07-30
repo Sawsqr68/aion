@@ -186,6 +186,20 @@ impl WorkflowCatalog {
         self.serving
     }
 
+    /// Every resident version of `workflow_type` that is no longer the
+    /// route-active one — what a deploy leaves behind.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EngineError::CatalogPoisoned`] when the snapshot lock is
+    /// poisoned.
+    pub fn superseded_versions(
+        &self,
+        workflow_type: &str,
+    ) -> Result<Vec<ContentHash>, EngineError> {
+        Ok(self.current()?.superseded_versions_of(workflow_type))
+    }
+
     fn current(&self) -> Result<Arc<CatalogSnapshot>, EngineError> {
         let guard = self
             .snapshot

@@ -25,6 +25,17 @@ pub struct LoadOutcome {
     pub freshly_loaded: bool,
     /// True when this call re-pointed the type's route at the version.
     pub route_changed: bool,
+    /// Every OTHER version of this workflow type still resident after the
+    /// load, sorted, with the newly routed one excluded.
+    ///
+    /// Deploy has never removed a superseded version and is not going to
+    /// start: a version may still be carrying live runs, and the decision to
+    /// unload one is the platform's, not the engine's (decision record #62).
+    /// What deploy CAN do is stop the accumulation being invisible. A stale
+    /// retained version is still a reachable contract — one of them made a
+    /// whole task queue unservable — so the operator is handed the exact
+    /// hashes `unload_workflow_version` will accept.
+    pub superseded_versions: Vec<ContentHash>,
 }
 
 /// One queue contract retained under an exact `.v4` package identity.

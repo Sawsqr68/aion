@@ -41,6 +41,15 @@ pub struct ProtoLoadPackageResponse {
     /// False = the hash was already route-active (full no-op).
     #[prost(bool, tag = "6")]
     pub route_changed: bool,
+    /// Every OTHER version of this type still resident and no longer routed.
+    ///
+    /// Deploy does not remove them: they stay loaded, stay in the durable
+    /// package table, and stay part of worker-admission contract checking
+    /// until an operator unloads them. Naming them here is what makes
+    /// `aion unload <workflow-type> <content-hash>` discoverable at the one
+    /// moment the operator has a reason to care.
+    #[prost(string, repeated, tag = "7")]
+    pub superseded_versions: Vec<String>,
 }
 
 /// Proto representation of `ListVersionsRequest` (engine-global; no namespace).
@@ -124,6 +133,7 @@ mod tests {
             entry_function: "run".to_owned(),
             freshly_loaded: true,
             route_changed: true,
+            superseded_versions: vec!["b".repeat(64)],
         };
         let decoded: ProtoLoadPackageResponse =
             serde_json::from_str(&serde_json::to_string(&response)?)?;

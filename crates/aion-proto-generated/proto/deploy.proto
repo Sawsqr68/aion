@@ -34,6 +34,14 @@ message LoadPackageResponse {
   bool freshly_loaded = 5;
   // False = the hash was already route-active (full no-op).
   bool route_changed = 6;
+  // Every OTHER version of this type still resident and no longer routed.
+  // Deploy does not remove them and never has: they stay loaded, stay in the
+  // durable package table, and stay part of worker-admission contract
+  // checking until an operator unloads them. Naming them here is what turns
+  // `aion unload <workflow-type> <content-hash>` from a verb nobody knows
+  // about into the obvious next step. Empty on a first deploy, and empty
+  // once a deploy loop prunes as it goes.
+  repeated string superseded_versions = 7;
 }
 
 // Engine-global listing; no namespace (the catalog is namespace-blind).

@@ -83,6 +83,11 @@ impl Engine {
             catalog
                 .publish_package_routes(package.manifest().entry_module.as_str(), &version)
                 .await?;
+            // Read the superseded set AFTER routing settles, so the version
+            // this call just routed is never in it.
+            let mut outcome = outcome;
+            outcome.superseded_versions =
+                catalog.superseded_versions(outcome.record.workflow_type())?;
             Ok(outcome)
         }
         .await;

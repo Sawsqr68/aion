@@ -324,6 +324,82 @@ async fn idempotent_reload_registers_nothing_and_re_routes_rolled_back_versions(
     Ok(())
 }
 
+/// A deploy leaves the version it replaced RESIDENT — loaded, in the durable
+/// package table, and still part of worker-admission contract checking — and
+/// it always has. The engine will not prune it: that call belongs to the
+/// platform (decision record #62 D2), and the version may still be carrying
+/// live runs.
+///
+/// What deploy must not do is leave the accumulation INVISIBLE. One stale
+/// retained version made a whole task queue unservable, and what made that
+/// cost a morning is that nothing told the operator `unload` existed. So the
+/// deploy outcome names the exact hashes `unload_workflow_version` will take.
+#[tokio::test]
+async fn deploy_names_the_versions_it_superseded_without_removing_them() -> TestResult {
+    if crate::gleam_test_support::skip_if_unavailable() {
+        return Ok(());
+    }
+    let (v1, v2) = two_versions("run")?;
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+    let engine = engine_with(&store, vec![]).await?;
+
+    let first = engine.load_package(v1.clone()).await?;
+    assert!(
+        first.superseded_versions.is_empty(),
+        "a first deploy supersedes nothing: {:?}",
+        first.superseded_versions
+    );
+
+    let second = engine.load_package(v2.clone()).await?;
+    assert_eq!(
+        second
+            .superseded_versions
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        vec![v1.content_hash().to_string()],
+        "the deploy must name the version it took the route from"
+    );
+    assert!(
+        !second
+            .superseded_versions
+            .iter()
+            .any(|version| version == v2.content_hash()),
+        "the version this deploy just routed is not superseded by itself"
+    );
+
+    // Named, NOT removed: both are still loaded and the old module is still
+    // registered. Reporting a version the engine had actually dropped would be
+    // a different and much worse bug than not reporting it at all.
+    assert_eq!(engine.list_workflow_versions()?.len(), 2);
+    assert!(
+        engine
+            .runtime()
+            .has_registered_module(&v1.deployed_entry_module())
+    );
+
+    // And the hash it named is one `unload` genuinely accepts — the report is
+    // actionable, not decorative.
+    engine
+        .unload_workflow_version(v1.manifest().entry_module.as_str(), v1.content_hash())
+        .await?;
+    assert_eq!(engine.list_workflow_versions()?.len(), 1);
+
+    let third = engine.load_package(v1.clone()).await?;
+    assert_eq!(
+        third
+            .superseded_versions
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        vec![v2.content_hash().to_string()],
+        "after the route moves back, the OTHER version is the superseded one"
+    );
+
+    engine.shutdown()?;
+    Ok(())
+}
+
 // --- brief §4 test 8: listing / re-pointing ----------------------------------
 
 #[tokio::test]

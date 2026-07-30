@@ -128,6 +128,11 @@ pub async fn load_package(
                 entry_function: outcome.record.entry_function().to_owned(),
                 freshly_loaded: outcome.freshly_loaded,
                 route_changed: outcome.route_changed,
+                superseded_versions: outcome
+                    .superseded_versions
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
             })
         }
         Err(error) => Err(map_engine_refusal(

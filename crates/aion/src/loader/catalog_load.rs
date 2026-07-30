@@ -213,6 +213,9 @@ impl WorkflowCatalog {
         self.install(next)?;
         drop(mutation_guard);
         Ok(LoadOutcome {
+            // Filled in by `Engine::load_package` once routing settles; the
+            // catalog stage cannot know it yet.
+            superseded_versions: Vec::new(),
             record,
             freshly_loaded: true,
             route_changed,
@@ -274,6 +277,7 @@ impl WorkflowCatalog {
             self.install(next)?;
         }
         Ok(Some(LoadOutcome {
+            superseded_versions: Vec::new(),
             record: first.workflow.clone(),
             freshly_loaded: false,
             route_changed,
