@@ -1520,12 +1520,24 @@ impl LiminalConnectionNotifier {
                     })
                 })
                 .collect::<Result<Vec<_>, LiminalServerError>>()?;
+        // Both advertised forms travel into the gate together: the NAME set the
+        // dispatcher selects on and the CONTRACT set admission compares. A
+        // refusal computed from one while the record printed the other is what
+        // produced the 2026-07-30 self-contradicting log.
+        let activity_types = registration
+            .activity_types
+            .iter()
+            .cloned()
+            .collect::<std::collections::BTreeSet<_>>();
         super::contracts::validate_worker_contracts(
             engine,
             &registration.task_queue,
             registration.node.as_deref(),
             &registration.identity,
-            &advertised,
+            super::contracts::WorkerAdvertisement {
+                activity_types: &activity_types,
+                contracts: &advertised,
+            },
         )
         .map_err(|error| LiminalServerError::ListenerAccept {
             message: error.to_string(),
@@ -1640,12 +1652,24 @@ impl ConnectionNotifier for LiminalConnectionNotifier {
         // identical text and a refused worker can be diagnosed from either end.
         self.admit_registration(pid, registration)
             .inspect_err(|error| {
+                // The two advertised sets are logged SEPARATELY and named for
+                // what each one is. Logging `activity_types` alone beside a
+                // contract-mismatch reason produced a record that listed an
+                // action as advertised in the same line that reported it
+                // `<missing>` — true of two different sets, and unresolvable by
+                // the operator it exists to help.
+                let advertised_contracts = registration
+                    .activities
+                    .iter()
+                    .map(|activity| activity.name.as_str())
+                    .collect::<Vec<_>>();
                 tracing::warn!(
                     connection_pid = pid,
                     identity = %registration.identity,
                     task_queue = %registration.task_queue,
                     namespaces = ?registration.namespaces,
-                    activity_types = ?registration.activity_types,
+                    advertised_activity_types = ?registration.activity_types,
+                    advertised_contracts = ?advertised_contracts,
                     reason = %error,
                     "REFUSED liminal worker registration"
                 );

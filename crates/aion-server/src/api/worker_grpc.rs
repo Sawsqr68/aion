@@ -638,12 +638,23 @@ fn validate_worker_contracts(
         );
         return Ok(());
     };
+    // Both advertised forms travel into the gate together — see
+    // [`crate::worker::contracts::WorkerAdvertisement`] for why carrying only
+    // one of them makes a refusal contradict itself.
+    let activity_types = register
+        .activity_types
+        .iter()
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
     crate::worker::contracts::validate_worker_contracts(
         &engine,
         &register.task_queue,
         crate::worker::registry::optional_node(&register.node).as_deref(),
         &register.identity,
-        &advertised,
+        crate::worker::contracts::WorkerAdvertisement {
+            activity_types: &activity_types,
+            contracts: &advertised,
+        },
     )
     .map_err(|error| match error {
         crate::worker::contracts::ContractAdmissionError::Mismatch { .. } => {

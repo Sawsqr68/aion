@@ -7,7 +7,7 @@
 use aion_package::{ActivityDescriptor, ExtractionLimits, Package};
 use serde_json::json;
 
-use super::{ContractAdmissionError, validate_worker_contracts};
+use super::{ContractAdmissionError, WorkerAdvertisement, validate_worker_contracts};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -122,6 +122,22 @@ fn v2_worker() -> Vec<ActivityDescriptor> {
     }]
 }
 
+/// The activity-type NAME set a worker advertises.
+fn names(names: &[&str]) -> std::collections::BTreeSet<String> {
+    names.iter().map(|name| (*name).to_owned()).collect()
+}
+
+/// Pair the two advertised forms for one registration.
+fn advertisement<'a>(
+    activity_types: &'a std::collections::BTreeSet<String>,
+    contracts: &'a [ActivityDescriptor],
+) -> WorkerAdvertisement<'a> {
+    WorkerAdvertisement {
+        activity_types,
+        contracts,
+    }
+}
+
 /// THE INCIDENT, at the gate that refused it. A queue carries two deployed
 /// versions whose contracts differ; the older one no longer routes and has no
 /// live run. A worker built for the current version — doing its whole job —
@@ -150,7 +166,13 @@ async fn a_worker_matching_the_current_version_is_admitted_despite_a_stale_one()
          the worker built for the current one"
     );
 
-    validate_worker_contracts(&engine, "payments", None, "drift-worker", &v2_worker())?;
+    validate_worker_contracts(
+        &engine,
+        "payments",
+        None,
+        "drift-worker",
+        advertisement(&names(&["charge"]), &v2_worker()),
+    )?;
     Ok(())
 }
 
@@ -165,9 +187,13 @@ async fn a_worker_that_cannot_serve_the_routed_version_is_still_refused() -> Tes
     let stale = deploy(&engine, V1).await?;
     let current = deploy(&engine, V3).await?;
 
-    let Err(error) =
-        validate_worker_contracts(&engine, "payments", None, "stale-worker", &v1_worker())
-    else {
+    let Err(error) = validate_worker_contracts(
+        &engine,
+        "payments",
+        None,
+        "stale-worker",
+        advertisement(&names(&["charge"]), &v1_worker()),
+    ) else {
         return Err("a worker that cannot accept the routed version's input was admitted".into());
     };
     let message = error.to_string();
@@ -217,9 +243,13 @@ async fn the_remedy_offers_unload_only_for_the_versions_that_can_be_unloaded() -
     let stale = deploy(&engine, V1).await?;
     let current = deploy(&engine, V3).await?;
 
-    let Err(error) =
-        validate_worker_contracts(&engine, "payments", None, "stale-worker", &v1_worker())
-    else {
+    let Err(error) = validate_worker_contracts(
+        &engine,
+        "payments",
+        None,
+        "stale-worker",
+        advertisement(&names(&["charge"]), &v1_worker()),
+    ) else {
         return Err("a worker that cannot accept the routed version's input was admitted".into());
     };
     let message = error.to_string();
@@ -249,8 +279,167 @@ async fn a_queue_no_package_declares_admits_any_worker() -> TestResult {
     let engine = engine().await?;
     drop(deploy(&engine, V1).await?);
 
-    validate_worker_contracts(&engine, "other_queue", None, "unrelated-worker", &[])?;
+    validate_worker_contracts(
+        &engine,
+        "other_queue",
+        None,
+        "unrelated-worker",
+        advertisement(&names(&[]), &[]),
+    )?;
     Ok(())
+}
+
+/// THE 2026-07-30 LIVE REFUSAL LOOP, both sides of it.
+///
+/// A worker advertises the action's NAME — so the dispatcher would select it —
+/// but registers no typed contract for it. Admission compares contracts, so the
+/// action is `<missing>` and the worker is refused; the refusal record used to
+/// print the name set beside that verdict and so appeared to contradict itself.
+///
+/// The refused half asserts the refusal now RECONCILES the two sets by naming
+/// the gap. The admitted half is the control on the same fixture: add the
+/// contract, change nothing else, and the worker is admitted — which is what
+/// proves the refusal is about the contract and not about the name.
+#[tokio::test]
+async fn a_name_without_a_contract_is_refused_with_a_message_that_names_the_gap() -> TestResult {
+    let engine = engine().await?;
+    drop(deploy(&engine, V1).await?);
+    let advertised_names = names(&["charge"]);
+
+    // Refused half: the name is advertised, the contract is not.
+    let Err(error) = validate_worker_contracts(
+        &engine,
+        "payments",
+        None,
+        "name-only-worker",
+        advertisement(&advertised_names, &[]),
+    ) else {
+        return Err("a worker advertising no contract for a required action was admitted".into());
+    };
+    let message = error.to_string();
+
+    assert!(message.contains("WORKER_CONTRACT_MISMATCH"), "{message}");
+    assert!(
+        message.contains("action `charge` field `action`"),
+        "the refusal must still name the missing action: {message}"
+    );
+    assert!(
+        message.contains("worker advertised <missing>"),
+        "the refusal must still report the action as advertised-missing: {message}"
+    );
+    // The reconciliation: the same message that says `<missing>` states that
+    // the name WAS advertised and that admission compares the other set.
+    assert!(
+        message.contains("admission compares CONTRACTS"),
+        "the refusal must say which of the two advertised sets it compared: {message}"
+    );
+    assert!(
+        message.contains("1 action advertised by name with NO contract: `charge`"),
+        "the refusal must name the action that is advertised by name but not by contract, or it \
+         contradicts the name set the log prints beside it: {message}"
+    );
+    assert!(
+        message.contains("worker advertised 1 activity-type name and 0 typed contracts"),
+        "the refusal must state both advertised counts: {message}"
+    );
+    assert!(
+        message.contains("must announce an input and output schema at registration"),
+        "the remedy must say what to do about the gap it just named: {message}"
+    );
+
+    // Admitted half — the control. Same engine, same queue, same name set; the
+    // ONLY difference is that the contract is now advertised.
+    validate_worker_contracts(
+        &engine,
+        "payments",
+        None,
+        "contract-worker",
+        advertisement(&advertised_names, &v1_worker()),
+    )?;
+    Ok(())
+}
+
+/// The reconciling clause must not fire when there is nothing to reconcile: a
+/// worker whose every advertised name carries a contract is refused (if at all)
+/// on the schemas alone, with no gap sentence to send an operator hunting for a
+/// missing descriptor that is not missing.
+#[tokio::test]
+async fn a_schema_mismatch_alone_never_reports_a_missing_contract() -> TestResult {
+    let engine = engine().await?;
+    drop(deploy(&engine, V1).await?);
+    drop(deploy(&engine, V3).await?);
+
+    let Err(error) = validate_worker_contracts(
+        &engine,
+        "payments",
+        None,
+        "stale-worker",
+        advertisement(&names(&["charge"]), &v1_worker()),
+    ) else {
+        return Err("a worker that cannot accept the routed version's input was admitted".into());
+    };
+    let message = error.to_string();
+
+    assert!(
+        message.contains("input_schema.properties.amount.type"),
+        "the fixture must really be a schema disagreement: {message}"
+    );
+    assert!(
+        !message.contains("advertised by name with NO contract"),
+        "every advertised name carries a contract here, so the gap clause must stay silent: \
+         {message}"
+    );
+    assert!(
+        !message.contains("must announce an input and output schema at registration"),
+        "the gap remedy must stay silent when there is no gap: {message}"
+    );
+    Ok(())
+}
+
+/// The gap is computed from the two sets, never from a hardcoded list: a name
+/// with a contract is not in it, a name without one is, and the answer is
+/// independent of how many of each there are.
+#[test]
+fn the_gap_is_exactly_the_advertised_names_carrying_no_contract() {
+    let advertised_names = names(&["charge", "refund", "settle"]);
+    let contracts = v1_worker();
+    let advertisement = advertisement(&advertised_names, &contracts);
+
+    let gap = advertisement.names_without_contracts();
+
+    let described = contracts
+        .iter()
+        .map(|contract| contract.name.clone())
+        .collect::<std::collections::BTreeSet<_>>();
+    let expected = advertised_names
+        .iter()
+        .filter(|name| !described.contains(*name))
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(gap, expected);
+    // Non-vacuity: the fixture really does contain both kinds of name.
+    assert!(
+        !gap.is_empty(),
+        "the fixture must contain an undescribed name"
+    );
+    assert!(
+        gap.len() < advertised_names.len(),
+        "the fixture must also contain a described name, or the filter is untested"
+    );
+}
+
+/// A contract advertised for an action the worker did NOT name is not a gap —
+/// the gap is one-directional, and reporting it both ways would invent a fault.
+#[test]
+fn a_contract_without_a_matching_advertised_name_is_not_a_gap() {
+    let advertised_names = names(&[]);
+    let contracts = v1_worker();
+
+    assert!(
+        advertisement(&advertised_names, &contracts)
+            .names_without_contracts()
+            .is_empty()
+    );
 }
 
 /// A catalog read that cannot answer must refuse, never admit. The typed

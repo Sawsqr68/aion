@@ -6,12 +6,58 @@
 //! versions are named in a refusal but never held against the worker: demanding
 //! them made one stale deploy enough to kill a whole task queue.
 
+use std::collections::BTreeSet;
+
 use aion::AdmissionReason;
 use aion_package::ActivityDescriptor;
 
 mod refusal;
 
 use refusal::render_mismatch;
+
+/// What a registering worker announced about itself, in the TWO independent
+/// forms it announces it in.
+///
+/// These are different sets and they are used for different things, which is
+/// precisely why they must travel together. `activity_types` is the NAME set the
+/// dispatcher selects on; `contracts` is the typed-descriptor set admission
+/// compares against the deployed `.v4` contracts. A worker can advertise a name
+/// with no contract behind it — it is then selectable but not admissible.
+///
+/// Before this pair existed, admission received only `contracts` while the
+/// refusal log printed only `activity_types`, and on 2026-07-30 that produced a
+/// refusal record which listed action `assistant` as advertised in the same line
+/// that reported it `<missing>`. Both facts were true of different sets and the
+/// record said which of neither. Carrying both through the gate makes the
+/// refusal state the gap instead of contradicting itself.
+#[derive(Clone, Copy, Debug)]
+pub struct WorkerAdvertisement<'a> {
+    /// Activity-type NAMES the worker advertised — the dispatcher's selection
+    /// set.
+    pub activity_types: &'a BTreeSet<String>,
+    /// Typed contracts the worker advertised — the set admission compares.
+    pub contracts: &'a [ActivityDescriptor],
+}
+
+impl WorkerAdvertisement<'_> {
+    /// Advertised names carrying no typed contract, sorted.
+    ///
+    /// Non-empty means the worker is selectable for actions it cannot be
+    /// admitted for, which is the exact shape of the 2026-07-30 refusal loop.
+    #[must_use]
+    pub fn names_without_contracts(&self) -> Vec<String> {
+        let described = self
+            .contracts
+            .iter()
+            .map(|contract| contract.name.as_str())
+            .collect::<BTreeSet<_>>();
+        self.activity_types
+            .iter()
+            .filter(|name| !described.contains(name.as_str()))
+            .cloned()
+            .collect()
+    }
+}
 
 /// Typed refusal from worker contract admission.
 #[derive(Debug, thiserror::Error)]
@@ -76,7 +122,7 @@ pub fn validate_worker_contracts(
     task_queue: &str,
     node: Option<&str>,
     identity: &str,
-    advertised: &[ActivityDescriptor],
+    advertised: WorkerAdvertisement<'_>,
 ) -> Result<(), ContractAdmissionError> {
     let admission = engine
         .worker_contracts_for_admission(task_queue)
@@ -87,7 +133,7 @@ pub fn validate_worker_contracts(
             &required.contract.package_version.to_string(),
             &required.contract.contract,
             node,
-            advertised,
+            advertised.contracts,
         ) {
             disagreements.push(Disagreement {
                 reason: required.reason,
@@ -102,7 +148,7 @@ pub fn validate_worker_contracts(
     Err(ContractAdmissionError::Mismatch {
         identity: identity.to_owned(),
         task_queue: task_queue.to_owned(),
-        details: render_mismatch(&admission, node, &disagreements),
+        details: render_mismatch(&admission, node, advertised, &disagreements),
     })
 }
 

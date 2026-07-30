@@ -8,6 +8,15 @@
 //! against the worker, nor what to do about it — and the answer (a stale,
 //! non-routed version nothing could reach) took an hour to find.
 //!
+//! On 2026-07-30 it then failed a second time, differently: a worker advertising
+//! 8 activity-type NAMES and 0 typed CONTRACTS was refused with action
+//! `assistant` reported `<missing>` — in a log record that listed `assistant`
+//! among the advertised types on the same line. Both statements were true of
+//! DIFFERENT sets and the record said which of neither, so the operator could
+//! not resolve it. [`advertisement_summary`] is that reconciliation: the refusal
+//! now states both advertised counts, says which set admission compared, and
+//! names the actions that carry a name but no contract.
+//!
 //! The rendered form, verbatim from `a_worker_that_cannot_serve_the_routed_
 //! version_is_still_refused` (hashes shortened here only for legibility):
 //!
@@ -15,8 +24,10 @@
 //! WORKER_CONTRACT_MISMATCH: worker build `stale-worker` queue `payments`
 //! refused. checked 1 reachable deployed package version (1 routes new starts);
 //! ignored 1 unreachable version that nothing can dispatch under: `0c578458…`
-//! (workflow `admission_drift`). this connection advertises no node, so it is
-//! held only to unpinned actions. 1 disagreement. [1/1] package `854bace6…`
+//! (workflow `admission_drift`). worker advertised 1 activity-type name and 1
+//! typed contract, and admission compares CONTRACTS. this connection advertises
+//! no node, so it is held only to unpinned actions. 1 disagreement. [1/1]
+//! package `854bace6…`
 //! (workflow `admission_drift`, held because it currently routes new starts)
 //! action `charge` field `input_schema.properties.amount.type` expected
 //! "string" but worker advertised "integer". REMEDY: rebuild and redeploy this
@@ -33,15 +44,19 @@ use std::collections::BTreeSet;
 
 use aion::{AdmissionReason, QueueAdmission, ReasonCensus};
 
-use super::Disagreement;
+use super::{Disagreement, WorkerAdvertisement};
 
 /// Renders the full diagnosis: what was checked, what disagreed, what to do.
 pub(super) fn render_mismatch(
     admission: &QueueAdmission,
     node: Option<&str>,
+    advertised: WorkerAdvertisement<'_>,
     disagreements: &[Disagreement],
 ) -> String {
-    let mut sections = vec![checked_summary(admission)];
+    let mut sections = vec![
+        checked_summary(admission),
+        advertisement_summary(advertised),
+    ];
     if let Some(node) = node {
         sections.push(format!(
             "this connection advertises node `{node}`, so it is held only to the actions a \
@@ -57,8 +72,36 @@ pub(super) fn render_mismatch(
     for (index, disagreement) in disagreements.iter().enumerate() {
         sections.push(render_disagreement(index + 1, total, disagreement));
     }
-    sections.push(remedy(admission, disagreements));
+    sections.push(remedy(admission, advertised, disagreements));
     sections.join(". ")
+}
+
+/// What the worker announced, in both forms, and the gap between them.
+///
+/// This clause exists because the two forms are routinely confused, including by
+/// this system's own logs: a worker announces activity-type NAMES (what the
+/// dispatcher selects on) and typed CONTRACTS (what admission compares), and a
+/// name with no contract behind it is selectable but not admissible. A refusal
+/// that reports an action `<missing>` while the worker plainly advertises its
+/// name is not wrong — it is answering about the other set — but it is
+/// unresolvable by the person reading it unless the refusal says so. So it says
+/// so, and it names the actions in the gap.
+fn advertisement_summary(advertised: WorkerAdvertisement<'_>) -> String {
+    let mut clauses = vec![format!(
+        "worker advertised {} and {}, and admission compares CONTRACTS",
+        pluralized(advertised.activity_types.len(), "activity-type name"),
+        pluralized(advertised.contracts.len(), "typed contract"),
+    )];
+    let gap = advertised.names_without_contracts();
+    if !gap.is_empty() {
+        clauses.push(format!(
+            "{} advertised by name with NO contract: {} — a name makes a worker \
+             selectable for dispatch, a contract makes it admissible",
+            pluralized(gap.len(), "action"),
+            backticked(&gap),
+        ));
+    }
+    clauses.join("; ")
 }
 
 /// The header: what admission held the worker to, and what it deliberately did
@@ -141,12 +184,28 @@ fn render_disagreement(index: usize, total: usize, disagreement: &Disagreement) 
 /// under pressure to unload it would send them straight into a second refusal.
 /// What CAN be unloaded is the ignored set, and the message says plainly that
 /// doing so will not change this refusal.
-fn remedy(admission: &QueueAdmission, disagreements: &[Disagreement]) -> String {
+fn remedy(
+    admission: &QueueAdmission,
+    advertised: WorkerAdvertisement<'_>,
+    disagreements: &[Disagreement],
+) -> String {
     let mut clauses = vec![
         "REMEDY: rebuild and redeploy this worker from the same source as the deployed \
          package(s) named above, so it advertises their action shapes"
             .to_owned(),
     ];
+    let gap = advertised.names_without_contracts();
+    if !gap.is_empty() {
+        // Naming the mechanism, not one SDK's method name: every worker SDK has
+        // to solve this, and the schemas are declared in the package the queue
+        // is serving, so they are always knowable.
+        clauses.push(format!(
+            "the {} listed above with no contract must announce an input and output schema \
+             at registration, not just a name — the shapes are the ones the deployed \
+             package declares",
+            pluralized(gap.len(), "action")
+        ));
+    }
     let reasons = disagreements
         .iter()
         .map(|disagreement| disagreement.reason)
@@ -210,6 +269,14 @@ fn workflow_clause(workflow_types: &[String]) -> String {
                 .join(", ")
         ),
     }
+}
+
+fn backticked(names: &[String]) -> String {
+    names
+        .iter()
+        .map(|name| format!("`{name}`"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn pluralized(count: usize, noun: &str) -> String {
