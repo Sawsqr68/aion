@@ -102,9 +102,24 @@ fn quoted_strings(text: &str) -> Vec<String> {
 
 /// Builds a deterministic, minimal JSON value that satisfies `schema` (a
 /// draft-2020-12 schema as produced by the AWL schema deriver). Required
-/// object properties are populated; optional ones are omitted; arrays are
-/// empty; enums take their first variant. The value only needs to satisfy the
-/// generated input codec so the workflow can start and reach its body.
+/// object properties are populated; optional ones are omitted; enums take
+/// their first variant; scalars take the smallest value their declared bounds
+/// allow.
+///
+/// **This is a heuristic, and [`witness_fault`] is what makes it safe.** The
+/// generator honours the constraint keywords the corpus uses (`minLength`,
+/// `maxLength`, `minItems`, `maxItems`, `minimum`, `maximum`, the exclusive
+/// bounds, and integer `multipleOf`) but it cannot solve a `pattern` or a
+/// `format`, and it does not try. Every witness it produces is checked against
+/// the very schema it was generated for, so a shape it cannot satisfy fails
+/// LOUDLY at the fixture, naming the fixture and the failing keyword.
+///
+/// It was not always so: this returned `"x"` for every string, including one a
+/// fixture schema declared `minLength: 3`. That fixture started with input its
+/// own declared contract forbids for the whole life of this harness, and
+/// nothing noticed, because nothing was enforcing the contract at the door
+/// either. When enforcement arrived the fixture went red — and the red was
+/// scored as infrastructure noise. Both halves of that are fixed here.
 pub fn example_for_schema(schema: &Value) -> Value {
     // Record-typed properties lower to `$ref: "#/$defs/Name"`; resolve those
     // against the top-level `$defs` so a required record input/result becomes a
@@ -143,15 +158,138 @@ fn example_with_defs(schema: &Value, defs: Option<&Value>) -> Value {
     }
     match map.get("type").and_then(Value::as_str) {
         Some("object") => example_object(map, defs),
-        Some("array") => Value::Array(Vec::new()),
-        Some("string") => Value::String(String::from("x")),
-        Some("integer") => json!(0),
-        Some("number") => json!(0.0),
+        Some("array") => example_array(map, defs),
+        Some("string") => Value::String(example_string(map)),
+        Some("integer") => example_integer(map),
+        Some("number") => example_number(map),
         Some("boolean") => Value::Bool(false),
         // `"null"` and an untyped `{}` schema (AWL `Unknown`, accepts
         // anything) both take the simplest satisfying value.
         _ => Value::Null,
     }
+}
+
+/// The shortest run of `x` that satisfies the schema's declared length bounds.
+///
+/// A `pattern` is deliberately NOT solved: regex inversion is not tractable in
+/// general, a run of `x` satisfies every pattern this corpus applies to a
+/// REQUIRED property, and [`witness_fault`] turns any future fixture where it
+/// does not into a named failure rather than a silent one.
+fn example_string(map: &Map<String, Value>) -> String {
+    let shortest = map.get("minLength").and_then(Value::as_u64).unwrap_or(1);
+    let length = map
+        .get("maxLength")
+        .and_then(Value::as_u64)
+        .map_or(shortest, |longest| shortest.min(longest));
+    "x".repeat(usize::try_from(length).unwrap_or(usize::MAX))
+}
+
+/// The smallest integer inside the schema's declared bounds.
+///
+/// Bounds that are not themselves integral JSON numbers (`1E5` parses as a
+/// float) are not applied — they cannot narrow an integer witness without a
+/// lossy cast, and a bound this skips can only ever leave the witness at `0`,
+/// which [`witness_fault`] then judges against the real schema.
+fn example_integer(map: &Map<String, Value>) -> Value {
+    let mut value = 0i64;
+    if let Some(smallest) = map.get("minimum").and_then(Value::as_i64) {
+        value = value.max(smallest);
+    }
+    if let Some(below) = map.get("exclusiveMinimum").and_then(Value::as_i64) {
+        value = value.max(below.saturating_add(1));
+    }
+    if let Some(largest) = map.get("maximum").and_then(Value::as_i64) {
+        value = value.min(largest);
+    }
+    if let Some(above) = map.get("exclusiveMaximum").and_then(Value::as_i64) {
+        value = value.min(above.saturating_sub(1));
+    }
+    if let Some(step) = map.get("multipleOf").and_then(Value::as_i64) {
+        if step > 0 {
+            let remainder = value.rem_euclid(step);
+            if remainder != 0 {
+                value = value.saturating_add(step - remainder);
+            }
+        }
+    }
+    json!(value)
+}
+
+/// The smallest number inside the schema's declared bounds.
+///
+/// `multipleOf` is not applied to a float witness: stepping a binary float to
+/// an exact multiple of a decimal step is not reliably representable, and
+/// pretending otherwise would produce a witness that LOOKS satisfying. `0` is
+/// an exact multiple of every step, so the default already satisfies it; a
+/// bound that forces the witness off zero and onto a step is left to
+/// [`witness_fault`] to report rather than to a rounding guess.
+fn example_number(map: &Map<String, Value>) -> Value {
+    let mut value = 0f64;
+    if let Some(smallest) = map.get("minimum").and_then(Value::as_f64) {
+        if value < smallest {
+            value = smallest;
+        }
+    }
+    if let Some(below) = map.get("exclusiveMinimum").and_then(Value::as_f64) {
+        if value <= below {
+            value = below + 1.0;
+        }
+    }
+    if let Some(largest) = map.get("maximum").and_then(Value::as_f64) {
+        if value > largest {
+            value = largest;
+        }
+    }
+    if let Some(above) = map.get("exclusiveMaximum").and_then(Value::as_f64) {
+        if value >= above {
+            value = above - 1.0;
+        }
+    }
+    json!(value)
+}
+
+/// An array carrying exactly as many generated items as `minItems` demands
+/// (empty when it demands none), clamped by `maxItems`.
+fn example_array(map: &Map<String, Value>, defs: Option<&Value>) -> Value {
+    let fewest = map.get("minItems").and_then(Value::as_u64).unwrap_or(0);
+    let count = map
+        .get("maxItems")
+        .and_then(Value::as_u64)
+        .map_or(fewest, |most| fewest.min(most));
+    let count = usize::try_from(count).unwrap_or(0);
+    let items = map.get("items");
+    let mut out = Vec::with_capacity(count);
+    for _ in 0..count {
+        out.push(items.map_or(Value::Null, |schema| example_with_defs(schema, defs)));
+    }
+    Value::Array(out)
+}
+
+/// Judges a generated witness against the schema it was generated FOR, and
+/// describes the fault when it does not satisfy it.
+///
+/// This is the assertion that makes [`example_for_schema`] a heuristic the
+/// harness can trust rather than one it merely hopes about. Without it a
+/// witness the engine will refuse reaches the run boundary and surfaces as
+/// `engine run error`, which reads as an environment problem — so the harness
+/// is quietest exactly where its own inputs are wrong.
+pub fn witness_fault(schema: &Value, witness: &Value) -> Option<String> {
+    let validator = match jsonschema::validator_for(schema) {
+        Ok(validator) => validator,
+        Err(error) => return Some(format!("schema is not usable as a validator: {error}")),
+    };
+    let faults: Vec<String> = validator
+        .iter_errors(witness)
+        .map(|fault| format!("{}: {fault}", fault.instance_path()))
+        .collect();
+    if faults.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "generated witness {witness} does not satisfy the schema it was \
+         generated for: {}",
+        faults.join("; ")
+    ))
 }
 
 /// Whether a schema branch is exactly the `null` type.
@@ -195,8 +333,16 @@ const FAILING_ACTION_PREFIX: &str = "fail_";
 /// (`child_call_awaited`, `child_spawn_combo`, `spawn_detached`); a fourth,
 /// `declarations_combined`, takes a data-driven route-failure first — both
 /// classes proven in `child_boundary.rs` (see `covered.rs`).
-pub fn action_results(document: &Document, root: &Path) -> HashMap<String, ActionResult> {
+/// Returns the map alongside every witness fault found while building it, so a
+/// canned result that does NOT satisfy its action's declared return type is
+/// named at the fixture rather than discovered later as an activity-decode
+/// detour that quietly changes what the run proves.
+pub fn action_results(
+    document: &Document,
+    root: &Path,
+) -> (HashMap<String, ActionResult>, Vec<String>) {
     let mut results = HashMap::new();
+    let mut faults = Vec::new();
     for worker in &document.workers {
         for action in &worker.actions {
             if action.name.starts_with(FAILING_ACTION_PREFIX) {
@@ -209,13 +355,23 @@ pub fn action_results(document: &Document, root: &Path) -> HashMap<String, Actio
                 );
                 continue;
             }
-            let value = example_for_schema(&schema_for_typeref(document, root, &action.returns));
-            if let Ok(json) = serde_json::to_string(&value) {
-                results.insert(action.name.clone(), Ok(json));
+            let schema = schema_for_typeref(document, root, &action.returns);
+            let value = example_for_schema(&schema);
+            if let Some(fault) = witness_fault(&schema, &value) {
+                faults.push(format!("action `{}` result: {fault}", action.name));
+            }
+            match serde_json::to_string(&value) {
+                Ok(json) => {
+                    results.insert(action.name.clone(), Ok(json));
+                }
+                Err(error) => faults.push(format!(
+                    "action `{}` result cannot be serialized: {error}",
+                    action.name
+                )),
             }
         }
     }
-    results
+    (results, faults)
 }
 
 /// Resolves a declared return `TypeRef` to a JSON schema, using the same

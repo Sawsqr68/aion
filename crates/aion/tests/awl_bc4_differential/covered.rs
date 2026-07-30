@@ -272,6 +272,16 @@ async fn covered_set_is_byte_identical() -> TestResult {
         "covered fixtures unexpectedly refused (intersection shrinkage):\n{}",
         report.render()
     );
+    // Both backends agreeing on a refusal IS a comparison result, and the
+    // report says so — but it is pinned EMPTY here, because a fixture neither
+    // backend would run proves nothing about lowering. This bucket exists so
+    // that outcome is named correctly when it happens; it is not a pass.
+    assert!(
+        report.agreed_refusal_fixtures().is_empty(),
+        "covered fixtures were refused by BOTH backends — agreement, but the \
+         fixture bodies never executed:\n{}",
+        report.render()
+    );
 
     // Exact per-bucket NAME pins (r2 finding 2).
     assert_eq!(

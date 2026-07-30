@@ -27,6 +27,11 @@ pub struct Classified {
     pub refusals: Vec<(String, String)>,
     /// Divergences discovered during classification (e.g. IR-12 name skew).
     pub classification_divergences: Vec<(String, String, String)>,
+    /// Generated witnesses that do not satisfy the schema they were generated
+    /// for, as `(ratchet name, fault)`. A harness fault, reported as INFRA —
+    /// but reported HERE, naming the fixture and the keyword, instead of
+    /// reaching the engine and surfacing as an opaque run error.
+    pub witness_faults: Vec<(String, String)>,
 }
 
 /// Classifies each covered fixture: a `lower` refusal (or an emit/select
@@ -45,6 +50,7 @@ pub fn classify(names: &[String]) -> Result<Classified, Box<dyn std::error::Erro
         action_results: HashMap::new(),
         refusals: Vec::new(),
         classification_divergences: Vec::new(),
+        witness_faults: Vec::new(),
     };
     for name in names {
         let loaded = fixtures::load(name)?;
@@ -92,7 +98,15 @@ fn classify_lowering(
         return;
     }
     let input = fixtures::example_for_schema(&entry.input_schema);
-    let results = fixtures::action_results(&loaded.document, loaded.dir.as_path());
+    if let Some(fault) = fixtures::witness_fault(&entry.input_schema, &input) {
+        classified
+            .witness_faults
+            .push((name.to_owned(), format!("start input: {fault}")));
+    }
+    let (results, result_faults) = fixtures::action_results(&loaded.document, loaded.dir.as_path());
+    for fault in result_faults {
+        classified.witness_faults.push((name.to_owned(), fault));
+    }
     classified.inputs.insert(name.to_owned(), input);
     classified.action_results.insert(name.to_owned(), results);
     classified.direct_bytes.insert(name.to_owned(), bytes);
@@ -129,6 +143,13 @@ pub async fn run_differential(
     let classified = classify(&run_names)?;
     for (fixture, text) in &classified.refusals {
         report.record_refusal(fixture, text.clone());
+    }
+    // A witness the harness itself generated wrongly is the harness's fault, so
+    // it is INFRA — but it is recorded HERE, naming the fixture and the failing
+    // keyword, rather than travelling to the engine and coming back as an
+    // opaque run error that reads like an environment problem.
+    for (fixture, fault) in &classified.witness_faults {
+        report.record_infra(fixture, fault);
     }
     for (fixture, left, right) in &classified.classification_divergences {
         report.compare(
@@ -177,10 +198,14 @@ pub async fn build_spliced(
     label: &str,
 ) -> Result<Vec<SplicedFixture>, Box<dyn std::error::Error>> {
     let classified = classify(names)?;
-    if !classified.refusals.is_empty() || !classified.classification_divergences.is_empty() {
+    if !classified.refusals.is_empty()
+        || !classified.classification_divergences.is_empty()
+        || !classified.witness_faults.is_empty()
+    {
         return Err(format!(
-            "ABI fixtures must be in the intersection: refusals={:?} skews={:?}",
-            classified.refusals, classified.classification_divergences
+            "ABI fixtures must be in the intersection with satisfiable witnesses: \
+             refusals={:?} skews={:?} witness faults={:?}",
+            classified.refusals, classified.classification_divergences, classified.witness_faults
         )
         .into());
     }
@@ -273,9 +298,13 @@ async fn differential_one(
     fold_runs(report, name, reference_run, direct_run);
 }
 
-/// Compares the two run outcomes and records the result. Any run error, `Stuck`
-/// disposition, or serialization failure is INFRA (a hard failure), never
-/// quiesced. A backend disagreement on disposition is a divergence.
+/// Compares the two run outcomes and records the result.
+///
+/// A `Stuck` disposition or a serialization failure is INFRA (a hard failure),
+/// never quiesced. A backend disagreement on disposition is a divergence. A
+/// run REFUSAL is classified by whether the backends agree on it: identical
+/// refusals are agreement, a one-sided or differing refusal is a divergence,
+/// and neither is infrastructure noise.
 /// Aliases the run-uuid inside `timer:named:deadline:<run-id>` keys so the
 /// two backends' park summaries compare on timer STRUCTURE; every other key
 /// passes through byte-exact.
@@ -289,6 +318,48 @@ fn alias_deadline_timers(timers: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// Aliases per-run identities out of a refusal message so two refusals compare
+/// on their REASON.
+///
+/// The two backends necessarily carry DIFFERENT package version hashes — that
+/// difference is the whole point of the splice — so an identical refusal
+/// reaches this function as two strings that differ. Comparing them raw would
+/// class every agreed refusal as a divergence.
+fn alias_run_identities(message: &str) -> String {
+    let mut out = String::with_capacity(message.len());
+    let mut run = String::new();
+    for character in message.chars() {
+        if character.is_ascii_hexdigit() || character == '-' {
+            run.push(character);
+            continue;
+        }
+        flush_identity_run(&mut out, &mut run);
+        out.push(character);
+    }
+    flush_identity_run(&mut out, &mut run);
+    out
+}
+
+/// Flushes an accumulated `[0-9a-f-]` run, replacing it with `<id>` when it
+/// carries enough hex digits to be a content hash or a uuid rather than a word.
+fn flush_identity_run(out: &mut String, run: &mut String) {
+    if run.chars().filter(char::is_ascii_hexdigit).count() >= 32 {
+        out.push_str("<id>");
+    } else {
+        out.push_str(run);
+    }
+    run.clear();
+}
+
+/// Renders one side of a run outcome for a refusal-split divergence: either it
+/// ran, or it refused for a stated reason.
+fn describe_run(error: Option<&(dyn std::error::Error + 'static)>) -> String {
+    error.map_or_else(
+        || String::from("ran"),
+        |error| format!("refused: {}", alias_run_identities(&error.to_string())),
+    )
+}
+
 fn fold_runs(
     report: &mut Report,
     name: &str,
@@ -297,14 +368,26 @@ fn fold_runs(
 ) {
     let (reference, direct) = match (reference_run, direct_run) {
         (Ok(reference), Ok(direct)) => (reference, direct),
+        // BOTH backends refused the run, identically. That is the differential
+        // AGREEING — the exact signal this harness exists to produce — and
+        // scoring it as infrastructure noise made the instrument quietest at
+        // the moment it was working. It gets its own bucket, pinned empty by
+        // the covered ratchet, so it is classified honestly AND still loud.
+        (Err(reference_error), Err(direct_error))
+            if alias_run_identities(&reference_error.to_string())
+                == alias_run_identities(&direct_error.to_string()) =>
+        {
+            report.record_agreed_refusal(name, &alias_run_identities(&reference_error.to_string()));
+            return;
+        }
+        // One backend refused and the other did not, or they refused for
+        // different reasons. That is a behavioral SPLIT between the backends,
+        // which is a divergence — not noise either.
         (reference_run, direct_run) => {
-            report.record_infra(
+            report.compare(
                 name,
-                &format!(
-                    "engine run error: ref={:?} direct={:?}",
-                    reference_run.err().map(|error| error.to_string()),
-                    direct_run.err().map(|error| error.to_string()),
-                ),
+                &[Value::String(describe_run(reference_run.err().as_deref()))],
+                &[Value::String(describe_run(direct_run.err().as_deref()))],
             );
             return;
         }

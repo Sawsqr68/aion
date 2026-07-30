@@ -61,6 +61,16 @@ pub struct Report {
     pub divergences: Vec<Divergence>,
     /// Every out-of-intersection refusal, in fixture order.
     pub refusals: Vec<Refusal>,
+    /// Fixtures BOTH backends refused to run, identically, as
+    /// `(fixture, identity-aliased refusal text)`.
+    ///
+    /// This is a comparison OUTCOME, not an infrastructure failure: the two
+    /// backends agreed, which is what the differential exists to measure. It
+    /// gets its own bucket so the agreement is stated honestly, and the
+    /// covered ratchet pins that bucket EMPTY so an agreed refusal still fails
+    /// the gate — an agreeing pair of refusals proves nothing about lowering,
+    /// because neither side executed the fixture's body.
+    pub agreed_refusals: Vec<(String, String)>,
     /// Infrastructure failures — missing package/bytes, a splice-binding
     /// violation, an engine build/start/read error, a `Stuck` run, a
     /// serialization error, or a disposition the harness cannot classify. This
@@ -99,6 +109,23 @@ impl Report {
     /// Records an infrastructure failure (hard — the differential must fail).
     pub fn record_infra(&mut self, fixture: &str, reason: &str) {
         self.infra.push((fixture.to_owned(), reason.to_owned()));
+    }
+
+    /// Records a fixture both backends refused to run with the same reason.
+    pub fn record_agreed_refusal(&mut self, fixture: &str, reason: &str) {
+        self.agreed_refusals
+            .push((fixture.to_owned(), reason.to_owned()));
+    }
+
+    /// The sorted set of fixtures both backends refused identically.
+    pub fn agreed_refusal_fixtures(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .agreed_refusals
+            .iter()
+            .map(|(fixture, _)| fixture.clone())
+            .collect();
+        names.sort();
+        names
     }
 
     /// Records an out-of-intersection refusal.
@@ -153,16 +180,25 @@ impl Report {
     pub fn render(&self) -> String {
         let mut lines = vec![format!(
             "differential report: {} succeeded, {} failed-path, {} cancelled, \
-             {} timer-parked, {} excluded, {} refused, {} DIVERGENCES, {} INFRA",
+             {} timer-parked, {} excluded, {} refused, {} AGREED-REFUSAL, \
+             {} DIVERGENCES, {} INFRA",
             self.succeeded.len(),
             self.failed.len(),
             self.cancelled.len(),
             self.parked_timer.len(),
             self.excluded.len(),
             self.refusals.len(),
+            self.agreed_refusals.len(),
             self.divergences.len(),
             self.infra.len(),
         )];
+        for (fixture, reason) in &self.agreed_refusals {
+            lines.push(format!(
+                "  AGREED-REFUSAL {fixture} :: both backends refused, identically \
+                 — the fixture's body never executed, so it proves nothing about \
+                 lowering :: {reason}"
+            ));
+        }
         for (fixture, reason) in &self.infra {
             lines.push(format!("  INFRA {fixture} :: {reason}"));
         }
