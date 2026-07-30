@@ -35,12 +35,61 @@ ratchet" — it is that a per-crate gate (`cargo test -p aion-awl`, which I ran
 and which passed) cannot see a cross-crate ratchet, and I cited it as if it
 could.
 
-## 🔴 RESUME HERE — 2026-07-30 ~10:55Z. `origin/main` = `e819b96a`, tree clean.
+## 🔴 RESUME HERE — 2026-07-30 ~11:00Z. HEAD = `87aaf8f2`. TWO AGENTS IN FLIGHT.
 
-**NOTHING IS IN FLIGHT.** No agents, no background builds. Everything below is
-committed and pushed.
+**Do not edit these paths — an agent owns each:**
+- Agent A (assistant AWL port + worker fix): `examples/agent-dev/worker/**`,
+  `examples/assistant/**`, `docs/design/aion-authoring/ASSISTANT-AWL-PORT.md`
+- Agent B (task #87, engine-side): `crates/aion/**`, `crates/aion-server/**`,
+  `crates/aion-core/**`
 
-**THE NEXT STEP, unambiguous:** port `examples/assistant` to AWL — the full
+**THE ANSWER TO "IT JUST STOPPED AGAIN" — now complete, and it is TWO faults,
+neither of them in the durable engine.**
+
+1. **The 2 July session was alive the whole time and nobody could tell.** Run
+   `f9b062c2-d260-43f9-8374-d3210330f567` sat parked on `assistant_continue`
+   for 28 days. A live `assistant_status` query answered instantly:
+   `{"phase":"awaiting_operator","round":2}`. The engine held queryable state
+   four weeks past its last event. It was never stuck — it was waiting for him.
+
+2. **But it was a zombie.** Signalling it woke it correctly and it died in 11
+   seconds: norn refused with *"session '…-assistant' is a fresh-epoch
+   projection; explicit resume approval is required"*. The agent-dev worker
+   composes `--resume-if-exists` and `--account` and never
+   `--allow-degraded-session`, so ANY agent session outliving a provider epoch
+   is permanently unresumable through the worker. **Fix proven by hand against
+   that exact session id before a line was written** — it resumed WITH ITS
+   MEMORY INTACT, naming a concrete item from the 2 July conversation
+   unprompted. Full evidence:
+   `docs/design/aion-authoring/DURABLE-AGENT-SESSION-EPOCH-FINDING.md` (commit
+   `87aaf8f2`), task #89. Worker fix dispatched to Agent A.
+
+   ⚠️ **I killed that run doing it.** It is now `Failed`. It would have died
+   identically on his own next message, so the loss bought a diagnosis — but it
+   is a real durable run that no longer exists, and the query was free while
+   the signal never could be.
+
+3. **Newer sessions hung forever showing `Running`** — task #87, dispatched to
+   Agent B. Confirmed at the bytes: `ActivityScheduled` and `ActivityStarted`
+   are recorded atomically at DISPATCH with the identical timestamp
+   (`10:46:51.332538Z` for both, seq 14/15). `ActivityStarted` means "the
+   engine sent it", not "a worker took it". On a queue with no workers that is
+   indistinguishable from live work, forever, with no timeout.
+
+**Also filed:** task #90 — a retry-exhausted activity records
+`{"kind":"Terminal","message":"retryable:…"}`. The kind flips, the prefix
+doesn't. A lie in an event that can never be rewritten.
+
+**Still owed and NOT done:** the server (pid 47610) and staged-rounds worker
+(pid 49833) are still old binaries. Deliberately held until Agent A's worker
+fix lands, so the restart carries it and Tom's assistant can be repaired in one
+motion instead of two disruptions.
+
+**Do not tell Tom any of this as status.** Fix it, prove it live, then tell him
+with the working thing attached — he has asked repeatedly not to be given
+progress without substance.
+
+**THE OTHER NEXT STEP (Agent A):** port `examples/assistant` to AWL — the full
 workflow, not the spike. The seam is PROVEN (see below), so this is now a
 straight port rather than a risk. Source of truth for behaviour:
 `examples/assistant/src/assistant.gleam` (305 lines), whose module doc states
