@@ -298,6 +298,83 @@ jobs:
         working-directory: ${{ matrix.package }}
         run: uv run --extra dev python -m pytest tests/ -q
 
+  # The TypeScript SDKs had NO lane at all — not a shadowed one, none. Their
+  # `typecheck`, `lint`, `test` and (for the worker) `check:proto` scripts have
+  # been present and passing on a developer's machine and invoked by nothing.
+  #
+  # `check:proto` is the same class of gate as the Python packages' staleness
+  # tests: it regenerates from the authoritative proto contract and compares
+  # against what is committed. It exists ONLY in `aion-worker`.
+  #
+  # ⚠️ Read this lane for what it can and cannot say. Every one of these gates is
+  # green today, and for `aion-client` that greenness cannot answer the fossil
+  # question, because that package has no drift check to run. Its 32 tests
+  # validate the client against its own committed stubs, and its live-server
+  # conformance skips at runtime when `AION_SERVER_URL` is unset — which is the
+  # honest thing for it to do and is exactly the shape that let the Rust and
+  # Python caller SDKs sit wire-dead while passing. Building `aion-client` a
+  # drift gate is the remaining work in #67; this lane does not stand in for it.
+  #
+  # **bun, installed once at the workspace root** — not npm per package. The repo
+  # root is a private bun workspace (`aion-workspace`, members `apps/*` and
+  # `sdks/typescript/*`) and `bun.lock` is the tracked lockfile. `npm ci` inside a
+  # member directory cannot work: `npm prefix` there resolves to the repo root, so
+  # npm looks for a lockfile at the root and ignores any local one. Verified by
+  # running it, which is the only reason this comment is right.
+  typescript-sdks:
+    name: TypeScript SDKs (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - sdks/typescript/aion-worker
+          - sdks/typescript/aion-client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      # `--frozen-lockfile` because the lockfile is the point of a gate that is
+      # meant to be reproducible: a resolution that drifts under CI is a gate
+      # measuring something other than what is committed.
+      - name: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile
+      # `!cancelled()` on every later step, for the reason set out on
+      # `standalone-crates`: these ask about the same package under the same
+      # inputs, so one status per package is the honest granularity — but a lint
+      # failure must not hide whether the tests pass.
+      - name: typecheck
+        if: ${{ !cancelled() }}
+        working-directory: ${{ matrix.package }}
+        run: bun run typecheck
+      - name: lint
+        if: ${{ !cancelled() }}
+        working-directory: ${{ matrix.package }}
+        run: bun run lint
+      - name: test
+        if: ${{ !cancelled() }}
+        working-directory: ${{ matrix.package }}
+        run: bun run test
+
+  # The proto-drift gate, in its own job so it reports for itself. It is the one
+  # check here that can catch a fossil, and burying it among the pass/fail of
+  # three other scripts would make its absence read as someone else's failure —
+  # which is precisely how the `--all-features` lane went unnoticed.
+  typescript-proto-drift:
+    name: TypeScript worker proto drift (check:proto)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile
+      # Regenerates from the authoritative proto contract in the Rust tree and
+      # byte-compares against the committed `src/proto/`, so that tree must be in
+      # the checkout. It is — but the dependency is easy to miss and is the thing
+      # that broke before.
+      - name: bun run check:proto
+        working-directory: sdks/typescript/aion-worker
+        run: bun run check:proto
+
   # ----------------------------------------------------------------------- #
   # SLOW LANE — the real OS-process failover gates (kill-9 + graceful). These
   # PASS on main since #157 (the per-shard failover seam now forwards through the
