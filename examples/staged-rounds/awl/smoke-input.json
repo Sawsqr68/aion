@@ -1,0 +1,46 @@
+{
+  "material": {
+    "title": "Fleet smoke: two tiny functions in a throwaway crate",
+    "brief": "This is a WIRING PROOF, not a real piece of work. The target is a deliberately tiny crate whose whole content is one `add` function. Add exactly two things: a `sub(a: i64, b: i64) -> i64` function and a `mul(a: i64, b: i64) -> i64` function, each with its own `#[test]` unit test in the same file, and each with a doc comment. Follow the existing style of `add` exactly — `#[must_use]`, a one-line doc comment, `i64` arguments. Do not add dependencies, do not add modules, do not restructure anything, and do not touch `add`. The two functions are INDEPENDENT of each other, so they are two separate work items with no dependency ordering between them. Keep each item's diff to the one function it owns plus that function's test.",
+    "pointers": [
+      "src/lib.rs",
+      "README.md",
+      "Cargo.toml"
+    ]
+  },
+  "config": {
+    "repo_root": "/Users/tom/.aion-fleet-smoke/smoke-repo",
+    "base_branch": "main",
+    "gates": [
+      {
+        "name": "fmt",
+        "argv": ["cargo", "fmt", "--all"]
+      },
+      {
+        "name": "build",
+        "argv": ["cargo", "build"]
+      },
+      {
+        "name": "clippy",
+        "argv": ["cargo", "clippy", "--all-targets", "--", "-D", "warnings"]
+      },
+      {
+        "name": "test",
+        "argv": ["cargo", "test"]
+      }
+    ],
+    "lenses": [
+      {
+        "name": "correctness",
+        "charter": "Hunt defects in the change itself: wrong arithmetic, wrong argument order, a test that asserts something other than what the function computes, a test that would pass against a broken implementation. Assume the change is wrong and construct the concrete input that breaks it."
+      },
+      {
+        "name": "brief_compliance",
+        "charter": "Hold the diff to the item, adversarially. This brief is deliberately narrow: exactly one named function plus its own unit test, matching the existing style of `add`, with no new dependencies, no new modules, no restructuring and no edit to `add`. Any addition beyond that is a blocking finding no matter how reasonable it looks. Pass-and-still-wrong is the failure class here — do not accept a claim without evidence in the diff or the gate output."
+      }
+    ],
+    "max_rounds": 2,
+    "max_merge_rounds": 2,
+    "max_integration_rounds": 2
+  }
+}
