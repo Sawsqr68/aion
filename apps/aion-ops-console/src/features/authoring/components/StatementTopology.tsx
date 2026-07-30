@@ -120,6 +120,7 @@ function statementKindLabel(kind: ProjectionStatementKind): string {
     field_stage: 'Field stage',
     combinator_stage: 'Combinator stage',
     wait: 'Wait',
+    send: 'Send signal',
     sleep: 'Sleep',
     parallel_fork: 'Parallel fan-out',
     sequential_fork: 'Sequential fan-out',

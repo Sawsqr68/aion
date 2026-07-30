@@ -1,0 +1,29 @@
+//! Report progress back to the coordinator that started this run: the parent
+//! hands its own id down as an input, and the child signals it.
+workflow gated_item
+  input coordinator_id: String
+  input item_id: String
+  signal decision: Decision
+  send heartbeat: Nil
+  send progress: Progress
+  send verdict: String
+  outcome done: type Done, route success
+
+type Decision { approved: Bool }
+type Done     { item: String }
+type Progress { item: String, state: String }
+type Verdict  { ok: Bool }
+
+worker gates
+  action evaluate(item: String) -> Verdict
+
+step announce
+  send heartbeat to coordinator_id
+  send progress(item: item_id, state: "started") to coordinator_id
+
+step gate after announce
+  evaluate(item: item_id) -> assessment
+  wait decision -> answer
+  send verdict("gated: " + item_id) to coordinator_id
+  send progress(item: item_id, state: "gated") to workflow.id
+  route done(item: item_id)

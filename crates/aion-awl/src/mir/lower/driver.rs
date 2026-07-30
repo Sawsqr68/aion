@@ -95,6 +95,7 @@ fn flow_shape_gap(document: &Document) -> Option<(crate::Span, &'static str)> {
                 Statement::Call(_)
                 | Statement::Spawn(_)
                 | Statement::Wait(_)
+                | Statement::Send(_)
                 | Statement::Sleep(_)
                 | Statement::Distribute(_)
                 | Statement::Collect(_) => None,

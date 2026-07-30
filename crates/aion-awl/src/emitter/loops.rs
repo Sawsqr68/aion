@@ -235,6 +235,7 @@ pub(crate) fn first_route_span(statements: &[Statement]) -> Option<Span> {
             Statement::Call(_)
             | Statement::Spawn(_)
             | Statement::Wait(_)
+            | Statement::Send(_)
             | Statement::Sleep(_)
             | Statement::Distribute(_)
             | Statement::Collect(_) => {}
@@ -310,6 +311,15 @@ pub(crate) fn statements_expr_refs(statements: &[Statement], refs: &mut BTreeSet
             Statement::Distribute(distribute) => {
                 expr_refs(&distribute.collection, refs);
             }
+            Statement::Send(send) => {
+                expr_refs(&send.target, refs);
+                for arg in send.payload_args() {
+                    expr_refs(&arg.value, refs);
+                }
+                if let Some(crate::ast::RoutePayload::Value(value)) = &send.payload {
+                    expr_refs(value, refs);
+                }
+            }
             Statement::Wait(_) | Statement::Sleep(_) | Statement::Collect(_) => {}
             Statement::Fork(fork) => {
                 if let ForkHeader::Collection { collection, .. } = &fork.header {
@@ -376,6 +386,7 @@ pub(crate) fn statement_defs(statements: &[Statement], defs: &mut BTreeSet<Strin
                 defs.insert(collect.bind.name.clone());
             }
             Statement::Spawn(_)
+            | Statement::Send(_)
             | Statement::Sleep(_)
             | Statement::Route(_)
             | Statement::Distribute(_) => {}

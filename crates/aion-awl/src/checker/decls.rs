@@ -109,6 +109,28 @@ fn check_header(ctx: &mut Ctx<'_>) {
             );
         }
     }
+    // The outbound surface. A name may be declared in BOTH directions — a
+    // relay receives `cancel` and forwards `cancel` — so the two tables are
+    // independent and only collisions WITHIN a direction are errors.
+    for send in &doc.sends {
+        if !is_snake_case(&send.name) {
+            ctx.error(
+                send.name_span,
+                format!(
+                    "send name `{}` must be snake_case ([a-z][a-z0-9_]*)",
+                    send.name
+                ),
+            );
+        }
+        let ty = ctx.resolve_type_ref(&send.ty);
+        ctx.semantic.ty(send.name_span, &ty.to_string());
+        if ctx.sends.insert(send.name.clone(), ty).is_some() {
+            ctx.error(
+                send.name_span,
+                format!("duplicate send declaration `{}`", send.name),
+            );
+        }
+    }
     for outcome in &doc.outcomes {
         if !is_snake_case(&outcome.name) {
             ctx.error(

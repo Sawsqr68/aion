@@ -107,6 +107,10 @@ pub(super) struct FnPlan {
     /// declared signal in sorted-name order — the slots the shells have
     /// always occupied; `wait` lowering calls them.
     pub(super) signals: BTreeMap<String, FnRef>,
+    /// Outbound signal name to its send-ref shell, one per declared `send`
+    /// in sorted-name order, allocated AFTER every inbound signal shell so a
+    /// document without sends keeps byte-identical function refs.
+    pub(super) send_signals: BTreeMap<String, FnRef>,
     /// One reserved slot pair per timeout wait (receive fn, then case fn),
     /// in the exact traversal order lowering encounters them
     /// (`wait::count_wait_fns` — the same pre-order discipline as `forks`,
@@ -241,6 +245,14 @@ pub(super) fn skeleton(ctx: &mut Ctx<'_>) -> Result<Skeleton, LowerError> {
         signal_refs.insert(signal.clone(), FnRef(next));
         next += 1;
     }
+    let mut send_signals_names: Vec<String> =
+        emitter.sends.keys().map(|k| (*k).to_owned()).collect();
+    send_signals_names.sort();
+    let mut send_signal_refs = BTreeMap::new();
+    for signal in &send_signals_names {
+        send_signal_refs.insert(signal.clone(), FnRef(next));
+        next += 1;
+    }
     let slots = super::plan_slots::plan_flow_slots(ctx, &mut next)?;
     let (child_witness, predicate_start) = super::plan_slots::fixed_helper_refs(
         next,
@@ -262,6 +274,7 @@ pub(super) fn skeleton(ctx: &mut Ctx<'_>) -> Result<Skeleton, LowerError> {
         loops: slots.loops,
         forks: slots.forks,
         signals: signal_refs,
+        send_signals: send_signal_refs,
         waits: slots.waits,
         compensations: slots.compensations,
         child_witness,
@@ -286,6 +299,10 @@ pub(super) fn skeleton(ctx: &mut Ctx<'_>) -> Result<Skeleton, LowerError> {
     }
     for signal in &signals {
         let shell = super::wrappers::signal_shell(ctx, &plan, signal)?;
+        functions.push(shell);
+    }
+    for signal in &send_signals_names {
+        let shell = super::wrappers::send_signal_shell(ctx, &plan, signal)?;
         functions.push(shell);
     }
     // Region bodies are appended by `flow::regions`.

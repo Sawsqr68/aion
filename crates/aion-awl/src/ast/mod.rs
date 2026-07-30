@@ -12,7 +12,7 @@ mod command_tests;
 pub use command::{CommandError, CommandReference, ScannedCommand, scan_command};
 pub use document::{
     ActionBody, ActionDecl, ChildDecl, ConfigLine, ConfigValue, ConstDecl, Document, EnumVariant,
-    FieldDecl, InputDecl, OutcomeDecl, ParamDecl, RetrySpec, RouteDirection, SignalDecl,
+    FieldDecl, InputDecl, OutcomeDecl, ParamDecl, RetrySpec, RouteDirection, SendDecl, SignalDecl,
     SubflowDecl, SubflowOutcome, TypeBody, TypeDecl, TypeRef, WorkerDecl, WorkflowTimeoutDecl,
 };
 pub(crate) use expr::join_span;
@@ -21,7 +21,7 @@ pub use steps::{
     AfterRef, Binding, Call, CallStmt, CollectStmt, CombinatorCall, CombinatorKind, DeliveryVerb,
     DistributeStmt, ForkHeader, ForkStmt, Guard, JoinLine, LoopStmt, LoopTail, MaxVisits,
     OnFailure, OutcomeClause, PipeEnd, PipeStage, PipeStmt, RoutePayload, RouteStmt, RouteTarget,
-    SleepStmt, SpawnStmt, Statement, Step, WaitStmt,
+    SendStmt, SleepStmt, SpawnStmt, Statement, Step, WaitStmt,
 };
 pub(crate) use trivia::doc_text;
 pub use trivia::{Comment, DocLine, Lead};

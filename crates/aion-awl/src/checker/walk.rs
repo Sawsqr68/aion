@@ -14,6 +14,7 @@ use super::context::{Ctx, Flow};
 use super::exprs::View;
 use super::graph::StepGraph;
 use super::outcomes::{Env, check_clauses, check_route};
+use super::sends::walk_send;
 use super::stages::walk_pipe;
 use super::types::{Ty, assignable, same_ty};
 
@@ -243,6 +244,7 @@ fn statement_span(statement: &Statement) -> Span {
         Statement::Spawn(spawn) => spawn.span,
         Statement::Pipe(pipe) => pipe.span,
         Statement::Wait(wait) => wait.span,
+        Statement::Send(send) => send.span,
         Statement::Sleep(sleep) => sleep.span,
         Statement::Fork(fork) => fork.span,
         Statement::Loop(looped) => looped.span,
@@ -266,6 +268,12 @@ fn walk_statement(
         Statement::Spawn(spawn) => walk_spawn(w, scope, spawn),
         Statement::Pipe(pipe) => walk_pipe(w, scope, pipe, env),
         Statement::Wait(wait) => Some(walk_wait(w, scope, wait)),
+        // A send binds nothing and produces no value: it is an effect whose
+        // only outcome is success or a fault on the step.
+        Statement::Send(send) => {
+            walk_send(w, scope, send);
+            None
+        }
         Statement::Sleep(_) => None,
         Statement::Fork(fork) => walk_fork(w, scope, fork, owner, env),
         Statement::Loop(looped) => walk_loop(w, scope, looped, owner, env),

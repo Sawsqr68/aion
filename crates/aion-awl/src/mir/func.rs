@@ -179,8 +179,13 @@ pub enum FnOrigin {
         action: String,
         raw: bool,
     },
+    /// A `signal.SignalRef` constructor shell. `out` distinguishes the
+    /// OUTBOUND ref a `send` uses from the inbound ref a `wait` uses: one
+    /// document may declare the same name in both directions, and the two
+    /// shells are then distinct functions with distinct payload codecs.
     SignalRef {
         signal: String,
+        out: bool,
     },
     DeadBody,
     ChildWitness,

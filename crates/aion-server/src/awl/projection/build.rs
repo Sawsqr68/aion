@@ -232,11 +232,15 @@ impl<'a> Context<'a> {
                         groups,
                     );
                 }
+                // A send carries no nested statement list, so this scan — which
+                // exists only to descend into fork and loop bodies — has
+                // nothing to recurse into.
                 Statement::SubStep(_)
                 | Statement::Call(_)
                 | Statement::Spawn(_)
                 | Statement::Pipe(_)
                 | Statement::Wait(_)
+                | Statement::Send(_)
                 | Statement::Sleep(_)
                 | Statement::Route(_)
                 | Statement::Distribute(_)
@@ -298,7 +302,12 @@ fn collect_waits(statements: &[Statement], found: &mut bool) {
             Statement::Wait(_) | Statement::Sleep(_) => *found = true,
             Statement::Fork(fork) => collect_waits(&fork.body, found),
             Statement::Loop(looped) => collect_waits(&looped.body, found),
-            Statement::Call(_)
+            // Deliberately NOT a wait. This flag marks a step that durably
+            // SUSPENDS, and a send does not: it hands the payload to the signal
+            // bridge and the step carries straight on. Only `wait` (and the
+            // matching receiver in the target document) suspends.
+            Statement::Send(_)
+            | Statement::Call(_)
             | Statement::Spawn(_)
             | Statement::Pipe(_)
             | Statement::Route(_)
@@ -329,7 +338,11 @@ fn collect_activities(statements: &[Statement], names: &mut BTreeSet<String>) {
             }
             Statement::Fork(fork) => collect_activities(&fork.body, names),
             Statement::Loop(looped) => collect_activities(&looped.body, names),
-            Statement::Pipe(_)
+            // A send names a SIGNAL, not an activity: it is executed by the
+            // engine's signal bridge and never dispatched to a worker, so it
+            // must not appear in the activity set a queue is expected to serve.
+            Statement::Send(_)
+            | Statement::Pipe(_)
             | Statement::Wait(_)
             | Statement::Sleep(_)
             | Statement::Route(_)
@@ -390,7 +403,11 @@ fn collect_child_calls(
             Statement::Loop(looped) => {
                 collect_child_calls(parent_step, &looped.body, children, found);
             }
-            Statement::Wait(_)
+            // A send starts no child. It addresses an ALREADY-RUNNING workflow
+            // by a runtime id, so there is no declared child relationship for
+            // the projection to record.
+            Statement::Send(_)
+            | Statement::Wait(_)
             | Statement::Sleep(_)
             | Statement::Route(_)
             | Statement::SubStep(_)

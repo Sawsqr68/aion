@@ -38,9 +38,9 @@ pub use ast::{
     DurationLiteral, EnumVariant, Expr, FieldDecl, ForkHeader, ForkStmt, Guard, InputDecl,
     JoinLine, Lead, LoopStmt, LoopTail, MaxVisits, OnFailure, OutcomeClause, OutcomeDecl,
     ParamDecl, PipeEnd, PipeStage, PipeStmt, PredicateKind, Quantifier, RetrySpec, RouteDirection,
-    RoutePayload, RouteStmt, RouteTarget, ScannedCommand, SignalDecl, SleepStmt, SpawnStmt,
-    Statement, Step, SubflowDecl, SubflowOutcome, TypeBody, TypeDecl, TypeRef, WaitStmt,
-    WorkerDecl, WorkflowTimeoutDecl, scan_command,
+    RoutePayload, RouteStmt, RouteTarget, ScannedCommand, SendDecl, SendStmt, SignalDecl,
+    SleepStmt, SpawnStmt, Statement, Step, SubflowDecl, SubflowOutcome, TypeBody, TypeDecl,
+    TypeRef, WaitStmt, WorkerDecl, WorkflowTimeoutDecl, scan_command,
 };
 pub use checker::{CheckError, check, check_in};
 pub use compile::{

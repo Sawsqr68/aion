@@ -86,6 +86,8 @@ pub enum ProjectionStatementKind {
     CombinatorStage,
     /// Durable signal wait.
     Wait,
+    /// Durable signal send.
+    Send,
     /// Durable timer.
     Sleep,
     /// Parallel collection fan-out.

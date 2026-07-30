@@ -219,6 +219,10 @@ pub(super) fn lower_statement(
             super::wait::lower_wait_stmt(ctx, env.plan, step, wait, scope, stmts, slots)?;
             Ok(None)
         }
+        Statement::Send(send) => {
+            super::send::lower_send_stmt(ctx, env.plan, send, scope, stmts)?;
+            Ok(None)
+        }
         Statement::Fork(fork) => {
             lower_fork_stmt(ctx, env, step, fork, scope, stmts, slots)?;
             Ok(None)

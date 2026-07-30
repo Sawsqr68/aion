@@ -512,6 +512,7 @@ fn statement_nodes(
             // region statements carry no calls.
             Statement::Spawn(_)
             | Statement::Wait(_)
+            | Statement::Send(_)
             | Statement::Sleep(_)
             | Statement::Route(_)
             | Statement::Distribute(_)

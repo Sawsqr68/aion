@@ -69,6 +69,7 @@ pub fn parse(source: &str) -> Result<Document, ParseError> {
         timeout: None,
         inputs: Vec::new(),
         signals: Vec::new(),
+        sends: Vec::new(),
         outcomes: Vec::new(),
         consts: Vec::new(),
         types: Vec::new(),
@@ -124,8 +125,8 @@ fn parse_narration(stream: &mut Stream) -> Result<Vec<DocLine>, ParseError> {
     Ok(narration)
 }
 
-/// Parse the indented header block: `timeout`, `input`, `signal`, and `outcome`
-/// declarations in any order (the printer canonicalizes the order).
+/// Parse the indented header block: `timeout`, `input`, `signal`, `send`, and
+/// `outcome` declarations in any order (the printer canonicalizes the order).
 fn parse_header_block(stream: &mut Stream, document: &mut Document) -> Result<(), ParseError> {
     let leads = stream.take_leads()?;
     if !stream.open_block() {
@@ -153,22 +154,7 @@ fn parse_header_block(stream: &mut Stream, document: &mut Document) -> Result<()
                         "duplicate workflow `timeout` declaration",
                     ));
                 }
-                let negative = stream
-                    .eat(|kind| matches!(kind, TokenKind::Minus))
-                    .is_some();
-                let duration = expect_duration(
-                    stream,
-                    span,
-                    "workflow `timeout` needs a duration (`30s`, `5m`, `3h`, `2d`)",
-                )?;
-                let trailing = stream.end_line()?;
-                document.timeout = Some(WorkflowTimeoutDecl {
-                    span: join_span(span, duration.span),
-                    lead,
-                    trailing,
-                    duration,
-                    negative,
-                });
+                document.timeout = Some(parse_workflow_timeout(stream, lead, span)?);
             }
             TokenKind::Keyword(Keyword::Input) => {
                 stream.next();
@@ -200,11 +186,18 @@ fn parse_header_block(stream: &mut Stream, document: &mut Document) -> Result<()
                     .outcomes
                     .push(parse_outcome_decl(stream, lead, span)?);
             }
+            // `send` is positional, not reserved: the corpus already uses the
+            // word as an action and step name (`parser/send.rs`).
+            TokenKind::Identifier(word) if super::send::heads_declaration(word) => {
+                document
+                    .sends
+                    .push(super::send::parse_declaration(stream, lead, span)?);
+            }
             TokenKind::Identifier(word) => {
                 let message = gone_keyword_hint(word).unwrap_or_else(|| {
                     format!(
-                        "expected `timeout`, `input`, `signal`, or `outcome` in the workflow header, \
-                         found `{word}`"
+                        "expected `timeout`, `input`, `signal`, `send`, or `outcome` in the \
+                         workflow header, found `{word}`"
                     )
                 });
                 return Err(ParseError::new(span, message));
@@ -213,8 +206,8 @@ fn parse_header_block(stream: &mut Stream, document: &mut Document) -> Result<()
                 return Err(ParseError::new(
                     span,
                     format!(
-                        "expected `timeout`, `input`, `signal`, or `outcome` in the workflow header, \
-                         found {}",
+                        "expected `timeout`, `input`, `signal`, `send`, or `outcome` in the \
+                         workflow header, found {}",
                         describe(other)
                     ),
                 ));
@@ -225,6 +218,33 @@ fn parse_header_block(stream: &mut Stream, document: &mut Document) -> Result<()
     stream.consume_block_dedent();
     stream.push_back_leads(stray);
     Ok(())
+}
+
+/// Parse the workflow `timeout` declaration after its keyword (at
+/// `timeout_span`) has been consumed. A leading `-` is accepted so the
+/// checker — not the parser — owns the "a timeout cannot be negative"
+/// diagnostic.
+fn parse_workflow_timeout(
+    stream: &mut Stream,
+    lead: Vec<Lead>,
+    timeout_span: Span,
+) -> Result<WorkflowTimeoutDecl, ParseError> {
+    let negative = stream
+        .eat(|kind| matches!(kind, TokenKind::Minus))
+        .is_some();
+    let duration = expect_duration(
+        stream,
+        timeout_span,
+        "workflow `timeout` needs a duration (`30s`, `5m`, `3h`, `2d`)",
+    )?;
+    let trailing = stream.end_line()?;
+    Ok(WorkflowTimeoutDecl {
+        span: join_span(timeout_span, duration.span),
+        lead,
+        trailing,
+        duration,
+        negative,
+    })
 }
 
 struct IoDecl {

@@ -25,6 +25,8 @@ pub struct Document {
     pub inputs: Vec<InputDecl>,
     /// `signal` declarations in source order.
     pub signals: Vec<SignalDecl>,
+    /// `send` declarations in source order — the OUTBOUND signal surface.
+    pub sends: Vec<SendDecl>,
     /// Workflow `outcome` declarations in source order (at least one).
     pub outcomes: Vec<OutcomeDecl>,
     /// `const` declarations in source order.
@@ -85,6 +87,36 @@ pub struct SignalDecl {
     /// Same-line trailing comment.
     pub trailing: Option<Comment>,
     /// Signal name.
+    pub name: String,
+    /// Source span of the signal name.
+    pub name_span: Span,
+    /// Declared payload type.
+    pub ty: TypeRef,
+}
+
+/// One `send name: Type` declaration in the workflow header: a signal this
+/// workflow SENDS to another workflow.
+///
+/// Separate from [`SignalDecl`] because the two are different directions of
+/// a workflow's surface and only the inbound one is a contract the engine
+/// can route to this run. Keeping them apart is also what lets a relay
+/// declare `signal cancel: Reason` and `send cancel: Reason` in one file
+/// without either declaration lying about the other.
+///
+/// The declaration exists to close the language's one silent hole: the
+/// engine routes signals BY NAME, so a send whose name no receiver awaits
+/// succeeds and does nothing. AWL cannot verify the far side (the target is
+/// a runtime id — see the `send` statement), but it CAN refuse a send whose
+/// name and payload shape the document never stated.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SendDecl {
+    /// Span covering the declaration line.
+    pub span: Span,
+    /// Leading trivia before the declaration.
+    pub lead: Vec<Lead>,
+    /// Same-line trailing comment.
+    pub trailing: Option<Comment>,
+    /// Outbound signal name — the name the engine routes on.
     pub name: String,
     /// Source span of the signal name.
     pub name_span: Span,

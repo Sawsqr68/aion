@@ -101,6 +101,16 @@ fn print_document(printer: &mut Printer, document: &Document) {
             signal.trailing.as_ref(),
         );
     }
+    // The outbound surface prints straight after the inbound one: a reader
+    // sees what a workflow receives and what it sends side by side.
+    for send in &document.sends {
+        printer.leads(1, &send.lead);
+        printer.line(
+            1,
+            &format!("send {}: {}", send.name, type_ref_text(&send.ty)),
+            send.trailing.as_ref(),
+        );
+    }
     print_outcome_decls(printer, &document.outcomes);
     for decl in &document.consts {
         print_const_decl(printer, decl);

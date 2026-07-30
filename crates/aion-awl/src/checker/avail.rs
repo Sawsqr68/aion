@@ -57,7 +57,10 @@ pub(super) fn defined_in_statements(statements: &[Statement], names: &mut BTreeS
                 names.insert(collect.bind.name.clone());
             }
             Statement::SubStep(sub) => defined_in_statements(&sub.body, names),
-            Statement::Spawn(_) | Statement::Sleep(_) | Statement::Route(_) => {}
+            Statement::Spawn(_)
+            | Statement::Send(_)
+            | Statement::Sleep(_)
+            | Statement::Route(_) => {}
         }
     }
 }
@@ -150,7 +153,10 @@ pub(super) fn origins_in_statements(statements: &[Statement], origins: &mut Orig
                 insert_origin(origins, &collect.bind.name, collect.bind.span);
             }
             Statement::SubStep(substep) => origins_in_statements(&substep.body, origins),
-            Statement::Spawn(_) | Statement::Sleep(_) | Statement::Route(_) => {}
+            Statement::Spawn(_)
+            | Statement::Send(_)
+            | Statement::Sleep(_)
+            | Statement::Route(_) => {}
         }
     }
 }

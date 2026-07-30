@@ -195,6 +195,7 @@ pub(super) fn lower_statements(
             Statement::Call(call) => lower_call(emitter, call, scope)?,
             Statement::Spawn(spawn) => lower_spawn(emitter, spawn, scope)?,
             Statement::Wait(wait) => lower_wait(emitter, wait, scope)?,
+            Statement::Send(send) => super::sends::lower_send(emitter, send, scope)?,
             Statement::Sleep(sleep) => lower_sleep(emitter, sleep),
             Statement::Fork(fork) => lower_fork(emitter, fork, scope)?,
             Statement::Loop(looped) => {

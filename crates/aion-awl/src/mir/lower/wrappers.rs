@@ -2,7 +2,7 @@
 //! 500-line law): the typed activity wrapper (T-ACT), its raw twin
 //! (T-ACTRAW, heterogeneous named forks), and the signal-ref shell (T-SIG).
 
-use crate::emitter::{snake, type_ref_to_g};
+use crate::emitter::{GType, snake, type_ref_to_g};
 
 use super::super::func::{FnOrigin, FnSig, MirFn, TemplateFn, TypeShapeRef};
 use super::super::ids::Span;
@@ -100,12 +100,36 @@ pub(super) fn signal_shell(
     signal: &str,
 ) -> Result<MirFn, LowerError> {
     let payload_g = type_ref_to_g(&ctx.emitter.signals[signal].ty);
-    let payload_tydesc = ctx.tydesc(&payload_g);
-    let payload_codec = codec_ref_for(ctx, plan, &payload_g)?;
+    ref_shell(ctx, plan, signal, &payload_g, false)
+}
+
+/// The OUTBOUND twin of [`signal_shell`], for a header `send` declaration.
+/// Distinctly named (`{snake}_send_signal`) because one document may declare
+/// the same name in both directions.
+pub(super) fn send_signal_shell(
+    ctx: &mut Ctx<'_>,
+    plan: &FnPlan,
+    signal: &str,
+) -> Result<MirFn, LowerError> {
+    let payload_g = type_ref_to_g(&ctx.emitter.sends[signal].ty);
+    ref_shell(ctx, plan, signal, &payload_g, true)
+}
+
+fn ref_shell(
+    ctx: &mut Ctx<'_>,
+    plan: &FnPlan,
+    signal: &str,
+    payload_g: &GType,
+    out: bool,
+) -> Result<MirFn, LowerError> {
+    let payload_tydesc = ctx.tydesc(payload_g);
+    let payload_codec = codec_ref_for(ctx, plan, payload_g)?;
+    let suffix = if out { "_send_signal" } else { "_signal" };
     Ok(MirFn::Templated {
-        name: format!("{}_signal", snake(signal)),
+        name: format!("{}{suffix}", snake(signal)),
         origin: FnOrigin::SignalRef {
             signal: signal.to_owned(),
+            out,
         },
         template: TemplateFn::SignalRef {
             signal: signal.to_owned(),

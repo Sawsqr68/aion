@@ -25,6 +25,7 @@ mod operators;
 mod outcomes;
 mod project;
 mod regions;
+mod sends;
 mod stages;
 mod statement_info;
 mod subflows;

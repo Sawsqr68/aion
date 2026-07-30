@@ -114,6 +114,12 @@ const fn projection_kind(kind: StatementKind) -> ProjectionStatementKind {
         StatementKind::FieldStage => ProjectionStatementKind::FieldStage,
         StatementKind::CombinatorStage => ProjectionStatementKind::CombinatorStage,
         StatementKind::Wait => ProjectionStatementKind::Wait,
+        // A send gets its OWN projected kind rather than folding into a
+        // neighbour. The console's statement topology is how an operator sees
+        // what a step actually does, and a durable send is exactly the kind of
+        // outward effect they must be able to see; collapsing it into another
+        // kind would make it invisible on the canvas while it still executed.
+        StatementKind::Send => ProjectionStatementKind::Send,
         StatementKind::Sleep => ProjectionStatementKind::Sleep,
         StatementKind::ParallelFork => ProjectionStatementKind::ParallelFork,
         StatementKind::SequentialFork => ProjectionStatementKind::SequentialFork,

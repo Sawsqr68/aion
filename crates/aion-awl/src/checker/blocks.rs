@@ -208,7 +208,7 @@ fn statement_binds(statement: &Statement, out: &mut Vec<(String, Span)>) {
         Statement::Collect(collect) => {
             out.push((collect.bind.name.clone(), collect.bind.span));
         }
-        Statement::Spawn(_) | Statement::Sleep(_) | Statement::Route(_) => {}
+        Statement::Spawn(_) | Statement::Send(_) | Statement::Sleep(_) | Statement::Route(_) => {}
     }
 }
 

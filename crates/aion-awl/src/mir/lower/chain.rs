@@ -153,6 +153,17 @@ fn collect_statements(
             Statement::Wait(wait) => {
                 defs.insert(wait.bind.name.clone());
             }
+            // A send defines nothing and reads its target plus every payload
+            // expression.
+            Statement::Send(send) => {
+                add_expr(&send.target, defs, refs);
+                for arg in send.payload_args() {
+                    add_expr(&arg.value, defs, refs);
+                }
+                if let Some(RoutePayload::Value(value)) = &send.payload {
+                    add_expr(value, defs, refs);
+                }
+            }
             // Boundary-shaped like the shared collector's `collect_loop`:
             // seed and `max` read the pre-loop scope; the threaded var and
             // counter are local while collecting the body/`until`. Deliberate

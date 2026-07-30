@@ -154,16 +154,45 @@ pub(super) fn signal_refs(emitter: &mut Emitter<'_>) {
         let signal = &emitter.document.signals[signal_index];
         let signal_name = signal.name.clone();
         let payload = type_ref_to_g(&signal.ty);
-        let signal_type = emitter.env.gleam_type(&payload);
-        let codec = emitter.codec_fn(&payload);
-        emitter.line(&format!(
-            "fn {}_signal() -> signal.SignalRef({signal_type}) {{",
-            snake(&signal_name)
-        ));
-        emitter.indented(|this| {
-            this.line(&format!("signal.new(\"{signal_name}\", {codec}())"));
-        });
-        emitter.line("}");
-        emitter.blank();
+        emit_signal_ref(
+            emitter,
+            &format!("{}_signal", snake(&signal_name)),
+            &signal_name,
+            &payload,
+        );
     }
+    // Outbound refs live in their own name space (`_send_signal`): a relay
+    // may declare the same name in both directions with different payload
+    // types, and two shells named alike would collide.
+    for send_index in 0..emitter.document.sends.len() {
+        let send = &emitter.document.sends[send_index];
+        let send_name = send.name.clone();
+        let payload = type_ref_to_g(&send.ty);
+        emit_signal_ref(
+            emitter,
+            &format!("{}_send_signal", snake(&send_name)),
+            &send_name,
+            &payload,
+        );
+    }
+}
+
+/// Emit one `signal.SignalRef` constructor: the wire name the engine routes
+/// on, plus the payload codec.
+fn emit_signal_ref(
+    emitter: &mut Emitter<'_>,
+    fn_name: &str,
+    signal_name: &str,
+    payload: &super::types::GType,
+) {
+    let signal_type = emitter.env.gleam_type(payload);
+    let codec = emitter.codec_fn(payload);
+    emitter.line(&format!(
+        "fn {fn_name}() -> signal.SignalRef({signal_type}) {{"
+    ));
+    emitter.indented(|this| {
+        this.line(&format!("signal.new(\"{signal_name}\", {codec}())"));
+    });
+    emitter.line("}");
+    emitter.blank();
 }

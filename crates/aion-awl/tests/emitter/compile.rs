@@ -115,6 +115,25 @@ fn loop_and_fork_fixtures_compile_under_gleam() -> Result<(), Box<dyn Error>> {
     )
 }
 
+/// Signal-sender compile proof: the emitted `signal.send(…)` call, its
+/// outbound `SignalRef` constructors, and the `map_engine_error` threading
+/// are real Gleam against the local SDK — not merely well-formed text. This
+/// is the proof that catches an arity or argument-order drift against
+/// `aion/signal.gleam`, which no AWL-side test could see.
+#[test]
+fn signal_sender_fixture_compiles_under_gleam() -> Result<(), Box<dyn Error>> {
+    if crate::gleam_test_support::skip_if_unavailable() {
+        return Ok(());
+    }
+    compile_generated_modules(
+        "signal_sender",
+        &[(
+            "gated_item",
+            emitted_fixture("step-bodies/valid/send_signal.awl")?,
+        )],
+    )
+}
+
 fn compile_generated_modules(
     project_name: &str,
     modules: &[(&str, String)],

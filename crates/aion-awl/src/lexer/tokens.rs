@@ -46,7 +46,11 @@ impl Token {
 /// `collect`, `visits`). The declarative action-body word `run` is
 /// deliberately ABSENT: it is recognised positionally, as a plain
 /// identifier inside an action's block, so that `step run`, `input run` and
-/// every other existing use of the word keeps working unchanged. Words that
+/// every other existing use of the word keeps working unchanged. The signal
+/// sender's `send` and `to` are absent for the same reason and are read the
+/// same way (`parser/send.rs`): the corpus carries `action send(to: String,
+/// …)` and `step send` today, and reserving either word would break them.
+/// Words that
 /// were keywords in AWL-0/1 but are gone from rev-2 (`about`, `do`, `as`,
 /// `each`, `repeat`, `finish`, `match`, `case`, `parallel`, `race`,
 /// `output`, `error`, `up`, `to`, `in`, `order`, `queue`, `fail`) lex as

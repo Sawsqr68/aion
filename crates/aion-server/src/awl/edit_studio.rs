@@ -374,6 +374,14 @@ fn statement_uses_field(statement: &Statement, name: &str) -> bool {
                     .as_ref()
                     .is_some_and(|tail| expr_uses_field(&tail.expr, name))
         }
+        // A send reads fields in BOTH halves — the constructed payload and the
+        // target id expression. Answering `false` here would let a field rename
+        // report that nothing uses the field while a send still names it, and
+        // the document would stop compiling after the rename it was told was
+        // safe.
+        Statement::Send(send) => {
+            route_uses_field(send.payload.as_ref(), name) || expr_uses_field(&send.target, name)
+        }
         Statement::Route(route) => route_uses_field(route.target.payload.as_ref(), name),
         Statement::SubStep(step) => step_uses_field(step, name),
         Statement::Distribute(distribute) => expr_uses_field(&distribute.collection, name),

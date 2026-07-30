@@ -58,7 +58,8 @@ fn render_origin(module: &MirModule, origin: &FnOrigin) -> String {
         FnOrigin::ActivityWrapper { action, raw } => {
             format!("activity_wrapper({action}, raw={raw})")
         }
-        FnOrigin::SignalRef { signal } => format!("signal_ref({signal})"),
+        FnOrigin::SignalRef { signal, out: false } => format!("signal_ref({signal})"),
+        FnOrigin::SignalRef { signal, out: true } => format!("send_signal_ref({signal})"),
         FnOrigin::DeadBody => "dead_body".to_owned(),
         FnOrigin::ChildWitness => "child_witness".to_owned(),
         FnOrigin::CodecTemplate {

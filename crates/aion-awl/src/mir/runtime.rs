@@ -65,6 +65,7 @@ pub enum RuntimeFn {
     DurationMs,
     ErrorTerminal,
     SignalNew,
+    SignalSend,
     ChildAwait,
     // gleam@json
     JObject,
@@ -178,6 +179,7 @@ impl RuntimeFn {
             Self::DurationMs => ("aion@duration", "milliseconds", 1),
             Self::ErrorTerminal => ("aion@error", "terminal", 1),
             Self::SignalNew => ("aion@signal", "new", 2),
+            Self::SignalSend => ("aion@signal", "send", 3),
             Self::ChildAwait => ("aion@child", "await", 1),
             Self::JObject => ("gleam@json", "object", 1),
             Self::JString => ("gleam@json", "string", 1),
@@ -230,7 +232,7 @@ impl RuntimeFn {
             Self::WfSpawn | Self::WfSpawnAndWait | Self::ChildAwait => {
                 Some(DurableFamily::Children)
             }
-            Self::WfReceive | Self::SignalNew => Some(DurableFamily::Signals),
+            Self::WfReceive | Self::SignalNew | Self::SignalSend => Some(DurableFamily::Signals),
             _ => None,
         }
     }
@@ -283,6 +285,7 @@ fn all_runtime_fns() -> Vec<RuntimeFn> {
         RuntimeFn::DurationMs,
         RuntimeFn::ErrorTerminal,
         RuntimeFn::SignalNew,
+        RuntimeFn::SignalSend,
         RuntimeFn::ChildAwait,
         RuntimeFn::JObject,
         RuntimeFn::JString,
@@ -389,42 +392,43 @@ mod tests {
             RuntimeFn::DurationMs => 30,
             RuntimeFn::ErrorTerminal => 31,
             RuntimeFn::SignalNew => 32,
-            RuntimeFn::ChildAwait => 33,
-            RuntimeFn::JObject => 34,
-            RuntimeFn::JString => 35,
-            RuntimeFn::JArray => 36,
-            RuntimeFn::JNullable => 37,
-            RuntimeFn::JToString => 38,
-            RuntimeFn::DField => 39,
-            RuntimeFn::DOptionalField => 40,
-            RuntimeFn::DSuccess => 41,
-            RuntimeFn::DFailure => 42,
-            RuntimeFn::DThen => 43,
-            RuntimeFn::DMap => 44,
-            RuntimeFn::DList => 45,
-            RuntimeFn::DOptional => 46,
-            RuntimeFn::LFlatten => 47,
-            RuntimeFn::LFilter => 48,
-            RuntimeFn::LMap => 49,
-            RuntimeFn::LAny => 50,
-            RuntimeFn::LAll => 51,
-            RuntimeFn::LSort => 52,
-            RuntimeFn::LLength => 53,
-            RuntimeFn::LTryFold => 54,
-            RuntimeFn::LFold => 55,
-            RuntimeFn::LReverse => 56,
-            RuntimeFn::LIsEmpty => 57,
-            RuntimeFn::OIsSome => 58,
-            RuntimeFn::OIsNone => 59,
-            RuntimeFn::CmpInt => 60,
-            RuntimeFn::CmpFloat => 61,
-            RuntimeFn::CmpString => 62,
-            RuntimeFn::StrAppend => 63,
-            RuntimeFn::ResultTry => 64,
-            RuntimeFn::IntAdd => 65,
-            RuntimeFn::LeafCodec(leaf) => 66 + 3 * leaf_ordinal(leaf),
-            RuntimeFn::LeafToJson(leaf) => 67 + 3 * leaf_ordinal(leaf),
-            RuntimeFn::LeafDecoder(leaf) => 68 + 3 * leaf_ordinal(leaf),
+            RuntimeFn::SignalSend => 33,
+            RuntimeFn::ChildAwait => 34,
+            RuntimeFn::JObject => 35,
+            RuntimeFn::JString => 36,
+            RuntimeFn::JArray => 37,
+            RuntimeFn::JNullable => 38,
+            RuntimeFn::JToString => 39,
+            RuntimeFn::DField => 40,
+            RuntimeFn::DOptionalField => 41,
+            RuntimeFn::DSuccess => 42,
+            RuntimeFn::DFailure => 43,
+            RuntimeFn::DThen => 44,
+            RuntimeFn::DMap => 45,
+            RuntimeFn::DList => 46,
+            RuntimeFn::DOptional => 47,
+            RuntimeFn::LFlatten => 48,
+            RuntimeFn::LFilter => 49,
+            RuntimeFn::LMap => 50,
+            RuntimeFn::LAny => 51,
+            RuntimeFn::LAll => 52,
+            RuntimeFn::LSort => 53,
+            RuntimeFn::LLength => 54,
+            RuntimeFn::LTryFold => 55,
+            RuntimeFn::LFold => 56,
+            RuntimeFn::LReverse => 57,
+            RuntimeFn::LIsEmpty => 58,
+            RuntimeFn::OIsSome => 59,
+            RuntimeFn::OIsNone => 60,
+            RuntimeFn::CmpInt => 61,
+            RuntimeFn::CmpFloat => 62,
+            RuntimeFn::CmpString => 63,
+            RuntimeFn::StrAppend => 64,
+            RuntimeFn::ResultTry => 65,
+            RuntimeFn::IntAdd => 66,
+            RuntimeFn::LeafCodec(leaf) => 67 + 3 * leaf_ordinal(leaf),
+            RuntimeFn::LeafToJson(leaf) => 68 + 3 * leaf_ordinal(leaf),
+            RuntimeFn::LeafDecoder(leaf) => 69 + 3 * leaf_ordinal(leaf),
         }
     }
 
@@ -439,12 +443,12 @@ mod tests {
         }
     }
 
-    /// `all_runtime_fns` enumerates every variant exactly once: 66 plain
+    /// `all_runtime_fns` enumerates every variant exactly once: 67 plain
     /// variants plus 3 leaf-parametrised rows over the 5 leaves.
     #[test]
     fn enumeration_covers_every_variant_exactly_once() {
         let all = all_runtime_fns();
-        let expected = 66 + 3 * ALL_LEAVES.len();
+        let expected = 67 + 3 * ALL_LEAVES.len();
         assert_eq!(all.len(), expected);
         let mut seen = vec![false; expected];
         for function in all {

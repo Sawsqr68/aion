@@ -89,6 +89,7 @@ fn check_nested(ctx: &mut Ctx<'_>, statements: &[Statement]) {
             }
             Statement::Spawn(_)
             | Statement::Wait(_)
+            | Statement::Send(_)
             | Statement::Sleep(_)
             | Statement::Route(_)
             | Statement::Distribute(_)
@@ -193,6 +194,7 @@ fn call_names(statements: &[Statement], out: &mut Vec<String>) {
                 }
             }
             Statement::Wait(_)
+            | Statement::Send(_)
             | Statement::Sleep(_)
             | Statement::Route(_)
             | Statement::Distribute(_)

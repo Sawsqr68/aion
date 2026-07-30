@@ -161,7 +161,14 @@ fn collect_statement_routes(
             Statement::Loop(looped) => {
                 collect_statement_routes(source, &looped.body, label, step_names, targets, edges);
             }
-            Statement::Call(_)
+            // A send is NOT a route edge. This scan draws control-flow edges
+            // between steps of THIS document; a send hands a payload to another
+            // RUN, addressed by a runtime id, and control continues at the next
+            // statement. Drawing an edge for it would assert a transfer of
+            // control the document does not make, and there is no in-document
+            // node to draw it to.
+            Statement::Send(_)
+            | Statement::Call(_)
             | Statement::Spawn(_)
             | Statement::Wait(_)
             | Statement::Sleep(_)

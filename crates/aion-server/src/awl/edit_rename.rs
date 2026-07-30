@@ -71,6 +71,7 @@ fn rename_statements(statements: &mut [Statement], spans: &BTreeSet<(usize, usiz
             Statement::Wait(wait) if matches_span(wait.bind.span, spans) => {
                 wait.bind.name.clone_from(&to.to_owned());
             }
+            Statement::Send(send) => rename_send(send, spans, to),
             Statement::Wait(_) | Statement::Sleep(_) => {}
             Statement::Fork(fork) => {
                 if let aion_awl::ForkHeader::Collection {
@@ -128,6 +129,29 @@ fn rename_statements(statements: &mut [Statement], spans: &BTreeSet<(usize, usiz
             }
         }
     }
+}
+
+/// Rename inside a `send signal(payload…) to <target>`.
+///
+/// BOTH halves carry binding references and both must be reached: the payload
+/// is constructed from bindings exactly as a route payload is, and the target
+/// is an ordinary `String` expression — very often the plain binding a parent's
+/// id was bound to. Renaming one and not the other would leave a document that
+/// still parses and no longer compiles, which is the failure mode a rename is
+/// supposed to make impossible. The signal NAME is deliberately untouched: it
+/// is declared in the header's `send` block, not bound in a step, so it is not
+/// in this walker's namespace.
+fn rename_send(send: &mut aion_awl::SendStmt, spans: &BTreeSet<(usize, usize)>, to: &str) {
+    match &mut send.payload {
+        Some(aion_awl::RoutePayload::Args(args)) => {
+            for arg in args {
+                rename_arg(arg, spans, to);
+            }
+        }
+        Some(aion_awl::RoutePayload::Value(value)) => rename_expr(value, spans, to),
+        None => {}
+    }
+    rename_expr(&mut send.target, spans, to);
 }
 
 fn rename_target(target: &mut aion_awl::RouteTarget, spans: &BTreeSet<(usize, usize)>, to: &str) {

@@ -418,6 +418,17 @@ impl Liveness<'_, '_> {
                 Statement::Wait(wait) => {
                     defined.insert(wait.bind.name.clone());
                 }
+                // A send defines nothing and READS its target plus every
+                // payload expression: those names must stay live into it.
+                Statement::Send(send) => {
+                    self.add_expr(&send.target, node, defined);
+                    for arg in send.payload_args() {
+                        self.add_expr(&arg.value, node, defined);
+                    }
+                    if let Some(RoutePayload::Value(value)) = &send.payload {
+                        self.add_expr(value, node, defined);
+                    }
+                }
                 Statement::Fork(fork) => self.collect_fork(fork, node, defined),
                 Statement::Loop(looped) => self.collect_loop(looped, node, defined),
                 Statement::Route(route) => self.collect_route(route, node, defined),
@@ -557,6 +568,7 @@ fn collect_route_targets<'a>(
             Statement::Call(_)
             | Statement::Spawn(_)
             | Statement::Wait(_)
+            | Statement::Send(_)
             | Statement::Sleep(_)
             | Statement::SubStep(_)
             | Statement::Distribute(_)

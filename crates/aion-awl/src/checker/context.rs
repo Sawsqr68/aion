@@ -147,8 +147,13 @@ pub(super) struct Ctx<'a> {
     pub(super) consts: BTreeMap<String, ConstInfo>,
     /// Workflow inputs: name → declared type.
     pub(super) inputs: BTreeMap<String, Ty>,
-    /// Declared signals: name → payload type.
+    /// Declared inbound signals: name → payload type.
     pub(super) signals: BTreeMap<String, Ty>,
+    /// Declared OUTBOUND signals (`send <name>: <Type>`): name → payload
+    /// type. Separate from `signals` because the two are opposite
+    /// directions of the workflow's surface, and only `signals` is what the
+    /// engine can route INTO this run.
+    pub(super) sends: BTreeMap<String, Ty>,
     /// Workflow outcomes: name → payload type.
     pub(super) outcome_types: BTreeMap<String, Ty>,
     /// Semantic facts retained from checker computations.
@@ -173,6 +178,7 @@ impl<'a> Ctx<'a> {
             consts: BTreeMap::new(),
             inputs: BTreeMap::new(),
             signals: BTreeMap::new(),
+            sends: BTreeMap::new(),
             outcome_types: BTreeMap::new(),
             semantic: Builder::new(doc),
             errors: Vec::new(),

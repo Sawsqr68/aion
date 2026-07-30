@@ -109,6 +109,9 @@ pub(super) const COVERED: &[&str] = &[
     "step-bodies/valid/literal_forms",
     "step-bodies/valid/pipe_chain_stages",
     "step-bodies/valid/predicates_and_operators",
+    // The signal SENDER: header `send` declarations, all three payload
+    // forms, and both addressing shapes an id-valued expression allows.
+    "step-bodies/valid/send_signal",
     "step-bodies/valid/step_bodies_combined",
     // BC-4 adversarial: UTF-8 string literals and concat through the wire.
     "step-bodies/valid/unicode_payloads",

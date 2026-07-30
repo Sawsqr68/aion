@@ -20,8 +20,17 @@ pub enum DeclarationKind {
     Workflow,
     /// A workflow input.
     Input,
-    /// A workflow signal.
+    /// A workflow signal this workflow RECEIVES.
     Signal,
+    /// A signal this workflow SENDS (`send <name>: <Type>`).
+    ///
+    /// A distinct category from [`DeclarationKind::Signal`], not a flag on
+    /// it: one document may declare the same name in both directions, and a
+    /// shared category would make the reference from a `send` statement
+    /// ambiguous — which resolves to no declaration at all, so hover and
+    /// go-to-definition would silently go blank on exactly the relay
+    /// documents the feature exists for.
+    Send,
     /// A workflow outcome.
     Outcome,
     /// A document-level `const`.
@@ -56,6 +65,9 @@ impl DeclarationKind {
             Self::Workflow => "workflow",
             Self::Input => "input",
             Self::Signal => "signal",
+            // The AWL keyword, so hover renders the declaration line the
+            // author actually wrote.
+            Self::Send => "send",
             Self::Outcome => "outcome",
             Self::Const => "const",
             Self::Type => "type",
@@ -249,6 +261,9 @@ impl Builder {
         for signal in &document.signals {
             builder.declare(signal.name_span, &signal.name, DeclarationKind::Signal, &[]);
         }
+        for send in &document.sends {
+            builder.declare(send.name_span, &send.name, DeclarationKind::Send, &[]);
+        }
         for outcome in &document.outcomes {
             builder.declare(
                 outcome.name_span,
@@ -427,7 +442,7 @@ impl Builder {
                 Statement::Collect(collect) => {
                     self.binding_declaration(collect.bind.span, &collect.bind.name);
                 }
-                Statement::Sleep(_) | Statement::Route(_) => {}
+                Statement::Send(_) | Statement::Sleep(_) | Statement::Route(_) => {}
             }
         }
     }

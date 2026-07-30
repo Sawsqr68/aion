@@ -190,6 +190,10 @@ Valid:
   `is present` guarded arm using the narrowed value (only fixture with the `d` duration unit).
 - `step-bodies/valid/literal_forms.awl` — list literal `["a", "b"]`, float literal `0.5`,
   `true`, escaped string (`\"` `\n` `\t` `\\`), `///` doc on an action and on a step.
+- `step-bodies/valid/send_signal.awl` — the signal SENDER: header `send <name>: <Type>`
+  declarations (record, leaf, and `Nil` payloads) and all three `send … to <expr>` payload
+  forms, addressed by an input-carried coordinator id and by `workflow.id`; sits alongside a
+  `signal`/`wait` receiver in the same document.
 - `step-bodies/valid/step_bodies_combined.awl` — realistic multi-construct: pipe chains,
   combinators, indexing, `+`, sleep, wait+timeout, fall-through + route-targeted steps.
 

@@ -30,6 +30,7 @@ mod pipes;
 mod plan_slots;
 mod registry;
 mod route;
+mod send;
 mod slots;
 mod step;
 mod visits;

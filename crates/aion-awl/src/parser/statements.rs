@@ -89,19 +89,7 @@ pub(super) fn parse_statement(
         TokenKind::Keyword(Keyword::Spawn) => {
             reject_docs(&docs, "a spawn")?;
             stream.next();
-            let call = parse_call(stream)?;
-            let bind = match stream.eat(|kind| matches!(kind, TokenKind::Arrow)) {
-                Some(arrow) => Some(parse_binding(stream, arrow.span)?),
-                None => None,
-            };
-            let trailing = stream.end_line()?;
-            Ok(Statement::Spawn(SpawnStmt {
-                span: join_span(span, call.span),
-                lead,
-                trailing,
-                call,
-                bind,
-            }))
+            Ok(Statement::Spawn(parse_spawn(stream, lead, span)?))
         }
         TokenKind::Keyword(Keyword::Route) => {
             reject_docs(&docs, "a route")?;
@@ -125,6 +113,9 @@ pub(super) fn parse_statement(
         TokenKind::Identifier(name) => {
             reject_docs(&docs, "a statement")?;
             let name = name.clone();
+            if super::send::heads_statement(stream, &name) {
+                return super::send::parse_statement(stream, lead, span);
+            }
             parse_value_statement(stream, lead, span, &name)
         }
         // A statement may start with any expression: a literal (including
@@ -353,6 +344,29 @@ fn parse_call(stream: &mut Stream) -> Result<Call, ParseError> {
     })
 }
 
+/// Parse a `spawn name(args…)` statement after its keyword (at
+/// `spawn_span`) has been consumed. The `-> binding` parses so the checker
+/// can refuse it with a targeted diagnostic rather than a syntax error.
+fn parse_spawn(
+    stream: &mut Stream,
+    lead: Vec<Lead>,
+    spawn_span: Span,
+) -> Result<SpawnStmt, ParseError> {
+    let call = parse_call(stream)?;
+    let bind = match stream.eat(|kind| matches!(kind, TokenKind::Arrow)) {
+        Some(arrow) => Some(parse_binding(stream, arrow.span)?),
+        None => None,
+    };
+    let trailing = stream.end_line()?;
+    Ok(SpawnStmt {
+        span: join_span(spawn_span, call.span),
+        lead,
+        trailing,
+        call,
+        bind,
+    })
+}
+
 fn parse_wait(
     stream: &mut Stream,
     lead: Vec<Lead>,
@@ -417,7 +431,9 @@ pub(super) fn parse_route_target(stream: &mut Stream) -> Result<RouteTarget, Par
     })
 }
 
-enum ParsedPayload {
+/// A parsed payload body, with the span of its closing parenthesis. Shared
+/// with the `send` statement, whose payload grammar is the route payload's.
+pub(super) enum ParsedPayload {
     Args(Vec<crate::ast::Arg>, Span),
     Value(crate::ast::Expr, Span),
 }
@@ -426,7 +442,7 @@ enum ParsedPayload {
 /// construction fields (`route done(value: …)`) or one bare value expression
 /// (`route out(verdict)` — the payload is the value itself). The two are
 /// told apart by the `name:` lookahead.
-fn parse_route_payload(stream: &mut Stream) -> Result<ParsedPayload, ParseError> {
+pub(super) fn parse_route_payload(stream: &mut Stream) -> Result<ParsedPayload, ParseError> {
     let name_shaped = stream.peek_is(|kind| {
         matches!(kind, TokenKind::Identifier(_))
             || matches!(kind, TokenKind::Keyword(keyword) if super::stream::soft_keyword(*keyword))

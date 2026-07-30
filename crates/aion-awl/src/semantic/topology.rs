@@ -59,6 +59,8 @@ pub enum StatementKind {
     CombinatorStage,
     /// A durable signal wait.
     Wait,
+    /// A durable signal send to another workflow.
+    Send,
     /// A durable timer.
     Sleep,
     /// A collection fork whose branches execute in parallel.

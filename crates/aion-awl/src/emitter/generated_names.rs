@@ -129,7 +129,10 @@ fn collect_statement_names(statements: &[Statement], names: &mut BTreeSet<String
             Statement::Collect(collect) => {
                 names.insert(ident(&collect.bind.name));
             }
-            Statement::Spawn(_) | Statement::Sleep(_) | Statement::Route(_) => {}
+            Statement::Spawn(_)
+            | Statement::Send(_)
+            | Statement::Sleep(_)
+            | Statement::Route(_) => {}
         }
     }
 }

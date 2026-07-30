@@ -114,6 +114,7 @@ fn refuse_uninventoried(ctx: &Ctx<'_>, on_failure: &OnFailure) -> Result<(), Low
             | Statement::Route(_)
             | Statement::Spawn(_)
             | Statement::Wait(_)
+            | Statement::Send(_)
             | Statement::Fork(_)
             | Statement::Loop(_) => continue,
         };

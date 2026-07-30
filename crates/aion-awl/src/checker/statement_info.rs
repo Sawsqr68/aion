@@ -21,6 +21,7 @@ fn statement_info(ctx: &Ctx<'_>, statement: &Statement) -> StatementInfo {
         Statement::Spawn(spawn) => spawn_info(ctx, spawn),
         Statement::Pipe(pipe) => pipe_info(ctx, pipe),
         Statement::Wait(wait) => wait_info(wait),
+        Statement::Send(send) => send_info(send),
         Statement::Sleep(sleep) => info(
             sleep.span,
             StatementKind::Sleep,
@@ -118,6 +119,17 @@ fn wait_info(wait: &crate::ast::WaitStmt) -> StatementInfo {
         StatementKind::Wait,
         format!("wait {}", wait.signal),
         Some(format!("{timeout}→ {}", wait.bind.name)),
+        None,
+        Vec::new(),
+    )
+}
+
+fn send_info(send: &crate::ast::SendStmt) -> StatementInfo {
+    info(
+        send.span,
+        StatementKind::Send,
+        format!("send {}", send.signal),
+        Some(format!("to {}", expr_text(&send.target))),
         None,
         Vec::new(),
     )

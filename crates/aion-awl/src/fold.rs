@@ -260,6 +260,10 @@ impl Folder<'_> {
                 Statement::Route(route) => self.fold_route(&mut route.target)?,
                 Statement::SubStep(sub) => self.fold_step(sub)?,
                 Statement::Distribute(distribute) => self.fold_expr(&mut distribute.collection)?,
+                Statement::Send(send) => {
+                    self.fold_payload(&mut send.payload)?;
+                    self.fold_expr(&mut send.target)?;
+                }
                 Statement::Wait(_) | Statement::Sleep(_) | Statement::Collect(_) => {}
             }
         }
@@ -267,7 +271,16 @@ impl Folder<'_> {
     }
 
     fn fold_route(&mut self, target: &mut RouteTarget) -> Result<(), FoldError> {
-        match &mut target.payload {
+        self.fold_payload(&mut target.payload)
+    }
+
+    /// Fold a payload in either of its two forms — the shared body of route
+    /// payloads and `send` payloads.
+    fn fold_payload(
+        &mut self,
+        payload: &mut Option<crate::ast::RoutePayload>,
+    ) -> Result<(), FoldError> {
+        match payload {
             Some(crate::ast::RoutePayload::Args(args)) => {
                 for arg in args {
                     self.fold_expr(&mut arg.value)?;

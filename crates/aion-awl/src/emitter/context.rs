@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::mem;
 
-use crate::ast::{ActionDecl, ChildDecl, Document, RouteDirection, SignalDecl};
+use crate::ast::{ActionDecl, ChildDecl, Document, RouteDirection, SendDecl, SignalDecl};
 
 use super::error::EmitError;
 use super::flowshape::{RegionShape, SubflowShape};
@@ -45,6 +45,8 @@ pub(crate) struct Emitter<'a> {
     pub(crate) actions: BTreeMap<&'a str, (&'a str, &'a ActionDecl)>,
     pub(crate) children: BTreeMap<&'a str, &'a ChildDecl>,
     pub(crate) signals: BTreeMap<&'a str, &'a SignalDecl>,
+    /// Declared OUTBOUND signals by name (`send <name>: <Type>`).
+    pub(crate) sends: BTreeMap<&'a str, &'a SendDecl>,
     /// The host flow's collapsed per-item regions, by synthetic step name.
     pub(crate) host_regions: &'a BTreeMap<String, RegionShape>,
     /// Shaped subflow declarations, in declaration order.
@@ -120,15 +122,8 @@ impl<'a> Emitter<'a> {
                 ));
             }
         }
-        let mut signals = BTreeMap::new();
-        for signal in &document.signals {
-            if signals.insert(signal.name.as_str(), signal).is_some() {
-                return Err(EmitError::new(
-                    signal.name_span,
-                    format!("signal `{}` is declared more than once", signal.name),
-                ));
-            }
-        }
+        let signals = signal_table(document)?;
+        let sends = send_table(document)?;
 
         let workflow_pascal = pascal(&document.name);
         let input_type = env.names.fresh(&format!("{workflow_pascal}Input"));
@@ -175,6 +170,7 @@ impl<'a> Emitter<'a> {
             actions,
             children,
             signals,
+            sends,
             host_regions,
             subflow_shapes,
             subflows,
@@ -282,6 +278,38 @@ impl<'a> Emitter<'a> {
         self.indent = saved_indent;
         result.map(|()| captured)
     }
+}
+
+/// The inbound signal table, refusing a duplicate name.
+///
+/// Inbound and outbound live in separate tables because a name may legally
+/// appear in both directions — a relay receives `cancel` and forwards
+/// `cancel` — and only a repeat WITHIN one direction is a contradiction.
+fn signal_table(document: &Document) -> Result<BTreeMap<&str, &SignalDecl>, EmitError> {
+    let mut signals = BTreeMap::new();
+    for signal in &document.signals {
+        if signals.insert(signal.name.as_str(), signal).is_some() {
+            return Err(EmitError::new(
+                signal.name_span,
+                format!("signal `{}` is declared more than once", signal.name),
+            ));
+        }
+    }
+    Ok(signals)
+}
+
+/// The outbound signal table, refusing a duplicate name.
+fn send_table(document: &Document) -> Result<BTreeMap<&str, &SendDecl>, EmitError> {
+    let mut sends = BTreeMap::new();
+    for send in &document.sends {
+        if sends.insert(send.name.as_str(), send).is_some() {
+            return Err(EmitError::new(
+                send.name_span,
+                format!("send `{}` is declared more than once", send.name),
+            ));
+        }
+    }
+    Ok(sends)
 }
 
 fn region_input_types(

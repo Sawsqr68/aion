@@ -68,6 +68,8 @@ pub enum Statement {
     Pipe(PipeStmt),
     /// Durable signal gate: `wait signal [timeout D] -> name`.
     Wait(WaitStmt),
+    /// Durable signal send: `send signal(payload…) to <workflow id>`.
+    Send(SendStmt),
     /// Durable timer: `sleep D`.
     Sleep(SleepStmt),
     /// Intra-step parallelism: `fork … join`.
@@ -333,6 +335,55 @@ pub struct WaitStmt {
     pub timeout: Option<DurationLiteral>,
     /// Required payload binding.
     pub bind: Binding,
+}
+
+/// A `send <signal>[(<payload>)] to <expr>` statement: deliver a declared
+/// outbound signal to the workflow the address expression names.
+///
+/// The address is an expression, not a name the compiler can resolve to a
+/// workflow: today the only addressable things are `workflow.id` (a run
+/// naming itself) and any `String` an input or binding carries — which is
+/// how a child signals the parent that passed its id down. A statically
+/// checkable target needs a spawn handle carrying the child's workflow
+/// type, which is a later landing.
+///
+/// The send is fire-and-forget in the sense that nothing is awaited, but it
+/// is NOT failure-blind: delivery returns a `Result` and a failed send
+/// faults the step, catchable by the step's `on failure` block exactly like
+/// a failed action call. One error idiom, no second one invented here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SendStmt {
+    /// Span from `send` through the address expression.
+    pub span: Span,
+    /// Leading trivia before the statement.
+    pub lead: Vec<Lead>,
+    /// Same-line trailing comment.
+    pub trailing: Option<Comment>,
+    /// Outbound signal name (checked against the header's `send` decls).
+    pub signal: String,
+    /// Source span of the signal name.
+    pub signal_span: Span,
+    /// The payload, in the same two forms a route payload takes: named
+    /// fields for a record payload type, one bare expression otherwise.
+    /// `None` is the payload-less form, legal only for a `Nil` payload.
+    pub payload: Option<RoutePayload>,
+    /// Span of the parenthesised payload, for diagnostics that point at the
+    /// payload rather than the whole statement.
+    pub payload_span: Option<Span>,
+    /// The target workflow id — checked to be a `String`.
+    pub target: Expr,
+}
+
+impl SendStmt {
+    /// The constructed payload's named fields — empty for the bare and
+    /// single-value forms, which carry no named fields.
+    #[must_use]
+    pub fn payload_args(&self) -> &[Arg] {
+        match &self.payload {
+            Some(RoutePayload::Args(args)) => args,
+            _ => &[],
+        }
+    }
 }
 
 /// A `sleep <duration>` statement.

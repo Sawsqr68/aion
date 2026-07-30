@@ -63,6 +63,7 @@ export type ProjectionStatementKind =
   | 'field_stage'
   | 'combinator_stage'
   | 'wait'
+  | 'send'
   | 'sleep'
   | 'parallel_fork'
   | 'sequential_fork'

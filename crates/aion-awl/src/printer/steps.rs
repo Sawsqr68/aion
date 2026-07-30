@@ -78,6 +78,18 @@ fn print_statement(printer: &mut Printer, indent: usize, statement: &Statement) 
             let _ = write!(text, " -> {}", wait.bind.name);
             printer.line(indent, &text, wait.trailing.as_ref());
         }
+        Statement::Send(send) => {
+            printer.leads(indent, &send.lead);
+            printer.line(
+                indent,
+                &format!(
+                    "send {} to {}",
+                    payload_text(&send.signal, send.payload.as_ref()),
+                    expr_text(&send.target)
+                ),
+                send.trailing.as_ref(),
+            );
+        }
         Statement::Sleep(sleep) => {
             printer.leads(indent, &sleep.lead);
             printer.line(
@@ -252,14 +264,16 @@ fn stage_text(stage: &PipeStage) -> String {
 }
 
 fn route_target_text(target: &RouteTarget) -> String {
-    match &target.payload {
-        Some(crate::ast::RoutePayload::Args(args)) => {
-            format!("{}({})", target.name, args_text(args))
-        }
-        Some(crate::ast::RoutePayload::Value(value)) => {
-            format!("{}({})", target.name, expr_text(value))
-        }
-        None => target.name.clone(),
+    payload_text(&target.name, target.payload.as_ref())
+}
+
+/// Render `<name>`, `<name>(field: …, …)`, or `<name>(<value>)` — the one
+/// payload spelling, shared by route targets and `send` statements.
+fn payload_text(name: &str, payload: Option<&crate::ast::RoutePayload>) -> String {
+    match payload {
+        Some(crate::ast::RoutePayload::Args(args)) => format!("{name}({})", args_text(args)),
+        Some(crate::ast::RoutePayload::Value(value)) => format!("{name}({})", expr_text(value)),
+        None => name.to_owned(),
     }
 }
 
