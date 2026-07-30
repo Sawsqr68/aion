@@ -159,11 +159,18 @@ fn build_ops_console_dist(root: &Path) -> Result<PathBuf> {
         );
     }
 
-    // (a) Regenerate the ts-rs wire types from Rust-owned types. This is the
-    // existing exporter test; it writes apps/aion-ops-console/src/types/generated/.
+    // (a) Regenerate the ts-rs wire types from Rust-owned types.
+    //
+    // `AION_UPDATE_BINDINGS` is REQUIRED here. The exporter test asserts by
+    // default and writes nothing, so that an ordinary `cargo test` can never
+    // mutate a tracked file behind the developer's back; this task is the
+    // sanctioned regeneration path, so it opts in explicitly. Without the
+    // variable this step would merely assert, and a stale binding would fail the
+    // refresh instead of being refreshed by it.
     step("regenerating ts-rs wire types");
     run(Command::new("cargo")
         .args(["test", "-p", "aion-core", "export_ops_console_wire_types"])
+        .env("AION_UPDATE_BINDINGS", "1")
         .current_dir(root))
     .context("ts-rs wire type export failed")?;
 

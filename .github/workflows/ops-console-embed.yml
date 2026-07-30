@@ -7,9 +7,15 @@ name: ops-console-embed
 #
 # Two DISTINCT guards (kept separate so there is no write-then-assert
 # contradiction):
-#   1. wire-types-no-diff   — regenerate the ts-rs wire types and assert the
-#      committed generated files match (read-only assertion on already-committed
-#      output). Does NOT build the ops console.
+#   1. wire-types-no-diff   — assert the committed ts-rs wire types match what
+#      the exporter produces. The exporter test itself is the assertion now: it
+#      regenerates IN MEMORY, compares, and fails without writing unless
+#      AION_UPDATE_BINDINGS is set. The git-diff step below is retained as a
+#      belt-and-braces proof that nothing was written. Does NOT build the console.
+#
+#      NOTE: this workflow has never run — GitHub Actions is disabled on this
+#      repository — which is precisely why the assertion was moved into the test,
+#      where the local battery executes it. Keep both; they are cheap.
 #   2. embed-freshness      — rebuild the ops console into a scratch dir and DIFF
 #      against the committed ops-console-embed/ bundle (cargo xtask
 #      verify-ops-console). Fails loudly if the committed bundle is stale, then
@@ -27,12 +33,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Regenerate ts-rs wire types
+      - name: Assert committed ts-rs wire types match the exporter
         run: cargo test -p aion-core export_ops_console_wire_types
-      - name: Assert no diff (committed generated types are up to date)
+      - name: Assert nothing was written (the test must not mutate the tree)
         run: |
           if ! git diff --exit-code -- apps/aion-ops-console/src/types/generated/; then
-            echo "::error::Generated wire types are stale. Run: cargo test -p aion-core export_ops_console_wire_types, then commit." >&2
+            echo "::error::The exporter test mutated tracked files without AION_UPDATE_BINDINGS. That is a bug in the test, not in the bindings." >&2
             exit 1
           fi
 
