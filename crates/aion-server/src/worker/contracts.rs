@@ -28,6 +28,19 @@ pub enum ContractAdmissionError {
 
 /// Validates a worker against every retained `.v4` contract for its queue.
 ///
+/// `node` is the connection's advertised locality, `None` when it carries none.
+/// Callers holding a raw proto3 string normalize with
+/// [`super::registry::optional_node`] — the SAME normalization the registry then
+/// routes by, never a restatement of it, because admission decides which actions
+/// a connection owes from exactly the locality the dispatcher will filter on.
+///
+/// Only the actions whose dispatch can reach this connection's node are demanded
+/// of it, because the server routes by (namespace × `task_queue` × node) and a
+/// worker serving several nodes therefore opens one connection PER NODE, each
+/// advertising only that node's actions. Demanding the whole queue of every
+/// connection refused each one for omitting the others' actions, so a correctly
+/// partitioned worker could never register at all.
+///
 /// # Errors
 ///
 /// Returns [`ContractAdmissionError::Catalog`] when durable contract records
@@ -36,6 +49,7 @@ pub enum ContractAdmissionError {
 pub fn validate_worker_contracts(
     engine: &aion::Engine,
     task_queue: &str,
+    node: Option<&str>,
     identity: &str,
     advertised: &[ActivityDescriptor],
 ) -> Result<(), ContractAdmissionError> {
@@ -47,6 +61,7 @@ pub fn validate_worker_contracts(
         diffs.extend(aion_package::contract_diffs(
             &contract.package_version.to_string(),
             &contract.contract,
+            node,
             advertised,
         ));
     }

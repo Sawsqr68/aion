@@ -20,6 +20,12 @@ use tokio_stream::wrappers::{ReceiverStream, TcpListenerStream};
 
 const SOURCE: &str = "//! Registration contract fixture.\nworkflow contract_registration\n  input url: String\n  outcome done: type Result, route success\n\ntype Result { ok: Bool }\n\nworker typed_queue\n  action fetch(url: String) -> Result\n\nstep call\n  fetch(url: url) -> result\n  route done(ok: result.ok)\n";
 
+/// A queue whose two actions are pinned to DIFFERENT nodes — the shape every
+/// multi-role worker serves, since the server routes by
+/// (namespace × `task_queue` × node) and a process serving both nodes must open
+/// one connection per node advertising only that node's actions.
+const PARTITIONED_SOURCE: &str = "//! Node-partitioned registration fixture.\nworkflow partitioned_registration\n  input url: String\n  outcome done: type Result, route success\n\ntype Result { ok: Bool }\n\nworker typed_queue\n  action fetch(url: String) -> Result\n    node netbox\n  action grade(url: String) -> Result\n    node shell\n\nstep call\n  fetch(url: url) -> fetched\n  grade(url: url) -> graded\n  route done(ok: fetched.ok and graded.ok)\n";
+
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 fn runtime_config() -> RuntimeConfig {
@@ -68,15 +74,45 @@ fn runtime_config() -> RuntimeConfig {
 }
 
 async fn state_with_contract() -> TestResult<(ServerState, aion_package::ActionContract)> {
+    let (state, actions) = state_from(SOURCE).await?;
+    let action = actions
+        .into_iter()
+        .next()
+        .ok_or("the fixture package declared no actions")?;
+    Ok((state, action))
+}
+
+async fn state_from(source: &str) -> TestResult<(ServerState, Vec<aion_package::ActionContract>)> {
     let root = tempfile::tempdir()?;
-    let prepared = compile_and_assemble_awl(SOURCE, root.path())?;
+    let prepared = compile_and_assemble_awl(source, root.path())?;
     let package = Package::load_from_bytes(prepared.archive, ExtractionLimits::unbounded())?;
-    let action = package.contract()?.workers[0].actions[0].clone();
+    let actions = package.contract()?.workers[0].actions.clone();
     let state =
         ServerState::build_with_store(aion_store::InMemoryStore::default(), runtime_config())
             .await?;
     state.engine()?.load_package(package).await?;
-    Ok((state, action))
+    Ok((state, actions))
+}
+
+/// The action contract the fixture declared under `name`.
+fn action_named(
+    actions: &[aion_package::ActionContract],
+    name: &str,
+) -> TestResult<aion_package::ActionContract> {
+    actions
+        .iter()
+        .find(|action| action.name == name)
+        .cloned()
+        .ok_or_else(|| format!("the fixture declared no action `{name}`").into())
+}
+
+/// The wire descriptor advertising an action exactly as its contract declares it.
+fn descriptor_for(action: &aion_package::ActionContract) -> generated::ActivityDescriptor {
+    generated::ActivityDescriptor {
+        name: action.name.clone(),
+        input_schema_json: action.input_schema.to_string(),
+        output_schema_json: action.output_schema.to_string(),
+    }
 }
 
 async fn register(
@@ -84,6 +120,19 @@ async fn register(
     activity: generated::ActivityDescriptor,
 ) -> TestResult<Result<tonic::Response<tonic::Streaming<generated::ServerToWorker>>, tonic::Status>>
 {
+    register_on_node(state, String::new(), vec![activity]).await
+}
+
+async fn register_on_node(
+    state: ServerState,
+    node: String,
+    activities: Vec<generated::ActivityDescriptor>,
+) -> TestResult<Result<tonic::Response<tonic::Streaming<generated::ServerToWorker>>, tonic::Status>>
+{
+    let activity_types = activities
+        .iter()
+        .map(|activity| activity.name.clone())
+        .collect();
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
     let server = tokio::spawn(
@@ -98,10 +147,10 @@ async fn register(
             message: Some(worker_to_server::Message::Register(
                 generated::RegisterWorker {
                     namespaces: vec!["default".to_owned()],
-                    activity_types: vec!["fetch".to_owned()],
+                    activity_types,
                     task_queue: "typed_queue".to_owned(),
-                    node: String::new(),
-                    activities: vec![activity],
+                    node,
+                    activities,
                     identity: "test-build".to_owned(),
                 },
             )),
@@ -135,6 +184,60 @@ async fn mismatched_worker_is_refused_with_field_level_diff() -> TestResult {
     assert!(status.message().contains("input_schema"));
     assert!(status.message().contains("expected"));
     assert!(status.message().contains("worker advertised"));
+    Ok(())
+}
+
+/// THE DEFECT, on the real gRPC registration path. Admission checked every
+/// bodyless action of the queue against every connection with no regard for the
+/// node dimension, so a worker serving `netbox` was refused for omitting the
+/// `shell` node's action and vice versa: BOTH connections rejected on every
+/// dial, the queue unservable, and the refused process looking merely asleep.
+///
+/// This test lives at the transport rather than only over `contract_diffs`
+/// because the unit-level rule can be perfectly right while the server hands it
+/// an empty node forever — the threading is the part that was missing.
+#[tokio::test]
+async fn a_connection_serving_one_node_is_admitted_without_the_other_nodes_action() -> TestResult {
+    let (state, actions) = state_from(PARTITIONED_SOURCE).await?;
+    let fetch = action_named(&actions, "fetch")?;
+
+    let result = register_on_node(state, "netbox".to_owned(), vec![descriptor_for(&fetch)]).await?;
+
+    assert!(
+        result.is_ok(),
+        "the netbox connection serves its whole job and must be admitted without \
+         advertising the shell node's action: {:?}",
+        result.err().map(|status| status.message().to_owned())
+    );
+    Ok(())
+}
+
+/// The gate keeps its teeth on the actions that CAN reach the connection: the
+/// `shell` node's own action, omitted, is still refused — and the refusal names
+/// the node that owed it so the operator knows which connection to look at.
+#[tokio::test]
+async fn a_connection_omitting_its_own_nodes_action_is_still_refused() -> TestResult {
+    let (state, actions) = state_from(PARTITIONED_SOURCE).await?;
+    let fetch = action_named(&actions, "fetch")?;
+
+    // On the `shell` node, advertising only the netbox node's action.
+    let result = register_on_node(state, "shell".to_owned(), vec![descriptor_for(&fetch)]).await?;
+    let status = result
+        .err()
+        .ok_or("a connection omitting its own node's action was accepted")?;
+
+    assert_eq!(status.code(), tonic::Code::FailedPrecondition);
+    assert!(status.message().contains("WORKER_CONTRACT_MISMATCH"));
+    assert!(
+        status.message().contains("grade"),
+        "the refusal must name the unserved action: {}",
+        status.message()
+    );
+    assert!(
+        status.message().contains("pinned to node `shell`"),
+        "the refusal must name the node that owed the action: {}",
+        status.message()
+    );
     Ok(())
 }
 

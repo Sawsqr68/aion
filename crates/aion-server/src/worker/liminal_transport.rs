@@ -1523,6 +1523,7 @@ impl LiminalConnectionNotifier {
         super::contracts::validate_worker_contracts(
             engine,
             &registration.task_queue,
+            registration.node.as_deref(),
             &registration.identity,
             &advertised,
         )

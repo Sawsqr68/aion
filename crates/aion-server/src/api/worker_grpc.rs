@@ -641,6 +641,7 @@ fn validate_worker_contracts(
     crate::worker::contracts::validate_worker_contracts(
         &engine,
         &register.task_queue,
+        crate::worker::registry::optional_node(&register.node).as_deref(),
         &register.identity,
         &advertised,
     )

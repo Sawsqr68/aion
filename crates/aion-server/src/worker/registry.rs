@@ -1106,7 +1106,13 @@ const fn transport_of(delivery: &WorkerDelivery) -> WorkerTransport {
 /// Normalize a wire `node` string into an optional locality affinity: an empty
 /// value (the proto3 default) carries no node, anything else is the worker's
 /// advertised node id.
-fn optional_node(node: &str) -> Option<String> {
+///
+/// Shared with contract admission ([`super::contracts::validate_worker_contracts`])
+/// rather than restated there: admission decides which of a package's actions a
+/// connection owes from the same locality this registry then routes by, and two
+/// independent normalizations of the wire default would be a place for that
+/// agreement to drift silently.
+pub(crate) fn optional_node(node: &str) -> Option<String> {
     if node.is_empty() {
         None
     } else {

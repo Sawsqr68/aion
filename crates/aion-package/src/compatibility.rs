@@ -48,10 +48,15 @@ impl fmt::Display for ContractDiff {
 /// worker. Output compatibility is covariant: every value the worker may emit
 /// must be decodable by the workflow. This admits input widening and optional
 /// output-field additions while refusing narrowing and undeclared output drift.
+///
+/// `worker_node` is the registering connection's advertised locality — `None`
+/// when it carries none. Only the actions whose dispatch can REACH that
+/// connection are demanded of it; see [`dispatch_can_reach`].
 #[must_use]
 pub fn contract_diffs(
     package_version: &str,
     contract: &WorkerContract,
+    worker_node: Option<&str>,
     advertised: &[ActivityDescriptor],
 ) -> Vec<ContractDiff> {
     let advertised = advertised
@@ -67,6 +72,7 @@ pub fn contract_diffs(
         .actions
         .iter()
         .filter(|action| action.body.is_none())
+        .filter(|action| dispatch_can_reach(action.node.as_deref(), worker_node))
         .collect::<Vec<_>>();
     expected.sort_by(|left, right| left.name.cmp(&right.name));
     let mut diffs = Vec::new();
@@ -76,7 +82,9 @@ pub fn contract_diffs(
                 package_version: package_version.to_owned(),
                 action: action.name.clone(),
                 field: "action".to_owned(),
-                expected: Some(Value::String("declared".to_owned())),
+                expected: Some(Value::String(missing_action_requirement(
+                    action.node.as_deref(),
+                ))),
                 advertised: None,
             });
             continue;
@@ -109,6 +117,51 @@ pub fn contract_diffs(
         }
     }
     diffs
+}
+
+/// Whether a dispatch for an action pinned to `action_node` can REACH a worker
+/// connection advertising `worker_node`.
+///
+/// This is the admission-side mirror of the server registry's dispatch filter
+/// (`worker_matches_node`), and the two must never drift: an unpinned action
+/// (`None`) reaches every worker in the pool, while an action pinned to a node
+/// reaches ONLY a connection advertising that exact node — so a connection
+/// carrying no locality is reachable by unpinned actions alone.
+///
+/// WHY ADMISSION NEEDS IT. The server routes by (namespace × `task_queue` × node)
+/// and a worker process that serves several nodes therefore opens one
+/// connection PER NODE, each advertising only that node's actions. Checking
+/// every bodyless action of the queue against every connection demanded each
+/// connection serve the OTHER connections' actions, so a correctly partitioned
+/// worker was refused on every dial — the whole queue unservable — for omitting
+/// actions no dispatch could ever have handed it. Demanding exactly the
+/// reachable set keeps the gate's guarantee intact: any action a dispatch could
+/// land on this connection is still required of it, so an unservable dispatch is
+/// still refused at registration rather than discovered at run time.
+///
+/// This is deliberately NOT a claim that the pool is fully staffed. A node whose
+/// connection never arrives leaves its pinned actions unserved; that is an
+/// unstaffed-pool condition the census reports, not an admission failure of the
+/// connections that did arrive.
+#[must_use]
+fn dispatch_can_reach(action_node: Option<&str>, worker_node: Option<&str>) -> bool {
+    match action_node {
+        None => true,
+        Some(pin) => worker_node == Some(pin),
+    }
+}
+
+/// The requirement text for an action the connection was reachable for and did
+/// not advertise. It names WHY this connection owed the action, because the
+/// operator's next move differs entirely between the two cases: an unpinned
+/// action is owed by every worker in the pool, while a pinned one is owed by the
+/// connection on that node alone.
+fn missing_action_requirement(action_node: Option<&str>) -> String {
+    match action_node {
+        None => "advertised: the action is unpinned, so every worker in the pool must serve it"
+            .to_owned(),
+        Some(node) => format!("advertised: the action is pinned to node `{node}`"),
+    }
 }
 
 fn diff_schema(
@@ -211,6 +264,7 @@ mod tests {
 
     use super::contract_diffs;
     use crate::{ActionContract, ActivityDescriptor, WorkerContract};
+    use serde_json::Value;
 
     fn contract(input: serde_json::Value, output: serde_json::Value) -> WorkerContract {
         WorkerContract {
@@ -247,7 +301,7 @@ mod tests {
             json!({"type":"boolean"}),
         );
 
-        let diffs = contract_diffs("abc", &contract, &advertised);
+        let diffs = contract_diffs("abc", &contract, None, &advertised);
         assert_eq!(diffs.len(), 1);
         assert_eq!(diffs[0].field, "input_schema.properties.amount.type");
         assert_eq!(diffs[0].expected, Some(json!("integer")));
@@ -287,7 +341,7 @@ mod tests {
             }),
         );
 
-        assert!(contract_diffs("abc", &contract, &advertised).is_empty());
+        assert!(contract_diffs("abc", &contract, None, &advertised).is_empty());
     }
 
     #[test]
@@ -295,7 +349,7 @@ mod tests {
         let contract = contract(json!({"type":"number"}), json!({"type":"integer"}));
         let advertised = advertised(json!({"type":"integer"}), json!({"type":"number"}));
 
-        let diffs = contract_diffs("abc", &contract, &advertised);
+        let diffs = contract_diffs("abc", &contract, None, &advertised);
         assert_eq!(diffs.len(), 2);
         assert_eq!(diffs[0].field, "input_schema.type");
         assert_eq!(diffs[1].field, "output_schema.type");
@@ -321,7 +375,7 @@ mod tests {
             json!({"type":"boolean"}),
         );
 
-        assert!(contract_diffs("abc", &contract, &advertised).is_empty());
+        assert!(contract_diffs("abc", &contract, None, &advertised).is_empty());
     }
 
     /// `$comment` is non-validating by specification — draft 2020-12 reserves it
@@ -351,7 +405,7 @@ mod tests {
         );
 
         assert!(
-            contract_diffs("abc", &contract, &advertised).is_empty(),
+            contract_diffs("abc", &contract, None, &advertised).is_empty(),
             "a non-validating comment must not decide contract admission"
         );
     }
@@ -398,8 +452,136 @@ mod tests {
         }];
 
         assert!(
-            contract_diffs("abc", &contract, &advertised).is_empty(),
+            contract_diffs("abc", &contract, None, &advertised).is_empty(),
             "a server-executed declared body must not be demanded of a worker"
+        );
+    }
+
+    /// A three-node queue, exactly the shape a real multi-role worker serves.
+    fn node_partitioned_contract() -> WorkerContract {
+        let action = |name: &str, node: Option<&str>| ActionContract {
+            name: name.to_owned(),
+            input_schema: json!({"type":"object"}),
+            output_schema: json!({"type":"boolean"}),
+            node: node.map(str::to_owned),
+            timeout: None,
+            retry: None,
+            advisory: false,
+            body: None,
+        };
+        WorkerContract {
+            task_queue: "staged_rounds".to_owned(),
+            actions: vec![
+                action("gate_item", Some("shell")),
+                action("dev_item", Some("developer")),
+                action("review_item", Some("reviewer")),
+                action("audit", None),
+            ],
+        }
+    }
+
+    fn descriptor(name: &str) -> ActivityDescriptor {
+        ActivityDescriptor {
+            name: name.to_owned(),
+            input_schema: json!({"type":"object"}),
+            output_schema: json!({"type":"boolean"}),
+        }
+    }
+
+    /// THE DEFECT. The server routes by (namespace × `task_queue` × node), so a
+    /// worker serving several nodes opens one connection PER NODE advertising
+    /// only that node's actions. Checking every bodyless action of the queue
+    /// against every connection demanded each connection serve the OTHER
+    /// connections' actions — so on 2026-07-30 a correctly partitioned worker
+    /// was refused on every dial, `WORKER_CONTRACT_MISMATCH` naming five actions
+    /// that were never that connection's job, and the queue was unservable.
+    #[test]
+    fn a_node_partitioned_connection_is_not_demanded_another_nodes_actions() {
+        let contract = node_partitioned_contract();
+        let shell = vec![descriptor("gate_item"), descriptor("audit")];
+
+        assert!(
+            contract_diffs("abc", &contract, Some("shell"), &shell).is_empty(),
+            "the shell connection serves its own node's actions and the unpinned \
+             one — it must not be refused for omitting the developer and reviewer \
+             nodes' actions"
+        );
+    }
+
+    /// The gate keeps its teeth on the actions that CAN reach the connection: an
+    /// action pinned to this very node and left unadvertised is still refused,
+    /// and the refusal names the node so the operator knows which connection
+    /// owed it.
+    #[test]
+    fn an_action_pinned_to_this_node_is_still_demanded() {
+        let contract = node_partitioned_contract();
+        // On the shell node, serving only the unpinned action.
+        let short = vec![descriptor("audit")];
+
+        let diffs = contract_diffs("abc", &contract, Some("shell"), &short);
+        assert_eq!(diffs.len(), 1, "{diffs:?}");
+        assert_eq!(diffs[0].action, "gate_item");
+        assert_eq!(
+            diffs[0].expected,
+            Some(Value::String(
+                "advertised: the action is pinned to node `shell`".to_owned()
+            ))
+        );
+    }
+
+    /// An UNPINNED action's dispatch reaches every worker in the pool (the
+    /// registry's `worker_matches_node` returns true for a `None` filter against
+    /// any worker), so every connection owes it no matter what node it carries.
+    /// Reachability is the whole rule — narrowing it to same-node actions would
+    /// admit a connection a dispatch could land the unpinned action on.
+    #[test]
+    fn an_unpinned_action_is_demanded_of_every_node() {
+        let contract = node_partitioned_contract();
+        let developer_only = vec![descriptor("dev_item")];
+
+        let diffs = contract_diffs("abc", &contract, Some("developer"), &developer_only);
+        assert_eq!(diffs.len(), 1, "{diffs:?}");
+        assert_eq!(diffs[0].action, "audit");
+        assert_eq!(
+            diffs[0].expected,
+            Some(Value::String(
+                "advertised: the action is unpinned, so every worker in the pool \
+                 must serve it"
+                    .to_owned()
+            ))
+        );
+    }
+
+    /// A connection carrying NO locality is reachable only by unpinned
+    /// dispatches, so it owes the unpinned action and nothing else — the same
+    /// asymmetry the registry applies when filtering candidates.
+    #[test]
+    fn a_node_less_connection_owes_only_the_unpinned_actions() {
+        let contract = node_partitioned_contract();
+
+        assert!(
+            contract_diffs("abc", &contract, None, &[descriptor("audit")]).is_empty(),
+            "a node-less connection is unreachable for pinned dispatches"
+        );
+        let diffs = contract_diffs("abc", &contract, None, &[]);
+        assert_eq!(diffs.len(), 1, "{diffs:?}");
+        assert_eq!(
+            diffs[0].action, "audit",
+            "the unpinned action is still owed by a node-less connection"
+        );
+    }
+
+    /// A connection on a node the package never mentions owes only the unpinned
+    /// actions. It is admitted rather than refused because no pinned dispatch can
+    /// reach it — the pool simply has a connection nothing routes to, which the
+    /// census reports and admission does not adjudicate.
+    #[test]
+    fn a_connection_on_an_unknown_node_owes_only_the_unpinned_actions() {
+        let contract = node_partitioned_contract();
+
+        assert!(
+            contract_diffs("abc", &contract, Some("stranger"), &[descriptor("audit")]).is_empty(),
+            "an unknown node is unreachable for every pinned action"
         );
     }
 }

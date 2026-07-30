@@ -675,7 +675,7 @@ mod tests {
                 body: None,
             }],
         };
-        let diffs = contract_diffs("demo.v5", &contract, &advertised);
+        let diffs = contract_diffs("demo.v5", &contract, None, &advertised);
         assert!(
             diffs.is_empty(),
             "the generated worker must satisfy a contract over its own declared types: {diffs:?}"
@@ -689,7 +689,7 @@ mod tests {
             input_schema: advertised_schema(&module, "OrderInput")?,
             output_schema: Value::Bool(true),
         }];
-        let refused = contract_diffs("demo.v5", &contract, &shrugging);
+        let refused = contract_diffs("demo.v5", &contract, None, &shrugging);
         assert!(
             refused
                 .iter()
@@ -724,7 +724,7 @@ mod tests {
                     .clone()
             }],
         };
-        let diffs = contract_diffs("demo.v5", &from_artifact, &advertised);
+        let diffs = contract_diffs("demo.v5", &from_artifact, None, &advertised);
         assert!(
             diffs.is_empty(),
             "a marker-free advertisement must satisfy an artifact-derived contract: {diffs:?}"
