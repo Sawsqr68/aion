@@ -50,6 +50,21 @@ pub enum DocumentError {
     WorkspaceUnconfigured,
     #[error("AWL workspace I/O failed: {0}")]
     Io(#[from] io::Error),
+    /// A document was written but its first revision could not be stored, and
+    /// the half-created document could not be removed again. Both causes are
+    /// carried because the operator needs the second one to get unstuck: until
+    /// `path` is deleted by hand, creating that document will keep failing as
+    /// though it already exists.
+    #[error(
+        "AWL document `{path}` was created but its first revision could not be stored ({reason}), \
+         and removing the half-created document then failed ({rollback}); \
+         `{path}` is still in the workspace and must be deleted before it can be created again"
+    )]
+    CreateRollbackFailed {
+        path: String,
+        reason: String,
+        rollback: io::Error,
+    },
 }
 
 pub async fn list(root: &Path) -> Result<Vec<DocumentEntry>, DocumentError> {
@@ -125,8 +140,19 @@ pub async fn create(
     let revision = match super::revisions::store(root, &source).await {
         Ok(revision) => revision,
         Err(error) => {
-            if let Ok(workspace) = ConfinedDir::open(root) {
-                let _ = workspace.remove_file(Path::new(&path));
+            // The document file is already on disk but has no first revision,
+            // so it must come back off. If the rollback ITSELF fails the
+            // operator has to hear about it: the orphan stays in the
+            // workspace, and every retry of this create will now fail with
+            // `Exists` for a document that was never successfully created.
+            // Reporting only the revision error would send them chasing that
+            // instead of the file they actually have to delete.
+            if let Err(rollback) = rollback_created_document(root, &path).await {
+                return Err(DocumentError::CreateRollbackFailed {
+                    path: path.clone(),
+                    reason: error.to_string(),
+                    rollback,
+                });
             }
             return Err(revision_io(&error));
         }
@@ -180,6 +206,33 @@ pub(crate) fn document_path(requested: &str) -> Result<PathBuf, DocumentError> {
         ));
     }
     Ok(path.to_owned())
+}
+
+/// Remove a document that was created but never got a first revision.
+///
+/// Runs on the blocking pool like every other filesystem call in this module —
+/// the original rollback ran `ConfinedDir::open` and `remove_file` inline on
+/// the async runtime, which blocks a reactor thread on real disk I/O.
+///
+/// A workspace that has already vanished is treated as a successful rollback:
+/// the document it held is gone too, which is the outcome this is for.
+async fn rollback_created_document(root: &Path, path: &str) -> Result<(), io::Error> {
+    let root_owned = root.to_owned();
+    let path_owned = PathBuf::from(path);
+    tokio::task::spawn_blocking(move || {
+        let workspace = match ConfinedDir::open(&root_owned) {
+            Ok(workspace) => workspace,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        match workspace.remove_file(&path_owned) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
+        }
+    })
+    .await
+    .map_err(|error| io::Error::other(format!("document rollback task failed: {error}")))?
 }
 
 fn confinement_error(error: io::Error) -> DocumentError {
@@ -281,6 +334,118 @@ mod tests {
             read(workspace.path(), "/tmp/outside.awl").await,
             Err(DocumentError::InvalidPath(_))
         ));
+        Ok(())
+    }
+
+    /// A create whose first revision cannot be stored must leave NOTHING
+    /// behind. The rollback used to be skippable in silence, and the cost of
+    /// skipping it is not a stray file — it is that every retry of the same
+    /// create then fails with `Exists` for a document the operator never
+    /// managed to create, with nothing anywhere saying why.
+    #[tokio::test]
+    async fn a_create_whose_revision_fails_leaves_no_document_behind()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let workspace = crate::test_support::private_tempdir()?;
+        // `.aion-authoring` is where revisions live. As a regular file it
+        // cannot be opened as a directory, so storing the first revision
+        // fails after the document itself is already on disk — exactly the
+        // window the rollback exists to close.
+        std::fs::write(workspace.path().join(".aion-authoring"), b"not a directory")?;
+
+        let failure = create(
+            workspace.path(),
+            CreateDocumentRequest {
+                name: "rollback_probe".to_owned(),
+            },
+        )
+        .await;
+        assert!(
+            failure.is_err(),
+            "a create whose revision cannot be stored must not report success"
+        );
+        assert!(
+            !workspace.path().join("rollback_probe.awl").exists(),
+            "the half-created document was left in the workspace"
+        );
+        assert!(
+            list(workspace.path()).await?.is_empty(),
+            "the half-created document is still listed"
+        );
+
+        // With the revision store repaired, the same name must be creatable —
+        // proving the failed attempt did not poison it.
+        std::fs::remove_file(workspace.path().join(".aion-authoring"))?;
+        let created = create(
+            workspace.path(),
+            CreateDocumentRequest {
+                name: "rollback_probe".to_owned(),
+            },
+        )
+        .await?;
+        assert_eq!(created.path, "rollback_probe.awl");
+        Ok(())
+    }
+
+    /// A rollback that cannot do its job must SAY SO. This is the exact
+    /// defect: the old code wrote `if let Ok(workspace) = …` and
+    /// `let _ = workspace.remove_file(…)`, so a rollback that failed was
+    /// indistinguishable from one that worked, and the operator was told only
+    /// about the revision error while the orphan sat in the workspace
+    /// poisoning every retry.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_rollback_that_cannot_remove_the_document_reports_it()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::unix::fs::PermissionsExt;
+
+        // Root bypasses directory permissions, so the sabotage below would not
+        // sabotage anything and the assertion would pass vacuously. Skip
+        // loudly at runtime rather than hiding the test behind `#[ignore]`.
+        if rustix::process::geteuid().is_root() {
+            tracing::info!(
+                "skipping rollback-failure pin: running as root, which bypasses the \
+                 directory permissions this test depends on"
+            );
+            return Ok(());
+        }
+
+        let workspace = crate::test_support::private_tempdir()?;
+        let document = workspace.path().join("stuck.awl");
+        std::fs::write(&document, b"workflow stuck\n")?;
+
+        // Owner read+execute only: the document can still be seen but not
+        // unlinked, because unlinking needs write on the DIRECTORY.
+        std::fs::set_permissions(workspace.path(), std::fs::Permissions::from_mode(0o500))?;
+        let outcome = rollback_created_document(workspace.path(), "stuck.awl").await;
+        std::fs::set_permissions(workspace.path(), std::fs::Permissions::from_mode(0o700))?;
+
+        let error = match outcome {
+            Ok(()) => {
+                return Err("a rollback that could not remove the document reported success — \
+                            this is the swallowed error the fix exists to stop"
+                    .into());
+            }
+            Err(error) => error,
+        };
+        assert_eq!(
+            error.kind(),
+            io::ErrorKind::PermissionDenied,
+            "the rollback failure must carry its real cause, got: {error}"
+        );
+        assert!(document.exists(), "the test did not actually block removal");
+        Ok(())
+    }
+
+    /// The rollback must not invent a failure when there is nothing to undo.
+    #[tokio::test]
+    async fn rolling_back_a_vanished_workspace_is_not_a_failure()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let parent = crate::test_support::private_tempdir()?;
+        let absent = parent.path().join("never-created");
+        rollback_created_document(&absent, "anything.awl").await?;
+
+        let workspace = crate::test_support::private_tempdir()?;
+        rollback_created_document(workspace.path(), "never-written.awl").await?;
         Ok(())
     }
 

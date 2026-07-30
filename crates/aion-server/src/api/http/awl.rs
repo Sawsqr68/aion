@@ -361,6 +361,17 @@ impl IntoResponse for DocumentHttpError {
                 "DocumentIoError",
                 error.to_string(),
             ),
+            // Its own error type rather than a generic I/O failure: the
+            // workspace has been left holding a document that was never
+            // successfully created, so every retry of this create will come
+            // back as `DocumentExists`. A caller that cannot tell the two
+            // apart has no way to explain that to the operator, and the
+            // message names the file that has to be removed by hand.
+            error @ awl::documents::DocumentError::CreateRollbackFailed { .. } => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DocumentCreateRollbackFailed",
+                error.to_string(),
+            ),
         };
         (
             status,
