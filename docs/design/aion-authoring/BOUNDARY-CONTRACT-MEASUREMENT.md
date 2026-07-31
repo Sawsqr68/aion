@@ -360,10 +360,29 @@ is genuinely new and not a second copy of what was already there.
 
 ---
 
-# 🔴 RESUME HERE — 2026-07-31 ~06:40Z
+# 🔴 RESUME HERE — 2026-07-31 ~07:30Z
 
-`origin/main` = **`4462765a`**. Working tree clean apart from pre-existing
+`origin/main` = **`d489e5e8`**. Working tree clean apart from pre-existing
 untracked `RELEASE-0.9.2.md`.
+
+**🔴 THE FINDING THAT OUTGREW ITS LANE: three commits are sitting on main with
+clippy errors in them.** `unnecessary_wraps` from `4d9ca3b0`, `similar_names`
+in `schema/derive.rs` from `73c6ed50`, and `unnecessary_hashes` in
+`tests/declared_signal_contract.rs`. All three are fixed, but the pattern is
+the point — EVERY crate touched so far has surfaced one, which means the lint
+gate has genuinely not been running rather than three people being unlucky.
+Queue item 1 is therefore not a formality: `aion-rs` and `aion-server` are far
+larger surfaces carrying the same exposure, and it should be expected to go
+red.
+
+#31 closed (`d489e5e8`): the AWL language server can complete. Design and the
+full reasoning at `AWL-COMPLETION-DESIGN.md`. The load-bearing lesson, which
+generalises: **every other feature in that crate opens
+`aion_awl::parse(source).ok()?`, and for completion that would have been fatal
+— completion fires precisely when the document is half-written, so the feature
+would have worked in every state except the only one it is invoked in.** The
+same shape as #74 approached from the other side. Candidates come from the
+token stream instead, and the claim is mutation-checked rather than asserted.
 
 Done today: #110 (`46bbdced`), #95 closed by measurement, #97-A verified as
 built-by-another-lane, the `aion-server` debt discharged, the AWL signal→contract
