@@ -769,3 +769,69 @@ diagnostic value in all three cases.
 
 ⇒ **THE ONLY THING THAT HAS EVER CAUGHT A VACUOUS TEST HERE IS AN INVERTED
 CONTROL THAT WAS ACTUALLY RUN.**
+
+---
+
+# 📍 RESUME HERE — written at compaction #2
+
+## Everything is COMMITTED. Working tree has no uncommitted crate code.
+
+| commit | what |
+|---|---|
+| `7ead877a` | **Block G** — writer mutex + read pool + `schedule_timer` P0 fix |
+| `918f2d3c` | **The graduated pin** (Waffles' constraint) + the fmt miss |
+| `58ad4215` | **Block H** — write-on-read is a COMPILE error |
+| `88e3d4a0` `d995b5ac` `73554571` `2fa09707` `885c4632` | the findings |
+
+All local, **unpushed** (`origin/main..HEAD` ≈ 16 commits).
+
+## 🔴 THE ONE THING STILL IN FLIGHT
+
+Background task **`bsdl8oit7`**, log **`/tmp/blockh-gate.log`**, last line `EXIT=<code>`:
+
+```
+cargo test -p aion-rs --all-targets --no-fail-fast
+```
+
+The dependents gate for Block H. Index it by **EXIT + the quoted `test result:`
+line + `ok + FAILED == 58`** — a run only counts if the total is 58.
+
+**Expect the #85 flake to appear at roughly 3 in 10.** If it does, that is the
+KNOWN open flake (#85), NOT a Block H regression — but say which test, and add
+the run to #85's denominator either way. Block H is a pure type change plus four
+test-only write-on-read fixes, and `cargo build -p aion-rs -p aion-server`
+already passed.
+
+## What is DONE and needs no re-doing
+
+- Block G, the pin, Block H — all landed, all gated (clippy 0, 91 crate tests).
+- #85 hypothesis **refuted** and the task rewritten with the evidence.
+- Block H's own design doc corrected (its `trybuild` recommendation was wrong).
+
+## Next, in order
+
+1. Read `/tmp/blockh-gate.log`, report it honestly, close out #122.
+2. Board: **#121** (both recovery-loop guards covered by nothing), #117, #88, #71, #76.
+3. #85 is now an OPEN INVESTIGATION with a fresh lead — see its task body.
+
+## 🔴 The laws this block earned, in one place
+
+- **The only thing that has ever caught a vacuous test here is an inverted
+  control that was actually RUN.** Three vacuous tests in this block (PRAGMA
+  assertion, pin v1, control v1). Reading never caught one. Conviction has zero
+  diagnostic value.
+- **A control that cannot reach the defect is indistinguishable from a fix.**
+  Both produce a green. Check the control removes the property before trusting it.
+- **A concurrency test that asserts "no error" cannot see a defect whose symptom
+  is silent.**
+- **When a measurement disappoints, count the mechanism before enlarging the
+  sample.** The arithmetic that refuted #85 needed no run at all.
+- **A denominator written from memory is a measurement like any other.** I nearly
+  amended a correct commit to match my own incorrect note.
+- **A tree identical to a gated tree inherits exactly the gates that were RUN on
+  it, and no others.**
+- **A mechanism that rules out one option usually rules out its sibling.**
+- **A constraint that only pays off when the news is good is not a constraint.**
+- **A claim you never made is a claim you never have to withdraw.**
+- Process: **never run a formatter in the same command block as a gate** — it
+  produced one unexplained red this session.
