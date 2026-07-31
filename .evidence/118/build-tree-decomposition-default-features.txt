@@ -95,3 +95,28 @@ Two earlier stories were wrong: "a second feature resolution" and
 to the wrong variable. A mechanism claim needs a second data point that
 VARIES the proposed cause — this read varies both flags against the
 earlier one, which is why it could refute the person who ran it.
+
+## ADDENDUM — how to price a PARTIAL delete (Athena's instrument, adopted)
+
+The `alone` vs `in-walk` inconsistency above is not only a trap. Pointed
+deliberately, it is the measurement of the exact quantity it was obscuring:
+
+    (du -sh X alone)  −  (X's line in `du -h -d 1 PARENT`)
+      =  bytes in X that are ALSO linked from somewhere already walked
+      =  what deleting X will NOT free
+
+`stat -f %l` tells you a file has a twin. It does NOT tell you WHERE the twin
+lives — and for a delete, that is the only thing that matters. A file with
+links=2 whose twin is inside the same directory gets freed anyway. So a
+link-count census over X is an UPPER BOUND on the shortfall, never the figure.
+
+Worked, on this tree:
+    deps         18G alone   13G in-walk   ⇒ 5G held elsewhere (incremental)
+    incremental  8.4G alone  8.4G in-walk  ⇒ walked first, so it claims the shared
+                                             bytes; the delta shows up on deps
+    rm -rf target/debug   frees the FULL 23G — every link is inside the target
+
+RULE: `du -sh X` is an upper bound on what `rm -rf X` frees. It is EXACT only
+when X contains every link to its own bytes. Deleting a parent is exact;
+deleting one sibling of a hardlinked pair is not — and those are different
+operations over the same bytes.
