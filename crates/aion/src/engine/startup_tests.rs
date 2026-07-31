@@ -1277,3 +1277,108 @@ async fn a_paused_run_forced_into_the_active_list_is_never_made_resident() -> Te
 
     Ok(())
 }
+
+/// #117(c) requirement (5), discharged as the seam test BEFORE the feature it
+/// guards: boot honours a recorded cancellation before minting a writer.
+///
+/// The ruled mechanism (B) lets a never-alive run be cancelled through a
+/// registry-held terminal-writer reservation. The run that results is a shape
+/// nothing else produces: `WorkflowStarted` then `WorkflowCancelled`, with no
+/// process having ever existed for it. If boot were to make such a run resident,
+/// the cancellation would be undone by the very next restart and the operator's
+/// only lever would have been a no-op — so this must hold before the writer that
+/// creates the shape is built at all.
+///
+/// The existing `a_cancelled_run_is_terminal_at_boot_and_never_has_a_writer_minted`
+/// proves this at the STORE FILTER. This proves it one layer deeper, at the guard
+/// the filter normally hides (#121): the cancelled run is forced into
+/// `list_active` and the recovery loop must refuse it on its own account.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cancelled_run_forced_into_the_active_list_never_has_a_writer_minted() -> TestResult {
+    let stale = Arc::new(aion_store::testing::StaleActiveListStore::new());
+    let store: Arc<dyn EventStore> = Arc::clone(&stale) as Arc<dyn EventStore>;
+    let runtime = Arc::new(RuntimeHandle::new(RuntimeConfig::new(Some(1)))?);
+    runtime.register_waiting_test_module("loadable_deployed", "run");
+    let catalog = Arc::new(WorkflowCatalog::new());
+    catalog.note_loaded_workflow_for_test(
+        "loadable",
+        "loadable_deployed",
+        "run",
+        aion_package::ContentHash::from_bytes([3; 32]),
+    );
+
+    // The control. Identical but never cancelled, so a sweep that did nothing at
+    // all cannot satisfy the assertion below.
+    let healthy = WorkflowId::new_v4();
+    let mut seed = crate::durability::Recorder::new(healthy.clone(), Arc::clone(&store));
+    seed.record_workflow_started(
+        Utc::now(),
+        crate::durability::WorkflowStartRecord {
+            workflow_type: "loadable".to_owned(),
+            input: Payload::from_json(&json!({}))?,
+            run_id: RunId::new_v4(),
+            parent_run_id: None,
+            package_version: aion_core::PackageVersion::new("03".repeat(32)),
+        },
+    )
+    .await?;
+
+    // The shape mechanism (B) produces: started, then cancelled, with nothing
+    // ever resident in between.
+    let cancelled = WorkflowId::new_v4();
+    let mut seed = crate::durability::Recorder::new(cancelled.clone(), Arc::clone(&store));
+    seed.record_workflow_started(
+        Utc::now(),
+        crate::durability::WorkflowStartRecord {
+            workflow_type: "loadable".to_owned(),
+            input: Payload::from_json(&json!({}))?,
+            run_id: RunId::new_v4(),
+            parent_run_id: None,
+            package_version: aion_core::PackageVersion::new("03".repeat(32)),
+        },
+    )
+    .await?;
+    seed.record_workflow_cancelled(
+        Utc::now(),
+        "cancelled while never resident: its package could not load".to_owned(),
+    )
+    .await?;
+
+    // Pinned directly rather than inferred: the projection must be terminal, or
+    // the guard under test is not the one being exercised.
+    let projected = aion_core::status_from_events(&store.read_history(&cancelled).await?);
+    assert_eq!(projected, WorkflowStatus::Cancelled);
+    assert!(
+        projected.is_terminal(),
+        "the whole requirement rests on Cancelled being terminal; if it ever stopped \
+         being so, this test would still pass while the guarantee evaporated"
+    );
+
+    stale.force_active(cancelled.clone());
+
+    let active = store.list_active().await?;
+    assert!(
+        active.contains(&cancelled),
+        "the cancelled run must reach the recovery loop — otherwise this re-proves \
+         the store filter, which is already covered, instead of the guard behind it"
+    );
+    assert!(active.contains(&healthy), "the control must also be listed");
+
+    let registry = Arc::new(Registry::default());
+    let mut context = context_with_registry(&store, &runtime, &registry);
+    context.catalog = catalog;
+    super::recover_active_workflows_on_startup(context).await?;
+
+    assert!(
+        registry.live_pid(&healthy)?.is_some(),
+        "the control must be made resident, or this proves nothing about the cancelled run"
+    );
+    assert!(
+        registry.live_pid(&cancelled)?.is_none(),
+        "boot must honour the recorded cancellation before minting a writer: a run \
+         cancelled while never alive must stay cancelled across a restart, or the \
+         operator's only lever was a no-op"
+    );
+
+    Ok(())
+}
