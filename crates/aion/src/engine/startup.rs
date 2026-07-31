@@ -184,6 +184,11 @@ async fn repopulate_active_workflows(
         // dead peer's shards into a LIVE engine) it skips the workflows this node
         // already owns, leaving only the newly-adopted ones to recover.
         if registry.live_pid(&workflow_id)?.is_some() {
+            // Already resident, so any degraded verdict this process recorded
+            // for it is now false. Clearing here rather than only on the
+            // recovery path covers the SS-5 adoption re-run, which reaches
+            // workflows that became resident by a route this loop never took.
+            registry.unrecoverable().clear(&workflow_id)?;
             continue;
         }
         let history = store.as_ref().read_history(&workflow_id).await?;
@@ -220,14 +225,37 @@ async fn repopulate_active_workflows(
             &history,
             catalog,
         ) {
-            Ok(recovered) => recovered,
+            Ok(recovered) => {
+                // Recovery succeeded, so a verdict recorded by an earlier sweep
+                // in this same process (SS-5 adoption re-runs this loop) no
+                // longer holds. A degraded flag that outlives the degradation
+                // sends an operator to a redeploy for a healthy run.
+                registry.unrecoverable().clear(&workflow_id)?;
+                recovered
+            }
             Err(error) => {
+                // #117: retain the verdict as typed data, not only as this log
+                // line. A run skipped here never becomes resident, so it can
+                // never obtain a Recorder and can never be cancelled through
+                // the sanctioned path — and until this was retained, the only
+                // record of WHY was one ERROR in a boot stream that cannot be
+                // queried afterwards. The operator who needs it is exactly the
+                // one who was not watching stdout at boot.
+                let reason = error.to_string();
                 tracing::error!(
                     workflow_id = %workflow_id,
                     workflow_type = %workflow_type,
                     error = %error,
                     "active workflow failed startup recovery; skipping it and continuing"
                 );
+                registry.unrecoverable().record(
+                    workflow_id.clone(),
+                    crate::registry::UnrecoverableRun {
+                        workflow_type: workflow_type.clone(),
+                        reason,
+                        observed_at: Utc::now(),
+                    },
+                )?;
                 continue;
             }
         };

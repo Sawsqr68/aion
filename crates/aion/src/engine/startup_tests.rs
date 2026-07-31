@@ -829,3 +829,100 @@ async fn cold_boot_sweep_errors_on_a_live_handle_ordering_breach() -> TestResult
     runtime.shutdown()?;
     Ok(())
 }
+
+/// #117 — the seam, not the set.
+///
+/// `registry::unrecoverable`'s own unit tests drive the set directly and would
+/// stay green if `repopulate_active_workflows` never called it. That is exactly
+/// how #58 shipped an inert feature behind eight passing tests, so this test
+/// crosses the wiring instead: it runs the real startup sweep and asks the
+/// registry afterwards.
+///
+/// It is written as a BASELINE COMPARISON rather than an enumeration — the same
+/// sweep sees one run whose pinned version is loaded and one whose is not, so
+/// the assertion is about the DIFFERENCE between them. A version of `record`
+/// that fired for every run, or for none, fails one half or the other; a
+/// hardcoded expectation of "one entry" would pass for the wrong reasons.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_run_whose_pinned_version_cannot_load_is_retained_as_unrecoverable() -> TestResult {
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+    let runtime = Arc::new(RuntimeHandle::new(RuntimeConfig::new(Some(1)))?);
+    runtime.register_waiting_test_module("loadable_deployed", "run");
+    let catalog = Arc::new(WorkflowCatalog::new());
+    catalog.note_loaded_workflow_for_test(
+        "loadable",
+        "loadable_deployed",
+        "run",
+        aion_package::ContentHash::from_bytes([3; 32]),
+    );
+
+    // The healthy run: its type is in the catalog, so recovery makes it resident.
+    let healthy = WorkflowId::new_v4();
+    let mut seed = crate::durability::Recorder::new(healthy.clone(), Arc::clone(&store));
+    seed.record_workflow_started(
+        Utc::now(),
+        crate::durability::WorkflowStartRecord {
+            workflow_type: "loadable".to_owned(),
+            input: Payload::from_json(&json!({}))?,
+            run_id: RunId::new_v4(),
+            parent_run_id: None,
+            // The pin must MATCH the catalogued version, or this run is degraded
+            // too and the comparison has no baseline. `ContentHash` renders as
+            // lowercase hex, so `from_bytes([3; 32])` is "03" thirty-two times.
+            // The first draft pinned "a" * 64 and the baseline half of this test
+            // caught it — which is the assertion earning its place.
+            package_version: aion_core::PackageVersion::new("03".repeat(32)),
+        },
+    )
+    .await?;
+
+    // The degraded run: nothing in the catalog can serve its type. This is the
+    // shape of 0756ecd5 — an archive minted under a superseded package-identity
+    // domain, which this build has no encoder for and therefore cannot load.
+    let degraded = WorkflowId::new_v4();
+    let mut seed = crate::durability::Recorder::new(degraded.clone(), Arc::clone(&store));
+    seed.record_workflow_started(
+        Utc::now(),
+        crate::durability::WorkflowStartRecord {
+            workflow_type: "minted_under_a_superseded_identity_domain".to_owned(),
+            input: Payload::from_json(&json!({}))?,
+            run_id: RunId::new_v4(),
+            parent_run_id: None,
+            package_version: aion_core::PackageVersion::new("b".repeat(64)),
+        },
+    )
+    .await?;
+
+    let registry = Arc::new(Registry::default());
+    let mut context = context_with_registry(&store, &runtime, &registry);
+    context.catalog = catalog;
+    super::recover_active_workflows_on_startup(context).await?;
+
+    // The degraded run is retained WITH its reason — the whole point is that the
+    // operator can ask afterwards, not that a line scrolled past at boot.
+    let retained = registry.unrecoverable().get(&degraded)?.ok_or_else(|| {
+        Box::<dyn std::error::Error>::from(
+            "the run whose pinned version cannot load must be retained as unrecoverable; \
+             without this the only record is one boot-log ERROR nobody can query",
+        )
+    })?;
+    assert_eq!(
+        retained.workflow_type, "minted_under_a_superseded_identity_domain",
+        "the retained entry must name the run's own type"
+    );
+    assert!(
+        !retained.reason.is_empty(),
+        "an entry with an empty reason is a flag, not an answer — the operator \
+         needs the cause, which is the difference between a redeploy and a \
+         data-loss incident"
+    );
+
+    // The baseline half: the healthy run must NOT be reported degraded.
+    assert!(
+        registry.unrecoverable().get(&healthy)?.is_none(),
+        "a run that recovered normally must not be reported unrecoverable — a \
+         stale degraded flag sends an operator to a redeploy for a healthy run"
+    );
+
+    Ok(())
+}

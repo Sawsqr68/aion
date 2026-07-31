@@ -8,6 +8,7 @@ use aion_core::{Event, RunId, WorkflowId, status_from_events};
 use crate::EngineError;
 
 use super::handle::{Residency, WorkflowHandle};
+use super::unrecoverable::UnrecoverableRuns;
 
 type RegistryKey = (WorkflowId, RunId);
 type HandleMap = HashMap<RegistryKey, WorkflowHandle>;
@@ -31,11 +32,19 @@ type LivePidIndex = HashMap<WorkflowId, (RunId, u64)>;
 ///
 /// `handles` is always locked before `index`; never the reverse. The
 /// read-only [`Registry::live_pid`] lookup locks `index` alone. This fixed
-/// order rules out lock-order inversion between the two mutexes.
+/// order rules out lock-order inversion between the two mutexes. The
+/// `unrecoverable` set is a third, independent mutex that is never held
+/// together with either.
 #[derive(Debug, Default)]
 pub struct Registry {
     handles: Mutex<HandleMap>,
     index: Mutex<LivePidIndex>,
+    /// Runs this process could not make resident (#117). Lives here because
+    /// residency is what the registry is about, and this is the negative half
+    /// of it: the runs that have no handle and never will under this build.
+    /// It carries its OWN mutex and is never locked while `handles` or `index`
+    /// is held, so it sits outside the ordering below rather than extending it.
+    unrecoverable: UnrecoverableRuns,
 }
 
 impl Registry {
@@ -218,6 +227,15 @@ impl Registry {
     ) -> Result<Option<(RunId, u64)>, EngineError> {
         let index = self.index()?;
         Ok(index.get(workflow_id).cloned())
+    }
+
+    /// The runs this process could not make resident, and why (#117).
+    ///
+    /// Exposed by reference rather than cloned: the set is the engine's single
+    /// live answer to "why is this run not running", and a caller holding a
+    /// stale copy is precisely the failure this exists to prevent.
+    pub fn unrecoverable(&self) -> &UnrecoverableRuns {
+        &self.unrecoverable
     }
 
     fn handles(&self) -> Result<MutexGuard<'_, HandleMap>, EngineError> {
