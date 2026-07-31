@@ -136,3 +136,54 @@ is not a compile gate.**
 
 I walked into a trap whose shape I had already written down. The control is what
 caught it — the reading did not.
+
+---
+
+## STATE AT 2026-07-31 ~11:25Z — resume from here
+
+**BUILT AND PUSHED.** `origin/main` carries the four-part fix at `2abcdd47`
+plus regression tests. Rig is DOWN, box quiet, free 78.9 GiB, Tom's `99844`
+alive and untouched (HTTP 200).
+
+### Done
+
+- All four parts built, `--all-features` clippy exit 0 on both crates.
+- `mod reachability_tests` in `heartbeat.rs` — **5 passed**. Pins part 4 at the
+  mechanism level, including the regression itself (an inbound frame must NOT
+  prove reachability) with a positive control beside it (an answered ping must),
+  so a tracker that reported everything unreachable could not pass.
+- Two scope corrections made and endorsed at Cally's seat: deadline at TWO push
+  sites not three (`push_dispatch` never abandons, so a deadline there would
+  regress 45-minute legs), and part 1's concurrency held at the existing one
+  rather than silently widened.
+
+### Owed, in order
+
+1. **#118 — main is RED under `--all-features`** (`NO_QUEUE_DECLARATION` on
+   `production_boot_dispatches_executes_and_records_over_liminal`, proven
+   pre-existing on a stashed clean tree). Cally's recommendation, with Waffles:
+   fix BEFORE the acceptance runs, because a known-red row puts an exception
+   clause on every gate reading. My lane unless reassigned.
+2. **Rig precondition** — `remote_gates.awl` needs a declared workspace bound
+   AND a between-run sweep before any acceptance run. Non-negotiable: the last
+   run took 37 GiB in 17 minutes and was killed on disk pressure.
+   **Tell Athena before it restarts so she can re-base P** (she is at
+   P₂ = 78.9 GiB, class "rig DOWN"). She has stated she cannot watch a
+   225 GiB/h term on any cadence she can sustain — so the bound is the
+   mechanism, not her.
+3. **Acceptance**: must (a) busy-past-ceiling in the DECLARED workload class
+   (45m legs, not a scaled-down stand-in); must (b) pump-alive/serve-loop-dead
+   worker seen to LOSE dispatch eligibility within the window. (b) does not need
+   a long leg — the condition is reproducible on demand now the mechanism is
+   known.
+4. **#119** — the gate trap, as a board battery-configuration question.
+
+### Still true and load-bearing
+
+- Every gate on `aion-worker` / `aion-server` uses `--all-features`. A plain
+  `-p aion-worker` gate is vacuous and returns green on unparsed source.
+- Debug profile only while `99844` lives; `lsof` before replacing any artifact
+  under a running process.
+- Shakedown #116 lands **RED-WITH-FINDINGS**. Condition (1) passes on
+  engineered grounds (refusal withdrawn); (2) moves whole into the post-fix
+  re-run; (3) and (4) were never reached.
