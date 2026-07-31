@@ -1,6 +1,39 @@
 # 🔴 BLOCK G — #122 connection pool — IN FLIGHT, UNCOMMITTED
 
-## 🚨 IF `crates/aion-store-libsql` LOOKS CLEAN, THE WORK IS STASHED, NOT LOST
+## ✅ RESTORED — the stash is popped and dropped, the work is in the tree
+
+The baseline A/B is finished. Verified after popping: `pool.rs` `928f8520…`,
+`connection.rs` `9a9e662f…`, `schedule_timer` on the **writer** (store.rs:507),
+`transaction_lock` gone (0 hits). The section below is kept for its findings,
+**not** as a live recipe — `stash@{0}` `91c637b8…` no longer exists.
+
+### 🔴 AND THE PINNED-BY-HASH RECIPE I COMMITTED DID NOT WORK EITHER
+
+```
+git stash pop 91c637b86a234a1631ee1bc34c7755283bc8699e
+  error: '91c637b8…' is not a stash reference
+```
+
+`git stash pop` takes a **stash ref**, not a commit. So the fix for "a label is
+not an identity" was a command I had never run — **the exact law committed
+twenty minutes earlier, broken while writing its own remedy.** Fourth time in
+this block that I have filed a rule and then supplied the counterexample.
+
+The form that actually works resolves hash → ref, then pops the ref:
+
+```
+PIN=<stash commit sha>
+REF=$(git stash list --format='%gd %H' | awk -v p="$PIN" '$2==p {print $1}')
+[ -n "$REF" ] || { echo "ABORT: pinned stash not present"; exit 1; }
+git stash pop "$REF"
+```
+
+⇒ **A CORRECTION IS AN UNTESTED CHANGE LIKE ANY OTHER.** Being the fix for a real
+defect grants it no presumption of working. `--check`-equivalents are owed to
+remedies most of all, because a broken remedy is reached for at exactly the
+moment nothing else is left.
+
+## 🚨 HISTORICAL — the stash-era recovery notes (recipe no longer live)
 
 A baseline A/B was run by stashing the implementation to reach a clean HEAD.
 Recovery, in order of preference:
