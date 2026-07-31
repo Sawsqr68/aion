@@ -31,9 +31,14 @@
 //! `tests/` is packaged, and a source file outside the crate root is not.
 //! The copies are therefore kept byte-identical and pinned that way by
 //! [`the_shared_gleam_support_copies_have_not_diverged`], which fails in every
-//! crate the moment one copy is edited alone. `aion-awl`'s own copy is
-//! deliberately NOT in that set: it carries emitter-specific wording and is
-//! owned by another lane.
+//! crate the moment one copy is edited alone.
+//!
+//! That pin checks the copies it was told about, so on its own it cannot see a
+//! copy nobody wrote down — the list it verifies is the same list it derives
+//! its expectation from. [`every_gleam_support_file_is_classified`] supplies
+//! the other half by enumerating the filesystem and requiring every `gleam.rs`
+//! it finds to be accounted for, so the three lists together are a statement
+//! about **every** copy that exists rather than only the intended ones.
 
 use std::error::Error;
 use std::fmt;
@@ -99,12 +104,52 @@ const GLEAM_SOURCE_ROOT: &str = "src";
 /// The copies of this file that must stay byte-identical, relative to the
 /// repository root. Every crate in this list compiles this same text, so the
 /// list is the same in every copy and the pin is symmetric.
+///
+/// 🔴 **This list is an expectation, not a census.** It cannot answer "how many
+/// copies exist" — a copy that is never written down is, to this list, not
+/// there. That is why [`discover_gleam_support_files`] enumerates the
+/// filesystem independently and
+/// `every_gleam_support_file_is_classified` requires every file it
+/// finds to appear in this list or in [`DIVERGENT_COPIES`] /
+/// [`SEPARATE_BY_DESIGN`]. A baseline derived from the thing it audits passes
+/// hardest when it is most wrong.
 const SHARED_COPIES: &[&str] = &[
     "crates/aion/tests/test_support/gleam.rs",
     "crates/aion-cli/tests/test_support/gleam.rs",
     "crates/aion-awl-package/tests/test_support/gleam.rs",
     "crates/aion-server/tests/test_support/gleam.rs",
 ];
+
+/// Copies that are **not** byte-identical to [`SHARED_COPIES`] and should be,
+/// each with the reason it has not converged yet.
+///
+/// An entry here is a debt, not a decision. It is deliberately a separate
+/// constant from [`SEPARATE_BY_DESIGN`] so that the *name* carries the status
+/// and a reader does not have to weigh prose to tell "known-wrong" from
+/// "correctly different".
+const DIVERGENT_COPIES: &[(&str, &str)] = &[(
+    "crates/aion-awl/tests/test_support/gleam.rs",
+    "The ANCESTOR this file was ported from at 8fb4c153 (#74). It never \
+     received the improvements made in transit — it still calls a rejected \
+     build an 'emitter defect' where the ported text says 'code defect', and \
+     it has no dependency-layer classification at all. Converging it is a real \
+     refactor, not a copy: it exposes `compile_project` with a different \
+     signature to `compile_whole_project` here, and 13 test files in that \
+     crate call it. Tracked separately; do not silently `cp` over it.",
+)];
+
+/// Files that share this file's name and purpose but are correctly a different
+/// artefact, each with the reason it is not a copy.
+const SEPARATE_BY_DESIGN: &[(&str, &str)] = &[(
+    "crates/aion-package/tests/test_support/gleam.rs",
+    "A deliberate crate-local gate, not a stale copy. It carries only the \
+     runtime skip and its announcement — no project runner, no build \
+     classification — because that is all `aion-package` needs, and it is the \
+     single definition included by all three of that crate's call sites, \
+     including the unit test inside `src/` which reaches it through a `#[path]` \
+     in `src/structure/mod.rs`. Converging it would import machinery the crate \
+     does not use.",
+)];
 
 /// Distinguishes the scratch projects the runner pins create, so parallel test
 /// binaries never share one directory.
@@ -609,5 +654,143 @@ fn the_shared_gleam_support_copies_have_not_diverged() -> Result<(), Box<dyn Err
         canonical.is_some(),
         "SHARED_COPIES must not be empty: an empty list would make this pin vacuous"
     );
+    Ok(())
+}
+
+// ---- census --------------------------------------------------------------
+
+/// The subtrees of each crate a copy of this gate can live in.
+///
+/// `tests/` is where every copy lives today. `src/` is searched too because
+/// #125 found a hand-rolled `gleam` gate inside `src/`, where a sweep over
+/// `tests/` could not see it: a search space that excludes a place the thing
+/// has actually been found is not a search space.
+const CRATE_SUBTREES_TO_SEARCH: &[&str] = &["src", "tests"];
+
+/// Collect every file named `name` beneath `directory`, recursively.
+///
+/// A missing directory is not an error — most crates have no `tests/` — but an
+/// unreadable one is, because a directory this walk cannot enter is a place a
+/// copy could hide while the census reported a clean result.
+fn collect_named_files(
+    directory: &Path,
+    name: &str,
+    found: &mut Vec<PathBuf>,
+) -> Result<(), Box<dyn Error>> {
+    if !directory.is_dir() {
+        return Ok(());
+    }
+    let entries = fs::read_dir(directory)
+        .map_err(|error| format!("could not read {}: {error}", directory.display()))?;
+    for entry in entries {
+        let path = entry?.path();
+        if path.is_dir() {
+            collect_named_files(&path, name, found)?;
+        } else if path.file_name().and_then(|file| file.to_str()) == Some(name) {
+            found.push(path);
+        }
+    }
+    Ok(())
+}
+
+/// Every file in the workspace named `gleam.rs`, as repository-relative paths
+/// with `/` separators, sorted.
+///
+/// This walks the filesystem and consults none of the classification lists, so
+/// it is a **census** rather than a restatement of an expectation. It is the
+/// only thing in this file capable of noticing a copy nobody wrote down.
+fn discover_gleam_support_files(root: &Path) -> Result<Vec<String>, Box<dyn Error>> {
+    let crates_root = root.join("crates");
+    let entries = fs::read_dir(&crates_root)
+        .map_err(|error| format!("could not read {}: {error}", crates_root.display()))?;
+    let mut found: Vec<PathBuf> = Vec::new();
+    for entry in entries {
+        let crate_directory = entry?.path();
+        if !crate_directory.is_dir() {
+            continue;
+        }
+        for subtree in CRATE_SUBTREES_TO_SEARCH {
+            collect_named_files(&crate_directory.join(subtree), "gleam.rs", &mut found)?;
+        }
+    }
+    let mut relative = Vec::with_capacity(found.len());
+    for path in found {
+        let suffix = path.strip_prefix(root).map_err(|_| {
+            format!(
+                "discovered {} outside the repository root {}",
+                path.display(),
+                root.display()
+            )
+        })?;
+        relative.push(
+            suffix
+                .components()
+                .map(|component| component.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("/"),
+        );
+    }
+    relative.sort();
+    Ok(relative)
+}
+
+/// Every copy of this gate that exists is accounted for by exactly one list.
+///
+/// [`the_shared_gleam_support_copies_have_not_diverged`] proves the copies in
+/// [`SHARED_COPIES`] are identical to one another. It cannot prove there are no
+/// others, because the list it checks is also the list it was derived from —
+/// delete a copy from `SHARED_COPIES` and the pin stops looking for it and
+/// still passes. This test supplies the missing half by enumerating the
+/// **population** and requiring the lists to account for it.
+///
+/// Both directions are asserted, and neither is derived from the other:
+///
+/// - **population → lists** catches a new copy that nobody wrote down, which is
+///   the failure the divergence pin is structurally blind to;
+/// - **lists → population** catches a listed path that has been moved, renamed
+///   or deleted, and is what keeps this test non-vacuous — a walk that found
+///   nothing at all fails it loudly instead of passing with an empty set.
+#[test]
+fn every_gleam_support_file_is_classified() -> Result<(), Box<dyn Error>> {
+    let root = repository_root();
+    let discovered = discover_gleam_support_files(&root)?;
+
+    for path in &discovered {
+        let listed_as = usize::from(SHARED_COPIES.contains(&path.as_str()))
+            + usize::from(
+                DIVERGENT_COPIES
+                    .iter()
+                    .any(|(listed, _)| *listed == path.as_str()),
+            )
+            + usize::from(
+                SEPARATE_BY_DESIGN
+                    .iter()
+                    .any(|(listed, _)| *listed == path.as_str()),
+            );
+        assert!(
+            listed_as == 1,
+            "{path} is classified by {listed_as} of the three lists, and must be classified by \
+             exactly one. A new copy of this gate is not covered by any pin until it is written \
+             down: put it in SHARED_COPIES if it must stay byte-identical, in DIVERGENT_COPIES if \
+             it has drifted and should converge, or in SEPARATE_BY_DESIGN with the reason it is \
+             correctly a different artefact."
+        );
+    }
+
+    for listed in SHARED_COPIES
+        .iter()
+        .copied()
+        .chain(DIVERGENT_COPIES.iter().map(|(path, _)| *path))
+        .chain(SEPARATE_BY_DESIGN.iter().map(|(path, _)| *path))
+    {
+        assert!(
+            discovered.iter().any(|path| path == listed),
+            "{listed} is listed but the census did not find it. Either the file moved and the \
+             list is stale, or the census cannot see where it now lives — and a census that \
+             cannot see a copy it was told about cannot be trusted about the ones it was not. \
+             The walk covers {CRATE_SUBTREES_TO_SEARCH:?} under each directory in crates/, and \
+             found: {discovered:?}"
+        );
+    }
     Ok(())
 }
