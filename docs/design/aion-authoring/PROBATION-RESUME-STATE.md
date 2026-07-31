@@ -236,30 +236,60 @@ battery, and neither should be quoted as one.** What would settle it is one
 clean full-battery run measured with `du -h -d 1` — cheap, and not tonight.
 
 
-## 🔴 The two resolutions are NOT nested — measured, per target
+## 🔴 The two resolutions are NOT nested — 4 distinct tests each way
 
-Block A ran 3902 tests and Block B ran 3889 on the same 240 targets. The
-13-test gap is not noise and not a truncation; it is two disjoint sets, and
-each gate runs tests the other cannot:
+Block A ran 3902 tests and Block B 3889 on the same 240 targets. The 13-test
+gap is real but it is a gap in EXECUTIONS, not in coverage. Resolved from the
+test NAMES in both logs, not from counting `#[test]` attributes:
 
 ```
-ONLY under DEFAULT features (18 tests)     ONLY under --all-features (5)
-  deploy_commands.rs          8 -> 0         run_server_outbox_e2e   0 -> 4
-  deploy_audit_log.rs         8 -> 0         unittests            2666 -> 2667
-  deploy_api_e2e.rs          14 -> 13
-  worker_dispatch_delivery.rs 8 -> 7
+DISTINCT test functions that run ONLY under DEFAULT features   = 4
+  deploy_commands.rs        deploy_subcommands_drive_a_live_server
+  deploy_audit_log.rs       deploy_mutations_emit_structured_audit_lines
+  deploy_api_e2e.rs         deploy_metrics_count_operations_and_denials
+  worker_dispatch_delivery  denied_registration_fails_rpc_without_frames
+
+DISTINCT test functions that run ONLY under --all-features     = 4
+  run_server_outbox_e2e     run_server_child_process
+                            run_server_outbox_happy_path_fan_out_completes_once
+                            run_server_outbox_live_reconciliation_rearms_stranded_claims_once
+                            run_server_outbox_restart_rearms_stranded_rows
 ```
 
-**Deliberate, documented, and correct.** Those suites carry
-`#![cfg(not(feature = "auth"))]` with the reason on the file: they depend on
-dev-token mode, where `jwks_url` is a shared secret. With `auth` compiled in,
-`jwks_url` is a real JWKS endpoint the server fetches at boot, so the shared
-secret is not a valid URL and boot would fail before any deploy mechanic runs.
-The five that only appear under `--all-features` are the outbox tests fixed in
-`2460103d`, which only compile there.
+The four default-only tests carry `#![cfg(not(feature = "auth"))]`, documented
+at the file: they need dev-token mode, where `jwks_url` is a shared secret.
+With `auth` compiled in it is a real JWKS endpoint fetched at boot, so boot
+fails before any deploy mechanic runs. The four all-features-only tests are the
+outbox suite fixed in `2460103d`, which only compiles there.
 
-★ **This is the justification for the house battery having BOTH gates, and it
-is now measured rather than asserted.** Neither resolution is a superset of the
-other, so a green run of either is not evidence about the other — the same
-principle as #120 one level up: **a passing count only covers the targets that
-ran, under the features they ran with.**
+### 🔴 The other 14 of the "18" were an artifact of my own counting
+
+`#[path = "test_support/gleam.rs"] mod gleam_test_support;` pulls a SEVEN-test
+module into every including target, and integration targets do not set
+`cfg(test)`, so those seven compile and RUN once per including target:
+
+```
+under DEFAULT       49 targets include it   335 executions
+under --all-features 47 targets include it   321 executions
+```
+
+When `deploy_commands` and `deploy_audit_log` vanish under `auth`, they take
+their COPIES of those seven with them — but the same seven functions still run
+in 47 other targets. **They are not default-only in any coverage sense.** My
+first reading of the diff called it "18 tests only under default"; the honest
+figure is **4**, and the asymmetry is 4-vs-4, not 18-vs-5.
+
+★ **3889 is a count of test EXECUTIONS, not of distinct tests.** For "did
+anything break" that is the right noun. For "how much is covered" it is not —
+**a measurement is a pair (VALUE, NOUN)**, and a per-target diff answers the
+first question while looking like it answers the second.
+
+The duplication is deliberate and guarded: `test_support/gleam.rs` carries
+`the_shared_gleam_support_copies_have_not_diverged`, because the module is
+copied across crates. Worth knowing before anyone "fixes" it — though 335
+executions to check six copies is a ratio nobody chose on purpose.
+
+★ **The load-bearing claim survives unchanged: neither resolution is a superset
+of the other, so a green run of either is not evidence about the other.** That
+is why the house battery runs both gates — now measured at the level of
+distinct test functions rather than asserted from a count.
