@@ -156,6 +156,26 @@ inside a single store. Nothing exercises many tasks against ONE connection, whic
 is what every `Arc<LibSqlStore>` actually is. Same class as #119: a green about a
 different program.
 
+## Exposure — measured, because severity should not be assumed either
+
+**libSQL is not the default backend, and that bounds this.** The default is
+haematite (`crates/aion-server/src/config/sections.rs:646`). libSQL is selected
+when — and only when — a store URL is given: both `--store-url`
+(`config/load.rs:356-370`) and `AION_STORE_URL` (`config/env.rs:35-48`) coerce an
+implicit `Memory` or `Haematite` backend to `LibSql`, on the stated reasoning that
+haematite ignores `store.url` so a URL can only mean libSQL. An operator who
+writes `backend = "libsql"` lands there directly.
+
+So the exposed population is: every deployment naming a store URL, and the whole
+outbox/durability test suite, which runs on libSQL throughout.
+
+**The haematite backend does not have this shape** — checked, not assumed.
+`HaematiteStore` (`crates/aion-store-haematite/src/store.rs:194-212`) holds an
+`Arc<haematite::EventStore>` and nothing connection-scoped; there is no
+transaction mode living on a shared handle, and its only lock (`owned_shards`,
+an `RwLock`) guards shard enumeration, not statement issue. Whatever else is true
+of it, the defect described here is libSQL-specific.
+
 ## The fix is a decision, not a patch
 
 Two coherent answers; a third that only looks like one.
