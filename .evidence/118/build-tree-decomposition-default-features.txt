@@ -1,0 +1,32 @@
+# aion build-tree decomposition — cargo test --workspace (DEFAULT features)
+# taken_at_utc: 2026-07-31T13:30:47Z   (read from `date -u`, not authored)
+# taken DURING the run, in its test-execution phase: rustc absent, size flat.
+# baseline for this block: free 90.36 GiB, target/debug ~0, 13:19:23Z (Athena's hand)
+# host: Darwin 25.3.0 arm64   rustc: rustc 1.97.1 (8bab26f4f 2026-07-14)
+
+## phase check at time of read
+cargo procs: 1   rustc procs: 0
+free (df -g /Users/tom): 67 GiB
+
+## top-level
+ 23G	target/debug
+ 18G	target/debug/deps
+4.2G	target/debug/incremental
+221M	target/debug/build
+
+## linked test EXECUTABLES in deps (the --all-targets multiplier)
+count=249  total=10.18 GiB  mean=41.9 MB
+largest 10:
+     223.2 MB  target/debug/deps/aion_server-3747dc4edf7dd042
+     218.5 MB  target/debug/deps/aion-451da06d8d29a23d
+     176.6 MB  target/debug/deps/outbox_transport_e2e-fe7f396078a3bdcf
+     174.6 MB  target/debug/deps/graceful_shutdown_park_e2e-0cd5521a45b10b38
+     152.8 MB  target/debug/deps/deploy_restart_e2e-2c273c6e3174c0f6
+     137.6 MB  target/debug/deps/deploy_api_e2e-dbeca9efb029eb61
+     134.3 MB  target/debug/deps/dev_ui_e2e-1a054e4718a5abd0
+     125.8 MB  target/debug/deps/websocket_resume-0c3f53db7cb0d111
+     118.8 MB  target/debug/deps/authoring_out_of_box_e2e-5071ecfbf0ae5a68
+     117.7 MB  target/debug/deps/deploy_audit_log-2fc83baf552fb1e3
+
+## rlibs in deps
+count=500  total=2.11 GiB
