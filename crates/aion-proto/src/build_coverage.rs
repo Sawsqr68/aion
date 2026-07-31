@@ -46,8 +46,11 @@
 //! `posture:proto-*` gates in `scripts/battery.sh` assert that the
 //! posture-appropriate name appeared and its opposite did not; they are also
 //! the real anchor for the negative arm, which claims little on its own. A
-//! FILTERED run skips the announcer entirely — a limit no in-suite mechanism
-//! can close, and the battery gates never filter.
+//! FILTERED ad-hoc run skips the announcer entirely — a limit no in-suite
+//! mechanism can close, and one the battery gates do not close either: they
+//! filter *to* `build_coverage::` so the announcer is the only thing they run.
+//! They prove the arms track the posture; they cannot make someone else's
+//! narrow filter announce anything.
 
 #[cfg(not(feature = "generated"))]
 #[test]
@@ -55,13 +58,19 @@ fn generated_stubs_absent_from_this_build_so_no_contract_was_checked_against_the
     // Deliberately passes. The announcement IS the name: a green here means the
     // hand-written contracts were compiled, not that they agree with the wire.
     //
-    // Weak self-anchor, for the case where someone deletes the `cfg` above; the
-    // real anchor is `posture:proto-default` in scripts/battery.sh.
-    assert!(
-        !cfg!(feature = "generated"),
-        "this arm claims the generated stubs are absent, but the feature is ON — \
-         the announcement would be lying about the build it ran in"
-    );
+    // Self-anchor for the case where someone deletes the `cfg` above. It is a
+    // `const` block because `cfg!` is a compile-time constant: a runtime
+    // `assert!` here would be constant-folded into nothing — a vacuous assertion
+    // inside a module built to stop vacuous greens. In const context the same
+    // claim fails the BUILD instead. Weak by design either way; the real anchor
+    // is `posture:proto-default` in scripts/battery.sh.
+    const {
+        assert!(
+            !cfg!(feature = "generated"),
+            "this arm claims the generated stubs are absent, but the feature is ON — \
+             the announcement would be lying about the build it ran in"
+        );
+    }
 }
 
 /// The counterpart, and it must not be able to pass vacuously: it names the

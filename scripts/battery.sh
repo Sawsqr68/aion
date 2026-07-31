@@ -190,11 +190,11 @@ posture_control() {
 
 gate "posture:worker-default" posture_control "aion-worker, default features" \
   liminal_transport_absent_from_this_build \
-  liminal_transport_compiled_into_this_build \
+  liminal_transport_compiled_here \
   cargo test -p aion-worker --lib build_coverage::
 
 gate "posture:worker-liminal" posture_control "aion-worker, liminal-transport on" \
-  liminal_transport_compiled_into_this_build \
+  liminal_transport_compiled_here \
   liminal_transport_absent_from_this_build \
   cargo test -p aion-worker --lib --features liminal-transport build_coverage::
 
