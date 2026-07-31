@@ -1,6 +1,6 @@
 # Seat state — 2026-07-31, evening block
 
-Written to survive a compaction. `origin/main` = **`7c9a2329`**, everything
+Written to survive a compaction. `origin/main` = **`81c92490`**, everything
 pushed, nothing in flight, box idle.
 
 ## Landed this session
@@ -10,6 +10,10 @@ pushed, nothing in flight, box idle.
 | `07ff0ec0` | #119 — a vacuous green announces its own vacuity; **the announcement was itself vacuous twice** |
 | `5b9d5d39` | #119 docs — landing hash + #76 cross-reference |
 | `7c9a2329` | #117 (b) — a run that can never become resident can now SAY so |
+| `ecbf59ea` | #117 — Waffles' five binding requirements pinned verbatim |
+| `4b6f01fe` | #120 — the obvious truncation control is wrong, cause confirmed |
+| `476e5372` | #117 (5) pinning test — **and the guard it names has NO coverage** |
+| `81c92490` | **#120 CLOSED** — the battery now checks a run reached the end |
 
 Detail lives in `GATE-TRAP-119-STATE.md` and
 `DEGRADED-RUN-QUERYABLE-117B-STATE.md`. Both are landed records, not plans.
@@ -186,3 +190,60 @@ caught a control that reasoning alone would have shipped broken.
 - **A monitor with no liveness channel and a healthy one are indistinguishable
   from inside** — the cure must be a property of the artifact, not something the
   monitor volunteers.
+
+
+## 🔴 #121 — the finding that outranks the lane that produced it
+
+`engine/startup.rs::repopulate_active_workflows` has two adjacent guards. Both
+look masked by `list_active`'s `== Running` filter. **They have opposite
+coverage, measured:**
+
+```
+if false && projected_status.is_terminal()          -> EXIT 0,   nothing notices
+if false && projected_status == WorkflowStatus::Paused -> EXIT 101, one test fails
+                                    (outbox_happy_path_completes_with_n_terminals_in_order)
+```
+
+The terminal guard — the second defence behind Waffles' requirement (5) — can be
+deleted today and the entire `aion-rs` suite stays green.
+
+**And the Paused result refuted my own explanation.** I had written that
+`list_active` masks the region so nothing *can* reach it. That predicted the same
+zero coverage for Paused. Wrong. The region IS reachable from the existing suite,
+so the terminal guard is **reachable-but-untested**, not
+unreachable-by-construction. Masking was an excuse, and it would have converted a
+real hole into an inevitability that nobody re-measures.
+
+**Next step, cheapest first:** trace what reaches the Paused guard (start from
+`outbox_happy_path_completes_with_n_terminals_in_order`) and see whether the same
+path can carry a terminal run — that would avoid the adversarial-`EventStore`
+boilerplate entirely.
+
+## Block discipline — two corrections from Athena, both adopted
+
+- **A block closes at BOX IDLE, not when I feel done.** I closed Block E at
+  "15:05, delta ≈0" while two more commits landed under her GO through 15:22
+  (real delta +1.39). Her window is GO → idle and that is the one that counts.
+  Third sub-window error; the first that misdescribed what she was answerable
+  for rather than merely what I banked.
+- **Declare the mutation class.** For ~11 min the tree carried a deliberately
+  disabled safety guard while she reasoned about a tree that did not exist. One
+  line in the declaration: *"this block mutates source to probe coverage and
+  reverts."*
+
+## The unifying statement (Athena's, and it covers all of tonight)
+
+**A channel with no delivery confirmation reports success and absence
+identically.** Her sampler could only say "armed". Waffles' ruling could only say
+"issued" (and died between compactions — *a ruling not in the builder's hands
+isn't issued*). The battery comment could only say "read the target list". My
+`#[cfg]` arms could only say "this build has the feature". Each was
+indistinguishable from working until someone measured the **artifact** instead of
+reading the **report**.
+
+## Unattributed working-tree entries
+
+`.aion-jjuabk-snapshot-20260731/` and `.aion-accepted-binary-20260731/` were both
+already untracked at 14:15:44Z, my first `git status` after resuming. Not
+knowingly created by me, not touched, **not deletable on my say-so** — a
+pre-compaction version of me cannot be ruled out. Treat as unattributed.
