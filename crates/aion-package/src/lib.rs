@@ -20,6 +20,8 @@
 pub mod admission;
 /// Compiled BEAM module records extracted from packages.
 pub mod beam;
+/// Which `serde_json::Map` representation this build resolved, announced.
+mod build_coverage;
 /// Archive builder utilities for tests and packaging tools.
 pub mod builder;
 /// Canonical JSON text encoding for emitted artifacts.

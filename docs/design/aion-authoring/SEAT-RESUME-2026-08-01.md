@@ -62,7 +62,7 @@ Cally carries the dependency in Tom's digest.
 | **#88** | still needs its (a)/(b) ruling — the floor I tried was not option-independent, reverted at `9ccee6f9` |
 | **#85** | open investigation; `sqlite3_errmsg` connection-level-state lead REFUTED, cause unidentified; evidence in `evidence/85-outbox-flake/` |
 | **#71** | GitHub Actions is DISABLED on the repo — a decision for Tom, not a build |
-| **#76** | a behaviour-changing dependency feature can arrive with no diff and nothing detects it — same family as everything below, unbuilt |
+| ~~**#76**~~ | ✅ CLOSED — three named gates + a behavioural posture probe. See `PRESERVE-ORDER-GATE-76.md`. The inverted control is the lane: with `sorted_entries` mutated to not sort, the per-crate run was **0 failed, exit 0** and the `preserve_order` run was **11 failed**. |
 | **#7 / #77 / #82** | Tom's standing lanes: AWL properly, tharsis, the NIF-state P0 |
 
 ## 🔬 Method laws earned tonight — these are the durable part

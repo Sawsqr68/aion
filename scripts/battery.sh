@@ -274,6 +274,69 @@ gate "posture:proto-generated" posture_control "aion-proto, generated on" \
   generated_stubs_absent_from_this_build \
   cargo test -p aion-proto --lib --features generated build_coverage::
 
+# --- serde_json Map-ordering posture (#76) -------------------------------------
+#
+# `serde_json/preserve_order` swaps `Map` from a key-sorted `BTreeMap` to an
+# insertion-ordered `IndexMap`. Emitters here WALK a `Map` to build generated
+# record field order, decoder field sequence, and the MIR literal pool — program
+# structure, not layout — so the swap changes a compiled package's bytes and
+# therefore its content hash.
+#
+# 🔴 NO CRATE IN THIS WORKSPACE ASKS FOR IT. Measured, and it is what makes this
+# structural rather than a one-off:
+#
+#   $ grep -rn 'preserve_order' --include=Cargo.toml .
+#   (no matches)
+#
+# It arrives entirely by cargo feature unification from
+# `agent-client-protocol-schema`, which means it can turn on with NO DIFF IN THIS
+# REPOSITORY AT ALL — a dependency bump anywhere in the tree flips it and our
+# change is a lockfile line. It has already cost two red goldens once, when the
+# same `.awl` source compiled to a different package version depending on an
+# unrelated crate sharing the build.
+#
+# 🔴 WHY THE EXISTING COVERAGE IS AN ACCIDENT, NOT A GATE. The ON case does run
+# today — `rust:test-all-features` above resolves it ON, and `-p <crate>` leaves
+# it OFF. That disagreement is the ONLY reason the incident was caught. But
+# nothing states that both resolutions are required, so the detection evaporates
+# the day the acp crate stops being a workspace member, or the day someone reads
+# a per-crate green and stops. These gates give it a name.
+#
+# 🔴 AND UNDER `OFF`, EVERY `*_independent_of_insertion_order` TEST IS VACUOUS.
+# `Map` is a `BTreeMap`, so a fixture built `alpha, beta, gamma` and one built
+# `gamma, beta, alpha` are not two objects — they are the same object, and
+# asserting they serialize alike compares a value with itself. Those tests read
+# identically whether they prove something or nothing, which is why the ON run
+# has to be pinned by name rather than left to resolution.
+#
+# The posture is detected by BEHAVIOUR, not by a `cfg`. A crate can only `cfg` on
+# its own features, so a forwarding `preserve-order` feature would report `false`
+# while the feature was ON in the unification case — a label that lies in exactly
+# the situation it exists to detect. See crates/aion-package/src/build_coverage.rs.
+#
+# `-- --nocapture` is load-bearing: a cfg-selected announcement is printed as a
+# test NAME whether or not output is captured, but a runtime-detected one is
+# printed by the running test and cargo swallows it otherwise.
+#
+# `-p aion-package` ALONE is also load-bearing, for the reason the proto posture
+# gates already carry: the resolution depends on which packages are named, so a
+# run that names a neighbour is measuring a different program.
+
+gate "posture:serde-json-sorted" posture_control "aion-package ALONE, default features" \
+  "SERDE_JSON_MAP=key_sorted" \
+  "SERDE_JSON_MAP=insertion_ordered" \
+  cargo test -p aion-package --lib build_coverage:: -- --nocapture
+
+gate "posture:serde-json-insertion" posture_control "aion-package, preserve_order forced ON" \
+  "SERDE_JSON_MAP=insertion_ordered" \
+  "SERDE_JSON_MAP=key_sorted" \
+  cargo test -p aion-package --features serde_json/preserve_order --lib build_coverage:: -- --nocapture
+
+# The claim itself, under the resolution where it is not vacuous: every
+# ordering-sensitive pin in the two crates that walk `Map`s for structure.
+gate "rust:preserve-order-pins" paired_test \
+  cargo test -p aion-package -p aion-awl --features serde_json/preserve_order --no-fail-fast
+
 # --- Ops console --------------------------------------------------------------
 
 if require_tool bun "The ops console is a separate bun project; without it the console's typecheck and tests cannot run."; then
