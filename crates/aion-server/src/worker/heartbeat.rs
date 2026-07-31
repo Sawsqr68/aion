@@ -104,7 +104,53 @@ struct HeartbeatState {
     /// the ping proves "the exact path a dispatch would take, not a parallel
     /// one that could be healthy while the real one is not" — and the pump
     /// feeding the same lease was exactly that parallel channel.
-    reachability: HashMap<WorkerId, Instant>,
+    reachability: HashMap<WorkerId, Reachability>,
+}
+
+/// How many CONSECUTIVE answered pings re-admit a worker to dispatch.
+///
+/// A connection is a channel to prove reachability ON, never proof of it: the
+/// registration handshake's ack is SENT by the server, and a sent ack is not a
+/// received one — exactly the inference this whole lane exists to stop making.
+/// So eligibility is earned by measurement, on every connection including the
+/// first, and a redial re-seeds the measurement OPPORTUNITY rather than the
+/// verdict.
+///
+/// Why two and not one: one success re-admits a link that answered once by luck
+/// — a race, a buffer that happened to drain — so a link answering one probe in
+/// three would flap in and out of eligibility indefinitely, which is the defect
+/// this constant exists to remove rather than slow down. Two consecutive
+/// successes is the smallest number that distinguishes "answered" from
+/// "answering".
+///
+/// Why not three or more: the cost is paid on EVERY connect, in probe cadences.
+/// At the probe's cadence a fresh worker is undispatchable for `K` cadences
+/// while its first dispatches park, and that latency is charged to every honest
+/// worker to catch a dishonest one. Two buys the discrimination; three buys
+/// only delay.
+const DISPATCH_PROBATION_PINGS: u32 = 2;
+
+/// A worker's dispatch-path standing: how many consecutive pings it has
+/// answered, and when the most recent one landed.
+///
+/// `proved_at` is `None` until the probation is served, so a worker on
+/// probation is not merely stale — it has no proof at all, which is the honest
+/// description of a connection nothing has been measured on yet.
+#[derive(Clone, Copy, Debug, Default)]
+struct Reachability {
+    consecutive_answers: u32,
+    proved_at: Option<Instant>,
+}
+
+impl Reachability {
+    /// Whether the probation is served and the proof is still inside `window`.
+    fn is_proved(self, now: Instant, window: Duration) -> bool {
+        self.consecutive_answers >= DISPATCH_PROBATION_PINGS
+            && self.proved_at.is_some_and(|proved_at| {
+                now.checked_duration_since(proved_at)
+                    .is_none_or(|elapsed| elapsed <= window)
+            })
+    }
 }
 
 /// Per-task liveness tracker for remote-worker streams.
@@ -126,14 +172,22 @@ impl HeartbeatTracker {
         }
     }
 
-    /// Start the connection-level lease for a newly registered worker, and seed
-    /// its dispatch reachability.
+    /// Start the connection-level lease for a newly registered worker, and open
+    /// its dispatch probation.
     ///
-    /// Both facts start true, and legitimately: the registration handshake is
-    /// itself a completed server-to-worker round trip, so at `now` the server
-    /// has just proved it can reach this worker. Seeding reachability here is
-    /// what keeps a freshly registered worker dispatchable during the interval
-    /// before its first ping lands.
+    /// The connection lease starts fresh — the worker's process is plainly
+    /// alive, it just registered. Dispatch reachability does NOT: a new
+    /// connection is a channel to prove reachability on, not proof of it.
+    ///
+    /// This deliberately reverses an earlier reading of mine, that the
+    /// registration handshake is "itself a completed server-to-worker round
+    /// trip". The ack is SENT by the server; nothing reports that it was
+    /// RECEIVED. Treating a send as a delivery is the same inference this lane
+    /// exists to stop making, and left unfixed it meant a worker the server
+    /// could never reach would re-seed itself on every redial and cycle in and
+    /// out of eligibility forever instead of settling out.
+    ///
+    /// See [`DISPATCH_PROBATION_PINGS`].
     ///
     /// # Errors
     ///
@@ -145,7 +199,10 @@ impl HeartbeatTracker {
     ) -> Result<(), ServerError> {
         let mut state = self.state()?;
         state.connections.insert(worker_id, now);
-        state.reachability.insert(worker_id, now);
+        // A fresh, UNSERVED probation: zero answers, no proof. Inserted rather
+        // than left absent so the worker is carried by `unreachable_workers`
+        // and is therefore explicitly excluded, not merely unknown.
+        state.reachability.insert(worker_id, Reachability::default());
         Ok(())
     }
 
@@ -180,7 +237,9 @@ impl HeartbeatTracker {
     /// ANSWERED liveness ping, and nothing else.
     ///
     /// Advances both facts, because an answered ping proves both: the worker
-    /// received a server push (reachability) and replied to it (alive).
+    /// received a server push (reachability) and replied to it (alive). It also
+    /// serves one ping of the dispatch probation; eligibility returns once
+    /// [`DISPATCH_PROBATION_PINGS`] consecutive answers have landed.
     ///
     /// Returns `false` if the worker has already been removed from lease
     /// tracking; a pong racing a reap must not resurrect it.
@@ -198,12 +257,38 @@ impl HeartbeatTracker {
             return Ok(false);
         };
         *last_activity = now;
-        state.reachability.insert(worker_id, now);
+        let standing = state.reachability.entry(worker_id).or_default();
+        standing.consecutive_answers = standing.consecutive_answers.saturating_add(1);
+        standing.proved_at = Some(now);
+        Ok(true)
+    }
+
+    /// Record that a liveness ping went UNANSWERED: the probation restarts.
+    ///
+    /// This is what makes the probation consecutive rather than cumulative. A
+    /// link answering one probe in three would otherwise accumulate its way to
+    /// eligibility and keep it, which is the flapping this design removes.
+    ///
+    /// Returns `false` if the worker has already been removed from lease
+    /// tracking.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if tracker state cannot be trusted.
+    pub fn record_dispatch_unreachable(&self, worker_id: WorkerId) -> Result<bool, ServerError> {
+        let mut state = self.state()?;
+        if !state.connections.contains_key(&worker_id) {
+            return Ok(false);
+        }
+        let standing = state.reachability.entry(worker_id).or_default();
+        standing.consecutive_answers = 0;
+        standing.proved_at = None;
         Ok(true)
     }
 
     /// Whether the server has proved, within the heartbeat window, that it can
-    /// reach this worker's dispatch path.
+    /// reach this worker's dispatch path — probation served AND the proof still
+    /// fresh.
     ///
     /// An untracked worker is not reachable: absence of proof is not proof.
     ///
@@ -216,10 +301,10 @@ impl HeartbeatTracker {
         now: Instant,
     ) -> Result<bool, ServerError> {
         let state = self.state()?;
-        Ok(state.reachability.get(&worker_id).is_some_and(|proved_at| {
-            now.checked_duration_since(*proved_at)
-                .is_none_or(|elapsed| elapsed <= self.heartbeat_window)
-        }))
+        Ok(state
+            .reachability
+            .get(&worker_id)
+            .is_some_and(|standing| standing.is_proved(now, self.heartbeat_window)))
     }
 
     /// Every tracked worker the server has NOT been able to reach within the
@@ -233,10 +318,7 @@ impl HeartbeatTracker {
         let mut workers = state
             .reachability
             .iter()
-            .filter(|(_, proved_at)| {
-                now.checked_duration_since(**proved_at)
-                    .is_some_and(|elapsed| elapsed > self.heartbeat_window)
-            })
+            .filter(|(_, standing)| !standing.is_proved(now, self.heartbeat_window))
             .map(|(worker_id, _)| *worker_id)
             .collect::<Vec<_>>();
         workers.sort_unstable();
