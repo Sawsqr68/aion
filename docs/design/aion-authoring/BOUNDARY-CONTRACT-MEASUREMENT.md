@@ -362,13 +362,16 @@ is genuinely new and not a second copy of what was already there.
 
 # 🔴 RESUME HERE — 2026-07-31 ~05:45Z
 
-`origin/main` = **`4d9ca3b0`** — `fix(deploy): a contract the engine cannot
-enforce may not reach a server`. Working tree clean apart from pre-existing
+`origin/main` = **`29a2d8ad`**. Working tree clean apart from pre-existing
 untracked `RELEASE-0.9.2.md`.
 
 Done today: #110 (`46bbdced`), #95 closed by measurement, #97-A verified as
 built-by-another-lane, the `aion-server` debt discharged, the AWL signal→contract
-supply line gated (`73c6ed50`), and #106's second half built (`4d9ca3b0`).
+supply line gated (`73c6ed50`), #106's second half built (`4d9ca3b0`), #75
+closed (`e866f723` — the compile proof no longer leaves a Gleam build tree in
+the system temp directory on every run), and #83 measured and DESIGNED but
+deliberately not built (`29a2d8ad`, see `AWLFAILED-CARRIES-NOTHING.md`: it
+changes a durable wire family and cannot be gated under the freeze).
 
 **🔴 TWO ITEMS OWED, HELD BY RULING. Do not run them without a NAMED GO from
 Cally.** The estate rule, minted today: a heavy-class says-before executes only
