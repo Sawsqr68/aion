@@ -255,6 +255,19 @@ struct RegistryState {
     /// of "compatible" is node-specific: a worker still serving the activity on
     /// another node must never make a pinned address look freshly served.
     last_departure: HashMap<ActivityKey, BTreeMap<Option<String>, Instant>>,
+    /// Workers the server currently cannot reach on the server-to-worker push
+    /// leg, and which are therefore excluded from selection while they remain
+    /// so.
+    ///
+    /// Held here rather than derived at selection time because selection must
+    /// not take the heartbeat tracker's lock: the liveness probe owns the
+    /// evidence and publishes the verdict, and selection only reads it.
+    ///
+    /// This is exclusion from DISPATCH, not deregistration. An unreachable
+    /// worker stays registered, keeps its in-flight work, and becomes eligible
+    /// again the moment a ping is answered — nothing about it is torn down on
+    /// the strength of a push failure.
+    dispatch_ineligible: BTreeSet<WorkerId>,
 }
 
 impl Default for RegistryState {
@@ -265,6 +278,7 @@ impl Default for RegistryState {
             by_activity: HashMap::new(),
             rotation: HashMap::new(),
             last_departure: HashMap::new(),
+            dispatch_ineligible: BTreeSet::new(),
         }
     }
 }
@@ -896,9 +910,45 @@ impl ConnectedWorkerRegistry {
             workers
                 .values()
                 .filter(|worker| worker_matches_node(worker, node))
+                // Reachability is a dispatch PRECONDITION, so it is enforced
+                // here rather than discovered at push time. Selecting a worker
+                // the server cannot push to produces a dispatch that can only
+                // fail, and on the liminal transport it fails by consuming
+                // connection capacity — so an unreachable worker chosen anyway
+                // makes its own unreachability worse.
+                .filter(|worker| !state.dispatch_ineligible.contains(&worker.id))
                 .min_by_key(|worker| worker.id)
                 .cloned()
         }))
+    }
+
+    /// Publish the liveness probe's reachability verdict: the set of workers the
+    /// server cannot currently reach on the push leg, which
+    /// [`Self::select_worker`] then skips.
+    ///
+    /// Replaces the whole set rather than toggling one worker, so the published
+    /// verdict is always exactly one round's evidence and a worker can never be
+    /// left excluded by a stale entry nobody cleared.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if the registry lock is poisoned.
+    pub fn set_dispatch_ineligible(
+        &self,
+        unreachable: BTreeSet<WorkerId>,
+    ) -> Result<(), ServerError> {
+        self.state()?.dispatch_ineligible = unreachable;
+        Ok(())
+    }
+
+    /// Whether a worker is currently excluded from dispatch selection for
+    /// unreachability.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if the registry lock is poisoned.
+    pub fn is_dispatch_ineligible(&self, worker_id: WorkerId) -> Result<bool, ServerError> {
+        Ok(self.state()?.dispatch_ineligible.contains(&worker_id))
     }
 
     /// Census the live fleet for one dispatch address (R1).

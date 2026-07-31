@@ -318,6 +318,16 @@ impl std::fmt::Debug for AgentHarnessConfig {
 pub struct LiminalActivityWorker {
     client: PushClient,
     registry: Arc<ActivityRegistry>,
+    /// Execution permits for plain typed-registry dispatches, which now run off
+    /// the serve loop ([`Self::spawn_plain_dispatch`]).
+    ///
+    /// Holds exactly ONE permit, so plain activities still execute strictly one
+    /// at a time — identical to when they ran inline on the serve loop. This is
+    /// not a new limit; it is the existing one made explicit once the execution
+    /// stopped being what enforced it. Widening it is a configuration decision
+    /// about how much work one worker may do at once, and it has teeth: the
+    /// dispatches that would newly overlap are whole `cargo` builds.
+    plain_dispatch_slots: Arc<tokio::sync::Semaphore>,
     /// The attempt back-index a pushed intervention is routed through (NOI-6). A
     /// pushed [`InterventionRequest`] is delivered to the live session owning its
     /// target `(workflow, activity, attempt)`; a command with no live owner is the
@@ -455,6 +465,9 @@ impl LiminalActivityWorker {
         Ok(Self {
             client,
             registry,
+            // Exactly one, preserving the concurrency plain dispatches already
+            // had when they executed inline on the serve loop.
+            plain_dispatch_slots: Arc::new(tokio::sync::Semaphore::new(1)),
             control: ControlRegistry::new(),
             agent_harness: None,
             agent_activity_types: BTreeSet::new(),
@@ -736,20 +749,100 @@ impl LiminalActivityWorker {
             agent_types = ?self.agent_activity_types,
             "received dispatch push"
         );
-        // An AGENT dispatch may run for a long time. It MUST NOT block the serve loop,
-        // or a mid-run intervention push (which rides the SAME channel) could never be
-        // received. So it is SPAWNED: the run drives concurrently and replies its own
-        // correlated DispatchResponse when it finishes, while the serve loop returns to
-        // receive interventions. A plain activity runs inline (short, no live session).
+        // NO dispatch may block the serve loop. Anything that runs on this task
+        // stops the worker receiving the frames that share this channel — a
+        // mid-run intervention push, and the server's liveness ping.
+        //
+        // This was once true of agent dispatches only, on the reasoning that "a
+        // plain activity runs inline (short, no live session)". That is false:
+        // `remote_gates.awl` declares plain activities at `timeout 45m`, and on
+        // run `dfd2117c` a plain `run_check` leg held this loop for 169 seconds
+        // during which not one ping could be dequeued, let alone answered. The
+        // server read that silence as a dead connection while the worker was
+        // doing exactly the work it was sent.
+        //
+        // So BOTH kinds are spawned and the serve loop only ever routes.
         if self.is_agent_activity(&request.activity_type) {
             self.spawn_agent_dispatch(correlation_id, request);
             return Ok(());
         }
-        let response = self.execute(&request).await?;
-        let payload = serde_json::to_vec(&response).map_err(WorkerError::encode)?;
-        self.client
-            .reply(correlation_id, payload)
-            .map_err(|error| transport_error(&error))
+        self.spawn_plain_dispatch(correlation_id, request);
+        Ok(())
+    }
+
+    /// Spawns a plain typed-registry dispatch as a background task so the serve
+    /// loop stays free to answer liveness pings and receive interventions,
+    /// replying its own correlated [`DispatchResponse`] when the handler
+    /// returns.
+    ///
+    /// EXECUTION CONCURRENCY IS UNCHANGED BY THIS. `plain_dispatch_slots` holds
+    /// exactly one permit, so plain activities still execute strictly one at a
+    /// time, precisely as they did when they ran inline. That is deliberate and
+    /// it is not a limit invented here — it is the limit that already existed,
+    /// made explicit and moved off the serve loop. Raising it is a real
+    /// decision with real consequences (a gate worker running N cargo builds at
+    /// once is how a workspace reached 37 GiB in 17 minutes on 2026-07-31), so
+    /// it belongs in worker configuration and to whoever owns that call, not in
+    /// a bug fix.
+    ///
+    /// The permit is acquired INSIDE the task, never on the serve loop, so a
+    /// busy worker still receives and answers pings while its queued dispatch
+    /// waits its turn. That is the whole point: the server learns "busy", not
+    /// "dead".
+    fn spawn_plain_dispatch(&self, correlation_id: u64, request: DispatchRequest) {
+        let slots = self.plain_dispatch_slots.clone();
+        // The reply rides this connection's `PushWriter`, exactly as the agent
+        // path's does — `PushClient` itself is not clonable and does not need
+        // to be.
+        let context = self.plain_dispatch_context();
+        let writer = context.writer.clone();
+        tokio::spawn(async move {
+            // A closed semaphore means the worker is shutting down; there is no
+            // reply to send and saying so is more honest than a silent return.
+            let Ok(_permit) = slots.acquire().await else {
+                tracing::warn!(
+                    correlation_id,
+                    "plain dispatch: worker is shutting down; the dispatch was not executed and \
+                     the server's held wait will be resolved by the outbox re-drive"
+                );
+                return;
+            };
+            let response = match context.execute(&request).await {
+                Ok(response) => response,
+                Err(error) => {
+                    // The serve loop no longer carries this error, so it must be
+                    // reported here or it is swallowed entirely.
+                    tracing::warn!(
+                        %error,
+                        activity_type = %request.activity_type,
+                        workflow_id = %request.workflow_id,
+                        ordinal = request.ordinal,
+                        "plain dispatch: execution failed before a response could be formed; no \
+                         reply is sent and the server's held wait is resolved by the outbox"
+                    );
+                    return;
+                }
+            };
+            match serde_json::to_vec(&response) {
+                Ok(payload) => {
+                    if let Err(error) = writer.reply(correlation_id, payload) {
+                        tracing::warn!(
+                            %error,
+                            workflow_id = %request.workflow_id,
+                            ordinal = request.ordinal,
+                            "plain dispatch: completed but its reply could not be written; the \
+                             outbox re-drives the completion"
+                        );
+                    }
+                }
+                Err(error) => tracing::warn!(
+                    %error,
+                    workflow_id = %request.workflow_id,
+                    ordinal = request.ordinal,
+                    "plain dispatch: completed but its response could not be encoded"
+                ),
+            }
+        });
     }
 
     /// Arms this connection's dead-man switch with the window the server just
@@ -848,15 +941,49 @@ impl LiminalActivityWorker {
         });
     }
 
-    /// Executes one dispatch and maps its outcome onto a [`DispatchResponse`].
+    /// The cheap-clone slice of this worker a spawned plain dispatch needs, so
+    /// the execution can outlive the borrow of `&self` and run off the serve
+    /// loop.
     ///
-    /// An activity whose type is registered as an agent type (via
-    /// [`Self::with_agent_harness`]) is driven through the agent path
-    /// ([`Self::execute_agent`]): its transcript streams LIVE to the server and the
-    /// live session self-registers for intervention. Every other activity runs
-    /// through the plain typed registry ([`Self::execute_registry`]). Either way a
-    /// missing handler / failure becomes a failure outcome (a reason string), never a
-    /// dropped reply, so the server always sees a correlated answer it can re-enter.
+    /// `PushClient` and `SilenceMonitor` are deliberately NOT carried: neither
+    /// is `Clone`, and neither is needed. A dispatch replies through the
+    /// connection's [`PushWriter`] (exactly as the agent path does) and needs
+    /// only the silence WINDOW value, not the monitor that owns it.
+    fn plain_dispatch_context(&self) -> PlainDispatchContext {
+        PlainDispatchContext {
+            writer: self.client.writer_handle(),
+            registry: self.registry.clone(),
+            live_writer: self.live_writer.clone(),
+            drain_backoff: self.drain_backoff,
+            silence_window: self.silence.window(),
+        }
+    }
+
+}
+
+/// The cheap-clone slice of a [`LiminalActivityWorker`] needed to execute one
+/// plain typed-registry dispatch away from the serve loop.
+#[derive(Clone)]
+struct PlainDispatchContext {
+    writer: PushWriter,
+    registry: Arc<ActivityRegistry>,
+    live_writer: LiveWriter,
+    drain_backoff: RedialBackoff,
+    /// The server-declared silence window this connection learned from its
+    /// liveness pings, used to arm the dispatch's liveness pump.
+    silence_window: Option<Duration>,
+}
+
+impl PlainDispatchContext {
+    /// Executes one plain dispatch and maps its outcome onto a
+    /// [`DispatchResponse`].
+    ///
+    /// Agent activities never reach here — they are spawned separately in
+    /// `handle_pushed_frame` and driven through the harness. This is the plain
+    /// typed-registry path, carrying the LIVE transcript event drain so a
+    /// handler that emits events streams them mid-run. A missing handler or a
+    /// failure becomes a failure OUTCOME (a reason string), never a dropped
+    /// reply, so the server always sees a correlated answer it can re-enter.
     async fn execute(&self, request: &DispatchRequest) -> Result<DispatchResponse, WorkerError> {
         // Agent activities are spawned in `handle_pushed_frame` and never reach here;
         // this path is the plain typed-registry execution, now carrying the LIVE
@@ -881,7 +1008,7 @@ impl LiminalActivityWorker {
         // genuinely runs (a no-op for the window-less outbox path). The guard
         // aborts the pump on every exit path.
         let _liveness =
-            spawn_liveness_pump(self.client.writer_handle(), request, self.silence.window());
+            spawn_liveness_pump(self.writer.clone(), request, self.silence_window);
         let (event_sender, drain) = spawn_event_drain(DrainBinding::new(
             self.live_writer.clone(),
             self.drain_backoff,
@@ -917,7 +1044,9 @@ impl LiminalActivityWorker {
             outcome,
         })
     }
+}
 
+impl LiminalActivityWorker {
     /// Whether `activity_type` is driven through the installed agent harness.
     fn is_agent_activity(&self, activity_type: &str) -> bool {
         self.agent_harness.is_some() && self.agent_activity_types.contains(activity_type)

@@ -606,6 +606,17 @@ impl LiminalWorkerDelivery {
     /// the gRPC bridge contract. One frame format, one push primitive, one held
     /// wait policy.
     ///
+    /// DELIBERATELY NO REPLY DEADLINE, unlike the liveness and intervention
+    /// pushes. A dispatch's reply IS the activity's completion, so its lifetime
+    /// is the activity's — `remote_gates.awl` declares legs at `timeout 45m`.
+    /// [`receive_bridge_reply`] re-arms on every poll timeout and waits
+    /// unbounded by contract, so this push NEVER abandons its slot and cannot
+    /// leak one: the slot is held for exactly as long as work is outstanding
+    /// and resolves when the reply lands. Attaching a deadline here would kill
+    /// long activities, and would be a regression, not a hardening. The leak
+    /// fixed on the other two sites came from ABANDONING a no-deadline slot,
+    /// which this site never does.
+    ///
     /// # Errors
     ///
     /// Returns [`ServerError::WorkerBusy`] when liminal's typed connection cap
@@ -624,8 +635,9 @@ impl LiminalWorkerDelivery {
             .map_err(|error| classify_push_error(&error))
     }
 
-    /// Push already-encoded `payload` out on the worker's connection, returning
-    /// the awaiter for its correlated reply.
+    /// Push already-encoded `payload` out on the worker's connection with an
+    /// explicit reply `deadline`, returning the awaiter for its correlated
+    /// reply.
     ///
     /// The raw push primitive behind the typed pushes above, used by the
     /// connection liveness probe
@@ -634,14 +646,30 @@ impl LiminalWorkerDelivery {
     /// that reaches the worker proves the exact path a dispatch would take, not
     /// a parallel one that could be healthy while the real one is not.
     ///
+    /// The deadline is LOAD-BEARING and is why this is not
+    /// `push_to_connection`. Riding the dispatch leg means sharing its bounded
+    /// §5 `max_pending_pushes_per_connection` admission, and a no-deadline slot
+    /// is reclaimed only by a consumed reply or a connection close — never by
+    /// the caller giving up. A probe that abandons an unanswered ping every
+    /// cadence therefore LEAKS one slot per round until the cap is exhausted,
+    /// at which point no dispatch, intervention or ping can be pushed on that
+    /// connection again. Measured live on run `dfd2117c`: 32 abandoned pings,
+    /// then permanent refusal, ≈240 s from first blocked ping. The probe built
+    /// to prove the dispatch path works is what destroyed it. With a deadline,
+    /// expiry removes the slot and RELEASES its cap admission.
+    ///
     /// # Errors
     ///
     /// Returns [`ServerError::WorkerBusy`] when liminal's typed connection cap
     /// refuses admission, and [`ServerError::WorkerConnectionLost`] for every
     /// other push-enqueue failure.
-    pub fn push_payload(&self, payload: Vec<u8>) -> Result<PushReplyAwaiter, ServerError> {
+    pub fn push_payload_with_deadline(
+        &self,
+        payload: Vec<u8>,
+        deadline: Duration,
+    ) -> Result<PushReplyAwaiter, ServerError> {
         self.supervisor
-            .push_to_connection(self.pid, payload)
+            .push_to_connection_with_deadline(self.pid, payload, deadline)
             .map_err(|error| classify_push_error(&error))
     }
 
@@ -669,9 +697,17 @@ impl LiminalWorkerDelivery {
                 format!("intervention serialize failed: {error}"),
             )
         })?;
+        // Deadline-bounded, and it must be: this wait ABANDONS on timeout (the
+        // `receive` error below is terminal, not a re-arm), so a no-deadline
+        // slot would be held until the connection closed and would count
+        // against the connection's §5 pending-push cap forever. The deadline
+        // matches the wait, so an intervention that goes unanswered releases
+        // its admission instead of leaking it. Contrast `push_dispatch`, whose
+        // wait re-arms and is unbounded by contract, and which therefore
+        // correctly takes no deadline.
         let awaiter = self
             .supervisor
-            .push_to_connection(self.pid, payload)
+            .push_to_connection_with_deadline(self.pid, payload, PUSH_REPLY_TIMEOUT)
             .map_err(|error| {
                 ServerError::worker_connection_lost(
                     "liminal-push",

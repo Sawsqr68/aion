@@ -80,7 +80,31 @@ struct TaskKey(WorkerId, WorkflowId, ActivityId);
 struct HeartbeatState {
     tasks: HashMap<TaskKey, TaskLiveness>,
     /// Last frame observed on each live worker connection.
+    ///
+    /// This is the PROCESS-IS-ALIVE fact, and only that. It is advanced by
+    /// anything the worker sends — including the worker-side liveness pump,
+    /// which beats from a background task regardless of what its serve loop is
+    /// doing. A fresh entry here means "that process is running and its
+    /// worker-to-server direction works". It does NOT mean the server can
+    /// reach it.
     connections: HashMap<WorkerId, Instant>,
+    /// Last time the server PROVED it can reach this worker's dispatch path,
+    /// i.e. the last answered liveness ping.
+    ///
+    /// This is the SERVER-CAN-REACH-THE-WORKER fact, and it is the only one
+    /// that is a dispatch precondition. It is advanced ONLY by an answered
+    /// ping, never by an inbound frame, because only the ping rides the same
+    /// server-to-worker leg a dispatch does.
+    ///
+    /// The two facts are separate because collapsing them hid a total outage:
+    /// on run `dfd2117c` the server could not push to a worker for fifteen
+    /// minutes while the worker's pump kept the single old lease perfectly
+    /// fresh, so the dead-man switch could not fire for the one failure it
+    /// exists to detect. `liminal_transport`'s own doc already forbids this —
+    /// the ping proves "the exact path a dispatch would take, not a parallel
+    /// one that could be healthy while the real one is not" — and the pump
+    /// feeding the same lease was exactly that parallel channel.
+    reachability: HashMap<WorkerId, Instant>,
 }
 
 /// Per-task liveness tracker for remote-worker streams.
@@ -102,7 +126,14 @@ impl HeartbeatTracker {
         }
     }
 
-    /// Start the connection-level lease for a newly registered worker.
+    /// Start the connection-level lease for a newly registered worker, and seed
+    /// its dispatch reachability.
+    ///
+    /// Both facts start true, and legitimately: the registration handshake is
+    /// itself a completed server-to-worker round trip, so at `now` the server
+    /// has just proved it can reach this worker. Seeding reachability here is
+    /// what keeps a freshly registered worker dispatchable during the interval
+    /// before its first ping lands.
     ///
     /// # Errors
     ///
@@ -112,11 +143,19 @@ impl HeartbeatTracker {
         worker_id: WorkerId,
         now: Instant,
     ) -> Result<(), ServerError> {
-        self.state()?.connections.insert(worker_id, now);
+        let mut state = self.state()?;
+        state.connections.insert(worker_id, now);
+        state.reachability.insert(worker_id, now);
         Ok(())
     }
 
     /// Advance a worker's connection lease after receiving any frame.
+    ///
+    /// Records ONLY that the worker's process is alive. It deliberately does
+    /// NOT advance dispatch reachability: an inbound frame — a heartbeat, a
+    /// pump beat, a completion — proves the worker-to-server direction and
+    /// says nothing about whether the server can push to it. Use
+    /// [`Self::record_dispatch_reachability`] for the fact that gates dispatch.
     ///
     /// Returns `false` if the worker has already been removed from lease tracking;
     /// a frame racing deregistration must not resurrect it.
@@ -137,13 +176,82 @@ impl HeartbeatTracker {
         Ok(true)
     }
 
+    /// Record proof that the server can reach this worker's dispatch path — an
+    /// ANSWERED liveness ping, and nothing else.
+    ///
+    /// Advances both facts, because an answered ping proves both: the worker
+    /// received a server push (reachability) and replied to it (alive).
+    ///
+    /// Returns `false` if the worker has already been removed from lease
+    /// tracking; a pong racing a reap must not resurrect it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if tracker state cannot be trusted.
+    pub fn record_dispatch_reachability(
+        &self,
+        worker_id: WorkerId,
+        now: Instant,
+    ) -> Result<bool, ServerError> {
+        let mut state = self.state()?;
+        let Some(last_activity) = state.connections.get_mut(&worker_id) else {
+            return Ok(false);
+        };
+        *last_activity = now;
+        state.reachability.insert(worker_id, now);
+        Ok(true)
+    }
+
+    /// Whether the server has proved, within the heartbeat window, that it can
+    /// reach this worker's dispatch path.
+    ///
+    /// An untracked worker is not reachable: absence of proof is not proof.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if tracker state cannot be trusted.
+    pub fn is_dispatch_reachable(
+        &self,
+        worker_id: WorkerId,
+        now: Instant,
+    ) -> Result<bool, ServerError> {
+        let state = self.state()?;
+        Ok(state.reachability.get(&worker_id).is_some_and(|proved_at| {
+            now.checked_duration_since(*proved_at)
+                .is_none_or(|elapsed| elapsed <= self.heartbeat_window)
+        }))
+    }
+
+    /// Every tracked worker the server has NOT been able to reach within the
+    /// heartbeat window, regardless of how alive its process looks.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if tracker state cannot be trusted.
+    pub fn unreachable_workers(&self, now: Instant) -> Result<Vec<WorkerId>, ServerError> {
+        let state = self.state()?;
+        let mut workers = state
+            .reachability
+            .iter()
+            .filter(|(_, proved_at)| {
+                now.checked_duration_since(**proved_at)
+                    .is_some_and(|elapsed| elapsed > self.heartbeat_window)
+            })
+            .map(|(worker_id, _)| *worker_id)
+            .collect::<Vec<_>>();
+        workers.sort_unstable();
+        Ok(workers)
+    }
+
     /// End connection-lease tracking when a transport closes normally.
     ///
     /// # Errors
     ///
     /// Returns [`ServerError::LockPoisoned`] if tracker state cannot be trusted.
     pub fn unregister_connection(&self, worker_id: WorkerId) -> Result<(), ServerError> {
-        self.state()?.connections.remove(&worker_id);
+        let mut state = self.state()?;
+        state.connections.remove(&worker_id);
+        state.reachability.remove(&worker_id);
         Ok(())
     }
 

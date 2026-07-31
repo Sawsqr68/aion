@@ -27,11 +27,38 @@
 //!   when pings stop. That is the death of the second.
 //!
 //! A ping that is not answered inside the cadence is logged LOUDLY with the
-//! worker's identity and queue and, crucially, is NOT counted as lease activity
-//! — so a genuinely dead worker's lease runs down and the EXISTING expiry sweep
-//! ([`HeartbeatSweeper`](super::HeartbeatSweeper)) reaps it through the one
-//! proven, idempotent deregistration path. There is deliberately no second
-//! reaper.
+//! worker's identity and queue, and withdraws the worker's DISPATCH
+//! ELIGIBILITY once the silence outlasts the window.
+//!
+//! # Why eligibility, and not the connection lease
+//!
+//! This module used to claim that an unanswered ping let "a genuinely dead
+//! worker's lease run down" so the expiry sweep would reap it. **That was
+//! false, and run `dfd2117c` proved it**: the server could not push to a worker
+//! for fifteen minutes and the worker never lost its lease, because the
+//! worker-side liveness pump beats from a background task and keeps refreshing
+//! it whatever the worker's serve loop is doing.
+//!
+//! Two different facts were collapsed into one lease:
+//!
+//! - **the worker process is alive** — proven by anything the worker sends,
+//!   pump included, on the worker-to-server direction;
+//! - **the server can reach the worker's dispatch path** — proven only by an
+//!   answered ping, on the server-to-worker direction.
+//!
+//! Only the second is a dispatch precondition, and
+//! [`LiminalWorkerDelivery::push_payload_with_deadline`] already says why the
+//! ping is the only thing that can prove it: it rides "the exact path a
+//! dispatch would take, not a parallel one that could be healthy while the real
+//! one is not." The pump is exactly such a parallel channel, so it must not
+//! feed the fact the ping exists to establish.
+//!
+//! So the probe advances a SEPARATE reachability clock
+//! ([`HeartbeatTracker::record_dispatch_reachability`]) and publishes an
+//! eligibility verdict the dispatch selector honours. The connection lease and
+//! its expiry sweep are untouched and still own process liveness — there is
+//! still deliberately no second reaper, and an unreachable worker is excluded
+//! from dispatch rather than torn down.
 //!
 //! # No knobs
 //!
@@ -159,10 +186,22 @@ impl LivenessProbe {
     ///
     /// Rounds never overlap: each tick's pings are awaited to completion (each
     /// bounded by the cadence) before the next round starts, and a missed tick
-    /// is skipped rather than queued. That bounds the outstanding server pushes
-    /// this probe can hold on any connection to exactly one, so it can never
+    /// is skipped rather than queued.
+    ///
+    /// That bounds the concurrent WAITS to one per connection. It was once
+    /// claimed to bound the outstanding PUSHES to one as well, "so it can never
     /// crowd out real dispatches against liminal's per-connection pending-push
-    /// cap.
+    /// cap." **That claim was false and the failure it denied is exactly what
+    /// happened** on run `dfd2117c`: a push slot is not released by the caller
+    /// giving up, only by a consumed reply, a deadline expiry, or a connection
+    /// close. Awaiting a round to completion ends the wait, not the slot. So
+    /// abandoning one unanswered no-deadline ping per round leaked one slot per
+    /// round — 32 of them, then total refusal of every push on that connection.
+    ///
+    /// The bound is now real because
+    /// [`LiminalWorkerDelivery::push_payload_with_deadline`] attaches the
+    /// cadence as the push's own reply deadline, so an unanswered ping's slot
+    /// expires and RELEASES its cap admission instead of accumulating.
     pub async fn run(self, mut shutdown: watch::Receiver<bool>) {
         info!(
             cadence_ms = self.cadence.as_millis(),
@@ -228,53 +267,146 @@ impl LivenessProbe {
         for (pid, worker_id, outcome) in futures::future::join_all(answers).await {
             self.apply_answer(pid, worker_id, sequence, outcome);
         }
+        self.publish_reachability_verdict(sequence);
     }
 
-    /// Apply one connection's ping outcome: a correct answer advances the lease,
-    /// anything else is logged LOUDLY and advances nothing.
+    /// Publish this round's reachability verdict to the registry, so dispatch
+    /// selection skips workers the server cannot reach.
+    ///
+    /// Runs after every round, including rounds where every ping succeeded —
+    /// that is what RESTORES eligibility to a worker whose pings have started
+    /// answering again. Recovery must not need a separate trigger.
+    ///
+    /// This is the half that makes the switch able to fire at all. A worker's
+    /// connection lease is refreshed by anything it sends, including its own
+    /// background liveness pump, so a worker whose dispatch path is completely
+    /// dead can look perfectly alive indefinitely. Reachability is tracked
+    /// separately and only an answered ping advances it, so the pump can no
+    /// longer hold dispatch eligibility open against failing pings.
+    fn publish_reachability_verdict(&self, sequence: u64) {
+        let now = Instant::now();
+        let unreachable = match self.tracker.unreachable_workers(now) {
+            Ok(workers) => workers,
+            Err(error) => {
+                warn!(
+                    %error,
+                    liveness_ping = sequence,
+                    "could not read liminal worker reachability; leaving the previous dispatch \
+                     eligibility verdict in place rather than guessing"
+                );
+                return;
+            }
+        };
+        for worker_id in &unreachable {
+            // Announce the transition only, not the standing state, so a
+            // persistently unreachable worker does not re-log every cadence.
+            match self.registry.is_dispatch_ineligible(*worker_id) {
+                Ok(false) => warn!(
+                    worker_id = worker_id.value(),
+                    task_queue = self
+                        .task_queue_of(*worker_id)
+                        .as_deref()
+                        .unwrap_or("<unregistered>"),
+                    liveness_ping = sequence,
+                    silence_window_ms = self.silence_window.as_millis(),
+                    "WITHDRAWING DISPATCH ELIGIBILITY from liminal worker: the server has not been \
+                     able to reach its dispatch path within the window. It stays registered and \
+                     keeps its in-flight work, and becomes eligible again as soon as one ping is \
+                     answered"
+                ),
+                Ok(true) => {}
+                Err(error) => warn!(
+                    %error,
+                    worker_id = worker_id.value(),
+                    "could not read a liminal worker's current dispatch eligibility"
+                ),
+            }
+        }
+        if let Err(error) = self
+            .registry
+            .set_dispatch_ineligible(unreachable.into_iter().collect())
+        {
+            warn!(
+                %error,
+                liveness_ping = sequence,
+                "could not publish liminal worker dispatch eligibility; selection keeps the \
+                 previous verdict"
+            );
+        }
+    }
+
+    /// Apply one connection's ping outcome: a correct answer proves dispatch
+    /// reachability, anything else is logged LOUDLY and proves nothing.
     fn apply_answer(
         &self,
         pid: u64,
         worker_id: WorkerId,
         sequence: u64,
-        outcome: Result<Result<LivenessPong, String>, tokio::task::JoinError>,
+        outcome: Result<Result<LivenessPong, PingFailure>, tokio::task::JoinError>,
     ) {
         let failure = match outcome {
-            Err(join_error) => format!("liveness ping task failed to run: {join_error}"),
-            Ok(Err(reason)) => reason,
-            Ok(Ok(pong)) if pong.liveness_pong != sequence => format!(
-                "worker answered liveness ping {sequence} with mismatched sequence {}",
+            Err(join_error) => {
+                PingFailure::Unanswered(format!("ping task failed to run: {join_error}"))
+            }
+            Ok(Err(failure)) => failure,
+            Ok(Ok(pong)) if pong.liveness_pong != sequence => PingFailure::Unanswered(format!(
+                "worker answered with mismatched sequence {}",
                 pong.liveness_pong
-            ),
+            )),
             Ok(Ok(_)) => {
-                // The proof the worker is alive: advance its connection lease so
-                // the idle expiry cannot fire on a healthy idle connection. A
-                // `false` return means the worker was already deregistered (a
-                // pong racing a reap); a frame must never resurrect it.
+                // The one thing that proves the server can reach this worker's
+                // DISPATCH path: a push we sent came back answered. Only this
+                // advances reachability — an inbound frame proves the opposite
+                // direction and cannot stand in for it. A `false` return means
+                // the worker was already deregistered (a pong racing a reap);
+                // an answer must never resurrect it.
                 if let Err(error) = self
                     .tracker
-                    .record_connection_activity(worker_id, Instant::now())
+                    .record_dispatch_reachability(worker_id, Instant::now())
                 {
                     warn!(
                         %error,
                         connection_pid = pid,
                         worker_id = worker_id.value(),
-                        "failed to advance liminal worker connection lease from a liveness answer"
+                        "failed to record liminal worker dispatch reachability from a liveness answer"
                     );
                 }
                 return;
             }
         };
-        warn!(
-            connection_pid = pid,
-            worker_id = worker_id.value(),
-            task_queue = self.task_queue_of(worker_id).as_deref().unwrap_or("<unregistered>"),
-            liveness_ping = sequence,
-            reason = %failure,
-            silence_window_ms = self.silence_window.as_millis(),
-            "liminal worker did not answer its liveness ping; its connection lease is NOT being \
-             refreshed and the expiry sweep will reap it if the silence persists"
-        );
+        // The two failures are DIFFERENT FACTS and the operator must be able to
+        // tell them apart: one is about the worker, the other is about us.
+        let task_queue = self
+            .task_queue_of(worker_id)
+            .unwrap_or_else(|| "<unregistered>".to_owned());
+        match failure {
+            PingFailure::Unaskable(reason) => warn!(
+                connection_pid = pid,
+                worker_id = worker_id.value(),
+                task_queue = %task_queue,
+                liveness_ping = sequence,
+                reason = %reason,
+                silence_window_ms = self.silence_window.as_millis(),
+                "THE SERVER COULD NOT ASK this liminal worker for liveness — the push itself was \
+                 refused, so nothing was sent and the worker has no idea it was probed. A dispatch \
+                 would be refused by the same connection for the same reason. This says nothing \
+                 about whether the worker is healthy; it says this server cannot currently reach \
+                 it. Its dispatch eligibility is withdrawn while this persists"
+            ),
+            PingFailure::Unanswered(reason) => warn!(
+                connection_pid = pid,
+                worker_id = worker_id.value(),
+                task_queue = %task_queue,
+                liveness_ping = sequence,
+                reason = %reason,
+                silence_window_ms = self.silence_window.as_millis(),
+                "liminal worker did not answer its liveness ping; the server could not prove it \
+                 can reach this worker's dispatch path, so dispatch eligibility is withdrawn once \
+                 the silence outlasts the window. NOTE: the worker's connection lease may still be \
+                 fresh — its liveness pump beats from a background task and keeps proving the \
+                 process is alive — so do NOT expect an expiry sweep to reap it"
+            ),
+        }
     }
 
     /// The task queue a worker is registered on, for the WARN line. `None` when
@@ -294,19 +426,41 @@ impl LivenessProbe {
 /// async. Every failure is rendered as a reason string, because at this layer
 /// the distinction that matters is "answered" vs "did not answer" — the typed
 /// error text rides into the WARN verbatim.
+/// Why one liveness round produced no proof of dispatch reachability.
+///
+/// The two cases are different facts about different parties and an operator
+/// must be able to act on the difference, so they are typed rather than folded
+/// into one string. Collapsing them is how the old WARN came to blame a worker
+/// for a connection the server had itself exhausted.
+#[derive(Debug)]
+enum PingFailure {
+    /// The server could not ASK. Push admission was refused, so no frame left
+    /// the server and the worker was never probed. A dispatch on this
+    /// connection would be refused identically. Says nothing about the worker.
+    Unaskable(String),
+    /// The server asked and got no usable answer. The push was admitted; the
+    /// reply did not arrive in the cadence, or did not decode.
+    Unanswered(String),
+}
+
 fn ping_one(
     delivery: &LiminalWorkerDelivery,
     payload: Vec<u8>,
     deadline: Duration,
-) -> Result<LivenessPong, String> {
+) -> Result<LivenessPong, PingFailure> {
+    // The deadline is attached to the PUSH, not just to the wait. Without it the
+    // reply slot is reclaimed only by a consumed reply or a connection close, so
+    // abandoning an unanswered ping every cadence leaks one slot per round until
+    // the connection's push cap is exhausted and nothing — ping, dispatch or
+    // intervention — can be pushed to that worker again.
     let awaiter = delivery
-        .push_payload(payload)
-        .map_err(|error| format!("liveness ping push failed: {error}"))?;
+        .push_payload_with_deadline(payload, deadline)
+        .map_err(|error| PingFailure::Unaskable(error.to_string()))?;
     let reply = awaiter
         .receive(deadline)
-        .map_err(|error| format!("liveness answer never arrived: {error}"))?;
+        .map_err(|error| PingFailure::Unanswered(format!("no answer arrived: {error}")))?;
     serde_json::from_slice(&reply)
-        .map_err(|error| format!("liveness answer could not be decoded: {error}"))
+        .map_err(|error| PingFailure::Unanswered(format!("answer could not be decoded: {error}")))
 }
 
 #[cfg(test)]
