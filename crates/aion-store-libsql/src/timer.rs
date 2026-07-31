@@ -44,7 +44,7 @@ pub(crate) async fn schedule_timer(
 /// Returns `StoreError::Backend` for libSQL read failures and `StoreError::Serialization` when a
 /// persisted row cannot be reconstructed into Aion timer types.
 pub(crate) async fn expired_timers(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
     as_of: DateTime<Utc>,
 ) -> Result<Vec<TimerEntry>, StoreError> {
     let as_of = encode_fire_at(as_of);
@@ -170,7 +170,8 @@ mod tests {
         )
         .await?;
 
-        let expired = super::expired_timers(&conn, as_of).await?;
+        let expired =
+            super::expired_timers(crate::pool::ReadOnly::from_raw_for_test(&conn), as_of).await?;
 
         assert_eq!(expired.len(), 2);
         assert!(

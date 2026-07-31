@@ -97,7 +97,7 @@ pub(crate) async fn put_package_with_routes(
 /// Returns `StoreError::Backend` for libSQL read failures and
 /// `StoreError::Serialization` when a persisted row cannot be reconstructed.
 pub(crate) async fn list_packages(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
 ) -> Result<Vec<PackageRecord>, StoreError> {
     let mut rows = conn
         .query(LIST_PACKAGES_SQL, ())
@@ -178,7 +178,7 @@ pub(crate) async fn put_package_route(
 ///
 /// Returns `StoreError::Backend` for libSQL read failures.
 pub(crate) async fn list_package_routes(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
 ) -> Result<Vec<PackageRouteRecord>, StoreError> {
     let mut rows = conn
         .query(LIST_ROUTES_SQL, ())
@@ -247,7 +247,7 @@ mod tests {
         };
 
         super::put_package(&conn, record.clone()).await?;
-        let listed = super::list_packages(&conn).await?;
+        let listed = super::list_packages(crate::pool::ReadOnly::from_raw_for_test(&conn)).await?;
 
         assert_eq!(listed, vec![record]);
         Ok(())

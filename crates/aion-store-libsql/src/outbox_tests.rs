@@ -172,7 +172,7 @@ async fn claim_complete_retry_round_trip() -> Result<(), StoreError> {
     // Complete one row; it leaves the claimable set permanently.
     store.complete_outbox_row(&row_a.dispatch_key).await?;
     assert_eq!(
-        status_of(&*store.reader().await?, &row_a.dispatch_key).await?,
+        status_of(store.reader().await?.read(), &row_a.dispatch_key).await?,
         Some(String::from("done"))
     );
 
@@ -184,7 +184,7 @@ async fn claim_complete_retry_round_trip() -> Result<(), StoreError> {
         .retry_outbox_row(&row_b.dispatch_key, 1, future)
         .await?;
     assert_eq!(
-        status_of(&*store.reader().await?, &row_b.dispatch_key).await?,
+        status_of(store.reader().await?.read(), &row_b.dispatch_key).await?,
         Some(String::from("pending"))
     );
     assert!(store.claim_outbox_rows(10).await?.is_empty());
@@ -201,7 +201,7 @@ async fn claim_complete_retry_round_trip() -> Result<(), StoreError> {
     // Fail it: terminal, never claimable again.
     store.fail_outbox_row(&row_b.dispatch_key).await?;
     assert_eq!(
-        status_of(&*store.reader().await?, &row_b.dispatch_key).await?,
+        status_of(store.reader().await?.read(), &row_b.dispatch_key).await?,
         Some(String::from("failed"))
     );
     assert!(store.claim_outbox_rows(10).await?.is_empty());
@@ -227,7 +227,7 @@ async fn stale_claim_rearm_touches_only_old_claimed_rows_and_preserves_attempt()
     store.fail_outbox_row(&failed.dispatch_key).await?;
 
     set_outbox_bookkeeping(
-        &*store.reader().await?,
+        &*store.writer().await,
         &stale.dispatch_key,
         "claimed",
         7,
@@ -235,7 +235,7 @@ async fn stale_claim_rearm_touches_only_old_claimed_rows_and_preserves_attempt()
     )
     .await?;
     set_outbox_bookkeeping(
-        &*store.reader().await?,
+        &*store.writer().await,
         &fresh.dispatch_key,
         "claimed",
         3,
@@ -243,7 +243,7 @@ async fn stale_claim_rearm_touches_only_old_claimed_rows_and_preserves_attempt()
     )
     .await?;
     set_outbox_bookkeeping(
-        &*store.reader().await?,
+        &*store.writer().await,
         &done.dispatch_key,
         "done",
         5,
@@ -251,7 +251,7 @@ async fn stale_claim_rearm_touches_only_old_claimed_rows_and_preserves_attempt()
     )
     .await?;
     set_outbox_bookkeeping(
-        &*store.reader().await?,
+        &*store.writer().await,
         &failed.dispatch_key,
         "failed",
         6,
@@ -281,19 +281,19 @@ async fn stale_claim_rearm_touches_only_old_claimed_rows_and_preserves_attempt()
         Some(7)
     );
     assert_eq!(
-        status_of(&*store.reader().await?, &fresh.dispatch_key).await?,
+        status_of(store.reader().await?.read(), &fresh.dispatch_key).await?,
         Some(String::from("claimed"))
     );
     assert_eq!(
-        status_of(&*store.reader().await?, &done.dispatch_key).await?,
+        status_of(store.reader().await?.read(), &done.dispatch_key).await?,
         Some(String::from("done"))
     );
     assert_eq!(
-        status_of(&*store.reader().await?, &failed.dispatch_key).await?,
+        status_of(store.reader().await?.read(), &failed.dispatch_key).await?,
         Some(String::from("failed"))
     );
     assert_eq!(
-        claimed_at_of(&*store.reader().await?, &stale.dispatch_key).await?,
+        claimed_at_of(store.reader().await?.read(), &stale.dispatch_key).await?,
         None
     );
     Ok(())
@@ -324,7 +324,7 @@ async fn settle_cancelled_is_idempotent_and_terminal() -> Result<(), StoreError>
         .settle_outbox_row_cancelled(&pending.dispatch_key)
         .await?;
     assert_eq!(
-        status_of(&*store.reader().await?, &pending.dispatch_key).await?,
+        status_of(store.reader().await?.read(), &pending.dispatch_key).await?,
         Some(String::from("cancelled"))
     );
     let claimed_rows = store.claim_outbox_rows(10).await?;
@@ -344,11 +344,11 @@ async fn settle_cancelled_is_idempotent_and_terminal() -> Result<(), StoreError>
         .settle_outbox_row_cancelled(&claimed.dispatch_key)
         .await?;
     assert_eq!(
-        status_of(&*store.reader().await?, &claimed.dispatch_key).await?,
+        status_of(store.reader().await?.read(), &claimed.dispatch_key).await?,
         Some(String::from("cancelled"))
     );
     assert_eq!(
-        claimed_at_of(&*store.reader().await?, &claimed.dispatch_key).await?,
+        claimed_at_of(store.reader().await?.read(), &claimed.dispatch_key).await?,
         None,
         "cancelling a claimed row clears claimed_at"
     );
@@ -379,11 +379,11 @@ async fn settle_cancelled_is_idempotent_and_terminal() -> Result<(), StoreError>
         .settle_outbox_row_cancelled("absent-dispatch-key")
         .await?;
     assert_eq!(
-        status_of(&*store.reader().await?, &done.dispatch_key).await?,
+        status_of(store.reader().await?.read(), &done.dispatch_key).await?,
         Some(String::from("done"))
     );
     assert_eq!(
-        status_of(&*store.reader().await?, &failed.dispatch_key).await?,
+        status_of(store.reader().await?.read(), &failed.dispatch_key).await?,
         Some(String::from("failed"))
     );
     Ok(())
@@ -406,7 +406,7 @@ async fn rearm_outbox_pending_revives_a_done_row_and_inserts_a_fresh_one() -> Re
     assert_eq!(claimed.len(), 1);
     store.complete_outbox_row(&original.dispatch_key).await?;
     assert_eq!(
-        status_of(&*store.reader().await?, &original.dispatch_key).await?,
+        status_of(store.reader().await?.read(), &original.dispatch_key).await?,
         Some(String::from("done"))
     );
     assert!(store.claim_outbox_rows(10).await?.is_empty());
@@ -420,12 +420,12 @@ async fn rearm_outbox_pending_revives_a_done_row_and_inserts_a_fresh_one() -> Re
 
     // The previously-done row is back to pending...
     assert_eq!(
-        status_of(&*store.reader().await?, &revived.dispatch_key).await?,
+        status_of(store.reader().await?.read(), &revived.dispatch_key).await?,
         Some(String::from("pending"))
     );
     // ...and the brand-new dispatch_key was inserted as pending.
     assert_eq!(
-        status_of(&*store.reader().await?, &fresh.dispatch_key).await?,
+        status_of(store.reader().await?.read(), &fresh.dispatch_key).await?,
         Some(String::from("pending"))
     );
 
@@ -474,7 +474,10 @@ async fn append_with_outbox_commits_events_and_rows_atomically() -> Result<(), S
         )
         .await?;
 
-    assert_eq!(event_count(&*store.reader().await?, &workflow_id).await?, 1);
+    assert_eq!(
+        event_count(store.reader().await?.read(), &workflow_id).await?,
+        1
+    );
     let claimed = store.claim_outbox_rows(10).await?;
     assert_eq!(claimed.len(), 1);
     assert_eq!(claimed[0].dispatch_key, row.dispatch_key);
@@ -509,7 +512,10 @@ async fn append_with_outbox_rolls_back_both_on_failure() -> Result<(), StoreErro
 
     assert!(result.is_err(), "outbox insert failure must surface as Err");
     // Neither the events nor the outbox rows were committed: the events table is empty.
-    assert_eq!(event_count(&*store.reader().await?, &workflow_id).await?, 0);
+    assert_eq!(
+        event_count(store.reader().await?.read(), &workflow_id).await?,
+        0
+    );
     Ok(())
 }
 
@@ -523,7 +529,10 @@ async fn event_only_append_with_outbox_matches_plain_append() -> Result<(), Stor
         .append_with_outbox(WriteToken::recorder(), &workflow_id, &events, 0, None)
         .await?;
 
-    assert_eq!(event_count(&*store.reader().await?, &workflow_id).await?, 1);
+    assert_eq!(
+        event_count(store.reader().await?.read(), &workflow_id).await?,
+        1
+    );
     assert!(store.claim_outbox_rows(10).await?.is_empty());
     Ok(())
 }
@@ -954,7 +963,7 @@ async fn a_completion_survives_a_rollback_of_a_concurrent_writer_transaction()
     })??;
 
     assert_eq!(
-        status_of(&*store.reader().await?, &row.dispatch_key).await?,
+        status_of(store.reader().await?.read(), &row.dispatch_key).await?,
         Some(String::from("done")),
         "the completion committed on its own and MUST survive the rollback of an \
          unrelated writer transaction; finding it still `claimed` means the \
@@ -983,7 +992,7 @@ fn pending_row(
 }
 
 async fn status_of(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
     dispatch_key: &str,
 ) -> Result<Option<String>, StoreError> {
     let mut rows = conn
@@ -1028,7 +1037,7 @@ async fn set_outbox_bookkeeping(
 }
 
 async fn claimed_at_of(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
     dispatch_key: &str,
 ) -> Result<Option<String>, StoreError> {
     let mut rows = conn
@@ -1055,7 +1064,7 @@ fn encode_instant(instant: DateTime<Utc>) -> String {
 }
 
 async fn event_count(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
     workflow_id: &WorkflowId,
 ) -> Result<i64, StoreError> {
     let mut rows = conn

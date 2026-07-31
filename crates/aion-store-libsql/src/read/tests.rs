@@ -61,7 +61,9 @@ async fn read_history_from_returns_range_suffix() -> Result<(), StoreError> {
 #[tokio::test]
 async fn read_history_from_range_scan_uses_primary_key_index() -> Result<(), StoreError> {
     let store = open_test_store("range-plan").await?;
-    let mut rows = store.reader().await?
+    let guard = store.reader().await?;
+    let mut rows = guard
+        .read()
         .query(
             "EXPLAIN QUERY PLAN SELECT event FROM events WHERE workflow_id = ?1 AND seq >= ?2 ORDER BY seq ASC",
             ("00000000-0000-0000-0000-000000000001", 2_u64),

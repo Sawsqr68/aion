@@ -21,7 +21,7 @@ async fn appends_first_batch_from_empty_history() -> Result<(), StoreError> {
         .append(WriteToken::recorder(), &workflow_id, &events, 0)
         .await?;
 
-    let stats = event_stats(&*store.reader().await?, &workflow_id).await?;
+    let stats = event_stats(store.reader().await?.read(), &workflow_id).await?;
     assert_eq!(stats, EventStats { count: 1, head: 1 });
     Ok(())
 }
@@ -41,11 +41,11 @@ async fn appends_multi_event_batch_with_contiguous_sequences() -> Result<(), Sto
         .await?;
 
     assert_eq!(
-        stored_sequences(&*store.reader().await?, &workflow_id).await?,
+        stored_sequences(store.reader().await?.read(), &workflow_id).await?,
         vec![1, 2, 3]
     );
     assert_eq!(
-        event_stats(&*store.reader().await?, &workflow_id).await?,
+        event_stats(store.reader().await?.read(), &workflow_id).await?,
         EventStats { count: 3, head: 3 }
     );
     Ok(())
@@ -61,7 +61,7 @@ async fn empty_batch_checks_guard_and_leaves_head_unchanged() -> Result<(), Stor
         .await?;
 
     assert_eq!(
-        event_stats(&*store.reader().await?, &workflow_id).await?,
+        event_stats(store.reader().await?.read(), &workflow_id).await?,
         EventStats { count: 0, head: 0 }
     );
     Ok(())
@@ -83,11 +83,11 @@ async fn stale_expected_sequence_rolls_back_without_writes() -> Result<(), Store
 
     assert_sequence_conflict(&result, 0, 1)?;
     assert_eq!(
-        event_stats(&*store.reader().await?, &workflow_id).await?,
+        event_stats(store.reader().await?.read(), &workflow_id).await?,
         EventStats { count: 1, head: 1 }
     );
     assert_eq!(
-        stored_sequences(&*store.reader().await?, &workflow_id).await?,
+        stored_sequences(store.reader().await?.read(), &workflow_id).await?,
         vec![1]
     );
     Ok(())
@@ -105,7 +105,7 @@ async fn ahead_expected_sequence_rolls_back_without_writes() -> Result<(), Store
 
     assert_sequence_conflict(&result, 2, 0)?;
     assert_eq!(
-        event_stats(&*store.reader().await?, &workflow_id).await?,
+        event_stats(store.reader().await?.read(), &workflow_id).await?,
         EventStats { count: 0, head: 0 }
     );
     Ok(())
@@ -140,7 +140,7 @@ async fn non_contiguous_batch_rolls_back_without_writes() -> Result<(), StoreErr
     }
 
     assert_eq!(
-        event_stats(&*store.reader().await?, &workflow_id).await?,
+        event_stats(store.reader().await?.read(), &workflow_id).await?,
         EventStats { count: 0, head: 0 }
     );
     Ok(())
@@ -177,11 +177,11 @@ async fn concurrent_same_expected_sequence_has_one_winner() -> Result<(), StoreE
     assert_eq!(ok_count, 1);
     assert_eq!(conflict_count, 1);
     assert_eq!(
-        event_stats(&*store.reader().await?, &workflow_id).await?,
+        event_stats(store.reader().await?.read(), &workflow_id).await?,
         EventStats { count: 1, head: 1 }
     );
     assert_eq!(
-        stored_sequences(&*store.reader().await?, &workflow_id).await?,
+        stored_sequences(store.reader().await?.read(), &workflow_id).await?,
         vec![1]
     );
     Ok(())
@@ -224,7 +224,7 @@ fn is_sequence_conflict(result: &Result<(), StoreError>, expected: u64, found: u
 }
 
 async fn event_stats(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
     workflow_id: &WorkflowId,
 ) -> Result<EventStats, StoreError> {
     let workflow_id = workflow_id.to_string();
@@ -251,7 +251,7 @@ async fn event_stats(
 }
 
 async fn stored_sequences(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
     workflow_id: &WorkflowId,
 ) -> Result<Vec<i64>, StoreError> {
     let workflow_id = workflow_id.to_string();

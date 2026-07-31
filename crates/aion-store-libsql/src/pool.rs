@@ -107,11 +107,51 @@ pub(crate) struct ReadGuard {
     pool: Arc<ReadPool>,
 }
 
-impl std::ops::Deref for ReadGuard {
-    type Target = libsql::Connection;
+impl ReadGuard {
+    /// Borrow this connection as a read-only capability.
+    ///
+    /// `ReadGuard` deliberately does NOT implement `Deref<Target = Connection>`.
+    /// While it did, a write on a read connection compiled cleanly — and one
+    /// shipped: `schedule_timer` (an `INSERT … ON CONFLICT DO UPDATE`) was routed
+    /// through `reader()` and passed all 90 crate tests, because ~78 of them are
+    /// single-threaded and cannot observe contention at all. It was caught by a
+    /// hand audit, and habits die with whoever holds them.
+    pub(crate) fn read(&self) -> ReadOnly<'_> {
+        ReadOnly(&self.connection)
+    }
+}
 
-    fn deref(&self) -> &Self::Target {
-        &self.connection
+/// A connection restricted to reads (#122, Block H).
+///
+/// There is no `execute` on this type, so a write cannot be issued through it:
+/// the writer/reader split is enforced by `rustc` rather than by a reviewer
+/// remembering which accessor a callee needs.
+///
+/// # Why there is no escape hatch
+///
+/// A `from_writer` constructor would reintroduce exactly the judgement call this
+/// type exists to remove. It is not needed: no read helper is ever called with
+/// the writer connection — reads performed inside a write transaction take
+/// `&Transaction`, a different type entirely. Should one ever genuinely need it,
+/// adding it must be a deliberate, reviewed, greppable act.
+#[derive(Clone, Copy)]
+pub(crate) struct ReadOnly<'a>(&'a libsql::Connection);
+
+impl ReadOnly<'_> {
+    /// Run a read query.
+    ///
+    /// This mirrors `libsql::Connection::query` EXACTLY, including its error
+    /// type. That is deliberate: it keeps every read helper's body byte-for-byte
+    /// unchanged, so this refactor is a pure type change across ~90 sites rather
+    /// than ~90 opportunities to alter behaviour while "just" changing a
+    /// signature. The design sketch had this returning `StoreError`; mirroring
+    /// won because a mechanical diff is a reviewable diff.
+    pub(crate) async fn query(
+        &self,
+        sql: &str,
+        params: impl libsql::params::IntoParams,
+    ) -> Result<libsql::Rows, libsql::Error> {
+        self.0.query(sql, params).await
     }
 }
 
@@ -122,6 +162,25 @@ impl Drop for ReadGuard {
         // back lets the guard hold its connection by value — no `Option`, no
         // `unwrap` in `Deref`, and no unreachable branch to justify.
         self.pool.release(self.connection.clone());
+    }
+}
+
+/// Test-only: view a raw connection as read-only.
+///
+/// 🔴 This is NOT the `from_writer` escape hatch the Block H design refused.
+/// That one would have been reachable from production code, reintroducing the
+/// exact judgement call this type exists to remove. This is `#[cfg(test)]`, so
+/// no production path can call it and the compile-time guarantee over the
+/// shipped crate is unchanged.
+///
+/// It exists because several tests open their own bare `libsql::Connection`
+/// rather than going through a store, and still need to read from it. The
+/// alternative was rewriting those tests to route through a store — which would
+/// have changed what they cover in the same commit that changed the types.
+#[cfg(test)]
+impl<'a> ReadOnly<'a> {
+    pub(crate) fn from_raw_for_test(connection: &'a libsql::Connection) -> Self {
+        Self(connection)
     }
 }
 
@@ -172,6 +231,7 @@ mod tests {
     async fn pooled_synchronous(store: &LibSqlStore) -> TestResult<i64> {
         let reader = store.reader().await?;
         let mut rows = reader
+            .read()
             .query("PRAGMA synchronous", ())
             .await
             .map_err(|error| crate::error::libsql_error(&error))?;

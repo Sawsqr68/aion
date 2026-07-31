@@ -15,7 +15,7 @@ use libsql::{Value, params, params_from_iter};
 /// Returns `StoreError::Backend` for libSQL failures and `StoreError::Serialization` when a stored
 /// event blob cannot be decoded as an Aion event. Unknown workflows return an empty history.
 pub(crate) async fn read_history(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
     workflow_id: &WorkflowId,
 ) -> Result<Vec<Event>, StoreError> {
     let workflow_id = workflow_id.to_string();
@@ -42,7 +42,7 @@ pub(crate) async fn read_history(
 /// event blob cannot be decoded as an Aion event. Unknown workflows and `from_seq` beyond the
 /// current head both return an empty history.
 pub(crate) async fn read_history_from(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
     workflow_id: &WorkflowId,
     from_seq: u64,
 ) -> Result<Vec<Event>, StoreError> {
@@ -81,7 +81,7 @@ async fn collect_events(mut rows: libsql::Rows) -> Result<Vec<Event>, StoreError
 /// Returns `StoreError::Backend` for libSQL failures, `StoreError::Serialization` when a stored
 /// event blob cannot be decoded, or a backend projection error for malformed chains.
 pub(crate) async fn read_run_chain(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
     workflow_id: &WorkflowId,
 ) -> Result<Vec<RunSummary>, StoreError> {
     let history = read_history(conn, workflow_id).await?;
@@ -95,7 +95,7 @@ pub(crate) async fn read_run_chain(
 /// Returns `StoreError::Backend` for libSQL failures and `StoreError::Serialization` when a stored
 /// workflow id cannot be decoded.
 pub(crate) async fn list_workflow_ids(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
 ) -> Result<Vec<WorkflowId>, StoreError> {
     let mut rows = conn
         .query(
@@ -126,7 +126,9 @@ pub(crate) async fn list_workflow_ids(
 ///
 /// Returns `StoreError::Backend` for libSQL failures and `StoreError::Serialization` for malformed
 /// stored event blobs.
-pub(crate) async fn list_active(conn: &libsql::Connection) -> Result<Vec<WorkflowId>, StoreError> {
+pub(crate) async fn list_active(
+    conn: crate::pool::ReadOnly<'_>,
+) -> Result<Vec<WorkflowId>, StoreError> {
     let mut active = load_summaries(conn, &WorkflowFilter::default(), false)
         .await?
         .into_iter()
@@ -146,7 +148,9 @@ pub(crate) async fn list_active(conn: &libsql::Connection) -> Result<Vec<Workflo
 ///
 /// Returns `StoreError::Backend` for libSQL failures and `StoreError::Serialization` for malformed
 /// stored event blobs.
-pub(crate) async fn list_paused(conn: &libsql::Connection) -> Result<Vec<WorkflowId>, StoreError> {
+pub(crate) async fn list_paused(
+    conn: crate::pool::ReadOnly<'_>,
+) -> Result<Vec<WorkflowId>, StoreError> {
     let mut paused = load_summaries(conn, &WorkflowFilter::default(), false)
         .await?
         .into_iter()
@@ -164,7 +168,7 @@ pub(crate) async fn list_paused(conn: &libsql::Connection) -> Result<Vec<Workflo
 /// Returns `StoreError::Backend` for libSQL failures and `StoreError::Serialization` for malformed
 /// stored event blobs.
 pub(crate) async fn query(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
     filter: &WorkflowFilter,
 ) -> Result<Vec<WorkflowSummary>, StoreError> {
     let mut summaries = load_summaries(conn, filter, true)
@@ -182,7 +186,7 @@ pub(crate) async fn query(
 ///
 /// Returns `StoreError::Backend` for libSQL failures and `StoreError::Serialization` when any
 /// stored event blob is incompatible with the current event schema.
-pub(crate) async fn validate_all_events(conn: &libsql::Connection) -> Result<(), StoreError> {
+pub(crate) async fn validate_all_events(conn: crate::pool::ReadOnly<'_>) -> Result<(), StoreError> {
     let mut rows = conn
         .query(
             "SELECT event FROM events ORDER BY workflow_id ASC, seq ASC",
@@ -206,7 +210,7 @@ pub(crate) async fn validate_all_events(conn: &libsql::Connection) -> Result<(),
 }
 
 async fn load_summaries(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
     filter: &WorkflowFilter,
     include_parents: bool,
 ) -> Result<Vec<WorkflowSummary>, StoreError> {
@@ -231,7 +235,7 @@ async fn load_summaries(
 }
 
 async fn load_candidate_histories(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
     filter: &WorkflowFilter,
 ) -> Result<HashMap<WorkflowId, Vec<Event>>, StoreError> {
     let plan = QueryPlan::from_filter(filter);
@@ -310,7 +314,7 @@ impl QueryPlan {
 }
 
 async fn load_parent_links(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
 ) -> Result<HashMap<WorkflowId, WorkflowId>, StoreError> {
     let mut rows = conn
         .query(

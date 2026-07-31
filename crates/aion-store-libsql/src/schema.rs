@@ -317,29 +317,31 @@ mod tests {
         let conn = open_test_connection("objects").await?;
 
         ensure_schema(&conn).await?;
+        // `ReadOnly` is `Copy`, so one binding serves every assertion below.
+        let read = crate::pool::ReadOnly::from_raw_for_test(&conn);
 
-        assert_schema_object(&conn, "table", "events").await?;
-        assert_schema_object(&conn, "index", "sqlite_autoindex_events_1").await?;
-        assert_schema_object(&conn, "index", "idx_events_queryable_filter").await?;
-        assert_schema_object(&conn, "table", "timers").await?;
-        assert_schema_object(&conn, "index", "sqlite_autoindex_timers_1").await?;
-        assert_schema_object(&conn, "index", "idx_timers_fire_at").await?;
-        assert_schema_object(&conn, "table", "packages").await?;
-        assert_schema_object(&conn, "index", "sqlite_autoindex_packages_1").await?;
-        assert_schema_object(&conn, "table", "package_routes").await?;
-        assert_schema_object(&conn, "index", "sqlite_autoindex_package_routes_1").await?;
-        assert_schema_object(&conn, "table", "visibility").await?;
-        assert_schema_object(&conn, "index", "sqlite_autoindex_visibility_1").await?;
-        assert_schema_object(&conn, "index", "idx_visibility_workflow_type").await?;
-        assert_schema_object(&conn, "index", "idx_visibility_status").await?;
-        assert_schema_object(&conn, "index", "idx_visibility_start_time").await?;
-        assert_schema_object(&conn, "index", "idx_visibility_close_time").await?;
-        assert_schema_object(&conn, "table", "outbox").await?;
-        assert_schema_object(&conn, "index", "idx_outbox_pending").await?;
-        assert_schema_object(&conn, "index", "idx_outbox_claimed_at").await?;
-        assert_schema_object(&conn, "table", "namespaces").await?;
-        assert_schema_object(&conn, "index", "sqlite_autoindex_namespaces_1").await?;
-        assert_schema_object(&conn, "index", "idx_namespaces_created_at").await?;
+        assert_schema_object(read, "table", "events").await?;
+        assert_schema_object(read, "index", "sqlite_autoindex_events_1").await?;
+        assert_schema_object(read, "index", "idx_events_queryable_filter").await?;
+        assert_schema_object(read, "table", "timers").await?;
+        assert_schema_object(read, "index", "sqlite_autoindex_timers_1").await?;
+        assert_schema_object(read, "index", "idx_timers_fire_at").await?;
+        assert_schema_object(read, "table", "packages").await?;
+        assert_schema_object(read, "index", "sqlite_autoindex_packages_1").await?;
+        assert_schema_object(read, "table", "package_routes").await?;
+        assert_schema_object(read, "index", "sqlite_autoindex_package_routes_1").await?;
+        assert_schema_object(read, "table", "visibility").await?;
+        assert_schema_object(read, "index", "sqlite_autoindex_visibility_1").await?;
+        assert_schema_object(read, "index", "idx_visibility_workflow_type").await?;
+        assert_schema_object(read, "index", "idx_visibility_status").await?;
+        assert_schema_object(read, "index", "idx_visibility_start_time").await?;
+        assert_schema_object(read, "index", "idx_visibility_close_time").await?;
+        assert_schema_object(read, "table", "outbox").await?;
+        assert_schema_object(read, "index", "idx_outbox_pending").await?;
+        assert_schema_object(read, "index", "idx_outbox_claimed_at").await?;
+        assert_schema_object(read, "table", "namespaces").await?;
+        assert_schema_object(read, "index", "sqlite_autoindex_namespaces_1").await?;
+        assert_schema_object(read, "index", "idx_namespaces_created_at").await?;
 
         Ok(())
     }
@@ -362,7 +364,7 @@ mod tests {
     }
 
     async fn assert_schema_object(
-        conn: &libsql::Connection,
+        conn: crate::pool::ReadOnly<'_>,
         object_type: &str,
         name: &str,
     ) -> Result<(), StoreError> {

@@ -118,7 +118,9 @@ pub(crate) async fn put_namespace(
 ///
 /// Returns `StoreError::Backend` for libSQL read failures and
 /// `StoreError::Serialization` when a persisted record cannot be decoded.
-pub(crate) async fn list_namespaces(conn: &Connection) -> Result<Vec<NamespaceRecord>, StoreError> {
+pub(crate) async fn list_namespaces(
+    conn: crate::pool::ReadOnly<'_>,
+) -> Result<Vec<NamespaceRecord>, StoreError> {
     let mut rows = conn
         .query(LIST_RECORDS_SQL, ())
         .await
@@ -143,7 +145,7 @@ pub(crate) async fn list_namespaces(conn: &Connection) -> Result<Vec<NamespaceRe
 /// Returns `StoreError::Backend` for libSQL read failures and
 /// `StoreError::Serialization` when the persisted record cannot be decoded.
 pub(crate) async fn get_namespace(
-    conn: &Connection,
+    conn: crate::pool::ReadOnly<'_>,
     name: &str,
 ) -> Result<Option<NamespaceRecord>, StoreError> {
     let mut rows = conn
@@ -367,9 +369,10 @@ mod tests {
             super::register_namespace(&conn, "orders", NamespaceOrigin::WorkerMint).await?;
         assert_eq!(outcome, MintOutcome::Created);
 
-        let record = super::get_namespace(&conn, "orders")
-            .await?
-            .expect("namespace must persist");
+        let record =
+            super::get_namespace(crate::pool::ReadOnly::from_raw_for_test(&conn), "orders")
+                .await?
+                .expect("namespace must persist");
         assert_eq!(record.name, "orders");
         assert_eq!(record.origin, NamespaceOrigin::WorkerMint);
         assert_eq!(record.state, NamespaceState::Active);
@@ -383,17 +386,19 @@ mod tests {
 
         let first = super::register_namespace(&conn, "orders", NamespaceOrigin::WorkerMint).await?;
         assert_eq!(first, MintOutcome::Created);
-        let original = super::get_namespace(&conn, "orders")
-            .await?
-            .expect("namespace must persist");
+        let original =
+            super::get_namespace(crate::pool::ReadOnly::from_raw_for_test(&conn), "orders")
+                .await?
+                .expect("namespace must persist");
 
         // A different origin on re-register must NOT overwrite the recorded origin.
         let second = super::register_namespace(&conn, "orders", NamespaceOrigin::Explicit).await?;
         assert_eq!(second, MintOutcome::AlreadyExisted);
 
-        let touched = super::get_namespace(&conn, "orders")
-            .await?
-            .expect("namespace must persist");
+        let touched =
+            super::get_namespace(crate::pool::ReadOnly::from_raw_for_test(&conn), "orders")
+                .await?
+                .expect("namespace must persist");
         assert_eq!(touched.created_at, original.created_at);
         assert_eq!(touched.origin, NamespaceOrigin::WorkerMint);
         assert!(touched.last_seen >= original.last_seen);
@@ -425,9 +430,10 @@ mod tests {
             MintOutcome::AlreadyExisted
         );
 
-        let stored = super::get_namespace(&conn, "billing")
-            .await?
-            .expect("namespace must persist");
+        let stored =
+            super::get_namespace(crate::pool::ReadOnly::from_raw_for_test(&conn), "billing")
+                .await?
+                .expect("namespace must persist");
         assert_eq!(stored.origin, NamespaceOrigin::Explicit);
         assert_eq!(stored.config.kind.as_deref(), Some("tenant"));
         Ok(())
@@ -461,11 +467,12 @@ mod tests {
         )
         .await?;
 
-        let listed: Vec<String> = super::list_namespaces(&conn)
-            .await?
-            .into_iter()
-            .map(|record| record.name)
-            .collect();
+        let listed: Vec<String> =
+            super::list_namespaces(crate::pool::ReadOnly::from_raw_for_test(&conn))
+                .await?
+                .into_iter()
+                .map(|record| record.name)
+                .collect();
         assert_eq!(listed, vec!["alpha", "zeta", "beta"]);
         Ok(())
     }
@@ -473,7 +480,11 @@ mod tests {
     #[tokio::test]
     async fn get_returns_none_for_absent_name() -> Result<(), StoreError> {
         let conn = open_test_connection("get-miss").await?;
-        assert!(super::get_namespace(&conn, "missing").await?.is_none());
+        assert!(
+            super::get_namespace(crate::pool::ReadOnly::from_raw_for_test(&conn), "missing")
+                .await?
+                .is_none()
+        );
         Ok(())
     }
 
@@ -488,9 +499,10 @@ mod tests {
 
         let conn = open_test_connection("set-placement").await?;
         super::register_namespace(&conn, "orders", NamespaceOrigin::Explicit).await?;
-        let original = super::get_namespace(&conn, "orders")
-            .await?
-            .expect("namespace must persist");
+        let original =
+            super::get_namespace(crate::pool::ReadOnly::from_raw_for_test(&conn), "orders")
+                .await?
+                .expect("namespace must persist");
         assert_eq!(original.placement, NamespacePlacement::Unplaced);
 
         let nodes: BTreeSet<String> = ["n1".to_owned()].into_iter().collect();
@@ -501,9 +513,10 @@ mod tests {
             super::set_namespace_placement(&conn, "orders", placement.clone()).await?,
             Some(())
         );
-        let updated = super::get_namespace(&conn, "orders")
-            .await?
-            .expect("namespace must persist");
+        let updated =
+            super::get_namespace(crate::pool::ReadOnly::from_raw_for_test(&conn), "orders")
+                .await?
+                .expect("namespace must persist");
         assert_eq!(updated.placement, placement);
         assert_eq!(updated.origin, NamespaceOrigin::Explicit);
         assert_eq!(updated.created_at, original.created_at);
@@ -519,7 +532,11 @@ mod tests {
             super::set_namespace_placement(&conn, "ghost", NamespacePlacement::Unplaced).await?,
             None
         );
-        assert!(super::get_namespace(&conn, "ghost").await?.is_none());
+        assert!(
+            super::get_namespace(crate::pool::ReadOnly::from_raw_for_test(&conn), "ghost")
+                .await?
+                .is_none()
+        );
         Ok(())
     }
 
@@ -529,21 +546,29 @@ mod tests {
         super::register_namespace(&conn, "orders", NamespaceOrigin::WorkerMint).await?;
 
         super::deprecate_namespace(&conn, "orders").await?;
-        let deprecated = super::get_namespace(&conn, "orders")
-            .await?
-            .expect("namespace must persist");
+        let deprecated =
+            super::get_namespace(crate::pool::ReadOnly::from_raw_for_test(&conn), "orders")
+                .await?
+                .expect("namespace must persist");
         assert_eq!(deprecated.state, NamespaceState::Deprecated);
 
         // Deprecating again is a no-op, not an error.
         super::deprecate_namespace(&conn, "orders").await?;
-        let still = super::get_namespace(&conn, "orders")
+        let still = super::get_namespace(crate::pool::ReadOnly::from_raw_for_test(&conn), "orders")
             .await?
             .expect("namespace must persist");
         assert_eq!(still.state, NamespaceState::Deprecated);
 
         // Deprecating an absent namespace is an idempotent no-op.
         super::deprecate_namespace(&conn, "never-seen").await?;
-        assert!(super::get_namespace(&conn, "never-seen").await?.is_none());
+        assert!(
+            super::get_namespace(
+                crate::pool::ReadOnly::from_raw_for_test(&conn),
+                "never-seen"
+            )
+            .await?
+            .is_none()
+        );
         Ok(())
     }
 }

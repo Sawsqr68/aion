@@ -76,7 +76,7 @@ pub(crate) async fn record_visibility(
 ///
 /// Returns backend errors from libSQL or serialization errors when persisted rows cannot be decoded.
 pub(crate) async fn list_workflows(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
     filter: ListWorkflowsFilter,
 ) -> Result<Vec<VisibilityWorkflowSummary>, StoreError> {
     let plan = QueryPlan::list(&filter)?;
@@ -103,7 +103,7 @@ pub(crate) async fn list_workflows(
 ///
 /// Returns backend errors from libSQL or serialization errors from filter encoding.
 pub(crate) async fn count_workflows(
-    conn: &libsql::Connection,
+    conn: crate::pool::ReadOnly<'_>,
     filter: ListWorkflowsFilter,
 ) -> Result<u64, StoreError> {
     let plan = QueryPlan::count(&filter)?;
@@ -135,11 +135,11 @@ impl VisibilityStore for LibSqlStore {
         &self,
         filter: ListWorkflowsFilter,
     ) -> Result<Vec<VisibilityWorkflowSummary>, StoreError> {
-        list_workflows(&*self.reader().await?, filter).await
+        list_workflows(self.reader().await?.read(), filter).await
     }
 
     async fn count_workflows(&self, filter: ListWorkflowsFilter) -> Result<u64, StoreError> {
-        count_workflows(&*self.reader().await?, filter).await
+        count_workflows(self.reader().await?.read(), filter).await
     }
 }
 
@@ -487,7 +487,11 @@ mod tests {
         );
         record_visibility(&conn, record.clone()).await?;
 
-        let summaries = list_workflows(&conn, ListWorkflowsFilter::default()).await?;
+        let summaries = list_workflows(
+            crate::pool::ReadOnly::from_raw_for_test(&conn),
+            ListWorkflowsFilter::default(),
+        )
+        .await?;
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0], record.into());
 
@@ -520,7 +524,7 @@ mod tests {
 
         assert_eq!(
             ids(list_workflows(
-                &conn,
+                crate::pool::ReadOnly::from_raw_for_test(&conn),
                 ListWorkflowsFilter {
                     workflow_type: Some(String::from("orders")),
                     ..ListWorkflowsFilter::default()
@@ -531,7 +535,7 @@ mod tests {
         );
         assert_eq!(
             ids(list_workflows(
-                &conn,
+                crate::pool::ReadOnly::from_raw_for_test(&conn),
                 ListWorkflowsFilter {
                     status: Some(WorkflowStatus::Running),
                     ..ListWorkflowsFilter::default()
@@ -542,7 +546,7 @@ mod tests {
         );
         assert_eq!(
             ids(list_workflows(
-                &conn,
+                crate::pool::ReadOnly::from_raw_for_test(&conn),
                 ListWorkflowsFilter {
                     started_after: Some(instant(2026, 6, 2, 0, 0, 0)?),
                     started_before: Some(instant(2026, 6, 2, 23, 59, 59)?),
@@ -554,7 +558,7 @@ mod tests {
         );
         assert_eq!(
             ids(list_workflows(
-                &conn,
+                crate::pool::ReadOnly::from_raw_for_test(&conn),
                 ListWorkflowsFilter {
                     closed_after: Some(instant(2026, 6, 1, 9, 30, 0)?),
                     closed_before: Some(instant(2026, 6, 1, 10, 30, 0)?),
@@ -594,7 +598,7 @@ mod tests {
 
         assert_eq!(
             ids(list_workflows(
-                &conn,
+                crate::pool::ReadOnly::from_raw_for_test(&conn),
                 custom_filter(SearchAttributePredicate::Equals {
                     name: String::from("customer"),
                     value: SearchAttributeValue::String(String::from("cust-1")),
@@ -605,7 +609,7 @@ mod tests {
         );
         assert_eq!(
             ids(list_workflows(
-                &conn,
+                crate::pool::ReadOnly::from_raw_for_test(&conn),
                 custom_filter(SearchAttributePredicate::GreaterThan {
                     name: String::from("attempts"),
                     value: SearchAttributeValue::Int(3),
@@ -616,7 +620,7 @@ mod tests {
         );
         assert_eq!(
             ids(list_workflows(
-                &conn,
+                crate::pool::ReadOnly::from_raw_for_test(&conn),
                 custom_filter(SearchAttributePredicate::LessThan {
                     name: String::from("attempts"),
                     value: SearchAttributeValue::Int(3),
@@ -627,7 +631,7 @@ mod tests {
         );
         assert_eq!(
             ids(list_workflows(
-                &conn,
+                crate::pool::ReadOnly::from_raw_for_test(&conn),
                 custom_filter(SearchAttributePredicate::Contains {
                     name: String::from("tags"),
                     keyword: String::from("west"),
@@ -675,7 +679,11 @@ mod tests {
         .await?;
 
         assert_eq!(
-            ids(list_workflows(&conn, ListWorkflowsFilter::default()).await?),
+            ids(list_workflows(
+                crate::pool::ReadOnly::from_raw_for_test(&conn),
+                ListWorkflowsFilter::default()
+            )
+            .await?),
             vec![
                 newest.workflow_id,
                 middle.workflow_id.clone(),
@@ -684,7 +692,7 @@ mod tests {
         );
         assert_eq!(
             ids(list_workflows(
-                &conn,
+                crate::pool::ReadOnly::from_raw_for_test(&conn),
                 ListWorkflowsFilter {
                     limit: Some(1),
                     offset: Some(1),
@@ -723,17 +731,37 @@ mod tests {
         .await?;
 
         assert_eq!(
-            count_workflows(&conn, ListWorkflowsFilter::default()).await?,
+            count_workflows(
+                crate::pool::ReadOnly::from_raw_for_test(&conn),
+                ListWorkflowsFilter::default()
+            )
+            .await?,
             2
         );
         let filter = ListWorkflowsFilter {
             status: Some(WorkflowStatus::Completed),
             ..ListWorkflowsFilter::default()
         };
-        assert_eq!(count_workflows(&conn, filter.clone()).await?, 1);
         assert_eq!(
-            usize::try_from(count_workflows(&conn, filter.clone()).await?).unwrap_or(usize::MAX),
-            list_workflows(&conn, filter).await?.len()
+            count_workflows(
+                crate::pool::ReadOnly::from_raw_for_test(&conn),
+                filter.clone()
+            )
+            .await?,
+            1
+        );
+        assert_eq!(
+            usize::try_from(
+                count_workflows(
+                    crate::pool::ReadOnly::from_raw_for_test(&conn),
+                    filter.clone()
+                )
+                .await?
+            )
+            .unwrap_or(usize::MAX),
+            list_workflows(crate::pool::ReadOnly::from_raw_for_test(&conn), filter)
+                .await?
+                .len()
         );
 
         Ok(())
@@ -836,7 +864,11 @@ mod tests {
         record.failure_reason = Some(String::from("provider error: rate limited"));
         record_visibility(&conn, record.clone()).await?;
 
-        let summaries = list_workflows(&conn, ListWorkflowsFilter::default()).await?;
+        let summaries = list_workflows(
+            crate::pool::ReadOnly::from_raw_for_test(&conn),
+            ListWorkflowsFilter::default(),
+        )
+        .await?;
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].failed_step.as_deref(), Some("dev_review"));
         assert_eq!(

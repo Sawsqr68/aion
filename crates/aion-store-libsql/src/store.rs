@@ -124,7 +124,7 @@ impl LibSqlStore {
     /// Returns `StoreError::Serialization` when any stored event cannot be decoded by the current
     /// event schema, or `StoreError::Backend` for libSQL scan failures.
     pub async fn validate_event_compatibility(&self) -> Result<(), StoreError> {
-        crate::read::validate_all_events(&*self.reader().await?).await
+        crate::read::validate_all_events(self.reader().await?.read()).await
     }
 
     /// Trigger and await a libSQL replica synchronization cycle.
@@ -192,7 +192,7 @@ impl LibSqlStore {
         &self,
         dispatch_key: &str,
     ) -> Result<Option<OutboxRowState>, StoreError> {
-        crate::outbox::outbox_row_state(&*self.reader().await?, dispatch_key).await
+        crate::outbox::outbox_row_state(self.reader().await?.read(), dispatch_key).await
     }
 }
 
@@ -212,7 +212,7 @@ impl PackageStore for LibSqlStore {
     }
 
     async fn list_packages(&self) -> Result<Vec<PackageRecord>, StoreError> {
-        crate::package::list_packages(&*self.reader().await?).await
+        crate::package::list_packages(self.reader().await?.read()).await
     }
 
     async fn delete_package(
@@ -232,7 +232,7 @@ impl PackageStore for LibSqlStore {
     }
 
     async fn list_package_routes(&self) -> Result<Vec<PackageRouteRecord>, StoreError> {
-        crate::package::list_package_routes(&*self.reader().await?).await
+        crate::package::list_package_routes(self.reader().await?.read()).await
     }
 }
 
@@ -251,11 +251,11 @@ impl NamespaceStore for LibSqlStore {
     }
 
     async fn list_namespaces(&self) -> Result<Vec<NamespaceRecord>, StoreError> {
-        crate::namespace::list_namespaces(&*self.reader().await?).await
+        crate::namespace::list_namespaces(self.reader().await?.read()).await
     }
 
     async fn get_namespace(&self, name: &str) -> Result<Option<NamespaceRecord>, StoreError> {
-        crate::namespace::get_namespace(&*self.reader().await?, name).await
+        crate::namespace::get_namespace(self.reader().await?.read(), name).await
     }
 
     async fn set_namespace_placement(
@@ -376,12 +376,16 @@ impl OutboxStore for LibSqlStore {
         older_than: DateTime<Utc>,
         limit: u32,
     ) -> Result<Vec<OutboxRow>, StoreError> {
-        crate::outbox::list_stale_claimed_outbox_rows(&*self.reader().await?, older_than, limit)
-            .await
+        crate::outbox::list_stale_claimed_outbox_rows(
+            self.reader().await?.read(),
+            older_than,
+            limit,
+        )
+        .await
     }
 
     async fn list_unsettled_outbox_workflow_ids(&self) -> Result<Vec<WorkflowId>, StoreError> {
-        crate::outbox::list_unsettled_outbox_workflow_ids(&*self.reader().await?).await
+        crate::outbox::list_unsettled_outbox_workflow_ids(self.reader().await?.read()).await
     }
 
     async fn cancel_outbox_rows_for_workflow(
@@ -426,7 +430,8 @@ impl OutboxStore for LibSqlStore {
         &self,
         workflow_id: &WorkflowId,
     ) -> Result<Vec<OutboxRow>, StoreError> {
-        crate::outbox::list_dead_lettered_outbox_rows(&*self.reader().await?, workflow_id).await
+        crate::outbox::list_dead_lettered_outbox_rows(self.reader().await?.read(), workflow_id)
+            .await
     }
 
     async fn redrive_outbox_row(
@@ -442,30 +447,33 @@ impl OutboxStore for LibSqlStore {
     }
 
     async fn count_inflight_outbox_rows(&self, namespace: &str) -> Result<u64, StoreError> {
-        crate::outbox::count_inflight_outbox_rows(&*self.reader().await?, namespace).await
+        crate::outbox::count_inflight_outbox_rows(self.reader().await?.read(), namespace).await
     }
 
     async fn count_claimed_outbox_rows(&self, namespace: &str) -> Result<u64, StoreError> {
-        crate::outbox::count_claimed_outbox_rows(&*self.reader().await?, namespace).await
+        crate::outbox::count_claimed_outbox_rows(self.reader().await?.read(), namespace).await
     }
 
     async fn count_claimed_outbox_rows_by_namespace(
         &self,
         namespaces: &[&str],
     ) -> Result<std::collections::BTreeMap<String, u64>, StoreError> {
-        crate::outbox::count_claimed_outbox_rows_by_namespace(&*self.reader().await?, namespaces)
-            .await
+        crate::outbox::count_claimed_outbox_rows_by_namespace(
+            self.reader().await?.read(),
+            namespaces,
+        )
+        .await
     }
 
     async fn pending_outbox_routes(&self) -> Result<Vec<ClaimScope>, StoreError> {
-        crate::outbox::pending_outbox_routes(&*self.reader().await?).await
+        crate::outbox::pending_outbox_routes(self.reader().await?.read()).await
     }
 }
 
 #[async_trait]
 impl ReadableEventStore for LibSqlStore {
     async fn read_history(&self, workflow_id: &WorkflowId) -> Result<Vec<Event>, StoreError> {
-        crate::read::read_history(&*self.reader().await?, workflow_id).await
+        crate::read::read_history(self.reader().await?.read(), workflow_id).await
     }
 
     async fn read_history_from(
@@ -473,30 +481,30 @@ impl ReadableEventStore for LibSqlStore {
         workflow_id: &WorkflowId,
         from_seq: u64,
     ) -> Result<Vec<Event>, StoreError> {
-        crate::read::read_history_from(&*self.reader().await?, workflow_id, from_seq).await
+        crate::read::read_history_from(self.reader().await?.read(), workflow_id, from_seq).await
     }
 
     async fn read_run_chain(
         &self,
         workflow_id: &WorkflowId,
     ) -> Result<Vec<RunSummary>, StoreError> {
-        crate::read::read_run_chain(&*self.reader().await?, workflow_id).await
+        crate::read::read_run_chain(self.reader().await?.read(), workflow_id).await
     }
 
     async fn list_workflow_ids(&self) -> Result<Vec<WorkflowId>, StoreError> {
-        crate::read::list_workflow_ids(&*self.reader().await?).await
+        crate::read::list_workflow_ids(self.reader().await?.read()).await
     }
 
     async fn list_active(&self) -> Result<Vec<WorkflowId>, StoreError> {
-        crate::read::list_active(&*self.reader().await?).await
+        crate::read::list_active(self.reader().await?.read()).await
     }
 
     async fn list_paused(&self) -> Result<Vec<WorkflowId>, StoreError> {
-        crate::read::list_paused(&*self.reader().await?).await
+        crate::read::list_paused(self.reader().await?.read()).await
     }
 
     async fn query(&self, filter: &WorkflowFilter) -> Result<Vec<WorkflowSummary>, StoreError> {
-        crate::read::query(&*self.reader().await?, filter).await
+        crate::read::query(self.reader().await?.read(), filter).await
     }
 
     async fn schedule_timer(
@@ -512,7 +520,7 @@ impl ReadableEventStore for LibSqlStore {
     }
 
     async fn expired_timers(&self, as_of: DateTime<Utc>) -> Result<Vec<TimerEntry>, StoreError> {
-        crate::timer::expired_timers(&*self.reader().await?, as_of).await
+        crate::timer::expired_timers(self.reader().await?.read(), as_of).await
     }
 }
 
@@ -537,9 +545,9 @@ mod tests {
     async fn open_creates_schema() -> Result<(), StoreError> {
         let store = LibSqlStore::open(unique_temp_path("open-schema")).await?;
 
-        assert_schema_object(&*store.reader().await?, "table", "events").await?;
-        assert_schema_object(&*store.reader().await?, "table", "timers").await?;
-        assert_schema_object(&*store.reader().await?, "table", "visibility").await?;
+        assert_schema_object(store.reader().await?.read(), "table", "events").await?;
+        assert_schema_object(store.reader().await?.read(), "table", "timers").await?;
+        assert_schema_object(store.reader().await?.read(), "table", "visibility").await?;
 
         Ok(())
     }
@@ -579,7 +587,7 @@ mod tests {
             .await
             .map_err(|error| crate::error::libsql_error(&error))?;
 
-        let count = timer_count(&*store.reader().await?).await?;
+        let count = timer_count(store.reader().await?.read()).await?;
         if count == 1 {
             Ok(())
         } else {
@@ -591,7 +599,7 @@ mod tests {
     }
 
     async fn assert_schema_object(
-        conn: &libsql::Connection,
+        conn: crate::pool::ReadOnly<'_>,
         object_type: &str,
         name: &str,
     ) -> Result<(), StoreError> {
@@ -617,7 +625,7 @@ mod tests {
         }
     }
 
-    async fn timer_count(conn: &libsql::Connection) -> Result<i64, StoreError> {
+    async fn timer_count(conn: crate::pool::ReadOnly<'_>) -> Result<i64, StoreError> {
         let mut rows = conn
             .query("SELECT COUNT(*) FROM timers", ())
             .await

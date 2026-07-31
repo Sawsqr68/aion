@@ -691,7 +691,7 @@ async fn select_and_rearm_stale_claimed(
 /// Returns `StoreError::Backend` for libSQL boundary failures and `StoreError::Serialization` when a
 /// stored row cannot be decoded.
 pub(crate) async fn list_stale_claimed_outbox_rows(
-    conn: &Connection,
+    conn: crate::pool::ReadOnly<'_>,
     older_than: DateTime<Utc>,
     limit: u32,
 ) -> Result<Vec<OutboxRow>, StoreError> {
@@ -723,7 +723,7 @@ pub(crate) async fn list_stale_claimed_outbox_rows(
 /// Returns `StoreError::Backend` for libSQL boundary failures and `StoreError::Serialization` when a
 /// stored workflow id cannot be decoded.
 pub(crate) async fn list_unsettled_outbox_workflow_ids(
-    conn: &Connection,
+    conn: crate::pool::ReadOnly<'_>,
 ) -> Result<Vec<WorkflowId>, StoreError> {
     let mut rows = conn
         .query(SELECT_UNSETTLED_WORKFLOW_IDS_SQL, ())
@@ -781,7 +781,7 @@ pub(crate) async fn settle_workflow_outbox_rows_cancelled(
 /// Returns `StoreError::Backend` for libSQL boundary failures and `StoreError::Serialization` when
 /// a stored row cannot be decoded.
 pub(crate) async fn list_dead_lettered_outbox_rows(
-    conn: &Connection,
+    conn: crate::pool::ReadOnly<'_>,
     workflow_id: &WorkflowId,
 ) -> Result<Vec<OutboxRow>, StoreError> {
     let mut rows = conn
@@ -878,7 +878,7 @@ SELECT status, attempt, visible_after FROM outbox WHERE dispatch_key = ?1";
 
 /// Read `(status, attempt, visible_after)` for one row, or `None` when absent.
 pub(crate) async fn outbox_row_state(
-    conn: &Connection,
+    conn: crate::pool::ReadOnly<'_>,
     dispatch_key: &str,
 ) -> Result<Option<OutboxRowState>, StoreError> {
     let mut rows = conn
@@ -920,7 +920,7 @@ pub(crate) async fn outbox_row_state(
 /// Returns `StoreError::Backend` for libSQL boundary failures and `StoreError::Serialization` when
 /// the engine returns a negative count.
 pub(crate) async fn count_inflight_outbox_rows(
-    conn: &Connection,
+    conn: crate::pool::ReadOnly<'_>,
     namespace: &str,
 ) -> Result<u64, StoreError> {
     let mut rows = conn
@@ -952,7 +952,7 @@ pub(crate) async fn count_inflight_outbox_rows(
 /// Returns `StoreError::Backend` for libSQL boundary failures and `StoreError::Serialization` when
 /// the engine returns a negative count.
 pub(crate) async fn count_claimed_outbox_rows(
-    conn: &Connection,
+    conn: crate::pool::ReadOnly<'_>,
     namespace: &str,
 ) -> Result<u64, StoreError> {
     let mut rows = conn
@@ -985,7 +985,7 @@ pub(crate) async fn count_claimed_outbox_rows(
 /// Returns `StoreError::Backend` for libSQL boundary failures and `StoreError::Serialization` when the
 /// engine returns a negative count.
 pub(crate) async fn count_claimed_outbox_rows_by_namespace(
-    conn: &Connection,
+    conn: crate::pool::ReadOnly<'_>,
     namespaces: &[&str],
 ) -> Result<std::collections::BTreeMap<String, u64>, StoreError> {
     let requested: std::collections::BTreeSet<&str> = namespaces.iter().copied().collect();
@@ -1028,7 +1028,7 @@ pub(crate) async fn count_claimed_outbox_rows_by_namespace(
 /// Returns `StoreError::Backend` for libSQL boundary failures and `StoreError::Serialization` when a
 /// stored route column cannot be decoded.
 pub(crate) async fn pending_outbox_routes(
-    conn: &Connection,
+    conn: crate::pool::ReadOnly<'_>,
 ) -> Result<Vec<ClaimScope>, StoreError> {
     let now = encode_instant(Utc::now());
     let mut rows = conn
