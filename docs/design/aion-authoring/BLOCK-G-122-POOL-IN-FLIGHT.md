@@ -694,3 +694,78 @@ on the flake rate, three reds arriving mid-series cost the commit **nothing**.
 Nothing had to be retracted, because nothing had been claimed.
 
 ⇒ **A CLAIM YOU NEVER MADE IS A CLAIM YOU NEVER HAVE TO WITHDRAW.**
+
+---
+
+## ✅ THE GRADUATED PIN — landed `918f2d3c`, and v1 of it proved NOTHING
+
+Waffles' constraint discharged: `a_completion_survives_a_rollback_of_a_concurrent_writer_transaction`
+in `crates/aion-store-libsql/src/outbox_tests.rs`.
+
+### 🔴 v1 passed WITH THE DEFECT RESTORED — 5 runs out of 5
+
+v1 drove eight appends concurrently with eight completions and asserted both
+landed. Green on the fixed store; **green on the broken store too**.
+
+The reason is the finding, not the test:
+
+- libSQL's local `Connection` is a bare `*mut ffi::sqlite3` with **no mutex** —
+  verified at `libsql-0.9.30/src/local/connection.rs:27-36`. So #122's stated
+  mechanism is CONFIRMED at the source.
+- But **SQLite's own serialized threading mode** takes a per-connection mutex
+  inside the C library. Concurrent use of one handle does not error; it silently
+  serialises.
+
+⇒ **THE DEFECT WAS NEVER AN ERROR TO CATCH.** It is a durability loss — work
+committed by one caller discarded by another caller's rollback.
+
+⇒ **A CONCURRENCY TEST THAT ASSERTS "NO ERROR" CANNOT SEE A DEFECT WHOSE SYMPTOM
+IS SILENT.** v1 asserted the one thing that was true on both sides.
+
+### The pin that works, and what its red says
+
+Hold a transaction open on the writer → let a completion attempt → **roll back**.
+
+Control: `complete_outbox_row` restored to the true pre-#122 shape (a bare
+`libsql::Connection` field cloned from the writer, taking no lock). **RED 3/3:**
+
+```
+left: Some("claimed")   right: Some("done")
+```
+
+🔴 That symptom names the severity nothing else had: a `done` outbox row
+reverting to `claimed` is **REDELIVERY**. #122 was an **at-most-once violation**
+that raised no error and wrote no log line. Neither the 90-test battery nor any
+gate could have seen it.
+
+### 🔴 THE SECOND CONTROL ATTEMPT FAILED TO DISCRIMINATE — and nearly passed as proof
+
+My first control wrote `let unguarded = self.writer().await.clone();` — which
+**still acquires the mutex** before cloning. The completion parked for the whole
+delay and ran after the rollback, so the pin stayed green and I briefly had
+"control passed" as evidence the pin was sound. It was evidence of nothing.
+
+⇒ **A CONTROL THAT CANNOT REACH THE DEFECT IS INDISTINGUISHABLE FROM A FIX.**
+Both produce a green. Before trusting a control, check it actually removes the
+property under test — `.clone()` on a guard is not the same as never locking.
+
+### 🔴 THE LANDED COMMIT WAS NOT FMT-CLEAN
+
+`cargo fmt` moved `store.rs` and `pool.rs` *after* `7ead877a` landed. The tree
+was byte-identical to the gated tree and I took that as covering formatting — but
+the gate had been **clippy + test only**. Fixed in `918f2d3c` (pure line-wrapping,
+verified in the diff).
+
+⇒ **A TREE IDENTICAL TO A GATED TREE INHERITS EXACTLY THE GATES THAT WERE RUN ON
+IT, AND NO OTHERS.** "Unmoved since green" is only as broad as that green was.
+
+### The through-line of this whole block
+
+Three tests in Block G were written, believed, and found vacuous — the PRAGMA
+assertion, pin v1, and control v1. All three were caught the same way and by
+nothing else: **running the thing backwards and watching for red.** Reading them
+never worked. Reasoning about them never worked. My own conviction had zero
+diagnostic value in all three cases.
+
+⇒ **THE ONLY THING THAT HAS EVER CAUGHT A VACUOUS TEST HERE IS AN INVERTED
+CONTROL THAT WAS ACTUALLY RUN.**
