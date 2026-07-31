@@ -1,4 +1,4 @@
-//! Recording test doubles for store decorators.
+//! The recording seam spy.
 //!
 //! [`ShardSeamSpy`] is a thin recording wrapper over [`InMemoryStore`]: every
 //! non-seam [`crate::EventStore`] method delegates to the inner store (so the spy is a

@@ -36,8 +36,15 @@ pub mod package;
 pub mod run_chain;
 /// Core readable and writable event-store traits.
 pub mod store;
-/// Recording test doubles for store decorators, gated behind `test-support`.
-#[cfg(feature = "test-support")]
+/// Test doubles over the in-memory store: a recording seam spy and a store that
+/// lies about `list_active`.
+///
+/// Dependents opt in with the `test-support` feature. This crate's OWN test build
+/// compiles it unconditionally — under `--features test-support` alone, the
+/// doubles' own tests are invisible to `cargo test -p aion-store` and run only
+/// when a dependent's feature selection happens to unify them in, which is a gate
+/// that exists without running.
+#[cfg(any(test, feature = "test-support"))]
 pub mod testing;
 /// Timer persistence records and queries.
 pub mod timer;

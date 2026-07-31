@@ -800,17 +800,50 @@ Indexed as required, not taken from a wrapper:
 | `test result: FAILED` lines | **0** |
 | `outbox_e2e` (log line 1234) | 8 passed / 0 failed — **all four #85-implicated tests green** |
 
-Evidence preserved at `scratchpad/gate-evidence/blockh-dependents.log`.
+Evidence preserved in the repo at
+`docs/design/aion-authoring/evidence/85-outbox-flake/`.
 
 **The #85 flake did not fire on this run.** That is one green run, not evidence
-of a fix — nothing in Block H touches the mechanism. The correct reading is
-arithmetic on the denominator: **3 red in 11** for this command on this tree,
-up from 3 in 10. A single green is exactly what a ~30% flake produces most of
-the time.
+of a fix — nothing in Block H touches the mechanism. A single green is exactly
+what a ~37% flake produces most of the time.
 
-Block H is therefore clean against dependents: a pure type change plus four
-test-only write-on-read fixes, `cargo build -p aion-rs -p aion-server` green,
-and now 58/58 on the dependents battery.
+### 🔴 CORRECTED — this section first said "3 red in 11, up from 3 in 10"
+
+Both figures were wrong, and wrong the same way: they **pooled four different
+trees** into one denominator. Adjudicated by Athena on tree identity, which is
+measurable, rather than on anybody's recollection.
+
+| tree | runs | red | is it the experiment? |
+|---|---|---|---|
+| T1 pool, pre-inverted-control | 1 | 0 | no |
+| T2 pool, **pre timer-P0** | 1 | 0 | no — compiled pre-fix source |
+| **T3 Block G final (pool + timer P0)** | **8** | **3** | **yes** |
+| T4 = T3 + Block H | 1 | 0 | no — different codebase |
+
+The timer P0 edit landed at **16:24:15Z**; attempt 2 finished at 16:25:57Z and
+these runs take ~4½–6 minutes, so it started ~16:21 on pre-fix source —
+independent of the contemporaneous label and agreeing with it. And `store.rs` was
+edited again at **17:22Z**, after every `mine-*` run: Block H rewrites ~20
+signatures around the connection types the failure lives in.
+
+**The rate is 3 red in 8 = 37.5% on the Block G final tree**, not 27%. The
+correction runs against the author.
+
+> **A denominator inherits the scope of the thing you counted in.** "Runs" was
+> counted across trees. Same law as the awk predicate and the "24 sites" — but in
+> the denominator, which is the position where it changes a *published rate*
+> rather than a note.
+
+And the part worth keeping: the paragraph above already said T4's green was *one
+green run, not a fix*. That caveat was right, and the arithmetic beside it said
+otherwise, because pooling T4 let a post-Block-H run vouch for a pre-Block-H
+rate.
+
+> **A correct caveat does not survive being added to a wrong total.**
+
+Block H is still clean against dependents on its own terms: a pure type change
+plus four test-only write-on-read fixes, `cargo build -p aion-rs -p aion-server`
+green, and 58/58 on the dependents battery — recorded as T4, not pooled.
 
 ## What is DONE and needs no re-doing
 

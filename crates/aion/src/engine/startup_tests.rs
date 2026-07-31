@@ -1059,3 +1059,221 @@ async fn a_cancelled_run_is_terminal_at_boot_and_never_has_a_writer_minted() -> 
 
     Ok(())
 }
+
+/// #121 — the terminal guard, reached for the first time.
+///
+/// `repopulate_active_workflows` re-reads each listed run's history and refuses
+/// the ones that project terminal. Every real backend already filters
+/// `list_active` to `Running`, so that refusal is a SECOND line of defence behind
+/// a total filter: it can never fire through an honest store, and deleting it
+/// changes no observable outcome. Measured directly — `if false &&` on the guard
+/// left the whole `aion-rs` suite green at 1022 passed / 0 failed.
+///
+/// [`StaleActiveListStore`] is what makes it reachable: the completed run is
+/// forced into `list_active` while its history still says `Completed`, so the
+/// loop meets the contradiction the guard exists for and must refuse residency
+/// on its own account.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_terminal_run_forced_into_the_active_list_is_never_made_resident() -> TestResult {
+    let stale = Arc::new(aion_store::testing::StaleActiveListStore::new());
+    let store: Arc<dyn EventStore> = Arc::clone(&stale) as Arc<dyn EventStore>;
+    let runtime = Arc::new(RuntimeHandle::new(RuntimeConfig::new(Some(1)))?);
+    runtime.register_waiting_test_module("loadable_deployed", "run");
+    let catalog = Arc::new(WorkflowCatalog::new());
+    catalog.note_loaded_workflow_for_test(
+        "loadable",
+        "loadable_deployed",
+        "run",
+        aion_package::ContentHash::from_bytes([3; 32]),
+    );
+
+    // The control: identical in every respect except that it never completes.
+    // Without it, "not resident" is satisfied by a loop that recovered nothing
+    // at all — including one that never ran.
+    let healthy = WorkflowId::new_v4();
+    let mut seed = crate::durability::Recorder::new(healthy.clone(), Arc::clone(&store));
+    seed.record_workflow_started(
+        Utc::now(),
+        crate::durability::WorkflowStartRecord {
+            workflow_type: "loadable".to_owned(),
+            input: Payload::from_json(&json!({}))?,
+            run_id: RunId::new_v4(),
+            parent_run_id: None,
+            package_version: aion_core::PackageVersion::new("03".repeat(32)),
+        },
+    )
+    .await?;
+
+    let finished = WorkflowId::new_v4();
+    let mut seed = crate::durability::Recorder::new(finished.clone(), Arc::clone(&store));
+    seed.record_workflow_started(
+        Utc::now(),
+        crate::durability::WorkflowStartRecord {
+            workflow_type: "loadable".to_owned(),
+            input: Payload::from_json(&json!({}))?,
+            run_id: RunId::new_v4(),
+            parent_run_id: None,
+            package_version: aion_core::PackageVersion::new("03".repeat(32)),
+        },
+    )
+    .await?;
+    seed.record_workflow_completed(Utc::now(), Payload::from_json(&json!({ "done": true }))?)
+        .await?;
+
+    // The store's own filter is correct and is NOT what is under test here —
+    // pinned so a future change that starts listing terminal runs honestly does
+    // not quietly turn this test into a duplicate of the filter's own coverage.
+    assert!(
+        !store.list_active().await?.contains(&finished),
+        "the inner store must still exclude the completed run, or the injection \
+         below is not injecting anything"
+    );
+
+    stale.force_active(finished.clone());
+
+    // Non-vacuity, asserted rather than assumed: the loop must actually be handed
+    // the terminal run. If this fails the guard was never reached and a green
+    // outcome below would mean nothing.
+    let active = store.list_active().await?;
+    assert!(
+        active.contains(&finished),
+        "the forced terminal run must reach the recovery loop — this is the whole \
+         mechanism, and it is asserted here rather than inferred from the outcome"
+    );
+    assert!(
+        active.contains(&healthy),
+        "the control must also be listed, or it cannot discriminate"
+    );
+
+    let registry = Arc::new(Registry::default());
+    let mut context = context_with_registry(&store, &runtime, &registry);
+    context.catalog = catalog;
+    super::recover_active_workflows_on_startup(context).await?;
+
+    assert!(
+        registry.live_pid(&healthy)?.is_some(),
+        "the control must be made resident — without this the assertion below is \
+         satisfied by a sweep that did nothing at all"
+    );
+    assert!(
+        registry.live_pid(&finished)?.is_none(),
+        "a terminal run must never be made resident even when the store insists it \
+         is active: residency mints a writer for a run whose history is closed"
+    );
+
+    Ok(())
+}
+
+/// #121 — the `Paused` guard (#204), reached for the first time.
+///
+/// `Paused` is NON-terminal, so the `is_terminal` refusal above lets it through;
+/// it needs its own guard. That guard was equally uncovered — `if false` on it
+/// left the suite green TWICE. (An earlier single observation of a failure here
+/// was a flake of the #85 class, not a causal path: a deterministic cause cannot
+/// pass twice.)
+///
+/// This models the real interleaving rather than a filter bug. `list_active` is a
+/// SNAPSHOT; a run paused between that snapshot and the per-run re-read was
+/// genuinely active when listed and is `Paused` by the time it is read. The
+/// double reproduces that ordering deterministically, with no race to lose.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_paused_run_forced_into_the_active_list_is_never_made_resident() -> TestResult {
+    let stale = Arc::new(aion_store::testing::StaleActiveListStore::new());
+    let store: Arc<dyn EventStore> = Arc::clone(&stale) as Arc<dyn EventStore>;
+    let runtime = Arc::new(RuntimeHandle::new(RuntimeConfig::new(Some(1)))?);
+    runtime.register_waiting_test_module("loadable_deployed", "run");
+    let catalog = Arc::new(WorkflowCatalog::new());
+    catalog.note_loaded_workflow_for_test(
+        "loadable",
+        "loadable_deployed",
+        "run",
+        aion_package::ContentHash::from_bytes([3; 32]),
+    );
+
+    let healthy = WorkflowId::new_v4();
+    let mut seed = crate::durability::Recorder::new(healthy.clone(), Arc::clone(&store));
+    seed.record_workflow_started(
+        Utc::now(),
+        crate::durability::WorkflowStartRecord {
+            workflow_type: "loadable".to_owned(),
+            input: Payload::from_json(&json!({}))?,
+            run_id: RunId::new_v4(),
+            parent_run_id: None,
+            package_version: aion_core::PackageVersion::new("03".repeat(32)),
+        },
+    )
+    .await?;
+
+    let held = WorkflowId::new_v4();
+    let held_run = RunId::new_v4();
+    let mut seed = crate::durability::Recorder::new(held.clone(), Arc::clone(&store));
+    seed.record_workflow_started(
+        Utc::now(),
+        crate::durability::WorkflowStartRecord {
+            workflow_type: "loadable".to_owned(),
+            input: Payload::from_json(&json!({}))?,
+            run_id: held_run.clone(),
+            parent_run_id: None,
+            package_version: aion_core::PackageVersion::new("03".repeat(32)),
+        },
+    )
+    .await?;
+    seed.record_workflow_paused(
+        Utc::now(),
+        held_run,
+        Some("operator hold during recovery".to_owned()),
+        Some("tester".to_owned()),
+    )
+    .await?;
+
+    // The projection, pinned directly: `Paused` is NON-terminal, which is exactly
+    // why the terminal guard cannot cover this case and a separate one is needed.
+    let projected = aion_core::status_from_events(&store.read_history(&held).await?);
+    assert_eq!(projected, WorkflowStatus::Paused);
+    assert!(
+        !projected.is_terminal(),
+        "if Paused ever became terminal the guard under test would be redundant \
+         and this test would be silently covering the other one instead"
+    );
+    assert!(
+        !store.list_active().await?.contains(&held),
+        "the inner store must exclude the paused run before forcing"
+    );
+
+    stale.force_active(held.clone());
+
+    let active = store.list_active().await?;
+    assert!(
+        active.contains(&held),
+        "the forced paused run must reach the recovery loop"
+    );
+    assert!(
+        active.contains(&healthy),
+        "the control must also be listed, or it cannot discriminate"
+    );
+
+    let registry = Arc::new(Registry::default());
+    let mut context = context_with_registry(&store, &runtime, &registry);
+    context.catalog = catalog;
+    super::recover_active_workflows_on_startup(context).await?;
+
+    assert!(
+        registry.live_pid(&healthy)?.is_some(),
+        "the control must be made resident, or this proves nothing about the paused one"
+    );
+    assert!(
+        registry.live_pid(&held)?.is_none(),
+        "a durably-paused run must NOT be respawned (#204 GATE-2): the dispatch \
+         hold rebuilt from list_paused keeps its outbox rows held, and an operator \
+         `resume` is the only thing that may bring it back"
+    );
+
+    // The pause must survive the recovery pass. A loop that respawned it and then
+    // recorded a resume would satisfy the residency check above on a later poll.
+    assert!(
+        store.list_paused().await?.contains(&held),
+        "the run must still be durably paused after recovery"
+    );
+
+    Ok(())
+}
