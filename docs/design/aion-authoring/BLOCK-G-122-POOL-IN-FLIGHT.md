@@ -785,22 +785,32 @@ CONTROL THAT WAS ACTUALLY RUN.**
 
 All local, **unpushed** (`origin/main..HEAD` ≈ 16 commits).
 
-## 🔴 THE ONE THING STILL IN FLIGHT
-
-Background task **`bsdl8oit7`**, log **`/tmp/blockh-gate.log`**, last line `EXIT=<code>`:
+## ✅ THE DEPENDENTS GATE — GREEN (task `bsdl8oit7`, 2026-08-01)
 
 ```
 cargo test -p aion-rs --all-targets --no-fail-fast
 ```
 
-The dependents gate for Block H. Index it by **EXIT + the quoted `test result:`
-line + `ok + FAILED == 58`** — a run only counts if the total is 58.
+Indexed as required, not taken from a wrapper:
 
-**Expect the #85 flake to appear at roughly 3 in 10.** If it does, that is the
-KNOWN open flake (#85), NOT a Block H regression — but say which test, and add
-the run to #85's denominator either way. Block H is a pure type change plus four
-test-only write-on-read fixes, and `cargo build -p aion-rs -p aion-server`
-already passed.
+| index | value |
+|---|---|
+| `EXIT=` (log line 1489) | **0** |
+| `test result:` lines | **58** — the run happened |
+| `test result: FAILED` lines | **0** |
+| `outbox_e2e` (log line 1234) | 8 passed / 0 failed — **all four #85-implicated tests green** |
+
+Evidence preserved at `scratchpad/gate-evidence/blockh-dependents.log`.
+
+**The #85 flake did not fire on this run.** That is one green run, not evidence
+of a fix — nothing in Block H touches the mechanism. The correct reading is
+arithmetic on the denominator: **3 red in 11** for this command on this tree,
+up from 3 in 10. A single green is exactly what a ~30% flake produces most of
+the time.
+
+Block H is therefore clean against dependents: a pure type change plus four
+test-only write-on-read fixes, `cargo build -p aion-rs -p aion-server` green,
+and now 58/58 on the dependents battery.
 
 ## What is DONE and needs no re-doing
 
@@ -810,7 +820,7 @@ already passed.
 
 ## Next, in order
 
-1. Read `/tmp/blockh-gate.log`, report it honestly, close out #122.
+1. ~~Read `/tmp/blockh-gate.log`~~ — DONE, green, above. #122 closed.
 2. Board: **#121** (both recovery-loop guards covered by nothing), #117, #88, #71, #76.
 3. #85 is now an OPEN INVESTIGATION with a fresh lead — see its task body.
 
