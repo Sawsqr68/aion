@@ -58,15 +58,37 @@ package's own native `tree-sitter` dependency fails `node-gyp` under node v26.
 Install the CLI alone into a scratch prefix:
 `npm install --prefix <scratch> tree-sitter-cli@0.26.10`.
 
-## THE QUEUE — where it actually stands
+## THE QUEUE — CLOSED 2026-07-31 ~09:00Z
+
+**All items done. `origin/main` = `8554b30f`, tree clean, everything pushed.
+Artemis Peach has been DM'd the one-line close, which is her GO-6 launch
+signal — the box is hers.** Do not start a heavy compile without checking
+whether her full-workspace nextest is still running; my own rule about a
+battery having one lane's changes under it applies to hers too.
 
 | Item | State |
 | --- | --- |
-| 0. scoped clean | ✅ done — **14.3 MiB, a rounding error** |
+| 0. scoped clean | ✅ **14.3 MiB, a rounding error** |
 | 1. clippy aion-rs + aion-server | ✅ RED as predicted → fixed → **exit 0** (`ec56f1b4`) |
 | 4a. #97 live proof | ✅ **CLOSED** (`013ae8e5`) |
-| 2. `cargo test -p aion-rs` | 🔄 **RUNNING** — launched ~08:41Z on a measured-quiet box |
-| 4b. #83 | ⬜ NEXT — and it is a BUILD, not a tap re-run (see below) |
+| 2. `cargo test -p aion-rs` | ✅ **1015 passed / 0 failed** on a measured-quiet box — #106 verified |
+| 4b. #83 | ✅ **CLOSED** (`8554b30f`) |
+
+### 4b — #83, closed at the bytes
+
+`BC4_DUMP_FAILED=step-bodies/valid/send_signal` now dumps a `WorkflowFailed`
+whose details decode to
+`{"message":"workflow_id: invalid character: found \`x\` at 0","tag":"AwlEngineFailed"}`.
+It was `{"tag":"AwlFailed"}`.
+
+`EngineError` has one variant carrying a `String` — the reason was always
+there. `map_engine_error` matched `Error(_)` and threw it away one line from
+the record it belonged in. **Four green assertions were pinning that defect**,
+including two that fed in `EngineFailure("boom")` and required "boom" to be
+absent; the headline mapper had no test at all.
+
+Gates: gleam 154/0, aion-awl 506/0, aion-awl-package green (freshness +
+determinism), BC4 differential 26/0 byte-identical, clippy 0.
 
 ### Item 0 — the scoped clean, measured small and reported as such
 
@@ -174,11 +196,13 @@ and **after** the owed gates — which is why item 2 was run before it.
 
 ## Owed, in order
 
-1. **#83 / 4b** — the build above, one motion, after item 2 reports.
-2. **DM Artemis Peach directly, one line, when the queue closes** — that word is
-   her GO-6 launch signal (full-workspace nextest, +6–12 GiB, needs the quiet
-   box). She is idle until it arrives. Do not let it slip into a wrap-up.
-3. **Cally's two findings on `enforce_contract`** (asymmetry itself APPROVED):
+**Nothing here may start a heavy compile while Artemis's GO-6 full-workspace
+nextest is running.** Check first. Doc work is always safe.
+
+1. **#113 (P0)** — the `AION_HOME` isolation inversion. Highest live blast
+   radius of anything open at this seat: it points a second server at the
+   running one's store.
+2. **Cally's two findings on `enforce_contract`** (asymmetry itself APPROVED):
    - **A — the degraded state has no queryable trace after boot.** The only
      evidence a resident package runs with its contract off is a boot-time error
      line — "a log line at a moment nobody is watching", the exact hazard the
@@ -193,10 +217,13 @@ and **after** the owed gates — which is why item 2 was run before it.
    - Plus one design sentence: a middle door (load for pinned runs, deactivate
      the route) existed and was implicitly rejected. Right call for
      restart-availability — say so where the next reader will look.
-4. `cargo test -p aion-server --test ops_console_packaging` — asserts the
+3. `cargo test -p aion-server --test ops_console_packaging` — asserts the
    refreshed bundle ships in the packaged crate. Owed on this tree before
    release.
-5. **#113 and #114** — the two defects 4a surfaced.
+4. **#115** — the SDK-closure freshness gate compares module and export SETS,
+   never bytes, so a changed function BODY ships stale with the suite green.
+   Found because it passed against a closure the regenerator rewrites entirely.
+5. **#114** — `aion server --endpoint` accepted and never read.
 
 ## 🔴 Standing constraints
 
