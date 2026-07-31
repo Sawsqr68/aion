@@ -406,6 +406,32 @@ Not a tally of verdicts — the verdict lines themselves. Logs preserved outside
 ── base-1.log · base-2.log (clean HEAD)                         EXIT=0, no FAILED verdict
 ```
 
+### 🔴 `FAILED = 0` CANNOT SEE A RUN THAT NEVER FINISHED
+
+Every complete `cargo test -p aion-rs --all-targets` run emits exactly **58**
+`test result:` lines. The red is 57 ok + 1 FAILED = 58.
+
+A run that dies early — truncation, OOM kill, linker failure, `^C`, the box going
+down mid-series — emits **fewer verdicts and zero FAILED**, which under a
+`FAILED = 0` index is **indistinguishable from green**. `EXIT=0` does not rescue
+it either; that is the trailing-`echo` door.
+
+⇒ **AN ORACLE THAT ONLY DETECTS FAILURE CANNOT DETECT ABSENCE.** A positive
+verdict is required, not merely the lack of a negative one.
+
+**Index every run by three numbers: EXIT, the quoted verdict, and `ok + FAILED`,
+which must equal 58.** The total is the one that proves the run *happened*.
+
+```
+base-1 · base-2 · gate-aion-rs · gate-aion-rs-2 · gate-aion-rs-4 · mine-1
+                        EXIT=0    ok=58  FAILED=0  total=58  COMPLETE
+gate-aion-rs-3          EXIT=101  ok=57  FAILED=1  total=58  COMPLETE  ← the red
+```
+
+This was live risk, not theory: six unattended gates were running back to back
+with nothing between a killed run and a recorded green but a count nobody was
+taking.
+
 ### 🔴 The first version of this table under-reported by half
 
 It had a `FAILED` column holding `1` — a true count of **binaries reporting
