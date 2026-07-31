@@ -29,6 +29,9 @@ struct TimedRun {
     registry: Arc<Registry>,
     runtime: Arc<RuntimeHandle>,
     handle: WorkflowHandle,
+    /// Empty: this run is resident, so the never-alive cancel branch (#117(c))
+    /// is never reached and the catalog is never read.
+    catalog: Arc<crate::loader::WorkflowCatalog>,
 }
 
 /// Records a deadline `TimerStarted` for the run so its history looks armed.
@@ -90,6 +93,7 @@ async fn timed_run() -> Result<TimedRun, Box<dyn std::error::Error>> {
         registry,
         runtime,
         handle,
+        catalog: Arc::new(crate::loader::WorkflowCatalog::new()),
     })
 }
 
@@ -632,6 +636,7 @@ async fn deadline_and_cancel_race_records_exactly_one_terminal() -> TestResult {
                 store: Arc::clone(&run.store),
                 visibility_store: Arc::clone(&run.visibility_store),
                 registry: run.registry.as_ref(),
+                catalog: run.catalog.as_ref(),
             },
             &workflow_id,
             &run_id,
@@ -640,15 +645,45 @@ async fn deadline_and_cancel_race_records_exactly_one_terminal() -> TestResult {
         let (deadline_result, cancel_result) = tokio::join!(deadline, cancel);
         deadline_result?;
         // The cancel may lose the registry lookup race (the deadline already
-        // deregistered); that typed not-found is a legitimate loss.
+        // deregistered and recorded its terminal). Since #117(c) a cancel that
+        // finds no handle no longer stops at "not found": it takes the
+        // never-alive branch, which reads the history and refuses on what it
+        // finds there. So the legitimate loss now names the RECORDED TERMINAL —
+        // a strictly better answer for this race than "not found" ever was,
+        // because the run is neither missing nor unrecoverable, it is finished.
+        let history = run.store.read_history(&workflow_id).await?;
+        // The cancel may lose the race. Since #117(c) a cancel that finds no
+        // handle no longer stops at "not found": it takes the never-alive
+        // branch, reads history, and refuses on what it finds there. TWO honest
+        // refusals are reachable, and which one depends on how far the winning
+        // teardown had got when this cancel looked:
+        //
+        //   * the terminal was already visible  -> "already recorded a terminal"
+        //   * the handle was gone but the terminal not yet visible
+        //                                       -> NoResidencyVerdict
+        //
+        // Both are true statements about what the cancel could see, and neither
+        // appends anything. What is asserted is the INVARIANT rather than one
+        // interleaving's label: the loss is one of these two, and in particular
+        // it is NEVER `WorkflowNotFound` — a run whose history this test is
+        // reading in the next statement is not missing, and saying so was the
+        // defect #117 was raised for. Pinning a single label here would encode
+        // this box's scheduling rather than the property; the second refusal was
+        // only ever observed under a loaded `--all-targets` run and never in 600
+        // isolated iterations.
         if let Err(error) = cancel_result {
+            let honest = match &error {
+                crate::EngineError::Runtime { reason } => {
+                    reason.contains("already recorded a terminal event")
+                }
+                crate::EngineError::NoResidencyVerdict { .. } => true,
+                _ => false,
+            };
             assert!(
-                matches!(error, crate::EngineError::WorkflowNotFound { .. }),
-                "cancel lost the race cleanly, got {error:?}"
+                honest,
+                "cancel lost the race cleanly, got {error:?}; history {history:#?}"
             );
         }
-
-        let history = run.store.read_history(&workflow_id).await?;
         let terminals = history
             .iter()
             .filter(|event| {

@@ -1,5 +1,7 @@
 //! Workflow lifecycle operations: start, terminate, suspend, and resume.
 
+/// Cancelling a run that was never made resident and never can be (#117(c)).
+pub mod cancel_never_alive;
 /// Workflow completion notification helpers.
 pub mod completion;
 /// Continue-as-new lifecycle transition support.

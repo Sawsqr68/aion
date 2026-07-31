@@ -459,21 +459,61 @@ impl ServerError {
     }
 }
 
+/// The wire type name for each #117(c) never-alive cancellation refusal.
+///
+/// Each keeps its OWN name rather than collapsing into one: an operator told
+/// "not found" for a run whose history they are reading learns nothing, and
+/// telling them "this workflow already has a writer" versus "your package now
+/// loads again" is the difference between a dead end and the next action.
+///
+/// Total without a panic. A variant that should never reach here gets the
+/// family label — an admittedly vague answer, which is the right failure mode
+/// for a function whose only job is to name an error someone is already
+/// receiving.
+fn never_alive_error_type(source: &EngineError) -> &'static str {
+    match source {
+        EngineError::TerminalWriterUnavailable { .. } => "TerminalWriterUnavailable",
+        EngineError::TerminalWriterHeld { .. } => "TerminalWriterHeld",
+        EngineError::RunIsRecoverable { .. } => "RunIsRecoverable",
+        EngineError::NoResidencyVerdict { .. } => "NoResidencyVerdict",
+        _ => "EngineError",
+    }
+}
+
+/// A durability failure that is really a STORE failure keeps the store's own
+/// trace fields; the rest are the engine's.
+///
+/// Extracted from [`engine_trace_fields`] because a nested match is a different
+/// question from the flat dispatch around it, not to satisfy a line count.
+fn durability_trace_fields<'a>(
+    durability: &'a aion::durability::DurabilityError,
+    source: &'a EngineError,
+) -> ErrorTraceFields<'a> {
+    match durability {
+        aion::durability::DurabilityError::Store(store) => store_trace_fields(store),
+        aion::durability::DurabilityError::NonDeterminism(_)
+        | aion::durability::DurabilityError::HistoryShape { .. }
+        | aion::durability::DurabilityError::SearchAttribute(_) => {
+            simple_engine_fields("Durability", source)
+        }
+    }
+}
+
 fn engine_trace_fields(source: &EngineError) -> ErrorTraceFields<'_> {
     match source {
         EngineError::WorkflowNotFound { .. } => simple_engine_fields("WorkflowNotFound", source),
+        // #117(c): the never-alive cancellation path's four refusals.
+        EngineError::TerminalWriterUnavailable { .. }
+        | EngineError::TerminalWriterHeld { .. }
+        | EngineError::RunIsRecoverable { .. }
+        | EngineError::NoResidencyVerdict { .. } => {
+            simple_engine_fields(never_alive_error_type(source), source)
+        }
         EngineError::InvalidState { .. } => simple_engine_fields("InvalidState", source),
         EngineError::ScheduleNotFound { .. } => simple_engine_fields("ScheduleNotFound", source),
         EngineError::ShuttingDown => simple_engine_fields("ShuttingDown", source),
         EngineError::Store(store) => store_trace_fields(store),
-        EngineError::Durability(durability) => match durability {
-            aion::durability::DurabilityError::Store(store) => store_trace_fields(store),
-            aion::durability::DurabilityError::NonDeterminism(_)
-            | aion::durability::DurabilityError::HistoryShape { .. }
-            | aion::durability::DurabilityError::SearchAttribute(_) => {
-                simple_engine_fields("Durability", source)
-            }
-        },
+        EngineError::Durability(durability) => durability_trace_fields(durability, source),
         EngineError::MissingStore => simple_engine_fields("MissingStore", source),
         EngineError::MissingVisibilityStore => {
             simple_engine_fields("MissingVisibilityStore", source)
@@ -586,6 +626,16 @@ fn wire_from_engine(source: &EngineError) -> WireError {
         }
         // Reopen preconditions use failed-precondition/HTTP 409, not NotFound.
         EngineError::InvalidState { reason } => engine::invalid_state_wire(reason),
+        // #117(c). All four are PRECONDITION failures, never NotFound: in every
+        // one of them the run exists and its history is readable, and what has
+        // failed is a condition on cancelling it here and now. Mapping any of
+        // them to 404 would reproduce, one layer out, the exact lie this path
+        // exists to stop telling.
+        E::TerminalWriterUnavailable { .. }
+        | E::TerminalWriterHeld { .. }
+        | E::RunIsRecoverable { .. }
+        | E::NoResidencyVerdict { .. } => engine::invalid_state_wire(&source.to_string())
+            .with_error_type(never_alive_error_type(source)),
         EngineError::ScheduleNotFound { .. } => {
             WireError::not_found_with_type("ScheduleNotFound", source.to_string())
         }

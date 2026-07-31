@@ -43,7 +43,8 @@ pub use recorder::{
 };
 pub use recovery::{
     ActiveWorkflowRecovery, ActiveWorkflowRecoverySeam, ActiveWorkflowRecoverySeamImpl,
-    RecoveryDriver, RecoveryOutcome, RecoveryPlan, RecoveryReport, RecoveryResumePoint, recover,
+    RecoveryDriver, RecoveryOutcome, RecoveryPlan, RecoveryReport, RecoveryResumePoint,
+    pinned_package_if_loaded, recover,
 };
 pub use replay::{Replay, ReplayOutcome, ReplayStep, ReplayTerminal};
 pub use replay_inspect::{

@@ -1,17 +1,58 @@
 //! Active-execution registry keyed by workflow and run identifiers.
 
 use std::collections::HashMap;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use aion_core::{Event, RunId, WorkflowId, status_from_events};
+use aion_store::EventStore;
 
 use crate::EngineError;
 
 use super::handle::{Residency, WorkflowHandle};
+use super::terminal_writer::TerminalWriterReservation;
 use super::unrecoverable::UnrecoverableRuns;
 
 type RegistryKey = (WorkflowId, RunId);
 type HandleMap = HashMap<RegistryKey, WorkflowHandle>;
+
+/// Everything that can hold a writer for a workflow, behind ONE lock.
+///
+/// The two maps are deliberately not two mutexes. A live handle and a
+/// terminal-writer reservation (#117(c)) are both writers for the same durable
+/// event stream, and exactly one of them may exist for a given workflow at a
+/// time (invariant #3). Putting them in separate locks would make that
+/// exclusion a rule two independent critical sections have to co-operate to
+/// keep; putting them in one makes it a property of every operation that can
+/// create either, because no path can observe or mutate one without holding the
+/// other's lock too.
+#[derive(Debug, Default)]
+struct Slots {
+    handles: HandleMap,
+    /// Workflows currently held by a terminal-writer reservation, and the run
+    /// each reservation names. At most one per workflow, keyed by workflow
+    /// rather than by `(workflow, run)` because a `Recorder` writes the
+    /// WORKFLOW's event stream: a reservation on one run excludes a handle on
+    /// any run of the same workflow, and vice versa.
+    terminal_writers: HashMap<WorkflowId, RunId>,
+}
+
+impl Slots {
+    /// The run of the only live handle for `workflow_id`, if any.
+    ///
+    /// Scans the handle map rather than consulting the `index`, and must: the
+    /// index is a `WorkflowId -> (RunId, pid)` map with ONE slot per workflow,
+    /// so a continue-as-new window that registers two runs and then removes the
+    /// newer leaves the older handle live with no index entry at all. The index
+    /// answers "which run is current"; only the handle map answers "does any
+    /// handle exist". Cancelling a never-alive run is a rare operator action, so
+    /// the linear scan buys exactness at a cost nothing is measuring.
+    fn any_handle_for(&self, workflow_id: &WorkflowId) -> Option<RunId> {
+        self.handles
+            .keys()
+            .find(|(id, _)| id == workflow_id)
+            .map(|(_, run)| run.clone())
+    }
+}
 
 /// Secondary index mapping a workflow to its single live run.
 ///
@@ -30,14 +71,14 @@ type LivePidIndex = HashMap<WorkflowId, (RunId, u64)>;
 ///
 /// # Lock ordering
 ///
-/// `handles` is always locked before `index`; never the reverse. The
+/// `slots` is always locked before `index`; never the reverse. The
 /// read-only [`Registry::live_pid`] lookup locks `index` alone. This fixed
 /// order rules out lock-order inversion between the two mutexes. The
 /// `unrecoverable` set is a third, independent mutex that is never held
 /// together with either.
 #[derive(Debug, Default)]
 pub struct Registry {
-    handles: Mutex<HandleMap>,
+    slots: Mutex<Slots>,
     index: Mutex<LivePidIndex>,
     /// Runs this process could not make resident (#117). Lives here because
     /// residency is what the registry is about, and this is the negative half
@@ -54,16 +95,22 @@ impl Registry {
     ///
     /// # Errors
     ///
-    /// Returns [`EngineError::RegistryPoisoned`] if the registry lock was poisoned.
+    /// Returns [`EngineError::RegistryPoisoned`] if the registry lock was
+    /// poisoned, and [`EngineError::TerminalWriterHeld`] when a terminal-writer
+    /// reservation holds this workflow's writer slot (#117(c)). The refusal is
+    /// the other half of that exclusion: a reservation lives only across one
+    /// terminal transition, so the caller's run is momentarily un-registerable
+    /// rather than permanently so.
     pub fn insert(
         &self,
         key: (WorkflowId, RunId),
         handle: WorkflowHandle,
     ) -> Result<Option<WorkflowHandle>, EngineError> {
-        // Lock ordering: handles first, then index. Never the reverse.
-        let mut handles = self.handles()?;
+        // Lock ordering: slots first, then index. Never the reverse.
+        let mut slots = self.slots()?;
+        refuse_if_terminal_writer_held(&slots, &key)?;
         let pid = handle.pid();
-        let previous = handles.insert(key.clone(), handle);
+        let previous = slots.handles.insert(key.clone(), handle);
         // Upsert the live-pid index: the newest run for a workflow id wins,
         // so a continue-as-new replacement points at the new run immediately.
         self.index()?.insert(key.0, (key.1, pid));
@@ -84,19 +131,22 @@ impl Registry {
     ///
     /// # Errors
     ///
-    /// Returns [`EngineError::RegistryPoisoned`] if the registry lock was poisoned.
+    /// Returns [`EngineError::RegistryPoisoned`] if the registry lock was
+    /// poisoned, and [`EngineError::TerminalWriterHeld`] when a terminal-writer
+    /// reservation holds this workflow's writer slot (see [`Self::insert`]).
     pub fn insert_if_absent(
         &self,
         key: (WorkflowId, RunId),
         handle: WorkflowHandle,
     ) -> Result<WorkflowHandle, EngineError> {
-        // Lock ordering: handles first, then index. Never the reverse.
-        let mut handles = self.handles()?;
-        if let Some(existing) = handles.get(&key) {
+        // Lock ordering: slots first, then index. Never the reverse.
+        let mut slots = self.slots()?;
+        refuse_if_terminal_writer_held(&slots, &key)?;
+        if let Some(existing) = slots.handles.get(&key) {
             return Ok(existing.clone());
         }
         let pid = handle.pid();
-        handles.insert(key.clone(), handle.clone());
+        slots.handles.insert(key.clone(), handle.clone());
         self.index()?.insert(key.0, (key.1, pid));
         Ok(handle)
     }
@@ -107,8 +157,8 @@ impl Registry {
     ///
     /// Returns [`EngineError::RegistryPoisoned`] if the registry lock was poisoned.
     pub fn get(&self, id: &WorkflowId, run: &RunId) -> Result<Option<WorkflowHandle>, EngineError> {
-        let handles = self.handles()?;
-        Ok(handles.get(&(id.clone(), run.clone())).cloned())
+        let slots = self.slots()?;
+        Ok(slots.handles.get(&(id.clone(), run.clone())).cloned())
     }
 
     /// Removes a live workflow run handle.
@@ -121,9 +171,9 @@ impl Registry {
         id: &WorkflowId,
         run: &RunId,
     ) -> Result<Option<WorkflowHandle>, EngineError> {
-        // Lock ordering: handles first, then index. Never the reverse.
-        let mut handles = self.handles()?;
-        let removed = handles.remove(&(id.clone(), run.clone()));
+        // Lock ordering: slots first, then index. Never the reverse.
+        let mut slots = self.slots()?;
+        let removed = slots.handles.remove(&(id.clone(), run.clone()));
         // Compare-and-delete: only drop the index entry when it still points
         // at the run being removed. During continue-as-new a newer run already
         // overwrote the entry, and that newer run must survive this removal.
@@ -142,8 +192,8 @@ impl Registry {
     ///
     /// Returns [`EngineError::RegistryPoisoned`] if the registry lock was poisoned.
     pub fn list(&self) -> Result<Vec<WorkflowHandle>, EngineError> {
-        let handles = self.handles()?;
-        Ok(handles.values().cloned().collect())
+        let slots = self.slots()?;
+        Ok(slots.handles.values().cloned().collect())
     }
 
     /// Updates only the engine-internal residency for a live workflow run.
@@ -160,8 +210,8 @@ impl Registry {
         run: &RunId,
         residency: Residency,
     ) -> Result<Option<WorkflowHandle>, EngineError> {
-        let mut handles = self.handles()?;
-        let Some(handle) = handles.get_mut(&(id.clone(), run.clone())) else {
+        let mut slots = self.slots()?;
+        let Some(handle) = slots.handles.get_mut(&(id.clone(), run.clone())) else {
             return Ok(None);
         };
 
@@ -184,8 +234,8 @@ impl Registry {
         events: &[Event],
     ) -> Result<Option<WorkflowHandle>, EngineError> {
         let projected = status_from_events(events);
-        let mut handles = self.handles()?;
-        let Some(handle) = handles.get_mut(&(id.clone(), run.clone())) else {
+        let mut slots = self.slots()?;
+        let Some(handle) = slots.handles.get_mut(&(id.clone(), run.clone())) else {
             return Ok(None);
         };
 
@@ -238,15 +288,116 @@ impl Registry {
         &self.unrecoverable
     }
 
-    fn handles(&self) -> Result<MutexGuard<'_, HandleMap>, EngineError> {
-        self.handles
-            .lock()
-            .map_err(|_| EngineError::RegistryPoisoned)
+    /// Takes the sole terminal-writer reservation for a run that holds no handle
+    /// and can never obtain one (#117(c)).
+    ///
+    /// This call IS the under-lock proof of the non-residency precondition:
+    /// nothing is cited from an earlier observation. Under the one `slots` lock
+    /// it establishes, atomically, that the workflow has no live handle for ANY
+    /// run and no other reservation — and hands back a guard that keeps both
+    /// true for as long as it lives. That is why the exclusion is a property of
+    /// the registry rather than a check a caller performs and then hopes holds:
+    /// between a caller's check and its append there is a window, and between
+    /// these two statements there is not.
+    ///
+    /// The reservation is invisible to [`Self::live_pid`], [`Self::get`], and
+    /// [`Self::list`]: it is not a process, and nothing that looks for one may
+    /// find it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EngineError::RegistryPoisoned`] if the registry lock was
+    /// poisoned, and [`EngineError::TerminalWriterUnavailable`] when the
+    /// workflow already has a writer — either a live handle (in which case the
+    /// ordinary cancel path applies and this extraordinary one must not) or an
+    /// existing reservation.
+    pub fn reserve_terminal_writer(
+        &self,
+        id: &WorkflowId,
+        run: &RunId,
+        store: Arc<dyn EventStore>,
+    ) -> Result<TerminalWriterReservation<'_>, EngineError> {
+        let mut slots = self.slots()?;
+        if let Some(resident_run) = slots.any_handle_for(id) {
+            return Err(EngineError::TerminalWriterUnavailable {
+                workflow_id: id.to_string(),
+                run_id: run.to_string(),
+                holder: format!("run {resident_run} holds a live handle for this workflow"),
+            });
+        }
+        if let Some(held_run) = slots.terminal_writers.get(id) {
+            return Err(EngineError::TerminalWriterUnavailable {
+                workflow_id: id.to_string(),
+                run_id: run.to_string(),
+                holder: format!("run {held_run} already holds a terminal-writer reservation"),
+            });
+        }
+        slots.terminal_writers.insert(id.clone(), run.clone());
+        drop(slots);
+        Ok(TerminalWriterReservation::new(
+            self,
+            id.clone(),
+            run.clone(),
+            store,
+        ))
+    }
+
+    /// Releases a terminal-writer reservation, returning whether one was held.
+    ///
+    /// Called only by [`TerminalWriterReservation`]'s `Drop`, which is why it is
+    /// not public: release is not a decision any caller makes. The compare
+    /// against `run` is the same compare-and-delete discipline [`Self::remove`]
+    /// uses on the index — a reservation for a different run of this workflow
+    /// must survive a stale release.
+    pub(super) fn release_terminal_writer(
+        &self,
+        id: &WorkflowId,
+        run: &RunId,
+    ) -> Result<bool, EngineError> {
+        let mut slots = self.slots()?;
+        if let std::collections::hash_map::Entry::Occupied(entry) =
+            slots.terminal_writers.entry(id.clone())
+        {
+            if entry.get() == run {
+                entry.remove();
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// Whether a terminal-writer reservation is currently held for `id`, and for
+    /// which run.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EngineError::RegistryPoisoned`] if the registry lock was poisoned.
+    pub fn terminal_writer_run(&self, id: &WorkflowId) -> Result<Option<RunId>, EngineError> {
+        Ok(self.slots()?.terminal_writers.get(id).cloned())
+    }
+
+    fn slots(&self) -> Result<MutexGuard<'_, Slots>, EngineError> {
+        self.slots.lock().map_err(|_| EngineError::RegistryPoisoned)
     }
 
     fn index(&self) -> Result<MutexGuard<'_, LivePidIndex>, EngineError> {
         self.index.lock().map_err(|_| EngineError::RegistryPoisoned)
     }
+}
+
+/// The handle-side half of the terminal-writer exclusion.
+///
+/// Both `insert` paths route through this while holding the same `slots` lock a
+/// reservation is taken under, so the two writers can never be created for one
+/// workflow whichever order the calls arrive in.
+fn refuse_if_terminal_writer_held(slots: &Slots, key: &RegistryKey) -> Result<(), EngineError> {
+    if let Some(held_run) = slots.terminal_writers.get(&key.0) {
+        return Err(EngineError::TerminalWriterHeld {
+            workflow_id: key.0.to_string(),
+            run_id: held_run.to_string(),
+        });
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -500,7 +651,7 @@ mod tests {
         let registry = Arc::new(Registry::default());
         let poisoner_registry = Arc::clone(&registry);
         let poisoner = std::thread::spawn(move || {
-            let guard = poisoner_registry.handles.lock();
+            let guard = poisoner_registry.slots.lock();
             assert!(guard.is_ok());
             std::panic::resume_unwind(Box::new("poison registry lock"));
         });
@@ -575,6 +726,167 @@ mod tests {
             reconciled.map(|handle| handle.cached_status()),
             Some(WorkflowStatus::Running)
         );
+        Ok(())
+    }
+
+    fn store() -> Arc<dyn aion_store::EventStore> {
+        Arc::new(aion_store::InMemoryStore::default())
+    }
+
+    /// Requirement (1). The registry — not a caller's check — is what makes a
+    /// handle and a terminal-writer reservation mutually exclusive, and it holds
+    /// in BOTH directions and from EITHER order of arrival.
+    #[test]
+    fn a_reservation_and_a_handle_are_mutually_exclusive() -> Result<(), EngineError> {
+        let registry = Registry::default();
+        let workflow_id = aion_core::WorkflowId::new_v4();
+        let run = aion_core::RunId::new_v4();
+
+        // Reservation first: the handle is refused while it is held.
+        let reservation = registry.reserve_terminal_writer(&workflow_id, &run, store())?;
+        assert!(
+            matches!(
+                registry.insert(
+                    (workflow_id.clone(), run.clone()),
+                    handle(1, 1, WorkflowStatus::Running)
+                ),
+                Err(EngineError::TerminalWriterHeld { .. })
+            ),
+            "a handle must not be registrable for a workflow whose writer is reserved"
+        );
+        assert!(
+            matches!(
+                registry.insert_if_absent(
+                    (workflow_id.clone(), run.clone()),
+                    handle(1, 1, WorkflowStatus::Running)
+                ),
+                Err(EngineError::TerminalWriterHeld { .. })
+            ),
+            "insert_if_absent is the other door into the same map and must refuse too"
+        );
+        drop(reservation);
+
+        // Handle first: the reservation is refused while it is held.
+        registry.insert(
+            (workflow_id.clone(), run.clone()),
+            handle(1, 1, WorkflowStatus::Running),
+        )?;
+        assert!(
+            matches!(
+                registry.reserve_terminal_writer(&workflow_id, &run, store()),
+                Err(EngineError::TerminalWriterUnavailable { .. })
+            ),
+            "a resident run has a writer already and must take the ordinary cancel path"
+        );
+        Ok(())
+    }
+
+    /// The exclusion is WORKFLOW-scoped, not `(workflow, run)`-scoped, because a
+    /// `Recorder` writes the workflow's event stream. A handle on a different run
+    /// of the same workflow is still a second writer.
+    ///
+    /// This is the case a `(workflow, run)`-keyed check would wave through, and
+    /// it is reachable: the continue-as-new window registers two runs at once.
+    #[test]
+    fn a_handle_on_another_run_of_the_workflow_blocks_the_reservation() -> Result<(), EngineError> {
+        let registry = Registry::default();
+        let workflow_id = aion_core::WorkflowId::new_v4();
+        let live_run = aion_core::RunId::new_v4();
+        let dead_run = aion_core::RunId::new_v4();
+
+        registry.insert(
+            (workflow_id.clone(), live_run),
+            handle(1, 1, WorkflowStatus::Running),
+        )?;
+
+        assert!(
+            matches!(
+                registry.reserve_terminal_writer(&workflow_id, &dead_run, store()),
+                Err(EngineError::TerminalWriterUnavailable { .. })
+            ),
+            "another run's live handle is still a writer for this workflow's stream"
+        );
+
+        // The control: a DIFFERENT workflow is unaffected. Without this, a
+        // `reserve` that refused everything would pass the assertion above.
+        let other_workflow = aion_core::WorkflowId::new_v4();
+        assert!(
+            registry
+                .reserve_terminal_writer(&other_workflow, &dead_run, store())
+                .is_ok(),
+            "the refusal must be scoped to the workflow that has a writer, not global"
+        );
+        Ok(())
+    }
+
+    /// Only one reservation at a time — the guard is the writer, so two guards
+    /// would be two writers.
+    #[test]
+    fn a_second_reservation_for_the_same_workflow_is_refused() -> Result<(), EngineError> {
+        let registry = Registry::default();
+        let workflow_id = aion_core::WorkflowId::new_v4();
+        let first = aion_core::RunId::new_v4();
+        let second = aion_core::RunId::new_v4();
+
+        let held = registry.reserve_terminal_writer(&workflow_id, &first, store())?;
+        assert!(matches!(
+            registry.reserve_terminal_writer(&workflow_id, &second, store()),
+            Err(EngineError::TerminalWriterUnavailable { .. })
+        ));
+        drop(held);
+        Ok(())
+    }
+
+    /// The anti-wedge property, and the reason the reservation is an RAII guard
+    /// rather than a pair of calls: a reservation that could be taken and never
+    /// released would lock the workflow out of every future writer for the life
+    /// of the process — the defect this whole path exists to fix, one level up.
+    #[test]
+    fn dropping_a_reservation_releases_the_slot() -> Result<(), EngineError> {
+        let registry = Registry::default();
+        let workflow_id = aion_core::WorkflowId::new_v4();
+        let run = aion_core::RunId::new_v4();
+
+        {
+            let _reservation = registry.reserve_terminal_writer(&workflow_id, &run, store())?;
+            assert_eq!(
+                registry.terminal_writer_run(&workflow_id)?,
+                Some(run.clone()),
+                "the slot must be held while the guard is alive, or the test below proves nothing"
+            );
+        }
+
+        assert_eq!(
+            registry.terminal_writer_run(&workflow_id)?,
+            None,
+            "the slot must be free once the guard goes out of scope"
+        );
+        registry.insert(
+            (workflow_id.clone(), run.clone()),
+            handle(1, 1, WorkflowStatus::Running),
+        )?;
+        assert!(
+            registry.get(&workflow_id, &run)?.is_some(),
+            "and a handle must be registrable again afterwards"
+        );
+        Ok(())
+    }
+
+    /// A reservation is not a process. Every read that exists to find a live
+    /// process must miss it — a reservation that showed up in `live_pid` would
+    /// make the startup recovery loop skip the run permanently, and would make
+    /// delivery believe there is somewhere to route to.
+    #[test]
+    fn a_reservation_is_invisible_to_every_live_process_lookup() -> Result<(), EngineError> {
+        let registry = Registry::default();
+        let workflow_id = aion_core::WorkflowId::new_v4();
+        let run = aion_core::RunId::new_v4();
+        let _reservation = registry.reserve_terminal_writer(&workflow_id, &run, store())?;
+
+        assert_eq!(registry.live_pid(&workflow_id)?, None);
+        assert_eq!(registry.live_run_pid(&workflow_id)?, None);
+        assert_eq!(registry.get(&workflow_id, &run)?, None);
+        assert!(registry.list()?.is_empty());
         Ok(())
     }
 

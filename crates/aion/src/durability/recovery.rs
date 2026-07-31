@@ -70,6 +70,51 @@ fn started_metadata<'a>(
     })
 }
 
+/// Resolves the exact package a run is pinned to, spawning nothing.
+///
+/// The resolution half of [`ActiveWorkflowRecoverySeamImpl::recover_active_workflow`],
+/// factored out so a second caller can ask "would recovery resolve this run's
+/// package right now?" by running the SAME code rather than a lookalike. #117(c)
+/// asks exactly that before taking the extraordinary cancellation path, and a
+/// re-implementation there could drift from this one without either side
+/// changing — the answer would then be about a predicate recovery does not use.
+/// `Ok(None)` means the catalog does not hold the pinned version — the exact
+/// condition that makes a run unrecoverable pending a redeploy. Every other
+/// failure (an unparseable recorded version, a catalog read error) is an error,
+/// because it is a different fact and a redeploy is not its remedy.
+fn resolve_pinned_package(
+    workflow_type: &str,
+    started: &StartedMetadata<'_>,
+    catalog: &WorkflowCatalog,
+) -> Result<(ContentHash, Option<crate::loader::LoadedWorkflow>), EngineError> {
+    let version = crate::loader::parse_package_version(workflow_type, started.package_version)?;
+    let loaded = catalog.get(workflow_type, &version)?;
+    Ok((version, loaded))
+}
+
+/// Whether startup recovery could resolve this run's pinned package right now.
+///
+/// Returns the pinned version, and the loaded package when the catalog holds it.
+/// This is a pure read of the catalog: nothing is spawned, nothing is
+/// registered, and the engine is in the same state afterwards either way — which
+/// is what makes it safe to run from a cancellation path (#117(c)).
+///
+/// # Errors
+///
+/// Returns the typed [`EngineError`] raised while reading the run's own
+/// `WorkflowStarted` metadata or parsing its recorded package version. A history
+/// that cannot even be read this far is not "unrecoverable pending redeploy" —
+/// it is malformed, and saying so is more useful than reporting `None`.
+pub fn pinned_package_if_loaded(
+    workflow_id: &WorkflowId,
+    workflow_type: &str,
+    history: &[Event],
+    catalog: &WorkflowCatalog,
+) -> Result<(ContentHash, Option<crate::loader::LoadedWorkflow>), EngineError> {
+    let started = started_metadata(workflow_id, workflow_type, history)?;
+    resolve_pinned_package(workflow_type, &started, catalog)
+}
+
 /// Small AE/test seam that supplies the execution-specific inputs AD cannot infer from history.
 pub trait RecoveryDriver: Send + Sync {
     /// Builds the replay plan for one active workflow history.
@@ -282,14 +327,12 @@ impl ActiveWorkflowRecoverySeam for ActiveWorkflowRecoverySeamImpl {
         catalog: &WorkflowCatalog,
     ) -> Result<ActiveWorkflowRecovery, EngineError> {
         let started = started_metadata(workflow_id, workflow_type, history)?;
-        let version = crate::loader::parse_package_version(workflow_type, started.package_version)?;
-        let loaded = catalog
-            .get(workflow_type, &version)?
-            .ok_or_else(|| EngineError::Load {
-                reason: format!(
-                    "active workflow `{workflow_id}` is pinned to package version `{version}` of `{workflow_type}`, which is not loaded"
-                ),
-            })?;
+        let (version, loaded) = resolve_pinned_package(workflow_type, &started, catalog)?;
+        let loaded = loaded.ok_or_else(|| EngineError::Load {
+            reason: format!(
+                "active workflow `{workflow_id}` is pinned to package version `{version}` of `{workflow_type}`, which is not loaded"
+            ),
+        })?;
         let runtime_input = RuntimeInput::from_payload(started.input)?;
         let pid = spawn_workflow_with_policy(
             &self.runtime,

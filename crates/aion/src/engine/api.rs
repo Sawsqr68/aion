@@ -477,6 +477,7 @@ impl Engine {
                 store: self.store(),
                 visibility_store: self.visibility_store(),
                 registry: &self.registry,
+                catalog: &self.catalog,
             },
             id,
             run,
@@ -990,6 +991,7 @@ mod tests {
             store: engine.store(),
             visibility_store: engine.visibility_store(),
             registry: engine.registry(),
+            catalog: engine.workflow_catalog(),
         }
     }
 

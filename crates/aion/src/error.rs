@@ -335,6 +335,74 @@ pub enum EngineError {
         workflow_type: String,
     },
 
+    /// A terminal-writer reservation could not be taken because the workflow
+    /// already has a writer (#117(c)).
+    ///
+    /// The extraordinary cancellation path exists only for a run that can never
+    /// obtain a handle. A workflow that has one — or that another reservation is
+    /// already writing — is not that case, and taking a second writer would
+    /// break the single-writer invariant this refusal protects.
+    #[error("workflow `{workflow_id}` run `{run_id}` cannot take the terminal writer: {holder}")]
+    TerminalWriterUnavailable {
+        /// Workflow whose writer slot is occupied.
+        workflow_id: String,
+        /// Run the refused reservation named.
+        run_id: String,
+        /// What holds the slot, in the operator's terms.
+        holder: String,
+    },
+
+    /// A handle could not be registered because a terminal-writer reservation
+    /// holds this workflow's writer slot (#117(c)).
+    ///
+    /// The mirror of [`Self::TerminalWriterUnavailable`], and transient by
+    /// construction: a reservation lives only across one terminal transition.
+    #[error(
+        "workflow `{workflow_id}` cannot register a handle: run `{run_id}` holds the terminal writer"
+    )]
+    TerminalWriterHeld {
+        /// Workflow whose writer slot is reserved.
+        workflow_id: String,
+        /// Run holding the reservation.
+        run_id: String,
+    },
+
+    /// The extraordinary cancellation path was asked for a run whose pinned
+    /// package resolves right now, so the run is recoverable (#117(c)).
+    ///
+    /// Measured at the moment of the request, never cited from an earlier boot's
+    /// verdict: a redeploy between then and now is exactly the remedy that makes
+    /// the ordinary path work again, and the ordinary path must be used when it
+    /// does.
+    #[error(
+        "workflow `{workflow_id}` run `{run_id}` is recoverable: its pinned package version `{version}` resolves, so it must be recovered and cancelled through the ordinary path"
+    )]
+    RunIsRecoverable {
+        /// Workflow the request named.
+        workflow_id: String,
+        /// Run the request named.
+        run_id: String,
+        /// The pinned package version that resolved.
+        version: String,
+    },
+
+    /// A run holds no handle, cannot obtain one, and this engine has no recorded
+    /// reason why (#117(c)).
+    ///
+    /// Distinct from [`Self::WorkflowNotFound`] on purpose: the run EXISTS and
+    /// its history is readable. What is absent is a verdict from this process's
+    /// startup recovery, so the extraordinary cancellation path — which must
+    /// cite that verdict — has nothing to cite.
+    #[error(
+        "workflow `{workflow_id}` run `{run_id}` is not resident and this engine recorded no reason it could not be made resident; it exists but cannot be cancelled here"
+    )]
+    NoResidencyVerdict {
+        /// Workflow the request named.
+        workflow_id: String,
+        /// Run the request named.
+        run_id: String,
+    },
+
     /// No durable schedule was found for the request.
     #[error("schedule `{schedule_id}` was not found")]
     ScheduleNotFound {

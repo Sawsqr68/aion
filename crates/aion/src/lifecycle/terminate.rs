@@ -23,6 +23,9 @@ pub struct TerminateWorkflowContext<'a> {
     pub visibility_store: Arc<dyn VisibilityStore>,
     /// Active execution registry keyed by workflow/run identifiers.
     pub registry: &'a Registry,
+    /// Loaded package catalog, read to re-measure whether a non-resident run's
+    /// pinned version resolves right now (#117(c)). Never mutated here.
+    pub catalog: &'a crate::loader::WorkflowCatalog,
 }
 
 /// Completes a live workflow run with its terminal result payload.
@@ -97,19 +100,28 @@ pub async fn fail(
 /// Cancels a live workflow run, relying on runtime link propagation to tear down
 /// any linked activity children.
 ///
+/// A run that holds no handle takes the never-alive branch
+/// ([`super::cancel_never_alive`]) rather than being refused outright: for a run
+/// whose pinned package can never load, "not registered" is a permanent
+/// condition, and refusing there is what left run `0756ecd5` `Running` with no
+/// way out (#117(c)). That branch has its own four conditions and refuses on its
+/// own terms when they are not met.
+///
 /// # Errors
 ///
-/// Returns [`EngineError::WorkflowNotFound`] when the `(workflow, run)` pair is
-/// not registered. Runtime cancellation, recorder, and registry failures surface
-/// as their typed [`EngineError`] variants.
+/// Returns the never-alive branch's typed refusals when the `(workflow, run)`
+/// pair is not registered. Runtime cancellation, recorder, and registry failures
+/// surface as their typed [`EngineError`] variants.
 pub async fn cancel(
     context: TerminateWorkflowContext<'_>,
     id: &WorkflowId,
     run: &RunId,
     reason: impl Into<String>,
 ) -> Result<(), EngineError> {
-    let handle = registered_handle(context.registry, id, run)?;
     let reason = reason.into();
+    let Some(handle) = context.registry.get(id, run)? else {
+        return super::cancel_never_alive::cancel_never_alive(context, id, run, reason).await;
+    };
     // Record the durable cancellation BEFORE killing the process: the exit
     // monitor records WorkflowFailed for any kill it observes without a
     // terminal event already in history.
@@ -150,7 +162,7 @@ pub async fn cancel(
 /// the lock makes this check-then-record atomic against it. Taking `history` (the
 /// same read used to derive the deadline for retirement) keeps the transition to
 /// a single locked history read.
-fn reject_if_recorded_terminal(
+pub(super) fn reject_if_recorded_terminal(
     history: &[aion_core::Event],
     id: &WorkflowId,
     run: &RunId,
@@ -200,6 +212,9 @@ mod tests {
         runtime: RuntimeHandle,
         registry: Registry,
         handle: WorkflowHandle,
+        /// Empty: every test here drives a RESIDENT run, so the never-alive
+        /// branch is never entered and the catalog is never read.
+        catalog: crate::loader::WorkflowCatalog,
     }
 
     fn payload(label: &str) -> Result<Payload, aion_core::PayloadError> {
@@ -219,6 +234,7 @@ mod tests {
         let visibility_store: Arc<dyn VisibilityStore> = backing;
         let runtime = RuntimeHandle::new(RuntimeConfig::new(Some(1)))?;
         let registry = Registry::default();
+        let catalog = crate::loader::WorkflowCatalog::new();
         let workflow_id = aion_core::WorkflowId::new_v4();
         let run_id = aion_core::RunId::new_v4();
         let mut recorder = Recorder::new(workflow_id.clone(), Arc::clone(&store));
@@ -256,6 +272,7 @@ mod tests {
             runtime,
             registry,
             handle,
+            catalog,
         })
     }
 
@@ -264,12 +281,14 @@ mod tests {
         store: Arc<dyn EventStore>,
         visibility_store: Arc<dyn VisibilityStore>,
         registry: &'a Registry,
+        catalog: &'a crate::loader::WorkflowCatalog,
     ) -> TerminateWorkflowContext<'a> {
         TerminateWorkflowContext {
             runtime,
             store,
             visibility_store,
             registry,
+            catalog,
         }
     }
 
@@ -285,6 +304,7 @@ mod tests {
                 active.store.clone(),
                 active.visibility_store.clone(),
                 &active.registry,
+                &active.catalog,
             ),
             active.handle.workflow_id(),
             active.handle.run_id(),
@@ -336,6 +356,7 @@ mod tests {
                 active.store.clone(),
                 active.visibility_store.clone(),
                 &active.registry,
+                &active.catalog,
             ),
             active.handle.workflow_id(),
             active.handle.run_id(),
@@ -391,6 +412,7 @@ mod tests {
                 active.store.clone(),
                 active.visibility_store.clone(),
                 &active.registry,
+                &active.catalog,
             ),
             active.handle.workflow_id(),
             active.handle.run_id(),
@@ -454,6 +476,7 @@ mod tests {
                 active.store.clone(),
                 active.visibility_store.clone(),
                 &active.registry,
+                &active.catalog,
             ),
             active.handle.workflow_id(),
             active.handle.run_id(),
@@ -485,6 +508,7 @@ mod tests {
     async fn cancel_unknown_workflow_returns_not_found() -> Result<(), Box<dyn std::error::Error>> {
         let runtime = RuntimeHandle::new(RuntimeConfig::new(Some(1)))?;
         let registry = Registry::default();
+        let catalog = crate::loader::WorkflowCatalog::new();
         let workflow_id = aion_core::WorkflowId::new_v4();
         let run_id = aion_core::RunId::new_v4();
 
@@ -494,6 +518,7 @@ mod tests {
                 Arc::new(InMemoryStore::default()),
                 Arc::new(InMemoryStore::default()),
                 &registry,
+                &catalog,
             ),
             &workflow_id,
             &run_id,
