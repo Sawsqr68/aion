@@ -334,13 +334,56 @@ fn render_binary(
     scope: &Scope,
     prelude: &mut Vec<String>,
 ) -> Result<String, EmitError> {
-    if let Some((subject, none_result)) = optional_short_circuit(left, op)
+    // A chain that proves something renders as nested `case`s, because the
+    // unwrapped value only exists inside the branch that proved it — a later
+    // operand has to be rendered THERE, not beside it. A chain that proves
+    // nothing renders as the flat operator expression it has always been.
+    if matches!(op, BinaryOp::And | BinaryOp::Or) {
+        let mut operands = crate::ast::chain_operands(left, op);
+        operands.extend(crate::ast::chain_operands(right, op));
+        if let Some((first, rest)) = operands.split_first()
+            && operands
+                .iter()
+                .rev()
+                .skip(1)
+                .any(|operand| proving_subject(operand, op).is_some())
+        {
+            return render_chain(emitter, first, rest, op, scope, prelude);
+        }
+    }
+    let symbol = operator_for(emitter, op, left, right, scope);
+    let left = render_parenthesized(emitter, left, scope, prelude)?;
+    let right = render_parenthesized(emitter, right, scope, prelude)?;
+    Ok(format!("{left} {symbol} {right}"))
+}
+
+/// Render `first` followed by `rest` as one `and`/`or` chain, opening a `case`
+/// for each operand that proves its subject and rendering everything after it
+/// inside that branch.
+///
+/// `a is present and a.b is present and a.b` becomes a `case` inside a `case`:
+/// the second operand is typed against the first's proof, and the third reads
+/// the second's unwrapped value. Rendering the chain left-associatively — the
+/// shape before this — put the third operand OUTSIDE both branches, where it
+/// read the optional back and Gleam refused it.
+fn render_chain(
+    emitter: &mut Emitter<'_>,
+    first: &Expr,
+    rest: &[&Expr],
+    op: BinaryOp,
+    scope: &Scope,
+    prelude: &mut Vec<String>,
+) -> Result<String, EmitError> {
+    let Some((next, tail)) = rest.split_first() else {
+        return render_expr(emitter, first, scope, prelude);
+    };
+    if let Some(subject) = proving_subject(first, op)
         && let Some(path) = crate::ast::access_path(subject)
     {
         let option_ty = expr_type(emitter, subject, scope)?;
         let GType::Option(inner) = emitter.env.resolve(&option_ty) else {
             return Err(EmitError::new(
-                left.span(),
+                first.span(),
                 format!("`{}` is not optional", path.join(".")),
             ));
         };
@@ -350,7 +393,7 @@ fn render_binary(
         let rendered_subject = render_expr(emitter, subject, scope, &mut subject_prelude)?;
         if !subject_prelude.is_empty() {
             return Err(EmitError::new(
-                left.span(),
+                first.span(),
                 "a guarded optional subject cannot need a prelude",
             ));
         }
@@ -367,9 +410,11 @@ fn render_binary(
             fresh
         };
         let mut rhs_prelude = Vec::new();
-        let rhs = render_expr(emitter, right, &rhs_scope, &mut rhs_prelude)?;
+        let rhs = render_chain(emitter, next, tail, op, &rhs_scope, &mut rhs_prelude)?;
         let mut some_branch = String::new();
-        if rhs_prelude.is_empty() {
+        // A nested `case` is wrapped in a block: without one, the inner case's
+        // arms and the outer's read as a single arm list.
+        if rhs_prelude.is_empty() && !rhs.contains('\n') {
             some_branch.push_str(&rhs);
         } else {
             some_branch.push_str("{\n");
@@ -380,27 +425,44 @@ fn render_binary(
         }
         return Ok(format!(
             "case {rendered_subject} {{\n  Some({name}) -> {some_branch}\n  None -> {}\n}}",
-            if none_result { "True" } else { "False" }
+            if matches!(op, BinaryOp::Or) {
+                "True"
+            } else {
+                "False"
+            }
         ));
     }
-    let symbol = operator_for(emitter, op, left, right, scope);
-    let left = render_parenthesized(emitter, left, scope, prelude)?;
-    let right = render_parenthesized(emitter, right, scope, prelude)?;
-    Ok(format!("{left} {symbol} {right}"))
+    let symbol = operator_for(emitter, op, first, next, scope);
+    let rendered_first = render_parenthesized(emitter, first, scope, prelude)?;
+    let rendered_rest = if tail.is_empty() {
+        render_parenthesized(emitter, next, scope, prelude)?
+    } else {
+        let rendered = render_chain(emitter, next, tail, op, scope, prelude)?;
+        format!("{{ {rendered} }}")
+    };
+    Ok(format!("{rendered_first} {symbol} {rendered_rest}"))
 }
 
-/// Recognize the optional predicates whose short-circuit edge proves the RHS
-/// subject is present. The returned boolean is the result for `None`.
-fn optional_short_circuit(left: &Expr, op: BinaryOp) -> Option<(&Expr, bool)> {
+/// The subject an operand proves present on the edge its chain takes: `and`
+/// short-circuits past a `None`, so `x is present` proves `x` for everything
+/// after it; `or` short-circuits past a `Some`, so `x is absent` does the same.
+/// Only an access path can be proved — nothing else has an identity a later
+/// read can be matched against.
+fn proving_subject(operand: &Expr, op: BinaryOp) -> Option<&Expr> {
     let expected = match op {
         BinaryOp::And => PredicateKind::Present,
         BinaryOp::Or => PredicateKind::Absent,
         _ => return None,
     };
-    let Expr::Predicate { subject, kind, .. } = left else {
+    let Expr::Predicate { subject, kind, .. } = operand else {
         return None;
     };
-    (*kind == expected).then_some((subject.as_ref(), matches!(op, BinaryOp::Or)))
+    if *kind != expected {
+        return None;
+    }
+    crate::ast::access_path(subject)
+        .is_some()
+        .then(|| subject.as_ref())
 }
 
 fn render_parenthesized(

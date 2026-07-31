@@ -36,24 +36,13 @@ pub(super) fn type_binary(
                     format!("`{word}` needs Bool operands, found {left_ty}"),
                 );
             }
-            let narrowed_kind = match op {
-                BinaryOp::And => PredicateKind::Present,
-                BinaryOp::Or => PredicateKind::Absent,
-                _ => unreachable!(),
-            };
             // The proved edge narrows the subject PATH — a binding (`x`) or a
-            // field of one (`x.y`) — and adds to whatever is already in force,
-            // so `a and b and c` carries a's proof into c exactly as the
-            // lowered control tree does.
+            // field of one (`x.y`) — and adds to whatever is already in force.
+            // `left` is the whole preceding chain, not one operand: `a and b
+            // and c` parses as `(a and b) and c`, and both code generators
+            // evaluate `c` with a's AND b's proofs live.
             let mut narrow = view.narrow.to_vec();
-            super::narrow::collect(
-                w,
-                view.vars,
-                view.accessor,
-                left,
-                narrowed_kind,
-                &mut narrow,
-            );
+            super::narrow::collect(w, view.vars, view.accessor, left, op, &mut narrow);
             let right_view = View {
                 vars: view.vars,
                 narrow: &narrow,

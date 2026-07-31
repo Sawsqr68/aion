@@ -33,7 +33,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// agent harness), so the two must run identically as well as lower
 /// identically, and running both here is what proves the marker is inert at
 /// run time rather than merely inert in the MIR.
-const COVERED_COUNT: usize = 90;
+const COVERED_COUNT: usize = 91;
 
 /// Out-of-oracle (r2 finding 3): bare signal-wait fixtures whose durable park
 /// boundary is NOT observable through any engine surface without racy sampling.
@@ -132,6 +132,7 @@ const EXPECTED_FAILED: &[&str] = &[
     // an optional FIELD narrows the same way an optional binding always has.
     // Both are pinned because the two positions are different machinery: the
     // guard's short-circuit edge, and the arm's own proof.
+    "step-bodies/valid/guard_chain_carries_every_proof",
     "step-bodies/valid/guard_narrows_a_deep_optional_field",
     "step-bodies/valid/guard_narrows_an_optional_field",
     "step-bodies/valid/predicates_and_operators",

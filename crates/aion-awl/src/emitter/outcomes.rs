@@ -404,8 +404,21 @@ fn emit_cascade(
     }
 }
 
-/// Emit one arm's body: the guard's flow-typing rebind when it applies,
-/// then the arm's route.
+/// Emit one arm's body: the guard's flow-typing rebinds, then the arm's route.
+///
+/// EVERY conjunct of the guard is materialized here, not just a bare one. The
+/// cascade renders the guard as a `case` EXPRESSION, so whatever a conjunct
+/// proved inside that expression is out of scope by the time the arm's route is
+/// emitted — the proof has to be re-established as a statement. An arm is only
+/// reached when the whole guard held, so every `let assert` below is on an edge
+/// that proved it. (The direct lowering splits this differently: its decision
+/// tree already carries all but the last conjunct into the arm, so its
+/// `narrow_present` materializes only that one. Same unwraps, same order,
+/// reached by different routes.)
+///
+/// Rebinds run left to right so a later conjunct reads what an earlier one
+/// unwrapped: `a is present and a.b is present` binds `a` first, and `a.b` is
+/// then a field of the unwrapped record.
 fn emit_arm(
     emitter: &mut Emitter<'_>,
     flow: &FlowCtx<'_>,
@@ -415,37 +428,58 @@ fn emit_arm(
     guard: Option<&Expr>,
 ) -> Result<(), EmitError> {
     let mut arm_scope = scope.clone();
-    if let Some(Expr::Predicate {
-        subject,
-        kind: PredicateKind::Present,
-        ..
-    }) = guard
-        && let Some(path) = crate::ast::access_path(subject)
-        && let GType::Option(inner) = emitter
-            .env
-            .resolve(&super::exprs::expr_type(emitter, subject, &arm_scope)?)
-    {
-        // A bare binding rebinds its own name; a field path has none, so the
-        // unwrapped value gets a fresh one and reads of the path resolve to it.
-        let mut subject_prelude = Vec::new();
-        let rendered_subject =
-            super::exprs::render_expr(emitter, subject, &arm_scope, &mut subject_prelude)?;
-        if !subject_prelude.is_empty() {
-            return Err(EmitError::new(
-                clause.span,
-                "a guarded optional subject cannot need a prelude",
-            ));
-        }
-        if let [single] = path.as_slice() {
-            let rendered = ident(single);
-            emitter.line(&format!("let assert Some({rendered}) = {rendered}"));
-            arm_scope.insert(single.clone(), (*inner).clone());
-        } else {
-            let fresh = emitter.fresh_name(&format!("awl_present_{}", path.join("_")));
-            emitter.line(&format!("let assert Some({fresh}) = {rendered_subject}"));
-            arm_scope.narrow_path(path, fresh, (*inner).clone());
+    if let Some(guard) = guard {
+        for conjunct in crate::ast::chain_operands(guard, BinaryOp::And) {
+            emit_arm_rebind(emitter, clause, conjunct, &mut arm_scope)?;
         }
     }
     let route = clause.route.clone();
     emit_route(emitter, flow, frame, &route, &arm_scope, None)
+}
+
+/// Unwrap what one guard conjunct proves, if it proves anything a read can use.
+fn emit_arm_rebind(
+    emitter: &mut Emitter<'_>,
+    clause: &OutcomeClause,
+    conjunct: &Expr,
+    arm_scope: &mut Scope,
+) -> Result<(), EmitError> {
+    let Expr::Predicate {
+        subject,
+        kind: PredicateKind::Present,
+        ..
+    } = conjunct
+    else {
+        return Ok(());
+    };
+    let Some(path) = crate::ast::access_path(subject) else {
+        return Ok(());
+    };
+    let GType::Option(inner) = emitter
+        .env
+        .resolve(&super::exprs::expr_type(emitter, subject, arm_scope)?)
+    else {
+        return Ok(());
+    };
+    // A bare binding rebinds its own name; a field path has none, so the
+    // unwrapped value gets a fresh one and reads of the path resolve to it.
+    let mut subject_prelude = Vec::new();
+    let rendered_subject =
+        super::exprs::render_expr(emitter, subject, arm_scope, &mut subject_prelude)?;
+    if !subject_prelude.is_empty() {
+        return Err(EmitError::new(
+            clause.span,
+            "a guarded optional subject cannot need a prelude",
+        ));
+    }
+    if let [single] = path.as_slice() {
+        let rendered = ident(single);
+        emitter.line(&format!("let assert Some({rendered}) = {rendered}"));
+        arm_scope.insert(single.clone(), (*inner).clone());
+    } else {
+        let fresh = emitter.fresh_name(&format!("awl_present_{}", path.join("_")));
+        emitter.line(&format!("let assert Some({fresh}) = {rendered_subject}"));
+        arm_scope.narrow_path(path, fresh, (*inner).clone());
+    }
+    Ok(())
 }

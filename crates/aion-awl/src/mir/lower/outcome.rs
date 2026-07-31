@@ -187,7 +187,7 @@ fn guard_decision<'a>(
             ..
         } => {
             let rhs = guard_decision(right, when_true, when_false.clone());
-            let rhs = narrow_short_circuit_rhs(left, PredicateKind::Present, rhs);
+            let rhs = narrow_short_circuit_rhs(left, BinaryOp::And, rhs);
             guard_decision(left, rhs, when_false)
         }
         Expr::Binary {
@@ -197,7 +197,7 @@ fn guard_decision<'a>(
             ..
         } => {
             let rhs = guard_decision(right, when_true.clone(), when_false);
-            let rhs = narrow_short_circuit_rhs(left, PredicateKind::Absent, rhs);
+            let rhs = narrow_short_circuit_rhs(left, BinaryOp::Or, rhs);
             guard_decision(left, when_true, rhs)
         }
         _ => Decision::Test {
@@ -208,16 +208,27 @@ fn guard_decision<'a>(
     }
 }
 
-fn narrow_short_circuit_rhs<'a>(
-    left: &'a Expr,
-    kind: PredicateKind,
-    next: Decision<'a>,
-) -> Decision<'a> {
-    let Expr::Predicate {
+/// Carry the proof the LAST operand of `left`'s chain establishes into the
+/// decision reached once `left` held.
+///
+/// The last operand, and only the last: `a and b and c` parses as
+/// `(a and b) and c`, and `guard_decision` recurses into `left`, so by the time
+/// this runs on `(a and b)` the recursion has already wrapped `a`'s proof
+/// around everything downstream of `a`'s test. What no recursion reaches is the
+/// proof of the operand tested LAST — its true edge is this `next`. Before the
+/// chain was flattened here, `b`'s proof was simply dropped and `c` read a
+/// still-wrapped optional.
+fn narrow_short_circuit_rhs<'a>(left: &'a Expr, op: BinaryOp, next: Decision<'a>) -> Decision<'a> {
+    let kind = match op {
+        BinaryOp::And => PredicateKind::Present,
+        BinaryOp::Or => PredicateKind::Absent,
+        _ => return next,
+    };
+    let Some(Expr::Predicate {
         subject,
         kind: actual,
         span,
-    } = left
+    }) = crate::ast::chain_operands(left, op).last().copied()
     else {
         return next;
     };
@@ -311,17 +322,32 @@ fn lower_outcome_arm(
     Ok(Block { stmts, tail })
 }
 
+/// Unwrap what the arm's guard proved but the decision tree did not already
+/// materialize: the LAST conjunct.
+///
+/// An arm is the true edge of its whole guard, so every conjunct held there.
+/// `guard_decision` wraps each conjunct's proof around the decision that
+/// follows its test, which covers all of them EXCEPT the last — that one's true
+/// edge is the arm itself, and no `NarrowPresent` sits between. So a bare
+/// `x is present` guard is narrowed here (its only conjunct is its last), and
+/// under `a is present and b is present` the tree supplies `a` and this
+/// supplies `b`. Neither is narrowed twice.
 fn narrow_present(
     ctx: &mut Ctx<'_>,
     guard: Option<&Expr>,
     scope: &mut Scope,
     stmts: &mut Vec<Stmt>,
 ) -> Result<(), LowerError> {
+    let Some(guard) = guard else {
+        return Ok(());
+    };
     let Some(Expr::Predicate {
         subject,
         kind: PredicateKind::Present,
         span,
-    }) = guard
+    }) = crate::ast::chain_operands(guard, BinaryOp::And)
+        .last()
+        .copied()
     else {
         return Ok(());
     };

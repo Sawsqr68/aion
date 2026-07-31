@@ -14,7 +14,7 @@
 //! proof made `a` a record). How far a proof reaches is deliberately pinned to
 //! what the two code generators do — see `collect`.
 
-use crate::ast::{Expr, PredicateKind, access_path};
+use crate::ast::{BinaryOp, Expr, PredicateKind, access_path, chain_operands};
 
 use super::exprs::View;
 use super::types::{Ty, resolve};
@@ -89,58 +89,80 @@ fn narrowing_of(w: &Walker<'_, '_>, view: View<'_>, subject: &Expr) -> Option<Na
     })
 }
 
-/// Collect the narrowing `expr` proves on the edge where it holds, appending
-/// to the proofs already in force.
+/// Collect every narrowing the chain `expr` proves on the edge where it holds,
+/// appending to the proofs already in force.
 ///
-/// `kind` is what the edge proves: `is present` on the true edge of an `and`,
-/// `is absent` on the false edge of an `or`.
+/// `op` names both the connective to flatten by and what its proved edge
+/// establishes: `and` proves each conjunct's `is present` on the true edge,
+/// `or` proves each disjunct's `is absent` on the false edge. Any other
+/// operator proves nothing.
 ///
-/// This deliberately does NOT walk into a nested conjunction. `a and b and c`
-/// parses as `(a and b) and c`, so a proof `b` establishes does not reach `c`
-/// here — and it does not reach it in either backend either: both the direct
-/// lowering (`mir/lower/outcome.rs`) and the Gleam reference emitter
-/// (`emitter/exprs.rs`) narrow from a binary's DIRECT left operand only. The
-/// checker stays exactly as permissive as the code generators are correct. A
-/// checker that outran them would accept a document that compiles to a test
-/// against an unwrapped optional — silently false, never reported. Widening
-/// this is a three-layer change, not a checker change.
+/// The chain is FLATTENED before collection, because `a and b and c` parses as
+/// `(a and b) and c` and a proof the middle conjunct establishes is in force
+/// where the last one is evaluated. Collection runs left to right and each
+/// proof is visible to the next, so `a is present and a.b is present` narrows
+/// `a.b` — the second subject only resolves because the first proof already
+/// made `a` a record.
+///
+/// The reach is pinned to exactly what the two code generators compile. Both
+/// build the same shape: the direct lowering nests one `NarrowPresent` per
+/// proving operand (`mir/lower/outcome.rs::guard_decision`) and the reference
+/// emitter nests one `case` per proving operand
+/// (`emitter/exprs.rs::render_chain`). A checker more permissive than its code
+/// generators is worse than the defect it fixes — it accepts a document that
+/// compiles to a test against a still-wrapped optional, silently false and
+/// never reported. Widening this further is a three-layer change, not a
+/// checker change.
 pub(super) fn collect(
     w: &Walker<'_, '_>,
     vars: &Scope,
     accessor: Option<&Ty>,
     expr: &Expr,
-    kind: PredicateKind,
+    op: BinaryOp,
     proofs: &mut Vec<Narrowing>,
 ) {
-    let Expr::Predicate {
-        subject,
-        kind: actual,
-        ..
-    } = expr
-    else {
-        return;
+    let kind = match op {
+        BinaryOp::And => PredicateKind::Present,
+        BinaryOp::Or => PredicateKind::Absent,
+        _ => return,
     };
-    if *actual != kind {
-        return;
-    }
-    let found = {
-        let view = View {
-            vars,
-            narrow: proofs,
-            accessor,
+    for operand in chain_operands(expr, op) {
+        let Expr::Predicate {
+            subject,
+            kind: actual,
+            ..
+        } = operand
+        else {
+            continue;
         };
-        narrowing_of(w, view, subject)
-    };
-    if let Some(narrowing) = found {
-        proofs.push(narrowing);
+        if *actual != kind {
+            continue;
+        }
+        let found = {
+            let view = View {
+                vars,
+                narrow: proofs,
+                accessor,
+            };
+            narrowing_of(w, view, subject)
+        };
+        if let Some(narrowing) = found {
+            proofs.push(narrowing);
+        }
     }
 }
 
 /// The narrowings a step's outcome guard proves inside its arm. The guard is
 /// typed with nothing in force, so this starts the set rather than extending
 /// one.
+///
+/// The whole guard is the chain: an arm is reached only when every conjunct
+/// held, so each one's proof is in force there. Both generators materialize
+/// exactly these unwraps for the arm — the direct lowering across its decision
+/// tree plus `narrow_present`, the reference emitter as a run of `let assert`
+/// statements at the top of the arm body.
 pub(super) fn from_guard(w: &Walker<'_, '_>, scope: &Scope, guard: &Expr) -> Vec<Narrowing> {
     let mut proofs = Vec::new();
-    collect(w, scope, None, guard, PredicateKind::Present, &mut proofs);
+    collect(w, scope, None, guard, BinaryOp::And, &mut proofs);
     proofs
 }

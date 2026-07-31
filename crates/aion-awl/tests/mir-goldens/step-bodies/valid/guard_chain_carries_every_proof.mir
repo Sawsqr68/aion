@@ -1,0 +1,516 @@
+module guard_chain_carries_every_proof source=guard_chain_carries_every_proof.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_decide:
+    aion@activity:task_queue/2 [activities] (v4, lit#23)
+    aion@workflow:run/1 [activities] (v5)
+== durable families == activities
+== atoms ==
+  [0] session
+  [1] resumed
+  [2] parked
+  [3] note_input
+  [4] guard_chain_carries_every_proof_input
+  [5] resumed_outcome
+  [6] some
+  [7] none
+  [8] ok
+  [9] awl_outcome_failure
+  [10] error
+== literals ==
+  [0] "label"
+  [1] "note"
+  [2] "ended"
+  [3] "label"
+  [4] "note"
+  [5] "ended"
+  [6] "label"
+  [7] "note"
+  [8] "label"
+  [9] "reason"
+  [10] "session"
+  [11] "note_hint"
+  [12] "ended_hint"
+  [13] "session"
+  [14] "note_hint"
+  [15] "ended_hint"
+  [16] "resumed"
+  [17] "outcome"
+  [18] ""
+  [19] ""
+  [20] "GuardChainCarriesEveryProofOutcome"
+  [21] "resumed"
+  [22] "payload"
+  [23] "desk"
+  [24] "parked"
+  [25] "parked"
+  [26] "parked"
+  [27] "parked"
+  [28] "parked"
+  [29] "parked"
+  [30] "parked"
+  [31] "parked"
+  [32] "parked"
+  [33] "parked"
+  [34] "parked"
+  [35] "parked"
+== types ==
+  record Session tag=session
+    label: string
+    note: nullable(string) optional
+    ended: nullable(bool) optional
+  record Resumed tag=resumed
+    label: string
+    note: string
+  record Parked tag=parked
+    label: string
+  record NoteInput tag=note_input
+    reason: string
+  record GuardChainCarriesEveryProofInput tag=guard_chain_carries_every_proof_input
+    session: ref(Session)
+    note_hint: nullable(string) optional
+    ended_hint: nullable(bool) optional
+  union GuardChainCarriesEveryProofOutcome
+    resumed -> resumed_outcome(ref(Resumed))
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=guard_chain_carries_every_proof_input_codec output=guard_chain_carries_every_proof_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(guard_chain_carries_every_proof.GuardChainCarriesEveryProofInput, guard_chain_carries_every_proof.GuardChainCarriesEveryProofOutcome, AwlError)
+  T-DEF name="guard_chain_carries_every_proof" input=guard_chain_carries_every_proof_input_codec output=guard_chain_carries_every_proof_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (guard_chain_carries_every_proof.GuardChainCarriesEveryProofInput) -> Result(guard_chain_carries_every_proof.GuardChainCarriesEveryProofOutcome, AwlError)
+  T-EXEC fields=[session:guard_chain_carries_every_proof.Session, note_hint:Option(String), ended_hint:Option(Bool)] entry=step_decide args=[2, 1, 0]
+== fn session_codec/0 origin=codec_template(RecordTrio, Session, record#0) ==
+  sig: () -> Codec(guard_chain_carries_every_proof.Session)
+  v0 = make_closure session_to_json captures=[]
+  v1 = call_local session_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn session_to_json/1 origin=codec_template(RecordTrio, Session, record#0) ==
+  sig: (guard_chain_carries_every_proof.Session) -> Json
+  v1 = field(v0, 1)
+  v2 = call_rt aion@awl@codec:string_to_json/1(v1) live_after=[v0]
+  v3 = tuple([lit#0, v2])
+  v4 = list([v3])
+  v5 = field(v0, 2)
+  v6 = call_local session_to_json$field1(v5) live_after=[v0, v4]
+  v7 = field(v0, 3)
+  v8 = call_local session_to_json$field2(v7) live_after=[v4, v6]
+  v9 = list([v4, v6, v8])
+  v10 = call_rt gleam@list:flatten/1(v9)
+  tail_rt gleam@json:object/1(v10)
+== fn session_decoder/0 origin=codec_template(RecordTrio, Session, record#0) ==
+  sig: () -> Decoder(guard_chain_carries_every_proof.Session)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure session_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v0, v1)
+== fn session_to_json$field1/1 origin=lifted(session_to_json, #0) ==
+  sig: (Option(String)) -> List(#(String, Json))
+  if is_tagged v0 some/2:
+    v1 = field(v0, 1)
+    v2 = call_rt aion@awl@codec:string_to_json/1(v1)
+    v3 = tuple([lit#1, v2])
+    v4 = list([v3])
+    return v4
+  else:
+    return nil
+== fn session_to_json$field2/1 origin=lifted(session_to_json, #1) ==
+  sig: (Option(Bool)) -> List(#(String, Json))
+  if is_tagged v0 some/2:
+    v1 = field(v0, 1)
+    v2 = call_rt aion@awl@codec:bool_to_json/1(v1)
+    v3 = tuple([lit#2, v2])
+    v4 = list([v3])
+    return v4
+  else:
+    return nil
+== fn session_decoder$some/1 origin=lifted(session_decoder, #0) ==
+  sig: (Dynamic) -> Option(Dynamic)
+  v1 = record(some, [v0])
+  return v1
+== fn session_decoder$0/1 origin=lifted(session_decoder, #1) ==
+  sig: (String) -> Decoder(guard_chain_carries_every_proof.Session)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure session_decoder$some captures=[]
+  v3 = call_rt gleam@dynamic@decode:map/2(v1, v2) live_after=[v0]
+  v4 = make_closure session_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:optional_field/4(lit#4, 'none', v3, v4)
+== fn session_decoder$1/2 origin=lifted(session_decoder, #2) ==
+  sig: (Option(String), String) -> Decoder(guard_chain_carries_every_proof.Session)
+  v2 = call_rt aion@awl@codec:bool_decoder/0() live_after=[v0, v1]
+  v3 = make_closure session_decoder$some captures=[]
+  v4 = call_rt gleam@dynamic@decode:map/2(v2, v3) live_after=[v0, v1]
+  v5 = make_closure session_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:optional_field/4(lit#5, 'none', v4, v5)
+== fn session_decoder$2/3 origin=lifted(session_decoder, #3) ==
+  sig: (Option(Bool), String, Option(String)) -> Decoder(guard_chain_carries_every_proof.Session)
+  v3 = record(session, [v1, v2, v0])
+  tail_rt gleam@dynamic@decode:success/1(v3)
+== fn resumed_codec/0 origin=codec_template(RecordTrio, Resumed, record#1) ==
+  sig: () -> Codec(guard_chain_carries_every_proof.Resumed)
+  v0 = make_closure resumed_to_json captures=[]
+  v1 = call_local resumed_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn resumed_to_json/1 origin=codec_template(RecordTrio, Resumed, record#1) ==
+  sig: (guard_chain_carries_every_proof.Resumed) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"label": v1|>awlc.string_to_json, "note": v2|>awlc.string_to_json}
+  return v3
+== fn resumed_decoder/0 origin=codec_template(RecordTrio, Resumed, record#1) ==
+  sig: () -> Decoder(guard_chain_carries_every_proof.Resumed)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure resumed_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
+== fn resumed_decoder$0/1 origin=lifted(resumed_decoder, #0) ==
+  sig: (String) -> Decoder(guard_chain_carries_every_proof.Resumed)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure resumed_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#7, v1, v2)
+== fn resumed_decoder$1/2 origin=lifted(resumed_decoder, #1) ==
+  sig: (String, String) -> Decoder(guard_chain_carries_every_proof.Resumed)
+  v2 = record(resumed, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn parked_codec/0 origin=codec_template(RecordTrio, Parked, record#2) ==
+  sig: () -> Codec(guard_chain_carries_every_proof.Parked)
+  v0 = make_closure parked_to_json captures=[]
+  v1 = call_local parked_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn parked_to_json/1 origin=codec_template(RecordTrio, Parked, record#2) ==
+  sig: (guard_chain_carries_every_proof.Parked) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"label": v1|>awlc.string_to_json}
+  return v2
+== fn parked_decoder/0 origin=codec_template(RecordTrio, Parked, record#2) ==
+  sig: () -> Decoder(guard_chain_carries_every_proof.Parked)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure parked_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#8, v0, v1)
+== fn parked_decoder$0/1 origin=lifted(parked_decoder, #0) ==
+  sig: (String) -> Decoder(guard_chain_carries_every_proof.Parked)
+  v1 = record(parked, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn note_input_codec/0 origin=codec_template(RecordTrio, NoteInput, record#3) ==
+  sig: () -> Codec(guard_chain_carries_every_proof.NoteInput)
+  v0 = make_closure note_input_to_json captures=[]
+  v1 = call_local note_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn note_input_to_json/1 origin=codec_template(RecordTrio, NoteInput, record#3) ==
+  sig: (guard_chain_carries_every_proof.NoteInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"reason": v1|>awlc.string_to_json}
+  return v2
+== fn note_input_decoder/0 origin=codec_template(RecordTrio, NoteInput, record#3) ==
+  sig: () -> Decoder(guard_chain_carries_every_proof.NoteInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure note_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#9, v0, v1)
+== fn note_input_decoder$0/1 origin=lifted(note_input_decoder, #0) ==
+  sig: (String) -> Decoder(guard_chain_carries_every_proof.NoteInput)
+  v1 = record(note_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn guard_chain_carries_every_proof_input_codec/0 origin=codec_template(RecordTrio, GuardChainCarriesEveryProofInput, record#4) ==
+  sig: () -> Codec(guard_chain_carries_every_proof.GuardChainCarriesEveryProofInput)
+  v0 = make_closure guard_chain_carries_every_proof_input_to_json captures=[]
+  v1 = call_local guard_chain_carries_every_proof_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn guard_chain_carries_every_proof_input_to_json/1 origin=codec_template(RecordTrio, GuardChainCarriesEveryProofInput, record#4) ==
+  sig: (guard_chain_carries_every_proof.GuardChainCarriesEveryProofInput) -> Json
+  v1 = field(v0, 1)
+  v2 = call_local session_to_json(v1) live_after=[v0]
+  v3 = tuple([lit#10, v2])
+  v4 = list([v3])
+  v5 = field(v0, 2)
+  v6 = call_local guard_chain_carries_every_proof_input_to_json$field1(v5) live_after=[v0, v4]
+  v7 = field(v0, 3)
+  v8 = call_local guard_chain_carries_every_proof_input_to_json$field2(v7) live_after=[v4, v6]
+  v9 = list([v4, v6, v8])
+  v10 = call_rt gleam@list:flatten/1(v9)
+  tail_rt gleam@json:object/1(v10)
+== fn guard_chain_carries_every_proof_input_decoder/0 origin=codec_template(RecordTrio, GuardChainCarriesEveryProofInput, record#4) ==
+  sig: () -> Decoder(guard_chain_carries_every_proof.GuardChainCarriesEveryProofInput)
+  v0 = call_local session_decoder()
+  v1 = make_closure guard_chain_carries_every_proof_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#13, v0, v1)
+== fn guard_chain_carries_every_proof_input_to_json$field1/1 origin=lifted(guard_chain_carries_every_proof_input_to_json, #0) ==
+  sig: (Option(String)) -> List(#(String, Json))
+  if is_tagged v0 some/2:
+    v1 = field(v0, 1)
+    v2 = call_rt aion@awl@codec:string_to_json/1(v1)
+    v3 = tuple([lit#11, v2])
+    v4 = list([v3])
+    return v4
+  else:
+    return nil
+== fn guard_chain_carries_every_proof_input_to_json$field2/1 origin=lifted(guard_chain_carries_every_proof_input_to_json, #1) ==
+  sig: (Option(Bool)) -> List(#(String, Json))
+  if is_tagged v0 some/2:
+    v1 = field(v0, 1)
+    v2 = call_rt aion@awl@codec:bool_to_json/1(v1)
+    v3 = tuple([lit#12, v2])
+    v4 = list([v3])
+    return v4
+  else:
+    return nil
+== fn guard_chain_carries_every_proof_input_decoder$some/1 origin=lifted(guard_chain_carries_every_proof_input_decoder, #0) ==
+  sig: (Dynamic) -> Option(Dynamic)
+  v1 = record(some, [v0])
+  return v1
+== fn guard_chain_carries_every_proof_input_decoder$0/1 origin=lifted(guard_chain_carries_every_proof_input_decoder, #1) ==
+  sig: (guard_chain_carries_every_proof.Session) -> Decoder(guard_chain_carries_every_proof.GuardChainCarriesEveryProofInput)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure guard_chain_carries_every_proof_input_decoder$some captures=[]
+  v3 = call_rt gleam@dynamic@decode:map/2(v1, v2) live_after=[v0]
+  v4 = make_closure guard_chain_carries_every_proof_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:optional_field/4(lit#14, 'none', v3, v4)
+== fn guard_chain_carries_every_proof_input_decoder$1/2 origin=lifted(guard_chain_carries_every_proof_input_decoder, #2) ==
+  sig: (Option(String), guard_chain_carries_every_proof.Session) -> Decoder(guard_chain_carries_every_proof.GuardChainCarriesEveryProofInput)
+  v2 = call_rt aion@awl@codec:bool_decoder/0() live_after=[v0, v1]
+  v3 = make_closure guard_chain_carries_every_proof_input_decoder$some captures=[]
+  v4 = call_rt gleam@dynamic@decode:map/2(v2, v3) live_after=[v0, v1]
+  v5 = make_closure guard_chain_carries_every_proof_input_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:optional_field/4(lit#15, 'none', v4, v5)
+== fn guard_chain_carries_every_proof_input_decoder$2/3 origin=lifted(guard_chain_carries_every_proof_input_decoder, #3) ==
+  sig: (Option(Bool), guard_chain_carries_every_proof.Session, Option(String)) -> Decoder(guard_chain_carries_every_proof.GuardChainCarriesEveryProofInput)
+  v3 = record(guard_chain_carries_every_proof_input, [v1, v2, v0])
+  tail_rt gleam@dynamic@decode:success/1(v3)
+== fn guard_chain_carries_every_proof_outcome_codec/0 origin=codec_template(UnionTrio, GuardChainCarriesEveryProofOutcome, union#5) ==
+  sig: () -> Codec(guard_chain_carries_every_proof.GuardChainCarriesEveryProofOutcome)
+  v0 = make_closure guard_chain_carries_every_proof_outcome_to_json captures=[]
+  v1 = call_local guard_chain_carries_every_proof_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn guard_chain_carries_every_proof_outcome_to_json/1 origin=codec_template(UnionTrio, GuardChainCarriesEveryProofOutcome, union#5) ==
+  sig: (guard_chain_carries_every_proof.GuardChainCarriesEveryProofOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#16|>awlc.string_to_json, "payload": v1|>resumed_to_json}
+  return v2
+== fn guard_chain_carries_every_proof_outcome_decoder/0 origin=codec_template(UnionTrio, GuardChainCarriesEveryProofOutcome, union#5) ==
+  sig: () -> Decoder(guard_chain_carries_every_proof.GuardChainCarriesEveryProofOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure guard_chain_carries_every_proof_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#17, v0, v1)
+== fn guard_chain_carries_every_proof_outcome_decoder$outcome/1 origin=lifted(guard_chain_carries_every_proof_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(guard_chain_carries_every_proof.GuardChainCarriesEveryProofOutcome)
+  if cmp Eq v0 lit#21:
+    v3 = call_local resumed_decoder()
+    v4 = make_closure guard_chain_carries_every_proof_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#22, v3, v4)
+  else:
+    v1 = record(resumed, [lit#18, lit#19])
+    v2 = record(resumed_outcome, [v1])
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#20)
+== fn guard_chain_carries_every_proof_outcome_decoder$arm0/1 origin=lifted(guard_chain_carries_every_proof_outcome_decoder, #1) ==
+  sig: (guard_chain_carries_every_proof.Resumed) -> Decoder(guard_chain_carries_every_proof.GuardChainCarriesEveryProofOutcome)
+  v1 = record(resumed_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn option_bool_codec/0 origin=codec_template(CompositeTrio, Option(Bool), composite(nullable(bool))) ==
+  sig: () -> Codec(Option(Bool))
+  v0 = make_closure option_bool_to_json captures=[]
+  v1 = call_local option_bool_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn option_bool_to_json/1 origin=codec_template(CompositeTrio, Option(Bool), composite(nullable(bool))) ==
+  sig: (Option(Bool)) -> Json
+  v1 = make_closure option_bool_to_json$item captures=[]
+  tail_rt gleam@json:nullable/2(v0, v1)
+== fn option_bool_decoder/0 origin=codec_template(CompositeTrio, Option(Bool), composite(nullable(bool))) ==
+  sig: () -> Decoder(Option(Bool))
+  v0 = call_rt aion@awl@codec:bool_decoder/0()
+  tail_rt gleam@dynamic@decode:optional/1(v0)
+== fn option_bool_to_json$item/1 origin=lifted(option_bool_to_json, #0) ==
+  sig: (Bool) -> Json
+  tail_rt aion@awl@codec:bool_to_json/1(v0)
+== fn option_string_codec/0 origin=codec_template(CompositeTrio, Option(String), composite(nullable(string))) ==
+  sig: () -> Codec(Option(String))
+  v0 = make_closure option_string_to_json captures=[]
+  v1 = call_local option_string_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn option_string_to_json/1 origin=codec_template(CompositeTrio, Option(String), composite(nullable(string))) ==
+  sig: (Option(String)) -> Json
+  v1 = make_closure option_string_to_json$item captures=[]
+  tail_rt gleam@json:nullable/2(v0, v1)
+== fn option_string_decoder/0 origin=codec_template(CompositeTrio, Option(String), composite(nullable(string))) ==
+  sig: () -> Decoder(Option(String))
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  tail_rt gleam@dynamic@decode:optional/1(v0)
+== fn option_string_to_json$item/1 origin=lifted(option_string_to_json, #0) ==
+  sig: (String) -> Json
+  tail_rt aion@awl@codec:string_to_json/1(v0)
+== fn note_activity/1 origin=activity_wrapper(note, raw=false) ==
+  sig: (String) -> Activity(guard_chain_carries_every_proof.NoteInput, guard_chain_carries_every_proof.Parked)
+  T-ACT action=note input_codec=note_input_codec return=parked_codec
+== fn step_decide/3 origin=region(decide) ==
+  sig: (Option(Bool), Option(String), guard_chain_carries_every_proof.Session) -> Result(guard_chain_carries_every_proof.GuardChainCarriesEveryProofOutcome, AwlError)
+  v3 = field(v2, 1)
+  v4 = call_local note_activity(v3) live_after=[v0, v1, v2]
+  v5 = call_rt aion@activity:task_queue/2(v4, lit#23) live_after=[v0, v1, v2]
+  v6 = call_rt aion@workflow:run/1(v5) live_after=[v0, v1, v2]
+  v7 = call_rt aion@awl@error:map_activity_error/1(v6) live_after=[v0, v1, v2]
+  v8 = try_bind v7 live_after=[v0, v1, v2]
+  v9 = cmp Ne v1 'none'
+  if is_true v9:
+    v10 = assert_some v1
+    v11 = cmp Ne v0 'none'
+    if is_true v11:
+      v12 = assert_some v0
+      if is_true v12:
+        v13 = field(v2, 1)
+        v14 = record(resumed, [v13, v10])
+        v15 = record(resumed_outcome, [v14])
+        v16 = record(ok, [v15])
+        return v16
+      else:
+        v18 = field(v2, 2)
+        v17 = cmp Ne v18 'none'
+        if is_true v17:
+          v19 = field(v2, 2)
+          v20 = assert_some v19
+          v22 = field(v2, 3)
+          v21 = cmp Ne v22 'none'
+          if is_true v21:
+            v23 = field(v2, 3)
+            v24 = assert_some v23
+            if is_true v24:
+              tail_local step_confirm(v2)
+            else:
+              v25 = field(v8, 1)
+              v26 = record(parked, [v25])
+              v27 = call_local parked_to_json(v26)
+              v28 = call_rt gleam@json:to_string/1(v27)
+              v29 = record(awl_outcome_failure, [lit#24, v28])
+              v30 = record(error, [v29])
+              return v30
+          else:
+            v31 = field(v8, 1)
+            v32 = record(parked, [v31])
+            v33 = call_local parked_to_json(v32)
+            v34 = call_rt gleam@json:to_string/1(v33)
+            v35 = record(awl_outcome_failure, [lit#25, v34])
+            v36 = record(error, [v35])
+            return v36
+        else:
+          v37 = field(v8, 1)
+          v38 = record(parked, [v37])
+          v39 = call_local parked_to_json(v38)
+          v40 = call_rt gleam@json:to_string/1(v39)
+          v41 = record(awl_outcome_failure, [lit#26, v40])
+          v42 = record(error, [v41])
+          return v42
+    else:
+      v44 = field(v2, 2)
+      v43 = cmp Ne v44 'none'
+      if is_true v43:
+        v45 = field(v2, 2)
+        v46 = assert_some v45
+        v48 = field(v2, 3)
+        v47 = cmp Ne v48 'none'
+        if is_true v47:
+          v49 = field(v2, 3)
+          v50 = assert_some v49
+          if is_true v50:
+            tail_local step_confirm(v2)
+          else:
+            v51 = field(v8, 1)
+            v52 = record(parked, [v51])
+            v53 = call_local parked_to_json(v52)
+            v54 = call_rt gleam@json:to_string/1(v53)
+            v55 = record(awl_outcome_failure, [lit#27, v54])
+            v56 = record(error, [v55])
+            return v56
+        else:
+          v57 = field(v8, 1)
+          v58 = record(parked, [v57])
+          v59 = call_local parked_to_json(v58)
+          v60 = call_rt gleam@json:to_string/1(v59)
+          v61 = record(awl_outcome_failure, [lit#28, v60])
+          v62 = record(error, [v61])
+          return v62
+      else:
+        v63 = field(v8, 1)
+        v64 = record(parked, [v63])
+        v65 = call_local parked_to_json(v64)
+        v66 = call_rt gleam@json:to_string/1(v65)
+        v67 = record(awl_outcome_failure, [lit#29, v66])
+        v68 = record(error, [v67])
+        return v68
+  else:
+    v70 = field(v2, 2)
+    v69 = cmp Ne v70 'none'
+    if is_true v69:
+      v71 = field(v2, 2)
+      v72 = assert_some v71
+      v74 = field(v2, 3)
+      v73 = cmp Ne v74 'none'
+      if is_true v73:
+        v75 = field(v2, 3)
+        v76 = assert_some v75
+        if is_true v76:
+          tail_local step_confirm(v2)
+        else:
+          v77 = field(v8, 1)
+          v78 = record(parked, [v77])
+          v79 = call_local parked_to_json(v78)
+          v80 = call_rt gleam@json:to_string/1(v79)
+          v81 = record(awl_outcome_failure, [lit#30, v80])
+          v82 = record(error, [v81])
+          return v82
+      else:
+        v83 = field(v8, 1)
+        v84 = record(parked, [v83])
+        v85 = call_local parked_to_json(v84)
+        v86 = call_rt gleam@json:to_string/1(v85)
+        v87 = record(awl_outcome_failure, [lit#31, v86])
+        v88 = record(error, [v87])
+        return v88
+    else:
+      v89 = field(v8, 1)
+      v90 = record(parked, [v89])
+      v91 = call_local parked_to_json(v90)
+      v92 = call_rt gleam@json:to_string/1(v91)
+      v93 = record(awl_outcome_failure, [lit#32, v92])
+      v94 = record(error, [v93])
+      return v94
+== fn step_confirm/1 origin=region(confirm) ==
+  sig: (guard_chain_carries_every_proof.Session) -> Result(guard_chain_carries_every_proof.GuardChainCarriesEveryProofOutcome, AwlError)
+  v2 = field(v0, 2)
+  v1 = cmp Ne v2 'none'
+  if is_true v1:
+    v3 = field(v0, 2)
+    v4 = assert_some v3
+    v6 = field(v0, 3)
+    v5 = cmp Ne v6 'none'
+    if is_true v5:
+      v7 = field(v0, 3)
+      v8 = assert_some v7
+      if is_true v8:
+        v9 = field(v0, 1)
+        v10 = record(resumed, [v9, v4])
+        v11 = record(resumed_outcome, [v10])
+        v12 = record(ok, [v11])
+        return v12
+      else:
+        v13 = field(v0, 1)
+        v14 = record(parked, [v13])
+        v15 = call_local parked_to_json(v14)
+        v16 = call_rt gleam@json:to_string/1(v15)
+        v17 = record(awl_outcome_failure, [lit#33, v16])
+        v18 = record(error, [v17])
+        return v18
+    else:
+      v19 = field(v0, 1)
+      v20 = record(parked, [v19])
+      v21 = call_local parked_to_json(v20)
+      v22 = call_rt gleam@json:to_string/1(v21)
+      v23 = record(awl_outcome_failure, [lit#34, v22])
+      v24 = record(error, [v23])
+      return v24
+  else:
+    v25 = field(v0, 1)
+    v26 = record(parked, [v25])
+    v27 = call_local parked_to_json(v26)
+    v28 = call_rt gleam@json:to_string/1(v27)
+    v29 = record(awl_outcome_failure, [lit#35, v28])
+    v30 = record(error, [v29])
+    return v30
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD

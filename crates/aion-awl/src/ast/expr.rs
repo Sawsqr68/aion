@@ -312,3 +312,38 @@ pub(crate) fn field_path(base: &Expr, name: &str) -> Option<Vec<String>> {
     path.push(name.to_owned());
     Some(path)
 }
+
+/// Every operand of a chain of ONE connective, in source order.
+///
+/// `a and b and c` parses as `(a and b) and c`, so an expression that reads as
+/// three conjuncts is a two-operand binary whose left is another binary. Every
+/// layer that reasons about what a guard proves has to see all three: a proof
+/// established by the middle conjunct is in force where the last one is
+/// evaluated, and a layer that only looked at the direct operand would miss it.
+/// Like [`access_path`], this lives in the AST because the checker, the direct
+/// lowering, and the reference emitter must agree on it exactly.
+///
+/// Nesting on the right (`a and (b and c)`, which only source parentheses can
+/// produce) flattens the same way — the operands are the same three, and the
+/// proofs run in the same order.
+pub(crate) fn chain_operands(expr: &Expr, op: BinaryOp) -> Vec<&Expr> {
+    let mut operands = Vec::new();
+    push_chain_operands(expr, op, &mut operands);
+    operands
+}
+
+fn push_chain_operands<'e>(expr: &'e Expr, op: BinaryOp, operands: &mut Vec<&'e Expr>) {
+    if let Expr::Binary {
+        left,
+        op: connective,
+        right,
+        ..
+    } = expr
+        && *connective == op
+    {
+        push_chain_operands(left, op, operands);
+        push_chain_operands(right, op, operands);
+    } else {
+        operands.push(expr);
+    }
+}

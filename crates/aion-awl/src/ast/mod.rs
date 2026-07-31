@@ -17,7 +17,7 @@ pub use document::{
     WorkflowTimeoutDecl,
 };
 pub use expr::{Arg, BinaryOp, DurationLiteral, Expr, PredicateKind, Quantifier};
-pub(crate) use expr::{access_path, field_path, join_span};
+pub(crate) use expr::{access_path, chain_operands, field_path, join_span};
 pub use steps::{
     AfterRef, AnswerStmt, Binding, Call, CallStmt, CollectStmt, CombinatorCall, CombinatorKind,
     DeliveryVerb, DistributeStmt, ForkHeader, ForkStmt, Guard, JoinLine, LoopStmt, LoopTail,

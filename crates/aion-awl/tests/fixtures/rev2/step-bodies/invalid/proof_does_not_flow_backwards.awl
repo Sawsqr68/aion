@@ -1,0 +1,32 @@
+//! A guard chain carries its proofs FORWARD only.
+//!
+//! `and` short-circuits left to right, so a conjunct is evaluated with every
+//! EARLIER conjunct proved and nothing later. Reading `session.ended` before
+//! the conjunct that proves it present is reading an optional, and it stays
+//! refused however many conjuncts follow.
+//!
+//! This is the guard rail on flattening the chain: a layer that collected
+//! proofs from the whole chain without respecting position would accept this
+//! and then compile it to a test against a still-wrapped optional — silently
+//! false, never reported.
+workflow proof_does_not_flow_backwards
+  input session: Session
+  outcome resumed: type Resumed, route success
+  outcome parked:  type Parked,  route failure
+
+type Session { label: String, ended: Bool? }
+type Resumed { label: String }
+type Parked  { label: String }
+
+worker desk
+  action note(reason: String) -> Parked
+
+step decide
+  note(reason: session.label) -> noted
+
+  // defect: `session.ended` is read one conjunct BEFORE the proof that it is
+  // present, so it is still `Bool?` here
+  outcome ending: when session.ended and session.ended is present,
+    route resumed(label: session.label)
+  outcome parked: otherwise,
+    route parked(label: noted.label)

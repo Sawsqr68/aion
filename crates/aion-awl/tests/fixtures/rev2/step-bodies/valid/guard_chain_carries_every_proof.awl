@@ -1,0 +1,56 @@
+//! A guard chain carries EVERY proof it makes, not just the first.
+//!
+//! `a and b and c` parses as `(a and b) and c`. A layer that narrowed from a
+//! binary's direct left operand saw only two operands and dropped whatever the
+//! middle one proved, so the natural way to write this — prove a path, then
+//! read it — was refused the moment a third conjunct appeared.
+//!
+//! Every conjunct here is load-bearing and none is redundant. Both carriers are
+//! exercised, because they are different mechanisms:
+//!   - `hinted` chains over bare BINDINGS, where a proof rebinds its own name.
+//!   - `ending` chains over FIELD PATHS, where a proof has no name to rebind
+//!     and mints one. The record is deliberately NOT optional: field access
+//!     through an optional record already unwraps one level, so a fixture
+//!     rooted on `Session?` would pass without proving anything about the rule.
+//!
+//! And both narrowing POSITIONS are exercised in each, because they are also
+//! different: the middle conjunct's proof has to reach the third conjunct
+//! (inside the guard, on the short-circuit edge), and the first conjunct's
+//! proof has to reach the ARM, where it is read from the route payload.
+workflow guard_chain_carries_every_proof
+  input session: Session
+  // The operator's closing note and end answer, if either was supplied at
+  // start. Bare optional BINDINGS, where a proof rebinds its own name.
+  input note_hint: String?
+  input ended_hint: Bool?
+  outcome resumed: type Resumed, route success
+  outcome parked:  type Parked,  route failure
+
+type Session {
+  label: String,
+  /// Present only once the operator has written a closing note.
+  note: String?,
+  /// Present only once the operator has answered the end question.
+  ended: Bool?,
+}
+type Resumed { label: String, note: String }
+type Parked  { label: String }
+
+worker desk
+  action note(reason: String) -> Parked
+
+step decide
+  note(reason: session.label) -> noted
+
+  outcome hinted: when note_hint is present and ended_hint is present and ended_hint,
+    route resumed(label: session.label, note: note_hint)
+  outcome ending: when session.note is present and session.ended is present and session.ended,
+    route confirm
+  outcome parked: otherwise,
+    route parked(label: noted.label)
+
+step confirm
+  outcome resumed: when session.note is present and session.ended is present and session.ended,
+    route resumed(label: session.label, note: session.note)
+  outcome parked: otherwise,
+    route parked(label: session.label)

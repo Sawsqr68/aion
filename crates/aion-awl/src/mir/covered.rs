@@ -123,6 +123,7 @@ pub(super) const COVERED: &[&str] = &[
     // an optional FIELD narrows the same way an optional binding always has.
     // Both are pinned because the two positions are different machinery: the
     // guard's short-circuit edge, and the arm's own proof.
+    "step-bodies/valid/guard_chain_carries_every_proof",
     "step-bodies/valid/guard_narrows_a_deep_optional_field",
     "step-bodies/valid/guard_narrows_an_optional_field",
     "step-bodies/valid/predicates_and_operators",
