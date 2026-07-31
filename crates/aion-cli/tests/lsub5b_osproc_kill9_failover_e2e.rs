@@ -69,10 +69,11 @@
 //!
 //! ## Running
 //!
-//! Ignored (slow, spawns 4 OS processes + a 3-node cluster):
+//! Runtime-gated, never `#[ignore]`d (slow, spawns 4 OS processes + a 3-node cluster):
 //! ```text
-//! cargo test -p aion-cli --features haematite-backend,liminal-transport \
-//!   --test lsub5b_osproc_kill9_failover_e2e -- --ignored --nocapture
+//! AION_RUN_COSTLY_TESTS=1 cargo test -p aion-cli \
+//!   --features haematite-backend,liminal-transport \
+//!   --test lsub5b_osproc_kill9_failover_e2e -- --nocapture
 //! ```
 
 #![cfg(all(unix, feature = "haematite-backend", feature = "liminal-transport"))]
@@ -88,6 +89,8 @@ use serde_json::Value;
 mod aion_cli;
 #[path = "common/cluster_config.rs"]
 mod cluster_config;
+#[path = "common/costly_gate.rs"]
+mod costly_gate;
 #[path = "common/osproc.rs"]
 mod osproc;
 
@@ -157,8 +160,16 @@ fn boot_node(config: &Path, log_path: &Path, ports: (u16, u16, u16)) -> Result<N
 }
 
 #[test]
-#[ignore = "slow: spawns a 3-node aion-server cluster + a liminal worker, kill -9 failover"]
 fn osproc_kill9_liminal_failover_completes_exactly_once() -> Result<(), TestError> {
+    // Runtime-gated, never `#[ignore]`d. This is the CROSS-NODE failover
+    // proof — one of the two tests that establish the durability claim — so
+    // a run that skips it must say so rather than leave a tally that reads
+    // identically to a run that proved it.
+    if costly_gate::skip_unless_opted_in(
+        "a kill -9 of a node in a 3-node cluster failing over and completing the work EXACTLY ONCE",
+    ) {
+        return Ok(());
+    }
     let temp = tempfile::tempdir()?;
     run_kill9_failover(temp.path())
         .map_err(|error| preserve_on_failure(temp.path(), "lsub5b-kill9-failover", &error))

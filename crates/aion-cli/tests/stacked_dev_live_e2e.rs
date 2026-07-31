@@ -11,6 +11,9 @@
 
 #![cfg(unix)]
 
+#[path = "common/costly_gate.rs"]
+mod costly_gate;
+
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -473,11 +476,16 @@ fn deploy_archive(
 // Ignored only because it is slow: it does a real `cargo build` of the
 // out-of-workspace `norn-worker` crate against the published `aion-worker`
 // SDK, boots a real `aion server`, and drives real worker + shim processes.
-// Run deliberately with:
-// `cargo test -p aion-cli --test stacked_dev_live_e2e -- --ignored`.
 #[test]
-#[ignore = "slow: cargo-builds the out-of-workspace norn-worker, boots aion server, and drives real worker + shim processes"]
 fn stacked_dev_lands_through_the_real_worker_and_review_signal() -> Result<(), TestError> {
+    // Runtime-gated, never `#[ignore]`d: costly (cargo-builds the
+    // out-of-workspace norn-worker, boots a server, and drives real worker
+    // and shim processes).
+    if costly_gate::skip_unless_opted_in(
+        "a stacked-dev change landing through a REAL worker process and returning a review signal",
+    ) {
+        return Ok(());
+    }
     let repo = repo_root()?;
     let example = repo.join("examples/stacked-dev");
     build_example_archives(&repo)?;

@@ -40,10 +40,11 @@
 //!
 //! ## Running
 //!
-//! Ignored (slow, spawns processes): run explicitly with
+//! Runtime-gated, never `#[ignore]`d (slow, spawns processes): run explicitly with
 //! ```text
-//! cargo test -p aion-cli --features haematite-backend,liminal-transport \
-//!   --test lsub5b_osproc_failover_e2e -- --ignored --nocapture
+//! AION_RUN_COSTLY_TESTS=1 cargo test -p aion-cli \
+//!   --features haematite-backend,liminal-transport \
+//!   --test lsub5b_osproc_failover_e2e -- --nocapture
 //! ```
 
 #![cfg(all(unix, feature = "haematite-backend", feature = "liminal-transport"))]
@@ -52,6 +53,8 @@ use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+#[path = "common/costly_gate.rs"]
+mod costly_gate;
 #[path = "common/osproc.rs"]
 mod osproc;
 
@@ -116,8 +119,15 @@ liminal_listen_address = "127.0.0.1:{liminal_port}"
 }
 
 #[test]
-#[ignore = "slow: spawns real aion-server + liminal worker OS processes"]
 fn osproc_liminal_listener_accepts_real_worker_connection() -> Result<(), TestError> {
+    // Runtime-gated, never `#[ignore]`d: costly (spawns real aion-server and
+    // liminal worker OS processes), so it stays off by default — but the run
+    // now SAYS which proof it did not establish.
+    if costly_gate::skip_unless_opted_in(
+        "a real liminal worker connecting to a real aion-server listener over OS processes",
+    ) {
+        return Ok(());
+    }
     let temp = tempfile::tempdir()?;
     run_connect_half(temp.path())
         .map_err(|error| preserve_on_failure(temp.path(), "lsub5b-connect-half", &error))

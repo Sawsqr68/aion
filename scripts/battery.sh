@@ -171,6 +171,27 @@ gate "rust:clippy" cargo clippy --workspace --all-targets -- -D warnings
 # Note the filter trap: a legitimately filtered top-level run also reports
 # `filtered out > 0`, so that field cannot be used to identify child lines — the
 # `posture:*` gates filter deliberately.
+#
+# 🔴 TWO NOUNS THAT LOOK LIKE ONE, both consequences of those same child
+# re-invocations. Worked out at two hands on the 2026-08-01 green run and
+# written here because the next person re-derives them from scratch otherwise:
+#
+#   * `N passed` is a count of PASS EVENTS, not of DISTINCT TESTS. A subprocess
+#     test passes twice — once inside its parent target's tally, once as the
+#     filtered child. That run reported 3952 passed; distinct is ~3949.
+#   * VERDICT LINES ARE NOT TARGETS. The same run had 243 `test result:` lines
+#     and 240 targets; the gap is exactly the 3 nested child verdicts.
+#
+# Which is why this control counts TARGETS and pairs them rather than summing a
+# column: a nested child verdict cannot reach it. Summing across verdict lines
+# treats child re-invocations as peers of top-level runs, and an aggregate over
+# heterogeneous rows is a number about no population at all. (The same run's
+# `2133 filtered out` is 3 x 711 from one self-filtering binary — it looks like a
+# third of the suite was skipped and nothing was.)
+#
+# And the pattern needs its COLON. `grep '^test result'` also matches a test
+# NAMED `result_...`, which is how the 244-vs-243 discrepancy arose in the first
+# place. Count `^test result:`.
 paired_test() {
   local log
   log=$(mktemp) || return 1
@@ -273,6 +294,89 @@ gate "posture:proto-generated" posture_control "aion-proto, generated on" \
   generated_stubs_compiled_into_this_build \
   generated_stubs_absent_from_this_build \
   cargo test -p aion-proto --lib --features generated build_coverage::
+
+# --- Costly proofs announce their own absence (#86) ----------------------------
+#
+# Five tests used `#[ignore]`, which the house rules ban outright. Among them
+# were the CROSS-NODE kill-9 failover proof and the PARKED-TIMER resume proof —
+# the two tests that establish the durability claim — so the headline number
+# excluded them and nobody reading it could tell.
+#
+# They are now runtime-gated (`AION_RUN_COSTLY_TESTS=1` to opt in) and each
+# announces, on the real stderr handle, WHICH PROOF did not happen. Default
+# behaviour is deliberately unchanged: they still do not run. What changed is
+# that the run says so.
+#
+# 🔴 THE HONEST COST, AND WHY THIS GATE IS NOT OPTIONAL. A runtime-gated skip
+# returns `Ok(())`, so it counts as a PASS — the total now includes tests that
+# proved nothing, which is worse than `#[ignore]`'s separate tally. That trade is
+# only acceptable while the announcement is CHECKED. Delete this gate and the
+# conversion becomes a downgrade.
+#
+# 🔴 THE PATTERN MUST MATCH AN ANNOUNCEMENT, NOT THE TOKEN. Found by the
+# inverted control, which is the only reason it is not still here: grepping the
+# bare token `COSTLY_PROOF_SKIPPED` also matches CARGO'S OWN DIAGNOSTICS, because
+# a dead-code warning quotes the source line that defines the constant —
+# `pub const SKIP_TOKEN: &str = "COSTLY_PROOF_SKIPPED";`. And that warning
+# appears exactly when a call site is removed, so the count was inflated in
+# precisely the case the gate exists to detect. The anchored
+# `^COSTLY_PROOF_SKIPPED (PROVES NOTHING):` cannot match a quoted source line,
+# which compilers indent.
+#
+# 🔴 A BASELINE IS ONLY A CONTROL IF IT IS INDEPENDENT OF WHAT IT MEASURES.
+# The second defect the inverted control found, and the one that would have
+# shipped a FALSE PASS. With the pattern fixed, this gate derived its expected
+# count by grepping the number of `skip_unless_opted_in(` call sites and
+# comparing it to the number of announcements — on the reasoning that a derived
+# baseline beats a hardcoded list. It reported `4 call sites, 4 announcements`
+# and PASSED while a durability proof was being skipped silently, because
+# deleting the call site DELETED ITS OWN EXPECTATION. Two numbers moving
+# together, agreeing perfectly about nothing.
+#
+# So the list below is deliberate. Enumerate the POPULATION — nothing else in
+# the tree states which suites own a costly proof — and never the ANSWER. Adding
+# a sixth costly proof does require an edit here; that is the price of an
+# expectation the code under test cannot move. The non-vacuity guard still
+# matters for the same reason it always does: an empty list would assert nothing
+# while reporting success, so zero checked suites is a failure.
+costly_announcements() {
+  # The declared list of suites that carry a costly proof. This IS the
+  # enumeration, and it has to be: nothing else in the tree says which suites
+  # own one. What must never be enumerated is the ANSWER — see below.
+  local targets="lsub5b_osproc_failover_e2e lsub5b_osproc_kill9_failover_e2e \
+                 parked_timer_osproc_kill9_failover_e2e stacked_dev_live_e2e \
+                 new_scaffold_build"
+  local target out found failures=0 checked=0
+
+  for target in $targets; do
+    out=$(cargo test -q -p aion-cli --test "$target" 2>&1)
+    found=$(printf '%s' "$out" | grep -c '^COSTLY_PROOF_SKIPPED (PROVES NOTHING):')
+    checked=$((checked + 1))
+    if [ "$found" -eq 0 ]; then
+      printf 'COSTLY-ANNOUNCEMENT GATE FAILED: `%s` announced NOTHING.\n' "$target"
+      printf 'Its costly proof is being skipped silently — the exact invisibility\n'
+      printf '`#[ignore]` was banned for. Either it now runs (move it off this list)\n'
+      printf 'or its runtime gate lost its announcement.\n'
+      failures=$((failures + 1))
+    else
+      printf '  %-42s announced %d\n' "$target" "$found"
+    fi
+  done
+
+  if [ "$checked" -eq 0 ]; then
+    printf 'NON-VACUITY GUARD FAILED: the target list is empty, so this gate\n'
+    printf 'asserted nothing while reporting success.\n'
+    return 1
+  fi
+  if [ "$failures" -ne 0 ]; then
+    printf '%d of %d costly suite(s) failed to announce.\n' "$failures" "$checked"
+    return 1
+  fi
+  printf 'costly announcements ok: %d suite(s), every one announced its skipped proof\n' "$checked"
+  return 0
+}
+
+gate "gates:costly-announced" costly_announcements
 
 # --- serde_json Map-ordering posture (#76) -------------------------------------
 #

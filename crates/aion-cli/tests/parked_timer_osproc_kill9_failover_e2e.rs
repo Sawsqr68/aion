@@ -90,14 +90,17 @@
 //!
 //! ## Running
 //!
-//! Ignored (slow: spawns a 3-node `aion server` cluster + a hard-kill failover):
+//! Runtime-gated, never `#[ignore]`d (slow: spawns a 3-node `aion server` cluster + a hard-kill failover):
 //! ```text
-//! cargo test -p aion-cli --features haematite-backend,liminal-transport \
-//!   --test parked_timer_osproc_kill9_failover_e2e -- --ignored --nocapture
+//! AION_RUN_COSTLY_TESTS=1 cargo test -p aion-cli \
+//!   --features haematite-backend,liminal-transport \
+//!   --test parked_timer_osproc_kill9_failover_e2e -- --nocapture
 //! ```
 
 #![cfg(all(unix, feature = "haematite-backend", feature = "liminal-transport"))]
 
+#[path = "common/costly_gate.rs"]
+mod costly_gate;
 #[path = "test_support/gleam.rs"]
 mod gleam_test_support;
 
@@ -554,10 +557,15 @@ fn boot_cluster(dir: &Path, package: &Path, ports: &[(u16, u16)]) -> Result<Vec<
 // ---------------------------------------------------------------------------
 
 #[test]
-#[ignore = "slow: spawns a 3-node aion-server cluster + a hard-kill failover; \
-            passes since #157; run with `-- --ignored --nocapture` (and \
-            KILL9_KEEP_LOGS=<dir> to keep server logs)."]
 fn osproc_kill9_parked_timer_resumes_and_completes_exactly_once() -> Result<(), TestError> {
+    // Runtime-gated, never `#[ignore]`d. This is the PARKED-TIMER resume
+    // proof — the other half of the durability claim — and it has passed
+    // since #157. Set `KILL9_KEEP_LOGS=<dir>` to keep server logs.
+    if costly_gate::skip_unless_opted_in(
+        "a workflow parked on a timer surviving a hard kill, resuming, and completing EXACTLY ONCE",
+    ) {
+        return Ok(());
+    }
     let temp = tempfile::tempdir()?;
     let package = build_sleep_query_archive(temp.path())?;
 

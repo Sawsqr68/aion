@@ -4,6 +4,8 @@
 //! `cargo check`. The hello-world template is proven end to end (server
 //! boot, deploy, start, completion) in `new_hello_world_e2e.rs`.
 
+#[path = "common/costly_gate.rs"]
+mod costly_gate;
 #[path = "test_support/gleam.rs"]
 mod gleam_test_support;
 
@@ -235,11 +237,18 @@ fn saga_worker_crate_passes_cargo_check() -> Result<(), TestError> {
 /// scaffolded hermetic `gleam test` suite passes.
 // Ignored: this gate downloads the `gleam_json` hex dependency from
 // https://hex.pm during `gleam build`/`gleam test`, so it fails in a normal
-// offline `cargo test --workspace`. Run deliberately when online with:
-// `cargo test -p aion-cli --test new_scaffold_build -- --ignored`.
 #[test]
-#[ignore = "downloads gleam_json from hex.pm; fails offline — run with --ignored when online"]
 fn dev_pipeline_template_builds_packages_and_passes_its_tests() -> Result<(), TestError> {
+    // Runtime-gated, never `#[ignore]`d. This one needs the NETWORK, not just
+    // time: it downloads `gleam_json` from hex.pm and fails offline. Opting in
+    // on a disconnected box is a real failure and is reported as one — the
+    // gate governs whether the attempt happens, never whether it is believed.
+    if costly_gate::skip_unless_opted_in(
+        "the dev-pipeline template scaffolding, building, packaging and passing its own tests \
+         (needs hex.pm)",
+    ) {
+        return Ok(());
+    }
     let temp_dir = tempfile::tempdir()?;
     let (project, report) = common::scaffold_project(
         temp_dir.path(),
