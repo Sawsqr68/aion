@@ -369,3 +369,111 @@ Three parts, and the third is the one that matters:
 
 **Nothing here is certified. The run continues; conditions (3) and (4) remain
 measurable and are still worth measuring.**
+
+---
+
+## 🔴 CORRECTION — two of my own claims above are WRONG, and the real defect is sharper
+
+Found at 10:55Z reading `aion-worker/src/runtime/liminal.rs:998–1030`
+(`spawn_liveness_pump`) while scoping the #58 fix. Written before building,
+because the fix would have been designed against a false picture.
+
+### WITHDRAWN 1 — "the worker assumes plain activities are short"
+
+I wrote that Finding A's root cause "rests on one parenthesis — *A plain
+activity runs inline (short, no live session)* — that assumption is false, and
+the workflow document itself says so," and I counted it as the **fifth**
+instance of the discarded-fact pattern.
+
+**That is wrong, and I withdraw it.** The worker does not assume plain
+activities are short. A fuller comment in the *same file* states the opposite,
+names the exact consequence, and reports it observed in production:
+
+> a plain activity executes INLINE on the serve loop, so while it runs the
+> worker **cannot dequeue (or answer) the server's pings**, and nothing else
+> would advance the connection lease. A leg longer than the window would be
+> deregistered mid-work for the crime of working — **observed live on legs over
+> ~40 s.** The pump publishes from a background task on a shared writer, so it
+> keeps the lease alive whatever the serve loop is doing.
+
+The hazard was known, diagnosed, and **compensated** — by a background liveness
+pump publishing `WorkerLivenessBeat` on `WORKER_LIVENESS_CHANNEL` every quarter
+window, independent of the serve loop. The parenthesis I quoted is a stale
+comment at one site, contradicted by a fuller one a few hundred lines away. It
+is not the load-bearing assumption I claimed. **The discarded-fact census drops
+back to five instances, not six.**
+
+That paragraph also identifies 07-29's failure exactly — *"deregistered mid-work
+for the crime of working, observed on legs over ~40 s"* is the "lease expired
+mid-cargo" event — and records that it was **already fixed** by the pump.
+
+### WITHDRAWN 2 — "the reaper is broken / supervision is switched off"
+
+Finding B concluded the dead-man switch does not fire and offered two readings,
+treating "the sweep does not reap" as the live one. **The other reading was the
+correct one: something *is* refreshing the lease, by design.** The pump is.
+
+So the reaper is **not** broken, and my refusal of green condition (1) rested on
+a false premise. **Condition (1) — workers keep their leases, no mid-cargo
+expiry orphaning — passes, and passes for a legitimate engineered reason.** I
+withdraw the refusal. It was the right instinct applied to the wrong mechanism:
+I inferred a broken reaper from an absence of reap events without checking
+whether a designed refresher explained the absence.
+
+### WHAT STANDS, UNCHANGED
+
+Everything in the slot-leak finding. Exactly 32 pings time out, ping 42 is
+refused at a cap of 32; `aion-server` uses liminal's no-deadline push at all
+three sites and the deadline variant nowhere; an abandoned ping never releases
+its slot; the resulting push-admission ceiling is ≈240 s against a declared
+45-minute leg; condition (2) is unreachable because `notify_result` needs a new
+push on a permanently-refused connection. None of that is touched by this
+correction — the leak is in the *server's* probe, not the worker's pump.
+
+### AND THE REAL FINDING B, WHICH IS SHARPER THAN THE ONE I WITHDREW
+
+`push_payload`'s doc gives the ping's whole reason for existing:
+
+> the dead-man switch rides the SAME server-push leg a dispatch does — a ping
+> that reaches the worker proves the exact path a dispatch would take, **not a
+> parallel one that could be healthy while the real one is not.**
+
+**The pump is precisely such a parallel channel, and it feeds the same lease.**
+It publishes from a background task whatever the serve loop is doing — including
+when the serve loop can receive nothing at all.
+
+So the two signals collide, and the weaker one wins:
+
+- the **ping** says *the server cannot reach this worker* — 73 consecutive
+  failures, the exact evidence the switch exists to collect;
+- the **pump** says *this worker's process is alive* — and refreshes the lease;
+- the lease accepts either, so the ping's negative evidence is **discarded**.
+
+A worker whose dispatch path is one hundred percent dead holds a perfectly
+healthy lease indefinitely. **The dead-man switch cannot fire for the failure
+mode the ping was built to detect.** That is live right now on `dfd2117c`: the
+server has been unable to reach this worker for over fifteen minutes, and the
+worker is in perfect standing.
+
+The root cause is that **two different facts are collapsed into one lease**:
+*the worker process is alive* (pump, worker→server) and *the server can reach
+the worker* (ping, server→worker). Only the second is a dispatch precondition.
+The current warning asserts the lease is not being refreshed, which is **false**
+whenever an activity is in flight — the pump is refreshing it by design.
+
+### CONSEQUENCE FOR WAFFLES' ACCEPTANCE MUST (b)
+
+His reaper positive control is right and now needs a sharper target. **Killing
+the worker process is not a sufficient control** — that closes the connection,
+and connection-close reclaims by a different path, so it would go green while
+this defect stands. The control that discriminates is a worker that **keeps
+pumping while its serve loop cannot answer** — process alive, dispatch path
+dead. On this build that worker is never reaped. That is the positive control
+worth having, and it is exactly tonight's live condition.
+
+**Method note against myself, twice in one night.** The invalid `Code`-chunk
+fixture failed for the wrong reason and I nearly banked it. Here I inferred a
+broken mechanism from an absence of events without asking what else could
+produce that absence. Same error shape: *a signal's absence is not
+self-explanatory.* Both were caught by reading the code that produces the
+signal rather than the signal alone.
