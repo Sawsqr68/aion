@@ -213,6 +213,88 @@ fn every_document_on_this_queue_agrees_with_the_advertised_surface() -> TestResu
     Ok(())
 }
 
+/// THE ROUTING INVARIANT: the harness-served set is exactly what the DOCUMENT
+/// marks `agent`, and nothing else.
+///
+/// The baseline is recomputed from the compiled contract inside the test rather
+/// than written out as a list of names. A hardcoded list would encode today's
+/// document; this encodes the property, so marking a new action `agent` moves
+/// the split automatically and REMOVING a marker is caught.
+#[test]
+fn the_agent_split_is_exactly_what_the_document_marks() -> TestResult {
+    let surface = advertised_surface()?;
+    let contract = contract_of(ASSISTANT_DOCUMENT)?;
+
+    let mut marked: Vec<String> = contract
+        .actions
+        .iter()
+        .filter(|action| action.agent && action.body.is_none())
+        .map(|action| action.name.clone())
+        .collect();
+    marked.sort();
+    assert_eq!(
+        surface.agent_names, marked,
+        "the harness-served set must come from the document's `agent` markers"
+    );
+
+    let split = surface.split();
+    let mut routed: Vec<String> = split.agent.iter().map(|d| d.name.clone()).collect();
+    routed.sort();
+    assert_eq!(
+        routed, marked,
+        "an action routed to the agent harness must be one the document marks `agent` — \
+         routing a plain handler there sends a workspace clone to norn as if it were a prompt"
+    );
+
+    // Non-vacuity, both directions: a document with nothing marked, or with
+    // EVERYTHING marked, would satisfy the equalities above while proving
+    // nothing about the split.
+    assert!(
+        !split.agent.is_empty(),
+        "the document must mark at least one action `agent`, or this test passes vacuously"
+    );
+    assert!(
+        !split.plain.is_empty(),
+        "the document must leave at least one action unmarked, or the split is not a split"
+    );
+    assert_eq!(
+        split.agent.len() + split.plain.len(),
+        surface.descriptors.len(),
+        "every advertised action must land on exactly one side of the split"
+    );
+    Ok(())
+}
+
+/// The control arm for the marker itself: the AWL checker must REFUSE `agent`
+/// on an action that is not arity-1 `String -> String`.
+///
+/// Without this, `agent_names` would be a set the worker trusts for its shape
+/// and nothing would establish that shape — the marker would be a name in the
+/// grammar with no force, which is the exact defect it was built to remove.
+#[test]
+fn the_checker_refuses_an_agent_marker_on_the_wrong_shape() -> TestResult {
+    let document = "//! control arm\n\
+                    workflow ask\n  \
+                      input question: String\n  \
+                      outcome answered: type Answer, route success\n\n\
+                    type Answer { reply: String }\n\n\
+                    worker default\n  \
+                      action ask(prompt: String) -> Answer\n    \
+                        agent\n\n\
+                    step ask\n  \
+                      ask(prompt: question) -> answer\n  \
+                      route answered(reply: answer.reply)\n";
+    let errors = aion_awl::check(&aion_awl::parse(document)?);
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.message.contains("agent") && error.message.contains("returns")),
+        "an `agent` action returning a record must be refused; got {:?}",
+        errors.iter().map(|e| &e.message).collect::<Vec<_>>()
+    );
+    Ok(())
+}
+
 /// The non-vacuity guard for the invariant above: it must be checking more than
 /// one document, or it has quietly become a restatement of
 /// `the_advertised_surface_is_admitted_by_the_assistant_contract`.

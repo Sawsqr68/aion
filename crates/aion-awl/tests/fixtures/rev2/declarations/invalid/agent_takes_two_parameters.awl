@@ -1,0 +1,16 @@
+//! `agent` names a SHAPE: one `String` prompt in, one `String` reply out. Two
+//! parameters leave the harness choosing which one to send, and a marker whose
+//! meaning depends on an adapter's choice is not a contract.
+workflow brief_the_agent
+  input question: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+worker assistants
+  action ask(prompt: String, context: String) -> String
+    agent
+
+step ask
+  ask(prompt: question, context: question) -> reply
+  route answered(reply: reply)

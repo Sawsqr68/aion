@@ -142,7 +142,13 @@ worker default
   /// ONE terminal-text string out. NO timeout, by design. The worker pins one
   /// norn session per action type per run, so repeated dispatches resume one
   /// conversation.
+  ///
+  /// The `agent` marker is what makes that routing readable from HERE. Before
+  /// it, the worker binary carried the same fact as a hand-written list of
+  /// action names, so this document could declare an agent round and the
+  /// worker had no way to know it had.
   action assistant(prompt: String) -> String
+    agent
 
 step provision
   // Registered BEFORE the activity dispatch: provisioning clones a repository

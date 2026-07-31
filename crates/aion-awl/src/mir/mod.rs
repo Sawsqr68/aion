@@ -19,6 +19,8 @@ mod unit;
 mod verify;
 
 #[cfg(test)]
+mod agent_control_tests;
+#[cfg(test)]
 mod child_fork_tests;
 #[cfg(test)]
 mod codec_tests;

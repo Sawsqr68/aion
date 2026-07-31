@@ -87,6 +87,13 @@ pub(super) fn walk_call(w: &mut Walker<'_, '_>, scope: &mut Scope, call: &CallSt
                 "a call site may pin `node` and `timeout` only — `advisory` stays on the \
                  action declaration; an action is a side channel everywhere or nowhere",
             );
+        } else if let Some(span) = config.agent {
+            w.err(
+                span,
+                "a call site may pin `node` and `timeout` only — `agent` stays on the \
+                 action declaration; the marker describes the action's SHAPE (a `String` \
+                 prompt in, a `String` reply out), which one call site cannot change",
+            );
         } else if let Some(retry) = &config.retry {
             let span = match retry {
                 RetrySpec::Every { span, .. } | RetrySpec::Backoff { span, .. } => *span,

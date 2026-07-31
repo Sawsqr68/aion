@@ -43,11 +43,23 @@ use aion_integration_norn::NornHarness;
 use aion_integrations::{DynAgentHarness, InterventionCapabilities, InterventionPrimitive};
 use aion_worker::{AgentHarnessConfig, RedialTiming, WorkerConfig};
 
-/// The agent activity types routed through the composed harness rather than
-/// the typed registry — the three Norn rounds of the `agent_dev` workflow
-/// plus the `assistant` workflow's session round. ONE worker binary serves
-/// both packages; a separately managed assistant worker is a later phase.
-const AGENT_ACTIVITY_TYPES: [&str; 4] = ["scout", "dev", "review", "assistant"];
+/// Agent rounds this binary serves for a package that has NO `.awl` document
+/// to declare them — the three Norn rounds of the Gleam-authored `agent_dev`
+/// workflow. ONE worker binary serves both packages.
+///
+/// Everything the `assistant` document DOES declare now arrives through the
+/// document's own `agent` markers ([`advertised_surface`]), which is why this
+/// list no longer contains `assistant`. What remains is the residue of a
+/// package that cannot state the fact itself.
+///
+/// This list is deletable, and the condition is precise: when `agent_dev`
+/// gains an `.awl` document, mark its three rounds `agent` there and delete
+/// this constant. It is NOT kept because a Rust list is an acceptable place
+/// for the fact — the whole point of the marker is that it is not. It is kept
+/// because these three have no other home yet, and removing their routing here
+/// would quietly settle an open question about the Gleam authoring path rather
+/// than answer it.
+const UNDECLARED_AGENT_ACTIVITY_TYPES: [&str; 3] = ["scout", "dev", "review"];
 
 /// Lower bound on the reconnect backoff between candidate dials.
 const REDIAL_INITIAL_BACKOFF: Duration = Duration::from_millis(50);
@@ -87,6 +99,7 @@ fn composed_agent_harness(
     workspace_root: &Path,
     allow_degraded_session: bool,
     agent_descriptors: &[aion_package::ActivityDescriptor],
+    declared_agent_types: &[String],
 ) -> AgentHarnessConfig {
     // The run's own clone — the ONE template both the file-tool confinement
     // (--workspace-root) and the tool-execution cwd (-C) point at.
@@ -101,9 +114,17 @@ fn composed_agent_harness(
         Arc::new(norn.without_env("OPENAI_API_KEY")),
         allow_degraded_session,
     ));
+    // The agent set is the union of what the document DECLARES and the
+    // undeclared residue named above. Declared names come first because they
+    // are the ones a reader can check against a source file.
+    let agent_types: Vec<String> = declared_agent_types
+        .iter()
+        .cloned()
+        .chain(UNDECLARED_AGENT_ACTIVITY_TYPES.iter().map(|&name| name.to_owned()))
+        .collect();
     AgentHarnessConfig::new(
         harness,
-        AGENT_ACTIVITY_TYPES,
+        agent_types,
         InterventionCapabilities::from_primitives([
             InterventionPrimitive::InjectMessage,
             InterventionPrimitive::Cancel,
@@ -252,12 +273,13 @@ fn main() -> anyhow::Result<()> {
     // a startup failure carrying the compiler's own diagnosis, not a remote
     // WORKER_CONTRACT_MISMATCH an operator has to decode from a log.
     let surface = advertised_surface()?;
-    let split = surface.split(&AGENT_ACTIVITY_TYPES);
+    let split = surface.split();
     tracing::info!(
         task_queue = %surface.task_queue,
         advertised = ?surface.names(),
         agent_served = ?split.agent.iter().map(|d| &d.name).collect::<Vec<_>>(),
         registry_served = ?split.plain.iter().map(|d| &d.name).collect::<Vec<_>>(),
+        undeclared_agent_types = ?UNDECLARED_AGENT_ACTIVITY_TYPES,
         "advertising the typed action surface declared by the embedded assistant document"
     );
 
@@ -280,6 +302,7 @@ fn main() -> anyhow::Result<()> {
         &workspace_root,
         args.allow_degraded_session,
         &split.agent,
+        &surface.agent_names,
     );
 
     // Never stop on our own; the operator ends the worker with a signal.

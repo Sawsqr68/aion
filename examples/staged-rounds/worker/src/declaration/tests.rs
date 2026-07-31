@@ -24,6 +24,7 @@ fn action(name: &str, node: Option<&str>, body: Option<&str>) -> ActionContract 
         timeout: None,
         retry: None,
         advisory: false,
+        agent: false,
         body: body.map(|command| ActionBodyContract::Run {
             command: command.to_owned(),
         }),

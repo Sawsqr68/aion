@@ -39,6 +39,22 @@
 //! than declared, and why `descriptors_tests.rs` runs the real
 //! `aion_package::contract_diffs` gate rather than a proxy for it.
 //!
+//! ## Which actions go to the agent harness
+//!
+//! The DOCUMENT decides, through the `agent` marker on the action declaration.
+//! `agent` states that the action's one `String` parameter is a prompt and its
+//! `String` result is the reply, and the AWL checker refuses the marker on any
+//! other shape — so a name in [`AdvertisedSurface::agent_names`] is a name the
+//! harness can be handed without re-checking it here.
+//!
+//! It used to be decided by a four-name array in this binary's `main.rs`. That
+//! is the same class of defect as the missing descriptors above: the document
+//! could declare an agent round and the worker had no way to know it had, so
+//! the two could drift apart silently and only a live dispatch would say so.
+//! One name still lives in that array — see `UNDECLARED_AGENT_ACTIVITY_TYPES`
+//! — for a package that has no document to declare it in, and it carries the
+//! condition for its own deletion.
+//!
 //! ## What is NOT advertised, and why that is not an omission
 //!
 //! The `agent_dev` workflow's own activities (`provision`, `gate`, `land`,
@@ -87,6 +103,13 @@ pub struct AdvertisedSurface {
     pub task_queue: String,
     /// The typed descriptors, ordered by name so two runs advertise identically.
     pub descriptors: Vec<ActivityDescriptor>,
+    /// The actions the DOCUMENT marks `agent`, ordered by name.
+    ///
+    /// This is the set routed to the agent harness, and it comes from the
+    /// declaration rather than from a list maintained by hand in this binary.
+    /// The checker guarantees every name here is arity-1 `String -> String`, so
+    /// the harness can rely on the shape without re-checking it.
+    pub agent_names: Vec<String>,
 }
 
 /// The advertised surface split by HOW each action is served.
@@ -118,19 +141,19 @@ impl AdvertisedSurface {
             .collect()
     }
 
-    /// Split the surface into harness-executed and registry-executed halves.
+    /// Split the surface into harness-executed and registry-executed halves,
+    /// along the line the DOCUMENT draws with its `agent` markers.
     ///
-    /// `agent_types` is the set this binary routes through the agent harness.
-    /// Everything else in the document is expected to have a typed handler; the
+    /// Everything not marked `agent` is expected to have a typed handler; the
     /// registry verifies that and refuses if one is missing, so an action can
     /// never be advertised by a worker that cannot run it.
     #[must_use]
-    pub fn split(&self, agent_types: &[&str]) -> SurfaceSplit {
+    pub fn split(&self) -> SurfaceSplit {
         let (agent, plain) = self
             .descriptors
             .iter()
             .cloned()
-            .partition(|descriptor| agent_types.contains(&descriptor.name.as_str()));
+            .partition(|descriptor| self.agent_names.contains(&descriptor.name));
         SurfaceSplit { agent, plain }
     }
 }
@@ -161,10 +184,8 @@ pub fn advertised_surface() -> Result<AdvertisedSurface, SurfaceError> {
         .workers
         .first()
         .ok_or(SurfaceError::NoWorker)?;
-    let mut descriptors: Vec<ActivityDescriptor> = worker
-        .actions
-        .iter()
-        .filter(|action| action.body.is_none())
+    let served = || worker.actions.iter().filter(|action| action.body.is_none());
+    let mut descriptors: Vec<ActivityDescriptor> = served()
         .map(|action| ActivityDescriptor {
             name: action.name.clone(),
             input_schema: action.input_schema.clone(),
@@ -172,9 +193,18 @@ pub fn advertised_surface() -> Result<AdvertisedSurface, SurfaceError> {
         })
         .collect();
     descriptors.sort_by(|left, right| left.name.cmp(&right.name));
+    // The routing split comes from the document's own `agent` markers. It is
+    // filtered by the SAME `body.is_none()` predicate as the descriptors, so a
+    // name can never enter the agent set without the schema that admits it.
+    let mut agent_names: Vec<String> = served()
+        .filter(|action| action.agent)
+        .map(|action| action.name.clone())
+        .collect();
+    agent_names.sort();
     Ok(AdvertisedSurface {
         task_queue: worker.task_queue.clone(),
         descriptors,
+        agent_names,
     })
 }
 

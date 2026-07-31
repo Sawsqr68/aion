@@ -1,0 +1,15 @@
+//! `agent` classifies the action itself; a call site cannot declare it. The
+//! marker describes the action's shape, which one call site cannot change.
+workflow ask_the_agent
+  input question: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+worker assistants
+  action ask(prompt: String) -> String
+
+step ask
+  ask(prompt: question) -> reply
+    agent, node fast
+  route answered(reply: reply)

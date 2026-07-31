@@ -24,6 +24,7 @@ fn action(name: &str, field: &str) -> ActionContract {
             max: Duration::from_secs(8),
         }),
         advisory: false,
+        agent: false,
         body: None,
     }
 }

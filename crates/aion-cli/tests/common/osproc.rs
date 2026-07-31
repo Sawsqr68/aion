@@ -143,6 +143,10 @@ fn fixture_contract(manifest: &Manifest) -> Result<PackageContract, TestError> {
             timeout: None,
             retry: None,
             advisory: false,
+            // A typed `String -> String` handler serves these, not an agent
+            // harness — the fan fixture's shape merely coincides with an agent
+            // seam's, and marking it would route it somewhere no handler is.
+            agent: false,
             // A connected worker serves this fixture's queue, so the
             // declaration carries no body of its own.
             body: None,

@@ -112,6 +112,7 @@ fn fleet_contract() -> WorkerContract {
         timeout: None,
         retry: None,
         advisory: false,
+        agent: false,
         body: None,
     };
     let report = json!({
@@ -151,6 +152,7 @@ fn fleet_contract() -> WorkerContract {
                 timeout: None,
                 retry: None,
                 advisory: false,
+                agent: false,
                 body: Some(ActionBodyContract::Run {
                     command: "echo $host".to_owned(),
                 }),

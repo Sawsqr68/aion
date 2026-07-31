@@ -1,0 +1,148 @@
+module ask_the_agent source=ask_the_agent.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_ask:
+    aion@activity:timeout/2 [activities] (v1, v2)
+    aion@activity:task_queue/2 [activities] (v3, lit#9)
+    aion@workflow:run/1 [activities] (v4)
+== durable families == activities
+== atoms ==
+  [0] answer
+  [1] ask_input
+  [2] ask_the_agent_input
+  [3] answered_outcome
+  [4] ok
+== literals ==
+  [0] "reply"
+  [1] "prompt"
+  [2] "question"
+  [3] "answered"
+  [4] "outcome"
+  [5] ""
+  [6] "AskTheAgentOutcome"
+  [7] "answered"
+  [8] "payload"
+  [9] "assistants"
+== types ==
+  record Answer tag=answer
+    reply: string
+  record AskInput tag=ask_input
+    prompt: string
+  record AskTheAgentInput tag=ask_the_agent_input
+    question: string
+  union AskTheAgentOutcome
+    answered -> answered_outcome(ref(Answer))
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=ask_the_agent_input_codec output=ask_the_agent_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(ask_the_agent.AskTheAgentInput, ask_the_agent.AskTheAgentOutcome, AwlError)
+  T-DEF name="ask_the_agent" input=ask_the_agent_input_codec output=ask_the_agent_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (ask_the_agent.AskTheAgentInput) -> Result(ask_the_agent.AskTheAgentOutcome, AwlError)
+  T-EXEC fields=[question:String] entry=step_ask args=[0]
+== fn answer_codec/0 origin=codec_template(RecordTrio, Answer, record#0) ==
+  sig: () -> Codec(ask_the_agent.Answer)
+  v0 = make_closure answer_to_json captures=[]
+  v1 = call_local answer_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn answer_to_json/1 origin=codec_template(RecordTrio, Answer, record#0) ==
+  sig: (ask_the_agent.Answer) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"reply": v1|>awlc.string_to_json}
+  return v2
+== fn answer_decoder/0 origin=codec_template(RecordTrio, Answer, record#0) ==
+  sig: () -> Decoder(ask_the_agent.Answer)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure answer_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn answer_decoder$0/1 origin=lifted(answer_decoder, #0) ==
+  sig: (String) -> Decoder(ask_the_agent.Answer)
+  v1 = record(answer, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn ask_input_codec/0 origin=codec_template(RecordTrio, AskInput, record#1) ==
+  sig: () -> Codec(ask_the_agent.AskInput)
+  v0 = make_closure ask_input_to_json captures=[]
+  v1 = call_local ask_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn ask_input_to_json/1 origin=codec_template(RecordTrio, AskInput, record#1) ==
+  sig: (ask_the_agent.AskInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"prompt": v1|>awlc.string_to_json}
+  return v2
+== fn ask_input_decoder/0 origin=codec_template(RecordTrio, AskInput, record#1) ==
+  sig: () -> Decoder(ask_the_agent.AskInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure ask_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v0, v1)
+== fn ask_input_decoder$0/1 origin=lifted(ask_input_decoder, #0) ==
+  sig: (String) -> Decoder(ask_the_agent.AskInput)
+  v1 = record(ask_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn ask_the_agent_input_codec/0 origin=codec_template(RecordTrio, AskTheAgentInput, record#2) ==
+  sig: () -> Codec(ask_the_agent.AskTheAgentInput)
+  v0 = make_closure ask_the_agent_input_to_json captures=[]
+  v1 = call_local ask_the_agent_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn ask_the_agent_input_to_json/1 origin=codec_template(RecordTrio, AskTheAgentInput, record#2) ==
+  sig: (ask_the_agent.AskTheAgentInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"question": v1|>awlc.string_to_json}
+  return v2
+== fn ask_the_agent_input_decoder/0 origin=codec_template(RecordTrio, AskTheAgentInput, record#2) ==
+  sig: () -> Decoder(ask_the_agent.AskTheAgentInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure ask_the_agent_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v0, v1)
+== fn ask_the_agent_input_decoder$0/1 origin=lifted(ask_the_agent_input_decoder, #0) ==
+  sig: (String) -> Decoder(ask_the_agent.AskTheAgentInput)
+  v1 = record(ask_the_agent_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn ask_the_agent_outcome_codec/0 origin=codec_template(UnionTrio, AskTheAgentOutcome, union#3) ==
+  sig: () -> Codec(ask_the_agent.AskTheAgentOutcome)
+  v0 = make_closure ask_the_agent_outcome_to_json captures=[]
+  v1 = call_local ask_the_agent_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn ask_the_agent_outcome_to_json/1 origin=codec_template(UnionTrio, AskTheAgentOutcome, union#3) ==
+  sig: (ask_the_agent.AskTheAgentOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#3|>awlc.string_to_json, "payload": v1|>answer_to_json}
+  return v2
+== fn ask_the_agent_outcome_decoder/0 origin=codec_template(UnionTrio, AskTheAgentOutcome, union#3) ==
+  sig: () -> Decoder(ask_the_agent.AskTheAgentOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure ask_the_agent_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+== fn ask_the_agent_outcome_decoder$outcome/1 origin=lifted(ask_the_agent_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(ask_the_agent.AskTheAgentOutcome)
+  if cmp Eq v0 lit#7:
+    v3 = call_local answer_decoder()
+    v4 = make_closure ask_the_agent_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#8, v3, v4)
+  else:
+    v1 = record(answer, [lit#5])
+    v2 = record(answered_outcome, [v1])
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#6)
+== fn ask_the_agent_outcome_decoder$arm0/1 origin=lifted(ask_the_agent_outcome_decoder, #1) ==
+  sig: (ask_the_agent.Answer) -> Decoder(ask_the_agent.AskTheAgentOutcome)
+  v1 = record(answered_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn ask_activity/1 origin=activity_wrapper(ask, raw=false) ==
+  sig: (String) -> Activity(ask_the_agent.AskInput, String)
+  T-ACT action=ask input_codec=ask_input_codec return=awlc.string_codec
+== fn step_ask/1 origin=region(ask) ==
+  sig: (String) -> Result(ask_the_agent.AskTheAgentOutcome, AwlError)
+  v1 = call_local ask_activity(v0)
+  v2 = call_rt aion@duration:milliseconds/1(600000) live_after=[v1]
+  v3 = call_rt aion@activity:timeout/2(v1, v2)
+  v4 = call_rt aion@activity:task_queue/2(v3, lit#9)
+  v5 = call_rt aion@workflow:run/1(v4)
+  v6 = call_rt aion@awl@error:map_activity_error/1(v5)
+  v7 = try_bind v6
+  v8 = record(answer, [v7])
+  v9 = record(answered_outcome, [v8])
+  v10 = record(ok, [v9])
+  return v10
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD

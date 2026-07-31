@@ -33,6 +33,7 @@ fn action(name: &str, node: Option<&str>, body: Option<ActionBodyContract>) -> A
         timeout: None,
         retry: None,
         advisory: false,
+        agent: false,
         body,
     }
 }

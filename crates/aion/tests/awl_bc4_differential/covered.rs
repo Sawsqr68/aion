@@ -26,7 +26,14 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// backends must lower identically, so it belongs in the differential and not
 /// merely in aion-awl's own ratchet. Its bucket below was read off the run, not
 /// predicted.
-const COVERED_COUNT: usize = 86;
+///
+/// 88 since the `agent` marker: `declarations/valid/agent_seam` and its control
+/// arm `agent_seam_unmarked_control` — the same document with and without the
+/// marker. `agent` classifies the DECLARATION (a worker routes the call to an
+/// agent harness), so the two must run identically as well as lower
+/// identically, and running both here is what proves the marker is inert at
+/// run time rather than merely inert in the MIR.
+const COVERED_COUNT: usize = 88;
 
 /// Out-of-oracle (r2 finding 3): bare signal-wait fixtures whose durable park
 /// boundary is NOT observable through any engine surface without racy sampling.
@@ -173,6 +180,14 @@ const EXPECTED_SUCCEEDED: &[&str] = &[
     // proves the direct and Gleam lowerings route around the fault arm
     // identically.
     "declarations/valid/advisory_side_channel",
+    // The `agent` marker and its control arm — the same document with and
+    // without it. BOTH complete with byte-identical normalized trails, which is
+    // the run-time half of the claim that `agent` classifies the DECLARATION
+    // and never touches the flow. (The lowering half is
+    // `mir::agent_control_tests` in aion-awl, which diffs their MIR goldens.)
+    // Read off this run, not predicted.
+    "declarations/valid/agent_seam",
+    "declarations/valid/agent_seam_unmarked_control",
     "declarations/valid/timeout_inside_retry",
     "declarations/valid/worker_retry_backoff",
     "declarations/valid/worker_single_action",

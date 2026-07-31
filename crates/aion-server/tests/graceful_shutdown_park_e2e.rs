@@ -143,6 +143,7 @@ fn write_package_archive(dir: &std::path::Path, beam: &[u8]) -> Result<PathBuf, 
                 timeout: None,
                 retry: None,
                 advisory: false,
+                agent: false,
                 // Out-of-band worker fixture: the connected worker serves the action, so
                 // the declaration carries no body.
                 body: None,

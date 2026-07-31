@@ -315,6 +315,15 @@ fn package_contract(
                 .config
                 .as_ref()
                 .is_some_and(|config| config.advisory.is_some());
+            // The agent seam rides into the contract so a worker can read from
+            // the DOCUMENT which of its actions go to a harness. Before this,
+            // that fact lived in a hand-written list of names inside a worker
+            // binary, where the language could declare an agent call and the
+            // worker had no way to know it had.
+            let agent = action
+                .config
+                .as_ref()
+                .is_some_and(|config| config.agent.is_some());
             // The declarative body rides into package identity: a document
             // that says what an action DOES is a different promise from one
             // that only says an action exists.
@@ -331,6 +340,7 @@ fn package_contract(
                 timeout,
                 retry,
                 advisory,
+                agent,
                 body,
             });
         }

@@ -1,0 +1,16 @@
+//! An agent's one parameter is the prompt handed to the harness. A structured
+//! input has no place to go on the wire to an agent.
+workflow brief_the_agent
+  input brief: Brief
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+type Brief  { question: String }
+
+worker assistants
+  action ask(brief: Brief) -> String
+    agent
+
+step ask
+  ask(brief: brief) -> reply
+  route answered(reply: reply)

@@ -277,6 +277,7 @@ mod tests {
                 timeout: None,
                 retry: None,
                 advisory: false,
+                agent: false,
                 body: None,
             }],
         }
@@ -428,6 +429,7 @@ mod tests {
                     timeout: None,
                     retry: None,
                     advisory: false,
+                    agent: false,
                     body: None,
                 },
                 ActionContract {
@@ -438,6 +440,7 @@ mod tests {
                     timeout: None,
                     retry: None,
                     advisory: false,
+                    agent: false,
                     body: Some(crate::ActionBodyContract::Run {
                         command: "git rev-parse HEAD".to_owned(),
                     }),
@@ -467,6 +470,7 @@ mod tests {
             timeout: None,
             retry: None,
             advisory: false,
+            agent: false,
             body: None,
         };
         WorkerContract {

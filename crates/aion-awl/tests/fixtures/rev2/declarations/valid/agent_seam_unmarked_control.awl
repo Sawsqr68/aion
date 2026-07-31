@@ -1,0 +1,31 @@
+//! The CONTROL ARM for `agent_seam.awl`: the same workflow, the same action
+//! shape, the same call — with the `agent` marker absent.
+//!
+//! `agent` is a DECLARATION classification. It tells a worker to hand the call
+//! to an agent harness instead of a typed handler, and it must change nothing
+//! about how the flow lowers. This document exists so that claim is CHECKED
+//! rather than asserted: `agent_marked_and_unmarked_lower_identically` diffs
+//! the two committed MIR goldens and fails if they ever differ.
+//!
+//! Keep this file in lockstep with `agent_seam.awl`. If the two drift for any
+//! reason other than the marker, the comparison stops being a control and
+//! quietly becomes two unrelated fixtures that happen to both compile.
+//!
+//! The WORKFLOW NAME must differ: a deployed package's entry module is named
+//! from it, and two workflows sharing one name cannot be loaded together (the
+//! BC-4 differential loads the whole covered corpus at once and refuses the
+//! duplicate outright). The name is therefore the one thing the golden
+//! comparison normalises, and it normalises nothing else.
+workflow ask_the_agent_control
+  input question: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+worker assistants
+  action ask(prompt: String) -> String
+    timeout 10m
+
+step ask
+  ask(prompt: question) -> reply
+  route answered(reply: reply)

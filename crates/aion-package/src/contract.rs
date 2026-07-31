@@ -205,6 +205,18 @@ pub struct ActionContract {
     /// what the package promises a caller.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub advisory: bool,
+    /// Whether the declaration classes this activity as an AGENT seam: its one
+    /// `String` parameter carries a prompt and its `String` result carries the
+    /// reply, so a worker hands the call to an agent harness rather than to a
+    /// typed handler. The checker enforces that shape, so a worker reading this
+    /// flag may rely on it.
+    ///
+    /// Identity-bound for the same reason `advisory` is — an action that
+    /// becomes an agent seam promises a caller something different — and
+    /// skipped when false, so a document with no agent action hashes exactly as
+    /// it did before the marker existed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub agent: bool,
     /// The declarative body the action carries, when it declares one.
     ///
     /// `None` is a requirement on an out-of-band worker: the action's name

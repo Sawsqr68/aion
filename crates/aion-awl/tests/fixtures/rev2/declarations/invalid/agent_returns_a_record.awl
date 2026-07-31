@@ -1,0 +1,15 @@
+//! An agent returns the harness's reply as a `String`. Structure is parsed
+//! downstream; the seam itself cannot promise it.
+workflow ask_the_agent
+  input question: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+worker assistants
+  action ask(prompt: String) -> Answer
+    agent
+
+step ask
+  ask(prompt: question) -> answer
+  route answered(reply: answer.reply)

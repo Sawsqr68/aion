@@ -672,6 +672,7 @@ mod tests {
                 timeout: None,
                 retry: None,
                 advisory: false,
+                agent: false,
                 body: None,
             }],
         };

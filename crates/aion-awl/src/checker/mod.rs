@@ -4,6 +4,7 @@
 //! (`distribute`/`sequence` … `collect`), subflows, outcome
 //! exhaustiveness, guard-dependent optionality, and schema projection.
 
+mod agents;
 mod anchor;
 mod args;
 mod avail;

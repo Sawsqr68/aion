@@ -30,6 +30,17 @@ pub(super) const COVERED: &[&str] = &[
     "declarations/valid/action_run_bodies",
     // R5: an advisory side channel lowers past the fault arm.
     "declarations/valid/advisory_side_channel",
+    // The `agent` marker is a DECLARATION classification, like `advisory` and
+    // like a `run` body: it rides the package contract so a worker knows to
+    // hand the call to a harness, and the call site lowers exactly as any
+    // other action call does. Pinning it here is what proves that — a marker
+    // that changed the lowering would be a marker that changed the flow's
+    // meaning, which it must not.
+    "declarations/valid/agent_seam",
+    // The control arm for the line above: the same document WITHOUT the
+    // marker. Both are pinned so `agent_marked_and_unmarked_lower_identically`
+    // has two committed goldens to compare.
+    "declarations/valid/agent_seam_unmarked_control",
     "declarations/valid/call_site_override",
     "declarations/valid/child_call_awaited",
     // BC-4 adversarial: await a child, then fire-and-forget a detached child.

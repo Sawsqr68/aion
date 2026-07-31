@@ -1,0 +1,23 @@
+//! An agent seam declared in the language. `agent` says the action's one
+//! `String` carries a prompt and its `String` result carries the reply, which
+//! is the whole of what an adapter needs to hand the call to a harness instead
+//! of running it as an ordinary activity.
+//!
+//! `agent_seam_unmarked_control.awl` is this document with the marker removed.
+//! The two must lower to identical MIR — the marker classifies the DECLARATION
+//! and must not touch the flow. Change one, change the other.
+workflow ask_the_agent
+  input question: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+worker assistants
+  /// Handed to an agent harness. The marker is the contract; before it, a
+  /// worker binary carried the same fact as a hand-written list of names.
+  action ask(prompt: String) -> String
+    agent, timeout 10m
+
+step ask
+  ask(prompt: question) -> reply
+  route answered(reply: reply)
