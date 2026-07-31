@@ -392,6 +392,37 @@ flakes disappear, that is recorded **consistent, not load-bearing**. No commit
 message, doc, or task update may cite flake disappearance as evidence the fix
 worked.
 
+## The evidence, indexed by the verdict each artifact EMITTED
+
+Not a tally of verdicts — the verdict lines themselves. Logs preserved outside
+`/tmp` before write-up.
+
+```
+── gate-aion-rs-3.log   EXIT=101
+     test result: FAILED. 6 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out
+     ↳ test outbox_crash_recovery_rearms_stranded_done_row_and_finishes ... FAILED
+     ↳ test outbox_failure_fails_fast_and_cancels_unresolved_siblings ... FAILED
+── gate-aion-rs.log · gate-aion-rs-2.log · gate-aion-rs-4.log   EXIT=0, no FAILED verdict
+── base-1.log · base-2.log (clean HEAD)                         EXIT=0, no FAILED verdict
+```
+
+### 🔴 The first version of this table under-reported by half
+
+It had a `FAILED` column holding `1` — a true count of **binaries reporting
+failure** (both failures are in one binary) under a header every reader parses as
+**failing tests**. There were two. It failed toward *less severe*, the direction
+nobody audits.
+
+The table did not drift from the logs; it drifted from **the question a reader
+brings to it**. And it was built specifically as an anti-drift device — the third
+time in this block a remedy carried the defect it was written against.
+
+⇒ **A COUNT OF ORACLES IS NOT AN ORACLE.** Don't tally verdicts, **quote** them:
+`6 passed; 2 failed` carries both numbers, names both tests, and cannot be
+misread as either.
+
+⇒ **(VALUE, NOUN) TRAVEL TOGETHER OR THE VALUE IS FREE TO MEAN ANYTHING.**
+
 ## 🔴 SEVEN REPORTING DEFECTS, ONE TRAP: a SUMMARY diverging from its SUBJECT
 
 Every reporting failure in this block is the same bug wearing a different door:
