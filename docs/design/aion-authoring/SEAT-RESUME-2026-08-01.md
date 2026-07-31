@@ -96,6 +96,12 @@ never a load-bearing component.
 
 ## 🔴 Box rules confirmed the hard way
 
+- ✅ **`target/debug` was CLEARED at the end of this session** (2026-08-01). Free went
+  48 → **85 GiB**; `target/release` verified byte-identical after
+  (1,427,144 KiB, `f748956c…`). So the next cold build has room — but check anyway.
+- 🔴 **Athena's measurement that forced it:** from 48 GiB free with a 37 GiB debug tree, a
+  cold full-workspace build would have landed at **~8.8 GiB — far below the hard floor of
+  25.** The box could not have absorbed one. Do not assume headroom; measure it.
 - A cold full-workspace build + battery costs **~25–37 GiB** and needs **~40 GiB free**.
   Name it to Athena BEFORE starting; she grants, **you execute** (she is read-only by
   standing constraint, and if she both deletes and verifies nobody independent has

@@ -57,6 +57,39 @@ and **37 minutes before `24370cab` existed at all**.
 Two independent methods agree: the route probe and the process start time each exclude
 `24370cab`, from opposite directions. Neither was derived from the other.
 
+## The control the time argument needed — raised by Athena, run at both hands
+
+"The commit did not exist yet" is a claim about when the OBJECT existed, and `git log`
+shows the AUTHOR date by default. A rebase or a cherry-pick makes author and committer
+dates diverge, and the exclusion of `24370cab` would then need re-deriving from the
+committer date instead.
+
+They are **identical on all three anchors**, verified independently by Athena and by me:
+
+| commit | author | committer |
+|---|---|---|
+| `51411a41` | 2026-07-30T05:41:19+10:00 | identical |
+| `2fd5cd63` | 2026-07-30T20:55:22+10:00 | identical |
+| `24370cab` | 2026-07-30T21:36:42+10:00 | identical |
+
+No skew, so the argument holds on either noun. **That is the check that would have broken
+it**, which is exactly why it is written down next to the claim rather than left implied.
+
+## 🔎 Which way the bound errs — 76 is a CEILING
+
+Also Athena's, and it strengthens the result rather than qualifying it.
+
+The start time bounds when the **process launched**, not when the **source was read**.
+Compilation takes non-zero time, so the true upper bound is `start − build_duration`, not
+`start`. `2fd5cd63` landed 4m 24s before launch — if that build took longer than 4m 24s,
+`2fd5cd63` was not in it either.
+
+> **76 is an OVER-estimate, never an under-estimate. The running code is one of those 76,
+> and possibly one of a smaller prefix.**
+
+That is the right direction for a bound to be wrong in, and it has to be stated: **a bound
+whose error direction is unknown is barely a bound.**
+
 ## What it does not narrow, and why I stopped
 
 Only ONE router change lands inside the window (`24370cab` itself, the upper bound), so no
