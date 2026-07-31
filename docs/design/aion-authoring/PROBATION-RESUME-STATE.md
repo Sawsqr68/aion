@@ -60,7 +60,10 @@ arithmetic, not a guess:
 
 ```
 free now ~68 GiB, target/debug 22 GiB
-house battery peak = ~55 GiB of target, from clean OR from here
+house battery peak = ~46 GiB of target from clean (INFERRED from two
+  clean halves: 22.77 default + 23.35 all-features, both measured tonight).
+  The 55 that justified the split was a tree holding THREE build
+  configurations at once and is not comparable — see below.
   reclaim first: free 90 - 55 = 35   ← below floor
   keep artifacts: free 68 - 33 = 35  ← same endpoint, same breach
 ```
@@ -181,3 +184,48 @@ AWL the only one.
   by construction.
 - **A count is only a coverage claim if the run reached the end** (#120).
 - **A red baseline is a blindfold, not a footnote.**
+
+
+## 🔴 THE 55 DOES NOT SURVIVE MEASUREMENT — and the split was right for the wrong number
+
+Tonight's clean halves, each measured from `rm -rf target/debug`:
+
+```
+Block A  cargo test --workspace                  = 22.77 GiB
+Block B  cargo test --workspace --all-features   = 23.35 GiB
+house battery (both resolutions coexisting)      ≈ 46 GiB   ← INFERRED, not measured
+```
+
+The 55 came from a tree built by THREE different commands, cumulatively,
+recovered from the session transcript rather than from memory:
+
+```
+12:31  rm -rf target/debug && cargo test -p aion-worker -p aion-server \
+         --all-targets --all-features --no-run          ← clean, but two-package AND --all-targets
+12:41  cargo test --workspace --all-features --no-run   ← ON TOP of the above
+12:44  cargo test --workspace --no-run                  ← ON TOP of both
+```
+
+Three reasons it is not the house battery's footprint:
+
+1. **It was never clean.** The workspace builds ran on a tree already holding
+   the two-package artifacts.
+2. **It includes `--all-targets`**, which the house battery does not use.
+   Benches and examples are in that tree and in no gate.
+3. The `du -sh target target/debug/deps` form has the parent/child trap — though
+   here the TOTAL is unaffected, because `target` is the first argument and is
+   walked before anything can claim its bytes. Only the `deps` sub-figure was corrupted.
+
+**Consequence, and it does not reverse the split but it does re-price it:**
+90 − 46 = **43.9**, under the 45 floor by 1.1 GiB — which is INSIDE the 1.52
+noise band. So the unsplit battery would have finished AT the floor, a
+coin-flip, not the 10 GiB breach the 55 implied.
+
+★ **Being right is not the same as having been right for the reasons given.**
+The next person planning against "the house battery needs 55" would
+over-reserve by 9 GiB and split work that did not need splitting.
+
+**Both figures must be labelled: 46 is INFERRED from two clean halves; 55 is
+UNVERIFIABLE (that tree is gone). Neither is a measurement of the house
+battery, and neither should be quoted as one.** What would settle it is one
+clean full-battery run measured with `du -h -d 1` — cheap, and not tonight.
