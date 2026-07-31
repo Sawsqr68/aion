@@ -1,5 +1,38 @@
 # 🔴 BLOCK G — #122 connection pool — IN FLIGHT, UNCOMMITTED
 
+## 📍 RESUME HERE (written at compaction)
+
+**Implementation is IN THE TREE, uncommitted, gates green at crate level.**
+`git diff --stat block-g-stash -- crates/aion-store-libsql` → **empty** = the
+crate tree is byte-identical to the verified restore point. Tag `block-g-stash`
+= `91c637b8…` is permanent; `pool.rs` (untracked, invisible to that diff) must
+hash to `34cd902a4b7fd206163101510e0901c16159601c`.
+
+**In flight:** a ONE-ARM series on this tree, **N = 6 declared blind**,
+sequential, logs `/tmp/mine-1..6.log` (copy them out — `/tmp` is not durable).
+Question: *does the red recur on this tree, and roughly how often* — powered to
+rule out a **high** rate (≥1/3), **not** a rare one. **No clean-tree sentence may
+appear in the write-up.**
+
+Index every run by three numbers; a run only counts if `ok + FAILED == 58`:
+
+```
+mine-1  EXIT=0  ok=58  FAILED=0  total=58  COMPLETE
+mine-2  EXIT=0  ok=58  FAILED=0  total=58  COMPLETE
+mine-3..6                                   pending at compaction
+```
+
+🔴 **Report the result as `1 red in N` where N INCLUDES gate attempts 3 and 4**
+(both on this tree). Six greens would make it **1 red in 8** — not "6 green".
+
+**Next, in order:** finish the series → land G using the drafted message in the
+session scratchpad (`commit-122.txt`, already rewritten to quote the red rather
+than cite a green) → Waffles' graduated pin test for the `outbox_e2e.rs:534-547`
+interleave → **Block H** (`BLOCK-H-READGUARD-COMPILE-GUARD.md`).
+
+Docs-only declaration in force while the series runs: only
+`BLOCK-G-122-POOL-IN-FLIGHT.md` and `BLOCK-H-READGUARD-COMPILE-GUARD.md`.
+
 ## ✅ RESTORED — the stash is popped and dropped, the work is in the tree
 
 The baseline A/B is finished. Verified after popping: `pool.rs` `928f8520…`,
