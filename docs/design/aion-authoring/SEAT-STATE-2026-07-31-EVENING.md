@@ -1,6 +1,6 @@
 # Seat state — 2026-07-31, evening block
 
-Written to survive a compaction. `origin/main` = **`81c92490`**, everything
+Written to survive a compaction. `origin/main` = **`c1252dc5`**, everything
 pushed, nothing in flight, box idle.
 
 ## Landed this session
@@ -192,7 +192,45 @@ caught a control that reasoning alone would have shipped broken.
   monitor volunteers.
 
 
-## 🔴 #121 — the finding that outranks the lane that produced it
+## 🔴 #121 — SETTLED, and I was wrong in the middle of it
+
+**BOTH guards are uncovered.** Disabling either — `is_terminal()` at
+`startup.rs:197` or `== WorkflowStatus::Paused` at `:212` — leaves
+`cargo test -p aion-rs --all-targets --no-fail-fast` at **exit 0**.
+
+I earlier reported they had OPPOSITE coverage, on a single EXIT 101 observation.
+Refuted: the mutated tree passes twice, and a deterministic causal path cannot
+pass. The failing test was a known-flaky `outbox_e2e` member (#85).
+
+**The shape worth keeping:** comfortable explanation → measured, refuted it, felt
+good → *the refutation became the new comfortable belief and got broadcast.* The
+correction was more seductive than the error because it arrived wearing the
+evidence of rigour. And the masking explanation I loudly discarded was correct:
+both backends filter `== Running` (`memory.rs:374`, libSQL `read.rs:133`).
+
+**Athena's asymmetry, which is why one block settled it:** mutated-PASSES is
+strong refutation; mutated-FAILS-twice is weak confirmation, because **p² is not
+distinguishable from causality without knowing p**. I had built an enumeration
+and called it an experiment — three hours after writing a seam test to avoid
+exactly that shape.
+
+**Fix:** an adversarial `EventStore` whose `list_active` returns a terminal (and
+separately a paused) run anyway. No cheap route exists; that depended on the
+refuted claim.
+
+## 🔴 A NON-DETERMINISTIC TEST IS INSIDE EVERY GREEN CERTIFIED TONIGHT
+
+`outbox_happy_path_completes_with_n_terminals_in_order` failed **1 in 8** runs of
+`cargo test -p aion-rs --all-targets --no-fail-fast` tonight. So the 1021, the
+1022 and the 58-targets-0-unpaired all carry an unknown error rate.
+
+Third `outbox_e2e` member joining **#85**'s two — one subsystem, three tests, one
+suspected shared-connection defect in the libSQL store. #85 already states the
+stakes: *if it is a shared-connection bug it is a PRODUCTION defect, and the
+flakes are the only thing currently reporting it.* **This is now the highest-value
+open item on my board.**
+
+## (superseded) #121 as first reported
 
 `engine/startup.rs::repopulate_active_workflows` has two adjacent guards. Both
 look masked by `list_active`'s `== Running` filter. **They have opposite
