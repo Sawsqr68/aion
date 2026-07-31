@@ -10,3 +10,5 @@ pub use derive::{
     schema_for_workflow, schema_for_workflow_in,
 };
 pub use error::SchemaError;
+
+pub(crate) use derive::derived_contract_schemas;

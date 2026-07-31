@@ -241,6 +241,125 @@ failed.
 
 ---
 
+# #106, second half: the deploy door refuses a contract it cannot enforce
+
+Built 2026-07-31, continuing from `73c6ed50`.
+
+#106's ruled fix had two halves. The FIRST — "`aion awl check` must prove the
+schema it DERIVES compiles into a usable validator" — landed earlier the same
+day at `bfaa42b9`, by another hand: `checker/entry.rs::contract_derivation_errors`
+runs `aion_package::schema_is_usable` over the workflow, outcome and query
+schemas of an otherwise-clean document. Verified present and not re-built.
+
+The SECOND — "verify the deploy path also refuses an uncompilable declared
+schema, so it cannot reach a running server" — was NOT built. Measured before
+building: nothing in `Package::load_from_bytes`, `StagedLoad::new`,
+`load_package_with_mode` or the server's deploy handlers consults
+`schema_is_usable`. `schema_is_usable` had exactly two callers in the whole
+tree, both inside `aion-awl`.
+
+That matters beyond AWL, and it is why the authoring-side fix cannot close
+#106 on its own: `aion awl check` guards documents written in AWL. A
+Gleam-authored package, a hand-written manifest, an archive built by an older
+toolchain, or an AWL document compiled before `bfaa42b9` all reach the engine
+through the same door and none of them passes through the AWL checker.
+
+## What the engine now does
+
+`PackageContract::unenforceable_schemas` (`aion-package/src/admission.rs`)
+walks the WHOLE declared surface — entry input and result, every additional
+entry, every signal payload, every child input and result, every activity's
+parameters and result on every queue — and returns each declaration a
+validator cannot compile, named in the author's own vocabulary, with the
+compiler's own reason. The whole surface, not only the schemas today's
+admission sites happen to read: a declaration is identity-bound, so a package
+that commits to a shape no validator can compile has promised something it can
+never be held to, whichever boundary reaches it first.
+
+`loader/load.rs::enforce_contract` is the single mechanism, and the policy is
+named at each door via `ContractEnforcement`:
+
+- `WorkflowCatalog::stage_package` (the live deploy seam) — **Refuse**
+- `WorkflowCatalog::load_package` (builder startup sources) — **Refuse**
+- `WorkflowCatalog::reload_package` (recovery) — **ReportOnly**
+
+One implementation, three named doors, so the invariant cannot diverge between
+the builder path and the deploy path — the multi-enforcer failure this codebase
+keeps producing.
+
+`EngineError::UnenforceableContract` → `WireError::invalid_input` → HTTP 400.
+The archive is well-formed and the defect is in what it DECLARES, so it is the
+operator's own input to correct, not a backend fault.
+
+## The asymmetry, deliberately
+
+Recovery is not a door. A run parked for months must not be stranded because
+the package it is pinned to declares something a validator cannot compile:
+refusing there would convert a validation gap into an availability outage,
+which for a durable execution engine is the strictly worse failure — and the
+run reads no declaration anyway. An operator offering an archive can fix it and
+must be told now; a parked run can fix nothing. So recovery loads it and
+reports at `error` level, naming every unenforceable declaration and saying
+plainly that values they cover are admitted unchecked until re-deploy.
+
+This is the reason enforcement is a parameter rather than a constant, and
+`recovery_still_loads_a_persisted_package_the_door_would_now_refuse` pins it.
+
+## What is still admit-anyway, and why
+
+`start_admission.rs:100-108` and `catalog_admission.rs:134-143` still warn and
+admit on `UnusableSchema`. That is now reachable only for a package persisted
+before this gate existed. It is left as it is on purpose: refusing a signal
+there strands a live parked run, which is the failure the gate is built to
+avoid causing. The gate moved the defence to the only place it costs nothing.
+
+## Gates
+
+- `cargo test -p aion-package` — green, 298 lib tests, every binary ok.
+- `cargo test -p aion-rs --test deploy_refuses_unenforceable_contract` — 6/6.
+- MUTATION CHECK, decisive: with `enforce_contract` collapsed to always admit,
+  **exactly four fail** — the four that assert a refusal — and the two that
+  assert the gate must NOT fire (`an_enforceable_contract_still_deploys_and_routes`,
+  `recovery_still_loads_a_persisted_package_the_door_would_now_refuse`) stay
+  green. A suite written to its own answer would not have moved that way.
+
+## The authoring half, finished
+
+`bfaa42b9` left `aion awl check` proving three schemas — workflow input,
+outcomes, queries. The contract commits to more than that. A type reachable
+ONLY through a signal payload, a child's parameters or result, or an activity's
+parameters or result never appears in those three, so a document could check
+clean and then be refused by the compiler at `emit`. Loud, but at the wrong
+door: the author has stopped looking at the file by then.
+
+`schema::derived_contract_schemas` now derives exactly what
+`compile::package_contract` derives, in ONE place that the checker consumes, so
+the checker cannot list a different set from the one the compiler will. That
+shared definition is the point — a checker with its own copy of the
+enumeration is the divergence family again.
+
+Two things fell out of building it, and the second is the interesting one:
+
+1. The premise needed testing before it was worth fixing. It held: the
+   `check_proves_the_signal_child_and_activity_schemas_too` fixture produced
+   ZERO refusals before this and three after.
+2. `params_schema` and `standalone_type_ref_schema` are shared by every
+   callable surface, so they could only name the DOCUMENT. The checker sorts
+   and DEDUPS its diagnostics, so three declarations failing for the same
+   reason collapsed into one message pointing at the workflow's name — the
+   author told that something is wrong and not where. `attributed` re-anchors
+   each refusal on the declaration that carries it, which is both the better
+   diagnostic and the only reason the three survive dedup as separate
+   findings.
+
+Gates: `cargo test -p aion-awl` — every binary ok, 0 failed. MUTATION CHECK:
+with the one `derived.extend(...)` line removed, exactly the new test fails and
+the other 13 schema tests stay green, including the pre-existing
+`a_door_the_validator_cannot_compile_is_refused_at_check` — so the new coverage
+is genuinely new and not a second copy of what was already there.
+
+---
+
 # 🔴 RESUME HERE — 2026-07-31 ~05:15Z
 
 State: `origin/main` at `656a3327` plus ONE UNCOMMITTED addition — the gate

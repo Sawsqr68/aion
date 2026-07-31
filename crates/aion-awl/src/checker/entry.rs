@@ -87,7 +87,7 @@ fn run(document: &Document, root: Option<&Path>) -> (Vec<CheckError>, crate::sem
 /// than anything about the document. Those are left to the caller that has the
 /// directory; a schema that is unusable is reported either way.
 fn contract_derivation_errors(document: &Document, root: Option<&Path>) -> Vec<CheckError> {
-    let derived = match root {
+    let mut derived = match root {
         Some(root) => vec![
             crate::schema_for_workflow_in(document, root),
             crate::schema_for_outcomes_in(document, root),
@@ -99,6 +99,12 @@ fn contract_derivation_errors(document: &Document, root: Option<&Path>) -> Vec<C
             crate::schema_for_queries(document),
         ],
     };
+    // Every OTHER schema the contract commits to — signal payloads, child
+    // parameters and results, activity parameters and results. The compiler
+    // derives these too and refuses the same failure, so leaving them out of
+    // `check` meant a document could check clean and then be refused at
+    // `emit`, which is the wrong door to meet a type error at.
+    derived.extend(crate::schema::derived_contract_schemas(document, root));
     derived
         .into_iter()
         .filter_map(|result| match result {

@@ -321,3 +321,75 @@ step file
     );
     Ok(())
 }
+
+/// The contract is more than the workflow header, and `check` must prove ALL
+/// of it.
+///
+/// A type that appears only as a signal payload, a child's parameter or an
+/// activity's result never reaches the workflow input, outcome or query
+/// schemas — so a checker that derived only those three would pass this
+/// document and let the compiler refuse it later, at `emit` or `deploy`. That
+/// is a type error met at the wrong door: the author is no longer looking at
+/// the file.
+///
+/// Each surface below carries its OWN uncompilable type, so a check that
+/// covers some of them and not others fails here rather than passing on the
+/// one it happens to cover.
+#[test]
+fn check_proves_the_signal_child_and_activity_schemas_too() -> TestResult {
+    const BAD: &str = "\"type\": \"string\", \"pattern\": \"^{[0-9]+}$\"";
+    const GOOD: &str = "\"type\": \"string\"";
+    let source = format!(
+        "\
+//! Uncompilable types reachable ONLY through signal, child and activity.
+workflow contract_surfaces
+  input label: String
+  signal control: Control
+  outcome filed: type Filed, route success
+
+type Control {{ token: Token }}
+type Token = schema {{ {BAD} }}
+type Filed {{ note: String }}
+type Ticket = schema {{ {BAD} }}
+type Receipt = schema {{ {BAD} }}
+
+worker doors
+  action file_reading(ticket: Ticket) -> Filed
+
+child sub(note: String) -> Receipt
+
+step file
+  wait control -> answer
+  label |> file_reading |> route filed
+"
+    );
+
+    let document = parse(&source)?;
+    let errors = aion_awl::check(&document);
+    let refusals = errors
+        .iter()
+        .filter(|error| {
+            error
+                .message
+                .contains("cannot be compiled into a validator")
+        })
+        .count();
+    assert!(
+        refusals >= 3,
+        "each of the signal payload, the activity parameter and the child result \
+         must be proven; got {refusals} refusals from: {errors:?}"
+    );
+
+    // CONTROL. The same document with every pattern removed checks clean, so
+    // the refusals above are about the schemas and not about the shape of a
+    // document that declares signals, children and workers at all.
+    let clean = source.replace(BAD, GOOD);
+    assert_ne!(clean, source, "the control must actually differ");
+    let clean_document = parse(&clean)?;
+    assert!(
+        aion_awl::check(&clean_document).is_empty(),
+        "the control must check clean: {:?}",
+        aion_awl::check(&clean_document)
+    );
+    Ok(())
+}

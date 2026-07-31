@@ -27,6 +27,26 @@ pub enum EngineError {
         reason: String,
     },
 
+    /// A package offered for deployment declares a contract the engine cannot
+    /// enforce: at least one declared schema does not compile into a validator.
+    ///
+    /// Refused at the door rather than admitted, because the alternative is
+    /// silent: every admission boundary answers an uncompilable schema by
+    /// letting the value through unchecked, so a package that reaches the
+    /// catalog with one runs with that part of its declared contract switched
+    /// off and only a log line to say so.
+    #[error(
+        "workflow package `{workflow_type}` declares {count} type(s) the engine cannot compile into a validator, so nothing it declares there could ever be enforced: {detail}"
+    )]
+    UnenforceableContract {
+        /// Logical workflow type of the refused package.
+        workflow_type: String,
+        /// How many declarations could not be compiled.
+        count: usize,
+        /// Each unenforceable declaration, named, with the compiler's reason.
+        detail: String,
+    },
+
     /// A route or unload targeted a `(workflow type, version)` that is not loaded.
     #[error(
         "workflow `{workflow_type}` version `{version}` is not loaded (loaded versions: {loaded})"

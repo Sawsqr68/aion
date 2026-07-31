@@ -483,6 +483,9 @@ fn engine_trace_fields(source: &EngineError) -> ErrorTraceFields<'_> {
         }
         EngineError::EventStreaming(_) => simple_engine_fields("EventStreaming", source),
         EngineError::Load { .. } => simple_engine_fields("Load", source),
+        EngineError::UnenforceableContract { .. } => {
+            simple_engine_fields("UnenforceableContract", source)
+        }
         EngineError::UnknownVersion { .. } => simple_engine_fields("UnknownVersion", source),
         EngineError::VersionPinned { .. } => simple_engine_fields("VersionPinned", source),
         EngineError::RouteActive { .. } => simple_engine_fields("RouteActive", source),
@@ -596,6 +599,11 @@ fn wire_from_engine(source: &EngineError) -> WireError {
         E::ConflictingEventPublisher => backend("ConflictingEventPublisher", source),
         EngineError::EventStreaming(_) => engine::backend_wire("EventStreaming", source),
         EngineError::Load { .. } => WireError::backend_with_type("Load", source.to_string()),
+        // The archive is well-formed and the defect is in what it DECLARES, so
+        // this is the operator's own input to correct — not a backend fault.
+        EngineError::UnenforceableContract { .. } => {
+            WireError::invalid_input(source.to_string()).with_error_type("UnenforceableContract")
+        }
         // Deploy refusals preserve not-found, state-conflict, and input classes.
         EngineError::UnknownVersion { .. } => {
             WireError::not_found_with_type("UnknownVersion", source.to_string())

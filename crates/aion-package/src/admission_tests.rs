@@ -197,3 +197,92 @@ fn an_additional_entry_resolves_to_its_own_input_schema() {
         &json!({ "type": "object", "required": ["objective"] })
     );
 }
+
+/// A contract that says nothing is not a contract that is broken.
+///
+/// `PackageContract::default()` carries `null` for both schemas, and a legacy
+/// manifest carries whatever it never declared. If those were reported as
+/// unenforceable, the deploy door built on this would refuse every package
+/// that predates typed declarations — the gate would be worse than the hole.
+#[test]
+fn a_contract_declaring_nothing_has_nothing_unenforceable() {
+    assert!(
+        PackageContract::default()
+            .unenforceable_schemas()
+            .is_empty(),
+        "the default contract declares nothing and must not be reported as unenforceable"
+    );
+
+    let vacuous = PackageContract {
+        input_schema: json!({}),
+        output_schema: Value::Bool(true),
+        ..PackageContract::default()
+    };
+    assert!(
+        vacuous.unenforceable_schemas().is_empty(),
+        "JSON Schema's own accept-everything forms constrain nothing on purpose"
+    );
+}
+
+/// A schema that compiles is not reported, and one that cannot is — named.
+///
+/// The pairing is the point: the report has to DISCRIMINATE. A function that
+/// reported everything, or nothing, would satisfy half of this and is exactly
+/// what a one-sided test would let through.
+#[test]
+fn an_uncompilable_declaration_is_reported_and_a_compilable_one_is_not() -> TestResult {
+    let enforceable = PackageContract {
+        input_schema: continuation_schema(),
+        output_schema: json!({ "type": "string" }),
+        signals: vec![SignalContract {
+            name: "control".to_owned(),
+            input_schema: continuation_schema(),
+        }],
+        ..PackageContract::default()
+    };
+    assert!(
+        enforceable.unenforceable_schemas().is_empty(),
+        "every declaration here compiles: {:?}",
+        enforceable.unenforceable_schemas()
+    );
+
+    let broken = PackageContract {
+        input_schema: continuation_schema(),
+        output_schema: json!({}),
+        signals: vec![SignalContract {
+            name: "control".to_owned(),
+            input_schema: json!({ "$ref": "#/$defs/Missing" }),
+        }],
+        additional_workflows: vec![AdditionalWorkflowContract {
+            workflow_type: "second".to_owned(),
+            input_schema: json!({ "type": "string", "pattern": "^{[0-9]+}$" }),
+            output_schema: json!({}),
+        }],
+        ..PackageContract::default()
+    };
+    let found = broken.unenforceable_schemas();
+    assert_eq!(
+        found.len(),
+        2,
+        "both unenforceable declarations must be reported, not the first one only: {found:?}"
+    );
+    let named = found
+        .iter()
+        .map(|entry| entry.declaration.clone())
+        .collect::<Vec<_>>();
+    assert!(
+        named.iter().any(|entry| entry.contains("signal `control`")),
+        "the signal declaration must be named: {named:?}"
+    );
+    assert!(
+        named
+            .iter()
+            .any(|entry| entry.contains("workflow `second`")),
+        "the additional entry must be named: {named:?}"
+    );
+    assert!(
+        found.iter().all(|entry| !entry.reason.is_empty()),
+        "each report must carry the compiler's own reason: {found:?}"
+    );
+    Ok(())
+}

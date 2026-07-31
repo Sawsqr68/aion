@@ -249,6 +249,71 @@ impl<'a> StagedLoad<'a> {
     }
 }
 
+/// What the catalog does with a package whose declared contract it cannot
+/// enforce.
+///
+/// The distinction is between a package being OFFERED and a package being
+/// RECOVERED, and it is the whole reason this is a parameter rather than a
+/// constant: an operator handing over an archive can fix it and must be told
+/// now, while a run that has been parked for months cannot fix anything and
+/// must not be stranded for a defect in a declaration it never reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ContractEnforcement {
+    /// Refuse the load. Every door an operator offers a package through:
+    /// the deploy seam, and the startup sources a builder is handed.
+    Refuse,
+    /// Load it, and say so at `error` level. The recovery path only.
+    ReportOnly,
+}
+
+/// Refuses (or reports) a staged package that declares schemas no validator
+/// can compile.
+///
+/// An uncompilable declared schema does not fail loudly at the boundary it
+/// guards: `admit_value` can only answer `UnusableSchema`, and every admission
+/// site's answer to that is to let the value through unchecked. So a package
+/// carrying one runs with that part of its declared contract switched off, and
+/// the only trace is a log line at a moment nobody is watching. The door is
+/// the last place it can still be a diagnostic.
+///
+/// A pre-`.v4` identity commits to no contract at all, so there is nothing to
+/// enforce and nothing to report.
+pub(crate) fn enforce_contract(
+    staged: &StagedLoad<'_>,
+    workflow_type: &str,
+    enforcement: ContractEnforcement,
+) -> Result<(), EngineError> {
+    let Some(contract) = staged.contract.as_ref() else {
+        return Ok(());
+    };
+    let unenforceable = contract.unenforceable_schemas();
+    if unenforceable.is_empty() {
+        return Ok(());
+    }
+    let detail = unenforceable
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("; ");
+    match enforcement {
+        ContractEnforcement::Refuse => Err(EngineError::UnenforceableContract {
+            workflow_type: workflow_type.to_owned(),
+            count: unenforceable.len(),
+            detail,
+        }),
+        ContractEnforcement::ReportOnly => {
+            tracing::error!(
+                workflow_type,
+                version = %staged.version,
+                count = unenforceable.len(),
+                %detail,
+                "recovering a persisted package whose declared contract cannot be enforced: these declarations compile into no validator, so every value they cover is admitted unchecked until the package is re-deployed"
+            );
+            Ok(())
+        }
+    }
+}
+
 /// One deployable module of a staged package.
 pub(crate) struct StagedModule<'a> {
     pub(crate) deployed_name: String,

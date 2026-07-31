@@ -131,7 +131,7 @@ pub(crate) async fn reload_persisted_packages(
             );
             continue;
         }
-        match catalog.load_package(runtime, &package).await {
+        match catalog.reload_package(runtime, &package).await {
             Ok(outcome) => {
                 tracing::info!(
                     workflow_type = outcome.record.workflow_type(),

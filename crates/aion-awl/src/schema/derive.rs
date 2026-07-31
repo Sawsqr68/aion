@@ -160,6 +160,89 @@ pub fn schema_for_type_ref_in(
     Deriver::new(document, Some(root)).standalone_type_ref_schema(ty)
 }
 
+/// Every schema the package contract derives FROM THE DOCUMENT, in one place.
+///
+/// The contract's entry input and result schemas are supplied by the compiler
+/// from the workflow header, so they are not here; everything else the
+/// contract commits to — each declared signal's payload, each child's
+/// parameters and result, each activity's parameters and result on each
+/// worker — is derived exactly here, exactly as `compile::package_contract`
+/// derives it.
+///
+/// It exists so the CHECKER can prove those schemas compile without owning a
+/// second copy of the enumeration. A checker that listed a different set from
+/// the one the compiler derives would pass documents the compiler then refuses,
+/// which is the divergence this is deliberately built to avoid.
+///
+/// `root` is optional because the checker can be called without a document
+/// directory. A schema IMPORT is unresolvable then, and that failure is an
+/// artefact of how the checker was called rather than anything about the
+/// document — callers filter for the failure they asked about.
+pub(crate) fn derived_contract_schemas(
+    document: &Document,
+    root: Option<&Path>,
+) -> Vec<Result<Value, SchemaError>> {
+    let deriver = Deriver::new(document, root);
+    let mut derived = Vec::new();
+    for signal in &document.signals {
+        derived.push(attributed(
+            deriver.standalone_type_ref_schema(&signal.ty),
+            format!("signal {}", signal.name),
+            signal.name_span,
+        ));
+    }
+    for child in &document.children {
+        derived.push(attributed(
+            deriver.params_schema(&child.params),
+            format!("the parameters of child {}", child.name),
+            child.name_span,
+        ));
+        derived.push(attributed(
+            deriver.standalone_type_ref_schema(&child.returns),
+            format!("the result of child {}", child.name),
+            child.name_span,
+        ));
+    }
+    for worker in &document.workers {
+        for action in &worker.actions {
+            derived.push(attributed(
+                deriver.params_schema(&action.params),
+                format!("the parameters of action {}", action.name),
+                action.name_span,
+            ));
+            derived.push(attributed(
+                deriver.standalone_type_ref_schema(&action.returns),
+                format!("the result of action {}", action.name),
+                action.name_span,
+            ));
+        }
+    }
+    derived
+}
+
+/// Re-anchors an unusable-schema refusal on the DECLARATION that carries it.
+///
+/// `params_schema` and `standalone_type_ref_schema` are shared by every
+/// callable surface, so they can only name the document. That is fine for one
+/// refusal and useless for three: the checker sorts and dedups its
+/// diagnostics, so three declarations failing for the same reason collapse
+/// into a single message pointing at the workflow's name — the author is told
+/// something is wrong and not where. Naming the declaration makes each
+/// refusal distinct, which is both a better diagnostic and the only reason
+/// they survive dedup as separate findings.
+fn attributed(
+    result: Result<Value, SchemaError>,
+    name: String,
+    span: Span,
+) -> Result<Value, SchemaError> {
+    match result {
+        Err(SchemaError::UnusableSchema { detail, .. }) => {
+            Err(SchemaError::UnusableSchema { name, detail, span })
+        }
+        other => other,
+    }
+}
+
 /// Refuses a derived schema that cannot be compiled into a validator.
 ///
 /// The check runs through `aion_package::schema_is_usable`, which is the same

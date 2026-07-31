@@ -4,7 +4,9 @@ use aion_package::{ContentHash, Package};
 use chrono::Utc;
 
 use super::{CatalogEntry, CatalogSnapshot, PackageGroup, WorkflowCatalog};
-use crate::loader::load::{LoadOutcome, StagedLoad, load_error, rollback_registered};
+use crate::loader::load::{
+    ContractEnforcement, LoadOutcome, StagedLoad, enforce_contract, load_error, rollback_registered,
+};
 use crate::{error::EngineError, runtime::RuntimeHandle};
 
 impl WorkflowCatalog {
@@ -32,7 +34,27 @@ impl WorkflowCatalog {
         runtime: &RuntimeHandle,
         package: &Package,
     ) -> Result<LoadOutcome, EngineError> {
-        self.load_package_mode(runtime, package, true).await
+        self.load_package_mode(runtime, package, true, ContractEnforcement::Refuse)
+            .await
+    }
+
+    /// Loads a package the engine has ALREADY accepted and persisted, on the
+    /// recovery path.
+    ///
+    /// Identical to [`WorkflowCatalog::load_package`] except that an
+    /// unenforceable contract is reported rather than refused. A refusal here
+    /// would strand every live run pinned to the version — a durable run that
+    /// crashed on step nine would never come back — over a declaration defect
+    /// that only a re-deploy can fix and that affects only work not yet
+    /// started. Turning a validation gap into an availability outage is the
+    /// worse of the two failures, so recovery loads it and says so loudly.
+    pub(crate) async fn reload_package(
+        &self,
+        runtime: &RuntimeHandle,
+        package: &Package,
+    ) -> Result<LoadOutcome, EngineError> {
+        self.load_package_mode(runtime, package, true, ContractEnforcement::ReportOnly)
+            .await
     }
 
     /// Stages verified modules and version entries without publishing routes.
@@ -41,7 +63,8 @@ impl WorkflowCatalog {
         runtime: &RuntimeHandle,
         package: &Package,
     ) -> Result<LoadOutcome, EngineError> {
-        self.load_package_mode(runtime, package, false).await
+        self.load_package_mode(runtime, package, false, ContractEnforcement::Refuse)
+            .await
     }
 
     async fn load_package_mode(
@@ -49,6 +72,7 @@ impl WorkflowCatalog {
         runtime: &RuntimeHandle,
         package: &Package,
         publish_routes: bool,
+        enforcement: ContractEnforcement,
     ) -> Result<LoadOutcome, EngineError> {
         let hash = package.content_hash();
         let nif_modules = runtime.registered_nif_modules();
@@ -97,6 +121,7 @@ impl WorkflowCatalog {
                 }
             },
             publish_routes,
+            enforcement,
         )
         .await
     }
@@ -115,8 +140,15 @@ impl WorkflowCatalog {
         R: FnMut(&str) -> Result<(), EngineError>,
         V: FnMut(&str, &str) -> Result<(), EngineError>,
     {
-        self.load_package_with_mode(package, register, rollback, verify_entry, true)
-            .await
+        self.load_package_with_mode(
+            package,
+            register,
+            rollback,
+            verify_entry,
+            true,
+            ContractEnforcement::Refuse,
+        )
+        .await
     }
 
     /// Test seam for the durable-first gap between verified staging and route publication.
@@ -133,8 +165,15 @@ impl WorkflowCatalog {
         R: FnMut(&str) -> Result<(), EngineError>,
         V: FnMut(&str, &str) -> Result<(), EngineError>,
     {
-        self.load_package_with_mode(package, register, rollback, verify_entry, false)
-            .await
+        self.load_package_with_mode(
+            package,
+            register,
+            rollback,
+            verify_entry,
+            false,
+            ContractEnforcement::Refuse,
+        )
+        .await
     }
 
     async fn load_package_with_mode<F, R, V>(
@@ -144,6 +183,7 @@ impl WorkflowCatalog {
         mut rollback: R,
         verify_entry: V,
         publish_routes: bool,
+        enforcement: ContractEnforcement,
     ) -> Result<LoadOutcome, EngineError>
     where
         F: FnMut(&str, &[u8]) -> Result<(), EngineError>,
@@ -152,6 +192,15 @@ impl WorkflowCatalog {
     {
         let mutation_guard = self.mutations.lock().await;
         let staged = StagedLoad::new(package)?;
+        // Before anything registers, and before the idempotent-re-load
+        // shortcut: re-offering an archive already resident does not make its
+        // contract enforceable, and a route flip onto it is exactly the
+        // moment an operator believes the declaration took effect.
+        enforce_contract(
+            &staged,
+            package.manifest().entry_module.as_str(),
+            enforcement,
+        )?;
         let snapshot = self.current()?;
 
         validate_staged_module_names(&staged, &snapshot)?;

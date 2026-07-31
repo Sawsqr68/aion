@@ -50,7 +50,9 @@ pub mod structure;
 /// Workflow version identifiers derived from package content.
 pub mod version;
 
-pub use admission::{AdmissionError, admit_value, declares_nothing, schema_is_usable};
+pub use admission::{
+    AdmissionError, UnenforceableSchema, admit_value, declares_nothing, schema_is_usable,
+};
 pub use beam::{BeamModule, BeamSet, RESERVED_MODULE_NAMES};
 pub use builder::PackageBuilder;
 pub use canonical::{CanonicalJson, serialize_value, sorted_entries};

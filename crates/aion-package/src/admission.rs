@@ -15,6 +15,28 @@ use serde_json::Value;
 
 use crate::contract::{PackageContract, SignalContract};
 
+/// One declared schema in a package contract that no validator can compile,
+/// named by the declaration that carries it.
+///
+/// An unenforceable declaration is not a harmless one: [`admit_value`] can only
+/// answer [`AdmissionError::UnusableSchema`] for it, and every admission
+/// boundary's response to that is to let the value through unchecked. A
+/// contract carrying one is a contract the engine cannot honour, and the
+/// operator needs to be told WHICH declaration — a package can declare dozens.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnenforceableSchema {
+    /// The declaration the schema belongs to, in the author's own vocabulary.
+    pub declaration: String,
+    /// The compiler's own reason for refusing the schema.
+    pub reason: String,
+}
+
+impl std::fmt::Display for UnenforceableSchema {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}: {}", self.declaration, self.reason)
+    }
+}
+
 /// A caller-supplied value did not satisfy a declared contract schema.
 ///
 /// Both variants are caller-facing refusals, never engine faults: they are
@@ -120,6 +142,79 @@ pub fn admit_value(schema: &Value, value: &Value) -> Result<(), AdmissionError> 
 }
 
 impl PackageContract {
+    /// Every declared schema in this contract that cannot be compiled into a
+    /// validator, in declaration order.
+    ///
+    /// This is the whole contract surface, not only the schemas today's
+    /// admission boundaries happen to read: a declaration is identity-bound,
+    /// so a package that commits to a shape no validator can compile has
+    /// promised something it can never be held to, whichever boundary reaches
+    /// it first. An empty result means every declaration this package makes is
+    /// one the engine can actually enforce.
+    ///
+    /// A declaration that constrains nothing ([`declares_nothing`]) is not a
+    /// failure — it says nothing on purpose, and admission skips it
+    /// deliberately rather than by breaking.
+    #[must_use]
+    pub fn unenforceable_schemas(&self) -> Vec<UnenforceableSchema> {
+        let mut found = Vec::new();
+        let mut check = |declaration: String, schema: &Value| {
+            if let Err(reason) = schema_is_usable(schema) {
+                found.push(UnenforceableSchema {
+                    declaration,
+                    reason,
+                });
+            }
+        };
+
+        check("the workflow input type".to_owned(), &self.input_schema);
+        check("the workflow result type".to_owned(), &self.output_schema);
+        for entry in &self.additional_workflows {
+            let workflow_type = &entry.workflow_type;
+            check(
+                format!("the input type of workflow `{workflow_type}`"),
+                &entry.input_schema,
+            );
+            check(
+                format!("the result type of workflow `{workflow_type}`"),
+                &entry.output_schema,
+            );
+        }
+        for signal in &self.signals {
+            let name = &signal.name;
+            check(
+                format!("the payload type of signal `{name}`"),
+                &signal.input_schema,
+            );
+        }
+        for child in &self.children {
+            let name = &child.name;
+            check(
+                format!("the input type of child workflow `{name}`"),
+                &child.input_schema,
+            );
+            check(
+                format!("the result type of child workflow `{name}`"),
+                &child.output_schema,
+            );
+        }
+        for worker in &self.workers {
+            let queue = &worker.task_queue;
+            for action in &worker.actions {
+                let name = &action.name;
+                check(
+                    format!("the parameter types of activity `{name}` on queue `{queue}`"),
+                    &action.input_schema,
+                );
+                check(
+                    format!("the result type of activity `{name}` on queue `{queue}`"),
+                    &action.output_schema,
+                );
+            }
+        }
+        found
+    }
+
     /// The declared signal record for `signal_name`, when this contract
     /// declares one.
     #[must_use]
