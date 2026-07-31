@@ -28,6 +28,18 @@ mod scan;
 #[cfg(test)]
 mod tests;
 
+/// The crate's ONE runtime gate for tests that shell out to the real `gleam`
+/// CLI, shared with the integration tests rather than re-implemented here.
+///
+/// The unit test below is inside `src/`, so it cannot reach a `tests/` module
+/// the ordinary way. Its own gate used `tracing::info!`, which with no
+/// subscriber installed wrote the skip line nowhere at all (#74). Reaching the
+/// shared file by path keeps one definition of "the skip must be visible"
+/// instead of a third copy that looks right in isolation.
+#[cfg(test)]
+#[path = "../../tests/test_support/gleam.rs"]
+mod gleam_test_support;
+
 pub use determinism::{DeterminismError, Violation, ViolationKind, analyze_determinism};
 pub use error::StructureError;
 pub use extract::extract_structure;

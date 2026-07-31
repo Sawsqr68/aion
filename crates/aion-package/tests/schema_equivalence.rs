@@ -15,12 +15,17 @@
 //! The model is built through the REAL pipeline (`gleam export
 //! package-interface` on the staged example → interface front end → schema
 //! emitter). Per project policy this never uses `#[ignore]`: without a gleam
-//! toolchain it logs a skip and passes; with one it runs for real.
+//! toolchain it announces a skip and passes; with one it runs for real. The
+//! announcement goes through the shared gate, because the skip line this file
+//! used to print was captured by `libtest` and never shown (#74).
 
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+#[path = "test_support/gleam.rs"]
+mod gleam_test_support;
 
 use aion_package::{CodegenMode, boundary_types_from_interface, emit_schemas};
 use serde_json::Value;
@@ -152,13 +157,6 @@ fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-fn gleam_available() -> bool {
-    Command::new("gleam")
-        .arg("--version")
-        .output()
-        .is_ok_and(|output| output.status.success())
-}
-
 /// Copies `examples/order-saga` into a temp dir with the `aion_flow` path
 /// dependency rewritten to an absolute path (mirrors the other gates).
 fn stage_order_saga() -> Result<(tempfile::TempDir, PathBuf), TestError> {
@@ -217,8 +215,7 @@ fn semantic_shape(value: &Value) -> Value {
 #[test]
 fn emitted_order_saga_schemas_are_semantically_equivalent_to_the_authored_originals()
 -> Result<(), TestError> {
-    if !gleam_available() {
-        eprintln!("skipping schema_equivalence: gleam toolchain not on PATH");
+    if gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
     let (_temp, project) = stage_order_saga()?;

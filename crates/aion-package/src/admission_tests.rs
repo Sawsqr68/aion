@@ -230,7 +230,7 @@ fn a_contract_declaring_nothing_has_nothing_unenforceable() {
 /// reported everything, or nothing, would satisfy half of this and is exactly
 /// what a one-sided test would let through.
 #[test]
-fn an_uncompilable_declaration_is_reported_and_a_compilable_one_is_not() -> TestResult {
+fn an_uncompilable_declaration_is_reported_and_a_compilable_one_is_not() {
     let enforceable = PackageContract {
         input_schema: continuation_schema(),
         output_schema: json!({ "type": "string" }),
@@ -284,5 +284,4 @@ fn an_uncompilable_declaration_is_reported_and_a_compilable_one_is_not() -> Test
         found.iter().all(|entry| !entry.reason.is_empty()),
         "each report must carry the compiler's own reason: {found:?}"
     );
-    Ok(())
 }

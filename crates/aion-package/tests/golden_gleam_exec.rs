@@ -17,12 +17,17 @@
 //! regenerates, asserting the round-trip is byte-identical.
 //!
 //! Per project policy this never uses `#[ignore]`: when the `gleam` toolchain is
-//! absent it logs a skip line and returns `Ok(())`; when `gleam` is present it
+//! absent it announces a skip and returns `Ok(())`; when `gleam` is present it
 //! runs `gleam test` for real and fails the Rust test if that exits non-zero.
+//! The announcement goes through the shared gate, because the skip line this
+//! file used to print was captured by `libtest` and never shown (#74).
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+#[path = "test_support/gleam.rs"]
+mod gleam_test_support;
 
 use aion_package::{
     ActivityDeclaration, CodegenMode, Tier, boundary_types_from_interface, emit_schemas,
@@ -83,16 +88,6 @@ pub fn golden_probe(
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-/// Whether the `gleam` toolchain can be run. Per project policy the test is
-/// gated at runtime rather than with `#[ignore]`: absence logs and skips,
-/// presence runs for real.
-fn gleam_available() -> bool {
-    Command::new("gleam")
-        .arg("--version")
-        .output()
-        .is_ok_and(|output| output.status.success())
 }
 
 /// Copies `examples/order-saga` into a fresh temp directory, rewriting the
@@ -219,14 +214,79 @@ fn export_interface(project: &Path) -> Result<Vec<u8>, TestError> {
     Ok(fs::read(&out)?)
 }
 
+/// The test whose skip [`the_skip_is_visible_in_a_passing_run`] re-runs. Named
+/// once so the pin and the `#[test]` below cannot drift apart under a rename.
+const GATED_TEST: &str =
+    "generated_golden_passes_real_gleam_test_for_float_optional_enum_and_nested";
+
+/// Set on the child process so a filter that ever matched this pin itself
+/// could not recurse.
+const PIN_CHILD_MARKER: &str = "AION_GLEAM_GATE_PIN_CHILD";
+
+/// THE PIN (#74). A skipped Gleam gate announces itself where a reader of a
+/// PLAIN `cargo test` log will see it — inside a run that reports `ok`.
+///
+/// This cannot be checked by inspection and it cannot be checked in-process:
+/// the failure being guarded is `libtest`'s output capture, which replays a
+/// test's `print!`/`eprintln!` output only when that test FAILS. A skip line
+/// written through the macros is therefore perfectly correct, perfectly
+/// invisible, and indistinguishable from a gate that ran — which is what all
+/// three of this crate's gates did before this commit.
+///
+/// So the pin re-runs one real gated test in a child process with `gleam`
+/// removed from `PATH`, with capture left ON exactly as a normal run has it,
+/// and requires BOTH halves:
+///
+/// - the announcement reaches the child's stderr, and
+/// - the child reports the test as PASSED.
+///
+/// The second half is the control, and it is the load-bearing one. Capture is
+/// replayed on failure, so an announcement seen in a FAILING run would prove
+/// nothing at all about the case that matters.
+#[test]
+fn the_skip_is_visible_in_a_passing_run() -> Result<(), TestError> {
+    if std::env::var_os(PIN_CHILD_MARKER).is_some() {
+        return Ok(());
+    }
+
+    // An EMPTY `PATH` is not a reliable way to hide a binary — an empty search
+    // path falls back to a system default on some platforms. An empty
+    // DIRECTORY is unambiguous: the search succeeds and finds nothing.
+    let empty = tempfile::tempdir()?;
+    let output = Command::new(std::env::current_exe()?)
+        .args(["--exact", GATED_TEST, "--test-threads", "1"])
+        .env(PIN_CHILD_MARKER, "1")
+        // The binary is invoked by absolute path and needs no `PATH` itself.
+        .env("PATH", empty.path())
+        .output()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        stdout.contains("1 passed"),
+        "the control failed: the child run must PASS, or a visible announcement would only prove \
+         that `libtest` replays capture on failure.\n--- stdout ---\n{stdout}\n--- stderr \
+         ---\n{stderr}"
+    );
+    assert!(
+        stderr.contains(gleam_test_support::SKIP_MARKER),
+        "a gate that skipped inside a passing run announced nothing a reader of a plain `cargo \
+         test` log could see — the skip is invisible and the `ok` is \
+         vacuous.\n--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}"
+    );
+    assert!(
+        stderr.contains("golden_gleam_exec.rs:"),
+        "the announcement must name the CALLER's file and line, so a reader lands on the test \
+         that did not run rather than on the shared helper.\n--- stderr ---\n{stderr}"
+    );
+    Ok(())
+}
+
 #[test]
 fn generated_golden_passes_real_gleam_test_for_float_optional_enum_and_nested()
 -> Result<(), TestError> {
-    if !gleam_available() {
-        eprintln!(
-            "skipping golden_gleam_exec: gleam toolchain not on PATH \
-             (run `gleam --version` to confirm); this gate runs for real when gleam is present"
-        );
+    if gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
 

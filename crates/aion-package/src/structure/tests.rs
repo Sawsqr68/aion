@@ -1115,10 +1115,15 @@ fn regeneration_does_not_mutate_the_package_or_graph() -> TestResult {
 }
 
 /// C24: a bounded delta over a Run-only sub-shape regenerates Gleam that
-/// type-checks under `gleam build`. Gated at runtime on the `gleam` binary;
-/// skips with a logged line when it is absent, never `#[ignore]`.
+/// type-checks under `gleam build`. Gated at runtime on the `gleam` binary,
+/// never `#[ignore]`; the skip is announced where a plain `cargo test` run
+/// shows it, through the crate's shared gate.
 #[test]
 fn append_run_regenerates_type_checking_gleam() -> TestResult {
+    if super::gleam_test_support::skip_if_unavailable() {
+        return Ok(());
+    }
+
     let package = saga_package()?;
     let graph = run_only_graph();
 
@@ -1127,13 +1132,6 @@ fn append_run_regenerates_type_checking_gleam() -> TestResult {
         after: NodeId(2),
     };
     let regenerated = regenerate_gleam(&package, &graph, &delta)?;
-
-    if Command::new("gleam").arg("--version").output().is_err() {
-        tracing::info!(
-            "skipping append_run_regenerates_type_checking_gleam: `gleam` binary not available"
-        );
-        return Ok(());
-    }
 
     assert_gleam_type_checks(&regenerated)?;
     Ok(())
