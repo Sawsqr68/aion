@@ -119,6 +119,12 @@ pub(super) const COVERED: &[&str] = &[
     "step-bodies/valid/index_and_concat",
     "step-bodies/valid/literal_forms",
     "step-bodies/valid/pipe_chain_stages",
+    // #97-B: guard-dependent optionality narrowing keys on an access PATH, so
+    // an optional FIELD narrows the same way an optional binding always has.
+    // Both are pinned because the two positions are different machinery: the
+    // guard's short-circuit edge, and the arm's own proof.
+    "step-bodies/valid/guard_narrows_a_deep_optional_field",
+    "step-bodies/valid/guard_narrows_an_optional_field",
     "step-bodies/valid/predicates_and_operators",
     // The read-only surface: header `query` declarations, all three answer
     // forms, an answer re-registered inside a loop, and one inside an

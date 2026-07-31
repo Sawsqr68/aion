@@ -99,7 +99,7 @@ pub(super) fn walk_fork(
         } => {
             let view = View {
                 vars: scope,
-                narrow: None,
+                narrow: &[],
                 accessor: None,
             };
             let collection_ty = type_of(w, view, collection);

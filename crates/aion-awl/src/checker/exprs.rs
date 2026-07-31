@@ -6,18 +6,20 @@ use crate::Span;
 use crate::ast::Expr;
 use crate::spanned::Spanned;
 
+use super::narrow::Narrowing;
 use super::operators::{is_bool, type_binary, type_predicate};
 use super::types::{Ty, assignable, resolve};
 use super::walk::{Scope, Walker};
 
-/// A read-only view of the bindings in scope, with at most one
-/// guard-narrowed name (`when x is present` makes `x` a `T` in its arm).
+/// A read-only view of the bindings in scope, with the guard narrowings in
+/// force (`when x is present` makes `x` a `T` in its arm, and
+/// `when x.y is present` does the same for the FIELD `x.y`).
 #[derive(Clone, Copy)]
 pub(super) struct View<'s> {
     /// Bindings in scope: name → type.
     pub(super) vars: &'s Scope,
-    /// The one narrowed binding, if the surrounding arm narrows.
-    pub(super) narrow: Option<&'s (String, Ty)>,
+    /// The guard narrowings in force, outermost proof first.
+    pub(super) narrow: &'s [Narrowing],
     /// Element type bound to `.field` inside an `any`/`all` predicate.
     pub(super) accessor: Option<&'s Ty>,
 }
@@ -27,16 +29,19 @@ impl View<'_> {
     pub(super) const fn plain(vars: &Scope) -> View<'_> {
         View {
             vars,
-            narrow: None,
+            narrow: &[],
             accessor: None,
         }
     }
 
+    /// The narrowed type of exactly this access path, if an arm narrows it.
+    pub(super) fn narrowed(&self, path: &[String]) -> Option<Ty> {
+        super::narrow::lookup(self.narrow, path)
+    }
+
     pub(super) fn get(&self, name: &str) -> Option<Ty> {
-        if let Some((narrowed, ty)) = self.narrow
-            && narrowed == name
-        {
-            return Some(ty.clone());
+        if let Some(ty) = super::narrow::lookup_name(self.narrow, name) {
+            return Some(ty);
         }
         self.vars.get(name).map(|value| value.ty.clone())
     }
@@ -188,8 +193,22 @@ fn type_field(
         );
         return Ty::Unknown;
     }
+    // A guard may have proved THIS path present (`when nudge.end is present`),
+    // in which case the field's declared optional type is not what it carries
+    // inside the arm. The ordinary walk still runs: it resolves the base, emits
+    // the field's declaration reference, and reports any real defect on the way.
+    let narrowed = crate::ast::field_path(base, name).and_then(|path| view.narrowed(&path));
     let base_ty = type_of(w, view, base);
-    field_access(w, &base_ty, Some(base), name, name_span)
+    let ty = field_access(w, &base_ty, Some(base), name, name_span);
+    match narrowed {
+        Some(narrowed) => {
+            if w.emit {
+                w.ctx.semantic.ty(name_span, &narrowed.to_string());
+            }
+            narrowed
+        }
+        None => ty,
+    }
 }
 
 fn type_list(w: &mut Walker<'_, '_>, view: View<'_>, items: &[Expr]) -> Ty {

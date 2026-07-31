@@ -41,23 +41,22 @@ pub(super) fn type_binary(
                 BinaryOp::Or => PredicateKind::Absent,
                 _ => unreachable!(),
             };
-            let narrow = match left {
-                Expr::Predicate { subject, kind, .. } if *kind == narrowed_kind => {
-                    match subject.as_ref() {
-                        Expr::Ref { name, .. } => view.get(name).and_then(|ty| {
-                            let Ty::Optional(inner) = resolve(&ty, &w.ctx.types) else {
-                                return None;
-                            };
-                            Some((name.clone(), inner.as_ref().clone()))
-                        }),
-                        _ => None,
-                    }
-                }
-                _ => None,
-            };
+            // The proved edge narrows the subject PATH — a binding (`x`) or a
+            // field of one (`x.y`) — and adds to whatever is already in force,
+            // so `a and b and c` carries a's proof into c exactly as the
+            // lowered control tree does.
+            let mut narrow = view.narrow.to_vec();
+            super::narrow::collect(
+                w,
+                view.vars,
+                view.accessor,
+                left,
+                narrowed_kind,
+                &mut narrow,
+            );
             let right_view = View {
                 vars: view.vars,
-                narrow: narrow.as_ref().or(view.narrow),
+                narrow: &narrow,
                 accessor: view.accessor,
             };
             let right_ty = type_of(w, right_view, right);

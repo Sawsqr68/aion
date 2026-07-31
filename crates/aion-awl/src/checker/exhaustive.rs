@@ -105,7 +105,7 @@ fn enum_totality_gap(w: &mut Walker<'_, '_>, scope: &Scope, step: &Step) -> Opti
     let subject = subject_expr?;
     let view = View {
         vars: scope,
-        narrow: None,
+        narrow: &[],
         accessor: None,
     };
     let subject_ty = w.silently(|w| type_of(w, view, subject));

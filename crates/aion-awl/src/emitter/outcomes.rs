@@ -420,12 +420,31 @@ fn emit_arm(
         kind: PredicateKind::Present,
         ..
     }) = guard
-        && let Expr::Ref { name, .. } = subject.as_ref()
-        && let Some(GType::Option(inner)) = arm_scope.get(name).map(|ty| emitter.env.resolve(ty))
+        && let Some(path) = crate::ast::access_path(subject)
+        && let GType::Option(inner) = emitter
+            .env
+            .resolve(&super::exprs::expr_type(emitter, subject, &arm_scope)?)
     {
-        let rendered = ident(name);
-        emitter.line(&format!("let assert Some({rendered}) = {rendered}"));
-        arm_scope.insert(name.clone(), (*inner).clone());
+        // A bare binding rebinds its own name; a field path has none, so the
+        // unwrapped value gets a fresh one and reads of the path resolve to it.
+        let mut subject_prelude = Vec::new();
+        let rendered_subject =
+            super::exprs::render_expr(emitter, subject, &arm_scope, &mut subject_prelude)?;
+        if !subject_prelude.is_empty() {
+            return Err(EmitError::new(
+                clause.span,
+                "a guarded optional subject cannot need a prelude",
+            ));
+        }
+        if let [single] = path.as_slice() {
+            let rendered = ident(single);
+            emitter.line(&format!("let assert Some({rendered}) = {rendered}"));
+            arm_scope.insert(single.clone(), (*inner).clone());
+        } else {
+            let fresh = emitter.fresh_name(&format!("awl_present_{}", path.join("_")));
+            emitter.line(&format!("let assert Some({fresh}) = {rendered_subject}"));
+            arm_scope.narrow_path(path, fresh, (*inner).clone());
+        }
     }
     let route = clause.route.clone();
     emit_route(emitter, flow, frame, &route, &arm_scope, None)

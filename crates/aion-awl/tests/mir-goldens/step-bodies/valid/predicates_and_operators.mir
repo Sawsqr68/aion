@@ -306,156 +306,158 @@ exports: run/1, definition/0, execute/1
   v8 = field(v0, 5)
   v7 = cmp Ne v8 'none'
   if is_true v7:
-    v9 = field(v0, 1)
-    v10 = record(held, [v9, lit#22])
-    v11 = call_local held_to_json(v10)
-    v12 = call_rt gleam@json:to_string/1(v11)
-    v13 = record(awl_outcome_failure, [lit#23, v12])
-    v14 = record(error, [v13])
-    return v14
+    v9 = field(v0, 5)
+    v10 = assert_some v9
+    v11 = field(v0, 1)
+    v12 = record(held, [v11, lit#22])
+    v13 = call_local held_to_json(v12)
+    v14 = call_rt gleam@json:to_string/1(v13)
+    v15 = record(awl_outcome_failure, [lit#23, v14])
+    v16 = record(error, [v15])
+    return v16
   else:
-    v16 = field(v0, 1)
-    v15 = cmp Eq v16 lit#24
-    if is_true v15:
-      v17 = field(v0, 1)
-      v18 = record(held, [v17, lit#25])
-      v19 = call_local held_to_json(v18)
-      v20 = call_rt gleam@json:to_string/1(v19)
-      v21 = record(awl_outcome_failure, [lit#26, v20])
-      v22 = record(error, [v21])
-      return v22
+    v18 = field(v0, 1)
+    v17 = cmp Eq v18 lit#24
+    if is_true v17:
+      v19 = field(v0, 1)
+      v20 = record(held, [v19, lit#25])
+      v21 = call_local held_to_json(v20)
+      v22 = call_rt gleam@json:to_string/1(v21)
+      v23 = record(awl_outcome_failure, [lit#26, v22])
+      v24 = record(error, [v23])
+      return v24
     else:
-      v24 = field(v0, 2)
-      v23 = cmp Ge v24 100
-      if is_true v23:
-        v26 = field(v0, 5)
-        v25 = cmp Eq v26 'none'
-        if is_true v25:
-          v27 = field(v6, 1)
-          v28 = record(shipped, [v27])
-          v29 = record(shipped_outcome, [v28])
-          v30 = record(ok, [v29])
-          return v30
+      v26 = field(v0, 2)
+      v25 = cmp Ge v26 100
+      if is_true v25:
+        v28 = field(v0, 5)
+        v27 = cmp Eq v28 'none'
+        if is_true v27:
+          v29 = field(v6, 1)
+          v30 = record(shipped, [v29])
+          v31 = record(shipped_outcome, [v30])
+          v32 = record(ok, [v31])
+          return v32
         else:
-          v32 = field(v0, 2)
-          v31 = cmp Lt v32 80
-          if is_true v31:
-            v33 = field(v0, 1)
-            v34 = record(held, [v33, lit#27])
-            v35 = call_local held_to_json(v34)
-            v36 = call_rt gleam@json:to_string/1(v35)
-            v37 = record(awl_outcome_failure, [lit#28, v36])
-            v38 = record(error, [v37])
-            return v38
+          v34 = field(v0, 2)
+          v33 = cmp Lt v34 80
+          if is_true v33:
+            v35 = field(v0, 1)
+            v36 = record(held, [v35, lit#27])
+            v37 = call_local held_to_json(v36)
+            v38 = call_rt gleam@json:to_string/1(v37)
+            v39 = record(awl_outcome_failure, [lit#28, v38])
+            v40 = record(error, [v39])
+            return v40
           else:
-            v40 = field(v0, 3)
-            v39 = cmp Gt v40 30
-            if is_true v39:
-              v41 = field(v0, 1)
-              v42 = record(held, [v41, lit#29])
-              v43 = call_local held_to_json(v42)
-              v44 = call_rt gleam@json:to_string/1(v43)
-              v45 = record(awl_outcome_failure, [lit#30, v44])
-              v46 = record(error, [v45])
-              return v46
+            v42 = field(v0, 3)
+            v41 = cmp Gt v42 30
+            if is_true v41:
+              v43 = field(v0, 1)
+              v44 = record(held, [v43, lit#29])
+              v45 = call_local held_to_json(v44)
+              v46 = call_rt gleam@json:to_string/1(v45)
+              v47 = record(awl_outcome_failure, [lit#30, v46])
+              v48 = record(error, [v47])
+              return v48
             else:
-              v48 = field(v0, 3)
-              v47 = cmp Le v48 30
-              if is_true v47:
-                v49 = field(v0, 4)
-                if is_true v49:
-                  v50 = field(v0, 1)
-                  v51 = record(held, [v50, lit#31])
-                  v52 = call_local held_to_json(v51)
-                  v53 = call_rt gleam@json:to_string/1(v52)
-                  v54 = record(awl_outcome_failure, [lit#32, v53])
-                  v55 = record(error, [v54])
-                  return v55
+              v50 = field(v0, 3)
+              v49 = cmp Le v50 30
+              if is_true v49:
+                v51 = field(v0, 4)
+                if is_true v51:
+                  v52 = field(v0, 1)
+                  v53 = record(held, [v52, lit#31])
+                  v54 = call_local held_to_json(v53)
+                  v55 = call_rt gleam@json:to_string/1(v54)
+                  v56 = record(awl_outcome_failure, [lit#32, v55])
+                  v57 = record(error, [v56])
+                  return v57
                 else:
-                  v57 = field(v0, 2)
-                  v56 = cmp Ne v57 0
-                  if is_true v56:
-                    v58 = field(v6, 1)
-                    v59 = record(shipped, [v58])
-                    v60 = record(shipped_outcome, [v59])
-                    v61 = record(ok, [v60])
-                    return v61
+                  v59 = field(v0, 2)
+                  v58 = cmp Ne v59 0
+                  if is_true v58:
+                    v60 = field(v6, 1)
+                    v61 = record(shipped, [v60])
+                    v62 = record(shipped_outcome, [v61])
+                    v63 = record(ok, [v62])
+                    return v63
                   else:
-                    v62 = field(v0, 1)
-                    v63 = record(held, [v62, lit#33])
-                    v64 = call_local held_to_json(v63)
-                    v65 = call_rt gleam@json:to_string/1(v64)
-                    v66 = record(awl_outcome_failure, [lit#34, v65])
-                    v67 = record(error, [v66])
-                    return v67
+                    v64 = field(v0, 1)
+                    v65 = record(held, [v64, lit#33])
+                    v66 = call_local held_to_json(v65)
+                    v67 = call_rt gleam@json:to_string/1(v66)
+                    v68 = record(awl_outcome_failure, [lit#34, v67])
+                    v69 = record(error, [v68])
+                    return v69
               else:
-                v68 = field(v0, 1)
-                v69 = record(held, [v68, lit#35])
-                v70 = call_local held_to_json(v69)
-                v71 = call_rt gleam@json:to_string/1(v70)
-                v72 = record(awl_outcome_failure, [lit#36, v71])
-                v73 = record(error, [v72])
-                return v73
+                v70 = field(v0, 1)
+                v71 = record(held, [v70, lit#35])
+                v72 = call_local held_to_json(v71)
+                v73 = call_rt gleam@json:to_string/1(v72)
+                v74 = record(awl_outcome_failure, [lit#36, v73])
+                v75 = record(error, [v74])
+                return v75
       else:
-        v75 = field(v0, 2)
-        v74 = cmp Lt v75 80
-        if is_true v74:
-          v76 = field(v0, 1)
-          v77 = record(held, [v76, lit#37])
-          v78 = call_local held_to_json(v77)
-          v79 = call_rt gleam@json:to_string/1(v78)
-          v80 = record(awl_outcome_failure, [lit#38, v79])
-          v81 = record(error, [v80])
-          return v81
+        v77 = field(v0, 2)
+        v76 = cmp Lt v77 80
+        if is_true v76:
+          v78 = field(v0, 1)
+          v79 = record(held, [v78, lit#37])
+          v80 = call_local held_to_json(v79)
+          v81 = call_rt gleam@json:to_string/1(v80)
+          v82 = record(awl_outcome_failure, [lit#38, v81])
+          v83 = record(error, [v82])
+          return v83
         else:
-          v83 = field(v0, 3)
-          v82 = cmp Gt v83 30
-          if is_true v82:
-            v84 = field(v0, 1)
-            v85 = record(held, [v84, lit#39])
-            v86 = call_local held_to_json(v85)
-            v87 = call_rt gleam@json:to_string/1(v86)
-            v88 = record(awl_outcome_failure, [lit#40, v87])
-            v89 = record(error, [v88])
-            return v89
+          v85 = field(v0, 3)
+          v84 = cmp Gt v85 30
+          if is_true v84:
+            v86 = field(v0, 1)
+            v87 = record(held, [v86, lit#39])
+            v88 = call_local held_to_json(v87)
+            v89 = call_rt gleam@json:to_string/1(v88)
+            v90 = record(awl_outcome_failure, [lit#40, v89])
+            v91 = record(error, [v90])
+            return v91
           else:
-            v91 = field(v0, 3)
-            v90 = cmp Le v91 30
-            if is_true v90:
-              v92 = field(v0, 4)
-              if is_true v92:
-                v93 = field(v0, 1)
-                v94 = record(held, [v93, lit#41])
-                v95 = call_local held_to_json(v94)
-                v96 = call_rt gleam@json:to_string/1(v95)
-                v97 = record(awl_outcome_failure, [lit#42, v96])
-                v98 = record(error, [v97])
-                return v98
+            v93 = field(v0, 3)
+            v92 = cmp Le v93 30
+            if is_true v92:
+              v94 = field(v0, 4)
+              if is_true v94:
+                v95 = field(v0, 1)
+                v96 = record(held, [v95, lit#41])
+                v97 = call_local held_to_json(v96)
+                v98 = call_rt gleam@json:to_string/1(v97)
+                v99 = record(awl_outcome_failure, [lit#42, v98])
+                v100 = record(error, [v99])
+                return v100
               else:
-                v100 = field(v0, 2)
-                v99 = cmp Ne v100 0
-                if is_true v99:
-                  v101 = field(v6, 1)
-                  v102 = record(shipped, [v101])
-                  v103 = record(shipped_outcome, [v102])
-                  v104 = record(ok, [v103])
-                  return v104
+                v102 = field(v0, 2)
+                v101 = cmp Ne v102 0
+                if is_true v101:
+                  v103 = field(v6, 1)
+                  v104 = record(shipped, [v103])
+                  v105 = record(shipped_outcome, [v104])
+                  v106 = record(ok, [v105])
+                  return v106
                 else:
-                  v105 = field(v0, 1)
-                  v106 = record(held, [v105, lit#43])
-                  v107 = call_local held_to_json(v106)
-                  v108 = call_rt gleam@json:to_string/1(v107)
-                  v109 = record(awl_outcome_failure, [lit#44, v108])
-                  v110 = record(error, [v109])
-                  return v110
+                  v107 = field(v0, 1)
+                  v108 = record(held, [v107, lit#43])
+                  v109 = call_local held_to_json(v108)
+                  v110 = call_rt gleam@json:to_string/1(v109)
+                  v111 = record(awl_outcome_failure, [lit#44, v110])
+                  v112 = record(error, [v111])
+                  return v112
             else:
-              v111 = field(v0, 1)
-              v112 = record(held, [v111, lit#45])
-              v113 = call_local held_to_json(v112)
-              v114 = call_rt gleam@json:to_string/1(v113)
-              v115 = record(awl_outcome_failure, [lit#46, v114])
-              v116 = record(error, [v115])
-              return v116
+              v113 = field(v0, 1)
+              v114 = record(held, [v113, lit#45])
+              v115 = call_local held_to_json(v114)
+              v116 = call_rt gleam@json:to_string/1(v115)
+              v117 = record(awl_outcome_failure, [lit#46, v116])
+              v118 = record(error, [v117])
+              return v118
 == fn awl$dead_body/1 origin=dead_body ==
   sig: (Dynamic) -> Result(Dynamic, AwlError)
   T-DEAD

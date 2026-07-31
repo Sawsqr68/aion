@@ -285,3 +285,30 @@ pub(crate) fn join_span(start: Span, end: Span) -> Span {
         column: start.column,
     }
 }
+
+/// The dotted access path an expression names, if it is a bare reference or a
+/// chain of field accesses over one (`nudge.end` → `["nudge", "end"]`).
+///
+/// This is the identity guard narrowing keys on: a guard proves a PATH is
+/// present, and every layer — checker, direct lowering, reference emitter —
+/// has to agree on which reads that proof covers. `workflow.id` is
+/// deliberately not a path: it is a builtin, not a binding, and can never be
+/// optional.
+pub(crate) fn access_path(expr: &Expr) -> Option<Vec<String>> {
+    match expr {
+        Expr::Ref { name, .. } => Some(vec![name.clone()]),
+        Expr::Field { base, name, .. } => {
+            let mut path = access_path(base)?;
+            path.push(name.clone());
+            Some(path)
+        }
+        _ => None,
+    }
+}
+
+/// The path a field access names, given its parts (`base`, `.name`).
+pub(crate) fn field_path(base: &Expr, name: &str) -> Option<Vec<String>> {
+    let mut path = access_path(base)?;
+    path.push(name.to_owned());
+    Some(path)
+}

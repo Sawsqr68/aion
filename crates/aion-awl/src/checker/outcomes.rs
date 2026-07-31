@@ -5,7 +5,7 @@
 //! Exhaustiveness lives in `exhaustive`.
 
 use crate::Span;
-use crate::ast::{Expr, Guard, PredicateKind, RoutePayload, RouteTarget, Statement, Step};
+use crate::ast::{Guard, RoutePayload, RouteTarget, Statement, Step};
 use crate::semantic::DeclarationKind;
 use crate::spanned::Spanned;
 
@@ -246,7 +246,7 @@ fn check_outcome_payload(
                 );
             }
         }
-        None => match view_lookup(view, name) {
+        None => match view.get(name) {
             Some(bound) => {
                 if !assignable(&bound, ty, &w.ctx.types) {
                     w.err(
@@ -269,15 +269,6 @@ fn check_outcome_payload(
             }
         },
     }
-}
-
-fn view_lookup(view: View<'_>, name: &str) -> Option<Ty> {
-    if let Some((narrowed, ty)) = view.narrow
-        && narrowed == name
-    {
-        return Some(ty.clone());
-    }
-    view.vars.get(name).map(|value| value.ty.clone())
 }
 
 /// Check a step's outcome clauses in written order.
@@ -331,14 +322,10 @@ pub(super) fn check_clauses(w: &mut Walker<'_, '_>, scope: &Scope, step: &Step, 
     }
     let count = step.outcomes.len();
     for (position, clause) in step.outcomes.iter().enumerate() {
-        let mut narrow: Option<(String, Ty)> = None;
+        let mut narrow = Vec::new();
         match &clause.guard {
             Guard::When { expr, .. } => {
-                let view = View {
-                    vars: scope,
-                    narrow: None,
-                    accessor: None,
-                };
+                let view = View::plain(scope);
                 let ty = type_of(w, view, expr);
                 if !matches!(resolve(&ty, &w.ctx.types), Ty::Bool | Ty::Unknown) {
                     w.err(
@@ -346,7 +333,7 @@ pub(super) fn check_clauses(w: &mut Walker<'_, '_>, scope: &Scope, step: &Step, 
                         format!("`when` needs a Bool guard, found {ty}"),
                     );
                 }
-                narrow = narrowed_binding(scope, expr);
+                narrow = super::narrow::from_guard(w, scope, expr);
             }
             Guard::Otherwise { span } => {
                 if position + 1 != count {
@@ -360,7 +347,7 @@ pub(super) fn check_clauses(w: &mut Walker<'_, '_>, scope: &Scope, step: &Step, 
         }
         let view = View {
             vars: scope,
-            narrow: narrow.as_ref(),
+            narrow: &narrow,
             accessor: None,
         };
         check_route(w, view, &clause.route, env, None);
@@ -385,23 +372,4 @@ fn first_loop_span(statements: &[Statement]) -> Option<Span> {
         }
     }
     None
-}
-
-/// `when x is present` narrows `x` from `T?` to `T` within its arm.
-fn narrowed_binding(scope: &Scope, guard: &Expr) -> Option<(String, Ty)> {
-    let Expr::Predicate {
-        subject,
-        kind: PredicateKind::Present,
-        ..
-    } = guard
-    else {
-        return None;
-    };
-    let Expr::Ref { name, .. } = subject.as_ref() else {
-        return None;
-    };
-    match scope.get(name).map(|value| &value.ty) {
-        Some(Ty::Optional(inner)) => Some((name.clone(), (**inner).clone())),
-        _ => None,
-    }
 }

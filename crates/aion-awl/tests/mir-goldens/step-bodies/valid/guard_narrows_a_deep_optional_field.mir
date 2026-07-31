@@ -1,0 +1,317 @@
+module guard_narrows_a_deep_optional_field source=guard_narrows_a_deep_optional_field.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_decide:
+    aion@activity:task_queue/2 [activities] (v2, lit#15)
+    aion@workflow:run/1 [activities] (v3)
+== durable families == activities
+== atoms ==
+  [0] outer
+  [1] inner
+  [2] resumed
+  [3] parked
+  [4] note_input
+  [5] guard_narrows_a_deep_optional_field_input
+  [6] resumed_outcome
+  [7] some
+  [8] none
+  [9] false
+  [10] awl_outcome_failure
+  [11] error
+  [12] ok
+== literals ==
+  [0] "label"
+  [1] "inner"
+  [2] "end"
+  [3] "end"
+  [4] "label"
+  [5] "ended"
+  [6] "label"
+  [7] "reason"
+  [8] "outer"
+  [9] "resumed"
+  [10] "outcome"
+  [11] ""
+  [12] "GuardNarrowsADeepOptionalFieldOutcome"
+  [13] "resumed"
+  [14] "payload"
+  [15] "desk"
+  [16] "parked"
+  [17] "parked"
+  [18] "parked"
+== types ==
+  record Outer tag=outer
+    label: string
+    inner: ref(Inner)
+  record Inner tag=inner
+    end: nullable(bool) optional
+  record Resumed tag=resumed
+    label: string
+    ended: bool
+  record Parked tag=parked
+    label: string
+  record NoteInput tag=note_input
+    reason: string
+  record GuardNarrowsADeepOptionalFieldInput tag=guard_narrows_a_deep_optional_field_input
+    outer: ref(Outer)
+  union GuardNarrowsADeepOptionalFieldOutcome
+    resumed -> resumed_outcome(ref(Resumed))
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=guard_narrows_a_deep_optional_field_input_codec output=guard_narrows_a_deep_optional_field_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(guard_narrows_a_deep_optional_field.GuardNarrowsADeepOptionalFieldInput, guard_narrows_a_deep_optional_field.GuardNarrowsADeepOptionalFieldOutcome, AwlError)
+  T-DEF name="guard_narrows_a_deep_optional_field" input=guard_narrows_a_deep_optional_field_input_codec output=guard_narrows_a_deep_optional_field_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (guard_narrows_a_deep_optional_field.GuardNarrowsADeepOptionalFieldInput) -> Result(guard_narrows_a_deep_optional_field.GuardNarrowsADeepOptionalFieldOutcome, AwlError)
+  T-EXEC fields=[outer:guard_narrows_a_deep_optional_field.Outer] entry=step_decide args=[0]
+== fn outer_codec/0 origin=codec_template(RecordTrio, Outer, record#0) ==
+  sig: () -> Codec(guard_narrows_a_deep_optional_field.Outer)
+  v0 = make_closure outer_to_json captures=[]
+  v1 = call_local outer_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn outer_to_json/1 origin=codec_template(RecordTrio, Outer, record#0) ==
+  sig: (guard_narrows_a_deep_optional_field.Outer) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"label": v1|>awlc.string_to_json, "inner": v2|>inner_to_json}
+  return v3
+== fn outer_decoder/0 origin=codec_template(RecordTrio, Outer, record#0) ==
+  sig: () -> Decoder(guard_narrows_a_deep_optional_field.Outer)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure outer_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn outer_decoder$0/1 origin=lifted(outer_decoder, #0) ==
+  sig: (String) -> Decoder(guard_narrows_a_deep_optional_field.Outer)
+  v1 = call_local inner_decoder() live_after=[v0]
+  v2 = make_closure outer_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v1, v2)
+== fn outer_decoder$1/2 origin=lifted(outer_decoder, #1) ==
+  sig: (guard_narrows_a_deep_optional_field.Inner, String) -> Decoder(guard_narrows_a_deep_optional_field.Outer)
+  v2 = record(outer, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn inner_codec/0 origin=codec_template(RecordTrio, Inner, record#1) ==
+  sig: () -> Codec(guard_narrows_a_deep_optional_field.Inner)
+  v0 = make_closure inner_to_json captures=[]
+  v1 = call_local inner_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn inner_to_json/1 origin=codec_template(RecordTrio, Inner, record#1) ==
+  sig: (guard_narrows_a_deep_optional_field.Inner) -> Json
+  v1 = field(v0, 1)
+  v2 = call_local inner_to_json$field0(v1)
+  v3 = list([v2])
+  v4 = call_rt gleam@list:flatten/1(v3)
+  tail_rt gleam@json:object/1(v4)
+== fn inner_decoder/0 origin=codec_template(RecordTrio, Inner, record#1) ==
+  sig: () -> Decoder(guard_narrows_a_deep_optional_field.Inner)
+  v0 = call_rt aion@awl@codec:bool_decoder/0()
+  v1 = make_closure inner_decoder$some captures=[]
+  v2 = call_rt gleam@dynamic@decode:map/2(v0, v1)
+  v3 = make_closure inner_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:optional_field/4(lit#3, 'none', v2, v3)
+== fn inner_to_json$field0/1 origin=lifted(inner_to_json, #0) ==
+  sig: (Option(Bool)) -> List(#(String, Json))
+  if is_tagged v0 some/2:
+    v1 = field(v0, 1)
+    v2 = call_rt aion@awl@codec:bool_to_json/1(v1)
+    v3 = tuple([lit#2, v2])
+    v4 = list([v3])
+    return v4
+  else:
+    return nil
+== fn inner_decoder$some/1 origin=lifted(inner_decoder, #0) ==
+  sig: (Dynamic) -> Option(Dynamic)
+  v1 = record(some, [v0])
+  return v1
+== fn inner_decoder$0/1 origin=lifted(inner_decoder, #1) ==
+  sig: (Option(Bool)) -> Decoder(guard_narrows_a_deep_optional_field.Inner)
+  v1 = record(inner, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn resumed_codec/0 origin=codec_template(RecordTrio, Resumed, record#2) ==
+  sig: () -> Codec(guard_narrows_a_deep_optional_field.Resumed)
+  v0 = make_closure resumed_to_json captures=[]
+  v1 = call_local resumed_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn resumed_to_json/1 origin=codec_template(RecordTrio, Resumed, record#2) ==
+  sig: (guard_narrows_a_deep_optional_field.Resumed) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"label": v1|>awlc.string_to_json, "ended": v2|>awlc.bool_to_json}
+  return v3
+== fn resumed_decoder/0 origin=codec_template(RecordTrio, Resumed, record#2) ==
+  sig: () -> Decoder(guard_narrows_a_deep_optional_field.Resumed)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure resumed_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+== fn resumed_decoder$0/1 origin=lifted(resumed_decoder, #0) ==
+  sig: (String) -> Decoder(guard_narrows_a_deep_optional_field.Resumed)
+  v1 = call_rt aion@awl@codec:bool_decoder/0() live_after=[v0]
+  v2 = make_closure resumed_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#5, v1, v2)
+== fn resumed_decoder$1/2 origin=lifted(resumed_decoder, #1) ==
+  sig: (Bool, String) -> Decoder(guard_narrows_a_deep_optional_field.Resumed)
+  v2 = record(resumed, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn parked_codec/0 origin=codec_template(RecordTrio, Parked, record#3) ==
+  sig: () -> Codec(guard_narrows_a_deep_optional_field.Parked)
+  v0 = make_closure parked_to_json captures=[]
+  v1 = call_local parked_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn parked_to_json/1 origin=codec_template(RecordTrio, Parked, record#3) ==
+  sig: (guard_narrows_a_deep_optional_field.Parked) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"label": v1|>awlc.string_to_json}
+  return v2
+== fn parked_decoder/0 origin=codec_template(RecordTrio, Parked, record#3) ==
+  sig: () -> Decoder(guard_narrows_a_deep_optional_field.Parked)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure parked_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
+== fn parked_decoder$0/1 origin=lifted(parked_decoder, #0) ==
+  sig: (String) -> Decoder(guard_narrows_a_deep_optional_field.Parked)
+  v1 = record(parked, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn note_input_codec/0 origin=codec_template(RecordTrio, NoteInput, record#4) ==
+  sig: () -> Codec(guard_narrows_a_deep_optional_field.NoteInput)
+  v0 = make_closure note_input_to_json captures=[]
+  v1 = call_local note_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn note_input_to_json/1 origin=codec_template(RecordTrio, NoteInput, record#4) ==
+  sig: (guard_narrows_a_deep_optional_field.NoteInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"reason": v1|>awlc.string_to_json}
+  return v2
+== fn note_input_decoder/0 origin=codec_template(RecordTrio, NoteInput, record#4) ==
+  sig: () -> Decoder(guard_narrows_a_deep_optional_field.NoteInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure note_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#7, v0, v1)
+== fn note_input_decoder$0/1 origin=lifted(note_input_decoder, #0) ==
+  sig: (String) -> Decoder(guard_narrows_a_deep_optional_field.NoteInput)
+  v1 = record(note_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn guard_narrows_a_deep_optional_field_input_codec/0 origin=codec_template(RecordTrio, GuardNarrowsADeepOptionalFieldInput, record#5) ==
+  sig: () -> Codec(guard_narrows_a_deep_optional_field.GuardNarrowsADeepOptionalFieldInput)
+  v0 = make_closure guard_narrows_a_deep_optional_field_input_to_json captures=[]
+  v1 = call_local guard_narrows_a_deep_optional_field_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn guard_narrows_a_deep_optional_field_input_to_json/1 origin=codec_template(RecordTrio, GuardNarrowsADeepOptionalFieldInput, record#5) ==
+  sig: (guard_narrows_a_deep_optional_field.GuardNarrowsADeepOptionalFieldInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outer": v1|>outer_to_json}
+  return v2
+== fn guard_narrows_a_deep_optional_field_input_decoder/0 origin=codec_template(RecordTrio, GuardNarrowsADeepOptionalFieldInput, record#5) ==
+  sig: () -> Decoder(guard_narrows_a_deep_optional_field.GuardNarrowsADeepOptionalFieldInput)
+  v0 = call_local outer_decoder()
+  v1 = make_closure guard_narrows_a_deep_optional_field_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#8, v0, v1)
+== fn guard_narrows_a_deep_optional_field_input_decoder$0/1 origin=lifted(guard_narrows_a_deep_optional_field_input_decoder, #0) ==
+  sig: (guard_narrows_a_deep_optional_field.Outer) -> Decoder(guard_narrows_a_deep_optional_field.GuardNarrowsADeepOptionalFieldInput)
+  v1 = record(guard_narrows_a_deep_optional_field_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn guard_narrows_a_deep_optional_field_outcome_codec/0 origin=codec_template(UnionTrio, GuardNarrowsADeepOptionalFieldOutcome, union#6) ==
+  sig: () -> Codec(guard_narrows_a_deep_optional_field.GuardNarrowsADeepOptionalFieldOutcome)
+  v0 = make_closure guard_narrows_a_deep_optional_field_outcome_to_json captures=[]
+  v1 = call_local guard_narrows_a_deep_optional_field_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn guard_narrows_a_deep_optional_field_outcome_to_json/1 origin=codec_template(UnionTrio, GuardNarrowsADeepOptionalFieldOutcome, union#6) ==
+  sig: (guard_narrows_a_deep_optional_field.GuardNarrowsADeepOptionalFieldOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#9|>awlc.string_to_json, "payload": v1|>resumed_to_json}
+  return v2
+== fn guard_narrows_a_deep_optional_field_outcome_decoder/0 origin=codec_template(UnionTrio, GuardNarrowsADeepOptionalFieldOutcome, union#6) ==
+  sig: () -> Decoder(guard_narrows_a_deep_optional_field.GuardNarrowsADeepOptionalFieldOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure guard_narrows_a_deep_optional_field_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#10, v0, v1)
+== fn guard_narrows_a_deep_optional_field_outcome_decoder$outcome/1 origin=lifted(guard_narrows_a_deep_optional_field_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(guard_narrows_a_deep_optional_field.GuardNarrowsADeepOptionalFieldOutcome)
+  if cmp Eq v0 lit#13:
+    v3 = call_local resumed_decoder()
+    v4 = make_closure guard_narrows_a_deep_optional_field_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#14, v3, v4)
+  else:
+    v1 = record(resumed, [lit#11, 'false'])
+    v2 = record(resumed_outcome, [v1])
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#12)
+== fn guard_narrows_a_deep_optional_field_outcome_decoder$arm0/1 origin=lifted(guard_narrows_a_deep_optional_field_outcome_decoder, #1) ==
+  sig: (guard_narrows_a_deep_optional_field.Resumed) -> Decoder(guard_narrows_a_deep_optional_field.GuardNarrowsADeepOptionalFieldOutcome)
+  v1 = record(resumed_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn option_bool_codec/0 origin=codec_template(CompositeTrio, Option(Bool), composite(nullable(bool))) ==
+  sig: () -> Codec(Option(Bool))
+  v0 = make_closure option_bool_to_json captures=[]
+  v1 = call_local option_bool_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn option_bool_to_json/1 origin=codec_template(CompositeTrio, Option(Bool), composite(nullable(bool))) ==
+  sig: (Option(Bool)) -> Json
+  v1 = make_closure option_bool_to_json$item captures=[]
+  tail_rt gleam@json:nullable/2(v0, v1)
+== fn option_bool_decoder/0 origin=codec_template(CompositeTrio, Option(Bool), composite(nullable(bool))) ==
+  sig: () -> Decoder(Option(Bool))
+  v0 = call_rt aion@awl@codec:bool_decoder/0()
+  tail_rt gleam@dynamic@decode:optional/1(v0)
+== fn option_bool_to_json$item/1 origin=lifted(option_bool_to_json, #0) ==
+  sig: (Bool) -> Json
+  tail_rt aion@awl@codec:bool_to_json/1(v0)
+== fn note_activity/1 origin=activity_wrapper(note, raw=false) ==
+  sig: (String) -> Activity(guard_narrows_a_deep_optional_field.NoteInput, guard_narrows_a_deep_optional_field.Parked)
+  T-ACT action=note input_codec=note_input_codec return=parked_codec
+== fn step_decide/1 origin=region(decide) ==
+  sig: (guard_narrows_a_deep_optional_field.Outer) -> Result(guard_narrows_a_deep_optional_field.GuardNarrowsADeepOptionalFieldOutcome, AwlError)
+  v1 = field(v0, 1)
+  v2 = call_local note_activity(v1) live_after=[v0]
+  v3 = call_rt aion@activity:task_queue/2(v2, lit#15) live_after=[v0]
+  v4 = call_rt aion@workflow:run/1(v3) live_after=[v0]
+  v5 = call_rt aion@awl@error:map_activity_error/1(v4) live_after=[v0]
+  v6 = try_bind v5 live_after=[v0]
+  v8 = field(v0, 2)
+  v9 = field(v8, 1)
+  v7 = cmp Ne v9 'none'
+  if is_true v7:
+    v10 = field(v0, 2)
+    v11 = field(v10, 1)
+    v12 = assert_some v11
+    if is_true v12:
+      tail_local step_confirm(v0)
+    else:
+      v13 = field(v6, 1)
+      v14 = record(parked, [v13])
+      v15 = call_local parked_to_json(v14)
+      v16 = call_rt gleam@json:to_string/1(v15)
+      v17 = record(awl_outcome_failure, [lit#16, v16])
+      v18 = record(error, [v17])
+      return v18
+  else:
+    v19 = field(v6, 1)
+    v20 = record(parked, [v19])
+    v21 = call_local parked_to_json(v20)
+    v22 = call_rt gleam@json:to_string/1(v21)
+    v23 = record(awl_outcome_failure, [lit#17, v22])
+    v24 = record(error, [v23])
+    return v24
+== fn step_confirm/1 origin=region(confirm) ==
+  sig: (guard_narrows_a_deep_optional_field.Outer) -> Result(guard_narrows_a_deep_optional_field.GuardNarrowsADeepOptionalFieldOutcome, AwlError)
+  v2 = field(v0, 2)
+  v3 = field(v2, 1)
+  v1 = cmp Ne v3 'none'
+  if is_true v1:
+    v4 = field(v0, 2)
+    v5 = field(v4, 1)
+    v6 = assert_some v5
+    v7 = field(v0, 1)
+    v8 = record(resumed, [v7, v6])
+    v9 = record(resumed_outcome, [v8])
+    v10 = record(ok, [v9])
+    return v10
+  else:
+    v11 = field(v0, 1)
+    v12 = record(parked, [v11])
+    v13 = call_local parked_to_json(v12)
+    v14 = call_rt gleam@json:to_string/1(v13)
+    v15 = record(awl_outcome_failure, [lit#18, v14])
+    v16 = record(error, [v15])
+    return v16
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD

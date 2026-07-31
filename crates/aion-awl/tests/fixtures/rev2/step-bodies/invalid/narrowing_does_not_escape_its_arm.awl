@@ -1,0 +1,27 @@
+//! The proof belongs to the arm that established it, and to nothing else.
+//!
+//! `when nudge.end is present` makes `nudge.end` a `Bool` inside ITS arm. The
+//! sibling `otherwise` arm is the complement — the path is not proved there —
+//! so the same read must still be refused. Without this fixture a fix that
+//! narrowed globally would pass every positive test in the suite while
+//! quietly compiling an unguarded optional read.
+workflow narrowing_does_not_escape_its_arm
+  input nudge: Nudge
+  outcome resumed: type Resumed, route success
+  outcome parked:  type Parked,  route failure
+
+type Nudge   { reason: String, end: Bool? }
+type Resumed { ended: Bool }
+type Parked  { ended: Bool }
+
+worker desk
+  action note(reason: String) -> Resumed
+
+step decide
+  note(reason: nudge.reason) -> noted
+
+  outcome resumed: when nudge.end is present,
+    route resumed(ended: nudge.end)
+  // defect: this arm is the complement — `nudge.end` is NOT proved present here
+  outcome parked: otherwise,
+    route parked(ended: nudge.end)

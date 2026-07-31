@@ -22,6 +22,7 @@ mod error;
 mod exhaustive;
 mod exprs;
 mod graph;
+mod narrow;
 mod operators;
 mod outcomes;
 mod project;

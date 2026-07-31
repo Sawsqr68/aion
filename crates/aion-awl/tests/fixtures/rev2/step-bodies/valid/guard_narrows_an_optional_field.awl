@@ -1,0 +1,42 @@
+//! Narrow an optional FIELD, not just a whole binding.
+//!
+//! The record itself is NOT optional — that is the whole point. Field access
+//! THROUGH an optional record already unwraps one level, so a fixture whose
+//! base was `Nudge?` would appear to narrow while proving nothing about this
+//! rule. Here `nudge` is always present and `nudge.end` is the optional, so
+//! the only thing that can make `nudge.end` a `Bool` is the guard proving that
+//! exact PATH present.
+//!
+//! Both narrowing positions are exercised, and they are not the same position:
+//!   - `decide` proves the path inside the GUARD, where `and` short-circuits
+//!     onto the proved edge and the right operand reads the unwrapped value;
+//!   - `confirm` proves it with a bare `is present` guard and reads the
+//!     unwrapped value in the ARM, from the route payload.
+workflow guard_narrows_an_optional_field
+  input nudge: Nudge
+  outcome resumed: type Resumed, route success
+  outcome parked:  type Parked,  route failure
+
+type Nudge {
+  reason: String,
+  /// Present only when the operator answered the end question.
+  end: Bool?,
+}
+type Resumed { reason: String, ended: Bool }
+type Parked  { reason: String }
+
+worker desk
+  action note(reason: String) -> Parked
+
+step decide
+  note(reason: nudge.reason) -> noted
+
+  outcome ending: when nudge.end is present and nudge.end, route confirm
+  outcome parked: otherwise,
+    route parked(reason: noted.reason)
+
+step confirm
+  outcome resumed: when nudge.end is present,
+    route resumed(reason: nudge.reason, ended: nudge.end)
+  outcome parked: otherwise,
+    route parked(reason: nudge.reason)

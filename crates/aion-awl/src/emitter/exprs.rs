@@ -19,25 +19,30 @@ use super::error::EmitError;
 use super::names::{ident, string_lit};
 use super::types::{GType, NamedDef};
 
-/// Bindings in scope during rendering, with their types.
+/// Bindings in scope during rendering, with their types, plus the
+/// guard-narrowed access PATHS in force.
+///
+/// A narrowed path (`candidate.veto_note`, proved present by a guard) has no
+/// name in the document, so it cannot be a binding. What the proof produces is
+/// a Gleam identifier holding the unwrapped value, and every read of that path
+/// inside the proved region renders as that identifier rather than as a fresh
+/// field access that would hand back the optional again.
 #[derive(Clone, Default)]
 pub(super) struct Scope {
     vars: BTreeMap<String, GType>,
+    narrowed: BTreeMap<Vec<String>, (String, GType)>,
     accessor: Option<(String, GType)>,
 }
 
 impl Scope {
-    pub(super) const fn new() -> Self {
-        Self {
-            vars: BTreeMap::new(),
-            accessor: None,
-        }
+    pub(super) fn new() -> Self {
+        Self::default()
     }
 
     pub(super) fn from_vars(vars: BTreeMap<String, GType>) -> Self {
         Self {
             vars,
-            accessor: None,
+            ..Self::default()
         }
     }
 
@@ -45,6 +50,16 @@ impl Scope {
         let mut nested = self.clone();
         nested.accessor = Some((name, ty));
         nested
+    }
+
+    /// Record that `path` is proved present and is held by `name`.
+    pub(super) fn narrow_path(&mut self, path: Vec<String>, name: String, ty: GType) {
+        self.narrowed.insert(path, (name, ty));
+    }
+
+    /// The identifier and type holding a proved path, if this region proves it.
+    pub(super) fn narrowed_path(&self, path: &[String]) -> Option<&(String, GType)> {
+        self.narrowed.get(path)
     }
 }
 
@@ -129,6 +144,11 @@ pub(super) fn expr_type(
         } => {
             if matches!(base.as_ref(), Expr::Workflow { .. }) && name == "id" {
                 return Ok(GType::Str);
+            }
+            if let Some(path) = crate::ast::field_path(base, name)
+                && let Some((_, ty)) = scope.narrowed_path(&path)
+            {
+                return Ok(ty.clone());
             }
             let base_ty = expr_type(emitter, base, scope)?;
             field_type(emitter, &base_ty, name, *name_span)
@@ -242,6 +262,13 @@ pub(super) fn render_expr(
                 ));
                 return Ok(fresh);
             }
+            // A guard on this edge already unwrapped this exact path; read the
+            // identifier holding that value, not the optional field again.
+            if let Some(path) = crate::ast::field_path(base, name)
+                && let Some((bound, _)) = scope.narrowed_path(&path)
+            {
+                return Ok(bound.clone());
+            }
             let base = render_expr(emitter, base, scope, prelude)?;
             Ok(format!("{base}.{}", ident(name)))
         }
@@ -307,21 +334,40 @@ fn render_binary(
     scope: &Scope,
     prelude: &mut Vec<String>,
 ) -> Result<String, EmitError> {
-    if let Some((name, none_result)) = optional_short_circuit(left, op) {
-        let option_ty = scope
-            .get(name)
-            .ok_or_else(|| EmitError::new(left.span(), format!("`{name}` is not in scope")))?;
-        let GType::Option(inner) = emitter.env.resolve(option_ty) else {
+    if let Some((subject, none_result)) = optional_short_circuit(left, op)
+        && let Some(path) = crate::ast::access_path(subject)
+    {
+        let option_ty = expr_type(emitter, subject, scope)?;
+        let GType::Option(inner) = emitter.env.resolve(&option_ty) else {
             return Err(EmitError::new(
                 left.span(),
-                format!("`{name}` is not optional"),
+                format!("`{}` is not optional", path.join(".")),
             ));
         };
+        // The subject is a reference or a field chain over one; neither can
+        // need a prelude, and a prelude is not renderable inside a guard.
+        let mut subject_prelude = Vec::new();
+        let rendered_subject = render_expr(emitter, subject, scope, &mut subject_prelude)?;
+        if !subject_prelude.is_empty() {
+            return Err(EmitError::new(
+                left.span(),
+                "a guarded optional subject cannot need a prelude",
+            ));
+        }
+        // A bare binding rebinds its own name — the shadowing form every
+        // existing document emits. A field path has no name to shadow, so the
+        // proof gets a fresh one and reads of the path resolve to it.
         let mut rhs_scope = scope.clone();
-        rhs_scope.insert(name.to_owned(), *inner);
+        let name = if let [single] = path.as_slice() {
+            rhs_scope.insert(single.clone(), *inner);
+            ident(single)
+        } else {
+            let fresh = emitter.fresh_name(&format!("awl_present_{}", path.join("_")));
+            rhs_scope.narrow_path(path, fresh.clone(), *inner);
+            fresh
+        };
         let mut rhs_prelude = Vec::new();
         let rhs = render_expr(emitter, right, &rhs_scope, &mut rhs_prelude)?;
-        let name = ident(name);
         let mut some_branch = String::new();
         if rhs_prelude.is_empty() {
             some_branch.push_str(&rhs);
@@ -333,7 +379,7 @@ fn render_binary(
             let _ = write!(some_branch, "    {rhs}\n  }}");
         }
         return Ok(format!(
-            "case {name} {{\n  Some({name}) -> {some_branch}\n  None -> {}\n}}",
+            "case {rendered_subject} {{\n  Some({name}) -> {some_branch}\n  None -> {}\n}}",
             if none_result { "True" } else { "False" }
         ));
     }
@@ -344,8 +390,8 @@ fn render_binary(
 }
 
 /// Recognize the optional predicates whose short-circuit edge proves the RHS
-/// binding is present. The returned boolean is the result for `None`.
-fn optional_short_circuit(left: &Expr, op: BinaryOp) -> Option<(&str, bool)> {
+/// subject is present. The returned boolean is the result for `None`.
+fn optional_short_circuit(left: &Expr, op: BinaryOp) -> Option<(&Expr, bool)> {
     let expected = match op {
         BinaryOp::And => PredicateKind::Present,
         BinaryOp::Or => PredicateKind::Absent,
@@ -354,10 +400,7 @@ fn optional_short_circuit(left: &Expr, op: BinaryOp) -> Option<(&str, bool)> {
     let Expr::Predicate { subject, kind, .. } = left else {
         return None;
     };
-    let Expr::Ref { name, .. } = subject.as_ref() else {
-        return None;
-    };
-    (*kind == expected).then_some((name, matches!(op, BinaryOp::Or)))
+    (*kind == expected).then_some((subject.as_ref(), matches!(op, BinaryOp::Or)))
 }
 
 fn render_parenthesized(

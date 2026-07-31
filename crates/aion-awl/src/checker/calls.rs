@@ -14,7 +14,7 @@ use super::walk::{Scope, Walker, insert_binding};
 pub(super) fn walk_call(w: &mut Walker<'_, '_>, scope: &mut Scope, call: &CallStmt) -> Ty {
     let view = View {
         vars: scope,
-        narrow: None,
+        narrow: &[],
         accessor: None,
     };
     let name = &call.call.name;
@@ -147,7 +147,7 @@ pub(super) fn walk_spawn(
 ) -> Option<Ty> {
     let view = View {
         vars: scope,
-        narrow: None,
+        narrow: &[],
         accessor: None,
     };
     let name = &spawn.call.name;

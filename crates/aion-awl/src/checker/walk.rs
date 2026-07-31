@@ -296,7 +296,7 @@ fn walk_statement(
         Statement::Route(route) => {
             let view = View {
                 vars: scope,
-                narrow: None,
+                narrow: &[],
                 accessor: None,
             };
             check_route(w, view, &route.target, env, None);

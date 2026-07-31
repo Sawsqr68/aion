@@ -25,7 +25,51 @@ pub(super) struct Binding {
     pub(super) ty: GType,
 }
 
-pub(super) type Scope = BTreeMap<String, Binding>;
+/// Bindings in scope, plus the guard-narrowed ACCESS PATHS in force.
+///
+/// A narrowed path (`nudge.end`, proved present by `when nudge.end is
+/// present`) is not a binding: nothing in the document names it. It is the
+/// unwrapped value the proof produced, and any read of that path inside the
+/// proved edge must resolve to it rather than re-fetching the optional field.
+/// Keeping it beside the bindings means the existing per-branch `scope.clone()`
+/// already scopes it correctly — a proof cannot leak out of the edge that
+/// established it.
+#[derive(Clone, Default)]
+pub(super) struct Scope {
+    vars: BTreeMap<String, Binding>,
+    narrowed: BTreeMap<Vec<String>, Binding>,
+}
+
+impl Scope {
+    /// An empty scope: no bindings, nothing proved.
+    pub(super) fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record that `path` is proved present and carries `binding`.
+    pub(super) fn narrow_path(&mut self, path: Vec<String>, binding: Binding) {
+        self.narrowed.insert(path, binding);
+    }
+
+    /// The unwrapped value of a proved path, if this edge proves it.
+    pub(super) fn narrowed_path(&self, path: &[String]) -> Option<&Binding> {
+        self.narrowed.get(path)
+    }
+}
+
+impl std::ops::Deref for Scope {
+    type Target = BTreeMap<String, Binding>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.vars
+    }
+}
+
+impl std::ops::DerefMut for Scope {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.vars
+    }
+}
 
 fn span_of(span: crate::Span) -> Span {
     Span::from_source(span)
@@ -85,36 +129,7 @@ pub(super) fn lower_expr(
             name,
             name_span,
             ..
-        } => {
-            if matches!(base.as_ref(), Expr::Workflow { .. }) && name == "id" {
-                let result = call_rt(ctx, RuntimeFn::WfId, Vec::new(), stmts, *name_span);
-                let mapped = call_rt(
-                    ctx,
-                    RuntimeFn::MapEngineError,
-                    vec![Value::Var(result)],
-                    stmts,
-                    *name_span,
-                );
-                let dst = ctx.fresh_var();
-                stmts.push(Stmt::TryBind {
-                    dst,
-                    result: mapped,
-                    live_after: LiveAfter::default(),
-                    span: span_of(*name_span),
-                });
-                return Ok((Value::Var(dst), GType::Str));
-            }
-            let (base_value, base_ty) = lower_expr(ctx, base, scope, stmts)?;
-            let (index, field_ty) = ctx.field_index(&base_ty, name, *name_span)?;
-            let dst = ctx.fresh_var();
-            stmts.push(Stmt::FieldGet {
-                dst,
-                base: base_value,
-                index,
-                span: span_of(*name_span),
-            });
-            Ok((Value::Var(dst), field_ty))
-        }
+        } => lower_field(ctx, base, name, *name_span, scope, stmts),
         Expr::Record {
             name,
             name_span,
@@ -135,6 +150,55 @@ pub(super) fn lower_expr(
         }
         other @ Expr::Duration(_) => Err(LowerError::unsupported("expression", expr_span(other))),
     }
+}
+
+/// Lower a `.field` read: the `workflow.id` builtin, a guard-proved path, or
+/// an ordinary field fetch.
+fn lower_field(
+    ctx: &mut Ctx<'_>,
+    base: &Expr,
+    name: &str,
+    name_span: crate::Span,
+    scope: &Scope,
+    stmts: &mut Vec<Stmt>,
+) -> Result<(Value, GType), LowerError> {
+    if matches!(base, Expr::Workflow { .. }) && name == "id" {
+        let result = call_rt(ctx, RuntimeFn::WfId, Vec::new(), stmts, name_span);
+        let mapped = call_rt(
+            ctx,
+            RuntimeFn::MapEngineError,
+            vec![Value::Var(result)],
+            stmts,
+            name_span,
+        );
+        let dst = ctx.fresh_var();
+        stmts.push(Stmt::TryBind {
+            dst,
+            result: mapped,
+            live_after: LiveAfter::default(),
+            span: span_of(name_span),
+        });
+        return Ok((Value::Var(dst), GType::Str));
+    }
+    // A guard on this edge may already have unwrapped this exact path (`when
+    // nudge.end is present`). Read the unwrapped value it produced: re-fetching
+    // the field would hand back the optional the proof exists to remove, and
+    // the reader would be testing a wrapper for truth.
+    if let Some(path) = crate::ast::field_path(base, name)
+        && let Some(binding) = scope.narrowed_path(&path)
+    {
+        return Ok((Value::Var(binding.var), binding.ty.clone()));
+    }
+    let (base_value, base_ty) = lower_expr(ctx, base, scope, stmts)?;
+    let (index, field_ty) = ctx.field_index(&base_ty, name, name_span)?;
+    let dst = ctx.fresh_var();
+    stmts.push(Stmt::FieldGet {
+        dst,
+        base: base_value,
+        index,
+        span: span_of(name_span),
+    });
+    Ok((Value::Var(dst), field_ty))
 }
 
 /// List literals mirror the reference `render_expr` list arm

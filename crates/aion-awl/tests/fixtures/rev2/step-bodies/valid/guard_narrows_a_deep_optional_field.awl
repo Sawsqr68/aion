@@ -1,0 +1,33 @@
+//! The same rule two records deep: `outer.inner.end`.
+//!
+//! A narrowing keyed on a binding name cannot express this at all, and one
+//! keyed on only the last segment would confuse it with any other record's
+//! `end`. The proof is the whole path or it is nothing.
+workflow guard_narrows_a_deep_optional_field
+  input outer: Outer
+  outcome resumed: type Resumed, route success
+  outcome parked:  type Parked,  route failure
+
+type Outer { label: String, inner: Inner }
+type Inner {
+  /// Present only when the operator answered the end question.
+  end: Bool?,
+}
+type Resumed { label: String, ended: Bool }
+type Parked  { label: String }
+
+worker desk
+  action note(reason: String) -> Parked
+
+step decide
+  note(reason: outer.label) -> noted
+
+  outcome ending: when outer.inner.end is present and outer.inner.end, route confirm
+  outcome parked: otherwise,
+    route parked(label: noted.label)
+
+step confirm
+  outcome resumed: when outer.inner.end is present,
+    route resumed(label: outer.label, ended: outer.inner.end)
+  outcome parked: otherwise,
+    route parked(label: outer.label)

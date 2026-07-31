@@ -24,7 +24,7 @@ pub(super) fn walk_pipe(
 ) -> Option<Ty> {
     let view = View {
         vars: scope,
-        narrow: None,
+        narrow: &[],
         accessor: None,
     };
     let mut ty = type_of(w, view, &pipe.head);
@@ -39,7 +39,7 @@ pub(super) fn walk_pipe(
         PipeEnd::Route(target) => {
             let view = View {
                 vars: scope,
-                narrow: None,
+                narrow: &[],
                 accessor: None,
             };
             check_route(w, view, target, env, Some(ty));

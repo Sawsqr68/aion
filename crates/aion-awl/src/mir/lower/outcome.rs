@@ -7,7 +7,7 @@ use crate::emitter::{GType, snake};
 use crate::spanned::Spanned;
 
 use super::super::ids::Span;
-use super::super::ops::{Block, Stmt, Tail, Test};
+use super::super::ops::{Block, Stmt, Tail, Test, Value};
 use super::ctx::Ctx;
 use super::driver::LowerError;
 use super::expr::{Binding, Scope, lower_expr};
@@ -115,10 +115,11 @@ enum Decision<'a> {
         when_false: Box<Decision<'a>>,
     },
     /// The false side of `x is absent` and the true side of `x is present`
-    /// prove `x` is `Some`. Keep that proof on the control edge so a
-    /// short-circuited RHS can safely read fields from the payload.
+    /// prove the SUBJECT is `Some` — a binding (`x`) or a field path over one
+    /// (`x.y`). Keep that proof on the control edge so a short-circuited RHS
+    /// can safely read the unwrapped value.
     NarrowPresent {
-        name: &'a str,
+        subject: &'a Expr,
         span: crate::Span,
         next: Box<Decision<'a>>,
     },
@@ -220,12 +221,9 @@ fn narrow_short_circuit_rhs<'a>(
     else {
         return next;
     };
-    let Expr::Ref { name, .. } = subject.as_ref() else {
-        return next;
-    };
     if *actual == kind {
         Decision::NarrowPresent {
-            name,
+            subject,
             span: *span,
             next: Box::new(next),
         }
@@ -259,10 +257,14 @@ fn lower_decision(
                 },
             })
         }
-        Decision::NarrowPresent { name, span, next } => {
+        Decision::NarrowPresent {
+            subject,
+            span,
+            next,
+        } => {
             let mut narrowed = scope.clone();
             let mut stmts = Vec::new();
-            narrow_binding(ctx, name, *span, &mut narrowed, &mut stmts);
+            narrow_subject(ctx, subject, *span, &mut narrowed, &mut stmts)?;
             let mut block = lower_decision(ctx, env, next, &narrowed, None)?;
             stmts.append(&mut block.stmts);
             block.stmts = stmts;
@@ -304,7 +306,7 @@ fn lower_outcome_arm(
 ) -> Result<Block, LowerError> {
     let mut arm_scope = scope.clone();
     let mut stmts = Vec::new();
-    narrow_present(ctx, guard, &mut arm_scope, &mut stmts);
+    narrow_present(ctx, guard, &mut arm_scope, &mut stmts)?;
     let tail = route_tail(ctx, env, &clause.route, &arm_scope, None, &mut stmts)?;
     Ok(Block { stmts, tail })
 }
@@ -314,45 +316,65 @@ fn narrow_present(
     guard: Option<&Expr>,
     scope: &mut Scope,
     stmts: &mut Vec<Stmt>,
-) {
+) -> Result<(), LowerError> {
     let Some(Expr::Predicate {
         subject,
         kind: PredicateKind::Present,
         span,
     }) = guard
     else {
-        return;
+        return Ok(());
     };
-    let Expr::Ref { name, .. } = subject.as_ref() else {
-        return;
-    };
-    narrow_binding(ctx, name, *span, scope, stmts);
+    narrow_subject(ctx, subject, *span, scope, stmts)
 }
 
-fn narrow_binding(
+/// Unwrap the optional a guard proved present, and record the unwrapped value
+/// against the path it was proved for.
+///
+/// A bare binding rebinds the NAME, so every later read of it sees the
+/// unwrapped value. A field path (`nudge.end`) has no name to rebind — nothing
+/// in the document ever named it — so the value is recorded against the path
+/// itself, and `lower_expr` resolves a matching field read to it.
+///
+/// A subject that is not an optional path narrows nothing and emits nothing.
+/// The checker has already refused `is present` on a non-optional, so this is
+/// the belt on those braces, not a silent fallback: it leaves the value exactly
+/// as it was rather than inventing an unwrap the source did not prove.
+fn narrow_subject(
     ctx: &mut Ctx<'_>,
-    name: &str,
+    subject: &Expr,
     span: crate::Span,
     scope: &mut Scope,
     stmts: &mut Vec<Stmt>,
-) {
-    let Some(binding) = scope.get(name).cloned() else {
-        return;
+) -> Result<(), LowerError> {
+    let Some(path) = crate::ast::access_path(subject) else {
+        return Ok(());
     };
-    let GType::Option(inner) = ctx.emitter.env.resolve(&binding.ty) else {
-        return;
+    // Lower into a scratch buffer: if the subject turns out not to be an
+    // optional, nothing is spliced in and no dead field read is emitted.
+    let mut prelude = Vec::new();
+    let (option, ty) = lower_expr(ctx, subject, scope, &mut prelude)?;
+    let GType::Option(inner) = ctx.emitter.env.resolve(&ty) else {
+        return Ok(());
     };
+    let Value::Var(option) = option else {
+        return Ok(());
+    };
+    stmts.append(&mut prelude);
     let dst = ctx.fresh_var();
     stmts.push(Stmt::AssertSome {
         dst,
-        option: binding.var,
+        option,
         span: Span::from_source(span),
     });
-    scope.insert(
-        name.to_owned(),
-        Binding {
-            var: dst,
-            ty: *inner,
-        },
-    );
+    let binding = Binding {
+        var: dst,
+        ty: *inner,
+    };
+    if let [name] = path.as_slice() {
+        scope.insert(name.clone(), binding);
+    } else {
+        scope.narrow_path(path, binding);
+    }
+    Ok(())
 }

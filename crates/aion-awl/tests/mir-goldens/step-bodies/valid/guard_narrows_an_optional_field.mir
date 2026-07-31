@@ -1,0 +1,294 @@
+module guard_narrows_an_optional_field source=guard_narrows_an_optional_field.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_decide:
+    aion@activity:task_queue/2 [activities] (v2, lit#15)
+    aion@workflow:run/1 [activities] (v3)
+== durable families == activities
+== atoms ==
+  [0] nudge
+  [1] resumed
+  [2] parked
+  [3] note_input
+  [4] guard_narrows_an_optional_field_input
+  [5] resumed_outcome
+  [6] some
+  [7] none
+  [8] false
+  [9] awl_outcome_failure
+  [10] error
+  [11] ok
+== literals ==
+  [0] "reason"
+  [1] "end"
+  [2] "reason"
+  [3] "end"
+  [4] "reason"
+  [5] "ended"
+  [6] "reason"
+  [7] "reason"
+  [8] "nudge"
+  [9] "resumed"
+  [10] "outcome"
+  [11] ""
+  [12] "GuardNarrowsAnOptionalFieldOutcome"
+  [13] "resumed"
+  [14] "payload"
+  [15] "desk"
+  [16] "parked"
+  [17] "parked"
+  [18] "parked"
+== types ==
+  record Nudge tag=nudge
+    reason: string
+    end: nullable(bool) optional
+  record Resumed tag=resumed
+    reason: string
+    ended: bool
+  record Parked tag=parked
+    reason: string
+  record NoteInput tag=note_input
+    reason: string
+  record GuardNarrowsAnOptionalFieldInput tag=guard_narrows_an_optional_field_input
+    nudge: ref(Nudge)
+  union GuardNarrowsAnOptionalFieldOutcome
+    resumed -> resumed_outcome(ref(Resumed))
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=guard_narrows_an_optional_field_input_codec output=guard_narrows_an_optional_field_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(guard_narrows_an_optional_field.GuardNarrowsAnOptionalFieldInput, guard_narrows_an_optional_field.GuardNarrowsAnOptionalFieldOutcome, AwlError)
+  T-DEF name="guard_narrows_an_optional_field" input=guard_narrows_an_optional_field_input_codec output=guard_narrows_an_optional_field_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (guard_narrows_an_optional_field.GuardNarrowsAnOptionalFieldInput) -> Result(guard_narrows_an_optional_field.GuardNarrowsAnOptionalFieldOutcome, AwlError)
+  T-EXEC fields=[nudge:guard_narrows_an_optional_field.Nudge] entry=step_decide args=[0]
+== fn nudge_codec/0 origin=codec_template(RecordTrio, Nudge, record#0) ==
+  sig: () -> Codec(guard_narrows_an_optional_field.Nudge)
+  v0 = make_closure nudge_to_json captures=[]
+  v1 = call_local nudge_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn nudge_to_json/1 origin=codec_template(RecordTrio, Nudge, record#0) ==
+  sig: (guard_narrows_an_optional_field.Nudge) -> Json
+  v1 = field(v0, 1)
+  v2 = call_rt aion@awl@codec:string_to_json/1(v1) live_after=[v0]
+  v3 = tuple([lit#0, v2])
+  v4 = list([v3])
+  v5 = field(v0, 2)
+  v6 = call_local nudge_to_json$field1(v5) live_after=[v4]
+  v7 = list([v4, v6])
+  v8 = call_rt gleam@list:flatten/1(v7)
+  tail_rt gleam@json:object/1(v8)
+== fn nudge_decoder/0 origin=codec_template(RecordTrio, Nudge, record#0) ==
+  sig: () -> Decoder(guard_narrows_an_optional_field.Nudge)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure nudge_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v0, v1)
+== fn nudge_to_json$field1/1 origin=lifted(nudge_to_json, #0) ==
+  sig: (Option(Bool)) -> List(#(String, Json))
+  if is_tagged v0 some/2:
+    v1 = field(v0, 1)
+    v2 = call_rt aion@awl@codec:bool_to_json/1(v1)
+    v3 = tuple([lit#1, v2])
+    v4 = list([v3])
+    return v4
+  else:
+    return nil
+== fn nudge_decoder$some/1 origin=lifted(nudge_decoder, #0) ==
+  sig: (Dynamic) -> Option(Dynamic)
+  v1 = record(some, [v0])
+  return v1
+== fn nudge_decoder$0/1 origin=lifted(nudge_decoder, #1) ==
+  sig: (String) -> Decoder(guard_narrows_an_optional_field.Nudge)
+  v1 = call_rt aion@awl@codec:bool_decoder/0() live_after=[v0]
+  v2 = make_closure nudge_decoder$some captures=[]
+  v3 = call_rt gleam@dynamic@decode:map/2(v1, v2) live_after=[v0]
+  v4 = make_closure nudge_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:optional_field/4(lit#3, 'none', v3, v4)
+== fn nudge_decoder$1/2 origin=lifted(nudge_decoder, #2) ==
+  sig: (Option(Bool), String) -> Decoder(guard_narrows_an_optional_field.Nudge)
+  v2 = record(nudge, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn resumed_codec/0 origin=codec_template(RecordTrio, Resumed, record#1) ==
+  sig: () -> Codec(guard_narrows_an_optional_field.Resumed)
+  v0 = make_closure resumed_to_json captures=[]
+  v1 = call_local resumed_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn resumed_to_json/1 origin=codec_template(RecordTrio, Resumed, record#1) ==
+  sig: (guard_narrows_an_optional_field.Resumed) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"reason": v1|>awlc.string_to_json, "ended": v2|>awlc.bool_to_json}
+  return v3
+== fn resumed_decoder/0 origin=codec_template(RecordTrio, Resumed, record#1) ==
+  sig: () -> Decoder(guard_narrows_an_optional_field.Resumed)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure resumed_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+== fn resumed_decoder$0/1 origin=lifted(resumed_decoder, #0) ==
+  sig: (String) -> Decoder(guard_narrows_an_optional_field.Resumed)
+  v1 = call_rt aion@awl@codec:bool_decoder/0() live_after=[v0]
+  v2 = make_closure resumed_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#5, v1, v2)
+== fn resumed_decoder$1/2 origin=lifted(resumed_decoder, #1) ==
+  sig: (Bool, String) -> Decoder(guard_narrows_an_optional_field.Resumed)
+  v2 = record(resumed, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn parked_codec/0 origin=codec_template(RecordTrio, Parked, record#2) ==
+  sig: () -> Codec(guard_narrows_an_optional_field.Parked)
+  v0 = make_closure parked_to_json captures=[]
+  v1 = call_local parked_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn parked_to_json/1 origin=codec_template(RecordTrio, Parked, record#2) ==
+  sig: (guard_narrows_an_optional_field.Parked) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"reason": v1|>awlc.string_to_json}
+  return v2
+== fn parked_decoder/0 origin=codec_template(RecordTrio, Parked, record#2) ==
+  sig: () -> Decoder(guard_narrows_an_optional_field.Parked)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure parked_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
+== fn parked_decoder$0/1 origin=lifted(parked_decoder, #0) ==
+  sig: (String) -> Decoder(guard_narrows_an_optional_field.Parked)
+  v1 = record(parked, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn note_input_codec/0 origin=codec_template(RecordTrio, NoteInput, record#3) ==
+  sig: () -> Codec(guard_narrows_an_optional_field.NoteInput)
+  v0 = make_closure note_input_to_json captures=[]
+  v1 = call_local note_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn note_input_to_json/1 origin=codec_template(RecordTrio, NoteInput, record#3) ==
+  sig: (guard_narrows_an_optional_field.NoteInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"reason": v1|>awlc.string_to_json}
+  return v2
+== fn note_input_decoder/0 origin=codec_template(RecordTrio, NoteInput, record#3) ==
+  sig: () -> Decoder(guard_narrows_an_optional_field.NoteInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure note_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#7, v0, v1)
+== fn note_input_decoder$0/1 origin=lifted(note_input_decoder, #0) ==
+  sig: (String) -> Decoder(guard_narrows_an_optional_field.NoteInput)
+  v1 = record(note_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn guard_narrows_an_optional_field_input_codec/0 origin=codec_template(RecordTrio, GuardNarrowsAnOptionalFieldInput, record#4) ==
+  sig: () -> Codec(guard_narrows_an_optional_field.GuardNarrowsAnOptionalFieldInput)
+  v0 = make_closure guard_narrows_an_optional_field_input_to_json captures=[]
+  v1 = call_local guard_narrows_an_optional_field_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn guard_narrows_an_optional_field_input_to_json/1 origin=codec_template(RecordTrio, GuardNarrowsAnOptionalFieldInput, record#4) ==
+  sig: (guard_narrows_an_optional_field.GuardNarrowsAnOptionalFieldInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"nudge": v1|>nudge_to_json}
+  return v2
+== fn guard_narrows_an_optional_field_input_decoder/0 origin=codec_template(RecordTrio, GuardNarrowsAnOptionalFieldInput, record#4) ==
+  sig: () -> Decoder(guard_narrows_an_optional_field.GuardNarrowsAnOptionalFieldInput)
+  v0 = call_local nudge_decoder()
+  v1 = make_closure guard_narrows_an_optional_field_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#8, v0, v1)
+== fn guard_narrows_an_optional_field_input_decoder$0/1 origin=lifted(guard_narrows_an_optional_field_input_decoder, #0) ==
+  sig: (guard_narrows_an_optional_field.Nudge) -> Decoder(guard_narrows_an_optional_field.GuardNarrowsAnOptionalFieldInput)
+  v1 = record(guard_narrows_an_optional_field_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn guard_narrows_an_optional_field_outcome_codec/0 origin=codec_template(UnionTrio, GuardNarrowsAnOptionalFieldOutcome, union#5) ==
+  sig: () -> Codec(guard_narrows_an_optional_field.GuardNarrowsAnOptionalFieldOutcome)
+  v0 = make_closure guard_narrows_an_optional_field_outcome_to_json captures=[]
+  v1 = call_local guard_narrows_an_optional_field_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn guard_narrows_an_optional_field_outcome_to_json/1 origin=codec_template(UnionTrio, GuardNarrowsAnOptionalFieldOutcome, union#5) ==
+  sig: (guard_narrows_an_optional_field.GuardNarrowsAnOptionalFieldOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#9|>awlc.string_to_json, "payload": v1|>resumed_to_json}
+  return v2
+== fn guard_narrows_an_optional_field_outcome_decoder/0 origin=codec_template(UnionTrio, GuardNarrowsAnOptionalFieldOutcome, union#5) ==
+  sig: () -> Decoder(guard_narrows_an_optional_field.GuardNarrowsAnOptionalFieldOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure guard_narrows_an_optional_field_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#10, v0, v1)
+== fn guard_narrows_an_optional_field_outcome_decoder$outcome/1 origin=lifted(guard_narrows_an_optional_field_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(guard_narrows_an_optional_field.GuardNarrowsAnOptionalFieldOutcome)
+  if cmp Eq v0 lit#13:
+    v3 = call_local resumed_decoder()
+    v4 = make_closure guard_narrows_an_optional_field_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#14, v3, v4)
+  else:
+    v1 = record(resumed, [lit#11, 'false'])
+    v2 = record(resumed_outcome, [v1])
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#12)
+== fn guard_narrows_an_optional_field_outcome_decoder$arm0/1 origin=lifted(guard_narrows_an_optional_field_outcome_decoder, #1) ==
+  sig: (guard_narrows_an_optional_field.Resumed) -> Decoder(guard_narrows_an_optional_field.GuardNarrowsAnOptionalFieldOutcome)
+  v1 = record(resumed_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn option_bool_codec/0 origin=codec_template(CompositeTrio, Option(Bool), composite(nullable(bool))) ==
+  sig: () -> Codec(Option(Bool))
+  v0 = make_closure option_bool_to_json captures=[]
+  v1 = call_local option_bool_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn option_bool_to_json/1 origin=codec_template(CompositeTrio, Option(Bool), composite(nullable(bool))) ==
+  sig: (Option(Bool)) -> Json
+  v1 = make_closure option_bool_to_json$item captures=[]
+  tail_rt gleam@json:nullable/2(v0, v1)
+== fn option_bool_decoder/0 origin=codec_template(CompositeTrio, Option(Bool), composite(nullable(bool))) ==
+  sig: () -> Decoder(Option(Bool))
+  v0 = call_rt aion@awl@codec:bool_decoder/0()
+  tail_rt gleam@dynamic@decode:optional/1(v0)
+== fn option_bool_to_json$item/1 origin=lifted(option_bool_to_json, #0) ==
+  sig: (Bool) -> Json
+  tail_rt aion@awl@codec:bool_to_json/1(v0)
+== fn note_activity/1 origin=activity_wrapper(note, raw=false) ==
+  sig: (String) -> Activity(guard_narrows_an_optional_field.NoteInput, guard_narrows_an_optional_field.Parked)
+  T-ACT action=note input_codec=note_input_codec return=parked_codec
+== fn step_decide/1 origin=region(decide) ==
+  sig: (guard_narrows_an_optional_field.Nudge) -> Result(guard_narrows_an_optional_field.GuardNarrowsAnOptionalFieldOutcome, AwlError)
+  v1 = field(v0, 1)
+  v2 = call_local note_activity(v1) live_after=[v0]
+  v3 = call_rt aion@activity:task_queue/2(v2, lit#15) live_after=[v0]
+  v4 = call_rt aion@workflow:run/1(v3) live_after=[v0]
+  v5 = call_rt aion@awl@error:map_activity_error/1(v4) live_after=[v0]
+  v6 = try_bind v5 live_after=[v0]
+  v8 = field(v0, 2)
+  v7 = cmp Ne v8 'none'
+  if is_true v7:
+    v9 = field(v0, 2)
+    v10 = assert_some v9
+    if is_true v10:
+      tail_local step_confirm(v0)
+    else:
+      v11 = field(v6, 1)
+      v12 = record(parked, [v11])
+      v13 = call_local parked_to_json(v12)
+      v14 = call_rt gleam@json:to_string/1(v13)
+      v15 = record(awl_outcome_failure, [lit#16, v14])
+      v16 = record(error, [v15])
+      return v16
+  else:
+    v17 = field(v6, 1)
+    v18 = record(parked, [v17])
+    v19 = call_local parked_to_json(v18)
+    v20 = call_rt gleam@json:to_string/1(v19)
+    v21 = record(awl_outcome_failure, [lit#17, v20])
+    v22 = record(error, [v21])
+    return v22
+== fn step_confirm/1 origin=region(confirm) ==
+  sig: (guard_narrows_an_optional_field.Nudge) -> Result(guard_narrows_an_optional_field.GuardNarrowsAnOptionalFieldOutcome, AwlError)
+  v2 = field(v0, 2)
+  v1 = cmp Ne v2 'none'
+  if is_true v1:
+    v3 = field(v0, 2)
+    v4 = assert_some v3
+    v5 = field(v0, 1)
+    v6 = record(resumed, [v5, v4])
+    v7 = record(resumed_outcome, [v6])
+    v8 = record(ok, [v7])
+    return v8
+  else:
+    v9 = field(v0, 1)
+    v10 = record(parked, [v9])
+    v11 = call_local parked_to_json(v10)
+    v12 = call_rt gleam@json:to_string/1(v11)
+    v13 = record(awl_outcome_failure, [lit#18, v12])
+    v14 = record(error, [v13])
+    return v14
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD
