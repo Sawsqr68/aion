@@ -137,6 +137,74 @@ breaking wholesale.
 
 It runs in the house battery as `console:test` (`scripts/battery.sh`).
 
+## The third and fourth copies — the editors
+
+Chasing the last rider (the Zed mirror) found the same family twice more.
+
+**The mirror push was owed and the record of it was wrong.** A local clone said
+the published mirror was twelve keywords and the whole flow vocabulary behind.
+Fetching first showed that clone was stale: the mirror had been synced on
+2026-07-28 (`635f8b7`, aion `28eb1eec`) and the real gap was exactly the two
+words this document is about. The twelve-word finding was an artefact of not
+fetching, and is recorded here because acting on it would have produced a
+confident, wrong commit message. Measure the remote, not a copy of it.
+
+Synced and pushed as mirror `8d4d63e`, verified present by an anonymous
+`git ls-remote` with global and system git config nulled, then pinned in
+`editors/zed-awl/extension.toml`. Two further things the mirror was publishing
+were corrected there: its README was aion's README carried over verbatim, so it
+opened "This directory is the AUTHORITATIVE home of the AWL grammar" — exactly
+backwards, and the same divergence trap one level up; and it shipped
+`test/corpus-sweep.sh` and `test/highlight-smoke.sh`, both of which resolve
+their fixture root as `<grammar>/../..` and so have never been runnable from a
+standalone checkout, while the README told readers to run them.
+
+**Both editors' own query copies were stale on the flow vocabulary.**
+`editors/zed-awl/languages/awl/` and `editors/nvim-awl/queries/awl/` each
+vendor an adaptation of the authoritative queries, and each was missing
+`raw_string`, `const_declaration`, `subflow_declaration`, `json_body` and
+`schema_body`, and stopped the combinator list at `count` (no `any`, no `all`).
+Zed's outline query also listed no `const` or `subflow`, so neither appeared in
+its symbol outline.
+
+This one hid behind a legitimate difference. The two copies deliberately use
+different capture NAMES — Zed writes `@comment.doc` and `@number`, Neovim
+writes `@comment.documentation` and `@number.float` — because each editor's
+theme vocabulary differs. A diff is therefore expected to be noisy, and the
+missing nodes sat inside that noise looking like more of the same.
+
+## The editor gate
+
+`crates/aion-awl/tests/editor_assets.rs`, four tests:
+
+1. `every_editor_covers_every_node_the_authoritative_query_colours` — the
+   invariant is NODE COVERAGE, not capture names. A node the authoritative
+   query gives a colour to must be given some colour by every copy; the name is
+   each editor's own business, and a copy may capture MORE (extra folds are a
+   UX choice) but never less. Non-vacuity control on the extracted set.
+2. `no_query_names_a_node_the_grammar_does_not_produce` — the reverse
+   direction, across all nine query files, against `src/node-types.json`. A
+   pattern naming a renamed node matches nothing and reports nothing.
+3. `the_zed_pin_names_a_mirror_commit_carrying_this_grammar` — `extension.toml`
+   carries a `# grammar-sha256` digest of the four grammar sources the mirror
+   publishes. Change the grammar and this fires offline; the failure prints the
+   four-step recipe and the new digest, and says in terms that updating the
+   digest alone records a push that did not happen.
+4. `the_recorded_pin_is_present_on_the_public_mirror` — the network half of the
+   publish-before-pin ruling. Gated at runtime on `AION_VERIFY_MIRROR_PIN=1`
+   (never `#[ignore]`) and it prints a SKIPPED line when it does not run.
+
+All four mutation-checked, each naming exactly the right thing: removing
+`subflow_declaration` from Zed's highlights reports `["subflow_declaration"]`;
+typo'ing a node reports `["schemma_body"]`; adding a word to `grammar.js`
+without touching the pin fires (3); pointing `rev` at an unpushed sha fires (4)
+against the real remote; and the skip path was observed printing.
+
+One trap found while writing it: `manifest_value` had to be scoped to the
+`[grammars.awl]` table, because `repository` is ALSO a top-level key naming the
+aion repository — a flat read would have sent the publish-before-pin check at
+the wrong remote and passed.
+
 ## Rebuilding the grammar
 
 `tree-sitter-cli` is not installable inside `tools/tree-sitter-awl` on this box
@@ -151,7 +219,6 @@ then, in `tools/tree-sitter-awl`: `tree-sitter generate && tree-sitter test &&
 tree-sitter build --wasm`, and copy `tree-sitter-awl.wasm` over
 `apps/aion-ops-console/src/features/authoring/assets/awl.wasm`.
 
-**Still owed, and not done here:** `editors/zed-awl/extension.toml` pins the
-standalone mirror at rev `fa1afb22`. That mirror is a different repository, so
-this change does not reach Zed until it is pushed there and the rev bumped.
-Cross-repo changes land in their own repo, never vendored.
+**Discharged 2026-07-31:** the mirror push and the rev bump — see "The third
+and fourth copies" below. `editors/nvim-awl` tracks the mirror's default branch
+rather than a revision, so it needed no pin.

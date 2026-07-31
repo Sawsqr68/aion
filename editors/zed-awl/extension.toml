@@ -12,5 +12,14 @@ languages = ["AWL"]
 language_ids = { AWL = "awl" }
 
 [grammars.awl]
+# Zed does not build the grammar from this repository — it fetches the
+# published mirror below at this exact revision. So a change to
+# tools/tree-sitter-awl reaches Zed only after that mirror is pushed and this
+# `rev` is bumped, and nothing in a Zed user's toolchain can tell that it
+# wasn't. `grammar-sha256` digests the grammar sources a mirror commit must be
+# carrying for this pin to be current; crates/aion-awl/tests/editor_assets.rs
+# recomputes it and fails when the two disagree. Bump both together, and only
+# after `git ls-remote` shows the sha anonymously.
 repository = "https://github.com/tomWhiting/tree-sitter-awl.git"
-rev = "fa1afb22c756175131d252380fb4ba9e4b68a321"
+rev = "8d4d63e398bf765dd51772b60555b9dae8ebc106"
+# grammar-sha256 = "eb61fb429719c7666618a7dc841266119db320ee9a8cf8557d4364dcb993691e"
