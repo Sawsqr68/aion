@@ -529,3 +529,83 @@ before calling two things copies. A hash before calling a label an identity.
   grepping after.
 - **A published predicate transfers its unstated SCOPE along with its logic.**
   Athena reproduced my count exactly because she inherited the same one-file scope.
+
+---
+
+## 🔴 THE SERIES CAUGHT A SECOND RED — and it refutes #85's stated hypothesis
+
+`/tmp/mine-3.log`, on this tree, `ok=57 FAILED=1 total=58` (run completed):
+
+```
+test result: FAILED. 7 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 20.24s
+failures:
+    outbox_duplicate_completion_records_exactly_one_terminal
+```
+
+Same error as the gate red:
+`Store(Backend("SQLite failure: `bad parameter or other API misuse`"))` — this
+time surfaced *inside the workflow*, at `collect_all:durability:store error`,
+i.e. the fan-in settling four activities at once.
+
+**This one IS on #85's recorded list** — it is flake (1), by name. So the
+observed set now spans #85's list AND two tests outside it, all in `outbox_e2e`,
+all one error. The counterweight written above — *"#85 records what was observed,
+not a census"* — is now carried by evidence rather than offered as a caveat.
+
+### The audit that changes the story
+
+Counting the pre-change code at HEAD rather than restating the design note:
+
+| claim | drafted | **counted** |
+|---|---|---|
+| `self.connection()` sites in `store.rs` | "36 methods" | **48 sites** |
+| guarded entry points | — | **13** `let _guard` |
+| unguarded `BEGIN IMMEDIATE` entry points | "six" | **five** |
+
+The five: `put_package_with_routes`, `register_namespace`, `put_namespace`,
+`set_namespace_placement`, `deprecate_namespace`.
+
+🔴 **All five are deploy/namespace admin. NONE is on the outbox path.** Every
+outbox WRITE was already serialised by `transaction_lock` at HEAD.
+
+⇒ **The unguarded-BEGIN defect cannot have been producing the outbox flakes**,
+and fixing it was never predicted to stop them. #85's stated cause — *"suspected
+shared-connection defect in the durable write path"* — is **refuted** for the
+write path specifically.
+
+### What DID touch the outbox path — and still did not explain it
+
+Eight outbox READS ran unguarded on the very handle the guarded outbox writes
+were using: `outbox_row_state`, `list_stale_claimed_outbox_rows`,
+`list_unsettled_outbox_workflow_ids`, `list_dead_lettered_outbox_rows`,
+`count_inflight_outbox_rows`, `count_claimed_outbox_rows`,
+`count_claimed_outbox_rows_by_namespace`, `pending_outbox_routes`.
+
+That is a real shared-handle hazard on the outbox path, and Block G removes it
+(reads now take private connections). It was the one candidate that could have
+explained the flake. **It did not** — the flake survives at a comparable rate:
+**2 red in 9** on the fixed tree.
+
+⇒ #85 stays OPEN, with its hypothesis marked refuted rather than quietly closed
+by association with this commit. The cause is still unidentified.
+
+### Why this matters more than the fix
+
+Landing G with a green series would have produced the sentence *"the pool fixed
+the flakes"* with nothing but coincidence behind it. Waffles' constraint (a) —
+*the pool is justified by the proven mechanism, never by the flakes* — was
+written to stop exactly that. It earned its keep in the opposite direction from
+the one expected: the flakes **persisted**, and the constraint is what made that
+a finding instead of an embarrassment.
+
+⇒ **A CONSTRAINT THAT ONLY PAYS OFF WHEN THE NEWS IS GOOD IS NOT A CONSTRAINT.**
+
+### Law earned
+
+The audit that refuted the hypothesis was arithmetic on the OLD code — countable
+at any point in the last three days, needing no run at all. I reached for it only
+after a second red made the statistical story uncomfortable.
+
+⇒ **WHEN A MEASUREMENT DISAPPOINTS, COUNT THE MECHANISM BEFORE ENLARGING THE
+SAMPLE.** Another six runs would have refined a number that was answering the
+wrong question.
