@@ -360,7 +360,44 @@ is genuinely new and not a second copy of what was already there.
 
 ---
 
-# 🔴 RESUME HERE — 2026-07-31 ~05:15Z
+# 🔴 RESUME HERE — 2026-07-31 ~05:45Z
+
+`origin/main` = **`4d9ca3b0`** — `fix(deploy): a contract the engine cannot
+enforce may not reach a server`. Working tree clean apart from pre-existing
+untracked `RELEASE-0.9.2.md`.
+
+Done today: #110 (`46bbdced`), #95 closed by measurement, #97-A verified as
+built-by-another-lane, the `aion-server` debt discharged, the AWL signal→contract
+supply line gated (`73c6ed50`), and #106's second half built (`4d9ca3b0`).
+
+**🔴 TWO ITEMS OWED, HELD BY RULING. Do not run them without a NAMED GO from
+Cally.** The estate rule, minted today: a heavy-class says-before executes only
+on an explicit GO that names the exact command it authorizes. Declaring and
+proceeding is a disclosure wearing a says-before's clothes — I made that
+mistake at 05:31Z, started `cargo test -p aion-rs` inside a freeze, and it is
+on the record as an entered-then-killed forbidden-class run. Do not repeat it.
+
+Queue, in order, each on its own named GO, with a fresh disk reading first:
+
+1. `cargo clippy -p aion-package -p aion-rs -p aion-server --all-targets -- -D warnings`
+2. `cargo test -p aion-rs` — the #106 battery. The change sits in the
+   package-load path nearly every integration test walks, so until this runs
+   `4d9ca3b0` is unverified at battery level and must be described that way.
+3. `cargo build -p aion-cli` + the #97 live demonstration against a real
+   server, quoting recorded bytes. Do NOT take the `target/debug/aion`
+   shortcut: unknown provenance is not a citation.
+
+Also do not restart Tom's server (#108 — running from a deleted binary).
+
+Disk: `target` 29G at 05:41Z, `df -h /` free 77Gi. `target/debug/incremental`
+was evicted at 05:36Z; ~13 GiB actually reclaimed (a claimed 19G was wrong —
+three separate `du` runs count shared blocks once EACH, a single invocation
+over all paths dedups). GB-scale deletions during a freeze are now
+declare-and-wait with a named GO.
+
+---
+
+# 🔴 RESUME (earlier) — 2026-07-31 ~05:15Z
 
 State: `origin/main` at `656a3327` plus ONE UNCOMMITTED addition — the gate
 above (`crates/aion-awl/tests/declared_signal_contract.rs`) and this section.
