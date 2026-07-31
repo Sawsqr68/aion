@@ -15,12 +15,38 @@ use tokio::sync::Mutex;
 use crate::config::{LibSqlConfig, LibSqlMode};
 use crate::outbox::OutboxRowState;
 
-/// Durable `EventStore` backed by a shared libSQL connection.
+/// Durable `EventStore` over a dedicated write connection and a read pool.
+///
+/// # Why the shape is this and not one shared connection (#122)
+///
+/// `SQLite` transaction state is a property of the **connection**, and a
+/// `libsql::Connection` is an `Arc` over one raw `sqlite3*`. When every caller
+/// shared one connection, a statement issued while another task held an open
+/// `BEGIN IMMEDIATE` executed *inside that task's transaction* — so a write
+/// could be rolled back after returning `Ok`, a read could observe uncommitted
+/// rows, `sqlite3_changes64` could report another statement's count, and six
+/// entry points could issue a second `BEGIN` on a connection already inside one.
+///
+/// The old defence was a mutex over `()` sitting *beside* a connection that
+/// everyone could also reach through a `connection()` accessor. Taking it was a
+/// convention, and most methods did not.
+///
+/// Here the writer mutex **owns** its connection. There is no way to obtain a
+/// `&Connection` except by holding a guard, so forgetting is not expressible —
+/// the code that forgets does not compile. Reads come from their own
+/// connections and never touch the writer's, so a read cannot land inside
+/// anyone's transaction. `changes64` is per-operation because each operation
+/// holds its connection exclusively.
 #[derive(Clone)]
 pub struct LibSqlStore {
-    conn: libsql::Connection,
-    db: Arc<libsql::Database>,
-    transaction_lock: Arc<Mutex<()>>,
+    factory: Arc<crate::connection::ConnectionFactory>,
+    /// The ONE write connection. Every durable write serialises on this mutex,
+    /// which cannot time out — unlike a file lock, which can. That is why one
+    /// write connection beats N: WAL admits a single writer anyway, so N
+    /// connections would convert an in-process queue into `SQLITE_BUSY`
+    /// contention without adding throughput.
+    writer: Arc<Mutex<libsql::Connection>>,
+    readers: Arc<crate::pool::ReadPool>,
 }
 
 impl LibSqlStore {
@@ -31,15 +57,44 @@ impl LibSqlStore {
     /// Returns `StoreError::Backend` when the connection cannot be opened or when the idempotent
     /// schema DDL cannot be applied.
     pub async fn connect(config: LibSqlConfig) -> Result<Self, StoreError> {
-        let opened = crate::connection::open_connection(&config).await?;
-        let conn = opened.connection;
-        crate::schema::ensure_schema(&conn).await?;
+        let read_pool_size = config.read_pool_size;
+        let factory = Arc::new(crate::connection::open_factory(&config).await?);
+        let writer = factory.connect().await?;
+        crate::schema::ensure_schema(&writer).await?;
 
         Ok(Self {
-            conn,
-            db: Arc::new(opened.database),
-            transaction_lock: Arc::new(Mutex::new(())),
+            readers: Arc::new(crate::pool::ReadPool::new(
+                Arc::clone(&factory),
+                read_pool_size,
+            )),
+            factory,
+            writer: Arc::new(Mutex::new(writer)),
         })
+    }
+
+    /// Take the write connection for one durable operation.
+    ///
+    /// Holding the returned guard **is** the exclusion — there is no separate
+    /// lock to remember, because there is no other way to reach the connection.
+    pub(crate) async fn writer(&self) -> tokio::sync::MutexGuard<'_, libsql::Connection> {
+        self.writer.lock().await
+    }
+
+    /// Take a read connection for one operation, returned to the pool on drop.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StoreError::Backend` when a new connection cannot be opened or
+    /// configured.
+    pub(crate) async fn reader(&self) -> Result<crate::pool::ReadGuard, StoreError> {
+        self.readers.acquire().await
+    }
+
+    /// The read pool, for the pool module's own tests. Not a general accessor:
+    /// it exposes retention state, never a connection.
+    #[cfg(test)]
+    pub(crate) fn readers(&self) -> &crate::pool::ReadPool {
+        &self.readers
     }
 
     /// Open an embedded local-file store at `path`.
@@ -56,6 +111,8 @@ impl LibSqlStore {
             journal_mode: None,
             synchronous: None,
             sync_interval_seconds: None,
+            busy_timeout_ms: None,
+            read_pool_size: None,
         })
         .await
     }
@@ -67,7 +124,7 @@ impl LibSqlStore {
     /// Returns `StoreError::Serialization` when any stored event cannot be decoded by the current
     /// event schema, or `StoreError::Backend` for libSQL scan failures.
     pub async fn validate_event_compatibility(&self) -> Result<(), StoreError> {
-        crate::read::validate_all_events(self.connection()).await
+        crate::read::validate_all_events(&*self.reader().await?).await
     }
 
     /// Trigger and await a libSQL replica synchronization cycle.
@@ -77,7 +134,10 @@ impl LibSqlStore {
     /// Returns `StoreError::Backend` when the current libSQL database mode does not support sync or
     /// when the replica sync operation fails.
     pub async fn sync(&self) -> Result<(), StoreError> {
-        self.db
+        // A database operation, not a connection one, so it belongs to the
+        // factory's handle rather than to any pooled connection.
+        self.factory
+            .database()
             .sync()
             .await
             .map(|_| ())
@@ -104,9 +164,8 @@ impl LibSqlStore {
         expected_seq: u64,
         outbox_rows: Option<&[OutboxRow]>,
     ) -> Result<(), StoreError> {
-        let _guard = self.transaction_lock.lock().await;
         crate::append::append_with_outbox(
-            self.connection(),
+            &*self.writer().await,
             workflow_id,
             events,
             expected_seq,
@@ -133,19 +192,14 @@ impl LibSqlStore {
         &self,
         dispatch_key: &str,
     ) -> Result<Option<OutboxRowState>, StoreError> {
-        crate::outbox::outbox_row_state(self.connection(), dispatch_key).await
-    }
-
-    /// Borrow the shared libSQL connection used by append, read, and timer modules.
-    pub(crate) fn connection(&self) -> &libsql::Connection {
-        &self.conn
+        crate::outbox::outbox_row_state(&*self.reader().await?, dispatch_key).await
     }
 }
 
 #[async_trait]
 impl PackageStore for LibSqlStore {
     async fn put_package(&self, record: PackageRecord) -> Result<(), StoreError> {
-        crate::package::put_package(self.connection(), record).await
+        crate::package::put_package(&*self.writer().await, record).await
     }
 
     async fn put_package_with_routes(
@@ -153,12 +207,12 @@ impl PackageStore for LibSqlStore {
         record: PackageRecord,
         route_workflow_types: &[String],
     ) -> Result<(), StoreError> {
-        crate::package::put_package_with_routes(self.connection(), record, route_workflow_types)
+        crate::package::put_package_with_routes(&*self.writer().await, record, route_workflow_types)
             .await
     }
 
     async fn list_packages(&self) -> Result<Vec<PackageRecord>, StoreError> {
-        crate::package::list_packages(self.connection()).await
+        crate::package::list_packages(&*self.reader().await?).await
     }
 
     async fn delete_package(
@@ -166,7 +220,7 @@ impl PackageStore for LibSqlStore {
         workflow_type: &str,
         content_hash: &str,
     ) -> Result<(), StoreError> {
-        crate::package::delete_package(self.connection(), workflow_type, content_hash).await
+        crate::package::delete_package(&*self.writer().await, workflow_type, content_hash).await
     }
 
     async fn put_package_route(
@@ -174,11 +228,11 @@ impl PackageStore for LibSqlStore {
         workflow_type: &str,
         content_hash: &str,
     ) -> Result<(), StoreError> {
-        crate::package::put_package_route(self.connection(), workflow_type, content_hash).await
+        crate::package::put_package_route(&*self.writer().await, workflow_type, content_hash).await
     }
 
     async fn list_package_routes(&self) -> Result<Vec<PackageRouteRecord>, StoreError> {
-        crate::package::list_package_routes(self.connection()).await
+        crate::package::list_package_routes(&*self.reader().await?).await
     }
 }
 
@@ -189,19 +243,19 @@ impl NamespaceStore for LibSqlStore {
         name: &str,
         origin: NamespaceOrigin,
     ) -> Result<MintOutcome, StoreError> {
-        crate::namespace::register_namespace(self.connection(), name, origin).await
+        crate::namespace::register_namespace(&*self.writer().await, name, origin).await
     }
 
     async fn put_namespace(&self, record: NamespaceRecord) -> Result<MintOutcome, StoreError> {
-        crate::namespace::put_namespace(self.connection(), record).await
+        crate::namespace::put_namespace(&*self.writer().await, record).await
     }
 
     async fn list_namespaces(&self) -> Result<Vec<NamespaceRecord>, StoreError> {
-        crate::namespace::list_namespaces(self.connection()).await
+        crate::namespace::list_namespaces(&*self.reader().await?).await
     }
 
     async fn get_namespace(&self, name: &str) -> Result<Option<NamespaceRecord>, StoreError> {
-        crate::namespace::get_namespace(self.connection(), name).await
+        crate::namespace::get_namespace(&*self.reader().await?, name).await
     }
 
     async fn set_namespace_placement(
@@ -209,11 +263,11 @@ impl NamespaceStore for LibSqlStore {
         name: &str,
         placement: NamespacePlacement,
     ) -> Result<Option<()>, StoreError> {
-        crate::namespace::set_namespace_placement(self.connection(), name, placement).await
+        crate::namespace::set_namespace_placement(&*self.writer().await, name, placement).await
     }
 
     async fn deprecate_namespace(&self, name: &str) -> Result<(), StoreError> {
-        crate::namespace::deprecate_namespace(self.connection(), name).await
+        crate::namespace::deprecate_namespace(&*self.writer().await, name).await
     }
 }
 
@@ -226,8 +280,7 @@ impl WritableEventStore for LibSqlStore {
         events: &[Event],
         expected_seq: u64,
     ) -> Result<(), StoreError> {
-        let _guard = self.transaction_lock.lock().await;
-        crate::append::append(self.connection(), workflow_id, events, expected_seq).await
+        crate::append::append(&*self.writer().await, workflow_id, events, expected_seq).await
     }
 
     async fn append_with_outbox(
@@ -238,9 +291,8 @@ impl WritableEventStore for LibSqlStore {
         expected_seq: u64,
         outbox_rows: &[OutboxRow],
     ) -> Result<(), StoreError> {
-        let _guard = self.transaction_lock.lock().await;
         crate::append::append_with_outbox(
-            self.connection(),
+            &*self.writer().await,
             workflow_id,
             events,
             expected_seq,
@@ -250,33 +302,29 @@ impl WritableEventStore for LibSqlStore {
     }
 
     async fn rearm_outbox_pending(&self, rows: &[OutboxRow]) -> Result<(), StoreError> {
-        let _guard = self.transaction_lock.lock().await;
-        crate::outbox::rearm_outbox_pending(self.connection(), rows).await
+        crate::outbox::rearm_outbox_pending(&*self.writer().await, rows).await
     }
 
     async fn settle_outbox_row_cancelled(&self, dispatch_key: &str) -> Result<(), StoreError> {
-        crate::outbox::settle_outbox_row_cancelled(self.connection(), dispatch_key).await
+        crate::outbox::settle_outbox_row_cancelled(&*self.writer().await, dispatch_key).await
     }
 
     async fn settle_workflow_outbox_rows_cancelled(
         &self,
         workflow_id: &WorkflowId,
     ) -> Result<Vec<String>, StoreError> {
-        let _guard = self.transaction_lock.lock().await;
-        crate::outbox::settle_workflow_outbox_rows_cancelled(self.connection(), workflow_id).await
+        crate::outbox::settle_workflow_outbox_rows_cancelled(&*self.writer().await, workflow_id).await
     }
 }
 
 #[async_trait]
 impl OutboxStore for LibSqlStore {
     async fn append_outbox_batch(&self, rows: &[OutboxRow]) -> Result<(), StoreError> {
-        let _guard = self.transaction_lock.lock().await;
-        crate::outbox::append_outbox_batch(self.connection(), rows).await
+        crate::outbox::append_outbox_batch(&*self.writer().await, rows).await
     }
 
     async fn claim_outbox_rows(&self, limit: u32) -> Result<Vec<OutboxRow>, StoreError> {
-        let _guard = self.transaction_lock.lock().await;
-        crate::outbox::claim_outbox_rows(self.connection(), limit).await
+        crate::outbox::claim_outbox_rows(&*self.writer().await, limit).await
     }
 
     async fn claim_outbox_rows_excluding(
@@ -284,8 +332,7 @@ impl OutboxStore for LibSqlStore {
         limit: u32,
         held: &std::collections::HashSet<WorkflowId>,
     ) -> Result<Vec<OutboxRow>, StoreError> {
-        let _guard = self.transaction_lock.lock().await;
-        crate::outbox::claim_outbox_rows_excluding(self.connection(), limit, held).await
+        crate::outbox::claim_outbox_rows_excluding(&*self.writer().await, limit, held).await
     }
 
     async fn claim_outbox_rows_scoped(
@@ -293,8 +340,7 @@ impl OutboxStore for LibSqlStore {
         scope: &ClaimScope,
         limit: u32,
     ) -> Result<Vec<OutboxRow>, StoreError> {
-        let _guard = self.transaction_lock.lock().await;
-        crate::outbox::claim_outbox_rows_scoped(self.connection(), scope, limit).await
+        crate::outbox::claim_outbox_rows_scoped(&*self.writer().await, scope, limit).await
     }
 
     async fn claim_outbox_rows_scoped_excluding(
@@ -303,8 +349,7 @@ impl OutboxStore for LibSqlStore {
         limit: u32,
         held: &std::collections::HashSet<WorkflowId>,
     ) -> Result<Vec<OutboxRow>, StoreError> {
-        let _guard = self.transaction_lock.lock().await;
-        crate::outbox::claim_outbox_rows_scoped_excluding(self.connection(), scope, limit, held)
+        crate::outbox::claim_outbox_rows_scoped_excluding(&*self.writer().await, scope, limit, held)
             .await
     }
 
@@ -315,9 +360,8 @@ impl OutboxStore for LibSqlStore {
         limit: u32,
         excluded: &std::collections::HashSet<String>,
     ) -> Result<Vec<OutboxRow>, StoreError> {
-        let _guard = self.transaction_lock.lock().await;
         crate::outbox::rearm_stale_claimed_outbox_rows(
-            self.connection(),
+            &*self.writer().await,
             older_than,
             visible_after,
             limit,
@@ -331,23 +375,22 @@ impl OutboxStore for LibSqlStore {
         older_than: DateTime<Utc>,
         limit: u32,
     ) -> Result<Vec<OutboxRow>, StoreError> {
-        crate::outbox::list_stale_claimed_outbox_rows(self.connection(), older_than, limit).await
+        crate::outbox::list_stale_claimed_outbox_rows(&*self.reader().await?, older_than, limit).await
     }
 
     async fn list_unsettled_outbox_workflow_ids(&self) -> Result<Vec<WorkflowId>, StoreError> {
-        crate::outbox::list_unsettled_outbox_workflow_ids(self.connection()).await
+        crate::outbox::list_unsettled_outbox_workflow_ids(&*self.reader().await?).await
     }
 
     async fn cancel_outbox_rows_for_workflow(
         &self,
         workflow_id: &WorkflowId,
     ) -> Result<Vec<String>, StoreError> {
-        let _guard = self.transaction_lock.lock().await;
-        crate::outbox::settle_workflow_outbox_rows_cancelled(self.connection(), workflow_id).await
+        crate::outbox::settle_workflow_outbox_rows_cancelled(&*self.writer().await, workflow_id).await
     }
 
     async fn complete_outbox_row(&self, dispatch_key: &str) -> Result<(), StoreError> {
-        crate::outbox::complete_outbox_row(self.connection(), dispatch_key).await
+        crate::outbox::complete_outbox_row(&*self.writer().await, dispatch_key).await
     }
 
     async fn retry_outbox_row(
@@ -357,7 +400,7 @@ impl OutboxStore for LibSqlStore {
         visible_after: DateTime<Utc>,
     ) -> Result<(), StoreError> {
         crate::outbox::retry_outbox_row(
-            self.connection(),
+            &*self.writer().await,
             dispatch_key,
             next_attempt,
             visible_after,
@@ -366,21 +409,21 @@ impl OutboxStore for LibSqlStore {
     }
 
     async fn fail_outbox_row(&self, dispatch_key: &str) -> Result<(), StoreError> {
-        crate::outbox::fail_outbox_row(self.connection(), dispatch_key).await
+        crate::outbox::fail_outbox_row(&*self.writer().await, dispatch_key).await
     }
 
     async fn record_outbox_failure_delivered(
         &self,
         dispatch_key: &str,
     ) -> Result<bool, StoreError> {
-        crate::outbox::record_outbox_failure_delivered(self.connection(), dispatch_key).await
+        crate::outbox::record_outbox_failure_delivered(&*self.writer().await, dispatch_key).await
     }
 
     async fn list_dead_lettered_outbox_rows(
         &self,
         workflow_id: &WorkflowId,
     ) -> Result<Vec<OutboxRow>, StoreError> {
-        crate::outbox::list_dead_lettered_outbox_rows(self.connection(), workflow_id).await
+        crate::outbox::list_dead_lettered_outbox_rows(&*self.reader().await?, workflow_id).await
     }
 
     async fn redrive_outbox_row(
@@ -391,35 +434,34 @@ impl OutboxStore for LibSqlStore {
     ) -> Result<RedriveOutcome, StoreError> {
         // Serialised with every other IMMEDIATE-transaction writer on this single connection, the
         // same way the workflow-terminal settle is.
-        let _guard = self.transaction_lock.lock().await;
-        crate::outbox::redrive_outbox_row(self.connection(), dispatch_key, visible_after, mode)
+        crate::outbox::redrive_outbox_row(&*self.writer().await, dispatch_key, visible_after, mode)
             .await
     }
 
     async fn count_inflight_outbox_rows(&self, namespace: &str) -> Result<u64, StoreError> {
-        crate::outbox::count_inflight_outbox_rows(self.connection(), namespace).await
+        crate::outbox::count_inflight_outbox_rows(&*self.reader().await?, namespace).await
     }
 
     async fn count_claimed_outbox_rows(&self, namespace: &str) -> Result<u64, StoreError> {
-        crate::outbox::count_claimed_outbox_rows(self.connection(), namespace).await
+        crate::outbox::count_claimed_outbox_rows(&*self.reader().await?, namespace).await
     }
 
     async fn count_claimed_outbox_rows_by_namespace(
         &self,
         namespaces: &[&str],
     ) -> Result<std::collections::BTreeMap<String, u64>, StoreError> {
-        crate::outbox::count_claimed_outbox_rows_by_namespace(self.connection(), namespaces).await
+        crate::outbox::count_claimed_outbox_rows_by_namespace(&*self.reader().await?, namespaces).await
     }
 
     async fn pending_outbox_routes(&self) -> Result<Vec<ClaimScope>, StoreError> {
-        crate::outbox::pending_outbox_routes(self.connection()).await
+        crate::outbox::pending_outbox_routes(&*self.reader().await?).await
     }
 }
 
 #[async_trait]
 impl ReadableEventStore for LibSqlStore {
     async fn read_history(&self, workflow_id: &WorkflowId) -> Result<Vec<Event>, StoreError> {
-        crate::read::read_history(self.connection(), workflow_id).await
+        crate::read::read_history(&*self.reader().await?, workflow_id).await
     }
 
     async fn read_history_from(
@@ -427,30 +469,30 @@ impl ReadableEventStore for LibSqlStore {
         workflow_id: &WorkflowId,
         from_seq: u64,
     ) -> Result<Vec<Event>, StoreError> {
-        crate::read::read_history_from(self.connection(), workflow_id, from_seq).await
+        crate::read::read_history_from(&*self.reader().await?, workflow_id, from_seq).await
     }
 
     async fn read_run_chain(
         &self,
         workflow_id: &WorkflowId,
     ) -> Result<Vec<RunSummary>, StoreError> {
-        crate::read::read_run_chain(self.connection(), workflow_id).await
+        crate::read::read_run_chain(&*self.reader().await?, workflow_id).await
     }
 
     async fn list_workflow_ids(&self) -> Result<Vec<WorkflowId>, StoreError> {
-        crate::read::list_workflow_ids(self.connection()).await
+        crate::read::list_workflow_ids(&*self.reader().await?).await
     }
 
     async fn list_active(&self) -> Result<Vec<WorkflowId>, StoreError> {
-        crate::read::list_active(self.connection()).await
+        crate::read::list_active(&*self.reader().await?).await
     }
 
     async fn list_paused(&self) -> Result<Vec<WorkflowId>, StoreError> {
-        crate::read::list_paused(self.connection()).await
+        crate::read::list_paused(&*self.reader().await?).await
     }
 
     async fn query(&self, filter: &WorkflowFilter) -> Result<Vec<WorkflowSummary>, StoreError> {
-        crate::read::query(self.connection(), filter).await
+        crate::read::query(&*self.reader().await?, filter).await
     }
 
     async fn schedule_timer(
@@ -459,11 +501,14 @@ impl ReadableEventStore for LibSqlStore {
         timer_id: &TimerId,
         fire_at: DateTime<Utc>,
     ) -> Result<(), StoreError> {
-        crate::timer::schedule_timer(self.connection(), workflow_id, timer_id, fire_at).await
+        // WRITER, not reader: `schedule_timer` UPSERTs a timer row. The name
+        // reads like scheduling and the first pass classified it by name — it
+        // is a durable write and must take the writer's mutex like every other.
+        crate::timer::schedule_timer(&*self.writer().await, workflow_id, timer_id, fire_at).await
     }
 
     async fn expired_timers(&self, as_of: DateTime<Utc>) -> Result<Vec<TimerEntry>, StoreError> {
-        crate::timer::expired_timers(self.connection(), as_of).await
+        crate::timer::expired_timers(&*self.reader().await?, as_of).await
     }
 }
 
@@ -488,9 +533,9 @@ mod tests {
     async fn open_creates_schema() -> Result<(), StoreError> {
         let store = LibSqlStore::open(unique_temp_path("open-schema")).await?;
 
-        assert_schema_object(store.connection(), "table", "events").await?;
-        assert_schema_object(store.connection(), "table", "timers").await?;
-        assert_schema_object(store.connection(), "table", "visibility").await?;
+        assert_schema_object(&*store.reader().await?, "table", "events").await?;
+        assert_schema_object(&*store.reader().await?, "table", "timers").await?;
+        assert_schema_object(&*store.reader().await?, "table", "visibility").await?;
 
         Ok(())
     }
@@ -505,11 +550,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn connection_accessor_reuses_same_database_handle() -> Result<(), StoreError> {
+    /// Renamed with the accessor it used to name (#122).
+    ///
+    /// The old name was `connection_accessor_reuses_same_database_handle`, and
+    /// `connection()` no longer exists — so the name claimed coverage of a
+    /// surface the run could not touch, which is the #119 defect one level down.
+    ///
+    /// What it proves NOW is a property the pool makes non-obvious and that
+    /// nothing else asserts: the writer connection and a pooled read connection
+    /// are DIFFERENT connections onto the SAME database. Before this change one
+    /// handle made that trivially true; now it is a real claim, and a pool that
+    /// somehow opened a separate database would pass every other test in the
+    /// crate while failing this one.
+    async fn a_write_is_visible_from_a_different_pooled_connection() -> Result<(), StoreError> {
         let store = LibSqlStore::open(unique_temp_path("shared-handle")).await?;
 
-        store
-            .connection()
+        store.writer().await
             .execute(
                 "INSERT INTO timers (workflow_id, timer_id, fire_at) VALUES (?1, ?2, ?3)",
                 ("workflow-a", "timer-a", "2026-06-03T00:00:00Z"),
@@ -517,12 +573,13 @@ mod tests {
             .await
             .map_err(|error| crate::error::libsql_error(&error))?;
 
-        let count = timer_count(store.connection()).await?;
+        let count = timer_count(&*store.reader().await?).await?;
         if count == 1 {
             Ok(())
         } else {
             Err(StoreError::Backend(format!(
-                "expected one timer through shared connection, found {count}"
+                "a row written on the writer connection must be readable from a \
+                 pooled read connection — expected 1 timer, found {count}"
             )))
         }
     }

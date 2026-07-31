@@ -19,6 +19,33 @@ pub struct LibSqlConfig {
     pub synchronous: Option<String>,
     /// Optional replica sync interval in seconds, used only for embedded-replica mode.
     pub sync_interval_seconds: Option<u64>,
+    /// Optional busy-wait, in **milliseconds**, applied to every connection this
+    /// store opens.
+    ///
+    /// Bounds how long a write waits for another *process or store* holding the
+    /// database file before it gives up. Within one store, writes are serialised
+    /// by the writer connection's own mutex and never reach this path (#122);
+    /// what contends here is the second `LibSqlStore` production opens for the
+    /// outbox dispatcher on the same `store.url`, and anything external.
+    ///
+    /// Absent means the inherited fallback in `connection.rs` — a value nobody
+    /// chose, kept only so this setting's arrival changes no behaviour. See
+    /// `INHERITED_BUSY_TIMEOUT`.
+    pub busy_timeout_ms: Option<u64>,
+    /// Optional cap on how many idle **read** connections are RETAINED for
+    /// reuse. A count, not a rate or a duration.
+    ///
+    /// 🔴 This caps RETENTION, never CONCURRENCY. WAL permits unlimited
+    /// concurrent readers, so the pool is a reuse cache and not a limiter: when
+    /// it is empty a caller opens a new connection rather than waiting for a
+    /// slot. Capping concurrency would reintroduce a queue exactly where `SQLite`
+    /// has none and invent a throughput ceiling nobody asked for.
+    ///
+    /// Absent means **no retention** — a fresh read connection per operation,
+    /// closed when the operation ends. That is correct, bounded by concurrency
+    /// either way, and requires no invented number. Choosing a value is a
+    /// deployment question and deliberately not answered here.
+    pub read_pool_size: Option<usize>,
 }
 
 /// Selects whether libSQL opens a local embedded file or an embedded replica.

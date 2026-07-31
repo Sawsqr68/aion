@@ -128,18 +128,18 @@ pub(crate) async fn count_workflows(
 #[async_trait]
 impl VisibilityStore for LibSqlStore {
     async fn record_visibility(&self, record: VisibilityRecord) -> Result<(), StoreError> {
-        record_visibility(self.connection(), record).await
+        record_visibility(&*self.writer().await, record).await
     }
 
     async fn list_workflows(
         &self,
         filter: ListWorkflowsFilter,
     ) -> Result<Vec<VisibilityWorkflowSummary>, StoreError> {
-        list_workflows(self.connection(), filter).await
+        list_workflows(&*self.reader().await?, filter).await
     }
 
     async fn count_workflows(&self, filter: ListWorkflowsFilter) -> Result<u64, StoreError> {
-        count_workflows(self.connection(), filter).await
+        count_workflows(&*self.reader().await?, filter).await
     }
 }
 
@@ -869,6 +869,8 @@ mod tests {
             journal_mode: None,
             synchronous: None,
             sync_interval_seconds: None,
+            busy_timeout_ms: None,
+            read_pool_size: None,
         };
         let conn = crate::connection::open_connection(&config)
             .await?

@@ -61,8 +61,7 @@ async fn read_history_from_returns_range_suffix() -> Result<(), StoreError> {
 #[tokio::test]
 async fn read_history_from_range_scan_uses_primary_key_index() -> Result<(), StoreError> {
     let store = open_test_store("range-plan").await?;
-    let mut rows = store
-        .connection()
+    let mut rows = store.reader().await?
         .query(
             "EXPLAIN QUERY PLAN SELECT event FROM events WHERE workflow_id = ?1 AND seq >= ?2 ORDER BY seq ASC",
             ("00000000-0000-0000-0000-000000000001", 2_u64),
@@ -458,8 +457,7 @@ async fn insert_raw_event(
     workflow_id: &WorkflowId,
     event: Vec<u8>,
 ) -> Result<(), StoreError> {
-    store
-        .connection()
+    store.writer().await
         .execute(
             "INSERT INTO events (workflow_id, seq, event, recorded_at, event_kind, is_queryable_event) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             libsql::params![workflow_id.to_string(), 1_u64, event, recorded_at(1).to_rfc3339(), "WorkflowStarted", 1_i64],

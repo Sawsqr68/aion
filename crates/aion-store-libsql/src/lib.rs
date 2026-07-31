@@ -29,6 +29,7 @@ mod outbox;
 #[path = "outbox_tests.rs"]
 mod outbox_tests;
 mod package;
+mod pool;
 mod read;
 /// Idempotent schema creation for the libSQL event store.
 pub mod schema;

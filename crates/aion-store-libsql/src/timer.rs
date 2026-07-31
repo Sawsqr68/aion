@@ -208,6 +208,8 @@ mod tests {
             journal_mode: None,
             synchronous: None,
             sync_interval_seconds: None,
+            busy_timeout_ms: None,
+            read_pool_size: None,
         };
         let conn = crate::connection::open_connection(&config)
             .await?

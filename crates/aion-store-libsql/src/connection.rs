@@ -21,11 +21,25 @@ use crate::config::{LibSqlConfig, LibSqlMode};
 ///
 /// Setting a busy timeout makes contending connections retry for the configured
 /// window — the standard, correct way to share a SQLite/libSQL file across
-/// connections. The per-handle `transaction_lock` only serialises writes within
-/// a single handle; it cannot coordinate across the separate engine/dispatcher
-/// handles, so this connection-level timeout is what makes concurrent same-file
-/// access reliable.
-const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
+/// connections.
+///
+/// # 🔴 This number is INHERITED, not chosen
+///
+/// Ten seconds arrived with the fix that introduced this constant and nobody has
+/// ever picked it. It is kept as the fallback **only** because changing it would
+/// alter contention behaviour in a change that is supposed to alter none, and
+/// inventing a different unchosen number would be worse than keeping this one.
+///
+/// `LibSqlConfig::busy_timeout_ms` overrides it, and choosing a real value is an
+/// open question rather than a settled one. It is named `INHERITED_` so the next
+/// reader cannot mistake it for a considered default.
+///
+/// Note what this timeout now does and does not cover, after #122: within a
+/// single store, writes are serialised by the writer connection's own mutex and
+/// cannot time out at all. This bounds **cross-store and external** contention —
+/// production opens a second `LibSqlStore` for the outbox dispatcher on the same
+/// `store.url`, and those two genuinely contend in `SQLite`.
+const INHERITED_BUSY_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Opened libSQL database handle and its mode-agnostic connection.
 pub struct OpenedConnection {
@@ -33,6 +47,117 @@ pub struct OpenedConnection {
     pub database: libsql::Database,
     /// Connection used by the event-store implementation.
     pub connection: libsql::Connection,
+}
+
+/// The ONE place a configured connection is produced (#122).
+///
+/// # Why this exists rather than a second `connect` call site
+///
+/// Every setting `open_connection` applies is **per-connection state**, except
+/// `journal_mode`, which persists in the database file:
+///
+/// | setting        | scope          |
+/// |----------------|----------------|
+/// | `busy_timeout` | **connection** |
+/// | `synchronous`  | **connection** |
+/// | `journal_mode` | file           |
+///
+/// So a pool that produced connections by calling `database.connect()` directly
+/// would hand out connections with libSQL's default busy timeout of **zero** —
+/// reintroducing the exact `SQLITE_BUSY` failure [`INHERITED_BUSY_TIMEOUT`] exists to
+/// prevent — and would silently drop the operator's chosen `synchronous`
+/// durability setting on every connection but the first.
+///
+/// A second place that configures a connection is a second place to forget, so
+/// there is exactly one: [`ConnectionFactory::connect`]. `open_connection` is
+/// written in terms of it rather than beside it.
+pub struct ConnectionFactory {
+    database: libsql::Database,
+    busy_timeout: Duration,
+    journal_mode: Option<String>,
+    synchronous: Option<String>,
+    /// True when this crate, not the operator, chose WAL — see `open_connection`.
+    default_wal: bool,
+}
+
+impl ConnectionFactory {
+    /// Produce a fully configured connection. Every caller in the crate,
+    /// including the pool, goes through here.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StoreError::Backend` when libSQL cannot open the connection or
+    /// when applying a configured PRAGMA fails.
+    pub async fn connect(&self) -> Result<libsql::Connection, StoreError> {
+        let connection = self
+            .database
+            .connect()
+            .map_err(|error| crate::error::libsql_error(&error))?;
+
+        connection
+            .busy_timeout(self.busy_timeout)
+            .map_err(|error| crate::error::libsql_error(&error))?;
+
+        if self.default_wal {
+            execute_pragma(&connection, "journal_mode", "wal").await?;
+        }
+        apply_pragmas(
+            &connection,
+            self.journal_mode.as_deref(),
+            self.synchronous.as_deref(),
+        )
+        .await?;
+
+        Ok(connection)
+    }
+
+    /// The database handle, for replica sync — which is a database operation,
+    /// not a connection one.
+    pub fn database(&self) -> &libsql::Database {
+        &self.database
+    }
+
+    /// The busy-wait this factory stamps on every connection it produces.
+    /// Reported rather than assumed, so a contention error can name it.
+    pub fn busy_timeout(&self) -> Duration {
+        self.busy_timeout
+    }
+}
+
+/// Open the configured database and return the factory that produces its
+/// connections.
+///
+/// # Errors
+///
+/// Returns `StoreError::Backend` when libSQL cannot build the database.
+pub async fn open_factory(config: &LibSqlConfig) -> Result<ConnectionFactory, StoreError> {
+    let database = match &config.mode {
+        LibSqlMode::Embedded { path } => build_embedded(path).await?,
+        LibSqlMode::EmbeddedReplica {
+            path,
+            primary_url,
+            auth_token,
+        } => {
+            build_embedded_replica(
+                path,
+                primary_url.clone(),
+                auth_token.clone(),
+                config.sync_interval_seconds,
+            )
+            .await?
+        }
+    };
+
+    Ok(ConnectionFactory {
+        database,
+        busy_timeout: config
+            .busy_timeout_ms
+            .map_or(INHERITED_BUSY_TIMEOUT, Duration::from_millis),
+        journal_mode: config.journal_mode.clone(),
+        synchronous: config.synchronous.clone(),
+        default_wal: matches!(config.mode, LibSqlMode::Embedded { .. })
+            && config.journal_mode.is_none(),
+    })
 }
 
 /// Open the configured libSQL database and return its handle and connection.
@@ -46,94 +171,39 @@ pub struct OpenedConnection {
 /// Returns `StoreError::Backend` when libSQL cannot build/connect the database or when applying an
 /// explicitly configured PRAGMA fails.
 pub async fn open_connection(config: &LibSqlConfig) -> Result<OpenedConnection, StoreError> {
-    let opened = match &config.mode {
-        LibSqlMode::Embedded { path } => open_embedded(path).await?,
-        LibSqlMode::EmbeddedReplica {
-            path,
-            primary_url,
-            auth_token,
-        } => {
-            open_embedded_replica(
-                path,
-                primary_url.clone(),
-                auth_token.clone(),
-                config.sync_interval_seconds,
-            )
-            .await?
-        }
-    };
-
-    opened
-        .connection
-        .busy_timeout(BUSY_TIMEOUT)
-        .map_err(|error| crate::error::libsql_error(&error))?;
-
-    // Default the local file to WAL journaling unless the operator chose a
-    // journal mode explicitly. Aion opens MULTIPLE connections on the same file
-    // (engine store + outbox-dispatcher store on one `store.url`, plus recovery
-    // and inspection handles). In the SQLite default rollback-journal mode a
-    // writer holds an EXCLUSIVE lock for the whole commit and the busy handler
-    // is not always retried for a contending writer, so concurrent same-file
-    // writes can still fail with `SQLITE_BUSY` even with a busy timeout. WAL
-    // lets writers and readers proceed against a write-ahead log and makes the
-    // busy-timeout retry reliable for the writer-vs-writer case. Operator config
-    // still wins: `apply_pragmas` below re-applies an explicit `journal_mode`.
-    let default_journal_mode =
-        matches!(config.mode, LibSqlMode::Embedded { .. }) && config.journal_mode.is_none();
-    if default_journal_mode {
-        execute_pragma(&opened.connection, "journal_mode", "wal").await?;
-    }
-
-    apply_pragmas(
-        &opened.connection,
-        config.journal_mode.as_deref(),
-        config.synchronous.as_deref(),
-    )
-    .await?;
-
-    Ok(opened)
-}
-
-async fn open_embedded(path: &Path) -> Result<OpenedConnection, StoreError> {
-    let database = libsql::Builder::new_local(path)
-        .build()
-        .await
-        .map_err(|error| crate::error::libsql_error(&error))?;
-
-    let connection = database
-        .connect()
-        .map_err(|error| crate::error::libsql_error(&error))?;
-
+    // Written in terms of the factory rather than beside it: one configuration
+    // path, so there is one place to forget a per-connection PRAGMA and it is
+    // already covered. See `ConnectionFactory`.
+    let factory = open_factory(config).await?;
+    let connection = factory.connect().await?;
     Ok(OpenedConnection {
-        database,
+        database: factory.database,
         connection,
     })
 }
 
-async fn open_embedded_replica(
+async fn build_embedded(path: &Path) -> Result<libsql::Database, StoreError> {
+    libsql::Builder::new_local(path)
+        .build()
+        .await
+        .map_err(|error| crate::error::libsql_error(&error))
+}
+
+async fn build_embedded_replica(
     path: &Path,
     primary_url: String,
     auth_token: String,
     sync_interval_seconds: Option<u64>,
-) -> Result<OpenedConnection, StoreError> {
+) -> Result<libsql::Database, StoreError> {
     let mut builder = libsql::Builder::new_remote_replica(path, primary_url, auth_token);
     if let Some(seconds) = sync_interval_seconds {
         builder = builder.sync_interval(Duration::from_secs(seconds));
     }
 
-    let db = builder
+    builder
         .build()
         .await
-        .map_err(|error| crate::error::libsql_error(&error))?;
-
-    let connection = db
-        .connect()
-        .map_err(|error| crate::error::libsql_error(&error))?;
-
-    Ok(OpenedConnection {
-        database: db,
-        connection,
-    })
+        .map_err(|error| crate::error::libsql_error(&error))
 }
 
 async fn apply_pragmas(
@@ -199,6 +269,8 @@ mod tests {
             journal_mode: Some(String::from("wal")),
             synchronous: Some(String::from("normal")),
             sync_interval_seconds: None,
+            busy_timeout_ms: None,
+            read_pool_size: None,
         };
 
         let opened = open_connection(&config).await?;
@@ -241,6 +313,8 @@ mod tests {
             journal_mode: None,
             synchronous: None,
             sync_interval_seconds: None,
+            busy_timeout_ms: None,
+            read_pool_size: None,
         };
 
         let setup = open_connection(&config(&path)).await?;
@@ -305,6 +379,8 @@ mod tests {
             journal_mode: None,
             synchronous: None,
             sync_interval_seconds: Some(1),
+            busy_timeout_ms: None,
+            read_pool_size: None,
         };
 
         match open_connection(&config).await {

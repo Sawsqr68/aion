@@ -69,6 +69,8 @@ fn replica_config(name: &str, primary_url: String, auth_token: String) -> LibSql
         journal_mode: None,
         synchronous: None,
         sync_interval_seconds: None,
+        busy_timeout_ms: None,
+        read_pool_size: None,
     }
 }
 
