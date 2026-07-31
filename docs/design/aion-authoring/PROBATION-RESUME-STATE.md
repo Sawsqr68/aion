@@ -126,8 +126,16 @@ this morning ONLY COMPILE under `--all-features`. Reporting "the house battery
 is green" off A alone would be reading a partial run as a complete one — the
 same defect as #120 one level up.
 
-**Count TARGETS, not tests.** 240 `Running` lines is a denominator; 3902
-passing tests is not.
+**Count TARGETS, not tests.** 240 target-runs is a denominator; 3902 passing
+tests is not.
+
+🔴 And the denominator itself needs its noun stated, because I got it wrong in
+the sentence that teaches this: **240 is 220 `Running` lines PLUS 20
+`Doc-tests` lines**, not 240 `Running` lines. Right value, wrong noun, in the
+one place claiming the noun matters. Doctests are a separate target class that
+cargo runs LAST, after every integration target — so a mid-run read of a log
+can show zero of them and be correct about that instant while saying nothing
+about the battery.
 
 ## 🔴 Disk laws learned tonight, all measured
 
