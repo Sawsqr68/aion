@@ -7,13 +7,27 @@ open with Athena; any compiler invocation needs a fresh declaration + GO, and
 must name the mutation class if it mutates source to probe coverage.
 
 **THE TOP ITEM IS #85, and it outranks everything else on this board.** A test in
-the durable write path fails ~1 run in 8; two more in the same subsystem do the
-same. Every green certified on 2026-07-31 carries that rate, including the 1021,
-the 1022, and the 58-targets-0-unpaired coverage claim. The libSQL error text
-("bad parameter or other API misuse" under concurrency) points at a
-shared-connection defect — if that is right it is a PRODUCTION bug in the durable
-write path, and these flakes are the only thing reporting it. Test that
-hypothesis before treating any of the three as test isolation.
+the durable write path failed once in 8 runs; two more in the same subsystem
+fail the same way. Rate is **non-zero and unquantified** — one event in eight
+gives a 95% interval of roughly 0.3%–53%, which cannot support a decision.
+The libSQL error text ("bad parameter or other API misuse" under concurrency)
+points at a shared-connection defect — if that is right it is a PRODUCTION bug in
+the durable write path, and these flakes are the only thing reporting it. Test
+that hypothesis before treating any of the three as test isolation.
+
+⚠️ **CORRECTED — the earlier "every green carries that rate" claim was
+DIRECTIONALLY WRONG and is struck.** A test that spuriously FAILS produces false
+REDS. It does not taint greens: when the assertion passed, it ran and held. The
+1021, the 1022 and the 58-targets-0-unpaired claim stand. What a red on this
+command now means is *re-run before believing it*.
+The structure that WOULD taint a green is a wait that can pass without
+observing — checked by reading on 2026-08-01, and it does not exist here:
+`wait_for_history` returns `Err` on timeout in both copies
+(`crates/aion/tests/outbox_e2e.rs:183`,
+`crates/aion-server/tests/run_server_outbox_support/helpers.rs:301`), no call
+site swallows the result, and every predicate is an equality against a positive
+constant (`== FAN_OUT` where `FAN_OUT = 4`, or `== 1`) that an empty or partial
+history cannot satisfy.
 
 **Then #121** (both recovery-loop guards uncovered; needs an adversarial
 `EventStore` whose `list_active` returns a terminal/paused run anyway).
@@ -243,13 +257,26 @@ exactly that shape.
 separately a paused) run anyway. No cheap route exists; that depended on the
 refuted claim.
 
-## 🔴 A NON-DETERMINISTIC TEST IS INSIDE EVERY GREEN CERTIFIED TONIGHT
+## 🔴 A NON-DETERMINISTIC TEST IS INSIDE THIS SUBSYSTEM
 
-`outbox_happy_path_completes_with_n_terminals_in_order` failed **1 in 8** runs of
-`cargo test -p aion-rs --all-targets --no-fail-fast` tonight. So the 1021, the
-1022 and the 58-targets-0-unpaired all carry an unknown error rate.
+`outbox_happy_path_completes_with_n_terminals_in_order` failed **once in 8 runs**
+of `cargo test -p aion-rs --all-targets --no-fail-fast` on 2026-07-31.
 
-Third `outbox_e2e` member joining **#85**'s two — one subsystem, three tests, one
+⚠️ **Two things this does NOT support, both of which I wrote and both struck on
+2026-08-01:**
+
+1. *"the 1021, the 1022 and the 58-targets-0-unpaired all carry an unknown error
+   rate."* Wrong in direction. A spurious FAILURE is a false RED. Those greens
+   were observations that ran and held. Reds on this command need a re-run before
+   they are believed; the greens stand. (The green-tainting structure would be a
+   wait that passes without observing — checked by reading, and it does not exist
+   here; see the READ FIRST section for the byte-level evidence.)
+2. *"1 in 8" as a rate.* One event in eight runs has a 95% interval of roughly
+   0.3%–53%. Say **"one failure in 8 runs; non-zero, unquantified"** — a figure
+   like "1 in 8" gets requoted as though it were measured.
+
+What survives both corrections, and is the whole point: this is the
+third `outbox_e2e` member joining **#85**'s two — one subsystem, three tests, one
 suspected shared-connection defect in the libSQL store. #85 already states the
 stakes: *if it is a shared-connection bug it is a PRODUCTION defect, and the
 flakes are the only thing currently reporting it.* **This is now the highest-value
