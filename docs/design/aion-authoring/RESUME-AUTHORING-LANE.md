@@ -70,6 +70,56 @@ Install the CLI alone into a scratch prefix:
 - **`git checkout --` after a mutation check reverts uncommitted FIXES too.**
   Copy the file to the scratchpad and restore from there instead.
 
+## 🔴 LAUNCHED — read this first (2026-07-31 08:16Z)
+
+**Cally gave LAUNCH at 08:16:30Z.** Athena's gate-two baseline landed
+08:13:35Z and I reproduced every number at my own hand at 08:16Z:
+
+| | Athena | Mine |
+| --- | --- | --- |
+| free | 72 GiB | 72.0 GiB |
+| `target/` | 32G (debug 31G, release 1.4G) | debug 31G, release 1.4G |
+| live compilers | ZERO | `pgrep -x cargo` 0, `pgrep -x rustc` 0 |
+| positive control | — | `pgrep -x zsh` = 16 |
+
+**Three riders travel with that number:**
+1. **Perishable, ~2h half-life. If the queue has not launched within ~2h of
+   08:13Z, RE-TAKE the baseline.**
+2. Headroom is **2 GiB to the free trigger, 3G to the target trigger**, and my
+   builds GROW the target. State an expected bound; Cally pre-registers it with
+   Athena as the named benign candidate for any crossing during the announced
+   queue.
+3. Limbs are disjoint — a flat target says nothing about free.
+
+**INSTRUMENT CORRECTION, use it in every quiet check:** `pgrep -f` matches
+argv TEXT, and Athena's probe counted another seat's quiet-check script as a
+live compiler because its argv contained "cargo" and "rustc" — the seats most
+likely to mention a tool are the ones measuring it. **Correct form is
+`pgrep -x <exe>` plus a positive control (`pgrep -x zsh` non-zero).** Third
+argv-substring contamination on the estate today.
+
+### The scoped clean — ruled and MEASURED SMALL
+
+Cally ruled the target-dir offer **SCOPED CLEAN ONLY**: `cargo clean -p` the
+crates the queue will not touch, enumerated, delta reported. **NOT the full
+32G** — items 1–3 rebuild aion-rs/aion-server/aion-cli anyway, so a cold wipe
+spends the freed space on its own rebuild and RAISES the peak. The remedy would
+consume itself. Right call.
+
+Computed the closure from `cargo metadata`'s resolve graph (all dep kinds, so
+dev-deps are included — the queue uses `--all-targets`):
+
+- **Queue touches (20):** aion-awl, aion-awl-lsp, aion-awl-package, aion-cli,
+  aion-client, aion-core, aion-darwin-acl, aion-integration-acp,
+  aion-integration-norn, aion-integrations, aion-package, aion-proto,
+  aion-proto-generated, aion-rs, aion-server, aion-store, aion-store-haematite,
+  aion-store-libsql, aion-toolchain, aion-worker.
+- **Safe to clean (3):** `aion-integration-cli`, `million-processes`, `xtask`.
+
+**Report this honestly: the scoped clean is a SMALL win, not a remedy.** Three
+leaf crates out of twenty-three. If Athena needs real gigabytes the answer is
+not here, and saying so beats delivering a rounding error dressed as help.
+
 ## The queue — RELEASED 2026-07-31 ~08:13Z
 
 The freeze is lifted and the per-command GO regime ended with it. Cally
@@ -113,9 +163,58 @@ contract-violating signal, and quoted history proving the run's bytes are
 byte-identical and it stays parked, plus the caller's 400. Split raised with
 Cally; neither gets dropped.
 
+**The split is RULED as written (Cally, 08:17:27Z).** The wrong evidence spec
+came from her seat, not a mis-sequencing at mine; executing item 4 as released
+would have closed **#97's name over #83's proof**. That is the ornamental-
+surface shape, refused at the bytes. 4a and 4b each get their own motion and
+their own record.
+
+### 4a — the #97 live proof: three constraints, all binding
+
+1. **My own server, my own port verified free BEFORE bind, my own fresh store
+   under my own tree.** Never `:8080`. Never the live store path. The
+   deleted-binary server (#108) gets no signal from my proof standing next to
+   it.
+2. **The server's lifetime is bounded by the proof.** Foreground, explicit kill
+   at the end, then an orphan check with `pgrep -x` and its positive control.
+   Tom's no-backgrounding law is the reason: a proof server that outlives its
+   proof is an unblessed long-lived process.
+3. **The quoted evidence IS the acceptance** — history byte-identical
+   before/after the refused signal, run still parked, and the wire 400. Quoted,
+   not summarized.
+
+**If any of that fails to hold cleanly, 4a STOPS and reports rather than
+adapts.**
+
 Still owed and unscheduled: `cargo test -p aion-server --test
 ops_console_packaging`, which asserts the refreshed bundle ships in the
 packaged crate. Owed on this tree before release.
+
+## Owed after the queue — Cally's two findings on `enforce_contract`
+
+Her second-reader review of the three-door recovery asymmetry is DONE and the
+asymmetry is **APPROVED**. Supply line clean (`reload_package`'s only
+production caller is the persistence recovery path, so the asymmetry cannot
+leak through another door); enforcement-before-idempotent-shortcut is right;
+the pre-`.v4` bypass is correct; the availability-over-validation ruling is
+sound. Two findings, **neither blocking the queue, both mine to schedule
+after it**:
+
+- **FINDING A — the degraded state has no queryable trace after boot.** The
+  only evidence a resident package runs with its contract switched off is a
+  boot-time error line, and the Refuse door's own doc names that exact hazard:
+  "a log line at a moment nobody is watching." The catalog cannot answer
+  *which resident packages run unchecked*. Suggested remedy is a flag on the
+  version record surfaced through `list_workflow_versions` —
+  **deletion-class**: it makes the invisible state impossible rather than
+  better-logged.
+- **FINDING B — `recovery_still_loads_a_persisted_package_the_door_would_now_refuse`
+  pins the LOADS half only.** A silently-quiet recovery load would pass the
+  suite, and the report is the ENTIRE compensation for the disabled contract.
+  Pin the report itself.
+- Plus one design sentence for the doc: a middle door (load for pinned runs,
+  deactivate the route) existed and was implicitly rejected. Right call for
+  restart-availability — but say so where the next reader will look.
 
 ## 🔴 Standing constraints
 
