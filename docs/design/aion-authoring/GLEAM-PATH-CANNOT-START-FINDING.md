@@ -114,3 +114,46 @@ Three coherent options, and this is a design call rather than a bug fix:
 
 What must NOT happen is leaving an exported SDK function that silently cannot
 do what its name and docs say.
+
+---
+
+## 🔴 2026-08-01 — an attempted "option-independent floor" was BUILT, MEASURED, AND REVERTED
+
+I judged that moving the refusal from first-start to **deploy** was independent of the
+(a)/(b)/(c) decision — under (a) the condition stops arising, under (b) it is the correct
+permanent refusal, under (c) it is complementary. I built it: one shared predicate
+(`unqueued_activities`) behind both gates so they could not drift, and an
+`enforce_queue_declaration` alongside the existing `enforce_contract`, reusing its
+`Refuse`-on-deploy / `ReportOnly`-on-recovery split for the same reason.
+
+It compiled clean. Then it failed **14 of 27 loader tests**, and that number is the
+finding:
+
+- `WorkflowCatalog::new()` defaults to `ActivityServing::QueueRouted` (`catalog.rs:168`).
+- The shared test manifest in `catalog_tests.rs:26` declares one activity —
+  `activity/send` — incidentally, because those tests are about load and route mechanics
+  and have nothing to do with queues.
+
+So **the shape that cannot start is the default shape of a package in this codebase's own
+fixtures.** Refusing it at deploy is not a narrow honesty fix; it makes `aion deploy` fail
+outright for every Gleam package that declares an activity.
+
+⇒ **That is not option-independent. It is close to option (b) — "stop claiming two
+first-class surfaces" — enacted by the deploy path rather than decided.** Refusing to
+deploy is a bigger statement than refusing to start, and it is not mine to make while
+(a)/(b) is open.
+
+**REVERTED.** The tree is back to unmodified. What survives is the measurement, which is
+worth more than the code was:
+
+1. The blast radius is a direct measure of how pervasive the unstartable shape is.
+2. A cheaper floor exists that IS option-independent and was not built: report the
+   unqueued activities in `LoadOutcome` so the CLI can print them at deploy. There is
+   precedent in the same struct — `superseded_versions` exists for exactly this, and its
+   own doc says *"What deploy CAN do is stop the accumulation being invisible."* That
+   closes "a deployed-and-broken package looks identical to a working one" with zero
+   behaviour change.
+
+**The general shape:** *a fix that is option-independent in its effect can still be
+option-deciding in its blast radius.* I checked the first and not the second, and only
+running it showed the difference.
