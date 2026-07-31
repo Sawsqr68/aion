@@ -114,3 +114,68 @@ registry's existing semantics close it.
 
 The reservation type, its mutual exclusion with `insert`, the cancel branch, requirements
 (1)–(4). Stated as outstanding rather than implied complete.
+
+---
+
+# 📍 RESUME HERE — written at compaction #3 (2026-08-01)
+
+## Tree state
+
+**21 commits ahead of `origin/main`, all local and unpushed. No uncommitted crate code.**
+
+| commit | what |
+|---|---|
+| `a1782ce9` | #122 closed — dependents gate green, three red runs made durable in-repo |
+| `2ea67fef` | **#121 CLOSED** — both recovery-loop guards reached; `StaleActiveListStore` built |
+| `9ccee6f9` | #88 — deploy-refusal built, measured at 14 broken tests, **REVERTED** |
+| `ff9431bc` | **#117(c) requirement (5)** discharged as the seam test |
+
+## 🔴 THE ACTIVE LANE — #117(c), RULED AND UNBLOCKED
+
+Waffles ruled via Cally 2026-08-01: **YES narrowly for never-alive runs, five binding
+requirements, mechanism (B) confirmed.** (A) and (C) are FORECLOSED — do not re-open them.
+
+**Done:** requirement (5) (the seam test, ruled to come first) and the process-local /
+non-durable verification Waffles asked for. Both above, both committed.
+
+**Next, in order — requirements (1)–(4):**
+
+1. The **terminal-writer reservation** type in `crate::registry`. Not a handle: no pid, no
+   `loaded_version`, no residency, invisible to `live_pid`. Keyed by `(id, run)` and
+   **mutually exclusive with a handle for that pair** — that mutual exclusion IS the
+   discharge of requirement (1), so it must be enforced by the registry, not by a check.
+2. Preconditions re-proven **at reservation time, under the lock, measured not cited**:
+   non-resident, AND *reload refuses right now*. **STOP if reload succeeds** — then the run
+   is recoverable and cancellation goes the ordinary route.
+3. Exactly ONE terminal append, citing `registry.unrecoverable().get(&id)` (landed
+   `7c9a2329`), then the reservation ends.
+4. The verb names the true state — **never "not found."**
+5. Fixture rehearsal; first live case is `0756ecd5`.
+
+## Method notes that cost something to learn tonight
+
+- **The only thing that has ever caught a vacuous test here is an inverted control that was
+  actually RUN.** Every guard test in these commits has one, and each kills exactly its own
+  test.
+- **`startup.rs` pin: `0759b697afe80fae80a5758c37b251b8eec3923baff4b750b8e334ed5613f3d7`.**
+  Re-verify after any mutation; `grep "if false"` must return nothing.
+- **A denominator inherits the scope of the thing you counted in.** #85 is **3 red in 8 on
+  the Block G final tree (37.5%)** — NOT 11, which pooled four trees. Corrected against me.
+- **A correct caveat does not survive being added to a wrong total.**
+- **A fix that is option-independent in its EFFECT can still be option-deciding in its
+  BLAST RADIUS** (#88, above).
+- **An alarm is never a load-bearing component.**
+- Truncation is a lossy channel: it can delete evidence, never fabricate it. **Completeness
+  is required to certify a PASS, not a FAILURE** — but a red licenses "this failed", never
+  a rate.
+- The background-task wrapper reported **exit 0 for a cargo that exited 101, twice
+  tonight.** Index on the in-log `EXIT=` line before anything else.
+- **Declare regimes to Athena up front** (any `--workspace` or unusual command); she clears
+  them in a line. Twice tonight she had to chase an undeclared pid.
+
+## Board after this
+
+#88 (needs its (a)/(b) ruling — the floor I tried was not option-independent), #71, #76,
+#117's operator-facing surface (own increment, unblocked in every branch), #85 (open
+investigation, `sqlite3_errmsg` lead, evidence in-repo at
+`evidence/85-outbox-flake/`).
