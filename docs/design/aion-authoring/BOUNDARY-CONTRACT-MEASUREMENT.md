@@ -360,18 +360,37 @@ is genuinely new and not a second copy of what was already there.
 
 ---
 
-# 🔴 RESUME HERE — 2026-07-31 ~05:45Z
+# 🔴 RESUME HERE — 2026-07-31 ~06:40Z
 
-`origin/main` = **`29a2d8ad`**. Working tree clean apart from pre-existing
+`origin/main` = **`4462765a`**. Working tree clean apart from pre-existing
 untracked `RELEASE-0.9.2.md`.
 
 Done today: #110 (`46bbdced`), #95 closed by measurement, #97-A verified as
 built-by-another-lane, the `aion-server` debt discharged, the AWL signal→contract
 supply line gated (`73c6ed50`), #106's second half built (`4d9ca3b0`), #75
 closed (`e866f723` — the compile proof no longer leaves a Gleam build tree in
-the system temp directory on every run), and #83 measured and DESIGNED but
+the system temp directory on every run), #83 measured and DESIGNED but
 deliberately not built (`29a2d8ad`, see `AWLFAILED-CARRIES-NOTHING.md`: it
-changes a durable wire family and cannot be gated under the freeze).
+changes a durable wire family and cannot be gated under the freeze), and #74
+closed (`4462765a`).
+
+**#74's lesson, worth carrying.** All three gates were correct code. They ran
+the right check, took the right branch, and wrote the right sentence — into a
+stream nothing reads. `libtest` replays a test's captured output only when the
+test FAILS, so a skip announced through `eprintln!` is invisible in exactly the
+case it exists for; `tracing::info!` with no subscriber writes nowhere at all.
+The pin therefore had to be a child process: re-run a real gated test with
+`gleam` absent, capture ON, and require BOTH the announcement AND `1 passed`.
+The `1 passed` half is the control and it is the load-bearing one — an
+announcement seen in a failing run only proves libtest replays capture on
+failure. **A diagnostic is not delivered until you have checked where it lands.**
+
+Residual, named rather than left silent: `aion-awl` and `aion` each still carry
+their own copy of this same gate. Both are correctly announced, so there is no
+defect there — but that is three definitions of one invariant, and the honest
+collapse is a shared test-support crate. Not attempted under the freeze: a new
+workspace member changes the feature graph and the publish surface (this repo
+releases 21 crates), and neither can be verified with the batteries frozen.
 
 **🔴 TWO ITEMS OWED, HELD BY RULING. Do not run them without a NAMED GO from
 Cally.** The estate rule, minted today: a heavy-class says-before executes only
@@ -382,7 +401,13 @@ on the record as an entered-then-killed forbidden-class run. Do not repeat it.
 
 Queue, in order, each on its own named GO, with a fresh disk reading first:
 
-1. `cargo clippy -p aion-package -p aion-rs -p aion-server --all-targets -- -D warnings`
+1. `cargo clippy -p aion-rs -p aion-server --all-targets -- -D warnings`.
+   Narrowed: `-p aion-package` is DISCHARGED (clean at `4462765a`), run on the
+   #74 tree because it is the same crate and the same weight as the suite that
+   lane already runs. It was not free — it caught a real `unnecessary_wraps`
+   error in `admission_tests.rs` that `4d9ca3b0` had landed unlinted. Treat
+   that as evidence for this queue item, not against it: the remaining two
+   crates carry the same exposure.
 2. `cargo test -p aion-rs` — the #106 battery. The change sits in the
    package-load path nearly every integration test walks, so until this runs
    `4d9ca3b0` is unverified at battery level and must be described that way.
