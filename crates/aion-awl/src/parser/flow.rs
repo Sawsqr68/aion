@@ -7,7 +7,7 @@ use crate::ast::{
     Binding, CollectStmt, DeliveryVerb, DistributeStmt, DocLine, Lead, MaxVisits, Statement, Step,
     SubflowDecl, SubflowOutcome, join_span,
 };
-use crate::{Keyword, Span, TokenKind};
+use crate::{IN_WORD, Keyword, Span, TokenKind};
 
 use super::ParseError;
 use super::args::parse_binding;
@@ -200,7 +200,7 @@ pub(super) fn parse_distribute(
 ) -> Result<DistributeStmt, ParseError> {
     let (var, var_span) = stream.expect_name(&format!("the `{}` item name", verb.as_word()))?;
     match stream.peek() {
-        Some(token) if matches!(&token.kind, TokenKind::Identifier(word) if word == "in") => {
+        Some(token) if matches!(&token.kind, TokenKind::Identifier(word) if word == IN_WORD) => {
             stream.next();
         }
         Some(token) => {

@@ -6,7 +6,7 @@
 //! action is DELIVERED, a body says what it DOES.
 
 use crate::ast::{ActionBody, ConfigLine, Lead, join_span};
-use crate::{Keyword, TokenKind};
+use crate::{Keyword, RUN_WORD, TokenKind};
 
 use super::ParseError;
 use super::stream::{Stream, describe};
@@ -102,7 +102,7 @@ fn is_config_key(kind: &TokenKind) -> bool {
 /// `run` all predate this feature and must keep working, including where an
 /// expression references them. Reserving the word would have broken them.
 fn is_run_word(kind: &TokenKind) -> bool {
-    matches!(kind, TokenKind::Identifier(name) if name == "run")
+    matches!(kind, TokenKind::Identifier(name) if name == RUN_WORD)
 }
 
 /// Parse one `run "<command>"` body line; the `run` word is at the cursor.

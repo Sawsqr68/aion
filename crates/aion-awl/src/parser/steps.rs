@@ -6,7 +6,7 @@ use crate::ast::{
     AfterRef, Binding, DocLine, ForkHeader, ForkStmt, Guard, JoinLine, Lead, LoopStmt, LoopTail,
     OnFailure, OutcomeClause, Statement, Step, join_span,
 };
-use crate::{Keyword, Span, TokenKind};
+use crate::{IN_WORD, Keyword, Span, TokenKind};
 
 use super::ParseError;
 use super::args::parse_binding;
@@ -257,7 +257,7 @@ pub(super) fn parse_fork(
     } else {
         let (var, var_span) = stream.expect_name("the fork item name")?;
         match stream.peek() {
-            Some(token) if matches!(&token.kind, TokenKind::Identifier(word) if word == "in") => {
+            Some(token) if matches!(&token.kind, TokenKind::Identifier(word) if word == IN_WORD) => {
                 stream.next();
             }
             Some(token) => {

@@ -183,21 +183,21 @@ pub(crate) fn derived_contract_schemas(
     root: Option<&Path>,
 ) -> Vec<Result<Value, SchemaError>> {
     let deriver = Deriver::new(document, root);
-    let mut derived = Vec::new();
+    let mut schemas = Vec::new();
     for signal in &document.signals {
-        derived.push(attributed(
+        schemas.push(attributed(
             deriver.standalone_type_ref_schema(&signal.ty),
             format!("signal {}", signal.name),
             signal.name_span,
         ));
     }
     for child in &document.children {
-        derived.push(attributed(
+        schemas.push(attributed(
             deriver.params_schema(&child.params),
             format!("the parameters of child {}", child.name),
             child.name_span,
         ));
-        derived.push(attributed(
+        schemas.push(attributed(
             deriver.standalone_type_ref_schema(&child.returns),
             format!("the result of child {}", child.name),
             child.name_span,
@@ -205,19 +205,19 @@ pub(crate) fn derived_contract_schemas(
     }
     for worker in &document.workers {
         for action in &worker.actions {
-            derived.push(attributed(
+            schemas.push(attributed(
                 deriver.params_schema(&action.params),
                 format!("the parameters of action {}", action.name),
                 action.name_span,
             ));
-            derived.push(attributed(
+            schemas.push(attributed(
                 deriver.standalone_type_ref_schema(&action.returns),
                 format!("the result of action {}", action.name),
                 action.name_span,
             ));
         }
     }
-    derived
+    schemas
 }
 
 /// Re-anchors an unusable-schema refusal on the DECLARATION that carries it.

@@ -4,6 +4,7 @@
 //! canonical printing remain exclusively in `aion-awl`.
 
 mod analysis;
+mod completion;
 mod navigation;
 mod server;
 

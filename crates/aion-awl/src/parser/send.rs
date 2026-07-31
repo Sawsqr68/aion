@@ -12,7 +12,7 @@
 //! is used as a parameter name in the corpus today.
 
 use crate::ast::{Lead, RoutePayload, SendDecl, SendStmt, Statement, join_span};
-use crate::{Span, TokenKind};
+use crate::{SEND_WORD, Span, TO_WORD, TokenKind};
 
 use super::ParseError;
 use super::exprs::{expr_span, parse_expr};
@@ -20,13 +20,10 @@ use super::statements::{ParsedPayload, parse_route_payload};
 use super::stream::Stream;
 use super::types::{parse_type_ref, type_ref_span};
 
-/// The word that names a send's target. Positional, never reserved.
-const TO: &str = "to";
-
 /// Whether an identifier at the head of a header line opens a `send`
 /// declaration.
 pub(super) fn heads_declaration(word: &str) -> bool {
-    word == "send"
+    word == SEND_WORD
 }
 
 /// Whether an identifier at the head of a body line opens a `send`
@@ -39,7 +36,7 @@ pub(super) fn heads_declaration(word: &str) -> bool {
 /// end of a body would otherwise swallow the next line's first word and
 /// report a send's diagnostic for a statement nobody wrote.
 pub(super) fn heads_statement(stream: &mut Stream, word: &str) -> bool {
-    word == "send"
+    word == SEND_WORD
         && matches!(
             stream.peek_second().map(|token| &token.kind),
             Some(TokenKind::Identifier(_) | TokenKind::TypeIdentifier(_))
@@ -122,7 +119,8 @@ fn parse_payload(stream: &mut Stream) -> Result<(Option<RoutePayload>, Option<Sp
 }
 
 fn expect_to(stream: &mut Stream, signal: &str, signal_span: Span) -> Result<(), ParseError> {
-    let is_to = stream.peek_is(|kind| matches!(kind, TokenKind::Identifier(word) if word == TO));
+    let is_to =
+        stream.peek_is(|kind| matches!(kind, TokenKind::Identifier(word) if word == TO_WORD));
     if is_to {
         stream.next();
         return Ok(());

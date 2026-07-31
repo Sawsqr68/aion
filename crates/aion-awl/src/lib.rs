@@ -51,7 +51,10 @@ pub use emitter::{
     EmitError, EmittedArtifact, SynthesizedWorkflowEntry, emit, emit_artifact, emit_artifact_in,
     emit_in,
 };
-pub use lexer::{DurationUnit, Keyword, LexError, Span, Token, TokenKind, lex};
+pub use lexer::{
+    ANSWER_WORD, DurationUnit, IN_WORD, Keyword, LexError, POSITIONAL_WORDS, QUERY_WORD, RUN_WORD,
+    SEND_WORD, Span, TO_WORD, Token, TokenKind, lex,
+};
 pub use parser::{ParseError, parse};
 pub use printer::{expr_text, print};
 pub use schema::{

@@ -20,7 +20,7 @@
 //! NAME follows it, which no other statement shape can produce.
 
 use crate::ast::{AnswerStmt, Lead, QueryDecl, RoutePayload, Statement, join_span};
-use crate::{Span, TokenKind};
+use crate::{ANSWER_WORD, QUERY_WORD, Span, TokenKind};
 
 use super::ParseError;
 use super::statements::{ParsedPayload, parse_route_payload};
@@ -30,7 +30,7 @@ use super::types::{parse_type_ref, type_ref_span};
 /// Whether an identifier at the head of a header line opens a `query`
 /// declaration.
 pub(super) fn heads_declaration(word: &str) -> bool {
-    word == "query"
+    word == QUERY_WORD
 }
 
 /// Whether an identifier at the head of a body line opens an `answer`
@@ -43,7 +43,7 @@ pub(super) fn heads_declaration(word: &str) -> bool {
 /// otherwise swallow the next line's first word and report an answer's
 /// diagnostic for a statement nobody wrote.
 pub(super) fn heads_statement(stream: &mut Stream, word: &str) -> bool {
-    word == "answer"
+    word == ANSWER_WORD
         && matches!(
             stream.peek_second().map(|token| &token.kind),
             Some(TokenKind::Identifier(_) | TokenKind::TypeIdentifier(_))

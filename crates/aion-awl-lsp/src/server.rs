@@ -3,9 +3,10 @@ use std::path::PathBuf;
 
 use lsp_server::{Connection, ErrorCode, Message, Notification, Request, Response};
 use lsp_types::{
-    DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-    DocumentFormattingParams, GotoDefinitionParams, HoverParams, HoverProviderCapability, OneOf,
-    PositionEncodingKind, PublishDiagnosticsParams, ServerCapabilities, TextDocumentPositionParams,
+    CompletionOptions, CompletionParams, CompletionResponse, DidChangeTextDocumentParams,
+    DidCloseTextDocumentParams, DidOpenTextDocumentParams, DocumentFormattingParams,
+    GotoDefinitionParams, HoverParams, HoverProviderCapability, OneOf, PositionEncodingKind,
+    PublishDiagnosticsParams, ServerCapabilities, TextDocumentPositionParams,
     TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, Uri,
 };
 use serde::de::DeserializeOwned;
@@ -95,6 +96,18 @@ fn capabilities() -> ServerCapabilities {
         document_symbol_provider: Some(OneOf::Left(true)),
         definition_provider: Some(OneOf::Left(true)),
         hover_provider: Some(HoverProviderCapability::Simple(true)),
+        completion_provider: Some(CompletionOptions {
+            // A completion list is complete as returned: every candidate is
+            // already in it, and the client filters by the prefix the author is
+            // typing. There is nothing a resolve round-trip could add.
+            resolve_provider: Some(false),
+            // AWL's openers are plain words, so the client's own identifier
+            // trigger is what fires completion. These are the characters after
+            // which a word does NOT start but a candidate is still wanted: the
+            // pipe's second character, and the colon before a type.
+            trigger_characters: Some(vec![">".to_owned(), ":".to_owned()]),
+            ..CompletionOptions::default()
+        }),
         ..ServerCapabilities::default()
     }
 }
@@ -213,6 +226,25 @@ fn handle_request(
                     navigation::definition(source, &text_document.uri, position, root.as_deref())
                 });
             respond(connection, request.id, location)
+        }
+        "textDocument/completion" => {
+            let Some(params) = decode_request::<CompletionParams>(connection, &request)? else {
+                return Ok(());
+            };
+            let TextDocumentPositionParams {
+                text_document,
+                position,
+            } = params.text_document_position;
+            // An unopened document yields an empty list rather than `null`: a
+            // client reads `null` as "this server declined", and the server did
+            // not decline — it has nothing to offer for a file it was never
+            // sent.
+            let items = documents
+                .get(text_document.uri.as_str())
+                .map_or_else(Vec::new, |source| {
+                    crate::completion::completions(source, position)
+                });
+            respond(connection, request.id, CompletionResponse::Array(items))
         }
         "textDocument/hover" => {
             let Some(params) = decode_request::<HoverParams>(connection, &request)? else {

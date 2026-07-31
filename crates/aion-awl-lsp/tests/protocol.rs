@@ -248,3 +248,160 @@ fn assert_semantic_requests(client: &Connection, uri: &str) -> TestResult {
     assert_eq!(definition["range"]["start"]["character"], 9);
     Ok(())
 }
+
+/// A document left MID-EDIT: a half-typed statement on the last line, which is
+/// the only state in which a real editor asks for completion.
+const HALF_TYPED: &str = "//! Completing.\nworkflow probe\n  input incident_id: String\n\nworker ops\n  action gather(incident_id: String) -> Diagnostics\n\nstep collect\n  ga";
+
+/// Drive the handshake and open `source`, returning once its diagnostics land.
+///
+/// Asserts the completion capability on the way through: an editor asks by
+/// advertising, so a provider the server never announces is never requested,
+/// and the feature would be unreachable however well it worked.
+fn initialize_and_open(client: &Connection, uri: &str, source: &str) -> TestResult {
+    send(
+        client,
+        Message::Request(Request::new(
+            RequestId::from(20),
+            "initialize".to_owned(),
+            json!({ "capabilities": {} }),
+        )),
+    )?;
+    let Message::Response(initialize) = receive(client)? else {
+        return Err("server did not respond to initialize".into());
+    };
+    let capabilities = initialize.result.ok_or("initialize omitted capabilities")?;
+    let completion = &capabilities["capabilities"]["completionProvider"];
+    assert!(
+        completion.is_object(),
+        "the server must ADVERTISE completion or no editor will ever ask for it: {capabilities}"
+    );
+    assert_eq!(completion["resolveProvider"], false);
+
+    send(
+        client,
+        Message::Notification(Notification::new("initialized".to_owned(), json!({}))),
+    )?;
+    send(
+        client,
+        Message::Notification(Notification::new(
+            "textDocument/didOpen".to_owned(),
+            json!({
+                "textDocument": {
+                    "uri": uri,
+                    "languageId": "awl",
+                    "version": 1,
+                    "text": source
+                }
+            }),
+        )),
+    )?;
+    let Message::Notification(published) = receive(client)? else {
+        return Err("server did not publish diagnostics".into());
+    };
+    assert_eq!(published.method, "textDocument/publishDiagnostics");
+    Ok(())
+}
+
+/// Ask for completion at the very end of `source` and return the labels.
+fn completion_labels(
+    client: &Connection,
+    uri: &str,
+    source: &str,
+) -> Result<Vec<String>, Box<dyn Error>> {
+    let line = u32::try_from(source.lines().count().saturating_sub(1))?;
+    let column = u32::try_from(
+        source
+            .lines()
+            .next_back()
+            .unwrap_or_default()
+            .chars()
+            .count(),
+    )?;
+    send(
+        client,
+        Message::Request(Request::new(
+            RequestId::from(21),
+            "textDocument/completion".to_owned(),
+            json!({
+                "textDocument": { "uri": uri },
+                "position": { "line": line, "character": column }
+            }),
+        )),
+    )?;
+    let Message::Response(response) = receive(client)? else {
+        return Err("server did not respond to completion".into());
+    };
+    assert!(
+        response.error.is_none(),
+        "completion failed over the wire: {response:?}"
+    );
+    let items = response
+        .result
+        .ok_or("completion response carried no result")?;
+    Ok(items
+        .as_array()
+        .ok_or("completion result was not an item array")?
+        .iter()
+        .filter_map(|item| item["label"].as_str().map(str::to_owned))
+        .collect())
+}
+
+fn shutdown_and_exit(client: &Connection, id: i32) -> TestResult {
+    send(
+        client,
+        Message::Request(Request::new(
+            RequestId::from(id),
+            "shutdown".to_owned(),
+            serde_json::Value::Null,
+        )),
+    )?;
+    let Message::Response(shutdown) = receive(client)? else {
+        return Err("server did not respond to shutdown".into());
+    };
+    assert!(shutdown.error.is_none(), "shutdown failed: {shutdown:?}");
+    send(
+        client,
+        Message::Notification(Notification::new(
+            "exit".to_owned(),
+            serde_json::Value::Null,
+        )),
+    )
+}
+
+/// THE WIRE PROOF. The completion provider is advertised in the handshake AND
+/// a real `textDocument/completion` request comes back answered, on a document
+/// that does not parse.
+///
+/// Both halves matter and either alone is satisfiable while the author still
+/// gets nothing: a provider that works when called directly but is never
+/// announced is not reachable, and an announced provider that returns an empty
+/// list for a half-typed line is not a feature.
+#[test]
+fn live_completion_answers_a_half_typed_step_body() -> TestResult {
+    assert!(
+        aion_awl::parse(HALF_TYPED).is_err(),
+        "the premise is a document mid-edit; if it parses, this proves nothing about the case \
+         completion exists for"
+    );
+
+    let (server, client) = Connection::memory();
+    let server_thread = thread::spawn(move || run_connection(&server));
+    let uri = "file:///tmp/completing.awl";
+
+    initialize_and_open(&client, uri, HALF_TYPED)?;
+    let labels = completion_labels(&client, uri, HALF_TYPED)?;
+    assert!(
+        labels.iter().any(|label| label == "gather"),
+        "the declared action must come back over the wire for a half-typed step body: {labels:?}"
+    );
+    assert!(
+        labels.iter().any(|label| label == "spawn"),
+        "the step-body vocabulary must come back too: {labels:?}"
+    );
+
+    shutdown_and_exit(&client, 22)?;
+    let server_result = server_thread.join().map_err(|_| "server thread panicked")?;
+    server_result?;
+    Ok(())
+}

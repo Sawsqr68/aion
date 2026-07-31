@@ -39,6 +39,43 @@ impl Token {
     }
 }
 
+/// The word that opens a signal `send`, positionally.
+pub const SEND_WORD: &str = "send";
+/// The word that names a `send`'s target workflow, positionally.
+pub const TO_WORD: &str = "to";
+/// The word that opens a `query` declaration, positionally.
+pub const QUERY_WORD: &str = "query";
+/// The word that opens an `answer` statement, positionally.
+pub const ANSWER_WORD: &str = "answer";
+/// The word that opens a declarative action body, positionally.
+pub const RUN_WORD: &str = "run";
+/// The word that separates a per-item region's binding from its collection,
+/// positionally.
+pub const IN_WORD: &str = "in";
+
+/// Every word AWL reads as an opener WITHOUT reserving it.
+///
+/// These are not in [`Keyword`] on purpose, and that is not an oversight: the
+/// corpus already carries `action send(to: String, …)`, `step run`, `wait
+/// decision -> answer` and `action parse_output(…, query: String)`, so
+/// reserving any of them would break documents that exist today. Each is
+/// instead recognised in the one grammar position where nothing else may
+/// stand.
+///
+/// What they lacked was a shared NAME. Every recognition site compared against
+/// a bare literal, so a consumer outside the parser — the language server's
+/// completion provider is the first — had to re-type the vocabulary and hope
+/// it still matched. Naming them here makes the parser and its consumers read
+/// the same words: a change to one is a change to both.
+pub const POSITIONAL_WORDS: [&str; 6] = [
+    SEND_WORD,
+    TO_WORD,
+    QUERY_WORD,
+    ANSWER_WORD,
+    RUN_WORD,
+    IN_WORD,
+];
+
 /// AWL keyword tokens.
 ///
 /// This is the complete reserved inventory from the AWL-2 spec plus the
@@ -180,6 +217,75 @@ pub enum Keyword {
 }
 
 impl Keyword {
+    /// Every reserved word in the language, in declaration order.
+    ///
+    /// Rust cannot enumerate an enum's variants, so a consumer that needs the
+    /// whole vocabulary — the language server's completion provider is the
+    /// first — would otherwise hand-copy it and fall silently behind the day a
+    /// keyword is added. `keyword_inventory_covers_every_variant` pins this
+    /// list against a count derived from [`Keyword::as_word`]'s own source, so
+    /// a new variant fails a test here rather than going quietly missing
+    /// downstream.
+    pub const ALL: [Self; 57] = [
+        Self::Workflow,
+        Self::Input,
+        Self::Signal,
+        Self::Outcome,
+        Self::Type,
+        Self::Schema,
+        Self::Worker,
+        Self::Action,
+        Self::Child,
+        Self::Step,
+        Self::After,
+        Self::Fork,
+        Self::Join,
+        Self::Loop,
+        Self::Counting,
+        Self::Until,
+        Self::Max,
+        Self::Sequential,
+        Self::Spawn,
+        Self::Wait,
+        Self::Sleep,
+        Self::Timeout,
+        Self::Retry,
+        Self::Advisory,
+        Self::Agent,
+        Self::Every,
+        Self::Backoff,
+        Self::Node,
+        Self::On,
+        Self::Failure,
+        Self::When,
+        Self::Otherwise,
+        Self::Route,
+        Self::Success,
+        Self::Filter,
+        Self::Map,
+        Self::Sort,
+        Self::Count,
+        Self::Any,
+        Self::All,
+        Self::Is,
+        Self::Empty,
+        Self::Present,
+        Self::Absent,
+        Self::Not,
+        Self::And,
+        Self::Or,
+        Self::True,
+        Self::False,
+        Self::Const,
+        Self::Json,
+        Self::Of,
+        Self::Subflow,
+        Self::Distribute,
+        Self::Sequence,
+        Self::Collect,
+        Self::Visits,
+    ];
+
     /// The reserved word this keyword lexes from.
     #[must_use]
     pub const fn as_word(self) -> &'static str {

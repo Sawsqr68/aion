@@ -34,7 +34,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// mapping is exercised rather than a single-entry special case. `end` is
 /// REQUIRED on `Continuation` and absent from `Nudge`, which is what lets a
 /// payload be valid for one signal and invalid for the other.
-const DECLARES_SIGNALS: &str = r#"//! Contract pin: a declared signal reaches the package contract.
+const DECLARES_SIGNALS: &str = r"//! Contract pin: a declared signal reaches the package contract.
 workflow signal_contract_pin
   input label: String
   signal control: Continuation
@@ -52,7 +52,7 @@ step wait_for_operator
     route done(label: label)
   outcome again: otherwise,
     route done(label: answer.message)
-"#;
+";
 
 /// The declared signal names in the contract are exactly the ones the document
 /// declares — compared against the PARSED document, not a hardcoded list, so
