@@ -5,7 +5,7 @@ closed. Read this first.
 
 ## Tree state
 
-**`origin/main` = `a06a714b`. Everything is pushed. Working tree clean of crate code.**
+**`origin/main` = `4b431af0`. Everything is pushed. Working tree clean of crate code.**
 
 | commit | what |
 |---|---|
@@ -14,6 +14,8 @@ closed. Read this first.
 | `c11e18a5` | docs — the exclusion is process-local, and where that puts the first live case |
 | `6f18949f` | #123 — `GET /build`, a server can say what code it is |
 | `a06a714b` | docs — what code Tom's live server actually runs, bounded to 76 commits |
+| `9e77ba65` | docs — this resume marker |
+| `4b431af0` | docs — the author/committer control, and which way the bound errs |
 
 Untracked and pre-existing, not mine to sweep: `.aion-accepted-binary-20260731/`,
 `.aion-jjuabk-snapshot-20260731/`, `examples/remote-gates/worker/Cargo.lock` (modified).
@@ -89,6 +91,25 @@ called it *fifteen runs accumulating*; it was mostly ONE build's **footprint**. 
 identically in a `du` and only the second predicts the next build. Measuring more carefully
 never catches this — only asking what KIND of quantity it is.
 
+**A vacuous ABSENCE check looks like SUCCESS.** Athena's, caught inside her own
+verification of the `target/debug` clear — the night's exact family, committed in the
+act of verifying it. A wrong path prefix made `ls -d "$A/debug"` test a path that had
+never existed; it answered `No such file or directory`, which is *exactly what a correct
+"debug is gone" result looks like*. True, empty, confirming. What caught it was the
+positive arm: the same bad prefix hit `du "$A/release"`, where absence is a **broken
+command** rather than an answer.
+
+> The absence-check went quiet and confirming; the presence-check went loud and broken.
+> — Athena
+
+⇒ **Never verify a deletion alone.** Every "X is gone" gets a sibling "Y is still here"
+built from the SAME prefix — the positive arm is the only one whose failure is loud, so
+it is the one that proves the negative arm was pointed at the right place at all. It
+generalises off the filesystem: *no rows matched*, *no such key*, *no error logged*,
+*the route 404s* all pass vacuously against the wrong database, namespace, or host. Same
+reversal as the non-vacuity guard one layer out: there an empty baseline satisfies
+equality, here an absent root satisfies absence.
+
 **One-writer is structural within a process and an ALARM across processes.** The registry
 holds no persistence and rebuilds empty at boot. Any second process takes a terminal-writer
 reservation trivially. `SequenceConflict` is the only cross-process defence, and an alarm is
@@ -96,9 +117,13 @@ never a load-bearing component.
 
 ## 🔴 Box rules confirmed the hard way
 
-- ✅ **`target/debug` was CLEARED at the end of this session** (2026-08-01). Free went
-  48 → **85 GiB**; `target/release` verified byte-identical after
-  (1,427,144 KiB, `f748956c…`). So the next cold build has room — but check anyway.
+- ✅ **`target/debug` was CLEARED at the end of this session** (2026-08-01) and the clear
+  is **VERIFIED AT ATHENA'S HAND, on her second pass** (see the vacuous-absence law
+  above — her first pass was empty). Free went 48 → **85.73 GiB**; `target/release`
+  intact to the byte (1,427,144 KiB, `f748956c…`), the `.aion-accepted-binary-20260731/`
+  ledger copy untouched at the same sha, and nothing collateral swept. A cold ~40 GiB
+  build from here lands at **45.73 GiB — clear of the floor by 20.7.** So the next cold
+  build has room — but measure it again anyway, because that is how this one was caught.
 - 🔴 **Athena's measurement that forced it:** from 48 GiB free with a 37 GiB debug tree, a
   cold full-workspace build would have landed at **~8.8 GiB — far below the hard floor of
   25.** The box could not have absorbed one. Do not assume headroom; measure it.
