@@ -1,8 +1,55 @@
 # The SDK-closure freshness gate is byte-blind (#115)
 
-Found 2026-07-31 while closing [#83](AWLFAILED-CARRIES-NOTHING.md). Design
-only — **not yet built**. The blindness is documented in the gate's own module
-comment, so this is a decision to revisit, not an oversight to correct.
+Found 2026-07-31 while closing [#83](AWLFAILED-CARRIES-NOTHING.md). The
+blindness was documented in the gate's own module comment, so this was a
+decision to revisit, not an oversight to correct.
+
+## ✅ BUILT AND CLOSED — `439d6a88`
+
+Landed 2026-07-31. Three deviations from the design below, each deliberate:
+
+1. **Direct chunk comparison, not a digest.** Same detection, no new
+   dependency, and it *names the chunk that moved* instead of returning a
+   boolean — a `Code`-only divergence reads as a source edit, a whole-set
+   divergence reads as a toolchain move.
+2. **An allowlist, not an exclude list.** The design named chunks to exclude.
+   An exclude list must be extended every time a toolchain introduces a new
+   volatile chunk, and the failure mode of forgetting is a gate that flaps. An
+   allowlist ignores anything unrecognised by construction.
+3. **The double-harvest stability check was not built as specified.** The
+   design asked for two consecutive fresh harvests compared against each other.
+   The allowlist makes that check structurally unnecessary — volatility can only
+   enter through a named chunk — and
+   `a_changed_metadata_chunk_does_not_diverge` pins the property directly by
+   proving a perturbed `CInf` does *not* trip the gate. Stated here rather than
+   quietly dropped.
+
+**Watched failing, twice**, because a green pin proves nothing otherwise:
+
+- Byte axis disabled at its source → the pin fails and **both** controls stay
+  green, so they are not passing merely because everything passes.
+- A genuinely stale committed beam → the gate reports *"committed closure BYTES
+  lag the harvest while the wire surface matches … `["aion@awl@error (StrT)"]`"*,
+  and the export axis passed on that same run. That sentence is the finding.
+
+**One invalid attempt, recorded because it nearly became evidence.** The first
+end-to-end check perturbed the `Code` chunk and the gate failed with
+`DecodeError("unsupported opcode 252")` — the export-set *parser* crashed before
+the byte assertion was reached. That is not the finding; it is a broken file. A
+stale closure has bytes that are **valid but different**, so the fixture moved to
+`StrT` — a changed string table, which is exactly the changed-error-message case
+the design names. A fixture that fails for the wrong reason is not a fixture.
+
+Measured while there: **the committed closure is currently byte-fresh** against
+this toolchain, so the axis lands as a guard rather than as a repair. The
+07-24 Erlang drift described below did not leave a residue.
+
+The three mechanism pins mutate a committed beam rather than harvesting a fresh
+one, so they need no `gleam` toolchain and run in **every** battery, not only
+where the oracle project can be built.
+
+Gates: `cargo test -p aion-awl-package` exit 0, 36 passed / 0 failed across 7
+targets; `cargo clippy -p aion-awl-package --all-targets -D warnings` exit 0.
 
 ## What the gate does
 

@@ -87,6 +87,31 @@ This is the **fourth** instance of the same pattern in three days, after #83,
 decision that needed it.* Here it is not even discarded — it is present in the
 report and contradicted by the sentence wrapped around it.
 
+## The message is fixed — `6b9252ad`, live-proven
+
+The misattributing sentence is gone. The skip now states the disjunction, says
+it cannot tell the two causes apart, and names the remedy. Proven on the real
+binary against the exact store that produced the false claim:
+
+```
+LEVEL:  ERROR
+REMEDY: redeploy this workflow
+ERROR:  package integrity mismatch: expected `13958627…`, computed `b367d725…`
+MESSAGE: persisted deployed package failed validation on reload; skipping it —
+  runs pinned to it will fail recovery loudly. Cause is EITHER an archive minted
+  under a superseded package-identity domain (an aion upgrade moved package
+  identity; this build carries no encoder for a superseded domain, by policy) OR
+  corrupted / tampered stored bytes. This build cannot tell them apart. The
+  remedy is the same for both: redeploy this workflow.
+```
+
+The fix turned out narrower and more clear-cut than first framed. I had intended
+to *identify* the superseded-domain case; `aion-package` states plainly that this
+build carries no `.v4` encoder and the two causes are therefore
+indistinguishable. So the defect was not a missing diagnosis — it was **asserting
+a diagnosis the code is documented as unable to make**. Refusing to guess costs
+nothing here, because both remedies are the same redeploy.
+
 ## Remedy shape — needs a ruling, not a quiet build
 
 The narrow fix that respects invariant #3: when a run is **non-resident and
