@@ -62,7 +62,9 @@ async fn legacy_null_namespace_and_task_queue_read_back_as_default() -> Result<(
     let dispatch_key = OutboxRow::dispatch_key_for(&workflow_id, 0);
     // Insert a row with NULL namespace + task_queue, exactly as a row persisted
     // before the additive columns existed would read back.
-    store.writer().await
+    store
+        .writer()
+        .await
         .execute(
             "INSERT INTO outbox \
              (dispatch_key, workflow_id, ordinal, activity_type, input, status, attempt, \
@@ -115,7 +117,9 @@ async fn legacy_null_node_reads_back_as_none() -> Result<(), StoreError> {
     let dispatch_key = OutboxRow::dispatch_key_for(&workflow_id, 0);
     // Insert a row with NULL node, exactly as a row persisted before the additive
     // `node` column existed would read back.
-    store.writer().await
+    store
+        .writer()
+        .await
         .execute(
             "INSERT INTO outbox \
              (dispatch_key, workflow_id, ordinal, activity_type, input, status, attempt, \
@@ -486,7 +490,9 @@ async fn append_with_outbox_rolls_back_both_on_failure() -> Result<(), StoreErro
 
     // Force a mid-transaction failure AFTER the events insert succeeds: dropping the outbox
     // table makes the outbox insert fail, which must roll back the already-inserted events too.
-    store.writer().await
+    store
+        .writer()
+        .await
         .execute("DROP TABLE outbox", ())
         .await
         .map_err(|error| crate::error::libsql_error(&error))?;
@@ -824,6 +830,135 @@ async fn pending_outbox_routes_enumerates_distinct_claimable_routes() -> Result<
     assert!(
         routes.iter().all(|r| r.namespace != "gamma"),
         "the future-fenced gamma route is not claimable and must not be enumerated"
+    );
+    Ok(())
+}
+
+/// 🔴 THE GRADUATED PIN for #122 — Waffles' constraint.
+///
+/// # The mechanism, as it stood before #122
+///
+/// `LibSqlStore` handed ONE `libsql::Connection` to every method. `append` took
+/// `transaction_lock` and opened `BEGIN IMMEDIATE`; `complete_outbox_row` took
+/// **no lock at all** and issued a bare `UPDATE`. `SQLite` transaction state
+/// belongs to the CONNECTION, so that unguarded `UPDATE` executed *inside*
+/// whatever transaction happened to be open on the handle — and was undone with
+/// it on rollback.
+///
+/// # 🔴 Why this asserts DURABILITY and not "no error"
+///
+/// The first version of this pin drove eight appends concurrently with eight
+/// completions and asserted both landed. It passed — **and it also passed with
+/// the pre-#122 shape deliberately restored**, five times out of five. It was
+/// proving nothing.
+///
+/// The reason is worth keeping: libSQL's local `Connection` is a bare
+/// `*mut ffi::sqlite3` with no mutex (verified in `libsql-0.9.30`
+/// `src/local/connection.rs`), but `SQLite`'s own serialized threading mode takes
+/// a per-connection mutex inside the C library. So concurrent use of one handle
+/// does not *error* — it silently serialises. **The defect was never an error to
+/// catch.** It is a durability loss: work committed by one caller discarded by
+/// another caller's rollback.
+///
+/// ⇒ A CONCURRENCY TEST THAT ASSERTS "NO ERROR" CANNOT SEE A DEFECT WHOSE
+/// SYMPTOM IS SILENT.
+///
+/// # What the defect actually costs, made concrete by the control
+///
+/// Under the pre-#122 shape this pin reports the settled row back at
+/// `"claimed"`. A `done` row reverting to `claimed` is **redelivery**: the
+/// dispatcher will hand that activity out again. So the defect is an
+/// at-most-once violation that raises no error and writes no log line.
+///
+/// So this pin holds a transaction open on the writer, lets a completion attempt
+/// to run, and then ROLLS BACK. On the old shape the completion had joined that
+/// transaction and vanishes with it; on the fixed shape it is excluded from the
+/// writer until the rollback is done, and survives.
+///
+/// # What this pin does NOT claim
+///
+/// 🔴 It is **not** a reproduction of #85. #85's flake SURVIVES #122 and its
+/// cause is unidentified — see
+/// `docs/design/aion-authoring/BLOCK-G-122-POOL-IN-FLIGHT.md`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_completion_survives_a_rollback_of_a_concurrent_writer_transaction()
+-> Result<(), StoreError> {
+    let store = std::sync::Arc::new(open_test_store("rollback-survival").await?);
+    let workflow_id = WorkflowId::new_v4();
+    let row = pending_row(&workflow_id, 0, "settle", instant(1)?);
+
+    store
+        .append_outbox_batch(std::slice::from_ref(&row))
+        .await?;
+
+    // 🔴 NON-VACUITY GUARD. `complete_outbox_row` only does durable work on a
+    // CLAIMED row. Against an unclaimed row it would be a no-op UPDATE that
+    // survives any rollback trivially, and this test would pass by construction.
+    let claimed = store.claim_outbox_rows(1).await?;
+    assert_eq!(
+        claimed.len(),
+        1,
+        "the pin needs exactly one CLAIMED row to settle"
+    );
+    assert_eq!(
+        claimed[0].status,
+        OutboxStatus::Claimed,
+        "an unclaimed row makes the completion a no-op and this test vacuous"
+    );
+
+    // Hold the writer inside an open IMMEDIATE transaction — the state the old
+    // store let an unguarded `complete_outbox_row` walk straight into.
+    let guard = store.writer().await;
+    let transaction = guard
+        .transaction_with_behavior(libsql::TransactionBehavior::Immediate)
+        .await
+        .map_err(|error| crate::error::libsql_error(&error))?;
+
+    let (started, attempted) = tokio::sync::oneshot::channel();
+    let completion_store = std::sync::Arc::clone(&store);
+    let dispatch_key = row.dispatch_key.clone();
+    let completion = tokio::spawn(async move {
+        // Signal immediately BEFORE the call, so the test waits on a real event
+        // rather than on a guessed delay alone.
+        let _ = started.send(());
+        completion_store.complete_outbox_row(&dispatch_key).await
+    });
+
+    attempted
+        .await
+        .map_err(|error| StoreError::Backend(format!("completion task never started: {error}")))?;
+    // The residual window between that signal and the UPDATE itself. This delay
+    // is the pin's SENSITIVITY, not a tidiness default: too short and a broken
+    // store passes because the completion had not run yet.
+    //
+    // 🔴 VERIFIED, not assumed. With `complete_outbox_row` restored to the
+    // pre-#122 shape — reading a bare `libsql::Connection` field cloned from the
+    // writer, taking no lock — this pin failed 3 runs out of 3 with exactly the
+    // predicted symptom:
+    //
+    //     left: Some("claimed")   right: Some("done")
+    //
+    // i.e. the completion had joined the test's transaction and was undone by
+    // the rollback. On the fixed store the completion is simply parked on the
+    // writer mutex for this long, and the wait costs nothing but time.
+    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+
+    transaction
+        .rollback()
+        .await
+        .map_err(|error| crate::error::libsql_error(&error))?;
+    drop(guard);
+
+    completion.await.map_err(|error| {
+        StoreError::Backend(format!("completion task did not finish: {error}"))
+    })??;
+
+    assert_eq!(
+        status_of(&*store.reader().await?, &row.dispatch_key).await?,
+        Some(String::from("done")),
+        "the completion committed on its own and MUST survive the rollback of an \
+         unrelated writer transaction; finding it still `claimed` means the \
+         completion had joined that transaction — #122's defect exactly"
     );
     Ok(())
 }

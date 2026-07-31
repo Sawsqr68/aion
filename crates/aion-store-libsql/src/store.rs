@@ -313,7 +313,8 @@ impl WritableEventStore for LibSqlStore {
         &self,
         workflow_id: &WorkflowId,
     ) -> Result<Vec<String>, StoreError> {
-        crate::outbox::settle_workflow_outbox_rows_cancelled(&*self.writer().await, workflow_id).await
+        crate::outbox::settle_workflow_outbox_rows_cancelled(&*self.writer().await, workflow_id)
+            .await
     }
 }
 
@@ -375,7 +376,8 @@ impl OutboxStore for LibSqlStore {
         older_than: DateTime<Utc>,
         limit: u32,
     ) -> Result<Vec<OutboxRow>, StoreError> {
-        crate::outbox::list_stale_claimed_outbox_rows(&*self.reader().await?, older_than, limit).await
+        crate::outbox::list_stale_claimed_outbox_rows(&*self.reader().await?, older_than, limit)
+            .await
     }
 
     async fn list_unsettled_outbox_workflow_ids(&self) -> Result<Vec<WorkflowId>, StoreError> {
@@ -386,7 +388,8 @@ impl OutboxStore for LibSqlStore {
         &self,
         workflow_id: &WorkflowId,
     ) -> Result<Vec<String>, StoreError> {
-        crate::outbox::settle_workflow_outbox_rows_cancelled(&*self.writer().await, workflow_id).await
+        crate::outbox::settle_workflow_outbox_rows_cancelled(&*self.writer().await, workflow_id)
+            .await
     }
 
     async fn complete_outbox_row(&self, dispatch_key: &str) -> Result<(), StoreError> {
@@ -450,7 +453,8 @@ impl OutboxStore for LibSqlStore {
         &self,
         namespaces: &[&str],
     ) -> Result<std::collections::BTreeMap<String, u64>, StoreError> {
-        crate::outbox::count_claimed_outbox_rows_by_namespace(&*self.reader().await?, namespaces).await
+        crate::outbox::count_claimed_outbox_rows_by_namespace(&*self.reader().await?, namespaces)
+            .await
     }
 
     async fn pending_outbox_routes(&self) -> Result<Vec<ClaimScope>, StoreError> {
@@ -565,7 +569,9 @@ mod tests {
     async fn a_write_is_visible_from_a_different_pooled_connection() -> Result<(), StoreError> {
         let store = LibSqlStore::open(unique_temp_path("shared-handle")).await?;
 
-        store.writer().await
+        store
+            .writer()
+            .await
             .execute(
                 "INSERT INTO timers (workflow_id, timer_id, fire_at) VALUES (?1, ?2, ?3)",
                 ("workflow-a", "timer-a", "2026-06-03T00:00:00Z"),

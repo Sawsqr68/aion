@@ -147,7 +147,11 @@ mod tests {
         ))
     }
 
-    fn config(path: PathBuf, read_pool_size: Option<usize>, synchronous: Option<&str>) -> LibSqlConfig {
+    fn config(
+        path: PathBuf,
+        read_pool_size: Option<usize>,
+        synchronous: Option<&str>,
+    ) -> LibSqlConfig {
         LibSqlConfig {
             mode: LibSqlMode::Embedded { path },
             journal_mode: None,
@@ -239,8 +243,7 @@ mod tests {
     /// the concurrency assertion — and only two survive their drop.
     #[tokio::test]
     async fn the_pool_retains_at_most_the_configured_count() -> TestResult {
-        let store =
-            LibSqlStore::connect(config(unique_temp_path("retain"), Some(2), None)).await?;
+        let store = LibSqlStore::connect(config(unique_temp_path("retain"), Some(2), None)).await?;
 
         {
             let _a = store.reader().await?;
