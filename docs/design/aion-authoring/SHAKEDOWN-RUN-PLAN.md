@@ -477,3 +477,88 @@ broken mechanism from an absence of events without asking what else could
 produce that absence. Same error shape: *a signal's absence is not
 self-explanatory.* Both were caught by reading the code that produces the
 signal rather than the signal alone.
+
+---
+
+## RUN ENDED 10:56:07Z — KILLED ON DISK PRESSURE. RED-WITH-FINDINGS.
+
+Not a completion and not a failure of the run: a **deliberate stop**, taken on
+Athena's off-tick alarm and my own confirming measurement, because the rig was
+consuming the volume that carries Tom's unrestartable `99844`.
+
+### Why it was stopped
+
+| time | free | `aion-gates` |
+|---|---|---|
+| 10:37:56Z | 79.0 GiB | absent |
+| 10:54:11Z | 48.8 GiB | 32G |
+| 10:54:50Z | 47.5 GiB | 34G |
+| **10:55:55Z (mine)** | **45 GiB** | **37G** |
+
+Still climbing at the moment of the kill, no plateau. My pre-run estimate for
+the workspace was **10–15 GiB**; it reached **37G in 17 minutes** and
+`run_nextest` had a declared 45-minute timeout with ~31 minutes still to run.
+
+**The rig declares no disk bound at all**, and `remote_gates.awl` has no
+workspace cap and no between-run sweep. It leaned on a 15-minute monitoring
+cadence to be safe — and a monitor is not a bound. That is a rig defect and it
+is mine: **an unbounded writer must not use a watcher as its safety mechanism.**
+Before this rig runs again it carries a declared workspace bound *and* a
+between-run sweep. They answer different failures — the bound stops one run
+running away, the sweep stops N runs accumulating.
+
+Kill order mattered: **worker first** (it owned the `cargo`/`rustc` children
+doing the writing), then an orphan sweep, then the server. Killing the server
+first would have orphaned the writers and left them running. Post-kill
+`pgrep rustc|cargo|remote-gates-worker` was empty. Growth stopped, then 37G of
+regenerable `checkouts/meridian/target` was deleted after inspection —
+`workspace/logs` (8.4MB of gate leg evidence) kept. **Free returned to 78 GiB.**
+Tom's `99844` verified alive throughout and after: `etime 23:57:43`, **HTTP 200**.
+
+### 🔴 THE SHUTDOWN CONFIRMED THE SLOT-LEAK PREDICTION AT THE BYTES
+
+This is the strongest evidence of the night and it was free — it fell out of the
+teardown. I had predicted that activities **2 (`run_clippy`)** and **4
+(`run_fmt_check`)** never reached the worker, because the worker log recorded
+only ordinals 0, 1 and 3. On disconnect:
+
+```
+outbox dispatch failed … dispatch_key "dfd2117c…:2" … no liminal worker registered
+outbox dispatch failed … dispatch_key "dfd2117c…:4" … no liminal worker registered
+outbox dispatch exhausted retry budget; dead-lettering row … :2
+outbox dispatch exhausted retry budget; dead-lettering row … :4
+```
+
+**Exactly ordinals 2 and 4, and no others.** Both had carried
+`ActivityScheduled` *and* `ActivityStarted` at 10:39:14.984Z and sat undelivered
+for **seventeen minutes** while history said they were running. The two legs the
+worker never received are precisely the two the outbox still held.
+
+That is the leak's operator-visible consequence stated exactly: **history
+records an activity as Started that the worker was never able to be told
+about.** Ordinals 0, 1 and 3 got through before the cap saturated; 2 and 4 did
+not, and never could.
+
+### And the must-(b) control, demonstrated by accident
+
+`"deregistered liminal worker on disconnect"` fired at 10:56:07.618Z —
+immediately, cleanly, on connection close. This is the empirical half of the
+correction sent to Waffles: **connection-close reclaims by its own path and
+reclaims fine.** So a process-kill reaper control would have gone green tonight
+while the defect stood untouched. The discriminating control remains a worker
+that keeps pumping while its serve loop cannot answer.
+
+### Final condition ledger — NOTHING CERTIFIED
+
+| condition | verdict |
+|---|---|
+| (1) workers keep their leases | **passes** — and legitimately, via the pump. My earlier refusal is withdrawn. |
+| (2) completion delivered across a worker gap | **unreachable by construction** on this build. Moves whole into the post-fix re-run. |
+| (3) wakes fire | **not reached** — the run never got past the gate legs. |
+| (4) no new zombie rows | **not established.** `dfd2117c` was killed mid-flight and its two dead-lettered rows are exactly the state this condition asks about. It is a question for the re-run, not an answer from this one. |
+
+The shakedown lands **RED-WITH-FINDINGS**, which is what it was for. It was
+never going to certify anything tonight; it was going to find out whether the
+rig survives real load, and it found three reasons it does not — a slot leak
+that kills the dispatch channel, a lease that cannot see that channel die, and
+a workspace with no bound.
