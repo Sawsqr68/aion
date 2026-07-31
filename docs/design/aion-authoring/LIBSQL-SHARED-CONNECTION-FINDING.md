@@ -7,11 +7,11 @@ and needs a decision before a line moves.**
 ## The claim
 
 `LibSqlStore` holds a single libSQL connection. Every method issues statements on
-it. **13 methods take `transaction_lock` first; roughly 28 do not** — and the
-unguarded set includes writes. Because SQLite transaction state is a property of
-the *connection*, a statement issued without the lock while another task holds an
-open `BEGIN IMMEDIATE` on that same connection **executes inside that other
-task's transaction**.
+it. **13 lock sites over 12 distinct methods take `transaction_lock` first; 36
+statement-issuing methods do not** — 14 of them writes. Because SQLite
+transaction state is a property of the *connection*, a statement issued without
+the lock while another task holds an open `BEGIN IMMEDIATE` on that same
+connection **executes inside that other task's transaction**.
 
 ## Proven by reading — five facts, each with its byte
 
@@ -62,13 +62,40 @@ async fn execute(&self, sql: &str, params: Params) -> Result<u64> {
 These `async fn`s never await. They also block the tokio worker thread on FFI,
 which is a separate defect worth its own item.
 
-**P4 — the guard is applied to some statements and not others.** Enumerated from
-`store.rs` mechanically, not by eye. `transaction_lock` is taken by `append`,
-`append_with_outbox`, `rearm_outbox_pending`, `settle_workflow_outbox_rows_cancelled`,
-`append_outbox_batch`, the four `claim_outbox_rows*`, `rearm_stale_claimed_outbox_rows`,
-`cancel_outbox_rows_for_workflow`, `redrive_outbox_row`.
+**P4 — the guard is applied to some statements and not others.** Enumerated
+mechanically. First reported here as "13 guarded / ~28 unguarded"; the second
+number was a guess dressed as a count and is corrected below. **Reproduce it
+rather than trusting me** — this predicate walks `store.rs` outside `#[cfg(test)]`,
+attributing each `transaction_lock.lock()` to the `fn` it appears in:
 
-It is **NOT** taken by these WRITES:
+```sh
+awk '
+/^#\[cfg\(test\)\]/ { intest=1 } intest { next }
+/^[[:space:]]*(pub |pub\(crate\) )?(async )?fn [a-z_0-9]+/ {
+  if (name != "") print (lock?"GUARDED":"unguarded"), name
+  match($0, /fn [a-z_0-9]+/); name=substr($0,RSTART+3,RLENGTH-3); lock=0
+}
+/transaction_lock\.lock\(\)/ { lock=1 }
+END { if (name != "") print (lock?"GUARDED":"unguarded"), name }
+' crates/aion-store-libsql/src/store.rs
+```
+
+**52 `fn` sites. 13 GUARDED, 39 unguarded.** The 13 guarded sites are 12 distinct
+methods — `append_with_outbox` is defined twice (inherent impl and trait impl)
+and both take the lock. That reconciles with the 15 raw `transaction_lock`
+mentions in the file: 13 `.lock()` calls, plus the field declaration and its
+constructor initialisation.
+
+Guarded (12): `append`, `append_with_outbox`, `append_outbox_batch`,
+`rearm_outbox_pending`, `rearm_stale_claimed_outbox_rows`,
+`settle_workflow_outbox_rows_cancelled`, `cancel_outbox_rows_for_workflow`,
+`redrive_outbox_row`, and the four `claim_outbox_rows*`.
+
+Of the 39 unguarded, three are not statement paths — `connect` and `open` are
+constructors and `connection` is an accessor — leaving **36 statement-issuing
+unguarded methods: 14 writes and 22 reads.**
+
+The 14 unguarded WRITES:
 
 ```
 complete_outbox_row              retry_outbox_row
@@ -192,5 +219,40 @@ Two coherent answers; a third that only looks like one.
    symptom rarer and the reasoning wrong, which is worse than leaving it visible.
 
 Recommendation: **(1)**, with (2) as the interim only if something must ship
-before the pool exists. Not started — this is the durable write path, and the
-house rule is to agree the shape first.
+before the pool exists.
+
+## 🔴 RULED — shape (1), the connection pool
+
+**Waffles, 2026-08-01, relayed through Cally Ray. Pinned here verbatim because a
+ruling that is not in the builder's hands has not been issued — this exact
+failure has already cost one ruling between compactions.**
+
+> "the only shape that dissolves the hazard class instead of guarding it — a
+> transaction is connection-scoped BY CONSTRUCTION, it cannot leak into a
+> stranger's statements because there are no strangers on the line, and changes64
+> becomes per-operation the same way. The lock disappears rather than grows:
+> correctness lives in the structure, not in 41 methods remembering to take a
+> mutex."
+
+**Shape (2) is not a step and must not be built as one.** It is a pre-declared
+contingency whose trigger is named now: it activates **only** if a live failure
+*attributed to this mechanism* arrives before the pool lands — *"a decision
+inherited, not a dilemma."* Shape (3) stays rejected.
+
+**Three constraints ride the ruling, his words:**
+
+- **(a)** *"the pool is justified by the proven mechanism, never by the flakes."*
+  If #85's flakes disappear once the pool lands, that is recorded as
+  **consistent, not load-bearing**. The failing test's interleave **graduates to
+  a deliberate pin test** after the pool rather than dying quietly as a flake.
+- **(b)** *"Writer-contention behavior is explicit and loud."* WAL still admits
+  one writer. Busy handling gets a stated timeout and a **named failure mode** —
+  never a silent retry-forever.
+- **(c)** *"Pool parameters declared with rationale and units — no assumed
+  defaults; sizing is a stated choice, discussed if it touches deployment
+  targets."* This is the house NO ARBITRARY LIMITS rule applied to pool sizing.
+
+Cally's addition, adopted: under a pool the `changes()` hazard (C3) needs no
+guard at all — the counter is per-operation by construction. That is the
+delete-the-hazard shape rather than the guard-the-hazard shape, and it is one
+more argument for (1) over (2).

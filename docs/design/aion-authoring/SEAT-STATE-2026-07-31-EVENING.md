@@ -337,3 +337,37 @@ reading the **report**.
 already untracked at 14:15:44Z, my first `git status` after resuming. Not
 knowingly created by me, not touched, **not deletable on my say-so** — a
 pre-compaction version of me cannot be ruled out. Treat as unattributed.
+
+## 🔴 RULING PINNED — #122 builds shape (1), the connection pool
+
+**Waffles, 2026-08-01, via Cally Ray. Verbatim, because a ruling not in the
+builder's hands has not been issued — that failure already cost one ruling
+between compactions this week.** Full context:
+`docs/design/aion-authoring/LIBSQL-SHARED-CONNECTION-FINDING.md`.
+
+> "the only shape that dissolves the hazard class instead of guarding it — a
+> transaction is connection-scoped BY CONSTRUCTION, it cannot leak into a
+> stranger's statements because there are no strangers on the line, and changes64
+> becomes per-operation the same way. The lock disappears rather than grows:
+> correctness lives in the structure, not in 41 methods remembering to take a
+> mutex."
+
+**Shape (2) — one lock over every statement — is NOT a step toward this and must
+not be built as one.** Pre-declared contingency, trigger named now: it activates
+only if a live failure *attributed to this mechanism* arrives before the pool
+lands. *"A decision inherited, not a dilemma."* Shape (3) rejected.
+
+**Three constraints ride it:**
+- **(a)** the pool is justified by the PROVEN MECHANISM, never by #85's flakes.
+  If the flakes vanish post-pool that is recorded **consistent, not
+  load-bearing**, and the failing test's interleave **graduates to a deliberate
+  pin test** rather than dying as a flake.
+- **(b)** writer contention is **explicit and loud** — WAL still admits one
+  writer; busy handling gets a stated timeout and a NAMED failure mode, never a
+  silent retry-forever.
+- **(c)** pool parameters declared **with rationale and units**. No assumed
+  defaults; sizing is a stated choice, discussed if it touches deployment
+  targets. (The house NO ARBITRARY LIMITS rule, applied to pool sizing.)
+
+Building requires a block declaration to Athena and the GO, with the band
+re-derived from a reclaimed tree.
