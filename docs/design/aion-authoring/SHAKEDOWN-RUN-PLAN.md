@@ -225,3 +225,30 @@ way agent dispatches are already spawned, so the serve loop stays free — but i
 belongs to task **#58** and wants its own build with the reap half (Finding B)
 settled alongside, since the two interact: making liveness answerable again will
 also make the reaper's behaviour observable for the first time.
+
+---
+
+## LIVE PROCESS STATE (for resume across a context compaction)
+
+- **Rig server** pid `79663` — `target/release/aion server`, config
+  `~/.aion/remote-gates-proof/server.toml`, HTTP 8091 / gRPC 51091 / liminal 51061.
+- **Gate worker** pid `81616` — `examples/remote-gates/worker/target/release/remote-gates-worker`,
+  identity `vesper-box-shakedown`, workspace `/Users/tom/aion-gates/workspace`.
+- **Run** `dfd2117c-b7b1-410c-bd61-3e4c2552e638`, run id `716e29a2`, `Running`,
+  four legs started, no leg completed yet.
+- **Monitor task** `bt16xil7r` (liveness spam filtered out).
+- Logs: `<scratchpad>/shakedown/rig-server.log`, `rig-worker.log`.
+- **DO NOT TOUCH** Tom's pid `99844` (8080/50051/50061).
+
+**Standing position, per Cally 10:43Z relaying her recommendation to Waffles
+(NOT yet his word):** run every measurable leg — (3) wakes, (4) no new zombie
+rows, and (2) *attempted* with the attempt documented either way — then land the
+shakedown as **RED-WITH-FINDINGS on this build** rather than certifying around a
+condition Finding A may make unreachable. A controlled gap (manual worker kill
+after completion, before delivery) is under consideration to make (2) testable
+independently of Finding A: feasibility is mine, whether it counts for green is
+his. **Certify nothing until Waffles rules.**
+
+Teardown still owed: orphan sweep, workspace sweep + reading to Athena, fixture
+and Tom's-server verification, and tell Athena when the rig is down so she can
+re-base P (currently VOID — last good value 80 GiB at 10:32:28Z).
