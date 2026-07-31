@@ -41,6 +41,10 @@
 //! ```
 
 /// Typed activity registration and failure classification.
+/// What this build actually covered, announced through test names (#119).
+#[cfg(test)]
+mod build_coverage;
+
 pub mod activity;
 /// Worker endpoint, identity, transport, and reconnect configuration.
 pub mod config;

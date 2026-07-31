@@ -18,6 +18,10 @@
 //! ```
 
 /// Conversion helpers between wire structures and `aion-core` values.
+/// What this build actually covered, announced through test names (#119).
+#[cfg(test)]
+mod build_coverage;
+
 pub mod convert;
 /// Operator deploy API wire contracts.
 pub mod deploy;

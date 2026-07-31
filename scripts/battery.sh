@@ -143,6 +143,71 @@ gate "rust:test" cargo test --workspace --no-fail-fast
 # genuinely different run, not a slower copy of the one above.
 gate "rust:test-all-features" cargo test --workspace --all-features --no-fail-fast
 
+# --- Build-posture controls (#119) ---------------------------------------------
+#
+# Two crates carry a default-OFF feature that gates an entire surface, so a
+# per-package run of either compiles none of it and exits 0:
+#
+#   aion-worker / liminal-transport  — the whole liminal transport
+#   aion-proto  / generated          — the tonic/prost stubs the hand-written
+#                                      wire contracts are supposed to be
+#                                      checked AGAINST
+#
+# Both crates now ANNOUNCE their posture through a test name, which a runner
+# always prints. But `reconcile-nextest.sh` states the law this would otherwise
+# break: *a pinned test denominator that nothing mechanically compares is an
+# instruction, not a control.* A printed announcement that nothing checks is
+# observability, not a gate — a run where the wrong arm fires reconciles
+# perfectly, because every count still adds up.
+#
+# So the gate asserts BOTH directions: the posture-appropriate name appeared,
+# AND its opposite did not. That is also what anchors the negative arms — they
+# assert little on their own, and deleting one would otherwise go unnoticed.
+posture_control() {
+  local label="$1" expect="$2" forbid="$3"
+  shift 3
+  local out code
+  out=$("$@" 2>&1)
+  code=$?
+  if [ "$code" -ne 0 ]; then
+    printf '%s\n' "$out"
+    printf 'POSTURE CONTROL (%s): the run itself failed with exit %d\n' "$label" "$code"
+    return "$code"
+  fi
+  if ! printf '%s' "$out" | grep -q -- "$expect"; then
+    printf 'POSTURE CONTROL FAILED (%s): expected announcement `%s` never appeared.\n' "$label" "$expect"
+    printf 'The build did not have the feature posture this gate believes it ran.\n'
+    return 1
+  fi
+  if printf '%s' "$out" | grep -q -- "$forbid"; then
+    printf 'POSTURE CONTROL FAILED (%s): forbidden announcement `%s` appeared.\n' "$label" "$forbid"
+    printf 'This build is NOT the posture the gate believes it is.\n'
+    return 1
+  fi
+  printf 'posture control ok (%s): %s\n' "$label" "$expect"
+  return 0
+}
+
+gate "posture:worker-default" posture_control "aion-worker, default features" \
+  liminal_transport_absent_from_this_build \
+  liminal_transport_compiled_into_this_build \
+  cargo test -p aion-worker --lib build_coverage::
+
+gate "posture:worker-liminal" posture_control "aion-worker, liminal-transport on" \
+  liminal_transport_compiled_into_this_build \
+  liminal_transport_absent_from_this_build \
+  cargo test -p aion-worker --lib --features liminal-transport build_coverage::
+
+gate "posture:proto-default" posture_control "aion-proto ALONE, default features" \
+  generated_stubs_absent_from_this_build \
+  generated_stubs_compiled_into_this_build \
+  cargo test -p aion-proto --lib build_coverage::
+
+gate "posture:proto-generated" posture_control "aion-proto, generated on" \
+  generated_stubs_compiled_into_this_build \
+  generated_stubs_absent_from_this_build \
+  cargo test -p aion-proto --lib --features generated build_coverage::
+
 # --- Ops console --------------------------------------------------------------
 
 if require_tool bun "The ops console is a separate bun project; without it the console's typecheck and tests cannot run."; then
