@@ -78,17 +78,22 @@ against Athena's 13:00:31Z baseline of 6.15. Low by ~2×, the second miss in a
 row in the same direction. The mechanism, measured rather than reasoned:
 
 ```
-target/debug/deps         15 GiB
-  of which linked test executables   4.33 GiB over 75 files
-  largest single test binary          247 MB (aion_server lib test)
-target/debug/incremental   4.9 GiB
+two-package --all-targets --all-features, at peak:
+  linked test executables   4.33 GiB over  75 files
+workspace, DEFAULT features, no --all-targets, at peak:
+  linked test executables  10.09 GiB over 221 files   (verified at two seats)
 ```
 
-**`--all-targets` is not a second feature resolution — it is ~75 separately
-linked binaries.** "Mostly a relink" was the right mechanism and the wrong
-magnitude: one relink of the aion-server test binary is 247 MB, and there are
-dozens. The class estimate for `-p a -p b --all-targets --all-features` on this
-workspace is **+12 to +18 GiB**, not +5 to +8.
+🔴 **CORRECTED TWICE. `--all-targets` is NOT the multiplier and neither is a
+second feature resolution — the multiplier is the TARGET COUNT ACROSS THE
+WORKSPACE.** `cargo test` already links every lib-test and integration target;
+`--all-targets` only adds benches and examples on top. Each binary carries the
+whole crate graph plus debuginfo (largest 223 MB, mean 47 MB over 221).
+
+Both wrong stories took a REAL measurement and bound it to the wrong variable.
+**A mechanism claim needs a second data point that VARIES the proposed cause.**
+Class estimate for `-p a -p b --all-targets --all-features` here: **+12 to +18
+GiB**. For `--workspace` default features: **+20 to +26**, measured at +22.77.
 
 ## Shakedown re-run — SPLIT INTO TWO BLOCKS
 
@@ -157,7 +162,8 @@ AWL the only one.
   tree, including a build appended to an edit command. That is how the last one
   went undeclared: it fell through my own taxonomy, and free does not care what
   I call it.
-- Watch free during it, abort at 45.
+- Watch free during it. **Abort at 50, not 45** — the floor is a band at
+  least 1.5 GiB wide, and a threshold at its edge fires late.
 - Report the SETTLED number against the watcher's baseline, not my own remembered
   one.
 - `target/release` is NEVER touched — Tom's live server `99844` runs from a
