@@ -10,9 +10,10 @@ import highlightQuery from '../assets/highlights.scm?raw';
 //
 // The grammar's keyword list is gated against the compiler's own: see
 // crates/aion-awl/src/lexer/grammar_vocabulary_tests.rs. That gate reads
-// grammar.js, NOT this wasm, so it catches a word missing from the grammar but
-// cannot tell that this artefact was rebuilt afterwards. Rebuild and re-vendor
-// in the same motion as any grammar.js edit.
+// grammar.js, NOT this wasm, so it cannot tell that this artefact was rebuilt
+// afterwards — highlight-assets.test.ts closes that half by asking the
+// compiled wasm beside this file. Rebuild and re-vendor in the same motion as
+// any grammar.js edit, or that test goes red.
 let parser: Parser | undefined;
 let query: Query | undefined;
 

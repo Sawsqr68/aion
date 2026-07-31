@@ -13,6 +13,13 @@
 //! read off the document by the worker) and `advisory` both rendered as
 //! ordinary identifiers in every editor. This is the door that makes the next
 //! one loud.
+//!
+//! This gate reads the SOURCE grammar, so it says nothing about whether the
+//! vendored wasm was rebuilt from it. That half is held by
+//! `apps/aion-ops-console/src/features/authoring/lib/highlight-assets.test.ts`,
+//! which loads the compiled artefact and checks it against this same array.
+//! Both are needed: this one catches a missing word, that one catches a
+//! missing rebuild.
 
 use super::Keyword;
 use crate::lexer::POSITIONAL_WORDS;

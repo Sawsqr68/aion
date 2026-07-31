@@ -106,6 +106,37 @@ through `include_str!` and pins the relationship in both directions:
 
 Each carries a non-vacuity control.
 
+## The second gate — the compiled artefact
+
+The gate above reads `grammar.js`. It therefore says nothing about whether the
+vendored wasm was ever rebuilt from it, which is the same silent-drift shape one
+layer down: edit the grammar, skip `tree-sitter build --wasm`, and the Rust gate
+stays green while the console keeps colouring the old vocabulary. Before this
+the console had **zero** tests touching highlighting at all.
+
+`apps/aion-ops-console/src/features/authoring/lib/highlight-assets.test.ts`
+loads the two vendored artefacts — `assets/awl.wasm` and `assets/highlights.scm`,
+the exact pair `highlight.worker.ts` imports — under `web-tree-sitter`, and
+checks the COMPILED grammar against `const keywords` read from `grammar.js`.
+Both halves are needed: the Rust one catches a missing word, this one catches a
+missing rebuild.
+
+It is driven by the grammar rather than by a hand-copied list, because a copied
+list drifts exactly the way the wasm did. The mechanism is that a keyword alone
+on a line lexes as `keyword`, so every declared word can be asked directly. It
+carries the same shape of controls: non-vacuity on the extracted array, `worker`
+as a positive control, `incident_id` as an inverted one, `agent`/`advisory` in
+real action-marker position, and `answer` asserted to stay plain in
+`wait approval timeout 30s -> answer`.
+
+Mutation-checked decisively. Restoring the pre-fix wasm
+(`git show 973b3d58~1:apps/.../awl.wasm`) fails exactly two tests and names
+exactly the two words — `["agent", "advisory"]` — while both control tests stay
+green, so the failure is about the artefact's vocabulary and not the harness
+breaking wholesale.
+
+It runs in the house battery as `console:test` (`scripts/battery.sh`).
+
 ## Rebuilding the grammar
 
 `tree-sitter-cli` is not installable inside `tools/tree-sitter-awl` on this box
