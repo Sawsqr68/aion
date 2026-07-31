@@ -1,8 +1,9 @@
-//! Finding every reference to a declaration, and renaming it — or refusing to.
+//! What the declaration under the cursor binds: its references, the occurrences
+//! an editor should highlight, and its rename — or the refusal of one.
 //!
-//! Both features live together because both are the same question first: which
-//! spans belong to the declaration under the cursor? `target_at` answers it
-//! once.
+//! Four features live together because all four are the same question first:
+//! which spans belong to the declaration under the cursor? `target_at` answers
+//! it once, and everything here is a different presentation of that answer.
 //!
 //! The checker already records, for every span it resolved, WHICH declaration
 //! that span refers to. So the edit set is not guessed by matching text — a
@@ -21,7 +22,7 @@ use std::path::Path;
 
 use aion_awl::semantic::{DeclarationKind, SemanticAnalysis};
 use aion_awl::{Document, Span, TokenKind};
-use lsp_types::{Position, Range, TextEdit, Uri};
+use lsp_types::{DocumentHighlight, DocumentHighlightKind, Position, Range, TextEdit, Uri};
 
 use crate::analysis::{byte_offset_at, range_for_span};
 
@@ -102,6 +103,39 @@ pub(crate) fn references(
             .iter()
             .filter(|span| include_declaration || **span != target.declaration)
             .map(|span| lsp_types::Location::new(uri.clone(), range_for_span(source, *span)))
+            .collect(),
+    )
+}
+
+/// Every occurrence of the declaration at `position`, for the editor to tint.
+///
+/// The declaration itself is reported as `Write` and every use as `Read`, so
+/// an author scanning a document sees where a thing is DEFINED distinctly from
+/// where it is used, rather than one undifferentiated wash of colour.
+///
+/// This is the same resolved span set the rename edits, deliberately: if the
+/// highlight and the rename could disagree, the highlight would be a promise
+/// the rename does not keep.
+pub(crate) fn highlights(
+    source: &str,
+    position: Position,
+    root: Option<&Path>,
+) -> Option<Vec<DocumentHighlight>> {
+    let document = aion_awl::parse(source).ok()?;
+    let analysis = analyze(&document, root);
+    let target = target_at(source, &analysis, position)?;
+    Some(
+        target
+            .spans
+            .iter()
+            .map(|span| DocumentHighlight {
+                range: range_for_span(source, *span),
+                kind: Some(if *span == target.declaration {
+                    DocumentHighlightKind::WRITE
+                } else {
+                    DocumentHighlightKind::READ
+                }),
+            })
             .collect(),
     )
 }
@@ -251,5 +285,5 @@ fn analyze(document: &Document, root: Option<&Path>) -> SemanticAnalysis {
 }
 
 #[cfg(test)]
-#[path = "rename_tests.rs"]
-mod rename_tests;
+#[path = "bindings_tests.rs"]
+mod bindings_tests;

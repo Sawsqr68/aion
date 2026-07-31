@@ -516,3 +516,94 @@ fn live_references_and_rename_including_a_refusal() -> TestResult {
     server_result?;
     Ok(())
 }
+
+/// THE WIRE PROOF for document highlight.
+///
+/// Asserted over the wire rather than only in the unit tests because a
+/// capability the server ADVERTISES and does not answer is worse than one it
+/// never claimed: the editor asks on every cursor move and silently gets
+/// nothing, and the author concludes the language has no tooling.
+///
+/// The count is compared against `references` in the same exchange. Both are
+/// built from the same resolved span set, so if they can ever disagree the
+/// highlight is showing the author something the rest of the server does not
+/// believe.
+#[test]
+fn live_document_highlight_distinguishes_the_declaration_from_its_uses() -> TestResult {
+    let (server, client) = Connection::memory();
+    let server_thread = thread::spawn(move || run_connection(&server));
+    let uri = "file:///tmp/highlighting.awl";
+
+    initialize_and_open(&client, uri, RENAMEABLE)?;
+
+    // Line 2 is `  input incident_id: String`, at the start of the name.
+    let at_name = json!({ "line": 2, "character": 8 });
+
+    request(
+        &client,
+        40,
+        "textDocument/references",
+        json!({
+            "textDocument": { "uri": uri },
+            "position": at_name,
+            "context": { "includeDeclaration": true }
+        }),
+    )?;
+    let Message::Response(found) = receive(&client)? else {
+        return Err("server did not respond to references".into());
+    };
+    let locations = found
+        .result
+        .ok_or("references carried no result")?
+        .as_array()
+        .ok_or("references result was not an array")?
+        .len();
+
+    request(
+        &client,
+        41,
+        "textDocument/documentHighlight",
+        json!({ "textDocument": { "uri": uri }, "position": at_name }),
+    )?;
+    let Message::Response(lit) = receive(&client)? else {
+        return Err("server did not respond to documentHighlight".into());
+    };
+    assert!(lit.error.is_none(), "documentHighlight failed: {lit:?}");
+    let spans = lit
+        .result
+        .ok_or("documentHighlight carried no result")?
+        .as_array()
+        .ok_or("documentHighlight result was not an array")?
+        .clone();
+    assert!(
+        spans.len() >= 2,
+        "the input is declared and used, so one span means nothing was resolved: {spans:?}"
+    );
+    assert_eq!(
+        spans.len(),
+        locations,
+        "the editor must tint exactly the spans references reports: {spans:?}"
+    );
+
+    // LSP DocumentHighlightKind: 1 = Text, 2 = Read, 3 = Write.
+    let writes = spans
+        .iter()
+        .filter(|span| span["kind"].as_u64() == Some(3))
+        .count();
+    assert_eq!(
+        writes, 1,
+        "exactly one span is the declaration, and it must arrive as kind 3 (Write): {spans:?}"
+    );
+    assert!(
+        spans
+            .iter()
+            .all(|span| matches!(span["kind"].as_u64(), Some(2 | 3))),
+        "every span carries a kind, so none renders as an undifferentiated wash: {spans:?}"
+    );
+
+    shutdown_and_exit(&client, 42)?;
+    server_thread
+        .join()
+        .map_err(|_| "server thread panicked")??;
+    Ok(())
+}

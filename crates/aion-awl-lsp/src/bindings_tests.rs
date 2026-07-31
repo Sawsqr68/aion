@@ -1,6 +1,6 @@
-use lsp_types::{Position, Uri};
+use lsp_types::{DocumentHighlightKind, Position, Uri};
 
-use super::{RenameRefusal, prepare, references, rename};
+use super::{RenameRefusal, highlights, prepare, references, rename};
 
 const DOCUMENT: &str = "\
 //! Rename fixture.
@@ -244,5 +244,118 @@ fn references_find_every_use_and_honour_the_declaration_flag() {
         without.len() >= 2,
         "the input is used more than once in the fixture, so a single result would mean the \
          references are not being collected: {without:?}"
+    );
+}
+
+/// The declaration is tinted as a write, its uses as reads.
+///
+/// An author scanning a document needs to see where a thing is DEFINED apart
+/// from where it is used; a single undifferentiated colour answers a weaker
+/// question than the editor is capable of asking.
+#[test]
+fn the_declaration_highlights_as_a_write_and_its_uses_as_reads() {
+    let found = highlights(DOCUMENT, position_within("input incident_id", 0, 6), None)
+        .unwrap_or_else(|| unreachable!("the workflow input must resolve"));
+
+    let writes = found
+        .iter()
+        .filter(|highlight| highlight.kind == Some(DocumentHighlightKind::WRITE))
+        .count();
+    assert_eq!(
+        writes, 1,
+        "exactly one span is the declaration; the rest are uses: {found:?}"
+    );
+    assert!(
+        found.len() > 1,
+        "the fixture uses `incident_id` several times, so a lone highlight means the uses were \
+         not resolved: {found:?}"
+    );
+    assert!(
+        found
+            .iter()
+            .all(|highlight| highlight
+                .kind
+                .is_some_and(|kind| kind == DocumentHighlightKind::WRITE
+                    || kind == DocumentHighlightKind::READ)),
+        "every highlight carries a kind, so no occurrence renders as an undifferentiated wash"
+    );
+}
+
+/// Highlighting resolves declarations, and does not match text.
+///
+/// The fixture deliberately gives the name `incident_id` to three unrelated
+/// declarations — a workflow input, an action parameter, and a type field. A
+/// text-matching highlighter would light all of them from any one cursor.
+#[test]
+fn highlighting_does_not_light_a_different_declaration_of_the_same_name() {
+    let from_input = highlights(DOCUMENT, position_within("input incident_id", 0, 6), None)
+        .unwrap_or_else(|| unreachable!("the workflow input must resolve"));
+    let from_field = highlights(
+        DOCUMENT,
+        position_within("type Resolved { incident_id", 0, 16),
+        None,
+    )
+    .unwrap_or_else(|| unreachable!("the type field must resolve"));
+
+    let occurrences = DOCUMENT.matches("incident_id").count();
+    assert!(
+        from_input.len() < occurrences,
+        "the input's highlight set covers all {occurrences} textual occurrences, which is what a \
+         text match would produce rather than a resolution"
+    );
+    assert_ne!(
+        from_input.len(),
+        from_field.len(),
+        "two different declarations sharing a name produced highlight sets of the same size, \
+         which is what text matching looks like"
+    );
+    assert!(
+        from_input
+            .iter()
+            .all(|highlight| !from_field.contains(highlight)),
+        "no span belongs to both the workflow input and the type field"
+    );
+}
+
+/// The highlight set and the rename edit set are the same spans.
+///
+/// If they could disagree, the highlight would be a promise the rename does not
+/// keep: the author would see what they expect to change, and something else
+/// would change.
+#[test]
+fn the_highlight_set_is_exactly_what_a_rename_would_edit() {
+    let position = position_within("input incident_id", 0, 6);
+    let lit: Vec<_> = highlights(DOCUMENT, position, None)
+        .unwrap_or_else(|| unreachable!("the workflow input must resolve"))
+        .into_iter()
+        .map(|highlight| highlight.range)
+        .collect();
+    let edited: Vec<_> = rename(DOCUMENT, position, "case_id", None)
+        .unwrap_or_else(|refusal| unreachable!("`case_id` is a legal rename: {refusal}"))
+        .into_iter()
+        .map(|edit| edit.range)
+        .collect();
+
+    assert_eq!(
+        lit.len(),
+        edited.len(),
+        "the editor tinted {} spans and the rename would edit {}",
+        lit.len(),
+        edited.len()
+    );
+    for range in &edited {
+        assert!(
+            lit.contains(range),
+            "the rename edits {range:?}, which the author was never shown as highlighted"
+        );
+    }
+}
+
+/// A cursor on a keyword highlights nothing, rather than guessing.
+#[test]
+fn a_keyword_binds_nothing_and_highlights_nothing() {
+    assert!(
+        highlights(DOCUMENT, position_of("workflow triage", 0), None).is_none(),
+        "`workflow` is syntax, not a binding — nothing should light up"
     );
 }

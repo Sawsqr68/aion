@@ -98,6 +98,7 @@ fn capabilities() -> ServerCapabilities {
         definition_provider: Some(OneOf::Left(true)),
         hover_provider: Some(HoverProviderCapability::Simple(true)),
         references_provider: Some(OneOf::Left(true)),
+        document_highlight_provider: Some(OneOf::Left(true)),
         // `prepareProvider` is on so the editor asks which range it may rename
         // BEFORE prompting. Without it a client offers a rename box over a
         // comment or a keyword and only learns it was impossible after the
@@ -257,6 +258,9 @@ fn handle_request(
             respond(connection, request.id, CompletionResponse::Array(items))
         }
         "textDocument/references" => handle_references(connection, request, documents),
+        "textDocument/documentHighlight" => {
+            handle_document_highlight(connection, request, documents)
+        }
         "textDocument/prepareRename" => handle_prepare_rename(connection, request, documents),
         "textDocument/rename" => {
             let Some(params) = decode_request::<RenameParams>(connection, &request)? else {
@@ -309,7 +313,7 @@ fn handle_references(
         .get(text_document.uri.as_str())
         .and_then(|source| {
             let root = document_root(&text_document.uri);
-            crate::rename::references(
+            crate::bindings::references(
                 source,
                 &text_document.uri,
                 position,
@@ -319,6 +323,27 @@ fn handle_references(
         })
         .unwrap_or_default();
     respond(connection, request.id, locations)
+}
+
+/// Every occurrence of the symbol under the cursor, for the editor to tint.
+fn handle_document_highlight(
+    connection: &Connection,
+    request: Request,
+    documents: &HashMap<String, String>,
+) -> Result<(), ServerError> {
+    let Some(params) = decode_request::<TextDocumentPositionParams>(connection, &request)? else {
+        return Ok(());
+    };
+    // An empty list, not `null`: the cursor sitting on a keyword is an ordinary
+    // answer — nothing here binds — and not a failure the editor should retry.
+    let highlights = documents
+        .get(params.text_document.uri.as_str())
+        .and_then(|source| {
+            let root = document_root(&params.text_document.uri);
+            crate::bindings::highlights(source, params.position, root.as_deref())
+        })
+        .unwrap_or_default();
+    respond(connection, request.id, highlights)
 }
 
 /// The range an editor should pre-fill, or `null` when nothing here renames.
@@ -334,7 +359,7 @@ fn handle_prepare_rename(
         .get(params.text_document.uri.as_str())
         .and_then(|source| {
             let root = document_root(&params.text_document.uri);
-            crate::rename::prepare(source, params.position, root.as_deref())
+            crate::bindings::prepare(source, params.position, root.as_deref())
         });
     respond(
         connection,
@@ -368,7 +393,7 @@ fn handle_rename(
         return send(connection, Message::Response(response));
     };
     let root = document_root(&uri);
-    match crate::rename::rename(
+    match crate::bindings::rename(
         source,
         params.text_document_position.position,
         &params.new_name,
