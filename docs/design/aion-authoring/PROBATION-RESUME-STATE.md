@@ -90,6 +90,60 @@ magnitude: one relink of the aion-server test binary is 247 MB, and there are
 dozens. The class estimate for `-p a -p b --all-targets --all-features` on this
 workspace is **+12 to +18 GiB**, not +5 to +8.
 
+## Shakedown re-run — SPLIT INTO TWO BLOCKS
+
+The full house battery cannot run without breaching the free floor by either
+route (arithmetic in the disk section below), so it runs as two declared
+blocks with a reclaim between them.
+
+```
+BLOCK A  cargo test --workspace  (DEFAULT features, --no-fail-fast)
+  exit 0 · 240 targets · 243 result lines · 3902 passed / 0 failed
+  disk peak +22.77 against a 90.36 free baseline — inside the declared +20..+26
+  log: .evidence/118/shakedown-default.log
+
+BLOCK B  cargo test --workspace --all-features --no-fail-fast
+  running; declared +30..+38, abort at 50 (not 45 — see the band, below)
+  log: .evidence/118/shakedown-allfeatures.log
+```
+
+🔴 **A green Block A is NOT evidence about Block B.** Different feature
+resolution, different artifact set, and the four tests that were red on main
+this morning ONLY COMPILE under `--all-features`. Reporting "the house battery
+is green" off A alone would be reading a partial run as a complete one — the
+same defect as #120 one level up.
+
+**Count TARGETS, not tests.** 240 `Running` lines is a denominator; 3902
+passing tests is not.
+
+## 🔴 Disk laws learned tonight, all measured
+
+- **The free floor is a BAND, not a line.** Free swings ~1.5 GiB in both
+  directions with the tree provably still, and that is a lower bound from one
+  quiet window. An abort set at the edge of an unmeasured swing fires late, so
+  the abort is **50**, which is also the watch's wake band — both seats then
+  move on the same reading.
+- **`du -sh` per sibling is not a measurement of that sibling.** cargo
+  hardlinks `.rcgu.o` objects between `incremental/` and `deps/`: 32,266 of
+  35,422 files in `deps` have link count > 1, and the 4.13 GiB of
+  multiply-linked bytes belongs to BOTH. `deps` reads 18G alone and 13G inside
+  a `du -h -d 1` walk; `incremental` reads 8.4G alone and 4.2G when its parent
+  is in the same argument list. **Bank the TOTAL — it is invocation-independent
+  — and take any split from ONE `du -h -d 1` walk.**
+- **A reclaim estimate from `du -sh` on a hardlinked tree is an upper bound.**
+  It is exact only when the deleted path contains every link to its own bytes.
+  `rm -rf target/debug` returned the full 23G (67 → 90); deleting
+  `incremental/` alone would return ~4.2 of its reported 8.4.
+- **A measurement cited in an argument must be written to a file before the
+  thing it measured can change** — and a reclaim is a scheduled, self-inflicted
+  change. Evidence + the exact COMMANDS are banked in
+  `.evidence/118/build-tree-decomposition-default-features.txt`; a banked result
+  without its command cannot distinguish a different METHOD from a different
+  WORLD.
+- **A timestamp is the one field that travels with the data while being produced
+  by something other than the measurement** — so it is the field most likely to
+  be authored rather than read. Take stamps from `date -u`.
+
 ## Board
 
 Closed today: **#58**, **#116**, **#118**, battery half of **#120**.
