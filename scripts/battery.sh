@@ -117,12 +117,31 @@ else
 
 gate "rust:fmt" cargo fmt --all -- --check
 gate "rust:clippy" cargo clippy --workspace --all-targets -- -D warnings
-gate "rust:test" cargo test --workspace
+
+# `--no-fail-fast` IS LOAD-BEARING, and its absence cost a P0 on 2026-07-31.
+#
+# This script already refuses to stop at the first failing GATE, for the reason
+# in the header: a battery that stops early hides the gates behind it. Without
+# this flag the Rust gates broke that same rule one level down — `cargo test`
+# stops at the first failing TARGET, so a single red lib test silently un-runs
+# every integration target after it.
+#
+# That is not hypothetical. A red lib test in `aion-server` truncated a run
+# before any integration target started, and the reading — "688 passed, 1
+# failed" — was taken as one known exception on an otherwise green suite. It was
+# a truncated run reported as a complete one, and among the targets that never
+# executed was one that would have HUNG FOREVER on a P0 introduced the day
+# before (every liminal worker accepting dispatches and executing none). See
+# docs/design/aion-authoring/RED-MAIN-118-RECORD.md.
+#
+# A count is only a coverage claim if the run reached the end. Read the target
+# list, not the tally.
+gate "rust:test" cargo test --workspace --no-fail-fast
 
 # The all-features resolution differs from the default one — `--workspace`
 # resolves some features ON that `-p <crate>` leaves off — so this is a
 # genuinely different run, not a slower copy of the one above.
-gate "rust:test-all-features" cargo test --workspace --all-features
+gate "rust:test-all-features" cargo test --workspace --all-features --no-fail-fast
 
 # --- Ops console --------------------------------------------------------------
 
