@@ -405,3 +405,114 @@ fn live_completion_answers_a_half_typed_step_body() -> TestResult {
     server_result?;
     Ok(())
 }
+
+/// A document that checks clean, for the rename exchange.
+const RENAMEABLE: &str = "//! Rename over the wire.\nworkflow triage\n  input incident_id: String\n  outcome resolved: type Resolved, route success\n\ntype Resolved { incident_id: String }\n\nstep report\n  outcome ok: otherwise, route resolved(incident_id: incident_id)\n";
+
+fn request(client: &Connection, id: i32, method: &str, params: serde_json::Value) -> TestResult {
+    send(
+        client,
+        Message::Request(Request::new(RequestId::from(id), method.to_owned(), params)),
+    )
+}
+
+/// THE WIRE PROOF for references and rename, including the refusal.
+///
+/// The refusal half is the one that cannot be skipped. A refused rename MUST
+/// come back as a protocol error: an editor handed an empty edit list shows the
+/// author nothing and they conclude the rename simply did not take, which is
+/// indistinguishable from a broken server and teaches them to stop trusting it.
+#[test]
+fn live_references_and_rename_including_a_refusal() -> TestResult {
+    let (server, client) = Connection::memory();
+    let server_thread = thread::spawn(move || run_connection(&server));
+    let uri = "file:///tmp/renaming.awl";
+
+    initialize_and_open(&client, uri, RENAMEABLE)?;
+
+    // The declaration is on line 2 (`  input incident_id: String`), at the
+    // start of the name.
+    let at_name = json!({ "line": 2, "character": 8 });
+
+    request(
+        &client,
+        30,
+        "textDocument/references",
+        json!({
+            "textDocument": { "uri": uri },
+            "position": at_name,
+            "context": { "includeDeclaration": true }
+        }),
+    )?;
+    let Message::Response(found) = receive(&client)? else {
+        return Err("server did not respond to references".into());
+    };
+    assert!(found.error.is_none(), "references failed: {found:?}");
+    let locations = found
+        .result
+        .ok_or("references carried no result")?
+        .as_array()
+        .ok_or("references result was not an array")?
+        .len();
+    assert!(
+        locations >= 2,
+        "the input is declared and used, so a single location means references are not being \
+         collected: {locations}"
+    );
+
+    request(
+        &client,
+        31,
+        "textDocument/rename",
+        json!({
+            "textDocument": { "uri": uri },
+            "position": at_name,
+            "newName": "case_id"
+        }),
+    )?;
+    let Message::Response(renamed) = receive(&client)? else {
+        return Err("server did not respond to rename".into());
+    };
+    assert!(renamed.error.is_none(), "rename failed: {renamed:?}");
+    let edits = renamed.result.ok_or("rename carried no result")?;
+    let edits = edits["changes"][uri]
+        .as_array()
+        .ok_or("rename produced no edits for the document")?;
+    assert!(
+        edits.len() >= 2,
+        "a rename must edit the declaration AND its uses: {edits:?}"
+    );
+
+    // THE REFUSAL. `TitleCase` cannot stand where a `snake_case` name does.
+    request(
+        &client,
+        32,
+        "textDocument/rename",
+        json!({
+            "textDocument": { "uri": uri },
+            "position": at_name,
+            "newName": "CaseId"
+        }),
+    )?;
+    let Message::Response(refused) = receive(&client)? else {
+        return Err("server did not respond to the refused rename".into());
+    };
+    assert!(
+        refused.result.is_none(),
+        "a refusal must not also carry edits: {refused:?}"
+    );
+    let error = refused.error.ok_or(
+        "a refused rename came back as SUCCESS — the author is shown nothing and concludes the \
+         rename did not take",
+    )?;
+    assert!(
+        error.message.contains("snake_case"),
+        "the refusal must reach the author saying which rule was broken: {}",
+        error.message
+    );
+
+    shutdown_and_exit(&client, 33)?;
+    let server_result = server_thread.join().map_err(|_| "server thread panicked")?;
+    server_result?;
+    Ok(())
+}

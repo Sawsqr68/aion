@@ -6,6 +6,7 @@
 mod analysis;
 mod completion;
 mod navigation;
+mod rename;
 mod server;
 
 pub use analysis::{byte_offset_at, diagnostics, format_document, position_at, range_for_span};

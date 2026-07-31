@@ -6,8 +6,9 @@ use lsp_types::{
     CompletionOptions, CompletionParams, CompletionResponse, DidChangeTextDocumentParams,
     DidCloseTextDocumentParams, DidOpenTextDocumentParams, DocumentFormattingParams,
     GotoDefinitionParams, HoverParams, HoverProviderCapability, OneOf, PositionEncodingKind,
-    PublishDiagnosticsParams, ServerCapabilities, TextDocumentPositionParams,
-    TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, Uri,
+    PrepareRenameResponse, PublishDiagnosticsParams, ReferenceParams, RenameOptions, RenameParams,
+    ServerCapabilities, TextDocumentPositionParams, TextDocumentSyncCapability,
+    TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, Uri, WorkDoneProgressOptions,
 };
 use serde::de::DeserializeOwned;
 
@@ -96,6 +97,15 @@ fn capabilities() -> ServerCapabilities {
         document_symbol_provider: Some(OneOf::Left(true)),
         definition_provider: Some(OneOf::Left(true)),
         hover_provider: Some(HoverProviderCapability::Simple(true)),
+        references_provider: Some(OneOf::Left(true)),
+        // `prepareProvider` is on so the editor asks which range it may rename
+        // BEFORE prompting. Without it a client offers a rename box over a
+        // comment or a keyword and only learns it was impossible after the
+        // author has typed a new name.
+        rename_provider: Some(OneOf::Right(RenameOptions {
+            prepare_provider: Some(true),
+            work_done_progress_options: WorkDoneProgressOptions::default(),
+        })),
         completion_provider: Some(CompletionOptions {
             // A completion list is complete as returned: every candidate is
             // already in it, and the client filters by the prefix the author is
@@ -246,6 +256,14 @@ fn handle_request(
                 });
             respond(connection, request.id, CompletionResponse::Array(items))
         }
+        "textDocument/references" => handle_references(connection, request, documents),
+        "textDocument/prepareRename" => handle_prepare_rename(connection, request, documents),
+        "textDocument/rename" => {
+            let Some(params) = decode_request::<RenameParams>(connection, &request)? else {
+                return Ok(());
+            };
+            handle_rename(connection, request.id, params, documents)
+        }
         "textDocument/hover" => {
             let Some(params) = decode_request::<HoverParams>(connection, &request)? else {
                 return Ok(());
@@ -268,6 +286,107 @@ fn handle_request(
                 ErrorCode::MethodNotFound as i32,
                 format!("unsupported request: {}", request.method),
             );
+            send(connection, Message::Response(response))
+        }
+    }
+}
+
+/// Every span the checker bound to the declaration under the cursor.
+fn handle_references(
+    connection: &Connection,
+    request: Request,
+    documents: &HashMap<String, String>,
+) -> Result<(), ServerError> {
+    let Some(params) = decode_request::<ReferenceParams>(connection, &request)? else {
+        return Ok(());
+    };
+    let include = params.context.include_declaration;
+    let TextDocumentPositionParams {
+        text_document,
+        position,
+    } = params.text_document_position;
+    let locations = documents
+        .get(text_document.uri.as_str())
+        .and_then(|source| {
+            let root = document_root(&text_document.uri);
+            crate::rename::references(
+                source,
+                &text_document.uri,
+                position,
+                root.as_deref(),
+                include,
+            )
+        })
+        .unwrap_or_default();
+    respond(connection, request.id, locations)
+}
+
+/// The range an editor should pre-fill, or `null` when nothing here renames.
+fn handle_prepare_rename(
+    connection: &Connection,
+    request: Request,
+    documents: &HashMap<String, String>,
+) -> Result<(), ServerError> {
+    let Some(params) = decode_request::<TextDocumentPositionParams>(connection, &request)? else {
+        return Ok(());
+    };
+    let range = documents
+        .get(params.text_document.uri.as_str())
+        .and_then(|source| {
+            let root = document_root(&params.text_document.uri);
+            crate::rename::prepare(source, params.position, root.as_deref())
+        });
+    respond(
+        connection,
+        request.id,
+        range.map(PrepareRenameResponse::Range),
+    )
+}
+
+/// Apply a rename, or report the refusal to the CLIENT rather than swallowing
+/// it.
+///
+/// A refused rename must come back as a protocol error: an editor that gets an
+/// empty edit list shows the author nothing at all and they conclude the
+/// rename simply did not take. The refusal text says which rule was broken.
+fn handle_rename(
+    connection: &Connection,
+    id: lsp_server::RequestId,
+    params: RenameParams,
+    documents: &HashMap<String, String>,
+) -> Result<(), ServerError> {
+    let uri = params.text_document_position.text_document.uri;
+    let Some(source) = documents.get(uri.as_str()) else {
+        let response = Response::new_err(
+            id,
+            ErrorCode::InvalidParams as i32,
+            format!(
+                "cannot rename in `{}`: the document is not open",
+                uri.as_str()
+            ),
+        );
+        return send(connection, Message::Response(response));
+    };
+    let root = document_root(&uri);
+    match crate::rename::rename(
+        source,
+        params.text_document_position.position,
+        &params.new_name,
+        root.as_deref(),
+    ) {
+        Ok(edits) => {
+            // The wire shape is `WorkspaceEdit.changes`, built here as a JSON
+            // object rather than through `lsp_types::WorkspaceEdit`. That
+            // struct keys its map by `Uri`, which carries interior mutability
+            // and is therefore not a sound hash key — the URI is a plain string
+            // on the wire, and that is what it is keyed by here.
+            let mut changes = serde_json::Map::new();
+            changes.insert(uri.as_str().to_owned(), serde_json::to_value(edits)?);
+            respond(connection, id, serde_json::json!({ "changes": changes }))
+        }
+        Err(refusal) => {
+            let response =
+                Response::new_err(id, ErrorCode::RequestFailed as i32, refusal.to_string());
             send(connection, Message::Response(response))
         }
     }
