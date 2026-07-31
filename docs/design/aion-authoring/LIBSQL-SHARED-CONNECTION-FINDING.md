@@ -128,6 +128,49 @@ pub fn execute(&self, params: &Params) -> Result<u64> {
 `sqlite3_changes64` is per **connection**, read *after* the step — not a value
 captured from the statement.
 
+### P4b — six unguarded methods issue their OWN `BEGIN`
+
+The write/read split above was the one part still resting on my reading, so I
+mechanised it too — and the mechanical check disagreed with me on four methods.
+**The classifier was wrong, not the claim**: it only followed one level, so
+`put_package`, `register_namespace`, `put_namespace` and `set_namespace_placement`
+looked read-only because their SQL lives one call deeper. Checked by hand:
+`put_package` delegates to `put_package_with_routes`, and the three namespace
+methods open a transaction and call `insert_record` / `touch_last_seen`. **14
+writes stands; the depth-1 limit is the classifier's, and it is stated here so
+the next person doesn't re-derive 10 and believe it.**
+
+Chasing that disagreement surfaced something sharper. Which delegates open a
+transaction:
+
+```sh
+awk '/^(pub\(crate\) )?(pub )?(async )?fn [a-z_0-9]+/ {
+       match($0,/fn [a-z_0-9]+/); name=substr($0,RSTART+3,RLENGTH-3) }
+     /transaction_with_behavior/ { if (!(name in seen)) { print name; seen[name]=1 } }
+' crates/aion-store-libsql/src/{outbox.rs,append.rs,package.rs,namespace.rs} \
+  crates/aion-store-libsql/src/outbox/transitions.rs
+```
+
+Fourteen do. Nine are reached only through guarded store methods. **Six are
+reached through UNGUARDED ones:**
+
+```
+put_package              -> put_package_with_routes   BEGIN, no lock
+put_package_with_routes                               BEGIN, no lock
+register_namespace                                    BEGIN, no lock
+put_namespace                                         BEGIN, no lock
+set_namespace_placement                               BEGIN, no lock
+deprecate_namespace                                   BEGIN, no lock
+```
+
+This is a **stronger** failure than C1. C1 is an unguarded statement quietly
+joining someone else's transaction. This is an unguarded `BEGIN` issued on a
+connection that may already be inside one — SQLite has no nested transactions, so
+the second `BEGIN` is an outright error on a connection whose transaction state
+belongs to a different task. A package deploy or a namespace registration landing
+concurrently with any guarded write is the collision, and neither side is doing
+anything unusual.
+
 ## What follows mechanically
 
 **C1 — an unguarded write can be silently rolled back after returning `Ok`.**
