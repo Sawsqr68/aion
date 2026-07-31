@@ -1,5 +1,24 @@
 # 🔴 BLOCK G — #122 connection pool — IN FLIGHT, UNCOMMITTED
 
+## 🚨 IF `crates/aion-store-libsql` LOOKS CLEAN, THE WORK IS STASHED, NOT LOST
+
+A baseline A/B was run by stashing the implementation to reach a clean HEAD.
+Recovery, in order of preference:
+
+```
+git stash list                      # look for the aion-store-libsql entry
+git stash pop                       # normal restore
+
+# fallback if the stash is gone — backups taken BEFORE stashing, hash-verified:
+#   <scratchpad>/122-tracked.patch  sha256 547424915c470966dad5e67cb1fe32ff083613bd7a9214815e2396890404b60a
+#   <scratchpad>/pool.rs.bak        sha256 928f85202d3d160e7be8df15bb483fc2a1aa0c7c86cf01a712c7726c5251ef26
+git apply <scratchpad>/122-tracked.patch
+cp <scratchpad>/pool.rs.bak crates/aion-store-libsql/src/pool.rs
+```
+
+`pool.rs` is UNTRACKED, so it needs `-u` on the stash and is not in the patch.
+
+
 **Written at compaction, 2026-08-01. The working tree carries an uncommitted
 implementation. Nothing here is on `origin/main` except the docs.**
 
@@ -27,7 +46,201 @@ crate-tree digest 2e2f4a19b82364b25d63488f89899d8abb32459d72924cb8338992a6a99b83
 The second exists because a single-file pin is blind to a stray edit elsewhere by
 construction. Both go back to her.
 
-## The one step left mid-air: the INVERTED CONTROL (amendment granted)
+## ✅ THE INVERTED CONTROL RAN — AND IT CAUGHT A VACUOUS TEST
+
+**Sequence, 2026-08-01:**
+
+1. `connection.rs` verified against Athena's pin **before** touching it: hash and
+   byte count both exact.
+2. `apply_pragmas` call deleted from `ConnectionFactory::connect`.
+3. `a_pooled_connection_carries_the_configured_pragmas_not_only_the_first`
+   → **PASSED**. 🔴 The control did not fire.
+
+**Why it was vacuous.** The test asserted a hardcoded `synchronous == 2`,
+reasoning that WAL's default is `1` so `2` could only come from the PRAGMA. That
+reasoning was wrong: `journal_mode = wal` is applied **after** the connection
+opens, so the WAL-specific default never applies and the connection already
+reports `2`. **The expected value equalled the default.** The assertion could not
+fail, and nothing about the pool's correctness was ever being tested.
+
+**The fix is the property, not a better number.** The test now measures a
+baseline from an *unconfigured* store's pooled connection, asserts the value
+under test differs from it (**non-vacuity guard**), then asserts the configured
+store's pooled connection reports it. `off` = `0` is the discriminator purely
+because no `SQLite` default is `0` — a fixture choice, not a durability opinion.
+A future change to libSQL's defaults cannot make this vacuous again; it would
+trip the guard loudly instead.
+
+4. Rewritten test against the still-broken factory → **RED**, with its own
+   message: `left: 2, right: 0`, naming the exact defect.
+5. `connection.rs` restored → hash back to `9a9e662f…`, 14884 bytes, **exact**.
+6. Gates on the corrected tree: clippy `-D warnings` **0**, `cargo test -p
+   aion-store-libsql` **0**, 90 tests.
+
+**Scope note, declared not buried:** the granted mutation class was *one file,
+one function, restore, nothing else moves*. `pool.rs` moved too — because the
+control found a defect in the test rather than in the code. `connection.rs` is
+byte-identical to its pin; the crate-tree digest differs **solely** because of
+that test rewrite.
+
+### Law earned
+
+**A control that passes is not a control.** The whole value was in watching it
+fail; had I skipped the step as ceremony, a test asserting a tautology would have
+shipped as the proof that the pool preserves operator durability settings. Second
+time in two blocks (#119, #120) that the *obvious* control was itself wrong —
+which is the argument for running them, not for trusting them.
+
+### Second finding, unrelated and free
+
+Every `echo "EXIT=${PIPESTATUS[0]}"` I ran this session **printed empty**. This
+shell is **zsh**, where the array is `pipestatus` and is **1-indexed**;
+`PIPESTATUS` is a bash-ism and is unset here. Every one of those exit lines was
+vacuous, and I read past them. Use `set -o pipefail` with `$?`, or
+`${pipestatus[1]}`. Cousin of the diff-driver grep trap: **a reporting construct
+borrowed from another shell fails silent, not loud.**
+
+## 🔴 GATE RED, UNATTRIBUTED — and two vacuous exit codes found under it
+
+`cargo test -p aion-rs --all-targets --no-fail-fast`, attempt 3, **EXIT=101**.
+Two failures in `outbox_e2e`, both:
+
+```
+Error: Store(Backend("SQLite failure: `bad parameter or other API misuse`"))
+  outbox_crash_recovery_rearms_stranded_done_row_and_finishes
+  outbox_failure_fails_fast_and_cancels_unresolved_siblings
+```
+
+### 🔴 The notification's exit code was NOT cargo's
+
+The task notification said **"completed (exit code 0)"** for a run whose real code
+was **101**. The command was `cargo test … > log 2>&1; echo "EXIT=$?" >> log` —
+the harness reports the *last* command's status, which is the `echo`. **A trailing
+`echo` launders any failure into a success.** I would have accepted that green if
+the log had not disagreed with it.
+
+⇒ **THE EXIT CODE OF A COMPOUND COMMAND BELONGS TO ITS LAST STATEMENT, NOT ITS
+SUBJECT.** Same family as the zsh `PIPESTATUS` finding an hour earlier: both are
+reporting constructs that fail silent, and both were caught only by reading the
+thing they claimed to summarise. Gates 1 and 2 were re-checked from their logs —
+`EXIT=0` with zero `test result: FAILED` lines, genuinely green.
+
+### What this red is, and what it is NOT
+
+`SQLITE_MISUSE` / "bad parameter or other API misuse" **is flake (2) in the #85
+record** — documented in `LIBSQL-SHARED-CONNECTION-FINDING.md:259` *before* this
+change, and explicitly **not** traced to an interleaving there.
+
+🔴 **A name matching a known flake is suggestive, not exculpatory.** This is the
+symmetric form of constraint (a): if flake disappearance may not be credited to
+the fix, flake familiarity may not excuse a red on the fixed tree. Both directions
+of that argument are cheap, and only measurement is not.
+
+Measured, not assumed:
+
+| attempt | tree | result |
+|---|---|---|
+| 1 | pool, pre-inverted-control | EXIT=0 |
+| 2 | pool, post-restore, **pre** timer fix | EXIT=0 |
+| 3 | pool + timer fix | **EXIT=101**, 2 failures |
+| — | isolation, single test, ×1 | pass |
+| — | whole `outbox_e2e` binary, ×3 | 8/8 pass each |
+| — | 8 concurrent instances × 3 rounds | **0 failures / 24 runs** |
+
+So it did not reproduce in 27 runs of the failing binary, including 24 under
+deliberate load. It has appeared exactly once, under whole-workspace load, which
+is a heavier and different regime than any of the above.
+
+**Current honest position: the red is UNATTRIBUTED.** One event cannot support a
+rate — the same statistical point already banked for #85. What can be said:
+the signature pre-dates the change, and the change was never justified by these
+flakes in the first place.
+
+### 🔴 CORRECTION: the failing tests are NOT #85's recorded flakes
+
+#85 names three: `outbox_duplicate_completion_records_exactly_one_terminal`,
+the aion-server unit test `paused_run_row_is_held_pending_then_dispatches_after_release`
+(which is where the MISUSE *text* comes from), and
+`outbox_happy_path_completes_with_n_terminals_in_order`.
+
+**Neither failure is on that list.** I matched on the error string and called it
+the known flake — the exact move I had warned against one paragraph earlier.
+
+⇒ **A SIGNATURE MATCH IS NOT AN INSTANCE MATCH.**
+
+Counterweight, stated rather than left for someone else: #85 records what was
+**observed**, not a census. Both failures live in the same file as (1) and (3)
+and share their `wait_for_history` structure. This raises the concern; it does
+not settle it.
+
+### 🔴 CORRECTION: the 90-green battery barely tests contention at all
+
+Counted, not assumed — `crates/aion/tests/outbox_e2e.rs`:
+
+| battery | shape |
+|---|---|
+| `aion-store-libsql` (the 90 green) | ~78 bare `#[tokio::test]` (**current-thread**), 9 sync `#[test]`, **2** multi_thread |
+| `outbox_e2e` (the red) | **8 of 8** `#[tokio::test(flavor = "multi_thread", worker_threads = 4)]` — including both failures |
+
+So the green battery is ~98% contention-free: it is **silence about exactly the
+property the red is a candidate instance of.** Treating 2 greens against 1 red as
+2–1 was wrong; the greens were mostly not asking the question.
+
+⇒ **A GREEN'S WEIGHT IS THE FRACTION OF IT THAT COULD HAVE GONE RED.**
+
+Also excluded, by reading `outbox_e2e.rs:124`: temp paths carry pid + nanos + a
+unique counter, so cross-process db collision cannot explain any of it. Whatever
+this is, it is **intra-process** — squarely this change's subject matter, not
+outside it.
+
+## 🔴 P0 FOUND IN MY OWN UNCOMMITTED FIX — a WRITE routed onto a READ connection
+
+Found by auditing the transform before committing, not by any test.
+
+```
+store.rs:504   crate::timer::schedule_timer(&*self.reader().await?, …)
+timer.rs:33    conn.execute(UPSERT_TIMER_SQL, …)
+```
+
+**Durable timer scheduling was executing on a pooled READ connection** — every
+workflow sleep, every activity timeout — outside the writer mutex, concurrent
+with the writer connection's `BEGIN IMMEDIATE`. That is the #122 mechanism
+exactly, rebuilt inside the commit whose purpose is to remove it.
+
+**Cause: I classified by NAME.** `schedule_timer` reads like scheduling, not
+writing. The same depth-1 classifier already missed `put_package` and three
+namespace methods earlier in this block; I corrected its *outputs* twice and
+never corrected the *method*.
+
+⇒ **A NAME IS NOT A SIGNATURE. Classify by what the callee EXECUTES.**
+
+**The audit, done properly this time.** Every `.execute(`, `BEGIN`, INSERT,
+UPDATE and DELETE in the crate extracted and mapped to its enclosing function by
+line range; all 24 `reader()` sites checked against their callee. `schedule_timer`
+is the **only** defect — the other 23 callees are verified read-only individually,
+not assumed.
+
+### 🔴 A habit caught it — nothing MECHANICAL could have
+
+Amended wording. "Nothing could have caught this" is false and is the kind of
+sentence that excuses the next one: I caught it by asking the blast-radius
+question during a gate wait. That is a **habit**, and habits die with whoever
+holds them — which is precisely the argument for the compiler cure, not against
+it. The accurate finding is narrower and worse:
+
+A write on a read connection **compiles cleanly and passes every test** — 90
+green, including the new concurrency test, with the defect live. Single-threaded
+tests never contend, so this class of bug is invisible to precisely the battery
+meant to guard it. The greens were real and said nothing about it.
+
+**Structural answer, declared before starting:** `ReadGuard` stops `Deref`-ing to
+`libsql::Connection` and exposes a read-only surface, so handing a read
+connection to anything that executes **fails to compile**. The compiler becomes
+the classifier and my judgement stops being load-bearing. ~20 signature changes
+across the read helpers. **Next step in this block, after the commit** — not
+deferred, sequenced, and declared to Athena in advance rather than slid into.
+
+## The one step left mid-air: the INVERTED CONTROL (amendment granted) — DONE, see above
 
 **Mutation class declared and approved: one file, one function, reverted.**
 
