@@ -594,11 +594,11 @@ fn wire_from_engine(source: &EngineError) -> WireError {
         }
         EngineError::Store(store) => wire_from_store(store),
         EngineError::Durability(durability) => engine::durability_wire(durability, source),
-        EngineError::MissingStore => engine::backend_wire("MissingStore", source),
+        E::MissingStore => backend("MissingStore", source),
         E::MissingVisibilityStore => backend("MissingVisibilityStore", source),
         E::ConflictingEventPublisher => backend("ConflictingEventPublisher", source),
-        EngineError::EventStreaming(_) => engine::backend_wire("EventStreaming", source),
-        EngineError::Load { .. } => WireError::backend_with_type("Load", source.to_string()),
+        E::EventStreaming(_) => backend("EventStreaming", source),
+        E::Load { .. } => backend("Load", source),
         // The archive is well-formed and the defect is in what it DECLARES, so
         // this is the operator's own input to correct — not a backend fault.
         EngineError::UnenforceableContract { .. } => {
@@ -617,24 +617,20 @@ fn wire_from_engine(source: &EngineError) -> WireError {
         EngineError::ManifestMismatch { .. } => {
             WireError::invalid_input(source.to_string()).with_error_type("ManifestMismatch")
         }
-        EngineError::Package(_) => WireError::backend_with_type("Package", source.to_string()),
+        E::Package(_) => backend("Package", source),
         E::ContractIdentity { .. } => engine::contract_refusal_wire("ContractIdentity", source),
         E::NoQueueDeclaration { .. } => engine::contract_refusal_wire("NoQueueDeclaration", source),
         E::StartInputRefused { .. } => engine::declared_contract_wire("StartInputRefused", source),
         E::SignalRefused { .. } => engine::declared_contract_wire("SignalRefused", source),
         EngineError::Schedule { .. } => backend("Schedule", source),
-        EngineError::Runtime { .. } => WireError::backend_with_type("Runtime", source.to_string()),
+        E::Runtime { .. } => backend("Runtime", source),
         E::Gate3BifReplacementMissing { .. } => backend("Gate3BifReplacementMissing", source),
         E::CleanupExecutorPoisoned => backend("CleanupExecutorPoisoned", source),
         E::CleanupExecutorShutdownTimedOut { .. } => {
             backend("CleanupExecutorShutdownTimedOut", source)
         }
-        EngineError::ProcessExitRegistryPoisoned => {
-            WireError::backend_with_type("ProcessExitRegistryPoisoned", source.to_string())
-        }
-        EngineError::ProcessExitOwnershipPoisoned { .. } => {
-            WireError::backend_with_type("ProcessExitOwnershipPoisoned", source.to_string())
-        }
+        E::ProcessExitRegistryPoisoned => backend("ProcessExitRegistryPoisoned", source),
+        E::ProcessExitOwnershipPoisoned { .. } => backend("ProcessExitOwnershipPoisoned", source),
         EngineError::ProcessExitStatePoisoned { .. } => {
             process_exit::wire("ProcessExitStatePoisoned", source)
         }
@@ -664,24 +660,12 @@ fn wire_from_engine(source: &EngineError) -> WireError {
         | EngineError::ProcessExitCallbackDispatcherShutdownTimedOut { .. } => {
             process_exit::callback_wire(source)
         }
-        EngineError::ProcessExitAlreadyTerminal { .. } => {
-            WireError::backend_with_type("ProcessExitAlreadyTerminal", source.to_string())
-        }
-        EngineError::ActivityDeliveryPoisoned { .. } => {
-            WireError::backend_with_type("ActivityDeliveryPoisoned", source.to_string())
-        }
-        EngineError::CatalogPoisoned => {
-            WireError::backend_with_type("CatalogPoisoned", source.to_string())
-        }
-        EngineError::RegistryPoisoned => {
-            WireError::backend_with_type("RegistryPoisoned", source.to_string())
-        }
-        EngineError::NifRegistration { .. } => {
-            WireError::backend_with_type("NifRegistration", source.to_string())
-        }
-        EngineError::SignalRouter(_) => {
-            WireError::backend_with_type("SignalRouter", source.to_string())
-        }
+        E::ProcessExitAlreadyTerminal { .. } => backend("ProcessExitAlreadyTerminal", source),
+        E::ActivityDeliveryPoisoned { .. } => backend("ActivityDeliveryPoisoned", source),
+        E::CatalogPoisoned => backend("CatalogPoisoned", source),
+        E::RegistryPoisoned => backend("RegistryPoisoned", source),
+        E::NifRegistration { .. } => backend("NifRegistration", source),
+        E::SignalRouter(_) => backend("SignalRouter", source),
         EngineError::Query(query) => engine::query_wire(query, source),
     }
 }
