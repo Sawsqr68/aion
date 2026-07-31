@@ -5,9 +5,23 @@
 A baseline A/B was run by stashing the implementation to reach a clean HEAD.
 Recovery, in order of preference:
 
+🔴 **`stash@{0}` IS A POSITION, NOT AN IDENTITY.** There is already an unrelated
+`stash@{1}`, and **any** `git stash push` — mine, a tool's, a later session's —
+renumbers silently, leaving this recipe still *reading* correct while pointing at
+something else. The stash's identity is its commit:
+
 ```
-git stash list                      # look for the aion-store-libsql entry
-git stash pop                       # normal restore — PREFERRED
+91c637b86a234a1631ee1bc34c7755283bc8699e
+  "On main: block-G #122 pool implementation (baseline A/B in progress)"
+  ^3 tree holds crates/aion-store-libsql/src/pool.rs at blob 34cd902a…
+```
+
+⇒ **IDENTITY OF AN ARTIFACT IS ITS HASH, NEVER ITS LABEL** — and `stash@{N}` is a
+label wearing the costume of an index.
+
+```
+git stash list --format='%H %gd %s'   # find 91c637b8…, do NOT assume it is @{0}
+git stash pop 91c637b86a234a1631ee1bc34c7755283bc8699e   # normal restore — PREFERRED
 
 # fallback if the stash is gone. 🔴 THE --include IS LOAD-BEARING, NOT TIDINESS:
 git apply --check --include='crates/aion-store-libsql/*' <scratchpad>/122-tracked.patch
@@ -344,6 +358,37 @@ New tests, all passing: `a_pooled_connection_carries_the_configured_pragmas_not_
 flakes disappear, that is recorded **consistent, not load-bearing**. No commit
 message, doc, or task update may cite flake disappearance as evidence the fix
 worked.
+
+## 🔴 SEVEN REPORTING DEFECTS, ONE TRAP: a SUMMARY diverging from its SUBJECT
+
+Every reporting failure in this block is the same bug wearing a different door:
+
+| the summary | what it was actually reporting |
+|---|---|
+| trailing `echo "EXIT=$?"` | the `echo`, not `cargo` |
+| `rc=$?` after a pipe (**twice**) | `head`, not the command |
+| `${PIPESTATUS[0]}` in zsh | nothing — it is a bash-ism, silently unset |
+| `git stash show --stat` | tracked files only; `-u` files invisible |
+| task notification "exit code 0" | the wrapper's last statement, for a run that exited 101 |
+| `stat` format string with a literal `Z` | a hand-typed label where a unit goes |
+
+Not seven traps. **One trap with seven doors** — and every escape came from the
+same move: reading the artifact and finding it disagreed with the summary.
+
+⇒ ★ **PREFER AN ORACLE THE SUBJECT EMITTED OVER A STATUS THE WRAPPER REPORTED.**
+`cargo` writes `test result: FAILED` into its own output — that is the subject
+speaking. `$?` after a pipe, a notification, a `--stat`, a format string are all
+something else speaking *about* it. When a summary must be used, the obligation
+is to know **what that particular summary omits** — which is exactly how
+`--stat` nearly cost the only untracked file in the backup.
+
+⇒ **Typeable form: grep the artifact for its own verdict.**
+
+⇒ And the meta-finding, because prose has demonstrably not changed behaviour —
+each of these was written into this file and then re-committed within the hour:
+**THESE ARE NOT LAWS TO REMEMBER, THEY ARE FLAGS TO TYPE.** `--check` before
+trusting a patch. `set -o pipefail` before reading `$?`. An explicit path list
+before calling two things copies. A hash before calling a label an identity.
 
 ## Laws earned in this block
 
