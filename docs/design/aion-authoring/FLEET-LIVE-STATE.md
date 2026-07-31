@@ -1,6 +1,47 @@
 # Fleet + lanes: LIVE STATE (resume point)
 
-## 🔴 RESUME HERE — 2026-07-31 ~04:00Z. main `8451e0e5`, PUSHED.
+## 🔴 RESUME HERE — 2026-07-31 ~04:45Z. main `b70df41e` + this commit.
+
+### #97-B IS CLOSED — `b70df41e`
+
+An optional FIELD now narrows. `when nudge.end is present and nudge.end`
+type-checks, lowers, and runs. Full record:
+`docs/design/aion-authoring/NARROWING-97B-FINDINGS.md` (the original
+measurement, then a `BUILT — 2026-07-31` section).
+
+**The finding that generalises beyond this fix:** narrowing was implemented
+THREE times — checker, direct MIR lowering, Gleam reference emitter — each
+keyed on `Expr::Ref`, with no shared source of truth. Fixing one would have
+been worse than fixing none: the document type-checks, then compiles to a test
+against a wrapped optional, always false, never reported. Waffles has filed
+this next to F8 in the estate taxonomy as the same disease at a different
+layer.
+
+**Held at the generators' limit, on purpose.** Mid-build the checker accepted
+`a is present and b is present and b`; neither backend carries that middle
+proof (`a and b and c` parses `(a and b) and c`, and both narrow from a
+binary's DIRECT left operand only). The checker was pulled back rather than
+ship a checker that outruns what compiles correctly. Gap is **task #110**, not
+paper.
+
+Gate on the final tree: `cargo test -p aion-awl` exit 0 (44 binaries),
+`cargo test -p aion-rs --test awl_bc4_differential` exit 0 (26 passed, both
+backends byte-identical), `cargo clippy --workspace --all-targets -- -D
+warnings` exit 0. `COVERED_COUNT` 88 → 90.
+
+Verified failing at my own hand in ALL THREE layers — checker (original error
+reproduced), lowering (MIR goldens mismatch), emitter (emits
+`Some(awl_present_nudge_end) -> nudge.end`, a Gleam type error).
+
+**NOT done, and it is a decision not an oversight:** the assistant's
+`assistant_continue` fields stay REQUIRED. The language limitation that forced
+them is gone, but this flow reads `nudge.end` inside a `Round(...)`
+construction under no guard, so making them optional means restructuring those
+reads AND changing a live operator wire contract on sessions that park for
+weeks. The stale reason in `examples/assistant/awl/assistant.awl` has been
+corrected to say exactly that. Tom's call.
+
+### Previously — 2026-07-31 ~04:00Z, main `8451e0e5`, PUSHED
 
 ### THE BOX IS UNDER A VISITOR-WINDOW FREEZE
 

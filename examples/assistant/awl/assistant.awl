@@ -54,11 +54,20 @@ workflow assistant
   input max_nudges: Int
 
   // The ONE control signal the session listens on. Both fields are REQUIRED
-  // on the wire: AWL cannot read the value of an optional `Bool?` or compare
-  // an optional `String?`, only test presence, so optional fields would make
-  // `end: false` indistinguishable from ending and a blank message
-  // undetectable. Send `{"message": "...", "end": false}` to continue and
+  // on the wire. Send `{"message": "...", "end": false}` to continue and
   // `{"message": "", "end": true}` to finish.
+  //
+  // The reason has CHANGED and the requirement has not. AWL used to be unable
+  // to read the value of an optional field at all — narrowing keyed on a
+  // binding name, so `nudge.end` could never become a `Bool`. That is fixed
+  // (#97-B): a guard now proves a PATH, and `when nudge.end is present and
+  // nudge.end` reads it. What still forces both fields is this flow's own
+  // shape, not the language: `nudge.end` is read where nothing has proved it
+  // — inside the `until` condition AND inside the `Round(...)` construction in
+  // the loop body, which sits under no guard. Making the fields optional means
+  // restructuring those reads behind guard arms, which changes the operator's
+  // wire contract on a session that can be parked for weeks. That is a
+  // deliberate change to make on purpose, not a consequence of a checker fix.
   signal assistant_continue: Continuation
 
   // The read-only surface: what an operator gets back from
