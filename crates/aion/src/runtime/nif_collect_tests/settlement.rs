@@ -53,6 +53,56 @@ async fn fail_fast_returns_lowest_ordinal_failure_and_cancels_unresolved() -> Te
     harness.shutdown()
 }
 
+/// 🔴 #90, THE SECOND CONSUMER. The fan-out settlement path records the
+/// terminal for every `distribute` leg, and it inherited the last attempt's
+/// `retryable:` reason verbatim into a `kind: Terminal` record — the same
+/// defect first observed on the single-await path, living untreated in a
+/// second place. It was found by sweeping the consumers of a retained
+/// activity error rather than by a second sighting, which is the only reason
+/// it was not shipped half-fixed.
+///
+/// The second assertion is the load-bearing one. The message handed to
+/// workflow code must be BYTE-IDENTICAL to the message recorded, because
+/// replay re-derives this failure by reading the recorded event
+/// (`recorded_terminal`) rather than by re-running the settlement. Correcting
+/// only the durable record would hand live code one string and replayed code
+/// another — a replay divergence, not a cosmetic inconsistency.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_fanned_out_terminal_never_records_the_retryable_class() -> TestResult {
+    let harness = CollectHarness::over_events(&pending_batch(&["a", "b"])).await?;
+    // The retained failure a producer delivers: classified `retryable:` by
+    // the attempt that produced it, and now becoming a terminal record.
+    let observed = "retryable:harness reported failure: run/execute failed (code -32603)";
+    harness.deps.runtime.deliver_activity_failure_message(
+        harness.pid,
+        "activity:0",
+        observed.to_owned(),
+    )?;
+
+    let step = harness.step(CollectKind::All, &specs(&["a", "b"]))?;
+
+    let CollectStep::FailFast(delivered) = step else {
+        return Err(format!("expected a fail-fast settlement, got {step:?}").into());
+    };
+    assert!(
+        !delivered.starts_with("retryable:"),
+        "a Terminal fan-out settlement still classified as retryable: {delivered}"
+    );
+    assert!(
+        delivered.ends_with("run/execute failed (code -32603)"),
+        "the inherited diagnostic was altered or dropped: {delivered}"
+    );
+
+    let recorded = harness.recorded_activity_failures().await?;
+    assert_eq!(
+        recorded,
+        vec![(0, ActivityErrorKind::Terminal, delivered.clone())],
+        "the durable record and the value handed to workflow code must be the \
+         same string — replay reads the recorded one"
+    );
+    harness.shutdown()
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn cancellation_set_covers_exactly_the_unresolved_ordinals() -> TestResult {
     // 0 completed, 2 failed, 1 and 3 pending: the cancel set is {1, 3}.

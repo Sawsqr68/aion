@@ -15,8 +15,13 @@ use crate::durability::Recorder;
 /// (kind `Retryable`), backed off, and re-dispatched with the SAME ordinal
 /// and routing at the incremented attempt. Non-retryable failures, absent
 /// policies (`"retry": null` — the SDK's run-exactly-once contract), and an
-/// exhausted budget deliver to the workflow exactly as before, with the last
-/// reason verbatim.
+/// exhausted budget deliver to the workflow with the last reason verbatim.
+///
+/// Verbatim delivery is deliberate and stops here (#90). This task cannot know
+/// whether the reason it delivers will become a `Terminal` record — the await
+/// and fan-out settlement paths decide that — so the retryable-class
+/// correction belongs at those consumers, not at this producer. See
+/// [`super::nif_activity_retry::reclassified_terminal_reason`].
 ///
 /// Every durable retry record is guarded against the settle races the
 /// workflow thread can win mid-loop (a `with_timeout` expiry recording the

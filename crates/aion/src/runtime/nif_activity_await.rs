@@ -201,13 +201,14 @@ fn take_runtime_completion(
         // record is `Terminal` — writing both would put two copies of one
         // classification, disagreeing, into bytes that can never be rewritten.
         // The diagnostic tail is preserved in full; only the false class is
-        // corrected. See `exhausted_terminal_reason`.
+        // corrected. See `reclassified_terminal_reason`.
         let attempt = attempt.unwrap_or(FIRST_DELIVERY_ATTEMPT);
         // Computed ONCE and used for both the durable record and the value
         // handed to workflow code. Deriving them separately would reintroduce
         // the same defect one layer out: what the log says and what the
         // workflow saw must be the same string.
-        let terminal_reason = super::nif_activity_retry::exhausted_terminal_reason(&error.message);
+        let terminal_reason =
+            super::nif_activity_retry::reclassified_terminal_reason(&error.message);
         context
             .record_activity_failed(
                 chrono::Utc::now(),

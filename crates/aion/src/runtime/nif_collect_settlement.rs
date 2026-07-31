@@ -219,13 +219,28 @@ fn take_and_record(
     }
     if let Some((error, attempt)) = deps.runtime.take_activity_error(pid, ordinal)? {
         let attempt = attempt.unwrap_or(FIRST_DELIVERY_ATTEMPT);
+        // #90: this is the SECOND consumer of a retained activity error, and it
+        // carried the same defect as the await path — a `Terminal` record whose
+        // message still opened `retryable:`, the `kind` field and the message
+        // prefix disagreeing in bytes that can never be rewritten. Every
+        // fan-out leg (`distribute`) settles through here, so the defect was
+        // never confined to the single-await path it was first observed on.
+        //
+        // Computed ONCE and used for the durable record AND the value handed
+        // back to workflow code. Deriving them separately is what let the two
+        // disagree here in the first place: the recorded error was built from
+        // `error.message` while `OrdinalState::Failed` returned that same raw
+        // string, so both were wrong together and neither could reveal the
+        // other.
+        let terminal_reason =
+            super::nif_activity_retry::reclassified_terminal_reason(&error.message);
         if outbox_enabled {
             let result = context
                 .record_fan_out_completion(
                     Utc::now(),
                     ordinal,
                     FanOutOutcome::Failed {
-                        error: terminal_error(&error.message),
+                        error: terminal_error(&terminal_reason),
                         attempt,
                     },
                 )
@@ -236,12 +251,12 @@ fn take_and_record(
                 .record_activity_failed(
                     Utc::now(),
                     activity_id,
-                    terminal_error(&error.message),
+                    terminal_error(&terminal_reason),
                     attempt,
                 )
                 .map_err(|inner| inner.error_reason())?;
         }
-        return Ok(OrdinalState::Failed(error.message));
+        return Ok(OrdinalState::Failed(terminal_reason));
     }
     Ok(OrdinalState::Pending)
 }
