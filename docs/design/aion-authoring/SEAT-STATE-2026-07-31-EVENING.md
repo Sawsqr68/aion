@@ -1,5 +1,30 @@
 # Seat state — 2026-07-31, evening block
 
+## 🔴 READ FIRST ON RESUME
+
+**Nothing is in flight. Box idle. Tree clean, everything pushed.** No block is
+open with Athena; any compiler invocation needs a fresh declaration + GO, and
+must name the mutation class if it mutates source to probe coverage.
+
+**THE TOP ITEM IS #85, and it outranks everything else on this board.** A test in
+the durable write path fails ~1 run in 8; two more in the same subsystem do the
+same. Every green certified on 2026-07-31 carries that rate, including the 1021,
+the 1022, and the 58-targets-0-unpaired coverage claim. The libSQL error text
+("bad parameter or other API misuse" under concurrency) points at a
+shared-connection defect — if that is right it is a PRODUCTION bug in the durable
+write path, and these flakes are the only thing reporting it. Test that
+hypothesis before treating any of the three as test isolation.
+
+**Then #121** (both recovery-loop guards uncovered; needs an adversarial
+`EventStore` whose `list_active` returns a terminal/paused run anyway).
+**Then #117's remaining work** — the operator-facing surface (crosses
+`aion-server`, needs its own block) and requirements (1)-(4) of the ruling, which
+is pinned verbatim below. Requirement (5) is already discharged as a test.
+
+⚠️ **Do not inherit the superseded #121 framing.** I published that the two guards
+had opposite coverage. That was a flake seen once. Both are uncovered.
+
+
 Written to survive a compaction. `origin/main` = **`c1252dc5`**, everything
 pushed, nothing in flight, box idle.
 
