@@ -335,8 +335,9 @@ impl LivenessProbe {
         }
     }
 
-    /// Apply one connection's ping outcome: a correct answer proves dispatch
-    /// reachability, anything else is logged LOUDLY and proves nothing.
+    /// Apply one connection's ping outcome: a correct answer advances dispatch
+    /// reachability, anything else is logged LOUDLY, proves nothing, and RESETS
+    /// the probation — proof of reachability must be a consecutive run.
     fn apply_answer(
         &self,
         pid: u64,
@@ -374,6 +375,22 @@ impl LivenessProbe {
                 return;
             }
         };
+        // A probation is CONSECUTIVE, so any failure resets it to zero. Without
+        // this the counter would be cumulative, and a link that answers one probe
+        // in three would still accrue its way to eligibility and then flap in and
+        // out of it forever — which is exactly the defect the probation exists to
+        // stop. Both failure classes below reset: whether we could not ask or the
+        // worker did not answer, the run of answers is broken either way.
+        // `Ok(false)` means the worker was already deregistered; nothing to reset.
+        if let Err(error) = self.tracker.record_dispatch_unreachable(worker_id) {
+            warn!(
+                %error,
+                connection_pid = pid,
+                worker_id = worker_id.value(),
+                "failed to reset liminal worker dispatch probation after a failed liveness ping; \
+                 its eligibility may outlive the proof that earned it"
+            );
+        }
         // The two failures are DIFFERENT FACTS and the operator must be able to
         // tell them apart: one is about the worker, the other is about us.
         let task_queue = self
@@ -391,7 +408,8 @@ impl LivenessProbe {
                  refused, so nothing was sent and the worker has no idea it was probed. A dispatch \
                  would be refused by the same connection for the same reason. This says nothing \
                  about whether the worker is healthy; it says this server cannot currently reach \
-                 it. Its dispatch eligibility is withdrawn while this persists"
+                 it. Its dispatch eligibility is withdrawn NOW and it must answer a full run of \
+                 consecutive pings to earn it back"
             ),
             PingFailure::Unanswered(reason) => warn!(
                 connection_pid = pid,
@@ -401,10 +419,12 @@ impl LivenessProbe {
                 reason = %reason,
                 silence_window_ms = self.silence_window.as_millis(),
                 "liminal worker did not answer its liveness ping; the server could not prove it \
-                 can reach this worker's dispatch path, so dispatch eligibility is withdrawn once \
-                 the silence outlasts the window. NOTE: the worker's connection lease may still be \
-                 fresh — its liveness pump beats from a background task and keeps proving the \
-                 process is alive — so do NOT expect an expiry sweep to reap it"
+                 can reach this worker's dispatch path, so its dispatch eligibility is withdrawn \
+                 NOW and it must answer a full run of consecutive pings to earn it back — an \
+                 unanswered probe is direct evidence about the push leg, not mere silence. NOTE: \
+                 the worker's connection lease may still be fresh — its liveness pump beats from a \
+                 background task and keeps proving the process is alive — so do NOT expect an \
+                 expiry sweep to reap it"
             ),
         }
     }
@@ -465,9 +485,13 @@ fn ping_one(
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
 
-    use super::{LivenessPing, LivenessPong};
+    use super::super::heartbeat::{DISPATCH_PROBATION_PINGS, HeartbeatTracker};
+    use super::super::liminal_transport::LiminalConnectionNotifier;
+    use super::super::registry::{ConnectedWorkerRegistry, WorkerId};
+    use super::{LivenessPing, LivenessPong, LivenessProbe, PingFailure};
 
     /// The ping/pong pair round-trips with stable field names — the cross-crate
     /// wire contract with `aion-worker`'s mirror of these types. A drift here is
@@ -521,5 +545,121 @@ mod tests {
         // The declared window IS the operator's window; the cadence divides it,
         // so a healthy connection is refreshed four times per window.
         assert!(super::sweep_interval(window) * 4 <= window);
+    }
+
+    /// 🔴 THE WIRING PIN. The probation lives in the tracker, but only the probe
+    /// can tell it a ping FAILED — and a probe that recorded successes and
+    /// dropped failures would compile, log its WARN lines exactly as it does
+    /// now, and leave the probation permanently unreset. The eligibility bug
+    /// would be silently back with every test in `heartbeat` still green,
+    /// because those tests drive the tracker directly and never go through this
+    /// seam.
+    ///
+    /// Every failure class is asserted individually. The fourth arm — a
+    /// `JoinError` from the ping task — converges on the same
+    /// `PingFailure::Unanswered` path these two take, one line above the reset.
+    #[test]
+    fn every_failed_probe_class_withdraws_dispatch_eligibility() {
+        let window = Duration::from_secs(30);
+        let worker = WorkerId::from_value(1);
+        let start = Instant::now();
+
+        // Each class gets its own probe and its own served probation, so a class
+        // cannot pass by inheriting the withdrawal an earlier class performed.
+        let failures = [
+            (
+                "the push was refused, so nothing was even asked",
+                Ok(Err(PingFailure::Unaskable("push refused".to_owned()))),
+            ),
+            (
+                "the ping was sent and no answer came back",
+                Ok(Err(PingFailure::Unanswered("no answer arrived".to_owned()))),
+            ),
+            (
+                "an answer came back carrying the wrong sequence",
+                Ok(Ok(LivenessPong { liveness_pong: 99 })),
+            ),
+        ];
+
+        for (class, outcome) in failures {
+            let registry = ConnectedWorkerRegistry::default();
+            let tracker = HeartbeatTracker::new(window);
+            let probe = LivenessProbe::new(
+                Arc::new(LiminalConnectionNotifier::new(registry.clone())),
+                tracker.clone(),
+                registry,
+                window,
+            );
+
+            assert!(
+                tracker.register_connection(worker, start).is_ok(),
+                "tracker registration must succeed for {class}"
+            );
+            for _ in 0..DISPATCH_PROBATION_PINGS {
+                assert!(
+                    tracker
+                        .record_dispatch_reachability(worker, start)
+                        .is_ok_and(|tracked| tracked),
+                    "the worker serves its probation before {class}"
+                );
+            }
+            assert!(
+                tracker
+                    .is_dispatch_reachable(worker, start)
+                    .is_ok_and(|reachable| reachable),
+                "precondition: the worker is eligible before {class}"
+            );
+
+            // Sequence 1 is the ping that was sent; the mismatched-answer case
+            // deliberately answers 99.
+            probe.apply_answer(7, worker, 1, outcome);
+
+            assert!(
+                tracker
+                    .is_dispatch_reachable(worker, start)
+                    .is_ok_and(|reachable| !reachable),
+                "the probe must withdraw dispatch eligibility when {class} — otherwise the \
+                 probation never resets and a one-way link keeps its eligibility forever"
+            );
+        }
+    }
+
+    /// The control for the pin above: the SUCCESS path through the same seam
+    /// must keep eligibility. Without it, a probe that withdrew eligibility on
+    /// every outcome — including healthy answers — would satisfy every
+    /// assertion above and strand every worker on the fleet.
+    #[test]
+    fn an_answered_probe_keeps_dispatch_eligibility_through_the_same_seam() {
+        let window = Duration::from_secs(30);
+        let worker = WorkerId::from_value(1);
+        let start = Instant::now();
+        let registry = ConnectedWorkerRegistry::default();
+        let tracker = HeartbeatTracker::new(window);
+        let probe = LivenessProbe::new(
+            Arc::new(LiminalConnectionNotifier::new(registry.clone())),
+            tracker.clone(),
+            registry,
+            window,
+        );
+
+        assert!(tracker.register_connection(worker, start).is_ok());
+        for sequence in 1..=u64::from(DISPATCH_PROBATION_PINGS) {
+            probe.apply_answer(
+                7,
+                worker,
+                sequence,
+                Ok(Ok(LivenessPong {
+                    liveness_pong: sequence,
+                })),
+            );
+        }
+
+        assert!(
+            tracker
+                .is_dispatch_reachable(worker, start)
+                .is_ok_and(|reachable| reachable),
+            "answered probes must EARN eligibility through the probe seam, not merely fail to \
+             withdraw it"
+        );
     }
 }

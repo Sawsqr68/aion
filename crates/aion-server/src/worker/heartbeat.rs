@@ -128,7 +128,7 @@ struct HeartbeatState {
 /// while its first dispatches park, and that latency is charged to every honest
 /// worker to catch a dishonest one. Two buys the discrimination; three buys
 /// only delay.
-const DISPATCH_PROBATION_PINGS: u32 = 2;
+pub(crate) const DISPATCH_PROBATION_PINGS: u32 = 2;
 
 /// A worker's dispatch-path standing: how many consecutive pings it has
 /// answered, and when the most recent one landed.
@@ -202,7 +202,9 @@ impl HeartbeatTracker {
         // A fresh, UNSERVED probation: zero answers, no proof. Inserted rather
         // than left absent so the worker is carried by `unreachable_workers`
         // and is therefore explicitly excluded, not merely unknown.
-        state.reachability.insert(worker_id, Reachability::default());
+        state
+            .reachability
+            .insert(worker_id, Reachability::default());
         Ok(())
     }
 
@@ -1059,7 +1061,7 @@ fn wire_error(message: &'static str) -> ServerError {
 mod reachability_tests {
     use std::time::{Duration, Instant};
 
-    use super::{HeartbeatTracker, ServerError, WorkerId};
+    use super::{DISPATCH_PROBATION_PINGS, HeartbeatTracker, ServerError, WorkerId};
 
     const WINDOW: Duration = Duration::from_secs(30);
 
@@ -1076,6 +1078,24 @@ mod reachability_tests {
         Ok((tracker, worker))
     }
 
+    /// Answer the full probation, so the worker is genuinely eligible. Tests
+    /// about staleness, pump beats, or withdrawal must start from a worker that
+    /// HAS eligibility — otherwise they pass on a worker that never had any and
+    /// prove nothing about the behaviour they name.
+    fn serve_probation(
+        tracker: &HeartbeatTracker,
+        worker: WorkerId,
+        at: Instant,
+    ) -> Result<(), ServerError> {
+        for _ in 0..DISPATCH_PROBATION_PINGS {
+            assert!(
+                tracker.record_dispatch_reachability(worker, at)?,
+                "the worker must still be tracked while it serves its probation"
+            );
+        }
+        Ok(())
+    }
+
     /// THE REGRESSION. This is the defect that made run `dfd2117c` invisible:
     /// the worker's liveness pump beat from a background task, refreshed the one
     /// shared lease, and the dead-man switch could not fire while the server had
@@ -1087,6 +1107,14 @@ mod reachability_tests {
     fn an_inbound_frame_cannot_prove_dispatch_reachability() -> TestResult {
         let start = Instant::now();
         let (tracker, worker) = tracker_with_worker(start)?;
+        // The worker STARTS eligible, earned honestly. Without this the test
+        // would pass on a worker that never had eligibility to lose, which says
+        // nothing about whether a pump beat can preserve it.
+        serve_probation(&tracker, worker, start)?;
+        assert!(
+            tracker.is_dispatch_reachable(worker, start)?,
+            "precondition: the worker is eligible before the connection goes one-way"
+        );
 
         // Well past the window, with the pump beating throughout — exactly what
         // a busy worker on a poisoned connection looks like.
@@ -1116,14 +1144,11 @@ mod reachability_tests {
         let (tracker, worker) = tracker_with_worker(start)?;
 
         let much_later = start + WINDOW * 4;
-        assert!(
-            tracker.record_dispatch_reachability(worker, much_later)?,
-            "the worker is still tracked"
-        );
+        serve_probation(&tracker, worker, much_later)?;
 
         assert!(
             tracker.is_dispatch_reachable(worker, much_later)?,
-            "an answered ping is the one thing that proves the push leg works"
+            "answered pings are the one thing that proves the push leg works"
         );
         assert!(
             tracker.unreachable_workers(much_later)?.is_empty(),
@@ -1132,18 +1157,116 @@ mod reachability_tests {
         Ok(())
     }
 
-    /// Registration is a completed server-to-worker round trip, so a freshly
-    /// registered worker is dispatchable before its first ping lands. Without
-    /// this seeding every new worker would be unreachable-by-default and no
-    /// dispatch could ever be placed.
+    /// Registration opens a PROBATION and grants nothing. The handshake ack is
+    /// SENT by this server; nothing reports that it was RECEIVED, so a
+    /// connection is a channel, not proof that the channel carries. Eligibility
+    /// is earned by answered pings only.
     #[test]
-    fn registration_seeds_reachability_so_a_new_worker_is_dispatchable() -> TestResult {
+    fn registration_opens_a_probation_and_does_not_grant_eligibility() -> TestResult {
         let start = Instant::now();
         let (tracker, worker) = tracker_with_worker(start)?;
 
         assert!(
+            !tracker.is_dispatch_reachable(worker, start)?,
+            "a brand-new connection has proved nothing about the push leg"
+        );
+        assert_eq!(
+            tracker.unreachable_workers(start)?,
+            vec![worker],
+            "a worker serving its probation is carried in the census as unreachable"
+        );
+        Ok(())
+    }
+
+    /// The probation must be SERVED IN FULL. One answered ping can be luck — a
+    /// link that answers one probe in three would otherwise accrue eligibility
+    /// and then flap. This pins the boundary from below: K-1 answers is not
+    /// enough, and the very next one is.
+    #[test]
+    fn one_ping_short_of_the_probation_earns_nothing() -> TestResult {
+        let start = Instant::now();
+        let (tracker, worker) = tracker_with_worker(start)?;
+
+        for _ in 0..DISPATCH_PROBATION_PINGS - 1 {
+            assert!(tracker.record_dispatch_reachability(worker, start)?);
+            assert!(
+                !tracker.is_dispatch_reachable(worker, start)?,
+                "eligibility must not be granted before the probation is served in full"
+            );
+        }
+
+        assert!(tracker.record_dispatch_reachability(worker, start)?);
+        assert!(
             tracker.is_dispatch_reachable(worker, start)?,
-            "the registration handshake itself proves reachability at t0"
+            "the ping that completes the probation must grant eligibility — otherwise this test \
+             would pass on a tracker that never grants it at all"
+        );
+        Ok(())
+    }
+
+    /// A failed probe RESETS the run. Eligibility is withdrawn immediately, not
+    /// when the window later expires: an unanswered probe is direct evidence
+    /// about the push leg, and direct negative evidence must weigh at least as
+    /// much as silence.
+    #[test]
+    fn a_failed_probe_withdraws_eligibility_at_once_and_restarts_the_probation() -> TestResult {
+        let start = Instant::now();
+        let (tracker, worker) = tracker_with_worker(start)?;
+        serve_probation(&tracker, worker, start)?;
+        assert!(
+            tracker.is_dispatch_reachable(worker, start)?,
+            "precondition"
+        );
+
+        assert!(
+            tracker.record_dispatch_unreachable(worker)?,
+            "the worker is still tracked"
+        );
+        assert!(
+            !tracker.is_dispatch_reachable(worker, start)?,
+            "a failed probe withdraws eligibility on the spot, inside the window"
+        );
+
+        // And the run restarts from zero rather than resuming: one answer does
+        // not restore what a full probation earned.
+        assert!(tracker.record_dispatch_reachability(worker, start)?);
+        assert!(
+            !tracker.is_dispatch_reachable(worker, start)?,
+            "a single answer after a failure must not restore eligibility"
+        );
+        Ok(())
+    }
+
+    /// 🔴 THE FLAPPING PIN. A link that answers every other probe must NEVER
+    /// become eligible. Cumulative counting would let it accrue, and eligibility
+    /// would switch on and off under a running fleet — the intermittent evidence
+    /// that costs hours to attribute. Consecutiveness is what forbids it.
+    #[test]
+    fn a_link_that_answers_every_other_probe_never_becomes_eligible() -> TestResult {
+        let start = Instant::now();
+        let (tracker, worker) = tracker_with_worker(start)?;
+
+        // Far more probes than the probation demands, alternating.
+        for probe in 0..DISPATCH_PROBATION_PINGS * 10 {
+            let now = start + Duration::from_millis(u64::from(probe));
+            if probe % 2 == 0 {
+                assert!(tracker.record_dispatch_reachability(worker, now)?);
+            } else {
+                assert!(tracker.record_dispatch_unreachable(worker)?);
+            }
+            assert!(
+                !tracker.is_dispatch_reachable(worker, now)?,
+                "a flapping link must never hold dispatch eligibility, at any probe (probe {probe})"
+            );
+        }
+
+        // The control: the same worker, answering consecutively, DOES become
+        // eligible — so this test cannot pass on a tracker that grants nothing.
+        let now = start + Duration::from_secs(1);
+        serve_probation(&tracker, worker, now)?;
+        assert!(
+            tracker.is_dispatch_reachable(worker, now)?,
+            "consecutive answers must still earn eligibility"
         );
         Ok(())
     }
@@ -1154,6 +1277,7 @@ mod reachability_tests {
     fn reachability_goes_stale_once_the_window_passes() -> TestResult {
         let start = Instant::now();
         let (tracker, worker) = tracker_with_worker(start)?;
+        serve_probation(&tracker, worker, start)?;
 
         assert!(
             tracker.is_dispatch_reachable(worker, start + WINDOW)?,
@@ -1181,6 +1305,12 @@ mod reachability_tests {
         assert!(
             !tracker.record_dispatch_reachability(worker, start)?,
             "a late pong must not resurrect a deregistered worker"
+        );
+        assert!(
+            !tracker.record_dispatch_unreachable(worker)?,
+            "a late probe FAILURE must not resurrect a deregistered worker either — the reset \
+             path allocates an entry, so it has to refuse an untracked worker as firmly as the \
+             success path does"
         );
         assert!(
             tracker.unreachable_workers(start)?.is_empty(),

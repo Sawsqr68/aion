@@ -1267,7 +1267,7 @@ impl Drop for WorkerRegistration {
 mod tests {
     use crate::config::NamespaceMode;
     use crate::namespace::{NamespaceResolver, StaticScheduleNamespaces, StaticWorkflowNamespaces};
-    use crate::worker::heartbeat::HeartbeatTracker;
+    use crate::worker::heartbeat::{DISPATCH_PROBATION_PINGS, HeartbeatTracker};
 
     use super::*;
 
@@ -2305,24 +2305,40 @@ mod tests {
         let start = Instant::now();
         tracker.register_connection(worker_id, start)?;
 
-        // Baseline: reachable at registration, and therefore selectable. If this
-        // did not hold, no new worker could ever be dispatched to.
+        // Baseline: the worker SERVES ITS PROBATION and is therefore selectable.
+        // Registration alone grants nothing — the handshake ack is sent, never
+        // confirmed received — so eligibility here is earned by answered pings.
+        // If this did not hold, no worker could ever be dispatched to.
+        for _ in 0..DISPATCH_PROBATION_PINGS {
+            assert!(
+                tracker.record_dispatch_reachability(worker_id, start)?,
+                "the worker is tracked while it serves its probation"
+            );
+        }
         registry
             .set_dispatch_ineligible(tracker.unreachable_workers(start)?.into_iter().collect())?;
         assert!(
             registry
                 .select_worker("default", "general", "greet", None)?
                 .is_some(),
-            "a freshly registered worker must be selectable: the handshake is a completed round \
-             trip and proves the push leg works"
+            "a worker that has answered a full run of pings must be selectable: this is the \
+             control, and without it a registry selecting NOBODY would satisfy every assertion \
+             below"
         );
 
         // Now the poisoned-connection shape: the pump beats past the window and
-        // not one ping is answered.
+        // not one ping is answered. Each unanswered probe is recorded exactly as
+        // the liveness probe records it, because that is the trajectory a real
+        // poisoned connection takes — staleness alone would be a shape only a
+        // stopped probe could produce.
         let much_later = start + WINDOW * 4;
         assert!(
             tracker.record_connection_activity(worker_id, much_later)?,
             "the worker is still tracked; its process is plainly alive"
+        );
+        assert!(
+            tracker.record_dispatch_unreachable(worker_id)?,
+            "the probe fired and went unanswered"
         );
         registry.set_dispatch_ineligible(
             tracker
@@ -2345,13 +2361,32 @@ mod tests {
              capacity — making the unreachability worse"
         );
 
-        // THE CONTROL, and the recovery path: one answered ping restores
-        // eligibility on the very next verdict. Exclusion must be withdrawable,
-        // or a single bad round would strand a healthy worker forever.
+        // The recovery path: exclusion must be WITHDRAWABLE, or a single bad
+        // round would strand a healthy worker forever. It is withdrawn by a
+        // served probation, not by one answer — and the intermediate assertion
+        // below pins that distinction rather than assuming it.
         assert!(
             tracker.record_dispatch_reachability(worker_id, much_later)?,
             "the worker is still tracked"
         );
+        registry.set_dispatch_ineligible(
+            tracker
+                .unreachable_workers(much_later)?
+                .into_iter()
+                .collect(),
+        )?;
+        assert!(
+            registry.is_dispatch_ineligible(worker_id)?,
+            "one answer part-way through a fresh probation must NOT restore eligibility: a link \
+             answering one probe in three would otherwise flap in and out of selection"
+        );
+
+        for _ in 1..DISPATCH_PROBATION_PINGS {
+            assert!(
+                tracker.record_dispatch_reachability(worker_id, much_later)?,
+                "the worker is still tracked"
+            );
+        }
         registry.set_dispatch_ineligible(
             tracker
                 .unreachable_workers(much_later)?
