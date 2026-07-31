@@ -156,3 +156,90 @@ two.
    `step-bodies/valid/send_signal` and quote the recorded detail. The close
    condition for #83 is that the recorded JSON names the failure, not that a
    test is green.
+
+---
+
+# BUILT AND CLOSED — 2026-07-31
+
+Landed as one motion, after the two owed gates, exactly as the checklist above
+required. Item 4b of the released queue.
+
+## The close condition, met at the bytes
+
+`BC4_DUMP_FAILED=step-bodies/valid/send_signal` on the reference trail. The
+`WorkflowFailed` event's `details` payload now decodes to:
+
+```json
+{"message":"workflow_id: invalid character: found `x` at 0","tag":"AwlEngineFailed"}
+```
+
+**The recorded JSON names the failure.** Before this change it was
+`{"tag":"AwlFailed"}` — a durable record saying the run failed and nothing
+whatever about why, which is the entire defect. An operator reading the trail
+can now see that the workflow id was rejected, and where.
+
+## What was actually wrong
+
+`EngineError` has exactly one variant and it carries a `String`. The reason was
+always present. `map_engine_error` matched `Error(_)` and returned the
+payload-free `AwlFailed`, so the message was dropped one line from the record
+it belonged in. Nothing had to be plumbed; something had to stop being thrown
+away. `map_spawn_error` and `map_timer_error` did the same with fixed strings
+("detached spawn failed", "timer failed") and were fixed in the same commit as
+Half A required.
+
+All three now match `Error(error.EngineFailure(message))` rather than `_`, so a
+future variant must come here and decide what it says instead of silently
+inheriting the old behaviour.
+
+## The tests were pinning the defect
+
+Four existing assertions asserted the reason was discarded, and were green:
+
+- `map_spawn_error_maps_failure_test` fed in `EngineFailure("boom")` and
+  required the output to be `AwlChildFailed("detached spawn failed")` — "boom"
+  deliberately absent.
+- `map_timer_error_maps_failure_test`, the same shape.
+- `runtime_codecs.rs:271` and `:311` pinned `{error, awl_failed}` through the
+  PRODUCTION host, on both backends.
+- `map_engine_error`, the headline case, had **no test at all**.
+
+They now assert the opposite, renamed to say what they check. This is worth
+recording plainly: **a test that pins a defect protects it.** Four green
+assertions were the reason this stayed invisible while the trail said nothing.
+
+## Gates run
+
+| Gate | Result |
+| --- | --- |
+| `gleam test` (aion_flow) | 154 passed, 0 failed |
+| `cargo test -p aion-awl` | 506 passed, 0 failed |
+| `cargo test -p aion-awl-package` | all green incl. freshness + determinism |
+| `cargo test -p aion-rs --test awl_bc4_differential` | 26 passed, 0 failed — byte-identical parity holds |
+| `cargo clippy -p aion-awl -p aion-awl-package --all-targets -D warnings` | 0 findings |
+
+Parity mattered most: both backends call the changed function, and the
+per-fixture parity assertions would have caught a fix that reached only one.
+
+## Two things found on the way, neither of them #83
+
+**1. The committed SDK closure had accumulated TOOLCHAIN drift.** Regenerating
+rewrote all 46 modules, including `gleam_stdlib` beams this change cannot
+touch. Separated by measurement rather than assumed: a clean-tree regen with
+the #83 edits reverted still produced a full rewrite (bundle `2b1cc2af…`), and
+re-applying the source edit moved it to `a04dc8ab…`. So the bulk is compiler
+drift and the delta between those two hashes is the part that is #83 — which
+is also the proof the source edit reached the shipped bytes.
+
+**2. 🔴 The freshness gate is byte-blind, and that is a real hole.**
+`committed_closure_matches_a_fresh_oracle_harvest` PASSED against the stale
+committed closure. It compares the module SET and each module's EXPORT SET —
+never bytes. So it catches an added, removed or re-exported module and is blind
+to a changed function BODY.
+
+Which means: **had `error.gleam` been edited without regenerating, nothing
+would have caught it.** The Gleam suite proves the new behaviour from source;
+the Rust runtime loads the committed beam with the old behaviour. Green suite,
+fossil artifact — the same shape as the wire-dead worker SDKs. The two archive
+pins DO compare bytes, but they only fire once someone regenerates, so they
+cannot detect a closure that silently lags its own source. Filed separately.

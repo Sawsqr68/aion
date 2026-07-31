@@ -75,6 +75,12 @@ const AWL_ERROR_TAGS: &[&str] = &[
     "AwlActivityFailed",
     "AwlChildFailed",
     "AwlDecodeInputFailed",
+    // An engine primitive failed and said why. Added for #83: the payload-free
+    // `AwlFailed` was what an operator saw when an engine primitive failed, so
+    // the run recorded nothing diagnosable. This set is a real pin and must not
+    // be widened casually — a new tag here means a new error term crossing the
+    // ABI, which is a durable-record change.
+    "AwlEngineFailed",
     "AwlError",
     "AwlFailed",
     "AwlIndexOutOfRange",

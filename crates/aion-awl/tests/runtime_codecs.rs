@@ -268,7 +268,20 @@ fn fallible_predicates_execute_through_production_hosts_with_parity() -> TestRes
     let direct_error = vm.call0("fallible_collection_predicates", "awl$rt_execute")?;
     let reference_error = vm.call0("ref_fallible_collection_predicates", "awl_rt_execute")?;
     assert_eq!(direct_error, reference_error, "execute error parity");
-    assert_eq!(direct_error, "{error, awl_failed}");
+    // #83: this pin used to read `{error, awl_failed}` — a recorded term that
+    // says the run failed and nothing whatever about why. The engine always had
+    // the reason (`EngineError` has one variant and it carries a `String`);
+    // `map_engine_error` threw it away. Both halves are asserted deliberately:
+    // the literal is the exact-bytes pin, and the `contains` below is the
+    // property that must survive even if someone later relaxes the literal.
+    assert_eq!(
+        direct_error,
+        "{error, {awl_engine_failed, <<\"missing workflow context\">>}}"
+    );
+    assert!(
+        direct_error.contains("missing workflow context"),
+        "the recorded term must NAME the failure, not just its class: {direct_error}"
+    );
 
     let any_reference = reference_module(
         "step-bodies/valid/fallible_any_short_circuit.awl",
@@ -295,7 +308,18 @@ fn fallible_predicates_execute_through_production_hosts_with_parity() -> TestRes
         let direct_result = vm.call0(module, "awl$rt_execute")?;
         let reference_result = vm.call0(&format!("ref_{module}"), "awl_rt_execute")?;
         assert_eq!(direct_result, reference_result, "{module} error parity");
-        assert_eq!(direct_result, "{error, awl_failed}");
+        // #83, second site: the short-circuit arms recorded the same
+        // reason-free `awl_failed`. Both backends now carry the engine's own
+        // message, and the parity assertion above proves they carry the SAME
+        // one — a fix that reached only the direct backend would fail there.
+        assert_eq!(
+            direct_result,
+            "{error, {awl_engine_failed, <<\"missing workflow context\">>}}"
+        );
+        assert!(
+            direct_result.contains("missing workflow context"),
+            "{module}: the recorded term must NAME the failure: {direct_result}"
+        );
     }
 
     let mut poisoned_ebins = ebins;

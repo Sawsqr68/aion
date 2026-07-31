@@ -24,7 +24,13 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// `aion_flow` 0.7.0 closure with the build box's upgraded Erlang (`compile_info`
 /// version 9.0.6 -> 10.0.2), which changed every module's bytes. The full
 /// workspace suite executed the new closure on the embedded beamr runtime.
-const BUNDLE_CHECKSUM: &str = "497cd906e1a33ab12e9ed964de1541432860160b178dcabed3a61f1a6d59474b";
+/// Repinned on 2026-07-31 for #83 (`AwlEngineFailed`), and the regeneration
+/// carried TWO independent causes, separated by measurement rather than
+/// assumed: a clean-tree regen with the #83 edits reverted still rewrote all
+/// 46 modules to `2b1cc2af…`, so the bulk is TOOLCHAIN drift the committed
+/// closure had accumulated; re-applying the #83 source edit then moved it to
+/// this value, which is what proves the edit reached the shipped bytes.
+const BUNDLE_CHECKSUM: &str = "a04dc8ab17ca3e4293de5942bdc8c99e2c9ad5e5f4780af821339942c1ccfa74";
 const BUNDLE_MODULE_COUNT: usize = 46;
 const BUNDLE_SDK_VERSION: &str = "0.7.0";
 
@@ -105,8 +111,14 @@ fn assembling_twice_yields_byte_identical_archives() -> TestResult {
 /// inputs to the embedded contract record changed by construction, so the
 /// archive bytes changed with the ARCHIVE FORMAT again, not with any
 /// workflow source edit — and determinism still holds (that test passes).
+/// Repinned on 2026-07-31: the #83 SDK-closure regeneration changed the
+/// embedded `aion@awl@error` beam (and, independently, refreshed accumulated
+/// toolchain drift across the other 45 modules), so the archive bytes changed
+/// with the CLOSURE, not with any workflow source edit.
+/// `assembling_twice_yields_byte_identical_archives` still passes, so the new
+/// bytes remain deterministic.
 const FIXED_INPUT_ARCHIVE_SHA256: &str =
-    "15fa28b0206a48276283df2f34e2f7af45f982ed9780ddb0fa8fb5856fe59642";
+    "dc3fc5fdb996fe650126445ddeb0a8e4e12ea4f6435611e87242ce92695aa2a6";
 
 /// Proof 1b — cross-process determinism: a fully fixed input assembles to
 /// pinned archive bytes.

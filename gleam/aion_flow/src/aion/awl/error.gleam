@@ -25,6 +25,10 @@ pub type AwlError {
   AwlIndexOutOfRange(String)
   AwlVisitsExceeded(String)
   AwlOutcomeFailure(outcome: String, payload: String)
+  /// An engine primitive failed and said why. Distinct from `AwlFailed`, which
+  /// carries nothing: a run that records only "failed" is undiagnosable from
+  /// its own durable trail, which is the whole defect this variant closes.
+  AwlEngineFailed(String)
   AwlFailed
 }
 
@@ -81,6 +85,11 @@ fn to_json(error_value: AwlError) -> json.Json {
         #("outcome", json.string(outcome)),
         #("payload", json.string(payload)),
       ])
+    AwlEngineFailed(message) ->
+      json.object([
+        #("tag", json.string("AwlEngineFailed")),
+        #("message", json.string(message)),
+      ])
     AwlFailed -> json.object([#("tag", json.string("AwlFailed"))])
   }
 }
@@ -124,6 +133,10 @@ fn decoder() -> decode.Decoder(AwlError) {
       use outcome <- decode.field("outcome", decode.string)
       use payload <- decode.field("payload", decode.string)
       decode.success(AwlOutcomeFailure(outcome: outcome, payload: payload))
+    }
+    "AwlEngineFailed" -> {
+      use message <- decode.field("message", decode.string)
+      decode.success(AwlEngineFailed(message))
     }
     "AwlFailed" -> decode.success(AwlFailed)
     _ -> decode.failure(AwlFailed, "AwlError")
@@ -205,34 +218,45 @@ pub fn map_child_error(
   }
 }
 
-/// Collapse a detached-spawn failure to a step failure.
+/// Collapse a detached-spawn failure to a step failure, carrying the reason.
 pub fn map_spawn_error(
   result: Result(a, error.EngineError),
 ) -> Result(a, AwlError) {
   case result {
     Ok(value) -> Ok(value)
-    Error(_) -> Error(AwlChildFailed("detached spawn failed"))
+    Error(error.EngineFailure(message)) ->
+      Error(AwlChildFailed("detached spawn failed: " <> message))
   }
 }
 
-/// Collapse a timer/sleep failure to a step failure.
+/// Collapse a timer/sleep failure to a step failure, carrying the reason.
 pub fn map_timer_error(
   result: Result(a, error.EngineError),
 ) -> Result(a, AwlError) {
   case result {
     Ok(value) -> Ok(value)
-    Error(_) -> Error(AwlTimerFailed("timer failed"))
+    Error(error.EngineFailure(message)) ->
+      Error(AwlTimerFailed("timer failed: " <> message))
   }
 }
 
-/// Collapse a workflow-context lookup failure to the language's generic
-/// workflow failure. The context lookup is normally infallible for registered
-/// workflow code; retaining the `Result` keeps misuse outside that context loud.
+/// Collapse a workflow-context lookup failure to a step failure, carrying the
+/// reason. The context lookup is normally infallible for registered workflow
+/// code; retaining the `Result` keeps misuse outside that context loud.
+///
+/// This used to discard the error and return the payload-free `AwlFailed`,
+/// which is how a real engine failure reached an operator as a run that
+/// recorded nothing but "failed". The engine always had the message —
+/// `EngineError` has exactly one variant and it carries a `String` — so
+/// nothing new had to be plumbed to say what went wrong. It was simply
+/// dropped. Matching the variant rather than `_` means a future variant must
+/// come here and decide what it says, instead of silently joining the old
+/// behaviour.
 pub fn map_engine_error(
   result: Result(a, error.EngineError),
 ) -> Result(a, AwlError) {
   case result {
     Ok(value) -> Ok(value)
-    Error(_) -> Error(AwlFailed)
+    Error(error.EngineFailure(message)) -> Error(AwlEngineFailed(message))
   }
 }

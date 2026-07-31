@@ -11,8 +11,8 @@
 import aion/awl/codec as awlc
 import aion/awl/error.{
   type AwlError, AwlActivityFailed, AwlChildFailed, AwlDecodeInputFailed,
-  AwlFailed, AwlIndexOutOfRange, AwlOutcomeFailure, AwlSignalFailed,
-  AwlTimerFailed,
+  AwlEngineFailed, AwlFailed, AwlIndexOutOfRange, AwlOutcomeFailure,
+  AwlSignalFailed, AwlTimerFailed,
 }
 import aion/awl/runtime
 import aion/codec
@@ -271,6 +271,7 @@ pub fn awl_error_codec_roundtrips_every_variant_test() {
   awl_error_roundtrips(AwlTimerFailed("m"))
   awl_error_roundtrips(AwlIndexOutOfRange("m"))
   awl_error_roundtrips(AwlOutcomeFailure(outcome: "failed", payload: "{}"))
+  awl_error_roundtrips(AwlEngineFailed("m"))
   awl_error_roundtrips(AwlFailed)
 }
 
@@ -314,14 +315,35 @@ pub fn map_child_error_maps_failure_test() {
   )
 }
 
-pub fn map_spawn_error_maps_failure_test() {
+// These three assert the SAME property from three call sites: the reason the
+// engine gave must reach the durable trail. They previously asserted the
+// opposite — that `boom` was discarded — which is how #83 stayed invisible
+// while its tests were green. A test that pins a defect protects it.
+
+pub fn map_spawn_error_carries_the_reason_test() {
   error.map_spawn_error(Error(aion_error.EngineFailure("boom")))
-  |> should.equal(Error(AwlChildFailed("detached spawn failed")))
+  |> should.equal(Error(AwlChildFailed("detached spawn failed: boom")))
 }
 
-pub fn map_timer_error_maps_failure_test() {
+pub fn map_timer_error_carries_the_reason_test() {
   error.map_timer_error(Error(aion_error.EngineFailure("boom")))
-  |> should.equal(Error(AwlTimerFailed("timer failed")))
+  |> should.equal(Error(AwlTimerFailed("timer failed: boom")))
+}
+
+/// The headline case of #83, and the one that had no test at all: a failing
+/// engine primitive used to collapse to the payload-free `AwlFailed`, so the
+/// run recorded that it failed and nothing about why.
+pub fn map_engine_error_carries_the_reason_test() {
+  error.map_engine_error(Error(aion_error.EngineFailure("boom")))
+  |> should.equal(Error(AwlEngineFailed("boom")))
+}
+
+/// Non-vacuity for the three above: the reason must be present in the encoded
+/// bytes, not merely in the in-memory value. The durable trail is what an
+/// operator reads, and the encoding is the only thing that reaches it.
+pub fn the_engine_reason_survives_into_the_encoded_bytes_test() {
+  error.codec().encode(AwlEngineFailed("boom"))
+  |> should.equal("{\"tag\":\"AwlEngineFailed\",\"message\":\"boom\"}")
 }
 
 // -- The run shell ---------------------------------------------------------
@@ -398,6 +420,7 @@ pub fn run_failure_round_trips_every_typed_kind_test() {
     AwlIndexOutOfRange("label text"),
     AwlDecodeInputFailed("failed to decode workflow input: boom"),
     AwlOutcomeFailure(outcome: "failed", payload: "{\"n\":1}"),
+    AwlEngineFailed("engine primitive failed: workflow context unavailable"),
     AwlFailed,
   ]
   |> list.each(fn(kind) {
