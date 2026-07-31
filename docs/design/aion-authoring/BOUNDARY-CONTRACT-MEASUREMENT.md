@@ -173,15 +173,109 @@ runs are young and weakest exactly where they are old**, which is the inverse
 of where the original defect hurt most. Not a reason to change it now; a reason
 to know it.
 
-## What is NOT done
+## The live demonstration — RUN 2026-07-31, evidence below
 
 The brief's acceptance is explicit that a green test is not enough: "Not a
 green test — a demonstrated behaviour… Do this against a real server and quote
-the recorded bytes." **That live demonstration has not been run.** Everything
-above is bench evidence — strong bench evidence, including a mutation check,
-but not the thing the brief asked for.
+the recorded bytes." **That demonstration has now been run**, against a real
+server built from `cargo build -p aion-cli` at commit `ec56f1b4`.
 
-Recorded as owed rather than claimed.
+Isolation, because a proof that damages the box proves nothing: own server
+(`target/debug/aion`, pid 35103) on ports 51099/8099 verified free before bind,
+own `AION_HOME` under an owner-only directory, data root confirmed **from the
+server's own log** before a single request was sent. Tom's live server (pid
+99844, ports 8080/50051) was never touched. See the isolation inversion below —
+verifying that data root was not ceremony.
+
+The fixture is `crates/aion-awl/tests/fixtures/parity/wait_signal.awl`, which
+declares `signal ruling: Ruling` where `Ruling { note: String }`. Deployed as
+content hash `e3179df9d95ac192867b066c27e12a828336435a83d0a54bb92d78065314b988`.
+
+**Precondition.** Run `0e45c766-ebc3-4d8b-a079-b23acb52a56a`, status `Running`,
+parked on the signal wait. History: 779 bytes, sha256
+`96b7d4ee88fccfbf146e5206fadceaa0a38803dbd4e0ea7a33e5943a439ca08c`, events
+`[(1, WorkflowStarted), (2, SearchAttributesUpdated)]`.
+
+**The contract-violating signal** — `{"note": 42}`, a number where the
+declaration says `String`:
+
+```
+HTTP STATUS: 400
+{"code":"invalid_input","message":"signal `ruling` was refused for workflow
+`0e45c766-ebc3-4d8b-a079-b23acb52a56a` run `9061057c-86da-44d1-a049-fc6a6ed4137a`
+against the contract declared by package version `e3179df9…`:
+/note: 42 is not of type \"string\"","error_type":"SignalRefused"}
+```
+
+The refusal names the JSON pointer, the offending value, the expected type, and
+the package version whose declaration decided it. An operator can act on that
+without reading the source.
+
+**History after, read strictly after the 400 arrived:** 779 bytes, sha256
+`96b7d4ee88fccfbf146e5206fadceaa0a38803dbd4e0ea7a33e5943a439ca08c`. `cmp`
+reports the two files byte-identical. The run stayed `Running` and parked.
+
+**The inverted control, which is what makes the above mean anything.** A
+byte-identical history proves nothing on its own — a server that ignored every
+signal would produce exactly the same reading. So the same run was then sent a
+VALID `ruling` on the same signal name:
+
+```
+HTTP STATUS: 200
+sha256 c4ca79294e9b6af5c3dbf3014d3505e18dad9a96668d3840ae615a59a6526e66
+events [(1, WorkflowStarted), (2, SearchAttributesUpdated),
+         (3, SignalReceived), (4, WorkflowCompleted)]
+```
+
+A valid signal DOES record and DOES drive the run to completion. Therefore the
+unchanged bytes above are a refusal, not an inert signal path.
+
+**On running this under a loaded box.** Every leg was checked for whether load
+could manufacture a PASS rather than a failure. Build, deploy, start and park
+fail loudly. The 400 is computed synchronously from the declared contract, so
+load changes latency, not the branch — a slow box yields a visible timeout, not
+a false 400. The one genuine false-green window is reading the "after" history
+before a wrongly-recorded append lands, and it is closed structurally rather
+than by waiting: **the 400 response is itself the barrier**, since the request
+holds no in-flight append once its response is on the wire. The residual
+sensitivity (an unrelated event landing between reads) points at a false RED,
+which is the safe direction — and any byte difference is to be investigated as
+real, never dismissed as contention. A byte-identical check whose failures get
+waved off as load is not a check.
+
+Teardown: explicit kill, exit confirmed in 2s, zero orphans, both ports
+released, verified with a positive control (`pgrep -x zsh` = 17) so that "zero"
+means zero rather than a broken probe.
+
+## Two defects the live run surfaced, which the bench never could
+
+Neither is #97. Both are recorded here because the live demonstration is the
+only thing that would ever have found them, which is the argument for demanding
+live demonstrations.
+
+**1. `AION_HOME` is an isolation inversion when a legacy `aion-data` exists.**
+The first launch set `AION_HOME` to a private scratch directory. The server
+logged `data root resolved:
+/Users/tom/Developer/ablative/stack/aion/aion-data` — the repo directory. It
+emitted a WARN reading "migration required" and then **used the legacy path
+anyway**. That directory is 6.4G and Tom's live server holds 66 open handles
+under it, including `writer.lock` and shard WALs. An operator who sets
+`AION_HOME` specifically to keep a second server away from the live store is
+silently pointed AT the live store. **The only thing between the proof server
+and a live WAL was an unrelated missing feature flag** — `--store-url` selects
+the libSQL backend, which is not compiled in, so the server died before it
+could open anything. WARN-then-proceed-on-the-legacy-path is the loud/silent
+law broken inside the product. Confirmed by mechanism, not guess: relaunching
+from a directory containing no `aion-data` resolved the data root correctly.
+
+**2. `aion server --endpoint` is accepted and never read.** It appears in
+`aion server --help` with a default of `127.0.0.1:50051`, and
+`crates/aion-cli/src/server.rs` contains no `endpoint` handling at all — the
+bind comes from `server.grpc_address` (env `AION_SERVER_GRPC_ADDRESS`). It
+failed loudly here only because Tom's server already holds 50051. On a free box
+it would bind the wrong port and look entirely healthy. Same class as the
+`$comment` and queue-admission defects: a surface advertises an input the
+binding never reads.
 
 ---
 
