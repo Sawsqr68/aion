@@ -133,3 +133,108 @@ Do not "fix" this by removing the legacy fallback outright. That would silently
 strand a real operator's durable state on the next restart, which is a worse
 failure than the one being fixed. The fallback is right; **its precedence
 against an explicit home is what is wrong.**
+
+---
+
+# BUILT AND CLOSED — 2026-07-31
+
+Built exactly as designed above. The fallback still exists and still protects
+the operator it was built for; only its precedence changed.
+
+## What moved
+
+`crates/aion-server/src/config/home.rs`
+
+- `aion_home()` now returns `AionHome { path, source }` where `source` is
+  `HomeSource::Explicit` (the operator set `AION_HOME`) or `HomeSource::Derived`
+  (`$HOME/.aion`). The provenance is no longer discarded at the point of
+  resolution.
+
+`crates/aion-server/src/config/resolution.rs`
+
+- `MigrationNotice` became `LegacyNotice`, carrying a `LegacyDisposition` of
+  `Adopted` or `IgnoredForExplicitHome`. **The rename is load-bearing:** the
+  vector now holds entries that are not migrations, and calling it `migrations`
+  would have been a name that lies. `ConfigResolution.migrations` became
+  `legacy_notices` for the same reason.
+- `select_default` takes the `HomeSource`. Under an explicit home the legacy
+  path is detected, reported, and **not selected**.
+- `log_startup` picks the headline from the disposition, so an ignored
+  directory no longer reads as a migration chore the operator must go and do.
+
+`crates/aion-server/src/config/load.rs`
+
+- `load_in` threads the source through. `from_slice_with_home` passes
+  `Explicit`: an embedded caller that names a home is isolating state, and
+  naming it in the call is the same assertion `AION_HOME` makes.
+- `load_for_test` takes the source as a **parameter**, not a constant. The two
+  worlds are exactly what the guard switches on, so a test has to be able to say
+  which one it stands in; a helper that could only simulate one would pin half
+  the behaviour and read as covered.
+
+The `#[cfg(not(unix))]` `home_explicit` flag was deliberately **left alone**. It
+looks like the same fact and is not: it asks "can this root's ACL be trusted",
+for which an in-process supplied home also counts. Merging them would have been
+a silent semantic change to a platform this box cannot compile.
+
+## Proof — the pins were watched failing
+
+A green pin proves nothing until it has been seen to fail. The fix was reverted
+in place (`select_default` forced back to adopting the legacy directory) and the
+suite re-run:
+
+```
+an_explicit_home_is_never_overridden_by_a_legacy_working_directory ... FAILED
+  left:  …/project/aion-data          ← the defect
+  right: …/isolated-home/data         ← the operator's home
+
+aion_home_environment_override_is_respected_everywhere ... FAILED
+  left:  …/project/aion-data
+  right: …/overridden-home/data
+```
+
+The second one is the valuable one: it runs in a **child process with a real
+`AION_HOME` set**, through real `aion_home()` and real `ServerConfig::load()`,
+with both legacy directories planted in its working directory. It is the
+production path, not a helper.
+
+Three controls stayed green through the reverted run, which is what makes the
+two failures mean something:
+
+- `a_derived_home_adopts_legacy_directories_and_guards_only_unconfigured_defaults`
+  — durable state is still never stranded.
+- `legacy_symlink_directories_are_never_selected`.
+- `an_explicit_home_with_no_legacy_directory_reports_nothing` — the guard
+  against "fixing" this by disabling the branch, which would otherwise pass
+  every path assertion above.
+
+The fix was then restored from a scratchpad copy, not `git checkout --`, which
+would have reverted the fix along with the mutation.
+
+## Gates
+
+| Gate | Result |
+|---|---|
+| `cargo clippy --workspace --all-targets -- -D warnings` | **exit 0** |
+| `cargo test -p aion-server` | **exit 0, 0 failed** (687 lib + every integration target) |
+| `cargo test -p aion-cli --test dev_hot_reload_e2e` | **exit 0, 8 passed** — the other `AION_HOME` consumer |
+| `cargo fmt` | applied |
+
+Box measured quiet immediately before the server battery and the witness
+written above the run: `cargo=0 rustc=0 nextest=0`, control `zsh=18`.
+
+## What an operator sees now
+
+Explicit home, legacy directory present:
+
+```
+WARN  Aion home legacy directory ignored because AION_HOME is set
+      notice=AION HOME IS SET, SO THE LEGACY DIRECTORY WAS IGNORED: legacy store
+      data directory `…/aion-data` exists but this server uses `…/home/data`;
+      the legacy directory is untouched and no state is being read from or
+      written to it
+INFO  aion-server data root resolved   data_root=…/home/data
+```
+
+It still names the other directory — an operator who has one needs to know it is
+there — but it no longer names it as the thing being used, because it is not.

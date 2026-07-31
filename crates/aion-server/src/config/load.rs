@@ -28,10 +28,10 @@ use super::{
     DEFAULT_OUTBOX_BACKOFF_BASE_MS, DEFAULT_OUTBOX_BACKOFF_MAX_MS,
     DEFAULT_OUTBOX_BACKOFF_MULTIPLIER, DEFAULT_OUTBOX_BATCH_SIZE, DEFAULT_OUTBOX_MAX_ATTEMPTS,
     DEFAULT_OUTBOX_POLL_INTERVAL_MS, DEFAULT_QUERY_TIMEOUT_MS, DEPLOY_MAX_ARCHIVE_BYTES_REQUIRED,
-    DEPLOY_MAX_INFLATED_BYTES_REQUIRED, DeployConfig, DevConfig, DrainConfig, ListenConfig,
-    MetricsConfig, NamespaceConfig, NamespaceMode, NamespacesConfig, OUTBOX_BACKOFF_BASE_REQUIRED,
-    OUTBOX_BACKOFF_MAX_REQUIRED, OUTBOX_BACKOFF_MULTIPLIER_REQUIRED, OUTBOX_BATCH_SIZE_REQUIRED,
-    OUTBOX_MAX_ATTEMPTS_REQUIRED, OUTBOX_POLL_INTERVAL_REQUIRED,
+    DEPLOY_MAX_INFLATED_BYTES_REQUIRED, DeployConfig, DevConfig, DrainConfig, HomeSource,
+    ListenConfig, MetricsConfig, NamespaceConfig, NamespaceMode, NamespacesConfig,
+    OUTBOX_BACKOFF_BASE_REQUIRED, OUTBOX_BACKOFF_MAX_REQUIRED, OUTBOX_BACKOFF_MULTIPLIER_REQUIRED,
+    OUTBOX_BATCH_SIZE_REQUIRED, OUTBOX_MAX_ATTEMPTS_REQUIRED, OUTBOX_POLL_INTERVAL_REQUIRED,
     OUTBOX_RECONCILE_INTERVAL_REQUIRED, OUTBOX_RECONCILE_STALE_AFTER_REQUIRED, ObservabilityConfig,
     OpsConsoleAssetSource, OpsConsoleConfig, OutboxConfig, QUERY_TIMEOUT_REQUIRED, RuntimeConfig,
     RuntimeSection, ServerSection, StoreBackend, StoreConfig, TlsConfig, WebSocketConfig,
@@ -105,12 +105,13 @@ impl ServerConfig {
                 "failed to resolve the current directory for config discovery: {source}"
             ),
         })?;
-        Self::load_in(cli, &home, &working_dir, true)
+        Self::load_in(cli, &home.path, home.source, &working_dir, true)
     }
 
     fn load_in(
         cli: &CliOverrides,
         home: &Path,
+        home_source: HomeSource,
         working_dir: &Path,
         overlay_environment: bool,
     ) -> Result<LoadedConfig, ServerError> {
@@ -134,7 +135,7 @@ impl ServerConfig {
         #[cfg(not(unix))]
         let authoring_workspace_explicit = config.authoring.workspace_dir.is_some();
         config.load_discovered_workflow_packages(cli, working_dir)?;
-        let migrations = fill_home_defaults(&mut config, home, working_dir)?;
+        let legacy_notices = fill_home_defaults(&mut config, home, home_source, working_dir)?;
         config.fill_operational_defaults();
         config.validate()?;
         let resolution = ConfigResolution {
@@ -142,7 +143,7 @@ impl ServerConfig {
             source: discovered.source,
             data_dir: config.store.data_dir.clone(),
             authoring_workspace: config.authoring.workspace_dir.clone(),
-            migrations,
+            legacy_notices,
             #[cfg(not(unix))]
             home_explicit,
             #[cfg(not(unix))]
@@ -155,13 +156,22 @@ impl ServerConfig {
         Ok(LoadedConfig { config, resolution })
     }
 
+    /// Load with an explicitly supplied home, without environment or CLI
+    /// overlays.
+    ///
+    /// `home_source` is a parameter rather than a constant because the two
+    /// worlds it selects between are exactly what the legacy-directory guard
+    /// turns on, and a test must be able to say which world it is standing in.
+    /// A test that could only ever simulate one of them would pin half the
+    /// behaviour and call it covered.
     #[cfg(test)]
     fn load_for_test(
         cli: &CliOverrides,
         home: &Path,
+        home_source: HomeSource,
         working_dir: &Path,
     ) -> Result<LoadedConfig, ServerError> {
-        Self::load_in(cli, home, working_dir, false)
+        Self::load_in(cli, home, home_source, working_dir, false)
     }
 
     /// Fill operational tuning knobs that have a sane default when omitted, so a
@@ -255,15 +265,18 @@ impl ServerConfig {
     /// Returns [`ServerError::Config`] when parsing fails or values are invalid.
     pub fn from_slice(bytes: &[u8]) -> Result<Self, ServerError> {
         let home = aion_home()?;
-        Self::from_slice_with_home(bytes, &home)
+        Self::from_slice_with_home(bytes, &home.path)
     }
 
     /// Parse server configuration using an explicitly supplied Aion home.
     ///
     /// This is useful for embedded callers and tests that must not consult or
     /// touch the process user's real home. It applies the same dynamic defaults
-    /// and legacy-directory migration guard as [`Self::load`], but does not
-    /// apply environment or CLI overlays.
+    /// as [`Self::load`], but does not apply environment or CLI overlays, and
+    /// naming the home here suppresses the working-directory legacy fallback
+    /// exactly as setting `AION_HOME` does — an embedded caller that supplies a
+    /// home is isolating this server's state, not asking to inherit whatever
+    /// directory the process happens to have been started in.
     ///
     /// # Errors
     ///
@@ -276,7 +289,10 @@ impl ServerConfig {
             ),
         })?;
         let mut config = Self::parse_unresolved(bytes)?;
-        fill_home_defaults(&mut config, home, &working_dir)?;
+        // The caller named the home in the call itself, which is the same
+        // assertion `AION_HOME` makes and is treated identically: a legacy
+        // directory in the working directory must not override it.
+        fill_home_defaults(&mut config, home, HomeSource::Explicit, &working_dir)?;
         config.fill_operational_defaults();
         config.validate()?;
         Ok(config)
@@ -641,7 +657,7 @@ mod home_tests;
 #[cfg(test)]
 mod tests {
     use crate::config::{
-        AutoCreate, DEFAULT_AUTHORING_WORKSPACE_DIR, DEFAULT_MAX_IN_FLIGHT_ACTIVITIES,
+        AutoCreate, DEFAULT_AUTHORING_WORKSPACE_DIR, DEFAULT_MAX_IN_FLIGHT_ACTIVITIES, HomeSource,
         OpsConsoleAssetSource,
     };
 
@@ -1735,7 +1751,12 @@ mod tests {
         config.runtime.query_timeout_ms = Some(10_000);
         let home = crate::test_support::private_tempdir()?;
         let working_dir = crate::test_support::private_tempdir()?;
-        super::fill_home_defaults(&mut config, home.path(), working_dir.path())?;
+        super::fill_home_defaults(
+            &mut config,
+            home.path(),
+            HomeSource::Derived,
+            working_dir.path(),
+        )?;
         assert_eq!(
             config.store.data_dir.as_deref(),
             home.path().join("data").to_str()

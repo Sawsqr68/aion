@@ -9,8 +9,8 @@ use tracing::{info, warn};
 use crate::error::ServerError;
 
 use super::{
-    DEFAULT_AUTHORING_WORKSPACE_DIR, DEFAULT_HAEMATITE_DATA_DIR, LEGACY_AUTHORING_WORKSPACE_DIR,
-    LEGACY_HAEMATITE_DATA_DIR, ServerConfig,
+    DEFAULT_AUTHORING_WORKSPACE_DIR, DEFAULT_HAEMATITE_DATA_DIR, HomeSource,
+    LEGACY_AUTHORING_WORKSPACE_DIR, LEGACY_HAEMATITE_DATA_DIR, ServerConfig,
 };
 
 /// The winning file layer in server configuration discovery.
@@ -39,25 +39,64 @@ impl fmt::Display for ConfigSource {
     }
 }
 
-/// One legacy default retained to avoid silently stranding durable state.
+/// What became of a legacy working-directory path that exists on disk.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum LegacyDisposition {
+    /// The home was derived, so the legacy directory keeps being used and the
+    /// operator is told to migrate. This is the case the guard exists for:
+    /// an operator who has moved nothing and whose durable state genuinely
+    /// lives in the working directory must never have it stranded.
+    Adopted,
+    /// The operator named a home with `AION_HOME`, so the legacy directory did
+    /// not compete for the default and was left untouched.
+    IgnoredForExplicitHome,
+}
+
+/// One legacy working-directory path found during default resolution, and what
+/// was decided about it.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct MigrationNotice {
+pub(crate) struct LegacyNotice {
     kind: &'static str,
     legacy: PathBuf,
     home_default: PathBuf,
+    disposition: LegacyDisposition,
 }
 
-impl fmt::Display for MigrationNotice {
+impl LegacyNotice {
+    /// The startup log message that fits this notice's disposition.
+    fn headline(&self) -> &'static str {
+        match self.disposition {
+            LegacyDisposition::Adopted => "Aion home legacy-directory migration guard active",
+            LegacyDisposition::IgnoredForExplicitHome => {
+                "Aion home legacy directory ignored because AION_HOME is set"
+            }
+        }
+    }
+}
+
+impl fmt::Display for LegacyNotice {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "AION HOME MIGRATION REQUIRED: using legacy {} directory `{}` instead of new Aion-home default `{}`; stop the server, move `{}` to `{}`, then remove the legacy directory to complete migration",
-            self.kind,
-            self.legacy.display(),
-            self.home_default.display(),
-            self.legacy.display(),
-            self.home_default.display(),
-        )
+        match self.disposition {
+            LegacyDisposition::Adopted => write!(
+                formatter,
+                "AION HOME MIGRATION REQUIRED: using legacy {} directory `{}` instead of new Aion-home default `{}`; stop the server, move `{}` to `{}`, then remove the legacy directory to complete migration",
+                self.kind,
+                self.legacy.display(),
+                self.home_default.display(),
+                self.legacy.display(),
+                self.home_default.display(),
+            ),
+            // The operator asked for isolation and got it. What they still need
+            // told is that the other directory is sitting there and that this
+            // server is not the thing reading or writing it.
+            LegacyDisposition::IgnoredForExplicitHome => write!(
+                formatter,
+                "AION HOME IS SET, SO THE LEGACY DIRECTORY WAS IGNORED: legacy {} directory `{}` exists but this server uses `{}`; the legacy directory is untouched and no state is being read from or written to it",
+                self.kind,
+                self.legacy.display(),
+                self.home_default.display(),
+            ),
+        }
     }
 }
 
@@ -68,7 +107,7 @@ pub(crate) struct ConfigResolution {
     pub(crate) source: ConfigSource,
     pub(crate) data_dir: Option<String>,
     pub(crate) authoring_workspace: Option<PathBuf>,
-    pub(crate) migrations: Vec<MigrationNotice>,
+    pub(crate) legacy_notices: Vec<LegacyNotice>,
     #[cfg(not(unix))]
     pub(crate) home_explicit: bool,
     #[cfg(not(unix))]
@@ -137,8 +176,8 @@ impl ConfigResolution {
     }
 
     pub(crate) fn log_startup(&self) {
-        for migration in &self.migrations {
-            warn!(notice = %migration, "Aion home legacy-directory migration guard active");
+        for notice in &self.legacy_notices {
+            warn!(notice = %notice, "{}", notice.headline());
         }
         #[cfg(not(unix))]
         {
@@ -219,16 +258,31 @@ fn warn_unverified_acl(label: &str, path: &Path) {
 /// A path is eligible for migration only while its config field is absent. File
 /// and environment values are therefore final before this function runs, and an
 /// explicitly configured value can never activate a legacy fallback.
+///
+/// **Setting `AION_HOME` counts as such an explicit configuration.** Relocating
+/// the home is how an operator isolates a server's state, so a legacy directory
+/// that happens to sit in the working directory must not be able to drag that
+/// state back to the shared location the operator was steering away from. When
+/// `home_source` is [`HomeSource::Explicit`] the legacy path is not eligible at
+/// all; it is still reported, so the operator learns it is there and is being
+/// left alone.
 pub(super) fn fill_home_defaults(
     config: &mut ServerConfig,
     home: &Path,
+    home_source: HomeSource,
     working_dir: &Path,
-) -> Result<Vec<MigrationNotice>, ServerError> {
-    let mut migrations = Vec::new();
+) -> Result<Vec<LegacyNotice>, ServerError> {
+    let mut notices = Vec::new();
     if config.store.data_dir.is_none() {
         let home_default = home.join(DEFAULT_HAEMATITE_DATA_DIR);
         let legacy = working_dir.join(LEGACY_HAEMATITE_DATA_DIR);
-        let selected = select_default("store data", legacy, home_default, &mut migrations)?;
+        let selected = select_default(
+            "store data",
+            legacy,
+            home_default,
+            home_source,
+            &mut notices,
+        )?;
         config.store.data_dir = Some(path_to_string(&selected, "store.data_dir")?);
     }
     if config.authoring.workspace_dir.is_none() {
@@ -238,17 +292,19 @@ pub(super) fn fill_home_defaults(
             "authoring workspace",
             legacy,
             home_default,
-            &mut migrations,
+            home_source,
+            &mut notices,
         )?);
     }
-    Ok(migrations)
+    Ok(notices)
 }
 
 fn select_default(
     kind: &'static str,
     legacy: PathBuf,
     home_default: PathBuf,
-    migrations: &mut Vec<MigrationNotice>,
+    home_source: HomeSource,
+    notices: &mut Vec<LegacyNotice>,
 ) -> Result<PathBuf, ServerError> {
     let is_real_directory = match std::fs::symlink_metadata(&legacy) {
         Ok(metadata) => metadata.is_dir() && !metadata.file_type().is_symlink(),
@@ -262,15 +318,22 @@ fn select_default(
             });
         }
     };
-    if is_real_directory {
-        migrations.push(MigrationNotice {
-            kind,
-            legacy: legacy.clone(),
-            home_default,
-        });
-        Ok(legacy)
-    } else {
-        Ok(home_default)
+    if !is_real_directory {
+        return Ok(home_default);
+    }
+    let disposition = match home_source {
+        HomeSource::Derived => LegacyDisposition::Adopted,
+        HomeSource::Explicit => LegacyDisposition::IgnoredForExplicitHome,
+    };
+    notices.push(LegacyNotice {
+        kind,
+        legacy: legacy.clone(),
+        home_default: home_default.clone(),
+        disposition,
+    });
+    match disposition {
+        LegacyDisposition::Adopted => Ok(legacy),
+        LegacyDisposition::IgnoredForExplicitHome => Ok(home_default),
     }
 }
 
@@ -296,7 +359,7 @@ mod tests {
             source: ConfigSource::BuiltInDefaults,
             data_dir: None,
             authoring_workspace: None,
-            migrations: Vec::new(),
+            legacy_notices: Vec::new(),
         }
     }
 

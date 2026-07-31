@@ -46,7 +46,7 @@ pub use defaults::{
     DEFAULT_OUTBOX_MAX_ATTEMPTS, DEFAULT_OUTBOX_POLL_INTERVAL_MS, DEFAULT_QUERY_TIMEOUT_MS,
 };
 pub(crate) use error::config_error;
-pub use home::aion_home;
+pub use home::{AionHome, HomeSource, aion_home};
 pub use load::ServerConfig;
 pub(crate) use resolution::{ConfigResolution, ConfigSource};
 pub use runtime::{CliOverrides, RuntimeConfig};
