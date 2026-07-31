@@ -171,6 +171,50 @@ belongs to a different task. A package deploy or a namespace registration landin
 concurrently with any guarded write is the collision, and neither side is doing
 anything unusual.
 
+### 🔴 P4c — the published predicate walked ONE of the TWO files, and the count is demoted
+
+`LibSqlStore`'s surface is **7 `impl` blocks across 2 files**. The predicate above
+walks `store.rs`, which carries 6 of them. It never saw
+**`impl VisibilityStore for LibSqlStore` at `visibility.rs:129`**, which adds
+three more unguarded statement-issuing methods:
+
+```rust
+// visibility.rs:129-145 — every one of these takes the shared connection, unguarded
+async fn record_visibility(&self, ..) { record_visibility(self.connection(), record).await }  // UPSERT — a WRITE
+async fn list_workflows(&self, ..)    { list_workflows(self.connection(), filter).await }
+async fn count_workflows(&self, ..)   { count_workflows(self.connection(), filter).await }
+```
+
+So `record_visibility` is a **15th unguarded write**, and it was invisible to the
+predicate I published and Athena independently reproduced. **Her reproduction
+agreed with my number exactly — because a published predicate transfers its
+unstated SCOPE along with its logic.** Reproduction validated the arithmetic and
+was silent about the coverage. That is a real limit on "publish the predicate so
+nobody has to trust you", and it belongs next to the technique rather than
+underneath it.
+
+My attempt to extend the predicate to both files then failed twice more: `awk`'s
+`intest` flag persisted across files, so `visibility.rs` was skipped entirely and
+the totals came back **unchanged** — caught only because I had predicted they must
+rise; and the version that did read both files counted `visibility.rs`'s free
+helper functions as store methods.
+
+⇒ **THE RATIO IS DEMOTED TO AN ILLUSTRATION AND SHOULD NOT BE QUOTED AS A
+MEASUREMENT.** Three predicates, three different scope or depth limits. What is
+verified by direct reading, and is what the finding actually rests on:
+
+1. One shared raw `sqlite3*` (P1–P3) — read from the vendored source.
+2. `connection()` hands it to any caller, guarded or not.
+3. **Six unguarded entry points issue their own `BEGIN`** (P4b) — each confirmed
+   at its line, and independently confirmed at Athena's hand.
+4. `record_visibility` is an unguarded write in an impl block no predicate here
+   has yet walked correctly.
+
+None of those depend on the count, **and neither does the fix** — the pool
+dissolves the class regardless of how many members it has. A number that has
+moved three times is not load-bearing, and continuing to polish it would be
+precision spent where it buys nothing.
+
 ## What follows mechanically
 
 **C1 — an unguarded write can be silently rolled back after returning `Ok`.**
