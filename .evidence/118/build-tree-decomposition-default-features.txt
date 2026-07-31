@@ -1,21 +1,61 @@
-# aion build-tree decomposition — cargo test --workspace (DEFAULT features)
-# taken_at_utc: 2026-07-31T13:30:47Z   (read from `date -u`, not authored)
-# taken DURING the run, in its test-execution phase: rustc absent, size flat.
-# baseline for this block: free 90.36 GiB, target/debug ~0, 13:19:23Z (Athena's hand)
-# host: Darwin 25.3.0 arm64   rustc: rustc 1.97.1 (8bab26f4f 2026-07-14)
+# aion build-tree decomposition — `cargo test --workspace` (DEFAULT features, no --all-targets)
+#
+# taken_at_utc: 2026-07-31T13:34:30Z   (read from `date -u`, never authored)
+# phase: test EXECUTION. rustc absent, size flat across 20+ samples at two seats.
+# baseline: free 90.36 GiB, target/debug ~0, 13:19:23Z (Athena's hand)
+# host: Darwin 25.3.0 arm64
+# rustc: rustc 1.97.1 (8bab26f4f 2026-07-14)
+#
+# EVERY FIGURE BELOW IS PRECEDED BY THE EXACT COMMAND THAT PRODUCED IT.
+# A banked result without its command cannot distinguish a different METHOD
+# from a different WORLD — a second seat measuring the same still tree got
+# deps 13G where the first got 18G, and neither was wrong about the disk.
 
-## phase check at time of read
-cargo procs: 1   rustc procs: 0
-free (df -g /Users/tom): 67 GiB
+## phase check
+\$ pgrep -x cargo | wc -l ; pgrep -x rustc | wc -l
+cargo=1  rustc=0
+$ df -g /Users/tom | tail -1
+/dev/disk3s5       926  829        67    93% 8817009 710373600    1%   /System/Volumes/Data
 
-## top-level
+## 🔴 TOTAL — THE ONLY DISK FIGURE THAT IS INVOCATION-INDEPENDENT
+$ du -sh target/debug
+ 23G	target/debug
+
+## per-directory split — SINGLE WALK, the canonical form
+$ du -h -d 1 target/debug
+ 14M	target/debug/.fingerprint
+8.4G	target/debug/incremental
+454M	target/debug/examples
+ 13G	target/debug/deps
+221M	target/debug/build
+ 23G	target/debug
+
+## 🔴 THE SAME STILL TREE, MEASURED THREE WAYS, DISAGREEING BY 5 GiB
+$ du -sh target/debug/deps            (alone)
+ 18G	target/debug/deps
+$ du -sh target/debug/incremental     (alone)
+8.4G	target/debug/incremental
+$ du -sh target/debug target/debug/deps target/debug/incremental target/debug/build   (parent AND children, ONE invocation — what I first ran, and it is WRONG)
  23G	target/debug
  18G	target/debug/deps
 4.2G	target/debug/incremental
 221M	target/debug/build
 
-## linked test EXECUTABLES in deps (the --all-targets multiplier)
-count=249  total=10.18 GiB  mean=41.9 MB
+# du skips inodes it has already counted WITHIN one invocation, and cargo
+# hardlinks artifacts between siblings (deps <-> examples <-> the top-level
+# binaries). So naming the parent alongside its children makes the children
+# report whatever the parent did not already claim, and naming siblings makes
+# the figure depend on WALK ORDER. My first read gave incremental 4.2G; alone
+# it is 8.4G. Same bytes, same instant, different arithmetic.
+#
+# RULE: bank the TOTAL, and take any split from ONE `du -h -d 1` walk.
+# Per-sibling figures from separate or mixed invocations are not comparable
+# across seats, and the disagreement looks exactly like a disagreement about
+# the world.
+
+## linked test EXECUTABLES — the workspace-target multiplier
+$ find target/debug/deps -maxdepth 1 -type f -perm -u+x ! -name "*.*"
+count=221  total=10.09 GiB  mean=46.8 MB
 largest 10:
      223.2 MB  target/debug/deps/aion_server-3747dc4edf7dd042
      218.5 MB  target/debug/deps/aion-451da06d8d29a23d
@@ -28,5 +68,30 @@ largest 10:
      118.8 MB  target/debug/deps/authoring_out_of_box_e2e-5071ecfbf0ae5a68
      117.7 MB  target/debug/deps/deploy_audit_log-2fc83baf552fb1e3
 
-## rlibs in deps
+# CORRECTED: my first count of 249 used a predicate that also swept in 28
+# proc-macro .dylib files (libserde_derive, libdarling_macro, ...). Those
+# are not test binaries. The right predicate excludes any dotted name.
+$ find target/debug/deps -maxdepth 1 -type f -perm -u+x ! -name "*.d" ! -name "*.rlib" ! -name "*.rmeta" -name "*.*" | wc -l
+28
+
+## rlibs
+$ find target/debug/deps -maxdepth 1 -name "*.rlib"
 count=500  total=2.11 GiB
+
+## THE MECHANISM, corrected twice and now measured at two seats
+
+221 linked test executables, 10.09 GiB, at DEFAULT features with NO
+--all-targets. Against a two-package `--all-targets --all-features` build
+that produced 75 / 4.33 GiB.
+
+=> The multiplier is the TARGET COUNT ACROSS THE WORKSPACE, not the flag.
+   `cargo test` already links every lib-test and every integration target;
+   --all-targets only adds benches and examples on top. Each binary carries
+   the whole crate graph plus debuginfo, so the largest are 177-223 MB and
+   the mean is 42 MB across 221 of them.
+
+Two earlier stories were wrong: "a second feature resolution" and
+"--all-targets is ~75 binaries". Both took a real measurement and bound it
+to the wrong variable. A mechanism claim needs a second data point that
+VARIES the proposed cause — this read varies both flags against the
+earlier one, which is why it could refute the person who ran it.
