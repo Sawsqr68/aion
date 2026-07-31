@@ -111,8 +111,13 @@ BLOCK A  cargo test --workspace  (DEFAULT features, --no-fail-fast)
   log: .evidence/118/shakedown-default.log
 
 BLOCK B  cargo test --workspace --all-features --no-fail-fast
-  running; declared +30..+38, abort at 50 (not 45 — see the band, below)
+  exit 0 · 240 targets · 243 result lines · 3889 passed / 0 failed
+  disk +23.07 from a cleaned tree (watch's hand); free floor 64.93, never
+  within 14.9 GiB of the shared 50 band
   log: .evidence/118/shakedown-allfeatures.log
+
+⇒ SHAKEDOWN GREEN ACROSS BOTH FEATURE RESOLUTIONS. 480 target-runs,
+  7791 test results, 0 failures, both exits 0.
 ```
 
 🔴 **A green Block A is NOT evidence about Block B.** Different feature
@@ -229,3 +234,32 @@ over-reserve by 9 GiB and split work that did not need splitting.
 UNVERIFIABLE (that tree is gone). Neither is a measurement of the house
 battery, and neither should be quoted as one.** What would settle it is one
 clean full-battery run measured with `du -h -d 1` — cheap, and not tonight.
+
+
+## 🔴 The two resolutions are NOT nested — measured, per target
+
+Block A ran 3902 tests and Block B ran 3889 on the same 240 targets. The
+13-test gap is not noise and not a truncation; it is two disjoint sets, and
+each gate runs tests the other cannot:
+
+```
+ONLY under DEFAULT features (18 tests)     ONLY under --all-features (5)
+  deploy_commands.rs          8 -> 0         run_server_outbox_e2e   0 -> 4
+  deploy_audit_log.rs         8 -> 0         unittests            2666 -> 2667
+  deploy_api_e2e.rs          14 -> 13
+  worker_dispatch_delivery.rs 8 -> 7
+```
+
+**Deliberate, documented, and correct.** Those suites carry
+`#![cfg(not(feature = "auth"))]` with the reason on the file: they depend on
+dev-token mode, where `jwks_url` is a shared secret. With `auth` compiled in,
+`jwks_url` is a real JWKS endpoint the server fetches at boot, so the shared
+secret is not a valid URL and boot would fail before any deploy mechanic runs.
+The five that only appear under `--all-features` are the outbox tests fixed in
+`2460103d`, which only compile there.
+
+★ **This is the justification for the house battery having BOTH gates, and it
+is now measured rather than asserted.** Neither resolution is a superset of the
+other, so a green run of either is not evidence about the other — the same
+principle as #120 one level up: **a passing count only covers the targets that
+ran, under the features they ran with.**
