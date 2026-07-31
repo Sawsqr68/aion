@@ -1,0 +1,14 @@
+   Compiling aion-worker v0.10.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+   Compiling aion-server v0.10.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.13s
+     Running tests/dead_man_switch_e2e.rs (target/debug/deps/dead_man_switch_e2e-ad6de8a6afe017f5)
+
+running 4 tests
+test a_wedged_link_is_detected_and_redialed ... ok
+test idle_worker_survives_past_the_old_lease_window ... ok
+test a_long_activity_is_not_mistaken_for_a_dead_link ... ok
+test a_busy_worker_still_answers_the_servers_liveness_ping ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.26s
+
+EXIT=0

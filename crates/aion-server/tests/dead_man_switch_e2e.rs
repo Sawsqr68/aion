@@ -46,7 +46,7 @@ use std::time::{Duration, Instant};
 use aion_core::{RunId, WorkflowId};
 use aion_server::worker::{
     ConnectedWorkerRegistry, DispatchRequest, HeartbeatSweeper, HeartbeatTracker,
-    LiminalConnectionNotifier, LivenessProbe, WorkerDelivery, WorkerHandle,
+    LiminalConnectionNotifier, LivenessProbe, WorkerDelivery, WorkerHandle, WorkerId,
 };
 use aion_worker::{ActivityRegistry, RedialTiming, WorkerConfig, serve_with_redial};
 use liminal_server::config::{ChannelDef, ServerConfig};
@@ -204,15 +204,19 @@ fn a_wedged_link_is_detected_and_redialed() -> TestResult {
 
 // ------------------------------------------------ busy is not silent ----
 
-/// A plain activity executes INLINE on the worker's serve loop, so a handler
-/// that outruns the silence window returns to a clock that started when its
-/// dispatch arrived. The dead-man switch must NOT read that as a dead link: the
-/// worker was busy, not silent, and tearing down a healthy connection after
+/// A handler that outruns the silence window must not be read as a dead link:
+/// the worker was busy, not silent, and tearing down a healthy connection after
 /// every long activity would be a far worse failure than the one being fixed.
 ///
 /// This pin is a self-inflicted-regression guard, not one of the four hits: it
 /// fails against the switch's first cut (which re-armed only on frame ARRIVAL)
 /// and passes once the clock also re-arms on completion.
+///
+/// It also fails, by hanging to the observation deadline, against the version of
+/// the #58 fix that spawned plain dispatches with `tokio::spawn` — on the
+/// current-thread runtime `serve_with_redial` uses, that dispatch was never
+/// polled and this reply never came. It was never run then, so it never said so
+/// (#118, #120).
 #[test]
 fn a_long_activity_is_not_mistaken_for_a_dead_link() -> TestResult {
     let harness = Harness::start()?;
@@ -259,6 +263,81 @@ fn a_long_activity_is_not_mistaken_for_a_dead_link() -> TestResult {
     harness.shutdown()
 }
 
+/// ACCEPTANCE (a) FOR #58: a worker BUSY past the silence window must still
+/// ANSWER the server's liveness ping throughout.
+///
+/// This is the property the whole #58 fix exists to provide, and the one the
+/// test above cannot establish: that one proves the connection survives a long
+/// activity and works AFTERWARDS. This proves the server can reach the worker
+/// DURING it — which is what decides whether a busy worker keeps its dispatch
+/// eligibility or is classed unreachable and excluded.
+///
+/// Why the assertion is not vacuous. Reachability is seeded by the registration
+/// handshake and then lives exactly one window. The check therefore runs at a
+/// point MORE than one full window after the activity began, so a seeded value
+/// has long since gone stale: the only thing that can hold it true is a ping
+/// answered while the handler was running. If pings queued behind the handler —
+/// the pre-#58 behaviour, where a plain activity ran inline on the serve loop —
+/// this reads false.
+///
+/// Live provenance: on run `dfd2117c` a plain `run_check` leg held the serve
+/// loop for 169 seconds during which not one ping could be dequeued. The server
+/// read that silence as a dead connection while the worker was doing exactly the
+/// work it had been sent.
+#[test]
+fn a_busy_worker_still_answers_the_servers_liveness_ping() -> TestResult {
+    let harness = Harness::start()?;
+    let worker = WorkerThread::spawn(vec![harness.address.to_string()])?;
+    harness.wait_for_worker()?;
+    let handle = harness
+        .registered_worker()
+        .ok_or_else(|| test_error("the worker never registered"))?;
+    let worker_id = handle.id();
+
+    // Settle into the steady state first, exactly as the pins above do.
+    std::thread::sleep(HEARTBEAT_WINDOW);
+
+    // Hold the worker for three full windows on its own thread, so the main
+    // thread can interrogate the server WHILE the leg is in flight.
+    let hold = HEARTBEAT_WINDOW * 3;
+    let busy = std::thread::spawn(move || {
+        push_dispatch_holding(
+            &handle,
+            "busy-not-silent",
+            u64::try_from(hold.as_millis()).unwrap_or(u64::MAX),
+        )
+    });
+
+    // Give the dispatch time to arrive and start, then wait out a FULL window
+    // more. Anything seeded at registration is stale by now; only an answered
+    // ping can still be holding this true.
+    std::thread::sleep(HEARTBEAT_WINDOW / 2);
+    let observed_at = Instant::now();
+    std::thread::sleep(HEARTBEAT_WINDOW + Duration::from_millis(250));
+    assert!(
+        observed_at.elapsed() > HEARTBEAT_WINDOW,
+        "the check must sit more than one window past the start of the leg, or a value seeded \
+         at registration would satisfy it and the assertion would prove nothing"
+    );
+    assert!(
+        harness.dispatch_reachable(worker_id)?,
+        "a worker busy with a long activity must still be answering pings: the server can only \
+         keep its dispatch eligibility if the serve loop stayed free to answer while the handler \
+         ran"
+    );
+
+    // And the leg itself must complete correctly — busy-but-reachable is only
+    // the right answer if the work is genuinely being done.
+    let response = busy
+        .join()
+        .map_err(|_| test_error("the busy dispatch thread panicked"))??;
+    assert_eq!(response, r#"{"ran":"busy-not-silent"}"#);
+    assert_eq!(worker.executions(), 1);
+
+    worker.stop();
+    harness.shutdown()
+}
+
 // ------------------------------------------------------------- harness ----
 
 /// A running liminal listener with the aion notifier, the liveness probe, and
@@ -266,6 +345,10 @@ fn a_long_activity_is_not_mistaken_for_a_dead_link() -> TestResult {
 struct Harness {
     listener: Option<ServerListener>,
     registry: ConnectedWorkerRegistry,
+    /// The SAME tracker the probe records answered pings into, so a test can ask
+    /// the server's own question — "can I still reach this worker?" — rather
+    /// than inferring it from something adjacent.
+    tracker: HeartbeatTracker,
     address: SocketAddr,
     runtime: Option<tokio::runtime::Runtime>,
     shutdown: tokio::sync::watch::Sender<bool>,
@@ -321,7 +404,7 @@ impl Harness {
             HEARTBEAT_WINDOW,
         );
         let sweeper = HeartbeatSweeper::new(
-            tracker,
+            tracker.clone(),
             registry.clone(),
             aion_server::worker::PendingActivities::default(),
             aion_server::shutdown::DrainState::default(),
@@ -333,10 +416,19 @@ impl Harness {
         Ok(Self {
             listener: Some(listener),
             registry,
+            tracker,
             address,
             runtime: Some(runtime),
             shutdown,
         })
+    }
+
+    /// Whether the SERVER can currently reach `worker` on its dispatch path —
+    /// the property only an answered liveness ping establishes.
+    fn dispatch_reachable(&self, worker: WorkerId) -> Result<bool, TestError> {
+        self.tracker
+            .is_dispatch_reachable(worker, Instant::now())
+            .map_err(test_error)
     }
 
     fn registered_workers(&self) -> Vec<WorkerHandle> {
@@ -500,7 +592,13 @@ impl WorkerThread {
 /// nobody drains, so both ends believe they are connected.
 struct WedgeableRelay {
     address: SocketAddr,
-    wedged: Arc<AtomicBool>,
+    /// Worker → server. Wedging this makes the worker look silent.
+    wedged_from_worker: Arc<AtomicBool>,
+    /// Server → worker. Wedging THIS ALONE is the pump-alive/serve-loop-dead
+    /// shape: the worker keeps sending (its in-flight activity's liveness pump),
+    /// so the connection lease stays fresh, while nothing the server pushes —
+    /// including its liveness ping — can ever arrive.
+    wedged_to_worker: Arc<AtomicBool>,
     stop: Arc<AtomicBool>,
     handle: Option<std::thread::JoinHandle<()>>,
 }
@@ -510,9 +608,11 @@ impl WedgeableRelay {
         let listener = TcpListener::bind("127.0.0.1:0").map_err(test_error)?;
         let address = listener.local_addr().map_err(test_error)?;
         listener.set_nonblocking(true).map_err(test_error)?;
-        let wedged = Arc::new(AtomicBool::new(false));
+        let wedged_from_worker = Arc::new(AtomicBool::new(false));
+        let wedged_to_worker = Arc::new(AtomicBool::new(false));
         let stop = Arc::new(AtomicBool::new(false));
-        let accept_wedged = Arc::clone(&wedged);
+        let accept_from_worker = Arc::clone(&wedged_from_worker);
+        let accept_to_worker = Arc::clone(&wedged_to_worker);
         let accept_stop = Arc::clone(&stop);
         let handle = std::thread::spawn(move || {
             // Accepted sockets are PARKED here for the relay's whole life: a
@@ -542,8 +642,11 @@ impl WedgeableRelay {
                         };
                         parked.push(downstream);
                         parked.push(up);
-                        for (from, to) in [(down_read, up_write), (up_read, down_write)] {
-                            let pump_wedged = Arc::clone(&accept_wedged);
+                        for (from, to, wedged) in [
+                            (down_read, up_write, &accept_from_worker),
+                            (up_read, down_write, &accept_to_worker),
+                        ] {
+                            let pump_wedged = Arc::clone(wedged);
                             let pump_stop = Arc::clone(&accept_stop);
                             std::thread::spawn(move || pump(from, to, &pump_wedged, &pump_stop));
                         }
@@ -559,15 +662,17 @@ impl WedgeableRelay {
         });
         Ok(Self {
             address,
-            wedged,
+            wedged_from_worker,
+            wedged_to_worker,
             stop,
             handle: Some(handle),
         })
     }
 
-    /// Stop carrying bytes in both directions, closing nothing.
+    /// Stop carrying bytes in BOTH directions, closing nothing.
     fn wedge(&self) {
-        self.wedged.store(true, Ordering::SeqCst);
+        self.wedged_from_worker.store(true, Ordering::SeqCst);
+        self.wedged_to_worker.store(true, Ordering::SeqCst);
     }
 
     fn shutdown(mut self) {

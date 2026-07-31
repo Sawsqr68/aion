@@ -1267,6 +1267,7 @@ impl Drop for WorkerRegistration {
 mod tests {
     use crate::config::NamespaceMode;
     use crate::namespace::{NamespaceResolver, StaticScheduleNamespaces, StaticWorkflowNamespaces};
+    use crate::worker::heartbeat::HeartbeatTracker;
 
     use super::*;
 
@@ -2261,6 +2262,112 @@ mod tests {
         assert_eq!(wrong_node.workers_serving_activity, 1);
         assert_eq!(wrong_node.compatible_workers, 0);
         assert_eq!(wrong_node.last_compatible_poller_age, None);
+        Ok(())
+    }
+
+    /// ACCEPTANCE (b) FOR #58, wiring half: a worker whose PROCESS looks alive
+    /// but which the server cannot REACH on the push leg must lose dispatch
+    /// eligibility — and losing it must actually remove it from selection.
+    ///
+    /// This is the composition the lease split exists for. The tracker half is
+    /// pinned in `heartbeat::reachability_tests`; this pins the half that turns
+    /// that verdict into a dispatch decision, using the SAME two types the
+    /// liveness probe wires together — a real [`HeartbeatTracker`] census
+    /// feeding a real [`ConnectedWorkerRegistry`].
+    ///
+    /// The staging is Finding B exactly: the worker's own liveness pump keeps
+    /// beating (`record_connection_activity`) well past the window, so every
+    /// signal that says "this process is alive" says so — and NO ping is ever
+    /// answered, so the one signal that says "the server can reach it" is
+    /// absent. Before the split those were one lease and the pump's weaker
+    /// positive evidence buried the ping's negative evidence.
+    ///
+    /// The control is the second half of the test: the same worker, reachable,
+    /// must still be selected. Without it a registry that selected NOBODY would
+    /// satisfy the first assertion and prove nothing.
+    #[test]
+    fn a_pump_alive_worker_the_server_cannot_reach_is_not_selected() -> Result<(), ServerError> {
+        const WINDOW: Duration = Duration::from_secs(30);
+
+        let registry = ConnectedWorkerRegistry::default();
+        let tracker = HeartbeatTracker::new(WINDOW);
+        let (tx, _rx) = mpsc::channel(1);
+        let worker = registry.register_namespaces(
+            [String::from("default")],
+            "general",
+            None,
+            [String::from("greet")].iter(),
+            tx,
+        )?;
+        let Some(worker_id) = worker.worker_id() else {
+            return Err(test_failure("registration carries an id"));
+        };
+        let start = Instant::now();
+        tracker.register_connection(worker_id, start)?;
+
+        // Baseline: reachable at registration, and therefore selectable. If this
+        // did not hold, no new worker could ever be dispatched to.
+        registry
+            .set_dispatch_ineligible(tracker.unreachable_workers(start)?.into_iter().collect())?;
+        assert!(
+            registry
+                .select_worker("default", "general", "greet", None)?
+                .is_some(),
+            "a freshly registered worker must be selectable: the handshake is a completed round \
+             trip and proves the push leg works"
+        );
+
+        // Now the poisoned-connection shape: the pump beats past the window and
+        // not one ping is answered.
+        let much_later = start + WINDOW * 4;
+        assert!(
+            tracker.record_connection_activity(worker_id, much_later)?,
+            "the worker is still tracked; its process is plainly alive"
+        );
+        registry.set_dispatch_ineligible(
+            tracker
+                .unreachable_workers(much_later)?
+                .into_iter()
+                .collect(),
+        )?;
+
+        assert!(
+            registry.is_dispatch_ineligible(worker_id)?,
+            "a worker the server cannot reach must be marked ineligible however alive its \
+             process looks"
+        );
+        assert!(
+            registry
+                .select_worker("default", "general", "greet", None)?
+                .is_none(),
+            "an ineligible worker must not be SELECTED: selecting one produces a dispatch that \
+             can only fail, and on the liminal transport it fails by consuming connection \
+             capacity — making the unreachability worse"
+        );
+
+        // THE CONTROL, and the recovery path: one answered ping restores
+        // eligibility on the very next verdict. Exclusion must be withdrawable,
+        // or a single bad round would strand a healthy worker forever.
+        assert!(
+            tracker.record_dispatch_reachability(worker_id, much_later)?,
+            "the worker is still tracked"
+        );
+        registry.set_dispatch_ineligible(
+            tracker
+                .unreachable_workers(much_later)?
+                .into_iter()
+                .collect(),
+        )?;
+        assert!(
+            !registry.is_dispatch_ineligible(worker_id)?,
+            "an answered ping must clear the exclusion"
+        );
+        assert!(
+            registry
+                .select_worker("default", "general", "greet", None)?
+                .is_some(),
+            "and the worker must be selectable again"
+        );
         Ok(())
     }
 

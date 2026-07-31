@@ -1292,9 +1292,8 @@ mod lsub_prod_xnode_e2e {
     fn fixture_contract(manifest: &Manifest) -> Result<PackageContract, TestError> {
         let mut actions = Vec::with_capacity(FAN_ACTIVITY_TYPES.len());
         for activity_type in FAN_ACTIVITY_TYPES {
-            let descriptor =
-                aion_worker::activity_descriptor::<FanInput, String>(activity_type)
-                    .map_err(test_error)?;
+            let descriptor = aion_worker::activity_descriptor::<FanInput, String>(activity_type)
+                .map_err(test_error)?;
             actions.push(ActionContract {
                 name: descriptor.name,
                 input_schema: descriptor.input_schema,
@@ -1431,13 +1430,16 @@ mod lsub_prod_xnode_e2e {
             // package's `fixture_contract` declares from, so the two sides
             // cannot drift.
             registry = registry
-                .register_activity_with_contract(activity_type, move |_input: FanInput, _context| {
-                    let executions = Arc::clone(&executions);
-                    Box::pin(async move {
-                        executions.fetch_add(1, Ordering::SeqCst);
-                        Ok(activity_type.to_owned())
-                    })
-                })
+                .register_activity_with_contract(
+                    activity_type,
+                    move |_input: FanInput, _context| {
+                        let executions = Arc::clone(&executions);
+                        Box::pin(async move {
+                            executions.fetch_add(1, Ordering::SeqCst);
+                            Ok(activity_type.to_owned())
+                        })
+                    },
+                )
                 .map_err(test_error)?;
         }
         Ok(Arc::new(registry))

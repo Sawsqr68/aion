@@ -934,7 +934,6 @@ impl LiminalActivityWorker {
             silence_window: self.silence.window(),
         }
     }
-
 }
 
 /// One plain typed-registry dispatch handed from a serve loop to the dedicated
@@ -1086,8 +1085,7 @@ impl PlainDispatchContext {
         // Keep this liveness-TRACKED dispatch beating for as long as the handler
         // genuinely runs (a no-op for the window-less outbox path). The guard
         // aborts the pump on every exit path.
-        let _liveness =
-            spawn_liveness_pump(self.writer.clone(), request, self.silence_window);
+        let _liveness = spawn_liveness_pump(self.writer.clone(), request, self.silence_window);
         let (event_sender, drain) = spawn_event_drain(DrainBinding::new(
             self.live_writer.clone(),
             self.drain_backoff,
