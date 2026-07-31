@@ -26,8 +26,12 @@ pub mod api;
 pub mod auth;
 /// Server-side Gleam authoring surface (compile, type-check, package, hot-load).
 pub mod authoring;
+
 /// In-process AWL checking, formatting, semantics, and workspace documents.
 pub(crate) mod awl;
+/// What code this server is: the revision stamped into the binary at build
+/// time, so a running server can be asked rather than guessed about (#123).
+pub mod build_identity;
 /// SS-5b automatic multi-node failover detection (cluster supervisor). Only
 /// meaningful for a distributed haematite boot, so gated behind the backend.
 #[cfg(feature = "haematite-backend")]
@@ -73,6 +77,7 @@ pub(crate) mod test_support;
 /// Remote-worker registry, heartbeat, and dispatch support.
 pub mod worker;
 
+pub use build_identity::BuildIdentity;
 pub use config::ServerConfig;
 pub use deploy::DeployGuard;
 pub use dev_ui::{ActivityMockRegistry, DevMockingDispatcher, MockedActivity};

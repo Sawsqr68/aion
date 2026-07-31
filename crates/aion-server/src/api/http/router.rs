@@ -14,6 +14,7 @@ use super::awl::{
     get_layout, get_revision, get_run_status, list_documents, put_document, put_layout, scaffold,
     worker_availability,
 };
+use super::build::build_identity;
 use super::cluster_command::cluster_command;
 use super::deploy::{list_versions, route_version, unload_version, upload_package};
 use super::dev_ui::{dev_register_mock, dev_replay_run, dev_trigger_run};
@@ -208,6 +209,7 @@ pub fn workflow_router(state: ServerState) -> Router {
         .merge(awl)
         .merge(dev)
         .route("/whoami", get(whoami))
+        .route("/build", get(build_identity))
         .route("/namespaces", get(list_namespaces).post(post_namespace))
         .route("/namespaces/records", get(list_namespace_records))
         .route(

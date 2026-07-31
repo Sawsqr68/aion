@@ -11,6 +11,7 @@
 //! - `auth` — caller-identity extraction from request headers.
 //! - `visibility` — visibility query-string parsing and namespace scoping.
 //! - `payload` — HTTP body/payload encode-decode shapes and conversions.
+//! - `build` — `GET /build`, the server's own revision.
 //! - `queues` — the fleet-wide unserved-queue read.
 //! - `unrecoverable` — the fleet-wide degraded-residency read.
 //! - `clean_dtos` — clean JSON request/response DTOs for the workflow POST endpoints.
@@ -19,6 +20,7 @@
 mod auth;
 mod authoring;
 mod awl;
+mod build;
 mod clean_dtos;
 mod cluster_command;
 mod deploy;

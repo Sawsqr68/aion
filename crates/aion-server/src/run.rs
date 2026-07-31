@@ -173,8 +173,16 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
         .iter()
         .map(|path| path.display().to_string())
         .collect();
+    // The revision, not just the version. A crate version cannot distinguish
+    // two builds from different commits of the same version, and that is the
+    // distinction an operator needs when deciding whether a restart restores
+    // what was running or substitutes something else (#123). The endpoint
+    // answers this too, but a crashed server leaves only its log.
+    let build = crate::build_identity::BuildIdentity::current();
     info!(
         version = env!("CARGO_PKG_VERSION"),
+        build = %build.line(),
+        commit = build.commit,
         grpc_address = %grpc_address,
         http_address = %http_address,
         default_namespace = %runtime.default_namespace,
