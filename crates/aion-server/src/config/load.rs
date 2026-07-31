@@ -350,6 +350,9 @@ impl ServerConfig {
         if let Some(address) = cli.listen_address {
             self.server.listen_address = address;
         }
+        if let Some(address) = cli.grpc_address {
+            self.server.grpc_address = address;
+        }
         if let Some(url) = &cli.store_url {
             self.store.url = Some(url.clone());
             // `--store-url` names an embedded libSQL database file, so it is an

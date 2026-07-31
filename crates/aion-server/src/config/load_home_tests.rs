@@ -291,6 +291,41 @@ fn an_explicit_home_is_never_overridden_by_a_legacy_working_directory()
     Ok(())
 }
 
+/// #114's server half: the CLI can now name the gRPC bind, and the override has
+/// to actually reach `[server].grpc_address`. Without this the flag would parse,
+/// convert, and be dropped one layer lower — the same shape as the `--endpoint`
+/// defect it replaces.
+#[test]
+fn the_grpc_bind_override_reaches_the_server_config() -> Result<(), Box<dyn std::error::Error>> {
+    let scratch = crate::test_support::private_tempdir()?;
+    let home = scratch.path().join("home");
+    let working_dir = scratch.path().join("project");
+    fs::create_dir_all(&working_dir)?;
+
+    let baseline = ServerConfig::load_for_test(
+        &CliOverrides::default(),
+        &home,
+        HomeSource::Derived,
+        &working_dir,
+    )?;
+    let cli = CliOverrides {
+        grpc_address: Some("127.0.0.1:18051".parse()?),
+        ..CliOverrides::default()
+    };
+    let overridden = ServerConfig::load_for_test(&cli, &home, HomeSource::Derived, &working_dir)?;
+
+    assert_ne!(
+        baseline.config.server.grpc_address, overridden.config.server.grpc_address,
+        "the override changed nothing; comparing against the default would have been vacuous"
+    );
+    assert_eq!(
+        overridden.config.server.grpc_address.port(),
+        18051,
+        "--grpc-address parsed and converted but never reached the bind"
+    );
+    Ok(())
+}
+
 /// The control against fixing #113 by disabling the branch outright: with no
 /// legacy directory present there is nothing to report, so a suite that only
 /// asserted "notices exist" would pass on a server that reported them always.

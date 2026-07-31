@@ -19,6 +19,13 @@ pub struct ServerArgs {
     /// Override the HTTP/JSON and ops-console listener address.
     #[arg(long)]
     listen_address: Option<SocketAddr>,
+    /// Override the gRPC listener address this server binds.
+    ///
+    /// This is the server's own bind address. The global `--endpoint` is the
+    /// address a *client* dials and has no effect here; `aion server` refuses
+    /// rather than start on a different port than the operator named.
+    #[arg(long)]
+    grpc_address: Option<SocketAddr>,
     /// Override the event-store URL and select the libSQL backend when the default is memory.
     #[arg(long)]
     store_url: Option<String>,
@@ -132,6 +139,7 @@ impl From<ServerArgs> for CliOverrides {
         Self {
             config_path: args.config,
             listen_address: args.listen_address,
+            grpc_address: args.grpc_address,
             store_url: args.store_url,
             scheduler_threads: args.scheduler_threads.map(NonZeroUsize::get),
             drain_timeout_seconds: args.drain_timeout_seconds.map(NonZeroU64::get),

@@ -23,6 +23,8 @@ pub struct CliOverrides {
     pub config_path: Option<PathBuf>,
     /// Override for `[server].listen_address`.
     pub listen_address: Option<SocketAddr>,
+    /// Override for `[server].grpc_address`.
+    pub grpc_address: Option<SocketAddr>,
     /// Override for `[store].url`.
     pub store_url: Option<String>,
     /// Override for `[runtime].scheduler_threads`.

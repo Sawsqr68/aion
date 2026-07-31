@@ -54,9 +54,15 @@ const QUERY_DEADLINE: Duration = Duration::from_secs(5);
     about = "Operate Aion workflows over gRPC and run the Aion workflow server"
 )]
 struct Cli {
-    /// gRPC server endpoint. A missing scheme is interpreted as http://.
-    #[arg(long, global = true, default_value = DEFAULT_ENDPOINT)]
-    endpoint: String,
+    /// gRPC server endpoint a client dials. A missing scheme is interpreted as
+    /// http://. Not a bind address: `aion server` takes `--grpc-address`.
+    ///
+    /// Deliberately has no clap `default_value`, so the difference between
+    /// "the operator named an endpoint" and "nobody said" survives parsing.
+    /// `aion server` needs that difference to refuse a flag it cannot honour;
+    /// a default applied here would erase it before anyone could ask.
+    #[arg(long, global = true)]
+    endpoint: Option<String>,
     /// Workflow namespace used for operations.
     #[arg(long, global = true, default_value = DEFAULT_NAMESPACE)]
     namespace: String,
@@ -444,6 +450,17 @@ async fn main() -> ExitCode {
         // The server owns its own reporting contract: tracing-logged errors
         // and the operations exit codes (2 = config, 130 = forced).
         Command::Server(ref args) => {
+            // `--endpoint` is a client dial address. It was accepted here and
+            // silently dropped, so an operator who passed it to move the bind
+            // got a server on the default port instead — which, on a box
+            // already running one, means a collision or a second process
+            // reaching for state the operator thought they had moved away
+            // from. Refuse: a bind address the operator named and did not get
+            // is not a thing to start up and hope about.
+            if let Some(refusal) = server_endpoint_refusal(cli.endpoint.as_deref()) {
+                eprintln!("{refusal}");
+                return ExitCode::from(2);
+            }
             // Report the agent harness composed into this binary at the root
             // (§3A.3): the default build ships Norn out-of-box; a
             // `--no-default-features` build reports none. The worker drives
@@ -477,7 +494,7 @@ async fn main() -> ExitCode {
         Command::Awl { ref command } => awl::run(command),
         Command::Worker { ref command } => {
             let result = match command {
-                WorkerCommand::Shell(args) => worker_shell::run(args, &cli.endpoint).await,
+                WorkerCommand::Shell(args) => worker_shell::run(args, cli.endpoint()).await,
                 // The agent worker registers into the namespace the global flag
                 // names, and dials liminal candidates rather than `--endpoint`.
                 WorkerCommand::Agent(args) => worker_agent::run(args, &cli.namespace).await,
@@ -561,7 +578,7 @@ async fn run(cli: &Cli, command: &ClientCommand) -> Result<Value> {
 
 fn deploy_target(cli: &Cli) -> deploy::DeployTarget {
     deploy::DeployTarget::new(
-        normalize_endpoint(&cli.endpoint),
+        normalize_endpoint(cli.endpoint()),
         cli.subject.clone(),
         deploy::resolve_token(cli.token.clone()),
     )
@@ -578,7 +595,7 @@ fn report_client_error(error: &anyhow::Error) {
 }
 
 async fn build_client(cli: &Cli) -> Result<Client> {
-    ClientBuilder::new(normalize_endpoint(&cli.endpoint))
+    ClientBuilder::new(normalize_endpoint(cli.endpoint()))
         .with_namespace(cli.namespace.clone())
         .with_subject(cli.subject.clone())
         .with_authorized_namespaces([cli.namespace.clone()])
@@ -865,6 +882,35 @@ async fn describe_workflow(
     describe_output(description.summary, description.history, raw)
 }
 
+/// The refusal `aion server` owes an operator who passed `--endpoint`, or
+/// `None` when they did not.
+///
+/// Separate from the dispatch arm so the message itself is testable: a refusal
+/// that names the wrong replacement flag is barely better than the silence it
+/// replaced.
+fn server_endpoint_refusal(endpoint: Option<&str>) -> Option<String> {
+    endpoint.map(|endpoint| {
+        format!(
+            "refusing to start: `--endpoint {endpoint}` names an address a CLIENT dials, and \
+             `aion server` cannot bind it. Use `--grpc-address <ADDR>` (or \
+             AION_SERVER_GRPC_ADDRESS, or [server].grpc_address) to choose the gRPC listener, \
+             and `--listen-address <ADDR>` for HTTP."
+        )
+    })
+}
+
+impl Cli {
+    /// The endpoint a client dials: what the operator named, or the default.
+    ///
+    /// The default lives here rather than in the clap attribute so that
+    /// [`Self::endpoint`] being `None` still means "nobody said", which is the
+    /// only way `aion server` can tell a flag it must refuse from one that was
+    /// never passed.
+    fn endpoint(&self) -> &str {
+        self.endpoint.as_deref().unwrap_or(DEFAULT_ENDPOINT)
+    }
+}
+
 fn normalize_endpoint(endpoint: &str) -> String {
     if endpoint.contains("://") {
         endpoint.to_owned()
@@ -882,8 +928,8 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        Cli, ClientCommand, Command, RemoteCommand, awl, normalize_endpoint, payload_to_json,
-        resolve_start_input,
+        Cli, ClientCommand, Command, DEFAULT_ENDPOINT, RemoteCommand, awl, normalize_endpoint,
+        payload_to_json, resolve_start_input, server_endpoint_refusal,
     };
 
     const WORKFLOW_ID: &str = "00000000-0000-0000-0000-000000000001";
@@ -1546,6 +1592,8 @@ mod tests {
             "dev-config.toml",
             "--listen-address",
             "127.0.0.1:18080",
+            "--grpc-address",
+            "127.0.0.1:18051",
             "--store-url",
             "aion.db",
             "--scheduler-threads",
@@ -1566,9 +1614,47 @@ mod tests {
             overrides.listen_address.map(|address| address.port()),
             Some(18080)
         );
+        assert_eq!(
+            overrides.grpc_address.map(|address| address.port()),
+            Some(18051),
+            "the gRPC bind override never reached the server config"
+        );
         assert_eq!(overrides.store_url.as_deref(), Some("aion.db"));
         assert_eq!(overrides.scheduler_threads, Some(2));
         assert_eq!(overrides.drain_timeout_seconds, Some(45));
+        Ok(())
+    }
+
+    /// #114: `--endpoint` was accepted by `aion server`, advertised in its
+    /// `--help`, and never read. An operator moving the bind off a port
+    /// already in use got a server on the default port instead. It now
+    /// refuses, and the refusal names the flag that does work — a refusal
+    /// pointing at the wrong flag is barely better than the silence.
+    #[test]
+    fn the_server_refuses_a_client_endpoint_instead_of_binding_the_default() -> anyhow::Result<()> {
+        let cli = Cli::try_parse_from(["aion", "--endpoint", "127.0.0.1:51099", "server"])?;
+        assert!(matches!(cli.command, Command::Server(_)));
+
+        let refusal = server_endpoint_refusal(cli.endpoint.as_deref())
+            .ok_or_else(|| anyhow::anyhow!("an explicit --endpoint was accepted by the server"))?;
+        assert!(refusal.contains("127.0.0.1:51099"));
+        assert!(refusal.contains("--grpc-address"));
+        assert!(refusal.contains("AION_SERVER_GRPC_ADDRESS"));
+        Ok(())
+    }
+
+    /// The control: without the flag there is nothing to refuse, and the
+    /// client default still applies. A refusal that fired unconditionally
+    /// would pass every assertion above and break every other verb.
+    #[test]
+    fn a_server_run_without_endpoint_is_not_refused_and_clients_keep_the_default()
+    -> anyhow::Result<()> {
+        let cli = Cli::try_parse_from(["aion", "server"])?;
+        assert!(server_endpoint_refusal(cli.endpoint.as_deref()).is_none());
+        assert_eq!(cli.endpoint(), DEFAULT_ENDPOINT);
+
+        let dialled = Cli::try_parse_from(["aion", "--endpoint", "example:1", "list"])?;
+        assert_eq!(dialled.endpoint(), "example:1");
         Ok(())
     }
 
