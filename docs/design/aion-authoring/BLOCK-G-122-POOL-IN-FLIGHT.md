@@ -609,3 +609,60 @@ after a second red made the statistical story uncomfortable.
 ⇒ **WHEN A MEASUREMENT DISAPPOINTS, COUNT THE MECHANISM BEFORE ENLARGING THE
 SAMPLE.** Another six runs would have refined a number that was answering the
 wrong question.
+
+---
+
+## 🔴 A THIRD RED — and a SECOND error string that names the mechanism
+
+`/tmp/mine-5.log`, `ok=57 FAILED=1 total=58` (run completed):
+
+```
+test result: FAILED. 7 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+failures:
+    outbox_happy_path_completes_with_n_terminals_in_order
+---- outbox_happy_path_completes_with_n_terminals_in_order stdout ----
+Error: Store(Backend("SQLite failure: `not an error`"))
+```
+
+That test is **#85's recorded flake (3)**, by name. Four distinct tests observed
+now, all in `outbox_e2e`.
+
+### 🔴 `not an error` is SQLITE_OK's message text
+
+`crates/aion-store-libsql/src/error.rs:7` is a pass-through —
+`StoreError::Backend(error.to_string())` — so this string is libSQL's own
+`Display` for `Error::SqliteFailure(code, msg)`. libSQL took a failure path and
+then formatted a message that says **no error occurred**.
+
+An error raised while the error state reads OK means the `sqlite3_errmsg` read
+did not correspond to the statement that failed.
+
+⇒ **`sqlite3_errmsg` IS CONNECTION-LEVEL STATE — EXACTLY LIKE
+`sqlite3_changes64`.** This block already documented the `changes64` hazard (a
+`changed > 0` check answering for somebody else's statement). This is the same
+hazard on the error channel, and it is the strongest lead available.
+
+### Strongest surviving hypothesis — UNTESTED, recorded as a lead not a finding
+
+If errmsg can be clobbered between the failing step and the errmsg read, then
+some connection is still being entered by two tasks at once. Reads now take
+private connections and writes serialise on the writer's mutex, so the naive
+candidates are closed. What is NOT yet ruled out:
+
+- `libsql::Transaction`'s `Drop` path when a helper returns early on error
+  without an explicit `commit`/`rollback` — does it run work on the connection
+  after the writer guard has been released?
+- Anything libSQL does on the connection off the caller's task.
+
+🔴 **This is a lead, not a diagnosis.** It has not been tested, and the last
+mechanism I found this plausible (`shared handle ⇒ outbox flake`) was refuted by
+counting. Count before believing it.
+
+### The honest reading of the series
+
+Waffles' constraint (a) has now paid twice. The first payment stopped a false
+"the pool fixed the flakes". The second is this: because the commit never leaned
+on the flake rate, three reds arriving mid-series cost the commit **nothing**.
+Nothing had to be retracted, because nothing had been claimed.
+
+⇒ **A CLAIM YOU NEVER MADE IS A CLAIM YOU NEVER HAVE TO WITHDRAW.**
