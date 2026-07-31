@@ -5,9 +5,10 @@ use aion_proto::generated::worker_protocol_client::WorkerProtocolClient;
 use aion_proto::generated::{self, server_to_worker, worker_to_server};
 use tokio_stream::wrappers::ReceiverStream;
 
-use crate::helpers::{FAN_OUT, NAMESPACE, POLL_DEADLINE, TestError, test_error};
-
-const FAN_ACTIVITY_TYPES: [&str; FAN_OUT] = ["fan:0", "fan:1", "fan:2", "fan:3"];
+use crate::helpers::{
+    FAN_ACTIVITY_TYPES, NAMESPACE, POLL_DEADLINE, TASK_QUEUE, TestError, fan_activity_descriptors,
+    test_error,
+};
 
 pub struct WorkerSession {
     worker_tx: tokio::sync::mpsc::Sender<generated::WorkerToServer>,
@@ -43,9 +44,21 @@ impl WorkerSession {
                             .iter()
                             .map(|activity| (*activity).to_owned())
                             .collect(),
-                        task_queue: String::from("default"),
+                        task_queue: TASK_QUEUE.to_owned(),
                         node: String::new(),
-                        activities: Vec::new(),
+                        // Names alone are NOT admissible: a name makes a worker
+                        // selectable for dispatch, a contract makes it
+                        // admissible, and the deployed package declares typed
+                        // actions on this queue. These descriptors come from the
+                        // same source that declaration does.
+                        activities: fan_activity_descriptors()?
+                            .into_iter()
+                            .map(|descriptor| generated::ActivityDescriptor {
+                                name: descriptor.name,
+                                input_schema_json: descriptor.input_schema.to_string(),
+                                output_schema_json: descriptor.output_schema.to_string(),
+                            })
+                            .collect(),
                         identity: "run-server-outbox-test-worker".to_owned(),
                     },
                 )),

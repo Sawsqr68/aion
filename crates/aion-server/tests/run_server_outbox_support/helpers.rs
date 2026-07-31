@@ -6,8 +6,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use aion_core::Event;
 use aion_package::{
-    BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest, ManifestVersion,
-    PackageBuilder,
+    ActionContract, ActivityDescriptor, BeamModule, BeamSet, CURRENT_FORMAT_VERSION,
+    DeclaredActivity, Manifest, ManifestVersion, PackageBuilder, PackageContract, WorkerContract,
 };
 use aion_proto::generated;
 use aion_store::{OutboxRow, OutboxStatus, ReadableEventStore};
@@ -15,6 +15,12 @@ use aion_store_libsql::LibSqlStore;
 use serde_json::json;
 
 pub const NAMESPACE: &str = "default";
+/// The task queue the harness worker polls, and therefore the queue this
+/// package's activities must be scoped onto.
+pub const TASK_QUEUE: &str = "default";
+/// The activity types `collect_four` schedules, one per fan-out ordinal — the
+/// same four the harness worker registers for.
+pub const FAN_ACTIVITY_TYPES: [&str; FAN_OUT] = ["fan:0", "fan:1", "fan:2", "fan:3"];
 pub const OUTBOX_MODULE: &str = "aion_outbox_fixture";
 pub const FAN_OUT: usize = 4;
 pub const POLL_DEADLINE: Duration = Duration::from_secs(20);
@@ -42,6 +48,65 @@ pub fn unique_temp_dir(name: &str) -> Result<tempfile::TempDir, TestError> {
         .tempdir()?)
 }
 
+/// The typed wire descriptors for the four fan activities, derived from the SAME
+/// concrete Rust types on both sides of admission: `collect_four` passes each
+/// member the JSON string `"in"` and a handler answers with a [`String`].
+///
+/// One source, two consumers — the package's declaration ([`fixture_contract`])
+/// and the harness worker's registration advertisement — so the two cannot drift
+/// apart and `WORKER_CONTRACT_MISMATCH` compares two schemas with one origin.
+///
+/// # Errors
+///
+/// Returns the descriptor-generation error if a schema cannot be represented as
+/// JSON.
+pub fn fan_activity_descriptors() -> Result<Vec<ActivityDescriptor>, TestError> {
+    let mut descriptors = Vec::with_capacity(FAN_ACTIVITY_TYPES.len());
+    for activity_type in FAN_ACTIVITY_TYPES {
+        descriptors.push(aion_worker::activity_descriptor::<String, String>(
+            activity_type,
+        )?);
+    }
+    Ok(descriptors)
+}
+
+/// The fixture's queue-scoped `.v4` contract.
+///
+/// `PackageContract::from_manifest` by design "never invents a queue", so a
+/// manifest's bare activity names land in `unscoped_activities` — and this
+/// server runs queue-routed, where an unscoped catalog is a terminal
+/// `NO_QUEUE_DECLARATION` at start admission. That refusal is EARNED: an
+/// unserved queue would otherwise wait silently forever. So the derived record
+/// is amended rather than bypassed — the same four names move out of
+/// `unscoped_activities` and onto the queue that serves them.
+fn fixture_contract(manifest: &Manifest) -> Result<PackageContract, TestError> {
+    let actions = fan_activity_descriptors()?
+        .into_iter()
+        .map(|descriptor| ActionContract {
+            name: descriptor.name,
+            input_schema: descriptor.input_schema,
+            output_schema: descriptor.output_schema,
+            node: None,
+            timeout: None,
+            retry: None,
+            advisory: false,
+            // A typed `String -> String` handler serves these, not an agent
+            // harness.
+            agent: false,
+            // The harness worker serves this queue, so the declaration carries
+            // no body of its own.
+            body: None,
+        })
+        .collect();
+    let mut contract = PackageContract::from_manifest(manifest);
+    contract.workers = vec![WorkerContract {
+        task_queue: TASK_QUEUE.to_owned(),
+        actions,
+    }];
+    contract.unscoped_activities.clear();
+    Ok(contract)
+}
+
 pub fn write_package_archive(dir: &Path) -> Result<PathBuf, TestError> {
     let beams = BeamSet::new(vec![BeamModule::new(OUTBOX_MODULE, OUTBOX_BEAM)])?;
     let manifest = Manifest {
@@ -50,15 +115,23 @@ pub fn write_package_archive(dir: &Path) -> Result<PathBuf, TestError> {
         input_schema: json!({ "type": "object" }),
         output_schema: json!({}),
         timeout: Some(Duration::from_secs(30)),
-        activities: vec![DeclaredActivity {
-            activity_type: "fixture_activity".to_owned(),
-        }],
+        // The four ordinals `collect_four` actually fans out. This manifest used
+        // to name one invented activity, `fixture_activity`, that the fixture
+        // never schedules and no worker ever served.
+        activities: FAN_ACTIVITY_TYPES
+            .iter()
+            .map(|activity_type| DeclaredActivity {
+                activity_type: (*activity_type).to_owned(),
+            })
+            .collect(),
         version: ManifestVersion::new("stamped-by-builder"),
         format_version: CURRENT_FORMAT_VERSION,
         additional_workflows: Vec::new(),
     };
+    let contract = fixture_contract(&manifest)?;
     let archive =
         PackageBuilder::with_source(manifest, beams, [(OUTBOX_MODULE, OUTBOX_SOURCE.to_vec())])
+            .with_contract(contract)
             .write_to_bytes()?;
     let path = dir.join("collect_four.aion");
     std::fs::write(&path, archive)?;

@@ -1219,8 +1219,8 @@ mod lsub_prod_xnode_e2e {
 
     use aion_core::Event;
     use aion_package::{
-        BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest, ManifestVersion,
-        PackageBuilder,
+        ActionContract, BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest,
+        ManifestVersion, PackageBuilder, PackageContract, WorkerContract,
     };
     use aion_store::ReadableEventStore;
     use aion_store_libsql::LibSqlStore;
@@ -1267,6 +1267,61 @@ mod lsub_prod_xnode_e2e {
         Ok(address)
     }
 
+    /// The fixture's queue-scoped `.v4` contract: the four `fan:N` activities
+    /// `collect_four` schedules, declared on the queue its worker actually polls.
+    ///
+    /// Why the archive cannot just carry the manifest-derived record: by design
+    /// `PackageContract::from_manifest` "never invents a queue", so a manifest's
+    /// bare activity names land in `unscoped_activities` — and this server boots
+    /// queue-routed, where an unscoped catalog is a terminal
+    /// `NO_QUEUE_DECLARATION` at start admission
+    /// (`aion::lifecycle::start_admission`). That refusal is EARNED: an unserved
+    /// queue would otherwise wait silently forever. So the derived record is
+    /// amended rather than bypassed — the same four names move out of
+    /// `unscoped_activities` and onto the queue that serves them — and the
+    /// package still loads through the production boot path with the `.v4`
+    /// identity `PackageBuilder` stamps over this exact contract.
+    ///
+    /// The action schemas come from the SAME generator the worker's typed
+    /// registry uses, for the SAME Rust types: `collect_four` passes each member
+    /// the JSON string `"in"` and the handler returns a [`String`]. Deriving both
+    /// sides from `activity_descriptor::<FanInput, String>` means the package's
+    /// declaration and the worker's advertisement cannot drift apart, so
+    /// registration admission (`WORKER_CONTRACT_MISMATCH`) compares two schemas
+    /// with one source.
+    fn fixture_contract(manifest: &Manifest) -> Result<PackageContract, TestError> {
+        let mut actions = Vec::with_capacity(FAN_ACTIVITY_TYPES.len());
+        for activity_type in FAN_ACTIVITY_TYPES {
+            let descriptor =
+                aion_worker::activity_descriptor::<FanInput, String>(activity_type)
+                    .map_err(test_error)?;
+            actions.push(ActionContract {
+                name: descriptor.name,
+                input_schema: descriptor.input_schema,
+                output_schema: descriptor.output_schema,
+                node: None,
+                timeout: None,
+                retry: None,
+                advisory: false,
+                // A typed `String -> String` handler serves these, not an agent
+                // harness — the fan fixture's shape merely coincides with an
+                // agent seam's, and marking it would route it somewhere no
+                // handler is.
+                agent: false,
+                // A connected worker serves this fixture's queue, so the
+                // declaration carries no body of its own.
+                body: None,
+            });
+        }
+        let mut contract = PackageContract::from_manifest(manifest);
+        contract.workers = vec![WorkerContract {
+            task_queue: TASK_QUEUE.to_owned(),
+            actions,
+        }];
+        contract.unscoped_activities.clear();
+        Ok(contract)
+    }
+
     /// Build the `collect_four` package on disk so the production state-build path
     /// loads it exactly as it loads operator-supplied `workflow_packages`.
     fn write_package_archive(dir: &std::path::Path) -> Result<PathBuf, TestError> {
@@ -1278,15 +1333,23 @@ mod lsub_prod_xnode_e2e {
             input_schema: json!({ "type": "object" }),
             output_schema: json!({}),
             timeout: Some(Duration::from_secs(30)),
-            activities: vec![DeclaredActivity {
-                activity_type: "fixture_activity".to_owned(),
-            }],
+            // The four ordinals `collect_four` actually fans out. This manifest
+            // used to name one invented activity, `fixture_activity`, that the
+            // fixture never schedules and no worker ever served.
+            activities: FAN_ACTIVITY_TYPES
+                .iter()
+                .map(|activity_type| DeclaredActivity {
+                    activity_type: (*activity_type).to_owned(),
+                })
+                .collect(),
             version: ManifestVersion::new("stamped-by-builder"),
             format_version: CURRENT_FORMAT_VERSION,
             additional_workflows: Vec::new(),
         };
+        let contract = fixture_contract(&manifest)?;
         let archive =
             PackageBuilder::with_source(manifest, beams, [(OUTBOX_MODULE, OUTBOX_SOURCE.to_vec())])
+                .with_contract(contract)
                 .write_to_bytes()
                 .map_err(test_error)?;
         let path = dir.join("collect_four.aion");
@@ -1359,8 +1422,16 @@ mod lsub_prod_xnode_e2e {
         let mut registry = ActivityRegistry::new();
         for activity_type in FAN_ACTIVITY_TYPES {
             let executions = Arc::clone(executions);
+            // `register_activity_with_contract`, not `register_activity`: the
+            // bare form registers a handler with NO descriptor, so the worker
+            // advertises four names and zero typed contracts, and admission —
+            // which compares CONTRACTS — refuses the registration outright
+            // (`WORKER_CONTRACT_MISMATCH`). Deriving the advertisement from
+            // `<FanInput, String>` is what makes it the same source the
+            // package's `fixture_contract` declares from, so the two sides
+            // cannot drift.
             registry = registry
-                .register_activity(activity_type, move |_input: FanInput, _context| {
+                .register_activity_with_contract(activity_type, move |_input: FanInput, _context| {
                     let executions = Arc::clone(&executions);
                     Box::pin(async move {
                         executions.fetch_add(1, Ordering::SeqCst);

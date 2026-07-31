@@ -977,17 +977,21 @@ fn wire_error(message: &'static str) -> ServerError {
 mod reachability_tests {
     use std::time::{Duration, Instant};
 
-    use super::{HeartbeatTracker, WorkerId};
+    use super::{HeartbeatTracker, ServerError, WorkerId};
 
     const WINDOW: Duration = Duration::from_secs(30);
 
-    fn tracker_with_worker(now: Instant) -> (HeartbeatTracker, WorkerId) {
+    /// Every test returns `Result` and uses `?` rather than unwrapping: a lock
+    /// fault inside the tracker is a real failure mode of the code under test,
+    /// and it should surface as a failed test carrying the typed error, not as a
+    /// panic message written by the test.
+    type TestResult = Result<(), ServerError>;
+
+    fn tracker_with_worker(now: Instant) -> Result<(HeartbeatTracker, WorkerId), ServerError> {
         let tracker = HeartbeatTracker::new(WINDOW);
         let worker = WorkerId::from_value(1);
-        tracker
-            .register_connection(worker, now)
-            .expect("register the connection");
-        (tracker, worker)
+        tracker.register_connection(worker, now)?;
+        Ok((tracker, worker))
     }
 
     /// THE REGRESSION. This is the defect that made run `dfd2117c` invisible:
@@ -998,63 +1002,52 @@ mod reachability_tests {
     /// An inbound frame must prove the worker is ALIVE and must NOT prove the
     /// server can REACH it.
     #[test]
-    fn an_inbound_frame_cannot_prove_dispatch_reachability() {
+    fn an_inbound_frame_cannot_prove_dispatch_reachability() -> TestResult {
         let start = Instant::now();
-        let (tracker, worker) = tracker_with_worker(start);
+        let (tracker, worker) = tracker_with_worker(start)?;
 
         // Well past the window, with the pump beating throughout — exactly what
         // a busy worker on a poisoned connection looks like.
         let much_later = start + WINDOW * 4;
         assert!(
-            tracker
-                .record_connection_activity(worker, much_later)
-                .expect("record an inbound frame"),
+            tracker.record_connection_activity(worker, much_later)?,
             "the worker is still tracked"
         );
 
         assert!(
-            !tracker
-                .is_dispatch_reachable(worker, much_later)
-                .expect("read reachability"),
+            !tracker.is_dispatch_reachable(worker, much_later)?,
             "a pump beat must NOT make a worker the server cannot push to look reachable"
         );
         assert_eq!(
-            tracker
-                .unreachable_workers(much_later)
-                .expect("census the unreachable"),
+            tracker.unreachable_workers(much_later)?,
             vec![worker],
             "the worker must be named unreachable however alive its process looks"
         );
+        Ok(())
     }
 
     /// The control for the test above: without it, a tracker that reported
     /// EVERYTHING unreachable would satisfy that assertion and prove nothing.
     #[test]
-    fn an_answered_ping_does_prove_dispatch_reachability() {
+    fn an_answered_ping_does_prove_dispatch_reachability() -> TestResult {
         let start = Instant::now();
-        let (tracker, worker) = tracker_with_worker(start);
+        let (tracker, worker) = tracker_with_worker(start)?;
 
         let much_later = start + WINDOW * 4;
         assert!(
-            tracker
-                .record_dispatch_reachability(worker, much_later)
-                .expect("record an answered ping"),
+            tracker.record_dispatch_reachability(worker, much_later)?,
             "the worker is still tracked"
         );
 
         assert!(
-            tracker
-                .is_dispatch_reachable(worker, much_later)
-                .expect("read reachability"),
+            tracker.is_dispatch_reachable(worker, much_later)?,
             "an answered ping is the one thing that proves the push leg works"
         );
         assert!(
-            tracker
-                .unreachable_workers(much_later)
-                .expect("census the unreachable")
-                .is_empty(),
+            tracker.unreachable_workers(much_later)?.is_empty(),
             "a worker answering pings is never unreachable"
         );
+        Ok(())
     }
 
     /// Registration is a completed server-to-worker round trip, so a freshly
@@ -1062,68 +1055,56 @@ mod reachability_tests {
     /// this seeding every new worker would be unreachable-by-default and no
     /// dispatch could ever be placed.
     #[test]
-    fn registration_seeds_reachability_so_a_new_worker_is_dispatchable() {
+    fn registration_seeds_reachability_so_a_new_worker_is_dispatchable() -> TestResult {
         let start = Instant::now();
-        let (tracker, worker) = tracker_with_worker(start);
+        let (tracker, worker) = tracker_with_worker(start)?;
 
         assert!(
-            tracker
-                .is_dispatch_reachable(worker, start)
-                .expect("read reachability"),
+            tracker.is_dispatch_reachable(worker, start)?,
             "the registration handshake itself proves reachability at t0"
         );
+        Ok(())
     }
 
     /// Reachability must EXPIRE on its own clock. If it were only ever advanced
     /// and never allowed to go stale, eligibility could never be withdrawn.
     #[test]
-    fn reachability_goes_stale_once_the_window_passes() {
+    fn reachability_goes_stale_once_the_window_passes() -> TestResult {
         let start = Instant::now();
-        let (tracker, worker) = tracker_with_worker(start);
+        let (tracker, worker) = tracker_with_worker(start)?;
 
         assert!(
-            tracker
-                .is_dispatch_reachable(worker, start + WINDOW)
-                .expect("read reachability"),
+            tracker.is_dispatch_reachable(worker, start + WINDOW)?,
             "still inside the window"
         );
         assert!(
-            !tracker
-                .is_dispatch_reachable(worker, start + WINDOW + Duration::from_millis(1))
-                .expect("read reachability"),
+            !tracker.is_dispatch_reachable(worker, start + WINDOW + Duration::from_millis(1))?,
             "one millisecond past the window is stale"
         );
+        Ok(())
     }
 
     /// An untracked worker is not reachable: absence of proof is not proof. A
     /// pong racing a reap must not resurrect it either.
     #[test]
-    fn an_unregistered_worker_is_never_reachable_and_cannot_be_resurrected() {
+    fn an_unregistered_worker_is_never_reachable_and_cannot_be_resurrected() -> TestResult {
         let start = Instant::now();
-        let (tracker, worker) = tracker_with_worker(start);
-        tracker
-            .unregister_connection(worker)
-            .expect("unregister the connection");
+        let (tracker, worker) = tracker_with_worker(start)?;
+        tracker.unregister_connection(worker)?;
 
         assert!(
-            !tracker
-                .is_dispatch_reachable(worker, start)
-                .expect("read reachability"),
+            !tracker.is_dispatch_reachable(worker, start)?,
             "a deregistered worker is not reachable"
         );
         assert!(
-            !tracker
-                .record_dispatch_reachability(worker, start)
-                .expect("record an answered ping"),
+            !tracker.record_dispatch_reachability(worker, start)?,
             "a late pong must not resurrect a deregistered worker"
         );
         assert!(
-            tracker
-                .unreachable_workers(start)
-                .expect("census the unreachable")
-                .is_empty(),
+            tracker.unreachable_workers(start)?.is_empty(),
             "an untracked worker is not carried in the census either"
         );
+        Ok(())
     }
 }
 

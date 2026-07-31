@@ -318,16 +318,25 @@ impl std::fmt::Debug for AgentHarnessConfig {
 pub struct LiminalActivityWorker {
     client: PushClient,
     registry: Arc<ActivityRegistry>,
-    /// Execution permits for plain typed-registry dispatches, which now run off
-    /// the serve loop ([`Self::spawn_plain_dispatch`]).
+    /// The queue handing plain typed-registry dispatches from the serve loop to
+    /// the dedicated execution thread ([`spawn_plain_dispatch_executor`]).
     ///
-    /// Holds exactly ONE permit, so plain activities still execute strictly one
-    /// at a time — identical to when they ran inline on the serve loop. This is
-    /// not a new limit; it is the existing one made explicit once the execution
-    /// stopped being what enforced it. Widening it is a configuration decision
-    /// about how much work one worker may do at once, and it has teeth: the
-    /// dispatches that would newly overlap are whole `cargo` builds.
-    plain_dispatch_slots: Arc<tokio::sync::Semaphore>,
+    /// That thread drains this queue STRICTLY ONE AT A TIME, so plain activities
+    /// execute exactly as serially as they did when they ran inline on the serve
+    /// loop. This is not a new limit; it is the existing one, preserved once the
+    /// execution stopped being what enforced it. Widening it is a configuration
+    /// decision about how much work one worker may do at once, and it has teeth:
+    /// the dispatches that would newly overlap are whole `cargo` builds.
+    ///
+    /// Why a dedicated thread and not `tokio::spawn`: the serve loop's receive
+    /// (`PushClient::recv_timeout`) BLOCKS — the push client is thread-based,
+    /// not async — and `serve_with_redial`, the entry point every real worker
+    /// uses, drives that loop with `block_on` on a CURRENT-THREAD runtime. A
+    /// `tokio::spawn`ed dispatch on that runtime is never polled, because the
+    /// only task on it blocks in the receive and never yields: the dispatch is
+    /// received, logged, and then silently never executed. Owning a runtime
+    /// removes the dependency on the caller's runtime flavour entirely.
+    plain_dispatch_tx: tokio::sync::mpsc::UnboundedSender<QueuedPlainDispatch>,
     /// The attempt back-index a pushed intervention is routed through (NOI-6). A
     /// pushed [`InterventionRequest`] is delivered to the live session owning its
     /// target `(workflow, activity, attempt)`; a command with no live owner is the
@@ -465,9 +474,9 @@ impl LiminalActivityWorker {
         Ok(Self {
             client,
             registry,
-            // Exactly one, preserving the concurrency plain dispatches already
-            // had when they executed inline on the serve loop.
-            plain_dispatch_slots: Arc::new(tokio::sync::Semaphore::new(1)),
+            // A single draining thread, preserving the concurrency plain
+            // dispatches already had when they executed inline on the serve loop.
+            plain_dispatch_tx: spawn_plain_dispatch_executor(),
             control: ControlRegistry::new(),
             agent_harness: None,
             agent_activity_types: BTreeSet::new(),
@@ -579,15 +588,14 @@ impl LiminalActivityWorker {
                 // switch, so a busy connection is never declared dead.
                 self.silence.record_inbound();
                 let served = self.handle_pushed_frame(frame).await;
-                // Re-arm on COMPLETION too. A plain activity executes INLINE on
-                // this loop, so a handler that outruns the silence window would
-                // otherwise return to a clock that started when its dispatch
-                // arrived and be declared dead on a perfectly healthy link. The
-                // switch measures silence while the worker is LISTENING; time
-                // spent executing is not silence, it is work. Pings that queued
-                // behind the handler are drained on the next iterations, so a
-                // link that genuinely died mid-activity is still declared dead
-                // one window after the handler returns.
+                // Re-arm on COMPLETION too. Handling a frame no longer executes
+                // anything — both dispatch kinds are handed off — but an
+                // intervention or a decode still costs time on this loop, and
+                // the switch measures silence while the worker is LISTENING:
+                // time spent handling is not silence, it is work. Kept rather
+                // than removed, because the cost of an unnecessary re-arm is
+                // nothing and the cost of a missing one is a healthy link
+                // declared dead.
                 self.silence.record_inbound();
                 served?;
                 Ok(true)
@@ -766,86 +774,54 @@ impl LiminalActivityWorker {
             self.spawn_agent_dispatch(correlation_id, request);
             return Ok(());
         }
-        self.spawn_plain_dispatch(correlation_id, request);
+        self.queue_plain_dispatch(correlation_id, request);
         Ok(())
     }
 
-    /// Spawns a plain typed-registry dispatch as a background task so the serve
-    /// loop stays free to answer liveness pings and receive interventions,
-    /// replying its own correlated [`DispatchResponse`] when the handler
-    /// returns.
+    /// Hands a plain typed-registry dispatch to the dedicated execution thread so
+    /// the serve loop stays free to answer liveness pings and receive
+    /// interventions. The dispatch replies with its own correlated
+    /// [`DispatchResponse`] when the handler returns.
     ///
-    /// EXECUTION CONCURRENCY IS UNCHANGED BY THIS. `plain_dispatch_slots` holds
-    /// exactly one permit, so plain activities still execute strictly one at a
-    /// time, precisely as they did when they ran inline. That is deliberate and
-    /// it is not a limit invented here — it is the limit that already existed,
-    /// made explicit and moved off the serve loop. Raising it is a real
-    /// decision with real consequences (a gate worker running N cargo builds at
-    /// once is how a workspace reached 37 GiB in 17 minutes on 2026-07-31), so
-    /// it belongs in worker configuration and to whoever owns that call, not in
-    /// a bug fix.
+    /// EXECUTION CONCURRENCY IS UNCHANGED BY THIS. One thread drains the queue
+    /// serially, so plain activities still execute strictly one at a time,
+    /// precisely as they did when they ran inline. That is deliberate and it is
+    /// not a limit invented here — it is the limit that already existed, made
+    /// explicit and moved off the serve loop. Raising it is a real decision with
+    /// real consequences (a gate worker running N cargo builds at once is how a
+    /// workspace reached 37 GiB in 17 minutes on 2026-07-31), so it belongs in
+    /// worker configuration and to whoever owns that call, not in a bug fix.
     ///
-    /// The permit is acquired INSIDE the task, never on the serve loop, so a
-    /// busy worker still receives and answers pings while its queued dispatch
-    /// waits its turn. That is the whole point: the server learns "busy", not
-    /// "dead".
-    fn spawn_plain_dispatch(&self, correlation_id: u64, request: DispatchRequest) {
-        let slots = self.plain_dispatch_slots.clone();
+    /// Queueing never blocks the serve loop, so a busy worker still receives and
+    /// answers pings while its queued dispatch waits its turn. That is the whole
+    /// point: the server learns "busy", not "dead".
+    fn queue_plain_dispatch(&self, correlation_id: u64, request: DispatchRequest) {
         // The reply rides this connection's `PushWriter`, exactly as the agent
         // path's does — `PushClient` itself is not clonable and does not need
-        // to be.
-        let context = self.plain_dispatch_context();
-        let writer = context.writer.clone();
-        tokio::spawn(async move {
-            // A closed semaphore means the worker is shutting down; there is no
-            // reply to send and saying so is more honest than a silent return.
-            let Ok(_permit) = slots.acquire().await else {
-                tracing::warn!(
-                    correlation_id,
-                    "plain dispatch: worker is shutting down; the dispatch was not executed and \
-                     the server's held wait will be resolved by the outbox re-drive"
-                );
-                return;
-            };
-            let response = match context.execute(&request).await {
-                Ok(response) => response,
-                Err(error) => {
-                    // The serve loop no longer carries this error, so it must be
-                    // reported here or it is swallowed entirely.
-                    tracing::warn!(
-                        %error,
-                        activity_type = %request.activity_type,
-                        workflow_id = %request.workflow_id,
-                        ordinal = request.ordinal,
-                        "plain dispatch: execution failed before a response could be formed; no \
-                         reply is sent and the server's held wait is resolved by the outbox"
-                    );
-                    return;
-                }
-            };
-            match serde_json::to_vec(&response) {
-                Ok(payload) => {
-                    if let Err(error) = writer.reply(correlation_id, payload) {
-                        tracing::warn!(
-                            %error,
-                            workflow_id = %request.workflow_id,
-                            ordinal = request.ordinal,
-                            "plain dispatch: completed but its reply could not be written; the \
-                             outbox re-drives the completion"
-                        );
-                    }
-                }
-                Err(error) => tracing::warn!(
-                    %error,
-                    workflow_id = %request.workflow_id,
-                    ordinal = request.ordinal,
-                    "plain dispatch: completed but its response could not be encoded"
-                ),
-            }
-        });
+        // to be — so the context is captured per dispatch rather than owned by
+        // the executor, which outlives any one connection.
+        let queued = QueuedPlainDispatch {
+            correlation_id,
+            request,
+            context: self.plain_dispatch_context(),
+        };
+        if let Err(error) = self.plain_dispatch_tx.send(queued) {
+            // The executor thread is gone (its runtime failed to build, or the
+            // worker is being torn down). There is no reply to send and saying
+            // so is more honest than a silent return.
+            let dispatch = &error.0.request;
+            tracing::warn!(
+                correlation_id = error.0.correlation_id,
+                activity_type = %dispatch.activity_type,
+                workflow_id = %dispatch.workflow_id,
+                ordinal = dispatch.ordinal,
+                "plain dispatch: the execution thread is gone; the dispatch was not executed and \
+                 the server's held wait will be resolved by the outbox re-drive"
+            );
+        }
     }
 
-    /// Arms this connection's dead-man switch with the window the server just
+    /// Arms this connection's dead-man switch with the window the server just    /// Arms this connection's dead-man switch with the window the server just
     /// declared and answers the ping on the same connection.
     ///
     /// The answer is what proves the worker→server leg to the SERVER: its
@@ -959,6 +935,109 @@ impl LiminalActivityWorker {
         }
     }
 
+}
+
+/// One plain typed-registry dispatch handed from a serve loop to the dedicated
+/// execution thread, carrying the connection context it must reply on.
+struct QueuedPlainDispatch {
+    correlation_id: u64,
+    request: DispatchRequest,
+    context: PlainDispatchContext,
+}
+
+/// Starts the ONE thread that executes this worker's plain typed-registry
+/// dispatches, and returns the queue the serve loop hands them to.
+///
+/// The thread owns its own current-thread runtime. That is what makes the
+/// execution independent of whichever runtime the caller drives the serve loop
+/// on: `serve_with_redial` — the entry point every real worker uses — drives it
+/// with `block_on` on a current-thread runtime whose only task blocks inside
+/// `PushClient::recv_timeout` and therefore never yields, so a `tokio::spawn`ed
+/// dispatch there would be received, logged, and then never polled. Owning a
+/// runtime is also exactly what the agent path already does, and for the same
+/// class of reason.
+///
+/// The loop is SERIAL by construction: one dispatch is driven to completion
+/// before the next is taken off the queue. That preserves the concurrency plain
+/// dispatches had when they executed inline on the serve loop — this is not a
+/// new cap, it is the old one, kept.
+///
+/// The thread ends when every sender is dropped, i.e. when the worker is
+/// dropped, after the dispatch in flight finishes.
+fn spawn_plain_dispatch_executor() -> tokio::sync::mpsc::UnboundedSender<QueuedPlainDispatch> {
+    let (sender, mut queue) = tokio::sync::mpsc::unbounded_channel::<QueuedPlainDispatch>();
+    std::thread::spawn(move || {
+        let runtime = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                // Every dispatch queued to this worker will now be refused at
+                // the send site with a named warning rather than vanishing.
+                tracing::error!(
+                    %error,
+                    "plain dispatch: failed to build the execution runtime; this worker cannot \
+                     execute plain activities and every dispatch it is sent will be re-driven by \
+                     the server's outbox"
+                );
+                return;
+            }
+        };
+        runtime.block_on(async move {
+            while let Some(queued) = queue.recv().await {
+                execute_queued_plain_dispatch(queued).await;
+            }
+        });
+    });
+    sender
+}
+
+/// Executes one queued plain dispatch and writes its correlated reply.
+///
+/// Every failure below is terminal for THIS attempt only: no reply is written,
+/// so the server's held wait is resolved by the outbox re-drive rather than by a
+/// malformed answer. Each is logged, because the serve loop no longer carries
+/// these errors and an unlogged one would be swallowed entirely.
+async fn execute_queued_plain_dispatch(queued: QueuedPlainDispatch) {
+    let QueuedPlainDispatch {
+        correlation_id,
+        request,
+        context,
+    } = queued;
+    let response = match context.execute(&request).await {
+        Ok(response) => response,
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                activity_type = %request.activity_type,
+                workflow_id = %request.workflow_id,
+                ordinal = request.ordinal,
+                "plain dispatch: execution failed before a response could be formed; no reply is \
+                 sent and the server's held wait is resolved by the outbox"
+            );
+            return;
+        }
+    };
+    match serde_json::to_vec(&response) {
+        Ok(payload) => {
+            if let Err(error) = context.writer.reply(correlation_id, payload) {
+                tracing::warn!(
+                    %error,
+                    workflow_id = %request.workflow_id,
+                    ordinal = request.ordinal,
+                    "plain dispatch: completed but its reply could not be written; the outbox \
+                     re-drives the completion"
+                );
+            }
+        }
+        Err(error) => tracing::warn!(
+            %error,
+            workflow_id = %request.workflow_id,
+            ordinal = request.ordinal,
+            "plain dispatch: completed but its response could not be encoded"
+        ),
+    }
 }
 
 /// The cheap-clone slice of a [`LiminalActivityWorker`] needed to execute one
