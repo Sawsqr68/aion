@@ -178,30 +178,6 @@ impl CollectHarness {
             .collect())
     }
 
-    /// Every recorded `ActivityFailed` as `(ordinal, kind, message)`, in
-    /// history order — the durable terminal an operator actually reads, and
-    /// the bytes replay re-derives the fan-out failure from.
-    pub(super) async fn recorded_activity_failures(
-        &self,
-    ) -> Result<Vec<(u64, ActivityErrorKind, String)>, Box<dyn std::error::Error>> {
-        Ok(self
-            .store
-            .read_history(&self.workflow_id)
-            .await?
-            .iter()
-            .filter_map(|event| match event {
-                Event::ActivityFailed {
-                    activity_id, error, ..
-                } => Some((
-                    activity_id.sequence_position(),
-                    error.kind.clone(),
-                    error.message.clone(),
-                )),
-                _ => None,
-            })
-            .collect())
-    }
-
     pub(super) async fn cancelled_ordinals(&self) -> Result<Vec<u64>, Box<dyn std::error::Error>> {
         Ok(self
             .store

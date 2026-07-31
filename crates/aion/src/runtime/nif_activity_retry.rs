@@ -97,84 +97,6 @@ pub(super) fn is_retryable_reason(reason: &str) -> bool {
     reason.starts_with(RETRYABLE_REASON_PREFIX)
 }
 
-/// Reason prefix classifying a failure as NON-retryable, matching the
-/// vocabulary `aion-server`'s dispatch taxonomy synthesizes
-/// (`worker::queue_service::taxonomy`'s `TERMINAL_PREFIX`) and the one
-/// [`is_retryable_reason`]'s own doc names first among the non-retryable set.
-/// Re-used rather than invented, so the terminal a retry exhaustion writes is
-/// spelled the same as every other terminal in the system.
-const TERMINAL_REASON_PREFIX: &str = "terminal:";
-
-/// What the rewritten reason says happened, between the classification prefix
-/// and the inherited diagnostic tail.
-///
-/// It states ONLY what the call site can actually know — a fact about the
-/// record being written, not about the history behind it. A terminal record is
-/// written precisely because no further attempt will be made, and the reason it
-/// inherited was retryable-classed. Both halves are true on every path that
-/// reaches here.
-///
-/// It deliberately does NOT say "retry budget exhausted", which was this
-/// constant's first wording and was WRONG. A retryable-classed reason reaches a
-/// terminal record from TWO producers: the retry loop giving up
-/// ([`super::nif_activity_retry_dispatch`]), where a budget genuinely was spent,
-/// and the in-VM completion watcher ([`super::nif_activity_in_vm`]), which runs
-/// no retry loop at all — an in-VM activity returning a typed `error.Retryable`
-/// is delivered straight through, never retried. Naming a mechanism that never
-/// ran would have traded #90's false claim for a new one of the same kind.
-///
-/// It also deliberately does NOT restate the attempt count. The recorded
-/// `ActivityFailed` already carries `attempt` as a field, and a second copy in
-/// the message is exactly the drifting duplicate this fix exists to remove.
-const NO_FURTHER_ATTEMPTS_HEAD: &str = "no further attempts; last attempt was retryable-classed: ";
-
-/// Reclassify the reason an activity records on its **terminal**
-/// `ActivityFailed` (#90).
-///
-/// # The defect
-///
-/// The terminal record inherits its message verbatim from the last attempt, and
-/// that attempt was classified `retryable:` — which was true of the attempt and
-/// is false of the event now being written. The result is
-/// `{"kind":"Terminal","message":"retryable:..."}`: the `kind` field and the
-/// message prefix are two copies of one classification, disagreeing, in the one
-/// place that can never be rewritten. An operator reading the terminal failure
-/// of a dead workflow was told, in the durable bytes, that it was retryable.
-///
-/// # Why rewrite rather than strip
-///
-/// The prefix is not decoration — it is the wire vocabulary the retry executor
-/// reads (see [`is_retryable_reason`]) and the server's dispatch taxonomy
-/// writes. Stripping it would leave an unclassified reason where every sibling
-/// terminal carries a class. So the classification is *corrected*, not deleted.
-///
-/// # Where it is applied
-///
-/// At the two CONSUMERS of a retained activity error — the await path
-/// ([`super::nif_activity_await`]) and the fan-out settlement path
-/// ([`super::nif_collect_settlement`]) — and deliberately not at any producer.
-/// The consumer is the only place that knows a `Terminal` record is the thing
-/// being written, which is exactly the invariant being enforced; the producers
-/// are three separate paths (retry loop, in-VM watcher, durable outbox) and
-/// fixing any one of them would leave the others free to reintroduce it. See
-/// [`NO_FURTHER_ATTEMPTS_HEAD`] for what the two producers of a
-/// retryable-classed reason do and do not have in common.
-///
-/// # What is preserved
-///
-/// Everything. The last attempt's diagnostic tail is kept verbatim after the
-/// head, so nothing an operator needs for the actual diagnosis is lost — only
-/// the false claim about retryability is. A reason that is not `retryable:`-
-/// classed is returned unchanged: a `timeout:`, `terminal:` or unprefixed
-/// reason is already honest about a terminal record, and re-prefixing it would
-/// trade one false statement for another.
-pub(super) fn reclassified_terminal_reason(reason: &str) -> String {
-    match reason.strip_prefix(RETRYABLE_REASON_PREFIX) {
-        Some(tail) => format!("{TERMINAL_REASON_PREFIX}{NO_FURTHER_ATTEMPTS_HEAD}{tail}"),
-        None => reason.to_owned(),
-    }
-}
-
 /// The SDK-declared retry policy for one activity, decoded from the dispatch
 /// `config` JSON.
 ///
@@ -430,7 +352,7 @@ mod tests {
     use super::{
         Backoff, PARKED_ACTIVITY_REASON, RetryPolicy, activity_settled, is_parked_reason,
         is_retryable_reason, latest_recorded_attempt, next_delivery_attempt,
-        reclassified_terminal_reason, retry_policy_from_config,
+        retry_policy_from_config,
     };
 
     fn config_with(retry: &str) -> String {
@@ -539,106 +461,6 @@ mod tests {
         assert!(!is_retryable_reason("timeout:deadline expired"));
         assert!(!is_retryable_reason("cancelled:operator"));
         assert!(!is_retryable_reason("unprefixed engine failure"));
-    }
-
-    /// 🔴 #90, THE DEFECT ITSELF. The observed bytes were
-    /// `{"kind":"Terminal","message":"retryable:harness reported failure: ..."}`
-    /// in run `f9b062c2-d260-43f9-8374-d3210330f567` seq 20. A terminal record
-    /// must never open with the retryable class.
-    ///
-    /// Asserted as an INVARIANT (`!is_retryable_reason`) rather than against
-    /// the exact output string, so the pin still holds if the wording is
-    /// reworded later — the claim is about the classification, not the prose.
-    #[test]
-    fn a_terminal_record_never_claims_the_failure_was_retryable() {
-        let observed = "retryable:harness reported failure: run/execute failed (code -32603)";
-        let rewritten = reclassified_terminal_reason(observed);
-        assert!(
-            !is_retryable_reason(&rewritten),
-            "a Terminal record still classified as retryable: {rewritten}"
-        );
-        assert!(
-            rewritten.starts_with("terminal:"),
-            "a terminal record must carry the terminal class, not merely lose the wrong one: \
-             {rewritten}"
-        );
-    }
-
-    /// No diagnostic detail may be traded for the correction. The whole reason
-    /// the message exists is the tail; a fix that sanitised it into
-    /// "retry budget exhausted" would be honest and useless.
-    #[test]
-    fn the_last_attempts_diagnostic_survives_the_reclassification() {
-        let tail = "harness reported failure: open_session failed: storage error";
-        let rewritten = reclassified_terminal_reason(&format!("retryable:{tail}"));
-        assert!(
-            rewritten.ends_with(tail),
-            "the inherited diagnostic was altered or dropped: {rewritten}"
-        );
-    }
-
-    /// 🔴 NON-VACUITY, AND THE MIRROR-IMAGE HONESTY CHECK. A reason that is not
-    /// retryable-classed is ALREADY honest on a terminal record, so rewriting
-    /// it would trade one false statement for another — and a rewrite that
-    /// fired unconditionally would pass the test above while corrupting every
-    /// other class. `timeout:deadline expired` in particular is a real
-    /// terminal reason (`nif_timeout::SCOPE_EXPIRED_MESSAGE`) that reaches the
-    /// sibling call site of the one this fix changes.
-    #[test]
-    fn a_reason_that_was_never_retryable_classed_is_left_exactly_alone() {
-        for untouched in [
-            "timeout:deadline expired",
-            "terminal:declared command failed to parse at dispatch",
-            "lost:worker died before reporting",
-            PARKED_ACTIVITY_REASON,
-            "unprefixed engine failure",
-            "",
-        ] {
-            assert_eq!(
-                reclassified_terminal_reason(untouched),
-                untouched,
-                "a non-retryable-classed reason must pass through byte-identical"
-            );
-        }
-    }
-
-    /// The prefix must not be re-applied to something that merely CONTAINS the
-    /// word: only a leading classification counts, exactly as
-    /// [`is_retryable_reason`] decides it.
-    #[test]
-    fn only_a_leading_classification_is_rewritten() {
-        let embedded = "terminal:the worker said the error was retryable:maybe";
-        assert_eq!(reclassified_terminal_reason(embedded), embedded);
-    }
-
-    /// 🔴 REPLAY SAFETY. The rewritten reason is what gets RECORDED, and a
-    /// recorded reason is read back — by `recorded_step` on the await path and
-    /// by `recorded_terminal` on the fan-out path. If a second pass over an
-    /// already-rewritten reason changed it again, the value a workflow saw live
-    /// and the value it sees on replay would differ, which is a determinism
-    /// break rather than a cosmetic one.
-    ///
-    /// Asserted as a fixed point over every class, not just the interesting
-    /// one: the property must hold for reasons this function rewrites AND for
-    /// the ones it passes through.
-    #[test]
-    fn reclassification_is_a_fixed_point_so_replay_reads_what_the_run_wrote() {
-        for reason in [
-            "retryable:harness reported failure: storage error",
-            "retryable:",
-            "timeout:deadline expired",
-            "terminal:already terminal",
-            PARKED_ACTIVITY_REASON,
-            "unprefixed engine failure",
-            "",
-        ] {
-            let once = reclassified_terminal_reason(reason);
-            assert_eq!(
-                reclassified_terminal_reason(&once),
-                once,
-                "re-reading a recorded reason changed it: {reason}"
-            );
-        }
     }
 
     /// The parked sentinel (#207) is its own class: never retryable-class (it
