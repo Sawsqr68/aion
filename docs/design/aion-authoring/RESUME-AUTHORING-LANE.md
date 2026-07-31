@@ -234,3 +234,43 @@ nextest is running.** Check first. Doc work is always safe.
   before bind, own store under an owner-only home.
 - **Awaiting Tom (HOLD OPEN, #88):** whether Gleam is a supported authoring
   surface or AWL is the only one.
+
+## 🔴 STATE AT COMPACTION — 2026-07-31 ~09:05Z
+
+`origin/main` = `a6fa60a7`, tree clean, everything pushed. **The queue is
+CLOSED** (items 0, 1, 2, 4a, 4b) and Artemis Peach has been signalled.
+
+**Commits this stretch:** `ec56f1b4` (item 1 fix) · `013ae8e5` (#97 evidence) ·
+`d4bec38c` (resume) · `8554b30f` (#83) · `08bf99d1` (resume) · `a6fa60a7`
+(#113 design).
+
+**IN FLIGHT ON THE BOX AND NOT MINE:** Artemis's GO-6 full-workspace nextest
+(`nextest=2` measured at 09:02Z, free 62.9 GiB and falling). **Do not start a
+heavy compile until it is done** — measure with `pgrep -x cargo/rustc` plus
+`pgrep -f nextest` and a `pgrep -x zsh` positive control. Also still live and
+untouchable: **pid 99844**, Tom's server, unlinked image, :8080 + :50051.
+
+**NEXT ACTION, ruled by Cally: implement #113.** The full design — mechanism,
+fix, tests, and the warning against the tempting wrong fix — is committed at
+`docs/design/aion-authoring/AION-HOME-ISOLATION-INVERSION.md`. Nothing is
+half-edited; the working tree is clean, so pick it up from the design.
+
+The four files it touches: `crates/aion-server/src/config/home.rs`
+(`aion_home()` discards the provenance — return `HomeSource::Explicit/Derived`),
+`crates/aion-server/src/config/resolution.rs` (`fill_home_defaults` +
+`select_default`), and the two call sites at `config/load.rs:102` and `:257`
+(plus `:137`, `:279`, and the test at `:1738`).
+
+**OPEN QUESTION FROM WAFFLES, answered honestly and awaiting his reply:** he
+asked where "the wake-prompt shakedown" sits in my order, because his
+`5c433ade` closure gates Apollo's two haematite lanes and Artemis's EXIT-001
+leg on my green. **I have NO record of that item at this seat** — not in this
+note, not on the task board, not in anything I carry, and a repo search found
+only unrelated uses of the word. I told him so rather than inventing a
+position. If he names it, it slots after #113 unless he says otherwise.
+
+**Still owed:** #113 (next) · Cally's two `enforce_contract` findings (A: no
+queryable trace of the degraded state, deletion-class remedy; B: pin the
+report, not just the load; plus the middle-door design sentence) ·
+`cargo test -p aion-server --test ops_console_packaging` on this tree before
+release · #115 (byte-blind freshness gate) · #114 (`server --endpoint`).
