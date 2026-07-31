@@ -853,7 +853,15 @@
     "named": false
   },
   {
+    "type": "advisory",
+    "named": false
+  },
+  {
     "type": "after",
+    "named": false
+  },
+  {
+    "type": "agent",
     "named": false
   },
   {

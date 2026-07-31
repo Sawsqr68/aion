@@ -1,6 +1,35 @@
 /// <reference types="tree-sitter-cli/dsl" />
 // @ts-check
 
+// Every AWL word that should render as syntax, and the ONLY definition of that
+// set outside the compiler.
+//
+// This is a HIGHLIGHTING grammar, not a parsing one: the statement rules below
+// match a declaration head and let the rest of the line fall into a generic
+// token stream, where `$.keyword` is what gives a word its colour. So this
+// array is a colouring decision, not a claim about what the language reserves.
+//
+// It must cover every variant of `Keyword::ALL` in
+// `crates/aion-awl/src/lexer/tokens.rs`, and `grammar_vocabulary_tests.rs` in
+// that crate reads this array through `include_str!` and fails when it does
+// not. A reserved word missing from here renders in the operator's editor as
+// an ordinary name, which is the compiler enforcing something the editor shows
+// no sign of.
+//
+// AWL's POSITIONAL WORDS are deliberately handled unevenly, and the unevenness
+// is the correct answer rather than an oversight. `in` is listed; `send`,
+// `to`, `query`, `answer` and `run` are NOT. None of the six is reserved — the
+// parser accepts each where it expects it and they stay legal as ordinary
+// names everywhere else — and this grammar is too coarse to tell the two uses
+// apart, so listing one colours it EVERYWHERE.
+//
+// For `in` that is free: it opens `fork item in items`, and nobody names a
+// binding `in`. For the other five it is not. `wait approval timeout 30s ->
+// answer` binds a result called `answer`, and the corpus proves it: adding
+// those five to this list turns three passing fixtures red, each because an
+// ordinary binding suddenly lexes as syntax. Leaving a statement opener plain
+// is a cosmetic loss; tinting an author's own binding is the editor lying
+// about their code.
 const keywords = [
   'workflow', 'input', 'signal', 'outcome', 'type', 'schema', 'worker',
   'action', 'child', 'step', 'subflow', 'after', 'fork', 'join', 'loop',
@@ -9,6 +38,8 @@ const keywords = [
   'when', 'otherwise', 'route', 'success', 'filter', 'map', 'sort', 'count',
   'any', 'all', 'is', 'empty', 'present', 'absent', 'not', 'and', 'or', 'in',
   'const', 'json', 'of', 'distribute', 'sequence', 'collect',
+  // Reserved words the grammar had fallen behind on.
+  'agent', 'advisory',
 ];
 
 module.exports = grammar({

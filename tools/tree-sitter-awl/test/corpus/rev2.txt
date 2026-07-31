@@ -463,3 +463,56 @@ score >= 1.5
   (comparison_operator)
   (float)
   (newline))
+
+==================
+Action markers: agent and advisory
+==================
+
+worker jobs
+  action ask(prompt: String) -> String
+    agent, timeout 10m
+  action announce(dir: String) -> Nil
+    advisory, node shell
+
+---
+
+(source_file
+  (newline)
+  (worker_declaration
+    (keyword)
+    (identifier))
+  (newline)
+  (action_declaration
+    (keyword)
+    (identifier))
+  (punctuation)
+  (identifier)
+  (punctuation)
+  (builtin_type)
+  (punctuation)
+  (bind_operator)
+  (builtin_type)
+  (newline)
+  (keyword)
+  (punctuation)
+  (configuration
+    (keyword))
+  (duration)
+  (newline)
+  (action_declaration
+    (keyword)
+    (identifier))
+  (punctuation)
+  (identifier)
+  (punctuation)
+  (builtin_type)
+  (punctuation)
+  (bind_operator)
+  (builtin_type)
+  (newline)
+  (keyword)
+  (punctuation)
+  (configuration
+    (keyword))
+  (identifier)
+  (newline))

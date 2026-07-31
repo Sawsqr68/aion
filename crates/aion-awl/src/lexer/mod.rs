@@ -4,6 +4,8 @@ mod scanner;
 mod tokens;
 
 #[cfg(test)]
+mod grammar_vocabulary_tests;
+#[cfg(test)]
 mod tokens_tests;
 
 pub use error::LexError;

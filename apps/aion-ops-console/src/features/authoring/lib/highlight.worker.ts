@@ -2,10 +2,17 @@ import { Language, Parser, Query } from 'web-tree-sitter';
 import awlWasmUrl from '../assets/awl.wasm?url';
 import highlightQuery from '../assets/highlights.scm?raw';
 
-// Vendored from this repo's tools/tree-sitter-awl (B1+B2 flow-vocab grammar,
-// commit 20f4309b) using tree-sitter-cli 0.26.10. The wasm and highlights.scm
-// in ../assets must always be replaced together. Mirror push to
-// github.com/tomWhiting/tree-sitter-awl is owed after these land.
+// Vendored from this repo's tools/tree-sitter-awl using tree-sitter-cli
+// 0.26.10. The wasm and highlights.scm in ../assets must always be replaced
+// together. Mirror push to github.com/tomWhiting/tree-sitter-awl is owed after
+// these land — editors/zed-awl pins that mirror by rev, so a grammar change
+// here does not reach Zed until it is pushed there.
+//
+// The grammar's keyword list is gated against the compiler's own: see
+// crates/aion-awl/src/lexer/grammar_vocabulary_tests.rs. That gate reads
+// grammar.js, NOT this wasm, so it catches a word missing from the grammar but
+// cannot tell that this artefact was rebuilt afterwards. Rebuild and re-vendor
+// in the same motion as any grammar.js edit.
 let parser: Parser | undefined;
 let query: Query | undefined;
 
