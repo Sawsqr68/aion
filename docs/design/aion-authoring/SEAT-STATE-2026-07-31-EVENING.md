@@ -120,18 +120,40 @@ logs, `started` and `results` DISAGREE on a fully green run:
 .evidence/118/shakedown-allfeatures    started=240 results=243
 ```
 
-Three extra `test result:` lines with no target-start line, on runs that passed.
-Cause not yet confirmed — the leading hypothesis is **child-process output**: a
-test that itself spawns `cargo test` (cf. #74's child-process pin) prints the
-child's `test result:` into the parent log. The three at lines 238/260/380 of
-`battery-final.log` all read `1 passed; 693 filtered out`, which is the shape of
-a filtered child run, and they appear INSIDE the `aion_server` lib target's
-output rather than after it.
+**CAUSE CONFIRMED at the bytes**, not inferred. `battery-final.log:225-238`:
 
-⇒ **A naive `started == results` gate would fire on every run.** Confirm the
-cause before building the control; the discrepancy is a constant offset only
-until it isn't. This is the third time tonight that measuring against real
-recorded output caught a control that reasoning alone would have shipped broken.
+```
+test config::load::home_tests::aion_home_env_probe_child ... ok
+
+running 1 test
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 693 filtered out;
+```
+
+A test that **re-executes its own binary as a child** with a filter — the
+`AION_HOME` env probe from #113 — and the child's `running 1 test` /
+`test result:` land in the PARENT's stdout, mid-target. Three such probes, three
+extra lines. Same family as #74's child-process pin.
+
+⇒ **A naive `started == results` gate would fire on every green run.**
+
+### The correct invariant, derived from that measurement
+
+Don't count. **Assert the pairing**: every `Running` / `Doc-tests` line must be
+followed by at least one `test result:` line before the next target line (or
+EOF). Truncation shows up as a target with no result after it. Child
+re-executions add EXTRA results inside a target's own block, which this
+invariant tolerates by construction.
+
+The counting version is wrong in both directions: it false-positives on child
+output, and — worse — a truncation that happens to coincide with N child extras
+would net to zero and read as complete.
+
+⚠️ Note the filter trap: a legitimately filtered top-level run also reports
+`filtered out > 0`, so "has filtered out" cannot be used to identify child
+lines. The `posture:*` gates filter deliberately.
+
+This is the **fourth** time tonight that measuring against real recorded output
+caught a control that reasoning alone would have shipped broken.
 
 ## Block discipline (Athena's seat, and it is working)
 
