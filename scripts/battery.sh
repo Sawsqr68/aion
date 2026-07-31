@@ -136,12 +136,78 @@ gate "rust:clippy" cargo clippy --workspace --all-targets -- -D warnings
 #
 # A count is only a coverage claim if the run reached the end. Read the target
 # list, not the tally.
-gate "rust:test" cargo test --workspace --no-fail-fast
+# Runs a cargo test invocation and asserts the run REACHED THE END (#120).
+#
+# A test run's exit code and its tally are two different claims, and only the
+# first is about completeness. `--no-fail-fast` continues past failing tests, but
+# a target that dies — or a run cut short — simply stops producing output, and
+# the surviving tally still reads `0 failed`. That is how "688 passed, 1 failed"
+# was taken as one known exception on an otherwise green suite when it was in
+# fact a truncated run reported as a complete one, hiding a P0 (see the comment
+# above `rust:test`).
+#
+# 🔴 THE OBVIOUS CONTROL — comparing the COUNT of target-start lines against the
+# count of `test result:` lines — DOES NOT WORK, and this was measured rather
+# than assumed. On fully green runs the two disagree:
+#
+#     .evidence/118/battery-final.log        45 targets, 48 results
+#     .evidence/118/shakedown-allfeatures    240 targets, 243 results
+#
+# Because a test that RE-EXECUTES ITS OWN BINARY as a child prints the child's
+# `running N tests` / `test result:` into the parent's stdout, mid-target — e.g.
+# `config::load::home_tests::aion_home_env_probe_child` from the AION_HOME work.
+# A counting gate would fire on every green run; worse, a real truncation
+# coinciding with N child extras would net to zero and read as complete.
+#
+# So assert the PAIRING, not the count: every target-start line must be followed
+# by at least one `test result:` before the next target line. Child extras land
+# inside a target's own block and are tolerated by construction; a truncation
+# leaves a started target with nothing after it.
+#
+# Validated both ways before being wired in: `unpaired=0` on three real green
+# logs (including both counting-mismatch cases above) and `unpaired=1` on the
+# same log with one result line removed.
+#
+# Note the filter trap: a legitimately filtered top-level run also reports
+# `filtered out > 0`, so that field cannot be used to identify child lines — the
+# `posture:*` gates filter deliberately.
+paired_test() {
+  local log
+  log=$(mktemp) || return 1
+  "$@" 2>&1 | tee "$log"
+  local code=${PIPESTATUS[0]}
+
+  local counts targets unpaired
+  counts=$(awk '
+    /^[[:space:]]+Running |^[[:space:]]+Doc-tests / { if (started) unpaired++; started = 1; targets++ }
+    /^test result:/ { started = 0 }
+    END { if (started) unpaired++; print targets + 0, unpaired + 0 }
+  ' "$log")
+  targets=${counts%% *}
+  unpaired=${counts##* }
+  rm -f "$log"
+
+  if [ "$targets" -eq 0 ]; then
+    printf 'COVERAGE CONTROL FAILED: the run started ZERO test targets.\n'
+    printf 'An exit code from a run that tested nothing is not a result about this code.\n'
+    return 1
+  fi
+  if [ "$unpaired" -ne 0 ]; then
+    printf 'COVERAGE CONTROL FAILED: %d of %d target(s) started and never reported a result.\n' \
+      "$unpaired" "$targets"
+    printf 'The run was TRUNCATED. Its tally is not a coverage claim, whatever it says.\n'
+    return 1
+  fi
+  printf 'coverage control ok: %d targets started, %d reached a result\n' "$targets" "$targets"
+  return "$code"
+}
+
+gate "rust:test" paired_test cargo test --workspace --no-fail-fast
 
 # The all-features resolution differs from the default one — `--workspace`
 # resolves some features ON that `-p <crate>` leaves off — so this is a
 # genuinely different run, not a slower copy of the one above.
-gate "rust:test-all-features" cargo test --workspace --all-features --no-fail-fast
+gate "rust:test-all-features" paired_test cargo test --workspace --all-features --no-fail-fast
 
 # --- Build-posture controls (#119) ---------------------------------------------
 #
