@@ -106,6 +106,11 @@ step settle
 ";
 
 const SPAWN_REFUSAL_MODULE: &str = "parity_spawn_refusal";
+/// The child type `SPAWN_REFUSAL` spawns and the archive deliberately does not
+/// carry. Named so the refusal assertion can require the recorded message to
+/// identify WHICH type was refused, and guarded against drifting away from the
+/// fixture source by `the_spawn_refusal_fixture_spawns_the_named_child`.
+const SPAWN_REFUSAL_CHILD_TYPE: &str = "audit_trail";
 const SPAWN_REFUSAL: &str = r"//! In-child spawn refusal: the spawned type is not in the archive.
 workflow parity_spawn_refusal
   input items: [String]
@@ -386,10 +391,47 @@ async fn failure_details_converge_between_direct_and_gleam_paths() -> TestResult
     assert_eq!(direct.parent_details, reference.parent_details);
     assert_eq!(direct.child_details, reference.child_details);
     assert_eq!(
-        direct.parent_details,
-        json!({ "tag": "AwlChildFailed", "message": "detached spawn failed" }),
-        "spawn refusal must surface the typed spawn failure"
+        direct.parent_details.get("tag").and_then(Value::as_str),
+        Some("AwlChildFailed"),
+        "spawn refusal must surface the typed spawn failure: {:?}",
+        direct.parent_details
     );
+    let message = direct
+        .parent_details
+        .get("message")
+        .and_then(Value::as_str)
+        .ok_or("spawn refusal carries no message")?;
+    // Asserts the PROPERTY — the refusal is typed and names which type was
+    // refused — rather than one exact string. A hardcoded literal here pinned
+    // the opaque `detached spawn failed` and went red the moment the reason
+    // started surviving into the record, even though the richer message is the
+    // improvement the assertion's own wording demands.
+    for expected in [
+        "detached spawn failed",
+        "child_workflow_type_not_loaded",
+        SPAWN_REFUSAL_CHILD_TYPE,
+    ] {
+        assert!(
+            message.contains(expected),
+            "spawn refusal message must name `{expected}`, so an operator learns WHICH type was \
+             refused and why: {message}"
+        );
+    }
     assert_eq!(direct.parent_details, direct.child_details);
     Ok(())
+}
+
+/// Keeps `SPAWN_REFUSAL_CHILD_TYPE` honest against the fixture it describes.
+///
+/// The refusal assertion requires the recorded message to name the refused
+/// type. If the fixture were reworded to spawn something else and the constant
+/// were not, that assertion would silently start checking for a type nothing
+/// spawns — and pass or fail for the wrong reason.
+#[test]
+fn the_spawn_refusal_fixture_spawns_the_named_child() {
+    assert!(
+        SPAWN_REFUSAL.contains(SPAWN_REFUSAL_CHILD_TYPE),
+        "the spawn-refusal fixture no longer mentions `{SPAWN_REFUSAL_CHILD_TYPE}`; the constant \
+         and the AWL source have drifted apart"
+    );
 }
