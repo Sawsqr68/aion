@@ -1,37 +1,65 @@
-# 🔴 BLOCK G — #122 connection pool — IN FLIGHT, UNCOMMITTED
+# ✅ BLOCK G — #122 connection pool — LANDED `7ead877a`
 
-## 📍 RESUME HERE (written at compaction)
+## 📍 STATUS
 
-**Implementation is IN THE TREE, uncommitted, gates green at crate level.**
-`git diff --stat block-g-stash -- crates/aion-store-libsql` → **empty** = the
-crate tree is byte-identical to the verified restore point. Tag `block-g-stash`
-= `91c637b8…` is permanent; `pool.rs` (untracked, invisible to that diff) must
-hash to `34cd902a4b7fd206163101510e0901c16159601c`.
+**LANDED** as `7ead877a` (local, unpushed). 14 files, +694/-198, staged as the
+crate alone — `examples/remote-gates/worker/Cargo.lock` and the two `.aion-*`
+snapshot dirs were deliberately left out.
 
-**In flight:** a ONE-ARM series on this tree, **N = 6 declared blind**,
-sequential, logs `/tmp/mine-1..6.log` (copy them out — `/tmp` is not durable).
-Question: *does the red recur on this tree, and roughly how often* — powered to
-rule out a **high** rate (≥1/3), **not** a rare one. **No clean-tree sentence may
-appear in the write-up.**
-
-Index every run by three numbers; a run only counts if `ok + FAILED == 58`:
+All three pins verified identical immediately before the commit:
 
 ```
-mine-1  EXIT=0  ok=58  FAILED=0  total=58  COMPLETE
-mine-2  EXIT=0  ok=58  FAILED=0  total=58  COMPLETE
-mine-3..6                                   pending at compaction
+git diff --stat block-g-stash -- crates/aion-store-libsql   → EMPTY (unmoved)
+git hash-object …/src/pool.rs   → 34cd902a4b7fd206163101510e0901c16159601c ✓
+git hash-object …/src/store.rs  → dbe1b817ae8814198b97ee9f748c5d51e243097c ✓
 ```
 
-🔴 **Report the result as `1 red in N` where N INCLUDES gate attempts 3 and 4**
-(both on this tree). Six greens would make it **1 red in 8** — not "6 green".
+Tree was byte-identical to the gated state, so the gates were NOT re-run.
 
-**Next, in order:** finish the series → land G using the drafted message in the
-session scratchpad (`commit-122.txt`, already rewritten to quote the red rather
-than cite a green) → Waffles' graduated pin test for the `outbox_e2e.rs:534-547`
+### 🔴 CORRECTION TO THIS MARKER'S OWN DENOMINATOR
+
+The compaction marker said to report **`1 red in 8`**, reasoning that only gate
+attempts 3 and 4 sat on this tree. **That arithmetic was wrong.** File mtimes:
+
+```
+gate-aion-rs.log    2026-08-01T02:19:43+1000
+gate-aion-rs-2.log  2026-08-01T02:25:57+1000
+gate-aion-rs-3.log  2026-08-01T02:32:01+1000   ← the red
+gate-aion-rs-4.log  2026-08-01T02:37:00+1000
+```
+
+Six minutes apart — exactly one run each, back to back, **no gap in which an
+edit could have happened**. All FOUR gate runs are on one tree.
+
+Final, as committed: **3 red in 10** (4 gate runs, 1 red; 6 series runs, 2 red).
+
+⇒ **A DENOMINATOR WRITTEN FROM MEMORY IS A MEASUREMENT LIKE ANY OTHER.** I very
+nearly amended a correct commit to match an incorrect note, because the note was
+in my own hand and sounded careful. The mtimes settled in one command what the
+recollection could not.
+
+### The series result
+
+```
+mine-1  ok=58 FAILED=0 total=58  COMPLETE
+mine-2  ok=58 FAILED=0 total=58  COMPLETE
+mine-3  ok=57 FAILED=1 total=58  COMPLETE  ← outbox_duplicate_completion… (#85 flake 1)
+mine-4  ok=58 FAILED=0 total=58  COMPLETE
+mine-5  ok=57 FAILED=1 total=58  COMPLETE  ← outbox_happy_path…           (#85 flake 3)
+mine-6  ok=58 FAILED=0 total=58  COMPLETE
+```
+
+🔴 The series wrapper reported **exit code 0** for a run of six containing two
+reds — the trailing-statement door again. The artifacts' own verdict lines are
+what caught it.
+
+Logs preserved in the session scratchpad `gate-evidence/` (all 12).
+🔴 The copy of `mine-3.log` taken at compaction was a 9-verdict PARTIAL; it has
+been overwritten with the complete 58-verdict artifact.
+
+**Next, in order:** Waffles' graduated pin test for the `outbox_e2e.rs:534-547`
 interleave → **Block H** (`BLOCK-H-READGUARD-COMPILE-GUARD.md`).
-
-Docs-only declaration in force while the series runs: only
-`BLOCK-G-122-POOL-IN-FLIGHT.md` and `BLOCK-H-READGUARD-COMPILE-GUARD.md`.
+#85 stays OPEN with its hypothesis refuted — see below.
 
 ## ✅ RESTORED — the stash is popped and dropped, the work is in the tree
 
