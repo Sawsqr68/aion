@@ -252,3 +252,120 @@ his. **Certify nothing until Waffles rules.**
 Teardown still owed: orphan sweep, workspace sweep + reading to Athena, fixture
 and Tom's-server verification, and tell Athena when the rig is down so she can
 re-base P (currently VOID — last good value 80 GiB at 10:32:28Z).
+
+---
+
+## 🔴 FINDING A — CORRECTED AND ESCALATED: the liveness probe poisons the connection it monitors
+
+The earlier root-cause entry above is **incomplete, and its emphasis was wrong.**
+The blocked serve loop is real, but it is the *trigger*, not the defect. The
+defect is what the server does about it. Measured at 10:47Z on run
+`dfd2117c`, from `rig-server.log`.
+
+### The two phases, exact
+
+| pings | window | failure reason |
+|---|---|---|
+| 10–41 (**32**) | 10:39:06 → 10:42:59 | `liveness answer never arrived: no correlated push reply arrived within the timeout` |
+| 42–82 (41+, ongoing) | 10:42:59 → now | `liveness ping push failed: … max_pending_pushes_per_connection limit of 32 is reached` |
+
+**Exactly 32 pings time out, and the 33rd attempt is refused by a cap of 32.**
+The transition is immediate and arithmetically exact. Zero pings have ever been
+answered since the first dispatch; zero recoveries.
+
+### The mechanism, in liminal's own words
+
+`liminal-server-0.5.0` offers two server-push APIs. From `push_to_connection`:
+
+> this no-deadline push reserves a slot that is reclaimed only by (a) the reply
+> being consumed or (b) the connection closing. **An elapsed `receive` poll is a
+> benign re-arm, never a failure and never a cancellation.** The §5
+> `max_pending_pushes_per_connection` cap bounds abandonment; **use
+> `push_to_connection_with_deadline` when the reply must have an explicit
+> expiry.**
+
+The deadline variant, at expiry, "is removed, and its §5
+`max_pending_pushes_per_connection` cap admission is **released**."
+
+`aion-server` calls `push_to_connection` at **all three** of its push sites
+(`liminal_transport.rs:623, 644, 674` — dispatch, liveness, intervention).
+`push_to_connection_with_deadline` is called **nowhere in the codebase.**
+
+And `liminal_liveness.rs:302` does precisely what the doc warns against:
+
+```rust
+let awaiter = delivery.push_payload(payload)         // no deadline
+    .map_err(|error| format!("liveness ping push failed: {error}"))?;
+let reply = awaiter.receive(deadline)                // one quantum
+    .map_err(|error| format!("liveness answer never arrived: {error}"))?;
+```
+
+An elapsed quantum is treated as a **failure** and the awaiter is dropped. The
+slot is not. The probe then fires again 7.5 s later with a fresh correlation id
+and a fresh slot.
+
+### Why this is a P0 rather than a monitoring nuisance
+
+`push_payload`'s own doc comment states the design intent, and it is *correct*:
+
+> used by the connection liveness probe … so the dead-man switch rides the SAME
+> server-push leg a dispatch does — a ping that reaches the worker proves the
+> exact path a dispatch would take, not a parallel one that could be healthy
+> while the real one is not.
+
+Sharing the leg is right. **Sharing the leg while leaking its bounded capacity
+is what turns the probe into a weapon.** The ping does not merely fail to
+observe the dispatch path — it *consumes the capacity the dispatch path needs*,
+at a fixed 7.5 s cadence, until none is left. The instrument built to prove the
+connection works is what destroys it.
+
+The bound follows directly: **32 slots ÷ one leaked slot per 7.5 s ≈ 240 s.**
+Any worker whose serve loop is busy for about **four minutes** permanently
+exhausts its connection's push capacity and can never be sent another dispatch,
+intervention, or ping — until the connection closes. `remote_gates.awl` declares
+`run_nextest … timeout 45m`. **The declared ceiling exceeds the survivable one
+by more than tenfold.**
+
+Two caveats stated honestly. The precise slot accounting against the three
+in-flight dispatch slots is not fully reconciled — the exact 32/33 transition,
+the API semantics, and the call sites together make "an abandoned ping leaks
+exactly one slot" the only reading consistent with the evidence, but I have not
+instrumented the registry to prove the arithmetic term by term. And the cap of
+32 is liminal's default, not an Aion setting.
+
+### This answers the flag I raised, and the answer is worse than the flag
+
+I flagged to Cally, for Waffles, that Finding A might make green condition (2)
+— *completion delivered across a worker gap* — **unreachable by construction**
+on this build. It does, and the mechanism is now exact: `notify_result` requires
+a **new** push on a connection whose push admission is permanently refused. The
+run cannot deliver its result. Not because a worker died — the worker is alive
+and doing real work — but because the server poisoned its own channel to it.
+
+### It also unifies 07-29 and tonight
+
+Finding B (the reaper never fires) and Finding A are the same mechanism seen
+from two sides. 07-29's *"lease expired mid-cargo"* and tonight's *"lease never
+expires at all"* are one broken supervision path failing in opposite directions
+across a build. **This makes #58 a correctness fix, not hardening** — which is
+how it has now been reclassified.
+
+### Fix shape (for #58, not built off my own bat)
+
+Three parts, and the third is the one that matters:
+
+1. **Spawn plain-activity dispatches** the way agent dispatches already are, so
+   the serve loop stays free. Removes the trigger.
+2. **Push the liveness ping with a deadline**, so an unanswered ping releases
+   its slot. Removes the leak. This is a one-line API change with a documented
+   contract behind it.
+3. **A ping that cannot be pushed because the cap is reached is not "the worker
+   did not answer" — it is "the server can no longer ask."** The current WARN
+   asserts a lease claim that is false, and names the worker as the party at
+   fault when the server is. This is the discarded-fact pattern again — **the
+   sixth instance** after #83, #113, #114, the reload message, and the worker's
+   inline assumption. The typed error already carries the distinction; the
+   warning collapses it.
+
+**Nothing here is certified. The run continues; conditions (3) and (4) remain
+measurable and are still worth measuring.**
