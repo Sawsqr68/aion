@@ -1,7 +1,6 @@
-# BLOCK H — make "a write on a read connection" a COMPILE error
+# ✅ BLOCK H — "a write on a read connection" is now a COMPILE error
 
-**Status: designed, not built. Fenced out of Block G deliberately.**
-Prerequisite: G lands (pool + `schedule_timer` fix).
+**Status: ✅ LANDED `58ad4215`.** Prerequisite G landed at `7ead877a`.
 
 ## The defect this exists to make impossible
 
@@ -142,3 +141,76 @@ things and citable for neither. G had already expanded once (the vacuous PRAGMA
 test rewrite), declared in the open. Twice is where a boundary stops meaning
 anything — and the uncommitted P0 timer fix is the most losable thing in the
 tree until G lands.
+
+---
+
+## ✅ OUTCOME — landed `58ad4215`
+
+26 read helpers moved to `ReadOnly<'_>`; 60+ call sites converted. `ReadGuard`
+no longer implements `Deref`. `ReadOnly`'s field is private to `crate::pool`, so
+outside that module the only production source of one is `ReadGuard::read()`.
+
+### The inverted control ran, and its message was read
+
+```
+error[E0599]: no method named `execute` found for struct `pool::ReadOnly<'a>` in the current scope
+```
+
+Produced by attempting a write through `ReadOnly` in `timer::expired_timers`,
+then restored and re-verified at `cargo build` 0 errors.
+
+### 🔴 IT FOUND REAL WRITE-ON-READ CODE ON THE FIRST COMPILE
+
+Four call sites were handing a pooled READ connection to
+`set_outbox_bookkeeping`, a helper that issues an `UPDATE` — present at HEAD as
+`set_outbox_bookkeeping(&*store.reader().await?, …)`. Same class as the
+`schedule_timer` P0, sitting in the suite, invisible to 90 green tests. `rustc`
+found all four in seconds.
+
+⇒ The argument for this block was made by the block itself, on its first build.
+
+### 🔴 CORRECTION TO THIS DOCUMENT: the `trybuild` recommendation was WRONG
+
+Above, this design recommended `trybuild` for a standing control, and attributed
+the visibility problem only to `compile_fail` doctests. **`trybuild` has the
+identical limitation.** It compiles a standalone file against the crate's PUBLIC
+surface, and `ReadPool` / `ReadGuard` / `ReadOnly` are all `pub(crate)`.
+
+Neither standing option works without widening visibility — i.e. making the type
+public in order to test that it is restrictive. That trade is refused.
+
+⇒ **THE GUARANTEE IS UNPOLICED.** The control was a one-time manual observation.
+Nothing stops a future `Deref` impl from quietly reopening the hole. Named here
+rather than left implied, exactly as the "if trybuild is refused" clause above
+required.
+
+⇒ **A MECHANISM THAT RULES OUT ONE OPTION USUALLY RULES OUT ITS SIBLING.** I
+diagnosed doctests correctly and then recommended a tool blocked by the very same
+mechanism, because I had stopped at the first option that failed.
+
+### On the `#[cfg(test)]` constructor
+
+`ReadOnly::from_raw_for_test` exists because several tests open a bare
+`libsql::Connection` rather than a store. It is **not** the `from_writer` hatch
+refused above: that one was reachable from production. This is `#[cfg(test)]`,
+and `cargo build` (production only) compiling clean is the proof that no
+production path reaches it.
+
+### Deviation from the sketch, and why
+
+`ReadOnly::query` mirrors `libsql::Connection::query` exactly, error type
+included — the sketch had it returning `StoreError`. Mirroring leaves every read
+helper's BODY byte-for-byte unchanged, making this a pure type change across ~90
+sites. ~90 sites of mechanical diff is reviewable; ~90 sites of "while I'm here"
+is not.
+
+### Acceptance
+
+| # | criterion | status |
+|---|---|---|
+| 1 | `ReadGuard` no longer `Deref`s | ✅ verified, 0 impls |
+| 2 | all production sites converted | ✅ 26 helpers, `cargo build` clean |
+| 3 | inverted control RUN, message quoted verbatim | ✅ above |
+| 4 | crate gates green, dependents green | ✅ clippy 0, 91 tests, dependents build 0 |
+| 5 | no `from_writer` escape hatch | ✅ only `read()` + a `cfg(test)` ctor |
+| — | standing control | 🔴 **NOT ACHIEVABLE** without widening visibility — named, not hidden |
