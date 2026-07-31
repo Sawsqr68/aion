@@ -1,229 +1,82 @@
 # Fleet + lanes: LIVE STATE (resume point)
 
-## 🔴 RESUME HERE — 2026-07-31 midday. main `e16b5962`.
+## 🔴 RESUME HERE — 2026-07-31 ~04:00Z. main `8451e0e5`, PUSHED.
+
+### THE BOX IS UNDER A VISITOR-WINDOW FREEZE
+
+Guests are on the machine; Manifold is the centrepiece. Waffles ruled that
+seconds-scale compiles (`cargo check`, `cargo test -p aion-awl`, the
+agent-dev-worker suite) are inside the freeze's intent, and Cally's sanction for
+those stands. **Full batteries wait for the window**, which Cally sends when
+Waffles relays it. Do not start one unprompted.
 
 ### PICK UP HERE, IN THIS ORDER
 
-1. **PUSH FIRST.** `e16b5962` (the `agent`-marker WIP) may be unpushed. Check
-   `git status` and `git log origin/main..HEAD` before anything else.
-2. **FINISH #98, the `agent` marker.** `e16b5962` is HALF DONE and labelled so.
-   Done: keyword, `ConfigLine.agent: Option<Span>`, parser (with duplicate
-   refusal), canonical printer. aion-awl green, round trip holds. **NOT done,
-   and it must not be called landed until both are:**
-   - the checker must REFUSE `agent` on an action that is not arity-1
-     `String -> String`. Until then the marker is accepted anywhere and means
-     nothing, which is the dormant-surface shape the change exists to remove.
-   - delete `AGENT_ACTIVITY_TYPES` at `examples/agent-dev/worker/src/main.rs:50`
-     (also used at :106 and :255). That deletion is the whole payoff.
-   Design is ruled in `RULING-AGENT-ACTION-WIRE-FORM.md`.
-3. **Then #97-B**: bare optional scalars never narrow. The `narrow` slot exists
-   at `checker/exprs.rs:14-23`; `blocks.rs:102` and `walk.rs:291` pass `None`,
-   so it never reaches a statement body.
+1. **#98 is CLOSED** — `8451e0e5`, pushed. The `agent` marker now has force: the
+   checker refuses it on anything that is not arity-1 `String -> String`, on a
+   declared body, and at a call site; the marker rides `ActionContract::agent`
+   into the package contract, and `examples/agent-dev/worker` derives its
+   harness-routed set from the compiled document. A control-arm fixture pair
+   (`agent_seam` / `agent_seam_unmarked_control`) pins that the marker changes
+   NOTHING in the lowering, at both MIR-golden and BC-4 runtime level.
+   - Deliberately NOT deleted: `UNDECLARED_AGENT_ACTIVITY_TYPES` still carries
+     `scout`/`dev`/`review`, because the Gleam-authored `agent_dev` package has
+     no `.awl` document to declare them in. Deleting them would quietly settle
+     #88 instead of answering it. The constant carries its own deletion
+     condition in a doc comment.
+2. **OWED, and honestly unrun: `cargo test -p aion-server`.** A background run
+   returned exit 0 but its output was summarized to 7 bytes, so it is NOT a
+   citable battery. My aion-server changes are three `agent: false` struct
+   fields in e2e tests that compile under `cargo check --workspace
+   --all-targets`; the behavioural risk is nil, but the battery is unrun. Run it
+   when the freeze lifts.
+3. **#97-B**: bare optional scalars never narrow. The `narrow` slot exists at
+   `checker/exprs.rs:14-23`; `blocks.rs:102` and `walk.rs:291` pass `None`, so
+   it never reaches a statement body.
 
 ### Verification standing at this point
 
-- `cargo test --workspace` **exit 0, 240 suites, 3818 passed, 0 failed** (run
-  at `bfaa42b9`-era tree, before the dispatch and agent-marker commits).
-- `cargo clippy --workspace --all-targets -D warnings` exit 0.
-- `cargo test -p aion-server` was mid-run at the compaction — 26 suites green,
-  0 failed, NOT complete. **Re-run it; the dispatch change is not fully gated
-  until it finishes.**
-- aion-awl green after the agent-marker WIP.
+- `cargo test -p aion-awl` **489 passed / 0 failed**.
+- `examples/agent-dev/worker`: **82 passed / 0 failed**.
+- BC-4 differential (`-p aion-rs --test awl_bc4_differential`): **26 passed /
+  0 failed** — 52 succeeded, 0 divergences, 0 infra, 0 refusals, 0 agreed
+  refusals. Both new fixtures byte-identical across backends.
+- `cargo clippy -D warnings` clean on aion-awl, aion-package, agent-dev-worker.
+- `cargo check --workspace --all-targets` exit 0.
+- `cargo test --workspace` **exit 0, 240 suites, 3818 passed, 0 failed** — run
+  at the `bfaa42b9`-era tree, so it PREDATES the dispatch and agent-marker
+  commits. Not a current attestation.
 
-### Coordination
+### A thing worth not re-learning: the `.beam.hex` goldens move under a bless
 
-- **Callisto** may take the #95/#97-A boundary lane (`16ba5157`, preserved,
-  NOT verified). She stood down on 2026-07-30 because accepting it would settle
-  an open question of Tom's by doing it. If she starts: she is in
-  `aion-awl`/`aion-package`/the signal boundary, so **tell her to rebase** —
-  I added `schema_is_usable` to `aion-package/src/admission.rs` and the
-  `agent` marker to `aion-awl`.
-- **ONE FULL AION BATTERY AT A TIME ON THIS BOX.** Coordinate before starting.
-- **I owe Cally the disk measurement unprompted** whenever it moves materially.
-  She named me as the party owing the clearing observation rather than polling.
+`AWL_BC2_BLESS=1` rewrites `awl_hello.beam.hex`, `fork_action_fanout.beam.hex`
+and `child_collection_fork.beam.hex` even when nothing about those fixtures
+changed, and the suite is green either way. That is not drift and not a defect:
+the comparison is `beam_equivalent` — chunk-canonical, with `LitT` compared
+DECOMPRESSED — because zlib output is not byte-stable. Revert those three rather
+than committing them, or the diff carries noise that looks like a codegen change
+and is not.
 
----
+### Tonight's cross-seat episode, in one line each
 
-## Earlier 2026-07-31 — main `4ea6e510`
+Three "anomalies" reached my seat; two were clock-labelling, not disk.
 
-
-### 🔴 READ THIS FIRST: the box, and Tom's server
-
-- **Disk was at 96% (43Gi free of 926Gi) with `aion/target` at 78G.** Cleared
-  `target/debug` only — now **112Gi free at 88%**, target back to ~6G.
-- **Tom's live server (pid 99844) was running from a DELETED inode.** `lsof`
-  said it was executing `target/release/aion`; `ls` said no such file. Something
-  had removed `target/release` while a process was executing out of it, so the
-  estate's authoring server was irreplaceable. **A spare binary now exists**
-  (rebuilt 09:13, `aion 0.10.0`, verified by running it). The running image is
-  58,087,280 bytes and the on-disk file is 57,939,600 — DIFFERENT FILES, which
-  is the proof the running one is still the old inode. It is now safe to
-  restart. See #108.
-- **Law worth keeping:** a derived artefact is safe to delete only if nothing is
-  currently executing it. "Derived" is exactly the property that makes people
-  skip the check, because derived reads as reproducible and reproducible reads
-  as disposable. It is reproducible. It is not disposable while it is running.
-  `cargo clean` would NOT have freed the inode, would NOT have helped, and
-  **would have looked like it worked**.
-- **Never `git add -A` on this tree.** It sweeps `.worktrees/` (an embedded git
-  repo) into the commit. Now gitignored.
-
-### Manifold conditions — 4 of 5 discharged
-
-| # | Condition | State |
-|---|---|---|
-| 1 | AWL end to end, scoped contract under queue-routed serving | ✅ verified LIVE: `default` available, 1 connected worker, `assistant` route-active |
-| 2 | Definition iteration | ✅ answered (unload already landed) + visibility built `1a2551de`. Live: 6 resident versions / 5 types / 1 superseded |
-| 3 | Empty-queue dispatch visible | ✅ BUILT `4ea6e510` — visibility half only, wait still unbounded |
-| 4 | Cancel contract written | ✅ `c5260d39` — `docs/CANCELLATION-CONTRACT.md` |
-| 5 | beamr JIT pushed + tagged | ⏳ Artemis' `4e94cec`, unpushed, not mine |
-
-**Condition 3, what it actually was:** the R1 queue-service taxonomy landed for
-the DIRECT dispatch path and never reached the second one. `dispatch_to_node`
-(`aion-server/src/worker/dispatch.rs`), production-wired as the gRPC leg of the
-outbox dispatcher, was the pre-R1 loop verbatim. Three surfaces read "nothing
-to see" simultaneously: `/queues/unserved` empty, `dispatch_parked` FALSE for a
-parked dispatch, and the outbox row stuck `claimed` where dead-letter and
-redrive could not see it because `dispatch()` never returned. Fixed by
-factoring `observe_selection_miss` OUT of the selection wait so both loops call
-one implementation. **The wait is still unbounded on purpose — bounding it is
-Tom's decision and implementing it would have been a way of making it.**
-
-### Corrections I made to my own record today
-
-- **#101 was WRONG.** Versions CAN be unloaded. Only a type's ROUTE-ACTIVE
-  version cannot, and there is no route-retire path. Cally had already relayed
-  my wrong version to Waffles, who was designing around it.
-- **#42/#45 was WRONG.** The authored workflow timeout is NOT wired to nothing.
-  It is wired and gated end to end (`crates/aion/tests/workflow_timeout_e2e.rs`).
-  The real cause is that a Gleam `workflow.toml` does not opt into the
-  timeout-bearing identity, so it reads as not-declared. (Found by Callisto,
-  verified by me at the file header.)
-- **A limitation nobody re-checks is indistinguishable from a fact.**
-
-### New findings logged today
-
-- **#107** — there is NO parent→children relation. The system cannot answer
-  "what are this workflow's children". Bigger than cancel; blocks ADR-004.
-- **#106** — a derived schema that cannot compile means input validation is
-  silently absent.
-- **#108** — the deleted-binary incident.
-
----
-
-## Earlier today — main `c5260d39`
-
-
-Four commits landed today, all pushed. Workspace clippy exit 0 throughout.
-Nothing is in flight at my hand; one read-only scout is mapping the empty-queue
-dispatch path for condition 3.
-
-### THE BUILD LIST IS NO LONGER MINE TO INFER
-
-Waffles STATED what "completely ready" means for Manifold (via Cally, 22:31Z
-30 Jul). Five conditions, none of them a feature. Full text in task #105.
-
-| # | Condition | State |
-|---|---|---|
-| 1 | AWL authoring proven end to end, scoped contract admitted under queue-routed serving | believed discharged (#93/#99 + `ASSISTANT-AWL-LIVE-PROOF.md`) — verify the wording, then close |
-| 2 | Definition-iteration story — unload/GC **or** a sanctioned throwaway-server pattern, **my choice** | ✅ ANSWERED: unload is already landed. Visibility half BUILT (`1a2551de`). Prune option NOT built; when it comes it defaults OFF and says so. |
-| 3 | Empty-queue dispatch fails loudly or parks VISIBLY (#87) | **NEXT. A build, not a ruling.** Now a release condition. |
-| 4 | Cancel semantics stated as a CONTRACT, even if "no cascade" | ✅ DISCHARGED `c5260d39` — `docs/CANCELLATION-CONTRACT.md` |
-| 5 | beamr JIT re-entry fix pushed and tagged (#82) | Artemis' `4e94cec` is on beamr main but UNPUSHED, held on Tom's box. Not mine. |
-
-**Gleam (#88) is OFF Manifold's critical path but the estate question is still
-Tom's and still OPEN. Cally's instruction, repeated twice and unchanged: do NOT
-write the Gleam limitation up as a deliberate boundary. A boundary that becomes
-true because nobody answered is not a decision.**
-
-### What landed today
-
-1. **`241b1a06` — the differential scored its own agreement as noise.** The
-   harness generated `"x"` for every string witness including one whose schema
-   declares `minLength: 3`, so `import_constraints` had been starting with
-   input its own contract forbids for the whole life of the harness. When the
-   boundary work made enforcement real, BOTH backends refused identically —
-   agreement, the one signal the differential exists to produce — and
-   `fold_runs` scored it `INFRA: engine run error`. Now: the generator honours
-   the constraint keywords; every witness is judged against the schema it was
-   generated for; identical refusals are an AGREED-REFUSAL bucket pinned empty,
-   and a one-sided or differing refusal is a DIVERGENCE (it was noise before
-   too). Package hashes aliased out of the comparison.
-
-2. **`bfaa42b9` — a contract nothing could compile validated nothing,
-   silently.** The witness check immediately found two fixtures whose DERIVED
-   contract `jsonschema` cannot compile. The engine's answer to a schema it
-   cannot compile is to log a warning and admit the payload UNCHECKED
-   (`catalog_admission.rs:134-143`) — so those workflows ran with input
-   validation off and every signal said fine.
-   *Cause one:* a schema door is a complete document rooted at ITS root; the
-   deriver pasted it in verbatim as a nested definition, silently changing what
-   `#` means, so every internal `$ref` pointed at nothing. The checker had it
-   right (`checker/project.rs:272-283`); only the deriver disagreed. Fixed by
-   re-rooting a door's internal pointers under wherever the door lands —
-   positional, nothing renamed, no collisions.
-   *Cause two:* `^{[0-9]+}$` is legal ECMA-262 and rejected by the engine's
-   regex engine.
-   *The general guard:* `aion awl check` now proves the contract it DERIVES
-   compiles, via `aion_package::schema_is_usable` — the same compilation the
-   engine performs at admission. Previously `check` was parse-and-typecheck
-   only and could say ok over a hollow contract. **This guard has its observed
-   red** (two uncompilable fixtures + one fixture restored to a real bucket),
-   which satisfies Waffles' new no-observed-red-no-gate-promotion law.
-
-3. **`1a2551de` — deploy now names the versions it superseded.** See the
-   correction below.
-
-4. **`c5260d39` — the cancellation contract, written down.**
-
-### 🔴 I KILLED ONE OF MY OWN FINDINGS. #101 WAS WRONG.
-
-I had recorded, and Cally had RELAYED TO WAFFLES, that deploy is a one-way door
-with no way to remove a version. **False.** `Engine::unload_workflow_version`
-(`crates/aion/src/engine/reload.rs:221-273`) exists, is wired to
-`POST /deploy/unload` and `aion unload <type> <hash>`, refuses on five ordered
-liveness pins, rolls the catalog back on failure, and deletes the persisted
-archive so the version cannot resurrect at restart. It was a RULED design —
-decision record #62 D2: manual unload, the PLATFORM owns *when*, deliberately
-no auto-GC inside aion.
-
-What is actually true is narrower and still real: **the route-active version of
-a type can never be unloaded and there is no route-retire path**, so version
-accumulation is bounded by what an operator prunes and TYPE accumulation is not
-bounded at all.
-
-The gap was ergonomics, not capability: yesterday's queue-unservable incident
-was RESOLVED by that verb, and what cost a morning is that nothing told the
-operator it existed. Hence `superseded_versions` on the deploy response.
-
-**Lesson worth keeping: a limitation nobody re-checks is indistinguishable from
-a fact, and mine was being designed around.**
-
-### Open, in order
-
-1. **Condition 3 / #87** — empty-queue dispatch. Scout mapping in flight.
-2. Condition 1 — verify the wording and close.
-3. #98 the `agent` marker (RULED, `47078711`); then #97-B (bare optional
-   scalars never narrow; `narrow` slot exists at `checker/exprs.rs:14-23`,
-   `blocks.rs:102` and `walk.rs:291` pass `None`).
-4. ADR-004 itself (build the parent-close policy) — needs parent→children
-   linkage first, which does not exist.
-5. Re-run the whole battery; `ts-worker:test` red 3 still undiagnosed
-   (`reconnect > completes an unaborted default sleep and leaves no timer
-   behind`), and `rust:test` red 1 was OOM under contention, not a defect.
-
-### Process notes
-
-- `git add -A` swept `.worktrees/` (an embedded git repo) into a commit. Caught
-  in my own review, reset, re-committed path-scoped. Now gitignored, so the
-  mistake is unavailable rather than discouraged.
-- Two seats were in this repo at once overnight (Artemis, sanctioned, in an
-  isolated worktree). Anyone measuring during that window measured a moving
-  tree.
-
----
-
-## Historical — the state before today
+- **The 30G transient did not exist.** A build is monotonic: it rises and it
+  stays. Rise-then-fall is not a build shape at any temperature, so no
+  measurement was needed to retire the attribution — but three were run anyway
+  (cold `-p aion-server` clean+test, full `--no-run` with a transient
+  `.rcgu.o` count, and `cargo package --list`), and all three were monotonic or
+  flat. The real event was my own `rm -rf target/debug`, issued 23:07:51Z,
+  `target/debug` recreated 23:11:10Z.
+- **THE HOUSE NOTE, now estate-wide:** the only safe cross-seat mtime comparison
+  carries an explicit offset — `stat -f "%Sm" -t "%Y-%m-%dT%H:%M:%S%z"`.
+  `TZ=UTC stat` on macOS does NOT convert; the format prints local time and
+  stamps it with whatever `%Z` it likes. I nearly filed a contradiction I was in
+  the middle of resolving. A bare local timestamp read across seats is exactly
+  as unreliable as an arrival-time stamp.
+- **The dangerous mislabel is the one that lands near a true value.** A
+  local-time reading of 09:11:10 sat almost on top of a real morning-era cluster
+  and borrowed its plausibility.
 
 ## 🔴🔴 RESUME HERE — 2026-07-31. Both lanes DEAD (usage limit). HEAD `16ba5157`.
 
