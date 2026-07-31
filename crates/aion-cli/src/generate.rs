@@ -53,6 +53,7 @@ use aion_package::{
     ActivityDeclaration, BoundaryType, CodegenMode, boundary_types_from_interface, emit_schemas,
     generate_activities, generate_codecs, generate_test_scaffold, parse_declarations,
 };
+use aion_toolchain::gleam_failure::{GleamFailureLayer, classify_gleam_failure};
 use anyhow::{Context, Result, bail};
 use serde::Serialize;
 use serde_json::Value;
@@ -343,13 +344,36 @@ fn export_package_interface(root: &Path, package_name: &str) -> Result<Vec<u8>> 
     // `_scratch` restores the renamed modules when it drops at the end of this
     // function, including on the bail! paths below.
     if !output.status.success() {
-        bail!(
-            "interface export failed: `gleam export package-interface` exited with {} in {} — \
-             the types module src/{package_name}_io.gleam (and every module not reaching the \
-             generated codecs/wrappers) must compile standalone\n{}",
-            output.status,
-            root.display(),
+        // 🔴 A non-zero exit is not evidence about the author's source (#125).
+        // `gleam export package-interface` resolves and fetches dependencies
+        // before it reads a line of Gleam, so a registry outage fails here
+        // having never reached the compiler. This message used to assert that
+        // the author's types module "must compile standalone" in EVERY case,
+        // which on an outage sends them to rewrite working code over a network
+        // fault they cannot fix. Classification is shared with the toolchain;
+        // the WORDING is not, because a diagnostic's safe default belongs to
+        // whoever receives it — and this one is read by an author.
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
+        );
+        if classify_gleam_failure(&combined) == GleamFailureLayer::DependencyLayer {
+            bail!(
+                "`gleam export package-interface` could not reach its package registry in {}, so \
+                 your workflow was never compiled — this is a network or registry failure, NOT a \
+                 problem with your code. Nothing has been generated; try again when the registry \
+                 is reachable.\n{combined}",
+                root.display()
+            );
+        }
+        bail!(
+            "interface export failed: `gleam export package-interface` exited with {} in {}. \
+             `gleam`'s own output follows; the most common cause is that the types module \
+             src/{package_name}_io.gleam (or another module not reaching the generated \
+             codecs/wrappers) does not compile standalone.\n{combined}",
+            output.status,
+            root.display()
         );
     }
     let json = fs::read(&out_path)

@@ -81,6 +81,17 @@ fn absolute_out(out: &Path) -> Result<PathBuf> {
 /// Spawns `gleam build` in the project directory with inherited stdio, so the
 /// user sees compiler output on stderr. Process spawning lives only in this
 /// CLI layer; the packaging library never builds.
+///
+/// # Why this one is deliberately NOT classified (#125)
+///
+/// The other `gleam` call sites classify a dependency-layer failure so they
+/// stop blaming the author's source for a registry outage. This one does not,
+/// and the reason is the inherited stdio: `gleam`'s own error — including the
+/// hex.pm failure — is already on the user's terminal, verbatim and live, and
+/// the bail below asserts nothing about their code. There is no false claim to
+/// remove. Classifying would mean switching to captured output and printing it
+/// after the fact, trading a real capability (streaming progress on a build
+/// that runs for seconds) for wording that is already honest.
 fn run_gleam_build(path: &Path) -> Result<()> {
     let status = Command::new("gleam")
         .arg("build")

@@ -36,6 +36,29 @@ pub enum ToolchainError {
         diagnostics: String,
     },
 
+    /// `gleam` exited non-zero from inside its **own dependency layer** — a
+    /// fetch, a Hex API call, unpacking a downloaded tarball, or a version
+    /// solve that could not reach the registry.
+    ///
+    /// 🔴 The submitted source was **never compiled**, so nothing has been
+    /// established about it. This variant exists because every such failure
+    /// used to be reported as [`Self::TypeCheck`], which is a structured claim
+    /// that type-checking *happened and produced diagnostics* — telling an
+    /// author their code failed to type-check when a registry was unreachable.
+    /// The wording was not the defect; the variant was (#125).
+    ///
+    /// Callers must not present this as a source error. It is transient, it is
+    /// the operator's or the network's to fix, and it is worth retrying.
+    #[error(
+        "gleam could not reach its package registry, so the submitted source was never compiled \
+         — this is an infrastructure failure, not a defect in the source:\n{diagnostics}"
+    )]
+    DependencyLayer {
+        /// The verbatim `gleam` output (stderr, with any stdout appended)
+        /// naming the registry failure.
+        diagnostics: String,
+    },
+
     /// The submitted source compiled and type-checked, but assembling the
     /// `.aion` archive from the built project failed.
     #[error(transparent)]

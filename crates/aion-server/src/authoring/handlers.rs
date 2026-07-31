@@ -348,11 +348,26 @@ async fn run_compile(
 
 /// Maps a toolchain failure onto the authoring wire classes.
 ///
-/// A type error is the inline 400; a spawn failure or packaging fault is a
-/// backend/invalid-input wire error naming the cause.
+/// A type error is the inline 400; a dependency-layer failure is the retryable
+/// 503, because the source was never compiled and nothing about it is in
+/// question; a spawn failure or packaging fault is a backend/invalid-input wire
+/// error naming the cause.
 fn map_toolchain_error(error: ToolchainError) -> AuthoringApiError {
     match error {
         ToolchainError::TypeCheck { diagnostics } => AuthoringApiError::TypeError(diagnostics),
+        ToolchainError::DependencyLayer { .. } => {
+            // 🔴 NOT a 400, and not a type error (#125). `gleam build` resolves
+            // and fetches dependencies before it compiles anything, so a
+            // registry outage exits non-zero having never reached the compiler.
+            // Routing that to `TypeError` told the author two untrue things at
+            // once: that type-checking produced these diagnostics, and — by the
+            // 400 — that their submission was the thing at fault. Nothing was
+            // established about the source. This is the server's environment
+            // failing and it is transient, so it is the retryable 503.
+            AuthoringApiError::Unavailable(
+                WireError::backend(error.to_string()).with_error_type("GleamRegistry"),
+            )
+        }
         ToolchainError::GleamSpawn { .. } | ToolchainError::Io { .. } => {
             // Operator-side faults (binary unspawnable, project filesystem
             // unwritable): backend errors, not caller-correctable input.
@@ -409,4 +424,83 @@ fn engine_handle(state: &ServerState) -> Result<Arc<aion::Engine>, AuthoringApiE
         .engine()
         .map(Arc::clone)
         .map_err(|error| AuthoringApiError::Wire(error.to_wire_error()))
+}
+
+#[cfg(test)]
+mod tests {
+    use aion_toolchain::error::ToolchainError;
+
+    use super::{AuthoringApiError, map_toolchain_error};
+
+    /// The exact `gleam` output that opened #125, from run 3 of the 2026-08-01
+    /// workspace battery.
+    const HEX_OUTAGE: &str = "  Resolving versions\nerror: HTTP error\n\nA HTTP request \
+         failed.\n\n    error sending request for url \
+         (https://hex.pm/api/packages/gleam_stdlib/releases/1.0.3)\n";
+
+    /// 🔴 THE INVERTED CONTROL FOR #125. Before the fix, a registry outage
+    /// arrived here as `ToolchainError::TypeCheck` and left as
+    /// `AuthoringApiError::TypeError` — an inline **400** telling the author
+    /// their submission was at fault, for a build that never reached the
+    /// compiler. Two untrue statements in one response: that type-checking
+    /// produced these diagnostics, and that the caller's input was wrong.
+    #[test]
+    fn a_registry_outage_is_never_reported_to_the_author_as_a_type_error() {
+        let mapped = map_toolchain_error(ToolchainError::DependencyLayer {
+            diagnostics: HEX_OUTAGE.to_owned(),
+        });
+        assert!(
+            !matches!(mapped, AuthoringApiError::TypeError(_)),
+            "a registry outage must never be an inline 400 type error: the source was never \
+             compiled, so nothing about it has been established"
+        );
+        assert!(
+            matches!(mapped, AuthoringApiError::Unavailable(_)),
+            "a registry outage is a transient environment failure — the retryable 503"
+        );
+        assert_eq!(mapped.outcome(), "unavailable");
+    }
+
+    /// The positive arm, under the same mapping. Without it, the assertion
+    /// above would still pass if `map_toolchain_error` stopped producing
+    /// `TypeError` for anything at all — a vacuous absence check.
+    #[test]
+    fn a_real_type_error_is_still_the_inline_400() {
+        let mapped = map_toolchain_error(ToolchainError::TypeCheck {
+            diagnostics: "error: Type mismatch\n  expected Int, got String".to_owned(),
+        });
+        assert!(
+            matches!(
+                &mapped,
+                AuthoringApiError::TypeError(diagnostics) if diagnostics.contains("Type mismatch")
+            ),
+            "a genuine type error must stay the inline 400 carrying its diagnostics, got {mapped:?}"
+        );
+    }
+
+    /// The registry diagnostics must survive the mapping: an operator debugging
+    /// a 503 needs `gleam`'s own words, and a class label alone would send them
+    /// hunting.
+    #[test]
+    fn the_registry_failure_carries_gleams_own_output_to_the_operator() {
+        let mapped = map_toolchain_error(ToolchainError::DependencyLayer {
+            diagnostics: HEX_OUTAGE.to_owned(),
+        });
+        // Three separate assertions rather than one compound: each failure mode
+        // reports distinctly, so a red says WHICH guarantee broke.
+        assert!(
+            matches!(&mapped, AuthoringApiError::Unavailable(_)),
+            "a registry outage must be the retryable class, got {mapped:?}"
+        );
+        assert!(
+            matches!(&mapped, AuthoringApiError::Unavailable(wire)
+                if wire.message.contains("hex.pm")),
+            "the registry endpoint must survive into the wire error: {mapped:?}"
+        );
+        assert!(
+            matches!(&mapped, AuthoringApiError::Unavailable(wire)
+                if wire.message.contains("never compiled")),
+            "the message must say the source was never compiled: {mapped:?}"
+        );
+    }
 }

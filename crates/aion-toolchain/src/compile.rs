@@ -29,6 +29,7 @@ use std::process::Command;
 use aion_package::{Package, PackageOptions, WorkflowVersion, package_project};
 
 use crate::error::ToolchainError;
+use crate::gleam_failure::{GleamFailureLayer, classify_gleam_failure};
 use crate::project;
 use crate::workspace::Workspace;
 
@@ -84,8 +85,10 @@ pub struct CompiledWorkflow {
 /// template has no parent directory to host the workspace,
 /// [`ToolchainError::Io`] when the working copy cannot be staged or the source
 /// cannot be written, [`ToolchainError::GleamSpawn`] when the `gleam` binary
-/// cannot be spawned, [`ToolchainError::TypeCheck`] (carrying the verbatim
-/// compiler diagnostics) when the build exits non-zero, and
+/// cannot be spawned, [`ToolchainError::DependencyLayer`] when `gleam` failed
+/// inside its own dependency layer (so the source was never compiled),
+/// [`ToolchainError::TypeCheck`] (carrying the verbatim compiler diagnostics)
+/// when the build exits non-zero for any other reason, and
 /// [`ToolchainError::Packaging`] when the built project cannot be assembled
 /// into a verified archive.
 pub fn compile_source(request: &CompileRequest<'_>) -> Result<CompiledWorkflow, ToolchainError> {
@@ -184,9 +187,13 @@ fn compile_built_project(
 /// loop calls it directly against the author's project on disk. Neither path
 /// reinvents the `gleam build` invocation or its diagnostic capture.
 ///
-/// A non-zero exit is a [`ToolchainError::TypeCheck`] carrying the verbatim
-/// compiler output (stderr, with any stdout appended): Gleam writes errors to
-/// stderr, but context may split across both streams, so both are captured.
+/// A non-zero exit carries the verbatim compiler output (stderr, with any
+/// stdout appended): Gleam writes errors to stderr, but context may split
+/// across both streams, so both are captured. It is then CLASSIFIED, because a
+/// non-zero exit is not on its own evidence that the source is at fault —
+/// `gleam build` resolves and fetches dependencies before compiling anything,
+/// so a registry outage exits non-zero having never reached the compiler
+/// ([`ToolchainError::DependencyLayer`], #125).
 ///
 /// This is synchronous and blocks on `gleam build`, which can run for seconds;
 /// async callers MUST wrap it in a blocking task.
@@ -194,8 +201,10 @@ fn compile_built_project(
 /// # Errors
 ///
 /// Returns [`ToolchainError::GleamSpawn`] when the `gleam` binary at
-/// `gleam_path` cannot be spawned, and [`ToolchainError::TypeCheck`] (carrying
-/// the verbatim compiler diagnostics) when the build exits non-zero.
+/// `gleam_path` cannot be spawned, [`ToolchainError::DependencyLayer`] when the
+/// non-zero exit came from `gleam`'s own dependency layer, and
+/// [`ToolchainError::TypeCheck`] (carrying the verbatim compiler diagnostics)
+/// for any other non-zero exit.
 pub fn build_project(project_root: &Path, gleam_path: &Path) -> Result<(), ToolchainError> {
     let output = Command::new(gleam_path)
         .arg("build")
@@ -208,9 +217,16 @@ pub fn build_project(project_root: &Path, gleam_path: &Path) -> Result<(), Toolc
     if output.status.success() {
         return Ok(());
     }
-    Err(ToolchainError::TypeCheck {
-        diagnostics: combine_diagnostics(&output.stderr, &output.stdout),
-    })
+    // 🔴 A non-zero exit is not on its own evidence that the source is at
+    // fault. `gleam build` resolves and fetches dependencies before it compiles
+    // anything, so a registry outage exits non-zero having never reached the
+    // compiler. Reporting that as `TypeCheck` tells an author their code failed
+    // to type-check when it was never type-checked (#125).
+    let diagnostics = combine_diagnostics(&output.stderr, &output.stdout);
+    match classify_gleam_failure(&diagnostics) {
+        GleamFailureLayer::DependencyLayer => Err(ToolchainError::DependencyLayer { diagnostics }),
+        GleamFailureLayer::NotDependencyLayer => Err(ToolchainError::TypeCheck { diagnostics }),
+    }
 }
 
 /// Joins captured stderr and stdout into the inline diagnostics string.

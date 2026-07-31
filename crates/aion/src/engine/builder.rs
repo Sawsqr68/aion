@@ -867,23 +867,22 @@ pub(super) fn package_from_source(source: WorkflowPackageSource) -> Result<Packa
 
 #[cfg(test)]
 mod tests {
-    mod gleam_test_support {
-        use std::process::Command;
-
-        #[must_use]
-        pub fn skip_if_unavailable() -> bool {
-            if Command::new("gleam")
-                .arg("--version")
-                .output()
-                .is_ok_and(|output| output.status.success())
-            {
-                return false;
-            }
-
-            println!("skipping Gleam-dependent test: `gleam` is not available on PATH");
-            true
-        }
-    }
+    // 🔴 #125. This was a hand-rolled twelve-line gate announcing its skip with
+    // `println!` — the exact pattern task #74 replaced, because the harness
+    // captures `println!` on a PASSING test and a gated skip always passes, so
+    // the announcement was invisible in precisely the case it existed for.
+    //
+    // #74's cure landed in `tests/test_support/gleam.rs` and is pinned across
+    // four byte-identical copies. This file is `src/`, so a sweep over `tests/`
+    // could never see it — and the correct copy was already sitting in THIS
+    // crate's own `tests/` directory. A fix's search space is part of the fix.
+    //
+    // Reusing the canonical file by path rather than copying it, per the
+    // precedent in `aion-package/src/structure/mod.rs`: a third copy would look
+    // right in isolation and drift silently. It is DECLARED in `engine/mod.rs`
+    // because `#[path]` resolves against the declaring module's directory and
+    // `src/engine/builder/` does not exist.
+    use super::super::gleam_test_support;
 
     use std::{num::NonZeroUsize, path::PathBuf, process::Command, sync::Arc, time::Duration};
 

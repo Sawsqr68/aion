@@ -34,6 +34,9 @@
 pub mod compile;
 /// Toolchain error taxonomy.
 pub mod error;
+/// Which layer of `gleam` refused a build — its dependency layer, or the
+/// sources it was given.
+pub mod gleam_failure;
 /// Project-root validation and entry-module source resolution.
 pub mod project;
 /// Per-submission isolated build workspace (RAII working copy of the template).

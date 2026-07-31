@@ -12,6 +12,19 @@ pub mod builder;
 pub mod delegated;
 /// Double-adoption fence-ordering planner (ADR-021 clean-partial).
 mod fence;
+/// The shared `gleam` test gate, reused from this crate's own `tests/` copy
+/// rather than re-implemented (#125).
+///
+/// It is declared HERE, not beside its only consumer in `builder.rs`, for a
+/// mechanical reason: `#[path]` resolves against the declaring module's
+/// directory, and `builder.rs` is not a `mod.rs`, so its children resolve under
+/// a `src/engine/builder/` that does not exist — the `..` traversal fails at the
+/// OS before rustc ever reads the target. `src/engine/` is a real directory, so
+/// the path resolves from here. Same technique as
+/// `aion-package/src/structure/mod.rs`.
+#[cfg(test)]
+#[path = "../../tests/test_support/gleam.rs"]
+mod gleam_test_support;
 /// Runtime package-load seam: live load, routing, listing, unload.
 mod reload;
 /// `EngineHandle` seam implementation for the engine.
