@@ -27,6 +27,7 @@ use super::schedules::{
     resume_schedule, update_schedule,
 };
 use super::transcripts::{fetch_transcript, list_transcript_streams};
+use super::unrecoverable::list_unrecoverable_runs;
 use super::whoami::whoami;
 use super::workers::{drain_worker, stop_worker};
 use super::workflows::{
@@ -228,6 +229,7 @@ pub fn workflow_router(state: ServerState) -> Router {
         .route("/workflows/attempts", post(list_attempts))
         .route("/workflows/transcript", post(fetch_transcript))
         .route("/workflows/transcripts", post(list_transcript_streams))
+        .route("/workflows/unrecoverable", get(list_unrecoverable_runs))
         .route("/events/stream", get(subscribe_events_socket))
         .route("/cluster/command", post(cluster_command))
         .route("/outbox/dead-letters", post(list_dead_letters))

@@ -575,6 +575,37 @@ impl NamespaceResolver {
             .filter(|attribution| attribution.namespace == namespace))
     }
 
+    /// Read a workflow's recorded attribution WITHOUT scoping it to a namespace.
+    ///
+    /// [`Self::workflow_attribution`] is the right read whenever the caller
+    /// already named the namespace it is asking about — it answers the scoped
+    /// question and hides everything else behind the anti-existence-leak
+    /// `None`. A fleet-wide SWEEP cannot use it: the sweep starts from a set of
+    /// workflow ids and does not yet know which namespace each belongs to, so
+    /// scoping first would require guessing the answer it is trying to read.
+    ///
+    /// The grant filter is therefore the CALLER's obligation here, and it is not
+    /// optional. Every use must drop entries the caller cannot access — see
+    /// [`CallerIdentity::can_access`] — before anything reaches a response body,
+    /// exactly as the enumeration reads do. Returning the raw attribution keeps
+    /// that filter visible at the sweep, rather than a scoped read silently
+    /// reporting `None` for a workflow the caller could in fact see.
+    ///
+    /// `None` means the workflow recorded no owning namespace at all: an
+    /// unattributed run, not a denied one. The two are different facts and the
+    /// caller must not merge them.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError`] when the underlying ownership data cannot be
+    /// read; callers must fail loudly rather than guessing.
+    pub async fn recorded_workflow_attribution(
+        &self,
+        workflow_id: &WorkflowId,
+    ) -> Result<Option<WorkflowAttribution>, ServerError> {
+        self.ownership.workflow_attribution(workflow_id).await
+    }
+
     /// Verify durable schedule ownership against the requested namespace.
     ///
     /// `NamespaceDenied` means exactly one thing: the caller has no grant for

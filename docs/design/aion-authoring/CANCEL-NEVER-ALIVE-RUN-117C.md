@@ -246,11 +246,15 @@ comments.
 | `crates/aion/src/error.rs` | 4 new typed refusals |
 | `crates/aion-server/src/error.rs` | wire mapping — all four `INVALID_STATE`, never 404 |
 
-## Still outstanding
+## ✅ The operator-facing surface — BUILT in its own increment
 
-#117's **operator-facing surface** — a way to LIST the unrecoverable runs and see why —
-remains its own increment, unblocked in every branch. This lane gives an operator who knows
-the id a working lever; it does not yet give them the id.
+`GET /workflows/unrecoverable`. See
+[`UNRECOVERABLE-RUNS-SURFACE-117.md`](UNRECOVERABLE-RUNS-SURFACE-117.md).
+
+This lane gave an operator who knows the id a working lever; that one gives them the id.
+Between them #117 is closed, with one limitation stated there: the surface is HTTP-only —
+no gRPC method and no CLI verb, because the CLI reaches the server over gRPC and that means
+a proto change wider than the increment.
 
 ---
 

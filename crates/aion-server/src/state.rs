@@ -666,6 +666,33 @@ impl ServerState {
         self.inner.queue_service_state.unserved()
     }
 
+    /// Every run this engine process could not make resident, with the reason it
+    /// could not and when the failure was observed (#117).
+    ///
+    /// This is the fleet half of the degraded-residency question. `POST
+    /// /workflows/describe` answers it for a run an operator can already name;
+    /// this answers it for the operator who cannot, which is the case that made
+    /// the original defect unrecoverable in practice — the id was only ever
+    /// printed in a boot log line that had scrolled away.
+    ///
+    /// The set is per-process and self-clearing: an entry disappears the moment
+    /// the engine observes that run resident, so an EMPTY list is the healthy
+    /// answer and never a stale one.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError`] when the state carries no engine handle, or when
+    /// the registry lock is poisoned.
+    pub fn unrecoverable_runs(
+        &self,
+    ) -> Result<Vec<(aion_core::WorkflowId, aion::registry::UnrecoverableRun)>, ServerError> {
+        self.engine()?
+            .registry()
+            .unrecoverable()
+            .list()
+            .map_err(ServerError::from)
+    }
+
     /// Build the NOI-6 intervention router over the connected-worker registry, the
     /// attempt-owner back-index, and the active intervention transport.
     ///
