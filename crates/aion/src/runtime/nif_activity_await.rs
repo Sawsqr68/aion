@@ -192,21 +192,33 @@ fn take_runtime_completion(
         return Ok(Some(ActivityAwaitStep::Completed(payload.bytes().to_vec())));
     }
     if let Some((error, attempt)) = runtime.take_activity_error(context.pid(), ordinal)? {
-        // #197: an exhausted retry budget fails the workflow with the LAST
-        // reason verbatim and the final attempt count on the recorded
-        // terminal `ActivityFailed`.
+        // #197: an exhausted retry budget fails the workflow with the last
+        // reason and the final attempt count on the recorded terminal
+        // `ActivityFailed`.
+        //
+        // #90: the reason is no longer taken VERBATIM. The inherited message
+        // was classified `retryable:` by the attempt that produced it, and this
+        // record is `Terminal` — writing both would put two copies of one
+        // classification, disagreeing, into bytes that can never be rewritten.
+        // The diagnostic tail is preserved in full; only the false class is
+        // corrected. See `exhausted_terminal_reason`.
         let attempt = attempt.unwrap_or(FIRST_DELIVERY_ATTEMPT);
+        // Computed ONCE and used for both the durable record and the value
+        // handed to workflow code. Deriving them separately would reintroduce
+        // the same defect one layer out: what the log says and what the
+        // workflow saw must be the same string.
+        let terminal_reason = super::nif_activity_retry::exhausted_terminal_reason(&error.message);
         context
             .record_activity_failed(
                 chrono::Utc::now(),
                 activity_id,
-                activity_error(error.message.clone()),
+                activity_error(terminal_reason.clone()),
                 attempt,
             )
             .map_err(|record_error| EngineError::Runtime {
                 reason: record_error.error_reason(),
             })?;
-        return Ok(Some(ActivityAwaitStep::Failed(error.message)));
+        return Ok(Some(ActivityAwaitStep::Failed(terminal_reason)));
     }
     Ok(None)
 }
