@@ -7,16 +7,53 @@ Recovery, in order of preference:
 
 ```
 git stash list                      # look for the aion-store-libsql entry
-git stash pop                       # normal restore
+git stash pop                       # normal restore — PREFERRED
 
-# fallback if the stash is gone — backups taken BEFORE stashing, hash-verified:
-#   <scratchpad>/122-tracked.patch  sha256 547424915c470966dad5e67cb1fe32ff083613bd7a9214815e2396890404b60a
-#   <scratchpad>/pool.rs.bak        sha256 928f85202d3d160e7be8df15bb483fc2a1aa0c7c86cf01a712c7726c5251ef26
-git apply <scratchpad>/122-tracked.patch
+# fallback if the stash is gone. 🔴 THE --include IS LOAD-BEARING, NOT TIDINESS:
+git apply --check --include='crates/aion-store-libsql/*' <scratchpad>/122-tracked.patch
+git apply         --include='crates/aion-store-libsql/*' <scratchpad>/122-tracked.patch
 cp <scratchpad>/pool.rs.bak crates/aion-store-libsql/src/pool.rs
 ```
 
-`pool.rs` is UNTRACKED, so it needs `-u` on the stash and is not in the patch.
+Backups taken BEFORE stashing:
+
+```
+<scratchpad>/122-tracked.patch  sha256 547424915c470966dad5e67cb1fe32ff083613bd7a9214815e2396890404b60a
+<scratchpad>/pool.rs.bak        sha256 928f85202d3d160e7be8df15bb483fc2a1aa0c7c86cf01a712c7726c5251ef26
+                                git hash-object → 34cd902a4b7fd206163101510e0901c16159601c
+                                = stash@{0}^3:…/pool.rs, byte-identical
+```
+
+`pool.rs` is UNTRACKED: it needs `-u` on the stash and is **not** in the patch.
+⚠️ `git stash show --stat` does **not** list `-u` files, so pool.rs is invisible
+there and present in the stash. Checking the obvious way concludes it was lost.
+
+### 🔴 Why the naive `git apply` DOES NOT WORK — found by running it, not reading it
+
+```
+git apply <scratchpad>/122-tracked.patch
+  error: patch failed: docs/design/aion-authoring/BLOCK-G-122-POOL-IN-FLIGHT.md:27
+  error: patch failed: examples/remote-gates/worker/Cargo.lock:83
+```
+
+The patch was taken across the **whole tree** (15 files); the stash was
+pathspec-limited to the **crate** (13 files). The two extras have both moved
+since, and **`git apply` is atomic** — those two rejections discard all thirteen
+crate files that were perfectly fine.
+
+- ⇒ **A SUPERSET BACKUP IS MORE FRAGILE THAN AN EXACT ONE.** The extra content is
+  not free insurance; it is an extra failure mode that takes the good hunks with it.
+- ⇒ **TWO COPIES WITH DIFFERENT SCOPES ARE NOT TWO COPIES OF THE SAME THING.**
+  The scope law again — this time hiding in the *recovery* path, where it would
+  surface only while being needed.
+- ⇒ **A BACKUP IS NOT A BACKUP UNTIL ITS RESTORE PATH HAS BEEN RUN.** `--check`
+  costs nothing and is the difference between a net and a picture of a net. Same
+  species as the inverted control: a fallback never watched succeeding is
+  untested.
+
+The `--include` form was verified: applies clean at **13 files, 366 insertions,
+198 deletions**, which is the stash's diffstat to the line — so the flag both
+repairs the fallback and independently proves patch ≡ stash across all thirteen.
 
 
 **Written at compaction, 2026-08-01. The working tree carries an uncommitted
