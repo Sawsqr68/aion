@@ -1,6 +1,6 @@
 # #119 — a green that is a result about a DIFFERENT PROGRAM
 
-**Status: LANDED.** Clippy clean over all three postures, tests green over all
+**Status: LANDED — `07ff0ec0`, pushed to origin/main.** Clippy clean over all three postures, tests green over all
 three, four posture gates green, inverted control watched failing. The OWED list
 at the bottom is discharged; kept for the record of what the lane was.
 
@@ -129,3 +129,12 @@ error, not of the disk** — a derived bound has no such input.
 `target/debug` was ~1.4G mid-lane (mostly incremental reuse), free ~89. Abort 50
 (Athena's band; the floor is a band ≥1.5 wide, so a threshold at its edge fires
 late). Reclaim at block end; `target/release` NEVER touched (#108, Tom's server).
+
+## Cross-reference
+
+The feature-unification finding (posture decided by which packages you NAME) is
+a member of **#76**'s class — *a behaviour-changing dependency feature can arrive
+with no diff in this repo, and nothing detects it*. Here the feature change comes
+not from a dependency bump but from the operator's own command line, and the
+effect is identical: the compiled program differs from the one the reader
+believes was tested, with nothing in the tree to show for it.
