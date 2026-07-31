@@ -54,6 +54,42 @@ printed. `gates:costly-announced` in `scripts/battery.sh` asserts every declared
 costly suite emits one. Delete that gate and this conversion becomes a downgrade
 — which is stated in the module docs so nobody removes it casually.
 
+### 🔴 And the pass count moves the WRONG WAY
+
+Athena found this in the run-2 → run-3 arithmetic, and it closes exactly:
+
+```
+3952   run 2, complete, green, 5 ignored
+  +5   the five formerly-#[ignore] tests now RUN (and announce)
+  -1   the codec test, unrelated hex.pm outage
+= 3956  observed in run 3, 0 ignored
+```
+
+That is an independent behavioural confirmation that this change added exactly
+five runnable tests and disturbed nothing else — better evidence than the diff.
+
+**It is also a warning.** Run 2 reported `3952 passed` with two durability proofs
+silently not running. Run 3 reports `3956 passed` with those same proofs *still*
+not running, now loudly. ⇒ **The pass total went UP because a gap was made
+visible.** A reader diffing 3952 → 3956 concludes coverage improved. Coverage did
+not move; honesty did, and the truly-proven count is *lower* than either total
+implies, because five of those passes are known non-proofs.
+
+> A metric that moves in the opposite direction from the truth it encodes is
+> worse than one that does not move.
+
+The gate cannot fix the harness's arithmetic, so it prints the correction beside
+the number on every run, where the reader actually is:
+
+```
+⚠️  those 5 suite(s) PASSED WITHOUT PROVING ANYTHING. Subtract 5 from any
+    pass total before reading it as coverage — making a gap VISIBLE raises
+    the count, so a rising total here is not a coverage win.
+```
+
+**Cite this lane as `IGNORED: 0` and "5 proofs declared not-established", never
+as `3956 passed`.**
+
 ## 🔴 The inverted control found TWO real defects in my own gate
 
 This is the part worth keeping. The mutation: silence one suite's announcement

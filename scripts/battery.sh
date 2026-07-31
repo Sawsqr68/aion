@@ -373,6 +373,20 @@ costly_announcements() {
     return 1
   fi
   printf 'costly announcements ok: %d suite(s), every one announced its skipped proof\n' "$checked"
+  # 🔴 SAY THE DIRECTION OUT LOUD. A gated skip PASSES, so converting these off
+  # `#[ignore]` RAISED the workspace pass total (3952 -> 3956: +5 now-running
+  # announcers, -1 unrelated network failure) while coverage did not move at
+  # all. A reader diffing the two totals concludes coverage improved. It did
+  # not — honesty improved, and the true proven count is LOWER than either
+  # total implies, because these five passes are known non-proofs.
+  #
+  # A METRIC THAT MOVES OPPOSITE TO THE TRUTH IT ENCODES IS WORSE THAN ONE THAT
+  # DOES NOT MOVE. The gate cannot fix the harness's arithmetic, so it states
+  # the correction next to the number, every run, where the reader is.
+  printf '⚠️  those %d suite(s) PASSED WITHOUT PROVING ANYTHING. Subtract %d from any\n' \
+    "$checked" "$checked"
+  printf '    pass total before reading it as coverage — making a gap VISIBLE raises\n'
+  printf '    the count, so a rising total here is not a coverage win.\n'
   return 0
 }
 
