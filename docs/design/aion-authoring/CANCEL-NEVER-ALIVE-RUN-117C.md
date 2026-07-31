@@ -256,6 +256,41 @@ Between them #117 is closed, with one limitation stated there: the surface is HT
 no gRPC method and no CLI verb, because the CLI reaches the server over gRPC and that means
 a proto change wider than the increment.
 
+## 🔴 The exclusion is PROCESS-LOCAL, and that decides where the first live case runs
+
+Raised by Cally at the relay, 2026-07-31, and it is correct. Worth stating plainly because
+the composition is easy to miss when each half is separately sound.
+
+The registry holds **no persistence** and is rebuilt empty by `Default` at every boot —
+that is verified, not assumed, and it is exactly what discharged Waffles' strandable-
+reservation note. The consequence cuts one specific way:
+
+> **The one-writer guarantee does not cross a process boundary.**
+
+Any process other than the live server — a CLI, a one-off, a second engine opened on the
+same store — starts with an empty registry, finds no handle for the workflow, takes the
+reservation **trivially**, and the invariant is back to being argued from circumstance
+across processes. That is precisely the (A)-shape reasoning the ruling foreclosed.
+
+Within a process the exclusion is structural. Across processes the only remaining defence
+is the store's `SequenceConflict` — an ALARM, and this design already holds that an alarm
+is never a load-bearing component. So:
+
+**The first live case (`0756ecd5`, per requirement (4)) must run INSIDE the live server's
+own process, through its own registry.** Not from a CLI, not from a second engine, however
+convenient the store sitting on disk makes it look. *The thing that would make a shortcut
+possible is not the thing that makes it permitted.*
+
+That queues it behind two locks, neither of them new and neither of them mine:
+
+1. **Tom's word** on restarting his live server (#108 — it runs from a deleted binary and
+   cannot be restarted; the restart is three-lock gated).
+2. **Acceptance of a binary containing (c).** The currently-accepted binary is #58-era and
+   does not carry this code, so a newer one goes through its own acceptance gate.
+
+Nothing here is blocked work. It means "at my sequencing" resolves to **after Tom's
+restart, on a binary accepted with (c) in it** — one more good thing waiting on his word.
+
 ---
 
 # 📍 RESUME HERE — written at compaction #3 (2026-08-01)
