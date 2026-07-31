@@ -1,0 +1,21 @@
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-server` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.72s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-96c0d5615dccff76)
+
+running 1 test
+Error: "workflow start over HTTP must succeed, got 409 Conflict: {\"code\":\"invalid_state\",\"message\":\"NO_QUEUE_DECLARATION: workflow `aion_outbox_fixture` version `e2e7a414be0e571bf56b4da9356dc5dac6ecc441ddb2ecc5aa1eb8d920e211b4` has unscoped activities fixture_activity; re-deploy from a checked AWL contract\",\"error_type\":\"NoQueueDeclaration\"}"
+test run::lsub_prod_xnode_e2e::production_boot_dispatches_executes_and_records_over_liminal ... FAILED
+
+failures:
+
+failures:
+    run::lsub_prod_xnode_e2e::production_boot_dispatches_executes_and_records_over_liminal
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 693 filtered out; finished in 0.08s
+
+error: test failed, to rerun pass `-p aion-server --lib`
+EXIT=101
