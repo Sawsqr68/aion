@@ -82,11 +82,21 @@ pub(crate) async fn persist_deployed_package(
 /// startup packages.
 ///
 /// Per-package isolation mirrors startup recovery's per-workflow isolation:
-/// a row that fails validation or load (store corruption / manual tampering)
-/// is skipped with a loud error so one bad row cannot prevent every other
-/// deploy — and every other workflow — from coming back. Runs pinned to a
-/// skipped version then fail their own recovery with the existing loud
-/// not-loaded skip.
+/// a row that fails validation or load is skipped with a loud error so one bad
+/// row cannot prevent every other deploy — and every other workflow — from
+/// coming back. Runs pinned to a skipped version then fail their own recovery
+/// with the existing loud not-loaded skip.
+///
+/// The skip does NOT diagnose a cause, because it cannot. A validation failure
+/// here is either an archive minted under a superseded package-identity domain
+/// (an aion upgrade moved identity, and this build carries no encoder for the
+/// older domain by policy — see `verified_content_hash_with_contract`) or
+/// genuinely corrupted or tampered bytes. `aion-package` states outright that
+/// the two are indistinguishable to this build. Naming only corruption and
+/// tampering would send an operator to a data-loss incident when the remedy for
+/// the far more likely cause — an upgrade — is a redeploy. Both remedies are a
+/// redeploy, so the message states the disjunction and the remedy and asserts
+/// no cause.
 ///
 /// Route pointers naming a version that is not loaded after reload (an
 /// operator-file version not supplied this boot, or a skipped corrupt row)
@@ -113,7 +123,8 @@ pub(crate) async fn reload_persisted_packages(
                     workflow_type = %record.workflow_type,
                     content_hash = %record.content_hash,
                     error = %error,
-                    "persisted deployed package failed validation on reload (store corruption or manual tampering); skipping it — runs pinned to it will fail recovery loudly"
+                    remedy = "redeploy this workflow",
+                    "persisted deployed package failed validation on reload; skipping it — runs pinned to it will fail recovery loudly. Cause is EITHER an archive minted under a superseded package-identity domain (an aion upgrade moved package identity; this build carries no encoder for a superseded domain, by policy) OR corrupted / tampered stored bytes. This build cannot tell them apart. The remedy is the same for both: redeploy this workflow."
                 );
                 continue;
             }
