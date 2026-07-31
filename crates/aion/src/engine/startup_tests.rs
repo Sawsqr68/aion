@@ -926,3 +926,129 @@ async fn a_run_whose_pinned_version_cannot_load_is_retained_as_unrecoverable() -
 
     Ok(())
 }
+
+/// #117 requirement (5), the PINNING TEST — built before the feature it protects.
+///
+/// Waffles ruled the direct cancellation of a never-alive run YES-narrowly, under
+/// five binding requirements. (5) is *"boot honors a cancellation record before
+/// minting a writer — a cancelled run is terminal at boot, unconditionally."*
+///
+/// It needs no new code: `list_active` filters `== Running`, and the recovery loop
+/// skips a terminal projected status before calling anything that mints a writer.
+/// But requirement (1) proves the writer slot is vacant at the WRITE INSTANT,
+/// which is spatial — and redeploy, the prescribed remedy for a stranded package,
+/// is precisely the event that could make the impossible writer possible later.
+/// (5) is what makes the invariant temporal: one writer EVER, not one writer now.
+///
+/// A load-bearing behaviour with no pinning test is one refactor away from
+/// fiction, so this exists to FALSIFY a future change that removes it.
+///
+/// # 🔴 What this test does NOT cover, stated rather than implied
+///
+/// There are two independent defences and this reaches only the first:
+///
+/// ```text
+/// layer 1  list_active never returns a non-Running run          <- pinned here
+/// layer 2  the recovery loop's own is_terminal() skip, which
+///          runs before any writer is minted                     <- NOT reached
+/// ```
+///
+/// Because layer 1 excludes the run entirely, it never arrives at layer 2. A test
+/// that only asserted "the cancelled run is not resident" would therefore go green
+/// while proving nothing about the guard.
+///
+/// 🔴 **MEASURED, not assumed — and worse than the limit above claims.** Disabling
+/// the layer-2 guard entirely (`if false && projected_status.is_terminal()`) and
+/// running the whole package leaves the suite at **exit 0, zero failures**. Not
+/// only does this test not reach layer 2 — *nothing in `aion-rs` does*. That guard
+/// is load-bearing and could be deleted today without a single test noticing,
+/// which is the "one refactor away from fiction" law standing on the very guard
+/// requirement (5) names.
+///
+/// Covering it needs an adversarial `EventStore` whose `list_active` returns the
+/// cancelled run anyway, forcing the loop to defend itself. Named as the follow-up
+/// with its cost known, rather than papered over by this green.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cancelled_run_is_terminal_at_boot_and_never_has_a_writer_minted() -> TestResult {
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+    let runtime = Arc::new(RuntimeHandle::new(RuntimeConfig::new(Some(1)))?);
+    runtime.register_waiting_test_module("loadable_deployed", "run");
+    let catalog = Arc::new(WorkflowCatalog::new());
+    catalog.note_loaded_workflow_for_test(
+        "loadable",
+        "loadable_deployed",
+        "run",
+        aion_package::ContentHash::from_bytes([3; 32]),
+    );
+
+    // The control. Identical in every respect except that it is not cancelled —
+    // so if the sweep silently did nothing, this half fails and the test cannot
+    // certify the cancelled half by accident.
+    let healthy = WorkflowId::new_v4();
+    let mut seed = crate::durability::Recorder::new(healthy.clone(), Arc::clone(&store));
+    seed.record_workflow_started(
+        Utc::now(),
+        crate::durability::WorkflowStartRecord {
+            workflow_type: "loadable".to_owned(),
+            input: Payload::from_json(&json!({}))?,
+            run_id: RunId::new_v4(),
+            parent_run_id: None,
+            package_version: aion_core::PackageVersion::new("03".repeat(32)),
+        },
+    )
+    .await?;
+
+    // The cancelled run: same type, same loadable version, so the ONLY difference
+    // between it and the control is the cancellation record itself.
+    let cancelled = WorkflowId::new_v4();
+    let mut seed = crate::durability::Recorder::new(cancelled.clone(), Arc::clone(&store));
+    seed.record_workflow_started(
+        Utc::now(),
+        crate::durability::WorkflowStartRecord {
+            workflow_type: "loadable".to_owned(),
+            input: Payload::from_json(&json!({}))?,
+            run_id: RunId::new_v4(),
+            parent_run_id: None,
+            package_version: aion_core::PackageVersion::new("03".repeat(32)),
+        },
+    )
+    .await?;
+    seed.record_workflow_cancelled(
+        Utc::now(),
+        "direct cancellation of a never-alive run".to_owned(),
+    )
+    .await?;
+
+    // Layer 1, pinned directly rather than inferred from the outcome below.
+    let active = store.list_active().await?;
+    assert!(
+        active.contains(&healthy),
+        "the control must be in the active set, or the sweep has nothing to do \
+         and the cancelled half proves nothing"
+    );
+    assert!(
+        !active.contains(&cancelled),
+        "a run carrying a cancellation record must not be listed active — this is \
+         requirement (5) at the layer that actually delivers it"
+    );
+
+    let registry = Arc::new(Registry::default());
+    let mut context = context_with_registry(&store, &runtime, &registry);
+    context.catalog = catalog;
+    super::recover_active_workflows_on_startup(context).await?;
+
+    // The outcome, through the real boot path.
+    assert!(
+        registry.live_pid(&healthy)?.is_some(),
+        "the control must be made resident — without this the assertion below is \
+         satisfied by a sweep that did nothing at all"
+    );
+    assert!(
+        registry.live_pid(&cancelled)?.is_none(),
+        "a cancelled run must never be made resident, so no writer is ever minted \
+         for it — the direct cancellation write closes the door behind itself, and \
+         a redeploy that makes its package loadable again must not reopen it"
+    );
+
+    Ok(())
+}
