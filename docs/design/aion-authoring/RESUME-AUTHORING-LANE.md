@@ -70,24 +70,59 @@ Install the CLI alone into a scratch prefix:
 - **`git checkout --` after a mutation check reverts uncommitted FIXES too.**
   Copy the file to the scratchpad and restore from there instead.
 
-## 🔴 Standing constraints — UNCHANGED
+## The queue — RELEASED 2026-07-31 ~08:13Z
 
-**The frozen queue. Each item runs ONLY on Cally's explicit NAMED GO naming the
-exact command. No named GO, no launch.**
+The freeze is lifted and the per-command GO regime ended with it. Cally
+released the held queue in its recorded order under normal rules: announced,
+owned, bounded, re-declared before each item. GB-scale deletions still
+declare-and-wait.
+
+**Gate 1 (Cally's, still standing at the time of writing): wait for Athena's
+fresh gate-two disk baseline.** Her remedy half-life is ~2h, so every disk
+number from this morning is stale and the queue launches against her fresh
+reading. Nothing below starts before that.
+
+My own disk reading, taken 08:15Z as an input to hers, not a substitute:
+`/System/Volumes/Data` 825Gi used / **72Gi avail**, 92%. The largest single
+object on the box is **aion's `target/` at 32G — mine**, against iridium 9.1G,
+beamr 8.2G, manifold 2.5G, liminal 2.0G, lys 1.6G. If Athena's reading is
+tight, my target dir is the cheapest remedy anyone has today; that is offered
+to Cally and not yet taken.
+
+Then, in order:
 
 1. `cargo clippy -p aion-rs -p aion-server --all-targets -- -D warnings`
    (`-p aion-package` discharged at `4462765a`). **Predicted RED, on record.**
+   Findings land on their OWN battery, not mixed into another lane's.
 2. `cargo test -p aion-rs` — the #106 battery. Until it runs, `4d9ca3b0` is
    unverified at battery level and must be described that way.
-3. `cargo build -p aion-cli` + the **#97 live demonstration** against a real
-   server, quoting recorded bytes. NOT the `target/debug/aion` shortcut.
-4. `cargo test -p aion-server --test ops_console_packaging` — asserts the
-   refreshed bundle ships in the packaged crate. Owed on this tree before
-   release.
+3. **4a — the #97 live demonstration.** `cargo build -p aion-cli`, a real
+   server, and quoted recorded bytes. NOT the `target/debug/aion` shortcut.
+4. **4b — #83**, its own motion on its own battery.
 
-Also: **do not restart Tom's server** (#108 — running from a deleted binary).
-**#83** stays designed-and-held (`AWLFAILED-CARRIES-NOTHING.md`); it lands as
-ONE motion after the two owed gates, on its own battery.
+**Item 4 was raised as one thing and is two.** Cally's release named "the
+`BC4_DUMP_FAILED` tap" as #97's evidence. It is not. That tap lives in
+`crates/aion/tests/awl_bc4_differential/driver.rs:462` and dumps a failed
+fixture's reference trail — it is **#83's** close condition
+(`AWLFAILED-CARRIES-NOTHING.md:155`: re-run it on
+`step-bodies/valid/send_signal` and quote the recorded detail; #83 closes when
+the recorded JSON names the failure). **#97** is the declared-contract signal
+boundary, and its acceptance
+(`BOUNDARY-CONTRACT-MEASUREMENT.md:179`) is a live server, a
+contract-violating signal, and quoted history proving the run's bytes are
+byte-identical and it stays parked, plus the caller's 400. Split raised with
+Cally; neither gets dropped.
 
-In-class work (no GO needed): `aion-awl`, `aion-awl-lsp`, the ops console,
-`tools/tree-sitter-awl`, `editors/`, docs.
+Still owed and unscheduled: `cargo test -p aion-server --test
+ops_console_packaging`, which asserts the refreshed bundle ships in the
+packaged crate. Owed on this tree before release.
+
+## 🔴 Standing constraints
+
+- **Do not restart or go near Tom's server** (#108 — running from a deleted
+  binary, cannot be restarted). The #97 proof stands up its OWN server, own
+  port, own store.
+- **Do not touch `aion-rs`/`aion-server` SOURCE until items 1 and 2 have run.**
+  A battery that goes red must have one lane's changes under it, not two.
+  Until then, work stays in: `aion-awl`, `aion-awl-lsp`, the ops console,
+  `tools/tree-sitter-awl`, `editors/`, docs.
