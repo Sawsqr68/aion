@@ -84,7 +84,7 @@ async fn state_with_contract() -> TestResult<(ServerState, aion_package::ActionC
 
 async fn state_from(source: &str) -> TestResult<(ServerState, Vec<aion_package::ActionContract>)> {
     let root = tempfile::tempdir()?;
-    let prepared = compile_and_assemble_awl(source, root.path())?;
+    let prepared = compile_and_assemble_awl(source, root.path(), "contract_registration.awl")?;
     let package = Package::load_from_bytes(prepared.archive, ExtractionLimits::unbounded())?;
     let actions = package.contract()?.workers[0].actions.clone();
     let state =

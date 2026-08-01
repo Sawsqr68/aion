@@ -165,7 +165,7 @@ struct RunRecord {
 }
 
 fn direct_package(source: &str) -> Result<Package, TestError> {
-    let prepared = compile_and_assemble_awl(source, Path::new("."))?;
+    let prepared = compile_and_assemble_awl(source, Path::new("."), "advisory_probe.awl")?;
     Ok(Package::load_from_bytes(
         prepared.archive,
         ExtractionLimits::unbounded(),

@@ -178,7 +178,19 @@ pub async fn deploy(
             &revision_source,
         )
         .map_err(|error| RevisionError::InvalidRecord(error.to_string()))?;
-        compile_and_assemble_awl(&revision_source, &schema_root).map_err(RunLoopError::from)
+        // The staged root mirrors the document's own directory, so the
+        // archived document name is the document's basename and every
+        // archived schema path stays relative to that root.
+        let document_filename = Path::new(&document_path)
+            .file_name()
+            .and_then(std::ffi::OsStr::to_str)
+            .ok_or_else(|| {
+                RevisionError::InvalidRecord(format!(
+                    "document path `{document_path}` has no filename"
+                ))
+            })?;
+        compile_and_assemble_awl(&revision_source, &schema_root, document_filename)
+            .map_err(RunLoopError::from)
     })
     .await
     .map_err(|error| {

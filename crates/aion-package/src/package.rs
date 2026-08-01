@@ -10,8 +10,9 @@ use std::{
 use zip::{ZipArchive, result::ZipError};
 
 use crate::{
-    BeamModule, BeamSet, ContentHash, ContractIdentityError, ExtractionLimits, Manifest,
+    AwlSource, BeamModule, BeamSet, ContentHash, ContractIdentityError, ExtractionLimits, Manifest,
     PackageContract, PackageError,
+    awl::{AWL_DOCUMENT_PREFIX, AWL_SCHEMA_PREFIX},
     builder::is_safe_logical_name,
     extraction::ExtractionBudget,
     hash::{has_contract_identity, verified_content_hash_with_contract},
@@ -25,6 +26,7 @@ const BEAM_PREFIX: &str = "beam/";
 const BEAM_SUFFIX: &str = ".beam";
 const SOURCE_PREFIX: &str = "src/";
 const SOURCE_SUFFIX: &str = ".gleam";
+const AWL_PREFIX: &str = "awl/";
 
 /// A validated, integrity-checked `.aion` package loaded fully into memory.
 ///
@@ -37,7 +39,16 @@ pub struct Package {
     contract: Option<PackageContract>,
     beams: BeamSet,
     source: BTreeMap<String, Vec<u8>>,
+    awl: Option<AwlSource>,
     content_hash: ContentHash,
+}
+
+/// The entry families one archive read yields, beyond the manifest and
+/// contract.
+struct ArchiveEntries {
+    beams: BeamSet,
+    source: BTreeMap<String, Vec<u8>>,
+    awl: Option<AwlSource>,
 }
 
 impl Package {
@@ -87,7 +98,8 @@ impl Package {
         manifest.check_format_version()?;
         let contract = read_contract(&mut archive, &mut budget)?;
 
-        let (beams, source) = read_archive_entries(&mut archive, &mut budget)?;
+        let entries = read_archive_entries(&mut archive, &mut budget)?;
+        let ArchiveEntries { beams, source, awl } = entries;
         let content_hash =
             verified_content_hash_with_contract(&beams, &manifest, contract.as_ref())?;
 
@@ -102,6 +114,7 @@ impl Package {
             contract,
             beams,
             source,
+            awl,
             content_hash,
         })
     }
@@ -122,6 +135,20 @@ impl Package {
     #[must_use]
     pub const fn source(&self) -> &BTreeMap<String, Vec<u8>> {
         &self.source
+    }
+
+    /// Returns the authored AWL document and its imported schema files, when
+    /// the archive carries them.
+    ///
+    /// `None` for every archive built from a Gleam project and for every AWL
+    /// archive written before the `awl/` entry families existed — the field is
+    /// provenance, never a load requirement.
+    ///
+    /// This is PROVENANCE ONLY: it never participates in the package's
+    /// [`ContentHash`], so a consumer must not treat it as a version input.
+    #[must_use]
+    pub const fn awl(&self) -> Option<&AwlSource> {
+        self.awl.as_ref()
     }
 
     /// Returns the recomputed content hash that proved package integrity.
@@ -254,8 +281,10 @@ impl Package {
     /// The deterministic [`crate::PackageBuilder`] write path is used, so the
     /// output round-trips through [`Self::load_from_bytes`] to a package with
     /// the same legacy or explicit-timeout content hash, canonical manifest
-    /// digest, and source set. This is the persistence form for runtime-deployed
-    /// packages: the engine stores these bytes so a deploy survives restart.
+    /// digest, source set, and AWL provenance. This is the persistence form for
+    /// runtime-deployed packages: the engine stores these bytes so a deploy
+    /// survives restart, and this path rebuilds the archive from FIELDS — so
+    /// anything the loaded package does not hold as a field is not persisted.
     ///
     /// # Errors
     ///
@@ -263,13 +292,17 @@ impl Package {
     /// writer failures; the entry module is already proven present by load
     /// validation.
     pub fn to_archive_bytes(&self) -> Result<Vec<u8>, PackageError> {
-        crate::PackageBuilder::with_source(
+        let mut builder = crate::PackageBuilder::with_source(
             self.manifest.clone(),
             self.beams.clone(),
             self.source.clone(),
-        )
-        .preserving_loaded_identity(self.content_hash.clone(), self.contract.clone())
-        .write_to_bytes()
+        );
+        if let Some(awl) = self.awl.clone() {
+            builder = builder.with_awl_source(awl);
+        }
+        builder
+            .preserving_loaded_identity(self.content_hash.clone(), self.contract.clone())
+            .write_to_bytes()
     }
 
     #[cfg(any(test, feature = "test-support"))]
@@ -286,6 +319,7 @@ impl Package {
             contract: None,
             beams,
             source,
+            awl: None,
             content_hash,
         }
     }
@@ -327,15 +361,26 @@ where
     Ok(Some(contract))
 }
 
+/// Reads every non-metadata entry into its family.
+///
+/// Entries outside the families this format defines are skipped, exactly as
+/// they always have been — with ONE deliberate exception: an entry under the
+/// `awl/` prefix that names no defined family is refused. That prefix is owned
+/// by this format, and a rewrite through [`Package::to_archive_bytes`] rebuilds
+/// the archive from fields, so silently skipping an unrecognised `awl/` entry
+/// would drop it on the next persistence write. Refusing names the problem
+/// instead of losing the bytes.
 fn read_archive_entries<R>(
     archive: &mut ZipArchive<R>,
     budget: &mut ExtractionBudget,
-) -> Result<(BeamSet, BTreeMap<String, Vec<u8>>), PackageError>
+) -> Result<ArchiveEntries, PackageError>
 where
     R: Read + Seek,
 {
     let mut modules = Vec::new();
     let mut source = BTreeMap::new();
+    let mut document: Option<(String, String)> = None;
+    let mut schemas = BTreeMap::new();
 
     for index in 0..archive.len() {
         let mut file = archive.by_index(index).map_err(PackageError::ArchiveRead)?;
@@ -358,11 +403,56 @@ where
             if source.insert(logical, bytes).is_some() {
                 return Err(PackageError::MalformedBeamEntry { entry });
             }
+        } else if let Some(name) = entry.strip_prefix(AWL_DOCUMENT_PREFIX) {
+            // The document sits at the ROOT of its own directory — that is what
+            // makes every schema entry's path document-relative — so its entry
+            // carries a bare filename and never a directory part.
+            if name.contains('/') {
+                return Err(PackageError::MalformedAwlEntry { entry });
+            }
+            let name = awl_relative_path(&entry, name)?;
+            let bytes = budget.read_entry(&mut file)?;
+            let text =
+                String::from_utf8(bytes).map_err(|source| PackageError::AwlDocumentNotUtf8 {
+                    entry: entry.clone(),
+                    source,
+                })?;
+            if document.replace((name, text)).is_some() {
+                return Err(PackageError::MalformedAwlEntry { entry });
+            }
+        } else if let Some(path) = entry.strip_prefix(AWL_SCHEMA_PREFIX) {
+            let path = awl_relative_path(&entry, path)?;
+            let bytes = budget.read_entry(&mut file)?;
+            if schemas.insert(path, bytes).is_some() {
+                return Err(PackageError::MalformedAwlEntry { entry });
+            }
+        } else if entry.starts_with(AWL_PREFIX) {
+            return Err(PackageError::MalformedAwlEntry { entry });
         }
     }
 
+    let awl = match document {
+        Some((name, text)) => Some(AwlSource::new(name, text, schemas)),
+        None if schemas.is_empty() => None,
+        None => return Err(PackageError::MissingAwlDocument),
+    };
+
     let beams = BeamSet::new(modules)?;
-    Ok((beams, source))
+    Ok(ArchiveEntries { beams, source, awl })
+}
+
+/// Validates the part of an `awl/` entry name that follows its family prefix.
+///
+/// The whole remainder is the name — extension and nesting included — because
+/// a consumer stages the file back at exactly that relative path.
+fn awl_relative_path(entry: &str, relative_path: &str) -> Result<String, PackageError> {
+    if is_safe_logical_name(relative_path) {
+        Ok(relative_path.to_owned())
+    } else {
+        Err(PackageError::MalformedAwlEntry {
+            entry: entry.to_owned(),
+        })
+    }
 }
 
 fn logical_name_from_entry(

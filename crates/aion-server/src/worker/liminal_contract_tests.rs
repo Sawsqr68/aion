@@ -26,7 +26,11 @@ step run
 
 async fn notifier_with_contract() -> TestResult<(LiminalConnectionNotifier, String)> {
     let root = tempfile::tempdir()?;
-    let prepared = aion_awl_package::compile_and_assemble_awl(SOURCE, root.path())?;
+    let prepared = aion_awl_package::compile_and_assemble_awl(
+        SOURCE,
+        root.path(),
+        "liminal_contract_test.awl",
+    )?;
     let package = Package::load_from_bytes(prepared.archive, ExtractionLimits::unbounded())?;
     let version = package.content_hash().to_string();
     let engine = aion::EngineBuilder::new()

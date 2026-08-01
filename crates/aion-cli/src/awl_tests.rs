@@ -482,7 +482,7 @@ fn emit_beam_bytes_equal_the_archive_entry_module() -> anyhow::Result<()> {
     let root = source_path
         .parent()
         .ok_or_else(|| anyhow::anyhow!("source path has no parent"))?;
-    let prepared = aion_awl_package::compile_and_assemble_awl(VALID_DOC, root)?;
+    let prepared = aion_awl_package::compile_and_assemble_awl(VALID_DOC, root, "probe.awl")?;
     let package = Package::load_from_bytes(prepared.archive, ExtractionLimits::unbounded())?;
     let entry_module = package.manifest().entry_module.clone();
     let archive_bytes = package

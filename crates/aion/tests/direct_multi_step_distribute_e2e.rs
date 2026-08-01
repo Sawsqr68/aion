@@ -163,7 +163,7 @@ fn repo_root() -> Result<PathBuf, Box<dyn std::error::Error>> {
 
 /// The DIRECT-path archive: source → MIR → BEAM → `.aion`, no toolchain.
 fn direct_package() -> Result<Package, Box<dyn std::error::Error>> {
-    let prepared = compile_and_assemble_awl(AWL, Path::new("."))?;
+    let prepared = compile_and_assemble_awl(AWL, Path::new("."), "multi_step_distribute.awl")?;
     let [child] = prepared.compiled.synthesized_workflows.as_slice() else {
         return Err(format!(
             "expected exactly one synthesized entry, got {}",
@@ -431,7 +431,7 @@ fn direct_and_gleam_archives_expose_identical_workflow_entries() -> TestResult {
     if crate::gleam_test_support::skip_if_unavailable() {
         return Ok(());
     }
-    let prepared = compile_and_assemble_awl(AWL, Path::new("."))?;
+    let prepared = compile_and_assemble_awl(AWL, Path::new("."), "multi_step_distribute.awl")?;
     let direct = Package::load_from_bytes(prepared.archive, ExtractionLimits::unbounded())?;
     let gleam = gleam_package()?;
 

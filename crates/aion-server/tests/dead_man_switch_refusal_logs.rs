@@ -210,7 +210,8 @@ impl RefusingServer {
     async fn start() -> Result<Self, TestError> {
         let root = tempfile::tempdir().map_err(test_error)?;
         let prepared =
-            aion_awl_package::compile_and_assemble_awl(SOURCE, root.path()).map_err(test_error)?;
+            aion_awl_package::compile_and_assemble_awl(SOURCE, root.path(), "refusal_pin.awl")
+                .map_err(test_error)?;
         let package = Package::load_from_bytes(prepared.archive, ExtractionLimits::unbounded())
             .map_err(test_error)?;
         let engine = aion::EngineBuilder::new()

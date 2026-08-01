@@ -6,7 +6,9 @@ mod assemble;
 mod bundle;
 mod bundle_data;
 mod prepare;
+mod source;
 
 pub use assemble::{AssembleError, AwlAssembleOptions, assemble_awl};
 pub use bundle::{sdk_closure_modules, sdk_closure_version};
 pub use prepare::{PrepareAwlError, PreparedAwlPackage, compile_and_assemble_awl};
+pub use source::{AwlSourceError, collect_awl_source};

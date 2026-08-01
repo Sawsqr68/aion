@@ -108,7 +108,8 @@ async fn engine() -> TestResult<Engine> {
 
 async fn deploy(engine: &Engine, source: &str) -> TestResult<String> {
     let root = tempfile::tempdir()?;
-    let prepared = aion_awl_package::compile_and_assemble_awl(source, root.path())?;
+    let prepared =
+        aion_awl_package::compile_and_assemble_awl(source, root.path(), "contract_drift.awl")?;
     let package = Package::load_from_bytes(prepared.archive, ExtractionLimits::unbounded())?;
     let version = package.content_hash().to_string();
     engine.load_package(package).await?;

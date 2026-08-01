@@ -12,17 +12,17 @@ use std::time::Duration;
 use aion_awl::CompiledWorkflow;
 
 use aion_package::{
-    BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest, ManifestVersion,
-    PackageBuilder, PackageError, WorkflowEntry, builder::is_safe_logical_name,
+    AwlSource, BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest,
+    ManifestVersion, PackageBuilder, PackageError, WorkflowEntry, builder::is_safe_logical_name,
 };
 
 use crate::bundle;
 
 /// Options for [`assemble_awl`].
 ///
-/// Construct via [`Default`] and assign fields, so call sites keep compiling
-/// when options are added.
-#[derive(Clone, Copy, Debug, Default)]
+/// Construct via [`Default`] and assign fields (`..Default::default()` in a
+/// struct literal), so call sites keep compiling when options are added.
+#[derive(Clone, Debug, Default)]
 pub struct AwlAssembleOptions {
     /// The document's explicitly authored workflow timeout, or `None` when the
     /// document declared none. There is NO policy default: a `None` timeout is
@@ -31,6 +31,12 @@ pub struct AwlAssembleOptions {
     /// opts the package into the explicit-timeout identity that authorises a
     /// deadline.
     pub timeout: Option<Duration>,
+    /// The authored document and its imported schema files, archived as
+    /// package provenance. `None` archives no source, which is what a caller
+    /// assembling a hand-built [`CompiledWorkflow`] has to say — there is no
+    /// document behind it. Provenance only: it never reaches package identity
+    /// (see [`aion_package::hash`]).
+    pub source: Option<AwlSource>,
 }
 
 /// A typed refusal from [`assemble_awl`].
@@ -77,10 +83,14 @@ pub enum AssembleError {
 /// produced. Deterministic: the same compile output yields byte-identical
 /// archives.
 ///
-/// The `.awl` source text and `.gleam_types` sidecar are deliberately NOT
-/// archived in this increment: the format-v1 loader rejects unknown entries,
-/// so source provenance is deferred to a loader-tolerance follow-up rather
-/// than shipped in a form the loader would refuse.
+/// The authored `.awl` document and the schema files it imports ARE archived,
+/// as the `awl/document/` and `awl/schema/` entry families, whenever the
+/// caller supplies them in [`AwlAssembleOptions::source`] — the compile-and-
+/// assemble seam always does. They are provenance and nothing more: they never
+/// enter package identity, and a package that carries them is the same version
+/// as one that does not. The `.gleam_types` sidecar is still not archived: it
+/// is a derived artifact of the compile, reproducible from the document, and
+/// no consumer reads it out of a package.
 ///
 /// # Errors
 ///
@@ -126,9 +136,11 @@ pub fn assemble_awl(
         additional_workflows: additional_workflows(compiled)?,
     };
 
-    Ok(PackageBuilder::new(manifest, beams)
-        .with_contract(compiled.contract.clone())
-        .write_to_bytes()?)
+    let mut builder = PackageBuilder::new(manifest, beams).with_contract(compiled.contract.clone());
+    if let Some(source) = opts.source {
+        builder = builder.with_awl_source(source);
+    }
+    Ok(builder.write_to_bytes()?)
 }
 
 /// Maps the compile output's synthesized workflow entries (implicit per-item
@@ -265,6 +277,7 @@ mod tests {
             &hand_built("timeout_case"),
             AwlAssembleOptions {
                 timeout: Some(std::time::Duration::from_secs(90)),
+                ..AwlAssembleOptions::default()
             },
         )?;
         let package = Package::load_from_bytes(authored, ExtractionLimits::unbounded())?;

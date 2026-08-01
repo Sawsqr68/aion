@@ -43,7 +43,11 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// Gleam path's synthesized artifact carries for the same document.
 #[test]
 fn direct_archive_carries_the_implicit_child_with_gleam_path_identity() -> TestResult {
-    let prepared = compile_and_assemble_awl(MULTI_STEP, std::path::Path::new("."))?;
+    let prepared = compile_and_assemble_awl(
+        MULTI_STEP,
+        std::path::Path::new("."),
+        "direct_parity_probe.awl",
+    )?;
     let package =
         Package::load_from_bytes(prepared.archive.clone(), ExtractionLimits::unbounded())?;
     let entries = &package.manifest().additional_workflows;
@@ -82,8 +86,16 @@ fn direct_archive_carries_the_implicit_child_with_gleam_path_identity() -> TestR
 /// multi-entry manifest folds into the same stamped bytes).
 #[test]
 fn direct_distribute_archive_is_deterministic() -> TestResult {
-    let first = compile_and_assemble_awl(MULTI_STEP, std::path::Path::new("."))?;
-    let second = compile_and_assemble_awl(MULTI_STEP, std::path::Path::new("."))?;
+    let first = compile_and_assemble_awl(
+        MULTI_STEP,
+        std::path::Path::new("."),
+        "direct_parity_probe.awl",
+    )?;
+    let second = compile_and_assemble_awl(
+        MULTI_STEP,
+        std::path::Path::new("."),
+        "direct_parity_probe.awl",
+    )?;
     assert_eq!(first.archive, second.archive);
     Ok(())
 }
@@ -111,7 +123,11 @@ step gather
   collect result -> results
   results |> count |> route done
 ";
-    let prepared = compile_and_assemble_awl(source, std::path::Path::new("."))?;
+    let prepared = compile_and_assemble_awl(
+        source,
+        std::path::Path::new("."),
+        "direct_parity_single.awl",
+    )?;
     let package = Package::load_from_bytes(prepared.archive, ExtractionLimits::unbounded())?;
     assert!(package.manifest().additional_workflows.is_empty());
     assert!(prepared.compiled.synthesized_workflows.is_empty());

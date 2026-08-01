@@ -18,6 +18,8 @@
 
 /// Declared-contract admission of caller-supplied values at a boundary.
 pub mod admission;
+/// AWL document provenance carried by an archive.
+pub mod awl;
 /// Compiled BEAM module records extracted from packages.
 pub mod beam;
 /// Which `serde_json::Map` representation this build resolved, announced.
@@ -55,6 +57,7 @@ pub mod version;
 pub use admission::{
     AdmissionError, UnenforceableSchema, admit_value, declares_nothing, schema_is_usable,
 };
+pub use awl::AwlSource;
 pub use beam::{BeamModule, BeamSet, RESERVED_MODULE_NAMES};
 pub use builder::PackageBuilder;
 pub use canonical::{CanonicalJson, serialize_value, sorted_entries};

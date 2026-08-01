@@ -240,7 +240,7 @@ fn repo_root() -> Result<PathBuf, TestError> {
 }
 
 fn direct_package(source: &str) -> Result<Package, TestError> {
-    let prepared = compile_and_assemble_awl(source, Path::new("."))?;
+    let prepared = compile_and_assemble_awl(source, Path::new("."), "failure_parity.awl")?;
     Ok(Package::load_from_bytes(
         prepared.archive,
         ExtractionLimits::unbounded(),

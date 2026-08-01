@@ -55,7 +55,8 @@ step run
 
 fn package(source: &str) -> Result<Package, Box<dyn std::error::Error>> {
     let root = tempfile::tempdir()?;
-    let prepared = aion_awl_package::compile_and_assemble_awl(source, root.path())?;
+    let prepared =
+        aion_awl_package::compile_and_assemble_awl(source, root.path(), "paused_pin.awl")?;
     Ok(Package::load_from_bytes(
         prepared.archive,
         ExtractionLimits::unbounded(),

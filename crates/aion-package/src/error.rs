@@ -1,5 +1,7 @@
 //! Error taxonomy for malformed `.aion` packages.
 
+use crate::awl::{AWL_DOCUMENT_PREFIX, AWL_SCHEMA_PREFIX};
+
 /// Errors produced while validating or loading a `.aion` package.
 #[derive(thiserror::Error, Debug)]
 pub enum PackageError {
@@ -92,6 +94,28 @@ pub enum PackageError {
         /// Archive entry or logical module name that failed validation.
         entry: String,
     },
+
+    /// An `awl/` archive entry is malformed, duplicated, or names a family
+    /// this format does not define.
+    #[error("malformed AWL source entry `{entry}`")]
+    MalformedAwlEntry {
+        /// Archive entry or relative path that failed validation.
+        entry: String,
+    },
+
+    /// The archived AWL document is not UTF-8 text.
+    #[error("archived AWL document `{entry}` is not valid UTF-8: {source}")]
+    AwlDocumentNotUtf8 {
+        /// Archive entry that failed decoding.
+        entry: String,
+        /// Decoding failure reported by the standard library.
+        source: std::string::FromUtf8Error,
+    },
+
+    /// The archive carries imported schema files with no document to own them,
+    /// so the provenance it claims is incomplete.
+    #[error("archive carries `{AWL_SCHEMA_PREFIX}` entries but no `{AWL_DOCUMENT_PREFIX}` entry")]
+    MissingAwlDocument,
 
     /// The archive's entries inflate past the caller's extraction budget.
     #[error(

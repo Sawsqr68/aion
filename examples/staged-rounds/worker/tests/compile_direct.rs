@@ -29,7 +29,7 @@ fn document_source() -> anyhow::Result<(String, std::path::PathBuf)> {
 #[test]
 fn staged_rounds_document_compiles_and_assembles_on_the_direct_path() -> anyhow::Result<()> {
     let (source, doc_dir) = document_source()?;
-    let prepared = compile_and_assemble_awl(&source, &doc_dir)?;
+    let prepared = compile_and_assemble_awl(&source, &doc_dir, "staged_rounds.awl")?;
     assert_eq!(prepared.compiled.workflow_name, "staged_rounds");
     assert_eq!(
         prepared.compiled.first_worker.as_deref(),
@@ -79,7 +79,7 @@ const EXPECTED_ACTIONS: [(&str, &str); 11] = [
 #[test]
 fn the_eleven_actions_pin_their_nodes() -> anyhow::Result<()> {
     let (source, doc_dir) = document_source()?;
-    let prepared = compile_and_assemble_awl(&source, &doc_dir)?;
+    let prepared = compile_and_assemble_awl(&source, &doc_dir, "staged_rounds.awl")?;
     let rows: Vec<(String, String, Option<String>)> = prepared
         .compiled
         .actions
@@ -112,7 +112,7 @@ fn the_eleven_actions_pin_their_nodes() -> anyhow::Result<()> {
 #[test]
 fn the_input_schema_covers_material_and_config() -> anyhow::Result<()> {
     let (source, doc_dir) = document_source()?;
-    let prepared = compile_and_assemble_awl(&source, &doc_dir)?;
+    let prepared = compile_and_assemble_awl(&source, &doc_dir, "staged_rounds.awl")?;
     let schema = &prepared.compiled.input_schema;
     let required = schema["required"]
         .as_array()
@@ -133,7 +133,7 @@ fn the_input_schema_covers_material_and_config() -> anyhow::Result<()> {
 #[test]
 fn example_input_validates_against_the_compiled_contract() -> anyhow::Result<()> {
     let (source, doc_dir) = document_source()?;
-    let prepared = compile_and_assemble_awl(&source, &doc_dir)?;
+    let prepared = compile_and_assemble_awl(&source, &doc_dir, "staged_rounds.awl")?;
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let input_text = std::fs::read_to_string(manifest_dir.join(EXAMPLE_INPUT))?;
     let input: serde_json::Value = serde_json::from_str(&input_text)?;

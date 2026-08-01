@@ -72,6 +72,15 @@ fn archive_with_manifest(manifest: &Manifest) -> Result<Vec<u8>, PackageError> {
 /// so a hand-crafted (possibly tampered) manifest can be loaded through the real
 /// [`Package::load_from_bytes`] integrity path.
 fn archive_with_beams(manifest: &Manifest, beams: &BeamSet) -> Result<Vec<u8>, PackageError> {
+    write_zip(archive_entries(manifest, beams)?)
+}
+
+/// The entry list [`archive_with_beams`] writes, so a test can append its own
+/// hand-crafted entries before the archive is sealed.
+fn archive_entries(
+    manifest: &Manifest,
+    beams: &BeamSet,
+) -> Result<Vec<(String, Vec<u8>)>, PackageError> {
     let manifest_bytes = serde_json::to_vec(manifest)
         .map_err(|source| PackageError::ManifestSerialise { source })?;
     let mut entries: Vec<(String, Vec<u8>)> = vec![("manifest.json".to_owned(), manifest_bytes)];
@@ -81,7 +90,7 @@ fn archive_with_beams(manifest: &Manifest, beams: &BeamSet) -> Result<Vec<u8>, P
             module.bytes().to_vec(),
         ));
     }
-    write_zip(entries)
+    Ok(entries)
 }
 
 /// A DEFLATE-compressed zip — what a hostile uploader sends.
@@ -416,5 +425,163 @@ fn load_from_path_loads_successfully() -> Result<(), Box<dyn std::error::Error>>
     let package = package_result?;
     remove_result?;
     assert_eq!(package.manifest().entry_module, "workflow/order");
+    Ok(())
+}
+
+/// The AWL provenance families survive the FULL persistence round-trip:
+/// build → load → `to_archive_bytes` → load. The second leg is the one that
+/// matters — `to_archive_bytes` rebuilds the archive from the loaded
+/// package's FIELDS, so a merely-tolerated entry would be dropped there and
+/// the deploy would lose its source on the first restart-persistence write.
+#[test]
+fn awl_provenance_survives_the_persistence_rewrite() -> Result<(), Box<dyn std::error::Error>> {
+    let awl = crate::AwlSource::new(
+        "order_flow.awl",
+        "workflow order_flow\n",
+        [
+            (
+                "schemas/order.schema.json",
+                br#"{"type":"object"}"#.to_vec(),
+            ),
+            ("ticket.schema.json", br#"{"type":"string"}"#.to_vec()),
+        ],
+    );
+    let bytes = PackageBuilder::new(sample_manifest(), sample_beams()?)
+        .with_awl_source(awl.clone())
+        .write_to_bytes()?;
+
+    let loaded = Package::load_from_bytes(&bytes, ExtractionLimits::unbounded())?;
+    assert_eq!(loaded.awl(), Some(&awl));
+
+    let rewritten = loaded.to_archive_bytes()?;
+    let reloaded = Package::load_from_bytes(&rewritten, ExtractionLimits::unbounded())?;
+
+    let carried = reloaded.awl().ok_or("the rewrite dropped the AWL source")?;
+    assert_eq!(carried.document_name(), "order_flow.awl");
+    assert_eq!(carried.document(), "workflow order_flow\n");
+    assert_eq!(
+        carried.schemas().get("schemas/order.schema.json").cloned(),
+        Some(br#"{"type":"object"}"#.to_vec())
+    );
+    assert_eq!(carried.schemas().len(), 2);
+    assert_eq!(reloaded, loaded, "the rewrite changed the loaded package");
+    assert_eq!(
+        reloaded.content_hash(),
+        loaded.content_hash(),
+        "the rewrite changed the package version"
+    );
+    Ok(())
+}
+
+/// An archive written before the `awl/` families existed carries none of them
+/// and loads exactly as it always did — the field is provenance, never a load
+/// requirement.
+#[test]
+fn an_archive_without_awl_entries_loads_with_no_provenance() -> Result<(), PackageError> {
+    let bytes = PackageBuilder::new(sample_manifest(), sample_beams()?).write_to_bytes()?;
+
+    let package = Package::load_from_bytes(&bytes, ExtractionLimits::unbounded())?;
+
+    assert_eq!(package.awl(), None);
+    assert_eq!(package.manifest().entry_module, "workflow/order");
+    assert!(package.beams().get("workflow/order").is_some());
+    assert!(package.source().is_empty());
+    // The rewrite of a provenance-free package stays provenance-free.
+    let rewritten =
+        Package::load_from_bytes(package.to_archive_bytes()?, ExtractionLimits::unbounded())?;
+    assert_eq!(rewritten.awl(), None);
+    Ok(())
+}
+
+/// Schema entries with no document to own them are a provenance claim the
+/// archive cannot keep, so the load refuses instead of loading a half record.
+#[test]
+fn schema_entries_without_a_document_are_refused() -> Result<(), Box<dyn std::error::Error>> {
+    let beams = sample_beams()?;
+    let mut manifest = sample_manifest();
+    manifest.version = ManifestVersion::new(content_hash(&beams).to_string());
+    let mut entries = archive_entries(&manifest, &beams)?;
+    entries.push((
+        "awl/schema/ticket.schema.json".to_owned(),
+        br#"{"type":"object"}"#.to_vec(),
+    ));
+
+    let result = Package::load_from_bytes(write_zip(entries)?, ExtractionLimits::unbounded());
+
+    assert!(
+        matches!(result, Err(PackageError::MissingAwlDocument)),
+        "orphan schema entries must be refused, got {result:?}"
+    );
+    Ok(())
+}
+
+/// The `awl/` prefix is owned by this format: an entry under it that names no
+/// defined family is refused rather than skipped, because a skip would lose
+/// the bytes at the next persistence rewrite.
+#[test]
+fn an_unrecognised_awl_family_is_refused() -> Result<(), Box<dyn std::error::Error>> {
+    let beams = sample_beams()?;
+    let mut manifest = sample_manifest();
+    manifest.version = ManifestVersion::new(content_hash(&beams).to_string());
+    let mut entries = archive_entries(&manifest, &beams)?;
+    entries.push(("awl/sidecar/types.hex".to_owned(), vec![1, 2, 3]));
+
+    let result = Package::load_from_bytes(write_zip(entries)?, ExtractionLimits::unbounded());
+
+    assert!(
+        matches!(
+            &result,
+            Err(PackageError::MalformedAwlEntry { entry }) if entry == "awl/sidecar/types.hex"
+        ),
+        "an unknown awl/ family must be refused, got {result:?}"
+    );
+    Ok(())
+}
+
+/// A document entry carrying a directory part contradicts the layout law (the
+/// document sits at the ROOT of its own directory, which is what makes every
+/// schema path document-relative), so it is refused.
+#[test]
+fn a_nested_document_entry_is_refused() -> Result<(), Box<dyn std::error::Error>> {
+    let beams = sample_beams()?;
+    let mut manifest = sample_manifest();
+    manifest.version = ManifestVersion::new(content_hash(&beams).to_string());
+    let mut entries = archive_entries(&manifest, &beams)?;
+    entries.push((
+        "awl/document/nested/order.awl".to_owned(),
+        b"workflow order\n".to_vec(),
+    ));
+
+    let result = Package::load_from_bytes(write_zip(entries)?, ExtractionLimits::unbounded());
+
+    assert!(
+        matches!(
+            &result,
+            Err(PackageError::MalformedAwlEntry { entry }) if entry == "awl/document/nested/order.awl"
+        ),
+        "a nested document entry must be refused, got {result:?}"
+    );
+    Ok(())
+}
+
+/// AWL source is text. A document entry that is not UTF-8 is reported as such
+/// rather than lossily decoded into something the checker would never accept.
+#[test]
+fn a_non_utf8_document_entry_is_refused() -> Result<(), Box<dyn std::error::Error>> {
+    let beams = sample_beams()?;
+    let mut manifest = sample_manifest();
+    manifest.version = ManifestVersion::new(content_hash(&beams).to_string());
+    let mut entries = archive_entries(&manifest, &beams)?;
+    entries.push(("awl/document/order.awl".to_owned(), vec![0xff, 0xfe, 0x00]));
+
+    let result = Package::load_from_bytes(write_zip(entries)?, ExtractionLimits::unbounded());
+
+    assert!(
+        matches!(
+            &result,
+            Err(PackageError::AwlDocumentNotUtf8 { entry, .. }) if entry == "awl/document/order.awl"
+        ),
+        "a non-UTF-8 document entry must be refused, got {result:?}"
+    );
     Ok(())
 }

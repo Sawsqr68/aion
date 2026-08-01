@@ -342,7 +342,7 @@ async fn seed_package(
     source: &str,
     root: &std::path::Path,
 ) -> Result<String, TestError> {
-    let prepared = compile_and_assemble_awl(source, root)?;
+    let prepared = compile_and_assemble_awl(source, root, "studio_document.awl")?;
     let package = Package::load_from_bytes(prepared.archive, ExtractionLimits::unbounded())?;
     Ok(engine
         .load_package(package)

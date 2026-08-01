@@ -26,6 +26,17 @@ const WORKER_CONTRACT_DOMAIN: &[u8] = b"aion.package.version.worker-contract.v5"
 /// domain-separated timeout encoding. Archive representation and optional
 /// source inclusion never participate, so deterministic inputs keep one version.
 ///
+/// "Source inclusion" is EVERY archived-source family, and this is a declared
+/// non-property rather than an accident of the current encoding: neither the
+/// Gleam `src/` entries nor the AWL `awl/document/` + `awl/schema/` entries
+/// (see [`crate::awl`]) contribute a byte to any identity above. Two packages
+/// that differ ONLY in whether they carry an authored AWL document, or in what
+/// that document says, are the SAME version — the provenance an archive shows
+/// is declared unbound from identity, never ambiently assumed to be bound.
+/// Pinned by `source_inclusion_does_not_change_manifest_version` and
+/// `awl_source_inclusion_does_not_change_manifest_version` in
+/// [`crate::builder`].
+///
 /// Its stable textual form is 64 lowercase hexadecimal characters. That text is
 /// the package version identifier stored in the manifest and the hash component
 /// embedded in namespaced deployed module names; it contains only `0-9a-f`,

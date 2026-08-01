@@ -78,7 +78,7 @@ impl ActivityDispatcher for FailBDispatcher {
 /// recorded.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn direct_single_activity_tolerant_distribute_completes_with_slot_semantics() -> TestResult {
-    let prepared = compile_and_assemble_awl(AWL, Path::new("."))?;
+    let prepared = compile_and_assemble_awl(AWL, Path::new("."), "single_tol_probe.awl")?;
     assert!(
         prepared.compiled.synthesized_workflows.is_empty(),
         "single-activity distribute must stay a combinator fan-out"

@@ -1,4 +1,28 @@
 //! `PackageBuilder` deterministic write path.
+//!
+//! # Archive layout
+//!
+//! Entries are written in one fixed order, so identical inputs produce
+//! byte-identical archives:
+//!
+//! ```text
+//! manifest.json                the deployment descriptor
+//! contract.json                the durable worker contract, when one is bound
+//! beam/<module>.beam           the compiled beam closure, canonical order
+//! src/<module>.gleam           optional Gleam source
+//! awl/document/<filename>      optional authored AWL document
+//! awl/schema/<relative path>   the schema files that document imports
+//! ```
+//!
+//! Only `manifest.json`, `contract.json`, and the `beam/` closure carry the
+//! package's meaning to the engine. `src/` and `awl/` are PROVENANCE: they
+//! record what the package was made from. Neither participates in package
+//! identity — the content hash is computed over beams, routing/timeouts, and
+//! the contract alone (see [`crate::hash`]), so adding, changing, or removing
+//! archived source cannot change a package version. That non-participation is
+//! a declared property of this format, pinned by
+//! `source_inclusion_does_not_change_manifest_version` and
+//! `awl_source_inclusion_does_not_change_manifest_version` below.
 
 use std::{
     collections::BTreeMap,
@@ -10,7 +34,8 @@ use std::{
 use zip::{CompressionMethod, DateTime, ZipWriter, write::SimpleFileOptions};
 
 use crate::{
-    BeamSet, ContentHash, Manifest, ManifestVersion, PackageContract, PackageError,
+    AwlSource, BeamSet, ContentHash, Manifest, ManifestVersion, PackageContract, PackageError,
+    awl::{AWL_DOCUMENT_PREFIX, AWL_SCHEMA_PREFIX},
     content_hash_with_contract,
 };
 
@@ -22,6 +47,7 @@ pub struct PackageBuilder {
     manifest: Manifest,
     beams: BeamSet,
     source: BTreeMap<String, Vec<u8>>,
+    awl: Option<AwlSource>,
     contract: Option<PackageContract>,
     preserved_identity: Option<ContentHash>,
 }
@@ -35,6 +61,7 @@ impl PackageBuilder {
             manifest,
             beams,
             source: BTreeMap::new(),
+            awl: None,
             contract: Some(contract),
             preserved_identity: None,
         }
@@ -56,6 +83,7 @@ impl PackageBuilder {
                 .into_iter()
                 .map(|(name, bytes)| (name.into(), bytes.into()))
                 .collect(),
+            awl: None,
             contract: Some(contract),
             preserved_identity: None,
         }
@@ -65,6 +93,18 @@ impl PackageBuilder {
     #[must_use]
     pub fn with_contract(mut self, contract: PackageContract) -> Self {
         self.contract = Some(contract);
+        self
+    }
+
+    /// Archives the authored AWL document and its imported schema files as
+    /// package provenance.
+    ///
+    /// Additive: it touches neither the manifest nor the contract, so it is
+    /// safe in any order relative to [`Self::with_contract`], and it cannot
+    /// change the package version (see this module's archive-layout note).
+    #[must_use]
+    pub fn with_awl_source(mut self, awl: AwlSource) -> Self {
+        self.awl = Some(awl);
         self
     }
 
@@ -173,6 +213,15 @@ impl PackageBuilder {
             write_entry(&mut archive, entry_name, bytes, options)?;
         }
 
+        if let Some(awl) = &self.awl {
+            let entry_name = awl_entry_name(AWL_DOCUMENT_PREFIX, awl.document_name())?;
+            write_entry(&mut archive, entry_name, awl.document().as_bytes(), options)?;
+            for (path, bytes) in awl.schemas() {
+                let entry_name = awl_entry_name(AWL_SCHEMA_PREFIX, path)?;
+                write_entry(&mut archive, entry_name, bytes, options)?;
+            }
+        }
+
         archive.finish().map_err(PackageError::ArchiveWrite)
     }
 }
@@ -195,6 +244,19 @@ fn archive_entry_name(
     } else {
         Err(PackageError::MalformedBeamEntry {
             entry: logical_name.to_owned(),
+        })
+    }
+}
+
+/// Builds an `awl/` entry name, keeping the supplied relative path verbatim —
+/// extension and nesting included — because a consumer must be able to stage
+/// the file back at exactly the path the document names.
+fn awl_entry_name(prefix: &str, relative_path: &str) -> Result<String, PackageError> {
+    if is_safe_logical_name(relative_path) {
+        Ok(format!("{prefix}{relative_path}"))
+    } else {
+        Err(PackageError::MalformedAwlEntry {
+            entry: relative_path.to_owned(),
         })
     }
 }
@@ -239,8 +301,8 @@ mod tests {
 
     use super::PackageBuilder;
     use crate::{
-        BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest, ManifestVersion,
-        PackageContract, PackageError, content_hash_with_contract,
+        AwlSource, BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest,
+        ManifestVersion, PackageContract, PackageError, content_hash_with_contract,
     };
 
     fn sample_manifest() -> Manifest {
@@ -357,6 +419,102 @@ mod tests {
             .version;
 
         assert_eq!(without_source, with_source);
+        Ok(())
+    }
+
+    /// THE RIDER, pinned: archived AWL source is provenance and is DECLARED
+    /// unbound from package identity. Three packages — one with no AWL source,
+    /// one carrying a document, and one carrying a DIFFERENT document under a
+    /// different filename with different schemas — all hash identically,
+    /// because none of those bytes reach any identity encoding in
+    /// [`crate::hash`]. If this ever fails, a workflow's version would change
+    /// when only a comment in its source changed, and every run pinned to the
+    /// old version would stop resolving.
+    #[test]
+    fn awl_source_inclusion_does_not_change_manifest_version() -> Result<(), PackageError> {
+        let bare = PackageBuilder::new(sample_manifest(), sample_beams()?)
+            .finalise_manifest()?
+            .version;
+        let carried = PackageBuilder::new(sample_manifest(), sample_beams()?)
+            .with_awl_source(AwlSource::new(
+                "order.awl",
+                "workflow order\n",
+                std::iter::empty::<(String, Vec<u8>)>(),
+            ))
+            .finalise_manifest()?
+            .version;
+        let differing = PackageBuilder::new(sample_manifest(), sample_beams()?)
+            .with_awl_source(AwlSource::new(
+                "renamed.awl",
+                "workflow order\n  timeout 6h\n",
+                [("ticket.schema.json", br#"{"type":"object"}"#.to_vec())],
+            ))
+            .finalise_manifest()?
+            .version;
+
+        assert_eq!(bare, carried, "carrying AWL source changed the version");
+        assert_eq!(
+            carried, differing,
+            "changing the archived AWL source changed the version"
+        );
+        Ok(())
+    }
+
+    /// The archived layout, pinned by name and order: the AWL families sit
+    /// under their own prefix, keep the document's original filename and each
+    /// schema's document-relative path verbatim, and are written last so the
+    /// archive stays byte-deterministic.
+    #[test]
+    fn awl_entries_are_written_under_their_own_prefixes() -> Result<(), PackageError> {
+        let bytes = PackageBuilder::new(sample_manifest(), sample_beams()?)
+            .with_awl_source(AwlSource::new(
+                "dev_brief.awl",
+                "workflow dev_brief\n",
+                [
+                    ("schemas/brief.schema.json", b"{}".to_vec()),
+                    ("ticket.schema.json", b"{}".to_vec()),
+                ],
+            ))
+            .write_to_bytes()?;
+
+        let mut archive = ZipArchive::new(Cursor::new(bytes)).map_err(PackageError::ArchiveRead)?;
+        let mut names = Vec::new();
+        for index in 0..archive.len() {
+            let file = archive.by_index(index).map_err(PackageError::ArchiveRead)?;
+            names.push(file.name().to_owned());
+        }
+
+        assert_eq!(
+            names,
+            vec![
+                "manifest.json",
+                "contract.json",
+                "beam/workflow/order.beam",
+                "beam/workflow/support.beam",
+                "awl/document/dev_brief.awl",
+                "awl/schema/schemas/brief.schema.json",
+                "awl/schema/ticket.schema.json",
+            ]
+        );
+        Ok(())
+    }
+
+    /// A schema path that could escape its archive root cannot be written: the
+    /// same guard that protects module names protects provenance paths.
+    #[test]
+    fn rejects_unsafe_awl_schema_paths() -> Result<(), PackageError> {
+        let result = PackageBuilder::new(sample_manifest(), sample_beams()?)
+            .with_awl_source(AwlSource::new(
+                "order.awl",
+                "workflow order\n",
+                [("../escape.json", b"{}".to_vec())],
+            ))
+            .write_to_bytes();
+
+        assert!(matches!(
+            result,
+            Err(PackageError::MalformedAwlEntry { entry }) if entry == "../escape.json"
+        ));
         Ok(())
     }
 

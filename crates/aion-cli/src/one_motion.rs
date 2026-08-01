@@ -50,7 +50,11 @@ pub(crate) fn package_file(path: &Path) -> Result<(String, Value, Vec<u8>)> {
     }
     let source = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read AWL file `{}`", path.display()))?;
-    package_source(&source, document_root(path))
+    let filename = path
+        .file_name()
+        .and_then(std::ffi::OsStr::to_str)
+        .ok_or_else(|| anyhow::anyhow!("AWL path `{}` has no filename", path.display()))?;
+    package_source(&source, document_root(path), filename)
 }
 
 /// Prepares one-motion run input. Validation completes before the caller can
@@ -67,9 +71,14 @@ pub(crate) fn prepare_run(path: &Path, input: &str) -> Result<PreparedAwl> {
     })
 }
 
-/// Compiles and assembles source into complete format-v1 package bytes.
-fn package_source(source: &str, schema_root: &Path) -> Result<(String, Value, Vec<u8>)> {
-    let prepared = compile_and_assemble_awl(source, schema_root)?;
+/// Compiles and assembles source into complete format-v1 package bytes,
+/// carrying the document and its imported schemas as archive provenance.
+fn package_source(
+    source: &str,
+    schema_root: &Path,
+    document_filename: &str,
+) -> Result<(String, Value, Vec<u8>)> {
+    let prepared = compile_and_assemble_awl(source, schema_root, document_filename)?;
     Ok((
         prepared.compiled.workflow_name,
         prepared.compiled.input_schema,
@@ -273,7 +282,7 @@ mod tests {
             1,
         );
         let root = path.parent().ok_or("fixture has no parent directory")?;
-        let (_, _, bytes) = package_source(&source, root)?;
+        let (_, _, bytes) = package_source(&source, root, "after_single.awl")?;
         let package = Package::load_from_bytes(bytes, ExtractionLimits::unbounded())?;
 
         assert_eq!(

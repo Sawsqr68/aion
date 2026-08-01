@@ -76,7 +76,8 @@ fn emit_beam_binary_output_equals_the_archive_entry_module() -> TestResult {
     );
 
     // The archive the ops console deploys carries the same module bytes.
-    let prepared = aion_awl_package::compile_and_assemble_awl(&source, schema_root)?;
+    let prepared =
+        aion_awl_package::compile_and_assemble_awl(&source, schema_root, "awl_hello.awl")?;
     let package = Package::load_from_bytes(prepared.archive, ExtractionLimits::unbounded())?;
     let entry_module = package.manifest().entry_module.clone();
     let archive_bytes = package
@@ -96,7 +97,7 @@ fn emit_beam_binary_output_equals_the_archive_entry_module() -> TestResult {
 /// document with a RELATIVE `schema("ticket.schema.json")` import, emitted by
 /// the binary run from an UNRELATED working directory, still resolves the schema
 /// beside the document (not beside the cwd) and produces bytes byte-identical to
-/// `compile_and_assemble_awl(source, document_parent)`. Were the CLI to root
+/// `compile_and_assemble_awl(source, document_parent, …)`. Were the CLI to root
 /// `schema("…")` at the process cwd, this emit would fail to find the schema
 /// from the temp cwd — so the parity is evidenced, not merely implemented (BC-5
 /// review advisory A).
@@ -132,7 +133,8 @@ fn emit_beam_resolves_schema_imports_from_the_document_directory() -> TestResult
     );
     let cli_bytes = std::fs::read(&output)?;
 
-    let prepared = aion_awl_package::compile_and_assemble_awl(&source, document_parent)?;
+    let prepared =
+        aion_awl_package::compile_and_assemble_awl(&source, document_parent, "import_ticket.awl")?;
     let package = Package::load_from_bytes(prepared.archive, ExtractionLimits::unbounded())?;
     let entry_module = package.manifest().entry_module.clone();
     let archive_bytes = package

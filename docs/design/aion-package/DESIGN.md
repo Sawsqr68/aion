@@ -82,13 +82,32 @@ access to entries, and per-entry compression) with a fixed internal layout:
 ```
 package.aion
 ├── manifest.json        the deployment descriptor (see below)
+├── contract.json        the durable worker contract, when identity binds one
 ├── beam/                compiled .beam modules
 │   ├── <module>.beam    the workflow entry module
 │   ├── <dep>.beam       its dependencies
 │   └── <stdlib>.beam    the stdlib beams it needs
-└── src/                 optional Gleam source (for inspection/recompile)
-    └── <module>.gleam
+├── src/                 optional Gleam source (for inspection/recompile)
+│   └── <module>.gleam
+└── awl/                 optional AWL provenance, rooted at the document's
+    │                    own directory
+    ├── document/        exactly one entry: the authored .awl file, under its
+    │   └── <filename>   original filename
+    └── schema/          the schema files that document imports, each at the
+        └── <rel path>   document-relative path the document itself names
 ```
+
+The `src/` and `awl/` families are **provenance, not meaning**: they record
+what the package was made from. Only `manifest.json`, `contract.json`, and the
+`beam/` closure carry anything the engine acts on. **Neither family
+participates in package identity** — see the content-hash section below; that
+non-participation is a declared property of this format, not an accident of
+the current encoding, so a package carrying an AWL document is the same
+version as one that does not, and editing the archived document changes no
+version. A loader that does not know a family skips it, but the `awl/` prefix
+is owned by this format: an entry under it naming no defined family is
+refused, because the persistence rewrite rebuilds an archive from its loaded
+fields and a skip would silently drop those bytes.
 
 ### The Manifest
 
@@ -131,6 +150,19 @@ contributing its name and its exact bytes), not over the archive file. Two
 packages with identical beams but one with source and one without are the
 *same version*. Rejected: hashing the archive bytes — it would make the
 version depend on packaging incidentals and break reproducibility.
+
+"Source" here is **every** archived-source family — the Gleam `src/` entries
+and the AWL `awl/document/` + `awl/schema/` entries alike. This is stated so
+it is a *declared* non-property rather than an ambient one: the provenance an
+archive shows is declared unbound from identity, never assumed bound because
+it happens to be unbound today. Two packages differing only in whether they
+carry an authored AWL document, or in what that document says, are the same
+version — pinned by `source_inclusion_does_not_change_manifest_version` and
+`awl_source_inclusion_does_not_change_manifest_version` in
+`crates/aion-package/src/builder.rs`. The consequence that makes it
+load-bearing: a run pins the version recorded in its `WorkflowStarted` event,
+so a version that moved when a comment in the source changed would orphan
+every run pinned to the old one.
 
 ### Content-Hash Module Namespacing
 

@@ -145,7 +145,7 @@ async fn compile_and_load_inner(
     if let Some(expected) = expected_workflow_type {
         validate_document_identity(&compiled.package, &expected)?;
     }
-    compiled.package = package_with_options(compiled.package, options)?;
+    compiled.package = package_with_options(compiled.package, &options)?;
     load_authorized_package(
         state,
         caller,
@@ -229,7 +229,7 @@ async fn load_authorized_package(
 
 pub(crate) fn package_with_options(
     package: Package,
-    options: AwlAssembleOptions,
+    options: &AwlAssembleOptions,
 ) -> Result<Package, AuthoringApiError> {
     let Some(timeout) = options.timeout else {
         return Ok(package);
@@ -245,8 +245,15 @@ pub(crate) fn package_with_options(
         .source()
         .iter()
         .map(|(name, bytes)| (name.clone(), bytes.clone()));
-    let bytes = PackageBuilder::with_source(manifest, package.beams().clone(), source)
-        .with_contract(contract.clone())
+    let mut builder = PackageBuilder::with_source(manifest, package.beams().clone(), source)
+        .with_contract(contract.clone());
+    // This path REBUILDS the archive from the loaded package's fields, so every
+    // provenance family has to be carried across explicitly or applying a
+    // manifest option would quietly strip it.
+    if let Some(awl) = package.awl() {
+        builder = builder.with_awl_source(awl.clone());
+    }
+    let bytes = builder
         .write_to_bytes()
         .map_err(|error| package_options_error(&error))?;
     Package::load_from_bytes(bytes, ExtractionLimits::unbounded())

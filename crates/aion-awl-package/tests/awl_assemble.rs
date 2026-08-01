@@ -204,6 +204,7 @@ fn document_timeout_reaches_the_manifest_and_absence_arms_nothing() -> TestResul
         &plain,
         AwlAssembleOptions {
             timeout: plain.timeout,
+            ..AwlAssembleOptions::default()
         },
     )?;
     let plain_package = Package::load_from_bytes(plain_bytes, ExtractionLimits::unbounded())?;
@@ -222,12 +223,14 @@ fn document_timeout_reaches_the_manifest_and_absence_arms_nothing() -> TestResul
         &declared,
         AwlAssembleOptions {
             timeout: declared.timeout,
+            ..AwlAssembleOptions::default()
         },
     )?;
     let rebuilt_bytes = assemble_awl(
         &declared,
         AwlAssembleOptions {
             timeout: declared.timeout,
+            ..AwlAssembleOptions::default()
         },
     )?;
     assert_eq!(declared_bytes, rebuilt_bytes);
