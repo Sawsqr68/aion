@@ -285,10 +285,19 @@ async fn concurrent_appends_on_same_expected_sequence_has_one_winner(
             )
         })
         .count();
+    // Carry the losing append's ACTUAL error into the failure message. A bare
+    // count says a conflict of the expected shape did not occur; it cannot say
+    // whether the loser succeeded (a single-writer breach) or failed with a
+    // different error class (a misclassification). Those are different defects
+    // of very different severity, and telling them apart from a battery log
+    // used to require re-running the race.
     expect_eq(
         conflict_count,
         1,
-        "losing concurrent append should return SequenceConflict for the winning head",
+        &format!(
+            "losing concurrent append should return SequenceConflict for the winning head; \
+             the appends actually returned first={first_result:?}, second={second_result:?}"
+        ),
     )?;
 
     let expected_history = if first_result.is_ok() {
