@@ -330,11 +330,10 @@ fn workerless_source(name: &str) -> String {
     )
 }
 
-/// A checker-valid document the DIRECT path still refuses, so the deploy
-/// surface's refusal passthrough stays exercised. Repointed from an
-/// `on failure` body to a SUBSTEP body when the failure edge landed
-/// (`aion-awl/src/mir/lower/failure.rs`).
-const LOWER_REFUSED: &str = "//! Focused substep lowering refusal (checker-valid; the direct path\n//! refuses substep blocks — with the `on failure` edge landed, substeps and\n//! parallel regions are the remaining step-shaped refusal classes).\nworkflow studio_substeps_refused\n  input title: String\n  outcome done: type Done, route success\n  outcome failed: type Failed, route failure\n\ntype Done   { title: String }\ntype Failed { reason: String }\n\nworker review\n  action check_doc(title: String) -> Done\n\nstep check_one\n  step inner\n    check_doc(title: title) -> checked\n\n  outcome ok: when checked.title != \"\",\n    route done(title: checked.title)\n  outcome hollow: otherwise,\n    route failed(reason: \"nothing to check\")\n";
+/// The direct path's one surviving refusal class: the checker's. Every
+/// checker-valid document lowers (substeps, parallel regions, and the
+/// `on failure` edge all landed), so the deploy surface's refusal
+/// passthrough is exercised through a checker refusal alone.
 const CHECK_REFUSED: &str = "//! Focused checker refusal.\nworkflow studio_check_refused\n  outcome done: type Done, route success\n\ntype Done { value: String }\n\nstep finish\n  route done(value: missing)\n";
 
 async fn seed_package(
@@ -372,7 +371,7 @@ async fn admission_probe(
     harness: &Harness,
     deploy_granted: bool,
 ) -> Result<(StatusCode, Value), TestError> {
-    let hash = save_document(&harness.router, "admission-refused.awl", LOWER_REFUSED).await?;
+    let hash = save_document(&harness.router, "admission-refused.awl", CHECK_REFUSED).await?;
     std::fs::remove_file(
         harness
             .workspace()
@@ -400,7 +399,7 @@ async fn admission_probe(
 }
 
 #[tokio::test]
-async fn awl_unauthorized_lower_refusal_is_denied_before_revision_or_compile()
+async fn awl_unauthorized_checker_refusal_is_denied_before_revision_or_compile()
 -> Result<(), TestError> {
     let harness = Harness::new_with_auth(true).await?;
     let (status, body) = admission_probe(&harness, false).await?;
@@ -411,7 +410,7 @@ async fn awl_unauthorized_lower_refusal_is_denied_before_revision_or_compile()
 }
 
 #[tokio::test]
-async fn awl_draining_lower_refusal_is_unavailable_before_revision_or_compile()
+async fn awl_draining_checker_refusal_is_unavailable_before_revision_or_compile()
 -> Result<(), TestError> {
     let harness = Harness::new().await?;
     assert!(harness.state.drain_state().begin());
@@ -555,29 +554,21 @@ async fn awl_direct_deploy_carries_document_timeout_into_manifest() -> Result<()
     Ok(())
 }
 
+/// A checker refusal landing on a server with deployed versions must leave
+/// every catalog entry, package row, and route exactly as it found them —
+/// the sibling below pins the same refusal against an empty server.
 #[tokio::test]
-async fn awl_lower_refusal_is_verbatim_and_mutates_no_catalog_or_route() -> Result<(), TestError> {
+async fn awl_checker_refusal_on_populated_catalog_mutates_nothing() -> Result<(), TestError> {
     let harness = Harness::new().await?;
     let baseline = workflow_source("studio_baseline", "baseline_queue", None);
     seed_package(&harness.engine, &baseline, harness.workspace()).await?;
-    let check = json_request(
-        &harness.router,
-        "POST",
-        "/awl/check",
-        json!({ "source": LOWER_REFUSED, "path": "refused.awl" }),
-    )
-    .await?;
-    let check = read_json(check).await?;
-    assert_eq!(check["ok"], true);
-    assert_eq!(check["deploys_green"], true);
-
-    let content_hash = save_document(&harness.router, "refused.awl", LOWER_REFUSED).await?;
+    let content_hash = save_document(&harness.router, "refused.awl", CHECK_REFUSED).await?;
     let versions_before = harness.engine.list_workflow_versions()?;
     let packages_before = harness.store.list_packages().await?;
     let routes_before = harness.store.list_package_routes().await?;
-    let expected = match aion_awl::compile(LOWER_REFUSED, harness.workspace()) {
+    let expected = match aion_awl::compile(CHECK_REFUSED, harness.workspace()) {
         Err(error) => error.to_string(),
-        Ok(_) => return Err("refusal fixture unexpectedly direct-compiled".into()),
+        Ok(_) => return Err("checker refusal fixture unexpectedly direct-compiled".into()),
     };
     let response = deploy_request(&harness.router, "refused.awl", &content_hash).await?;
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
