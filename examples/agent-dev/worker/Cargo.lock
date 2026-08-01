@@ -67,7 +67,7 @@ dependencies = [
 
 [[package]]
 name = "aion-awl"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "aion-package",
  "beamr",
@@ -78,7 +78,7 @@ dependencies = [
 
 [[package]]
 name = "aion-core"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "chrono",
  "serde",
@@ -90,7 +90,7 @@ dependencies = [
 
 [[package]]
 name = "aion-integration-norn"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "aion-core",
  "aion-integrations",
@@ -105,7 +105,7 @@ dependencies = [
 
 [[package]]
 name = "aion-integrations"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "aion-core",
  "async-trait",
@@ -118,7 +118,7 @@ dependencies = [
 
 [[package]]
 name = "aion-package"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "aion-core",
  "jsonschema",
@@ -132,7 +132,7 @@ dependencies = [
 
 [[package]]
 name = "aion-proto"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "aion-core",
  "aion-proto-generated",
@@ -148,7 +148,7 @@ dependencies = [
 
 [[package]]
 name = "aion-proto-generated"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "prost",
  "protoc-bin-vendored",
@@ -161,7 +161,7 @@ dependencies = [
 
 [[package]]
 name = "aion-worker"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "aion-core",
  "aion-integrations",
