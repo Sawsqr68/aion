@@ -1,166 +1,89 @@
-import { FileCode2 } from 'lucide-react';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 
-import { EmptyState } from '@/components/EmptyState';
-import { ErrorState } from '@/components/ErrorState';
-import { degradeToFade, SPRING_SIGNATURE } from '@/components/kit';
-import { LoadingSkeleton } from '@/components/LoadingSkeleton';
+import { cn } from '@/lib/utils';
 
-import { useAuthoringDocument, useAuthoringDocuments } from '../hooks/useAuthoringDocuments';
-import { AuthoringWorkspaceNotConfiguredError, authoringFacade } from '../lib/facade';
-import { DocumentList } from './DocumentList';
-import { EditorPane } from './EditorPane';
+import { DeployedPanel } from './DeployedPanel';
+import { WorkspacePanel } from './WorkspacePanel';
 
+/** Which side of the studio is on screen. */
+export type AuthoringSource = 'workspace' | 'deployed';
+
+/**
+ * The AWL studio: the operator's editable workspace, and the read-only view of
+ * what is actually deployed on this server.
+ *
+ * The two are deliberately separate surfaces rather than one list with a badge.
+ * A workspace document is a draft the operator owns and can change; a deployed
+ * version is a record of running code, named by content hash, that nothing in
+ * this console can edit. Showing them as one list would invite the operator to
+ * treat a deployment as a file — and a deploy has never written into their
+ * workspace, so the two can legitimately disagree.
+ */
 export function AuthoringView() {
-  const documentsQuery = useAuthoringDocuments();
-  const documents = documentsQuery.data ?? [];
-  // The URL is the source of truth for the open document (`?doc=<path>`), so
-  // any view is one shareable link (operator ruling, 2026-07-12). Selecting
-  // pushes history; the default/fallback selection replaces it so a plain
-  // /authoring visit never pollutes the back stack.
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedPath = searchParams.get('doc');
-  const setSelectedPath = useCallback(
-    (path: string | null, options?: { replace: boolean }) => {
-      setSearchParams(
-        (previous) => {
-          const next = new URLSearchParams(previous);
-          if (path === null) next.delete('doc');
-          else next.set('doc', path);
-          return next;
-        },
-        { replace: options?.replace ?? false }
-      );
+  const source: AuthoringSource =
+    searchParams.get('source') === 'deployed' ? 'deployed' : 'workspace';
+  const setSource = useCallback(
+    (next: AuthoringSource) => {
+      setSearchParams((previous) => {
+        const params = new URLSearchParams(previous);
+        if (next === 'workspace') params.delete('source');
+        else params.set('source', next);
+        return params;
+      });
     },
     [setSearchParams]
   );
-  const reducedMotion = useReducedMotion() ?? false;
-  const transition = degradeToFade(SPRING_SIGNATURE, reducedMotion);
-  const createDocument = useCallback(
-    async (name: string) => {
-      const created = await authoringFacade.createDocument(name);
-      await documentsQuery.refetch();
-      setSelectedPath(created.path);
-    },
-    [documentsQuery, setSelectedPath]
-  );
-
-  const documentsLoaded = documentsQuery.isSuccess;
-  useEffect(() => {
-    // Only reconcile once the list has actually loaded — a deep link must not
-    // be discarded because the fetch hasn't returned yet.
-    if (!documentsLoaded) return;
-    if (selectedPath === null && documents[0] !== undefined) {
-      setSelectedPath(documents[0].path, { replace: true });
-    }
-    if (selectedPath !== null && documents.every((document) => document.path !== selectedPath)) {
-      setSelectedPath(documents[0]?.path ?? null, { replace: true });
-    }
-  }, [documents, documentsLoaded, selectedPath, setSelectedPath]);
-
-  const documentQuery = useAuthoringDocument(selectedPath);
-  const unconfigured =
-    documentsQuery.error instanceof AuthoringWorkspaceNotConfiguredError ||
-    documentQuery.error instanceof AuthoringWorkspaceNotConfiguredError;
-
-  if (unconfigured) {
-    return (
-      <section
-        className="overflow-hidden rounded-xl border border-border bg-surface-elevated"
-        aria-label="Authoring"
-      >
-        <header className="border-border border-b bg-surface-base px-4 py-3">
-          <h1 className="font-semibold text-foreground text-lg">Authoring</h1>
-          <p className="text-muted-foreground text-sm">AWL documents and deployment checks</p>
-        </header>
-        <DocumentList documents={[]} onSelect={() => undefined} selectedPath={null} unconfigured />
-      </section>
-    );
-  }
-  if (documentsQuery.isPending) return <LoadingSkeleton />;
-  if (documentsQuery.isError) {
-    return (
-      <ErrorState
-        message={documentsQuery.error.message}
-        onRetry={() => void documentsQuery.refetch()}
-        title="Documents unavailable"
-      />
-    );
-  }
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-surface-elevated shadow-sm">
       <header className="flex items-center justify-between gap-4 border-border border-b bg-surface-base px-4 py-3">
         <div>
           <h1 className="font-semibold text-foreground text-lg">Authoring</h1>
-          <p className="text-muted-foreground text-sm">AWL documents and deployment checks</p>
+          <p className="text-muted-foreground text-sm">
+            {source === 'workspace'
+              ? 'AWL documents and deployment checks'
+              : 'AWL source carried by the packages deployed on this server'}
+          </p>
         </div>
-        <span className="rounded-full border border-border bg-surface-elevated px-2.5 py-1 font-mono text-muted-foreground text-xs">
-          {documentCountLabel(documents.length)}
-        </span>
-      </header>
-      <div className="flex min-h-[38rem] flex-col md:flex-row">
-        <aside
-          className="max-h-64 shrink-0 overflow-auto border-border border-b bg-surface-base md:max-h-none md:w-56 md:border-r md:border-b-0"
-          aria-label="Documents"
+        <fieldset
+          aria-label="Authoring source"
+          className="flex rounded-lg border border-border bg-surface-elevated p-0.5"
         >
-          <div className="sticky top-0 z-10 flex items-center justify-between border-border border-b bg-surface-base/95 px-3 py-2 backdrop-blur">
-            <span className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
-              Documents
-            </span>
-            <span className="font-mono text-muted-foreground text-[0.6875rem]">AWL</span>
-          </div>
-          <DocumentList
-            documents={documents}
-            onCreate={createDocument}
-            onSelect={setSelectedPath}
-            selectedPath={selectedPath}
-          />
-        </aside>
-        <div className="relative flex min-w-0 flex-1">
-          <AnimatePresence initial={false} mode="wait">
-            <motion.div
-              animate={{ opacity: 1, y: 0 }}
-              className="flex min-w-0 flex-1"
-              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 3 }}
-              initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -3 }}
-              key={selectedPath ?? 'empty'}
-              transition={transition}
-            >
-              {selectedPath === null ? (
-                <div className="m-auto w-full max-w-md p-6">
-                  <EmptyState
-                    description="Choose a document from the list to inspect and edit its source."
-                    icon={<FileCode2 aria-hidden="true" className="size-5" />}
-                    title="Select an AWL document"
-                  />
-                </div>
-              ) : documentQuery.isPending ? (
-                <LoadingSkeleton />
-              ) : documentQuery.isError ? (
-                <ErrorState
-                  message={documentQuery.error.message}
-                  onRetry={() => void documentQuery.refetch()}
-                  title="Document unavailable"
-                />
-              ) : (
-                <EditorPane
-                  documents={documents}
-                  initialSource={documentQuery.data}
-                  onOpenDocument={setSelectedPath}
-                  path={selectedPath}
-                />
-              )}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </div>
+          <SourceButton current={source} label="Workspace" onSelect={setSource} value="workspace" />
+          <SourceButton current={source} label="Deployed" onSelect={setSource} value="deployed" />
+        </fieldset>
+      </header>
+      {source === 'workspace' ? <WorkspacePanel /> : <DeployedPanel />}
     </div>
   );
 }
 
-function documentCountLabel(count: number) {
-  return `${count} ${count === 1 ? 'document' : 'documents'}`;
+function SourceButton({
+  current,
+  label,
+  onSelect,
+  value,
+}: {
+  current: AuthoringSource;
+  label: string;
+  onSelect: (value: AuthoringSource) => void;
+  value: AuthoringSource;
+}) {
+  return (
+    <button
+      aria-pressed={current === value}
+      className={cn(
+        'rounded-md px-2.5 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-accent-primary',
+        current === value
+          ? 'bg-accent text-foreground'
+          : 'text-muted-foreground hover:text-foreground'
+      )}
+      onClick={() => onSelect(value)}
+      type="button"
+    >
+      {label}
+    </button>
+  );
 }

@@ -25,6 +25,16 @@ export type EditorChange = { content: string; origin: 'local' | 'remote' };
 export type MouseHover = { position: number; clientX: number; clientY: number };
 export type CursorChange = { position: number };
 
+/**
+ * How an editor instance is created.
+ *
+ * `readOnly` is enforced INSIDE the implementation, not by a host that
+ * declines to render a save button: a read-only editor accepts no keystroke,
+ * no paste, and no programmatic edit, so a surface showing a deployed artifact
+ * cannot be made to differ from the bytes it was given.
+ */
+export type EditorOptions = { readOnly?: boolean };
+
 /** Host-facing text editor contract. AWL-aware code depends only on this seam. */
 export interface AuthoringEditor {
   getContent(): string;

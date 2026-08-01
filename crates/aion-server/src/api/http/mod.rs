@@ -6,6 +6,8 @@
 //! - `schedules` — schedule management handlers.
 //! - `events` — websocket event-subscription handlers.
 //! - `deploy` — operator deploy handlers (mounted only when `[deploy].enabled`).
+//! - `awl_deployed` — the read-only deployed-AWL studio surface (mounted only
+//!   when `[deploy].enabled`, alongside the deploy read model it reflects).
 //! - `authoring` — server-side Gleam authoring (mounted only when `[authoring].gleam_path` is set).
 //! - `dev_ui` — local dev-server surface (mounted only when `[dev].enabled`).
 //! - `auth` — caller-identity extraction from request headers.
@@ -20,6 +22,7 @@
 mod auth;
 mod authoring;
 mod awl;
+mod awl_deployed;
 mod build;
 mod clean_dtos;
 mod cluster_command;

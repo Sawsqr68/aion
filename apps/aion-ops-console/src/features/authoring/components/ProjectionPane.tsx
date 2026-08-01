@@ -1,10 +1,11 @@
 import type { AwlDocument, CheckResult, EditResult, GestureOperation } from '../lib/facade';
 import type { SemanticIndex } from '../lib/projection-types';
-import { AuthoringCanvas } from './AuthoringCanvas';
+import { AuthoringCanvas, type CanvasMode } from './AuthoringCanvas';
 
 export type AuthoringViewMode = 'text' | 'canvas' | 'split' | 'studio' | 'run';
 
 export function ProjectionPane({
+  canvasMode = 'edit',
   check,
   documents,
   onJumpToSpan,
@@ -15,6 +16,7 @@ export function ProjectionPane({
   semantic,
   viewMode,
 }: {
+  canvasMode?: CanvasMode;
   check: CheckResult | null;
   documents: readonly AwlDocument[];
   onJumpToSpan: (byteOffset: number) => void;
@@ -38,6 +40,7 @@ export function ProjectionPane({
       diagnostics={check?.diagnostics ?? []}
       documents={documents}
       graph={semantic.graph}
+      mode={canvasMode}
       onGesture={onGesture}
       onJumpToSpan={onJumpToSpan}
       onOpenDocument={onOpenDocument}

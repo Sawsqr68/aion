@@ -29,6 +29,7 @@ import type {
   CursorChange,
   EditorChange,
   EditorDecorations,
+  EditorOptions,
   HighlightSpan,
   LayoutMetrics,
   MouseHover,
@@ -106,6 +107,23 @@ export function applyTabBindingForTest(
   return state.doc.toString();
 }
 
+/**
+ * Attempt a document change against a state built with (or without) the
+ * read-only extensions, exported so the seam tests can pin the refusal over a
+ * headless document — the same shape as `applyTabBindingForTest`.
+ *
+ * Returns the document after the attempt. A read-only state must return it
+ * unchanged; the editable state is the control that proves the attempt is a
+ * real one.
+ */
+export function applyInsertForTest(content: string, insert: string, readOnly: boolean): string {
+  const state = EditorState.create({
+    doc: content,
+    extensions: readOnly ? readOnlyDocument : [],
+  });
+  return state.update({ changes: { from: 0, to: 0, insert } }).state.doc.toString();
+}
+
 class TextMarker extends GutterMarker {
   constructor(
     readonly text: string,
@@ -121,10 +139,37 @@ class TextMarker extends GutterMarker {
   }
 }
 
+/**
+ * A read-only document: no keystroke, no paste, no drag-drop, and no
+ * programmatic dispatch can change it.
+ *
+ * Three extensions, because each closes a different door and none of them
+ * closes all three:
+ *
+ * - `EditorState.changeFilter` returning false SUPPRESSES the document changes
+ *   of every transaction. This is the one that holds against code: `readOnly`
+ *   alone does NOT stop a dispatched `state.update({ changes })`, which was
+ *   measured, not assumed (`read-only.test.ts`).
+ * - `EditorState.readOnly` stops the editing commands and the view's own input
+ *   handling from even trying.
+ * - `EditorView.editable` takes the contenteditable off the DOM node, so the
+ *   browser offers no editing caret and assistive technology does not announce
+ *   the region as editable.
+ *
+ * Decorations, highlights, gutters, and cursor moves are transaction EFFECTS
+ * and selections, not document changes, so they keep working.
+ */
+const readOnlyDocument = [
+  EditorState.changeFilter.of(() => false),
+  EditorState.readOnly.of(true),
+  EditorView.editable.of(false),
+];
+
 /** The only CodeMirror-aware implementation of the editor seam. */
 export function createCodeMirrorEditor(
   parent: HTMLElement,
-  initialContent: string
+  initialContent: string,
+  options: EditorOptions = {}
 ): AuthoringEditor {
   const changeListeners = new Set<(change: EditorChange) => void>();
   const cursorListeners = new Set<(change: CursorChange) => void>();
@@ -136,6 +181,7 @@ export function createCodeMirrorEditor(
     state: EditorState.create({
       doc: initialContent,
       extensions: [
+        ...(options.readOnly === true ? readOnlyDocument : []),
         history(),
         keymap.of(historyKeymap),
         indentation,

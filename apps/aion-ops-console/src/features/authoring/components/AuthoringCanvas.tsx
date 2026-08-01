@@ -36,8 +36,18 @@ export type AuthoringCanvasProps = {
   onJumpToSpan: (byteOffset: number) => void;
   onOpenDocument: (path: string) => void;
   onGesture: (operation: GestureOperation) => Promise<EditResult>;
-  mode?: 'edit' | 'run';
+  /**
+   * What the canvas is showing.
+   *
+   * `edit` is the authoring canvas: gestures, dragging, and layout persistence.
+   * `run` follows a live run. `deployed` renders a DEPLOYED artifact — it owns
+   * no layout record and offers no gesture, because there is nothing here to
+   * change: the bytes came out of an archive.
+   */
+  mode?: CanvasMode;
 };
+
+export type CanvasMode = 'edit' | 'run' | 'deployed';
 
 export function AuthoringCanvas(props: AuthoringCanvasProps) {
   const {
@@ -141,6 +151,10 @@ export function AuthoringCanvas(props: AuthoringCanvasProps) {
     let active = true;
     setLayout({ positions: {} });
     setLayoutError(null);
+    // A deployed artifact has no layout record to read: layouts belong to
+    // workspace documents, and asking for one under a deployed key would put a
+    // spurious "Layout unavailable" on a canvas that is perfectly fine.
+    if (mode === 'deployed') return;
     void authoringFacade
       .loadLayout(path)
       .then((record) => {
@@ -152,7 +166,7 @@ export function AuthoringCanvas(props: AuthoringCanvasProps) {
     return () => {
       active = false;
     };
-  }, [path]);
+  }, [path, mode]);
 
   useEffect(() => setNodes(projected.nodes), [projected.nodes]);
 
@@ -161,7 +175,7 @@ export function AuthoringCanvas(props: AuthoringCanvasProps) {
   }
 
   function persistNodePosition(node: Node<CanvasNodeData>) {
-    if (mode === 'run') return;
+    if (mode !== 'edit') return;
     if (node.type !== 'step') return;
     const positions = { ...layout.positions, [node.id]: node.position };
     const next = { positions };
@@ -221,11 +235,7 @@ export function AuthoringCanvas(props: AuthoringCanvasProps) {
         />
       )}
       <div className="pointer-events-none absolute right-3 bottom-3 rounded-lg border border-border bg-surface-base/95 px-3 py-2 text-muted-foreground text-xs shadow-sm">
-        <span>
-          {mode === 'run'
-            ? 'Live run · nodes follow workflow events'
-            : 'Tab through controls · connect handles to draw an otherwise route'}
-        </span>
+        <span>{captionFor(mode)}</span>
         {layoutError !== null && <span className="ml-2 text-destructive">{layoutError}</span>}
         {gestureError !== null && <span className="ml-2 text-destructive">{gestureError}</span>}
       </div>
@@ -242,7 +252,7 @@ function projectFlow(
   proseEditingStep: string | null,
   onBeginProseEdit: (step: string | null) => void,
   onGesture: (operation: GestureOperation) => Promise<EditResult>,
-  mode: 'edit' | 'run',
+  mode: CanvasMode,
   expandedSubflows: ReadonlySet<string>,
   onToggleSubflow: (path: string) => void
 ): { nodes: Node<CanvasNodeData>[]; edges: Edge[] } {
@@ -320,7 +330,7 @@ function stepNode(
   proseEditingStep: string | null,
   onBeginProseEdit: (step: string | null) => void,
   onGesture: (operation: GestureOperation) => Promise<EditResult>,
-  mode: 'edit' | 'run',
+  mode: CanvasMode,
   expandedSubflows: ReadonlySet<string>,
   onToggleSubflow: (path: string) => void
 ): Node<CanvasNodeData> {
@@ -342,12 +352,18 @@ function stepNode(
       diagnostic: tones.get(step.name),
       onActivate: () => onJumpToSpan(step.span.start),
       proseEditing: proseEditingStep === step.name,
-      onBeginProseEdit: () => onBeginProseEdit(step.name),
+      // A deployed artifact exposes NO prose-edit affordance at all. The node
+      // renders the button from the presence of this callback, so withholding
+      // it is what makes the read-only claim true rather than merely styled.
+      onBeginProseEdit: mode === 'deployed' ? undefined : () => onBeginProseEdit(step.name),
       onCancelProseEdit: () => onBeginProseEdit(null),
-      onSaveProse: async (prose) => {
-        await onGesture({ type: 'edit_prose', step: step.name, prose });
-        onBeginProseEdit(null);
-      },
+      onSaveProse:
+        mode === 'deployed'
+          ? undefined
+          : async (prose) => {
+              await onGesture({ type: 'edit_prose', step: step.name, prose });
+              onBeginProseEdit(null);
+            },
     },
   };
 }
@@ -360,4 +376,10 @@ function edgeColor(kind: 'route' | 'fall_through' | 'after') {
   if (kind === 'route') return 'var(--accent-primary)';
   if (kind === 'after') return 'var(--warning)';
   return 'var(--muted-foreground)';
+}
+
+function captionFor(mode: CanvasMode) {
+  if (mode === 'run') return 'Live run · nodes follow workflow events';
+  if (mode === 'deployed') return 'Deployed artifact · read-only';
+  return 'Tab through controls · connect handles to draw an otherwise route';
 }

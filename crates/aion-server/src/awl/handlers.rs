@@ -80,6 +80,23 @@ pub fn check_source(request: &CheckRequest) -> CheckResponse {
     check_source_at(request, None)
 }
 
+/// Checks `source` with schema imports resolved against `root`, carrying no
+/// workspace document path.
+///
+/// The deployed-AWL read surface uses this: its schemas come out of the
+/// deployed archive and are staged into a directory of their own, so there is
+/// a root but deliberately no workspace path — a deployed document is not a
+/// workspace document and must never be resolved as one.
+pub(crate) fn check_source_at_root(source: &str, root: Option<&Path>) -> CheckResponse {
+    check_source_at(
+        &CheckRequest {
+            source: source.to_owned(),
+            path: None,
+        },
+        root,
+    )
+}
+
 fn check_source_at(request: &CheckRequest, root: Option<&Path>) -> CheckResponse {
     let document = match parse(&request.source) {
         Ok(document) => document,

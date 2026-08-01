@@ -14,6 +14,7 @@ use super::awl::{
     get_layout, get_revision, get_run_status, list_documents, put_document, put_layout, scaffold,
     worker_availability,
 };
+use super::awl_deployed::{get_deployed_document, list_deployed};
 use super::build::build_identity;
 use super::cluster_command::cluster_command;
 use super::deploy::{list_versions, route_version, unload_version, upload_package};
@@ -138,6 +139,36 @@ async fn dev_disabled() -> StatusCode {
     StatusCode::NOT_FOUND
 }
 
+/// Disabled deployed-AWL surface: a plain 404 with no body. The deployed
+/// studio view reads the same deployed catalog `GET /deploy/versions` serves,
+/// so it follows the deploy surface's own switch rather than opening a second
+/// door onto deployed state when the operator has closed the first.
+async fn deployed_awl_disabled() -> StatusCode {
+    StatusCode::NOT_FOUND
+}
+
+/// The read-only deployed-AWL route family.
+///
+/// GET only: both routes carry a single `get`, so every other method is a 405
+/// the router answers — there is no mutation handler on this family to reach,
+/// guarded or otherwise. With the deploy surface off the family is a plain 404,
+/// covering the bare path and everything under it (a `{*rest}` wildcard does
+/// not match the bare path).
+fn deployed_awl_router(deploy_enabled: bool) -> Router<ServerState> {
+    if deploy_enabled {
+        Router::new()
+            .route("/awl/deployed", get(list_deployed))
+            .route(
+                "/awl/deployed/{workflow_type}/{content_hash}",
+                get(get_deployed_document),
+            )
+    } else {
+        Router::new()
+            .route("/awl/deployed", any(deployed_awl_disabled))
+            .route("/awl/deployed/{*rest}", any(deployed_awl_disabled))
+    }
+}
+
 /// Build the public workflow-management HTTP router.
 pub fn workflow_router(state: ServerState) -> Router {
     // The deploy surface is dark by default: when `[deploy].enabled` is
@@ -180,6 +211,7 @@ pub fn workflow_router(state: ServerState) -> Router {
             get(get_document).put(put_document),
         )
         .route("/awl/layout/{*path}", get(get_layout).put(put_layout));
+    let awl_deployed = deployed_awl_router(state.runtime_config().deploy.enabled);
     let awl = Router::new()
         .route("/awl/check", post(check))
         .route("/awl/emit", post(emit))
@@ -191,7 +223,8 @@ pub fn workflow_router(state: ServerState) -> Router {
         .route("/awl/edit", post(edit))
         .route("/awl/fmt", post(format))
         .route("/awl/scaffold", post(scaffold))
-        .merge(awl_documents);
+        .merge(awl_documents)
+        .merge(awl_deployed);
     // The dev surface is dark by default, gated on `[dev].enabled`: when off the
     // routes are not mounted and every `/dev/*` path is a plain 404 (the
     // explicit catch-all keeps the ops-console SPA fallback from answering for

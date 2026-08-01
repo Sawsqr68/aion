@@ -1,3 +1,4 @@
+pub mod deployed;
 pub mod documents;
 pub mod edit;
 mod edit_rename;

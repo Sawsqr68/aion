@@ -1,19 +1,18 @@
 import type { RenameMapping } from './facade-records';
 import { parseLayout, parseRenameMapping } from './facade-records';
-import { parseSemanticIndex } from './facade-semantic';
 import { createGuidedFacade } from './guided-facade';
 
 export type { RenameMapping } from './facade-records';
 
-import {
-  expectArray,
-  expectBoolean,
-  expectNumber,
-  expectRecord,
-  expectString,
-} from './facade-values';
-import type { LayoutRecord, SemanticIndex } from './projection-types';
+import type { AwlDiagnostic, CheckResult } from './facade-check';
+import { parseCheckResult, parseDiagnostic } from './facade-check';
+import { expectArray, expectBoolean, expectRecord, expectString } from './facade-values';
+import type { LayoutRecord } from './projection-types';
 
+// The check shapes and their parser live in `facade-check`, shared with the
+// read-only deployed facade so both views of the server's `CheckResponse`
+// are one type parsed one way.
+export type { AwlDiagnostic, CheckResult, DiagnosticClass } from './facade-check';
 export type {
   DeploymentRecord,
   GuidedDeployResult,
@@ -21,23 +20,6 @@ export type {
   RunStatus,
   WorkerAvailability,
 } from './guided-facade';
-
-export type DiagnosticClass = 'error' | 'emit_subset';
-
-export type AwlDiagnostic = {
-  class: DiagnosticClass;
-  message: string;
-  line: number;
-  column: number;
-};
-
-export type CheckResult = {
-  ok: boolean;
-  deploysGreen: boolean;
-  steps: number | null;
-  diagnostics: AwlDiagnostic[];
-  semantic: SemanticIndex | null;
-};
 
 export type AwlDocument = { path: string; name: string };
 export type WorkerRuntime = 'shell' | 'rust';
@@ -133,40 +115,18 @@ export function createAuthoringFacade(fetchImpl: Fetch = globalThis.fetch.bind(g
     if (documentEndpoint && (response.status === 404 || response.status === 503)) {
       throw new AuthoringWorkspaceNotConfiguredError();
     }
-    if (!response.ok) {
-      const failure: unknown = await response.json().catch(() => null);
-      if (failure !== null && typeof failure === 'object') {
-        const record = failure as Record<string, unknown>;
-        if (typeof record.message === 'string') {
-          throw new GuidedFlowRefusedError(
-            typeof record.error_type === 'string' ? record.error_type : 'AuthoringRefused',
-            record.message
-          );
-        }
-      }
-      throw new GuidedFlowRefusedError(
-        'AuthoringRefused',
-        `Authoring request failed (${response.status})`
-      );
-    }
+    if (!response.ok) throw await refusalFrom(response);
     return response.json();
   }
 
   return {
     async check(source: string, path?: string): Promise<CheckResult> {
-      const value = expectRecord(
+      return parseCheckResult(
         await request(
           '/awl/check',
           jsonInit('POST', path === undefined ? { source } : { source, path })
         )
       );
-      return {
-        ok: expectBoolean(value.ok, 'ok'),
-        deploysGreen: expectBoolean(value.deploys_green, 'deploys_green'),
-        steps: value.steps === null ? null : expectNumber(value.steps, 'steps'),
-        diagnostics: expectArray(value.diagnostics, 'diagnostics').map(parseDiagnostic),
-        semantic: value.semantic === null ? null : parseSemanticIndex(value.semantic),
-      };
     },
     async format(source: string): Promise<string> {
       const value = expectRecord(await request('/awl/fmt', jsonInit('POST', { source })));
@@ -256,16 +216,26 @@ function jsonInit(method: string, body: unknown): RequestInit {
   return { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) };
 }
 
-function parseDiagnostic(value: unknown): AwlDiagnostic {
-  const record = expectRecord(value);
-  const diagnosticClass = record.class;
-  if (diagnosticClass !== 'error' && diagnosticClass !== 'emit_subset') {
-    throw new Error('Invalid authoring response: class');
+/**
+ * Builds the refusal for a non-OK authoring response.
+ *
+ * Lifted out of `request` so the transport does one thing: a body the server
+ * shaped as a refusal keeps its own error type and message verbatim, and
+ * anything else becomes a refusal naming the status. Both arms throw — a
+ * failed request never returns a value.
+ */
+async function refusalFrom(response: Response): Promise<GuidedFlowRefusedError> {
+  const failure: unknown = await response.json().catch(() => null);
+  const record =
+    failure !== null && typeof failure === 'object' ? (failure as Record<string, unknown>) : null;
+  if (record !== null && typeof record.message === 'string') {
+    return new GuidedFlowRefusedError(
+      typeof record.error_type === 'string' ? record.error_type : 'AuthoringRefused',
+      record.message
+    );
   }
-  return {
-    class: diagnosticClass,
-    message: expectString(record.message, 'message'),
-    line: expectNumber(record.line, 'line'),
-    column: expectNumber(record.column, 'column'),
-  };
+  return new GuidedFlowRefusedError(
+    'AuthoringRefused',
+    `Authoring request failed (${response.status})`
+  );
 }

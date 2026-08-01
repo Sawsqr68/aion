@@ -1,0 +1,102 @@
+import { expect, test } from 'bun:test';
+import { renderToStaticMarkup } from 'react-dom/server';
+
+import type { DeployedDocument } from '../lib/deployed-facade';
+import { DeployedDocumentPane } from './DeployedDocumentPane';
+
+const HASH = 'abcdef0123456789'.repeat(4);
+
+function deployed(overrides: Partial<DeployedDocument> = {}): DeployedDocument {
+  return {
+    workflowType: 'dev_brief',
+    contentHash: HASH,
+    documentName: 'dev_brief.awl',
+    source: '//! Deployed probe.\nworkflow dev_brief\n',
+    schemas: [],
+    projection: {
+      ok: true,
+      deploysGreen: true,
+      steps: 3,
+      diagnostics: [],
+      semantic: null,
+    },
+    ...overrides,
+  };
+}
+
+/**
+ * 🔴 THE UNAMBIGUITY PIN. The pane says what it is showing, and names the
+ * artifact the way the deploy surface names it: workflow type plus content
+ * hash. An operator must never have to guess whether the source in front of
+ * them is their draft or what is running.
+ */
+test('the pane is labelled as the deployed artifact and identifies it by type and hash', () => {
+  const html = renderToStaticMarkup(<DeployedDocumentPane document={deployed()} />);
+  expect(html).toContain('Deployed · read-only');
+  expect(html).toContain('dev_brief.awl');
+  expect(html).toContain('dev_brief');
+  expect(html).toContain('abcdef01…23456789');
+  expect(html).toContain(HASH);
+  expect(html).toContain('3 steps');
+  expect(html).toContain('no imported schemas');
+});
+
+/**
+ * 🔴 NO MUTATION AFFORDANCE IS REACHABLE. Every control the workspace editor
+ * offers for changing a document is named here and asserted ABSENT — Save,
+ * Format, the gesture-bearing Studio view, and the Ship & Run panel that
+ * deploys. The view switcher above is the survival half: the pane does render
+ * its read surfaces, so this is not passing because nothing rendered.
+ */
+test('the deployed pane exposes no save, format, studio, or ship control', () => {
+  const html = renderToStaticMarkup(<DeployedDocumentPane document={deployed()} />);
+  for (const control of ['Save', 'Format', 'Studio', 'Ship & Run']) {
+    expect(html).not.toContain(control);
+  }
+  expect(html).not.toContain('Modified');
+  // Survival: the read-only view surfaces are all present.
+  expect(html).toContain('Text view');
+  expect(html).toContain('Canvas view');
+  expect(html).toContain('Split view');
+});
+
+/** The archived schemas are named, so the operator sees what it was checked against. */
+test('archived schemas are named in the footer', () => {
+  const html = renderToStaticMarkup(
+    <DeployedDocumentPane
+      document={deployed({
+        schemas: [
+          { path: 'schemas/brief.schema.json', text: '{"type":"object"}', byteLength: 17 },
+          { path: 'schemas/step.schema.json', text: null, byteLength: 4 },
+        ],
+      })}
+    />
+  );
+  expect(html).toContain('2 archived schemas');
+  expect(html).toContain('schemas/brief.schema.json');
+  expect(html).toContain('schemas/step.schema.json');
+});
+
+/**
+ * A deployed version whose archived source no longer checks green is reported
+ * as it is. The pane states the projection it was given; it does not launder a
+ * red into a green because the version is deployed.
+ */
+test('a projection with errors is reported, not smoothed over', () => {
+  const html = renderToStaticMarkup(
+    <DeployedDocumentPane
+      document={deployed({
+        projection: {
+          ok: false,
+          deploysGreen: false,
+          steps: null,
+          diagnostics: [{ class: 'error', message: 'unknown step', line: 4, column: 2 }],
+          semantic: null,
+        },
+      })}
+    />
+  );
+  expect(html).toContain('1 errors');
+  expect(html).toContain('projection unavailable');
+  expect(html).not.toContain('deploys green');
+});
