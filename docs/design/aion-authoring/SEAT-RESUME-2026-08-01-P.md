@@ -16,6 +16,11 @@ Tree: clean except seat's untracked .aion-accepted-binary-20260731/ +
 .aion-jjuabk-snapshot-20260731/. stash@{0} NOT OURS — do not touch.
 ```
 
+**🔶 DIRT OWNERSHIP: the #133 docs lane (dispatched after this marker) owns
+all dirt inside its BRIEF-133-DOCS.md fences (docs/**, READMEs, CHANGELOG,
+examples/assistant/resources/) until it commits and pushes. Unmarked dirty
+outside those fences = STOP.**
+
 ## Landing evidence (the honest record)
 
 - **Rust gate, PARTIAL BY RULING, not by neglect**: 14/41 aion-server test
