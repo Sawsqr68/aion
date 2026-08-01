@@ -32,7 +32,7 @@ test('document list exposes the New Workflow form when creation is configured', 
   expect(html).toContain('Create workflow');
 });
 
-test('document rows expose compact deployment state and selected semantics', () => {
+test('document rows expose name, path, and selected semantics — and claim no deploy state', () => {
   const html = renderToStaticMarkup(
     <DocumentList
       documents={[
@@ -46,7 +46,11 @@ test('document rows expose compact deployment state and selected semantics', () 
 
   expect(html).toContain('checkout.awl');
   expect(html).toContain('workflows/checkout.awl');
+  expect(html).toContain('refund.awl');
+  expect(html).toContain('workflows/refund.awl');
   expect(html).toContain('aria-current="true"');
-  expect(html.match(/deploys green/g)?.length).toBe(2);
-  expect(html.match(/data-status="healthy"/g)?.length).toBe(2);
+  // The list runs no checks, so it may not claim per-document deploy state:
+  // the old hardcoded "deploys green" badge asserted health nothing measured.
+  expect(html).not.toContain('deploys green');
+  expect(html).not.toContain('data-status="healthy"');
 });

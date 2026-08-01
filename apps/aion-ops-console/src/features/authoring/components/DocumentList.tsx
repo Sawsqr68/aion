@@ -2,7 +2,6 @@ import { FileCode2, FolderCog, Plus } from 'lucide-react';
 import { useState } from 'react';
 
 import { EmptyState } from '@/components/EmptyState';
-import { StatusDot } from '@/components/kit';
 import { cn } from '@/lib/utils';
 import type { AwlDocument } from '../lib/facade';
 
@@ -115,13 +114,9 @@ export function DocumentList({
                     {document.name}
                   </span>
                 </span>
-                <span className="mt-1.5 flex items-center justify-between gap-2 pl-5.5">
+                <span className="mt-1.5 flex items-center pl-5.5">
                   <span className="min-w-0 truncate font-mono text-muted-foreground text-[0.6875rem]">
                     {document.path}
-                  </span>
-                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 font-medium text-[0.625rem] text-success">
-                    <StatusDot className="size-1.5" status="healthy" />
-                    deploys green
                   </span>
                 </span>
               </button>
