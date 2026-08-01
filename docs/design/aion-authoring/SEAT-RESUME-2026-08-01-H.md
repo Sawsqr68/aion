@@ -9,8 +9,11 @@ I am **Vesper Lynd**, session `5849e0d8-4802-4869-8e0f-9f7fd187e198`. Sign
 ## State
 
 ```
-origin/main = f7a08aaf   (PUSHED; local == remote, nothing in flight locally)
-crates/ is byte-identical to the pre-#90 state 3bee2840
+origin/main = 2a33475e   (PUSHED; local == remote, nothing in flight locally)
+  2a33475e  test(conformance): the concurrent-append assertion names the actual error
+  8741e7d4  docs(seat): this marker
+  f7a08aaf  revert(retry): #90's fix was the defect
+crates/aion/ is byte-identical to the pre-#90 state 3bee2840
 ```
 
 Working tree clean apart from untracked `.aion-*-20260731/` artifact dirs and
@@ -48,14 +51,39 @@ against a live control. My prediction ("expect exactly one red, and it will be
 losing concurrent append should return SequenceConflict for the winning head
   expected: 1   actual: 0
 ```
-`crates/aion-store/src/conformance.rs:291`. haematite is the **default**
-durable backend, and by invariant 3 a `SequenceConflict` **is** the
-double-writer signal. Prime suspect `51411a41`, which gave haematite "a
-generalized read-modify-write whose guard refusals write nothing" (+215 lines).
-Still genuinely open: whether the case guarantees a real race or merely hopes
-for one — if the appends serialize, 0 is correct and the ASSERTION is wrong.
-An Opus diagnostician was dispatched read-only; **if no verdict is in this
-transcript, re-dispatch it.**
+`crates/aion-store/src/conformance.rs:291`. **DIAGNOSED — and my first framing
+of it was wrong.** It is NOT a single-writer breach. The assertion immediately
+before it, `success_count == 1`, PASSED: exactly one append won and history was
+protected. `expected: 1 / actual: 0` counts conflicts **of the expected type**.
+The loser failed with `Backend(HistoryCompacted)` instead of `SequenceConflict`.
+(I read `actual: 0` as "no conflict occurred" when it means "no conflict of that
+type occurred" — a correct number with the wrong noun.)
+
+Cause, verified in the dependency's source: `stream_head` (`store.rs:1520`) is a
+FULL history read → haematite 0.7.0 `read_from`
+(`api/event_store.rs:184-196`), which issues **two separate shard-actor
+round-trips** (`read_event_entries_from`, then `read_stream_next_seq`). The
+winner's commit can land between them → entries read empty, `next_seq` reads 1
+→ `HistoryCompacted` → mapped to `StoreError::Backend` by `error.rs:12-14`.
+Only one of three interleavings diverges. Haematite-only: `inmemory ... ok`
+(ws6.log:5709), `libsql ... ok` (ws6.log:5937).
+
+Rate: **0 in 118 local executions** (incl. 48 at 16x process concurrency), 1 hit
+in the loaded battery. RULED OUT with measurement: the 5s reply timeout (binary
+finished in 4.39s), `WriteDuringRootAdvanceEmission` (no subscriber), and
+`51411a41` — its generalized RMW is in the WRITE path; this is the READ path.
+
+**Landed for it (`2a33475e`):** the assertion now prints the losing append's
+actual error, watched failing to confirm it renders. The bare count could not
+distinguish a misclassification from an invariant breach.
+
+**Still open, and NOT fixable in aion today:** haematite 0.7.0's public
+`EventStore` exposes no head/next-seq read (`append*`, `read`, `read_from`,
+`read_value`, `cas`, `scan`, `flush`), so `stream_head` must scan the entire
+stream — O(history) per append on the default backend, and the thing that opens
+the window. Real fix is upstream; house law keeps cross-repo changes in their
+own repo. Athena has offered to sequence a repro INTO a contended window and
+instrument it (a miss there is NOT evidence of absence).
 
 Note: the working tree is CLEAN. Earlier notes calling these files
 "uncommitted-modified" came from a stale session-start snapshot — refuted.
@@ -80,6 +108,16 @@ Five arms all measured against the premise instead of testing it.
 
 **🔴 A ROUGH-EDGE COMMENT IS A LOAD-BEARING SPECIFICATION.** The violated
 constraint was written in the adjacent test file and read only afterwards.
+
+**🔴 LOAD IS PART OF THE ORACLE** (Athena's, and it corrects a claim I made):
+a battery on a quiet box and the same battery on a loaded one are TWO DIFFERENT
+INSTRUMENTS. I reported "0 in 118, incl. 48 at 16x concurrency" as though it
+bounded #127's rate. It does not — process count contends the subject's own
+lock, but what widens a two-round-trip window is the OS descheduling the reading
+thread, a property of the BOX. My 118 and her 1 are not 119 samples. ⇒ a green
+concurrency suite must record the load it was green *under*, and **a quiet box
+is systematically blind to exactly the defect class that hurts most in
+production.**
 
 **A THRESHOLD TEST MUST RE-MEASURE AT THE MOMENT IT DECIDES** (Athena's, taken):
 `df -g` truncates, so it understates by at most 0.99 GiB and cannot explain a
