@@ -98,3 +98,27 @@ land. Undeployable: 16 → 9 → 6 → 2 expected. Remaining after layers: subst
 takes it to 2 if verified. #127 with Apollo (his #74+#75, one commit; our
 `2a33475e` assertion goes RED when his fix lands — coordinated, expected).
 #128 unchanged (await_result no timeout — honour declared, don't invent).
+
+---
+
+## ✅ RESOLVED (appended post-landing): the checklist above is DISCHARGED
+
+`origin/main = 3328cf18` — parallel layers LANDED at my hand. Every item:
+battery green (aion-awl 514/0, BC-4 29/0, COMPILED 102 = 105−3, clippy/fmt 0),
+population clean (4 tracked fixtures, 0 new .awl, 8 new goldens / 0 modified),
+buckets 63/36/0/3/3 = 105 by line range, substep pins untouched, fixture
+rename verified name-only against a real pre-existing module collision,
+transcript read (0 divergences; concurrency proven in the trail at block 13;
+no suppressed finding), and **mutation arm 2 run at MY hand**: mutant red on
+exact inventory, restored byte-identical, lib 114/0.
+
+⚠️ Lesson from arm 2: **`git checkout --` cannot restore an UNTRACKED file.**
+The implementer's new `layers.rs` was `??`, so my first restore silently
+failed with a pathspec error and the mutant stayed live; caught because the
+restore-verify run went red. Restore untracked files by re-applying the
+edit, and always verify the restore with the suite, not with the checkout's
+exit alone.
+
+**Undeployable: 16 → 2. Remaining: substeps ×2 — the LAST class.** Task #7
+has the full state. Next session: dispatch substeps, land it, and the
+language refuses nothing in its own valid corpus.
