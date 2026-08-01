@@ -57,17 +57,45 @@ pub(super) fn lower_named_fork(
         }
         return Ok(());
     }
-    let span = Span::from_source(fork.span);
-    // R4: branch activity values in source order, then the single all-call.
-    let raw = !homogeneous;
+    let binds = all_dispatch(ctx, plan, &branches, !homogeneous, fork.span, scope, stmts)?;
+    bind_branches(ctx, plan, &branches, binds, homogeneous, scope, stmts)?;
+    Ok(())
+}
+
+/// The shared `workflow.all` dispatch: activity values in SOURCE ORDER into
+/// one list, the all-call, `map_activity_error`, `TryBind`, then the
+/// source-position destructure. Returns the destructured var of every call
+/// that binds (`None` where the call discards its result).
+///
+/// Shared by named forks and dependency-parallel layers because the reference
+/// emits the same two forms for both — `emitter/steps.rs::emit_parallel_layer`
+/// renders the typed `workflow.all` inline and delegates the heterogeneous
+/// case to the very same `emitter/forks.rs::lower_hetero_parallel` a named
+/// fork uses. Factoring it here is what keeps the two from drifting apart.
+///
+/// Every value is computed BEFORE any position binds, so a call's arguments
+/// can never read a sibling's result. That is a property of both callers'
+/// inputs, not an accident: named fork branches are siblings under one join,
+/// and layer members are mutually dependency-independent by construction
+/// (`emitter/graph.rs::layer`).
+pub(super) fn all_dispatch(
+    ctx: &mut Ctx<'_>,
+    plan: &FnPlan,
+    calls: &[&CallStmt],
+    raw: bool,
+    source: crate::Span,
+    scope: &Scope,
+    stmts: &mut Vec<Stmt>,
+) -> Result<Vec<Option<Var>>, LowerError> {
+    let span = Span::from_source(source);
     let mut values = Vec::new();
-    for branch in &branches {
+    for call in calls {
         let queued = activity_value(
             ctx,
             plan,
-            &branch.call,
+            &call.call,
             ActivityForm {
-                site_config: branch.config.as_ref(),
+                site_config: call.config.as_ref(),
                 piped: None,
                 raw,
             },
@@ -82,19 +110,13 @@ pub(super) fn lower_named_fork(
         items: values,
         span,
     });
-    let ran = call_rt(
-        ctx,
-        RuntimeFn::WfAll,
-        vec![Value::Var(list)],
-        stmts,
-        fork.span,
-    );
+    let ran = call_rt(ctx, RuntimeFn::WfAll, vec![Value::Var(list)], stmts, source);
     let mapped = call_rt(
         ctx,
         RuntimeFn::MapActivityError,
         vec![Value::Var(ran)],
         stmts,
-        fork.span,
+        source,
     );
     let joined = ctx.fresh_var();
     stmts.push(Stmt::TryBind {
@@ -104,22 +126,21 @@ pub(super) fn lower_named_fork(
         span,
     });
     // Source-position destructure: `let assert [p0, p1, …] = awl_branches`.
-    let binds: Vec<Option<Var>> = branches
+    let binds: Vec<Option<Var>> = calls
         .iter()
-        .map(|branch| branch.bind.as_ref().map(|_| ctx.fresh_var()))
+        .map(|call| call.bind.as_ref().map(|_| ctx.fresh_var()))
         .collect();
     stmts.push(Stmt::AssertList {
         binds: binds.clone(),
         list: joined,
         span,
     });
-    bind_branches(ctx, plan, &branches, binds, homogeneous, scope, stmts)?;
-    Ok(())
+    Ok(binds)
 }
 
 /// Insert every bound branch's binding: directly for the typed homogeneous
 /// path, through the per-position raw decode for the heterogeneous path.
-fn bind_branches(
+pub(super) fn bind_branches(
     ctx: &mut Ctx<'_>,
     plan: &FnPlan,
     branches: &[&CallStmt],

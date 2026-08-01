@@ -1,0 +1,993 @@
+module dev_brief source=dev_brief.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_provision:
+    aion@activity:retry/2 [activities] (v4, v7)
+    aion@activity:timeout/2 [activities] (v8, v9)
+    aion@activity:task_queue/2 [activities] (v10, lit#59)
+    aion@activity:node/2 [activities] (v11, lit#60)
+    aion@workflow:run/1 [activities] (v12)
+  step_scout:
+    aion@activity:timeout/2 [activities] (v3, v4)
+    aion@activity:task_queue/2 [activities] (v5, lit#61)
+    aion@activity:node/2 [activities] (v6, lit#62)
+    aion@activity:timeout/2 [activities] (v9, v10)
+    aion@activity:task_queue/2 [activities] (v11, lit#63)
+    aion@activity:node/2 [activities] (v12, lit#64)
+    aion@workflow:all/1 [activities] (v14)
+  step_review:
+    aion@workflow:map/2 [activities] (v4, v5)
+  fix_cycle_loop_0:
+    aion@activity:timeout/2 [activities] (v6, v7)
+    aion@activity:task_queue/2 [activities] (v8, lit#67)
+    aion@activity:node/2 [activities] (v9, lit#68)
+    aion@workflow:run/1 [activities] (v10)
+  review_fork_0:
+    aion@activity:timeout/2 [activities] (v3, v4)
+    aion@activity:task_queue/2 [activities] (v5, lit#71)
+    aion@activity:node/2 [activities] (v6, lit#72)
+== durable families == activities
+== atoms ==
+  [0] brief
+  [1] run_config
+  [2] workspace
+  [3] scout_report
+  [4] build_warmth
+  [5] round
+  [6] lens
+  [7] lens_verdict
+  [8] landed
+  [9] rejected
+  [10] exhausted
+  [11] fix_round_input
+  [12] provision_input
+  [13] review_lens_input
+  [14] scout_input
+  [15] warm_build_input
+  [16] dev_brief_input
+  [17] landed_outcome
+  [18] some
+  [19] none
+  [20] false
+  [21] fixed
+  [22] retry_policy
+  [23] ok
+  [24] awl_outcome_failure
+  [25] error
+== literals ==
+  [0] "statement"
+  [1] "title"
+  [2] "acceptance_criteria"
+  [3] "acceptance_criteria"
+  [4] "statement"
+  [5] "title"
+  [6] "base_branch"
+  [7] "gate_commands"
+  [8] "lenses"
+  [9] "max_fix_cycles"
+  [10] "repo_root"
+  [11] "path"
+  [12] "branch"
+  [13] "base_commit"
+  [14] "summary"
+  [15] "pointers"
+  [16] "warmed"
+  [17] "detail"
+  [18] "summary"
+  [19] "gates_green"
+  [20] "name"
+  [21] "charter"
+  [22] "lens"
+  [23] "blocking"
+  [24] "reject_reason"
+  [25] "lens"
+  [26] "blocking"
+  [27] "reject_reason"
+  [28] "branch"
+  [29] "fix_cycles"
+  [30] "first_pass"
+  [31] "summary"
+  [32] "branch"
+  [33] "verdicts"
+  [34] "reason"
+  [35] "cycles_spent"
+  [36] "brief"
+  [37] "scout"
+  [38] "workspace"
+  [39] "prior"
+  [40] "repo_root"
+  [41] "base_branch"
+  [42] "brief"
+  [43] "lens"
+  [44] "workspace"
+  [45] "round"
+  [46] "brief"
+  [47] "workspace"
+  [48] "workspace"
+  [49] "gates"
+  [50] "brief"
+  [51] "config"
+  [52] "landed"
+  [53] "outcome"
+  [54] ""
+  [55] ""
+  [56] "DevBriefOutcome"
+  [57] "landed"
+  [58] "payload"
+  [59] "dev_brief"
+  [60] "shell"
+  [61] "dev_brief"
+  [62] "scout"
+  [63] "dev_brief"
+  [64] "shell"
+  [65] "scout"
+  [66] ""
+  [67] "dev_brief"
+  [68] "developer"
+  [69] "gates never went green"
+  [70] "exhausted"
+  [71] "dev_brief"
+  [72] "reviewer"
+  [73] "rejected"
+== types ==
+  record Brief tag=brief
+    acceptance_criteria: nullable(list(string)) optional
+    statement: string
+    title: string
+  record RunConfig tag=run_config
+    base_branch: string
+    gate_commands: list(string)
+    lenses: list(ref(Lens))
+    max_fix_cycles: int
+    repo_root: string
+  record Workspace tag=workspace
+    path: string
+    branch: string
+    base_commit: string
+  record ScoutReport tag=scout_report
+    summary: string
+    pointers: list(string)
+  record BuildWarmth tag=build_warmth
+    warmed: bool
+    detail: string
+  record Round tag=round
+    summary: string
+    gates_green: bool
+  record Lens tag=lens
+    name: string
+    charter: string
+  record LensVerdict tag=lens_verdict
+    lens: string
+    blocking: bool
+    reject_reason: nullable(string) optional
+  record Landed tag=landed
+    branch: string
+    fix_cycles: int
+    first_pass: bool
+    summary: string
+  record Rejected tag=rejected
+    branch: string
+    verdicts: list(ref(LensVerdict))
+  record Exhausted tag=exhausted
+    reason: string
+    cycles_spent: int
+  record FixRoundInput tag=fix_round_input
+    brief: ref(Brief)
+    scout: ref(ScoutReport)
+    workspace: ref(Workspace)
+    prior: ref(Round)
+  record ProvisionInput tag=provision_input
+    repo_root: string
+    base_branch: string
+    brief: ref(Brief)
+  record ReviewLensInput tag=review_lens_input
+    lens: ref(Lens)
+    workspace: ref(Workspace)
+    round: ref(Round)
+  record ScoutInput tag=scout_input
+    brief: ref(Brief)
+    workspace: ref(Workspace)
+  record WarmBuildInput tag=warm_build_input
+    workspace: ref(Workspace)
+    gates: list(string)
+  record DevBriefInput tag=dev_brief_input
+    brief: ref(Brief)
+    config: ref(RunConfig)
+  union DevBriefOutcome
+    landed -> landed_outcome(ref(Landed))
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=dev_brief_input_codec output=dev_brief_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(dev_brief.DevBriefInput, dev_brief.DevBriefOutcome, AwlError)
+  T-DEF name="dev_brief" input=dev_brief_input_codec output=dev_brief_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (dev_brief.DevBriefInput) -> Result(dev_brief.DevBriefOutcome, AwlError)
+  T-EXEC fields=[brief:dev_brief.Brief, config:dev_brief.RunConfig] entry=step_provision args=[0, 1]
+== fn brief_codec/0 origin=codec_template(RecordTrio, Brief, record#0) ==
+  sig: () -> Codec(dev_brief.Brief)
+  v0 = make_closure brief_to_json captures=[]
+  v1 = call_local brief_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn brief_to_json/1 origin=codec_template(RecordTrio, Brief, record#0) ==
+  sig: (dev_brief.Brief) -> Json
+  v1 = field(v0, 1)
+  v2 = call_local brief_to_json$field0(v1) live_after=[v0]
+  v3 = field(v0, 2)
+  v4 = call_rt aion@awl@codec:string_to_json/1(v3) live_after=[v0, v2]
+  v5 = tuple([lit#0, v4])
+  v6 = list([v5])
+  v7 = field(v0, 3)
+  v8 = call_rt aion@awl@codec:string_to_json/1(v7) live_after=[v2, v6]
+  v9 = tuple([lit#1, v8])
+  v10 = list([v9])
+  v11 = list([v2, v6, v10])
+  v12 = call_rt gleam@list:flatten/1(v11)
+  tail_rt gleam@json:object/1(v12)
+== fn brief_decoder/0 origin=codec_template(RecordTrio, Brief, record#0) ==
+  sig: () -> Decoder(dev_brief.Brief)
+  v0 = call_local list_string_decoder()
+  v1 = make_closure brief_decoder$some captures=[]
+  v2 = call_rt gleam@dynamic@decode:map/2(v0, v1)
+  v3 = make_closure brief_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:optional_field/4(lit#3, 'none', v2, v3)
+== fn brief_to_json$field0/1 origin=lifted(brief_to_json, #0) ==
+  sig: (Option(List(String))) -> List(#(String, Json))
+  if is_tagged v0 some/2:
+    v1 = field(v0, 1)
+    v2 = call_local list_string_to_json(v1)
+    v3 = tuple([lit#2, v2])
+    v4 = list([v3])
+    return v4
+  else:
+    return nil
+== fn brief_decoder$some/1 origin=lifted(brief_decoder, #0) ==
+  sig: (Dynamic) -> Option(Dynamic)
+  v1 = record(some, [v0])
+  return v1
+== fn brief_decoder$0/1 origin=lifted(brief_decoder, #1) ==
+  sig: (Option(List(String))) -> Decoder(dev_brief.Brief)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure brief_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v1, v2)
+== fn brief_decoder$1/2 origin=lifted(brief_decoder, #2) ==
+  sig: (String, Option(List(String))) -> Decoder(dev_brief.Brief)
+  v2 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0, v1]
+  v3 = make_closure brief_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#5, v2, v3)
+== fn brief_decoder$2/3 origin=lifted(brief_decoder, #3) ==
+  sig: (String, Option(List(String)), String) -> Decoder(dev_brief.Brief)
+  v3 = record(brief, [v1, v2, v0])
+  tail_rt gleam@dynamic@decode:success/1(v3)
+== fn run_config_codec/0 origin=codec_template(RecordTrio, RunConfig, record#1) ==
+  sig: () -> Codec(dev_brief.RunConfig)
+  v0 = make_closure run_config_to_json captures=[]
+  v1 = call_local run_config_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn run_config_to_json/1 origin=codec_template(RecordTrio, RunConfig, record#1) ==
+  sig: (dev_brief.RunConfig) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = field(v0, 3)
+  v4 = field(v0, 4)
+  v5 = field(v0, 5)
+  v6 = json_obj {"base_branch": v1|>awlc.string_to_json, "gate_commands": v2|>list_string_to_json, "lenses": v3|>list_lens_to_json, "max_fix_cycles": v4|>awlc.int_to_json, "repo_root": v5|>awlc.string_to_json}
+  return v6
+== fn run_config_decoder/0 origin=codec_template(RecordTrio, RunConfig, record#1) ==
+  sig: () -> Decoder(dev_brief.RunConfig)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure run_config_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
+== fn run_config_decoder$0/1 origin=lifted(run_config_decoder, #0) ==
+  sig: (String) -> Decoder(dev_brief.RunConfig)
+  v1 = call_local list_string_decoder() live_after=[v0]
+  v2 = make_closure run_config_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#7, v1, v2)
+== fn run_config_decoder$1/2 origin=lifted(run_config_decoder, #1) ==
+  sig: (List(String), String) -> Decoder(dev_brief.RunConfig)
+  v2 = call_local list_lens_decoder() live_after=[v0, v1]
+  v3 = make_closure run_config_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#8, v2, v3)
+== fn run_config_decoder$2/3 origin=lifted(run_config_decoder, #2) ==
+  sig: (List(dev_brief.Lens), String, List(String)) -> Decoder(dev_brief.RunConfig)
+  v3 = call_rt aion@awl@codec:int_decoder/0() live_after=[v0, v1, v2]
+  v4 = make_closure run_config_decoder$3 captures=[v1, v2, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#9, v3, v4)
+== fn run_config_decoder$3/4 origin=lifted(run_config_decoder, #3) ==
+  sig: (Int, String, List(String), List(dev_brief.Lens)) -> Decoder(dev_brief.RunConfig)
+  v4 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0, v1, v2, v3]
+  v5 = make_closure run_config_decoder$4 captures=[v1, v2, v3, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#10, v4, v5)
+== fn run_config_decoder$4/5 origin=lifted(run_config_decoder, #4) ==
+  sig: (String, String, List(String), List(dev_brief.Lens), Int) -> Decoder(dev_brief.RunConfig)
+  v5 = record(run_config, [v1, v2, v3, v4, v0])
+  tail_rt gleam@dynamic@decode:success/1(v5)
+== fn workspace_codec/0 origin=codec_template(RecordTrio, Workspace, record#2) ==
+  sig: () -> Codec(dev_brief.Workspace)
+  v0 = make_closure workspace_to_json captures=[]
+  v1 = call_local workspace_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn workspace_to_json/1 origin=codec_template(RecordTrio, Workspace, record#2) ==
+  sig: (dev_brief.Workspace) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = field(v0, 3)
+  v4 = json_obj {"path": v1|>awlc.string_to_json, "branch": v2|>awlc.string_to_json, "base_commit": v3|>awlc.string_to_json}
+  return v4
+== fn workspace_decoder/0 origin=codec_template(RecordTrio, Workspace, record#2) ==
+  sig: () -> Decoder(dev_brief.Workspace)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure workspace_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#11, v0, v1)
+== fn workspace_decoder$0/1 origin=lifted(workspace_decoder, #0) ==
+  sig: (String) -> Decoder(dev_brief.Workspace)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure workspace_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#12, v1, v2)
+== fn workspace_decoder$1/2 origin=lifted(workspace_decoder, #1) ==
+  sig: (String, String) -> Decoder(dev_brief.Workspace)
+  v2 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0, v1]
+  v3 = make_closure workspace_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#13, v2, v3)
+== fn workspace_decoder$2/3 origin=lifted(workspace_decoder, #2) ==
+  sig: (String, String, String) -> Decoder(dev_brief.Workspace)
+  v3 = record(workspace, [v1, v2, v0])
+  tail_rt gleam@dynamic@decode:success/1(v3)
+== fn scout_report_codec/0 origin=codec_template(RecordTrio, ScoutReport, record#3) ==
+  sig: () -> Codec(dev_brief.ScoutReport)
+  v0 = make_closure scout_report_to_json captures=[]
+  v1 = call_local scout_report_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn scout_report_to_json/1 origin=codec_template(RecordTrio, ScoutReport, record#3) ==
+  sig: (dev_brief.ScoutReport) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"summary": v1|>awlc.string_to_json, "pointers": v2|>list_string_to_json}
+  return v3
+== fn scout_report_decoder/0 origin=codec_template(RecordTrio, ScoutReport, record#3) ==
+  sig: () -> Decoder(dev_brief.ScoutReport)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure scout_report_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#14, v0, v1)
+== fn scout_report_decoder$0/1 origin=lifted(scout_report_decoder, #0) ==
+  sig: (String) -> Decoder(dev_brief.ScoutReport)
+  v1 = call_local list_string_decoder() live_after=[v0]
+  v2 = make_closure scout_report_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#15, v1, v2)
+== fn scout_report_decoder$1/2 origin=lifted(scout_report_decoder, #1) ==
+  sig: (List(String), String) -> Decoder(dev_brief.ScoutReport)
+  v2 = record(scout_report, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn build_warmth_codec/0 origin=codec_template(RecordTrio, BuildWarmth, record#4) ==
+  sig: () -> Codec(dev_brief.BuildWarmth)
+  v0 = make_closure build_warmth_to_json captures=[]
+  v1 = call_local build_warmth_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn build_warmth_to_json/1 origin=codec_template(RecordTrio, BuildWarmth, record#4) ==
+  sig: (dev_brief.BuildWarmth) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"warmed": v1|>awlc.bool_to_json, "detail": v2|>awlc.string_to_json}
+  return v3
+== fn build_warmth_decoder/0 origin=codec_template(RecordTrio, BuildWarmth, record#4) ==
+  sig: () -> Decoder(dev_brief.BuildWarmth)
+  v0 = call_rt aion@awl@codec:bool_decoder/0()
+  v1 = make_closure build_warmth_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#16, v0, v1)
+== fn build_warmth_decoder$0/1 origin=lifted(build_warmth_decoder, #0) ==
+  sig: (Bool) -> Decoder(dev_brief.BuildWarmth)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure build_warmth_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#17, v1, v2)
+== fn build_warmth_decoder$1/2 origin=lifted(build_warmth_decoder, #1) ==
+  sig: (String, Bool) -> Decoder(dev_brief.BuildWarmth)
+  v2 = record(build_warmth, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn round_codec/0 origin=codec_template(RecordTrio, Round, record#5) ==
+  sig: () -> Codec(dev_brief.Round)
+  v0 = make_closure round_to_json captures=[]
+  v1 = call_local round_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn round_to_json/1 origin=codec_template(RecordTrio, Round, record#5) ==
+  sig: (dev_brief.Round) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"summary": v1|>awlc.string_to_json, "gates_green": v2|>awlc.bool_to_json}
+  return v3
+== fn round_decoder/0 origin=codec_template(RecordTrio, Round, record#5) ==
+  sig: () -> Decoder(dev_brief.Round)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure round_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#18, v0, v1)
+== fn round_decoder$0/1 origin=lifted(round_decoder, #0) ==
+  sig: (String) -> Decoder(dev_brief.Round)
+  v1 = call_rt aion@awl@codec:bool_decoder/0() live_after=[v0]
+  v2 = make_closure round_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#19, v1, v2)
+== fn round_decoder$1/2 origin=lifted(round_decoder, #1) ==
+  sig: (Bool, String) -> Decoder(dev_brief.Round)
+  v2 = record(round, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn lens_codec/0 origin=codec_template(RecordTrio, Lens, record#6) ==
+  sig: () -> Codec(dev_brief.Lens)
+  v0 = make_closure lens_to_json captures=[]
+  v1 = call_local lens_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn lens_to_json/1 origin=codec_template(RecordTrio, Lens, record#6) ==
+  sig: (dev_brief.Lens) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"name": v1|>awlc.string_to_json, "charter": v2|>awlc.string_to_json}
+  return v3
+== fn lens_decoder/0 origin=codec_template(RecordTrio, Lens, record#6) ==
+  sig: () -> Decoder(dev_brief.Lens)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure lens_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#20, v0, v1)
+== fn lens_decoder$0/1 origin=lifted(lens_decoder, #0) ==
+  sig: (String) -> Decoder(dev_brief.Lens)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure lens_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#21, v1, v2)
+== fn lens_decoder$1/2 origin=lifted(lens_decoder, #1) ==
+  sig: (String, String) -> Decoder(dev_brief.Lens)
+  v2 = record(lens, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn lens_verdict_codec/0 origin=codec_template(RecordTrio, LensVerdict, record#7) ==
+  sig: () -> Codec(dev_brief.LensVerdict)
+  v0 = make_closure lens_verdict_to_json captures=[]
+  v1 = call_local lens_verdict_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn lens_verdict_to_json/1 origin=codec_template(RecordTrio, LensVerdict, record#7) ==
+  sig: (dev_brief.LensVerdict) -> Json
+  v1 = field(v0, 1)
+  v2 = call_rt aion@awl@codec:string_to_json/1(v1) live_after=[v0]
+  v3 = tuple([lit#22, v2])
+  v4 = list([v3])
+  v5 = field(v0, 2)
+  v6 = call_rt aion@awl@codec:bool_to_json/1(v5) live_after=[v0, v4]
+  v7 = tuple([lit#23, v6])
+  v8 = list([v7])
+  v9 = field(v0, 3)
+  v10 = call_local lens_verdict_to_json$field2(v9) live_after=[v4, v8]
+  v11 = list([v4, v8, v10])
+  v12 = call_rt gleam@list:flatten/1(v11)
+  tail_rt gleam@json:object/1(v12)
+== fn lens_verdict_decoder/0 origin=codec_template(RecordTrio, LensVerdict, record#7) ==
+  sig: () -> Decoder(dev_brief.LensVerdict)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure lens_verdict_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#25, v0, v1)
+== fn lens_verdict_to_json$field2/1 origin=lifted(lens_verdict_to_json, #0) ==
+  sig: (Option(String)) -> List(#(String, Json))
+  if is_tagged v0 some/2:
+    v1 = field(v0, 1)
+    v2 = call_rt aion@awl@codec:string_to_json/1(v1)
+    v3 = tuple([lit#24, v2])
+    v4 = list([v3])
+    return v4
+  else:
+    return nil
+== fn lens_verdict_decoder$some/1 origin=lifted(lens_verdict_decoder, #0) ==
+  sig: (Dynamic) -> Option(Dynamic)
+  v1 = record(some, [v0])
+  return v1
+== fn lens_verdict_decoder$0/1 origin=lifted(lens_verdict_decoder, #1) ==
+  sig: (String) -> Decoder(dev_brief.LensVerdict)
+  v1 = call_rt aion@awl@codec:bool_decoder/0() live_after=[v0]
+  v2 = make_closure lens_verdict_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#26, v1, v2)
+== fn lens_verdict_decoder$1/2 origin=lifted(lens_verdict_decoder, #2) ==
+  sig: (Bool, String) -> Decoder(dev_brief.LensVerdict)
+  v2 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0, v1]
+  v3 = make_closure lens_verdict_decoder$some captures=[]
+  v4 = call_rt gleam@dynamic@decode:map/2(v2, v3) live_after=[v0, v1]
+  v5 = make_closure lens_verdict_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:optional_field/4(lit#27, 'none', v4, v5)
+== fn lens_verdict_decoder$2/3 origin=lifted(lens_verdict_decoder, #3) ==
+  sig: (Option(String), String, Bool) -> Decoder(dev_brief.LensVerdict)
+  v3 = record(lens_verdict, [v1, v2, v0])
+  tail_rt gleam@dynamic@decode:success/1(v3)
+== fn landed_codec/0 origin=codec_template(RecordTrio, Landed, record#8) ==
+  sig: () -> Codec(dev_brief.Landed)
+  v0 = make_closure landed_to_json captures=[]
+  v1 = call_local landed_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn landed_to_json/1 origin=codec_template(RecordTrio, Landed, record#8) ==
+  sig: (dev_brief.Landed) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = field(v0, 3)
+  v4 = field(v0, 4)
+  v5 = json_obj {"branch": v1|>awlc.string_to_json, "fix_cycles": v2|>awlc.int_to_json, "first_pass": v3|>awlc.bool_to_json, "summary": v4|>awlc.string_to_json}
+  return v5
+== fn landed_decoder/0 origin=codec_template(RecordTrio, Landed, record#8) ==
+  sig: () -> Decoder(dev_brief.Landed)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure landed_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#28, v0, v1)
+== fn landed_decoder$0/1 origin=lifted(landed_decoder, #0) ==
+  sig: (String) -> Decoder(dev_brief.Landed)
+  v1 = call_rt aion@awl@codec:int_decoder/0() live_after=[v0]
+  v2 = make_closure landed_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#29, v1, v2)
+== fn landed_decoder$1/2 origin=lifted(landed_decoder, #1) ==
+  sig: (Int, String) -> Decoder(dev_brief.Landed)
+  v2 = call_rt aion@awl@codec:bool_decoder/0() live_after=[v0, v1]
+  v3 = make_closure landed_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#30, v2, v3)
+== fn landed_decoder$2/3 origin=lifted(landed_decoder, #2) ==
+  sig: (Bool, String, Int) -> Decoder(dev_brief.Landed)
+  v3 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0, v1, v2]
+  v4 = make_closure landed_decoder$3 captures=[v1, v2, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#31, v3, v4)
+== fn landed_decoder$3/4 origin=lifted(landed_decoder, #3) ==
+  sig: (String, String, Int, Bool) -> Decoder(dev_brief.Landed)
+  v4 = record(landed, [v1, v2, v3, v0])
+  tail_rt gleam@dynamic@decode:success/1(v4)
+== fn rejected_codec/0 origin=codec_template(RecordTrio, Rejected, record#9) ==
+  sig: () -> Codec(dev_brief.Rejected)
+  v0 = make_closure rejected_to_json captures=[]
+  v1 = call_local rejected_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn rejected_to_json/1 origin=codec_template(RecordTrio, Rejected, record#9) ==
+  sig: (dev_brief.Rejected) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"branch": v1|>awlc.string_to_json, "verdicts": v2|>list_lens_verdict_to_json}
+  return v3
+== fn rejected_decoder/0 origin=codec_template(RecordTrio, Rejected, record#9) ==
+  sig: () -> Decoder(dev_brief.Rejected)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure rejected_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#32, v0, v1)
+== fn rejected_decoder$0/1 origin=lifted(rejected_decoder, #0) ==
+  sig: (String) -> Decoder(dev_brief.Rejected)
+  v1 = call_local list_lens_verdict_decoder() live_after=[v0]
+  v2 = make_closure rejected_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#33, v1, v2)
+== fn rejected_decoder$1/2 origin=lifted(rejected_decoder, #1) ==
+  sig: (List(dev_brief.LensVerdict), String) -> Decoder(dev_brief.Rejected)
+  v2 = record(rejected, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn exhausted_codec/0 origin=codec_template(RecordTrio, Exhausted, record#10) ==
+  sig: () -> Codec(dev_brief.Exhausted)
+  v0 = make_closure exhausted_to_json captures=[]
+  v1 = call_local exhausted_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn exhausted_to_json/1 origin=codec_template(RecordTrio, Exhausted, record#10) ==
+  sig: (dev_brief.Exhausted) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"reason": v1|>awlc.string_to_json, "cycles_spent": v2|>awlc.int_to_json}
+  return v3
+== fn exhausted_decoder/0 origin=codec_template(RecordTrio, Exhausted, record#10) ==
+  sig: () -> Decoder(dev_brief.Exhausted)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure exhausted_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#34, v0, v1)
+== fn exhausted_decoder$0/1 origin=lifted(exhausted_decoder, #0) ==
+  sig: (String) -> Decoder(dev_brief.Exhausted)
+  v1 = call_rt aion@awl@codec:int_decoder/0() live_after=[v0]
+  v2 = make_closure exhausted_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#35, v1, v2)
+== fn exhausted_decoder$1/2 origin=lifted(exhausted_decoder, #1) ==
+  sig: (Int, String) -> Decoder(dev_brief.Exhausted)
+  v2 = record(exhausted, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn fix_round_input_codec/0 origin=codec_template(RecordTrio, FixRoundInput, record#11) ==
+  sig: () -> Codec(dev_brief.FixRoundInput)
+  v0 = make_closure fix_round_input_to_json captures=[]
+  v1 = call_local fix_round_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn fix_round_input_to_json/1 origin=codec_template(RecordTrio, FixRoundInput, record#11) ==
+  sig: (dev_brief.FixRoundInput) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = field(v0, 3)
+  v4 = field(v0, 4)
+  v5 = json_obj {"brief": v1|>brief_to_json, "scout": v2|>scout_report_to_json, "workspace": v3|>workspace_to_json, "prior": v4|>round_to_json}
+  return v5
+== fn fix_round_input_decoder/0 origin=codec_template(RecordTrio, FixRoundInput, record#11) ==
+  sig: () -> Decoder(dev_brief.FixRoundInput)
+  v0 = call_local brief_decoder()
+  v1 = make_closure fix_round_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#36, v0, v1)
+== fn fix_round_input_decoder$0/1 origin=lifted(fix_round_input_decoder, #0) ==
+  sig: (dev_brief.Brief) -> Decoder(dev_brief.FixRoundInput)
+  v1 = call_local scout_report_decoder() live_after=[v0]
+  v2 = make_closure fix_round_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#37, v1, v2)
+== fn fix_round_input_decoder$1/2 origin=lifted(fix_round_input_decoder, #1) ==
+  sig: (dev_brief.ScoutReport, dev_brief.Brief) -> Decoder(dev_brief.FixRoundInput)
+  v2 = call_local workspace_decoder() live_after=[v0, v1]
+  v3 = make_closure fix_round_input_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#38, v2, v3)
+== fn fix_round_input_decoder$2/3 origin=lifted(fix_round_input_decoder, #2) ==
+  sig: (dev_brief.Workspace, dev_brief.Brief, dev_brief.ScoutReport) -> Decoder(dev_brief.FixRoundInput)
+  v3 = call_local round_decoder() live_after=[v0, v1, v2]
+  v4 = make_closure fix_round_input_decoder$3 captures=[v1, v2, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#39, v3, v4)
+== fn fix_round_input_decoder$3/4 origin=lifted(fix_round_input_decoder, #3) ==
+  sig: (dev_brief.Round, dev_brief.Brief, dev_brief.ScoutReport, dev_brief.Workspace) -> Decoder(dev_brief.FixRoundInput)
+  v4 = record(fix_round_input, [v1, v2, v3, v0])
+  tail_rt gleam@dynamic@decode:success/1(v4)
+== fn provision_input_codec/0 origin=codec_template(RecordTrio, ProvisionInput, record#12) ==
+  sig: () -> Codec(dev_brief.ProvisionInput)
+  v0 = make_closure provision_input_to_json captures=[]
+  v1 = call_local provision_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn provision_input_to_json/1 origin=codec_template(RecordTrio, ProvisionInput, record#12) ==
+  sig: (dev_brief.ProvisionInput) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = field(v0, 3)
+  v4 = json_obj {"repo_root": v1|>awlc.string_to_json, "base_branch": v2|>awlc.string_to_json, "brief": v3|>brief_to_json}
+  return v4
+== fn provision_input_decoder/0 origin=codec_template(RecordTrio, ProvisionInput, record#12) ==
+  sig: () -> Decoder(dev_brief.ProvisionInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure provision_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#40, v0, v1)
+== fn provision_input_decoder$0/1 origin=lifted(provision_input_decoder, #0) ==
+  sig: (String) -> Decoder(dev_brief.ProvisionInput)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure provision_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#41, v1, v2)
+== fn provision_input_decoder$1/2 origin=lifted(provision_input_decoder, #1) ==
+  sig: (String, String) -> Decoder(dev_brief.ProvisionInput)
+  v2 = call_local brief_decoder() live_after=[v0, v1]
+  v3 = make_closure provision_input_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#42, v2, v3)
+== fn provision_input_decoder$2/3 origin=lifted(provision_input_decoder, #2) ==
+  sig: (dev_brief.Brief, String, String) -> Decoder(dev_brief.ProvisionInput)
+  v3 = record(provision_input, [v1, v2, v0])
+  tail_rt gleam@dynamic@decode:success/1(v3)
+== fn review_lens_input_codec/0 origin=codec_template(RecordTrio, ReviewLensInput, record#13) ==
+  sig: () -> Codec(dev_brief.ReviewLensInput)
+  v0 = make_closure review_lens_input_to_json captures=[]
+  v1 = call_local review_lens_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn review_lens_input_to_json/1 origin=codec_template(RecordTrio, ReviewLensInput, record#13) ==
+  sig: (dev_brief.ReviewLensInput) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = field(v0, 3)
+  v4 = json_obj {"lens": v1|>lens_to_json, "workspace": v2|>workspace_to_json, "round": v3|>round_to_json}
+  return v4
+== fn review_lens_input_decoder/0 origin=codec_template(RecordTrio, ReviewLensInput, record#13) ==
+  sig: () -> Decoder(dev_brief.ReviewLensInput)
+  v0 = call_local lens_decoder()
+  v1 = make_closure review_lens_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#43, v0, v1)
+== fn review_lens_input_decoder$0/1 origin=lifted(review_lens_input_decoder, #0) ==
+  sig: (dev_brief.Lens) -> Decoder(dev_brief.ReviewLensInput)
+  v1 = call_local workspace_decoder() live_after=[v0]
+  v2 = make_closure review_lens_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#44, v1, v2)
+== fn review_lens_input_decoder$1/2 origin=lifted(review_lens_input_decoder, #1) ==
+  sig: (dev_brief.Workspace, dev_brief.Lens) -> Decoder(dev_brief.ReviewLensInput)
+  v2 = call_local round_decoder() live_after=[v0, v1]
+  v3 = make_closure review_lens_input_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#45, v2, v3)
+== fn review_lens_input_decoder$2/3 origin=lifted(review_lens_input_decoder, #2) ==
+  sig: (dev_brief.Round, dev_brief.Lens, dev_brief.Workspace) -> Decoder(dev_brief.ReviewLensInput)
+  v3 = record(review_lens_input, [v1, v2, v0])
+  tail_rt gleam@dynamic@decode:success/1(v3)
+== fn scout_input_codec/0 origin=codec_template(RecordTrio, ScoutInput, record#14) ==
+  sig: () -> Codec(dev_brief.ScoutInput)
+  v0 = make_closure scout_input_to_json captures=[]
+  v1 = call_local scout_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn scout_input_to_json/1 origin=codec_template(RecordTrio, ScoutInput, record#14) ==
+  sig: (dev_brief.ScoutInput) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"brief": v1|>brief_to_json, "workspace": v2|>workspace_to_json}
+  return v3
+== fn scout_input_decoder/0 origin=codec_template(RecordTrio, ScoutInput, record#14) ==
+  sig: () -> Decoder(dev_brief.ScoutInput)
+  v0 = call_local brief_decoder()
+  v1 = make_closure scout_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#46, v0, v1)
+== fn scout_input_decoder$0/1 origin=lifted(scout_input_decoder, #0) ==
+  sig: (dev_brief.Brief) -> Decoder(dev_brief.ScoutInput)
+  v1 = call_local workspace_decoder() live_after=[v0]
+  v2 = make_closure scout_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#47, v1, v2)
+== fn scout_input_decoder$1/2 origin=lifted(scout_input_decoder, #1) ==
+  sig: (dev_brief.Workspace, dev_brief.Brief) -> Decoder(dev_brief.ScoutInput)
+  v2 = record(scout_input, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn warm_build_input_codec/0 origin=codec_template(RecordTrio, WarmBuildInput, record#15) ==
+  sig: () -> Codec(dev_brief.WarmBuildInput)
+  v0 = make_closure warm_build_input_to_json captures=[]
+  v1 = call_local warm_build_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn warm_build_input_to_json/1 origin=codec_template(RecordTrio, WarmBuildInput, record#15) ==
+  sig: (dev_brief.WarmBuildInput) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"workspace": v1|>workspace_to_json, "gates": v2|>list_string_to_json}
+  return v3
+== fn warm_build_input_decoder/0 origin=codec_template(RecordTrio, WarmBuildInput, record#15) ==
+  sig: () -> Decoder(dev_brief.WarmBuildInput)
+  v0 = call_local workspace_decoder()
+  v1 = make_closure warm_build_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#48, v0, v1)
+== fn warm_build_input_decoder$0/1 origin=lifted(warm_build_input_decoder, #0) ==
+  sig: (dev_brief.Workspace) -> Decoder(dev_brief.WarmBuildInput)
+  v1 = call_local list_string_decoder() live_after=[v0]
+  v2 = make_closure warm_build_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#49, v1, v2)
+== fn warm_build_input_decoder$1/2 origin=lifted(warm_build_input_decoder, #1) ==
+  sig: (List(String), dev_brief.Workspace) -> Decoder(dev_brief.WarmBuildInput)
+  v2 = record(warm_build_input, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn dev_brief_input_codec/0 origin=codec_template(RecordTrio, DevBriefInput, record#16) ==
+  sig: () -> Codec(dev_brief.DevBriefInput)
+  v0 = make_closure dev_brief_input_to_json captures=[]
+  v1 = call_local dev_brief_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn dev_brief_input_to_json/1 origin=codec_template(RecordTrio, DevBriefInput, record#16) ==
+  sig: (dev_brief.DevBriefInput) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"brief": v1|>brief_to_json, "config": v2|>run_config_to_json}
+  return v3
+== fn dev_brief_input_decoder/0 origin=codec_template(RecordTrio, DevBriefInput, record#16) ==
+  sig: () -> Decoder(dev_brief.DevBriefInput)
+  v0 = call_local brief_decoder()
+  v1 = make_closure dev_brief_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#50, v0, v1)
+== fn dev_brief_input_decoder$0/1 origin=lifted(dev_brief_input_decoder, #0) ==
+  sig: (dev_brief.Brief) -> Decoder(dev_brief.DevBriefInput)
+  v1 = call_local run_config_decoder() live_after=[v0]
+  v2 = make_closure dev_brief_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#51, v1, v2)
+== fn dev_brief_input_decoder$1/2 origin=lifted(dev_brief_input_decoder, #1) ==
+  sig: (dev_brief.RunConfig, dev_brief.Brief) -> Decoder(dev_brief.DevBriefInput)
+  v2 = record(dev_brief_input, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn dev_brief_outcome_codec/0 origin=codec_template(UnionTrio, DevBriefOutcome, union#17) ==
+  sig: () -> Codec(dev_brief.DevBriefOutcome)
+  v0 = make_closure dev_brief_outcome_to_json captures=[]
+  v1 = call_local dev_brief_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn dev_brief_outcome_to_json/1 origin=codec_template(UnionTrio, DevBriefOutcome, union#17) ==
+  sig: (dev_brief.DevBriefOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#52|>awlc.string_to_json, "payload": v1|>landed_to_json}
+  return v2
+== fn dev_brief_outcome_decoder/0 origin=codec_template(UnionTrio, DevBriefOutcome, union#17) ==
+  sig: () -> Decoder(dev_brief.DevBriefOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure dev_brief_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#53, v0, v1)
+== fn dev_brief_outcome_decoder$outcome/1 origin=lifted(dev_brief_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(dev_brief.DevBriefOutcome)
+  if cmp Eq v0 lit#57:
+    v3 = call_local landed_decoder()
+    v4 = make_closure dev_brief_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#58, v3, v4)
+  else:
+    v1 = record(landed, [lit#54, 0, 'false', lit#55])
+    v2 = record(landed_outcome, [v1])
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#56)
+== fn dev_brief_outcome_decoder$arm0/1 origin=lifted(dev_brief_outcome_decoder, #1) ==
+  sig: (dev_brief.Landed) -> Decoder(dev_brief.DevBriefOutcome)
+  v1 = record(landed_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn list_lens_codec/0 origin=codec_template(CompositeTrio, List(Lens), composite(list(ref(Lens)))) ==
+  sig: () -> Codec(List(dev_brief.Lens))
+  v0 = make_closure list_lens_to_json captures=[]
+  v1 = call_local list_lens_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn list_lens_to_json/1 origin=codec_template(CompositeTrio, List(Lens), composite(list(ref(Lens)))) ==
+  sig: (List(dev_brief.Lens)) -> Json
+  v1 = make_closure lens_to_json captures=[]
+  tail_rt gleam@json:array/2(v0, v1)
+== fn list_lens_decoder/0 origin=codec_template(CompositeTrio, List(Lens), composite(list(ref(Lens)))) ==
+  sig: () -> Decoder(List(dev_brief.Lens))
+  v0 = call_local lens_decoder()
+  tail_rt gleam@dynamic@decode:list/1(v0)
+== fn list_lens_verdict_codec/0 origin=codec_template(CompositeTrio, List(LensVerdict), composite(list(ref(LensVerdict)))) ==
+  sig: () -> Codec(List(dev_brief.LensVerdict))
+  v0 = make_closure list_lens_verdict_to_json captures=[]
+  v1 = call_local list_lens_verdict_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn list_lens_verdict_to_json/1 origin=codec_template(CompositeTrio, List(LensVerdict), composite(list(ref(LensVerdict)))) ==
+  sig: (List(dev_brief.LensVerdict)) -> Json
+  v1 = make_closure lens_verdict_to_json captures=[]
+  tail_rt gleam@json:array/2(v0, v1)
+== fn list_lens_verdict_decoder/0 origin=codec_template(CompositeTrio, List(LensVerdict), composite(list(ref(LensVerdict)))) ==
+  sig: () -> Decoder(List(dev_brief.LensVerdict))
+  v0 = call_local lens_verdict_decoder()
+  tail_rt gleam@dynamic@decode:list/1(v0)
+== fn list_string_codec/0 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: () -> Codec(List(String))
+  v0 = make_closure list_string_to_json captures=[]
+  v1 = call_local list_string_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn list_string_to_json/1 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: (List(String)) -> Json
+  v1 = make_closure list_string_to_json$item captures=[]
+  tail_rt gleam@json:array/2(v0, v1)
+== fn list_string_decoder/0 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: () -> Decoder(List(String))
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  tail_rt gleam@dynamic@decode:list/1(v0)
+== fn list_string_to_json$item/1 origin=lifted(list_string_to_json, #0) ==
+  sig: (String) -> Json
+  tail_rt aion@awl@codec:string_to_json/1(v0)
+== fn option_list_string_codec/0 origin=codec_template(CompositeTrio, Option(List(String)), composite(nullable(list(string)))) ==
+  sig: () -> Codec(Option(List(String)))
+  v0 = make_closure option_list_string_to_json captures=[]
+  v1 = call_local option_list_string_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn option_list_string_to_json/1 origin=codec_template(CompositeTrio, Option(List(String)), composite(nullable(list(string)))) ==
+  sig: (Option(List(String))) -> Json
+  v1 = make_closure list_string_to_json captures=[]
+  tail_rt gleam@json:nullable/2(v0, v1)
+== fn option_list_string_decoder/0 origin=codec_template(CompositeTrio, Option(List(String)), composite(nullable(list(string)))) ==
+  sig: () -> Decoder(Option(List(String)))
+  v0 = call_local list_string_decoder()
+  tail_rt gleam@dynamic@decode:optional/1(v0)
+== fn option_string_codec/0 origin=codec_template(CompositeTrio, Option(String), composite(nullable(string))) ==
+  sig: () -> Codec(Option(String))
+  v0 = make_closure option_string_to_json captures=[]
+  v1 = call_local option_string_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn option_string_to_json/1 origin=codec_template(CompositeTrio, Option(String), composite(nullable(string))) ==
+  sig: (Option(String)) -> Json
+  v1 = make_closure option_string_to_json$item captures=[]
+  tail_rt gleam@json:nullable/2(v0, v1)
+== fn option_string_decoder/0 origin=codec_template(CompositeTrio, Option(String), composite(nullable(string))) ==
+  sig: () -> Decoder(Option(String))
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  tail_rt gleam@dynamic@decode:optional/1(v0)
+== fn option_string_to_json$item/1 origin=lifted(option_string_to_json, #0) ==
+  sig: (String) -> Json
+  tail_rt aion@awl@codec:string_to_json/1(v0)
+== fn fix_round_activity/4 origin=activity_wrapper(fix_round, raw=false) ==
+  sig: (dev_brief.Brief, dev_brief.ScoutReport, dev_brief.Workspace, dev_brief.Round) -> Activity(dev_brief.FixRoundInput, dev_brief.Round)
+  T-ACT action=fix_round input_codec=fix_round_input_codec return=round_codec
+== fn provision_activity/3 origin=activity_wrapper(provision, raw=false) ==
+  sig: (String, String, dev_brief.Brief) -> Activity(dev_brief.ProvisionInput, dev_brief.Workspace)
+  T-ACT action=provision input_codec=provision_input_codec return=workspace_codec
+== fn review_lens_activity/3 origin=activity_wrapper(review_lens, raw=false) ==
+  sig: (dev_brief.Lens, dev_brief.Workspace, dev_brief.Round) -> Activity(dev_brief.ReviewLensInput, dev_brief.LensVerdict)
+  T-ACT action=review_lens input_codec=review_lens_input_codec return=lens_verdict_codec
+== fn scout_activity/2 origin=activity_wrapper(scout, raw=false) ==
+  sig: (dev_brief.Brief, dev_brief.Workspace) -> Activity(dev_brief.ScoutInput, dev_brief.ScoutReport)
+  T-ACT action=scout input_codec=scout_input_codec return=scout_report_codec
+== fn warm_build_activity/2 origin=activity_wrapper(warm_build, raw=false) ==
+  sig: (dev_brief.Workspace, List(String)) -> Activity(dev_brief.WarmBuildInput, dev_brief.BuildWarmth)
+  T-ACT action=warm_build input_codec=warm_build_input_codec return=build_warmth_codec
+== fn scout_activity_raw/2 origin=activity_wrapper(scout, raw=true) ==
+  sig: (dev_brief.Brief, dev_brief.Workspace) -> Activity(String, String)
+  T-ACTRAW action=scout input_codec=scout_input_codec
+== fn warm_build_activity_raw/2 origin=activity_wrapper(warm_build, raw=true) ==
+  sig: (dev_brief.Workspace, List(String)) -> Activity(String, String)
+  T-ACTRAW action=warm_build input_codec=warm_build_input_codec
+== fn step_provision/2 origin=region(provision) ==
+  sig: (dev_brief.Brief, dev_brief.RunConfig) -> Result(dev_brief.DevBriefOutcome, AwlError)
+  v2 = field(v1, 5)
+  v3 = field(v1, 1)
+  v4 = call_local provision_activity(v2, v3, v0) live_after=[v0, v1]
+  v5 = call_rt aion@duration:milliseconds/1(30000) live_after=[v0, v1, v4]
+  v6 = record(fixed, [v5])
+  v7 = record(retry_policy, [3, v6])
+  v8 = call_rt aion@activity:retry/2(v4, v7) live_after=[v0, v1]
+  v9 = call_rt aion@duration:milliseconds/1(300000) live_after=[v0, v1, v8]
+  v10 = call_rt aion@activity:timeout/2(v8, v9) live_after=[v0, v1]
+  v11 = call_rt aion@activity:task_queue/2(v10, lit#59) live_after=[v0, v1]
+  v12 = call_rt aion@activity:node/2(v11, lit#60) live_after=[v0, v1]
+  v13 = call_rt aion@workflow:run/1(v12) live_after=[v0, v1]
+  v14 = call_rt aion@awl@error:map_activity_error/1(v13) live_after=[v0, v1]
+  v15 = try_bind v14 live_after=[v0, v1]
+  tail_local step_scout(v0, v1, v15)
+== fn step_scout/3 origin=chain_step(provision.scout) ==
+  sig: (dev_brief.Brief, dev_brief.RunConfig, dev_brief.Workspace) -> Result(dev_brief.DevBriefOutcome, AwlError)
+  v3 = call_local scout_activity_raw(v0, v2) live_after=[v0, v1, v2]
+  v4 = call_rt aion@duration:milliseconds/1(900000) live_after=[v0, v1, v2, v3]
+  v5 = call_rt aion@activity:timeout/2(v3, v4) live_after=[v0, v1, v2]
+  v6 = call_rt aion@activity:task_queue/2(v5, lit#61) live_after=[v0, v1, v2]
+  v7 = call_rt aion@activity:node/2(v6, lit#62) live_after=[v0, v1, v2]
+  v8 = field(v1, 2)
+  v9 = call_local warm_build_activity_raw(v2, v8) live_after=[v0, v1, v2, v7]
+  v10 = call_rt aion@duration:milliseconds/1(1200000) live_after=[v0, v1, v2, v7, v9]
+  v11 = call_rt aion@activity:timeout/2(v9, v10) live_after=[v0, v1, v2, v7]
+  v12 = call_rt aion@activity:task_queue/2(v11, lit#63) live_after=[v0, v1, v2, v7]
+  v13 = call_rt aion@activity:node/2(v12, lit#64) live_after=[v0, v1, v2, v7]
+  v14 = list([v7, v13])
+  v15 = call_rt aion@workflow:all/1(v14) live_after=[v0, v1, v2]
+  v16 = call_rt aion@awl@error:map_activity_error/1(v15) live_after=[v0, v1, v2]
+  v17 = try_bind v16 live_after=[v0, v1, v2]
+  assert_list [v18, _] = v17
+  v19 = call_local scout_report_codec() live_after=[v0, v1, v2, v18]
+  v20 = call_rt aion@awl@codec:decoded/3(v19, v18, lit#65) live_after=[v0, v1, v2]
+  v21 = try_bind v20 live_after=[v0, v1, v2]
+  tail_local step_fix_cycle(v0, v1, v21, v2)
+== fn step_fix_cycle/4 origin=chain_step(provision.fix_cycle) ==
+  sig: (dev_brief.Brief, dev_brief.RunConfig, dev_brief.ScoutReport, dev_brief.Workspace) -> Result(dev_brief.DevBriefOutcome, AwlError)
+  v4 = record(round, [lit#66, 'false'])
+  v5 = field(v1, 4)
+  v6 = call_local fix_cycle_loop_0(v4, 0, v5, v0, v2, v3) live_after=[v1, v3]
+  v7 = try_bind v6 live_after=[v1, v3]
+  v8 = field(v7, 0)
+  v9 = field(v7, 1)
+  v10 = field(v8, 2)
+  if is_true v10:
+    tail_local step_review(v1, v9, v8, v3)
+  else:
+    v11 = record(exhausted, [lit#69, v9])
+    v12 = call_local exhausted_to_json(v11)
+    v13 = call_rt gleam@json:to_string/1(v12)
+    v14 = record(awl_outcome_failure, [lit#70, v13])
+    v15 = record(error, [v14])
+    return v15
+== fn step_review/4 origin=region(review) ==
+  sig: (dev_brief.RunConfig, Int, dev_brief.Round, dev_brief.Workspace) -> Result(dev_brief.DevBriefOutcome, AwlError)
+  v4 = field(v0, 3)
+  v5 = make_closure review_fork_0 captures=[v2, v3]
+  v6 = call_rt aion@workflow:map/2(v4, v5) live_after=[v1, v2, v3]
+  v7 = call_rt aion@awl@error:map_activity_error/1(v6) live_after=[v1, v2, v3]
+  v8 = try_bind v7 live_after=[v1, v2, v3]
+  v9 = make_closure awl_combinator_0 captures=[]
+  v10 = call_rt gleam@list:filter/2(v8, v9) live_after=[v1, v2, v3]
+  v11 = cmp Eq v10 nil
+  if is_true v11:
+    v12 = field(v3, 2)
+    v13 = cmp Eq v1 1
+    v14 = field(v2, 1)
+    v15 = record(landed, [v12, v1, v13, v14])
+    v16 = record(landed_outcome, [v15])
+    v17 = record(ok, [v16])
+    return v17
+  else:
+    v18 = field(v3, 2)
+    v19 = record(rejected, [v18, v10])
+    v20 = call_local rejected_to_json(v19)
+    v21 = call_rt gleam@json:to_string/1(v20)
+    v22 = record(awl_outcome_failure, [lit#73, v21])
+    v23 = record(error, [v22])
+    return v23
+== fn fix_cycle_loop_0/6 origin=loop(fix_cycle#0) ==
+  sig: (dev_brief.Round, Int, Int, dev_brief.Brief, dev_brief.ScoutReport, dev_brief.Workspace) -> Result(#(dev_brief.Round, Int), AwlError)
+  v6 = call_local fix_round_activity(v3, v4, v5, v0) live_after=[v1, v2, v3, v4, v5]
+  v7 = call_rt aion@duration:milliseconds/1(1800000) live_after=[v1, v2, v3, v4, v5, v6]
+  v8 = call_rt aion@activity:timeout/2(v6, v7) live_after=[v1, v2, v3, v4, v5]
+  v9 = call_rt aion@activity:task_queue/2(v8, lit#67) live_after=[v1, v2, v3, v4, v5]
+  v10 = call_rt aion@activity:node/2(v9, lit#68) live_after=[v1, v2, v3, v4, v5]
+  v11 = call_rt aion@workflow:run/1(v10) live_after=[v1, v2, v3, v4, v5]
+  v12 = call_rt aion@awl@error:map_activity_error/1(v11) live_after=[v1, v2, v3, v4, v5]
+  v13 = try_bind v12 live_after=[v1, v2, v3, v4, v5]
+  v14 = increment v1
+  v17 = field(v13, 2)
+  if is_true v17:
+    v15 = tuple([v13, v14])
+    v16 = record(ok, [v15])
+    return v16
+  else:
+    if cmp Ge v14 v2:
+      v15 = tuple([v13, v14])
+      v16 = record(ok, [v15])
+      return v16
+    else:
+      tail_local fix_cycle_loop_0(v13, v14, v2, v3, v4, v5)
+== fn review_fork_0/3 origin=fork(review#0) ==
+  sig: (dev_brief.Lens, dev_brief.Round, dev_brief.Workspace) -> Activity(dev_brief.ReviewLensInput, dev_brief.LensVerdict)
+  v3 = call_local review_lens_activity(v0, v2, v1)
+  v4 = call_rt aion@duration:milliseconds/1(1200000) live_after=[v3]
+  v5 = call_rt aion@activity:timeout/2(v3, v4)
+  v6 = call_rt aion@activity:task_queue/2(v5, lit#71)
+  v7 = call_rt aion@activity:node/2(v6, lit#72)
+  return v7
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD
+== fn awl_combinator_0/1 origin=lifted(execute, #0) ==
+  sig: (dev_brief.LensVerdict) -> Bool
+  v1 = field(v0, 2)
+  return v1

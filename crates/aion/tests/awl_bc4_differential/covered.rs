@@ -49,7 +49,17 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// only way to prove the direct path's inline function set behaves as the
 /// reference's does is to run both and compare the durable trail the enclosing
 /// workflow records. Their buckets below were read off the run, not predicted.
-const COVERED_COUNT: usize = 101;
+/// 105 since dependency-parallel layers: `after_multi_diamond`,
+/// `release_pipeline_combined`, `dev_brief`, and `layer_hygiene` joined at
+/// once. A parallel layer is the one construct whose two lowerings could agree
+/// on every VALUE and still disagree on the durable trail — a layer dispatched
+/// concurrently records both activities scheduled before either completes,
+/// while the same layer run in written order records a completed round trip
+/// between them. Nothing short of running both backends and comparing the
+/// recorded event order decides that, which is why all four are here and not
+/// only in aion-awl's ratchet. Their buckets below were read off the run, not
+/// predicted.
+const COVERED_COUNT: usize = 105;
 
 /// Out-of-oracle (r2 finding 3): fixtures whose durable park boundary is NOT
 /// observable through any engine surface without racy sampling.
@@ -130,6 +140,28 @@ const EXPECTED_CANCELLED: &[&str] = &[];
 ///    (`declarations_combined` also declares a child but takes a data-driven
 ///    route-failure first, so it belongs to kind 1.)
 const EXPECTED_FAILED: &[&str] = &[
+    // Dependency-parallel layers, kind 1 — both run their real bodies and are
+    // sent to a failure outcome by the canned data, and both recorded trails
+    // were READ (`BC4_DUMP_FAILED`) rather than inferred from the bucket name:
+    //
+    // `after_multi_diamond` gathers, dispatches `extract_claims` (seq 6-7) and
+    // `collect_citations` (seq 8-9) — both SCHEDULED AND STARTED before either
+    // completes at seq 10-11, which is the recorded shape of a concurrent
+    // layer — composes, and then takes its `otherwise` arm because the canned
+    // `Report.complete` is the minimal Bool `false`:
+    // `{"outcome":"incomplete","tag":"AwlOutcomeFailure"}`.
+    //
+    // `dev_brief` provisions, dispatches `scout` and `warm_build` with the same
+    // interleave, runs one `fix_round`, and takes `route exhausted` because the
+    // canned `Round.gates_green` is `false` and `config.max_fix_cycles`
+    // generates as the minimal Int.
+    //
+    // Both fixtures therefore pin WHERE THEIR DATA SENDS THEM, after the
+    // parallel layer has run; neither failure is in the dispatch. That the
+    // direct backend records the same interleave byte-for-byte is the claim
+    // this corpus exists to make.
+    "dag-fork/valid/after_multi_diamond",
+    "flagship/valid/dev_brief",
     "dag-fork/valid/fork_named_branches",
     "declarations/valid/call_site_override",
     "declarations/valid/child_call_awaited",
@@ -217,6 +249,14 @@ const EXPECTED_SUCCEEDED: &[&str] = &[
     "dag-fork/valid/fork_named_homogeneous",
     "dag-fork/valid/fork_sequential",
     "dag-fork/valid/fork_sequential_route",
+    // The DEGRADED dependency-parallel layer: `build_all` (a collection fork)
+    // and `notes` (a bare call) share a layer that cannot ride a
+    // `workflow.all`, so both backends run it in WRITTEN ORDER. That is the
+    // arm where the two could most easily disagree — the direct path splits
+    // the layer into two tail-called functions where the reference inlines
+    // both into one — and a completed run with a byte-identical trail is what
+    // proves the split changed the code shape and not the recorded order.
+    "dag-fork/valid/release_pipeline_combined",
     "dag-fork/valid/runtime_sized_fork",
     "dag-fork/valid/sit_one",
     // A declared `run` body rides the package CONTRACT, not the flow, so the
@@ -263,6 +303,14 @@ const EXPECTED_SUCCEEDED: &[&str] = &[
     "flow-shape/valid/distribute_activity_tolerant",
     "flow-shape/valid/distribute_child_collect",
     "flow-shape/valid/distribute_child_tolerant",
+    // The dependency-parallel layer, CONCURRENT arm, completing its real path:
+    // `left` and `right` both follow `root` and `merge` joins them. It is also
+    // the name-hygiene arm — the document's own input is called `awl_layer`,
+    // the generated name the reference's typed parallel layer allocates — so a
+    // completed run with a byte-identical trail is what proves the reference's
+    // allocator dodged its own collision while the direct path, which names
+    // nothing, never had one.
+    "flow-shape/valid/layer_hygiene",
     // The on-failure edge, arm EXECUTED, compensating to a SIBLING STEP:
     // `fail_charge` fails by name, the compensation routes to `unwind`, and
     // the refund settles the workflow — a completed run whose completion is
@@ -443,6 +491,43 @@ async fn covered_set_is_byte_identical() -> TestResult {
     assert_eq!(
         union, covered,
         "the outcome union is not exactly the covered corpus"
+    );
+    Ok(())
+}
+
+/// Every covered fixture must declare a DISTINCT workflow name.
+///
+/// The reference backend builds the whole corpus as ONE Gleam project, and a
+/// fixture's emitted module is named for its workflow — so two covered
+/// fixtures sharing a workflow name would write the same `src/<name>.gleam`
+/// and only one of them could exist. The build refuses with
+/// `ConfigInvalid { field: "workflow[N].entry_module" }`, which names an index
+/// into a generated list and neither fixture path, so the corpus constraint is
+/// asserted here where it can name both.
+///
+/// This is not hypothetical: `dag-fork/valid/release_pipeline_combined` and
+/// `declarations/valid/declarations_combined` both declared `workflow
+/// release_pipeline`, and the clash lay dormant for as long as only one of
+/// them was covered. The rev-2 tree still holds several such duplicate names
+/// among fixtures that are NOT both covered, so the next coverage landing can
+/// walk into the same wall; this test is what turns that into a legible
+/// failure naming the two fixtures and the name they share.
+#[test]
+fn every_covered_fixture_declares_a_distinct_workflow_name() -> TestResult {
+    let names = fixtures::covered_paths()?;
+    let mut seen: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    let mut clashes = Vec::new();
+    for name in &names {
+        let loaded = fixtures::load(name)?;
+        let workflow = loaded.document.name.clone();
+        if let Some(prior) = seen.insert(workflow.clone(), name.clone()) {
+            clashes.push(format!("`{workflow}`: {prior} and {name}"));
+        }
+    }
+    assert!(
+        clashes.is_empty(),
+        "covered fixtures share workflow names, so the reference project cannot \
+         hold both: {clashes:?}"
     );
     Ok(())
 }

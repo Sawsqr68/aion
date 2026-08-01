@@ -5,7 +5,10 @@
 //! constructs has no nested flows, no `distribute` statements, and no child
 //! adapters, so every pre-B4 `FnRef` is preserved exactly):
 //!
-//! 1. host region chains (one slot per layer, as always);
+//! 1. host region chains (one slot per CHAIN UNIT — `layers::chain_units`).
+//!    A region without a dependency-parallel layer holds exactly one member
+//!    per layer, so the unit count equals the layer count and every
+//!    pre-parallel module keeps byte-identical function references;
 //! 2. nested flow function sets — subflows in DECLARATION order first (the
 //!    reference `emitter/flows.rs::emit_nested` order), then per-item regions
 //!    by ascending region id; each set is the run-once entry wrapper slot
@@ -31,7 +34,7 @@
 use std::collections::BTreeMap;
 
 use crate::ast::Step;
-use crate::emitter::{Plan, RegionShape, implicit_child_required};
+use crate::emitter::{Emitter, Plan, RegionShape, implicit_child_required};
 
 use super::super::ids::FnRef;
 use super::build::{AdapterFns, FlowFns, NestedFns};
@@ -54,14 +57,14 @@ pub(super) struct FlowSlots {
 
 /// One flow's traversal surface, in the canonical order (host, then regions
 /// by ascending id).
-struct FlowWalk<'a> {
-    steps: &'a [Step],
+pub(super) struct FlowWalk<'a> {
+    pub(super) steps: &'a [Step],
     regions: &'a BTreeMap<String, RegionShape>,
-    plan: &'a Plan,
+    pub(super) plan: &'a Plan,
 }
 
 /// Every flow in the canonical nested-flow order.
-fn flows_in_order<'c>(ctx: &Ctx<'c>) -> Result<Vec<FlowWalk<'c>>, LowerError> {
+pub(super) fn flows_in_order<'c>(ctx: &Ctx<'c>) -> Result<Vec<FlowWalk<'c>>, LowerError> {
     let emitter = ctx.emitter;
     let plans = ctx.plans;
     let mut flows = vec![FlowWalk {
@@ -96,13 +99,15 @@ fn flows_in_order<'c>(ctx: &Ctx<'c>) -> Result<Vec<FlowWalk<'c>>, LowerError> {
     Ok(flows)
 }
 
-/// One flow's region-chain slots (one per layer, min one).
-fn chain_slots(plan: &Plan, next: &mut u32) -> FlowFns {
+/// One flow's region-chain slots (one per chain unit, min one).
+fn chain_slots(walk: &FlowWalk<'_>, emitter: &Emitter<'_>, next: &mut u32) -> FlowFns {
     let mut regions = Vec::new();
     let mut chains = Vec::new();
-    for region in &plan.regions {
+    for region in &walk.plan.regions {
         regions.push(FnRef(*next));
-        let slots = region.layers.len().max(1);
+        let slots = super::layers::chain_units(walk.steps, &region.layers, emitter)
+            .len()
+            .max(1);
         let mut chain = Vec::with_capacity(slots);
         for _ in 0..slots {
             chain.push(FnRef(*next));
@@ -113,32 +118,71 @@ fn chain_slots(plan: &Plan, next: &mut u32) -> FlowFns {
     FlowFns { regions, chains }
 }
 
+/// Every action a HETEROGENEOUS dependency-parallel layer dispatches, over
+/// every flow — these need the raw wrapper twin planned exactly as a
+/// heterogeneous named fork's actions do (`build::raw_activity_shell`).
+///
+/// The named-fork inventory (`forks::raw_action_inventory`) cannot see these:
+/// a parallel layer is a property of the region PLAN, not of any statement, so
+/// it is derived here where the per-flow plans are already in hand.
+pub(super) fn parallel_raw_actions(ctx: &Ctx<'_>) -> Result<Vec<String>, LowerError> {
+    let mut out = std::collections::BTreeSet::new();
+    for walk in flows_in_order(ctx)? {
+        for region in &walk.plan.regions {
+            for layer in &region.layers {
+                if layer.len() < 2 {
+                    continue;
+                }
+                let Some(calls) =
+                    super::layers::parallel_layer_calls(walk.steps, layer, ctx.emitter)
+                else {
+                    continue;
+                };
+                if super::layers::homogeneous(&calls) {
+                    continue;
+                }
+                out.extend(calls.iter().map(|call| call.call.name.clone()));
+            }
+        }
+    }
+    Ok(out.into_iter().collect())
+}
+
 /// Reserve every flow-function slot in the canonical order documented in the
 /// module header.
 pub(super) fn plan_flow_slots(ctx: &Ctx<'_>, next: &mut u32) -> Result<FlowSlots, LowerError> {
     let emitter = ctx.emitter;
     let plans = ctx.plans;
-    let host = chain_slots(&plans.host, next);
+    // The chain-slot walks in the SAME canonical order the traversal pools
+    // below use, so a unit count is never read against another flow's steps.
+    let flows = flows_in_order(ctx)?;
+    let mut walks = flows.iter();
+    let host = chain_slots(next_walk(&mut walks, "the host flow")?, emitter, next);
     let mut subflow_fns = BTreeMap::new();
     for shape in emitter.subflow_shapes {
-        let nested = plans
-            .subflows
-            .get(&shape.name)
-            .ok_or_else(|| unplanned_subflow(&shape.name))?;
+        if !plans.subflows.contains_key(&shape.name) {
+            return Err(unplanned_subflow(&shape.name));
+        }
         let wrapper = FnRef(*next);
         *next += 1;
-        let fns = chain_slots(&nested.plan, next);
+        let walk = next_walk(&mut walks, &format!("subflow `{}`", shape.name))?;
+        let fns = chain_slots(walk, emitter, next);
         subflow_fns.insert(shape.name.clone(), NestedFns { wrapper, fns });
     }
     let mut region_fns = BTreeMap::new();
-    for (&id, nested) in &plans.regions {
+    for &id in plans.regions.keys() {
         let wrapper = FnRef(*next);
         *next += 1;
-        let fns = chain_slots(&nested.plan, next);
+        let walk = next_walk(&mut walks, &format!("region {id}"))?;
+        let fns = chain_slots(walk, emitter, next);
         region_fns.insert(id, NestedFns { wrapper, fns });
     }
+    if walks.next().is_some() {
+        return Err(LowerError::Planning {
+            message: "the flow walk outran the chain-slot plan".to_owned(),
+        });
+    }
 
-    let flows = flows_in_order(ctx)?;
     let mut loops = Vec::new();
     for flow in &flows {
         for_each_step(flow, |step| {
@@ -203,6 +247,18 @@ pub(super) fn plan_flow_slots(ctx: &Ctx<'_>, next: &mut u32) -> Result<FlowSlots
         compensations,
         adapters,
         child_witness_needed,
+    })
+}
+
+/// The next flow in the canonical walk, or a planning error — the chain-slot
+/// pass and the traversal pools must consume the SAME sequence, so a
+/// mismatched length is a bug in one of them, never a document error.
+fn next_walk<'w, 'c>(
+    walks: &mut std::slice::Iter<'w, FlowWalk<'c>>,
+    what: &str,
+) -> Result<&'w FlowWalk<'c>, LowerError> {
+    walks.next().ok_or_else(|| LowerError::Planning {
+        message: format!("{what} has no planned flow walk"),
     })
 }
 

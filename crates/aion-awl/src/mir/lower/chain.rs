@@ -27,16 +27,29 @@ use crate::emitter::{expr_refs, falls_through};
 use super::ctx::Ctx;
 use super::driver::LowerError;
 use super::flow::{ExitKind, FlowCtx, FlowExit};
+use super::layers::ChainUnit;
 use super::visits::counter_name;
 
-/// Per-position parameter names for a sequential chain, in chain order. The
+/// Per-position parameter names for a region's chain, in chain-unit order. The
 /// entry position is computed too (it equals the region's params for a chain
 /// the shared fixed point saw), but callers keep `region_params` for the entry
 /// so the parity anchor stays the shared plan.
+///
+/// A parallel chain unit folds every member of its layer. Layer membership is
+/// mutual dependency-independence (`emitter/graph.rs::layer`), so no member
+/// reads a name another member defines and the fold is order-insensitive
+/// across them; they are folded in reverse written order all the same, so the
+/// walk stays one uniform backward pass.
+///
+/// `region_last` is the region's HIGHEST member index — the reference's own
+/// fall-through anchor (`emitter/liveness.rs`'s `layers.iter().flatten().max()`
+/// and `emitter/steps.rs::emit_region`) — not the last unit's step, which can
+/// differ when an `after` names a step written later.
 pub(super) fn chain_params(
     ctx: &Ctx<'_>,
     flow: &FlowCtx<'_>,
-    chain: &[usize],
+    units: &[ChainUnit],
+    region_last: usize,
 ) -> Result<Vec<Vec<String>>, LowerError> {
     let steps = flow.steps;
     let mut live: BTreeSet<String> = BTreeSet::new();
@@ -44,10 +57,8 @@ pub(super) fn chain_params(
     // next step's region, or a member flow's exit return of the collected
     // binding (the reference `emit_flow_end` / the shared collector's
     // fall-through edge).
-    if let Some(&last) = chain.last()
-        && falls_through(&steps[last])
-    {
-        let next = last + 1;
+    if steps.get(region_last).is_some_and(falls_through) {
+        let next = region_last + 1;
         if next < steps.len() {
             if let Some(region) = flow.plan.region_of_entry(next) {
                 live.extend(flow.plan.region_params(region).iter().cloned());
@@ -63,9 +74,14 @@ pub(super) fn chain_params(
             live.insert(binding.clone());
         }
     }
-    let mut params = vec![Vec::new(); chain.len()];
-    for position in (0..chain.len()).rev() {
-        step_live_in(ctx, flow, &steps[chain[position]], &mut live)?;
+    let mut params = vec![Vec::new(); units.len()];
+    for position in (0..units.len()).rev() {
+        for &member in units[position].members.iter().rev() {
+            let step = steps.get(member).ok_or_else(|| LowerError::Planning {
+                message: format!("chain unit names step {member}, which the flow does not hold"),
+            })?;
+            step_live_in(ctx, flow, step, &mut live)?;
+        }
         params[position] = live.iter().cloned().collect();
     }
     Ok(params)

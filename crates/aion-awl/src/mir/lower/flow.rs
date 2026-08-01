@@ -131,29 +131,35 @@ fn lower_region(
     let layers = region.layers.clone();
     let entry_step = flow.steps[entry_index].clone();
 
-    // A sequential chain has exactly one member per layer; dependency-parallel
-    // layers stay deferred.
-    let mut chain = Vec::with_capacity(layers.len());
-    for layer in &layers {
-        let [member] = layer.as_slice() else {
-            return Err(LowerError::unsupported(
-                "parallel region",
-                entry_step.name_span,
-            ));
-        };
-        chain.push(*member);
-    }
-    if chain.first() != Some(&entry_index) {
-        return Err(LowerError::unsupported(
-            "parallel region",
+    // The chain units: one per step, except a dependency-parallel layer that
+    // dispatches concurrently, which is one unit for the whole layer.
+    let units = super::layers::chain_units(flow.steps, &layers, ctx.emitter);
+    if units.first().map(|unit| unit.members.as_slice()) != Some(&[entry_index][..]) {
+        // Layer 0 holds exactly the region's roots, and a group with more than
+        // one root is refused during planning, so the first unit is always the
+        // entry alone. Reaching here is a planning bug — never `Unsupported`,
+        // which the coverage sweep would silently bucket as deferred.
+        return Err(LowerError::new(
             entry_step.name_span,
+            format!(
+                "region `{}` does not open on its entry step — the document did not check \
+                 cleanly",
+                entry_step.name
+            ),
         ));
     }
-    let region_last = chain.last().copied().unwrap_or(entry_index);
+    // The reference's own fall-through anchor: the region's HIGHEST member
+    // index, not the last unit's step (`emitter/steps.rs::emit_region` and
+    // `emitter/liveness.rs`, both `layers.iter().flatten().max()`).
+    let region_last = layers
+        .iter()
+        .flatten()
+        .copied()
+        .max()
+        .unwrap_or(entry_index);
 
-    let params = chain_params(ctx, flow, &chain)?;
-    for (position, &step_index) in chain.iter().enumerate() {
-        let step = flow.steps[step_index].clone();
+    let params = chain_params(ctx, flow, &units, region_last)?;
+    for (position, unit) in units.iter().enumerate() {
         // The entry's parameter list is the shared plan's fixed point (the
         // parity anchor); chain boundaries use the backward live sets.
         let param_names = if position == 0 {
@@ -161,19 +167,36 @@ fn lower_region(
         } else {
             params[position].clone()
         };
-        let next = chain.get(position + 1).map(|_| Next {
+        let next = units.get(position + 1).map(|_| Next {
             callee: flow.fns.chains[region_index][position + 1],
             param_names: params[position + 1].clone(),
         });
-        let chain_step = ChainStep {
-            entry_step: &entry_step,
-            step: &step,
-            position,
-            param_names: &param_names,
-            next,
-            region_last,
+        let flow_fn = if unit.parallel {
+            super::parallel::lower_parallel_layer(
+                ctx,
+                env,
+                super::parallel::ParallelUnit {
+                    entry_step: &entry_step,
+                    members: &unit.members,
+                    position,
+                    param_names: &param_names,
+                    next,
+                    region_last,
+                },
+            )?
+        } else {
+            let step = flow.steps[unit.anchor()].clone();
+            let chain_step = ChainStep {
+                entry_step: &entry_step,
+                step: &step,
+                position,
+                param_names: &param_names,
+                next,
+                region_last,
+                degraded_parallel: unit.degraded,
+            };
+            lower_chain_step(ctx, env, chain_step, slots)?
         };
-        let flow_fn = lower_chain_step(ctx, env, chain_step, slots)?;
         functions.push(MirFn::Flow(flow_fn));
     }
     Ok(())
@@ -186,6 +209,9 @@ struct ChainStep<'a> {
     param_names: &'a [String],
     next: Option<Next>,
     region_last: usize,
+    /// S13: this step heads a dependency-parallel layer that could not
+    /// dispatch concurrently, so the layer runs in written order.
+    degraded_parallel: bool,
 }
 
 fn lower_chain_step(
@@ -304,6 +330,6 @@ fn lower_chain_step(
         ret_ty: flow.ret_ty.clone(),
         body,
         span: Span::from_source(chain.step.name_span),
-        degraded_parallel: false,
+        degraded_parallel: chain.degraded_parallel,
     })
 }

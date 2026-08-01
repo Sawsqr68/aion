@@ -1,0 +1,432 @@
+module diamond_report source=diamond_report.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_gather:
+    aion@activity:task_queue/2 [activities] (v1, lit#19)
+    aion@workflow:run/1 [activities] (v2)
+  step_claims:
+    aion@activity:task_queue/2 [activities] (v2, lit#20)
+    aion@activity:task_queue/2 [activities] (v5, lit#21)
+    aion@workflow:all/1 [activities] (v7)
+  step_compose:
+    aion@activity:task_queue/2 [activities] (v4, lit#24)
+    aion@workflow:run/1 [activities] (v5)
+== durable families == activities
+== atoms ==
+  [0] sources
+  [1] claims
+  [2] citations
+  [3] report
+  [4] reported
+  [5] incomplete
+  [6] collect_citations_input
+  [7] compose_input
+  [8] extract_claims_input
+  [9] gather_input
+  [10] diamond_report_input
+  [11] reported_outcome
+  [12] ok
+  [13] awl_outcome_failure
+  [14] error
+== literals ==
+  [0] "urls"
+  [1] "facts"
+  [2] "links"
+  [3] "text"
+  [4] "complete"
+  [5] "text"
+  [6] "text"
+  [7] "urls"
+  [8] "facts"
+  [9] "links"
+  [10] "urls"
+  [11] "topic"
+  [12] "topic"
+  [13] "reported"
+  [14] "outcome"
+  [15] ""
+  [16] "DiamondReportOutcome"
+  [17] "reported"
+  [18] "payload"
+  [19] "research"
+  [20] "research"
+  [21] "research"
+  [22] "extract_claims"
+  [23] "collect_citations"
+  [24] "research"
+  [25] "incomplete"
+== types ==
+  record Sources tag=sources
+    urls: list(string)
+  record Claims tag=claims
+    facts: list(string)
+  record Citations tag=citations
+    links: list(string)
+  record Report tag=report
+    text: string
+    complete: bool
+  record Reported tag=reported
+    text: string
+  record Incomplete tag=incomplete
+    text: string
+  record CollectCitationsInput tag=collect_citations_input
+    urls: list(string)
+  record ComposeInput tag=compose_input
+    facts: list(string)
+    links: list(string)
+  record ExtractClaimsInput tag=extract_claims_input
+    urls: list(string)
+  record GatherInput tag=gather_input
+    topic: string
+  record DiamondReportInput tag=diamond_report_input
+    topic: string
+  union DiamondReportOutcome
+    reported -> reported_outcome(ref(Reported))
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=diamond_report_input_codec output=diamond_report_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(diamond_report.DiamondReportInput, diamond_report.DiamondReportOutcome, AwlError)
+  T-DEF name="diamond_report" input=diamond_report_input_codec output=diamond_report_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (diamond_report.DiamondReportInput) -> Result(diamond_report.DiamondReportOutcome, AwlError)
+  T-EXEC fields=[topic:String] entry=step_gather args=[0]
+== fn sources_codec/0 origin=codec_template(RecordTrio, Sources, record#0) ==
+  sig: () -> Codec(diamond_report.Sources)
+  v0 = make_closure sources_to_json captures=[]
+  v1 = call_local sources_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn sources_to_json/1 origin=codec_template(RecordTrio, Sources, record#0) ==
+  sig: (diamond_report.Sources) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"urls": v1|>list_string_to_json}
+  return v2
+== fn sources_decoder/0 origin=codec_template(RecordTrio, Sources, record#0) ==
+  sig: () -> Decoder(diamond_report.Sources)
+  v0 = call_local list_string_decoder()
+  v1 = make_closure sources_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn sources_decoder$0/1 origin=lifted(sources_decoder, #0) ==
+  sig: (List(String)) -> Decoder(diamond_report.Sources)
+  v1 = record(sources, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn claims_codec/0 origin=codec_template(RecordTrio, Claims, record#1) ==
+  sig: () -> Codec(diamond_report.Claims)
+  v0 = make_closure claims_to_json captures=[]
+  v1 = call_local claims_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn claims_to_json/1 origin=codec_template(RecordTrio, Claims, record#1) ==
+  sig: (diamond_report.Claims) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"facts": v1|>list_string_to_json}
+  return v2
+== fn claims_decoder/0 origin=codec_template(RecordTrio, Claims, record#1) ==
+  sig: () -> Decoder(diamond_report.Claims)
+  v0 = call_local list_string_decoder()
+  v1 = make_closure claims_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v0, v1)
+== fn claims_decoder$0/1 origin=lifted(claims_decoder, #0) ==
+  sig: (List(String)) -> Decoder(diamond_report.Claims)
+  v1 = record(claims, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn citations_codec/0 origin=codec_template(RecordTrio, Citations, record#2) ==
+  sig: () -> Codec(diamond_report.Citations)
+  v0 = make_closure citations_to_json captures=[]
+  v1 = call_local citations_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn citations_to_json/1 origin=codec_template(RecordTrio, Citations, record#2) ==
+  sig: (diamond_report.Citations) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"links": v1|>list_string_to_json}
+  return v2
+== fn citations_decoder/0 origin=codec_template(RecordTrio, Citations, record#2) ==
+  sig: () -> Decoder(diamond_report.Citations)
+  v0 = call_local list_string_decoder()
+  v1 = make_closure citations_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v0, v1)
+== fn citations_decoder$0/1 origin=lifted(citations_decoder, #0) ==
+  sig: (List(String)) -> Decoder(diamond_report.Citations)
+  v1 = record(citations, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn report_codec/0 origin=codec_template(RecordTrio, Report, record#3) ==
+  sig: () -> Codec(diamond_report.Report)
+  v0 = make_closure report_to_json captures=[]
+  v1 = call_local report_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn report_to_json/1 origin=codec_template(RecordTrio, Report, record#3) ==
+  sig: (diamond_report.Report) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"text": v1|>awlc.string_to_json, "complete": v2|>awlc.bool_to_json}
+  return v3
+== fn report_decoder/0 origin=codec_template(RecordTrio, Report, record#3) ==
+  sig: () -> Decoder(diamond_report.Report)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure report_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v0, v1)
+== fn report_decoder$0/1 origin=lifted(report_decoder, #0) ==
+  sig: (String) -> Decoder(diamond_report.Report)
+  v1 = call_rt aion@awl@codec:bool_decoder/0() live_after=[v0]
+  v2 = make_closure report_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v1, v2)
+== fn report_decoder$1/2 origin=lifted(report_decoder, #1) ==
+  sig: (Bool, String) -> Decoder(diamond_report.Report)
+  v2 = record(report, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn reported_codec/0 origin=codec_template(RecordTrio, Reported, record#4) ==
+  sig: () -> Codec(diamond_report.Reported)
+  v0 = make_closure reported_to_json captures=[]
+  v1 = call_local reported_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn reported_to_json/1 origin=codec_template(RecordTrio, Reported, record#4) ==
+  sig: (diamond_report.Reported) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"text": v1|>awlc.string_to_json}
+  return v2
+== fn reported_decoder/0 origin=codec_template(RecordTrio, Reported, record#4) ==
+  sig: () -> Decoder(diamond_report.Reported)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure reported_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#5, v0, v1)
+== fn reported_decoder$0/1 origin=lifted(reported_decoder, #0) ==
+  sig: (String) -> Decoder(diamond_report.Reported)
+  v1 = record(reported, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn incomplete_codec/0 origin=codec_template(RecordTrio, Incomplete, record#5) ==
+  sig: () -> Codec(diamond_report.Incomplete)
+  v0 = make_closure incomplete_to_json captures=[]
+  v1 = call_local incomplete_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn incomplete_to_json/1 origin=codec_template(RecordTrio, Incomplete, record#5) ==
+  sig: (diamond_report.Incomplete) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"text": v1|>awlc.string_to_json}
+  return v2
+== fn incomplete_decoder/0 origin=codec_template(RecordTrio, Incomplete, record#5) ==
+  sig: () -> Decoder(diamond_report.Incomplete)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure incomplete_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
+== fn incomplete_decoder$0/1 origin=lifted(incomplete_decoder, #0) ==
+  sig: (String) -> Decoder(diamond_report.Incomplete)
+  v1 = record(incomplete, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn collect_citations_input_codec/0 origin=codec_template(RecordTrio, CollectCitationsInput, record#6) ==
+  sig: () -> Codec(diamond_report.CollectCitationsInput)
+  v0 = make_closure collect_citations_input_to_json captures=[]
+  v1 = call_local collect_citations_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn collect_citations_input_to_json/1 origin=codec_template(RecordTrio, CollectCitationsInput, record#6) ==
+  sig: (diamond_report.CollectCitationsInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"urls": v1|>list_string_to_json}
+  return v2
+== fn collect_citations_input_decoder/0 origin=codec_template(RecordTrio, CollectCitationsInput, record#6) ==
+  sig: () -> Decoder(diamond_report.CollectCitationsInput)
+  v0 = call_local list_string_decoder()
+  v1 = make_closure collect_citations_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#7, v0, v1)
+== fn collect_citations_input_decoder$0/1 origin=lifted(collect_citations_input_decoder, #0) ==
+  sig: (List(String)) -> Decoder(diamond_report.CollectCitationsInput)
+  v1 = record(collect_citations_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn compose_input_codec/0 origin=codec_template(RecordTrio, ComposeInput, record#7) ==
+  sig: () -> Codec(diamond_report.ComposeInput)
+  v0 = make_closure compose_input_to_json captures=[]
+  v1 = call_local compose_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn compose_input_to_json/1 origin=codec_template(RecordTrio, ComposeInput, record#7) ==
+  sig: (diamond_report.ComposeInput) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"facts": v1|>list_string_to_json, "links": v2|>list_string_to_json}
+  return v3
+== fn compose_input_decoder/0 origin=codec_template(RecordTrio, ComposeInput, record#7) ==
+  sig: () -> Decoder(diamond_report.ComposeInput)
+  v0 = call_local list_string_decoder()
+  v1 = make_closure compose_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#8, v0, v1)
+== fn compose_input_decoder$0/1 origin=lifted(compose_input_decoder, #0) ==
+  sig: (List(String)) -> Decoder(diamond_report.ComposeInput)
+  v1 = call_local list_string_decoder() live_after=[v0]
+  v2 = make_closure compose_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#9, v1, v2)
+== fn compose_input_decoder$1/2 origin=lifted(compose_input_decoder, #1) ==
+  sig: (List(String), List(String)) -> Decoder(diamond_report.ComposeInput)
+  v2 = record(compose_input, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn extract_claims_input_codec/0 origin=codec_template(RecordTrio, ExtractClaimsInput, record#8) ==
+  sig: () -> Codec(diamond_report.ExtractClaimsInput)
+  v0 = make_closure extract_claims_input_to_json captures=[]
+  v1 = call_local extract_claims_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn extract_claims_input_to_json/1 origin=codec_template(RecordTrio, ExtractClaimsInput, record#8) ==
+  sig: (diamond_report.ExtractClaimsInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"urls": v1|>list_string_to_json}
+  return v2
+== fn extract_claims_input_decoder/0 origin=codec_template(RecordTrio, ExtractClaimsInput, record#8) ==
+  sig: () -> Decoder(diamond_report.ExtractClaimsInput)
+  v0 = call_local list_string_decoder()
+  v1 = make_closure extract_claims_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#10, v0, v1)
+== fn extract_claims_input_decoder$0/1 origin=lifted(extract_claims_input_decoder, #0) ==
+  sig: (List(String)) -> Decoder(diamond_report.ExtractClaimsInput)
+  v1 = record(extract_claims_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn gather_input_codec/0 origin=codec_template(RecordTrio, GatherInput, record#9) ==
+  sig: () -> Codec(diamond_report.GatherInput)
+  v0 = make_closure gather_input_to_json captures=[]
+  v1 = call_local gather_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn gather_input_to_json/1 origin=codec_template(RecordTrio, GatherInput, record#9) ==
+  sig: (diamond_report.GatherInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"topic": v1|>awlc.string_to_json}
+  return v2
+== fn gather_input_decoder/0 origin=codec_template(RecordTrio, GatherInput, record#9) ==
+  sig: () -> Decoder(diamond_report.GatherInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure gather_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#11, v0, v1)
+== fn gather_input_decoder$0/1 origin=lifted(gather_input_decoder, #0) ==
+  sig: (String) -> Decoder(diamond_report.GatherInput)
+  v1 = record(gather_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn diamond_report_input_codec/0 origin=codec_template(RecordTrio, DiamondReportInput, record#10) ==
+  sig: () -> Codec(diamond_report.DiamondReportInput)
+  v0 = make_closure diamond_report_input_to_json captures=[]
+  v1 = call_local diamond_report_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn diamond_report_input_to_json/1 origin=codec_template(RecordTrio, DiamondReportInput, record#10) ==
+  sig: (diamond_report.DiamondReportInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"topic": v1|>awlc.string_to_json}
+  return v2
+== fn diamond_report_input_decoder/0 origin=codec_template(RecordTrio, DiamondReportInput, record#10) ==
+  sig: () -> Decoder(diamond_report.DiamondReportInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure diamond_report_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#12, v0, v1)
+== fn diamond_report_input_decoder$0/1 origin=lifted(diamond_report_input_decoder, #0) ==
+  sig: (String) -> Decoder(diamond_report.DiamondReportInput)
+  v1 = record(diamond_report_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn diamond_report_outcome_codec/0 origin=codec_template(UnionTrio, DiamondReportOutcome, union#11) ==
+  sig: () -> Codec(diamond_report.DiamondReportOutcome)
+  v0 = make_closure diamond_report_outcome_to_json captures=[]
+  v1 = call_local diamond_report_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn diamond_report_outcome_to_json/1 origin=codec_template(UnionTrio, DiamondReportOutcome, union#11) ==
+  sig: (diamond_report.DiamondReportOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#13|>awlc.string_to_json, "payload": v1|>reported_to_json}
+  return v2
+== fn diamond_report_outcome_decoder/0 origin=codec_template(UnionTrio, DiamondReportOutcome, union#11) ==
+  sig: () -> Decoder(diamond_report.DiamondReportOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure diamond_report_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#14, v0, v1)
+== fn diamond_report_outcome_decoder$outcome/1 origin=lifted(diamond_report_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(diamond_report.DiamondReportOutcome)
+  if cmp Eq v0 lit#17:
+    v3 = call_local reported_decoder()
+    v4 = make_closure diamond_report_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#18, v3, v4)
+  else:
+    v1 = record(reported, [lit#15])
+    v2 = record(reported_outcome, [v1])
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#16)
+== fn diamond_report_outcome_decoder$arm0/1 origin=lifted(diamond_report_outcome_decoder, #1) ==
+  sig: (diamond_report.Reported) -> Decoder(diamond_report.DiamondReportOutcome)
+  v1 = record(reported_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn list_string_codec/0 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: () -> Codec(List(String))
+  v0 = make_closure list_string_to_json captures=[]
+  v1 = call_local list_string_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn list_string_to_json/1 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: (List(String)) -> Json
+  v1 = make_closure list_string_to_json$item captures=[]
+  tail_rt gleam@json:array/2(v0, v1)
+== fn list_string_decoder/0 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: () -> Decoder(List(String))
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  tail_rt gleam@dynamic@decode:list/1(v0)
+== fn list_string_to_json$item/1 origin=lifted(list_string_to_json, #0) ==
+  sig: (String) -> Json
+  tail_rt aion@awl@codec:string_to_json/1(v0)
+== fn collect_citations_activity/1 origin=activity_wrapper(collect_citations, raw=false) ==
+  sig: (List(String)) -> Activity(diamond_report.CollectCitationsInput, diamond_report.Citations)
+  T-ACT action=collect_citations input_codec=collect_citations_input_codec return=citations_codec
+== fn compose_activity/2 origin=activity_wrapper(compose, raw=false) ==
+  sig: (List(String), List(String)) -> Activity(diamond_report.ComposeInput, diamond_report.Report)
+  T-ACT action=compose input_codec=compose_input_codec return=report_codec
+== fn extract_claims_activity/1 origin=activity_wrapper(extract_claims, raw=false) ==
+  sig: (List(String)) -> Activity(diamond_report.ExtractClaimsInput, diamond_report.Claims)
+  T-ACT action=extract_claims input_codec=extract_claims_input_codec return=claims_codec
+== fn gather_activity/1 origin=activity_wrapper(gather, raw=false) ==
+  sig: (String) -> Activity(diamond_report.GatherInput, diamond_report.Sources)
+  T-ACT action=gather input_codec=gather_input_codec return=sources_codec
+== fn collect_citations_activity_raw/1 origin=activity_wrapper(collect_citations, raw=true) ==
+  sig: (List(String)) -> Activity(String, String)
+  T-ACTRAW action=collect_citations input_codec=collect_citations_input_codec
+== fn extract_claims_activity_raw/1 origin=activity_wrapper(extract_claims, raw=true) ==
+  sig: (List(String)) -> Activity(String, String)
+  T-ACTRAW action=extract_claims input_codec=extract_claims_input_codec
+== fn step_gather/1 origin=region(gather) ==
+  sig: (String) -> Result(diamond_report.DiamondReportOutcome, AwlError)
+  v1 = call_local gather_activity(v0)
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#19)
+  v3 = call_rt aion@workflow:run/1(v2)
+  v4 = call_rt aion@awl@error:map_activity_error/1(v3)
+  v5 = try_bind v4
+  tail_local step_claims(v5)
+== fn step_claims/1 origin=chain_step(gather.claims) ==
+  sig: (diamond_report.Sources) -> Result(diamond_report.DiamondReportOutcome, AwlError)
+  v1 = field(v0, 1)
+  v2 = call_local extract_claims_activity_raw(v1) live_after=[v0]
+  v3 = call_rt aion@activity:task_queue/2(v2, lit#20) live_after=[v0]
+  v4 = field(v0, 1)
+  v5 = call_local collect_citations_activity_raw(v4) live_after=[v3]
+  v6 = call_rt aion@activity:task_queue/2(v5, lit#21) live_after=[v3]
+  v7 = list([v3, v6])
+  v8 = call_rt aion@workflow:all/1(v7)
+  v9 = call_rt aion@awl@error:map_activity_error/1(v8)
+  v10 = try_bind v9
+  assert_list [v11, v12] = v10
+  v13 = call_local claims_codec() live_after=[v11, v12]
+  v14 = call_rt aion@awl@codec:decoded/3(v13, v11, lit#22) live_after=[v12]
+  v15 = try_bind v14 live_after=[v12]
+  v16 = call_local citations_codec() live_after=[v12, v15]
+  v17 = call_rt aion@awl@codec:decoded/3(v16, v12, lit#23) live_after=[v15]
+  v18 = try_bind v17 live_after=[v15]
+  tail_local step_compose(v18, v15)
+== fn step_compose/2 origin=chain_step(gather.compose) ==
+  sig: (diamond_report.Citations, diamond_report.Claims) -> Result(diamond_report.DiamondReportOutcome, AwlError)
+  v2 = field(v1, 1)
+  v3 = field(v0, 1)
+  v4 = call_local compose_activity(v2, v3)
+  v5 = call_rt aion@activity:task_queue/2(v4, lit#24)
+  v6 = call_rt aion@workflow:run/1(v5)
+  v7 = call_rt aion@awl@error:map_activity_error/1(v6)
+  v8 = try_bind v7
+  v9 = field(v8, 2)
+  if is_true v9:
+    v10 = field(v8, 1)
+    v11 = record(reported, [v10])
+    v12 = record(reported_outcome, [v11])
+    v13 = record(ok, [v12])
+    return v13
+  else:
+    v14 = field(v8, 1)
+    v15 = record(incomplete, [v14])
+    v16 = call_local incomplete_to_json(v15)
+    v17 = call_rt gleam@json:to_string/1(v16)
+    v18 = record(awl_outcome_failure, [lit#25, v17])
+    v19 = record(error, [v18])
+    return v19
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD

@@ -151,7 +151,7 @@ pub(super) fn activity_call(
     // the flow's error path, so a spent side channel cannot fault the step
     // that called it. The checker has already refused any binding of an
     // advisory result, so nothing downstream reads this var.
-    if declared_advisory(ctx, call.name.as_str()) {
+    if declared_advisory(ctx.emitter, call.name.as_str()) {
         return Ok(ran);
     }
     let mapped = call_rt(
@@ -175,8 +175,12 @@ pub(super) fn activity_call(
 ///
 /// Declaration-only by construction: the call-site config line is not
 /// consulted, and the checker refuses `advisory` there.
-fn declared_advisory(ctx: &Ctx<'_>, name: &str) -> bool {
-    ctx.emitter.actions.get(name).is_some_and(|&(_, decl)| {
+///
+/// Takes the emitter rather than the whole [`Ctx`] because the
+/// dependency-parallel layer classifier (`layers::parallel_layer_calls`) runs
+/// during slot planning, before any lowering context exists.
+pub(super) fn declared_advisory(emitter: &crate::emitter::Emitter<'_>, name: &str) -> bool {
+    emitter.actions.get(name).is_some_and(|&(_, decl)| {
         decl.config
             .as_ref()
             .is_some_and(|config| config.advisory.is_some())

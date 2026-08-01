@@ -124,28 +124,174 @@ fn bc4_zero_step_workflow_refuses_no_start_region() -> Result<(), Box<dyn std::e
     Ok(())
 }
 
-/// The dependency-parallel layer (`step b after a`) is still unlowered, and
-/// these fixtures pin it. `dev_brief` always refused here. `layer_hygiene`
-/// JOINED this pin with the value-payload landing rather than joining the
-/// covered ratchet: its `route done(joined)` lowers now, but the document
-/// also carries `step left after root` / `step right after root`, so the
-/// payload gate simply stopped being the first thing it hit. Pinning it here
-/// is what keeps that boundary honest — the fixture is NOT covered, and the
-/// reason it is not covered is a different gap than the one this landing
-/// closed.
+/// The retired `parallel region` refusal, flipped to a lowering + verify
+/// coverage pin (the same promotion as `subflow_declarations_now_lower`). A
+/// dependency-parallel layer arises from an `after` naming MORE THAN ONE step,
+/// or from two steps declaring `after` the same predecessor; it is not a
+/// keyword, which is why `dev_brief` hit it without containing any visibly
+/// parallel syntax.
+///
+/// All four fixtures lower; none merely moved to a later refusal. They cover
+/// both halves of the reference's classification: `after_multi_diamond`,
+/// `dev_brief`, and `layer_hygiene` dispatch their layer concurrently, while
+/// `release_pipeline_combined`'s layer degrades to written order because
+/// `build_all`'s body is a collection fork rather than one bare action call.
 #[test]
-fn parallel_layer_fixtures_still_refuse() -> Result<(), Box<dyn std::error::Error>> {
+fn parallel_layer_fixtures_now_lower() -> Result<(), Box<dyn std::error::Error>> {
     for fixture in [
+        "tests/fixtures/rev2/dag-fork/valid/after_multi_diamond.awl",
+        "tests/fixtures/rev2/dag-fork/valid/release_pipeline_combined.awl",
         "tests/fixtures/rev2/flagship/valid/dev_brief.awl",
         "tests/fixtures/rev2/flow-shape/valid/layer_hygiene.awl",
     ] {
-        match lower_fixture(&manifest_dir().join(fixture))? {
-            Err(LowerError::Unsupported { shape, .. }) => {
-                assert_eq!(shape, "parallel region", "{fixture} refusal class drifted");
-            }
-            other => return Err(format!("{fixture} must still refuse: {other:?}").into()),
-        }
+        let module = lower_fixture(&manifest_dir().join(fixture))??;
+        super::verify(&module)?;
     }
+    Ok(())
+}
+
+/// A parallelizable layer dispatches CONCURRENTLY: both members' activity
+/// values reach ONE `aion@workflow:all/1`, and neither rides `workflow.run`.
+/// The pin is two-directional on purpose — asserting only that `all/1` appears
+/// would still pass on a lowering that ALSO ran each call sequentially first,
+/// and asserting only the absence of `run/1` would pass on a body that
+/// dispatched nothing at all.
+///
+/// Ordering is the risk this guards: a layer lowered in written order records
+/// `gather -> extract_claims -> collect_citations` as three sequential
+/// activity round trips, while the reference records one concurrent dispatch
+/// of two. Both trails are internally consistent, so only the pairing of
+/// presence and absence distinguishes them here; the BC-4 differential proves
+/// the durable consequence against the Gleam oracle.
+#[test]
+fn a_parallel_layer_dispatches_through_one_workflow_all() -> Result<(), Box<dyn std::error::Error>>
+{
+    let path = manifest_dir().join("tests/fixtures/rev2/dag-fork/valid/after_multi_diamond.awl");
+    let module = lower_fixture(&path)??;
+    let printed = super::print_mir(&module);
+    let layer = printed
+        .split("== fn step_claims/1")
+        .nth(1)
+        .and_then(|rest| rest.split("\n== fn ").next())
+        .ok_or("the diamond's parallel layer function is missing")?;
+    assert_eq!(
+        layer.matches("aion@workflow:all/1").count(),
+        1,
+        "the layer must dispatch through exactly one `workflow.all`:\n{layer}"
+    );
+    assert!(
+        layer.contains("v7 = list([v3, v6])"),
+        "both members' configured activity values must reach that one list:\n{layer}"
+    );
+    assert!(
+        !layer.contains("aion@workflow:run/1"),
+        "a concurrently dispatched layer must run NO member through \
+         `workflow.run` — that is the written-order form:\n{layer}"
+    );
+    // The heterogeneous join decodes each position with THAT action's return
+    // codec: a wrong-codec decode is validator-clean and runtime-wrong.
+    for term in ["claims_codec()", "citations_codec()"] {
+        assert!(
+            layer.contains(term),
+            "each bound position must decode with its own action's codec \
+             (missing `{term}`):\n{layer}"
+        );
+    }
+    Ok(())
+}
+
+/// A dependency-parallel layer the SDK cannot dispatch concurrently degrades
+/// to written order and SAYS SO (S13). `release_pipeline_combined`'s layer
+/// pairs `build_all` (a collection fork) with `notes` (a bare call), so the
+/// reference falls back to written order and names the degradation in the
+/// generated module; the direct path carries the same fact as
+/// `degraded_parallel` on the layer's first member.
+///
+/// Two-directional: the marker must be on `build_all` and on NOTHING else, so
+/// a lowering that marked every chain step — which would make the marker
+/// meaningless — fails here, and so does one that dropped it.
+#[test]
+fn a_degraded_parallel_layer_is_marked_on_its_first_member_only()
+-> Result<(), Box<dyn std::error::Error>> {
+    let path =
+        manifest_dir().join("tests/fixtures/rev2/dag-fork/valid/release_pipeline_combined.awl");
+    let module = lower_fixture(&path)??;
+    let printed = super::print_mir(&module);
+    let marked: Vec<&str> = printed
+        .split("== fn ")
+        .skip(1)
+        .filter(|body| body.contains("\n  degraded_parallel: true\n"))
+        .filter_map(|body| body.split('/').next())
+        .collect();
+    assert_eq!(
+        marked,
+        vec!["step_build_all"],
+        "exactly the degraded layer's FIRST member carries the S13 marker"
+    );
+    // The control arm: a fixture whose layer DOES dispatch concurrently must
+    // carry no marker at all, so the marker tracks the degradation rather than
+    // the mere presence of a multi-member layer.
+    let parallel = lower_fixture(
+        &manifest_dir().join("tests/fixtures/rev2/dag-fork/valid/after_multi_diamond.awl"),
+    )??;
+    assert!(
+        !super::print_mir(&parallel).contains("degraded_parallel: true"),
+        "a layer that DOES dispatch concurrently must carry no degradation marker"
+    );
+    Ok(())
+}
+
+/// R5: an ADVISORY call is not a layer-completion dependency, so a layer
+/// containing one degrades to written order rather than joining a
+/// `workflow.all` that would gate the layer on the advisory's outcome — the
+/// reference's own gate (`emitter/steps.rs::layer_calls`).
+///
+/// No corpus fixture pairs an advisory call with a dependency-parallel layer,
+/// so this is the only place that gate is exercised. Its control is the SAME
+/// document with the `advisory` marker removed, which must dispatch
+/// concurrently — the two arms differ by one word, so a classifier that
+/// ignored `advisory` would fail here and a classifier that refused every
+/// layer would fail on the control.
+#[test]
+fn an_advisory_call_keeps_its_layer_in_written_order() -> Result<(), Box<dyn std::error::Error>> {
+    let template = "\
+//! Focused advisory-in-a-parallel-layer pin.
+workflow advisory_layer
+  input seed: String
+  outcome done: type String, route success
+
+worker local
+  action root(value: String) -> String
+  action left(value: String) -> String
+  action right(value: String) -> String{marker}
+  action merge(left: String, right: String) -> String
+
+step root
+  root(value: seed) -> rooted
+
+step left after root
+  left(value: rooted) -> left_value
+
+step right after root
+  right(value: rooted)
+
+step merge after left, right
+  merge(left: left_value, right: left_value) -> joined
+  route done(joined)
+";
+    let advisory = super::print_mir(&lower_source(
+        &template.replace("{marker}", "\n    advisory"),
+    )??);
+    let control = super::print_mir(&lower_source(&template.replace("{marker}", ""))??);
+    assert!(
+        advisory.contains("degraded_parallel: true") && !advisory.contains("aion@workflow:all/1"),
+        "a layer holding an advisory call must run in written order:\n{advisory}"
+    );
+    assert!(
+        !control.contains("degraded_parallel: true") && control.contains("aion@workflow:all/1"),
+        "the same layer WITHOUT the advisory marker must dispatch \
+         concurrently:\n{control}"
+    );
     Ok(())
 }
 

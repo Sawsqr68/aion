@@ -10,8 +10,9 @@
 //! (`route out(<value>)`) with the value-payload landing, and `subflow`
 //! declarations with the subflow landing, which was the last one it held. The
 //! refusals that remain are per-construct and anchored where the construct
-//! actually is (`step`'s `substeps`, `flow`'s `parallel region`) plus the one
-//! shared `crate::unlowered` refusal both backends keep.
+//! actually is (`step`'s `substeps`) plus the one shared `crate::unlowered`
+//! refusal both backends keep. `flow`'s `parallel region` refusal is gone:
+//! dependency-parallel layers lower through `layers`/`parallel`.
 
 use std::fmt;
 use std::mem;

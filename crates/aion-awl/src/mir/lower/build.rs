@@ -233,9 +233,14 @@ pub(super) fn skeleton(ctx: &mut Ctx<'_>) -> Result<Skeleton, LowerError> {
         activities.insert(action.clone(), FnRef(next));
         next += 1;
     }
-    // Raw wrapper twins for heterogeneous named-fork actions, after every
-    // typed wrapper, in sorted-name order (deterministic).
-    let raw_actions = super::forks::raw_action_inventory(emitter);
+    // Raw wrapper twins for the heterogeneous parallel dispatches — named
+    // forks and dependency-parallel layers alike — after every typed wrapper,
+    // in sorted-name order (deterministic). A document with neither shape adds
+    // none, so every pre-existing module keeps byte-identical refs.
+    let mut raw_actions = super::forks::raw_action_inventory(emitter);
+    raw_actions.extend(super::plan_slots::parallel_raw_actions(ctx)?);
+    raw_actions.sort();
+    raw_actions.dedup();
     let mut raw_activities = BTreeMap::new();
     for action in &raw_actions {
         raw_activities.insert(action.clone(), FnRef(next));

@@ -1,0 +1,258 @@
+module layer_hygiene source=layer_hygiene.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_root:
+    aion@activity:task_queue/2 [activities] (v1, lit#13)
+    aion@workflow:run/1 [activities] (v2)
+  step_left:
+    aion@activity:task_queue/2 [activities] (v1, lit#14)
+    aion@activity:task_queue/2 [activities] (v3, lit#15)
+    aion@workflow:all/1 [activities] (v5)
+  step_merge:
+    aion@activity:task_queue/2 [activities] (v2, lit#18)
+    aion@workflow:run/1 [activities] (v3)
+== durable families == activities
+== atoms ==
+  [0] left_input
+  [1] merge_input
+  [2] right_input
+  [3] root_input
+  [4] layer_hygiene_input
+  [5] done_outcome
+  [6] ok
+== literals ==
+  [0] "value"
+  [1] "left"
+  [2] "right"
+  [3] "value"
+  [4] "value"
+  [5] "seed"
+  [6] "awl_layer"
+  [7] "done"
+  [8] "outcome"
+  [9] ""
+  [10] "LayerHygieneOutcome"
+  [11] "done"
+  [12] "payload"
+  [13] "local"
+  [14] "local"
+  [15] "local"
+  [16] "left"
+  [17] "right"
+  [18] "local"
+== types ==
+  record LeftInput tag=left_input
+    value: string
+  record MergeInput tag=merge_input
+    left: string
+    right: string
+  record RightInput tag=right_input
+    value: string
+  record RootInput tag=root_input
+    value: string
+  record LayerHygieneInput tag=layer_hygiene_input
+    seed: string
+    awl_layer: string
+  union LayerHygieneOutcome
+    done -> done_outcome(string)
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=layer_hygiene_input_codec output=layer_hygiene_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(layer_hygiene.LayerHygieneInput, layer_hygiene.LayerHygieneOutcome, AwlError)
+  T-DEF name="layer_hygiene" input=layer_hygiene_input_codec output=layer_hygiene_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (layer_hygiene.LayerHygieneInput) -> Result(layer_hygiene.LayerHygieneOutcome, AwlError)
+  T-EXEC fields=[seed:String, awl_layer:String] entry=step_root args=[0]
+== fn left_input_codec/0 origin=codec_template(RecordTrio, LeftInput, record#0) ==
+  sig: () -> Codec(layer_hygiene.LeftInput)
+  v0 = make_closure left_input_to_json captures=[]
+  v1 = call_local left_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn left_input_to_json/1 origin=codec_template(RecordTrio, LeftInput, record#0) ==
+  sig: (layer_hygiene.LeftInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"value": v1|>awlc.string_to_json}
+  return v2
+== fn left_input_decoder/0 origin=codec_template(RecordTrio, LeftInput, record#0) ==
+  sig: () -> Decoder(layer_hygiene.LeftInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure left_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn left_input_decoder$0/1 origin=lifted(left_input_decoder, #0) ==
+  sig: (String) -> Decoder(layer_hygiene.LeftInput)
+  v1 = record(left_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn merge_input_codec/0 origin=codec_template(RecordTrio, MergeInput, record#1) ==
+  sig: () -> Codec(layer_hygiene.MergeInput)
+  v0 = make_closure merge_input_to_json captures=[]
+  v1 = call_local merge_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn merge_input_to_json/1 origin=codec_template(RecordTrio, MergeInput, record#1) ==
+  sig: (layer_hygiene.MergeInput) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"left": v1|>awlc.string_to_json, "right": v2|>awlc.string_to_json}
+  return v3
+== fn merge_input_decoder/0 origin=codec_template(RecordTrio, MergeInput, record#1) ==
+  sig: () -> Decoder(layer_hygiene.MergeInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure merge_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v0, v1)
+== fn merge_input_decoder$0/1 origin=lifted(merge_input_decoder, #0) ==
+  sig: (String) -> Decoder(layer_hygiene.MergeInput)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure merge_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v1, v2)
+== fn merge_input_decoder$1/2 origin=lifted(merge_input_decoder, #1) ==
+  sig: (String, String) -> Decoder(layer_hygiene.MergeInput)
+  v2 = record(merge_input, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn right_input_codec/0 origin=codec_template(RecordTrio, RightInput, record#2) ==
+  sig: () -> Codec(layer_hygiene.RightInput)
+  v0 = make_closure right_input_to_json captures=[]
+  v1 = call_local right_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn right_input_to_json/1 origin=codec_template(RecordTrio, RightInput, record#2) ==
+  sig: (layer_hygiene.RightInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"value": v1|>awlc.string_to_json}
+  return v2
+== fn right_input_decoder/0 origin=codec_template(RecordTrio, RightInput, record#2) ==
+  sig: () -> Decoder(layer_hygiene.RightInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure right_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v0, v1)
+== fn right_input_decoder$0/1 origin=lifted(right_input_decoder, #0) ==
+  sig: (String) -> Decoder(layer_hygiene.RightInput)
+  v1 = record(right_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn root_input_codec/0 origin=codec_template(RecordTrio, RootInput, record#3) ==
+  sig: () -> Codec(layer_hygiene.RootInput)
+  v0 = make_closure root_input_to_json captures=[]
+  v1 = call_local root_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn root_input_to_json/1 origin=codec_template(RecordTrio, RootInput, record#3) ==
+  sig: (layer_hygiene.RootInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"value": v1|>awlc.string_to_json}
+  return v2
+== fn root_input_decoder/0 origin=codec_template(RecordTrio, RootInput, record#3) ==
+  sig: () -> Decoder(layer_hygiene.RootInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure root_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+== fn root_input_decoder$0/1 origin=lifted(root_input_decoder, #0) ==
+  sig: (String) -> Decoder(layer_hygiene.RootInput)
+  v1 = record(root_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn layer_hygiene_input_codec/0 origin=codec_template(RecordTrio, LayerHygieneInput, record#4) ==
+  sig: () -> Codec(layer_hygiene.LayerHygieneInput)
+  v0 = make_closure layer_hygiene_input_to_json captures=[]
+  v1 = call_local layer_hygiene_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn layer_hygiene_input_to_json/1 origin=codec_template(RecordTrio, LayerHygieneInput, record#4) ==
+  sig: (layer_hygiene.LayerHygieneInput) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"seed": v1|>awlc.string_to_json, "awl_layer": v2|>awlc.string_to_json}
+  return v3
+== fn layer_hygiene_input_decoder/0 origin=codec_template(RecordTrio, LayerHygieneInput, record#4) ==
+  sig: () -> Decoder(layer_hygiene.LayerHygieneInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure layer_hygiene_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#5, v0, v1)
+== fn layer_hygiene_input_decoder$0/1 origin=lifted(layer_hygiene_input_decoder, #0) ==
+  sig: (String) -> Decoder(layer_hygiene.LayerHygieneInput)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure layer_hygiene_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v1, v2)
+== fn layer_hygiene_input_decoder$1/2 origin=lifted(layer_hygiene_input_decoder, #1) ==
+  sig: (String, String) -> Decoder(layer_hygiene.LayerHygieneInput)
+  v2 = record(layer_hygiene_input, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn layer_hygiene_outcome_codec/0 origin=codec_template(UnionTrio, LayerHygieneOutcome, union#5) ==
+  sig: () -> Codec(layer_hygiene.LayerHygieneOutcome)
+  v0 = make_closure layer_hygiene_outcome_to_json captures=[]
+  v1 = call_local layer_hygiene_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn layer_hygiene_outcome_to_json/1 origin=codec_template(UnionTrio, LayerHygieneOutcome, union#5) ==
+  sig: (layer_hygiene.LayerHygieneOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#7|>awlc.string_to_json, "payload": v1|>awlc.string_to_json}
+  return v2
+== fn layer_hygiene_outcome_decoder/0 origin=codec_template(UnionTrio, LayerHygieneOutcome, union#5) ==
+  sig: () -> Decoder(layer_hygiene.LayerHygieneOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure layer_hygiene_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#8, v0, v1)
+== fn layer_hygiene_outcome_decoder$outcome/1 origin=lifted(layer_hygiene_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(layer_hygiene.LayerHygieneOutcome)
+  if cmp Eq v0 lit#11:
+    v2 = call_rt aion@awl@codec:string_decoder/0()
+    v3 = make_closure layer_hygiene_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#12, v2, v3)
+  else:
+    v1 = record(done_outcome, [lit#9])
+    tail_rt gleam@dynamic@decode:failure/2(v1, lit#10)
+== fn layer_hygiene_outcome_decoder$arm0/1 origin=lifted(layer_hygiene_outcome_decoder, #1) ==
+  sig: (String) -> Decoder(layer_hygiene.LayerHygieneOutcome)
+  v1 = record(done_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn left_activity/1 origin=activity_wrapper(left, raw=false) ==
+  sig: (String) -> Activity(layer_hygiene.LeftInput, String)
+  T-ACT action=left input_codec=left_input_codec return=awlc.string_codec
+== fn merge_activity/2 origin=activity_wrapper(merge, raw=false) ==
+  sig: (String, String) -> Activity(layer_hygiene.MergeInput, String)
+  T-ACT action=merge input_codec=merge_input_codec return=awlc.string_codec
+== fn right_activity/1 origin=activity_wrapper(right, raw=false) ==
+  sig: (String) -> Activity(layer_hygiene.RightInput, String)
+  T-ACT action=right input_codec=right_input_codec return=awlc.string_codec
+== fn root_activity/1 origin=activity_wrapper(root, raw=false) ==
+  sig: (String) -> Activity(layer_hygiene.RootInput, String)
+  T-ACT action=root input_codec=root_input_codec return=awlc.string_codec
+== fn left_activity_raw/1 origin=activity_wrapper(left, raw=true) ==
+  sig: (String) -> Activity(String, String)
+  T-ACTRAW action=left input_codec=left_input_codec
+== fn right_activity_raw/1 origin=activity_wrapper(right, raw=true) ==
+  sig: (String) -> Activity(String, String)
+  T-ACTRAW action=right input_codec=right_input_codec
+== fn step_root/1 origin=region(root) ==
+  sig: (String) -> Result(layer_hygiene.LayerHygieneOutcome, AwlError)
+  v1 = call_local root_activity(v0)
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#13)
+  v3 = call_rt aion@workflow:run/1(v2)
+  v4 = call_rt aion@awl@error:map_activity_error/1(v3)
+  v5 = try_bind v4
+  tail_local step_left(v5)
+== fn step_left/1 origin=chain_step(root.left) ==
+  sig: (String) -> Result(layer_hygiene.LayerHygieneOutcome, AwlError)
+  v1 = call_local left_activity_raw(v0) live_after=[v0]
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#14) live_after=[v0]
+  v3 = call_local right_activity_raw(v0) live_after=[v2]
+  v4 = call_rt aion@activity:task_queue/2(v3, lit#15) live_after=[v2]
+  v5 = list([v2, v4])
+  v6 = call_rt aion@workflow:all/1(v5)
+  v7 = call_rt aion@awl@error:map_activity_error/1(v6)
+  v8 = try_bind v7
+  assert_list [v9, v10] = v8
+  v11 = call_rt aion@awl@codec:string_codec/0() live_after=[v9, v10]
+  v12 = call_rt aion@awl@codec:decoded/3(v11, v9, lit#16) live_after=[v10]
+  v13 = try_bind v12 live_after=[v10]
+  v14 = call_rt aion@awl@codec:string_codec/0() live_after=[v10, v13]
+  v15 = call_rt aion@awl@codec:decoded/3(v14, v10, lit#17) live_after=[v13]
+  v16 = try_bind v15 live_after=[v13]
+  tail_local step_merge(v13, v16)
+== fn step_merge/2 origin=chain_step(root.merge) ==
+  sig: (String, String) -> Result(layer_hygiene.LayerHygieneOutcome, AwlError)
+  v2 = call_local merge_activity(v0, v1)
+  v3 = call_rt aion@activity:task_queue/2(v2, lit#18)
+  v4 = call_rt aion@workflow:run/1(v3)
+  v5 = call_rt aion@awl@error:map_activity_error/1(v4)
+  v6 = try_bind v5
+  v7 = record(done_outcome, [v6])
+  v8 = record(ok, [v7])
+  return v8
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD

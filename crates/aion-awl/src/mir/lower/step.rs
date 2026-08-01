@@ -10,11 +10,13 @@
 //! - substeps: mechanical but large (per-substep fns over the shared plan's
 //!   `sub_params`/`sub_node`, sibling/parent route frames, `on failure`
 //!   interaction — reference `emitter/subs.rs:20-60`) — `FnOrigin::SubStep`
-//!   already exists;
-//! - dependency-parallel region layers (`parallel region`) — see the design
-//!   sketch retained in the module history (flatten `region.layers` into the
-//!   emitter's step walk, `workflow.all` single-call layers, degrade richer
-//!   layers to written order with the S13 marker).
+//!   already exists.
+//!
+//! Dependency-parallel region layers are NO LONGER deferred: `layers` splits a
+//! region into chain units, `parallel` dispatches a parallelizable layer as one
+//! `workflow.all`, and a richer layer degrades to written order carrying the
+//! S13 `degraded_parallel` marker — the reference's own classification
+//! (`emitter/steps.rs::layer_calls`), gate for gate.
 //!
 //! Parity refusals (the reference emitter refuses these too — a language
 //! boundary, not a direct-path gap): mid-chain routes, indexing inside
@@ -98,7 +100,7 @@ pub(super) fn lower_step(
 /// Where control goes when the flow's last chain step completes: an implicit
 /// tail call into the next step's region, a member flow's exit return, or the
 /// honest refusal (the reference `emitter/steps.rs::emit_flow_end`).
-fn flow_end(
+pub(super) fn flow_end(
     ctx: &mut Ctx<'_>,
     env: FlowEnv<'_>,
     step: &Step,

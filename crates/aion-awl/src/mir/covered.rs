@@ -6,6 +6,12 @@
 /// ratchet instead of being silently absorbed by the deferred bucket. Paths
 /// are relative to `tests/fixtures/rev2`, without the `.awl` extension.
 pub(super) const COVERED: &[&str] = &[
+    // Dependency-parallel layers (`step c after a, b`): a layer of single
+    // bare action calls dispatches as ONE `workflow.all`, richer layers
+    // degrade to written order with the S13 marker. `after_multi_diamond` is
+    // the canonical diamond — two heterogeneous calls in one layer, joined by
+    // a third step.
+    "dag-fork/valid/after_multi_diamond",
     "dag-fork/valid/after_single",
     "dag-fork/valid/child_collection_fork",
     "dag-fork/valid/child_collection_fork_sequential",
@@ -21,6 +27,13 @@ pub(super) const COVERED: &[&str] = &[
     "dag-fork/valid/fork_named_homogeneous",
     "dag-fork/valid/fork_sequential",
     "dag-fork/valid/fork_sequential_route",
+    // The DEGRADED half of the parallel-layer landing: `build_all` and `notes`
+    // share a dependency layer, but `build_all`'s body is a collection fork
+    // rather than one bare action call, so the layer cannot ride a
+    // `workflow.all` and runs in written order — exactly as the reference
+    // emitter degrades it, with the S13 `degraded_parallel` marker in the
+    // golden where the reference emits its `awl stopgap` comment.
+    "dag-fork/valid/release_pipeline_combined",
     // BC-4 adversarial: a runtime-sized fork over a plain input list.
     "dag-fork/valid/runtime_sized_fork",
     "dag-fork/valid/sit_one",
@@ -55,6 +68,11 @@ pub(super) const COVERED: &[&str] = &[
     "declarations/valid/workers_multiple",
     "ergonomics/valid/flow_vocab_b1",
     "flagship/valid/awl_hello",
+    // The flagship arm of the parallel-layer landing: `scout` and `warm_build`
+    // both declare `after provision`, forming a heterogeneous layer whose
+    // second member binds nothing — so the join destructures a discarded
+    // position and decodes only the bound one.
+    "flagship/valid/dev_brief",
     // `subflow` declarations: an inline flow compiled once as a local
     // function set (wrapper + chains) and invoked by a plain local call.
     // `dev_flow` is the flagship arm — two nested flows in one document (a
@@ -74,6 +92,12 @@ pub(super) const COVERED: &[&str] = &[
     "flow-shape/valid/distribute_activity_tolerant",
     "flow-shape/valid/distribute_child_collect",
     "flow-shape/valid/distribute_child_tolerant",
+    // The NAME-HYGIENE arm of the parallel-layer landing: an author input
+    // literally named `awl_layer`, the generated name the reference's typed
+    // parallel layer allocates. The direct path names nothing — a layer's join
+    // is an SSA var — so this fixture is the proof that the collision has no
+    // surface to land on rather than a proof that the allocator dodged it.
+    "flow-shape/valid/layer_hygiene",
     // The on-failure edge, arm EXECUTED: `fail_*` actions fail by name in the
     // BC-4 differential, so these two RUN their compensation — one routing to
     // a workflow failure outcome, one to a sibling step that completes.

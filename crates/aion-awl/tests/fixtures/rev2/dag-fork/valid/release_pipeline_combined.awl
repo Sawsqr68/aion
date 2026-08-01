@@ -1,6 +1,6 @@
 //! Release pipeline: prepare a tag, build every target and render notes in parallel,
 //! check each artifact in a fan-out, then publish one target at a time in order.
-workflow release_pipeline
+workflow release_pipeline_combined
   input version: String
   input targets: [Target]
 
