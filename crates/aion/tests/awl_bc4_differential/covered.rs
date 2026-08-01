@@ -43,7 +43,13 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// different term than the oracle (a missed optional wrap, a dropped concat
 /// prelude, a temporary captured from the wrong scope). Their buckets below
 /// were read off the run, not predicted.
-const COVERED_COUNT: usize = 98;
+/// 101 since `subflow` declarations: `dev_flow`, `subflow_local_names`, and
+/// `subflow_nested` joined at once. A subflow compiles INLINE — it is not a
+/// child workflow, not an activity, and appends no event of its own — so the
+/// only way to prove the direct path's inline function set behaves as the
+/// reference's does is to run both and compare the durable trail the enclosing
+/// workflow records. Their buckets below were read off the run, not predicted.
+const COVERED_COUNT: usize = 101;
 
 /// Out-of-oracle (r2 finding 3): fixtures whose durable park boundary is NOT
 /// observable through any engine surface without racy sampling.
@@ -245,6 +251,15 @@ const EXPECTED_SUCCEEDED: &[&str] = &[
     // synthesized one that shares its name.
     "flow-shape/valid/action_param_hygiene",
     "flow-shape/valid/counter_hygiene",
+    // `subflow` declarations, flagship arm: `dev_flow` carries BOTH nested
+    // flow kinds in one document — a subflow whose bounded `review` step
+    // routes backward to `develop`, and a `distribute`/`collect ?` region
+    // whose member step INVOKES that subflow per item. It completes on both
+    // backends with byte-identical normalized trails, which is what proves
+    // the inline function set runs the same activities in the same order as
+    // the reference's — a subflow appends no event of its own, so the
+    // enclosing workflow's trail is the only place the difference could show.
+    "flow-shape/valid/dev_flow",
     "flow-shape/valid/distribute_activity_tolerant",
     "flow-shape/valid/distribute_child_collect",
     "flow-shape/valid/distribute_child_tolerant",
@@ -264,6 +279,14 @@ const EXPECTED_SUCCEEDED: &[&str] = &[
     "flow-shape/valid/region_sibling_local_reuse",
     "flow-shape/valid/sequence_activity_tolerant",
     "flow-shape/valid/sequence_region_loopback",
+    // The subflow scoping arms. `subflow_local_names` reuses the same author
+    // names (`value`, `out`) across two subflows at unrelated types and again
+    // in the host; `subflow_nested` has a subflow invoke a subflow. Both
+    // complete identically on both backends, so each flow's binding
+    // environment is resolved independently on the direct path exactly as the
+    // reference resolves it.
+    "flow-shape/valid/subflow_local_names",
+    "flow-shape/valid/subflow_nested",
     // The canonical value payload: `route done(note)` at the workflow
     // boundary, completing its real work -> route path on both backends.
     "flow-shape/valid/value_route_payload",

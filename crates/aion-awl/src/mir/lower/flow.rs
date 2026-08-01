@@ -28,19 +28,32 @@ use super::expr::{Binding, Scope};
 use super::slots::Slots;
 use super::step::{Next, lower_step};
 
-/// A member flow's exit contract: routing to (or falling into) the close
-/// step returns `Ok(<collected binding>)`.
+/// A nested flow's exit contract (the MIR twin of
+/// `emitter/steps.rs::FlowExit`).
 pub(super) struct FlowExit {
-    /// The route-target name that exits the flow (the close step's name).
+    /// The route-target name that exits the flow (a region's close step, or a
+    /// subflow's declared outcome).
     pub(super) name: String,
-    /// The per-instance binding the collect gathers.
-    pub(super) binding: String,
+    pub(super) kind: ExitKind,
+}
+
+/// What a nested flow's exit returns.
+pub(super) enum ExitKind {
+    /// A subflow outcome: `route out(<payload>)` returns `Ok(payload)`, the
+    /// payload rendered toward the declared outcome type.
+    Subflow { ty: GType },
+    /// A per-item region member flow: routing to (or falling into) the close
+    /// step returns `Ok(<collected binding>)`.
+    Region {
+        /// The per-instance binding the collect gathers.
+        binding: String,
+    },
 }
 
 /// The flow whose steps are being lowered: the host workflow (`prefix`
-/// empty, no exit) or a per-item region member flow, whose functions are
-/// name-prefixed and whose exit returns `Ok(<collected binding>)` instead of
-/// a workflow outcome.
+/// empty, no exit) or a nested flow — a subflow or a per-item region member
+/// flow — whose functions are name-prefixed and whose exit returns `Ok(...)`
+/// instead of a workflow outcome.
 pub(super) struct FlowCtx<'a> {
     pub(super) steps: &'a [Step],
     pub(super) regions: &'a BTreeMap<String, RegionShape>,
@@ -50,9 +63,10 @@ pub(super) struct FlowCtx<'a> {
     /// Binding/type environment owned by this flow.
     pub(super) bindings: &'a BTreeMap<String, GType>,
     pub(super) exit: Option<FlowExit>,
-    /// Generated-name prefix (`""` for the host, `"awl_r<id>_<open>_"`).
+    /// Generated-name prefix (`""` for the host, `"awl_r<id>_<open>_"` for a
+    /// region member flow, `"awl_sf_<name>_"` for a subflow).
     pub(super) prefix: String,
-    /// Origin qualifier for nested flows (`r0:wave`).
+    /// Origin qualifier for nested flows (`r0:wave`, `sf:dev_item`).
     pub(super) label: Option<String>,
     /// The full return type of this flow's functions (`Result(_, AwlError)`).
     pub(super) ret_ty: TyDesc,

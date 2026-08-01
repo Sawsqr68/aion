@@ -1,0 +1,112 @@
+module scoped_names source=scoped_names.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+== durable families ==
+== atoms ==
+  [0] scoped_names_input
+  [1] done_outcome
+  [2] ok
+== literals ==
+  [0] "value"
+  [1] "done"
+  [2] "outcome"
+  [3] ""
+  [4] "ScopedNamesOutcome"
+  [5] "done"
+  [6] "payload"
+  [7] "host"
+== types ==
+  record ScopedNamesInput tag=scoped_names_input
+    value: string
+  union ScopedNamesOutcome
+    done -> done_outcome(string)
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=scoped_names_input_codec output=scoped_names_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(scoped_names.ScopedNamesInput, scoped_names.ScopedNamesOutcome, AwlError)
+  T-DEF name="scoped_names" input=scoped_names_input_codec output=scoped_names_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (scoped_names.ScopedNamesInput) -> Result(scoped_names.ScopedNamesOutcome, AwlError)
+  T-EXEC fields=[value:String] entry=step_text args=[0]
+== fn scoped_names_input_codec/0 origin=codec_template(RecordTrio, ScopedNamesInput, record#0) ==
+  sig: () -> Codec(scoped_names.ScopedNamesInput)
+  v0 = make_closure scoped_names_input_to_json captures=[]
+  v1 = call_local scoped_names_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn scoped_names_input_to_json/1 origin=codec_template(RecordTrio, ScopedNamesInput, record#0) ==
+  sig: (scoped_names.ScopedNamesInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"value": v1|>awlc.string_to_json}
+  return v2
+== fn scoped_names_input_decoder/0 origin=codec_template(RecordTrio, ScopedNamesInput, record#0) ==
+  sig: () -> Decoder(scoped_names.ScopedNamesInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure scoped_names_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn scoped_names_input_decoder$0/1 origin=lifted(scoped_names_input_decoder, #0) ==
+  sig: (String) -> Decoder(scoped_names.ScopedNamesInput)
+  v1 = record(scoped_names_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn scoped_names_outcome_codec/0 origin=codec_template(UnionTrio, ScopedNamesOutcome, union#1) ==
+  sig: () -> Codec(scoped_names.ScopedNamesOutcome)
+  v0 = make_closure scoped_names_outcome_to_json captures=[]
+  v1 = call_local scoped_names_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn scoped_names_outcome_to_json/1 origin=codec_template(UnionTrio, ScopedNamesOutcome, union#1) ==
+  sig: (scoped_names.ScopedNamesOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#1|>awlc.string_to_json, "payload": v1|>awlc.string_to_json}
+  return v2
+== fn scoped_names_outcome_decoder/0 origin=codec_template(UnionTrio, ScopedNamesOutcome, union#1) ==
+  sig: () -> Decoder(scoped_names.ScopedNamesOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure scoped_names_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v0, v1)
+== fn scoped_names_outcome_decoder$outcome/1 origin=lifted(scoped_names_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(scoped_names.ScopedNamesOutcome)
+  if cmp Eq v0 lit#5:
+    v2 = call_rt aion@awl@codec:string_decoder/0()
+    v3 = make_closure scoped_names_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#6, v2, v3)
+  else:
+    v1 = record(done_outcome, [lit#3])
+    tail_rt gleam@dynamic@decode:failure/2(v1, lit#4)
+== fn scoped_names_outcome_decoder$arm0/1 origin=lifted(scoped_names_outcome_decoder, #1) ==
+  sig: (String) -> Decoder(scoped_names.ScopedNamesOutcome)
+  v1 = record(done_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn step_text/1 origin=region(text) ==
+  sig: (String) -> Result(scoped_names.ScopedNamesOutcome, AwlError)
+  v1 = call_local awl_sf_echo(v0)
+  v2 = try_bind v1
+  tail_local step_number(v2)
+== fn step_number/1 origin=chain_step(text.number) ==
+  sig: (String) -> Result(scoped_names.ScopedNamesOutcome, AwlError)
+  v1 = call_local awl_sf_same_number(7) live_after=[v0]
+  v2 = try_bind v1 live_after=[v0]
+  tail_local step_finish(v0)
+== fn step_finish/1 origin=chain_step(text.finish) ==
+  sig: (String) -> Result(scoped_names.ScopedNamesOutcome, AwlError)
+  v1 = record(done_outcome, [v0])
+  v2 = record(ok, [v1])
+  return v2
+== fn awl_sf_echo/1 origin=subflow_wrapper(echo) ==
+  sig: (String) -> Result(String, AwlError)
+  tail_local awl_sf_echo_step_decide(v0)
+== fn awl_sf_echo_step_decide/1 origin=region(sf:echo::decide) ==
+  sig: (String) -> Result(String, AwlError)
+  v1 = cmp Eq v0 lit#7
+  if is_true v1:
+    v2 = record(ok, [v0])
+    return v2
+  else:
+    v3 = record(ok, [v0])
+    return v3
+== fn awl_sf_same_number/1 origin=subflow_wrapper(same_number) ==
+  sig: (Int) -> Result(Int, AwlError)
+  tail_local awl_sf_same_number_step_return_it(v0)
+== fn awl_sf_same_number_step_return_it/1 origin=region(sf:same_number::return_it) ==
+  sig: (Int) -> Result(Int, AwlError)
+  v1 = record(ok, [v0])
+  return v1

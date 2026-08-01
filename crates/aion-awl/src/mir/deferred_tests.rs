@@ -206,6 +206,127 @@ step count_them
     Ok(())
 }
 
+/// The retired `subflow` refusal, flipped to a lowering + verify coverage pin
+/// (the same promotion as `value_route_payloads_now_lower`). `subflow` was the
+/// LAST construct the driver's B4 staging gate held, so retiring it removed
+/// that gate — and `flow_shape_gap` with it — entirely.
+///
+/// All three fixtures lower; none merely moved to a later refusal. `dev_flow`
+/// is the one worth naming: it carries `step wave after plan`, and an `after`
+/// on the IMMEDIATELY PRECEDING step is normalized to a fall-through edge by
+/// `flowshape::normalize_adjacent_after` before planning, so it never reaches
+/// the dependency-parallel layer refusal that `dev_brief` and `layer_hygiene`
+/// still hit. It is pinned here because that is easy to mistake for the
+/// parallel-layer gap having quietly weakened, which it has not —
+/// `parallel_layer_fixtures_still_refuse` above is untouched by this landing.
+#[test]
+fn subflow_declarations_now_lower() -> Result<(), Box<dyn std::error::Error>> {
+    for fixture in [
+        "tests/fixtures/rev2/flow-shape/valid/dev_flow.awl",
+        "tests/fixtures/rev2/flow-shape/valid/subflow_local_names.awl",
+        "tests/fixtures/rev2/flow-shape/valid/subflow_nested.awl",
+    ] {
+        let module = lower_fixture(&manifest_dir().join(fixture))??;
+        super::verify(&module)?;
+    }
+    Ok(())
+}
+
+/// A subflow's outcome payload is COERCED toward the subflow's DECLARED
+/// outcome type, exactly as a workflow outcome's payload is: an `Int` routed
+/// to an `Int?` subflow outcome must arrive wrapped in `Some`. A region member
+/// flow's exit takes the collected binding raw, so an exit lowering that
+/// treated a subflow the same way would hand the caller a bare integer where
+/// the Gleam oracle hands it `Some(1)`.
+///
+/// No corpus fixture declares an optional subflow outcome, so this is the only
+/// place that path is exercised. Pinned on the exact TERMS inside the
+/// subflow's own flow function — not on the `some` atom merely appearing in
+/// the pool, which an `Int?` codec interns regardless.
+#[test]
+fn a_subflow_outcome_payload_is_wrapped_for_an_optional_outcome()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = "\
+//! Focused optional-coercion pin for a subflow's outcome payload.
+workflow subflow_optional_payload
+  input docs: [Doc]
+  outcome done: type Int?, route success
+
+type Doc { title: String }
+
+subflow tally(items: [Doc])
+  outcome out: type Int?
+  step count_them
+    items |> count -> total
+    route out(total)
+
+step run_it
+  tally(items: docs) -> counted
+
+step finish
+  counted |> route done
+";
+    let module = lower_source(source)??;
+    super::verify(&module)?;
+    let printed = super::print_mir(&module);
+    let flow = printed
+        .split("== fn awl_sf_tally_step_count_them/1")
+        .nth(1)
+        .ok_or("the subflow's flow function is missing")?;
+    // The count must be wrapped, and the WRAPPED value must be what the exit
+    // returns — the `Ok` carries `Some(count)`, never the bare count.
+    for term in ["v2 = record(some, [v1])", "v3 = record(ok, [v2])"] {
+        assert!(
+            flow.contains(term),
+            "an Int payload routed to an `Int?` SUBFLOW outcome must reach the exit \
+             wrapped in `Some` (missing `{term}`):\n{flow}"
+        );
+    }
+    // The other direction: the raw count must NOT be what the exit returns. A
+    // `contains` check alone passes on a body that emits both, so the absence
+    // of the unwrapped form is asserted too.
+    assert!(
+        !flow.contains("record(ok, [v1])"),
+        "the subflow exit must not return the UNWRAPPED count:\n{flow}"
+    );
+    Ok(())
+}
+
+/// Each subflow owns an INDEPENDENT binding environment, so two subflows may
+/// reuse the same author names for their parameters and outcomes at unrelated
+/// types. The two wrappers below are each other's control: `echo` takes and
+/// returns `String`, `same_number` takes and returns `Int`, and a lowering
+/// that resolved either flow's names against the wrong environment (or against
+/// the host's, which reuses `value` again) would mistype one of them.
+#[test]
+fn each_subflow_keeps_its_own_binding_environment() -> Result<(), Box<dyn std::error::Error>> {
+    let path = manifest_dir().join("tests/fixtures/rev2/flow-shape/valid/subflow_local_names.awl");
+    let module = lower_fixture(&path)??;
+    super::verify(&module)?;
+    let printed = super::print_mir(&module);
+    for (header, signature) in [
+        (
+            "== fn awl_sf_echo/1 origin=subflow_wrapper(echo) ==",
+            "sig: (String) -> Result(String, AwlError)",
+        ),
+        (
+            "== fn awl_sf_same_number/1 origin=subflow_wrapper(same_number) ==",
+            "sig: (Int) -> Result(Int, AwlError)",
+        ),
+    ] {
+        let body = printed
+            .split(header)
+            .nth(1)
+            .ok_or_else(|| format!("missing subflow wrapper `{header}`"))?;
+        let first = body.lines().nth(1).unwrap_or_default().trim();
+        assert_eq!(
+            first, signature,
+            "subflow wrapper `{header}` did not keep its own declared types"
+        );
+    }
+    Ok(())
+}
+
 /// `guard_optional_wait` was the wait-deferral pin; timeout waits now lower,
 /// so it flips to a lowering + verify coverage pin (the same promotion as
 /// `post_join_combinator_now_lowers`).

@@ -140,6 +140,14 @@ pub enum FnOrigin {
         region: usize,
         open: String,
     },
+    /// A subflow's run-once entry wrapper (the MIR twin of
+    /// `emitter/flows.rs::emit_wrapper` over a `SubflowShape`): seeds the
+    /// subflow's visit counters and tail-calls its entry step function. A
+    /// subflow compiles inline, so this is an ordinary local function — never
+    /// an engine entry.
+    SubflowWrapper {
+        subflow: String,
+    },
     /// The typed `_execute` adapter of an implicit per-item child workflow:
     /// unpacks the child input record into the instance wrapper's arguments.
     ChildExecute {

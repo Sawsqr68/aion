@@ -1,0 +1,153 @@
+module nested_subflows source=nested_subflows.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  awl_sf_inner_polish_step_polish:
+    aion@activity:task_queue/2 [activities] (v1, lit#8)
+    aion@workflow:run/1 [activities] (v2)
+  awl_sf_outer_shape_step_second:
+    aion@activity:task_queue/2 [activities] (v1, lit#9)
+    aion@workflow:run/1 [activities] (v2)
+== durable families == activities
+== atoms ==
+  [0] work_input
+  [1] nested_subflows_input
+  [2] done_outcome
+  [3] ok
+== literals ==
+  [0] "item"
+  [1] "topic"
+  [2] "done"
+  [3] "outcome"
+  [4] ""
+  [5] "NestedSubflowsOutcome"
+  [6] "done"
+  [7] "payload"
+  [8] "writing"
+  [9] "writing"
+== types ==
+  record WorkInput tag=work_input
+    item: string
+  record NestedSubflowsInput tag=nested_subflows_input
+    topic: string
+  union NestedSubflowsOutcome
+    done -> done_outcome(string)
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=nested_subflows_input_codec output=nested_subflows_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(nested_subflows.NestedSubflowsInput, nested_subflows.NestedSubflowsOutcome, AwlError)
+  T-DEF name="nested_subflows" input=nested_subflows_input_codec output=nested_subflows_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (nested_subflows.NestedSubflowsInput) -> Result(nested_subflows.NestedSubflowsOutcome, AwlError)
+  T-EXEC fields=[topic:String] entry=step_run_it args=[0]
+== fn work_input_codec/0 origin=codec_template(RecordTrio, WorkInput, record#0) ==
+  sig: () -> Codec(nested_subflows.WorkInput)
+  v0 = make_closure work_input_to_json captures=[]
+  v1 = call_local work_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn work_input_to_json/1 origin=codec_template(RecordTrio, WorkInput, record#0) ==
+  sig: (nested_subflows.WorkInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"item": v1|>awlc.string_to_json}
+  return v2
+== fn work_input_decoder/0 origin=codec_template(RecordTrio, WorkInput, record#0) ==
+  sig: () -> Decoder(nested_subflows.WorkInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure work_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn work_input_decoder$0/1 origin=lifted(work_input_decoder, #0) ==
+  sig: (String) -> Decoder(nested_subflows.WorkInput)
+  v1 = record(work_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn nested_subflows_input_codec/0 origin=codec_template(RecordTrio, NestedSubflowsInput, record#1) ==
+  sig: () -> Codec(nested_subflows.NestedSubflowsInput)
+  v0 = make_closure nested_subflows_input_to_json captures=[]
+  v1 = call_local nested_subflows_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn nested_subflows_input_to_json/1 origin=codec_template(RecordTrio, NestedSubflowsInput, record#1) ==
+  sig: (nested_subflows.NestedSubflowsInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"topic": v1|>awlc.string_to_json}
+  return v2
+== fn nested_subflows_input_decoder/0 origin=codec_template(RecordTrio, NestedSubflowsInput, record#1) ==
+  sig: () -> Decoder(nested_subflows.NestedSubflowsInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure nested_subflows_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v0, v1)
+== fn nested_subflows_input_decoder$0/1 origin=lifted(nested_subflows_input_decoder, #0) ==
+  sig: (String) -> Decoder(nested_subflows.NestedSubflowsInput)
+  v1 = record(nested_subflows_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn nested_subflows_outcome_codec/0 origin=codec_template(UnionTrio, NestedSubflowsOutcome, union#2) ==
+  sig: () -> Codec(nested_subflows.NestedSubflowsOutcome)
+  v0 = make_closure nested_subflows_outcome_to_json captures=[]
+  v1 = call_local nested_subflows_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn nested_subflows_outcome_to_json/1 origin=codec_template(UnionTrio, NestedSubflowsOutcome, union#2) ==
+  sig: (nested_subflows.NestedSubflowsOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#2|>awlc.string_to_json, "payload": v1|>awlc.string_to_json}
+  return v2
+== fn nested_subflows_outcome_decoder/0 origin=codec_template(UnionTrio, NestedSubflowsOutcome, union#2) ==
+  sig: () -> Decoder(nested_subflows.NestedSubflowsOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure nested_subflows_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v0, v1)
+== fn nested_subflows_outcome_decoder$outcome/1 origin=lifted(nested_subflows_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(nested_subflows.NestedSubflowsOutcome)
+  if cmp Eq v0 lit#6:
+    v2 = call_rt aion@awl@codec:string_decoder/0()
+    v3 = make_closure nested_subflows_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#7, v2, v3)
+  else:
+    v1 = record(done_outcome, [lit#4])
+    tail_rt gleam@dynamic@decode:failure/2(v1, lit#5)
+== fn nested_subflows_outcome_decoder$arm0/1 origin=lifted(nested_subflows_outcome_decoder, #1) ==
+  sig: (String) -> Decoder(nested_subflows.NestedSubflowsOutcome)
+  v1 = record(done_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn work_activity/1 origin=activity_wrapper(work, raw=false) ==
+  sig: (String) -> Activity(nested_subflows.WorkInput, String)
+  T-ACT action=work input_codec=work_input_codec return=awlc.string_codec
+== fn step_run_it/1 origin=region(run_it) ==
+  sig: (String) -> Result(nested_subflows.NestedSubflowsOutcome, AwlError)
+  v1 = call_local awl_sf_outer_shape(v0)
+  v2 = try_bind v1
+  tail_local step_finish(v2)
+== fn step_finish/1 origin=chain_step(run_it.finish) ==
+  sig: (String) -> Result(nested_subflows.NestedSubflowsOutcome, AwlError)
+  v1 = record(done_outcome, [v0])
+  v2 = record(ok, [v1])
+  return v2
+== fn awl_sf_inner_polish/1 origin=subflow_wrapper(inner_polish) ==
+  sig: (String) -> Result(String, AwlError)
+  tail_local awl_sf_inner_polish_step_polish(v0)
+== fn awl_sf_inner_polish_step_polish/1 origin=region(sf:inner_polish::polish) ==
+  sig: (String) -> Result(String, AwlError)
+  v1 = call_local work_activity(v0)
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#8)
+  v3 = call_rt aion@workflow:run/1(v2)
+  v4 = call_rt aion@awl@error:map_activity_error/1(v3)
+  v5 = try_bind v4
+  v6 = record(ok, [v5])
+  return v6
+== fn awl_sf_outer_shape/1 origin=subflow_wrapper(outer_shape) ==
+  sig: (String) -> Result(String, AwlError)
+  tail_local awl_sf_outer_shape_step_first(v0)
+== fn awl_sf_outer_shape_step_first/1 origin=region(sf:outer_shape::first) ==
+  sig: (String) -> Result(String, AwlError)
+  v1 = call_local awl_sf_inner_polish(v0)
+  v2 = try_bind v1
+  tail_local awl_sf_outer_shape_step_second(v2)
+== fn awl_sf_outer_shape_step_second/1 origin=chain_step(sf:outer_shape::first.second) ==
+  sig: (String) -> Result(String, AwlError)
+  v1 = call_local work_activity(v0)
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#9)
+  v3 = call_rt aion@workflow:run/1(v2)
+  v4 = call_rt aion@awl@error:map_activity_error/1(v3)
+  v5 = try_bind v4
+  v6 = record(ok, [v5])
+  return v6
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD

@@ -6,9 +6,12 @@
 //! adapters, so every pre-B4 `FnRef` is preserved exactly):
 //!
 //! 1. host region chains (one slot per layer, as always);
-//! 2. nested flow function sets — per-item regions by ascending region id;
-//!    each set is the run-once entry wrapper slot followed by that flow's
-//!    region-chain slots;
+//! 2. nested flow function sets — subflows in DECLARATION order first (the
+//!    reference `emitter/flows.rs::emit_nested` order), then per-item regions
+//!    by ascending region id; each set is the run-once entry wrapper slot
+//!    followed by that flow's region-chain slots. A subflow's own collapsed
+//!    regions are per-item regions like any other and take their slots in the
+//!    region pass, not inside the subflow's set;
 //! 3. loop slots — host steps first (plan-region order, layers flattened,
 //!    `loops::count_loops` per body), then each nested flow's steps in the
 //!    same nested-flow order;
@@ -39,6 +42,7 @@ use super::driver::LowerError;
 /// loop/fork/wait pools, and the implicit-child adapter pairs.
 pub(super) struct FlowSlots {
     pub(super) host: FlowFns,
+    pub(super) subflow_fns: BTreeMap<String, NestedFns>,
     pub(super) region_fns: BTreeMap<usize, NestedFns>,
     pub(super) loops: Vec<FnRef>,
     pub(super) forks: Vec<FnRef>,
@@ -65,6 +69,17 @@ fn flows_in_order<'c>(ctx: &Ctx<'c>) -> Result<Vec<FlowWalk<'c>>, LowerError> {
         regions: emitter.host_regions,
         plan: &plans.host,
     }];
+    for shape in emitter.subflow_shapes {
+        let nested = plans
+            .subflows
+            .get(&shape.name)
+            .ok_or_else(|| unplanned_subflow(&shape.name))?;
+        flows.push(FlowWalk {
+            steps: &shape.flow.steps,
+            regions: &shape.flow.regions,
+            plan: &nested.plan,
+        });
+    }
     for (&id, nested) in &plans.regions {
         let shape = plans
             .region_shapes
@@ -104,6 +119,17 @@ pub(super) fn plan_flow_slots(ctx: &Ctx<'_>, next: &mut u32) -> Result<FlowSlots
     let emitter = ctx.emitter;
     let plans = ctx.plans;
     let host = chain_slots(&plans.host, next);
+    let mut subflow_fns = BTreeMap::new();
+    for shape in emitter.subflow_shapes {
+        let nested = plans
+            .subflows
+            .get(&shape.name)
+            .ok_or_else(|| unplanned_subflow(&shape.name))?;
+        let wrapper = FnRef(*next);
+        *next += 1;
+        let fns = chain_slots(&nested.plan, next);
+        subflow_fns.insert(shape.name.clone(), NestedFns { wrapper, fns });
+    }
     let mut region_fns = BTreeMap::new();
     for (&id, nested) in &plans.regions {
         let wrapper = FnRef(*next);
@@ -169,6 +195,7 @@ pub(super) fn plan_flow_slots(ctx: &Ctx<'_>, next: &mut u32) -> Result<FlowSlots
     }
     Ok(FlowSlots {
         host,
+        subflow_fns,
         region_fns,
         loops,
         forks,
@@ -177,6 +204,14 @@ pub(super) fn plan_flow_slots(ctx: &Ctx<'_>, next: &mut u32) -> Result<FlowSlots
         adapters,
         child_witness_needed,
     })
+}
+
+/// A subflow the shared planning pass never produced a plan for — a planning
+/// bug, never a document error (`plan_all` plans every shaped subflow).
+fn unplanned_subflow(name: &str) -> LowerError {
+    LowerError::Planning {
+        message: format!("subflow `{name}` was never planned"),
+    }
 }
 
 /// Walk one flow's steps in lowering order: plan regions in order, layers

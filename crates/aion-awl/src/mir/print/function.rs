@@ -49,6 +49,7 @@ fn render_origin(module: &MirModule, origin: &FnOrigin) -> String {
         FnOrigin::ChainStep { entry_step, step } => format!("chain_step({entry_step}.{step})"),
         FnOrigin::SubStep { parent, sub } => format!("substep({parent}.{sub})"),
         FnOrigin::RegionWrapper { region, open } => format!("region_wrapper(r{region}:{open})"),
+        FnOrigin::SubflowWrapper { subflow } => format!("subflow_wrapper({subflow})"),
         FnOrigin::ChildExecute { child } => format!("child_execute({child})"),
         FnOrigin::ChildRun { child } => format!("child_run({child})"),
         FnOrigin::Loop { step, index } => format!("loop({step}#{index})"),

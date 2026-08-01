@@ -6,11 +6,13 @@
 //! (`emitter/liveness.rs` `collect_into`/`collect_route`) except for the
 //! loop-body-bind asymmetry documented at the loop arm below. A route to
 //! another region contributes that region's `region_params` exactly as the
-//! fixed point's `params(callee) − defs` term does; a route to a member
-//! flow's exit contributes the collected binding, mirroring the shared
-//! collector's `target_refs_form`. A chain whose last step falls through
-//! seeds the backward walk with the demand of the implicit hand-off (the
-//! next step's region params, or a member flow's collected binding). The
+//! fixed point's `params(callee) − defs` term does; a route to a nested
+//! flow's exit contributes the collected binding (a region member flow) or
+//! the bare-route pickup (a subflow), mirroring the shared collector's
+//! `target_refs_form`. A chain whose last step falls through seeds the
+//! backward walk with the demand of the implicit hand-off (the next step's
+//! region params, or a member flow's collected binding — a subflow has no
+//! fall-through exit, so it seeds nothing). The
 //! shared collector cannot be consumed directly here: it intentionally
 //! aggregates an entire region into one graph node, while chain splitting
 //! needs a live-in set at every interior step boundary. Substeps remain
@@ -24,7 +26,7 @@ use crate::emitter::{expr_refs, falls_through};
 
 use super::ctx::Ctx;
 use super::driver::LowerError;
-use super::flow::{FlowCtx, FlowExit};
+use super::flow::{ExitKind, FlowCtx, FlowExit};
 use super::visits::counter_name;
 
 /// Per-position parameter names for a sequential chain, in chain order. The
@@ -50,7 +52,14 @@ pub(super) fn chain_params(
             if let Some(region) = flow.plan.region_of_entry(next) {
                 live.extend(flow.plan.region_params(region).iter().cloned());
             }
-        } else if let Some(FlowExit { binding, .. }) = &flow.exit {
+        } else if let Some(FlowExit {
+            kind: ExitKind::Region { binding },
+            ..
+        }) = &flow.exit
+        {
+            // Only a REGION member flow has a fall-through exit; a subflow's
+            // last step must route to its outcome, so nothing is demanded here
+            // (the reference liveness matches only `ExitLive::Region`).
             live.insert(binding.clone());
         }
     }
@@ -255,8 +264,20 @@ fn route_refs(
     if let Some(exit) = &flow.exit
         && exit.name == target.name
     {
-        if !defs.contains(&exit.binding) {
-            refs.insert(exit.binding.clone());
+        match &exit.kind {
+            ExitKind::Region { binding } => {
+                if !defs.contains(binding) {
+                    refs.insert(binding.clone());
+                }
+            }
+            // A subflow's bare `route out` picks up the binding named after
+            // the outcome, exactly as a bare workflow-outcome route does (the
+            // reference `target_refs_form`'s `ExitLive::Subflow` arm).
+            ExitKind::Subflow { .. } => {
+                if target.payload.is_none() && bare_pickup && !defs.contains(target.name.as_str()) {
+                    refs.insert(target.name.clone());
+                }
+            }
         }
         return;
     }

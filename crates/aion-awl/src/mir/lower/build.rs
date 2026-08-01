@@ -87,6 +87,10 @@ pub(super) struct FnPlan {
     pub(super) raw_activities: BTreeMap<String, FnRef>,
     /// The host flow's region-chain function refs.
     pub(super) host: FlowFns,
+    /// Subflow name to its inline flow's wrapper + chain refs. A subflow
+    /// compiles inline, so these are ordinary local functions — never engine
+    /// entries, and never exported.
+    pub(super) subflow_fns: BTreeMap<String, NestedFns>,
     /// Region id to its per-item member flow's wrapper + chain refs.
     pub(super) region_fns: BTreeMap<usize, NestedFns>,
     /// Region id to its implicit-child adapter shells (`_execute`, `_run`),
@@ -270,6 +274,7 @@ pub(super) fn skeleton(ctx: &mut Ctx<'_>) -> Result<Skeleton, LowerError> {
         activities,
         raw_activities,
         host: slots.host,
+        subflow_fns: slots.subflow_fns,
         region_fns: slots.region_fns,
         adapters: slots.adapters,
         loops: slots.loops,

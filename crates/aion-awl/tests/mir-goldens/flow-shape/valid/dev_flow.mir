@@ -1,0 +1,574 @@
+module dev_flow source=dev_flow.awl
+exports: run/1, definition/0, execute/1, aion_internal_awl_child_dev_flow_wave_0_run/1
+== effect schedule ==
+  step_plan:
+    aion@activity:task_queue/2 [activities] (v3, lit#31)
+    aion@workflow:run/1 [activities] (v4)
+  step_fold:
+    aion@activity:task_queue/2 [activities] (v6, lit#36)
+    aion@workflow:run/1 [activities] (v7)
+  awl_sf_dev_item_step_develop:
+    aion@activity:task_queue/2 [activities] (v5, lit#39)
+    aion@workflow:run/1 [activities] (v6)
+  awl_sf_dev_item_step_review:
+    aion@activity:task_queue/2 [activities] (v8, lit#41)
+    aion@workflow:run/1 [activities] (v9)
+  wave_fanout_0:
+    aion@workflow:spawn/6 [children] (lit#32, v4, v3, v5, v6, v7)
+  wave_fanout_1:
+    aion@child:await/1 [children] (v2)
+== durable families == activities, children
+== atoms ==
+  [0] task
+  [1] complete
+  [2] incomplete
+  [3] work_item
+  [4] item_verdict
+  [5] agent_out
+  [6] run_agent_input
+  [7] run_review_input
+  [8] dev_flow_input
+  [9] done_outcome
+  [10] aion_internal_awl_child_dev_flow_wave0_input
+  [11] ok
+  [12] some
+  [13] none
+  [14] awl_visits_exceeded
+  [15] error
+== literals ==
+  [0] "title"
+  [1] "goal"
+  [2] "summary"
+  [3] "reason"
+  [4] "id"
+  [5] "title"
+  [6] "goal"
+  [7] "verdict"
+  [8] "item_id"
+  [9] "items"
+  [10] "summary"
+  [11] "notes_dir"
+  [12] "instructions"
+  [13] "output_schema"
+  [14] "prompt"
+  [15] "item"
+  [16] "note"
+  [17] "task"
+  [18] "done"
+  [19] "outcome"
+  [20] ""
+  [21] "DevFlowOutcome"
+  [22] "done"
+  [23] "payload"
+  [24] "item"
+  [25] "state"
+  [26] "child"
+  [27] "outcome"
+  [28] "payload"
+  [29] "You are the coordinator. Plan waves of work items."
+  [30] "{\"$defs\":{\"WorkItem\":{\"description\":\"One planned work item, minted by the coordinator.\",\"properties\":{\"goal\":{\"type\":\"string\"},\"id\":{\"description\":\"git-ref-safe slug; names the branch.\",\"type\":\"string\"},\"title\":{\"type\":\"string\"}},\"required\":[\"id\",\"title\",\"goal\"],\"type\":\"object\"}},\"properties\":{\"items\":{\"items\":{\"$ref\":\"#/$defs/WorkItem\"},\"type\":\"array\"},\"notes_dir\":{\"type\":\"string\"},\"summary\":{\"type\":\"string\"}},\"required\":[\"items\",\"summary\",\"notes_dir\"],\"type\":\"object\"}"
+  [31] "dev"
+  [32] "aion_internal_awl_child_dev_flow_wave_0"
+  [33] "step `fold` exceeded its `max … visits` bound at line 62, column 3"
+  [34] "You are the coordinator. Plan waves of work items."
+  [35] "{\"$defs\":{\"WorkItem\":{\"description\":\"One planned work item, minted by the coordinator.\",\"properties\":{\"goal\":{\"type\":\"string\"},\"id\":{\"description\":\"git-ref-safe slug; names the branch.\",\"type\":\"string\"},\"title\":{\"type\":\"string\"}},\"required\":[\"id\",\"title\",\"goal\"],\"type\":\"object\"}},\"properties\":{\"items\":{\"items\":{\"$ref\":\"#/$defs/WorkItem\"},\"type\":\"array\"},\"notes_dir\":{\"type\":\"string\"},\"summary\":{\"type\":\"string\"}},\"required\":[\"items\",\"summary\",\"notes_dir\"],\"type\":\"object\"}"
+  [36] "dev"
+  [37] "You are the coordinator. Plan waves of work items."
+  [38] "{\"$defs\":{\"WorkItem\":{\"description\":\"One planned work item, minted by the coordinator.\",\"properties\":{\"goal\":{\"type\":\"string\"},\"id\":{\"description\":\"git-ref-safe slug; names the branch.\",\"type\":\"string\"},\"title\":{\"type\":\"string\"}},\"required\":[\"id\",\"title\",\"goal\"],\"type\":\"object\"}},\"properties\":{\"items\":{\"items\":{\"$ref\":\"#/$defs/WorkItem\"},\"type\":\"array\"},\"notes_dir\":{\"type\":\"string\"},\"summary\":{\"type\":\"string\"}},\"required\":[\"items\",\"summary\",\"notes_dir\"],\"type\":\"object\"}"
+  [39] "dev"
+  [40] "step `review` exceeded its `max … visits` bound at line 42, column 5"
+  [41] "dev"
+  [42] "reject"
+== types ==
+  record Task tag=task
+    title: string
+    goal: string
+  record Complete tag=complete
+    summary: string
+  record Incomplete tag=incomplete
+    reason: string
+  record WorkItem tag=work_item
+    id: string
+    title: string
+    goal: string
+  record ItemVerdict tag=item_verdict
+    verdict: string
+    item_id: string
+  record AgentOut tag=agent_out
+    items: list(ref(WorkItem))
+    summary: string
+    notes_dir: string
+  record RunAgentInput tag=run_agent_input
+    instructions: string
+    output_schema: string
+    prompt: string
+  record RunReviewInput tag=run_review_input
+    item: ref(WorkItem)
+    note: string
+  record DevFlowInput tag=dev_flow_input
+    task: ref(Task)
+  union DevFlowOutcome
+    done -> done_outcome(ref(Complete))
+  record AionInternalAwlChildDevFlowWave0Input tag=aion_internal_awl_child_dev_flow_wave0_input
+    item: ref(WorkItem)
+    state: ref(AgentOut)
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=dev_flow_input_codec output=dev_flow_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(dev_flow.DevFlowInput, dev_flow.DevFlowOutcome, AwlError)
+  T-DEF name="dev_flow" input=dev_flow_input_codec output=dev_flow_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (dev_flow.DevFlowInput) -> Result(dev_flow.DevFlowOutcome, AwlError)
+  T-EXEC fields=[task:dev_flow.Task] entry=step_plan args=[zero, 0]
+== fn task_codec/0 origin=codec_template(RecordTrio, Task, record#0) ==
+  sig: () -> Codec(dev_flow.Task)
+  v0 = make_closure task_to_json captures=[]
+  v1 = call_local task_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn task_to_json/1 origin=codec_template(RecordTrio, Task, record#0) ==
+  sig: (dev_flow.Task) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"title": v1|>awlc.string_to_json, "goal": v2|>awlc.string_to_json}
+  return v3
+== fn task_decoder/0 origin=codec_template(RecordTrio, Task, record#0) ==
+  sig: () -> Decoder(dev_flow.Task)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure task_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn task_decoder$0/1 origin=lifted(task_decoder, #0) ==
+  sig: (String) -> Decoder(dev_flow.Task)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure task_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v1, v2)
+== fn task_decoder$1/2 origin=lifted(task_decoder, #1) ==
+  sig: (String, String) -> Decoder(dev_flow.Task)
+  v2 = record(task, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn complete_codec/0 origin=codec_template(RecordTrio, Complete, record#1) ==
+  sig: () -> Codec(dev_flow.Complete)
+  v0 = make_closure complete_to_json captures=[]
+  v1 = call_local complete_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn complete_to_json/1 origin=codec_template(RecordTrio, Complete, record#1) ==
+  sig: (dev_flow.Complete) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"summary": v1|>awlc.string_to_json}
+  return v2
+== fn complete_decoder/0 origin=codec_template(RecordTrio, Complete, record#1) ==
+  sig: () -> Decoder(dev_flow.Complete)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure complete_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v0, v1)
+== fn complete_decoder$0/1 origin=lifted(complete_decoder, #0) ==
+  sig: (String) -> Decoder(dev_flow.Complete)
+  v1 = record(complete, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn incomplete_codec/0 origin=codec_template(RecordTrio, Incomplete, record#2) ==
+  sig: () -> Codec(dev_flow.Incomplete)
+  v0 = make_closure incomplete_to_json captures=[]
+  v1 = call_local incomplete_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn incomplete_to_json/1 origin=codec_template(RecordTrio, Incomplete, record#2) ==
+  sig: (dev_flow.Incomplete) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"reason": v1|>awlc.string_to_json}
+  return v2
+== fn incomplete_decoder/0 origin=codec_template(RecordTrio, Incomplete, record#2) ==
+  sig: () -> Decoder(dev_flow.Incomplete)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure incomplete_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v0, v1)
+== fn incomplete_decoder$0/1 origin=lifted(incomplete_decoder, #0) ==
+  sig: (String) -> Decoder(dev_flow.Incomplete)
+  v1 = record(incomplete, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn work_item_codec/0 origin=codec_template(RecordTrio, WorkItem, record#3) ==
+  sig: () -> Codec(dev_flow.WorkItem)
+  v0 = make_closure work_item_to_json captures=[]
+  v1 = call_local work_item_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn work_item_to_json/1 origin=codec_template(RecordTrio, WorkItem, record#3) ==
+  sig: (dev_flow.WorkItem) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = field(v0, 3)
+  v4 = json_obj {"id": v1|>awlc.string_to_json, "title": v2|>awlc.string_to_json, "goal": v3|>awlc.string_to_json}
+  return v4
+== fn work_item_decoder/0 origin=codec_template(RecordTrio, WorkItem, record#3) ==
+  sig: () -> Decoder(dev_flow.WorkItem)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure work_item_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+== fn work_item_decoder$0/1 origin=lifted(work_item_decoder, #0) ==
+  sig: (String) -> Decoder(dev_flow.WorkItem)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure work_item_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#5, v1, v2)
+== fn work_item_decoder$1/2 origin=lifted(work_item_decoder, #1) ==
+  sig: (String, String) -> Decoder(dev_flow.WorkItem)
+  v2 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0, v1]
+  v3 = make_closure work_item_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v2, v3)
+== fn work_item_decoder$2/3 origin=lifted(work_item_decoder, #2) ==
+  sig: (String, String, String) -> Decoder(dev_flow.WorkItem)
+  v3 = record(work_item, [v1, v2, v0])
+  tail_rt gleam@dynamic@decode:success/1(v3)
+== fn item_verdict_codec/0 origin=codec_template(RecordTrio, ItemVerdict, record#4) ==
+  sig: () -> Codec(dev_flow.ItemVerdict)
+  v0 = make_closure item_verdict_to_json captures=[]
+  v1 = call_local item_verdict_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn item_verdict_to_json/1 origin=codec_template(RecordTrio, ItemVerdict, record#4) ==
+  sig: (dev_flow.ItemVerdict) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"verdict": v1|>awlc.string_to_json, "item_id": v2|>awlc.string_to_json}
+  return v3
+== fn item_verdict_decoder/0 origin=codec_template(RecordTrio, ItemVerdict, record#4) ==
+  sig: () -> Decoder(dev_flow.ItemVerdict)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure item_verdict_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#7, v0, v1)
+== fn item_verdict_decoder$0/1 origin=lifted(item_verdict_decoder, #0) ==
+  sig: (String) -> Decoder(dev_flow.ItemVerdict)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure item_verdict_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#8, v1, v2)
+== fn item_verdict_decoder$1/2 origin=lifted(item_verdict_decoder, #1) ==
+  sig: (String, String) -> Decoder(dev_flow.ItemVerdict)
+  v2 = record(item_verdict, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn agent_out_codec/0 origin=codec_template(RecordTrio, AgentOut, record#5) ==
+  sig: () -> Codec(dev_flow.AgentOut)
+  v0 = make_closure agent_out_to_json captures=[]
+  v1 = call_local agent_out_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn agent_out_to_json/1 origin=codec_template(RecordTrio, AgentOut, record#5) ==
+  sig: (dev_flow.AgentOut) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = field(v0, 3)
+  v4 = json_obj {"items": v1|>list_work_item_to_json, "summary": v2|>awlc.string_to_json, "notes_dir": v3|>awlc.string_to_json}
+  return v4
+== fn agent_out_decoder/0 origin=codec_template(RecordTrio, AgentOut, record#5) ==
+  sig: () -> Decoder(dev_flow.AgentOut)
+  v0 = call_local list_work_item_decoder()
+  v1 = make_closure agent_out_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#9, v0, v1)
+== fn agent_out_decoder$0/1 origin=lifted(agent_out_decoder, #0) ==
+  sig: (List(dev_flow.WorkItem)) -> Decoder(dev_flow.AgentOut)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure agent_out_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#10, v1, v2)
+== fn agent_out_decoder$1/2 origin=lifted(agent_out_decoder, #1) ==
+  sig: (String, List(dev_flow.WorkItem)) -> Decoder(dev_flow.AgentOut)
+  v2 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0, v1]
+  v3 = make_closure agent_out_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#11, v2, v3)
+== fn agent_out_decoder$2/3 origin=lifted(agent_out_decoder, #2) ==
+  sig: (String, List(dev_flow.WorkItem), String) -> Decoder(dev_flow.AgentOut)
+  v3 = record(agent_out, [v1, v2, v0])
+  tail_rt gleam@dynamic@decode:success/1(v3)
+== fn run_agent_input_codec/0 origin=codec_template(RecordTrio, RunAgentInput, record#6) ==
+  sig: () -> Codec(dev_flow.RunAgentInput)
+  v0 = make_closure run_agent_input_to_json captures=[]
+  v1 = call_local run_agent_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn run_agent_input_to_json/1 origin=codec_template(RecordTrio, RunAgentInput, record#6) ==
+  sig: (dev_flow.RunAgentInput) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = field(v0, 3)
+  v4 = json_obj {"instructions": v1|>awlc.string_to_json, "output_schema": v2|>awlc.string_to_json, "prompt": v3|>awlc.string_to_json}
+  return v4
+== fn run_agent_input_decoder/0 origin=codec_template(RecordTrio, RunAgentInput, record#6) ==
+  sig: () -> Decoder(dev_flow.RunAgentInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure run_agent_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#12, v0, v1)
+== fn run_agent_input_decoder$0/1 origin=lifted(run_agent_input_decoder, #0) ==
+  sig: (String) -> Decoder(dev_flow.RunAgentInput)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure run_agent_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#13, v1, v2)
+== fn run_agent_input_decoder$1/2 origin=lifted(run_agent_input_decoder, #1) ==
+  sig: (String, String) -> Decoder(dev_flow.RunAgentInput)
+  v2 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0, v1]
+  v3 = make_closure run_agent_input_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#14, v2, v3)
+== fn run_agent_input_decoder$2/3 origin=lifted(run_agent_input_decoder, #2) ==
+  sig: (String, String, String) -> Decoder(dev_flow.RunAgentInput)
+  v3 = record(run_agent_input, [v1, v2, v0])
+  tail_rt gleam@dynamic@decode:success/1(v3)
+== fn run_review_input_codec/0 origin=codec_template(RecordTrio, RunReviewInput, record#7) ==
+  sig: () -> Codec(dev_flow.RunReviewInput)
+  v0 = make_closure run_review_input_to_json captures=[]
+  v1 = call_local run_review_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn run_review_input_to_json/1 origin=codec_template(RecordTrio, RunReviewInput, record#7) ==
+  sig: (dev_flow.RunReviewInput) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"item": v1|>work_item_to_json, "note": v2|>awlc.string_to_json}
+  return v3
+== fn run_review_input_decoder/0 origin=codec_template(RecordTrio, RunReviewInput, record#7) ==
+  sig: () -> Decoder(dev_flow.RunReviewInput)
+  v0 = call_local work_item_decoder()
+  v1 = make_closure run_review_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#15, v0, v1)
+== fn run_review_input_decoder$0/1 origin=lifted(run_review_input_decoder, #0) ==
+  sig: (dev_flow.WorkItem) -> Decoder(dev_flow.RunReviewInput)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure run_review_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#16, v1, v2)
+== fn run_review_input_decoder$1/2 origin=lifted(run_review_input_decoder, #1) ==
+  sig: (String, dev_flow.WorkItem) -> Decoder(dev_flow.RunReviewInput)
+  v2 = record(run_review_input, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn dev_flow_input_codec/0 origin=codec_template(RecordTrio, DevFlowInput, record#8) ==
+  sig: () -> Codec(dev_flow.DevFlowInput)
+  v0 = make_closure dev_flow_input_to_json captures=[]
+  v1 = call_local dev_flow_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn dev_flow_input_to_json/1 origin=codec_template(RecordTrio, DevFlowInput, record#8) ==
+  sig: (dev_flow.DevFlowInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"task": v1|>task_to_json}
+  return v2
+== fn dev_flow_input_decoder/0 origin=codec_template(RecordTrio, DevFlowInput, record#8) ==
+  sig: () -> Decoder(dev_flow.DevFlowInput)
+  v0 = call_local task_decoder()
+  v1 = make_closure dev_flow_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#17, v0, v1)
+== fn dev_flow_input_decoder$0/1 origin=lifted(dev_flow_input_decoder, #0) ==
+  sig: (dev_flow.Task) -> Decoder(dev_flow.DevFlowInput)
+  v1 = record(dev_flow_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn dev_flow_outcome_codec/0 origin=codec_template(UnionTrio, DevFlowOutcome, union#9) ==
+  sig: () -> Codec(dev_flow.DevFlowOutcome)
+  v0 = make_closure dev_flow_outcome_to_json captures=[]
+  v1 = call_local dev_flow_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn dev_flow_outcome_to_json/1 origin=codec_template(UnionTrio, DevFlowOutcome, union#9) ==
+  sig: (dev_flow.DevFlowOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#18|>awlc.string_to_json, "payload": v1|>complete_to_json}
+  return v2
+== fn dev_flow_outcome_decoder/0 origin=codec_template(UnionTrio, DevFlowOutcome, union#9) ==
+  sig: () -> Decoder(dev_flow.DevFlowOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure dev_flow_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#19, v0, v1)
+== fn dev_flow_outcome_decoder$outcome/1 origin=lifted(dev_flow_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(dev_flow.DevFlowOutcome)
+  if cmp Eq v0 lit#22:
+    v3 = call_local complete_decoder()
+    v4 = make_closure dev_flow_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#23, v3, v4)
+  else:
+    v1 = record(complete, [lit#20])
+    v2 = record(done_outcome, [v1])
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#21)
+== fn dev_flow_outcome_decoder$arm0/1 origin=lifted(dev_flow_outcome_decoder, #1) ==
+  sig: (dev_flow.Complete) -> Decoder(dev_flow.DevFlowOutcome)
+  v1 = record(done_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn aion_internal_awl_child_dev_flow_wave0_input_codec/0 origin=codec_template(RecordTrio, AionInternalAwlChildDevFlowWave0Input, record#10) ==
+  sig: () -> Codec(dev_flow.AionInternalAwlChildDevFlowWave0Input)
+  v0 = make_closure aion_internal_awl_child_dev_flow_wave0_input_to_json captures=[]
+  v1 = call_local aion_internal_awl_child_dev_flow_wave0_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn aion_internal_awl_child_dev_flow_wave0_input_to_json/1 origin=codec_template(RecordTrio, AionInternalAwlChildDevFlowWave0Input, record#10) ==
+  sig: (dev_flow.AionInternalAwlChildDevFlowWave0Input) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"item": v1|>work_item_to_json, "state": v2|>agent_out_to_json}
+  return v3
+== fn aion_internal_awl_child_dev_flow_wave0_input_decoder/0 origin=codec_template(RecordTrio, AionInternalAwlChildDevFlowWave0Input, record#10) ==
+  sig: () -> Decoder(dev_flow.AionInternalAwlChildDevFlowWave0Input)
+  v0 = call_local work_item_decoder()
+  v1 = make_closure aion_internal_awl_child_dev_flow_wave0_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#24, v0, v1)
+== fn aion_internal_awl_child_dev_flow_wave0_input_decoder$0/1 origin=lifted(aion_internal_awl_child_dev_flow_wave0_input_decoder, #0) ==
+  sig: (dev_flow.WorkItem) -> Decoder(dev_flow.AionInternalAwlChildDevFlowWave0Input)
+  v1 = call_local agent_out_decoder() live_after=[v0]
+  v2 = make_closure aion_internal_awl_child_dev_flow_wave0_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#25, v1, v2)
+== fn aion_internal_awl_child_dev_flow_wave0_input_decoder$1/2 origin=lifted(aion_internal_awl_child_dev_flow_wave0_input_decoder, #1) ==
+  sig: (dev_flow.AgentOut, dev_flow.WorkItem) -> Decoder(dev_flow.AionInternalAwlChildDevFlowWave0Input)
+  v2 = record(aion_internal_awl_child_dev_flow_wave0_input, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn list_work_item_codec/0 origin=codec_template(CompositeTrio, List(WorkItem), composite(list(ref(WorkItem)))) ==
+  sig: () -> Codec(List(dev_flow.WorkItem))
+  v0 = make_closure list_work_item_to_json captures=[]
+  v1 = call_local list_work_item_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn list_work_item_to_json/1 origin=codec_template(CompositeTrio, List(WorkItem), composite(list(ref(WorkItem)))) ==
+  sig: (List(dev_flow.WorkItem)) -> Json
+  v1 = make_closure work_item_to_json captures=[]
+  tail_rt gleam@json:array/2(v0, v1)
+== fn list_work_item_decoder/0 origin=codec_template(CompositeTrio, List(WorkItem), composite(list(ref(WorkItem)))) ==
+  sig: () -> Decoder(List(dev_flow.WorkItem))
+  v0 = call_local work_item_decoder()
+  tail_rt gleam@dynamic@decode:list/1(v0)
+== fn awl_child_output_item_verdict_codec/0 origin=codec_template(ChildEnvelopeTrio, ItemVerdict, child_envelope(ref(ItemVerdict))) ==
+  sig: () -> Codec(dev_flow.ItemVerdict)
+  v0 = make_closure awl_child_output_item_verdict_to_json captures=[]
+  v1 = call_local awl_child_output_item_verdict_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn awl_child_output_item_verdict_to_json/1 origin=codec_template(ChildEnvelopeTrio, ItemVerdict, child_envelope(ref(ItemVerdict))) ==
+  sig: (dev_flow.ItemVerdict) -> Json
+  v1 = json_obj {"outcome": lit#26|>awlc.string_to_json, "payload": v0|>item_verdict_to_json}
+  return v1
+== fn awl_child_output_item_verdict_decoder/0 origin=codec_template(ChildEnvelopeTrio, ItemVerdict, child_envelope(ref(ItemVerdict))) ==
+  sig: () -> Decoder(dev_flow.ItemVerdict)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure awl_child_output_item_verdict_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#27, v0, v1)
+== fn awl_child_output_item_verdict_decoder$outcome/1 origin=lifted(awl_child_output_item_verdict_decoder, #0) ==
+  sig: (String) -> Decoder(dev_flow.ItemVerdict)
+  v1 = call_local item_verdict_decoder()
+  v2 = make_closure awl_child_output_item_verdict_decoder$payload captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#28, v1, v2)
+== fn awl_child_output_item_verdict_decoder$payload/1 origin=lifted(awl_child_output_item_verdict_decoder, #1) ==
+  sig: (dev_flow.ItemVerdict) -> Decoder(dev_flow.ItemVerdict)
+  tail_rt gleam@dynamic@decode:success/1(v0)
+== fn run_agent_activity/3 origin=activity_wrapper(run_agent, raw=false) ==
+  sig: (String, String, String) -> Activity(dev_flow.RunAgentInput, dev_flow.AgentOut)
+  T-ACT action=run_agent input_codec=run_agent_input_codec return=agent_out_codec
+== fn run_review_activity/2 origin=activity_wrapper(run_review, raw=false) ==
+  sig: (dev_flow.WorkItem, String) -> Activity(dev_flow.RunReviewInput, dev_flow.ItemVerdict)
+  T-ACT action=run_review input_codec=run_review_input_codec return=item_verdict_codec
+== fn step_plan/2 origin=region(plan) ==
+  sig: (Int, dev_flow.Task) -> Result(dev_flow.DevFlowOutcome, AwlError)
+  v2 = field(v1, 2)
+  v3 = call_local run_agent_activity(lit#29, lit#30, v2) live_after=[v0]
+  v4 = call_rt aion@activity:task_queue/2(v3, lit#31) live_after=[v0]
+  v5 = call_rt aion@workflow:run/1(v4) live_after=[v0]
+  v6 = call_rt aion@awl@error:map_activity_error/1(v5) live_after=[v0]
+  v7 = try_bind v6 live_after=[v0]
+  tail_local step_wave(v0, v7)
+== fn step_wave/2 origin=region(wave) ==
+  sig: (Int, dev_flow.AgentOut) -> Result(dev_flow.DevFlowOutcome, AwlError)
+  v2 = field(v1, 1)
+  v3 = make_closure wave_fanout_0 captures=[v1]
+  v4 = call_rt gleam@list:fold/3(v2, nil, v3) live_after=[v0, v1]
+  v5 = call_rt gleam@list:reverse/1(v4) live_after=[v0, v1]
+  v6 = make_closure wave_fanout_1 captures=[]
+  v7 = call_rt gleam@list:fold/3(v5, nil, v6) live_after=[v0, v1]
+  v8 = call_rt gleam@list:reverse/1(v7) live_after=[v0, v1]
+  tail_local step_fold(v0, v1)
+== fn step_fold/2 origin=chain_step(wave.fold) ==
+  sig: (Int, dev_flow.AgentOut) -> Result(dev_flow.DevFlowOutcome, AwlError)
+  v2 = increment v0
+  if cmp Gt v2 3:
+    v3 = record(awl_visits_exceeded, [lit#33])
+    v4 = record(error, [v3])
+    return v4
+  else:
+    v5 = field(v1, 2)
+    v6 = call_local run_agent_activity(lit#34, lit#35, v5) live_after=[v2]
+    v7 = call_rt aion@activity:task_queue/2(v6, lit#36) live_after=[v2]
+    v8 = call_rt aion@workflow:run/1(v7) live_after=[v2]
+    v9 = call_rt aion@awl@error:map_activity_error/1(v8) live_after=[v2]
+    v10 = try_bind v9 live_after=[v2]
+    v12 = field(v10, 1)
+    v11 = cmp Eq v12 nil
+    if is_true v11:
+      v13 = field(v10, 2)
+      v14 = record(complete, [v13])
+      v15 = record(done_outcome, [v14])
+      v16 = record(ok, [v15])
+      return v16
+    else:
+      tail_local step_wave(v2, v10)
+== fn awl_sf_dev_item/2 origin=subflow_wrapper(dev_item) ==
+  sig: (dev_flow.WorkItem, String) -> Result(dev_flow.ItemVerdict, AwlError)
+  tail_local awl_sf_dev_item_step_develop(0, v0, v1)
+== fn awl_sf_dev_item_step_develop/3 origin=region(sf:dev_item::develop) ==
+  sig: (Int, dev_flow.WorkItem, String) -> Result(dev_flow.ItemVerdict, AwlError)
+  v4 = field(v1, 3)
+  v3 = concat v2 v4
+  v5 = call_local run_agent_activity(lit#37, lit#38, v3) live_after=[v0, v1, v2]
+  v6 = call_rt aion@activity:task_queue/2(v5, lit#39) live_after=[v0, v1, v2]
+  v7 = call_rt aion@workflow:run/1(v6) live_after=[v0, v1, v2]
+  v8 = call_rt aion@awl@error:map_activity_error/1(v7) live_after=[v0, v1, v2]
+  v9 = try_bind v8 live_after=[v0, v1, v2]
+  tail_local awl_sf_dev_item_step_review(v0, v1, v9, v2)
+== fn awl_sf_dev_item_step_review/4 origin=chain_step(sf:dev_item::develop.review) ==
+  sig: (Int, dev_flow.WorkItem, dev_flow.AgentOut, String) -> Result(dev_flow.ItemVerdict, AwlError)
+  v4 = increment v0
+  if cmp Gt v4 3:
+    v5 = record(awl_visits_exceeded, [lit#40])
+    v6 = record(error, [v5])
+    return v6
+  else:
+    v7 = field(v2, 2)
+    v8 = call_local run_review_activity(v1, v7) live_after=[v1, v3, v4]
+    v9 = call_rt aion@activity:task_queue/2(v8, lit#41) live_after=[v1, v3, v4]
+    v10 = call_rt aion@workflow:run/1(v9) live_after=[v1, v3, v4]
+    v11 = call_rt aion@awl@error:map_activity_error/1(v10) live_after=[v1, v3, v4]
+    v12 = try_bind v11 live_after=[v1, v3, v4]
+    v14 = field(v12, 1)
+    v13 = cmp Eq v14 lit#42
+    if is_true v13:
+      tail_local awl_sf_dev_item_step_develop(v4, v1, v3)
+    else:
+      v15 = record(ok, [v12])
+      return v15
+== fn awl_r0_wave/2 origin=region_wrapper(r0:wave) ==
+  sig: (dev_flow.WorkItem, dev_flow.AgentOut) -> Result(dev_flow.ItemVerdict, AwlError)
+  tail_local awl_r0_wave_step_build(v0, v1)
+== fn awl_r0_wave_step_build/2 origin=region(r0:wave::build) ==
+  sig: (dev_flow.WorkItem, dev_flow.AgentOut) -> Result(dev_flow.ItemVerdict, AwlError)
+  v2 = field(v1, 3)
+  v3 = call_local awl_sf_dev_item(v0, v2)
+  v4 = try_bind v3
+  v5 = record(ok, [v4])
+  return v5
+== fn wave_fanout_0/3 origin=fork(wave#0) ==
+  sig: (List(Option(ChildHandle(dev_flow.ItemVerdict, AwlError))), dev_flow.WorkItem, dev_flow.AgentOut) -> List(Option(ChildHandle(dev_flow.ItemVerdict, AwlError)))
+  v3 = json_obj {"item": v1|>work_item_to_json, "state": v2|>agent_out_to_json}
+  v4 = make_closure awl$child_witness captures=[]
+  v5 = call_rt aion@awl@codec:json_value/0() live_after=[v0, v3, v4]
+  v6 = call_local awl_child_output_item_verdict_codec() live_after=[v0, v3, v4, v5]
+  v7 = call_rt aion@awl@error:codec/0() live_after=[v0, v3, v4, v5, v6]
+  v8 = call_rt aion@workflow:spawn/6(lit#32, v4, v3, v5, v6, v7) live_after=[v0]
+  if is_tagged v8 ok/2:
+    v9 = field(v8, 1)
+    v10 = record(some, [v9])
+    v11 = cons v10 v0
+    return v11
+  else:
+    v12 = cons 'none' v0
+    return v12
+== fn wave_fanout_1/2 origin=fork(wave#1) ==
+  sig: (List(Option(dev_flow.ItemVerdict)), Option(ChildHandle(dev_flow.ItemVerdict, AwlError))) -> List(Option(dev_flow.ItemVerdict))
+  if is_tagged v1 some/2:
+    v2 = field(v1, 1)
+    v3 = call_rt aion@child:await/1(v2) live_after=[v0]
+    if is_tagged v3 ok/2:
+      v4 = field(v3, 1)
+      v5 = record(some, [v4])
+      v6 = cons v5 v0
+      return v6
+    else:
+      v7 = cons 'none' v0
+      return v7
+  else:
+    v8 = cons 'none' v0
+    return v8
+== fn aion_internal_awl_child_dev_flow_wave_0_execute/1 origin=child_execute(aion_internal_awl_child_dev_flow_wave_0) ==
+  sig: (dev_flow.AionInternalAwlChildDevFlowWave0Input) -> Result(dev_flow.ItemVerdict, AwlError)
+  T-EXEC fields=[item:dev_flow.WorkItem, state:dev_flow.AgentOut] entry=awl_r0_wave args=[0, 1]
+== fn aion_internal_awl_child_dev_flow_wave_0_run/1 origin=child_run(aion_internal_awl_child_dev_flow_wave_0) ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-CHILDRUN input=aion_internal_awl_child_dev_flow_wave0_input_codec output=awl_child_output_item_verdict_codec execute=aion_internal_awl_child_dev_flow_wave_0_execute
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD
+== fn awl$child_witness/1 origin=child_witness ==
+  sig: (Json) -> Result(Dynamic, AwlError)
+  T-WIT

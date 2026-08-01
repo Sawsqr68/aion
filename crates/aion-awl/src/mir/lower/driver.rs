@@ -2,6 +2,16 @@
 //! assemble the module skeleton, fill region bodies, and return the
 //! `MirModule`. Deferred shapes surface as `LowerError::Unsupported` — a
 //! BC-2-scope marker distinct from a D-BC3 parity refusal.
+//!
+//! There is no longer a document-level staging gate here. The B4 gate held
+//! the rev-3 constructs the direct path had not yet mirrored, and it emptied
+//! construct by construct — `distribute`/`sequence` regions, `collect` steps
+//! and `max … visits` with the fan-out parity landing, value route payloads
+//! (`route out(<value>)`) with the value-payload landing, and `subflow`
+//! declarations with the subflow landing, which was the last one it held. The
+//! refusals that remain are per-construct and anchored where the construct
+//! actually is (`step`'s `substeps`, `flow`'s `parallel region`) plus the one
+//! shared `crate::unlowered` refusal both backends keep.
 
 use std::fmt;
 use std::mem;
@@ -66,20 +76,6 @@ impl fmt::Display for LowerError {
 
 impl std::error::Error for LowerError {}
 
-/// The first rev-3 construct the direct path does not yet mirror (the B4
-/// staging gate: constructs retire from this list as their MIR lowering
-/// lands — `distribute`/`sequence` regions, `collect` steps, and `max …
-/// visits` retired with the fan-out parity landing; value route payloads
-/// (`route out(<value>)`) retired with the value-payload landing, which is
-/// why this gate no longer walks step bodies at all). `subflow` is the last
-/// construct held here.
-fn flow_shape_gap(document: &Document) -> Option<(crate::Span, &'static str)> {
-    document
-        .subflows
-        .first()
-        .map(|subflow| (subflow.name_span, "`subflow` declarations"))
-}
-
 /// Lower a checked document to its MIR module.
 ///
 /// # Errors
@@ -106,15 +102,6 @@ pub fn lower(document: &Document, root: Option<&Path>) -> Result<MirModule, Lowe
     if let Some((span, what)) = crate::unlowered::first_unlowered(document) {
         return Err(LowerError::Unsupported {
             shape: format!("{what} — a later landing carries them"),
-            span,
-        });
-    }
-    // TEMPORARY B4 staging gate: the direct path grows the rev-3 lowering
-    // piecewise behind the emitter; anything not yet mirrored refuses
-    // honestly here (removed as each construct lands).
-    if let Some((span, what)) = flow_shape_gap(document) {
-        return Err(LowerError::Unsupported {
-            shape: format!("{what} — the rev-3 flow shape is not yet lowered (B4)"),
             span,
         });
     }
@@ -160,8 +147,16 @@ pub fn lower(document: &Document, root: Option<&Path>) -> Result<MirModule, Lowe
         flow: &host_flow,
     };
     flow::lower_flow_fns(&mut ctx, host_env, &mut skeleton.functions, &mut slots)?;
-    // Each per-item member flow lowers once (wrapper + chain fns), ascending
-    // region id, right after the host chains (the reserved slot order).
+    // Each subflow lowers once (wrapper + chain fns), in declaration order,
+    // right after the host chains — then each per-item member flow, ascending
+    // region id. This is exactly the order `plan_slots` reserved the slots in
+    // and the order the reference `emitter/flows.rs::emit_nested` emits them.
+    super::nested::lower_subflow_flows(
+        &mut ctx,
+        &skeleton.plan,
+        &mut skeleton.functions,
+        &mut slots,
+    )?;
     super::nested::lower_nested_flows(
         &mut ctx,
         &skeleton.plan,

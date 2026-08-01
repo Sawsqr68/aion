@@ -11,9 +11,6 @@
 //!   `sub_params`/`sub_node`, sibling/parent route frames, `on failure`
 //!   interaction — reference `emitter/subs.rs:20-60`) — `FnOrigin::SubStep`
 //!   already exists;
-//! - `subflow` declarations: refused at the driver's staging gate, now the
-//!   only construct that gate holds (value route payloads retired from it
-//!   and lower in `route::route_payload`);
 //! - dependency-parallel region layers (`parallel region`) — see the design
 //!   sketch retained in the module history (flatten `region.layers` into the
 //!   emitter's step walk, `workflow.all` single-call layers, degrade richer
@@ -33,7 +30,7 @@ use super::activity::{activity_call, lower_sleep, record_new, zero_span};
 use super::ctx::Ctx;
 use super::driver::LowerError;
 use super::expr::{Binding, Scope};
-use super::flow::{FlowEnv, FlowExit};
+use super::flow::{ExitKind, FlowEnv, FlowExit};
 use super::forks::lower_fork_stmt;
 use super::loops::lower_loop_stmt;
 use super::outcome::lower_outcomes;
@@ -142,7 +139,10 @@ fn flow_end(
         });
     }
     match &flow.exit {
-        Some(FlowExit { binding, .. }) => {
+        Some(FlowExit {
+            kind: ExitKind::Region { binding },
+            ..
+        }) => {
             let bound = scope.get(binding).ok_or_else(|| {
                 LowerError::new(
                     step.name_span,
@@ -156,6 +156,18 @@ fn flow_end(
                 tail: Tail::Return(Value::Var(value)),
             })
         }
+        // A subflow has no fall-through exit: its payload can only come from
+        // a route to its declared outcome (the reference `emit_flow_end`).
+        Some(FlowExit {
+            kind: ExitKind::Subflow { .. },
+            name,
+        }) => Err(LowerError::new(
+            step.name_span,
+            format!(
+                "a subflow's last step must route to its outcome `{name}` — the document \
+                 did not check cleanly"
+            ),
+        )),
         None => Err(LowerError::unsupported(
             "step falls through without a route",
             step.name_span,
@@ -254,6 +266,12 @@ pub(super) fn lower_call(
     scope: &mut Scope,
     stmts: &mut Vec<Stmt>,
 ) -> Result<(), LowerError> {
+    // A subflow invocation resolves FIRST, exactly as the reference
+    // `stmts::lower_call` does: a subflow compiles inline, so the call is a
+    // plain local call of its generated wrapper.
+    if ctx.emitter.subflows.contains_key(call.call.name.as_str()) {
+        return super::nested::lower_subflow_call(ctx, env, call, scope, stmts);
+    }
     // An awaited child call dispatches through the string-name spawn form;
     // config on a child call refuses with the reference's class
     // (`child_call::lower_child_call_stmt`).

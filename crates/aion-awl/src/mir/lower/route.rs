@@ -1,7 +1,8 @@
 //! Route and payload lowering — the MIR twin of the reference
-//! `emitter/outcomes.rs::emit_route`/`render_payload`: a member flow's exit
-//! resolves first (routing to the region's close step returns `Ok(<collected
-//! binding>)`), workflow-outcome returns (`Ok(Ctor(payload))` /
+//! `emitter/outcomes.rs::emit_route`/`render_payload`: a nested flow's exit
+//! resolves first (routing to a region's close step returns `Ok(<collected
+//! binding>)`, routing to a subflow's outcome returns `Ok(<payload>)`),
+//! workflow-outcome returns (`Ok(Ctor(payload))` /
 //! `Error(AwlOutcomeFailure(…))`) apply only to the host flow, then step
 //! routes lower as region tail calls. Payloads: constructed named fields,
 //! a single value expression (`route out(<value>)`), the piped value, the
@@ -17,7 +18,7 @@ use super::activity::{call_rt, encode_json, record_new};
 use super::ctx::Ctx;
 use super::driver::LowerError;
 use super::expr::{Scope, lower_arg_for};
-use super::flow::FlowEnv;
+use super::flow::{ExitKind, FlowEnv, FlowExit};
 
 pub(super) fn route_tail(
     ctx: &mut Ctx<'_>,
@@ -28,29 +29,12 @@ pub(super) fn route_tail(
     stmts: &mut Vec<Stmt>,
 ) -> Result<Tail, LowerError> {
     let flow = env.flow;
-    // The member flow's exit resolves first (the reference `emit_route`).
+    // The nested flow's exit resolves first (the reference `emit_route` ->
+    // `emit_exit_return`).
     if let Some(exit) = &flow.exit
         && exit.name == target.name
     {
-        if piped.is_some() || target.payload.is_some() {
-            return Err(LowerError::new(
-                target.name_span,
-                "routing to a region's `collect` carries no payload — the collect \
-                 gathers the per-instance binding",
-            ));
-        }
-        let bound = scope.get(&exit.binding).ok_or_else(|| {
-            LowerError::new(
-                target.name_span,
-                format!(
-                    "the collected binding `{}` is not in scope at the exit route",
-                    exit.binding
-                ),
-            )
-        })?;
-        let ok = ctx.atom("ok");
-        let value = record_new(ctx, ok, vec![Value::Var(bound.var)], stmts);
-        return Ok(Tail::Return(Value::Var(value)));
+        return exit_return(ctx, exit, target, scope, piped, stmts);
     }
     if flow.exit.is_none()
         && let Some(info) = ctx.emitter.outcomes.get(target.name.as_str()).cloned()
@@ -129,6 +113,44 @@ pub(super) fn route_tail(
         callee: flow.fns.regions[region],
         args,
     })
+}
+
+/// Return from a nested flow through its exit (the reference
+/// `emit_exit_return`): `Ok(payload)` for a subflow outcome, `Ok(<collected
+/// binding>)` for a region member flow's close.
+fn exit_return(
+    ctx: &mut Ctx<'_>,
+    exit: &FlowExit,
+    target: &RouteTarget,
+    scope: &Scope,
+    piped: Option<(Value, GType)>,
+    stmts: &mut Vec<Stmt>,
+) -> Result<Tail, LowerError> {
+    let payload = match &exit.kind {
+        ExitKind::Region { binding } => {
+            if piped.is_some() || target.payload.is_some() {
+                return Err(LowerError::new(
+                    target.name_span,
+                    "routing to a region's `collect` carries no payload — the collect \
+                     gathers the per-instance binding",
+                ));
+            }
+            let bound = scope.get(binding).ok_or_else(|| {
+                LowerError::new(
+                    target.name_span,
+                    format!("the collected binding `{binding}` is not in scope at the exit route"),
+                )
+            })?;
+            Value::Var(bound.var)
+        }
+        ExitKind::Subflow { ty } => {
+            let ty = ty.clone();
+            route_payload(ctx, target, &ty, scope, piped, stmts)?
+        }
+    };
+    let ok = ctx.atom("ok");
+    let value = record_new(ctx, ok, vec![payload], stmts);
+    Ok(Tail::Return(Value::Var(value)))
 }
 
 /// Render the payload value a route carries toward a typed destination

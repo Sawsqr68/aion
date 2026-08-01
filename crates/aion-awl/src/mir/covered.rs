@@ -55,6 +55,13 @@ pub(super) const COVERED: &[&str] = &[
     "declarations/valid/workers_multiple",
     "ergonomics/valid/flow_vocab_b1",
     "flagship/valid/awl_hello",
+    // `subflow` declarations: an inline flow compiled once as a local
+    // function set (wrapper + chains) and invoked by a plain local call.
+    // `dev_flow` is the flagship arm — two nested flows in one document (a
+    // subflow AND a `distribute`/`collect` region whose member step invokes
+    // it), a bounded backward route inside the subflow, and the subflow's
+    // outcome carried out as a value payload.
+    "flow-shape/valid/dev_flow",
     // Value route payloads (`route out(<value>)`): the expression itself is
     // the payload, coerced toward the outcome type exactly as the reference
     // `render_arg_for` coerces it. These two are the NAME-HYGIENE arms —
@@ -89,6 +96,14 @@ pub(super) const COVERED: &[&str] = &[
     "flow-shape/valid/region_sibling_local_reuse",
     "flow-shape/valid/sequence_activity_tolerant",
     "flow-shape/valid/sequence_region_loopback",
+    // The subflow NAME-SCOPING arm: two subflows whose parameters and
+    // outcomes reuse the same author names at unrelated types, and a host
+    // that reuses them again. Each flow carries its own binding environment,
+    // so a lowering that leaked one scope into another would mistype here.
+    "flow-shape/valid/subflow_local_names",
+    // The subflow NESTING arm: a subflow invoking a subflow, each compiled
+    // once, the inner invocation binding the outer's local.
+    "flow-shape/valid/subflow_nested",
     // A value payload built by a binary CONCAT (`status + workflow.id`) in
     // BOTH arms of a decision, inside a document whose inputs deliberately
     // collide with every synthesized temporary. The payload is an expression
