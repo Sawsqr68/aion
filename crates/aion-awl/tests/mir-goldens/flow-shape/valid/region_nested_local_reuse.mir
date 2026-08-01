@@ -1,0 +1,355 @@
+module nested_region_locals source=nested_region_locals.awl
+exports: run/1, definition/0, execute/1, aion_internal_awl_child_nested_region_locals_outer_wave_2_run/1
+== effect schedule ==
+  awl_r0_text_wave_step_text_member:
+    aion@activity:task_queue/2 [activities] (v1, lit#16)
+    aion@workflow:run/1 [activities] (v2)
+  awl_r1_number_wave_step_number_member:
+    aion@activity:task_queue/2 [activities] (v1, lit#17)
+    aion@workflow:run/1 [activities] (v2)
+  awl_r2_outer_wave_step_text_wave:
+    aion@workflow:map/2 [activities] (v1, v2)
+  awl_r2_outer_wave_step_number_wave:
+    aion@workflow:map/2 [activities] (v0, v1)
+  outer_wave_fanout_0:
+    aion@workflow:spawn/6 [children] (lit#15, v5, v4, v6, v7, v8)
+  outer_wave_fanout_1:
+    aion@child:await/1 [children] (v1)
+  text_wave_fanout_2:
+    aion@activity:task_queue/2 [activities] (v1, lit#18)
+  number_wave_fanout_3:
+    aion@activity:task_queue/2 [activities] (v1, lit#19)
+== durable families == activities, children
+== atoms ==
+  [0] keep_number_input
+  [1] keep_text_input
+  [2] nested_region_locals_input
+  [3] done_outcome
+  [4] aion_internal_awl_child_nested_region_locals_outer_wave2_input
+  [5] ok
+== literals ==
+  [0] "value"
+  [1] "value"
+  [2] "texts"
+  [3] "numbers"
+  [4] "done"
+  [5] "outcome"
+  [6] "NestedRegionLocalsOutcome"
+  [7] "done"
+  [8] "payload"
+  [9] "outer"
+  [10] "numbers"
+  [11] "texts"
+  [12] "child"
+  [13] "outcome"
+  [14] "payload"
+  [15] "aion_internal_awl_child_nested_region_locals_outer_wave_2"
+  [16] "local"
+  [17] "local"
+  [18] "local"
+  [19] "local"
+== types ==
+  record KeepNumberInput tag=keep_number_input
+    value: int
+  record KeepTextInput tag=keep_text_input
+    value: string
+  record NestedRegionLocalsInput tag=nested_region_locals_input
+    texts: list(string)
+    numbers: list(int)
+  union NestedRegionLocalsOutcome
+    done -> done_outcome(int)
+  record AionInternalAwlChildNestedRegionLocalsOuterWave2Input tag=aion_internal_awl_child_nested_region_locals_outer_wave2_input
+    outer: string
+    numbers: list(int)
+    texts: list(string)
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=nested_region_locals_input_codec output=nested_region_locals_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(nested_region_locals.NestedRegionLocalsInput, nested_region_locals.NestedRegionLocalsOutcome, AwlError)
+  T-DEF name="nested_region_locals" input=nested_region_locals_input_codec output=nested_region_locals_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (nested_region_locals.NestedRegionLocalsInput) -> Result(nested_region_locals.NestedRegionLocalsOutcome, AwlError)
+  T-EXEC fields=[texts:List(String), numbers:List(Int)] entry=step_outer_wave args=[1, 0]
+== fn keep_number_input_codec/0 origin=codec_template(RecordTrio, KeepNumberInput, record#0) ==
+  sig: () -> Codec(nested_region_locals.KeepNumberInput)
+  v0 = make_closure keep_number_input_to_json captures=[]
+  v1 = call_local keep_number_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn keep_number_input_to_json/1 origin=codec_template(RecordTrio, KeepNumberInput, record#0) ==
+  sig: (nested_region_locals.KeepNumberInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"value": v1|>awlc.int_to_json}
+  return v2
+== fn keep_number_input_decoder/0 origin=codec_template(RecordTrio, KeepNumberInput, record#0) ==
+  sig: () -> Decoder(nested_region_locals.KeepNumberInput)
+  v0 = call_rt aion@awl@codec:int_decoder/0()
+  v1 = make_closure keep_number_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn keep_number_input_decoder$0/1 origin=lifted(keep_number_input_decoder, #0) ==
+  sig: (Int) -> Decoder(nested_region_locals.KeepNumberInput)
+  v1 = record(keep_number_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn keep_text_input_codec/0 origin=codec_template(RecordTrio, KeepTextInput, record#1) ==
+  sig: () -> Codec(nested_region_locals.KeepTextInput)
+  v0 = make_closure keep_text_input_to_json captures=[]
+  v1 = call_local keep_text_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn keep_text_input_to_json/1 origin=codec_template(RecordTrio, KeepTextInput, record#1) ==
+  sig: (nested_region_locals.KeepTextInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"value": v1|>awlc.string_to_json}
+  return v2
+== fn keep_text_input_decoder/0 origin=codec_template(RecordTrio, KeepTextInput, record#1) ==
+  sig: () -> Decoder(nested_region_locals.KeepTextInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure keep_text_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v0, v1)
+== fn keep_text_input_decoder$0/1 origin=lifted(keep_text_input_decoder, #0) ==
+  sig: (String) -> Decoder(nested_region_locals.KeepTextInput)
+  v1 = record(keep_text_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn nested_region_locals_input_codec/0 origin=codec_template(RecordTrio, NestedRegionLocalsInput, record#2) ==
+  sig: () -> Codec(nested_region_locals.NestedRegionLocalsInput)
+  v0 = make_closure nested_region_locals_input_to_json captures=[]
+  v1 = call_local nested_region_locals_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn nested_region_locals_input_to_json/1 origin=codec_template(RecordTrio, NestedRegionLocalsInput, record#2) ==
+  sig: (nested_region_locals.NestedRegionLocalsInput) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"texts": v1|>list_string_to_json, "numbers": v2|>list_int_to_json}
+  return v3
+== fn nested_region_locals_input_decoder/0 origin=codec_template(RecordTrio, NestedRegionLocalsInput, record#2) ==
+  sig: () -> Decoder(nested_region_locals.NestedRegionLocalsInput)
+  v0 = call_local list_string_decoder()
+  v1 = make_closure nested_region_locals_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v0, v1)
+== fn nested_region_locals_input_decoder$0/1 origin=lifted(nested_region_locals_input_decoder, #0) ==
+  sig: (List(String)) -> Decoder(nested_region_locals.NestedRegionLocalsInput)
+  v1 = call_local list_int_decoder() live_after=[v0]
+  v2 = make_closure nested_region_locals_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v1, v2)
+== fn nested_region_locals_input_decoder$1/2 origin=lifted(nested_region_locals_input_decoder, #1) ==
+  sig: (List(Int), List(String)) -> Decoder(nested_region_locals.NestedRegionLocalsInput)
+  v2 = record(nested_region_locals_input, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn nested_region_locals_outcome_codec/0 origin=codec_template(UnionTrio, NestedRegionLocalsOutcome, union#3) ==
+  sig: () -> Codec(nested_region_locals.NestedRegionLocalsOutcome)
+  v0 = make_closure nested_region_locals_outcome_to_json captures=[]
+  v1 = call_local nested_region_locals_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn nested_region_locals_outcome_to_json/1 origin=codec_template(UnionTrio, NestedRegionLocalsOutcome, union#3) ==
+  sig: (nested_region_locals.NestedRegionLocalsOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#4|>awlc.string_to_json, "payload": v1|>awlc.int_to_json}
+  return v2
+== fn nested_region_locals_outcome_decoder/0 origin=codec_template(UnionTrio, NestedRegionLocalsOutcome, union#3) ==
+  sig: () -> Decoder(nested_region_locals.NestedRegionLocalsOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure nested_region_locals_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#5, v0, v1)
+== fn nested_region_locals_outcome_decoder$outcome/1 origin=lifted(nested_region_locals_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(nested_region_locals.NestedRegionLocalsOutcome)
+  if cmp Eq v0 lit#7:
+    v2 = call_rt aion@awl@codec:int_decoder/0()
+    v3 = make_closure nested_region_locals_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#8, v2, v3)
+  else:
+    v1 = record(done_outcome, [0])
+    tail_rt gleam@dynamic@decode:failure/2(v1, lit#6)
+== fn nested_region_locals_outcome_decoder$arm0/1 origin=lifted(nested_region_locals_outcome_decoder, #1) ==
+  sig: (Int) -> Decoder(nested_region_locals.NestedRegionLocalsOutcome)
+  v1 = record(done_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn aion_internal_awl_child_nested_region_locals_outer_wave2_input_codec/0 origin=codec_template(RecordTrio, AionInternalAwlChildNestedRegionLocalsOuterWave2Input, record#4) ==
+  sig: () -> Codec(nested_region_locals.AionInternalAwlChildNestedRegionLocalsOuterWave2Input)
+  v0 = make_closure aion_internal_awl_child_nested_region_locals_outer_wave2_input_to_json captures=[]
+  v1 = call_local aion_internal_awl_child_nested_region_locals_outer_wave2_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn aion_internal_awl_child_nested_region_locals_outer_wave2_input_to_json/1 origin=codec_template(RecordTrio, AionInternalAwlChildNestedRegionLocalsOuterWave2Input, record#4) ==
+  sig: (nested_region_locals.AionInternalAwlChildNestedRegionLocalsOuterWave2Input) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = field(v0, 3)
+  v4 = json_obj {"outer": v1|>awlc.string_to_json, "numbers": v2|>list_int_to_json, "texts": v3|>list_string_to_json}
+  return v4
+== fn aion_internal_awl_child_nested_region_locals_outer_wave2_input_decoder/0 origin=codec_template(RecordTrio, AionInternalAwlChildNestedRegionLocalsOuterWave2Input, record#4) ==
+  sig: () -> Decoder(nested_region_locals.AionInternalAwlChildNestedRegionLocalsOuterWave2Input)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure aion_internal_awl_child_nested_region_locals_outer_wave2_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#9, v0, v1)
+== fn aion_internal_awl_child_nested_region_locals_outer_wave2_input_decoder$0/1 origin=lifted(aion_internal_awl_child_nested_region_locals_outer_wave2_input_decoder, #0) ==
+  sig: (String) -> Decoder(nested_region_locals.AionInternalAwlChildNestedRegionLocalsOuterWave2Input)
+  v1 = call_local list_int_decoder() live_after=[v0]
+  v2 = make_closure aion_internal_awl_child_nested_region_locals_outer_wave2_input_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#10, v1, v2)
+== fn aion_internal_awl_child_nested_region_locals_outer_wave2_input_decoder$1/2 origin=lifted(aion_internal_awl_child_nested_region_locals_outer_wave2_input_decoder, #1) ==
+  sig: (List(Int), String) -> Decoder(nested_region_locals.AionInternalAwlChildNestedRegionLocalsOuterWave2Input)
+  v2 = call_local list_string_decoder() live_after=[v0, v1]
+  v3 = make_closure aion_internal_awl_child_nested_region_locals_outer_wave2_input_decoder$2 captures=[v1, v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#11, v2, v3)
+== fn aion_internal_awl_child_nested_region_locals_outer_wave2_input_decoder$2/3 origin=lifted(aion_internal_awl_child_nested_region_locals_outer_wave2_input_decoder, #2) ==
+  sig: (List(String), String, List(Int)) -> Decoder(nested_region_locals.AionInternalAwlChildNestedRegionLocalsOuterWave2Input)
+  v3 = record(aion_internal_awl_child_nested_region_locals_outer_wave2_input, [v1, v2, v0])
+  tail_rt gleam@dynamic@decode:success/1(v3)
+== fn list_int_codec/0 origin=codec_template(CompositeTrio, List(Int), composite(list(int))) ==
+  sig: () -> Codec(List(Int))
+  v0 = make_closure list_int_to_json captures=[]
+  v1 = call_local list_int_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn list_int_to_json/1 origin=codec_template(CompositeTrio, List(Int), composite(list(int))) ==
+  sig: (List(Int)) -> Json
+  v1 = make_closure list_int_to_json$item captures=[]
+  tail_rt gleam@json:array/2(v0, v1)
+== fn list_int_decoder/0 origin=codec_template(CompositeTrio, List(Int), composite(list(int))) ==
+  sig: () -> Decoder(List(Int))
+  v0 = call_rt aion@awl@codec:int_decoder/0()
+  tail_rt gleam@dynamic@decode:list/1(v0)
+== fn list_int_to_json$item/1 origin=lifted(list_int_to_json, #0) ==
+  sig: (Int) -> Json
+  tail_rt aion@awl@codec:int_to_json/1(v0)
+== fn list_string_codec/0 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: () -> Codec(List(String))
+  v0 = make_closure list_string_to_json captures=[]
+  v1 = call_local list_string_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn list_string_to_json/1 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: (List(String)) -> Json
+  v1 = make_closure list_string_to_json$item captures=[]
+  tail_rt gleam@json:array/2(v0, v1)
+== fn list_string_decoder/0 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: () -> Decoder(List(String))
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  tail_rt gleam@dynamic@decode:list/1(v0)
+== fn list_string_to_json$item/1 origin=lifted(list_string_to_json, #0) ==
+  sig: (String) -> Json
+  tail_rt aion@awl@codec:string_to_json/1(v0)
+== fn awl_child_output_int_codec/0 origin=codec_template(ChildEnvelopeTrio, Int, child_envelope(int)) ==
+  sig: () -> Codec(Int)
+  v0 = make_closure awl_child_output_int_to_json captures=[]
+  v1 = call_local awl_child_output_int_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn awl_child_output_int_to_json/1 origin=codec_template(ChildEnvelopeTrio, Int, child_envelope(int)) ==
+  sig: (Int) -> Json
+  v1 = json_obj {"outcome": lit#12|>awlc.string_to_json, "payload": v0|>awlc.int_to_json}
+  return v1
+== fn awl_child_output_int_decoder/0 origin=codec_template(ChildEnvelopeTrio, Int, child_envelope(int)) ==
+  sig: () -> Decoder(Int)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure awl_child_output_int_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#13, v0, v1)
+== fn awl_child_output_int_decoder$outcome/1 origin=lifted(awl_child_output_int_decoder, #0) ==
+  sig: (String) -> Decoder(Int)
+  v1 = call_rt aion@awl@codec:int_decoder/0()
+  v2 = make_closure awl_child_output_int_decoder$payload captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#14, v1, v2)
+== fn awl_child_output_int_decoder$payload/1 origin=lifted(awl_child_output_int_decoder, #1) ==
+  sig: (Int) -> Decoder(Int)
+  tail_rt gleam@dynamic@decode:success/1(v0)
+== fn keep_number_activity/1 origin=activity_wrapper(keep_number, raw=false) ==
+  sig: (Int) -> Activity(nested_region_locals.KeepNumberInput, Int)
+  T-ACT action=keep_number input_codec=keep_number_input_codec return=awlc.int_codec
+== fn keep_text_activity/1 origin=activity_wrapper(keep_text, raw=false) ==
+  sig: (String) -> Activity(nested_region_locals.KeepTextInput, String)
+  T-ACT action=keep_text input_codec=keep_text_input_codec return=awlc.string_codec
+== fn step_outer_wave/2 origin=region(outer_wave) ==
+  sig: (List(Int), List(String)) -> Result(nested_region_locals.NestedRegionLocalsOutcome, AwlError)
+  v2 = make_closure outer_wave_fanout_0 captures=[v0, v1]
+  v3 = call_rt gleam@list:try_fold/3(v1, nil, v2)
+  v4 = try_bind v3
+  v5 = call_rt gleam@list:reverse/1(v4)
+  v6 = make_closure outer_wave_fanout_1 captures=[]
+  v7 = call_rt gleam@list:try_fold/3(v5, nil, v6)
+  v8 = try_bind v7
+  v9 = call_rt gleam@list:reverse/1(v8)
+  v10 = call_rt gleam@list:length/1(v9)
+  v11 = record(done_outcome, [v10])
+  v12 = record(ok, [v11])
+  return v12
+== fn awl_r0_text_wave/1 origin=region_wrapper(r0:text_wave) ==
+  sig: (String) -> Result(String, AwlError)
+  tail_local awl_r0_text_wave_step_text_member(v0)
+== fn awl_r0_text_wave_step_text_member/1 origin=region(r0:text_wave::text_member) ==
+  sig: (String) -> Result(String, AwlError)
+  v1 = call_local keep_text_activity(v0)
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#16)
+  v3 = call_rt aion@workflow:run/1(v2)
+  v4 = call_rt aion@awl@error:map_activity_error/1(v3)
+  v5 = try_bind v4
+  v6 = record(ok, [v5])
+  return v6
+== fn awl_r1_number_wave/1 origin=region_wrapper(r1:number_wave) ==
+  sig: (Int) -> Result(Int, AwlError)
+  tail_local awl_r1_number_wave_step_number_member(v0)
+== fn awl_r1_number_wave_step_number_member/1 origin=region(r1:number_wave::number_member) ==
+  sig: (Int) -> Result(Int, AwlError)
+  v1 = call_local keep_number_activity(v0)
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#17)
+  v3 = call_rt aion@workflow:run/1(v2)
+  v4 = call_rt aion@awl@error:map_activity_error/1(v3)
+  v5 = try_bind v4
+  v6 = record(ok, [v5])
+  return v6
+== fn awl_r2_outer_wave/3 origin=region_wrapper(r2:outer_wave) ==
+  sig: (String, List(Int), List(String)) -> Result(Int, AwlError)
+  tail_local awl_r2_outer_wave_step_text_wave(v1, v2)
+== fn awl_r2_outer_wave_step_text_wave/2 origin=region(r2:outer_wave::text_wave) ==
+  sig: (List(Int), List(String)) -> Result(Int, AwlError)
+  v2 = make_closure text_wave_fanout_2 captures=[]
+  v3 = call_rt aion@workflow:map/2(v1, v2) live_after=[v0]
+  v4 = call_rt aion@awl@error:map_activity_error/1(v3) live_after=[v0]
+  v5 = try_bind v4 live_after=[v0]
+  tail_local awl_r2_outer_wave_step_number_wave(v0)
+== fn awl_r2_outer_wave_step_number_wave/1 origin=chain_step(r2:outer_wave::text_wave.number_wave) ==
+  sig: (List(Int)) -> Result(Int, AwlError)
+  v1 = make_closure number_wave_fanout_3 captures=[]
+  v2 = call_rt aion@workflow:map/2(v0, v1)
+  v3 = call_rt aion@awl@error:map_activity_error/1(v2)
+  v4 = try_bind v3
+  v5 = call_rt gleam@list:length/1(v4)
+  v6 = record(ok, [v5])
+  return v6
+== fn outer_wave_fanout_0/4 origin=fork(outer_wave#0) ==
+  sig: (List(ChildHandle(Int, AwlError)), String, List(Int), List(String)) -> Result(List(ChildHandle(Int, AwlError)), AwlError)
+  v4 = json_obj {"outer": v1|>awlc.string_to_json, "numbers": v2|>list_int_to_json, "texts": v3|>list_string_to_json}
+  v5 = make_closure awl$child_witness captures=[]
+  v6 = call_rt aion@awl@codec:json_value/0() live_after=[v0, v4, v5]
+  v7 = call_local awl_child_output_int_codec() live_after=[v0, v4, v5, v6]
+  v8 = call_rt aion@awl@error:codec/0() live_after=[v0, v4, v5, v6, v7]
+  v9 = call_rt aion@workflow:spawn/6(lit#15, v5, v4, v6, v7, v8) live_after=[v0]
+  v10 = call_rt aion@awl@error:map_spawn_error/1(v9) live_after=[v0]
+  v11 = try_bind v10 live_after=[v0]
+  v12 = cons v11 v0
+  v13 = record(ok, [v12])
+  return v13
+== fn outer_wave_fanout_1/2 origin=fork(outer_wave#1) ==
+  sig: (List(Int), ChildHandle(Int, AwlError)) -> Result(List(Int), AwlError)
+  v2 = call_rt aion@child:await/1(v1) live_after=[v0]
+  v3 = call_rt aion@awl@error:map_child_error/1(v2) live_after=[v0]
+  v4 = try_bind v3 live_after=[v0]
+  v5 = cons v4 v0
+  v6 = record(ok, [v5])
+  return v6
+== fn text_wave_fanout_2/1 origin=fork(text_wave#2) ==
+  sig: (String) -> Activity(nested_region_locals.KeepTextInput, String)
+  v1 = call_local keep_text_activity(v0)
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#18)
+  return v2
+== fn number_wave_fanout_3/1 origin=fork(number_wave#3) ==
+  sig: (Int) -> Activity(nested_region_locals.KeepNumberInput, Int)
+  v1 = call_local keep_number_activity(v0)
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#19)
+  return v2
+== fn aion_internal_awl_child_nested_region_locals_outer_wave_2_execute/1 origin=child_execute(aion_internal_awl_child_nested_region_locals_outer_wave_2) ==
+  sig: (nested_region_locals.AionInternalAwlChildNestedRegionLocalsOuterWave2Input) -> Result(Int, AwlError)
+  T-EXEC fields=[outer:String, numbers:List(Int), texts:List(String)] entry=awl_r2_outer_wave args=[0, 1, 2]
+== fn aion_internal_awl_child_nested_region_locals_outer_wave_2_run/1 origin=child_run(aion_internal_awl_child_nested_region_locals_outer_wave_2) ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-CHILDRUN input=aion_internal_awl_child_nested_region_locals_outer_wave2_input_codec output=awl_child_output_int_codec execute=aion_internal_awl_child_nested_region_locals_outer_wave_2_execute
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD
+== fn awl$child_witness/1 origin=child_witness ==
+  sig: (Json) -> Result(Dynamic, AwlError)
+  T-WIT

@@ -55,6 +55,15 @@ pub(super) const COVERED: &[&str] = &[
     "declarations/valid/workers_multiple",
     "ergonomics/valid/flow_vocab_b1",
     "flagship/valid/awl_hello",
+    // Value route payloads (`route out(<value>)`): the expression itself is
+    // the payload, coerced toward the outcome type exactly as the reference
+    // `render_arg_for` coerces it. These two are the NAME-HYGIENE arms —
+    // an author binding that collides with a synthesized wrapper temporary
+    // (`awl_input_codec`) or with the visit-counter candidate
+    // (`awl_visits_again_188`) — so they prove the payload lowers without
+    // the allocator capturing the author's own name.
+    "flow-shape/valid/action_param_hygiene",
+    "flow-shape/valid/counter_hygiene",
     "flow-shape/valid/distribute_activity_tolerant",
     "flow-shape/valid/distribute_child_collect",
     "flow-shape/valid/distribute_child_tolerant",
@@ -67,9 +76,26 @@ pub(super) const COVERED: &[&str] = &[
     // route stays OUTSIDE the guard, so a deliberate `route <failure outcome>`
     // can never trigger compensation.
     "flow-shape/valid/on_failure_route_tail",
+    // A value payload as a REGION's terminal route: a literal payload on the
+    // close of a `distribute`/`collect` region carrying a `max … visits`
+    // bound, so the payload lowers after region synthesis rather than before.
+    "flow-shape/valid/region_close_bounded",
+    // Value payloads carried out of nested and sibling regions whose locals
+    // are reused at unrelated types — the payload is the piped `count` of the
+    // collected rows, so the expression lowering rides the region's own
+    // binding, not the host's.
+    "flow-shape/valid/region_nested_local_reuse",
     "flow-shape/valid/region_pure_decision",
+    "flow-shape/valid/region_sibling_local_reuse",
     "flow-shape/valid/sequence_activity_tolerant",
     "flow-shape/valid/sequence_region_loopback",
+    // A value payload built by a binary CONCAT (`status + workflow.id`) in
+    // BOTH arms of a decision, inside a document whose inputs deliberately
+    // collide with every synthesized temporary. The payload is an expression
+    // with its own prelude statements, not a bare binding.
+    "flow-shape/valid/temporary_hygiene",
+    // The canonical arm: `route done(note)` at the workflow boundary.
+    "flow-shape/valid/value_route_payload",
     "header-types/valid/builtins",
     "header-types/valid/combined",
     "header-types/valid/doc_comments",

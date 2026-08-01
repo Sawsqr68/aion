@@ -1,0 +1,166 @@
+module action_param_hygiene source=action_param_hygiene.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_gather:
+    aion@activity:task_queue/2 [activities] (v1, lit#9)
+    aion@activity:task_queue/2 [activities] (v3, lit#10)
+    aion@workflow:all/1 [activities] (v5)
+== durable families == activities
+== atoms ==
+  [0] fetch_number_input
+  [1] fetch_text_input
+  [2] action_param_hygiene_input
+  [3] complete_outcome
+  [4] ok
+== literals ==
+  [0] "value"
+  [1] "awl_input_codec"
+  [2] "seed"
+  [3] "complete"
+  [4] "outcome"
+  [5] ""
+  [6] "ActionParamHygieneOutcome"
+  [7] "complete"
+  [8] "payload"
+  [9] "source"
+  [10] "source"
+  [11] "fetch_text"
+  [12] "fetch_number"
+== types ==
+  record FetchNumberInput tag=fetch_number_input
+    value: string
+  record FetchTextInput tag=fetch_text_input
+    awl_input_codec: string
+  record ActionParamHygieneInput tag=action_param_hygiene_input
+    seed: string
+  union ActionParamHygieneOutcome
+    complete -> complete_outcome(string)
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=action_param_hygiene_input_codec output=action_param_hygiene_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(action_param_hygiene.ActionParamHygieneInput, action_param_hygiene.ActionParamHygieneOutcome, AwlError)
+  T-DEF name="action_param_hygiene" input=action_param_hygiene_input_codec output=action_param_hygiene_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (action_param_hygiene.ActionParamHygieneInput) -> Result(action_param_hygiene.ActionParamHygieneOutcome, AwlError)
+  T-EXEC fields=[seed:String] entry=step_gather args=[0]
+== fn fetch_number_input_codec/0 origin=codec_template(RecordTrio, FetchNumberInput, record#0) ==
+  sig: () -> Codec(action_param_hygiene.FetchNumberInput)
+  v0 = make_closure fetch_number_input_to_json captures=[]
+  v1 = call_local fetch_number_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn fetch_number_input_to_json/1 origin=codec_template(RecordTrio, FetchNumberInput, record#0) ==
+  sig: (action_param_hygiene.FetchNumberInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"value": v1|>awlc.string_to_json}
+  return v2
+== fn fetch_number_input_decoder/0 origin=codec_template(RecordTrio, FetchNumberInput, record#0) ==
+  sig: () -> Decoder(action_param_hygiene.FetchNumberInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure fetch_number_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn fetch_number_input_decoder$0/1 origin=lifted(fetch_number_input_decoder, #0) ==
+  sig: (String) -> Decoder(action_param_hygiene.FetchNumberInput)
+  v1 = record(fetch_number_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn fetch_text_input_codec/0 origin=codec_template(RecordTrio, FetchTextInput, record#1) ==
+  sig: () -> Codec(action_param_hygiene.FetchTextInput)
+  v0 = make_closure fetch_text_input_to_json captures=[]
+  v1 = call_local fetch_text_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn fetch_text_input_to_json/1 origin=codec_template(RecordTrio, FetchTextInput, record#1) ==
+  sig: (action_param_hygiene.FetchTextInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"awl_input_codec": v1|>awlc.string_to_json}
+  return v2
+== fn fetch_text_input_decoder/0 origin=codec_template(RecordTrio, FetchTextInput, record#1) ==
+  sig: () -> Decoder(action_param_hygiene.FetchTextInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure fetch_text_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v0, v1)
+== fn fetch_text_input_decoder$0/1 origin=lifted(fetch_text_input_decoder, #0) ==
+  sig: (String) -> Decoder(action_param_hygiene.FetchTextInput)
+  v1 = record(fetch_text_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn action_param_hygiene_input_codec/0 origin=codec_template(RecordTrio, ActionParamHygieneInput, record#2) ==
+  sig: () -> Codec(action_param_hygiene.ActionParamHygieneInput)
+  v0 = make_closure action_param_hygiene_input_to_json captures=[]
+  v1 = call_local action_param_hygiene_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn action_param_hygiene_input_to_json/1 origin=codec_template(RecordTrio, ActionParamHygieneInput, record#2) ==
+  sig: (action_param_hygiene.ActionParamHygieneInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"seed": v1|>awlc.string_to_json}
+  return v2
+== fn action_param_hygiene_input_decoder/0 origin=codec_template(RecordTrio, ActionParamHygieneInput, record#2) ==
+  sig: () -> Decoder(action_param_hygiene.ActionParamHygieneInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure action_param_hygiene_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v0, v1)
+== fn action_param_hygiene_input_decoder$0/1 origin=lifted(action_param_hygiene_input_decoder, #0) ==
+  sig: (String) -> Decoder(action_param_hygiene.ActionParamHygieneInput)
+  v1 = record(action_param_hygiene_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn action_param_hygiene_outcome_codec/0 origin=codec_template(UnionTrio, ActionParamHygieneOutcome, union#3) ==
+  sig: () -> Codec(action_param_hygiene.ActionParamHygieneOutcome)
+  v0 = make_closure action_param_hygiene_outcome_to_json captures=[]
+  v1 = call_local action_param_hygiene_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn action_param_hygiene_outcome_to_json/1 origin=codec_template(UnionTrio, ActionParamHygieneOutcome, union#3) ==
+  sig: (action_param_hygiene.ActionParamHygieneOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#3|>awlc.string_to_json, "payload": v1|>awlc.string_to_json}
+  return v2
+== fn action_param_hygiene_outcome_decoder/0 origin=codec_template(UnionTrio, ActionParamHygieneOutcome, union#3) ==
+  sig: () -> Decoder(action_param_hygiene.ActionParamHygieneOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure action_param_hygiene_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+== fn action_param_hygiene_outcome_decoder$outcome/1 origin=lifted(action_param_hygiene_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(action_param_hygiene.ActionParamHygieneOutcome)
+  if cmp Eq v0 lit#7:
+    v2 = call_rt aion@awl@codec:string_decoder/0()
+    v3 = make_closure action_param_hygiene_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#8, v2, v3)
+  else:
+    v1 = record(complete_outcome, [lit#5])
+    tail_rt gleam@dynamic@decode:failure/2(v1, lit#6)
+== fn action_param_hygiene_outcome_decoder$arm0/1 origin=lifted(action_param_hygiene_outcome_decoder, #1) ==
+  sig: (String) -> Decoder(action_param_hygiene.ActionParamHygieneOutcome)
+  v1 = record(complete_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn fetch_number_activity/1 origin=activity_wrapper(fetch_number, raw=false) ==
+  sig: (String) -> Activity(action_param_hygiene.FetchNumberInput, Int)
+  T-ACT action=fetch_number input_codec=fetch_number_input_codec return=awlc.int_codec
+== fn fetch_text_activity/1 origin=activity_wrapper(fetch_text, raw=false) ==
+  sig: (String) -> Activity(action_param_hygiene.FetchTextInput, String)
+  T-ACT action=fetch_text input_codec=fetch_text_input_codec return=awlc.string_codec
+== fn fetch_number_activity_raw/1 origin=activity_wrapper(fetch_number, raw=true) ==
+  sig: (String) -> Activity(String, String)
+  T-ACTRAW action=fetch_number input_codec=fetch_number_input_codec
+== fn fetch_text_activity_raw/1 origin=activity_wrapper(fetch_text, raw=true) ==
+  sig: (String) -> Activity(String, String)
+  T-ACTRAW action=fetch_text input_codec=fetch_text_input_codec
+== fn step_gather/1 origin=region(gather) ==
+  sig: (String) -> Result(action_param_hygiene.ActionParamHygieneOutcome, AwlError)
+  v1 = call_local fetch_text_activity_raw(v0) live_after=[v0]
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#9) live_after=[v0]
+  v3 = call_local fetch_number_activity_raw(v0) live_after=[v2]
+  v4 = call_rt aion@activity:task_queue/2(v3, lit#10) live_after=[v2]
+  v5 = list([v2, v4])
+  v6 = call_rt aion@workflow:all/1(v5)
+  v7 = call_rt aion@awl@error:map_activity_error/1(v6)
+  v8 = try_bind v7
+  assert_list [v9, v10] = v8
+  v11 = call_rt aion@awl@codec:string_codec/0() live_after=[v9, v10]
+  v12 = call_rt aion@awl@codec:decoded/3(v11, v9, lit#11) live_after=[v10]
+  v13 = try_bind v12 live_after=[v10]
+  v14 = call_rt aion@awl@codec:int_codec/0() live_after=[v10, v13]
+  v15 = call_rt aion@awl@codec:decoded/3(v14, v10, lit#12) live_after=[v13]
+  v16 = try_bind v15 live_after=[v13]
+  v17 = record(complete_outcome, [v13])
+  v18 = record(ok, [v17])
+  return v18
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD

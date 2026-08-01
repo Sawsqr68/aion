@@ -35,29 +35,32 @@ fn nested_handlers_on_failure_now_lowers() -> Result<(), Box<dyn std::error::Err
     Ok(())
 }
 
-/// The substep deferral is UNTOUCHED by the on-failure edge: both substep
-/// fixtures still refuse, each pinned to its OWN exact class and COMPLETE
-/// span (start/end/line/column), so range or column drift fails too — the
-/// pin the retired `on failure` ratchet used to carry.
+/// The substep deferral is UNTOUCHED by the value-payload landing: both
+/// substep fixtures still refuse, each pinned to its OWN exact class and
+/// COMPLETE span (start/end/line/column), so range or column drift fails too.
 ///
-/// The two refuse at different gates, and the difference is deliberate:
-/// `substep_on_failure_route_tail` carries a value route payload
-/// (`route failed("…")`), so it never reaches step lowering at all — the
-/// driver's staging gate takes it first; `substeps_two_stage` reaches
-/// `step::lower_step` and refuses at `substeps`, anchored to its guarding
-/// top-level step. A future substep lowering must retire BOTH knowingly.
+/// The two now refuse at the SAME gate, and that convergence is the
+/// value-payload landing's evidence rather than a weakening of this pin.
+/// Before it, `substep_on_failure_route_tail` carried a value route payload
+/// (`route failed("substep finished")`) and never reached step lowering at
+/// all — the driver's staging gate took it first, at the payload's own span
+/// (513..531, line 20). That gate is retired: the payload lowers now, so the
+/// fixture reaches `step::lower_step` and refuses at `substeps`, anchored to
+/// its guarding top-level step (`publish_it`) — exactly as its sibling
+/// `substeps_two_stage` always has. The refusal MOVED to the fixture's real
+/// remaining gap; it was not removed, and the fixture is still out of the
+/// covered ratchet. A future substep lowering must retire BOTH knowingly.
 #[test]
 fn substep_fixtures_still_refuse() -> Result<(), Box<dyn std::error::Error>> {
     for (fixture, expected_shape, expected) in [
         (
             "tests/fixtures/rev2/flow-shape/valid/substep_on_failure_route_tail.awl",
-            "value route payloads (`route out(<value>)`) — the rev-3 flow shape is not yet \
-             lowered (B4)",
+            "substeps",
             crate::Span {
-                start: 513,
-                end: 531,
-                line: 20,
-                column: 43,
+                start: 323,
+                end: 333,
+                line: 11,
+                column: 6,
             },
         ),
         (
@@ -121,19 +124,84 @@ fn bc4_zero_step_workflow_refuses_no_start_region() -> Result<(), Box<dyn std::e
     Ok(())
 }
 
-/// `dev_brief` still refuses at its dependency-parallel layer — the ONE
-/// remaining flow-shape gap in that fixture, unchanged by the on-failure
-/// edge. Its sibling `ship_release_combined` (whose `max … visits` bound the
-/// fan-out parity landing lowered, leaving `on failure` as its last gap) has
-/// retired from this pin into the covered ratchet.
+/// The dependency-parallel layer (`step b after a`) is still unlowered, and
+/// these fixtures pin it. `dev_brief` always refused here. `layer_hygiene`
+/// JOINED this pin with the value-payload landing rather than joining the
+/// covered ratchet: its `route done(joined)` lowers now, but the document
+/// also carries `step left after root` / `step right after root`, so the
+/// payload gate simply stopped being the first thing it hit. Pinning it here
+/// is what keeps that boundary honest — the fixture is NOT covered, and the
+/// reason it is not covered is a different gap than the one this landing
+/// closed.
 #[test]
-fn dev_brief_still_refuses_at_its_parallel_layer() -> Result<(), Box<dyn std::error::Error>> {
-    let dev_brief = manifest_dir().join("tests/fixtures/rev2/flagship/valid/dev_brief.awl");
-    match lower_fixture(&dev_brief)? {
-        Err(LowerError::Unsupported { shape, .. }) => {
-            assert_eq!(shape, "parallel region", "dev_brief refusal drifted");
+fn parallel_layer_fixtures_still_refuse() -> Result<(), Box<dyn std::error::Error>> {
+    for fixture in [
+        "tests/fixtures/rev2/flagship/valid/dev_brief.awl",
+        "tests/fixtures/rev2/flow-shape/valid/layer_hygiene.awl",
+    ] {
+        match lower_fixture(&manifest_dir().join(fixture))? {
+            Err(LowerError::Unsupported { shape, .. }) => {
+                assert_eq!(shape, "parallel region", "{fixture} refusal class drifted");
+            }
+            other => return Err(format!("{fixture} must still refuse: {other:?}").into()),
         }
-        other => return Err(format!("dev_brief must still refuse: {other:?}").into()),
+    }
+    Ok(())
+}
+
+/// The value-payload coverage pin (the same promotion as
+/// `nested_handlers_on_failure_now_lowers`): `route <outcome>(<value>)`
+/// lowers, and the payload is the EXPRESSION rather than a bare binding
+/// pickup. `temporary_hygiene` is the arm that proves the difference — its
+/// payload is `status + workflow.id`, a concat whose lowering emits prelude
+/// statements and a runtime call, so a lowering that only accepted bare
+/// bindings would fail here rather than quietly routing the wrong term.
+#[test]
+fn value_route_payloads_now_lower() -> Result<(), Box<dyn std::error::Error>> {
+    for fixture in [
+        "tests/fixtures/rev2/flow-shape/valid/value_route_payload.awl",
+        "tests/fixtures/rev2/flow-shape/valid/temporary_hygiene.awl",
+    ] {
+        let module = lower_fixture(&manifest_dir().join(fixture))??;
+        super::verify(&module)?;
+    }
+    Ok(())
+}
+
+/// A value payload is COERCED toward the outcome's type, not passed through
+/// raw: an `Int` routed to an `Int?` outcome must arrive wrapped in `Some`,
+/// exactly as the reference `render_arg_for` wraps it. Without the coercion
+/// the direct path would hand the engine a bare integer where the Gleam
+/// oracle hands it `Some(1)` — a silent wire divergence, so it is pinned on
+/// the term rather than left to the differential alone.
+#[test]
+fn a_value_payload_is_wrapped_for_an_optional_outcome() -> Result<(), Box<dyn std::error::Error>> {
+    let source = "\
+//! Focused optional-coercion pin for value route payloads.
+workflow optional_value_payload
+  input docs: [Doc]
+  outcome done: type Int?, route success
+
+type Doc { title: String }
+
+step count_them
+  docs |> count -> total
+  route done(total)
+";
+    let module = lower_source(source)??;
+    super::verify(&module)?;
+    let printed = super::print_mir(&module);
+    // Pinned on the exact ROUTE TERM, not on the `some` atom merely appearing
+    // in the pool: an `Int?` outcome's codec interns `some`/`none` regardless,
+    // so a pool-presence check would pass even with the coercion stripped.
+    // The count must be wrapped and the WRAPPED value must be what the outcome
+    // constructor receives.
+    for term in ["v2 = record(some, [v1])", "v3 = record(done_outcome, [v2])"] {
+        assert!(
+            printed.contains(term),
+            "an Int payload routed to an `Int?` outcome must reach the outcome \
+             constructor wrapped in `Some` (missing `{term}`):\n{printed}"
+        );
     }
     Ok(())
 }

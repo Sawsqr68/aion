@@ -33,19 +33,56 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// agent harness), so the two must run identically as well as lower
 /// identically, and running both here is what proves the marker is inert at
 /// run time rather than merely inert in the MIR.
-const COVERED_COUNT: usize = 91;
+///
+/// 98 since value route payloads (`route out(<value>)`): seven fixtures joined
+/// at once — `action_param_hygiene`, `counter_hygiene`, `region_close_bounded`,
+/// `region_nested_local_reuse`, `region_sibling_local_reuse`,
+/// `temporary_hygiene`, `value_route_payload`. A value payload is the one
+/// route form whose payload is an arbitrary EXPRESSION evaluated at the route,
+/// so it is exactly the form where the direct path could plausibly route a
+/// different term than the oracle (a missed optional wrap, a dropped concat
+/// prelude, a temporary captured from the wrong scope). Their buckets below
+/// were read off the run, not predicted.
+const COVERED_COUNT: usize = 98;
 
-/// Out-of-oracle (r2 finding 3): bare signal-wait fixtures whose durable park
-/// boundary is NOT observable through any engine surface without racy sampling.
+/// Out-of-oracle (r2 finding 3): fixtures whose durable park boundary is NOT
+/// observable through any engine surface without racy sampling.
 /// `SignalResumeHandoff::pending_count` reports queued signals, not a registered
 /// wait, and visibility reports only `Running`; there is no positive
 /// signal-park evidence. Per decision-16 (simplification over a racy proof) they
-/// are EXCLUDED from the oracle and pinned here, rather than classified from
-/// 120ms of history silence. They still lower, emit, and are covered by
-/// aion-awl's own ratchet; only their differential RUN is out-of-oracle.
+/// are EXCLUDED from the oracle rather than classified from 120ms of history
+/// silence. They still lower, emit, and are covered by aion-awl's own ratchet;
+/// only their differential RUN is out-of-oracle.
+///
+/// This list is DERIVED, not enumerated. It was originally populated by naming
+/// the fixtures that had been SEEN to flake, and the prose above ("bare
+/// signal-wait fixtures") was therefore true of the class while the list held
+/// only two of its three members. `step-bodies/valid/send_signal` was the
+/// missing one: it was classified `WorkflowFailed` from an uncontended run and
+/// sat in the covered oracle as a latent load-sensitive flake, surfacing as a
+/// `disposition=Parked` vs `disposition=Failed` divergence only when the box
+/// was loaded enough to change which side of its 120ms window the run landed
+/// on. It was never a lowering defect on either backend.
+///
+/// [`the_exclusion_list_is_exactly_the_unobservable_park_population`] now
+/// COMPUTES the population from the property below and asserts this list equals
+/// it, so a future fixture carrying the same hazard joins the list by failing
+/// that test rather than by flaking in someone's differential months later.
+///
+/// The property: the document contains a signal `wait` with NO `timeout`
+/// clause, and contains NO durable timer anywhere (`sleep`, or a `wait`
+/// carrying a timeout). The second half is what keeps
+/// `step-bodies/valid/wait_and_sleep` OUT of this list even though it does
+/// carry a bare `wait go`: its `sleep 30s` parks first on a real durable timer,
+/// which IS positive evidence, and it is pinned in [`EXPECTED_TIMER_PARKED`] on
+/// that timer's exact identity. Per-attempt ACTIVITY timeouts (`node writer,
+/// timeout 10m` in `header-types/valid/combined`) are deliberately not durable
+/// timers here — which is precisely why the property is computed over the
+/// parsed AST and never by grepping the source for `timeout`.
 const EXCLUDED_OUT_OF_ORACLE: &[&str] = &[
     "header-types/valid/combined",
     "header-types/valid/signal_wait",
+    "step-bodies/valid/send_signal",
 ];
 
 /// The fixtures that park at a durable TIMER, proven by visibility `Running`
@@ -104,6 +141,19 @@ const EXPECTED_FAILED: &[&str] = &[
     // publish SUCCEEDS here; the route fires and the compensation must NOT —
     // `AwlOutcomeFailure` is never mistaken for a step failure.
     "flow-shape/valid/on_failure_route_tail",
+    // A value payload built by a binary CONCAT (`status + workflow.id`), and
+    // the only one of the seven that takes a failure path. Kind 1, and the
+    // fault is NOT in the payload: the fixture opens with `reviewers[0]` over
+    // an `[String]` input, and the generator emits an empty array for an
+    // unconstrained list (no `minItems`), so the index faults before the loop
+    // or either route is reached — the same data-driven index fault that puts
+    // `step-bodies/valid/index_and_concat` (identical shape) in this bucket.
+    // Both backends record it byte-identically. Its payload lowering is proven
+    // where it IS decidable: `mir::deferred_tests::value_route_payloads_now_lower`
+    // lowers and verifies the concat, and this entry is pinned so a future
+    // input generator that fills the list would move it loudly rather than
+    // quietly changing what this fixture proves.
+    "flow-shape/valid/temporary_hygiene",
     // `on failure` on `publish`; the publish SUCCEEDS on the canned data, so
     // the compensation is lowered but not taken and the run takes the
     // data-driven `nothing was published` route.
@@ -147,20 +197,6 @@ const EXPECTED_FAILED: &[&str] = &[
     // is decidable — `RuntimeFn::QueryHandler` belongs to no durable family
     // (`aion-awl`'s `query_handler_is_not_a_durable_effect`).
     "step-bodies/valid/query_answer",
-    // Fails on its FIRST statement, `send heartbeat to coordinator_id`, because
-    // the harness input supplies `coordinator_id: "x"` — not a live run. Read
-    // off the trail, not inferred: the run reaches `WorkflowFailed` at seq 3
-    // with NO `ActivityScheduled` at all, so the fault is the send's
-    // unresolvable target and not the `evaluate` action below it. Both backends
-    // record it byte-identically, which is what pins an outbound signal's
-    // failure as a real durable effect rather than a silent no-op.
-    //
-    // Its recorded detail is a bare `{"tag":"AwlFailed"}` — no signal name, no
-    // target, no cause — where an authored failure route records
-    // `AwlOutcomeFailure` with its outcome and payload. That asymmetry is a
-    // diagnosis gap tracked separately; it is NOT what this pin asserts, and
-    // this comment exists so nobody reads the bucket as a blessing of it.
-    "step-bodies/valid/send_signal",
 ];
 
 /// The covered fixtures that COMPLETE their real path (`WorkflowCompleted`).
@@ -201,6 +237,14 @@ const EXPECTED_SUCCEEDED: &[&str] = &[
     "declarations/valid/workers_multiple",
     "ergonomics/valid/flow_vocab_b1",
     "flagship/valid/awl_hello",
+    // Value route payloads, name-hygiene arms: an author binding that collides
+    // with a synthesized wrapper temporary (`awl_input_codec`) and one that
+    // collides with the visit-counter candidate (`awl_visits_again_188`). Both
+    // COMPLETE on both backends with byte-identical trails, which is what
+    // proves the payload expression reads the author's binding and not the
+    // synthesized one that shares its name.
+    "flow-shape/valid/action_param_hygiene",
+    "flow-shape/valid/counter_hygiene",
     "flow-shape/valid/distribute_activity_tolerant",
     "flow-shape/valid/distribute_child_collect",
     "flow-shape/valid/distribute_child_tolerant",
@@ -209,9 +253,20 @@ const EXPECTED_SUCCEEDED: &[&str] = &[
     // the refund settles the workflow — a completed run whose completion is
     // reached THROUGH the failure edge.
     "flow-shape/valid/on_failure_compensates_to_step",
+    // Value payloads carried out of REGIONS: a literal on a bounded region's
+    // close, and the piped `count` of the collected rows out of nested and
+    // sibling regions whose locals are reused at unrelated types. All three
+    // complete identically on both backends, so the payload expression is
+    // resolved against the region's own scope on both paths.
+    "flow-shape/valid/region_close_bounded",
+    "flow-shape/valid/region_nested_local_reuse",
     "flow-shape/valid/region_pure_decision",
+    "flow-shape/valid/region_sibling_local_reuse",
     "flow-shape/valid/sequence_activity_tolerant",
     "flow-shape/valid/sequence_region_loopback",
+    // The canonical value payload: `route done(note)` at the workflow
+    // boundary, completing its real work -> route path on both backends.
+    "flow-shape/valid/value_route_payload",
     "header-types/valid/doc_comments",
     "header-types/valid/enum",
     "header-types/valid/line_width",
@@ -374,4 +429,115 @@ fn sorted(names: &[&str]) -> Vec<String> {
     let mut owned: Vec<String> = names.iter().map(|name| (*name).to_owned()).collect();
     owned.sort();
     owned
+}
+
+/// Applies `visit` to every statement in `statements`, descending into every
+/// nesting form a statement can carry.
+///
+/// Exhaustive by CONSTRUCTION: the match lists every `Statement` variant with
+/// no wildcard arm, so a new nesting form added to the AST fails to compile
+/// here instead of silently hiding a wait from the population below.
+fn walk_statements(
+    statements: &[aion_awl::Statement],
+    visit: &mut impl FnMut(&aion_awl::Statement),
+) {
+    for statement in statements {
+        visit(statement);
+        match statement {
+            aion_awl::Statement::Fork(fork) => walk_statements(&fork.body, visit),
+            aion_awl::Statement::Loop(looped) => walk_statements(&looped.body, visit),
+            aion_awl::Statement::SubStep(sub) => walk_step(sub, visit),
+            aion_awl::Statement::Call(_)
+            | aion_awl::Statement::Spawn(_)
+            | aion_awl::Statement::Wait(_)
+            | aion_awl::Statement::Send(_)
+            | aion_awl::Statement::Answer(_)
+            | aion_awl::Statement::Sleep(_)
+            | aion_awl::Statement::Pipe(_)
+            | aion_awl::Statement::Route(_)
+            | aion_awl::Statement::Distribute(_)
+            | aion_awl::Statement::Collect(_) => {}
+        }
+    }
+}
+
+/// Applies `visit` to every statement of a step, including its `on failure`
+/// edge — a bare wait inside a compensation body parks exactly as one in the
+/// guarded body does.
+fn walk_step(step: &aion_awl::Step, visit: &mut impl FnMut(&aion_awl::Statement)) {
+    walk_statements(&step.body, visit);
+    if let Some(on_failure) = &step.on_failure {
+        walk_statements(&on_failure.body, visit);
+    }
+}
+
+/// Whether a document's only durable park boundary is a bare signal wait — the
+/// property that makes a fixture unobservable to the oracle. See
+/// [`EXCLUDED_OUT_OF_ORACLE`] for why each half is needed.
+fn parks_only_on_a_bare_signal_wait(document: &aion_awl::Document) -> bool {
+    let mut bare_wait = false;
+    let mut durable_timer = false;
+    let mut visit = |statement: &aion_awl::Statement| match statement {
+        aion_awl::Statement::Wait(wait) => {
+            if wait.timeout.is_some() {
+                durable_timer = true;
+            } else {
+                bare_wait = true;
+            }
+        }
+        aion_awl::Statement::Sleep(_) => durable_timer = true,
+        _ => {}
+    };
+    for step in &document.steps {
+        walk_step(step, &mut visit);
+    }
+    for subflow in &document.subflows {
+        for step in &subflow.steps {
+            walk_step(step, &mut visit);
+        }
+    }
+    bare_wait && !durable_timer
+}
+
+/// The exclusion list is exactly the population that carries the hazard — it is
+/// DERIVED here rather than trusted as a list.
+///
+/// This is the test that closes r2 finding 3's real defect. That finding
+/// populated [`EXCLUDED_OUT_OF_ORACLE`] by naming the fixtures observed to
+/// flake, which is an enumeration standing in for an invariant: it is correct
+/// only until a fixture carrying the same hazard is added, or until one already
+/// present has simply not flaked yet on an unloaded box. Exactly that happened
+/// to `step-bodies/valid/send_signal`.
+///
+/// Asserting set EQUALITY (not mere containment) is what makes this a gate in
+/// both directions: a hazardous fixture missing from the list fails, and so
+/// does a name parked in the list that no longer carries the hazard — so the
+/// exclusion can never quietly grow into a dumping ground for anything
+/// inconvenient.
+#[test]
+fn the_exclusion_list_is_exactly_the_unobservable_park_population() -> TestResult {
+    let names = fixtures::covered_paths()?;
+    assert_eq!(
+        names.len(),
+        COVERED_COUNT,
+        "covered ratchet size drifted (expected {COVERED_COUNT})"
+    );
+    let mut hazardous = Vec::new();
+    for name in &names {
+        let loaded = fixtures::load(name)?;
+        if parks_only_on_a_bare_signal_wait(&loaded.document) {
+            hazardous.push(name.clone());
+        }
+    }
+    hazardous.sort();
+    assert_eq!(
+        hazardous,
+        sorted(EXCLUDED_OUT_OF_ORACLE),
+        "EXCLUDED_OUT_OF_ORACLE is not the computed bare-signal-wait population. \
+         A fixture whose only durable park boundary is a bare signal wait has no \
+         positive park evidence, so classifying it from history silence is \
+         load-sensitive: it must be excluded, not pinned to whichever outcome an \
+         unloaded box happened to produce."
+    );
+    Ok(())
 }

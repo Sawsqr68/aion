@@ -1,0 +1,120 @@
+module value_route source=value_route.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_run:
+    aion@activity:task_queue/2 [activities] (v1, lit#8)
+    aion@workflow:run/1 [activities] (v2)
+== durable families == activities
+== atoms ==
+  [0] work_input
+  [1] value_route_input
+  [2] done_outcome
+  [3] ok
+== literals ==
+  [0] "item"
+  [1] "task"
+  [2] "done"
+  [3] "outcome"
+  [4] ""
+  [5] "ValueRouteOutcome"
+  [6] "done"
+  [7] "payload"
+  [8] "w"
+== types ==
+  record WorkInput tag=work_input
+    item: string
+  record ValueRouteInput tag=value_route_input
+    task: string
+  union ValueRouteOutcome
+    done -> done_outcome(string)
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=value_route_input_codec output=value_route_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(value_route.ValueRouteInput, value_route.ValueRouteOutcome, AwlError)
+  T-DEF name="value_route" input=value_route_input_codec output=value_route_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (value_route.ValueRouteInput) -> Result(value_route.ValueRouteOutcome, AwlError)
+  T-EXEC fields=[task:String] entry=step_run args=[0]
+== fn work_input_codec/0 origin=codec_template(RecordTrio, WorkInput, record#0) ==
+  sig: () -> Codec(value_route.WorkInput)
+  v0 = make_closure work_input_to_json captures=[]
+  v1 = call_local work_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn work_input_to_json/1 origin=codec_template(RecordTrio, WorkInput, record#0) ==
+  sig: (value_route.WorkInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"item": v1|>awlc.string_to_json}
+  return v2
+== fn work_input_decoder/0 origin=codec_template(RecordTrio, WorkInput, record#0) ==
+  sig: () -> Decoder(value_route.WorkInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure work_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn work_input_decoder$0/1 origin=lifted(work_input_decoder, #0) ==
+  sig: (String) -> Decoder(value_route.WorkInput)
+  v1 = record(work_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn value_route_input_codec/0 origin=codec_template(RecordTrio, ValueRouteInput, record#1) ==
+  sig: () -> Codec(value_route.ValueRouteInput)
+  v0 = make_closure value_route_input_to_json captures=[]
+  v1 = call_local value_route_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn value_route_input_to_json/1 origin=codec_template(RecordTrio, ValueRouteInput, record#1) ==
+  sig: (value_route.ValueRouteInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"task": v1|>awlc.string_to_json}
+  return v2
+== fn value_route_input_decoder/0 origin=codec_template(RecordTrio, ValueRouteInput, record#1) ==
+  sig: () -> Decoder(value_route.ValueRouteInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure value_route_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v0, v1)
+== fn value_route_input_decoder$0/1 origin=lifted(value_route_input_decoder, #0) ==
+  sig: (String) -> Decoder(value_route.ValueRouteInput)
+  v1 = record(value_route_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn value_route_outcome_codec/0 origin=codec_template(UnionTrio, ValueRouteOutcome, union#2) ==
+  sig: () -> Codec(value_route.ValueRouteOutcome)
+  v0 = make_closure value_route_outcome_to_json captures=[]
+  v1 = call_local value_route_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn value_route_outcome_to_json/1 origin=codec_template(UnionTrio, ValueRouteOutcome, union#2) ==
+  sig: (value_route.ValueRouteOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#2|>awlc.string_to_json, "payload": v1|>awlc.string_to_json}
+  return v2
+== fn value_route_outcome_decoder/0 origin=codec_template(UnionTrio, ValueRouteOutcome, union#2) ==
+  sig: () -> Decoder(value_route.ValueRouteOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure value_route_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v0, v1)
+== fn value_route_outcome_decoder$outcome/1 origin=lifted(value_route_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(value_route.ValueRouteOutcome)
+  if cmp Eq v0 lit#6:
+    v2 = call_rt aion@awl@codec:string_decoder/0()
+    v3 = make_closure value_route_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#7, v2, v3)
+  else:
+    v1 = record(done_outcome, [lit#4])
+    tail_rt gleam@dynamic@decode:failure/2(v1, lit#5)
+== fn value_route_outcome_decoder$arm0/1 origin=lifted(value_route_outcome_decoder, #1) ==
+  sig: (String) -> Decoder(value_route.ValueRouteOutcome)
+  v1 = record(done_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn work_activity/1 origin=activity_wrapper(work, raw=false) ==
+  sig: (String) -> Activity(value_route.WorkInput, String)
+  T-ACT action=work input_codec=work_input_codec return=awlc.string_codec
+== fn step_run/1 origin=region(run) ==
+  sig: (String) -> Result(value_route.ValueRouteOutcome, AwlError)
+  v1 = call_local work_activity(v0)
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#8)
+  v3 = call_rt aion@workflow:run/1(v2)
+  v4 = call_rt aion@awl@error:map_activity_error/1(v3)
+  v5 = try_bind v4
+  v6 = record(done_outcome, [v5])
+  v7 = record(ok, [v6])
+  return v7
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD

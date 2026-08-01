@@ -1,0 +1,171 @@
+module bounded_region_close source=bounded_region_close.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  step_wave:
+    aion@workflow:map/2 [activities] (v1, v5)
+  awl_r0_wave_step_work:
+    aion@activity:task_queue/2 [activities] (v1, lit#11)
+    aion@workflow:run/1 [activities] (v2)
+  wave_fanout_0:
+    aion@activity:task_queue/2 [activities] (v1, lit#9)
+== durable families == activities
+== atoms ==
+  [0] echo_input
+  [1] bounded_region_close_input
+  [2] done_outcome
+  [3] awl_visits_exceeded
+  [4] error
+  [5] ok
+== literals ==
+  [0] "value"
+  [1] "values"
+  [2] "done"
+  [3] "outcome"
+  [4] ""
+  [5] "BoundedRegionCloseOutcome"
+  [6] "done"
+  [7] "payload"
+  [8] "step `wave` exceeded its `max … visits` bound at line 20, column 3"
+  [9] "local"
+  [10] "finished"
+  [11] "local"
+== types ==
+  record EchoInput tag=echo_input
+    value: string
+  record BoundedRegionCloseInput tag=bounded_region_close_input
+    values: list(string)
+  union BoundedRegionCloseOutcome
+    done -> done_outcome(string)
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=bounded_region_close_input_codec output=bounded_region_close_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(bounded_region_close.BoundedRegionCloseInput, bounded_region_close.BoundedRegionCloseOutcome, AwlError)
+  T-DEF name="bounded_region_close" input=bounded_region_close_input_codec output=bounded_region_close_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (bounded_region_close.BoundedRegionCloseInput) -> Result(bounded_region_close.BoundedRegionCloseOutcome, AwlError)
+  T-EXEC fields=[values:List(String)] entry=step_wave args=[zero, 0]
+== fn echo_input_codec/0 origin=codec_template(RecordTrio, EchoInput, record#0) ==
+  sig: () -> Codec(bounded_region_close.EchoInput)
+  v0 = make_closure echo_input_to_json captures=[]
+  v1 = call_local echo_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn echo_input_to_json/1 origin=codec_template(RecordTrio, EchoInput, record#0) ==
+  sig: (bounded_region_close.EchoInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"value": v1|>awlc.string_to_json}
+  return v2
+== fn echo_input_decoder/0 origin=codec_template(RecordTrio, EchoInput, record#0) ==
+  sig: () -> Decoder(bounded_region_close.EchoInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure echo_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn echo_input_decoder$0/1 origin=lifted(echo_input_decoder, #0) ==
+  sig: (String) -> Decoder(bounded_region_close.EchoInput)
+  v1 = record(echo_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn bounded_region_close_input_codec/0 origin=codec_template(RecordTrio, BoundedRegionCloseInput, record#1) ==
+  sig: () -> Codec(bounded_region_close.BoundedRegionCloseInput)
+  v0 = make_closure bounded_region_close_input_to_json captures=[]
+  v1 = call_local bounded_region_close_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn bounded_region_close_input_to_json/1 origin=codec_template(RecordTrio, BoundedRegionCloseInput, record#1) ==
+  sig: (bounded_region_close.BoundedRegionCloseInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"values": v1|>list_string_to_json}
+  return v2
+== fn bounded_region_close_input_decoder/0 origin=codec_template(RecordTrio, BoundedRegionCloseInput, record#1) ==
+  sig: () -> Decoder(bounded_region_close.BoundedRegionCloseInput)
+  v0 = call_local list_string_decoder()
+  v1 = make_closure bounded_region_close_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v0, v1)
+== fn bounded_region_close_input_decoder$0/1 origin=lifted(bounded_region_close_input_decoder, #0) ==
+  sig: (List(String)) -> Decoder(bounded_region_close.BoundedRegionCloseInput)
+  v1 = record(bounded_region_close_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn bounded_region_close_outcome_codec/0 origin=codec_template(UnionTrio, BoundedRegionCloseOutcome, union#2) ==
+  sig: () -> Codec(bounded_region_close.BoundedRegionCloseOutcome)
+  v0 = make_closure bounded_region_close_outcome_to_json captures=[]
+  v1 = call_local bounded_region_close_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn bounded_region_close_outcome_to_json/1 origin=codec_template(UnionTrio, BoundedRegionCloseOutcome, union#2) ==
+  sig: (bounded_region_close.BoundedRegionCloseOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#2|>awlc.string_to_json, "payload": v1|>awlc.string_to_json}
+  return v2
+== fn bounded_region_close_outcome_decoder/0 origin=codec_template(UnionTrio, BoundedRegionCloseOutcome, union#2) ==
+  sig: () -> Decoder(bounded_region_close.BoundedRegionCloseOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure bounded_region_close_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v0, v1)
+== fn bounded_region_close_outcome_decoder$outcome/1 origin=lifted(bounded_region_close_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(bounded_region_close.BoundedRegionCloseOutcome)
+  if cmp Eq v0 lit#6:
+    v2 = call_rt aion@awl@codec:string_decoder/0()
+    v3 = make_closure bounded_region_close_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#7, v2, v3)
+  else:
+    v1 = record(done_outcome, [lit#4])
+    tail_rt gleam@dynamic@decode:failure/2(v1, lit#5)
+== fn bounded_region_close_outcome_decoder$arm0/1 origin=lifted(bounded_region_close_outcome_decoder, #1) ==
+  sig: (String) -> Decoder(bounded_region_close.BoundedRegionCloseOutcome)
+  v1 = record(done_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn list_string_codec/0 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: () -> Codec(List(String))
+  v0 = make_closure list_string_to_json captures=[]
+  v1 = call_local list_string_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn list_string_to_json/1 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: (List(String)) -> Json
+  v1 = make_closure list_string_to_json$item captures=[]
+  tail_rt gleam@json:array/2(v0, v1)
+== fn list_string_decoder/0 origin=codec_template(CompositeTrio, List(String), composite(list(string))) ==
+  sig: () -> Decoder(List(String))
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  tail_rt gleam@dynamic@decode:list/1(v0)
+== fn list_string_to_json$item/1 origin=lifted(list_string_to_json, #0) ==
+  sig: (String) -> Json
+  tail_rt aion@awl@codec:string_to_json/1(v0)
+== fn echo_activity/1 origin=activity_wrapper(echo, raw=false) ==
+  sig: (String) -> Activity(bounded_region_close.EchoInput, String)
+  T-ACT action=echo input_codec=echo_input_codec return=awlc.string_codec
+== fn step_wave/2 origin=region(wave) ==
+  sig: (Int, List(String)) -> Result(bounded_region_close.BoundedRegionCloseOutcome, AwlError)
+  v2 = increment v0
+  if cmp Gt v2 2:
+    v3 = record(awl_visits_exceeded, [lit#8])
+    v4 = record(error, [v3])
+    return v4
+  else:
+    v5 = make_closure wave_fanout_0 captures=[]
+    v6 = call_rt aion@workflow:map/2(v1, v5) live_after=[v1, v2]
+    v7 = call_rt aion@awl@error:map_activity_error/1(v6) live_after=[v1, v2]
+    v8 = try_bind v7 live_after=[v1, v2]
+    v9 = cmp Lt v2 2
+    if is_true v9:
+      tail_local step_wave(v2, v1)
+    else:
+      v10 = record(done_outcome, [lit#10])
+      v11 = record(ok, [v10])
+      return v11
+== fn awl_r0_wave/1 origin=region_wrapper(r0:wave) ==
+  sig: (String) -> Result(String, AwlError)
+  tail_local awl_r0_wave_step_work(v0)
+== fn awl_r0_wave_step_work/1 origin=region(r0:wave::work) ==
+  sig: (String) -> Result(String, AwlError)
+  v1 = call_local echo_activity(v0)
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#11)
+  v3 = call_rt aion@workflow:run/1(v2)
+  v4 = call_rt aion@awl@error:map_activity_error/1(v3)
+  v5 = try_bind v4
+  v6 = record(ok, [v5])
+  return v6
+== fn wave_fanout_0/1 origin=fork(wave#0) ==
+  sig: (String) -> Activity(bounded_region_close.EchoInput, String)
+  v1 = call_local echo_activity(v0)
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#9)
+  return v2
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD

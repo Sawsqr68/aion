@@ -4,9 +4,8 @@
 //! binding>)`), workflow-outcome returns (`Ok(Ctor(payload))` /
 //! `Error(AwlOutcomeFailure(…))`) apply only to the host flow, then step
 //! routes lower as region tail calls. Payloads: constructed named fields,
-//! the piped value, the binding named after the destination, or `Nil` —
-//! value payloads (`route out(<value>)`) stay behind the driver's staging
-//! gate and refuse here in depth.
+//! a single value expression (`route out(<value>)`), the piped value, the
+//! binding named after the destination, or `Nil`.
 
 use crate::RouteDirection;
 use crate::ast::{RoutePayload, RouteTarget};
@@ -143,13 +142,20 @@ fn route_payload(
     piped: Option<(Value, GType)>,
     stmts: &mut Vec<Stmt>,
 ) -> Result<Value, LowerError> {
-    if let Some(RoutePayload::Value(value)) = &target.payload {
-        // Defense in depth behind the driver's staging gate.
-        return Err(LowerError::unsupported(
-            "value route payloads (`route out(<value>)`) — the rev-3 flow shape is \
-             not yet lowered (B4)",
-            crate::spanned::Spanned::span(value),
+    if piped.is_some() && target.payload.is_some() {
+        // The reference `render_payload`'s first gate: the checker rejects this
+        // pairing, so reaching it means the document did not check cleanly —
+        // refuse rather than silently drop one of the two payloads.
+        return Err(LowerError::new(
+            target.span,
+            "a piped route carries the piped value as its payload — payload construction is \
+             not allowed here (the document did not check cleanly)",
         ));
+    }
+    if let Some(RoutePayload::Value(value)) = &target.payload {
+        // The value expression IS the payload, coerced toward the outcome's
+        // type exactly as the reference `render_arg_for` coerces it.
+        return lower_arg_for(ctx, value, outcome_ty, scope, stmts);
     }
     if let Some(RoutePayload::Args(args)) = &target.payload {
         let Some((gleam_name, record)) = ctx.emitter.env.record_of(outcome_ty) else {

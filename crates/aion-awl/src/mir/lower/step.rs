@@ -11,8 +11,9 @@
 //!   `sub_params`/`sub_node`, sibling/parent route frames, `on failure`
 //!   interaction — reference `emitter/subs.rs:20-60`) — `FnOrigin::SubStep`
 //!   already exists;
-//! - `subflow` declarations and value route payloads (`route out(<value>)`):
-//!   refused at the driver's staging gate;
+//! - `subflow` declarations: refused at the driver's staging gate, now the
+//!   only construct that gate holds (value route payloads retired from it
+//!   and lower in `route::route_payload`);
 //! - dependency-parallel region layers (`parallel region`) — see the design
 //!   sketch retained in the module history (flatten `region.layers` into the
 //!   emitter's step walk, `workflow.all` single-call layers, degrade richer
