@@ -78,6 +78,25 @@ Discovery starts from the compiled tree `build/dev/erlang`:
 
 Every written archive is **re-loaded and re-validated before the tool reports success** — integrity hash, format version, and entry-module presence are all proven on the read path, so a reported package is a loadable package.
 
+## AWL archives: the document travels with the package
+
+A package produced from an `.awl` document — by `aion deploy <file.awl>`, `aion run <file.awl>`, the server's deploy surface, or a revision recompile, all of which go through the one `compile_and_assemble_awl` seam — additionally carries **the source it was compiled from**, as two entry families rooted at the document's own directory:
+
+| Entry family | Contents |
+|---|---|
+| `awl/document/<filename>` | Exactly one entry: the `.awl` document, under its original filename verbatim. |
+| `awl/schema/<document-relative path>` | Every `schema("…")` import the document resolves, with directory nesting preserved. |
+
+A consumer can therefore stage the pair back out and re-check the document exactly as deployed. This is what backs the deployed workflow's read-only source view in the ops console.
+
+**The rider: archived source is provenance, and a declared *non-property* of package identity.** The content hash excludes every archived-source family, so carrying the document cannot re-version a deployed workflow or orphan runs pinned to it. Adding, removing, or changing the archived source leaves the package version untouched — the same rule that already makes `include_source` version-neutral for Gleam packages. `crates/aion-package/src/hash.rs` names every excluded family, and two tests pin it: `awl_source_inclusion_does_not_change_manifest_version` and `archiving_the_document_does_not_change_the_package_version`.
+
+Three refusals keep the provenance honest rather than approximate:
+
+- A `schema("…")` import that resolves **above** the document's own directory is refused at assembly (`UnarchivableImport`) — an archive must not claim provenance it cannot carry.
+- An unknown `awl/`-prefixed entry is refused at load (`MalformedAwlEntry`), so a tolerated-but-unfielded entry cannot silently vanish on a rewrite.
+- `awl/schema/` entries **without** their document are refused at load (`MissingAwlDocument`).
+
 ## Determinism and versioning
 
 For a fixed built tree and a fixed `workflow.toml`, packaging is byte-for-byte reproducible: modules are stored in canonical name order with fixed timestamps and permissions, and repeated runs produce identical archives.

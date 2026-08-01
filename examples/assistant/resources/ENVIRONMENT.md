@@ -46,19 +46,61 @@ Use these sources in order:
 4. Checker-valid fixtures under
    `crates/aion-awl/tests/fixtures/rev2/**/valid/*.awl`.
 5. The parser and checker in `crates/aion-awl/src/`, plus the CLI definitions
-   in `crates/aion-cli/src/awl.rs`, `main.rs`, and `one_motion.rs`.
+   in `crates/aion-cli/src/awl.rs`, `main.rs`, `one_motion.rs`,
+   `awl_scaffold/` (the `aion awl scaffold` worker generator),
+   `worker_shell.rs`, and `worker_agent/` (the two `aion worker`
+   subcommands).
+
+The reserved vocabulary itself is enumerated once, in
+`crates/aion-awl/src/lexer/tokens.rs`: `Keyword::ALL` is the complete reserved
+inventory, and `POSITIONAL_WORDS` names the openers that are recognised in one
+grammar position WITHOUT being reserved (`send`, `to`, `query`, `answer`,
+`run`, `in`). A word's absence from `Keyword::ALL` is not evidence the
+construct does not exist — check `POSITIONAL_WORDS` and the parser before
+saying so.
 
 Design papers can explain intent, but accepted grammar plus checked files decide
 what can be authored now. Never copy syntax only from a roadmap or draft.
 
 ## Server boundary
 
-Checking, formatting, schema derivation, and emitting are local. `aion deploy`,
-`aion run`, and observation commands contact the configured endpoint. Do not
-assume the default endpoint is the operator's target, do not start or restart a
-server, and do not claim a deploy or run succeeded unless the actual command or
-ops console reported it. When server access is not explicitly available,
-finish at a checked `.awl` file and state that deploy/run was not performed.
+Checking, formatting, schema derivation, worker scaffolding, and emitting are
+local. `aion deploy`, `aion run`, and observation commands contact the
+configured endpoint. Do not assume the default endpoint is the operator's
+target, do not start or restart a server, and do not claim a deploy or run
+succeeded unless the actual command or ops console reported it. When server
+access is not explicitly available, finish at a checked `.awl` file and state
+that deploy/run was not performed.
+
+## The operator's server state lives in the Aion home
+
+A running server resolves one home directory before it reads any config:
+`AION_HOME` when set, otherwise `$HOME/.aion`. An empty `AION_HOME` is a
+startup error, and a relative one resolves against the current directory.
+
+Under that home:
+
+| Path | What it is |
+|---|---|
+| `<home>/config.toml` | user-level server config |
+| `<home>/data` | default haematite event-store directory |
+| `<home>/authoring` | default authoring/AWL workspace root |
+
+Config discovery takes the first that exists: `--config PATH`, then
+`./aion.toml`, then `<home>/config.toml`, then built-in defaults.
+
+Consequences for a session:
+
+- **This is the operator's durable state.** Never delete, move, chmod, or
+  rewrite anything under the Aion home, and never set `AION_HOME` for a command
+  you run on their behalf unless they asked for it — pointing a server at a
+  different home silently detaches it from every run it was holding.
+- The server provisions and tightens these roots itself (`0700`). An operator
+  does not need to `chmod` them by hand; do not advise it.
+- If more than one server is involved, `AION_HOME` is what separates them.
+  Confirm which endpoint and which home before reasoning about "the" state.
+- A `.aion` directory INSIDE an authoring workspace is a different thing
+  entirely (per-document layout sidecars). Do not confuse it with the home.
 
 At the end, report the path of every authored `.awl` file, every local check you
 ran, and whether deploy/run was performed or deliberately left to the operator.

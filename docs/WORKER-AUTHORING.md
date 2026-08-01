@@ -5,6 +5,17 @@ implementation: `examples/dev-brief/worker/`. Read that package alongside this
 guide — every pattern named here is implemented there, and when this guide and
 that code disagree, the code wins.
 
+> **First check whether you need to write one at all.** For an AWL document,
+> four things can serve a declared action, and a hand-written worker is only
+> the last: a declarative `run "…"` body (the server runs the command itself —
+> read [`DECLARED-COMMANDS.md`](DECLARED-COMMANDS.md) first, **there is no
+> sandbox**); `aion worker shell` with a manifest, for host commands; `aion
+> worker agent`, for an agent harness; and `aion awl scaffold FILE.awl --out
+> <DIR>`, which generates a compiling Rust worker crate with every advertised
+> schema taken from the compiled contract rather than re-derived from your Rust
+> types. See [`docs/AWL.md`](AWL.md). Write one by hand, as below, when the
+> logic is substantial enough to deserve its own crate.
+
 ## What a worker is
 
 A worker is a standalone binary that dials the Aion server's liminal listen

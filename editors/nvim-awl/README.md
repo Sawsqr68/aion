@@ -8,6 +8,32 @@ Neovim support for Aion Workflow Language (`*.awl`) files.
 - automatic startup of `aion awl lsp` through Neovim's built-in LSP client
 - opt-in LSP format-on-save
 
+The language itself is documented in [`docs/AWL.md`](../../docs/AWL.md), with
+the full reference at
+[`examples/assistant/resources/AWL-REFERENCE.md`](../../examples/assistant/resources/AWL-REFERENCE.md).
+
+## Vocabulary
+
+Highlighting keywords come from the grammar's own list
+(`tools/tree-sitter-awl/grammar.js`), which carries AWL's reserved inventory —
+including `agent` and `advisory`, the action-declaration config markers. `true`
+and `false` are highlighted as booleans rather than as keywords.
+
+AWL's *positional* openers — `send`, `to`, `query`, `answer`, `run` — are
+deliberately **not** tinted. They are not reserved words: the corpus carries
+`action send(to: String, …)`, `step run`, and `action parse_output(…, query:
+String)` today, so the parser recognises each only in the one grammar position
+where nothing else may stand. Leaving a statement opener plain is a cosmetic
+loss; tinting an author's own binding would be the editor lying about their
+code.
+
+The language server does not have that constraint, because a completion is a
+suggestion rather than a claim about existing text: `aion awl lsp` completes
+over the full reserved inventory *and* the positional openers, both read from
+the compiler's own tables (`Keyword::ALL` and `POSITIONAL_WORDS` in
+`crates/aion-awl/src/lexer/tokens.rs`), so a new keyword cannot go missing from
+completion without failing a test.
+
 ## Requirements
 
 - Neovim 0.11 or newer

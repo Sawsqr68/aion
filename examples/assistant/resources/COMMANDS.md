@@ -71,6 +71,28 @@ That is a generated stopgap/toolchain view. Never edit it or replace the `.awl`
 source with it. Emission is optional in the normal authoring loop; direct
 `.awl` deploy/run compile through the production path themselves.
 
+### Scaffold a worker crate
+
+```sh
+aion awl scaffold FILE.awl --out ./workers
+```
+
+This generates one compiling Rust worker crate per `worker` block, at
+`<out>/<queue>-worker`. Every wire descriptor the generated worker advertises
+comes from the contract the compiler returns — the same bytes the server
+deploys and admits against — not from the handlers' Rust types, because a
+second rendering of the same shapes is exactly the drift the server's contract
+gate exists to catch.
+
+`--worker NAME` scaffolds one block instead of every block. `--aion-crates
+<DIR>` points the generated crate at a local aion checkout's `crates/`
+directory by path; omitted, it depends on the published crates at this binary's
+version. `src/handlers.rs` is yours from the moment it exists — re-running
+rewrites the generated files and never that one.
+
+The generated worker serves no action that carries a declarative `run` body:
+the server executes those itself.
+
 ## Deploy a checked AWL document
 
 Deployment contacts a running server and requires its deploy surface and the
@@ -84,6 +106,15 @@ For a case-sensitive `.awl` path, the CLI reads, checks, direct-compiles, and
 assembles the workflow before using the ordinary deploy operation. There is no
 Gleam build, `workflow.toml`, `aion package`, or hand-managed `.aion` input in
 this path.
+
+The assembled package **carries the document it was compiled from**, under
+`awl/document/<filename>` plus one `awl/schema/<relative path>` entry per
+`schema("…")` import, so a deployed workflow can be shown the exact source it
+was built from. That archived source is provenance ONLY: it is excluded from
+the package content hash, so carrying it never re-versions a deployed workflow
+or orphans runs pinned to it. Do not describe archived source as part of
+package identity. A declared `run` command IS identity-bound, but through the
+worker contract, not through the archived document.
 
 The ops console deploy surface uses the same direct compiler seam. Prefer the
 console when working with an operator there. Never start, stop, or restart a
@@ -103,9 +134,72 @@ includes `workflow_type`, `workflow_id`, `run_id`, and the decoded result.
 Workflow failure, cancellation, timeout, or continue-as-new is reported as an
 error rather than as success.
 
+### `--timeout` bounds the WAIT, not the run
+
+```sh
+aion --endpoint HOST:PORT run FILE.awl --input '{"name":"Ada"}' --timeout 5m
+```
+
+The value is an AWL duration literal — `30s`, `5m`, `3h`, `2d` — parsed by
+aion-awl's own lexer, so this flag and a document's `timeout` declaration share
+one vocabulary.
+
+There is **no default**. Absent the flag, the wait is bounded only by the
+document's own `timeout` declaration, which the engine enforces as a real
+deadline; a document declaring neither, run without `--timeout`, waits
+indefinitely.
+
+Reaching the bound stops the WAIT and never the run. The command exits 1 and
+reports the workflow id, run id, and a describe line; **the workflow continues
+executing on the server**, and `describe` will show it Running. Never report a
+`--timeout` exit as a failed or cancelled workflow — it is a statement about
+this command's patience, not about the run. To stop a run, cancel it.
+
 Use `aion deploy FILE.awl` when the operator wants deployment without an
 immediate run. Use `aion run FILE.awl --input ...` for the one-motion path. Do
 not teach `aion package` + `aion start` as the AWL authoring loop.
+
+## Serve the declared actions
+
+A clean check does not connect a worker. Unless every action carries a
+declarative `run` body, something must serve the declared queue before a run
+can get past its first call:
+
+```sh
+aion --endpoint HOST:PORT worker shell --manifest worker.toml --awl FILE.awl
+aion worker agent FILE.awl --harness norn --liminal-address HOST:PORT \
+  --identity NAME --concurrency N \
+  --reconnect-initial-backoff S --reconnect-max-backoff S \
+  --reconnect-max-attempts N
+```
+
+`aion worker shell` requires BOTH `--manifest` and `--awl`: the manifest
+carries host-command wiring only, so the document is the sole source of the
+schemas the worker advertises.
+
+`aion worker agent` serves an agent harness compiled into the binary on the
+queue the document declares — an agent worker without writing a crate. Facts
+that matter before running it:
+
+- The document is positional and required; it is the only possible source of
+  the advertised schemas, because an agent activity's output is decided by the
+  agent and there is no Rust type to derive one from.
+- It dials `--liminal-address` candidates (repeatable, for ordered redial),
+  **not** the global gRPC `--endpoint` — the agent-harness seam exists only on
+  the liminal worker transport.
+- The default build carries two harnesses, `norn` and `acp`, so `--harness` is
+  REQUIRED; a build carrying exactly one derives it. A flag configuring a
+  harness this invocation is not serving is refused, never ignored.
+- Every connection setting comes from a flag or its named environment variable
+  (the flag wins), nothing is invented, and every missing one is reported by
+  name at once.
+- The queue is derived when the document declares exactly one `worker` block,
+  and selected with `--task-queue` when it declares several. A queue is served
+  whole or the verb refuses.
+- `--check` prints the exact action surface the worker would advertise, the
+  resolved harness, and its intervention controls, then exits without
+  connecting or demanding connection settings. Run it before reporting that an
+  agent worker cannot serve a document.
 
 ## Observe and operate a real run
 
@@ -135,6 +229,32 @@ aion --endpoint HOST:PORT --namespace NAME signal WORKFLOW_ID SIGNAL_NAME \
 
 A signal is not proof that the workflow consumed it; confirm progress in the
 console or with `describe`.
+
+For a declared `query`, the read-only surface of a RUNNING instance:
+
+```sh
+aion --endpoint HOST:PORT --namespace NAME query WORKFLOW_ID QUERY_NAME
+```
+
+The answer is whatever the run's most recent `answer` statement registered, so
+a query reads live state and never changes it. A **completed** run no longer
+answers live queries and returns `error[not_running]`; that is expected —
+inspect a terminal run with `describe`. `aion awl schema FILE.awl --queries`
+emits the schema of every declared query's answer without contacting a server.
+
+To hold and release a run:
+
+```sh
+aion --endpoint HOST:PORT --namespace NAME pause WORKFLOW_ID --reason TEXT
+aion --endpoint HOST:PORT --namespace NAME resume WORKFLOW_ID
+aion --endpoint HOST:PORT --namespace NAME cancel WORKFLOW_ID --reason TEXT
+aion --endpoint HOST:PORT --namespace NAME reopen WORKFLOW_ID
+```
+
+`pause` durably holds new activity dispatch and is non-terminal; `resume`
+releases the hold. `reopen` re-drives a terminal-reopenable (Failed or
+Cancelled) run. These change a real operator's real run — never issue one
+without explicit operator authority.
 
 ## Honest failure handling
 

@@ -102,9 +102,59 @@ validation; `[dashboard]` and `[namespace]` select dashboard asset source
 and namespace resolver mode — see [`docs/API.md`](../API.md) for the
 namespace/auth trust model.)
 
+### The Aion home (`~/.aion` and `AION_HOME`)
+
+The server resolves one **home directory** — its user-level config and state
+root — before it reads any config file
+(`crates/aion-server/src/config/home.rs`):
+
+| Situation | Resolved home |
+|---|---|
+| `AION_HOME` is set | that path (relative paths resolve against the current directory) |
+| `AION_HOME` is unset | `$HOME/.aion` |
+| `AION_HOME` is set but empty | startup fails: `AION_HOME must not be empty` |
+| neither `AION_HOME` nor `HOME` identifies a directory | startup fails: `cannot resolve Aion home: set AION_HOME or HOME` |
+
+Config file discovery reads the first of these that exists
+(`crates/aion-server/src/config/file.rs`):
+
+1. `--config <path>`, when given;
+2. `./aion.toml` in the working directory;
+3. `<home>/config.toml`;
+4. built-in defaults.
+
+Two paths default *below* the home
+(`crates/aion-server/src/config/resolution.rs`, `defaults.rs`):
+
+| Config key | Default | What it holds |
+|---|---|---|
+| `store.data_dir` | `<home>/data` | the haematite database directory |
+| `authoring.workspace_dir` | `<home>/authoring` | the authoring/AWL workspace root |
+
+A legacy `./aion-data` or `./aion-authoring` directory in the working directory
+is still adopted **only when the home was derived** from `$HOME`; setting
+`AION_HOME` explicitly means the operator has named where state lives, so a
+working-directory legacy is ignored rather than allowed to win silently. Either
+way, the choice is logged.
+
+Aion **provisions these roots itself**. It creates the home, the store data
+root, and the authoring root owner-only (`0700`, applied by the `mkdir` itself
+rather than a create-then-chmod window), and if one already exists, grants
+group or world access, and is owned by the server's own user, it tightens the
+mode in place and logs the change at INFO with the previous and applied modes.
+You do not have to `chmod` anything by hand. A root Aion cannot make safe still
+refuses startup, naming the path, the problem, and the remedy: a root owned by
+another uid, a symlinked root or path component, a name occupied by a
+non-directory, or a filesystem that will not carry Unix modes.
+
+Setting `AION_HOME` per server is how you run more than one Aion on one box
+without them sharing state.
+
 ### Environment overrides
 
-Every key: `AION_<SECTION>_<KEY>`, uppercase, underscores. Examples:
+Every key: `AION_<SECTION>_<KEY>`, uppercase, underscores. `AION_HOME` is
+**not** one of these — it is the home resolver above, not a config key.
+Examples:
 
 ```sh
 AION_SERVER_GRPC_ADDRESS=127.0.0.1:60051

@@ -25,8 +25,19 @@
 
 ## 1. Mental model (do not violate)
 
-The **typed Gleam workflow module is the single source of truth** (ADR-014). There is
-no DSL and no second schema. The DX commands wrap an author loop around that one module.
+Within a **Gleam** workflow package, the typed Gleam workflow module is the single
+source of truth (ADR-014): no second schema inside the package, and the DX commands
+below wrap an author loop around that one module.
+
+> **This is not the only authoring surface.** AWL (`.awl`) is Aion's other
+> first-class surface and has shipped: its own parser, checker, formatter,
+> schema derivation, language server, and direct compiler, driven by
+> `aion awl check|fmt|emit|scaffold|schema|lsp`, `aion deploy <file.awl>`, and
+> `aion run <file.awl> --input <json>`. An AWL document carries its own types
+> and contracts and is compiled directly — it has no `aion generate` step and
+> no `workflow.toml`. See [`docs/AWL.md`](../AWL.md). The `aion dev`,
+> `aion new`, `aion generate`, `aion check --deterministic`, and `aion input`
+> commands documented in this guide are the **Gleam** package loop.
 
 Five load-bearing invariants constrain everything here. Breaking one is a correctness
 bug, not a style nit:

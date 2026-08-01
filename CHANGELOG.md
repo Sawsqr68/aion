@@ -5,6 +5,71 @@ whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
 ## Unreleased
 
+- **Every valid AWL document in the corpus now deploys on the direct
+  compiler.** Four construct classes were held at the lowering staging gate
+  and have landed, retiring the gate itself rather than shrinking it: value
+  route payloads (`route out(<value>)`, coerced toward the outcome's declared
+  type rather than passed through raw), `subflow` declarations, dependency
+  parallel layers (an `after` naming more than one step, or two steps sharing
+  a predecessor — not a keyword, which is why the flagship `dev_brief` hit it
+  with no visibly parallel syntax), and substeps. A layer the SDK cannot
+  dispatch concurrently degrades to written order and **says so** with a
+  `degraded_parallel` marker rather than silently serialising. The claim is
+  pinned as an invariant, not a count: `lowers_cover_and_golden` asserts the
+  refused set is empty over the whole valid population, so a construct that
+  legitimately refuses in future forces a knowing decision instead of a quiet
+  regression.
+- **`aion run` is gated end to end, and its wait can be bounded.** The
+  one-motion pipeline (compile → deploy → start → await → report) was wired
+  but untraversed by any test, and the await was an unbounded poll loop, so
+  `aion run` against a non-terminating workflow hung forever. A live e2e gate
+  now drives the real binary against a real server. New
+  `aion run --timeout <duration>` bounds **the wait only**, written as an AWL
+  duration literal (`30s`, `5m`, `3h`, `2d`) — the flag is parsed by aion-awl's
+  own lexer, so it and a document's `timeout` declaration share one
+  vocabulary. There is no default and no invented margin: absent the flag, the
+  wait is bounded only by the document's own declared `timeout`, and a
+  document declaring neither waits indefinitely. Reaching the bound exits 1
+  with the workflow id, run id, and describe line — **the run continues on the
+  server**.
+- **A deployed AWL package carries the document it was compiled from.** The
+  `.aion` archive gains two entry families rooted at the document's own
+  directory: `awl/document/<filename>` (exactly one, the original filename
+  verbatim) and `awl/schema/<document-relative path>` (every `schema(…)`
+  import, nesting preserved), so a consumer can stage the pair and re-check
+  the document exactly as deployed. Every deploy path carries it — CLI
+  one-motion, server deploy, revision recompile. **Archived source is
+  provenance and a declared non-property of package identity:** it is excluded
+  from the content hash, so a carried document cannot re-version a deployed
+  workflow or orphan pinned runs. A schema import resolving above the
+  document's directory refuses at assembly; unknown `awl/`-prefixed entries
+  and schemas without their document refuse at load.
+- **The deployed surface shows its archived AWL source, read-only.**
+  `GET /awl/deployed` lists every deployed version as the union of the
+  engine's loaded catalog and the store's persisted archives, each row stating
+  which side it came from; `GET /awl/deployed/{type}/{hash}` returns the
+  archived document with four-state source honesty (available, absent, not
+  persisted, unreadable with reason). The routes are deploy-guard authorized,
+  mounted on `[deploy].enabled`, and reject every mutating method. Reading the
+  deployed surface changes neither workspace nor store. The ops console gains
+  a read-only deployed view at `/authoring?source=deployed`.
+- **`aion worker agent` — an agent worker without writing a crate.**
+  `aion worker agent <FILE.awl>` serves the agent harness compiled into the
+  binary on the queue the document declares. Previously `aion worker` had
+  exactly one subcommand (`shell`), every agent worker in `examples/` was a
+  bespoke `main.rs`, and the binary built a default harness and immediately
+  dropped it — so even Norn, the shipped default, was not servable out of the
+  box. The document is the only possible source of the advertised schemas (an
+  agent activity's output is decided by the agent, so there is no Rust type to
+  derive one from). The queue is derived when the document declares exactly
+  one `worker` block and selected with `--task-queue` when it declares
+  several; a queue is served whole or the verb refuses by name. The worker
+  dials `--liminal-address` candidates, not the global gRPC `--endpoint`.
+  `--harness` selects among the adapters the binary was built with (the
+  default build carries `norn` and `acp`, so it requires the flag), and a flag
+  configuring a harness this invocation is not serving is refused rather than
+  ignored. `--check` prints the exact advertised action surface, the resolved
+  harness, and its intervention controls, then exits without connecting.
 - **Aion provisions its own sensitive roots instead of asking the operator
   to.** The Aion home, the haematite data root, and the AWL authoring root are
   Aion's directories, so the server creates them owner-only (`0700`, from the

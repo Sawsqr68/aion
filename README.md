@@ -1,20 +1,21 @@
 # Aion
 
-**A durable workflow engine for Gleam, Rust, and the BEAM.**
+**A durable workflow engine for AWL, Gleam, Rust, and the BEAM.**
 
 Aion gives you Temporal-class durable execution: workflows that survive
 `kill -9`, replay from event history, sleep durably for months, and resume
-exactly where they were. Workflows are authored in type-safe Gleam or in AWL,
-compiled to BEAM bytecode, and executed on
-[beamr](https://crates.io/crates/beamr) — a Rust implementation of the BEAM
-VM — with a Rust persistence and transport layer around it.
+exactly where they were. Workflows are authored in **AWL** — Aion's own
+workflow language — or in type-safe **Gleam**, compiled to BEAM bytecode, and
+executed on [beamr](https://crates.io/crates/beamr) — a Rust implementation of
+the BEAM VM — with a Rust persistence and transport layer around it.
 
 ```sh
 cargo install aion-cli --locked   # installs the `aion` binary
 ```
 
 **Start here: [Getting started](docs/GETTING-STARTED.md)** — zero to a
-completed durable workflow, with every file you need inline.
+completed durable workflow, in AWL, with every file you need inline.
+The AWL language itself is in [`docs/AWL.md`](docs/AWL.md).
 
 > Aion is the Greek conception of eternal, unbounded time — distinct from
 > Chronos, who is sequential, ticking time. A workflow that sleeps for three
@@ -25,12 +26,18 @@ completed durable workflow, with every file you need inline.
 - **Durable execution** — event-sourced histories with deterministic replay.
   Kill the server mid-run; on restart it replays history and the run resumes
   at the same await, without re-executing completed activities.
-- **Two first-class authoring surfaces** — typed Gleam
-  ([`aion_flow`](gleam/aion_flow/)) and AWL `.awl` documents. AWL ships with
-  `aion awl check`, `aion awl fmt`, `aion awl emit`, and `aion awl schema`;
-  `aion deploy <file.awl>` direct-compiles and deploys a document, and
-  `aion run <file.awl> --input <json>` compiles, deploys, starts, and awaits
-  it.
+- **Two first-class authoring surfaces** — AWL `.awl` documents and typed
+  Gleam ([`aion_flow`](gleam/aion_flow/)).
+  - **AWL** is the shortest path: one file declares the types, the workers and
+    their actions, and the step graph. `aion awl check|fmt|emit|scaffold|schema|lsp`
+    cover the local loop (including a language server and Rust worker
+    scaffolding); `aion deploy <file.awl>` direct-compiles and deploys a
+    document; `aion run <file.awl> --input <json> [--timeout <dur>]` compiles,
+    deploys, starts, and awaits it in one motion. No Gleam build, no
+    `workflow.toml`, no `aion package` step.
+  - **Gleam** is the typed-code path when a workflow needs real code:
+    `aion new`, `aion generate`, `aion dev` hot-loading, and
+    `aion check --deterministic`.
 - **Activities on workers you own** — Rust, Python, and TypeScript worker
   SDKs over a gRPC worker protocol with acks, reconnect, heartbeats, and
   cooperative cancellation.
@@ -71,7 +78,10 @@ completed durable workflow, with every file you need inline.
 | Document | What it covers |
 |---|---|
 | [Getting started](docs/GETTING-STARTED.md) | Zero to completed workflow on published artifacts |
-| [Workflow authoring guide](docs/guides/workflows.md) | The entry contract, determinism rules, timers, signals, queries, children |
+| [AWL](docs/AWL.md) | The AWL surface: the verbs, the authoring loop, and where the language reference lives |
+| [AWL language reference](examples/assistant/resources/AWL-REFERENCE.md) | The complete checked AWL grammar: types, workers, steps, forks, regions, loops, waits, signals, queries |
+| [Declared commands](docs/DECLARED-COMMANDS.md) | `run "…"` action bodies — what is guaranteed and what is not (**there is no sandbox**) |
+| [Workflow authoring guide](docs/guides/workflows.md) | The Gleam entry contract, determinism rules, timers, signals, queries, children |
 | [Activities & workers guide](docs/guides/activities-and-workers.md) | Worker scaffolding, failure classification, retry semantics |
 | [Schema codegen guide](docs/guides/codegen.md) | Generate Gleam types + JSON codecs from your schemas; `--check` CI gate; supported subset |
 | [Operations guide](docs/guides/operations.md) | Full config reference, deploy/versioning, persistence & recovery, metrics |

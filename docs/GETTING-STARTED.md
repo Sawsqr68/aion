@@ -1,24 +1,31 @@
 # Getting started with Aion
 
 This guide takes you from nothing to a completed durable workflow using only
-published artifacts — no repository checkout. You will:
+published artifacts — no repository checkout.
 
-1. install the `aion` CLI,
-2. write and package a Gleam workflow with one activity, one signal, and one
-   query,
-3. write a Rust activity worker,
-4. configure and run the server,
-5. deploy, start, query, signal, and complete a workflow run,
-6. kill the server mid-run and watch the run survive.
+Aion has two first-class authoring surfaces, and this guide covers both:
+
+- **[Part 1 — AWL](#part-1--the-awl-path)**, Aion's workflow language. One
+  `.awl` file declares the whole workflow, and `aion run` compiles, deploys,
+  starts, and awaits it in one motion. **Start here.**
+- **[Part 2 — Gleam](#part-2--the-gleam-path)**, for workflows that need real
+  typed code: `aion generate` derives codecs and schemas from your types, and
+  `aion package` produces a `.aion` archive.
+
+Either way you will install the CLI, run the server, serve an activity, and
+then deploy, start, signal, and complete a run — and kill the server mid-run to
+watch it survive.
 
 Working from a repository checkout instead? Use
-[`examples/hello-world/README.md`](../examples/hello-world/README.md).
+[`examples/awl-hello/README.md`](../examples/awl-hello/README.md) for AWL or
+[`examples/hello-world/README.md`](../examples/hello-world/README.md) for
+Gleam.
 
 ## Prerequisites
 
 - Rust toolchain and Cargo ([rustup](https://rustup.rs) recommended)
-- [Gleam](https://gleam.run/getting-started/installing/) with Erlang/OTP on
-  your `PATH`
+- **Part 2 only:** [Gleam](https://gleam.run/getting-started/installing/) with
+  Erlang/OTP on your `PATH`. AWL needs no Gleam toolchain.
 
 ## 1. Install the CLI
 
@@ -27,29 +34,292 @@ cargo install aion-cli --locked
 ```
 
 The crate is named `aion-cli`; the installed binary is **`aion`**. It is the
-one user-facing binary: it packages workflows, runs the server (`aion server`),
-and operates workflows over gRPC. Verify:
+one user-facing binary: it authors AWL, packages Gleam workflows, runs the
+server (`aion server`), serves workers, and operates runs. Verify:
 
 ```sh
+aion --version
 aion --help
 ```
 
-You should see the subcommands: `server`, `new`, `package`, `deploy`,
-`versions`, `route`, `unload`, `start`, `signal`, `query`, `cancel`, `list`,
-`describe`.
+The subcommands are `server`, `dev`, `awl`, `worker`, `new`, `generate`,
+`check`, `input`, `package`, `deploy`, `run`, `versions`, `route`, `unload`,
+`start`, `signal`, `query`, `cancel`, `reopen`, `pause`, `resume`, `list`,
+`describe`, and `inspect`.
+
+> **Released versus this repository.** This guide is written against the
+> **published** `aion` crate, and every AWL document in Part 1 is checked
+> against it. The repository's `main` branch carries AWL surfaces that have not
+> been released yet — declared `run "…"` command bodies, the `agent` action
+> marker, in-language `send`, `query`/`answer`, `aion awl scaffold`, `aion
+> worker agent`, and `aion run --timeout`. They are documented in
+> [`docs/AWL.md`](AWL.md) and the [language
+> reference](../examples/assistant/resources/AWL-REFERENCE.md); if `aion awl
+> check` rejects one, you are on the published binary and need a build from
+> source. Check with `aion awl --help` and `aion worker --help`.
 
 > Prefer a generated starting point? `aion new <name>` scaffolds a complete,
-> buildable project — workflow, schemas, `workflow.toml`, a dev `aion.toml`,
-> and a README with these same steps (`--template hello-world`,
-> `approval-flow`, `saga`, or `dev-pipeline`; `--worker rust` adds a worker
-> crate, and `dev-pipeline` — three composed workflows with type-generated
-> codecs via `aion generate` and a hermetic test suite — requires it). This
-> guide builds the same thing by hand so you see every part.
+> buildable **Gleam** project — workflow, schemas, `workflow.toml`, a dev
+> `aion.toml`, and a README with these same steps. Templates are
+> `hello-world` (default), `approval-flow`, `saga`, `dev-pipeline`, and
+> `agent`; `--worker rust` adds a worker crate, and `dev-pipeline` and `agent`
+> require it. There is no `.awl` template — for AWL, write the file, which is
+> what Part 1 does.
 
 > There is no separate server binary and no installable worker binary.
 > `cargo install aion-server` and `cargo install aion-worker` are not how
-> Aion is installed: the server is `aion server`, and workers are ordinary
-> Rust/Python/TypeScript programs you write against a worker SDK (step 4).
+> Aion is installed: the server is `aion server`, and workers are either
+> `aion worker shell` or ordinary Rust/Python/TypeScript programs you write
+> against a worker SDK.
+
+# Part 1 — the AWL path
+
+## Write the workflow
+
+Create `my_flow.awl`. It greets the caller through a `greet` activity, waits
+durably for an `approval` signal, and returns a record built from both:
+
+```awl
+//! Greet a name, hold for approval, then report who approved.
+workflow my_flow
+  input name: String
+  signal approval: Approval
+  outcome greeted: type Greeting, route success
+
+/// The payload an operator sends to release the hold.
+type Approval { approver: String }
+/// The recorded result of a completed run.
+type Greeting { greeting: String, approved_by: String }
+
+worker my_flow
+  /// A worker on the `my_flow` queue must serve this.
+  action greet(name: String) -> String
+    timeout 30s, retry 3 every 10s
+
+step greet_and_hold
+  greet(name: name) -> greeting
+  wait approval -> approved
+  route greeted(greeting: greeting, approved_by: approved.approver)
+```
+
+That is the whole workflow. Reading it top to bottom:
+
+- `//!` narrates the workflow and `///` documents the declaration that follows.
+  Both reach the derived schemas and the ops console — the prose is part of the
+  model, not a comment.
+- `input` defines the start contract; `signal` declares a durable signal the
+  run can receive; `outcome … route success` declares the terminal payload and
+  maps it onto the engine's completed status.
+- `worker my_flow` declares a **task queue**, and each `action` is the typed
+  wire contract something on that queue must serve. It is a requirement, not an
+  implementation. The indented config line sets this action's timeout and retry
+  policy — those belong to the workflow, not to the worker.
+- `step` holds the flow. `->` binds a call's result. `wait approval -> approved`
+  is a durable wait: the run suspends there, for seconds or months, and
+  survives restarts. `route` ends the run with the declared outcome.
+
+There is no entry function, no codec, no `workflow.toml`, and no build step.
+
+## Check it
+
+```sh
+aion awl check my_flow.awl
+```
+
+```text
+ok: my_flow.awl (1 step)
+```
+
+`check` runs entirely locally — it never contacts a server. It parses and
+typechecks declarations, binding flow along the step graph, route targets,
+outcome exhaustiveness, and schema imports. An error prints as
+`my_flow.awl:<line>:<column>: error: <message>` on stderr and exits non-zero.
+Fix the source; never emit around a diagnostic.
+
+`aion awl fmt my_flow.awl` rewrites the file in canonical form. The printer
+*is* the formatter, so there is no `--check` mode: inspect the diff and check
+again.
+
+## See the contracts it derives
+
+The start contract and every declared type are derivable without a server:
+
+```sh
+aion awl schema my_flow.awl
+```
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Greet a name, hold for approval, then report who approved.",
+  "properties": {
+    "name": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "type": "object"
+}
+```
+
+Note the `description`: your `//!` narration became the schema's documentation.
+`aion awl schema my_flow.awl --type Greeting` does the same for any declared
+type. This is the exact contract `aion run` validates your input against.
+
+## Serve the activity
+
+A clean check proves the document is internally consistent. It does **not**
+prove a worker exists — a call waits for a worker serving the declared queue
+and action. The quickest worker is the built-in shell worker, which maps
+actions to host commands. Create `worker.toml`:
+
+```toml
+[worker]
+name = "my-flow-worker"
+task_queue = "my_flow"      # the `worker my_flow` block name IS the queue
+
+[[action]]
+name = "greet"
+command = ["printf", "Hello, %s!", "{input.name}"]
+result = "text"             # trimmed stdout becomes the JSON string result
+```
+
+Facts worth knowing before you rely on it: unknown TOML fields are rejected;
+`command` is an argv array and is **not** interpreted by a shell;
+`{input.field}` projects one top-level scalar field into one whole argument
+(arrays, objects, and absent fields cannot be projected); `result = "json"`
+instead requires stdout to be valid JSON; and a non-zero exit is a retryable
+activity failure, with AWL's declared `retry` policy deciding whether another
+attempt is scheduled.
+
+For anything beyond command wiring, write a real worker against a worker SDK —
+[Part 2, step 4](#4-write-the-activity-worker) shows the Rust one, and the
+[activities and workers guide](guides/activities-and-workers.md) covers failure
+classification, heartbeats, and cancellation.
+
+## Configure and run the server
+
+The server reads a TOML config file. Create `aion.toml` in a fresh working
+directory — the settings are explained in full in
+[step 5 of Part 2](#5-configure-and-run-the-server):
+
+```toml
+[server]
+listen_address = "127.0.0.1:8080"
+grpc_address = "127.0.0.1:50051"
+
+[runtime]
+query_timeout_ms = 10000            # REQUIRED, no default
+
+[websocket]
+event_broadcast_capacity = 1024     # REQUIRED, no default
+
+[deploy]
+enabled = true                      # REQUIRED for `aion deploy` / `aion run`
+```
+
+The store needs no configuration: the stock binary defaults to the haematite
+backend, and its data directory defaults to `~/.aion/data`. Set `AION_HOME` to
+put a server's whole state somewhere else — that is also how you run two
+servers on one machine without them sharing state. See the
+[operations guide](guides/operations.md#the-aion-home-aion-and-aion_home).
+
+Start the server (terminal 1):
+
+```sh
+aion server --config aion.toml
+```
+
+In terminal 2, start the worker:
+
+```sh
+aion worker shell --manifest worker.toml
+```
+
+## Compile, deploy, start, and await — in one motion
+
+In terminal 3:
+
+```sh
+aion run my_flow.awl --input '{"name":"Ada"}'
+```
+
+`run` does the whole pipeline: it compiles and assembles the document locally,
+validates `--input` against the derived start contract **before** it opens the
+deploy connection, deploys, starts the workflow under its declared name, and
+waits for the terminal result. Try `--input '{"nmae":"Ada"}'` once to watch it
+refuse at your desk rather than half-way through a deploy.
+
+The run executes `greet` on your shell worker, then suspends at
+`wait approval` — so this command is now waiting. Leave it.
+
+> Use `aion deploy my_flow.awl` instead when you want the document deployed
+> without starting a run, then `aion start my_flow --input '{"name":"Ada"}'`
+> later. Do not reach for `aion package` here: that is the Gleam path, and an
+> `.awl` document never needs it.
+
+## Prove the durability
+
+In terminal 4, find the run and then kill the server hard:
+
+```sh
+aion list
+kill -9 <server pid>
+```
+
+Restart it — same directory, same config:
+
+```sh
+aion server --config aion.toml
+```
+
+On startup the server reloads the deployed package from the store, replays the
+run's event history, and the run is waiting at `wait approval` again, exactly
+where it was. The `greet` activity is **not** re-executed: replay returns its
+recorded result from history. That is the whole promise, and it costs you
+nothing to write — nothing in `my_flow.awl` mentions durability.
+
+## Approve and complete
+
+```sh
+aion signal <workflow-id> approval --payload '{"approver":"ada"}'
+aion describe <workflow-id> --pretty
+```
+
+`describe` shows `"status": "Completed"` and the full event history: workflow
+started, `greet` scheduled and completed, the signal delivered, and the
+workflow completed carrying
+`{"greeting":"Hello, Ada!","approved_by":"ada"}`.
+
+Sending a signal is not proof the workflow consumed it — confirm with
+`describe`. Other operating verbs on a live run are `aion pause` /
+`aion resume` (durably hold and release activity dispatch), `aion cancel`,
+`aion reopen` (re-drive a Failed or Cancelled run), and `aion inspect`
+(time-travel over the recorded oplog). See the
+[errors reference](errors.md) for every error code.
+
+## Where to go from here in AWL
+
+`my_flow.awl` used a fraction of the language. AWL also has children and
+subflows, `fork`/`join`, multi-step `distribute`/`sequence` regions closed by
+`collect`, bounded loops and visit-capped flow cycles, timed waits, `sleep`,
+and `on failure` compensation.
+
+- **[`docs/AWL.md`](AWL.md)** — every verb and the authoring loop.
+- **[The language reference](../examples/assistant/resources/AWL-REFERENCE.md)**
+  — the complete grammar, with the checked fixture that proves each construct.
+- **[`docs/DECLARED-COMMANDS.md`](DECLARED-COMMANDS.md)** — read before writing
+  a `run "…"` action body. **There is no sandbox.**
+- **[Editor support](../editors/)** — `aion awl lsp` drives the Zed and Neovim
+  extensions.
+
+# Part 2 — the Gleam path
+
+Gleam is the surface for workflows that need real typed code. The steps below
+build the same shape as Part 1 — one activity, one signal, one query — in
+Gleam, and package it into a versioned `.aion` archive.
 
 ## 2. Write the workflow
 
@@ -538,7 +808,11 @@ model is in the [operations guide](guides/operations.md).
 
 ## Where to go next
 
-- [Workflow authoring guide](guides/workflows.md) — the entry contract,
+- [`docs/AWL.md`](AWL.md) — the AWL surface: every verb, the authoring loop,
+  and the full language reference.
+- [Declared commands](DECLARED-COMMANDS.md) — `run "…"` action bodies: what is
+  guaranteed and what is not. **There is no sandbox.**
+- [Workflow authoring guide](guides/workflows.md) — the Gleam entry contract,
   determinism rules, timers, signals, queries, child workflows.
 - [Activities and workers guide](guides/activities-and-workers.md) — worker
   scaffolding, failure classification, retry semantics as they actually are.

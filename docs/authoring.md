@@ -1,11 +1,18 @@
 # Authoring activities: declare once, generate the rest
 
-Aion authoring follows one rule (ADR-014): **the typed Gleam declaration is the
-single source of truth.** You declare an activity once — its name, its tier, and
-its typed input and output — and `aion generate` derives everything that must
-agree byte-for-byte across the workflow, the codecs, the worker, and the wire
-goldens. There is no separate DSL or manifest to keep in step, and a hand-edit
-to any generated file is a build error.
+> **Scope.** This guide covers the **Gleam** authoring surface. Aion has two
+> first-class authoring surfaces, and AWL is the other one: an `.awl` document
+> declares its own types, workers, and actions, needs no `aion generate` step,
+> and is compiled directly by `aion deploy` / `aion run`. If you are authoring
+> in AWL, start at [`docs/AWL.md`](AWL.md) instead.
+
+Within a Gleam workflow package, authoring follows one rule (ADR-014): **the
+typed Gleam declaration is the single source of truth for that package.** You
+declare an activity once — its name, its tier, and its typed input and output —
+and `aion generate` derives everything that must agree byte-for-byte across the
+workflow, the codecs, the worker, and the wire goldens. Inside a Gleam package
+there is no second manifest to keep in step, and a hand-edit to any generated
+file is a build error.
 
 This guide walks the model end to end using `examples/order-saga`.
 

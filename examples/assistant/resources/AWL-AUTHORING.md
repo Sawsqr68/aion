@@ -72,9 +72,53 @@ arguments:
 inspect(repo: request.repo) -> report
 ```
 
-Read `WORKERS.md` before promising an implementation. AWL worker bodies do not
-exist today; command runners are host-native, while substantial workers use the
-existing Rust or Gleam worker surfaces.
+Read `WORKERS.md` before promising an implementation. Four things can serve a
+declared action, and choosing between them is an authoring decision:
+
+1. **The document itself**, with a declarative `run "…"` body — the server
+   executes the command and no worker serves that action:
+
+   ```awl
+   type RunOutcome { exit_code: Int, stdout: String, stderr: String }
+
+   worker greeter
+     action greet(name: String) -> RunOutcome
+       run "echo hello $name"
+   ```
+
+   The result type must be a record over a subset of
+   `{ exit_code: Int, stdout: String, stderr: String }`, only the action's own
+   parameters interpolate (`$name` / `${name}`), the program must be written
+   out, and there is no shell. **Read `docs/DECLARED-COMMANDS.md` first: there
+   is no sandbox.** Never propose one for work the operator has not agreed can
+   run with the server's full privileges.
+
+2. **An agent harness**, with the `agent` marker — the action's one `String`
+   input is a prompt and its `String` output is the reply:
+
+   ```awl
+   worker assistants
+     action ask(prompt: String) -> String
+       agent, timeout 10m
+   ```
+
+   `aion worker agent FILE.awl` serves it without anyone writing a crate.
+   `agent` and a `run` body are mutually exclusive.
+
+3. **`aion worker shell`**, for host commands wired by a strict manifest.
+
+4. **A real worker process** — `aion awl scaffold FILE.awl --out ./workers`
+   generates a compiling Rust crate per `worker` block, with every advertised
+   schema taken from the compiled contract rather than re-derived.
+
+An action with no body and no marker is a requirement on an out-of-band worker.
+There is no AWL worker file with arbitrary bodies; `run` commands are the only
+bodies the language admits.
+
+The one other declaration-level marker is `advisory`: an advisory action never
+faults its calling step and is not a completion dependency, so it cannot bind a
+result. Like `agent`, it classifies the declaration and cannot be set at a call
+site.
 
 ## 4. Draw the flow with steps
 
@@ -148,6 +192,46 @@ makes the result optional and therefore requires a presence/absence decision.
 `sleep 30s` is a durable timer. Do not read host time or perform ambient I/O in
 workflow flow; world-touching work belongs in worker actions.
 
+## 7a. Talk to the outside: `send` and `query`
+
+`wait` receives. Two further header declarations cover the other directions,
+and both are in the language today — never say otherwise.
+
+**`send` signals another running workflow**, addressed by its durable id:
+
+```awl
+workflow gated_item
+  input coordinator_id: String
+  send progress: Progress
+
+step announce
+  send progress(item: item_id, state: "started") to coordinator_id
+```
+
+The target is a workflow id, which is a `String` — `workflow.id`, an input, or
+any bound `String`. Payload forms mirror route payloads: named fields, a bare
+value, or nothing at all when the declared type is `Nil`. A name declared as an
+inbound `signal` is not sendable; declare the outbound direction too.
+
+**`query` declares what an operator can ask a RUNNING instance**, and `answer`
+registers the value:
+
+```awl
+workflow gated_review
+  query review_status: Status
+
+step announce
+  answer review_status(phase: "announcing")
+```
+
+Every declared query must be answered somewhere in the document or the check
+fails. Re-register an answer inside a loop to make a long-running run report
+live progress. Operators read it with `aion query WORKFLOW_ID QUERY_NAME`, and
+`aion awl schema FILE.awl --queries` emits every answer's schema. A completed
+run no longer answers live queries.
+
+See `AWL-REFERENCE.md` §12 and §13 for the full rules.
+
 ## 8. Check continuously, then hand off honestly
 
 After each structural change:
@@ -161,7 +245,14 @@ check again. When the document is clean, follow `COMMANDS.md`: deploy the
 `.awl` file directly and start it with `aion run FILE.awl --input 'JSON'`, or
 use the ops console author → check → canvas → deploy → run path. Observe the
 real run in the console. Do not report success merely because the source
-checks; workers must also be connected on the declared queues.
+checks; something must also serve every declared queue.
+
+`aion run --timeout 5m` bounds how long the COMMAND waits, written as an AWL
+duration literal. There is no default: absent the flag, the wait is bounded
+only by the document's own `timeout` declaration, and a document declaring
+neither waits indefinitely. Reaching the bound stops the wait, never the run —
+the workflow keeps executing on the server, so never report a `--timeout` exit
+as a failed or cancelled workflow.
 
 ## Verified exemplars
 
@@ -174,3 +265,11 @@ checks; workers must also be connected on the declared queues.
   `crates/aion-awl/tests/fixtures/rev2/flow-shape/valid/dev_flow.awl`.
 - Wait and sleep:
   `crates/aion-awl/tests/fixtures/rev2/step-bodies/valid/wait_and_sleep.awl`.
+- Sending signals:
+  `crates/aion-awl/tests/fixtures/rev2/step-bodies/valid/send_signal.awl`.
+- Query and answer, every admitted form:
+  `crates/aion-awl/tests/fixtures/rev2/step-bodies/valid/query_answer.awl`.
+- Declared `run` bodies:
+  `crates/aion-awl/tests/fixtures/rev2/declarations/valid/action_run_bodies.awl`.
+- The `agent` marker:
+  `crates/aion-awl/tests/fixtures/rev2/declarations/valid/agent_seam.awl`.
