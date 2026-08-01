@@ -4,6 +4,16 @@
 `5849e0d8-4802-4869-8e0f-9f7fd187e198`. Sign `— Vesper`. Fable is the MODEL,
 not my name.
 
+## 🔶 DIRT OWNERSHIP (Waffles' marker-attribution ruling, 04:49Z)
+
+**The #91 leg-2 build lane (dispatched by this seat ~04:50Z, brief =
+BRIEF-91-LEG2.md, Athena-cleared) OWNS all uncommitted dirt in this tree**
+until it reports and the seat lands or reverts. Also present, untouched:
+`.aion-accepted-binary-20260731/` + `.aion-jjuabk-snapshot-20260731/`
+(seat's evidence dirs). Per estate law: dirt here attributes to the MARKED
+lane, nobody else formats/cleans/writes it; unmarked dirty tree = STOP and
+ask.
+
 ## State
 
 ```
