@@ -16,10 +16,10 @@ Tree: clean except seat's untracked .aion-accepted-binary-20260731/ +
 .aion-jjuabk-snapshot-20260731/. stash@{0} NOT OURS — do not touch.
 ```
 
-**🔶 DIRT OWNERSHIP: the #133 docs lane (dispatched after this marker) owns
-all dirt inside its BRIEF-133-DOCS.md fences (docs/**, READMEs, CHANGELOG,
-examples/assistant/resources/) until it commits and pushes. Unmarked dirty
-outside those fences = STOP.**
+**🔶 DIRT OWNERSHIP: the #133 docs lane LANDED (54ae9a43, verified at seat's
+read). The ACTIVE mutating lane is now the #131/#134 console-debt lane: it
+owns dirt inside apps/aion-ops-console/src/** and CHECK-BASELINE.md only,
+until it commits and pushes. Unmarked dirty outside = STOP.**
 
 ## Landing evidence (the honest record)
 
