@@ -2,11 +2,12 @@
 
 use std::fmt;
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use aion_awl::{DurationLiteral, TokenKind};
 use aion_awl_package::compile_and_assemble_awl;
 use aion_client::WorkflowHandle;
-use aion_core::{Event, Payload};
+use aion_core::{Event, Payload, WorkflowError};
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 
@@ -100,15 +101,69 @@ fn validate_input(schema: &Value, input: &Value) -> Result<()> {
 /// waiting for a terminal event.
 const RESULT_POLL_INTERVAL: Duration = Duration::from_millis(400);
 
+/// Parses the operator's `--timeout` bound on the one-motion wait.
+///
+/// There is no default and no invented margin: the bound exists only when the
+/// operator writes the flag. The accepted spelling IS the AWL duration literal
+/// — lexed and converted by `aion-awl` itself — so `aion run --timeout 5m` and a
+/// document's own `timeout 5m` can never drift into two vocabularies.
+///
+/// # Errors
+///
+/// Returns the rejection clap renders when the value is not a single whole AWL
+/// duration literal, overflows a `Duration`, or is zero (a zero bound would stop
+/// the wait before the first poll, which no operator means to ask for).
+pub(crate) fn parse_await_timeout(raw: &str) -> Result<Duration, String> {
+    let tokens =
+        aion_awl::lex(raw).map_err(|error| format!("invalid --timeout value `{raw}`: {error}"))?;
+    // The literal must cover the WHOLE argument: `5m extra` lexes to a leading
+    // duration token and must still be refused.
+    let literal = tokens
+        .first()
+        .and_then(|token| match token.kind {
+            TokenKind::Duration { magnitude, unit } => Some(DurationLiteral {
+                span: token.span,
+                magnitude,
+                unit,
+            }),
+            _ => None,
+        })
+        .filter(|literal| literal.span.start == 0 && literal.span.end == raw.len())
+        .ok_or_else(|| {
+            format!(
+                "--timeout takes one AWL duration literal (`30s`, `5m`, `3h`, `2d`), not `{raw}`"
+            )
+        })?;
+    let bound = literal
+        .checked_duration()
+        .ok_or_else(|| format!("--timeout value `{raw}` is out of range"))?;
+    if bound.is_zero() {
+        return Err(String::from("--timeout must be a positive duration"));
+    }
+    Ok(bound)
+}
+
 /// Waits for the concrete run's terminal event and emits the existing JSON
 /// identifier fields plus its decoded result. The wait polls `describe` over
 /// the one configured gRPC endpoint — event subscriptions need a separate
 /// stream listener address the CLI does not require operators to provide.
 /// AWL currently cannot continue as new, so that terminal is reported as a
 /// refusal rather than silently detached.
-pub(crate) async fn await_result(handle: WorkflowHandle, workflow_type: &str) -> Result<Value> {
+///
+/// `wait_limit` is the operator's `--timeout`, and is the ONLY client-side bound.
+/// A document that declares its own `timeout` is already driven to a
+/// `WorkflowTimedOut` terminal by the engine's deadline and ends this wait
+/// through the terminal arm below, so nothing here duplicates it with a margin.
+/// With neither, the wait is indefinite by design: the run has no declared end
+/// and inventing one would be a policy the author never wrote.
+pub(crate) async fn await_result(
+    handle: WorkflowHandle,
+    workflow_type: &str,
+    wait_limit: Option<Duration>,
+) -> Result<Value> {
     let workflow_id = handle.workflow_id().to_string();
     let run_id = handle.run_id().to_string();
+    let started = Instant::now();
     loop {
         let description = handle
             .describe()
@@ -125,7 +180,7 @@ pub(crate) async fn await_result(handle: WorkflowHandle, workflow_type: &str) ->
                     }));
                 }
                 Event::WorkflowFailed { error, .. } => {
-                    anyhow::bail!("workflow run failed: {error}");
+                    anyhow::bail!("workflow run failed: {}", render_failure(error));
                 }
                 Event::WorkflowCancelled { reason, .. } => {
                     anyhow::bail!("workflow run cancelled: {reason}");
@@ -139,7 +194,40 @@ pub(crate) async fn await_result(handle: WorkflowHandle, workflow_type: &str) ->
                 _ => {}
             }
         }
-        tokio::time::sleep(RESULT_POLL_INTERVAL).await;
+        let Some(limit) = wait_limit else {
+            tokio::time::sleep(RESULT_POLL_INTERVAL).await;
+            continue;
+        };
+        let Some(remaining) = limit.checked_sub(started.elapsed()) else {
+            anyhow::bail!(
+                "stopped waiting after --timeout {limit}s with no terminal event; the run CONTINUES on the server\n  workflow_id: {workflow_id}\n  run_id: {run_id}\n  inspect it with: aion describe {workflow_id} --run-id {run_id}",
+                limit = limit.as_secs(),
+            );
+        };
+        tokio::time::sleep(RESULT_POLL_INTERVAL.min(remaining)).await;
+    }
+}
+
+/// Renders a recorded workflow failure WITH its structured details.
+///
+/// `WorkflowError`'s `Display` is its `message` alone, and an AWL failure
+/// outcome records the outcome name and its routed payload in `details`.
+/// Reporting the message alone left the operator holding only the engine's
+/// process-ordinal text ("workflow 3 returned error"), which names neither the
+/// outcome nor the run. An undecodable `details` payload is reported as such
+/// rather than dropped.
+fn render_failure(error: &WorkflowError) -> String {
+    let Some(details) = error.details.as_ref() else {
+        return error.to_string();
+    };
+    match payload_to_json(details) {
+        Ok(decoded) => format!("{error}\n  details: {decoded}"),
+        Err(decode_error) => {
+            format!(
+                "{error}\n  details: <undecodable {:?} payload: {decode_error}>",
+                details.content_type()
+            )
+        }
     }
 }
 
@@ -150,7 +238,9 @@ mod tests {
     use aion_package::{ExtractionLimits, Package};
     use serde_json::json;
 
-    use super::{InputValidationError, package_file, package_source, prepare_run};
+    use super::{
+        InputValidationError, package_file, package_source, parse_await_timeout, prepare_run,
+    };
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -208,5 +298,25 @@ mod tests {
         assert!(rendered.starts_with("input validation failed:"));
         assert!(rendered.contains("expected schema: {"));
         Ok(())
+    }
+
+    #[test]
+    fn await_timeout_accepts_every_awl_duration_unit() {
+        use std::time::Duration;
+
+        assert_eq!(parse_await_timeout("30s"), Ok(Duration::from_secs(30)));
+        assert_eq!(parse_await_timeout("5m"), Ok(Duration::from_secs(300)));
+        assert_eq!(parse_await_timeout("3h"), Ok(Duration::from_secs(10_800)));
+        assert_eq!(parse_await_timeout("2d"), Ok(Duration::from_secs(172_800)));
+    }
+
+    #[test]
+    fn await_timeout_refuses_anything_but_one_whole_duration_literal() {
+        for rejected in ["", "5", "5x", "5m extra", "extra 5m", "5m5m", "-5m", "0s"] {
+            assert!(
+                parse_await_timeout(rejected).is_err(),
+                "`{rejected}` must be refused as a --timeout value"
+            );
+        }
     }
 }

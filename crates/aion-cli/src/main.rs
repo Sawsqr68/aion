@@ -288,6 +288,16 @@ enum ClientCommand {
         /// JSON input payload, validated before deployment.
         #[arg(long)]
         input: String,
+        /// Optional bound on how long this command waits for the run's terminal
+        /// event, written as an AWL duration literal (`30s`, `5m`, `3h`, `2d`).
+        ///
+        /// There is NO default: absent, the wait is bounded only by the
+        /// document's own `timeout` declaration, which the engine enforces as a
+        /// deadline. A document declaring no timeout and no `--timeout` here
+        /// waits indefinitely. Reaching this bound stops the WAIT, never the
+        /// run — the workflow continues on the server.
+        #[arg(long, value_parser = one_motion::parse_await_timeout)]
+        timeout: Option<Duration>,
     },
     /// List every loaded workflow version with its routing flag (operator API).
     Versions {
@@ -550,13 +560,17 @@ async fn run(cli: &Cli, command: &ClientCommand) -> Result<Value> {
                 deploy::deploy(&deploy_target(cli), archive).await
             }
         }
-        ClientCommand::Run { file, input } => {
+        ClientCommand::Run {
+            file,
+            input,
+            timeout,
+        } => {
             let prepared = one_motion::prepare_run(file, input)?;
             deploy::deploy_bytes(&deploy_target(cli), prepared.archive).await?;
             let client = build_client(cli).await?;
             let handle =
                 start_workflow_handle(&client, &prepared.workflow_name, prepared.input).await?;
-            one_motion::await_result(handle, &prepared.workflow_name).await
+            one_motion::await_result(handle, &prepared.workflow_name, *timeout).await
         }
         ClientCommand::Versions { workflow_type } => {
             deploy::versions(&deploy_target(cli), workflow_type.as_deref()).await
