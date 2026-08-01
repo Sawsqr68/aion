@@ -49,6 +49,28 @@ assistant worker rebuild (priced) → offer Tom the server swap (#108: pid
 99844 NEVER killed, runs deleted binary; nothing new visible to him until
 HIS restart).
 
+## Waffles exchange 14:35-14:40Z (banked pre-compaction)
+
+- **Shakedown question RESOLVED from the artifact**: his carried "queued
+  green re-run" (his #53/#54, sha 5c433ade — resolves in NO estate repo) has
+  no run obligation. ACCEPTANCE-58.md:3-5 + commit 30e28488 SUBSTITUTE
+  automated pins (watched failing, inverted controls) for the rig run, as a
+  stated decision. Told him: #54 can close; the pins are among the 27 unrun
+  aion-server targets, so **the Dean's-box release battery at 2ec0fdb0 IS
+  their green run**. One residue flagged to him: must (b) transport e2e NOT
+  built — undecided design question (register_connection seeds reachability
+  → a never-reachable worker CYCLES eligibility per window instead of
+  settling excluded; ACCEPTANCE-58.md says settle it, don't discover it).
+  If he boards it, it's a design item, not a test re-run.
+- **His publish rulings, binding**: no per-crate granularity — ONE anchored
+  sequence on Tom's green numbers, MY hand publishes (owners-land-own-
+  repos). RECEIPTS REQUIRED: raw pasted battery exit lines in the record +
+  post-publish crates.io registry verification per crate BEFORE calling the
+  release done. **A mid-family refusal STOPS the sequence and goes to
+  Waffles unimproved — never leave a half-published family for Tom to find.**
+- He flagged the paste-back wait to Tom directly (~14:37Z): expect Tom's
+  numbers OR a routing change (runner on Dean's box) shortly.
+
 ## Today's landings (all pushed)
 
 #91 both legs (678ab99c; c5ea86c9+1aa896b9) · #133 docs (54ae9a43, verified
