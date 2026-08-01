@@ -33,11 +33,22 @@ binary matches Benji's docs.
    re-runs on new tree — law).
 4. **Console gates local** (cheap, no cargo): bun run check absolute-green
    expected post-#131, bun test, bun run build.
-5. **Publish, dependency order** (crates.io, same family/order as 0.9.x
-   releases). ⚠️ `cargo publish` runs a local verify build PER CRATE —
-   disk cost must be PRICED WITH ATHENA before firing, or the verify
-   question (venue/flags) settled with her explicitly. Nothing publishes
-   until the battery is green and Athena has priced the publish window.
+5. **Publish, dependency order** — 21 crates (derived from cargo metadata,
+   normal deps, topo order; NOT the remembered "19"):
+   aion-core → aion-package → aion-awl → aion-awl-lsp → aion-awl-package →
+   aion-proto-generated → aion-proto → aion-store → aion-rs → aion-client →
+   aion-integrations → aion-integration-acp → aion-integration-norn →
+   aion-darwin-acl → aion-store-haematite → aion-store-libsql →
+   aion-toolchain → aion-worker → aion-server → aion-cli →
+   aion-integration-cli.
+   PRICED (Athena 06:46Z): verify SHARES the workspace target (measured:
+   aion-core dry-run +0.104 GiB, one dep compiled). Ceiling 1 GiB/hard 1.5
+   PER CRATE, anchors both nouns per crate, stop-on-anomaly vs the 0.104
+   leaf actual; expect the first high-family crate (verify resolving
+   published aion deps from crates.io, not path) to be the shape-breaker if
+   any. Authority = TOM'S GO 06:35Z (Athena withdrew her per-crate-word
+   gate herself, 06:46Z). --no-verify off the table. Publish only after the
+   Dean's-box battery is green at the release tree.
 6. **Post-publish verify**: install 0.11.0 and re-run the docs lane's
    probe corpus (the fixtures that failed on 0.10.0 must now check clean).
    Venue for the install build: price with Athena (or Dean's box).
