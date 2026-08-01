@@ -15,17 +15,22 @@
 //! fall-through exit, so it seeds nothing). The
 //! shared collector cannot be consumed directly here: it intentionally
 //! aggregates an entire region into one graph node, while chain splitting
-//! needs a live-in set at every interior step boundary. Substeps remain
-//! outside the covered subset and collect nothing here because they refuse
-//! during body lowering.
+//! needs a live-in set at every interior step boundary. A step carrying a
+//! trailing SUBSTEP block folds its leading statements plus the shared plan's
+//! `sub_params` for the first substep — the reference's own call edge from the
+//! region node into `sub_node[(member, 0)]` — and not its own outcome clauses,
+//! which the LAST substep evaluates.
 
 use std::collections::BTreeSet;
 
 use crate::ast::{Expr, Guard, PipeEnd, PipeStage, RoutePayload, RouteTarget, Statement, Step};
 use crate::emitter::{expr_refs, falls_through};
 
+use super::super::ids::Var;
+use super::super::tydesc::TyDesc;
 use super::ctx::Ctx;
 use super::driver::LowerError;
+use super::expr::{Binding, Scope};
 use super::flow::{ExitKind, FlowCtx, FlowExit};
 use super::layers::ChainUnit;
 use super::visits::counter_name;
@@ -80,11 +85,41 @@ pub(super) fn chain_params(
             let step = steps.get(member).ok_or_else(|| LowerError::Planning {
                 message: format!("chain unit names step {member}, which the flow does not hold"),
             })?;
-            step_live_in(ctx, flow, step, &mut live)?;
+            step_live_in(ctx, flow, member, step, &mut live)?;
         }
         params[position] = live.iter().cloned().collect();
     }
     Ok(params)
+}
+
+/// Bind a function's parameter names into a fresh scope: one SSA var per name,
+/// with the type the flow's binding environment established for it.
+///
+/// Every generated flow function opens this way — a chain step, a substep, and
+/// a lifted compensation alike — so the three share it rather than each
+/// re-deriving the same walk. A name the environment cannot type is a document
+/// that did not check cleanly, never a `Nil` guess.
+pub(super) fn bind_params(
+    ctx: &mut Ctx<'_>,
+    flow: &FlowCtx<'_>,
+    names: &[String],
+    anchor: crate::Span,
+    scope: &mut Scope,
+) -> Result<(Vec<Var>, Vec<TyDesc>), LowerError> {
+    let mut vars = Vec::with_capacity(names.len());
+    let mut tys = Vec::with_capacity(names.len());
+    for name in names {
+        let ty = flow
+            .bindings
+            .get(name)
+            .cloned()
+            .ok_or_else(|| LowerError::new(anchor, format!("binding `{name}` has no type")))?;
+        let var = ctx.fresh_var();
+        vars.push(var);
+        tys.push(ctx.tydesc(&ty));
+        scope.insert(name.clone(), Binding { var, ty });
+    }
+    Ok((vars, tys))
 }
 
 /// Fold one step: `live = refs(step) ∪ (live − defs(step))`, with refs
@@ -92,6 +127,7 @@ pub(super) fn chain_params(
 fn step_live_in(
     ctx: &Ctx<'_>,
     flow: &FlowCtx<'_>,
+    index: usize,
     step: &Step,
     live: &mut BTreeSet<String>,
 ) -> Result<(), LowerError> {
@@ -116,12 +152,36 @@ fn step_live_in(
             }
         }
     }
-    collect_statements(ctx, flow, &step.body, &mut defs, &mut refs);
-    for clause in &step.outcomes {
-        if let Guard::When { expr, .. } = &clause.guard {
-            add_expr(expr, &defs, &mut refs);
+    let split = super::subs::substep_split(step)?;
+    let leading = step.body.get(..split).unwrap_or(&step.body);
+    collect_statements(ctx, flow, leading, &mut defs, &mut refs);
+    if split < step.body.len() {
+        // A substep parent's demand is its leading statements plus whatever the
+        // FIRST substep's function needs — the shared plan's fixed point for
+        // that node, which already folds the whole substep chain and the
+        // parent's own outcome clauses (the reference's call edge from the
+        // region node to `sub_node[(member, 0)]`, and its
+        // `collect_substep` chain-end fold). The parent's arms are therefore
+        // deliberately NOT collected here: they are evaluated at the chain's
+        // end, inside the last substep, not at the parent.
+        let params = flow
+            .plan
+            .sub_params_of(index, 0)
+            .ok_or_else(|| LowerError::Planning {
+                message: format!("step `{}` has substeps but no planned nodes", step.name),
+            })?;
+        for name in params {
+            if !defs.contains(name) {
+                refs.insert(name.clone());
+            }
         }
-        route_refs(ctx, flow, &clause.route, &defs, &mut refs, true);
+    } else {
+        for clause in &step.outcomes {
+            if let Guard::When { expr, .. } = &clause.guard {
+                add_expr(expr, &defs, &mut refs);
+            }
+            route_refs(ctx, flow, &clause.route, &defs, &mut refs, true);
+        }
     }
     for def in &defs {
         live.remove(def);
@@ -251,8 +311,10 @@ fn collect_statements(
             Statement::Collect(collect) => {
                 defs.insert(collect.bind.name.clone());
             }
-            // Sleeps reference no bindings. Substeps refuse during body
-            // lowering and therefore never reach chain materialization.
+            // Sleeps reference no bindings. A substep never reaches here: a
+            // trailing block is split off in `step_live_in` and folded through
+            // its planned node, and a substep in any other position refuses
+            // during body lowering.
             Statement::Sleep(_) | Statement::SubStep(_) => {}
         }
     }

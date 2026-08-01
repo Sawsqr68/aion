@@ -125,6 +125,12 @@ pub(super) const COVERED: &[&str] = &[
     // that reuses them again. Each flow carries its own binding environment,
     // so a lowering that leaked one scope into another would mistype here.
     "flow-shape/valid/subflow_local_names",
+    // Substeps, the `on failure` arm: a substep's guarded body whose TERMINAL
+    // route fires a PARENT outcome arm carrying a value payload. The route is a
+    // tail, never a fallible result, so it stays outside the guard — a
+    // deliberate `route <failure outcome>` through the parent's arm cannot
+    // trigger the substep's compensation.
+    "flow-shape/valid/substep_on_failure_route_tail",
     // The subflow NESTING arm: a subflow invoking a subflow, each compiled
     // once, the inner invocation binding the outer's local.
     "flow-shape/valid/subflow_nested",
@@ -163,6 +169,10 @@ pub(super) const COVERED: &[&str] = &[
     "loop-outcomes/valid/nested_handlers",
     "loop-outcomes/valid/on_failure_compensation",
     "loop-outcomes/valid/route_outcome_by_name",
+    // Substeps, the SIBLING-CHAIN arm: two substeps where the first routes to
+    // the second by name and the second falls through into the parent's own
+    // outcome clauses — the substep group's boundary.
+    "loop-outcomes/valid/substeps_two_stage",
     // The on-failure edge: compensation to a SIBLING STEP, inside a workflow
     // that also carries a counting loop and a `max … visits` bound.
     "loop-outcomes/valid/ship_release_combined",

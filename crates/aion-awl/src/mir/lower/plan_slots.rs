@@ -8,7 +8,11 @@
 //! 1. host region chains (one slot per CHAIN UNIT — `layers::chain_units`).
 //!    A region without a dependency-parallel layer holds exactly one member
 //!    per layer, so the unit count equals the layer count and every
-//!    pre-parallel module keeps byte-identical function references;
+//!    pre-parallel module keeps byte-identical function references. Then one
+//!    slot per SUBSTEP of the same flow (steps in written order, substeps in
+//!    block order — the reference `emitter/steps.rs::emit_flow_fns` emits
+//!    every region function before any substep chain). A flow with no
+//!    substeps reserves none;
 //! 2. nested flow function sets — subflows in DECLARATION order first (the
 //!    reference `emitter/flows.rs::emit_nested` order), then per-item regions
 //!    by ascending region id; each set is the run-once entry wrapper slot
@@ -99,8 +103,16 @@ pub(super) fn flows_in_order<'c>(ctx: &Ctx<'c>) -> Result<Vec<FlowWalk<'c>>, Low
     Ok(flows)
 }
 
-/// One flow's region-chain slots (one per chain unit, min one).
-fn chain_slots(walk: &FlowWalk<'_>, emitter: &Emitter<'_>, next: &mut u32) -> FlowFns {
+/// One flow's region-chain slots (one per chain unit, min one), then one slot
+/// per substep of every step's trailing block — steps in written order,
+/// substeps in block order, which is exactly the order `subs::lower_sub_chains`
+/// appends their functions in and the order the reference emits them
+/// (`emitter/steps.rs::emit_flow_fns`).
+fn chain_slots(
+    walk: &FlowWalk<'_>,
+    emitter: &Emitter<'_>,
+    next: &mut u32,
+) -> Result<FlowFns, LowerError> {
     let mut regions = Vec::new();
     let mut chains = Vec::new();
     for region in &walk.plan.regions {
@@ -115,7 +127,18 @@ fn chain_slots(walk: &FlowWalk<'_>, emitter: &Emitter<'_>, next: &mut u32) -> Fl
         }
         chains.push(chain);
     }
-    FlowFns { regions, chains }
+    let mut subs = BTreeMap::new();
+    for (index, step) in walk.steps.iter().enumerate() {
+        for position in 0..super::subs::substeps_of(step)?.len() {
+            subs.insert((index, position), FnRef(*next));
+            *next += 1;
+        }
+    }
+    Ok(FlowFns {
+        regions,
+        chains,
+        subs,
+    })
 }
 
 /// Every action a HETEROGENEOUS dependency-parallel layer dispatches, over
@@ -157,7 +180,7 @@ pub(super) fn plan_flow_slots(ctx: &Ctx<'_>, next: &mut u32) -> Result<FlowSlots
     // below use, so a unit count is never read against another flow's steps.
     let flows = flows_in_order(ctx)?;
     let mut walks = flows.iter();
-    let host = chain_slots(next_walk(&mut walks, "the host flow")?, emitter, next);
+    let host = chain_slots(next_walk(&mut walks, "the host flow")?, emitter, next)?;
     let mut subflow_fns = BTreeMap::new();
     for shape in emitter.subflow_shapes {
         if !plans.subflows.contains_key(&shape.name) {
@@ -166,7 +189,7 @@ pub(super) fn plan_flow_slots(ctx: &Ctx<'_>, next: &mut u32) -> Result<FlowSlots
         let wrapper = FnRef(*next);
         *next += 1;
         let walk = next_walk(&mut walks, &format!("subflow `{}`", shape.name))?;
-        let fns = chain_slots(walk, emitter, next);
+        let fns = chain_slots(walk, emitter, next)?;
         subflow_fns.insert(shape.name.clone(), NestedFns { wrapper, fns });
     }
     let mut region_fns = BTreeMap::new();
@@ -174,7 +197,7 @@ pub(super) fn plan_flow_slots(ctx: &Ctx<'_>, next: &mut u32) -> Result<FlowSlots
         let wrapper = FnRef(*next);
         *next += 1;
         let walk = next_walk(&mut walks, &format!("region {id}"))?;
-        let fns = chain_slots(walk, emitter, next);
+        let fns = chain_slots(walk, emitter, next)?;
         region_fns.insert(id, NestedFns { wrapper, fns });
     }
     if walks.next().is_some() {
@@ -185,17 +208,17 @@ pub(super) fn plan_flow_slots(ctx: &Ctx<'_>, next: &mut u32) -> Result<FlowSlots
 
     let mut loops = Vec::new();
     for flow in &flows {
-        for_each_step(flow, |step| {
+        for_each_body(flow, |step| {
             for _ in 0..super::loops::count_loops(&step.body) {
                 loops.push(FnRef(*next));
                 *next += 1;
             }
-        });
+        })?;
     }
     let mut forks = Vec::new();
     let mut child_witness_needed = false;
     for flow in &flows {
-        for_each_step(flow, |step| {
+        for_each_body(flow, |step| {
             child_witness_needed |= super::forks::needs_child_witness(&step.body, emitter)
                 || super::fanout::needs_child_witness(step, flow.regions, emitter);
             let count = super::fanout::count_fanout_fns(step, flow.regions, emitter)
@@ -204,25 +227,25 @@ pub(super) fn plan_flow_slots(ctx: &Ctx<'_>, next: &mut u32) -> Result<FlowSlots
                 forks.push(FnRef(*next));
                 *next += 1;
             }
-        });
+        })?;
     }
     let mut waits = Vec::new();
     for flow in &flows {
-        for_each_step(flow, |step| {
+        for_each_body(flow, |step| {
             for _ in 0..super::wait::count_wait_fns(&step.body) {
                 waits.push(FnRef(*next));
                 *next += 1;
             }
-        });
+        })?;
     }
     let mut compensations = Vec::new();
     for flow in &flows {
-        for_each_step(flow, |step| {
+        for_each_body(flow, |step| {
             if step.on_failure.is_some() {
                 compensations.push(FnRef(*next));
                 *next += 1;
             }
-        });
+        })?;
     }
     let mut adapters = BTreeMap::new();
     for &id in plans.regions.keys() {
@@ -270,9 +293,17 @@ fn unplanned_subflow(name: &str) -> LowerError {
     }
 }
 
-/// Walk one flow's steps in lowering order: plan regions in order, layers
-/// flattened, written order within a layer.
-fn for_each_step(flow: &FlowWalk<'_>, mut f: impl FnMut(&Step)) {
+/// Walk every body of one flow in LOWERING order — the order the reserved-slot
+/// pools must be consumed in: first the chain steps (plan regions in order,
+/// layers flattened, written order within a layer), then every substep of every
+/// trailing block (steps in written order, substeps in block order), which is
+/// when `flow::lower_flow_fns` runs `subs::lower_sub_chains`.
+///
+/// A parent step's own count covers only its LEADING statements: the counting
+/// walks (`loops::count_loops` and its siblings) do not descend into a
+/// `SubStep`, so a substep's own loops, forks, waits, and `on failure` edge are
+/// counted here, once, at the position their functions are built.
+fn for_each_body(flow: &FlowWalk<'_>, mut f: impl FnMut(&Step)) -> Result<(), LowerError> {
     for region in &flow.plan.regions {
         for &step_index in region.layers.iter().flatten() {
             if let Some(step) = flow.steps.get(step_index) {
@@ -280,6 +311,12 @@ fn for_each_step(flow: &FlowWalk<'_>, mut f: impl FnMut(&Step)) {
             }
         }
     }
+    for step in flow.steps {
+        for sub in super::subs::substeps_of(step)? {
+            f(sub);
+        }
+    }
+    Ok(())
 }
 
 /// T-DEAD precedes T-WIT; the dynamic lifted-function pool (predicate

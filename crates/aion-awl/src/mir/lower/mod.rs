@@ -36,6 +36,7 @@ mod route;
 mod send;
 mod slots;
 mod step;
+mod subs;
 mod visits;
 mod wait;
 mod wrappers;

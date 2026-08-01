@@ -357,18 +357,50 @@ step second_pass
 /// structured fields and rendered prose both identical.
 #[test]
 fn refusal_passthrough_is_lossless() -> TestResult {
-    // Repointed at the SUBSTEP deferral when the `on failure` edge landed
-    // (`aion-awl/src/mir/lower/failure.rs`): this obligation needs a fixture
-    // the direct path still refuses, and substeps are the remaining
-    // step-shaped one. It self-documents its own next flip.
-    let (source, root) = read(&fixture("loop-outcomes/valid/substeps_two_stage.awl"))?;
+    // This obligation needs a document the direct path refuses, and NO `valid/`
+    // fixture does any more: substeps were the last step-shaped deferral, and
+    // with them lowered every one of the corpus's valid documents compiles.
+    // So the source is written here rather than read from the corpus, and it
+    // carries the one refusal both backends deliberately keep —
+    // `after` dependencies on a substep, which the reference emitter would drop
+    // on the floor (`aion-awl/src/unlowered.rs`). Authoring a `valid/` fixture
+    // for it would put a document in the sweep that cannot deploy, which is
+    // exactly what this landing removed.
+    let source = "\
+//! `after` on a substep: the one refusal both backends keep.
+workflow substep_after
+  input target: String
+  outcome done: type String, route success
+
+worker shell
+  action publish(target: String) -> String
+  action verify(target: String) -> String
+
+step publish_it
+  step attempt
+    publish(target: target) -> receipt
+
+  step confirm after attempt
+    verify(target: target) -> checked
+
+  outcome finish: otherwise, route done(\"stopped\")
+"
+    .to_owned();
+    let root = manifest_dir();
     let document = aion_awl::parse(&source)?;
     let Err(mir_error) = lower(&document, Some(&root)) else {
-        return Err("substeps_two_stage now lowers; pick a refused fixture".into());
+        return Err("the `after`-on-a-substep refusal is gone; repoint this obligation".into());
     };
     let LowerError::Unsupported { shape, span } = &mir_error else {
         return Err(format!("expected an unsupported refusal, got {mir_error:?}").into());
     };
+    // Name the refusal this obligation is carried by, so a document that starts
+    // refusing for some OTHER reason cannot keep the passthrough proof alive on
+    // an unrelated diagnostic.
+    assert_eq!(
+        shape, "`after` dependencies on substeps — a later landing carries them",
+        "the passthrough obligation is riding a different refusal than it names"
+    );
 
     match compile(&source, &root) {
         Err(error) => {
@@ -386,7 +418,7 @@ fn refusal_passthrough_is_lossless() -> TestResult {
                 }
             }
         }
-        Ok(_) => return Err("substeps_two_stage unexpectedly compiled".into()),
+        Ok(_) => return Err("the `after`-on-a-substep document unexpectedly compiled".into()),
     }
     Ok(())
 }

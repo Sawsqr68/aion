@@ -35,53 +35,219 @@ fn nested_handlers_on_failure_now_lowers() -> Result<(), Box<dyn std::error::Err
     Ok(())
 }
 
-/// The substep deferral is UNTOUCHED by the value-payload landing: both
-/// substep fixtures still refuse, each pinned to its OWN exact class and
-/// COMPLETE span (start/end/line/column), so range or column drift fails too.
+/// The retired `substeps` refusal — the LAST refusal class the direct MIR
+/// lowering path held — flipped to a lowering + verify coverage pin (the same
+/// promotion as `parallel_layer_fixtures_now_lower`). Both fixtures lower;
+/// neither merely moved to a later refusal.
 ///
-/// The two now refuse at the SAME gate, and that convergence is the
-/// value-payload landing's evidence rather than a weakening of this pin.
-/// Before it, `substep_on_failure_route_tail` carried a value route payload
-/// (`route failed("substep finished")`) and never reached step lowering at
-/// all — the driver's staging gate took it first, at the payload's own span
-/// (513..531, line 20). That gate is retired: the payload lowers now, so the
-/// fixture reaches `step::lower_step` and refuses at `substeps`, anchored to
-/// its guarding top-level step (`publish_it`) — exactly as its sibling
-/// `substeps_two_stage` always has. The refusal MOVED to the fixture's real
-/// remaining gap; it was not removed, and the fixture is still out of the
-/// covered ratchet. A future substep lowering must retire BOTH knowingly.
+/// The two arms are deliberately different machinery.
+/// `substeps_two_stage` is the SIBLING CHAIN: `fetch_batch` routes to `scrub`
+/// by name and `scrub` falls through into the parent's own outcome clauses.
+/// `substep_on_failure_route_tail` is the `on failure` × substep INTERACTION,
+/// and it also carries a value route payload fired through a parent arm — the
+/// two constructs the preceding landings built.
 #[test]
-fn substep_fixtures_still_refuse() -> Result<(), Box<dyn std::error::Error>> {
-    for (fixture, expected_shape, expected) in [
-        (
-            "tests/fixtures/rev2/flow-shape/valid/substep_on_failure_route_tail.awl",
-            "substeps",
-            crate::Span {
-                start: 323,
-                end: 333,
-                line: 11,
-                column: 6,
-            },
-        ),
-        (
-            "tests/fixtures/rev2/loop-outcomes/valid/substeps_two_stage.awl",
-            "substeps",
-            crate::Span {
-                start: 503,
-                end: 510,
-                line: 18,
-                column: 6,
-            },
-        ),
+fn substep_fixtures_now_lower() -> Result<(), Box<dyn std::error::Error>> {
+    for fixture in [
+        "tests/fixtures/rev2/flow-shape/valid/substep_on_failure_route_tail.awl",
+        "tests/fixtures/rev2/loop-outcomes/valid/substeps_two_stage.awl",
     ] {
-        match lower_fixture(&manifest_dir().join(fixture))? {
-            Err(LowerError::Unsupported { shape, span }) => {
-                assert_eq!(shape, expected_shape, "{fixture} refusal class drifted");
-                assert_eq!(span, expected, "{fixture} refusal span drifted");
-            }
-            other => {
-                return Err(format!("{fixture} must still refuse: {other:?}").into());
-            }
+        let module = lower_fixture(&manifest_dir().join(fixture))??;
+        super::verify(&module)?;
+    }
+    Ok(())
+}
+
+/// The substep chain's SHAPE, pinned two-directionally on the fixture whose
+/// parent carries two substeps.
+///
+/// A substep group is a chain of functions, not an inlined block: the parent
+/// hands off to the first substep and does nothing else, a sibling route is a
+/// tail call into that sibling's own function, and the parent's outcome clauses
+/// are evaluated at the CHAIN'S END — inside the LAST substep — because that is
+/// where the group's boundary is (`emitter/subs.rs::emit_sub_tail`).
+///
+/// Each arm needs its negative half. Asserting only that the parent tail-calls
+/// the first substep would still pass on a lowering that ALSO evaluated the
+/// parent's arms at the parent (running them before the substeps ever did);
+/// asserting only that the last substep evaluates them would still pass if the
+/// first substep evaluated them too, firing `hollow_source` one stage early.
+/// So the parent must hold the hand-off AND NOT the arms, and the arms must
+/// land in the last substep AND NOT the first — except for the ONE arm the
+/// first substep legitimately fires by routing to it by name.
+#[test]
+fn a_substep_chain_hands_off_and_closes_on_the_parents_arms()
+-> Result<(), Box<dyn std::error::Error>> {
+    let path =
+        manifest_dir().join("tests/fixtures/rev2/loop-outcomes/valid/substeps_two_stage.awl");
+    let module = lower_fixture(&path)??;
+    let printed = super::print_mir(&module);
+    let body_of = |name: &str| -> Result<String, String> {
+        printed
+            .split(&format!("== fn {name}/1"))
+            .nth(1)
+            .and_then(|rest| rest.split("\n== fn ").next())
+            .map(str::to_owned)
+            .ok_or_else(|| format!("function `{name}` is missing from the module"))
+    };
+
+    let parent = body_of("step_prepare")?;
+    assert!(
+        parent.contains("tail_local sub_prepare_fetch_batch(v0)"),
+        "the parent must hand off to its first substep:\n{parent}"
+    );
+    assert!(
+        !parent.contains("prepared_outcome") && !parent.contains("awl_outcome_failure"),
+        "the parent must evaluate NONE of its own outcome arms — they close the \
+         substep chain, they do not run before it:\n{parent}"
+    );
+
+    let first = body_of("sub_prepare_fetch_batch")?;
+    assert!(
+        first.contains("tail_local sub_prepare_scrub("),
+        "a route naming a sibling substep must tail-call that sibling's function:\n{first}"
+    );
+    assert!(
+        !first.contains("prepared_outcome"),
+        "the FIRST substep must not reach the parent's success arm — only the arm it \
+         routes to by name:\n{first}"
+    );
+
+    let last = body_of("sub_prepare_scrub")?;
+    assert!(
+        last.contains("record(prepared_outcome,") && last.contains("record(awl_outcome_failure,"),
+        "the LAST substep evaluates BOTH of the parent's arms — the chain's \
+         boundary:\n{last}"
+    );
+    assert!(
+        !last.contains("tail_local sub_prepare_"),
+        "the last substep has no sibling to hand off to:\n{last}"
+    );
+    Ok(())
+}
+
+/// The `on failure` × substep interaction, pinned two-directionally.
+///
+/// A substep's guarded body puts every fallible result behind an
+/// `is_tagged ok/2` test whose FAILURE arm tail-calls the lifted compensation.
+/// The substep's TAIL — here a `route finish` that fires the parent's arm and
+/// returns `Error(AwlOutcomeFailure(...))` — is a `Tail`, never a `TryBind`, so
+/// it lands in the SUCCESS arm and can never trigger compensation. That is the
+/// reference's invariant (`emitter/failure.rs`: a body-terminal route renders
+/// outside the attempt closure), and the two halves must be asserted together:
+/// a body that put the routed failure in the ERROR arm instead would still
+/// contain both terms, and would run `cleanup` on a deliberate failure outcome.
+///
+/// The compensation is checked for the same pairing from the other side: it
+/// runs `cleanup` and then fires the same parent arm, which is what the
+/// reference's `Error(_) ->` block does with the substep frame still in hand.
+#[test]
+fn a_substeps_failure_edge_keeps_its_routed_outcome_out_of_the_guard()
+-> Result<(), Box<dyn std::error::Error>> {
+    let path = manifest_dir()
+        .join("tests/fixtures/rev2/flow-shape/valid/substep_on_failure_route_tail.awl");
+    let module = lower_fixture(&path)??;
+    let printed = super::print_mir(&module);
+    let attempt = printed
+        .split("== fn sub_publish_it_attempt/1")
+        .nth(1)
+        .and_then(|rest| rest.split("\n== fn ").next())
+        .ok_or("the guarded substep function is missing")?;
+    let (success_arm, failure_arm) = attempt
+        .split_once("  else:\n")
+        .ok_or("the guarded body has no failure arm")?;
+    assert!(
+        success_arm.contains("if is_tagged v4 ok/2:"),
+        "the substep's fallible publish must be tested in place:\n{attempt}"
+    );
+    assert!(
+        success_arm.contains("record(awl_outcome_failure,")
+            && !failure_arm.contains("record(awl_outcome_failure,"),
+        "the routed failure outcome belongs to the SUCCESS arm — a route is a tail, \
+         never a fallible result:\n{attempt}"
+    );
+    assert!(
+        failure_arm.contains("tail_local sub_publish_it_attempt_on_failure(")
+            && !success_arm.contains("sub_publish_it_attempt_on_failure"),
+        "compensation is reachable ONLY from the failure arm:\n{attempt}"
+    );
+
+    let compensation = printed
+        .split("== fn sub_publish_it_attempt_on_failure/1")
+        .nth(1)
+        .and_then(|rest| rest.split("\n== fn ").next())
+        .ok_or("the substep's compensation function is missing")?;
+    assert!(
+        compensation.contains("call_local cleanup_activity("),
+        "the compensation must run the substep's cleanup:\n{compensation}"
+    );
+    assert!(
+        compensation.contains("record(awl_outcome_failure,"),
+        "the compensation's own `route finish` must fire the parent's arm from the \
+         substep frame:\n{compensation}"
+    );
+    Ok(())
+}
+
+/// A substep's `max … visits` bound REFUSES rather than lowering, and the
+/// refusal is anchored on the bound itself.
+///
+/// This is a divergence from the reference that runs the SAFE way, and it is
+/// MEASURED rather than reasoned: `aion awl emit` on this exact source produces
+/// `sub_publish_it_attempt` whose `True ->` arm is a bare
+/// `sub_publish_it_attempt(target)` — an unbounded self-recursion where the
+/// author wrote `max 3 visits`. `flowshape::rewrite_visits` recurses into
+/// substeps and allocates the counter, but `emitter/subs.rs::emit_sub_chain`
+/// emits no visit prologue, so nothing ever increments or tests it. Refusing is
+/// loud; mirroring would be exactly the silent divergence the direct path
+/// exists to avoid.
+///
+/// The guard here deliberately does NOT read `visits`. A guard that does drags
+/// the counter into the entry region's parameters, where it is neither an input
+/// nor a registered flow counter, and BOTH backends already refuse the document
+/// at that earlier gate — which would make this test pass for the wrong reason.
+/// No corpus fixture carries either shape, which is why this needs its own
+/// source.
+#[test]
+fn a_substep_visit_bound_refuses_rather_than_going_unenforced()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = "\
+//! Focused pin: a `max … visits` bound the reference would drop on the floor.
+workflow bounded_substep
+  input target: String
+  outcome done: type String, route success
+
+worker shell
+  action publish(target: String) -> String
+
+step publish_it
+  step attempt
+    max 3 visits
+    publish(target: target) -> receipt
+    outcome again: when receipt == \"retry\", route attempt
+    outcome give_up: otherwise, route finish
+
+  outcome finish: otherwise, route done(\"stopped\")
+";
+    match lower_source(source)? {
+        Err(LowerError::Unsupported { shape, span }) => {
+            assert_eq!(
+                shape, "a `max … visits` bound on a substep",
+                "the substep visit-bound refusal class drifted"
+            );
+            assert_eq!(
+                span,
+                crate::Span {
+                    start: 265,
+                    end: 277,
+                    line: 11,
+                    column: 5
+                },
+                "the substep visit-bound refusal span drifted"
+            );
+        }
+        other => {
+            return Err(format!("a substep `max … visits` bound must refuse: {other:?}").into());
         }
     }
     Ok(())

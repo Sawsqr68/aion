@@ -1,0 +1,289 @@
+module prepare_dataset source=prepare_dataset.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  sub_prepare_fetch_batch:
+    aion@activity:timeout/2 [activities] (v1, v2)
+    aion@activity:task_queue/2 [activities] (v3, lit#14)
+    aion@activity:node/2 [activities] (v4, lit#15)
+    aion@workflow:run/1 [activities] (v5)
+  sub_prepare_scrub:
+    aion@activity:timeout/2 [activities] (v2, v3)
+    aion@activity:task_queue/2 [activities] (v4, lit#18)
+    aion@activity:node/2 [activities] (v5, lit#19)
+    aion@workflow:run/1 [activities] (v6)
+== durable families == activities
+== atoms ==
+  [0] batch
+  [1] prepared
+  [2] hollow
+  [3] clean_input
+  [4] fetch_input
+  [5] prepare_dataset_input
+  [6] prepared_outcome
+  [7] awl_outcome_failure
+  [8] error
+  [9] ok
+== literals ==
+  [0] "rows"
+  [1] "path"
+  [2] "path"
+  [3] "rows"
+  [4] "reason"
+  [5] "path"
+  [6] "source"
+  [7] "source"
+  [8] "prepared"
+  [9] "outcome"
+  [10] ""
+  [11] "PrepareDatasetOutcome"
+  [12] "prepared"
+  [13] "payload"
+  [14] "data"
+  [15] "shell"
+  [16] "no rows survived"
+  [17] "hollow_source"
+  [18] "data"
+  [19] "shell"
+  [20] "no rows survived"
+  [21] "hollow_source"
+== types ==
+  record Batch tag=batch
+    rows: int
+    path: string
+  record Prepared tag=prepared
+    path: string
+    rows: int
+  record Hollow tag=hollow
+    reason: string
+  record CleanInput tag=clean_input
+    path: string
+  record FetchInput tag=fetch_input
+    source: string
+  record PrepareDatasetInput tag=prepare_dataset_input
+    source: string
+  union PrepareDatasetOutcome
+    prepared -> prepared_outcome(ref(Prepared))
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=prepare_dataset_input_codec output=prepare_dataset_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(prepare_dataset.PrepareDatasetInput, prepare_dataset.PrepareDatasetOutcome, AwlError)
+  T-DEF name="prepare_dataset" input=prepare_dataset_input_codec output=prepare_dataset_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (prepare_dataset.PrepareDatasetInput) -> Result(prepare_dataset.PrepareDatasetOutcome, AwlError)
+  T-EXEC fields=[source:String] entry=step_prepare args=[0]
+== fn batch_codec/0 origin=codec_template(RecordTrio, Batch, record#0) ==
+  sig: () -> Codec(prepare_dataset.Batch)
+  v0 = make_closure batch_to_json captures=[]
+  v1 = call_local batch_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn batch_to_json/1 origin=codec_template(RecordTrio, Batch, record#0) ==
+  sig: (prepare_dataset.Batch) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"rows": v1|>awlc.int_to_json, "path": v2|>awlc.string_to_json}
+  return v3
+== fn batch_decoder/0 origin=codec_template(RecordTrio, Batch, record#0) ==
+  sig: () -> Decoder(prepare_dataset.Batch)
+  v0 = call_rt aion@awl@codec:int_decoder/0()
+  v1 = make_closure batch_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn batch_decoder$0/1 origin=lifted(batch_decoder, #0) ==
+  sig: (Int) -> Decoder(prepare_dataset.Batch)
+  v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
+  v2 = make_closure batch_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v1, v2)
+== fn batch_decoder$1/2 origin=lifted(batch_decoder, #1) ==
+  sig: (String, Int) -> Decoder(prepare_dataset.Batch)
+  v2 = record(batch, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn prepared_codec/0 origin=codec_template(RecordTrio, Prepared, record#1) ==
+  sig: () -> Codec(prepare_dataset.Prepared)
+  v0 = make_closure prepared_to_json captures=[]
+  v1 = call_local prepared_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn prepared_to_json/1 origin=codec_template(RecordTrio, Prepared, record#1) ==
+  sig: (prepare_dataset.Prepared) -> Json
+  v1 = field(v0, 1)
+  v2 = field(v0, 2)
+  v3 = json_obj {"path": v1|>awlc.string_to_json, "rows": v2|>awlc.int_to_json}
+  return v3
+== fn prepared_decoder/0 origin=codec_template(RecordTrio, Prepared, record#1) ==
+  sig: () -> Decoder(prepare_dataset.Prepared)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure prepared_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v0, v1)
+== fn prepared_decoder$0/1 origin=lifted(prepared_decoder, #0) ==
+  sig: (String) -> Decoder(prepare_dataset.Prepared)
+  v1 = call_rt aion@awl@codec:int_decoder/0() live_after=[v0]
+  v2 = make_closure prepared_decoder$1 captures=[v0]
+  tail_rt gleam@dynamic@decode:field/3(lit#3, v1, v2)
+== fn prepared_decoder$1/2 origin=lifted(prepared_decoder, #1) ==
+  sig: (Int, String) -> Decoder(prepare_dataset.Prepared)
+  v2 = record(prepared, [v1, v0])
+  tail_rt gleam@dynamic@decode:success/1(v2)
+== fn hollow_codec/0 origin=codec_template(RecordTrio, Hollow, record#2) ==
+  sig: () -> Codec(prepare_dataset.Hollow)
+  v0 = make_closure hollow_to_json captures=[]
+  v1 = call_local hollow_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn hollow_to_json/1 origin=codec_template(RecordTrio, Hollow, record#2) ==
+  sig: (prepare_dataset.Hollow) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"reason": v1|>awlc.string_to_json}
+  return v2
+== fn hollow_decoder/0 origin=codec_template(RecordTrio, Hollow, record#2) ==
+  sig: () -> Decoder(prepare_dataset.Hollow)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure hollow_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+== fn hollow_decoder$0/1 origin=lifted(hollow_decoder, #0) ==
+  sig: (String) -> Decoder(prepare_dataset.Hollow)
+  v1 = record(hollow, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn clean_input_codec/0 origin=codec_template(RecordTrio, CleanInput, record#3) ==
+  sig: () -> Codec(prepare_dataset.CleanInput)
+  v0 = make_closure clean_input_to_json captures=[]
+  v1 = call_local clean_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn clean_input_to_json/1 origin=codec_template(RecordTrio, CleanInput, record#3) ==
+  sig: (prepare_dataset.CleanInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"path": v1|>awlc.string_to_json}
+  return v2
+== fn clean_input_decoder/0 origin=codec_template(RecordTrio, CleanInput, record#3) ==
+  sig: () -> Decoder(prepare_dataset.CleanInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure clean_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#5, v0, v1)
+== fn clean_input_decoder$0/1 origin=lifted(clean_input_decoder, #0) ==
+  sig: (String) -> Decoder(prepare_dataset.CleanInput)
+  v1 = record(clean_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn fetch_input_codec/0 origin=codec_template(RecordTrio, FetchInput, record#4) ==
+  sig: () -> Codec(prepare_dataset.FetchInput)
+  v0 = make_closure fetch_input_to_json captures=[]
+  v1 = call_local fetch_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn fetch_input_to_json/1 origin=codec_template(RecordTrio, FetchInput, record#4) ==
+  sig: (prepare_dataset.FetchInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"source": v1|>awlc.string_to_json}
+  return v2
+== fn fetch_input_decoder/0 origin=codec_template(RecordTrio, FetchInput, record#4) ==
+  sig: () -> Decoder(prepare_dataset.FetchInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure fetch_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
+== fn fetch_input_decoder$0/1 origin=lifted(fetch_input_decoder, #0) ==
+  sig: (String) -> Decoder(prepare_dataset.FetchInput)
+  v1 = record(fetch_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn prepare_dataset_input_codec/0 origin=codec_template(RecordTrio, PrepareDatasetInput, record#5) ==
+  sig: () -> Codec(prepare_dataset.PrepareDatasetInput)
+  v0 = make_closure prepare_dataset_input_to_json captures=[]
+  v1 = call_local prepare_dataset_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn prepare_dataset_input_to_json/1 origin=codec_template(RecordTrio, PrepareDatasetInput, record#5) ==
+  sig: (prepare_dataset.PrepareDatasetInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"source": v1|>awlc.string_to_json}
+  return v2
+== fn prepare_dataset_input_decoder/0 origin=codec_template(RecordTrio, PrepareDatasetInput, record#5) ==
+  sig: () -> Decoder(prepare_dataset.PrepareDatasetInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure prepare_dataset_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#7, v0, v1)
+== fn prepare_dataset_input_decoder$0/1 origin=lifted(prepare_dataset_input_decoder, #0) ==
+  sig: (String) -> Decoder(prepare_dataset.PrepareDatasetInput)
+  v1 = record(prepare_dataset_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn prepare_dataset_outcome_codec/0 origin=codec_template(UnionTrio, PrepareDatasetOutcome, union#6) ==
+  sig: () -> Codec(prepare_dataset.PrepareDatasetOutcome)
+  v0 = make_closure prepare_dataset_outcome_to_json captures=[]
+  v1 = call_local prepare_dataset_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn prepare_dataset_outcome_to_json/1 origin=codec_template(UnionTrio, PrepareDatasetOutcome, union#6) ==
+  sig: (prepare_dataset.PrepareDatasetOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#8|>awlc.string_to_json, "payload": v1|>prepared_to_json}
+  return v2
+== fn prepare_dataset_outcome_decoder/0 origin=codec_template(UnionTrio, PrepareDatasetOutcome, union#6) ==
+  sig: () -> Decoder(prepare_dataset.PrepareDatasetOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure prepare_dataset_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#9, v0, v1)
+== fn prepare_dataset_outcome_decoder$outcome/1 origin=lifted(prepare_dataset_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(prepare_dataset.PrepareDatasetOutcome)
+  if cmp Eq v0 lit#12:
+    v3 = call_local prepared_decoder()
+    v4 = make_closure prepare_dataset_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#13, v3, v4)
+  else:
+    v1 = record(prepared, [lit#10, 0])
+    v2 = record(prepared_outcome, [v1])
+    tail_rt gleam@dynamic@decode:failure/2(v2, lit#11)
+== fn prepare_dataset_outcome_decoder$arm0/1 origin=lifted(prepare_dataset_outcome_decoder, #1) ==
+  sig: (prepare_dataset.Prepared) -> Decoder(prepare_dataset.PrepareDatasetOutcome)
+  v1 = record(prepared_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn clean_activity/1 origin=activity_wrapper(clean, raw=false) ==
+  sig: (String) -> Activity(prepare_dataset.CleanInput, prepare_dataset.Batch)
+  T-ACT action=clean input_codec=clean_input_codec return=batch_codec
+== fn fetch_activity/1 origin=activity_wrapper(fetch, raw=false) ==
+  sig: (String) -> Activity(prepare_dataset.FetchInput, prepare_dataset.Batch)
+  T-ACT action=fetch input_codec=fetch_input_codec return=batch_codec
+== fn step_prepare/1 origin=region(prepare) ==
+  sig: (String) -> Result(prepare_dataset.PrepareDatasetOutcome, AwlError)
+  tail_local sub_prepare_fetch_batch(v0)
+== fn sub_prepare_fetch_batch/1 origin=substep(prepare.fetch_batch) ==
+  sig: (String) -> Result(prepare_dataset.PrepareDatasetOutcome, AwlError)
+  v1 = call_local fetch_activity(v0)
+  v2 = call_rt aion@duration:milliseconds/1(600000) live_after=[v1]
+  v3 = call_rt aion@activity:timeout/2(v1, v2)
+  v4 = call_rt aion@activity:task_queue/2(v3, lit#14)
+  v5 = call_rt aion@activity:node/2(v4, lit#15)
+  v6 = call_rt aion@workflow:run/1(v5)
+  v7 = call_rt aion@awl@error:map_activity_error/1(v6)
+  v8 = try_bind v7
+  v10 = field(v8, 1)
+  v9 = cmp Gt v10 0
+  if is_true v9:
+    tail_local sub_prepare_scrub(v8)
+  else:
+    v11 = record(hollow, [lit#16])
+    v12 = call_local hollow_to_json(v11)
+    v13 = call_rt gleam@json:to_string/1(v12)
+    v14 = record(awl_outcome_failure, [lit#17, v13])
+    v15 = record(error, [v14])
+    return v15
+== fn sub_prepare_scrub/1 origin=substep(prepare.scrub) ==
+  sig: (prepare_dataset.Batch) -> Result(prepare_dataset.PrepareDatasetOutcome, AwlError)
+  v1 = field(v0, 2)
+  v2 = call_local clean_activity(v1)
+  v3 = call_rt aion@duration:milliseconds/1(600000) live_after=[v2]
+  v4 = call_rt aion@activity:timeout/2(v2, v3)
+  v5 = call_rt aion@activity:task_queue/2(v4, lit#18)
+  v6 = call_rt aion@activity:node/2(v5, lit#19)
+  v7 = call_rt aion@workflow:run/1(v6)
+  v8 = call_rt aion@awl@error:map_activity_error/1(v7)
+  v9 = try_bind v8
+  v11 = field(v9, 1)
+  v10 = cmp Gt v11 0
+  if is_true v10:
+    v12 = field(v9, 2)
+    v13 = field(v9, 1)
+    v14 = record(prepared, [v12, v13])
+    v15 = record(prepared_outcome, [v14])
+    v16 = record(ok, [v15])
+    return v16
+  else:
+    v17 = record(hollow, [lit#20])
+    v18 = call_local hollow_to_json(v17)
+    v19 = call_rt gleam@json:to_string/1(v18)
+    v20 = record(awl_outcome_failure, [lit#21, v19])
+    v21 = record(error, [v20])
+    return v21
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD

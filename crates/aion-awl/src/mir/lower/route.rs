@@ -9,7 +9,7 @@
 //! binding named after the destination, or `Nil`.
 
 use crate::RouteDirection;
-use crate::ast::{RoutePayload, RouteTarget};
+use crate::ast::{RoutePayload, RouteTarget, Statement};
 use crate::emitter::{GType, snake};
 
 use super::super::ops::{Stmt, Tail, Value};
@@ -29,7 +29,14 @@ pub(super) fn route_tail(
     stmts: &mut Vec<Stmt>,
 ) -> Result<Tail, LowerError> {
     let flow = env.flow;
-    // The nested flow's exit resolves first (the reference `emit_route` ->
+    // Inside a substep chain the frame resolves FIRST: siblings, then the
+    // parent's outcome-clause names (the reference `emit_route`'s opening
+    // block). A fired parent arm is evaluated in the PARENT frame, so it can
+    // reach a step or a workflow outcome but never a sibling substep.
+    if let Some(tail) = frame_tail(ctx, env, target, scope, piped.clone(), stmts)? {
+        return Ok(tail);
+    }
+    // The nested flow's exit resolves next (the reference `emit_route` ->
     // `emit_exit_return`).
     if let Some(exit) = &flow.exit
         && exit.name == target.name
@@ -113,6 +120,59 @@ pub(super) fn route_tail(
         callee: flow.fns.regions[region],
         args,
     })
+}
+
+/// Resolve a route against the substep frame, when there is one: a sibling
+/// substep is a tail call into its function, and a parent outcome-clause name
+/// FIRES that arm — its own route re-resolved in the parent frame, carrying any
+/// piped payload with it, exactly as the reference recurses.
+///
+/// `None` means the frame claimed nothing and the ordinary resolution order
+/// (flow exit, workflow outcome, step region) applies.
+fn frame_tail(
+    ctx: &mut Ctx<'_>,
+    env: FlowEnv<'_>,
+    target: &RouteTarget,
+    scope: &Scope,
+    piped: Option<(Value, GType)>,
+    stmts: &mut Vec<Stmt>,
+) -> Result<Option<Tail>, LowerError> {
+    let Some(frame) = env.frame else {
+        return Ok(None);
+    };
+    let flow = env.flow;
+    let Some(parent) = flow.steps.get(frame.parent) else {
+        return Err(LowerError::Planning {
+            message: format!(
+                "substep frame names step {}, which the flow does not hold",
+                frame.parent
+            ),
+        });
+    };
+    for (position, statement) in parent
+        .body
+        .get(frame.split..)
+        .unwrap_or_default()
+        .iter()
+        .enumerate()
+    {
+        if let Statement::SubStep(candidate) = statement
+            && candidate.name == target.name
+        {
+            return super::subs::call_tail(env, frame.parent, position, scope, target.name_span)
+                .map(Some);
+        }
+    }
+    let Some(clause) = parent
+        .outcomes
+        .iter()
+        .find(|clause| clause.name == target.name)
+    else {
+        return Ok(None);
+    };
+    let route = clause.route.clone();
+    let parent_env = FlowEnv { frame: None, ..env };
+    route_tail(ctx, parent_env, &route, scope, piped, stmts).map(Some)
 }
 
 /// Return from a nested flow through its exit (the reference

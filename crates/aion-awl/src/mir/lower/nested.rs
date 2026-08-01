@@ -97,7 +97,11 @@ fn lower_subflow_flow(
         ret_ty,
     )?;
     functions.push(MirFn::Flow(wrapper));
-    let env = FlowEnv { plan, flow: &flow };
+    let env = FlowEnv {
+        plan,
+        flow: &flow,
+        frame: None,
+    };
     lower_flow_fns(ctx, env, functions, slots)
 }
 
@@ -279,7 +283,11 @@ fn lower_region_flow(
         ret_ty,
     )?;
     functions.push(MirFn::Flow(wrapper));
-    let env = FlowEnv { plan, flow: &flow };
+    let env = FlowEnv {
+        plan,
+        flow: &flow,
+        frame: None,
+    };
     lower_flow_fns(ctx, env, functions, slots)
 }
 

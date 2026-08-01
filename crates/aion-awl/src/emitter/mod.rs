@@ -45,7 +45,7 @@ pub(crate) use entry::{prepare, shape_document};
 pub(crate) use expr_refs::expr_refs;
 pub(crate) use flows::single_member_call;
 pub(crate) use flowshape::{RegionShape, SubflowShape, visits_counter};
-pub(crate) use graph::{NestedPlan, Plan, Plans, falls_through};
+pub(crate) use graph::{NestedPlan, Plan, Plans, falls_through, substep_split};
 pub(crate) use implicit_children::{implicit_child_required, synthesized_entries};
 pub(crate) use loops::{first_route_span, statement_defs, statements_expr_refs};
 pub(crate) use names::snake;

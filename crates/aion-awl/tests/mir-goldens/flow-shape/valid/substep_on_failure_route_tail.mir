@@ -1,0 +1,176 @@
+module substep_cleanup source=substep_cleanup.awl
+exports: run/1, definition/0, execute/1
+== effect schedule ==
+  sub_publish_it_attempt:
+    aion@activity:task_queue/2 [activities] (v1, lit#9)
+    aion@workflow:run/1 [activities] (v2)
+  sub_publish_it_attempt_on_failure:
+    aion@activity:task_queue/2 [activities] (v11, lit#12)
+    aion@workflow:run/1 [activities] (v12)
+== durable families == activities
+== atoms ==
+  [0] cleanup_input
+  [1] publish_input
+  [2] substep_cleanup_input
+  [3] done_outcome
+  [4] ok
+  [5] awl_outcome_failure
+  [6] error
+== literals ==
+  [0] "target"
+  [1] "target"
+  [2] "target"
+  [3] "done"
+  [4] "outcome"
+  [5] ""
+  [6] "SubstepCleanupOutcome"
+  [7] "done"
+  [8] "payload"
+  [9] "shell"
+  [10] "substep finished"
+  [11] "failed"
+  [12] "shell"
+  [13] "substep finished"
+  [14] "failed"
+== types ==
+  record CleanupInput tag=cleanup_input
+    target: string
+  record PublishInput tag=publish_input
+    target: string
+  record SubstepCleanupInput tag=substep_cleanup_input
+    target: string
+  union SubstepCleanupOutcome
+    done -> done_outcome(string)
+== fn run/1 origin=run ==
+  sig: (Dynamic) -> Result(String, AwlError)
+  T-RUN input=substep_cleanup_input_codec output=substep_cleanup_outcome_codec
+== fn definition/0 origin=definition ==
+  sig: () -> WorkflowDefinition(substep_cleanup.SubstepCleanupInput, substep_cleanup.SubstepCleanupOutcome, AwlError)
+  T-DEF name="substep_cleanup" input=substep_cleanup_input_codec output=substep_cleanup_outcome_codec
+== fn execute/1 origin=execute ==
+  sig: (substep_cleanup.SubstepCleanupInput) -> Result(substep_cleanup.SubstepCleanupOutcome, AwlError)
+  T-EXEC fields=[target:String] entry=step_publish_it args=[0]
+== fn cleanup_input_codec/0 origin=codec_template(RecordTrio, CleanupInput, record#0) ==
+  sig: () -> Codec(substep_cleanup.CleanupInput)
+  v0 = make_closure cleanup_input_to_json captures=[]
+  v1 = call_local cleanup_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn cleanup_input_to_json/1 origin=codec_template(RecordTrio, CleanupInput, record#0) ==
+  sig: (substep_cleanup.CleanupInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"target": v1|>awlc.string_to_json}
+  return v2
+== fn cleanup_input_decoder/0 origin=codec_template(RecordTrio, CleanupInput, record#0) ==
+  sig: () -> Decoder(substep_cleanup.CleanupInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure cleanup_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
+== fn cleanup_input_decoder$0/1 origin=lifted(cleanup_input_decoder, #0) ==
+  sig: (String) -> Decoder(substep_cleanup.CleanupInput)
+  v1 = record(cleanup_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn publish_input_codec/0 origin=codec_template(RecordTrio, PublishInput, record#1) ==
+  sig: () -> Codec(substep_cleanup.PublishInput)
+  v0 = make_closure publish_input_to_json captures=[]
+  v1 = call_local publish_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn publish_input_to_json/1 origin=codec_template(RecordTrio, PublishInput, record#1) ==
+  sig: (substep_cleanup.PublishInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"target": v1|>awlc.string_to_json}
+  return v2
+== fn publish_input_decoder/0 origin=codec_template(RecordTrio, PublishInput, record#1) ==
+  sig: () -> Decoder(substep_cleanup.PublishInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure publish_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#1, v0, v1)
+== fn publish_input_decoder$0/1 origin=lifted(publish_input_decoder, #0) ==
+  sig: (String) -> Decoder(substep_cleanup.PublishInput)
+  v1 = record(publish_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn substep_cleanup_input_codec/0 origin=codec_template(RecordTrio, SubstepCleanupInput, record#2) ==
+  sig: () -> Codec(substep_cleanup.SubstepCleanupInput)
+  v0 = make_closure substep_cleanup_input_to_json captures=[]
+  v1 = call_local substep_cleanup_input_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn substep_cleanup_input_to_json/1 origin=codec_template(RecordTrio, SubstepCleanupInput, record#2) ==
+  sig: (substep_cleanup.SubstepCleanupInput) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"target": v1|>awlc.string_to_json}
+  return v2
+== fn substep_cleanup_input_decoder/0 origin=codec_template(RecordTrio, SubstepCleanupInput, record#2) ==
+  sig: () -> Decoder(substep_cleanup.SubstepCleanupInput)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure substep_cleanup_input_decoder$0 captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#2, v0, v1)
+== fn substep_cleanup_input_decoder$0/1 origin=lifted(substep_cleanup_input_decoder, #0) ==
+  sig: (String) -> Decoder(substep_cleanup.SubstepCleanupInput)
+  v1 = record(substep_cleanup_input, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn substep_cleanup_outcome_codec/0 origin=codec_template(UnionTrio, SubstepCleanupOutcome, union#3) ==
+  sig: () -> Codec(substep_cleanup.SubstepCleanupOutcome)
+  v0 = make_closure substep_cleanup_outcome_to_json captures=[]
+  v1 = call_local substep_cleanup_outcome_decoder() live_after=[v0]
+  tail_rt aion@codec:json_codec/2(v0, v1)
+== fn substep_cleanup_outcome_to_json/1 origin=codec_template(UnionTrio, SubstepCleanupOutcome, union#3) ==
+  sig: (substep_cleanup.SubstepCleanupOutcome) -> Json
+  v1 = field(v0, 1)
+  v2 = json_obj {"outcome": lit#3|>awlc.string_to_json, "payload": v1|>awlc.string_to_json}
+  return v2
+== fn substep_cleanup_outcome_decoder/0 origin=codec_template(UnionTrio, SubstepCleanupOutcome, union#3) ==
+  sig: () -> Decoder(substep_cleanup.SubstepCleanupOutcome)
+  v0 = call_rt aion@awl@codec:string_decoder/0()
+  v1 = make_closure substep_cleanup_outcome_decoder$outcome captures=[]
+  tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
+== fn substep_cleanup_outcome_decoder$outcome/1 origin=lifted(substep_cleanup_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(substep_cleanup.SubstepCleanupOutcome)
+  if cmp Eq v0 lit#7:
+    v2 = call_rt aion@awl@codec:string_decoder/0()
+    v3 = make_closure substep_cleanup_outcome_decoder$arm0 captures=[]
+    tail_rt gleam@dynamic@decode:field/3(lit#8, v2, v3)
+  else:
+    v1 = record(done_outcome, [lit#5])
+    tail_rt gleam@dynamic@decode:failure/2(v1, lit#6)
+== fn substep_cleanup_outcome_decoder$arm0/1 origin=lifted(substep_cleanup_outcome_decoder, #1) ==
+  sig: (String) -> Decoder(substep_cleanup.SubstepCleanupOutcome)
+  v1 = record(done_outcome, [v0])
+  tail_rt gleam@dynamic@decode:success/1(v1)
+== fn cleanup_activity/1 origin=activity_wrapper(cleanup, raw=false) ==
+  sig: (String) -> Activity(substep_cleanup.CleanupInput, String)
+  T-ACT action=cleanup input_codec=cleanup_input_codec return=awlc.string_codec
+== fn publish_activity/1 origin=activity_wrapper(publish, raw=false) ==
+  sig: (String) -> Activity(substep_cleanup.PublishInput, String)
+  T-ACT action=publish input_codec=publish_input_codec return=awlc.string_codec
+== fn step_publish_it/1 origin=region(publish_it) ==
+  sig: (String) -> Result(substep_cleanup.SubstepCleanupOutcome, AwlError)
+  tail_local sub_publish_it_attempt(v0)
+== fn sub_publish_it_attempt/1 origin=substep(publish_it.attempt) ==
+  sig: (String) -> Result(substep_cleanup.SubstepCleanupOutcome, AwlError)
+  v1 = call_local publish_activity(v0) live_after=[v0]
+  v2 = call_rt aion@activity:task_queue/2(v1, lit#9) live_after=[v0]
+  v3 = call_rt aion@workflow:run/1(v2) live_after=[v0]
+  v4 = call_rt aion@awl@error:map_activity_error/1(v3) live_after=[v0]
+  if is_tagged v4 ok/2:
+    v5 = field(v4, 1)
+    v6 = call_rt aion@awl@codec:string_to_json/1(lit#10)
+    v7 = call_rt gleam@json:to_string/1(v6)
+    v8 = record(awl_outcome_failure, [lit#11, v7])
+    v9 = record(error, [v8])
+    return v9
+  else:
+    tail_local sub_publish_it_attempt_on_failure(v0)
+== fn sub_publish_it_attempt_on_failure/1 origin=compensation(publish_it.attempt) ==
+  sig: (String) -> Result(substep_cleanup.SubstepCleanupOutcome, AwlError)
+  v11 = call_local cleanup_activity(v10)
+  v12 = call_rt aion@activity:task_queue/2(v11, lit#12)
+  v13 = call_rt aion@workflow:run/1(v12)
+  v14 = call_rt aion@awl@error:map_activity_error/1(v13)
+  v15 = try_bind v14
+  v16 = call_rt aion@awl@codec:string_to_json/1(lit#13)
+  v17 = call_rt gleam@json:to_string/1(v16)
+  v18 = record(awl_outcome_failure, [lit#14, v17])
+  v19 = record(error, [v18])
+  return v19
+== fn awl$dead_body/1 origin=dead_body ==
+  sig: (Dynamic) -> Result(Dynamic, AwlError)
+  T-DEAD

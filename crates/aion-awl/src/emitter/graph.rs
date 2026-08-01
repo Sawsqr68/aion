@@ -65,6 +65,15 @@ impl Plan {
         &self.params[self.sub_node[&(step, sub)]]
     }
 
+    /// The same lookup, total: `None` when no substep node was planned for
+    /// `(step, sub)`. The direct path resolves substep parameters outside the
+    /// emitter's own traversal, where a missing node is a planning bug to
+    /// report rather than a panic to take.
+    pub(crate) fn sub_params_of(&self, step: usize, sub: usize) -> Option<&[String]> {
+        let node = *self.sub_node.get(&(step, sub))?;
+        self.params.get(node).map(Vec::as_slice)
+    }
+
     /// The region a route-targeted step heads, when it heads one.
     pub(crate) fn region_of_entry(&self, step: usize) -> Option<usize> {
         self.entry_region.get(&step).copied()

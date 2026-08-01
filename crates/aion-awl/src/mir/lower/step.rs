@@ -5,17 +5,15 @@
 //! failure` edge is layered over this body by `failure`, invoked from
 //! `flow::lower_chain_step`.
 //!
-//! Still deferred (`LowerError::unsupported`, visible incompleteness — never
-//! silent divergence from the reference):
-//! - substeps: mechanical but large (per-substep fns over the shared plan's
-//!   `sub_params`/`sub_node`, sibling/parent route frames, `on failure`
-//!   interaction — reference `emitter/subs.rs:20-60`) — `FnOrigin::SubStep`
-//!   already exists.
-//!
-//! Dependency-parallel region layers are NO LONGER deferred: `layers` splits a
-//! region into chain units, `parallel` dispatches a parallelizable layer as one
-//! `workflow.all`, and a richer layer degrades to written order carrying the
-//! S13 `degraded_parallel` marker — the reference's own classification
+//! Substeps are NO LONGER deferred: a step body's trailing substep block lowers
+//! through `subs` (one `FlowFn` per substep over the shared plan's
+//! `sub_params`/`sub_node`, sibling/parent route frames, `on failure`
+//! interaction — the reference `emitter/subs.rs`), and the step's own tail is
+//! the hand-off call into the first substep. Dependency-parallel region layers
+//! are not deferred either: `layers` splits a region into chain units,
+//! `parallel` dispatches a parallelizable layer as one `workflow.all`, and a
+//! richer layer degrades to written order carrying the S13 `degraded_parallel`
+//! marker — the reference's own classification
 //! (`emitter/steps.rs::layer_calls`), gate for gate.
 //!
 //! Parity refusals (the reference emitter refuses these too — a language
@@ -46,23 +44,43 @@ pub(super) struct Next {
     pub(super) param_names: Vec<String>,
 }
 
+/// One chain step's lowering identity: the step, where it sits in the flow's
+/// step list (the substep-chain key), its fall-through successor, and the
+/// region's fall-through anchor.
+pub(super) struct StepUnit<'a> {
+    pub(super) step: &'a Step,
+    pub(super) index: usize,
+    pub(super) next: Option<Next>,
+    pub(super) region_last: usize,
+}
+
 pub(super) fn lower_step(
     ctx: &mut Ctx<'_>,
     env: FlowEnv<'_>,
-    step: &Step,
+    unit: StepUnit<'_>,
     scope: &mut Scope,
-    next: Option<Next>,
-    region_last: usize,
     slots: &mut Slots,
 ) -> Result<Block, LowerError> {
-    if step.body.iter().any(|s| matches!(s, Statement::SubStep(_))) {
-        return Err(LowerError::unsupported("substeps", step.name_span));
-    }
+    let StepUnit {
+        step,
+        index,
+        next,
+        region_last,
+    } = unit;
+    // Only the LEADING statements are this step's own body; a trailing substep
+    // block is a separate function chain the step hands off to.
+    let split = super::subs::substep_split(step)?;
     let mut stmts = Vec::new();
-    for statement in &step.body {
-        if let Some(tail) = lower_statement(ctx, env, step, statement, scope, &mut stmts, slots)? {
-            return Ok(Block { stmts, tail });
-        }
+    let leading = step.body.get(..split).unwrap_or(&step.body);
+    if let Some(tail) = lower_body_stmts(ctx, env, step, leading, scope, &mut stmts, slots)? {
+        return Ok(Block { stmts, tail });
+    }
+    // The substep hand-off resolves BEFORE the step's own outcome clauses: the
+    // parent's arms are the substep chain's boundary, evaluated at its END
+    // (the reference `emitter/failure.rs::emit_step_tail`).
+    if split < step.body.len() {
+        let tail = super::subs::call_tail(env, index, 0, scope, step.name_span)?;
+        return Ok(Block { stmts, tail });
     }
     if !step.outcomes.is_empty() {
         let outcome = lower_outcomes(ctx, env, &step.outcomes, scope)
@@ -177,6 +195,27 @@ pub(super) fn flow_end(
     }
 }
 
+/// Lower a statement list in written order, returning the tail the first
+/// terminal statement produced (a route, or a piped route). Shared by a step's
+/// own leading body and by every substep body (`subs::lower_sub_body`), so the
+/// two can never drift on what a statement lowers to.
+pub(super) fn lower_body_stmts(
+    ctx: &mut Ctx<'_>,
+    env: FlowEnv<'_>,
+    step: &Step,
+    statements: &[Statement],
+    scope: &mut Scope,
+    stmts: &mut Vec<Stmt>,
+    slots: &mut Slots,
+) -> Result<Option<Tail>, LowerError> {
+    for statement in statements {
+        if let Some(tail) = lower_statement(ctx, env, step, statement, scope, stmts, slots)? {
+            return Ok(Some(tail));
+        }
+    }
+    Ok(None)
+}
+
 pub(super) fn lower_statement(
     ctx: &mut Ctx<'_>,
     env: FlowEnv<'_>,
@@ -250,7 +289,15 @@ pub(super) fn lower_statement(
             lower_loop_stmt(ctx, env, step, looped, scope, stmts, slots)?;
             Ok(None)
         }
-        Statement::SubStep(sub) => Err(LowerError::unsupported("substep", sub.name_span)),
+        // Substeps lower only as a step body's TRAILING block (`subs`), which
+        // `lower_step` splits off before this dispatch ever sees one. Reaching
+        // here means a substep sits inside a loop body, a fork branch, or an
+        // `on failure` block — the reference refuses exactly the same shape
+        // (`emitter/failure.rs::lower_statements`).
+        Statement::SubStep(sub) => Err(LowerError::unsupported(
+            "a substep outside a step body's trailing block",
+            sub.name_span,
+        )),
         // The collapsed region step's fan-out pair: the header lowers the
         // whole delivery + collect; the collect marker is consumed.
         Statement::Distribute(distribute) => {

@@ -59,7 +59,21 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// recorded event order decides that, which is why all four are here and not
 /// only in aion-awl's ratchet. Their buckets below were read off the run, not
 /// predicted.
-const COVERED_COUNT: usize = 105;
+///
+/// 107 since substeps — the LAST refusal class the direct lowering path held.
+/// `flow-shape/valid/substep_on_failure_route_tail` and
+/// `loop-outcomes/valid/substeps_two_stage` joined together, and with them every
+/// valid fixture in the corpus lowers. Both belong here rather than only in
+/// aion-awl's ratchet because a substep group is a CONTROL-FLOW split: the
+/// direct path lowers each substep into its own tail-called function where the
+/// reference nests them inside the parent's, so the two could agree on every
+/// value and still record a different sequence of activity round trips. The
+/// `on failure` arm sharpens that further — a substep's compensation is lifted
+/// out on the direct path and inlined in an `Error(_) ->` arm on the reference,
+/// so only a run decides whether the routed failure outcome triggers
+/// compensation on one backend and not the other. Their buckets below were read
+/// off the run, not predicted.
+const COVERED_COUNT: usize = 107;
 
 /// Out-of-oracle (r2 finding 3): fixtures whose durable park boundary is NOT
 /// observable through any engine surface without racy sampling.
@@ -179,6 +193,12 @@ const EXPECTED_FAILED: &[&str] = &[
     // publish SUCCEEDS here; the route fires and the compensation must NOT —
     // `AwlOutcomeFailure` is never mistaken for a step failure.
     "flow-shape/valid/on_failure_route_tail",
+    // The same invariant one level down, inside a SUBSTEP: `publish` succeeds
+    // on the canned data, the substep's terminal `route finish` fires the
+    // PARENT's arm, and that arm's `route failed("substep finished")` is the
+    // recorded end. The compensation must not run — which the trail decides,
+    // because a `cleanup` activity round trip would appear in it.
+    "flow-shape/valid/substep_on_failure_route_tail",
     // A value payload built by a binary CONCAT (`status + workflow.id`), and
     // the only one of the seven that takes a failure path. Kind 1, and the
     // fault is NOT in the payload: the fixture opens with `reviewers[0]` over
@@ -209,6 +229,14 @@ const EXPECTED_FAILED: &[&str] = &[
     "loop-outcomes/valid/loop_counting_until_max",
     "loop-outcomes/valid/loop_without_counting",
     "loop-outcomes/valid/route_outcome_by_name",
+    // The substep SIBLING CHAIN, kind 1: `fetch_batch` runs its activity and
+    // the canned minimal `Batch.rows` sends it down the `nothing` arm, which
+    // routes to the parent's `hollow` clause and out through `hollow_source`.
+    // The chain is what this pins: the direct path reaches that arm through a
+    // frame-resolved parent-clause fire inside a tail-called substep function,
+    // the reference through a nested `case` in one function, and the recorded
+    // trail must be identical either way.
+    "loop-outcomes/valid/substeps_two_stage",
     "schema-doors/valid/import_constraints",
     "schema-doors/valid/import_nested_defs",
     "schema-doors/valid/import_ticket",

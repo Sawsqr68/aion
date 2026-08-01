@@ -126,7 +126,9 @@ fn lowers_cover_and_golden() -> Result<(), Box<dyn std::error::Error>> {
     let fixtures_root = manifest_dir().join("tests/fixtures/rev2");
     let golden_root = manifest_dir().join("tests/mir-goldens");
     let mut covered = Vec::new();
-    for fixture in valid_fixtures() {
+    let mut refused: Vec<String> = Vec::new();
+    let all = valid_fixtures();
+    for fixture in all {
         let relative = fixture.strip_prefix(&fixtures_root)?;
         let stem = relative.with_extension("").to_string_lossy().into_owned();
         // A read/parse failure of a valid fixture is a hard error (outer `?`);
@@ -142,11 +144,27 @@ fn lowers_cover_and_golden() -> Result<(), Box<dyn std::error::Error>> {
                 check_golden(&sidecar_path, &sidecar)?;
                 covered.push(stem);
             }
-            Err(LowerError::Unsupported { .. } | LowerError::Planning { .. }) => {}
+            Err(error @ (LowerError::Unsupported { .. } | LowerError::Planning { .. })) => {
+                refused.push(format!("{stem}: {error}"));
+            }
             Err(other) => return Err(Box::new(other)),
         }
     }
     covered.sort();
+
+    // The substep landing's load-bearing claim, stated as an INVARIANT over the
+    // whole valid population rather than as a count: the direct path refuses
+    // NOTHING the corpus calls valid, so every valid document deploys (there is
+    // no Gleam fallback on the deploy path — a refused valid document cannot be
+    // deployed at all). This is deliberately not `covered.len() == 107`: a
+    // fixture added and a fixture refused would keep a count honest while the
+    // property broke. A future construct that legitimately refuses fails here
+    // and forces a knowing decision instead of quietly shrinking the surface.
+    assert!(
+        refused.is_empty(),
+        "these valid fixtures do not lower, so they cannot be deployed:\n{}",
+        refused.join("\n")
+    );
 
     // The covered set is pinned exactly: a fixture regressing covered → refused
     // (or a newly-covered fixture) fails here instead of being absorbed.

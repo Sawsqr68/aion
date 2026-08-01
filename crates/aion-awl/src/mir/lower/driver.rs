@@ -146,6 +146,7 @@ pub fn lower(document: &Document, root: Option<&Path>) -> Result<MirModule, Lowe
     let host_env = flow::FlowEnv {
         plan: &skeleton.plan,
         flow: &host_flow,
+        frame: None,
     };
     flow::lower_flow_fns(&mut ctx, host_env, &mut skeleton.functions, &mut slots)?;
     // Each subflow lowers once (wrapper + chain fns), in declaration order,

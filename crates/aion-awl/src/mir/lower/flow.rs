@@ -24,9 +24,9 @@ use super::build::{FlowFns, FnPlan};
 use super::chain::chain_params;
 use super::ctx::Ctx;
 use super::driver::LowerError;
-use super::expr::{Binding, Scope};
+use super::expr::Scope;
 use super::slots::Slots;
-use super::step::{Next, lower_step};
+use super::step::{Next, StepUnit, lower_step};
 
 /// A nested flow's exit contract (the MIR twin of
 /// `emitter/steps.rs::FlowExit`).
@@ -81,12 +81,25 @@ impl FlowCtx<'_> {
     }
 }
 
+/// Route-resolution frame while lowering inside a substep chain (the MIR twin
+/// of `emitter/steps.rs::Frame`'s `sub` field): a route resolves against the
+/// parent's sibling substeps and outcome-clause names before anything else.
+#[derive(Clone, Copy)]
+pub(super) struct SubFrame {
+    /// The parent step's index in this flow's step list.
+    pub(super) parent: usize,
+    /// Where the parent's trailing substep block starts.
+    pub(super) split: usize,
+}
+
 /// The per-flow lowering environment: the module-wide fn-ref plan plus the
 /// flow being lowered.
 #[derive(Clone, Copy)]
 pub(super) struct FlowEnv<'a> {
     pub(super) plan: &'a FnPlan,
     pub(super) flow: &'a FlowCtx<'a>,
+    /// `Some` while lowering inside a substep chain.
+    pub(super) frame: Option<SubFrame>,
 }
 
 /// Lower every region of one flow into `step_<name>` `FlowFn`s (one per chain
@@ -115,7 +128,9 @@ pub(super) fn lower_flow_fns(
         }
         retired_outcome_anchor = retired_outcome_anchor.or(outcome_anchor);
     }
-    Ok(())
+    // Every substep chain of the flow follows every region function, in written
+    // step order (the reference `emitter/steps.rs::emit_flow_fns`).
+    super::subs::lower_sub_chains(ctx, env, functions, slots)
 }
 
 fn lower_region(
@@ -185,10 +200,12 @@ fn lower_region(
                 },
             )?
         } else {
-            let step = flow.steps[unit.anchor()].clone();
+            let index = unit.anchor();
+            let step = flow.steps[index].clone();
             let chain_step = ChainStep {
                 entry_step: &entry_step,
                 step: &step,
+                index,
                 position,
                 param_names: &param_names,
                 next,
@@ -205,6 +222,8 @@ fn lower_region(
 struct ChainStep<'a> {
     entry_step: &'a Step,
     step: &'a Step,
+    /// The step's index in this flow's step list (the substep-chain key).
+    index: usize,
     position: usize,
     param_names: &'a [String],
     next: Option<Next>,
@@ -223,20 +242,13 @@ fn lower_chain_step(
     let flow = env.flow;
     ctx.reset_vars();
     let mut scope: Scope = Scope::new();
-    let mut param_vars = Vec::new();
-    let mut param_tys = Vec::new();
-    for name in chain.param_names {
-        let ty = flow.bindings.get(name).cloned().ok_or_else(|| {
-            LowerError::new(
-                chain.step.name_span,
-                format!("binding `{name}` has no type"),
-            )
-        })?;
-        let var = ctx.fresh_var();
-        param_vars.push(var);
-        param_tys.push(ctx.tydesc(&ty));
-        scope.insert(name.clone(), Binding { var, ty });
-    }
+    let (param_vars, param_tys) = super::chain::bind_params(
+        ctx,
+        flow,
+        chain.param_names,
+        chain.step.name_span,
+        &mut scope,
+    )?;
 
     // The visit-bound prologue of a `max … visits` step: increment the
     // language-owned counter and refuse the visit past the bound with the
@@ -275,10 +287,13 @@ fn lower_chain_step(
     let body = lower_step(
         ctx,
         env,
-        chain.step,
+        StepUnit {
+            step: chain.step,
+            index: chain.index,
+            next: chain.next,
+            region_last: chain.region_last,
+        },
         &mut scope,
-        chain.next,
-        chain.region_last,
         slots,
     )?;
     // The compensation function is built after the body so the step's own
@@ -287,15 +302,14 @@ fn lower_chain_step(
     let body = match edge {
         Some((on_failure, edge)) => {
             let body = super::failure::guard(chain.step, body, &edge)?;
-            super::failure::lower_compensation(
-                ctx,
-                env,
-                chain.step,
+            let guarded = super::failure::Guarded {
+                step: chain.step,
                 on_failure,
-                chain.param_names,
-                &edge,
-                slots,
-            )?;
+                param_names: chain.param_names,
+                stem: snake(&chain.step.name),
+                origin_step: flow.origin_step(&chain.step.name),
+            };
+            super::failure::lower_compensation(ctx, env, &guarded, &edge, slots)?;
             body
         }
         None => body,

@@ -32,17 +32,16 @@
 //!   protocol.
 
 use crate::ast::{OnFailure, Statement, Step};
-use crate::emitter::snake;
 
 use super::super::func::{FlowFn, FnOrigin, MirFn};
-use super::super::ids::{AtomRef, FnRef, Span, Var};
+use super::super::ids::{AtomRef, FnRef, Span};
 use super::super::ops::{Block, Stmt, Tail, Test, Value};
 use super::ctx::Ctx;
 use super::driver::LowerError;
-use super::expr::{Binding, Scope};
+use super::expr::Scope;
 use super::flow::FlowEnv;
 use super::slots::Slots;
-use super::step::lower_statement;
+use super::step::lower_body_stmts;
 
 /// A guarded step's failure edge: where control goes when any fallible
 /// statement in the body hands back an `Error`.
@@ -267,6 +266,19 @@ fn residual_fallible_tail(tail: &Tail) -> bool {
     }
 }
 
+/// The step (or substep) whose `on failure` edge is being lifted, with the two
+/// identities the generated function needs: the name stem and the origin
+/// qualifier. A top-level step's stem is its own snake name; a substep's is
+/// `sub_<parent>_<sub>`, so the two can never generate the same function name
+/// when a document has a step and a substep that share one.
+pub(super) struct Guarded<'a> {
+    pub(super) step: &'a Step,
+    pub(super) on_failure: &'a OnFailure,
+    pub(super) param_names: &'a [String],
+    pub(super) stem: String,
+    pub(super) origin_step: String,
+}
+
 /// Build the lifted compensation `FlowFn` and record it against its reserved
 /// slot. Its parameters are the guarded step's `avail_in`, in the step
 /// function's own parameter order, so the edge's tail call is a plain
@@ -274,36 +286,32 @@ fn residual_fallible_tail(tail: &Tail) -> bool {
 pub(super) fn lower_compensation(
     ctx: &mut Ctx<'_>,
     env: FlowEnv<'_>,
-    step: &Step,
-    on_failure: &OnFailure,
-    param_names: &[String],
+    guarded: &Guarded<'_>,
     edge: &FailureEdge,
     slots: &mut Slots,
 ) -> Result<(), LowerError> {
+    let Guarded {
+        step,
+        on_failure,
+        param_names,
+        stem,
+        origin_step,
+    } = guarded;
     let flow = env.flow;
     let mut scope: Scope = Scope::new();
-    let mut params: Vec<Var> = Vec::with_capacity(param_names.len());
-    let mut param_tys = Vec::with_capacity(param_names.len());
-    for name in param_names {
-        let ty = flow.bindings.get(name).cloned().ok_or_else(|| {
-            LowerError::new(step.name_span, format!("binding `{name}` has no type"))
-        })?;
-        let var = ctx.fresh_var();
-        params.push(var);
-        param_tys.push(ctx.tydesc(&ty));
-        scope.insert(name.clone(), Binding { var, ty });
-    }
+    let (params, param_tys) =
+        super::chain::bind_params(ctx, flow, param_names, step.name_span, &mut scope)?;
 
     let mut stmts = Vec::new();
-    let mut tail = None;
-    for statement in &on_failure.body {
-        if let Some(found) =
-            lower_statement(ctx, env, step, statement, &mut scope, &mut stmts, slots)?
-        {
-            tail = Some(found);
-            break;
-        }
-    }
+    let tail = lower_body_stmts(
+        ctx,
+        env,
+        step,
+        &on_failure.body,
+        &mut scope,
+        &mut stmts,
+        slots,
+    )?;
     // The checker requires an `on failure` block to end in a route, and the
     // reference emitter refuses one that does not; a block that reached here
     // without producing a tail would leave the compensation with nowhere to
@@ -321,9 +329,9 @@ pub(super) fn lower_compensation(
 
     let function = MirFn::Flow(FlowFn {
         origin: FnOrigin::Compensation {
-            step: flow.origin_step(&step.name),
+            step: origin_step.clone(),
         },
-        name: format!("{}{}_on_failure", flow.prefix, snake(&step.name)),
+        name: format!("{}{stem}_on_failure", flow.prefix),
         params,
         param_tys,
         ret_ty: flow.ret_ty.clone(),

@@ -51,6 +51,12 @@ pub(super) struct FlowFns {
     /// Region index to the function refs of its chain steps, one per layer in
     /// chain order.
     pub(super) chains: Vec<Vec<FnRef>>,
+    /// `(parent step index, substep position)` to that substep's function ref.
+    /// Reserved after every region chain of the flow — the reference's own
+    /// emission order (`emitter/steps.rs::emit_flow_fns`). A flow with no
+    /// substeps reserves none, so every pre-existing module keeps
+    /// byte-identical function references.
+    pub(super) subs: BTreeMap<(usize, usize), FnRef>,
 }
 
 /// A nested flow's reserved function set: the run-once entry wrapper slot
