@@ -8,8 +8,8 @@ import type { Event, Namespace, WorkflowId, WorkflowStatus } from '@/types';
 import { tallyExactlyOnce } from '../lib/exactlyOnce';
 import {
   FAILOVER_HISTORY_WINDOW_SIZE,
-  fetchFailoverHistoryTail,
   type FailoverHistoryClient,
+  fetchFailoverHistoryTail,
 } from '../lib/historyTail';
 
 /**

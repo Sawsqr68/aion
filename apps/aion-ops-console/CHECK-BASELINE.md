@@ -51,3 +51,40 @@ manufacture a delta. `timeline.ts` appears twice — two findings, one file.
 The original #131 filing said "2 organizeImports, +2 unclear". The named
 capture shows **4** organizeImports — the filing's count was a partial
 enumeration, which is precisely the failure mode term 1 exists to prevent.
+
+## ✅ DISCHARGED — 2026-08-01, tree `400a7c39` (task #131 closed)
+
+**`bun run check` is ABSOLUTE GREEN: `Checked 359 files. No fixes applied.`,
+exit 0, zero findings.** All 13 baseline findings are cleared — facade.ts
+earlier under term 4's trigger, the remaining 12 in this lane.
+
+**The gate is henceforth GREEN-NOT-DELTA.** Term 2 (delta-zero against the
+named set) is retired with the debt it existed to bound: with the set empty,
+delta-zero and absolute-green are the same statement, and the weaker one
+invites re-accumulation. Any leg that reddens `bun run check` clears it
+before landing. The ruling text above stands as the record of how a red gate
+is handled — enforced, named, owned — not renamed into harmlessness.
+
+How each was cleared (complexity scores as the tool reported them):
+
+| File | Finding | Clearing |
+| --- | --- | --- |
+| `FailoverFallback.tsx` | organizeImports | `biome check --write --only=assist/source/organizeImports` |
+| `hooks/useFanOutProgress.ts` | organizeImports | same |
+| `hooks/useLiveWorkflowEvents.ts` | organizeImports | same |
+| `lib/timeline.ts:32` | organizeImports | same |
+| `EditorPane.tsx` | 16 → clear | extracted `EditorHeader` + `EditorStatusBar` presentational components |
+| `ShipRunPanel.tsx` | 21 → clear | extracted `checkDeploysGreen`, `requireConnectedWorker`, `parseRunInput`, `projectDeployedRun`, `errorMessage` from the guided pipeline |
+| `lib/canvas-layout.ts` | 16 → clear | extracted `placeGraphNodes` + `edgeGutters` from `layoutEmbedded` |
+| `lib/transcriptFoldBuffer.ts` | 20 → clear | split `flushPending` into `mergePendingText` + `mergePendingTools` |
+| `lib/incrementalTimeline.ts` | 21 → clear | extracted `diffStep` (one merge-walk position) from `sequenceDifference` |
+| `lib/timeline.ts:171` | 16 → clear | replaced the 5-deep nested ternary with an `activityStatus` precedence ladder |
+| `swimlane/laneTree.ts` | 30 → clear | split `visit` into `visit` + `visitChildLane`; extracted `noticeRow`, `isChildExpanded`, `resolveChildState` |
+| `swimlane/timeLayout.ts` | 23 → clear | extracted `timeSpan`, `steppedSpan`, `markerGeometry`, `spanGeometry`, `attemptOffset` from `positionBar` |
+
+**No suppressions and no threshold change.** Every complexity finding was
+cleared by refactor, per term 4: no `// biome-ignore`, and
+`noExcessiveCognitiveComplexity` remains `warn` at the default max of 15.
+
+Gates at the discharge tree: `bun run check` exit 0 · `bun test` **613 pass /
+0 fail** (609 before, +4 from the #134 pin) · `bun run build` exit 0.

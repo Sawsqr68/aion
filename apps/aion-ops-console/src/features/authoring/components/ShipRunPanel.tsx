@@ -17,6 +17,55 @@ type StepName = (typeof STEP_NAMES)[number];
 type StepState = { state: 'idle' | 'working' | 'done' | 'failed'; detail?: string };
 type StepMap = Record<StepName, StepState>;
 
+type CheckSemantic = Awaited<ReturnType<typeof authoringFacade.check>>['semantic'];
+/** The deployed revision's status paired with the projection run mode draws from. */
+type ProjectedRun = { status: RunStatus; semantic: NonNullable<CheckSemantic> };
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+/**
+ * Gate the pipeline on the editor buffer deploying green, and report the detail
+ * the `check` step shows once it does.
+ */
+async function checkDeploysGreen(buffer: string, path: string): Promise<string> {
+  const checked = await authoringFacade.check(buffer, path);
+  if (!checked.deploysGreen) {
+    throw new Error(checked.diagnostics[0]?.message ?? 'Document does not deploy green');
+  }
+  return `${checked.steps ?? 0} steps deploy green`;
+}
+
+/** Starting against a task queue with no connected worker would hang, so refuse first. */
+async function requireConnectedWorker(namespace: string, taskQueue: string): Promise<void> {
+  const availability = await authoringFacade.workerAvailability(namespace, taskQueue);
+  if (!availability.available) {
+    throw new Error(
+      availability.scaffoldHint ?? `No worker is connected to ${availability.taskQueue}`
+    );
+  }
+}
+
+/** The run input must be a JSON object — arrays and scalars are not workflow inputs. */
+function parseRunInput(text: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(text);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('Run input must be a JSON object');
+  }
+  return parsed as Record<string, unknown>;
+}
+
+/** Run mode watches the DEPLOYED source, never the editor buffer it may have drifted from. */
+async function projectDeployedRun(deploymentId: string, path: string): Promise<ProjectedRun> {
+  const status = await authoringFacade.runStatus(deploymentId);
+  const deployedCheck = await authoringFacade.check(status.deployedSource, path);
+  if (deployedCheck.semantic === null) {
+    throw new Error('Deployed revision could not be projected');
+  }
+  return { status, semantic: deployedCheck.semantic };
+}
+
 export type ShipRunPanelProps = {
   path: string;
   buffer: string;
@@ -31,8 +80,7 @@ export function ShipRunPanel({ path, buffer, documents }: ShipRunPanelProps) {
   );
   const [steps, setSteps] = useState<StepMap>(() => initialSteps());
   const [run, setRun] = useState<RunStatus | null>(null);
-  const [semantic, setSemantic] =
-    useState<Awaited<ReturnType<typeof authoringFacade.check>>['semantic']>(null);
+  const [semantic, setSemantic] = useState<CheckSemantic>(null);
   const [input, setInput] = useState('{}');
   const [showDiff, setShowDiff] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -59,34 +107,17 @@ export function ShipRunPanel({ path, buffer, documents }: ShipRunPanelProps) {
     setSemantic(null);
     setSteps(initialSteps('check'));
     try {
-      const checked = await authoringFacade.check(buffer, path);
-      if (!checked.deploysGreen) {
-        throw new Error(checked.diagnostics[0]?.message ?? 'Document does not deploy green');
-      }
-      complete('check', `${checked.steps ?? 0} steps deploy green`);
+      complete('check', await checkDeploysGreen(buffer, path));
       const contentHash = await authoringFacade.saveDocument(path, buffer);
       working('compile');
       const deployed = await authoringFacade.deploy(path, contentHash);
       applyServerSteps(deployed.steps);
       working('start');
-      const availability = await authoringFacade.workerAvailability(
-        selectedNamespace,
-        deployed.deployment.taskQueue
-      );
-      if (!availability.available) {
-        throw new Error(
-          availability.scaffoldHint ?? `No worker is connected to ${availability.taskQueue}`
-        );
-      }
-      const parsedInput: unknown = JSON.parse(input);
-      if (typeof parsedInput !== 'object' || parsedInput === null || Array.isArray(parsedInput)) {
-        throw new Error('Run input must be a JSON object');
-      }
-      const runInput = parsedInput as Record<string, unknown>;
+      await requireConnectedWorker(selectedNamespace, deployed.deployment.taskQueue);
       const started = await apiClient.startWorkflow(
         {
           workflowType: deployed.deployment.workflowType,
-          input: runInput,
+          input: parseRunInput(input),
           taskQueue: deployed.deployment.taskQueue,
         },
         { namespace: selectedNamespace }
@@ -98,15 +129,12 @@ export function ShipRunPanel({ path, buffer, documents }: ShipRunPanelProps) {
         started.workflowId,
         started.runId
       );
-      const status = await authoringFacade.runStatus(deployed.deployment.deploymentId);
-      const deployedCheck = await authoringFacade.check(status.deployedSource, path);
-      if (deployedCheck.semantic === null)
-        throw new Error('Deployed revision could not be projected');
-      setSemantic(deployedCheck.semantic);
-      setRun(status);
+      const projected = await projectDeployedRun(deployed.deployment.deploymentId, path);
+      setSemantic(projected.semantic);
+      setRun(projected.status);
       complete('watch', 'live event stream attached');
     } catch (error) {
-      failCurrent(error instanceof Error ? error.message : 'Guided run failed');
+      failCurrent(errorMessage(error, 'Guided run failed'));
     } finally {
       setBusy(false);
     }

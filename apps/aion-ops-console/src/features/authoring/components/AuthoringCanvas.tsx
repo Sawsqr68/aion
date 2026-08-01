@@ -352,18 +352,34 @@ function stepNode(
       diagnostic: tones.get(step.name),
       onActivate: () => onJumpToSpan(step.span.start),
       proseEditing: proseEditingStep === step.name,
-      // A deployed artifact exposes NO prose-edit affordance at all. The node
-      // renders the button from the presence of this callback, so withholding
-      // it is what makes the read-only claim true rather than merely styled.
-      onBeginProseEdit: mode === 'deployed' ? undefined : () => onBeginProseEdit(step.name),
+      ...proseEditAffordance(mode, step.name, onBeginProseEdit, onGesture),
       onCancelProseEdit: () => onBeginProseEdit(null),
-      onSaveProse:
-        mode === 'deployed'
-          ? undefined
-          : async (prose) => {
-              await onGesture({ type: 'edit_prose', step: step.name, prose });
-              onBeginProseEdit(null);
-            },
+    },
+  };
+}
+
+/**
+ * The prose-edit affordance a canvas node is built with. ONLY the edit canvas
+ * gets one: the node renders its button from the presence of `onBeginProseEdit`,
+ * so withholding these callbacks is what makes the read-only claim true rather
+ * than merely styled. `run` follows a live run and `deployed` renders an
+ * archive — neither has anything the operator may change here, and the gesture
+ * underneath both is refused anyway.
+ */
+export function proseEditAffordance(
+  mode: CanvasMode,
+  stepName: string,
+  onBeginProseEdit: (step: string | null) => void,
+  onGesture: (operation: GestureOperation) => Promise<EditResult>
+): Pick<CanvasNodeData, 'onBeginProseEdit' | 'onSaveProse'> {
+  if (mode !== 'edit') {
+    return { onBeginProseEdit: undefined, onSaveProse: undefined };
+  }
+  return {
+    onBeginProseEdit: () => onBeginProseEdit(stepName),
+    onSaveProse: async (prose) => {
+      await onGesture({ type: 'edit_prose', step: stepName, prose });
+      onBeginProseEdit(null);
     },
   };
 }

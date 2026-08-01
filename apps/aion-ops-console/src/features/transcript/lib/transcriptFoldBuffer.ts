@@ -122,37 +122,61 @@ export class TranscriptFoldBuffer {
     return true;
   }
 
+  /**
+   * Merge buffered text fragments into their stream rows. A pending merge only
+   * lands when its index still points at a row of the expected type: a reindex
+   * between batches can move or drop a row, and a stale index must be discarded
+   * rather than overwrite an unrelated entry.
+   */
+  private mergePendingText(next: TranscriptEntry[]): void {
+    for (const [key, pending] of this.pendingText) {
+      const index = this.streamIndexes.get(key);
+      if (index === undefined) {
+        continue;
+      }
+      const current = next[index];
+      if (current?.type !== 'stream') {
+        continue;
+      }
+      next[index] = {
+        ...current,
+        text: current.text + pending.fragments.join(''),
+        // Thinking is sticky: a row that started as reasoning stays reasoning.
+        streamKind: current.streamKind === 'thinking' ? 'thinking' : pending.kind,
+        event: pending.event,
+      };
+    }
+  }
+
+  /** Merge buffered argument fragments into their tool-stream rows; see above on staleness. */
+  private mergePendingTools(next: TranscriptEntry[]): void {
+    for (const [key, pending] of this.pendingTools) {
+      const index = this.toolStreamIndexes.get(key);
+      if (index === undefined) {
+        continue;
+      }
+      const current = next[index];
+      if (current?.type !== 'tool-stream') {
+        continue;
+      }
+      next[index] = {
+        ...current,
+        callId: pending.callId ?? current.callId,
+        name: pending.name ?? current.name,
+        kind: pending.kind ?? current.kind,
+        argumentsText: current.argumentsText + pending.fragments.join(''),
+        event: pending.event,
+      };
+    }
+  }
+
   private flushPending(): void {
     if (this.pendingText.size === 0 && this.pendingTools.size === 0) {
       return;
     }
     const next = [...this.entries];
-    for (const [key, pending] of this.pendingText) {
-      const index = this.streamIndexes.get(key);
-      const current = index === undefined ? undefined : next[index];
-      if (index !== undefined && current?.type === 'stream') {
-        next[index] = {
-          ...current,
-          text: current.text + pending.fragments.join(''),
-          streamKind: current.streamKind === 'thinking' ? 'thinking' : pending.kind,
-          event: pending.event,
-        };
-      }
-    }
-    for (const [key, pending] of this.pendingTools) {
-      const index = this.toolStreamIndexes.get(key);
-      const current = index === undefined ? undefined : next[index];
-      if (index !== undefined && current?.type === 'tool-stream') {
-        next[index] = {
-          ...current,
-          callId: pending.callId ?? current.callId,
-          name: pending.name ?? current.name,
-          kind: pending.kind ?? current.kind,
-          argumentsText: current.argumentsText + pending.fragments.join(''),
-          event: pending.event,
-        };
-      }
-    }
+    this.mergePendingText(next);
+    this.mergePendingTools(next);
     this.pendingText.clear();
     this.pendingTools.clear();
     this.entries = next;

@@ -62,6 +62,67 @@ export function isWorkflowCycle(workflowId: string, ancestry: readonly string[])
   return ancestry.includes(workflowId);
 }
 
+/** Every notice row is keyed `<path>:<notice>`, which is unique per branch position. */
+function noticeRow(
+  path: string,
+  workflowId: string,
+  depth: number,
+  notice: 'loading' | 'error' | 'empty' | 'cycle',
+  message: string
+): LaneTreeRow {
+  return { kind: 'notice', id: `${path}:${notice}`, path, workflowId, depth, notice, message };
+}
+
+/**
+ * A child branch is drawn when it is not explicitly collapsed and is either
+ * expanded by the operator or auto-expanded by id on first render.
+ */
+function isChildExpanded(
+  childPath: string,
+  childWorkflowId: string,
+  expandedPaths: ReadonlySet<string>,
+  initiallyExpandedChildIds: ReadonlySet<string>,
+  collapsedPaths: ReadonlySet<string>
+): boolean {
+  if (collapsedPaths.has(childPath)) {
+    return false;
+  }
+  return expandedPaths.has(childPath) || initiallyExpandedChildIds.has(childWorkflowId);
+}
+
+/** Either the branch is ready to recurse into, or it stands in as a single notice row. */
+type ChildResolution =
+  | { kind: 'notice'; row: LaneTreeRow }
+  | { kind: 'ready'; entries: readonly TimelineEntry[]; isRunning: boolean };
+
+/** An unfetched child reads as loading — the request for it is issued in the same pass. */
+function resolveChildState(
+  child: ChildTimelineState | undefined,
+  childPath: string,
+  childWorkflowId: string,
+  depth: number
+): ChildResolution {
+  if (child === undefined || child.status === 'loading') {
+    return {
+      kind: 'notice',
+      row: noticeRow(
+        childPath,
+        childWorkflowId,
+        depth,
+        'loading',
+        `Loading ${childWorkflowId} history…`
+      ),
+    };
+  }
+  if (child.status === 'error') {
+    return {
+      kind: 'notice',
+      row: noticeRow(childPath, childWorkflowId, depth, 'error', child.message),
+    };
+  }
+  return { kind: 'ready', entries: child.entries, isRunning: child.isRunning };
+}
+
 /**
  * Flatten expanded workflow lanes into depth-indented rows. The tree only decides
  * row order; every row still uses the one shared track origin and axis in the view.
@@ -91,20 +152,22 @@ export function flattenLaneTree(
     const layout = layoutSwimlane(node.entries, { expandTimers: timersExpanded });
 
     if (layout.lanes.length === 0 && node.depth > 0) {
-      rows.push({
-        kind: 'notice',
-        id: `${node.path}:empty`,
-        path: node.path,
-        workflowId: node.workflowId,
-        depth: node.depth,
-        notice: 'empty',
-        message: 'No correlated child events yet.',
-      });
+      rows.push(
+        noticeRow(
+          node.path,
+          node.workflowId,
+          node.depth,
+          'empty',
+          'No correlated child events yet.'
+        )
+      );
       return;
     }
 
+    // Only the first timer lane carries the group toggle; the rest render bare.
     let hasTimerGroupToggle = false;
     for (const lane of layout.lanes) {
+      const carriesTimerToggle = lane.kind === 'timer' && !hasTimerGroupToggle;
       rows.push({
         kind: 'lane',
         id: `${node.path}:${lane.id}`,
@@ -112,73 +175,61 @@ export function flattenLaneTree(
         workflowId: node.workflowId,
         depth: node.depth,
         lane,
-        timerGroupExpanded: lane.kind === 'timer' && !hasTimerGroupToggle ? timersExpanded : null,
+        timerGroupExpanded: carriesTimerToggle ? timersExpanded : null,
       });
-      if (lane.kind === 'timer') {
+      if (carriesTimerToggle) {
         hasTimerGroupToggle = true;
       }
-
-      const childWorkflowId = lane.childWorkflowId;
-      if (childWorkflowId === null) {
-        continue;
-      }
-      const childPath = childNodePath(node.path, childWorkflowId);
-      const expanded =
-        !collapsedPaths.has(childPath) &&
-        (expandedPaths.has(childPath) || initiallyExpandedChildIds.has(childWorkflowId));
-      if (!expanded) {
-        continue;
-      }
-
-      const ancestry = [...node.ancestry, node.workflowId];
-      if (isWorkflowCycle(childWorkflowId, ancestry)) {
-        rows.push({
-          kind: 'notice',
-          id: `${childPath}:cycle`,
-          path: childPath,
-          workflowId: childWorkflowId,
-          depth: node.depth + 1,
-          notice: 'cycle',
-          message: `Workflow ${childWorkflowId} is already expanded above.`,
-        });
-        continue;
-      }
-
-      requests.push({ path: childPath, workflowId: childWorkflowId, ancestry });
-      const child = children.get(childPath);
-      if (child === undefined || child.status === 'loading') {
-        rows.push({
-          kind: 'notice',
-          id: `${childPath}:loading`,
-          path: childPath,
-          workflowId: childWorkflowId,
-          depth: node.depth + 1,
-          notice: 'loading',
-          message: `Loading ${childWorkflowId} history…`,
-        });
-        continue;
-      }
-      if (child.status === 'error') {
-        rows.push({
-          kind: 'notice',
-          id: `${childPath}:error`,
-          path: childPath,
-          workflowId: childWorkflowId,
-          depth: node.depth + 1,
-          notice: 'error',
-          message: child.message,
-        });
-        continue;
-      }
-
-      visit({
-        path: childPath,
-        workflowId: childWorkflowId,
-        ancestry,
-        depth: node.depth + 1,
-        entries: child.entries,
-        isRunning: child.isRunning,
-      });
+      visitChildLane(node, lane.childWorkflowId);
     }
+  }
+
+  /** Descend into (or post a notice for) the child workflow a lane correlates to. */
+  function visitChildLane(node: WorkflowTreeNode, childWorkflowId: string | null): void {
+    if (childWorkflowId === null) {
+      return;
+    }
+    const childPath = childNodePath(node.path, childWorkflowId);
+    const expanded = isChildExpanded(
+      childPath,
+      childWorkflowId,
+      expandedPaths,
+      initiallyExpandedChildIds,
+      collapsedPaths
+    );
+    if (!expanded) {
+      return;
+    }
+
+    const ancestry = [...node.ancestry, node.workflowId];
+    const depth = node.depth + 1;
+    if (isWorkflowCycle(childWorkflowId, ancestry)) {
+      rows.push(
+        noticeRow(
+          childPath,
+          childWorkflowId,
+          depth,
+          'cycle',
+          `Workflow ${childWorkflowId} is already expanded above.`
+        )
+      );
+      return;
+    }
+
+    requests.push({ path: childPath, workflowId: childWorkflowId, ancestry });
+    const resolved = resolveChildState(children.get(childPath), childPath, childWorkflowId, depth);
+    if (resolved.kind === 'notice') {
+      rows.push(resolved.row);
+      return;
+    }
+
+    visit({
+      path: childPath,
+      workflowId: childWorkflowId,
+      ancestry,
+      depth,
+      entries: resolved.entries,
+      isRunning: resolved.isRunning,
+    });
   }
 }

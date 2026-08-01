@@ -6,7 +6,7 @@ import type { Event, Namespace } from '@/types';
 
 import { buildClusterConfig, type ClusterConfig } from './lib/clusterConfig';
 import { tallyExactlyOnce } from './lib/exactlyOnce';
-import { fetchFailoverHistoryTail, type FailoverHistoryClient } from './lib/historyTail';
+import { type FailoverHistoryClient, fetchFailoverHistoryTail } from './lib/historyTail';
 
 /**
  * Tier-1 BULLETPROOF FALLBACK (DEMO-VIEW-PLAN §7). The floor that cannot fail to

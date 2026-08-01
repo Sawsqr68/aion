@@ -34,8 +34,8 @@ export {
   eventRecordedAt,
   eventSequence,
   isTerminalWorkflowEvent,
-  mergeEventWindowBySequence,
   mergeEventsBySequence,
+  mergeEventWindowBySequence,
   terminalOutcomeForEvents,
   terminalOutcomeForMergedEvents,
 } from './timelineEvents';
@@ -168,20 +168,31 @@ function newActivityEntry(
   };
 }
 
+/**
+ * Activity status precedence, highest first: an explicit cancel outranks a
+ * completion, which outranks advisory exhaustion, which outranks recorded
+ * failures, which outranks a bare start. Nothing recorded is still scheduled.
+ */
+function activityStatus(entry: ActivityTimelineEntry): ActivityTimelineEntry['status'] {
+  if (entry.cancelled) {
+    return 'cancelled';
+  }
+  if (entry.completed) {
+    return 'completed';
+  }
+  if (entry.advisoryExhausted) {
+    return 'advisory-exhausted';
+  }
+  if (entry.failures.length > 0) {
+    return 'failed';
+  }
+  return entry.started ? 'started' : 'scheduled';
+}
+
 function refreshActivity(entry: ActivityTimelineEntry): void {
   const latest = latestEvent(entry.events);
   entry.failures.sort((left, right) => left.sequence - right.sequence);
-  entry.status = entry.cancelled
-    ? 'cancelled'
-    : entry.completed
-      ? 'completed'
-      : entry.advisoryExhausted
-        ? 'advisory-exhausted'
-        : entry.failures.length > 0
-          ? 'failed'
-          : entry.started
-            ? 'started'
-            : 'scheduled';
+  entry.status = activityStatus(entry);
   entry.summary = activitySummary(entry);
   entry.payload = activityPayload(entry);
   entry.recordedAt = latest ? eventRecordedAt(latest) : entry.recordedAt;

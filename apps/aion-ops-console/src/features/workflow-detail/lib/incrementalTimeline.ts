@@ -41,35 +41,58 @@ export function updateTimelineProjection(
   return { events, timeline: mergeTimelineEntries(unaffected, rebuilt) };
 }
 
+/** The outcome of comparing the two lists at one position of the merge walk. */
+type DiffStep = {
+  /** Events whose timeline entry must be rebuilt because of this position. */
+  changed: readonly Event[];
+  advanceLeft: boolean;
+  advanceRight: boolean;
+};
+
+/**
+ * Compare the head of each list. A sequence present on only one side is a change;
+ * a sequence present on both is a change only when the event object was replaced.
+ * Both sides exhausted cannot occur — the walk's loop guard keeps one in range.
+ */
+function diffStep(previousEvent: Event | undefined, nextEvent: Event | undefined): DiffStep {
+  if (previousEvent === undefined) {
+    return {
+      changed: nextEvent === undefined ? [] : [nextEvent],
+      advanceLeft: false,
+      advanceRight: true,
+    };
+  }
+  if (nextEvent === undefined) {
+    return { changed: [previousEvent], advanceLeft: true, advanceRight: false };
+  }
+
+  const previousSeq = eventSequence(previousEvent);
+  const nextSeq = eventSequence(nextEvent);
+  if (previousSeq === nextSeq) {
+    return {
+      changed: previousEvent === nextEvent ? [] : [previousEvent, nextEvent],
+      advanceLeft: true,
+      advanceRight: true,
+    };
+  }
+  if (previousSeq < nextSeq) {
+    return { changed: [previousEvent], advanceLeft: true, advanceRight: false };
+  }
+  return { changed: [nextEvent], advanceLeft: false, advanceRight: true };
+}
+
 function sequenceDifference(previous: readonly Event[], next: readonly Event[]): Event[] {
   const changed: Event[] = [];
   let left = 0;
   let right = 0;
   while (left < previous.length || right < next.length) {
-    const previousEvent = previous[left];
-    const nextEvent = next[right];
-    if (previousEvent === undefined) {
-      if (nextEvent !== undefined) changed.push(nextEvent);
-      right += 1;
-    } else if (nextEvent === undefined) {
-      changed.push(previousEvent);
+    const step = diffStep(previous[left], next[right]);
+    changed.push(...step.changed);
+    if (step.advanceLeft) {
       left += 1;
-    } else {
-      const previousSeq = eventSequence(previousEvent);
-      const nextSeq = eventSequence(nextEvent);
-      if (previousSeq === nextSeq) {
-        if (previousEvent !== nextEvent) {
-          changed.push(previousEvent, nextEvent);
-        }
-        left += 1;
-        right += 1;
-      } else if (previousSeq < nextSeq) {
-        changed.push(previousEvent);
-        left += 1;
-      } else {
-        changed.push(nextEvent);
-        right += 1;
-      }
+    }
+    if (step.advanceRight) {
+      right += 1;
     }
   }
   return changed;

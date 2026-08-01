@@ -204,82 +204,17 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
     }
   }, []);
 
-  const status = check === null ? null : statusForCheck(check);
-  const statusStyle = statusPresentation(status?.tone);
-  const documentName = path.split('/').at(-1) ?? path;
-
   return (
     <section className="flex min-w-0 flex-1 flex-col" aria-label={`Editing ${path}`}>
-      <header className="flex flex-wrap items-center justify-between gap-3 border-border border-b bg-surface-base px-4 py-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="truncate font-semibold text-foreground text-sm">{documentName}</h2>
-              <Badge className="shrink-0" variant={dirty ? 'secondary' : 'outline'}>
-                {dirty ? 'Modified' : 'Saved'}
-              </Badge>
-            </div>
-            <p className="mt-0.5 truncate font-mono text-muted-foreground text-[0.6875rem]">
-              {path}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <fieldset
-            className="flex rounded-lg border border-border bg-surface-elevated p-0.5"
-            aria-label="Authoring view"
-          >
-            <ViewButton
-              icon={<FileText className="size-3.5" />}
-              label="Text"
-              mode="text"
-              selected={viewMode}
-              onSelect={setViewMode}
-            />
-            <ViewButton
-              icon={<Workflow className="size-3.5" />}
-              label="Canvas"
-              mode="canvas"
-              selected={viewMode}
-              onSelect={setViewMode}
-            />
-            <ViewButton
-              icon={<Columns2 className="size-3.5" />}
-              label="Split"
-              mode="split"
-              selected={viewMode}
-              onSelect={setViewMode}
-            />
-            <ViewButton
-              icon={<LayoutDashboard className="size-3.5" />}
-              label="Studio"
-              mode="studio"
-              selected={viewMode}
-              onSelect={setViewMode}
-            />
-            <ViewButton
-              icon={<Rocket className="size-3.5" />}
-              label="Ship & Run"
-              mode="run"
-              selected={viewMode}
-              onSelect={setViewMode}
-            />
-          </fieldset>
-          <Button
-            disabled={working !== null}
-            onClick={() => void format()}
-            size="sm"
-            variant="outline"
-          >
-            <ActionIcon action="format" dirty={dirty} working={working} />
-            {working === 'format' ? 'Formatting…' : 'Format'}
-          </Button>
-          <Button disabled={!dirty || working !== null} onClick={() => void save()} size="sm">
-            <ActionIcon action="save" dirty={dirty} working={working} />
-            {working === 'save' ? 'Saving…' : 'Save'}
-          </Button>
-        </div>
-      </header>
+      <EditorHeader
+        dirty={dirty}
+        onFormat={() => void format()}
+        onSave={() => void save()}
+        onSelectViewMode={setViewMode}
+        path={path}
+        viewMode={viewMode}
+        working={working}
+      />
       <div className="flex min-h-[32rem] min-w-0 flex-1 overflow-hidden">
         <div
           className={cn(
@@ -316,33 +251,134 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
         )}
         {viewMode === 'run' && <ShipRunPanel buffer={source} documents={documents} path={path} />}
       </div>
-      <div className="flex min-h-11 items-center justify-between gap-4 border-border border-t bg-surface-base px-4 py-2 text-xs">
-        <span
-          className={cn(
-            'inline-flex items-center gap-2 rounded-full border px-2.5 py-1 font-medium',
-            statusStyle.className
-          )}
-        >
-          <CheckStatusIcon checking={status === null} status={statusStyle.status} />
-          {status?.label ?? 'Checking…'}
-        </span>
-        <AnimatePresence initial={false} mode="wait">
-          <motion.span
-            animate={{ opacity: 1, y: 0 }}
-            className="truncate text-muted-foreground"
-            exit={{ opacity: 0, y: 2 }}
-            initial={{ opacity: 0, y: -2 }}
-            key={message ?? check?.steps ?? 'checking'}
-          >
-            {message ?? (check === null ? 'Validating source' : `${check.steps} steps`)}
-          </motion.span>
-        </AnimatePresence>
-      </div>
+      <EditorStatusBar check={check} message={message} />
     </section>
   );
 }
 
 type WorkingAction = 'format' | 'save' | null;
+
+/** Document identity, the view-mode switch, and the two document actions. */
+function EditorHeader({
+  dirty,
+  onFormat,
+  onSave,
+  onSelectViewMode,
+  path,
+  viewMode,
+  working,
+}: {
+  dirty: boolean;
+  onFormat: () => void;
+  onSave: () => void;
+  onSelectViewMode: (mode: ViewMode) => void;
+  path: string;
+  viewMode: ViewMode;
+  working: WorkingAction;
+}) {
+  const documentName = path.split('/').at(-1) ?? path;
+  return (
+    <header className="flex flex-wrap items-center justify-between gap-3 border-border border-b bg-surface-base px-4 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h2 className="truncate font-semibold text-foreground text-sm">{documentName}</h2>
+            <Badge className="shrink-0" variant={dirty ? 'secondary' : 'outline'}>
+              {dirty ? 'Modified' : 'Saved'}
+            </Badge>
+          </div>
+          <p className="mt-0.5 truncate font-mono text-muted-foreground text-[0.6875rem]">{path}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <fieldset
+          className="flex rounded-lg border border-border bg-surface-elevated p-0.5"
+          aria-label="Authoring view"
+        >
+          <ViewButton
+            icon={<FileText className="size-3.5" />}
+            label="Text"
+            mode="text"
+            selected={viewMode}
+            onSelect={onSelectViewMode}
+          />
+          <ViewButton
+            icon={<Workflow className="size-3.5" />}
+            label="Canvas"
+            mode="canvas"
+            selected={viewMode}
+            onSelect={onSelectViewMode}
+          />
+          <ViewButton
+            icon={<Columns2 className="size-3.5" />}
+            label="Split"
+            mode="split"
+            selected={viewMode}
+            onSelect={onSelectViewMode}
+          />
+          <ViewButton
+            icon={<LayoutDashboard className="size-3.5" />}
+            label="Studio"
+            mode="studio"
+            selected={viewMode}
+            onSelect={onSelectViewMode}
+          />
+          <ViewButton
+            icon={<Rocket className="size-3.5" />}
+            label="Ship & Run"
+            mode="run"
+            selected={viewMode}
+            onSelect={onSelectViewMode}
+          />
+        </fieldset>
+        <Button disabled={working !== null} onClick={onFormat} size="sm" variant="outline">
+          <ActionIcon action="format" dirty={dirty} working={working} />
+          {working === 'format' ? 'Formatting…' : 'Format'}
+        </Button>
+        <Button disabled={!dirty || working !== null} onClick={onSave} size="sm">
+          <ActionIcon action="save" dirty={dirty} working={working} />
+          {working === 'save' ? 'Saving…' : 'Save'}
+        </Button>
+      </div>
+    </header>
+  );
+}
+
+/** Debounced check verdict on the left, latest transient message on the right. */
+function EditorStatusBar({
+  check,
+  message,
+}: {
+  check: CheckResult | null;
+  message: string | null;
+}) {
+  const status = check === null ? null : statusForCheck(check);
+  const statusStyle = statusPresentation(status?.tone);
+  return (
+    <div className="flex min-h-11 items-center justify-between gap-4 border-border border-t bg-surface-base px-4 py-2 text-xs">
+      <span
+        className={cn(
+          'inline-flex items-center gap-2 rounded-full border px-2.5 py-1 font-medium',
+          statusStyle.className
+        )}
+      >
+        <CheckStatusIcon checking={status === null} status={statusStyle.status} />
+        {status?.label ?? 'Checking…'}
+      </span>
+      <AnimatePresence initial={false} mode="wait">
+        <motion.span
+          animate={{ opacity: 1, y: 0 }}
+          className="truncate text-muted-foreground"
+          exit={{ opacity: 0, y: 2 }}
+          initial={{ opacity: 0, y: -2 }}
+          key={message ?? check?.steps ?? 'checking'}
+        >
+          {message ?? (check === null ? 'Validating source' : `${check.steps} steps`)}
+        </motion.span>
+      </AnimatePresence>
+    </div>
+  );
+}
 
 function ViewButton({
   icon,

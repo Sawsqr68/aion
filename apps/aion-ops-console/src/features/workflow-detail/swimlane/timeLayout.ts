@@ -186,6 +186,122 @@ export function buildAxisLayout(
   };
 }
 
+/** One projected event reduced to the two coordinates both axis modes read. */
+type SpanPoint = { sequence: number; timestampMs: number };
+
+/** A bar's extent in track pixels before the marker floor and track clamp apply. */
+type RawSpan = { rawLeft: number; rawWidth: number; pointSpan: boolean };
+
+/** The final on-track geometry of one bar. */
+type BarGeometry = { left: number; width: number };
+
+/**
+ * Time-axis extent: the recorded-time envelope of the bar's events, stretched to
+ * the axis end while the bar and its workflow are still running, or clipped back
+ * to the scrub cursor when one is supplied. The two are mutually exclusive — a
+ * clip always wins, because the cursor defines what the operator has scrubbed to.
+ */
+function timeSpan(
+  workflowId: string,
+  bar: SwimlaneBar,
+  axis: AxisLayout,
+  points: readonly SpanPoint[],
+  clip: ScrubClip | null
+): RawSpan {
+  const timestamps = points.map((point) => point.timestampMs);
+  const start = timestamps.length > 0 ? Math.min(...timestamps) : axis.bounds.t0;
+  let end = timestamps.length > 0 ? Math.max(...timestamps) : start;
+  let pointSpan = bar.isMarker;
+
+  if (clip !== null) {
+    end = Math.max(start, Math.min(end, clip.cursor));
+    pointSpan = end === start;
+  } else if (bar.status === 'running' && axis.runningWorkflowIds.has(workflowId)) {
+    end = Math.max(end, axis.bounds.tEnd);
+    pointSpan = end === start;
+  }
+
+  const startFraction = fractionForTimestamp(start, axis.bounds);
+  return {
+    rawLeft: startFraction * axis.trackWidth,
+    rawWidth: (fractionForTimestamp(end, axis.bounds) - startFraction) * axis.trackWidth,
+    pointSpan,
+  };
+}
+
+/** Stepped-axis extent: the bar's global event ranks, clipped back to the scrub cursor. */
+function steppedSpan(
+  workflowId: string,
+  bar: SwimlaneBar,
+  axis: AxisLayout,
+  points: readonly SpanPoint[],
+  clip: ScrubClip | null
+): RawSpan {
+  const ranks = points.map(
+    (point) => axis.rankByEvent.get(eventKey(workflowId, point.sequence)) ?? 0
+  );
+  const startRank = ranks.length > 0 ? Math.min(...ranks) : 0;
+  let endRank = ranks.length > 0 ? Math.max(...ranks) : startRank;
+  let pointSpan = bar.isMarker;
+
+  if (clip !== null) {
+    endRank = Math.max(startRank, Math.min(endRank, clip.cursor));
+    pointSpan = endRank === startRank;
+  }
+
+  return {
+    rawLeft: startRank * axis.rankWidth,
+    rawWidth: (endRank - startRank + 1) * axis.rankWidth - 4,
+    pointSpan,
+  };
+}
+
+/** Marker floor: a fixed-size chip centred on the raw span and held inside the track. */
+function markerGeometry(span: RawSpan, axis: AxisLayout, minimumWidth: number): BarGeometry {
+  const width = Math.min(
+    Math.max(0, axis.trackWidth),
+    Math.max(minimumWidth, Math.min(14, axis.rankWidth || 14))
+  );
+  return {
+    width,
+    left: Math.min(
+      Math.max(0, axis.trackWidth - width),
+      Math.max(0, span.rawLeft + span.rawWidth / 2 - width / 2)
+    ),
+  };
+}
+
+/** Drawn span: the raw extent floored at the minimum width and held inside the track. */
+function spanGeometry(span: RawSpan, axis: AxisLayout, minimumWidth: number): BarGeometry {
+  const width = Math.max(minimumWidth, span.rawWidth);
+  return {
+    width,
+    left: Math.min(Math.max(0, axis.trackWidth - width), Math.max(0, span.rawLeft)),
+  };
+}
+
+/** Offset of one retry tick from the bar's own left edge; 0 when its event is absent. */
+function attemptOffset(
+  workflowId: string,
+  bar: SwimlaneBar,
+  axis: AxisLayout,
+  sequence: number,
+  left: number
+): number {
+  const event = bar.entry.events.find((candidate) => candidate.data.envelope.seq === sequence);
+  if (event === undefined) {
+    return 0;
+  }
+  if (axis.mode === 'time') {
+    return (
+      fractionForTimestamp(recordedAtMs(event.data.envelope.recorded_at), axis.bounds) *
+        axis.trackWidth -
+      left
+    );
+  }
+  return (axis.rankByEvent.get(eventKey(workflowId, sequence)) ?? 0) * axis.rankWidth - left;
+}
+
 /** Resolve a projected bar onto the shared axis, including the accepted marker floor. */
 export function positionBar(
   workflowId: string,
@@ -195,76 +311,24 @@ export function positionBar(
   clip: ScrubClip | null = null
 ): PositionedBar {
   const spanEntry = clip === null ? bar.entry : clip.fullEntry;
-  const points = spanEntry.events.map((event) => ({
+  const points: SpanPoint[] = spanEntry.events.map((event) => ({
     sequence: event.data.envelope.seq,
     timestampMs: recordedAtMs(event.data.envelope.recorded_at),
   }));
-  const firstPoint = points[0] ?? {
-    sequence: bar.sequence,
-    timestampMs: axis.bounds.t0,
-  };
 
-  let rawLeft: number;
-  let rawWidth: number;
-  let pointSpan = bar.isMarker;
+  const span =
+    axis.mode === 'time'
+      ? timeSpan(workflowId, bar, axis, points, clip)
+      : steppedSpan(workflowId, bar, axis, points, clip);
 
-  if (axis.mode === 'time') {
-    const timestamps = points.map((point) => point.timestampMs);
-    const start = timestamps.length > 0 ? Math.min(...timestamps) : firstPoint.timestampMs;
-    let end = timestamps.length > 0 ? Math.max(...timestamps) : start;
-    if (clip === null && bar.status === 'running' && axis.runningWorkflowIds.has(workflowId)) {
-      end = Math.max(end, axis.bounds.tEnd);
-      pointSpan = end === start;
-    } else if (clip !== null) {
-      end = Math.max(start, Math.min(end, clip.cursor));
-      pointSpan = end === start;
-    }
-    rawLeft = fractionForTimestamp(start, axis.bounds) * axis.trackWidth;
-    rawWidth =
-      (fractionForTimestamp(end, axis.bounds) - fractionForTimestamp(start, axis.bounds)) *
-      axis.trackWidth;
-  } else {
-    const ranks = points.map(
-      (point) => axis.rankByEvent.get(eventKey(workflowId, point.sequence)) ?? 0
-    );
-    const startRank = ranks.length > 0 ? Math.min(...ranks) : 0;
-    let endRank = ranks.length > 0 ? Math.max(...ranks) : startRank;
-    if (clip !== null) {
-      endRank = Math.max(startRank, Math.min(endRank, clip.cursor));
-      pointSpan = endRank === startRank;
-    }
-    rawLeft = startRank * axis.rankWidth;
-    rawWidth = (endRank - startRank + 1) * axis.rankWidth - 4;
-  }
+  const marker = span.pointSpan || span.rawWidth < minimumWidth;
+  const { left, width } = marker
+    ? markerGeometry(span, axis, minimumWidth)
+    : spanGeometry(span, axis, minimumWidth);
 
-  const marker = pointSpan || rawWidth < minimumWidth;
-  const width = marker
-    ? Math.min(
-        Math.max(0, axis.trackWidth),
-        Math.max(minimumWidth, Math.min(14, axis.rankWidth || 14))
-      )
-    : Math.max(minimumWidth, rawWidth);
-  const left = marker
-    ? Math.min(
-        Math.max(0, axis.trackWidth - width),
-        Math.max(0, rawLeft + rawWidth / 2 - width / 2)
-      )
-    : Math.min(Math.max(0, axis.trackWidth - width), Math.max(0, rawLeft));
-
-  const attemptOffsets = bar.attemptSequences.map((sequence) => {
-    const event = bar.entry.events.find((candidate) => candidate.data.envelope.seq === sequence);
-    if (event === undefined) {
-      return 0;
-    }
-    if (axis.mode === 'time') {
-      return (
-        fractionForTimestamp(recordedAtMs(event.data.envelope.recorded_at), axis.bounds) *
-          axis.trackWidth -
-        left
-      );
-    }
-    return (axis.rankByEvent.get(eventKey(workflowId, sequence)) ?? 0) * axis.rankWidth - left;
-  });
+  const attemptOffsets = bar.attemptSequences.map((sequence) =>
+    attemptOffset(workflowId, bar, axis, sequence, left)
+  );
 
   return { bar, left, width, marker, attemptOffsets };
 }

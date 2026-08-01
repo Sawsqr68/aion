@@ -5,7 +5,7 @@ import { type EventSubscriptionManager, useBatchedEventSubscription } from '@/fe
 import { isSelectedNamespace, useNamespace } from '@/features/namespace';
 import type { ResyncHandler, WorkflowEventSubscriptionFilter } from '@/lib/api';
 import type { Event, WorkflowId } from '@/types';
-import { updateTimelineProjection, type TimelineProjection } from '../lib/incrementalTimeline';
+import { type TimelineProjection, updateTimelineProjection } from '../lib/incrementalTimeline';
 import {
   eventSequence,
   isTerminalWorkflowEvent,

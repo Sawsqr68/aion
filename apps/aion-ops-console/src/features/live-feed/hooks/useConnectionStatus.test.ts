@@ -1,8 +1,16 @@
 import { expect, mock, test } from 'bun:test';
+import * as react from 'react';
 
 import { createAionEventWebSocketManager } from '@/lib/api';
 
+/**
+ * Calling the hook outside a render needs `useSyncExternalStore` to resolve
+ * synchronously — but `mock.module` is GLOBAL and outlives this file, so the
+ * rest of `react` is re-exported untouched. Replacing the whole module here
+ * would leave every later-loaded test file without `useState`/`useRef`.
+ */
 mock.module('react', () => ({
+  ...react,
   useSyncExternalStore: (
     subscribe: (notify: () => void) => () => void,
     getSnapshot: () => string
