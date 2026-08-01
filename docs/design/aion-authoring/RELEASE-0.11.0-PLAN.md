@@ -41,6 +41,10 @@ binary matches Benji's docs.
 6. **Post-publish verify**: install 0.11.0 and re-run the docs lane's
    probe corpus (the fixtures that failed on 0.10.0 must now check clean).
    Venue for the install build: price with Athena (or Dean's box).
+   6b. **Strike the release-boundary notes** (docs/AWL.md:27-30,
+   docs/GETTING-STARTED.md:51-58, AWL-REFERENCE.md:10-12) — true until
+   publish, false after. Docs-only commit; release notes state the battery
+   tree, which this commit does not move.
 7. **Assistant worker rebuild** (examples/agent-dev worker embeds the 5
    teaching files via include_str!): rebuild so the LIVE assistant serves
    the new content. Local cargo build — priced with Athena.

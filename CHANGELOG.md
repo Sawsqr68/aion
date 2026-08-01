@@ -3,7 +3,7 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
-## Unreleased
+## 0.11.0 — 2026-08-01
 
 - **Every valid AWL document in the corpus now deploys on the direct
   compiler.** Four construct classes were held at the lowering staging gate
