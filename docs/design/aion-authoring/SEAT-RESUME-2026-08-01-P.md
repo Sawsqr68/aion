@@ -23,6 +23,19 @@ outside those fences = STOP.**
 
 ## Landing evidence (the honest record)
 
+**Two Athena corrections (05:59Z), on the record:**
+1. **Where the disclosure lives**: the feature commit MESSAGE (c5ea86c9) does
+   NOT state the partial battery — I claimed it did. The disclosure is in
+   THIS marker's subject and in LANE-91-LEG2-STATE.md (named by the commit):
+   line 9 "Gate coverage is PARTIAL", §"DID NOT RUN — declared unrun, not
+   green". Reachable from the commit, absent from `git log` alone.
+2. **Count reconciliation**: LANE-91-LEG2-STATE.md says **6/41 executed /
+   35 unrun** — that describes the LANE'S earlier stop-at-first-failure run.
+   My window-1 `--no-fail-fast` run (05:46–05:49Z, post-landing of that doc)
+   completed **14/41**, and window 2 re-ran the edited e2e target 8/0. The
+   doc understates what ran (conservative direction). Authoritative tally at
+   landing: **14 targets green + edited e2e green = 27 unrun.**
+
 - **Rust gate, PARTIAL BY RULING, not by neglect**: 14/41 aion-server test
   targets completed green before Athena's ≤2 GiB ceiling stopped window 1
   (lib 729/0, twelve integration targets, awl_deploy_direct_e2e 7/1 — the 1
