@@ -31,8 +31,9 @@ froze mid-release, THIS FILE is the resume point.
   anchors (ceiling 1 GiB / hard 1.5) but the loop only stopped on exit≠0 —
   the delta check was never wired. aion-server verify cost 2124 MiB (> hard),
   aion-cli 1341 MiB (> ceiling); loop continued. No hazard (box had ~62 GiB
-  free after a ~23 GiB unattributed sibling release mid-sequence, likely APFS
-  purge — global gauge cannot attribute). Owed to Athena's book.
+  free after a ~23 GiB sibling release mid-sequence — ATTRIBUTED by Waffles
+  08:05Z: his disk sweep on Tom's order (meridian-v2 12.6 + beamr 11.3 GiB),
+  announced late to Athena's book. Not APFS). Reported to Athena's book.
 - Cumulative publish consumption ≈ 2.4 GiB before the reclamation.
 
 ## REMAINING (in order; resume here)
@@ -41,10 +42,10 @@ froze mid-release, THIS FILE is the resume point.
    and re-run the docs-lane probe corpus — the fixtures that FAILED on
    0.10.0 must now check clean. Venue: Dean's box preferred (has tree +
    headroom) or local with Athena pricing.
-2. **Assistant worker rebuild** (examples/agent-dev/worker): the step-6b
-   note-strike edited examples/assistant/resources/AWL-REFERENCE.md, one of
-   the include_str! teaching files → worker binary stale AGAIN. Warm rebuild
-   measured +0.096 GiB previously. Then worker-process restart serves it.
+2. ~~Assistant worker rebuild~~ **DONE**: rebuilt post-strike (exit 0, warm,
+   delta 0 MiB); binary content verified BOTH directions (new "carries the
+   full surface" = 1, old "newer than the last published release" = 0).
+   Worker-process restart still pending to serve it (rides with #108 offer).
 3. **Tom's server swap offer (#108)**: pid 99844 NEVER killed by anyone;
    offer the walk-through at his word.
 4. **DISK SWEEP (Waffles relaying Tom's estate order, 08:01Z)**: AFTER
