@@ -1,0 +1,54 @@
+    Updating crates.io index
+   Packaging aion-worker v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+    Updating crates.io index
+warning: package `spin v0.9.8` in Cargo.lock is yanked in registry `crates-io`, consider updating to a version that is not yanked
+    Packaged 37 files, 671.4KiB (151.8KiB compressed)
+   Verifying aion-worker v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+ Downloading crates ...
+  Downloaded aion-proto-generated v0.11.0
+  Downloaded aion-integrations v0.11.0
+  Downloaded aion-proto v0.11.0
+  Downloaded aion-package v0.11.0
+   Compiling parking_lot_core v0.9.12
+   Compiling mio v1.2.1
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling getrandom v0.4.2
+   Compiling tempfile v3.27.0
+   Compiling icu_normalizer v2.2.0
+   Compiling bitflags v2.13.0
+   Compiling uuid v1.23.4
+   Compiling nix v0.30.1
+   Compiling parking_lot v0.12.5
+   Compiling prost-build v0.14.3
+   Compiling tokio v1.52.3
+   Compiling referencing v0.46.6
+   Compiling ts-rs v12.0.1
+   Compiling tonic-prost-build v0.14.5
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling aion-proto-generated v0.11.0
+   Compiling aion-core v0.11.0
+   Compiling zstd-safe v7.2.4
+   Compiling jsonschema v0.46.6
+   Compiling zstd v0.13.3
+   Compiling zip v8.6.0
+   Compiling tokio-util v0.7.18
+   Compiling tokio-stream v0.1.18
+   Compiling h2 v0.4.14
+   Compiling tower v0.5.3
+   Compiling aion-integrations v0.11.0
+   Compiling aion-package v0.11.0
+   Compiling axum v0.8.9
+   Compiling hyper v1.10.1
+   Compiling hyper-util v0.1.20
+   Compiling hyper-timeout v0.5.2
+   Compiling tonic v0.14.6
+   Compiling tonic-prost v0.14.5
+   Compiling aion-proto v0.11.0
+   Compiling aion-worker v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-worker-0.11.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 28.61s
+   Uploading aion-worker v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+    Uploaded aion-worker v0.11.0 to registry `crates-io`
+note: waiting for aion-worker v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-worker v0.11.0 at registry `crates-io`

@@ -1,0 +1,18 @@
+    Updating crates.io index
+   Packaging aion-toolchain v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-toolchain)
+    Updating crates.io index
+    Packaged 15 files, 146.6KiB (38.9KiB compressed)
+   Verifying aion-toolchain v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-toolchain)
+   Compiling once_cell v1.21.4
+   Compiling ahash v0.8.12
+   Compiling tempfile v3.27.0
+   Compiling referencing v0.46.6
+   Compiling jsonschema v0.46.6
+   Compiling aion-package v0.11.0
+   Compiling aion-toolchain v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-toolchain-0.11.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 11.81s
+   Uploading aion-toolchain v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-toolchain)
+    Uploaded aion-toolchain v0.11.0 to registry `crates-io`
+note: waiting for aion-toolchain v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-toolchain v0.11.0 at registry `crates-io`

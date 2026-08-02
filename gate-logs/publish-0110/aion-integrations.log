@@ -1,0 +1,15 @@
+    Updating crates.io index
+   Packaging aion-integrations v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+    Updating crates.io index
+    Packaged 13 files, 76.8KiB (21.4KiB compressed)
+   Verifying aion-integrations v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+   Compiling tokio v1.52.3
+   Compiling ts-rs v12.0.1
+   Compiling aion-core v0.11.0
+   Compiling aion-integrations v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-integrations-0.11.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.66s
+   Uploading aion-integrations v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+    Uploaded aion-integrations v0.11.0 to registry `crates-io`
+note: waiting for aion-integrations v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-integrations v0.11.0 at registry `crates-io`

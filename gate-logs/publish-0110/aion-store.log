@@ -1,0 +1,12 @@
+    Updating crates.io index
+   Packaging aion-store v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+    Updating crates.io index
+    Packaged 25 files, 305.6KiB (68.8KiB compressed)
+   Verifying aion-store v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+   Compiling aion-store v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-store-0.11.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.56s
+   Uploading aion-store v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+    Uploaded aion-store v0.11.0 to registry `crates-io`
+note: waiting for aion-store v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-store v0.11.0 at registry `crates-io`

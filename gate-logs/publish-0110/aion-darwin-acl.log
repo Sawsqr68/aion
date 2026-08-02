@@ -1,0 +1,13 @@
+    Updating crates.io index
+   Packaging aion-darwin-acl v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-darwin-acl)
+    Updating crates.io index
+    Packaged 7 files, 20.1KiB (6.5KiB compressed)
+   Verifying aion-darwin-acl v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-darwin-acl)
+   Compiling uuid v1.23.4
+   Compiling aion-darwin-acl v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-darwin-acl-0.11.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.67s
+   Uploading aion-darwin-acl v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-darwin-acl)
+    Uploaded aion-darwin-acl v0.11.0 to registry `crates-io`
+note: waiting for aion-darwin-acl v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-darwin-acl v0.11.0 at registry `crates-io`

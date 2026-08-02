@@ -1,0 +1,26 @@
+    Updating crates.io index
+   Packaging aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Updating crates.io index
+    Packaged 311 files, 3.6MiB (810.7KiB compressed)
+   Verifying aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+   Compiling futures-channel v0.3.32
+   Compiling ts-rs v12.0.1
+   Compiling referencing v0.46.6
+   Compiling tokio v1.52.3
+   Compiling saffron v0.1.0
+   Compiling futures-util v0.3.32
+   Compiling jsonschema v0.46.6
+   Compiling aion-core v0.11.0
+   Compiling futures-executor v0.3.32
+   Compiling futures v0.3.32
+   Compiling tokio-util v0.7.18
+   Compiling beamr v0.16.2
+   Compiling aion-store v0.11.0
+   Compiling aion-package v0.11.0
+   Compiling aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-rs-0.11.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 29s
+   Uploading aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Uploaded aion-rs v0.11.0 to registry `crates-io`
+note: waiting for aion-rs v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-rs v0.11.0 at registry `crates-io`

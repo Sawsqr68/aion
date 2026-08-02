@@ -1,0 +1,20 @@
+    Updating crates.io index
+   Packaging aion-awl-lsp v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-lsp)
+    Updating crates.io index
+    Packaged 15 files, 170.9KiB (44.4KiB compressed)
+   Verifying aion-awl-lsp v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-lsp)
+ Downloading crates ...
+  Downloaded aion-awl v0.11.0
+   Compiling form_urlencoded v1.2.2
+   Compiling serde_repr v0.1.20
+   Compiling lsp-server v0.8.0
+   Compiling aion-awl v0.11.0
+   Compiling url v2.5.8
+   Compiling lsp-types v0.97.0
+   Compiling aion-awl-lsp v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-awl-lsp-0.11.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 18.37s
+   Uploading aion-awl-lsp v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-lsp)
+    Uploaded aion-awl-lsp v0.11.0 to registry `crates-io`
+note: waiting for aion-awl-lsp v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-awl-lsp v0.11.0 at registry `crates-io`

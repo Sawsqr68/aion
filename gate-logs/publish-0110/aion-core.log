@@ -1,0 +1,12 @@
+    Updating crates.io index
+   Packaging aion-core v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+    Updating crates.io index
+    Packaged 19 files, 240.0KiB (54.8KiB compressed)
+   Verifying aion-core v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+   Compiling aion-core v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-core-0.11.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.04s
+   Uploading aion-core v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+    Uploaded aion-core v0.11.0 to registry `crates-io`
+note: waiting for aion-core v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-core v0.11.0 at registry `crates-io`

@@ -1,0 +1,31 @@
+    Updating crates.io index
+   Packaging aion-integration-acp v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-acp)
+    Updating crates.io index
+    Packaged 18 files, 324.2KiB (86.0KiB compressed)
+   Verifying aion-integration-acp v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-acp)
+   Compiling serde_json v1.0.150
+   Compiling darling_core v0.23.0
+   Compiling serde_derive_internals v0.29.1
+   Compiling ref-cast-impl v1.0.25
+   Compiling derive_more-impl v2.1.1
+   Compiling strum_macros v0.28.0
+   Compiling tokio v1.52.3
+   Compiling ref-cast v1.0.25
+   Compiling schemars_derive v1.2.1
+   Compiling aion-core v0.11.0
+   Compiling derive_more v2.1.1
+   Compiling strum v0.28.0
+   Compiling darling_macro v0.23.0
+   Compiling schemars v1.2.1
+   Compiling darling v0.23.0
+   Compiling aion-integrations v0.11.0
+   Compiling serde_with_macros v3.21.0
+   Compiling serde_with v3.21.0
+   Compiling agent-client-protocol-schema v1.5.0
+   Compiling aion-integration-acp v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-integration-acp-0.11.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 25.16s
+   Uploading aion-integration-acp v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-acp)
+    Uploaded aion-integration-acp v0.11.0 to registry `crates-io`
+note: waiting for aion-integration-acp v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-integration-acp v0.11.0 at registry `crates-io`

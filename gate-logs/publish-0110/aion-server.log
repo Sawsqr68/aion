@@ -1,0 +1,55 @@
+    Updating crates.io index
+   Packaging aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Updating crates.io index
+warning: package `spin v0.9.8` in Cargo.lock is yanked in registry `crates-io`, consider updating to a version that is not yanked
+    Packaged 275 files, 5.7MiB (1.6MiB compressed)
+   Verifying aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+ Downloading crates ...
+  Downloaded aion-darwin-acl v0.11.0
+  Downloaded aion-toolchain v0.11.0
+  Downloaded aion-store-haematite v0.11.0
+  Downloaded aion-worker v0.11.0
+  Downloaded aion-awl-package v0.11.0
+   Compiling serde_json v1.0.150
+   Compiling ahash v0.8.12
+   Compiling tungstenite v0.29.0
+   Compiling serde_urlencoded v0.7.1
+   Compiling serde_path_to_error v0.1.20
+   Compiling aion-proto-generated v0.11.0
+   Compiling toml_datetime v0.6.11
+   Compiling serde_spanned v0.6.9
+   Compiling tracing-serde v0.2.0
+   Compiling aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-server-0.11.0)
+   Compiling aion-darwin-acl v0.11.0
+   Compiling toml_edit v0.22.27
+   Compiling tokio-tungstenite v0.29.0
+   Compiling aion-core v0.11.0
+   Compiling referencing v0.46.6
+   Compiling beamr v0.16.2
+   Compiling axum v0.8.9
+   Compiling schemars v1.2.1
+   Compiling tracing-subscriber v0.3.23
+   Compiling toml v0.8.23
+   Compiling jsonschema v0.46.6
+   Compiling aion-package v0.11.0
+   Compiling aion-store v0.11.0
+   Compiling aion-integrations v0.11.0
+   Compiling tonic v0.14.6
+   Compiling tonic-prost v0.14.5
+   Compiling aion-toolchain v0.11.0
+   Compiling aion-proto v0.11.0
+   Compiling aion-awl v0.11.0
+   Compiling aion-rs v0.11.0
+   Compiling aion-worker v0.11.0
+   Compiling haematite v0.7.0
+   Compiling aion-awl-package v0.11.0
+   Compiling liminal-rs v0.5.0
+   Compiling aion-store-haematite v0.11.0
+   Compiling liminal-server v0.5.0
+   Compiling liminal-sdk v0.5.0
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 56s
+   Uploading aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Uploaded aion-server v0.11.0 to registry `crates-io`
+note: waiting for aion-server v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-server v0.11.0 at registry `crates-io`

@@ -1,0 +1,18 @@
+    Updating crates.io index
+   Packaging aion-proto v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+    Updating crates.io index
+    Packaged 14 files, 168.8KiB (37.0KiB compressed)
+   Verifying aion-proto v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+   Compiling getrandom v0.4.2
+   Compiling chrono v0.4.45
+   Compiling serde_json v1.0.150
+   Compiling uuid v1.23.4
+   Compiling ts-rs v12.0.1
+   Compiling aion-core v0.11.0
+   Compiling aion-proto v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-proto-0.11.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.32s
+   Uploading aion-proto v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+    Uploaded aion-proto v0.11.0 to registry `crates-io`
+note: waiting for aion-proto v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-proto v0.11.0 at registry `crates-io`

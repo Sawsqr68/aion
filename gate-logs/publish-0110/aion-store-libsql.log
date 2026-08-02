@@ -1,0 +1,54 @@
+    Updating crates.io index
+   Packaging aion-store-libsql v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-libsql)
+    Updating crates.io index
+    Packaged 28 files, 372.8KiB (78.8KiB compressed)
+   Verifying aion-store-libsql v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-libsql)
+   Compiling smallvec v1.15.1
+   Compiling cc v1.2.63
+   Compiling libc v0.2.186
+   Compiling hashbrown v0.14.5
+   Compiling uuid v1.23.4
+   Compiling security-framework v2.11.1
+   Compiling parking_lot_core v0.9.12
+   Compiling ts-rs v12.0.1
+   Compiling parking_lot v0.12.5
+   Compiling hashlink v0.8.4
+   Compiling cmake v0.1.58
+   Compiling ring v0.17.14
+   Compiling libsql-sqlite3-parser v0.13.0
+   Compiling rustls-native-certs v0.7.3
+   Compiling tokio v1.52.3
+   Compiling errno v0.3.14
+   Compiling clang-sys v1.8.1
+   Compiling rustix v0.38.44
+   Compiling aion-core v0.11.0
+   Compiling which v4.4.2
+   Compiling bindgen v0.66.1
+   Compiling rustls v0.22.4
+   Compiling rustls-webpki v0.102.8
+   Compiling aion-store v0.11.0
+   Compiling tokio-util v0.7.18
+   Compiling tokio-io-timeout v1.2.1
+   Compiling tokio-stream v0.1.18
+   Compiling libsql-ffi v0.9.30
+   Compiling h2 v0.3.27
+   Compiling tower v0.4.13
+   Compiling tokio-rustls v0.25.0
+   Compiling tower-http v0.4.4
+   Compiling hyper v0.14.32
+   Compiling libsql-rusqlite v0.9.30
+   Compiling libsql-sys v0.9.30
+   Compiling axum v0.6.20
+   Compiling hyper-timeout v0.4.1
+   Compiling hyper-rustls v0.25.0
+   Compiling tonic v0.11.0
+   Compiling tonic-web v0.11.0
+   Compiling libsql_replication v0.9.30
+   Compiling libsql v0.9.30
+   Compiling aion-store-libsql v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-store-libsql-0.11.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 51.60s
+   Uploading aion-store-libsql v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-libsql)
+    Uploaded aion-store-libsql v0.11.0 to registry `crates-io`
+note: waiting for aion-store-libsql v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-store-libsql v0.11.0 at registry `crates-io`

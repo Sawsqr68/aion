@@ -1,0 +1,44 @@
+    Updating crates.io index
+   Packaging aion-proto-generated v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+    Updating crates.io index
+    Packaged 11 files, 56.8KiB (17.4KiB compressed)
+   Verifying aion-proto-generated v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+   Compiling libc v0.2.186
+   Compiling mio v1.2.1
+   Compiling futures-task v0.3.32
+   Compiling prost-derive v0.14.3
+   Compiling tracing v0.1.44
+   Compiling serde_core v1.0.228
+   Compiling pulldown-cmark v0.13.4
+   Compiling futures-channel v0.3.32
+   Compiling smallvec v1.15.1
+   Compiling tonic-build v0.14.6
+   Compiling futures-util v0.3.32
+   Compiling tokio v1.52.3
+   Compiling pulldown-cmark-to-cmark v22.0.0
+   Compiling prost v0.14.3
+   Compiling errno v0.3.14
+   Compiling getrandom v0.4.2
+   Compiling rustix v1.1.4
+   Compiling serde v1.0.228
+   Compiling tokio-util v0.7.18
+   Compiling tokio-stream v0.1.18
+   Compiling prost-types v0.14.3
+   Compiling h2 v0.4.14
+   Compiling tower v0.5.3
+   Compiling tempfile v3.27.0
+   Compiling prost-build v0.14.3
+   Compiling axum v0.8.9
+   Compiling tonic-prost-build v0.14.5
+   Compiling aion-proto-generated v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-proto-generated-0.11.0)
+   Compiling hyper v1.10.1
+   Compiling hyper-util v0.1.20
+   Compiling hyper-timeout v0.5.2
+   Compiling tonic v0.14.6
+   Compiling tonic-prost v0.14.5
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.40s
+   Uploading aion-proto-generated v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+    Uploaded aion-proto-generated v0.11.0 to registry `crates-io`
+note: waiting for aion-proto-generated v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-proto-generated v0.11.0 at registry `crates-io`

@@ -1,0 +1,37 @@
+    Updating crates.io index
+   Packaging aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Updating crates.io index
+warning: package `spin v0.9.8` in Cargo.lock is yanked in registry `crates-io`, consider updating to a version that is not yanked
+    Packaged 163 files, 1.3MiB (343.4KiB compressed)
+   Verifying aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+ Downloading crates ...
+  Downloaded aion-integration-norn v0.11.0
+  Downloaded aion-awl-lsp v0.11.0
+  Downloaded aion-client v0.11.0
+  Downloaded aion-integration-acp v0.11.0
+  Downloaded aion-server v0.11.0
+   Compiling aion-core v0.11.0
+   Compiling aion-proto-generated v0.11.0
+   Compiling aion-server v0.11.0
+   Compiling aion-darwin-acl v0.11.0
+   Compiling aion-package v0.11.0
+   Compiling aion-integrations v0.11.0
+   Compiling aion-store v0.11.0
+   Compiling aion-proto v0.11.0
+   Compiling aion-integration-acp v0.11.0
+   Compiling aion-integration-norn v0.11.0
+   Compiling aion-store-haematite v0.11.0
+   Compiling aion-awl v0.11.0
+   Compiling aion-rs v0.11.0
+   Compiling aion-worker v0.11.0
+   Compiling aion-toolchain v0.11.0
+   Compiling aion-awl-package v0.11.0
+   Compiling aion-awl-lsp v0.11.0
+   Compiling aion-client v0.11.0
+   Compiling aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-cli-0.11.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 27s
+   Uploading aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Uploaded aion-cli v0.11.0 to registry `crates-io`
+note: waiting for aion-cli v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-cli v0.11.0 at registry `crates-io`

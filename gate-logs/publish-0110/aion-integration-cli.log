@@ -1,0 +1,18 @@
+    Updating crates.io index
+   Packaging aion-integration-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-cli)
+    Updating crates.io index
+    Packaged 12 files, 132.8KiB (35.4KiB compressed)
+   Verifying aion-integration-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-cli)
+   Compiling futures-channel v0.3.32
+   Compiling tokio-stream v0.1.18
+   Compiling futures-util v0.3.32
+   Compiling futures-executor v0.3.32
+   Compiling futures v0.3.32
+   Compiling aion-integrations v0.11.0
+   Compiling aion-integration-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-integration-cli-0.11.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.38s
+   Uploading aion-integration-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-cli)
+    Uploaded aion-integration-cli v0.11.0 to registry `crates-io`
+note: waiting for aion-integration-cli v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-integration-cli v0.11.0 at registry `crates-io`

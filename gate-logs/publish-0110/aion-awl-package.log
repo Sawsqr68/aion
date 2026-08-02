@@ -1,0 +1,12 @@
+    Updating crates.io index
+   Packaging aion-awl-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-package)
+    Updating crates.io index
+    Packaged 64 files, 596.0KiB (390.0KiB compressed)
+   Verifying aion-awl-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-package)
+   Compiling aion-awl-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-awl-package-0.11.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.56s
+   Uploading aion-awl-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-package)
+    Uploaded aion-awl-package v0.11.0 to registry `crates-io`
+note: waiting for aion-awl-package v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-awl-package v0.11.0 at registry `crates-io`

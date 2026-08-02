@@ -1,0 +1,16 @@
+    Updating crates.io index
+   Packaging aion-store-haematite v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+    Updating crates.io index
+    Packaged 17 files, 356.2KiB (86.5KiB compressed)
+   Verifying aion-store-haematite v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+ Downloading crates ...
+  Downloaded aion-store v0.11.0
+   Compiling aion-core v0.11.0
+   Compiling aion-store v0.11.0
+   Compiling aion-store-haematite v0.11.0 (/Users/tom/Developer/ablative/stack/aion/target/package/aion-store-haematite-0.11.0)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 17.24s
+   Uploading aion-store-haematite v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+    Uploaded aion-store-haematite v0.11.0 to registry `crates-io`
+note: waiting for aion-store-haematite v0.11.0 to be available at registry `crates-io`
+help: you may press ctrl-c to skip waiting; the crate should be available shortly
+   Published aion-store-haematite v0.11.0 at registry `crates-io`
