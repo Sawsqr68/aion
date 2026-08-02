@@ -23,15 +23,6 @@ step greet_and_shout
   name |> greet |> .greeting |> shout |> route shouted
 ```
 
-> **Released versus this repository.** This page describes AWL as it stands on
-> `main`. Several surfaces below have **not been released** and are not in the
-> published `aion` crate (0.10.0): declared `run "…"` command bodies, the
-> `agent` action marker, in-language `send`, `query`/`answer`, `aion awl
-> scaffold`, `aion worker agent`, and `aion run --timeout`. On the published
-> binary, `aion awl check` rejects the first four with a parse error and the
-> last three do not appear in `--help`. If you need them, build from this
-> checkout. Everything else here works on both.
-
 ## Where the reference lives
 
 The complete language reference — every construct the parser and checker

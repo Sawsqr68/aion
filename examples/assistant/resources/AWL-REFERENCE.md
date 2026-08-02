@@ -6,15 +6,9 @@ by the repository's `aion-awl` parser and checker. It is distilled from
 examples. If an installed `aion awl check` disagrees, its diagnostic and that
 binary's source win.
 
-That precedence rule is live, not theoretical. Some constructs here are newer
-than the last published release (0.10.0): **declared `run` bodies (§4), the
-`agent` marker (§4), `send` (§12), and `query`/`answer` (§13)**, along with
-`aion awl scaffold`, `aion worker agent`, and `aion run --timeout`. A binary
-built from the repository accepts them; the published one rejects the language
-constructs with a parse error and does not list the commands in `--help`. Check
-which you are on before concluding a construct does not exist — and if a
-document must run on the published binary, say so and author within it rather
-than reporting the feature as missing.
+That precedence rule is live, not theoretical. The published `aion` crate
+(0.11.0) carries the full surface described here; if an older installed binary
+rejects a construct, upgrade before concluding the construct does not exist.
 
 ## 1. Document structure
 

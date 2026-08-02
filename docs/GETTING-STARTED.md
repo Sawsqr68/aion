@@ -47,17 +47,6 @@ The subcommands are `server`, `dev`, `awl`, `worker`, `new`, `generate`,
 `start`, `signal`, `query`, `cancel`, `reopen`, `pause`, `resume`, `list`,
 `describe`, and `inspect`.
 
-> **Released versus this repository.** This guide is written against the
-> **published** `aion` crate, and every AWL document in Part 1 is checked
-> against it. The repository's `main` branch carries AWL surfaces that have not
-> been released yet — declared `run "…"` command bodies, the `agent` action
-> marker, in-language `send`, `query`/`answer`, `aion awl scaffold`, `aion
-> worker agent`, and `aion run --timeout`. They are documented in
-> [`docs/AWL.md`](AWL.md) and the [language
-> reference](../examples/assistant/resources/AWL-REFERENCE.md); if `aion awl
-> check` rejects one, you are on the published binary and need a build from
-> source. Check with `aion awl --help` and `aion worker --help`.
-
 > Prefer a generated starting point? `aion new <name>` scaffolds a complete,
 > buildable **Gleam** project — workflow, schemas, `workflow.toml`, a dev
 > `aion.toml`, and a README with these same steps. Templates are
