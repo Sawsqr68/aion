@@ -38,10 +38,15 @@ froze mid-release, THIS FILE is the resume point.
 
 ## REMAINING (in order; resume here)
 
-1. **Install-verify**: install published `aion-cli` 0.11.0 (binary `aion`)
-   and re-run the docs-lane probe corpus — the fixtures that FAILED on
-   0.10.0 must now check clean. Venue: Dean's box preferred (has tree +
-   headroom) or local with Athena pricing.
+0. **#138 IS CLOSED — every leg green.** Install-verify (Dean's box,
+   detached): published aion-cli 0.11.0 install_exit=0, binary reports
+   "aion 0.11.0", **corpus 107 pass / 0 fail** (the 0.10.0-failing fixtures
+   now pass on the published binary). Disk sweep EXECUTED per Tom's order:
+   leg-0 lsof showed zero debug consumers (probe proven live — same read
+   found pid 99844 on release), announced to Athena pre-delete, target/debug
+   only, **56.0 GiB freed** (54963→112339 MiB), release dir + pid 99844 +
+   accepted binary verified intact after.
+1. ~~Install-verify~~ DONE (above).
 2. ~~Assistant worker rebuild~~ **DONE**: rebuilt post-strike (exit 0, warm,
    delta 0 MiB); binary content verified BOTH directions (new "carries the
    full surface" = 1, old "newer than the last published release" = 0).
