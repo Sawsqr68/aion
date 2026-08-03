@@ -32,12 +32,23 @@ const DEGRADED_SESSION_MARKERS: [&str; 2] = [
 /// `norn_account` mandatory: norn refuses to resume an existing OAuth session
 /// without an account alias.
 ///
+/// `norn_model` is an operator pass-through with NO default of this worker's:
+/// `Some` appends `--model <value>` and `None` defers to norn's own model
+/// selection. Which model answers a session is the operator's call, and
+/// inventing one here would silently override every deployment that never
+/// asked.
+///
 /// `allow_degraded_session` appends [`ALLOW_DEGRADED_SESSION_FLAG`]. It is an
 /// explicit operator opt-in and has NO default: resuming degraded means the
 /// exact provider transcript could not be replayed, which is a real fidelity
 /// tradeoff and not this worker's to assume on an operator's behalf.
 #[must_use]
-pub fn norn_args(run_clone: &str, norn_account: &str, allow_degraded_session: bool) -> Vec<String> {
+pub fn norn_args(
+    run_clone: &str,
+    norn_account: &str,
+    norn_model: Option<&str>,
+    allow_degraded_session: bool,
+) -> Vec<String> {
     let mut args = vec![
         "--workspace-root".to_owned(),
         run_clone.to_owned(),
@@ -50,6 +61,10 @@ pub fn norn_args(run_clone: &str, norn_account: &str, allow_degraded_session: bo
         norn_account.to_owned(),
         "--fast".to_owned(),
     ];
+    if let Some(model) = norn_model {
+        args.push("--model".to_owned());
+        args.push(model.to_owned());
+    }
     if allow_degraded_session {
         args.push(ALLOW_DEGRADED_SESSION_FLAG.to_owned());
     }

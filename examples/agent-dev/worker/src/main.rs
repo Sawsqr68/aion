@@ -26,7 +26,8 @@
 //! Usage:
 //!   agent-dev-worker --address 127.0.0.1:PORT [--address 127.0.0.1:PORT2 ...]
 //!                    [--identity <id>] [--ready-file <path>] [--norn-bin <path>]
-//!                    --norn-account <alias> [--norn-allow-degraded-session]
+//!                    --norn-account <alias> [--norn-model <model>]
+//!                    [--norn-allow-degraded-session]
 
 use std::path::Path;
 use std::sync::Arc;
@@ -96,6 +97,7 @@ const REDIAL_MAX_BACKOFF: Duration = Duration::from_millis(500);
 fn composed_agent_harness(
     norn_bin: &str,
     norn_account: &str,
+    norn_model: Option<&str>,
     workspace_root: &Path,
     allow_degraded_session: bool,
     agent_descriptors: &[aion_package::ActivityDescriptor],
@@ -105,7 +107,7 @@ fn composed_agent_harness(
     // (--workspace-root) and the tool-execution cwd (-C) point at.
     let run_clone = format!("{}/{{workflow_id}}/repo", workspace_root.display());
     let mut norn = NornHarness::with_binary(norn_bin);
-    for arg in norn_args(&run_clone, norn_account, allow_degraded_session) {
+    for arg in norn_args(&run_clone, norn_account, norn_model, allow_degraded_session) {
         norn = norn.with_arg(arg);
     }
     let harness: Arc<dyn DynAgentHarness> = Arc::new(AdvisingHarness::new(
@@ -120,7 +122,11 @@ fn composed_agent_harness(
     let agent_types: Vec<String> = declared_agent_types
         .iter()
         .cloned()
-        .chain(UNDECLARED_AGENT_ACTIVITY_TYPES.iter().map(|&name| name.to_owned()))
+        .chain(
+            UNDECLARED_AGENT_ACTIVITY_TYPES
+                .iter()
+                .map(|&name| name.to_owned()),
+        )
         .collect();
     AgentHarnessConfig::new(
         harness,
@@ -156,6 +162,13 @@ struct Args {
     /// turn a clear startup error into three retried activity failures and a
     /// failed workflow, which is exactly how this was found.
     norn_account: String,
+    /// Optional model passed to norn as `--model`.
+    ///
+    /// No default of this worker's: omitted means norn chooses its own model,
+    /// exactly as if the operator had run norn by hand without the flag. Which
+    /// model answers the assistant's sessions is an operator decision, not a
+    /// value this binary should bake in.
+    norn_model: Option<String>,
     /// Whether to pass norn `--allow-degraded-session`.
     ///
     /// OPT-IN, with no default. A durable session can park far longer than the
@@ -192,6 +205,7 @@ fn parse_args_from(
     let mut ready_file: Option<String> = None;
     let mut norn_bin = default_norn_bin;
     let mut norn_account: Option<String> = None;
+    let mut norn_model: Option<String> = None;
     let mut allow_degraded_session = false;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
@@ -215,6 +229,10 @@ fn parse_args_from(
             "--norn-account" => match args.next() {
                 Some(value) => norn_account = Some(value),
                 None => anyhow::bail!("--norn-account requires a value"),
+            },
+            "--norn-model" => match args.next() {
+                Some(value) => norn_model = Some(value),
+                None => anyhow::bail!("--norn-model requires a value"),
             },
             // A bare switch: it takes no value, because there is nothing to
             // configure — either the operator accepts the fidelity tradeoff
@@ -240,6 +258,7 @@ fn parse_args_from(
         ready_file,
         norn_bin,
         norn_account,
+        norn_model,
         allow_degraded_session,
     })
 }
@@ -263,6 +282,7 @@ fn main() -> anyhow::Result<()> {
         candidates = ?args.candidates,
         identity = %args.identity,
         norn_bin = %args.norn_bin,
+        norn_model = ?args.norn_model,
         workspace_root = %workspace_root.display(),
         allow_degraded_session = args.allow_degraded_session,
         "agent-dev-worker starting"
@@ -299,6 +319,7 @@ fn main() -> anyhow::Result<()> {
     let agent = composed_agent_harness(
         &args.norn_bin,
         &args.norn_account,
+        args.norn_model.as_deref(),
         &workspace_root,
         args.allow_degraded_session,
         &split.agent,
@@ -375,6 +396,17 @@ mod tests {
         assert_eq!(args.ready_file, None);
         assert_eq!(args.norn_bin, "norn-default");
         assert_eq!(args.norn_account, "default");
+        assert_eq!(
+            args.norn_model, None,
+            "the model must have no worker-side default — omitted means norn's own choice"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_norn_model_passes_through_when_supplied() -> anyhow::Result<()> {
+        let args = parse(&["--norn-account", "default", "--norn-model", "gpt-5.6-sol"])?;
+        assert_eq!(args.norn_model.as_deref(), Some("gpt-5.6-sol"));
         Ok(())
     }
 
@@ -448,6 +480,7 @@ mod tests {
             "--ready-file",
             "--norn-bin",
             "--norn-account",
+            "--norn-model",
         ] {
             assert_eq!(
                 parse(&[flag]).err().map(|error| error.to_string()),

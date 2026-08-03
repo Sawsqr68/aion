@@ -19,7 +19,7 @@ const RUN_CLONE: &str = "/Users/tom/.aion/clones/{workflow_id}/repo";
 
 #[test]
 fn the_opt_in_puts_the_flag_in_the_argv() {
-    let args = norn_args(RUN_CLONE, "default", true);
+    let args = norn_args(RUN_CLONE, "default", None, true);
     assert!(
         args.iter().any(|arg| arg == ALLOW_DEGRADED_SESSION_FLAG),
         "the opt-in must reach norn's argv; got {args:?}"
@@ -29,7 +29,7 @@ fn the_opt_in_puts_the_flag_in_the_argv() {
 #[test]
 fn without_the_opt_in_the_flag_is_absent() {
     // The negative control: an opt-in that is always passed is not an opt-in.
-    let args = norn_args(RUN_CLONE, "default", false);
+    let args = norn_args(RUN_CLONE, "default", None, false);
     assert!(
         !args.iter().any(|arg| arg == ALLOW_DEGRADED_SESSION_FLAG),
         "the flag must NOT be passed unless the operator asked for it; got {args:?}"
@@ -40,8 +40,8 @@ fn without_the_opt_in_the_flag_is_absent() {
 fn the_argv_is_otherwise_identical_with_and_without_the_opt_in() {
     // The flag is purely additive: it must not perturb the workspace
     // confinement, the pinned session id, or the account.
-    let without = norn_args(RUN_CLONE, "default", false);
-    let with = norn_args(RUN_CLONE, "default", true);
+    let without = norn_args(RUN_CLONE, "default", None, false);
+    let with = norn_args(RUN_CLONE, "default", None, true);
     assert_eq!(
         with.len(),
         without.len() + 1,
@@ -55,8 +55,48 @@ fn the_argv_is_otherwise_identical_with_and_without_the_opt_in() {
 }
 
 #[test]
+fn a_supplied_model_reaches_the_argv_as_norns_model_flag() {
+    let args = norn_args(RUN_CLONE, "default", Some("gpt-5.6-sol"), false);
+    let at = args.iter().position(|arg| arg == "--model");
+    assert!(at.is_some(), "--model is missing from {args:?}");
+    let index = at.unwrap_or_default();
+    assert_eq!(
+        args.get(index + 1).map(String::as_str),
+        Some("gpt-5.6-sol"),
+        "--model must be followed by the operator's value"
+    );
+}
+
+#[test]
+fn without_a_model_the_flag_is_absent_so_norn_chooses() {
+    // The negative control: a pass-through with a smuggled default is not a
+    // pass-through — omitting the flag must leave model selection to norn.
+    let args = norn_args(RUN_CLONE, "default", None, false);
+    assert!(
+        !args.iter().any(|arg| arg == "--model"),
+        "--model must NOT appear unless the operator supplied one; got {args:?}"
+    );
+}
+
+#[test]
+fn the_model_is_purely_additive_to_the_argv() {
+    let without = norn_args(RUN_CLONE, "default", None, false);
+    let with = norn_args(RUN_CLONE, "default", Some("gpt-5.6-sol"), false);
+    assert_eq!(
+        with.len(),
+        without.len() + 2,
+        "the model must add exactly the flag and its value"
+    );
+    assert_eq!(
+        &with[..without.len()],
+        without.as_slice(),
+        "the model must not reorder or replace any existing argument"
+    );
+}
+
+#[test]
 fn the_argv_carries_the_confinement_the_session_pin_and_the_account() {
-    let args = norn_args(RUN_CLONE, "work-alias", false);
+    let args = norn_args(RUN_CLONE, "work-alias", None, false);
     for (flag, value) in [
         ("--workspace-root", RUN_CLONE),
         ("-C", RUN_CLONE),
