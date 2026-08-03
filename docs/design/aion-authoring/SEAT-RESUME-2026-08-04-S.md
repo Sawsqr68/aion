@@ -17,18 +17,25 @@ never killed without his word.
    is repo-root `./aion-data` (haematite shards); server cwd = repo root;
    config `~/.aion/config.toml` DELIBERATELY leaves store.data_dir unset so
    the resolver picks the legacy `./aion-data` — do not "fix" that.
-2. **PREFLIGHT FIRST (one step remains)**: `~/.cargo/bin/aion server --config
-   <pf.toml>` with scratch store/authoring on ports 18080/18051/18061.
-   First attempt REFUSED BY DESIGN: path-safety gate rejects a store under
-   /private/tmp (ancestor 1777). RERUN with scratch dirs under
-   `~/.aion/preflight-0110/` (owner-only chain), verify `/api/build` answers
-   + console 200, then KILL the preflight process and delete the dir.
+2. ✅ DONE (22:05Z Aug 3): preflight GREEN. `~/.cargo/bin/aion server` with
+   scratch store/authoring under `~/.aion/preflight-0110/` (owner-only chain
+   — the earlier /private/tmp refusal was the path gate BY DESIGN), ports
+   18080/18051/18061: started clean, console 200, build identity answered.
+   Preflight killed, dir deleted, live processes verified untouched after.
+   ⚠️ ROUTE CORRECTION: the build-identity route is **`/build`**, NOT
+   `/api/build` — the SPA fallback answers any unmatched path with 200
+   text/html, so probes MUST assert on the BODY
+   (`curl -s http://127.0.0.1:8080/build | jq -e .version`). The installed
+   binary answers `{"version":"0.11.0","commit":"unknown",...}` — commit
+   "unknown" is CORRECT for a cargo-install build (no git tree), the
+   version field is the identity here. The old live binary answers /build
+   with HTML (no such route) — that contrast IS the swap verification.
 3. On GO + green preflight: `kill -TERM 99844` (graceful drain), confirm
    exit, then from repo root:
    `nohup ~/.cargo/bin/aion server > ~/.aion/server.log.20260804 2>&1 &`
    (installed 0.11.0 = the battery-proven published binary; embeds the new
    console; same ports 8080/50051/50061 from ~/.aion/config.toml).
-4. Verify: `/api/build` names the code (#123); console 200; workflow list
+4. Verify: `/build` body names 0.11.0 (#123); console 200; workflow list
    shows the pre-swap runs (store intact); assistant worker (pid 77969,
    gpt-5.6-sol) redials 50061 and re-registers — check its log
    `/tmp/agent-dev-worker-20260803.log` for a fresh "connected and
