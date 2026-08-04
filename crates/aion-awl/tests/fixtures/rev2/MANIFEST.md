@@ -95,6 +95,9 @@ Valid (schema files live beside the .awl that imports them):
   construction both providing and omitting an optional field.
 - `schema-doors/valid/mixed_doors.awl` (+ `intake.schema.json`) — all three doors in one
   document, inline schema with constraints, action config line, `count`, route-targeted step.
+- `schema-doors/valid/short_circuit_optional.awl` — short-circuit flow-typing: `when detail
+  is absent or detail.approved` — the left guard already decides, so the unsafe optional
+  field read on the right is skipped.
 - `schema-doors/valid/inline_verbatim_constraints.awl` — the paste-verbatim promise: inline
   schema with a negative bound, `1e-3`/`1E5` exponent literals, `\uXXXX` and `\/` string
   escapes, braces inside a `pattern` string, and three-space indentation — all raw-captured
@@ -138,6 +141,19 @@ Valid:
 - `declarations/valid/declarations_combined.awl` — 4 actions covering all config shapes incl.
   node-only and retry-only lines, 2 children, awaited call, spawn, unbound side-effect calls,
   call-site override, route-to-step + route-to-outcome.
+- `declarations/valid/action_run_bodies.awl` — two actions on one queue: one the document
+  implements itself with a declared `run` command body, one it only requires of an out-of-band
+  worker.
+- `declarations/valid/advisory_side_channel.awl` — an `advisory` action: announce progress on
+  a side channel, then do the work the run exists for (an advisory failure never faults the
+  step).
+- `declarations/valid/agent_seam.awl` — the `agent` marker: one `String` prompt in, one
+  `String` reply out — the whole of what an adapter needs to hand the call to a harness
+  instead of running it as an ordinary activity.
+- `declarations/valid/agent_seam_unmarked_control.awl` — the control arm: the same workflow,
+  action shape, and call with the marker absent. `agent` is a declaration classification that
+  rides the package contract, so the two must lower identically
+  (`agent_marked_and_unmarked_lower_identically` compares their committed goldens).
 
 Invalid:
 - `positional_call_args.awl` — positional argument → PARSE "named" @13 (judgment: "unwritable"
@@ -169,6 +185,42 @@ Invalid:
   untyped-binding cascades possible; substring pins the primary).
 - `action_list_element_optional.awl` — `[String?]` action parameter (ruled 2026-07-11: `?`
   illegal in list-element position, signature surface) → CHECK "element" @9.
+- `run_declared_twice.awl` — one action, two declared commands → PARSE
+  "at most one `run` body" @11.
+- `run_without_command.awl` — the `run` body word without a command line → PARSE
+  "quoted command line" @10.
+- `run_empty_command.awl` — a whitespace-only command names no program → CHECK
+  "empty `run` command" @10.
+- `run_parameterized_program.awl` — the program itself is a parameter, so a caller-supplied
+  value would choose which program runs → CHECK "must be written out" @11.
+- `run_unknown_parameter.awl` — the command interpolates a parameter the action never
+  declares → CHECK "does not declare" @10.
+- `run_shell_variable_unescaped.awl` — bare `$HOME` (inside `run` the dollar belongs to AWL;
+  `$$HOME` reaches the command) → CHECK "is not a parameter name" @11.
+- `run_result_not_a_record.awl` — a bodied action hands back the outcome OBJECT; a scalar
+  result type can never be it → CHECK "must be a record over" @10.
+- `run_result_unknown_member.awl` — the result type names a member the outcome never
+  carries → CHECK "is not part of the outcome" @9.
+- `run_result_member_wrong_type.awl` — `exit_code` declared String where the outcome carries
+  Int → CHECK "is `Int`, but action" @9.
+- `advisory_declared_twice.awl` — one config key, one spelling → PARSE
+  "duplicate `advisory` key" @10.
+- `advisory_binds_result.awl` — an advisory failure never faults the step, so it can promise
+  no value to bind → CHECK "advisory" @13.
+- `advisory_pipe_stage.awl` — a pipe stage hands its value on; an advisory stage would have
+  none → CHECK "advisory" @13.
+- `advisory_call_site_override.awl` — `advisory` classifies the action itself; a call site
+  cannot declare it → CHECK "advisory" @14.
+- `agent_takes_two_parameters.awl` — `agent` names a SHAPE: one `String` prompt in, one
+  `String` reply out → CHECK "takes 2 parameters" @12.
+- `agent_parameter_is_not_a_string.awl` — a structured input has no place to go on the wire
+  to an agent → CHECK "`String` prompt handed to the harness" @12.
+- `agent_returns_a_record.awl` — an agent returns the harness's reply as a `String`;
+  structure is parsed downstream → CHECK "returns the harness" @11.
+- `agent_action_declares_a_body.awl` — agent + declared body is two implementations of one
+  action → CHECK "also declares a body" @13.
+- `agent_call_site_override.awl` — `agent` classifies the action itself; a call site cannot
+  declare it → CHECK "`agent` stays on the" @14.
 
 ## step-bodies — calls, bindings, pipes, combinators, wait/sleep, literals
 
@@ -196,6 +248,27 @@ Valid:
   `signal`/`wait` receiver in the same document.
 - `step-bodies/valid/step_bodies_combined.awl` — realistic multi-construct: pipe chains,
   combinators, indexing, `+`, sleep, wait+timeout, fall-through + route-targeted steps.
+- `step-bodies/valid/collection_predicates.awl` — `any`/`all` collection predicates evaluated
+  entirely in the workflow VM, including over the empty list literal `[]`.
+- `step-bodies/valid/fallible_collection_predicates.awl` — `workflow.id` resolved inside
+  existential and universal predicates.
+- `step-bodies/valid/fallible_any_short_circuit.awl` — a fallible existential predicate stops
+  after its first matching item.
+- `step-bodies/valid/fallible_all_short_circuit.awl` — a fallible universal predicate stops
+  after its first non-matching item.
+- `step-bodies/valid/workflow_id.awl` — the replay-stable `workflow.id` attached to the
+  terminal record.
+- `step-bodies/valid/guard_narrows_an_optional_field.awl` — #97-B: `is present` narrows an
+  optional FIELD by its access path, not just a whole binding (the record itself is not
+  optional).
+- `step-bodies/valid/guard_narrows_a_deep_optional_field.awl` — the same rule two records
+  deep (`outer.inner.end`).
+- `step-bodies/valid/guard_chain_carries_every_proof.awl` — a guard chain carries EVERY proof
+  it makes, not just the first (`a is present and b is present and b` narrows through both
+  layers).
+- `step-bodies/valid/query_answer.awl` — the read-only surface: header `query` declarations,
+  all three `answer` forms, an answer re-registered inside a loop and one inside an
+  `on failure` block.
 
 Invalid:
 - `wait_missing_binding.awl` — `wait go` without `-> name` → PARSE "->" @15 (span on the wait
@@ -233,6 +306,28 @@ Invalid:
   "Greeting" @15.
 - `pipe_stage_type_mismatch.awl` — Int piped into a String-taking action → CHECK "Int" @18.
 - `index_non_list.awl` — `topic[0]` on String → CHECK "index" @13.
+- `any_non_list.awl` — a collection predicate over a non-list value → CHECK
+  "needs a List collection" @9.
+- `all_non_bool.awl` — a predicate item expression that is not Bool → CHECK
+  "predicate must be Bool" @10.
+- `bare_workflow.awl` — the `workflow` namespace used without a field → CHECK
+  "builtin namespace, not a value" @8.
+- `unknown_workflow_field.awl` — a `workflow.*` field the language does not define → CHECK
+  "unknown workflow builtin" @8.
+- `narrowing_does_not_escape_its_arm.awl` — a field-path proof belongs to the arm that
+  established it, and to nothing else → CHECK "found Bool?" @27.
+- `proof_does_not_flow_backwards.awl` — a guard chain carries its proofs FORWARD only →
+  CHECK "found Bool?" @29.
+- `query_duplicate_declaration.awl` — two declarations of one query name → CHECK
+  "duplicate query declaration `review_status`" @6.
+- `query_declared_never_answered.awl` — a query declared and never answered → CHECK
+  "is declared but never answered" @6.
+- `query_answer_undeclared.awl` — an answer whose query the header never declares → CHECK
+  "no query named `review_status` is declared in the workflow header" @11.
+- `query_answer_field_mismatch.awl` — an answer whose field set is not the declared answer
+  type's → CHECK "has no field `stage`" @12.
+- `query_answer_unbound.awl` — an answer reading a binding not in scope at the statement →
+  CHECK "assessment" @16.
 
 ## dag-fork — `after` graphs, fork/join
 
@@ -254,6 +349,12 @@ Valid:
 - `dag-fork/valid/fork_named_branches.awl` — bare `fork` heterogeneous branches with per-branch
   bindings, bare `join` (no `->`), branch bindings consumed downstream.
 - `dag-fork/valid/fork_sequential.awl` — `fork x in xs sequential … join -> name`.
+- `dag-fork/valid/child_collection_fork.awl` — child-per-item collection fan-out regression:
+  `fork spec in sittings` calling the `sit_one` child per item, `join -> rows` routed out.
+- `dag-fork/valid/child_collection_fork_sequential.awl` — the sequential arm of the same
+  regression: `fork value in values sequential` over a child call.
+- `dag-fork/valid/sit_one.awl` — the real child half of the cross-module collection-fork
+  contract proof: the workflow `child_collection_fork` names as its `sit_one` child.
 - `dag-fork/valid/release_pipeline_combined.awl` — fall-through root, diamond, collection fork,
   sequential fork, route-targeted step, per-action node/timeout/retry config.
 
@@ -281,9 +382,9 @@ diagnostic wording must carry both (e.g. "route cycle without a bound").
 Valid:
 - REV-3 EDITS: `backward_route_bounded_cycle.awl` carries `max max_polish_rounds visits` on
   `check` (the input-derived-bound witness) and `ship_release_combined.awl` carries
-  `max 3 visits` on `canary` — both required by the rev-3 cycle rule; both now refuse to
-  EMIT/lower with the honest "not yet lowered" flow-shape refusal until B4 (covered → refused
-  regressions recorded in `src/mir/covered.rs` and the emitter compile-proof lists).
+  `max 3 visits` on `canary` — both required by the rev-3 cycle rule. The bounds regressed
+  both fixtures covered → refused when rev 3 landed; the bound lowers now, and both are back
+  in the covered ratchet (`src/mir/covered.rs`) and emit today.
 - `loop-outcomes/valid/loop_counting_until_max.awl` — `loop x = seed counting n … until … max`.
 - `loop-outcomes/valid/loop_without_counting.awl` — bounded `loop x = seed … until … max`
   without a public counter (pins the scalar loop result and no-destructure call site).
@@ -302,6 +403,8 @@ Valid:
 - `loop-outcomes/valid/route_outcome_by_name.awl` — bare `route <outcome>` picks up the
   in-scope binding NAMED like the outcome (interpretation: by-name, not by-type; the negative
   is `bare_route_no_binding`).
+- `loop-outcomes/valid/float_threshold_guard.awl` — grade an essay and gate the verdict on a
+  Float threshold comparison in a `when` guard.
 - `loop-outcomes/valid/enum_when_totality.awl` — enum-subject `when x.category == Variant`
   arms, total without `otherwise` (pins bare-TitleCase variant comparison syntax for declared
   enums; imported string enums compare against string literals, see import_nested_defs).
@@ -373,8 +476,10 @@ Invalid:
   checker duty list has no unused-decl rule. Unreachable workflow OUTCOMES are not an error
   (the checker list covers unreachable steps only).
 - Deliberately NOT fixtured (spec-silent; no grammar invented): enum totality via anything but
-  `== Variant`; compound guards (`when x is present and …`); combinator literal arguments;
-  `sort` key comparability; parenthesized boolean grouping; empty list literal `[]`;
+  `== Variant`; literal arguments to `filter`/`sort`/`map`; `sort` key comparability;
+  parenthesized boolean grouping; (two shapes once on this list are now fixtured: compound
+  guards — `when x is present and …` — by the #97-B narrowing family, and the empty list
+  literal `[]` by `collection_predicates`);
   `T??`; trailing `|` in enums; zero-arg actions; declaration-order violations beyond the two
   covered; `join -> name` after named branches / bare `join` after collection forks;
   `required` naming an absent property; top-level non-object imported schema; explicit null in
@@ -482,10 +587,14 @@ Invalid (all CHECK; the unterminated-raw-string lex refusal is pinned by
 
 ## flow-shape — flow-vocabulary B2: subflow, distribute/sequence, collect, visits
 
-Rev-3 surface (`AWL-FLOW-VOCABULARY.md` rev 3 §1–§3, §5–§6). These fixtures parse, print
-canonically, and CHECK clean, but do NOT lower yet: `emit`/`mir::lower` answer with the honest
-spanned "not yet lowered" refusal until B4 (the corpus emit gate accepts exactly that refusal
-for them, nothing else).
+Rev-3 surface (`AWL-FLOW-VOCABULARY.md` rev 3 §1–§3, §5–§6). B4 landed: these fixtures parse,
+print canonically, CHECK clean, and LOWER on both backends — every one is pinned in the
+covered ratchet (`src/mir/covered.rs`, asserted refusal-free over the whole valid population
+by `lowers_cover_and_golden`) and emits through the reference path
+(`every_valid_fixture_emits`). The honest "not yet lowered" refusal survives only for shapes
+no corpus fixture carries: `after` dependencies on substeps (`src/unlowered.rs`) and a
+`max … visits` bound on a substep (the MIR backend's deliberate refusal — the reference
+would emit an unbounded self-recursion).
 
 Valid:
 - `flow-shape/valid/dev_flow.awl` — the rev-3 §6 worked example, adapted to checkable AWL
@@ -498,6 +607,53 @@ Valid:
 - `flow-shape/valid/sequence_region_loopback.awl` — `sequence` region with an in-region
   loop-back (`visits` read in a member's guard), strict `collect` with a further statement
   after it, and a pure decision step (`judge`).
+- `flow-shape/valid/distribute_child_collect.awl` — parallel fan-out over a single
+  child-workflow track: spawn all, await each in item order, strict `collect` (any terminal
+  child failure fails the run).
+- `flow-shape/valid/distribute_child_tolerant.awl` — the tolerant child arm: a failed
+  instance's slot is absent (spawn refusals included), siblings keep their results.
+- `flow-shape/valid/distribute_activity_tolerant.awl` — tolerant parallel fan-out over a
+  single-activity track: the settled combinator gathers one slot per item, absent where an
+  instance failed.
+- `flow-shape/valid/sequence_activity_tolerant.awl` — tolerant in-order fan-out: one instance
+  at a time in collection order, a failed instance's slot absent.
+- `flow-shape/valid/region_close_bounded.awl` — a region close carrying a `max … visits`
+  bound: the counter keeps its identity through region synthesis, and the close's literal
+  payload lowers after it.
+- `flow-shape/valid/region_pure_decision.awl` — a pure-decision member routing to the close
+  inside an extracted region.
+- `flow-shape/valid/region_nested_local_reuse.awl` — nested regions reusing locals at
+  unrelated types; the carried payload is the piped `count` of the collected rows, so the
+  expression rides the region's own binding.
+- `flow-shape/valid/region_sibling_local_reuse.awl` — sibling regions reusing region-local
+  names at unrelated types.
+- `flow-shape/valid/subflow_nested.awl` — a subflow invoking a subflow, each compiled once,
+  the inner invocation binding the outer's local.
+- `flow-shape/valid/subflow_local_names.awl` — subflow-local names independently typed: two
+  subflows reuse the same author names at unrelated types, and the host reuses them again.
+- `flow-shape/valid/value_route_payload.awl` — the canonical value-payload arm:
+  `route done(note)` at the workflow boundary, the expression itself the payload.
+- `flow-shape/valid/on_failure_route_tail.awl` — `on failure` plus a body-terminal route: the
+  fallible prefix runs under compensation, the route stays a genuine tail, so a routed
+  failure outcome never reads as a step failure.
+- `flow-shape/valid/on_failure_compensates_to_outcome.awl` — the compensation arm actually
+  RUNS (`fail_*` fails by name in the BC-4 differential) and the run ends on the failure
+  outcome the compensation routed to.
+- `flow-shape/valid/on_failure_compensates_to_step.awl` — compensation hands control to a
+  SIBLING STEP, whose refund succeeds and settles the workflow.
+- `flow-shape/valid/substep_on_failure_route_tail.awl` — a substep's routed failure outcome
+  stays outside its compensation attempt: the route fires a parent arm as a tail, never a
+  fallible result.
+- `flow-shape/valid/action_param_hygiene.awl` — name hygiene: wrapper temporaries must not
+  shadow author action parameters (an author binding named `awl_input_codec`).
+- `flow-shape/valid/counter_hygiene.awl` — name hygiene: the allocator skips an exact
+  collision with its first visit-counter candidate (`awl_visits_again_188`).
+- `flow-shape/valid/layer_hygiene.awl` — name hygiene: an author input literally named
+  `awl_layer`; the direct path's dependency-parallel layer is an SSA join with no name
+  surface to collide on.
+- `flow-shape/valid/temporary_hygiene.awl` — name hygiene: pipe, index, workflow-id, and loop
+  temporaries avoid author bindings; a binary-concat payload (`status + workflow.id`) in both
+  arms of a decision.
 
 Invalid (all CHECK; one per region rule):
 - `distribute_never_collected.awl` — region opened, never closed → CHECK
@@ -520,10 +676,12 @@ Invalid (all CHECK; one per region rule):
 
 ## BC-4 adversarial — the differential-harness corpus (net-new)
 
-Eight fixtures authored for the BC-4 differential harness. Six lower AND emit,
-so they join the covered ratchet and run through the differential to
-byte-identical durable trails; two are out-of-intersection and carry
-span-anchored deferred-refusal pins in `mir/deferred_tests.rs`.
+Eight fixtures authored for the BC-4 differential harness. Seven lower AND
+emit — `nested_handlers`'s on-failure refusal is retired (the exact-span pin
+became `nested_handlers_on_failure_now_lowers` in `src/mir/deferred_tests.rs`
+and the fixture joined the covered ratchet) — so they run through the
+differential to byte-identical durable trails; one remains below both
+backends' floor, its refusal pinned in the same file.
 
 Lowering (both backends accept):
 - `dag-fork/valid/empty_fork_collection.awl` — fork over a possibly-empty input
@@ -538,11 +696,13 @@ Lowering (both backends accept):
   fire-and-forget `spawn` of a second child.
 - `header-types/valid/max_arity_record.awl` — a high-arity (20-field) record,
   a wide tuple through the codec.
+- `loop-outcomes/valid/nested_handlers.awl` — an `on failure` region on a
+  guarded step, compensation ending in a workflow failure outcome. Once the
+  direct path's recorded refusal, now lowered on both backends
+  (`nested_handlers_on_failure_now_lowers`).
 
-Out-of-intersection (recorded refusals, never failed):
-- `loop-outcomes/valid/nested_handlers.awl` — checks clean and the reference
-  emits its `on failure` region, but the direct path does not yet lower
-  `on failure` (refusal anchored to the guarding step).
+Below both backends' floor (recorded refusal, never failed):
 - `header-types/zero_step_workflow.awl` — checks clean but has no steps, so
-  BOTH backends refuse (no runnable code). Lives outside any `valid/` sweep
-  directory for that reason.
+  BOTH backends refuse (no runnable code; span and message pinned by
+  `bc4_zero_step_workflow_refuses_no_start_region`). Lives outside any
+  `valid/` sweep directory for that reason.
