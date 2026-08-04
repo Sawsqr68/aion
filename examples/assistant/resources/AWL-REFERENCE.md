@@ -233,7 +233,7 @@ Rules the checker enforces:
 - Shell syntax in the command does NOT work: `run "a | b"` passes `|` and `b`
   as arguments to `a`; `run "x > f"` does not redirect.
 
-**Read `docs/DECLARED-COMMANDS.md` before writing one. THERE IS NO SANDBOX** —
+**Read `docs/workers/DECLARED-COMMANDS.md` before writing one. THERE IS NO SANDBOX** —
 no allowlist, no filesystem confinement, no network restriction, no privilege
 drop, no resource limit. A declared command can do anything the server's OS
 user can do. What protects you is review, not runtime enforcement: the command

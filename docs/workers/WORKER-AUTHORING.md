@@ -13,7 +13,7 @@ that code disagree, the code wins.
 > worker agent`, for an agent harness; and `aion awl scaffold FILE.awl --out
 > <DIR>`, which generates a compiling Rust worker crate with every advertised
 > schema taken from the compiled contract rather than re-derived from your Rust
-> types. See [`docs/AWL.md`](AWL.md). Write one by hand, as below, when the
+> types. See [`docs/AWL.md`](../authoring/AWL.md). Write one by hand, as below, when the
 > logic is substantial enough to deserve its own crate.
 
 ## What a worker is

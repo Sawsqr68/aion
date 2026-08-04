@@ -11,7 +11,7 @@ active-active itself landed the AA-4-x series (see MULTI-SHARD-ACTIVE-ACTIVE-DES
      Original status: "DRAFT, in progress. ... empirical haematite fencing spike (in progress)."
 
 Grounded in the comparative review
-([AION-DISTRIBUTION-REVIEW.md](./AION-DISTRIBUTION-REVIEW.md)) and an empirical haematite
+([AION-DISTRIBUTION-REVIEW.md](../archive/AION-DISTRIBUTION-REVIEW.md)) and an empirical haematite
 fencing spike. Spike-dependent sections are marked ⏳.
 
 ## Locked decisions (Tom, 2026-06-24)

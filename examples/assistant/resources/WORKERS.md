@@ -7,7 +7,7 @@ queue and the typed actions something must serve on it.
 One precise exception: an action MAY carry a declarative `run "…"` body, and
 then the document is that action's implementation — the server executes the
 command itself and no worker serves it. That is a real capability with real
-consequences; read `docs/DECLARED-COMMANDS.md` before writing one. Everything
+consequences; read `docs/workers/DECLARED-COMMANDS.md` before writing one. Everything
 else in a `worker` block is a typed requirement, not an implementation, and
 there is no AWL-authored worker with arbitrary bodies.
 
@@ -15,7 +15,7 @@ there is no AWL-authored worker with arbitrary bodies.
 
 | Layer | Purpose | Current truth |
 |---|---|---|
-| 0 — declared body | The document implements the action itself with `run "…"` | Shipped. The SERVER runs the command; no worker serves that action at all. Read `docs/DECLARED-COMMANDS.md` first — there is no sandbox. |
+| 0 — declared body | The document implements the action itself with `run "…"` | Shipped. The SERVER runs the command; no worker serves that action at all. Read `docs/workers/DECLARED-COMMANDS.md` first — there is no sandbox. |
 | 1 — command runner | Map actions to host commands, returning text or JSON | Shipped as `aion worker shell --manifest worker.toml --awl FILE.awl` |
 | 1a — agent harness | Hand an action's prompt to an agent harness | Shipped as `aion worker agent FILE.awl` |
 | 2 — script worker | One-file Python-style action host | Not built; do not promise a Python worker command or an AWL worker file with bodies beyond `run` |
@@ -180,7 +180,7 @@ is exactly one `run` body per action, and there is no shell: `run "a | b"`
 passes `|` and `b` as arguments. An author who wants a shell names one —
 `run "sh -c 'a | b'"` — which is visible in review.
 
-**`docs/DECLARED-COMMANDS.md` is required reading before you write one.** In
+**`docs/workers/DECLARED-COMMANDS.md` is required reading before you write one.** In
 summary: THERE IS NO SANDBOX. No allowlist, no denylist, no filesystem
 confinement, no network restriction, no privilege drop, no resource limit. A
 declared command can do anything the server's operating-system user can do.
@@ -260,7 +260,7 @@ claim a worker exists because its interface is declared.
 - Shell manifest and process behavior: `crates/aion-cli/src/worker_shell.rs`.
 - Agent worker flags, harness resolution, and the `--check` surface:
   `crates/aion-cli/src/worker_agent/` and `crates/aion-cli/src/harness/`.
-- Declared command bodies: `docs/DECLARED-COMMANDS.md` (the boundaries, in
+- Declared command bodies: `docs/workers/DECLARED-COMMANDS.md` (the boundaries, in
   full), with authoring-time checks in `crates/aion-awl/src/checker/bodies.rs`
   and the command scanner in `crates/aion-awl/src/ast/command.rs`.
 - The `agent` marker's rules: `crates/aion-awl/src/checker/agents.rs`.

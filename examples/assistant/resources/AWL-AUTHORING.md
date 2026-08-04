@@ -89,7 +89,7 @@ declared action, and choosing between them is an authoring decision:
    The result type must be a record over a subset of
    `{ exit_code: Int, stdout: String, stderr: String }`, only the action's own
    parameters interpolate (`$name` / `${name}`), the program must be written
-   out, and there is no shell. **Read `docs/DECLARED-COMMANDS.md` first: there
+   out, and there is no shell. **Read `docs/workers/DECLARED-COMMANDS.md` first: there
    is no sandbox.** Never propose one for work the operator has not agreed can
    run with the server's full privileges.
 

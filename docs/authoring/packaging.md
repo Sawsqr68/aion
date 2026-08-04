@@ -141,7 +141,7 @@ On success it prints one JSON document to stdout and exits 0:
 }
 ```
 
-`packages[].workflow_type` is the name to pass to `aion start`; `packages[].output` is the path to load with `aion server --workflow-package` or a `workflow_packages` config entry — or to deploy into a *running* server with `aion deploy <archive>` when the server's `[deploy]` surface is enabled (see [docs/API.md — Operator deploy API](API.md#operator-deploy-api)). The document is `jq`-friendly: `jq -r '.packages[0].output'` extracts the archive path for deploy scripts. Errors print an `Error:` chain on stderr and exit 1; CLI usage mistakes exit 2.
+`packages[].workflow_type` is the name to pass to `aion start`; `packages[].output` is the path to load with `aion server --workflow-package` or a `workflow_packages` config entry — or to deploy into a *running* server with `aion deploy <archive>` when the server's `[deploy]` surface is enabled (see [docs/API.md — Operator deploy API](../operations/API.md#operator-deploy-api)). The document is `jq`-friendly: `jq -r '.packages[0].output'` extracts the archive path for deploy scripts. Errors print an `Error:` chain on stderr and exit 1; CLI usage mistakes exit 2.
 
 ## Troubleshooting
 

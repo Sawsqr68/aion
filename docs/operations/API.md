@@ -180,7 +180,7 @@ aion route order <content-hash>     # rollback / roll-forward
 aion unload order <content-hash>
 ```
 
-See [docs/packaging.md](packaging.md) for building the `.aion` archives this API consumes.
+See [docs/packaging.md](../authoring/packaging.md) for building the `.aion` archives this API consumes.
 
 ## WebSocket event streaming
 
@@ -245,25 +245,25 @@ Crash/restart recovery and durable timers are implemented in the current build. 
 
 Use client SDKs when application code needs to call Aion workflows over the server API:
 
-- Gleam: [`../gleam/aion_client/README.md`](../gleam/aion_client/README.md) — SDK surface exists; live HTTP/WebSocket transport remains in progress for embedding applications.
+- Gleam: [`../gleam/aion_client/README.md`](../../gleam/aion_client/README.md) — SDK surface exists; live HTTP/WebSocket transport remains in progress for embedding applications.
 - Rust: `crates/aion-client` — gRPC client surface with workflow operations and event subscription.
-- Python and TypeScript SDK packages under [`../sdks/`](../sdks/) — in progress/hardening.
+- Python and TypeScript SDK packages under [`../sdks/`](../../sdks/) — in progress/hardening.
 
 ## Worker SDKs
 
 Use worker SDKs to host activities outside the workflow VM and connect them to the server worker protocol:
 
 - Rust: `crates/aion-worker`
-- Python and TypeScript worker packages under [`../sdks/`](../sdks/) — in progress/hardening.
+- Python and TypeScript worker packages under [`../sdks/`](../../sdks/) — in progress/hardening.
 
-The worker protocol is a single bidirectional gRPC stream whose authoritative contract lives in [`crates/aion-proto/proto/worker.proto`](../crates/aion-proto/proto/worker.proto): the server acknowledges registration with a `RegisterAck` frame (carrying the assigned worker id, the authorized namespace, and the heartbeat window) before dispatching any task, tasks carry a one-based delivery `attempt`, every consumed activity result is acknowledged with a `ResultAck` (only that ack clears a worker's re-report backlog), and a server `DrainRequest` tells workers to finish in-flight work and reconnect without consuming their reconnect drop budget.
+The worker protocol is a single bidirectional gRPC stream whose authoritative contract lives in [`crates/aion-proto-generated/proto/worker.proto`](../../crates/aion-proto-generated/proto/worker.proto): the server acknowledges registration with a `RegisterAck` frame (carrying the assigned worker id, the authorized namespace, and the heartbeat window) before dispatching any task, tasks carry a one-based delivery `attempt`, every consumed activity result is acknowledged with a `ResultAck` (only that ack clears a worker's re-report backlog), and a server `DrainRequest` tells workers to finish in-flight work and reconnect without consuming their reconnect drop budget.
 
 The hello-world quickstart uses the Python worker SDK and registers a `greet` activity.
 
 ## Workflow authoring SDK
 
-Gleam workflow code is authored with [`aion_flow`](../gleam/aion_flow/README.md). It provides typed workflow definitions, activity calls, signals, timers, queries, child workflows, codecs, and a test harness.
+Gleam workflow code is authored with [`aion_flow`](../../gleam/aion_flow/README.md). It provides typed workflow definitions, activity calls, signals, timers, queries, child workflows, codecs, and a test harness.
 
 ## Examples
 
-See [`../examples/`](../examples/) for working examples. Start with [`../examples/hello-world/README.md`](../examples/hello-world/README.md) for a complete workflow/package/server/worker run.
+See [`../examples/`](../../examples/) for working examples. Start with [`../examples/hello-world/README.md`](../../examples/hello-world/README.md) for a complete workflow/package/server/worker run.

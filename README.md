@@ -15,7 +15,7 @@ cargo install aion-cli --locked   # installs the `aion` binary
 
 **Start here: [Getting started](docs/GETTING-STARTED.md)** — zero to a
 completed durable workflow, in AWL, with every file you need inline.
-The AWL language itself is in [`docs/AWL.md`](docs/AWL.md).
+The AWL language itself is in [`docs/authoring/AWL.md`](docs/authoring/AWL.md).
 
 > Aion is the Greek conception of eternal, unbounded time — distinct from
 > Chronos, who is sequential, ticking time. A workflow that sleeps for three
@@ -78,16 +78,16 @@ The AWL language itself is in [`docs/AWL.md`](docs/AWL.md).
 | Document | What it covers |
 |---|---|
 | [Getting started](docs/GETTING-STARTED.md) | Zero to completed workflow on published artifacts |
-| [AWL](docs/AWL.md) | The AWL surface: the verbs, the authoring loop, and where the language reference lives |
+| [AWL](docs/authoring/AWL.md) | The AWL surface: the verbs, the authoring loop, and where the language reference lives |
 | [AWL language reference](examples/assistant/resources/AWL-REFERENCE.md) | The complete checked AWL grammar: types, workers, steps, forks, regions, loops, waits, signals, queries |
-| [Declared commands](docs/DECLARED-COMMANDS.md) | `run "…"` action bodies — what is guaranteed and what is not (**there is no sandbox**) |
-| [Workflow authoring guide](docs/guides/workflows.md) | The Gleam entry contract, determinism rules, timers, signals, queries, children |
-| [Activities & workers guide](docs/guides/activities-and-workers.md) | Worker scaffolding, failure classification, retry semantics |
-| [Schema codegen guide](docs/guides/codegen.md) | Generate Gleam types + JSON codecs from your schemas; `--check` CI gate; supported subset |
-| [Operations guide](docs/guides/operations.md) | Full config reference, deploy/versioning, persistence & recovery, metrics |
-| [Errors reference](docs/errors.md) | Every error code and what to do about it |
-| [API overview](docs/API.md) | HTTP/JSON, gRPC, WebSocket transports |
-| [Packaging reference](docs/packaging.md) | `workflow.toml` and the `.aion` format |
+| [Declared commands](docs/workers/DECLARED-COMMANDS.md) | `run "…"` action bodies — what is guaranteed and what is not (**there is no sandbox**) |
+| [Workflow authoring guide](docs/authoring/workflows.md) | The Gleam entry contract, determinism rules, timers, signals, queries, children |
+| [Activities & workers guide](docs/workers/activities-and-workers.md) | Worker scaffolding, failure classification, retry semantics |
+| [Schema codegen guide](docs/authoring/codegen.md) | Generate Gleam types + JSON codecs from your schemas; `--check` CI gate; supported subset |
+| [Operations guide](docs/operations/operations.md) | Full config reference, deploy/versioning, persistence & recovery, metrics |
+| [Errors reference](docs/operations/errors.md) | Every error code and what to do about it |
+| [API overview](docs/operations/API.md) | HTTP/JSON, gRPC, WebSocket transports |
+| [Packaging reference](docs/authoring/packaging.md) | `workflow.toml` and the `.aion` format |
 | [Order saga walkthrough](docs/examples/order-saga.md) | The flagship example: retries, timeout races, child workflows, compensation |
 
 ## Why Gleam + Rust + BEAM

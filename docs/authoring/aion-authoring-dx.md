@@ -35,7 +35,7 @@ below wrap an author loop around that one module.
 > `aion awl check|fmt|emit|scaffold|schema|lsp`, `aion deploy <file.awl>`, and
 > `aion run <file.awl> --input <json>`. An AWL document carries its own types
 > and contracts and is compiled directly — it has no `aion generate` step and
-> no `workflow.toml`. See [`docs/AWL.md`](../AWL.md). The `aion dev`,
+> no `workflow.toml`. See [`docs/AWL.md`](AWL.md). The `aion dev`,
 > `aion new`, `aion generate`, `aion check --deterministic`, and `aion input`
 > commands documented in this guide are the **Gleam** package loop.
 

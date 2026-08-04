@@ -8,7 +8,7 @@ continue-as-new.
 
 A workflow project is an ordinary Gleam project (`gleam new my_flow`,
 `gleam add aion_flow gleam_json`) plus a `workflow.toml` packaging
-descriptor — see [`docs/packaging.md`](../packaging.md). The
+descriptor — see [`docs/packaging.md`](packaging.md). The
 [getting-started guide](../GETTING-STARTED.md) builds one end to end;
 [`examples/order-fulfillment/`](../../examples/order-fulfillment/) is the
 flagship reference.
@@ -125,7 +125,7 @@ durable backoff (`workflow.sleep`), and dispatch a fresh attempt. Each
 attempt is its own recorded dispatch, so retry counts replay exactly.
 [`examples/order-fulfillment/`](../../examples/order-fulfillment/) implements
 this with a bounded attempt budget. See the
-[activities and workers guide](activities-and-workers.md) for the
+[activities and workers guide](../workers/activities-and-workers.md) for the
 worker-side view.
 
 ## Durable timers
@@ -221,7 +221,7 @@ Caller-side error semantics:
 | `not_running` | The run is terminal (completed/failed/cancelled/timed out) or otherwise unable to answer live. **Querying a completed run is an error by design** — inspect terminal runs with `aion describe`, which reads history. |
 | `query_failed` | The handler ran and reported an application-level failure. |
 
-See the [errors reference](../errors.md) for the full taxonomy.
+See the [errors reference](../operations/errors.md) for the full taxonomy.
 
 ## Child workflows
 

@@ -46,7 +46,7 @@ Each activity input and output value type is a JSON Schema under `schemas/`. The
 file stem becomes the Gleam type name (`order_input.json` → `OrderInput`). The
 supported subset is objects (with `required` and `additionalProperties: false`),
 string enums, arrays, and the scalar types; see
-[`docs/guides/codegen.md`](guides/codegen.md) for the full table.
+[`docs/guides/codegen.md`](codegen.md) for the full table.
 
 ```json
 // schemas/order_input.json
@@ -172,6 +172,6 @@ every generated file and re-running `aion generate` reproduces them
 byte-identically, so the generated tree is always a pure function of your
 declarations and schemas.
 
-See [`examples/order-saga/README.md`](../examples/order-saga/README.md) for the
+See [`examples/order-saga/README.md`](../../examples/order-saga/README.md) for the
 full run-it-locally walkthrough, including the worker and the compensation
 paths.

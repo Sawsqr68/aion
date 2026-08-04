@@ -185,7 +185,7 @@ attempt is scheduled.
 
 For anything beyond command wiring, write a real worker against a worker SDK —
 [Part 2, step 4](#4-write-the-activity-worker) shows the Rust one, and the
-[activities and workers guide](guides/activities-and-workers.md) covers failure
+[activities and workers guide](workers/activities-and-workers.md) covers failure
 classification, heartbeats, and cancellation.
 
 ## Configure and run the server
@@ -213,7 +213,7 @@ The store needs no configuration: the stock binary defaults to the haematite
 backend, and its data directory defaults to `~/.aion/data`. Set `AION_HOME` to
 put a server's whole state somewhere else — that is also how you run two
 servers on one machine without them sharing state. See the
-[operations guide](guides/operations.md#the-aion-home-aion-and-aion_home).
+[operations guide](operations/operations.md#the-aion-home-aion-and-aion_home).
 
 Start the server (terminal 1):
 
@@ -287,7 +287,7 @@ Sending a signal is not proof the workflow consumed it — confirm with
 `aion resume` (durably hold and release activity dispatch), `aion cancel`,
 `aion reopen` (re-drive a Failed or Cancelled run), and `aion inspect`
 (time-travel over the recorded oplog). See the
-[errors reference](errors.md) for every error code.
+[errors reference](operations/errors.md) for every error code.
 
 ## Where to go from here in AWL
 
@@ -296,10 +296,10 @@ subflows, `fork`/`join`, multi-step `distribute`/`sequence` regions closed by
 `collect`, bounded loops and visit-capped flow cycles, timed waits, `sleep`,
 and `on failure` compensation.
 
-- **[`docs/AWL.md`](AWL.md)** — every verb and the authoring loop.
+- **[`docs/authoring/AWL.md`](authoring/AWL.md)** — every verb and the authoring loop.
 - **[The language reference](../examples/assistant/resources/AWL-REFERENCE.md)**
   — the complete grammar, with the checked fixture that proves each construct.
-- **[`docs/DECLARED-COMMANDS.md`](DECLARED-COMMANDS.md)** — read before writing
+- **[`docs/workers/DECLARED-COMMANDS.md`](workers/DECLARED-COMMANDS.md)** — read before writing
   a `run "…"` action body. **There is no sandbox.**
 - **[Editor support](../editors/)** — `aion awl lsp` drives the Zed and Neovim
   extensions.
@@ -487,14 +487,14 @@ fn activity_error_message(activity_error: error.ActivityError) -> String {
 
 The full authoring surface — timers, timeout races, child workflows,
 determinism rules — is in the
-[workflow authoring guide](guides/workflows.md).
+[workflow authoring guide](authoring/workflows.md).
 
 ## 3. Describe and build the package
 
 Add `workflow.toml` next to `gleam.toml`:
 
 ```toml
-# Packaging descriptor read by `aion package`. Reference: docs/packaging.md.
+# Packaging descriptor read by `aion package`. Reference: docs/authoring/packaging.md.
 [[workflow]]
 entry_module = "my_flow"          # also the workflow type clients start
 entry_function = "run"
@@ -548,7 +548,7 @@ references, marked as generated):
 Re-run `aion generate .` after every type change, and add
 `aion generate . --check` to CI to fail on drift. The supported type subset
 and the full contract are in the
-[types-first codegen guide](guides/codegen.md).
+[types-first codegen guide](authoring/codegen.md).
 
 Build and package:
 
@@ -582,7 +582,7 @@ test-only modules are excluded from the archive by design; each entry
 names its reason.)
 
 (`aion package . --build` compiles and packages in one step. The full
-packaging reference is [`docs/packaging.md`](packaging.md).)
+packaging reference is [`docs/authoring/packaging.md`](authoring/packaging.md).)
 
 ## 4. Write the activity worker
 
@@ -654,7 +654,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 The handler's `Ok` value is serialized as the activity result — here a JSON
 object the workflow's `greeting_codec` decodes. Failure classification,
 retries, heartbeats, and cancellation are covered in the
-[activities and workers guide](guides/activities-and-workers.md).
+[activities and workers guide](workers/activities-and-workers.md).
 
 ## 5. Configure and run the server
 
@@ -694,7 +694,7 @@ max_inflated_bytes = 67108864       # 64 MiB decompressed-contents ceiling
 Every key can also be set by environment variable as
 `AION_<SECTION>_<KEY>` (for example `AION_RUNTIME_QUERY_TIMEOUT_MS=10000`).
 The complete config reference is in the
-[operations guide](guides/operations.md).
+[operations guide](operations/operations.md).
 
 Start the server (terminal 1):
 
@@ -778,7 +778,7 @@ workflow completion carrying the JSON result
 A completed run no longer answers live queries — `aion query` against it now
 returns `error[not_running]`. That is expected: terminal runs are inspected
 with `describe`, not queried. See the
-[errors reference](errors.md) for every error code.
+[errors reference](operations/errors.md) for every error code.
 
 ## 9. Versions, routing, rollback
 
@@ -793,24 +793,24 @@ aion unload my_flow <content-hash>  # remove a non-routed, unpinned version
 
 Running workflows keep executing the version they started on while new
 starts use the routed version. The full deploy, versioning, and recovery
-model is in the [operations guide](guides/operations.md).
+model is in the [operations guide](operations/operations.md).
 
 ## Where to go next
 
-- [`docs/AWL.md`](AWL.md) — the AWL surface: every verb, the authoring loop,
+- [`docs/authoring/AWL.md`](authoring/AWL.md) — the AWL surface: every verb, the authoring loop,
   and the full language reference.
-- [Declared commands](DECLARED-COMMANDS.md) — `run "…"` action bodies: what is
+- [Declared commands](workers/DECLARED-COMMANDS.md) — `run "…"` action bodies: what is
   guaranteed and what is not. **There is no sandbox.**
-- [Workflow authoring guide](guides/workflows.md) — the Gleam entry contract,
+- [Workflow authoring guide](authoring/workflows.md) — the Gleam entry contract,
   determinism rules, timers, signals, queries, child workflows.
-- [Activities and workers guide](guides/activities-and-workers.md) — worker
+- [Activities and workers guide](workers/activities-and-workers.md) — worker
   scaffolding, failure classification, retry semantics as they actually are.
-- [Schema codegen guide](guides/codegen.md) — generate Gleam types and JSON
+- [Schema codegen guide](authoring/codegen.md) — generate Gleam types and JSON
   codecs from your schemas; `--check` in CI; the supported subset.
-- [Operations guide](guides/operations.md) — full config reference, deploy
+- [Operations guide](operations/operations.md) — full config reference, deploy
   surface, persistence and recovery, metrics.
-- [Errors reference](errors.md) — every error code, with hints.
-- [`docs/API.md`](API.md) — HTTP/gRPC/WebSocket transports.
+- [Errors reference](operations/errors.md) — every error code, with hints.
+- [`docs/operations/API.md`](operations/API.md) — HTTP/gRPC/WebSocket transports.
 - [`docs/examples/order-saga.md`](examples/order-saga.md) — the flagship
   order-fulfillment saga: retries, timeout races, child workflows, and saga
   compensation in one walkthrough.

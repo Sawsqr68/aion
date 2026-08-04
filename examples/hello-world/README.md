@@ -42,7 +42,7 @@ The workflow source lives in `examples/hello-world/src/hello_world.gleam`. It im
 aion package examples/hello-world
 ```
 
-This reads the example's [`workflow.toml`](workflow.toml) and the BEAM files produced by `gleam build` (pass `--build` to compile and package in one step; see [`docs/packaging.md`](../../docs/packaging.md) for the full reference), and builds a manifest with:
+This reads the example's [`workflow.toml`](workflow.toml) and the BEAM files produced by `gleam build` (pass `--build` to compile and package in one step; see [`docs/authoring/packaging.md`](../../docs/authoring/packaging.md) for the full reference), and builds a manifest with:
 
 - entry module: `hello_world`
 - entry function: `run`
@@ -176,7 +176,7 @@ aion --subject hello-world-user \
 
 ## HTTP API reference
 
-The tutorial above uses the CLI as the primary interaction method. If you need to compare against the HTTP API directly, the dev server also listens on `http://127.0.0.1:8080/`; HTTP callers must provide JSON request bodies and the equivalent metadata headers (`x-aion-subject` and `x-aion-namespaces`). See [`docs/API.md`](../../docs/API.md) for the transport overview.
+The tutorial above uses the CLI as the primary interaction method. If you need to compare against the HTTP API directly, the dev server also listens on `http://127.0.0.1:8080/`; HTTP callers must provide JSON request bodies and the equivalent metadata headers (`x-aion-subject` and `x-aion-namespaces`). See [`docs/operations/API.md`](../../docs/operations/API.md) for the transport overview.
 
 ## Clean up
 

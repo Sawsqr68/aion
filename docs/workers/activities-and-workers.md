@@ -173,7 +173,7 @@ activity may be delivered again.
 ## The worker protocol, briefly
 
 One bidirectional gRPC stream per worker (contract:
-[`crates/aion-proto/proto/worker.proto`](../../crates/aion-proto/proto/worker.proto)):
+[`crates/aion-proto-generated/proto/worker.proto`](../../crates/aion-proto-generated/proto/worker.proto)):
 
 - The server acknowledges registration with a `RegisterAck` (assigned worker
   id, authorized namespace, heartbeat window) before dispatching tasks.

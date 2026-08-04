@@ -2,8 +2,8 @@
 
 > **This is the canonical forward roadmap.** It reconciles three planning
 > surfaces: the live task tracker, the strategic design docs
-> ([`CONTROL-PLANE.md`](./design/CONTROL-PLANE.md),
-> [`HAEMATITE-CLUSTER-SOURCE-OF-TRUTH.md`](./design/HAEMATITE-CLUSTER-SOURCE-OF-TRUTH.md),
+> ([`CONTROL-PLANE.md`](../design/CONTROL-PLANE.md),
+> [`HAEMATITE-CLUSTER-SOURCE-OF-TRUTH.md`](../design/HAEMATITE-CLUSTER-SOURCE-OF-TRUTH.md),
 > [`DURABLE-AGENTS-AS-INFRASTRUCTURE.md`](./DURABLE-AGENTS-AS-INFRASTRUCTURE.md)),
 > and the still-open detail from prior roadmaps. The machine ledger
 > (`docs/design/roadmap.json`) remains authoritative for fine-grained dispatch
@@ -15,7 +15,7 @@ A **self-contained, multi-tenant, compute-aware durable-execution platform**:
 the only single binary (embedded haematite, no Cassandra/ES/Postgres) that ships
 a first-class multi-tenant control plane AND places/supervises worker compute —
 the unclaimed quadrant vs Temporal/Inngest/Restate/DBOS/Hatchet
-([`CONTROL-PLANE.md`](./design/CONTROL-PLANE.md) §1). Three pillars + two freebies:
+([`CONTROL-PLANE.md`](../design/CONTROL-PLANE.md) §1). Three pillars + two freebies:
 
 | Pillar | State |
 |---|---|
@@ -63,7 +63,7 @@ The near-term credibility work. Pillar 1 is provable *today*.
   exists, never published); honest Temporal side-by-side (same saga, both
   systems, LOC + infra footprint).
 
-## Track B — Control plane (pillars 2 & 3) — [`CONTROL-PLANE.md`](./design/CONTROL-PLANE.md)
+## Track B — Control plane (pillars 2 & 3) — [`CONTROL-PLANE.md`](../design/CONTROL-PLANE.md)
 
 The strategic build. Design done; phased.
 

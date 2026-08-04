@@ -99,7 +99,7 @@ max_inflated_bytes = 67108864           # default 256 MiB when enabled; when set
 
 (`[tls]` keys exist but are currently unsupported and rejected by
 validation; `[dashboard]` and `[namespace]` select dashboard asset source
-and namespace resolver mode — see [`docs/API.md`](../API.md) for the
+and namespace resolver mode — see [`docs/API.md`](API.md) for the
 namespace/auth trust model.)
 
 ### The Aion home (`~/.aion` and `AION_HOME`)
@@ -315,8 +315,8 @@ Global CLI flags: `--endpoint` (default `127.0.0.1:50051`), `--namespace`
 (default `default`), `--subject` (default `cli-user`), `--token`,
 `--pretty`. Errors print as `error[<code>]: <message>` with a `hint:` line
 when there is an actionable next step — see the
-[errors reference](../errors.md).
+[errors reference](errors.md).
 
 Health endpoints: `GET /health/live`, `GET /health/ready`. Event streaming:
-`GET /events/stream` (WebSocket; see [`docs/API.md`](../API.md) for
+`GET /events/stream` (WebSocket; see [`docs/API.md`](API.md) for
 subscription shapes and resumption cursors).

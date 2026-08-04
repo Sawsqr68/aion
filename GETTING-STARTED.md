@@ -15,9 +15,9 @@ aion awl check my_flow.awl                        # local: parse + typecheck
 aion run my_flow.awl --input '{"name":"Ada"}'     # compile, deploy, start, await
 ```
 
-- [`docs/AWL.md`](docs/AWL.md) — the AWL surface: every verb, the authoring
+- [`docs/authoring/AWL.md`](docs/authoring/AWL.md) — the AWL surface: every verb, the authoring
   loop, and links to the full language reference.
-- [`docs/DECLARED-COMMANDS.md`](docs/DECLARED-COMMANDS.md) — read this before
+- [`docs/workers/DECLARED-COMMANDS.md`](docs/workers/DECLARED-COMMANDS.md) — read this before
   writing a `run "…"` action body. **There is no sandbox.**
 
 **Gleam** is the other first-class authoring path, for workflows that need

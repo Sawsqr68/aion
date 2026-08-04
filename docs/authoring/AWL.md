@@ -27,7 +27,7 @@ step greet_and_shout
 
 The complete language reference — every construct the parser and checker
 accept, with the fixture that proves each one — is
-**[`examples/assistant/resources/AWL-REFERENCE.md`](../examples/assistant/resources/AWL-REFERENCE.md)**.
+**[`examples/assistant/resources/AWL-REFERENCE.md`](../../examples/assistant/resources/AWL-REFERENCE.md)**.
 It is filed there because it is also the reference the bundled assistant is
 given, and one copy that cannot drift beats two that can.
 
@@ -35,10 +35,10 @@ Alongside it, and worth reading in the same sitting:
 
 | Document | Why |
 |---|---|
-| [`AWL-AUTHORING.md`](../examples/assistant/resources/AWL-AUTHORING.md) | The practical path from an objective to a checked document. |
-| [`WORKERS.md`](../examples/assistant/resources/WORKERS.md) | What a `worker` block declares, and what actually serves it. |
-| [`COMMANDS.md`](../examples/assistant/resources/COMMANDS.md) | Every CLI command in the AWL loop, with its honest failure modes. |
-| [`DECLARED-COMMANDS.md`](DECLARED-COMMANDS.md) | **Read before writing a `run "…"` body. There is no sandbox.** |
+| [`AWL-AUTHORING.md`](../../examples/assistant/resources/AWL-AUTHORING.md) | The practical path from an objective to a checked document. |
+| [`WORKERS.md`](../../examples/assistant/resources/WORKERS.md) | What a `worker` block declares, and what actually serves it. |
+| [`COMMANDS.md`](../../examples/assistant/resources/COMMANDS.md) | Every CLI command in the AWL loop, with its honest failure modes. |
+| [`DECLARED-COMMANDS.md`](../workers/DECLARED-COMMANDS.md) | **Read before writing a `run "…"` body. There is no sandbox.** |
 
 ## The verbs
 
@@ -64,7 +64,7 @@ Alongside it, and worth reading in the same sitting:
 
 `aion list`, `describe`, `inspect`, `signal`, `query`, `pause`, `resume`,
 `cancel`, `reopen`, and `versions` operate the resulting runs; see the
-[operations guide](guides/operations.md).
+[operations guide](../operations/operations.md).
 
 ## The authoring loop
 
@@ -112,11 +112,11 @@ worker review
 
 A clean `aion awl check` proves the document is internally consistent. It does
 **not** prove a worker exists. Three things can serve an action — see
-[`WORKERS.md`](../examples/assistant/resources/WORKERS.md):
+[`WORKERS.md`](../../examples/assistant/resources/WORKERS.md):
 
 1. **A declared body** (`run "…"`) — the server runs the command itself and no
    worker serves that action. Read
-   [`DECLARED-COMMANDS.md`](DECLARED-COMMANDS.md) first: **there is no
+   [`DECLARED-COMMANDS.md`](../workers/DECLARED-COMMANDS.md) first: **there is no
    sandbox.**
 2. **`aion worker shell`** — host commands wired by a strict manifest.
 3. **A real worker process** — `aion awl scaffold` generates a Rust one, or
@@ -136,4 +136,4 @@ re-version a deployed workflow. See [`packaging.md`](packaging.md).
 
 `aion awl lsp` speaks LSP over stdio: diagnostics from the real checker, plus
 completion over the real keyword inventory. The extensions under
-[`editors/`](../editors/) wire it up.
+[`editors/`](../../editors/) wire it up.
