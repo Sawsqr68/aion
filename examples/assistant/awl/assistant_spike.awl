@@ -3,6 +3,14 @@
 //! the full session's job (`assistant.awl`), and this document exists to show
 //! the agent seam with nothing else in the frame.
 //!
+//! PROVISION IS SERVER-RUN: `assistant_provision` declares a command body, so
+//! the server executes it from the deployed contract as the server's own user,
+//! with no sandbox — no worker serves it. Its environment is cleared to PATH
+//! only, its cwd is inherited from the server process, and the SERVER states
+//! where workspaces live: the literal `{workspace_root}` placeholder in the
+//! body's command is expanded at dispatch to the server's own aion home
+//! `clones/` directory (the startup banner's `workspace_root` field).
+//!
 //! It began as a spike proving that an AWL document could drive the agent-dev
 //! worker end to end, which it did, on a real server. It is kept — and kept in
 //! agreement — for a reason that is operational rather than sentimental:
@@ -15,7 +23,10 @@
 //! When this document declared `assistant_provision(repo_path, run_id)` and
 //! the full session declared it with `objective` as well, the worker could
 //! satisfy only one of them — so it was refused outright and NEITHER document
-//! could run. That took queue `default` down.
+//! could run. That took queue `default` down. Declared bodies raise the
+//! stakes: retained contracts declaring DIFFERENT bodies for one action name
+//! refuse every dispatch of it terminally, so the `run` line below must stay
+//! byte-identical with `assistant.awl`'s.
 //!
 //! A deployed workflow type cannot be removed from a running server (a
 //! route-active version refuses to unload, and there is no operation that
@@ -36,22 +47,110 @@ workflow assistant_spike
   input repo_path: String
   outcome answered: type Answered, route success
 
-/// The provisioned session workspace, materialised at `<root>/<run_id>/repo`,
-/// and the composed round-one prompt. Declared exactly as `assistant.awl`
-/// declares it — see the module note on shared-queue agreement.
-type Workspace { path: String, opening_prompt: String }
+// ---------------------------------------------------------------------------
+// The opening prompt, as document constants — IDENTICAL to `assistant.awl`'s
+// const block so both documents open a session with the same contract. See
+// that document for the porting notes; raw strings are VERBATIM, which is why
+// several constants open or close mid-sentence.
+// ---------------------------------------------------------------------------
+
+const contract_head = """You are the aion AWL authoring assistant: a long-running session helping an operator understand aion and author checked `.awl` workflows. The operator talks to you through the aion ops console; each of their messages arrives as a new prompt in this same session, so you keep full memory of the conversation.
+
+## Your workspace
+Your working directory is `"""
+
+const workspace_confinement = """`. Your file tools (read/write/edit) are confined to it; shell commands start there but may read other paths on the host."""
+
+const scratch_workspace = """ It is a scratch git workspace — no aion repository was provided for this session."""
+
+const attached_workspace_open = """ It is a clone of the aion repository at `"""
+const attached_workspace_close = """`; author `.awl` workflows inside the clone (e.g. under `examples/`)."""
+
+const ground_truth_head = """
+
+## Ground truth
+Your PRIMARY resources are your skill documents — the distilled operating manual for this exact job, kept in the aion repository at `examples/assistant/resources/`:
+- `ENVIRONMENT.md` — AWL preflight, workspace semantics, and the local/server boundary (read FIRST)
+- `AWL-AUTHORING.md` — the checked `.awl` authoring method from contract through observation
+- `COMMANDS.md` — exact AWL check/format/schema/emit/deploy/run and observation commands
+- `AWL-REFERENCE.md` — the checked AWL workflow language surface
+- `WORKERS.md` — current worker layers, task queues, shell manifests, and the host-native shell-worker law
+For anything deeper, consult the aion repository itself — never answer repo-level questions from memory"""
+
+const attached_ground_truth = """. Your workspace IS a clone of the aion repository — read the skill documents, and everything else, directly from the clone."""
+
+const scratch_ground_truth = """. No repository was attached to this session, so the skill documents are not on disk yet; when you need them — or anything else in the repository — clone it into your workspace: `git clone --depth 1 https://github.com/ablative-io/aion.git`. The repository is private, so the clone only succeeds where this host has git credentials — if it fails, say so, answer only what you can stand behind, and note to the operator that repo-dependent questions need either host credentials or a session started with the repository path set."""
+
+const contract_tail = """
+
+The most valuable repository paths:
+- `examples/awl-hello/awl_hello.awl` — minimal checked workflow
+- `examples/dev-brief/awl/` and `examples/remediation-packet/awl/` — production AWL flows and child workflows
+- `crates/aion-awl/tests/fixtures/rev2/**/valid/*.awl` — accepted grammar and checker proofs
+- `crates/aion-awl/src/` — parser, checker, printer, compiler
+- `crates/aion-cli/src/awl.rs`, `one_motion.rs`, and `main.rs` — the real check/emit/deploy/run commands
+Quote paths when you cite them, so the operator can follow.
+
+## How to author an AWL workflow
+AWL source (`.awl`) is the authoring truth. Do not substitute a language SDK project or generated compiler output. Follow checked examples and the current checker, not memory.
+The method:
+1. Read `ENVIRONMENT.md`, `AWL-AUTHORING.md`, and `AWL-REFERENCE.md`; inspect the closest checker-valid `.awl` example.
+2. Author the workflow header, terminal outcomes, types, worker action requirements, children/subflows, and steps in one `.awl` document. World-touching work is a typed worker action; durable orchestration stays in AWL.
+3. Use explicit outcomes for selection, explicit flow vocabulary for parallel/sequential work, and explicit bounds for every loop or backward route. Never invent syntax.
+4. Run `aion awl check FILE.awl` after each structural change. Treat every diagnostic as a source defect; optionally run `aion awl fmt`, inspect the diff, and check again.
+5. Read `WORKERS.md` before promising an action implementation. The worker name is its task queue, a declaration does not create a worker, and shell workers are host-native.
+6. Deploy/run the checked `.awl` directly through the ops console or with `aion deploy FILE.awl` / `aion run FILE.awl --input 'JSON'`, then observe the durable run in the console. Never start or restart a server as part of authoring.
+
+## Honesty rules
+- Distinguish what you VERIFIED (a file you read, a command you ran in this session) from what you believe. Say "I have not verified this" when you have not.
+- Never invent AWL syntax or worker capability. When unsure, read a checker-valid fixture or the parser/checker and run `aion awl check`.
+- If the repository is not available to you, say so and answer only what you can stand behind.
+
+## The operator's objective
+"""
+
+/// The recorded outcome of the server-run provision command. Declared exactly
+/// as `assistant.awl` declares it — see the module note on shared-queue
+/// agreement. `exit_code` is always 0 here, because a non-zero exit fails the
+/// dispatch instead of returning a result — and with no declared retry policy
+/// the action gets exactly one attempt, so that failure reaches the operator
+/// rather than any automatic re-run. `stdout` is in the result
+/// because it IS the workspace path: the script prints the resolved
+/// `<workspace_root>/<run_id>/repo` as its SOLE stdout (every tool's chatter
+/// is redirected to stderr), so the recorded activity result carries the
+/// RESOLVED path and the `{workspace_root}` placeholder never appears in any
+/// recorded value.
+type Provisioned { exit_code: Int, stdout: String }
 
 /// What one proven round returns: the agent's reply and where it worked.
 type Answered { reply: String, workspace_path: String }
 
 worker default
-  /// Materialises the session workspace and composes the round-one prompt.
-  /// `run_id` must be the workflow's own run id: it keys the worker-side
-  /// directory AND must equal the id the agent-harness `--workspace-root`
-  /// template expands to, or the agent works somewhere other than where it was
-  /// provisioned. The signature is IDENTICAL to `assistant.awl`'s by
+  /// Materialises the session workspace at `<workspace_root>/<run_id>/repo`
+  /// and prints that resolved path as its SOLE stdout.
+  /// SERVER-RUN, NO SANDBOX: this declared body executes on the server host as
+  /// the server's own user, with env cleared to PATH only and cwd inherited
+  /// from the server. `{workspace_root}` is not a parameter — it is a literal
+  /// placeholder the server expands at dispatch into its own aion home
+  /// `clones/` directory; if that root cannot resolve to an absolute directory
+  /// that exists, the dispatch is refused terminally, by name, with no
+  /// fallback. The action gets exactly one attempt: no `retry` policy is
+  /// declared, so a non-zero exit fails the dispatch and the failure reaches
+  /// the operator — nothing re-runs the command automatically. A stale
+  /// `<workspace_root>/<run_id>` is renamed aside to
+  /// `<run_id>.superseded-<stamp>-<pid>` rather than failing, guarding a
+  /// RE-RUN on a colliding workflow id whose earlier workspace survives —
+  /// a clone into an existing directory would fail. Empty `repo_path` is the
+  /// scratch mode: the repo directory is created and `git init`ed instead of
+  /// cloned.
+  ///
+  /// `run_id` must be the workflow's own id: it keys the directory AND must
+  /// equal the id the agent-harness `--workspace-root` template expands to, or
+  /// the agent works somewhere other than where it was provisioned. The
+  /// signature AND the `run` line are BYTE-IDENTICAL to `assistant.awl`'s by
   /// requirement, not by coincidence.
-  action assistant_provision(repo_path: String, run_id: String, objective: String) -> Workspace
+  action assistant_provision(run_id: String, repo_path: String) -> Provisioned
+    run "sh -c 'set -eu; case \"$2\" in \"\"|.|..|*/*) echo provision: run_id must be a single path component >&2; exit 9;; esac; if [ -z \"$1\" ]; then echo provision: workspace_root must not be empty >&2; exit 9; fi; mkdir -p \"$1\" >&2; if [ -e \"$1/$2\" ]; then mv \"$1/$2\" \"$1/$2.superseded-$(date +%Y%m%dT%H%M%S)-$$\" >&2; fi; mkdir \"$1/$2\" >&2; if [ -z \"$3\" ]; then mkdir -p \"$1/$2/repo\" >&2; git init \"$1/$2/repo\" >&2; else git clone \"$3\" \"$1/$2/repo\" >&2; fi; printf \"%s\" \"$1/$2/repo\"' -- {workspace_root} $run_id $repo_path"
 
   /// One agent round under the norn-harness contract: ONE prompt string in,
   /// ONE terminal-text string out. The worker pins one norn session per
@@ -59,11 +158,32 @@ worker default
   action assistant(prompt: String) -> String
 
 step provision
-  assistant_provision(repo_path: repo_path, run_id: workflow.id, objective: objective) -> session
+  assistant_provision(run_id: workflow.id, repo_path: repo_path) -> provisioned
+  // The RECORDED activity result is the one source of the workspace path: the
+  // body's sole stdout is the resolved `<workspace_root>/<run_id>/repo`, so
+  // durable history carries the real path and never the placeholder.
+  provisioned.stdout -> workspace_path
 
-step round after provision
-  // The prompt is the one the worker composed: the full working contract plus
-  // the operator's objective. Sending the bare objective instead would open
-  // the session with no contract at all.
-  assistant(prompt: session.opening_prompt) -> reply
-  route answered(reply: reply, workspace_path: session.path)
+step situate after provision
+  // The one branch in the contract text: whether a repository was attached.
+  // Same test the body's script makes on `$3` — empty means scratch.
+  outcome scratch: when repo_path == "", route scratch_note
+  outcome attached: otherwise, route attached_note
+
+step scratch_note
+  // Both branch steps bind the SAME name and converge on `round`, so the
+  // binding is guaranteed on every path in and the checker accepts the read.
+  scratch_workspace + ground_truth_head + scratch_ground_truth -> situation
+  route round
+
+step attached_note
+  attached_workspace_open + repo_path + attached_workspace_close + ground_truth_head + attached_ground_truth -> situation
+  route round
+
+step round
+  // The round-one prompt: the full working contract with the workspace path
+  // and branch fragment spliced in, then the operator's objective. Sending the
+  // bare objective instead would open the session with no contract at all.
+  contract_head + workspace_path + workspace_confinement + situation + contract_tail + objective -> opening_prompt
+  assistant(prompt: opening_prompt) -> reply
+  route answered(reply: reply, workspace_path: workspace_path)

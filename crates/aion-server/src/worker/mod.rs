@@ -56,6 +56,8 @@ pub mod registry;
 /// Transport-domain classification and re-dispatch budget for activities whose
 /// worker died before reporting a result.
 pub mod transport_loss;
+/// Server-side `{workspace_root}` expansion for declared action bodies (#139).
+pub mod workspace_root;
 
 pub use backpressure::{Backpressure, OwnedShardFraction};
 pub use bridge::{OutboxDeliveryCallback, PendingActivities, WorkerActivityDispatcher};
@@ -107,4 +109,7 @@ pub use transport_loss::{
     TRANSPORT_EXHAUSTED_REASON_PREFIX, TRANSPORT_LOSS_BUDGET_WINDOWS, TransportLossLedger,
     TransportLossVerdict, WORKER_LOST_REASON_PREFIX, is_transport_domain_reason,
     worker_lost_detail,
+};
+pub use workspace_root::{
+    ExpandedCommand, WORKSPACE_ROOT_PLACEHOLDER, WorkspaceRoot, WorkspaceRootError,
 };

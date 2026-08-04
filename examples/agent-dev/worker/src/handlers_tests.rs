@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-use super::{SKILL_RESOURCES, tail, workspace_root_from};
+use super::{tail, workspace_root_from};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -82,24 +82,5 @@ fn tail_keeps_the_end_of_long_output_and_short_output_whole() -> TestResult {
     assert_eq!(tail("abcdefgh", 3), "fgh");
     // Multi-byte chars truncate on a char boundary, never mid-codepoint.
     assert_eq!(tail(multibyte, 2), "éé");
-    Ok(())
-}
-
-#[test]
-fn skill_resources_publish_awl_reference_without_gleam_scaffold_or_sdk() -> TestResult {
-    let names: Vec<&str> = SKILL_RESOURCES
-        .iter()
-        .map(|(name, _contents)| *name)
-        .collect();
-    assert!(names.contains(&"AWL-REFERENCE.md"));
-    assert!(!names.contains(&"SCAFFOLD.md"));
-    assert!(!names.contains(&"SDK.md"));
-
-    let reference = SKILL_RESOURCES
-        .iter()
-        .find_map(|(name, contents)| (*name == "AWL-REFERENCE.md").then_some(*contents))
-        .ok_or("AWL reference contents are missing")?;
-    assert!(reference.contains("distribute"));
-    assert!(reference.contains("worker name (`dev`) is the task queue"));
     Ok(())
 }

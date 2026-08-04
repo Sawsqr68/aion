@@ -139,6 +139,19 @@ GRPC_ADDRESS="$(banner_field grpc_address)" || fail "startup banner carries no g
 SERVER_BUILD="$(curl -sf "http://$HTTP_ADDRESS/build")"
 note "server up at http://$HTTP_ADDRESS — $SERVER_BUILD"
 
+say "Reading the server's workspace root"
+WORKSPACE_ROOT="$(banner_field workspace_root)" || fail "startup banner carries no workspace_root — see $SERVER_LOG"
+case "$WORKSPACE_ROOT" in
+    "unresolvable:"*)
+        fail "the server's workspace root is unresolvable, so declared provisioning cannot dispatch — $WORKSPACE_ROOT (see $SERVER_LOG)"
+        ;;
+esac
+# The worker's own resolution (handlers.rs::resolve_workspace_root, override
+# wins) is BY CONSTRUCTION the server's value — one resolved value threaded
+# into both sides, from the server that will use it.
+export AION_WORKSPACE_ROOT="$WORKSPACE_ROOT"
+note "workspace root: $WORKSPACE_ROOT (threaded to the worker as AION_WORKSPACE_ROOT)"
+
 say "Deploying the assistant workflow"
 [ -f "$ASSISTANT_AWL" ] || fail "assistant document missing: $ASSISTANT_AWL"
 DEPLOY_RESULT="$(aion --endpoint "http://$GRPC_ADDRESS" deploy "$ASSISTANT_AWL")"

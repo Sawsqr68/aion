@@ -95,6 +95,14 @@ struct ServerStateInner {
     /// the engine exists. Held so surfaces (and the bridge) share ONE reader
     /// rather than each building their own view of the deployed contracts.
     queue_declarations: crate::worker::QueueDeclarationSource,
+    /// The server-resolved workspace root for declared action bodies (#139):
+    /// the aion home's `clones/` directory, resolved ONCE at state
+    /// construction. The declared-body dispatcher expands `{workspace_root}`
+    /// with THIS value and the startup banner reports it, so composition
+    /// points read the value instead of re-deriving it. A resolution failure
+    /// is held here — boot proceeds, and the failure surfaces as a terminal
+    /// refusal when a placeholder-bearing body dispatches.
+    workspace_root: crate::worker::WorkspaceRoot,
     /// This node's distribution name for the WS3 cluster snapshot self-identity.
     /// `Some` on a distributed haematite boot (the configured `store.cluster.node_id`),
     /// `None` on a single-node boot — the snapshot then reports the standalone
@@ -234,8 +242,12 @@ impl ServerState {
             &connected.namespace_store,
             mint_routing,
         );
+        // #139: THE one resolution of the declared-body workspace root. The
+        // dispatcher expands `{workspace_root}` with it and the state exposes
+        // it for the startup banner; nothing else derives the value.
+        let workspace_root = crate::worker::WorkspaceRoot::resolve();
         let (activity_dispatcher, activity_mock_registry, attempt_owners) =
-            build_decorated_dispatcher(&runtime, &seams);
+            build_decorated_dispatcher(&runtime, &seams, workspace_root.clone());
 
         let engine = build_engine(EngineAssembly {
             instrumented_store: &instrumented_store,
@@ -271,6 +283,7 @@ impl ServerState {
                 attempt_owners,
                 queue_service_state: seams.queue_service_state,
                 queue_declarations: seams.queue_declarations,
+                workspace_root,
                 cluster_self_node,
                 #[cfg(feature = "haematite-backend")]
                 cluster_responder,
@@ -356,6 +369,10 @@ impl ServerState {
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
                 queue_declarations: crate::worker::QueueDeclarationSource::default(),
+                // Inert here: this constructor builds no declared-body
+                // dispatcher, so nothing expands `{workspace_root}` with this
+                // value — it exists so `workspace_root()` is always readable.
+                workspace_root: crate::worker::WorkspaceRoot::resolve(),
                 cluster_self_node: None,
                 #[cfg(feature = "haematite-backend")]
                 cluster_responder: None,
@@ -430,6 +447,10 @@ impl ServerState {
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
                 queue_declarations: crate::worker::QueueDeclarationSource::default(),
+                // Inert here: this constructor builds no declared-body
+                // dispatcher, so nothing expands `{workspace_root}` with this
+                // value — it exists so `workspace_root()` is always readable.
+                workspace_root: crate::worker::WorkspaceRoot::resolve(),
                 cluster_self_node: None,
                 #[cfg(feature = "haematite-backend")]
                 cluster_responder: None,
@@ -503,6 +524,10 @@ impl ServerState {
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
                 queue_declarations: crate::worker::QueueDeclarationSource::default(),
+                // Inert here: this constructor builds no declared-body
+                // dispatcher, so nothing expands `{workspace_root}` with this
+                // value — it exists so `workspace_root()` is always readable.
+                workspace_root: crate::worker::WorkspaceRoot::resolve(),
                 cluster_self_node: None,
                 #[cfg(feature = "haematite-backend")]
                 cluster_responder: None,
@@ -571,6 +596,10 @@ impl ServerState {
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
                 queue_declarations: crate::worker::QueueDeclarationSource::default(),
+                // Inert here: this constructor builds no declared-body
+                // dispatcher, so nothing expands `{workspace_root}` with this
+                // value — it exists so `workspace_root()` is always readable.
+                workspace_root: crate::worker::WorkspaceRoot::resolve(),
                 cluster_self_node: None,
                 #[cfg(feature = "haematite-backend")]
                 cluster_responder: None,
@@ -604,6 +633,20 @@ impl ServerState {
     #[must_use]
     pub fn runtime_config(&self) -> &RuntimeConfig {
         &self.inner.runtime
+    }
+
+    /// Borrow the server-resolved workspace root declared bodies expand
+    /// `{workspace_root}` with (#139).
+    ///
+    /// The startup banner reads this so composition points learn the value
+    /// from the server that will use it, rather than re-deriving it. That
+    /// banner claim holds for [`Self::build`]-constructed states, where this
+    /// same value is threaded into the declared-body dispatcher; the
+    /// `from_parts*` constructors build no such dispatcher, so their copy is
+    /// inert — readable, but expanded by nothing.
+    #[must_use]
+    pub fn workspace_root(&self) -> &crate::worker::WorkspaceRoot {
+        &self.inner.workspace_root
     }
 
     /// Borrow the connected-worker registry shared by worker transports and dispatch.
@@ -1326,6 +1369,7 @@ fn build_bridge_dispatcher(
 fn build_decorated_dispatcher(
     runtime: &RuntimeConfig,
     seams: &WorkerSeams,
+    workspace_root: crate::worker::WorkspaceRoot,
 ) -> (
     Arc<dyn ActivityDispatcher>,
     Option<ActivityMockRegistry>,
@@ -1335,6 +1379,7 @@ fn build_decorated_dispatcher(
     let (activity_dispatcher, activity_mock_registry) = decorate_activity_dispatcher(
         dispatcher,
         seams.declared_bodies.clone(),
+        workspace_root,
         runtime.dev.enabled,
     );
     (activity_dispatcher, activity_mock_registry, attempt_owners)
@@ -1343,6 +1388,7 @@ fn build_decorated_dispatcher(
 fn decorate_activity_dispatcher(
     dispatcher: WorkerActivityDispatcher,
     declared_bodies: crate::worker::DeclaredBodySource,
+    workspace_root: crate::worker::WorkspaceRoot,
     dev_enabled: bool,
 ) -> (Arc<dyn ActivityDispatcher>, Option<ActivityMockRegistry>) {
     // The declared-body layer wraps the production dispatcher UNCONDITIONALLY:
@@ -1354,6 +1400,7 @@ fn decorate_activity_dispatcher(
         Arc::new(dispatcher),
         declared_bodies,
         tokio::runtime::Handle::current(),
+        workspace_root,
     );
     if dev_enabled {
         let registry = ActivityMockRegistry::new();

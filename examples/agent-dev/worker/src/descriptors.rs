@@ -118,9 +118,11 @@ pub struct AdvertisedSurface {
 /// [`AgentHarnessConfig::with_activity_descriptors`](aion_worker::AgentHarnessConfig::with_activity_descriptors)
 /// adds every descriptor name to the agent activity set, so a descriptor handed
 /// to the harness is also ROUTED to the harness. Passing the whole surface
-/// there would send `assistant_provision` — a plain registry handler that
-/// clones a workspace — to norn as if it were a prompt. The two halves are
-/// therefore advertised through the two different paths that also execute them.
+/// there would send any plain registry action — a handler that shells to real
+/// CLIs — to norn as if it were a prompt. The two halves are therefore
+/// advertised through the two different paths that also execute them. (Today
+/// the plain side is empty: the document's only non-agent action carries a
+/// declared body, which the server runs, so it is never advertised at all.)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SurfaceSplit {
     /// Descriptors for actions the agent harness executes.

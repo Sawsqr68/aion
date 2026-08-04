@@ -137,3 +137,30 @@ Known risks carried: cancellation of declared bodies is held-not-wired
   the path gate fires; readiness = `/build` BODY, never a status code;
   addresses derived from the startup banner, never assumed; worker
   identity is per-home/per-address, not per-box.
+
+## 2026-08-05: review verdicts and open questions
+
+Recorded from the leg-A Opus review and the seat's rulings (fixes brief
+`BRIEF-139-LEG-A-FIXES.md`); each is a decision NOT taken in code:
+
+1. **Provision has exactly one attempt.** No `retry` clause is declared, so a
+   non-zero exit fails the dispatch and reaches the operator. Whether the
+   action SHOULD declare a retry policy is an undecided value — the old
+   worker-side handler classified these failures terminal, so one-attempt is
+   behaviour-preserving, not a regression.
+2. **AWL cannot mark a run-body failure terminal vs retryable.** The language
+   has no construct for it; the executor's default classification decides.
+   Language gap, recorded — not worked around.
+3. **Superseded workspace directories accumulate unboundedly by design**
+   ("renamed aside — never deleted"). A retention/reaping policy is an
+   undecided value, not an omission to patch silently.
+4. **The root may be an operator-planted symlink and is followed.** That is
+   the operator's own configuration; the banner reports the configured path,
+   and no symlink refusal is imposed.
+5. **`state.rs` and `run.rs` exceed the 500-line law pre-existingly.**
+   Standing debt, not grown materially by this lane (the lane added a
+   handful of comment lines and moved banner logic OUT of `run.rs`).
+6. **`mv` collision on a same-second-same-pid superseded name** is
+   effectively unreachable (one process cannot mint two identical
+   `<stamp>-<pid>` suffixes for one run id in one second through this path);
+   if forced, `mv` nests the directory rather than failing. Recorded.

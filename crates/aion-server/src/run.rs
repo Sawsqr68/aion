@@ -179,6 +179,15 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     // what was running or substitutes something else (#123). The endpoint
     // answers this too, but a crashed server leaves only its log.
     let build = crate::build_identity::BuildIdentity::current();
+    // #139: the server-resolved workspace root (the aion home's `clones/`
+    // directory) that declared bodies expand `{workspace_root}` with. Reported
+    // here so composition points (setup.sh today, the workspace verb later)
+    // READ the value from the server that will use it instead of re-deriving
+    // it. An unresolvable root is reported as exactly that — never fabricated;
+    // a placeholder-bearing dispatch will refuse terminally with this reason.
+    // The rendering itself is `WorkspaceRoot::banner_value`, pinned by its own
+    // two-case test, so the banner and the tests cannot drift apart.
+    let workspace_root = state.workspace_root().banner_value();
     info!(
         version = env!("CARGO_PKG_VERSION"),
         build = %build.line(),
@@ -191,6 +200,7 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
         auth_enabled = runtime.auth.enabled,
         deploy_enabled = runtime.deploy.enabled,
         metrics_enabled = runtime.metrics.enabled,
+        workspace_root = %workspace_root,
         workflow_package_count = workflow_packages.len(),
         workflow_packages = ?workflow_packages,
         owned_shards = ?owned_shards,

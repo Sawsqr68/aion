@@ -15,9 +15,11 @@
 //!   The session id carries the activity TYPE, not the attempt: every
 //!   dispatch of the same type in one run resumes ONE session, which is what
 //!   makes the assistant's multi-round conversation continuous.
-//! - PLAIN registry activities `provision`, `assistant_provision`, `gate`,
-//!   `land`: async handler bodies in [`agent_dev_worker::handlers`] whose
-//!   command process groups are stopped and verified on activity cancellation.
+//! - PLAIN registry activities `provision`, `gate`, `land`: async handler
+//!   bodies in [`agent_dev_worker::handlers`] whose command process groups are
+//!   stopped and verified on activity cancellation. The `assistant` workflow's
+//!   `assistant_provision` is NOT served here: it carries a declared body, so
+//!   the server executes it from the deployed contract.
 //!
 //! Auth: Norn is invoked with `OPENAI_API_KEY` REMOVED from its child
 //! environment (via the adapter's `without_env`) so it uses the operator's

@@ -19,6 +19,8 @@ use aion::{ActivityDispatch, ActivityDispatcher};
 use aion_package::ActionBodyContract;
 use aion_worker::shell::ShellAction;
 
+use super::workspace_root::{WORKSPACE_ROOT_PLACEHOLDER, WorkspaceRoot};
+
 /// What a declared-body lookup found for one `(task_queue, action)` address.
 #[derive(Clone, Debug)]
 pub enum DeclaredBodyLookup {
@@ -147,20 +149,25 @@ pub struct DeclaredCommandDispatcher {
     inner: Arc<dyn ActivityDispatcher>,
     bodies: DeclaredBodySource,
     tokio: tokio::runtime::Handle,
+    workspace_root: WorkspaceRoot,
 }
 
 impl DeclaredCommandDispatcher {
-    /// Wrap `inner`, consulting `bodies` before every dispatch.
+    /// Wrap `inner`, consulting `bodies` before every dispatch and expanding
+    /// `{workspace_root}` in declared commands with the server-resolved
+    /// `workspace_root`.
     #[must_use]
     pub fn new(
         inner: Arc<dyn ActivityDispatcher>,
         bodies: DeclaredBodySource,
         tokio: tokio::runtime::Handle,
+        workspace_root: WorkspaceRoot,
     ) -> Self {
         Self {
             inner,
             bodies,
             tokio,
+            workspace_root,
         }
     }
 
@@ -172,6 +179,34 @@ impl DeclaredCommandDispatcher {
         command: &str,
     ) -> Result<String, String> {
         let arguments = decode_arguments(&request.input)?;
+        // Ratification condition (#139): a body that USES the placeholder is
+        // refused terminally, by name, when the root cannot resolve to an
+        // absolute directory that exists — no fallback to cwd, temp, or
+        // anything else. A body without the placeholder never reaches the
+        // resolution at all (`expand` returns `Ok(None)` untouched).
+        let expanded = self.workspace_root.expand(command).map_err(|error| {
+            format!(
+                "terminal:declared body for action `{name}` uses the {placeholder} \
+                 placeholder and cannot dispatch: {error}",
+                name = request.name,
+                placeholder = WORKSPACE_ROOT_PLACEHOLDER,
+            )
+        })?;
+        if let Some(expansion) = &expanded {
+            tracing::info!(
+                operation = "declared_command_dispatch",
+                workflow_id = %request.workflow_id,
+                activity_id = %request.activity_id,
+                activity_name = %request.name,
+                task_queue = %request.task_queue,
+                attempt = request.attempt,
+                workspace_root = %expansion.workspace_root,
+                "expanded the workspace-root placeholder in the declared command"
+            );
+        }
+        let command = expanded
+            .as_ref()
+            .map_or(command, |expansion| expansion.command.as_str());
         let action = ShellAction::new(command).map_err(|error| {
             // The AWL checker refuses these at compile time, so reaching this
             // arm means a defective contract got deployed — name the defect
@@ -292,6 +327,7 @@ mod tests {
     use aion_core::{ActivityId, RunId, WorkflowId};
     use aion_package::ActionBodyContract;
 
+    use super::super::workspace_root::{WorkspaceRoot, WorkspaceRootError};
     use super::{
         DeclaredBodies, DeclaredBodyLookup, DeclaredBodySource, DeclaredCommandDispatcher,
         decode_arguments,
@@ -349,6 +385,21 @@ mod tests {
         lookup: DeclaredBodyLookup,
         reply: Result<String, String>,
     ) -> (DeclaredCommandDispatcher, Arc<Mutex<Vec<String>>>) {
+        // These tests exercise bodies without the placeholder, so the root's
+        // value is never read; it is an explicit existing directory rather
+        // than a default so nothing here depends on resolution.
+        dispatcher_with_root(
+            lookup,
+            reply,
+            WorkspaceRoot::from_resolution(Ok(std::env::temp_dir())),
+        )
+    }
+
+    fn dispatcher_with_root(
+        lookup: DeclaredBodyLookup,
+        reply: Result<String, String>,
+        workspace_root: WorkspaceRoot,
+    ) -> (DeclaredCommandDispatcher, Arc<Mutex<Vec<String>>>) {
         let reached = Arc::new(Mutex::new(Vec::new()));
         let inner = RecordingInner {
             reached: Arc::clone(&reached),
@@ -360,6 +411,7 @@ mod tests {
             Arc::new(inner),
             bodies,
             tokio::runtime::Handle::current(),
+            workspace_root,
         );
         (decorated, reached)
     }
@@ -446,6 +498,155 @@ mod tests {
         assert!(error.starts_with("terminal:"), "{error}");
         assert!(error.contains("torn"), "{error}");
         assert!(reached_names(&reached).is_empty());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_placeholder_bearing_body_executes_with_the_expanded_root() -> TestResult {
+        let scratch = tempfile::tempdir()?;
+        let root = scratch.path().join("clones");
+        let root_text = root.to_string_lossy().into_owned();
+        let (decorated, reached) = dispatcher_with_root(
+            DeclaredBodyLookup::Declared(ActionBodyContract::Run {
+                command: "echo {workspace_root}".to_owned(),
+            }),
+            Err("terminal:the worker path must never be reached".to_owned()),
+            WorkspaceRoot::from_resolution(Ok(root.clone())),
+        );
+        let handle =
+            tokio::task::spawn_blocking(move || decorated.dispatch(request("provision", "{}")));
+        let result = handle.await?;
+        let encoded = result.map_err(|error| format!("declared command failed: {error}"))?;
+        let outcome: serde_json::Value = serde_json::from_str(&encoded)?;
+        assert_eq!(
+            outcome["stdout"], root_text,
+            "the command must observe the server-resolved root as its argv word"
+        );
+        assert_eq!(outcome["exit_code"], 0);
+        assert!(
+            root.is_dir(),
+            "dispatching a placeholder-bearing body must create the missing root"
+        );
+        assert!(reached_names(&reached).is_empty());
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_placeholder_bearing_body_refuses_terminally_when_the_root_is_unresolved()
+    -> TestResult {
+        let (decorated, reached) = dispatcher_with_root(
+            DeclaredBodyLookup::Declared(ActionBodyContract::Run {
+                command: "echo {workspace_root}".to_owned(),
+            }),
+            Ok("unused".to_owned()),
+            WorkspaceRoot::from_resolution(Err(WorkspaceRootError::Unresolvable {
+                reason: "cannot resolve Aion home: set AION_HOME or HOME".to_owned(),
+            })),
+        );
+        let handle =
+            tokio::task::spawn_blocking(move || decorated.dispatch(request("provision", "{}")));
+        let Err(error) = handle.await? else {
+            return Err("an unresolved root must refuse a placeholder-bearing body".into());
+        };
+        assert!(error.starts_with("terminal:"), "{error}");
+        assert!(
+            error.contains("provision"),
+            "the refusal must name the action: {error}"
+        );
+        assert!(
+            error.contains("cannot resolve Aion home"),
+            "the refusal must carry the resolution failure's reason: {error}"
+        );
+        assert!(
+            reached_names(&reached).is_empty(),
+            "a refused body must not fall through to the worker path"
+        );
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_shape_changing_root_refuses_terminally_naming_the_action() -> TestResult {
+        // `$` in the root would open a parameter reference after splicing.
+        let (decorated, reached) = dispatcher_with_root(
+            DeclaredBodyLookup::Declared(ActionBodyContract::Run {
+                command: "echo {workspace_root}".to_owned(),
+            }),
+            Ok("unused".to_owned()),
+            WorkspaceRoot::from_resolution(Ok(std::path::PathBuf::from("/absolute/with$dollar"))),
+        );
+        let handle =
+            tokio::task::spawn_blocking(move || decorated.dispatch(request("provision", "{}")));
+        let Err(error) = handle.await? else {
+            return Err("a shape-changing root must refuse a placeholder-bearing body".into());
+        };
+        assert!(error.starts_with("terminal:"), "{error}");
+        assert!(
+            error.contains("provision"),
+            "the refusal must name the action: {error}"
+        );
+        assert!(
+            error.contains("would change the parsed shape"),
+            "the refusal must carry the shape-changing diagnosis: {error}"
+        );
+        assert!(
+            reached_names(&reached).is_empty(),
+            "a refused body must not fall through to the worker path"
+        );
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_uncreatable_root_refuses_terminally_naming_the_action() -> TestResult {
+        // A root beneath a regular file cannot be created by any retry.
+        let scratch = tempfile::tempdir()?;
+        let file = scratch.path().join("occupied");
+        std::fs::write(&file, b"not a directory")?;
+        let (decorated, reached) = dispatcher_with_root(
+            DeclaredBodyLookup::Declared(ActionBodyContract::Run {
+                command: "echo {workspace_root}".to_owned(),
+            }),
+            Ok("unused".to_owned()),
+            WorkspaceRoot::from_resolution(Ok(file.join("clones"))),
+        );
+        let handle =
+            tokio::task::spawn_blocking(move || decorated.dispatch(request("provision", "{}")));
+        let Err(error) = handle.await? else {
+            return Err("an uncreatable root must refuse a placeholder-bearing body".into());
+        };
+        assert!(error.starts_with("terminal:"), "{error}");
+        assert!(
+            error.contains("provision"),
+            "the refusal must name the action: {error}"
+        );
+        assert!(
+            error.contains("could not be created"),
+            "the refusal must carry the creation-failure diagnosis: {error}"
+        );
+        assert!(
+            reached_names(&reached).is_empty(),
+            "a refused body must not fall through to the worker path"
+        );
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_body_without_the_placeholder_is_untouched_by_resolution_failure() -> TestResult {
+        let (decorated, _reached) = dispatcher_with_root(
+            DeclaredBodyLookup::Declared(ActionBodyContract::Run {
+                command: "echo $greeting".to_owned(),
+            }),
+            Ok("unused".to_owned()),
+            WorkspaceRoot::from_resolution(Err(WorkspaceRootError::Unresolvable {
+                reason: "cannot resolve Aion home: set AION_HOME or HOME".to_owned(),
+            })),
+        );
+        let handle = tokio::task::spawn_blocking(move || {
+            decorated.dispatch(request("greet", "{\"greeting\":\"still served\"}"))
+        });
+        let result = handle.await?;
+        let encoded = result.map_err(|error| format!("declared command failed: {error}"))?;
+        let outcome: serde_json::Value = serde_json::from_str(&encoded)?;
+        assert_eq!(outcome["stdout"], "still served");
         Ok(())
     }
 

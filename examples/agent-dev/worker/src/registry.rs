@@ -9,7 +9,7 @@ use aion_worker::{ActivityContext, ActivityRegistry, HandlerFuture};
 
 use crate::handlers;
 use crate::shell::Shell;
-use crate::types::{AssistantProvisionInput, GateInput, LandInput, ProvisionInput};
+use crate::types::{GateInput, LandInput, ProvisionInput};
 
 /// Adapt a handler that owns its cloned [`ActivityContext`] to the registry's
 /// borrowed-context signature. The clone shares the cancellation state while
@@ -58,15 +58,6 @@ pub fn build_registry(
             async move { handlers::provision(&shell, &root, input, context).await }
         }
     };
-    let assistant_provision = {
-        let shell = shell.clone();
-        let root = workspace_root.to_path_buf();
-        move |input: AssistantProvisionInput, context: ActivityContext| {
-            let shell = shell.clone();
-            let root = root.clone();
-            async move { handlers::assistant_provision(&shell, &root, input, context).await }
-        }
-    };
     let gate = {
         let shell = shell.clone();
         move |input: GateInput, context: ActivityContext| {
@@ -85,7 +76,7 @@ pub fn build_registry(
     // The descriptor list is reconciled against THIS set below, so a document
     // that declares an action the worker cannot run is a startup failure rather
     // than a dispatch into a void.
-    let served = ["provision", "assistant_provision", "gate", "land"];
+    let served = ["provision", "gate", "land"];
     for descriptor in plain_descriptors {
         anyhow::ensure!(
             served.contains(&descriptor.name.as_str()),
@@ -108,12 +99,6 @@ pub fn build_registry(
         "provision",
         descriptor_for("provision"),
         provision,
-    )?;
-    registry = register(
-        registry,
-        "assistant_provision",
-        descriptor_for("assistant_provision"),
-        assistant_provision,
     )?;
     registry = register(registry, "gate", descriptor_for("gate"), gate)?;
     registry = register(registry, "land", descriptor_for("land"), land)?;

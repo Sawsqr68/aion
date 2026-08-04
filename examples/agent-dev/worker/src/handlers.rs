@@ -26,19 +26,8 @@ use std::path::{Path, PathBuf};
 
 use aion_worker::{ActivityContext, ActivityFailure};
 
-mod opening_prompt;
-mod skill_resources;
-
-use opening_prompt::opening_prompt;
-#[cfg(test)]
-use skill_resources::SKILL_RESOURCES;
-use skill_resources::materialize_skill_resources;
-
 use crate::shell::{CliRun, Shell};
-use crate::types::{
-    AssistantProvisionInput, AssistantWorkspace, GateInput, GateResult, LandInput, LandResult,
-    ProvisionInput, Workspace,
-};
+use crate::types::{GateInput, GateResult, LandInput, LandResult, ProvisionInput, Workspace};
 
 /// Environment variable overriding the stable workspace root for clones.
 pub const WORKSPACE_ROOT_ENV: &str = "AION_WORKSPACE_ROOT";
@@ -235,76 +224,6 @@ pub async fn provision(
     Ok(Workspace {
         path: repo_dir,
         branch,
-    })
-}
-
-/// `assistant_provision` (the `assistant` workflow package): materialise the
-/// session workspace at `<root>/<run_id>/repo` — `git clone` of `repo_path`
-/// when given (a local path or URL), a fresh `git init` scratch workspace
-/// when empty, so the assistant always has a real, versionable working
-/// directory for the norn harness's `--workspace-root`/`-C` template — then
-/// compose the session's round-one prompt against the workspace it just made.
-///
-/// The prompt is composed HERE, not in the workflow, because this handler is
-/// the thing that knows the workspace and materializes the skill documents the
-/// prompt points at (see [`opening_prompt`]). The workflow dispatches the
-/// returned `opening_prompt` as round one and composes nothing itself.
-///
-/// Same #175 discipline as [`provision`]: the path is recorded in durable
-/// workflow history, so it lives under the stable resolved `root`, keyed by
-/// the engine-minted run id, and a colliding run directory (this execution's
-/// own earlier partial attempt) is renamed aside — never deleted.
-///
-/// # Errors
-///
-/// Terminal [`ActivityFailure`] when the run id is not a single path
-/// component, when the workspace directory cannot be claimed, or when the
-/// `git clone` / `git init` cannot run or exits non-zero.
-pub async fn assistant_provision(
-    shell: &Shell,
-    root: &Path,
-    input: AssistantProvisionInput,
-    context: ActivityContext,
-) -> Result<AssistantWorkspace, ActivityFailure> {
-    let AssistantProvisionInput {
-        repo_path,
-        run_id,
-        objective,
-    } = input;
-    std::fs::create_dir_all(root).map_err(|source| {
-        ActivityFailure::terminal(format!(
-            "cannot create workspace root {}: {source}",
-            root.display()
-        ))
-    })?;
-    let run_dir = claim_run_directory(root, &run_id)?;
-    let run_dir_str = run_dir.to_string_lossy().into_owned();
-    let repo_dir = run_dir.join("repo").to_string_lossy().into_owned();
-
-    if repo_path.is_empty() {
-        std::fs::create_dir(&repo_dir).map_err(|source| {
-            ActivityFailure::terminal(format!(
-                "cannot create scratch workspace directory {repo_dir}: {source}"
-            ))
-        })?;
-        require_run(shell, "git", &["init"], &repo_dir, "git init", &context).await?;
-    } else {
-        require_run(
-            shell,
-            "git",
-            &["clone", &repo_path, &repo_dir],
-            &run_dir_str,
-            "git clone",
-            &context,
-        )
-        .await?;
-    }
-    materialize_skill_resources(Path::new(&repo_dir))?;
-
-    let opening_prompt = opening_prompt(&objective, &repo_path, &repo_dir);
-    Ok(AssistantWorkspace {
-        path: repo_dir,
-        opening_prompt,
     })
 }
 
