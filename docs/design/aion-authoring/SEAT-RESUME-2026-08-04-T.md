@@ -25,6 +25,13 @@ documentation folder for everything."
   Historical records (remediation lanes, design briefs) deliberately NOT
   rewritten — they describe their moment.
 
+**UPDATE: ALL FOUR REMAINING STEPS DONE (this commit).** docs/README.md
+index written · docs/workers/AGENT-WORKERS.md written (sources: `aion worker
+agent --help`, norn_invocation.rs, main.rs flags, setup.sh) · both
+link-checked zero-broken · worker binary rebuilt release exit 0 (live pid
+77969 NOT restarted — fresh binary waits for the next natural restart) ·
+Tom told. Docs order COMPLETE; next lane is #139 per BUNDLE-139-NOTES.md.
+
 **REMAINING (do next, in order):**
 1. **docs/README.md** — the index/map of the whole docs tree (the
    "organized proper folder" front door). List each section + one-liner.
