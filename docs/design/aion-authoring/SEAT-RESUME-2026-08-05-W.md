@@ -28,7 +28,14 @@ DEAD; every standing note about those pids is obsolete. Current:
   (base rate: 6 in the old proven-working log; restoration is silent).
   Not evidence of a broken worker.
 
-## The #139 leg A lane — BUILT + REVIEWED + FIXED, **UNCOMMITTED**
+## The #139 leg A lane — ✅ LANDED main `fe702945`, pushed 2026-08-05
+
+**POST-LANDING UPDATE (same day, after the section below was written):** my
+read completed (F1 guard, F5 comments, deletions, provision_body.rs — all
+sound), both new test surfaces re-run green at my hand (15/15 + 5/5), the
+ONE commit landed and pushed as `fe702945`, Tom was told LLM-STARTUP.md is
+on GitHub, and Waffles got the landing note. Next-actions 1–5 below are ALL
+DONE — do not repeat them. What remains is item 6: the live-cut plan.
 
 Full history: BRIEF-139-LEG-A-REWORK.md (implementation brief),
 BRIEF-139-LEG-A-FIXES.md (review punch list + my rulings), BUNDLE-139-NOTES
