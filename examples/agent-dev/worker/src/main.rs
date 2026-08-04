@@ -34,13 +34,12 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
-use agent_dev_worker::advising_harness::AdvisingHarness;
 use agent_dev_worker::descriptors::advertised_surface;
 use agent_dev_worker::handlers;
-use agent_dev_worker::norn_invocation::norn_args;
+use agent_dev_worker::norn_invocation::{DEGRADED_SESSION_OPT_IN, norn_args};
 use agent_dev_worker::registry::build_registry;
 use agent_dev_worker::shell::Shell;
-use aion_integration_norn::NornHarness;
+use aion_integration_norn::{AdvisingHarness, NornHarness};
 use aion_integrations::{DynAgentHarness, InterventionCapabilities, InterventionPrimitive};
 use aion_worker::{AgentHarnessConfig, RedialTiming, WorkerConfig};
 
@@ -115,6 +114,9 @@ fn composed_agent_harness(
         // and a stray ambient key would take precedence and fail.
         Arc::new(norn.without_env("OPENAI_API_KEY")),
         allow_degraded_session,
+        // The advice names THIS worker's restart flag, spelled by the same
+        // constant the argument parser accepts.
+        DEGRADED_SESSION_OPT_IN,
     ));
     // The agent set is the union of what the document DECLARES and the
     // undeclared residue named above. Declared names come first because they
@@ -236,8 +238,10 @@ fn parse_args_from(
             },
             // A bare switch: it takes no value, because there is nothing to
             // configure — either the operator accepts the fidelity tradeoff
-            // for this worker's sessions or they do not.
-            "--norn-allow-degraded-session" => allow_degraded_session = true,
+            // for this worker's sessions or they do not. Matched by the same
+            // constant the degraded-session advice names, so the flag the
+            // failure teaches is always one this parser accepts.
+            DEGRADED_SESSION_OPT_IN => allow_degraded_session = true,
             other => anyhow::bail!("unknown argument `{other}`"),
         }
     }

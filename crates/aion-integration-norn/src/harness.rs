@@ -87,6 +87,30 @@ enum NornArgument {
     Literal(String),
 }
 
+/// The exact child invocation [`AgentHarness::start`] would exec for one run,
+/// previewable without spawning anything.
+///
+/// This exists so a composition root can ASSERT the invocation it composed: a
+/// flag that is only ever observed through a live agent run is untested in the
+/// case that matters — which is exactly how a mandatory `--account` once went
+/// missing from a worker's harness argv. [`NornHarness::invocation`] returns
+/// this and the private spawn path is built FROM it, so the preview and the
+/// exec'd reality cannot drift.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NornInvocation {
+    /// The `norn` binary to exec.
+    pub program: PathBuf,
+    /// The full argument list, in exec order: the fixed `--protocol jsonrpc`
+    /// followed by the configured extra arguments with their run-identity
+    /// placeholders expanded.
+    pub argv: Vec<String>,
+    /// The `KEY=VALUE` pairs set on the child's environment, in order.
+    pub env: Vec<(String, String)>,
+    /// The variables removed from the child's environment. Removals are
+    /// applied AFTER the sets, so removing a key wins over setting it.
+    pub env_removed: Vec<String>,
+}
+
 /// A harness that runs each activity attempt as a `norn --protocol jsonrpc` child process.
 ///
 /// Holds the harness-specific settings (the binary location and any fixed extra arguments) so the
@@ -174,27 +198,44 @@ impl NornHarness {
         self
     }
 
-    /// Builds the `norn --protocol jsonrpc` command for one run: the fixed protocol arguments
-    /// followed by the configured extra arguments with their run-identity placeholders expanded
-    /// from `spec` (see [`expand_arg`]), the configured child-environment sets and removals,
-    /// with piped stdin/stdout and inherited stderr.
-    fn command(&self, spec: &AgentRunSpec) -> Command {
-        let mut command = Command::new(&self.binary);
-        command.arg("--protocol").arg("jsonrpc");
+    /// The exact child invocation [`AgentHarness::start`] would exec for `spec`: the fixed
+    /// `norn --protocol jsonrpc` arguments followed by the configured extra arguments with
+    /// their run-identity placeholders expanded (see [`expand_arg`]), plus the configured
+    /// child-environment sets and removals.
+    ///
+    /// Public so a composition root can assert what it composed without spawning a process;
+    /// [`Self::command`] is built from this value, so the preview IS the spawn.
+    #[must_use]
+    pub fn invocation(&self, spec: &AgentRunSpec) -> NornInvocation {
+        let mut argv = vec!["--protocol".to_owned(), "jsonrpc".to_owned()];
         for argument in &self.extra_args {
-            match argument {
-                NornArgument::Template(template) => command.arg(expand_arg(template, spec)),
-                NornArgument::Literal(literal) => command.arg(literal),
-            };
+            argv.push(match argument {
+                NornArgument::Template(template) => expand_arg(template, spec),
+                NornArgument::Literal(literal) => literal.clone(),
+            });
         }
+        NornInvocation {
+            program: self.binary.clone(),
+            argv,
+            env: self.env.clone(),
+            env_removed: self.env_removed.clone(),
+        }
+    }
+
+    /// Builds the spawn command for one run from [`Self::invocation`], with piped
+    /// stdin/stdout and inherited stderr.
+    fn command(&self, spec: &AgentRunSpec) -> Command {
+        let invocation = self.invocation(spec);
+        let mut command = Command::new(&invocation.program);
+        command.args(&invocation.argv);
         command
-            .envs(self.env.iter().map(|(key, value)| (key, value)))
+            .envs(invocation.env.iter().map(|(key, value)| (key, value)))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .kill_on_drop(true);
         // Removals AFTER the sets, so `without_env` wins over `with_env` for the same key.
-        for key in &self.env_removed {
+        for key in &invocation.env_removed {
             command.env_remove(key);
         }
         command
@@ -549,6 +590,39 @@ mod tests {
         assert!(
             error.to_string().contains("not valid UTF-8"),
             "error must name the UTF-8 mismatch, got: {error}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_invocation_preview_is_the_spawned_reality() -> TestResult {
+        // `command` is BUILT from `invocation`, so asserting both against one
+        // configured harness proves the public preview is what a spawn execs.
+        let spec = spec();
+        let harness = NornHarness::with_binary("/bin/norn")
+            .with_arg("--session-id")
+            .with_arg("{workflow_id}-{activity_type}")
+            .with_env("NORN_LOG", "debug")
+            .without_env("OPENAI_API_KEY");
+        let invocation = harness.invocation(&spec);
+        assert_eq!(
+            invocation,
+            super::NornInvocation {
+                program: std::path::PathBuf::from("/bin/norn"),
+                argv: vec![
+                    "--protocol".to_owned(),
+                    "jsonrpc".to_owned(),
+                    "--session-id".to_owned(),
+                    format!("{}-dev", spec.workflow_id),
+                ],
+                env: vec![("NORN_LOG".to_owned(), "debug".to_owned())],
+                env_removed: vec!["OPENAI_API_KEY".to_owned()],
+            }
+        );
+        assert_eq!(
+            argv(&harness, &spec)?,
+            invocation.argv,
+            "the command's argv must be exactly the previewed argv"
         );
         Ok(())
     }

@@ -3,7 +3,7 @@
 //!
 //! Pure orchestration over two recorded worker actions:
 //!
-//!   assistant_provision -> [ assistant round ; await operator ]*   [bounded]
+//!   assistant_provision -> [ assistant round ; await operator ]*   [operator-paced]
 //!
 //! Round one dispatches the `assistant` agent action with the opening prompt
 //! the provisioning action composed — the full working contract plus the
@@ -43,15 +43,6 @@ workflow assistant
   // clone URL. Empty is the documented "no repository, scratch workspace"
   // mode — the assistant then says what it cannot verify.
   input repo_path: String
-  // The session's agent-round budget. The product decision is 50; AWL has no
-  // input defaults, so the caller states it. Spending it is the
-  // `RoundCapExhausted` disposition — an outcome, never an error.
-  input max_rounds: Int
-  // How many consecutive blank nudges one round will absorb before the
-  // session gives up waiting. AWL requires every loop to be bounded, so the
-  // Gleam version's unbounded "keep waiting" cannot be reproduced; this is
-  // the explicit ceiling that replaces it.
-  input max_nudges: Int
 
   // The ONE control signal the session listens on. Both fields are REQUIRED
   // on the wire. Send `{"message": "...", "end": false}` to continue and
@@ -167,9 +158,10 @@ step provision
   assistant_provision(repo_path: repo_path, run_id: workflow.id, objective: objective) -> session
 
 step session after provision
-  // The outer loop is one agent round plus the operator wait, bounded by the
-  // round budget. The body runs at least once, so a session always gets one
-  // round even at `max_rounds` of 1.
+  // The outer loop is one agent round plus the operator wait. There is no
+  // round budget: the session runs until the operator ends it or a wait
+  // stalls out (both `max` clauses below are language formalities set beyond
+  // reach). The body runs at least once, so a session always gets one round.
   //
   // The inner loop is the operator wait, and it is where the nudge tolerance
   // lives: it re-parks on `assistant_continue` until the operator either ends
@@ -194,10 +186,15 @@ step session after provision
     loop nudge = Continuation(message: "", end: false)
       wait assistant_continue -> nudge
       until nudge.end or nudge.message != ""
-      max max_nudges
+      // The session has no operational cap (the operator's ruling: it runs
+      // until ended or stalled). AWL requires a literal bound on every loop,
+      // so this is the language formality set beyond reach, not a budget.
+      max 1000000
     Round(prompt: nudge.message, reply: reply, ended: nudge.end, stalled: not nudge.end and nudge.message == "") -> round
     until round.ended or round.stalled
-    max max_rounds
+    // Same formality as the inner bound: no round budget exists — the session
+    // ends when the operator ends it or a wait stalls out.
+    max 1000000
   // Past the loop the counter IS readable, so the final answer carries the
   // real round count — the one point in the run where both fields are provable.
   answer assistant_status(phase: "settled", round: rounds)
@@ -214,8 +211,9 @@ step session after provision
   outcome nudges_spent: when round.stalled,
     route stalled(disposition: NudgeCapExhausted, rounds: rounds, last_reply: round.reply,
       workspace_path: session.path)
-  // The round budget is spent. An OUTCOME, never an error: the operator reads
-  // the transcript and starts a fresh session.
+  // Formally required exhaustion arm: AWL demands a route for a loop reaching
+  // its `max`, but with the bound set beyond reach this is unreachable in
+  // practice. Kept as an OUTCOME, never an error.
   outcome rounds_spent: otherwise,
     route capped(disposition: RoundCapExhausted, rounds: rounds, last_reply: round.reply,
       workspace_path: session.path)

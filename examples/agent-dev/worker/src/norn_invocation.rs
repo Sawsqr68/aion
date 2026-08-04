@@ -1,24 +1,24 @@
-//! The norn command-line surface this worker drives, and the operator advice
-//! attached to the one norn refusal an operator cannot otherwise get past.
+//! The norn command-line surface this worker drives.
 //!
 //! The argv lives here rather than inline in the composition root so it can be
 //! asserted directly. A flag that is only ever observed through a live agent
 //! run is untested in the case that matters — which is exactly how
 //! `--account` came to be missing from the harness invocation once already
 //! (see `main.rs`).
+//!
+//! The degraded-session recognition and operator advice that used to live
+//! here were promoted into `aion_integration_norn::advice` (so the built-in
+//! `aion worker agent` verb teaches the same way); this worker now composes
+//! [`aion_integration_norn::AdvisingHarness`] with its own opt-in spelling,
+//! [`DEGRADED_SESSION_OPT_IN`].
 
-/// Norn's flag for resuming a session whose exact provider transcript can no
-/// longer be replayed.
-pub const ALLOW_DEGRADED_SESSION_FLAG: &str = "--allow-degraded-session";
+use aion_integration_norn::ALLOW_DEGRADED_SESSION_FLAG;
 
-/// Substrings identifying norn's degraded-session refusal. Both must appear:
-/// the condition (`fresh-epoch projection`) and the demand (`explicit resume
-/// approval is required`). Requiring both keeps the advice off unrelated
-/// storage errors that happen to mention an epoch.
-const DEGRADED_SESSION_MARKERS: [&str; 2] = [
-    "fresh-epoch projection",
-    "explicit resume approval is required",
-];
+/// THIS worker's spelling of the degraded-resume opt-in — the flag the
+/// operator restarts `agent-dev-worker` with. It is what the promoted advice
+/// names in the failure detail, and what `main.rs` parses; one constant so
+/// the advice can never name a flag the parser does not accept.
+pub const DEGRADED_SESSION_OPT_IN: &str = "--norn-allow-degraded-session";
 
 /// Build the ordered norn argument list for one composed harness.
 ///
@@ -38,7 +38,8 @@ const DEGRADED_SESSION_MARKERS: [&str; 2] = [
 /// inventing one here would silently override every deployment that never
 /// asked.
 ///
-/// `allow_degraded_session` appends [`ALLOW_DEGRADED_SESSION_FLAG`]. It is an
+/// `allow_degraded_session` appends
+/// [`ALLOW_DEGRADED_SESSION_FLAG`]. It is an
 /// explicit operator opt-in and has NO default: resuming degraded means the
 /// exact provider transcript could not be replayed, which is a real fidelity
 /// tradeoff and not this worker's to assume on an operator's behalf.
@@ -69,43 +70,6 @@ pub fn norn_args(
         args.push(ALLOW_DEGRADED_SESSION_FLAG.to_owned());
     }
     args
-}
-
-/// Whether `detail` is norn's degraded-session refusal.
-#[must_use]
-pub fn is_degraded_session_refusal(detail: &str) -> bool {
-    DEGRADED_SESSION_MARKERS
-        .iter()
-        .all(|marker| detail.contains(marker))
-}
-
-/// The operator advice for a failed agent round, or `None` when the failure is
-/// not the degraded-session refusal or the opt-in was already given.
-///
-/// A durable session can park for weeks — one real run parked 28 days and the
-/// engine resumed it perfectly — and in that time the agent provider can move
-/// to a new epoch. When it has, norn refuses to resume without explicit
-/// approval, and the operator sees a raw storage string with no route out.
-/// This is the route out, in the same style as the `--account` refusal: name
-/// the flag, and state the tradeoff in one line so the decision is informed.
-///
-/// The advice is withheld once the opt-in has been given: at that point norn
-/// has refused for some other reason and pointing at a flag already in the
-/// argv would send the operator in a circle.
-#[must_use]
-pub fn degraded_session_advice(detail: &str, allow_degraded_session: bool) -> Option<String> {
-    if allow_degraded_session || !is_degraded_session_refusal(detail) {
-        return None;
-    }
-    Some(format!(
-        "{detail}\n\nOPERATOR ACTION: this session outlived the agent provider's \
-         epoch, so norn will not resume it without approval. Restart this worker \
-         with --norn-allow-degraded-session to allow it. The tradeoff: the session \
-         resumes from a fresh provider epoch because its exact provider transcript \
-         cannot be replayed, so provider-side fidelity is reduced — the conversation \
-         itself is retained. Without the flag the round fails on every retry and the \
-         workflow fails with it."
-    ))
 }
 
 #[cfg(test)]

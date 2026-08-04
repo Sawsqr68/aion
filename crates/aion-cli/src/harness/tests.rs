@@ -152,16 +152,53 @@ fn a_flag_for_another_harness_is_refused_by_name() -> TestResult {
         "the refusal must name the harness being served: {message}"
     );
 
-    // And the other direction: a norn flag on an ACP worker.
+    // And the other direction: every norn flag on an ACP worker — the scalar and
+    // both repeatables, so a future edit that drops one from the attribution table
+    // fails here rather than silently accepting it.
     let mut supplied = args();
     supplied.harness = Some(String::from("acp"));
     supplied.norn_binary = Some(String::from("/opt/norn"));
+    supplied.norn_args = vec![String::from("--allow-degraded-session")];
+    supplied.norn_unset_env = vec![String::from("OPENAI_API_KEY")];
     let Err(error) = supplied.select(&Environment::default()) else {
         return Err("a norn flag on an ACP worker must be refused".into());
     };
+    let message = error.to_string();
+    for flag in ["--norn-binary", "--norn-arg", "--norn-unset-env"] {
+        assert!(
+            message.contains(flag),
+            "the refusal must name the offending flag `{flag}`: {message}"
+        );
+    }
+    Ok(())
+}
+
+/// Each new repeatable norn flag is refused on its own when serving another harness —
+/// not only in company with `--norn-binary`, which was already attributed. A flag that
+/// is only refused alongside an older one would silently pass once supplied alone.
+#[cfg(all(feature = "norn", feature = "acp"))]
+#[test]
+fn each_repeatable_norn_flag_is_refused_alone_on_a_foreign_harness() -> TestResult {
+    let mut supplied = args();
+    supplied.harness = Some(String::from("acp"));
+    supplied.norn_args = vec![String::from("--fast")];
+    let Err(error) = supplied.select(&Environment::default()) else {
+        return Err("--norn-arg alone on an ACP worker must be refused".into());
+    };
     assert!(
-        error.to_string().contains("--norn-binary"),
-        "the refusal must name the offending flag: {error}"
+        error.to_string().contains("--norn-arg"),
+        "the refusal must name --norn-arg: {error}"
+    );
+
+    let mut supplied = args();
+    supplied.harness = Some(String::from("acp"));
+    supplied.norn_unset_env = vec![String::from("OPENAI_API_KEY")];
+    let Err(error) = supplied.select(&Environment::default()) else {
+        return Err("--norn-unset-env alone on an ACP worker must be refused".into());
+    };
+    assert!(
+        error.to_string().contains("--norn-unset-env"),
+        "the refusal must name --norn-unset-env: {error}"
     );
     Ok(())
 }
@@ -451,7 +488,11 @@ fn the_norn_binary_is_optional_and_overridable() -> TestResult {
     );
     assert_eq!(
         derived,
-        HarnessConfig::Norn(super::settings::NornConfig { binary: None }),
+        HarnessConfig::Norn(super::settings::NornConfig {
+            binary: None,
+            args: Vec::new(),
+            unset_env: Vec::new(),
+        }),
         "no binary configured means the adapter's own `norn`-on-PATH default"
     );
 
@@ -463,7 +504,119 @@ fn the_norn_binary_is_optional_and_overridable() -> TestResult {
         configured,
         HarnessConfig::Norn(super::settings::NornConfig {
             binary: Some(std::path::PathBuf::from("/opt/homebrew/bin/norn")),
+            args: Vec::new(),
+            unset_env: Vec::new(),
         })
+    );
+    Ok(())
+}
+
+/// A `--norn-unset-env` entry that is not a plain variable name is refused rather
+/// than reinterpreted: a `KEY=VALUE` pair is the shape of a SET (this flag removes),
+/// and a blank entry is an unset-template mistake no environment can carry.
+#[cfg(feature = "norn")]
+#[test]
+fn a_malformed_norn_unset_env_entry_is_refused() -> TestResult {
+    for malformed in ["OPENAI_API_KEY=", "OPENAI_API_KEY=abc", "=", "   "] {
+        let mut supplied = args();
+        supplied.norn_unset_env = vec![malformed.to_owned()];
+        let mut missing = Vec::new();
+        let Err(error) = supplied
+            .collect(
+                HarnessKind::Norn.settings(),
+                &Environment::default(),
+                &mut missing,
+            )
+            .parse()
+        else {
+            return Err(format!("`{malformed}` is not a variable name and must be refused").into());
+        };
+        assert!(
+            error.to_string().contains("--norn-unset-env"),
+            "the refusal names the setting: {error}"
+        );
+    }
+    Ok(())
+}
+
+/// THE ARGV-PARITY TEST: the reference session-pinned invocation the assistant's
+/// hand-written worker composes (`examples/agent-dev/worker/src/norn_invocation.rs`)
+/// is reproduced by `--norn-arg` pass-through, asserted on the COMPOSED child
+/// invocation with the run-identity placeholders expanded. A flag only observed
+/// through a live agent run is untested in the case that matters — which is exactly
+/// how `--account` once went missing from a harness invocation.
+#[cfg(all(feature = "norn", feature = "liminal-transport"))]
+#[test]
+fn the_norn_argv_pass_through_reaches_the_child_expanded_and_in_order() -> TestResult {
+    use aion_core::{ActivityId, ContentType, Payload, WorkflowId};
+    use aion_integrations::AgentRunSpec;
+
+    // Exactly what the operator types, one `--norn-arg` per element.
+    let mut supplied = args();
+    supplied.norn_args = [
+        "--workspace-root",
+        "/tmp/{workflow_id}/repo",
+        "-C",
+        "/tmp/{workflow_id}/repo",
+        "--session-id",
+        "{workflow_id}-{activity_type}",
+        "--resume-if-exists",
+        "--account",
+        "default",
+        "--fast",
+    ]
+    .map(str::to_owned)
+    .to_vec();
+    supplied.norn_unset_env = vec![String::from("OPENAI_API_KEY")];
+
+    let mut missing = Vec::new();
+    let config = supplied
+        .collect(
+            HarnessKind::Norn.settings(),
+            &Environment::default(),
+            &mut missing,
+        )
+        .parse()?;
+    assert!(missing.is_empty(), "nothing was missing: {missing:?}");
+    let super::settings::HarnessConfig::Norn(norn) = config else {
+        return Err("a norn selection must produce a norn configuration".into());
+    };
+
+    let harness = super::compose::build_norn(&norn);
+    let workflow_id = WorkflowId::new_v4();
+    let spec = AgentRunSpec::new(
+        workflow_id.clone(),
+        ActivityId::from_sequence_position(1),
+        1,
+        "assistant",
+        Payload::new(ContentType::Json, b"\"prompt\"".to_vec()),
+    );
+    let invocation = harness.invocation(&spec);
+
+    let clone = format!("/tmp/{workflow_id}/repo");
+    assert_eq!(
+        invocation.argv,
+        vec![
+            String::from("--protocol"),
+            String::from("jsonrpc"),
+            String::from("--workspace-root"),
+            clone.clone(),
+            String::from("-C"),
+            clone,
+            String::from("--session-id"),
+            format!("{workflow_id}-assistant"),
+            String::from("--resume-if-exists"),
+            String::from("--account"),
+            String::from("default"),
+            String::from("--fast"),
+        ],
+        "the child argv must be the operator's arguments, in order, with the \
+         run-identity placeholders expanded"
+    );
+    assert_eq!(
+        invocation.env_removed,
+        vec![String::from("OPENAI_API_KEY")],
+        "--norn-unset-env must reach the child as an environment removal"
     );
     Ok(())
 }

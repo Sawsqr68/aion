@@ -1,0 +1,362 @@
+//! The assistant workflow: an operator-paced aion-authoring chat session,
+//! authored in AWL.
+//!
+//! PROVISION IS SERVER-RUN: `assistant_provision` declares a command body, so
+//! the server executes it from the deployed contract as the server's own user,
+//! with no sandbox — no worker serves it. Its environment is cleared to PATH
+//! only and its cwd is inherited from the server process.
+//!
+//! Pure orchestration over one server-run provisioning command and one
+//! recorded worker action:
+//!
+//!   assistant_provision -> [ assistant round ; await operator ]*   [bounded]
+//!
+//! Round one dispatches the `assistant` agent action with the opening prompt
+//! THIS DOCUMENT composes — the full working contract (the consts below), the
+//! repository-attached or scratch branch fragment, and the operator's
+//! objective. Every later round is the operator's continuation message
+//! VERBATIM, dispatched into the SAME norn session (the worker pins
+//! `{workflow_id}-assistant` + `--resume-if-exists`, so repeated dispatches of
+//! the one action type resume one conversation and the contract is never
+//! re-sent).
+//!
+//! Between rounds the session parks on the ONE control signal,
+//! `assistant_continue`. Continue and end share the signal name and
+//! discriminate in the payload: `end: true` finishes cleanly, a non-blank
+//! `message` starts the next round, and a blank message is a no-op nudge that
+//! is absorbed by the inner wait loop without spending a round.
+//!
+//! WHY THIS EXISTS: the Gleam-authored `assistant` package cannot start at all
+//! under queue-routed serving. A project manifest's `DeclaredActivity` has one
+//! field, so every activity is committed UNSCOPED and start is refused with
+//! `NO_QUEUE_DECLARATION` (docs/design/aion-authoring/
+//! GLEAM-PATH-CANNOT-START-FINDING.md). AWL emits a scoped contract, so it is
+//! the only surface that can author this workflow. The differences between
+//! this document and the Gleam original are recorded in full in
+//! docs/design/aion-authoring/ASSISTANT-AWL-PORT.md — read it before changing
+//! anything here.
+//!
+//! DELIBERATE OMISSION — no `timeout` in the header. An agent round carries no
+//! timeout by design (a wedged round is cancelled or intervened, never timed
+//! out), and the session itself is operator-paced: a real run has parked on
+//! this signal for 28 days and resumed healthy. A workflow timeout would kill
+//! exactly the sessions this workflow exists to keep alive.
+workflow assistant
+  // The operator's opening ask. Must not be blank — there is nothing to open
+  // the session with. AWL has no input-validation construct, so unlike the
+  // Gleam original this is documented rather than enforced (see the ledger).
+  input objective: String
+  // The aion repository the session grounds its answers in: a local path or
+  // clone URL. Empty is the documented "no repository, scratch workspace"
+  // mode — the assistant then says what it cannot verify.
+  input repo_path: String
+  // Where session workspaces are created on the SERVER'S host, e.g. the
+  // expansion of `~/.aion/clones`. The declared provision body runs with its
+  // environment cleared to PATH only — no HOME to expand — and its cwd
+  // inherited from the server, so the caller states the root explicitly and
+  // the workspace path is composed in this document as
+  // `workspace_root + "/" + workflow.id + "/repo"`.
+  input workspace_root: String
+  // The session's agent-round budget. The product decision is 50; AWL has no
+  // input defaults, so the caller states it. Spending it is the
+  // `RoundCapExhausted` disposition — an outcome, never an error.
+  input max_rounds: Int
+  // How many consecutive blank nudges one round will absorb before the
+  // session gives up waiting. AWL requires every loop to be bounded, so the
+  // Gleam version's unbounded "keep waiting" cannot be reproduced; this is
+  // the explicit ceiling that replaces it.
+  input max_nudges: Int
+
+  // The ONE control signal the session listens on. Both fields are REQUIRED
+  // on the wire. Send `{"message": "...", "end": false}` to continue and
+  // `{"message": "", "end": true}` to finish.
+  //
+  // The reason has CHANGED and the requirement has not. AWL used to be unable
+  // to read the value of an optional field at all — narrowing keyed on a
+  // binding name, so `nudge.end` could never become a `Bool`. That is fixed
+  // (#97-B): a guard now proves a PATH, and `when nudge.end is present and
+  // nudge.end` reads it. What still forces both fields is this flow's own
+  // shape, not the language: `nudge.end` is read where nothing has proved it
+  // — inside the `until` condition AND inside the `Round(...)` construction in
+  // the loop body, which sits under no guard. Making the fields optional means
+  // restructuring those reads behind guard arms, which changes the operator's
+  // wire contract on a session that can be parked for weeks. That is a
+  // deliberate change to make on purpose, not a consequence of a checker fix.
+  signal assistant_continue: Continuation
+
+  // The read-only surface: what an operator gets back from
+  // `POST /workflows/query {"query_name": "assistant_status"}`. It reads live
+  // in-memory state, appends no event, and answers instantly — the one thing
+  // that proves a session parked for weeks is alive rather than wedged. Same
+  // name and same shape as the Gleam original's query.
+  query assistant_status: AssistantStatus
+
+  outcome ended:   type Session, route success
+  outcome capped:  type Session, route success
+  outcome stalled: type Session, route success
+
+// ---------------------------------------------------------------------------
+// The opening prompt, as document constants.
+//
+// Ported from examples/agent-dev/worker/src/handlers/opening_prompt.rs — the
+// worker composed this text when provisioning also materialised skill
+// resources into the workspace; the declared body materialises nothing, so
+// the prompt now points at `examples/assistant/resources/` inside the clone
+// (attached case) or at the public clone command (scratch case), and the
+// composition lives HERE, next to the branch that selects it.
+//
+// Raw strings are VERBATIM: every newline and space between the `"""`
+// delimiters is part of the value, which is why several constants open or
+// close mid-sentence — the concatenation seams in step `session` are exact.
+// ---------------------------------------------------------------------------
+
+// The contract's opening paragraph and the head of the workspace note, up to
+// the workspace path the document splices in.
+const contract_head = """You are the aion AWL authoring assistant: a long-running session helping an operator understand aion and author checked `.awl` workflows. The operator talks to you through the aion ops console; each of their messages arrives as a new prompt in this same session, so you keep full memory of the conversation.
+
+## Your workspace
+Your working directory is `"""
+
+// Closes the workspace path and states the confinement contract.
+const workspace_confinement = """`. Your file tools (read/write/edit) are confined to it; shell commands start there but may read other paths on the host."""
+
+// Workspace-note tail, scratch branch.
+const scratch_workspace = """ It is a scratch git workspace — no aion repository was provided for this session."""
+
+// Workspace-note tail, repository-attached branch: opens before the
+// operator's `repo_path` and closes after it.
+const attached_workspace_open = """ It is a clone of the aion repository at `"""
+const attached_workspace_close = """`; author `.awl` workflows inside the clone (e.g. under `examples/`)."""
+
+// Ground-truth head, shared by both branches. Opens with the blank line that
+// separates it from the workspace note and deliberately ends mid-sentence:
+// each branch fragment completes the sentence.
+const ground_truth_head = """
+
+## Ground truth
+Your PRIMARY resources are your skill documents — the distilled operating manual for this exact job, kept in the aion repository at `examples/assistant/resources/`:
+- `ENVIRONMENT.md` — AWL preflight, workspace semantics, and the local/server boundary (read FIRST)
+- `AWL-AUTHORING.md` — the checked `.awl` authoring method from contract through observation
+- `COMMANDS.md` — exact AWL check/format/schema/emit/deploy/run and observation commands
+- `AWL-REFERENCE.md` — the checked AWL workflow language surface
+- `WORKERS.md` — current worker layers, task queues, shell manifests, and the host-native shell-worker law
+For anything deeper, consult the aion repository itself — never answer repo-level questions from memory"""
+
+// Ground-truth tail, repository-attached branch.
+const attached_ground_truth = """. Your workspace IS a clone of the aion repository — read the skill documents, and everything else, directly from the clone."""
+
+// Ground-truth tail, scratch branch. There are no skill documents on disk
+// until the assistant clones the repository itself.
+const scratch_ground_truth = """. No repository was attached to this session, so the skill documents are not on disk yet; when you need them — or anything else in the repository — clone it into your workspace: `git clone --depth 1 https://github.com/ablative-io/aion.git`. The repository is private, so the clone only succeeds where this host has git credentials — if it fails, say so, answer only what you can stand behind, and note to the operator that repo-dependent questions need either host credentials or a session started with the repository path set."""
+
+// Everything after the branch point: the valuable-paths list, the authoring
+// method, the honesty rules, and the heading the operator's objective is
+// appended under.
+const contract_tail = """
+
+The most valuable repository paths:
+- `examples/awl-hello/awl_hello.awl` — minimal checked workflow
+- `examples/dev-brief/awl/` and `examples/remediation-packet/awl/` — production AWL flows and child workflows
+- `crates/aion-awl/tests/fixtures/rev2/**/valid/*.awl` — accepted grammar and checker proofs
+- `crates/aion-awl/src/` — parser, checker, printer, compiler
+- `crates/aion-cli/src/awl.rs`, `one_motion.rs`, and `main.rs` — the real check/emit/deploy/run commands
+Quote paths when you cite them, so the operator can follow.
+
+## How to author an AWL workflow
+AWL source (`.awl`) is the authoring truth. Do not substitute a language SDK project or generated compiler output. Follow checked examples and the current checker, not memory.
+The method:
+1. Read `ENVIRONMENT.md`, `AWL-AUTHORING.md`, and `AWL-REFERENCE.md`; inspect the closest checker-valid `.awl` example.
+2. Author the workflow header, terminal outcomes, types, worker action requirements, children/subflows, and steps in one `.awl` document. World-touching work is a typed worker action; durable orchestration stays in AWL.
+3. Use explicit outcomes for selection, explicit flow vocabulary for parallel/sequential work, and explicit bounds for every loop or backward route. Never invent syntax.
+4. Run `aion awl check FILE.awl` after each structural change. Treat every diagnostic as a source defect; optionally run `aion awl fmt`, inspect the diff, and check again.
+5. Read `WORKERS.md` before promising an action implementation. The worker name is its task queue, a declaration does not create a worker, and shell workers are host-native.
+6. Deploy/run the checked `.awl` directly through the ops console or with `aion deploy FILE.awl` / `aion run FILE.awl --input 'JSON'`, then observe the durable run in the console. Never start or restart a server as part of authoring.
+
+## Honesty rules
+- Distinguish what you VERIFIED (a file you read, a command you ran in this session) from what you believe. Say "I have not verified this" when you have not.
+- Never invent AWL syntax or worker capability. When unsure, read a checker-valid fixture or the parser/checker and run `aion awl check`.
+- If the repository is not available to you, say so and answer only what you can stand behind.
+
+## The operator's objective
+"""
+
+/// Payload of the `assistant_continue` signal.
+type Continuation {
+  /// The operator's next prompt, sent to the agent verbatim. Blank is a no-op
+  /// nudge that does not spend a round.
+  message: String,
+  /// True finishes the session cleanly as `OperatorEnded`.
+  end: Bool,
+}
+
+/// How the session ended. All three are CLEAN completions — the operator
+/// ended it, or one of the two explicit budgets was spent. None is an error.
+type Disposition = OperatorEnded | RoundCapExhausted | NudgeCapExhausted
+
+/// What the `assistant_status` query reports: which stage the session is in,
+/// and how many agent rounds it has run.
+///
+/// `round` is OPTIONAL where the Gleam original's is not, and the difference is
+/// a language fact, not a choice. A loop's `counting` binding is readable only
+/// AFTER the loop (`crates/aion-awl/src/emitter/loops.rs` removes it from the
+/// body scope, and the checker refuses a body reference as "bound on some path
+/// but not guaranteed"), and AWL has no arithmetic, so a round index cannot be
+/// threaded through the loop either. Reporting `0` from inside the loop would
+/// tell an operator that a session in round three is in round zero, which is
+/// worse than saying nothing: absent means "this document cannot prove it
+/// here", and every round number it DOES report is true.
+type AssistantStatus { phase: String, round: Int? }
+
+/// The recorded outcome of the server-run provision command. A bodied action's
+/// result must be a record over the command outcome members (`exit_code`,
+/// `stdout`, `stderr`); `exit_code` is always 0 here, because a non-zero exit
+/// fails the dispatch and retries instead of returning. The workspace path and
+/// the opening prompt — which the worker-served provision used to return — are
+/// composed in this document instead.
+type Provisioned { exit_code: Int }
+
+/// The one value the round loop threads, and the ONLY thing readable after
+/// the loop: the prompt the next round will send, the last reply received,
+/// whether the operator ended the session, and whether the wait loop gave up.
+///
+/// A binding made inside the nested wait loop is not guaranteed on every path
+/// out of the outer loop, so the continuation itself cannot be read after the
+/// loop — everything the outcomes need has to be folded into this value while
+/// it is still in scope.
+///
+/// `stalled` is LOAD-BEARING, not bookkeeping. An AWL loop exits identically
+/// whether `until` came true or `max` was reached — the lowering returns
+/// `Ok(var)` on both paths (`crates/aion-awl/src/emitter/loops.rs:86-121`),
+/// with no flag and no error. So a wait loop that exhausts its nudge budget
+/// falls out holding a blank message, and WITHOUT this field the outer
+/// `until` would be false and the session would dispatch another agent round
+/// on an empty prompt, over and over, until the round budget was spent.
+/// `stalled` is the only thing that makes the two exits distinguishable.
+type Round { prompt: String, reply: String, ended: Bool, stalled: Bool }
+
+/// The session's recorded result: how it ended, how many agent rounds ran, the
+/// final agent reply, and the workspace path (which persists for inspection).
+type Session { disposition: Disposition, rounds: Int, last_reply: String, workspace_path: String }
+
+worker default
+  /// Materialises the session workspace at `<workspace_root>/<run_id>/repo`.
+  /// SERVER-RUN, NO SANDBOX: this declared body executes on the server host as
+  /// the server's own user, with env cleared to PATH only and cwd inherited
+  /// from the server.
+  ///
+  /// The script's collision discipline is load-bearing: bodied actions retry
+  /// by default, and a clone into an existing directory fails, so a retry
+  /// after a partial earlier attempt would wedge the loop terminally. A stale
+  /// `<workspace_root>/<run_id>` is therefore renamed aside to
+  /// `<run_id>.superseded-<stamp>-<pid>` — never deleted — and the claim
+  /// proceeds fresh. Empty `repo_path` is the scratch mode: the repo directory
+  /// is created and `git init`ed instead of cloned.
+  ///
+  /// `run_id` must be the workflow's own id: it keys the directory AND must
+  /// equal the id the agent-harness `--workspace-root` template expands to, or
+  /// the agent works somewhere other than where it was provisioned.
+  ///
+  /// BYTE-IDENTICAL with `assistant_spike.awl` by requirement, not
+  /// coincidence: the two documents share queue `default`, and retained
+  /// contracts declaring DIFFERENT bodies for one action name refuse every
+  /// dispatch of it terminally.
+  action assistant_provision(workspace_root: String, run_id: String, repo_path: String) -> Provisioned
+    run "sh -c 'set -eu; case \"$2\" in \"\"|.|..|*/*) echo provision: run_id must be a single path component >&2; exit 9;; esac; if [ -z \"$1\" ]; then echo provision: workspace_root must not be empty >&2; exit 9; fi; mkdir -p \"$1\"; if [ -e \"$1/$2\" ]; then mv \"$1/$2\" \"$1/$2.superseded-$(date +%Y%m%dT%H%M%S)-$$\"; fi; mkdir \"$1/$2\"; if [ -z \"$3\" ]; then mkdir -p \"$1/$2/repo\"; git init \"$1/$2/repo\"; else git clone \"$3\" \"$1/$2/repo\"; fi' -- $workspace_root $run_id $repo_path"
+
+  /// One agent round under the norn-harness contract: ONE prompt string in,
+  /// ONE terminal-text string out. NO timeout, by design. The worker pins one
+  /// norn session per action type per run, so repeated dispatches resume one
+  /// conversation.
+  ///
+  /// The `agent` marker is what makes that routing readable from HERE. Before
+  /// it, the worker binary carried the same fact as a hand-written list of
+  /// action names, so this document could declare an agent round and the
+  /// worker had no way to know it had.
+  action assistant(prompt: String) -> String
+    agent
+
+step provision
+  // Registered BEFORE the activity dispatch: provisioning clones a repository,
+  // so it is the first stretch of a run long enough for an operator to ask
+  // about, and zero rounds have run.
+  answer assistant_status(phase: "provisioning", round: 0)
+  assistant_provision(workspace_root: workspace_root, run_id: workflow.id, repo_path: repo_path)
+  // The workspace path the body just materialised, composed HERE because a
+  // bodied action's result is capped at the command outcome members and cannot
+  // carry it. Must stay in lockstep with the body's `$1/$2/repo`.
+  workspace_root + "/" + workflow.id + "/repo" -> workspace_path
+
+step situate after provision
+  // The one branch in the contract text: whether a repository was attached.
+  // Same test the body's script makes on `$3` — empty means scratch.
+  outcome scratch: when repo_path == "", route scratch_note
+  outcome attached: otherwise, route attached_note
+
+step scratch_note
+  // Both branch steps bind the SAME name and converge on `session`, so the
+  // binding is guaranteed on every path in and the checker accepts the read.
+  scratch_workspace + ground_truth_head + scratch_ground_truth -> situation
+  route session
+
+step attached_note
+  attached_workspace_open + repo_path + attached_workspace_close + ground_truth_head + attached_ground_truth -> situation
+  route session
+
+step session
+  // The round-one prompt: the full working contract with the workspace path
+  // and branch fragment spliced in, then the operator's objective under the
+  // heading `contract_tail` ends with. The seams are exact — see the const
+  // block's note on verbatim raw strings.
+  contract_head + workspace_path + workspace_confinement + situation + contract_tail + objective -> opening_prompt
+  // The outer loop is one agent round plus the operator wait, bounded by the
+  // round budget. The body runs at least once, so a session always gets one
+  // round even at `max_rounds` of 1.
+  //
+  // The inner loop is the operator wait, and it is where the nudge tolerance
+  // lives: it re-parks on `assistant_continue` until the operator either ends
+  // the session or sends a non-blank message, absorbing blank nudges without
+  // spending an agent round. AWL demands a bound on it, so the tolerance is
+  // finite where the Gleam version's was not.
+  //
+  // `stalled` folds the inner loop's give-up into the threaded value, and the
+  // outer `until` tests it. Both halves are required: an AWL loop cannot
+  // report WHY it exited, so without this the exhausted wait would fall
+  // through and the next iteration would dispatch an agent round on an empty
+  // prompt. See `Round`.
+  loop round = Round(prompt: opening_prompt, reply: "", ended: false, stalled: false) counting rounds
+    // Re-registered every pass, which is what makes the answer LIVE: the value
+    // is computed here, from the bindings in scope here, and replay re-runs the
+    // statement rather than evaluating anything at a yield point.
+    answer assistant_status(phase: "working")
+    assistant(prompt: round.prompt) -> reply
+    // The long park. A real session has sat on this signal for 28 days; this is
+    // the answer that says so.
+    answer assistant_status(phase: "awaiting_operator")
+    loop nudge = Continuation(message: "", end: false)
+      wait assistant_continue -> nudge
+      until nudge.end or nudge.message != ""
+      max max_nudges
+    Round(prompt: nudge.message, reply: reply, ended: nudge.end, stalled: not nudge.end and nudge.message == "") -> round
+    until round.ended or round.stalled
+    max max_rounds
+  // Past the loop the counter IS readable, so the final answer carries the
+  // real round count — the one point in the run where both fields are provable.
+  answer assistant_status(phase: "settled", round: rounds)
+
+  // Three ways out, all read off the threaded value — see `Round` for why the
+  // continuation itself is not readable here. Ordered deliberately: an
+  // operator who ends with a blank message sets BOTH `ended` and the blank
+  // condition, and their intent wins.
+  outcome operator_ended: when round.ended,
+    route ended(disposition: OperatorEnded, rounds: rounds, last_reply: round.reply,
+      workspace_path: workspace_path)
+  // The wait loop spent its nudge budget without the operator ever deciding,
+  // so the session ends here rather than dispatching another round.
+  outcome nudges_spent: when round.stalled,
+    route stalled(disposition: NudgeCapExhausted, rounds: rounds, last_reply: round.reply,
+      workspace_path: workspace_path)
+  // The round budget is spent. An OUTCOME, never an error: the operator reads
+  // the transcript and starts a fresh session.
+  outcome rounds_spent: otherwise,
+    route capped(disposition: RoundCapExhausted, rounds: rounds, last_reply: round.reply,
+      workspace_path: workspace_path)

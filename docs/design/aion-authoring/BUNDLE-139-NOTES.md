@@ -45,6 +45,88 @@ measuring stick: everything it does must become the product's own motion.
 4. **Prereq floor**: norn stays a prerequisite until the ACP harness or a
    bundled agent changes that; say so plainly in the verb's output.
 
+## Scoped build plan (scout ratified 2026-08-04, seat's decisions)
+
+The scout's decisive findings, verified with cites:
+
+- **A declared body cannot return `Workspace{path, opening_prompt}`** —
+  bodied-action results are capped at a subset of `{exit_code: Int,
+  stdout: Str, stderr: Str}` (checker/bodies.rs:24-28). So provision
+  SPLITS: prompt composition moves into the document (consts +
+  triple-quoted raw strings + `+` concat — proven by
+  ergonomics/valid/flow_vocab_b1.awl), and the body only creates the
+  workspace.
+- **Declared bodies run with cwd inherited, env = PATH ONLY** (no HOME,
+  no AION_*; shell/action.rs:161-181) → the workflow gains a
+  `workspace_root` input; the workspace path is composed in AWL by
+  string concat.
+- **Resources cannot ride the package today** (no files/ archive family
+  — unknown prefixes are refused or silently dropped on rewrite,
+  package.rs:364-442; nothing materializes packages on disk). MVP: the
+  prompt points at `examples/assistant/resources/` inside the clone
+  (attached-repo case) or at the public clone command (scratch case).
+  No curl. The files/ family is the proper later build.
+- **`aion worker agent --harness norn` builds argv `--protocol jsonrpc`
+  and NOTHING else** — no session pin, no account, no workspace-root
+  confinement (compose.rs:46-54). Ten missing elements vs the crate's
+  norn_invocation.rs.
+
+**Leg A — the documents + body (no Rust):** assistant.awl and
+assistant_spike.awl (shared queue `default` — bodies must match
+byte-for-byte or dispatch wedges terminally, declared_body.rs:242-247):
+provision becomes `run "sh -c '<script>' -- $workspace_root $run_id
+$repo_path"` with rename-aside collision discipline reproduced IN the
+script (retry-wedge risk: clone-into-existing fails and bodies retry by
+default); prompt ported from opening_prompt.rs into consts; the
+two-branch workspace/ground-truth lines resolved either by when/otherwise
+binding or by the body echoing the branch fragment on stdout —
+`aion awl check` is the oracle, checker binding rules decide the shape.
+State the posture change plainly: provision now runs as the server's
+user, no sandbox (DECLARED-COMMANDS contract).
+
+**Leg B — the built-in norn harness reaches parity (Rust):**
+`--norn-arg` repeatable pass-through (allow_hyphen_values, mirror
+--acp-arg exactly, settings.rs:149-159) threaded into build_norn;
+`--norn-unset-env` repeatable (generic, operator-controlled — covers the
+OPENAI_API_KEY force-OAuth case without baking policy in); promote
+AdvisingHarness's degraded-session advice out of the example into
+aion-integration-norn so the built-in path gives the same route-out.
+Parity proven by a test asserting the COMPOSED argv (--check does not
+show argv; the --account lesson, norn_invocation.rs:6-8).
+
+**Leg C (after A+B):** embed the document in the binary + the verb;
+#27 endgame unchanged.
+
+## 2026-08-04 late: Tom's two rulings reshape leg A
+
+Mid-demo, Tom hit the start refusal (`max_rounds`/`max_nudges` required)
+and ruled, verbatim force: hand-supplying those caps is "ridiculous", and
+**"there should be no max rounds"**. Actions taken at once:
+
+- **Hotfix deployed + routed**: `assistant` version `6f43c809` — both cap
+  inputs REMOVED from the workflow; the loops carry `max 1000000` (AWL
+  demands a literal bound on every loop; this is the formality set beyond
+  reach, not a budget). Start input is now `objective` + `repo_path` only.
+  Verified live: empty-input probe names exactly those two fields.
+  `examples/assistant/awl/assistant.awl` in-tree IS this deployed version.
+  Old `67128ff6` stays resident; rollback is `aion route`.
+- **Leg A is REWORKED, not landed.** The bodied-provision drafts added a
+  `workspace_root` input (forced by the PATH-only body environment) — a
+  third required start field, which the same ruling forbids. The drafts
+  are parked byte-for-byte in `139-drafts/` beside this file. Before leg A
+  can land, the workspace location must come from somewhere that is not
+  the operator's start input. Candidates, undecided (discuss values before
+  implementing): the body's inherited cwd (bodies inherit the server's
+  cwd), or a server-side setting the body can see. The coupling to the
+  worker's `--norn-arg --workspace-root` argv must move with it — the
+  provision body and the worker argv must agree on one path.
+- The example crate's `descriptors_tests.rs` fixes (contract-derived
+  assertions) stay — they hold for any document shape.
+
+Known risks carried: cancellation of declared bodies is held-not-wired
+(a big clone won't stop); the live route cut needs `aion route` planning
+(old 67128 stays resident); both documents change identically.
+
 ## Cross-references
 
 - Live assistant is 67128ff6 (current document), upgraded from d9774285

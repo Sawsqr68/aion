@@ -31,6 +31,14 @@
 //!   function's own documentation is explicit about how the two can disagree.
 //! - [`protocol`] names Norn's wire contract; [`translate`] is the pure, independently tested
 //!   translation between that contract and the neutral types.
+//! - [`advice`] carries the operator route-out for Norn's degraded-session refusal:
+//!   [`AdvisingHarness`] decorates any composed harness so that specific refusal surfaces with
+//!   the restart flag that gets past it, spelled the way the deployment's own command line
+//!   spells it. Promoted here from the assistant's example worker so every composition root —
+//!   the built-in `aion worker agent` verb included — teaches the same way.
+//! - [`NornInvocation`] is the previewable child invocation ([`NornHarness::invocation`]): the
+//!   spawn path is built from it, so a composition root can assert the exact argv and child
+//!   environment it composed without running an agent.
 //!
 //! [`InterventionCapabilities`]: aion_core::InterventionCapabilities
 //!
@@ -42,10 +50,15 @@
 //! [`AgentSession::intervene`]: aion_integrations::AgentSession::intervene
 //! [`AgentSession::wait_result`]: aion_integrations::AgentSession::wait_result
 
+pub mod advice;
 pub mod harness;
 pub mod protocol;
 pub mod session;
 pub mod translate;
 
-pub use harness::{NornHarness, registration_capabilities};
+pub use advice::{
+    ALLOW_DEGRADED_SESSION_FLAG, AdvisingHarness, argv_allows_degraded_session,
+    degraded_session_advice, is_degraded_session_refusal,
+};
+pub use harness::{NornHarness, NornInvocation, registration_capabilities};
 pub use session::NornSession;

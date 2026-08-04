@@ -40,15 +40,22 @@
 //! there is no wait-forever setting, because a worker must not be hung by an agent
 //! that ignores EOF.
 //!
-//! # Why two settings have no environment variable
+//! # Why the repeatable settings have no environment variable
 //!
-//! `--acp-arg` and `--acp-env` are repeatable and ORDERED, and every other setting's
-//! environment form is a single string. Packing an ordered list of arbitrary strings
-//! into one variable needs a separator that no value may contain, and neither an ACP
-//! argument nor an environment value carries that guarantee — a wrongly split argument
-//! would launch the agent in the wrong mode, which is the exact failure the
-//! "nothing is inferred" rule exists to prevent. So they are supplied as repeated
-//! flags, where the shell has already done the quoting correctly.
+//! `--acp-arg`, `--acp-env`, and `--norn-arg` are repeatable and ORDERED, and every
+//! other setting's environment form is a single string. Packing an ordered list of
+//! arbitrary strings into one variable needs a separator that no value may contain,
+//! and neither an agent argument nor an environment value carries that guarantee — a
+//! wrongly split argument would launch the agent in the wrong mode, which is the exact
+//! failure the "nothing is inferred" rule exists to prevent. So they are supplied as
+//! repeated flags, where the shell has already done the quoting correctly.
+//!
+//! `--norn-unset-env` is a repeatable set of NAMES rather than an ordered list, but a
+//! comma-separated encoding is still not unambiguous: an environment variable name may
+//! contain any byte except `=` and NUL, commas included, so a split could silently
+//! turn one exotic name into two wrong ones — and a variable the operator believes is
+//! stripped from the agent's environment would still reach it. Flag only, for the same
+//! reason.
 //!
 //! # A setting for the harness you are NOT serving is refused
 //!
@@ -84,6 +91,10 @@ const HARNESS_ENV: &str = "AION_AGENT_HARNESS";
 const NORN_BINARY_FLAG: &str = "--norn-binary";
 /// Env: the `norn` binary to launch.
 const NORN_BINARY_ENV: &str = "AION_NORN_BINARY";
+/// One `norn` argument (repeatable, order preserved).
+const NORN_ARG_FLAG: &str = "--norn-arg";
+/// One variable name removed from the spawned `norn`'s environment (repeatable).
+const NORN_UNSET_ENV_FLAG: &str = "--norn-unset-env";
 /// The ACP agent executable.
 const ACP_COMMAND_FLAG: &str = "--acp-command";
 /// Env: the ACP agent executable.
@@ -140,6 +151,34 @@ pub(crate) struct HarnessArgs {
     /// worker's `PATH`. Env: `AION_NORN_BINARY`.
     #[arg(long = "norn-binary")]
     pub(crate) norn_binary: Option<String>,
+    /// One argument for the spawned `norn`. Repeat it; order is preserved.
+    ///
+    /// Flag only, deliberately: an ordered list of arbitrary strings has no safe
+    /// single-variable encoding. Hyphen-leading values are accepted verbatim, because
+    /// the arguments an operator most needs to pass ARE flags (`--session-id`,
+    /// `--resume-if-exists`, `--account`): without that they would be swallowed as
+    /// unknown arguments of `aion` itself.
+    ///
+    /// The adapter expands two run-identity placeholders in each argument at spawn
+    /// time — `{workflow_id}` and `{activity_type}`; any other `{...}` text passes
+    /// through literally. So `--norn-arg --session-id --norn-arg
+    /// "{workflow_id}-{activity_type}" --norn-arg --resume-if-exists` pins one
+    /// continuous norn session per (run, round), across restarts and weeks of sleep.
+    #[arg(long = "norn-arg", allow_hyphen_values = true)]
+    pub(crate) norn_args: Vec<String>,
+    /// An environment variable REMOVED from the spawned `norn`. Repeatable.
+    ///
+    /// Applied to the CHILD only, and removals win over inherited and explicitly set
+    /// values alike. Use it to strip ambient configuration the agent must not see —
+    /// `--norn-unset-env OPENAI_API_KEY` forces norn onto its OAuth login when a stray
+    /// ambient key would otherwise take precedence and fail.
+    ///
+    /// Flag only, deliberately: a variable name may contain any byte except `=` and
+    /// NUL, so even a comma-separated single-variable encoding could split one exotic
+    /// name into two wrong ones — and a variable believed stripped would still reach
+    /// the agent.
+    #[arg(long = "norn-unset-env", value_name = "KEY")]
+    pub(crate) norn_unset_env: Vec<String>,
     /// The ACP agent executable, passed to the child verbatim.
     ///
     /// Required by the `acp` harness: ACP has no standard launch flag and nothing can
@@ -226,6 +265,10 @@ pub(crate) enum Supplied {
     Norn {
         /// The `norn` binary, or `None` for the adapter's own `PATH` default.
         binary: Option<String>,
+        /// The extra `norn` arguments, in order.
+        args: Vec<String>,
+        /// The variable names to remove from the spawned child's environment.
+        unset_env: Vec<String>,
     },
     /// The `acp` harness's supplied settings.
     Acp {
@@ -267,6 +310,11 @@ pub(crate) enum HarnessConfig {
 pub(crate) struct NornConfig {
     /// The binary to launch, or `None` to take the adapter's `norn`-on-`PATH` default.
     pub(crate) binary: Option<PathBuf>,
+    /// Extra arguments appended to every spawned `norn`, in the order supplied. The
+    /// adapter expands `{workflow_id}` / `{activity_type}` in each at spawn time.
+    pub(crate) args: Vec<String>,
+    /// Environment variables removed from every spawned `norn` child.
+    pub(crate) unset_env: Vec<String>,
 }
 
 /// The `acp` harness's validated configuration.
@@ -399,6 +447,12 @@ impl HarnessArgs {
             ),
         ];
         let lists = [
+            (HarnessSettings::Norn, NORN_ARG_FLAG, &self.norn_args),
+            (
+                HarnessSettings::Norn,
+                NORN_UNSET_ENV_FLAG,
+                &self.norn_unset_env,
+            ),
             (HarnessSettings::Acp, ACP_ARG_FLAG, &self.acp_args),
             (HarnessSettings::Acp, ACP_ENV_FLAG, &self.acp_env),
         ];
@@ -433,8 +487,12 @@ impl HarnessArgs {
         match harness {
             HarnessSettings::Norn => Supplied::Norn {
                 // No miss recorded: the absence is legitimate because the ADAPTER owns
-                // the default (`norn` on `PATH`), so nothing is invented here.
+                // the default (`norn` on `PATH`), so nothing is invented here. The two
+                // repeatable settings are optional too — a norn that needs no extra
+                // arguments and no environment stripping is a complete configuration.
                 binary: settings::optional(self.norn_binary.clone(), NORN_BINARY_ENV, environment),
+                args: self.norn_args.clone(),
+                unset_env: self.norn_unset_env.clone(),
             },
             HarnessSettings::Acp => Supplied::Acp {
                 command: settings::resolve_one(
@@ -490,14 +548,20 @@ impl Supplied {
     /// # Errors
     ///
     /// Returns an error naming the one setting whose value is unusable: a relative
-    /// `--acp-cwd`, an unknown `--acp-permission`, a malformed `--acp-env` entry, or a
-    /// grace that is not a representable non-negative number of seconds; or naming the
-    /// harness this build does not compile in.
+    /// `--acp-cwd`, an unknown `--acp-permission`, a malformed `--acp-env` or
+    /// `--norn-unset-env` entry, or a grace that is not a representable non-negative
+    /// number of seconds; or naming the harness this build does not compile in.
     pub(crate) fn parse(self) -> Result<HarnessConfig> {
         match self {
             #[cfg(feature = "norn")]
-            Self::Norn { binary } => Ok(HarnessConfig::Norn(NornConfig {
+            Self::Norn {
+                binary,
+                args,
+                unset_env,
+            } => Ok(HarnessConfig::Norn(NornConfig {
                 binary: binary.map(PathBuf::from),
+                args,
+                unset_env: removed_environment(&unset_env)?,
             })),
             #[cfg(not(feature = "norn"))]
             Self::Norn { .. } => bail!(
@@ -590,6 +654,31 @@ fn permission_policy(supplied: &str) -> Result<aion_integration_acp::PermissionP
          whether an unattended agent may write files and run commands, so it is stated rather \
          than assumed. (It appears on the activity transcript as `deny` / `allow_once`.)"
     );
+}
+
+/// The variable names to remove from the spawned `norn` child, validated.
+///
+/// A blank name is refused because no process environment can carry one, so the entry
+/// is an unset-template mistake rather than a removal. A name containing `=` is
+/// refused because it is the `KEY=VALUE` shape of a SET: this flag REMOVES, and
+/// silently splitting the pair would leave the operator believing a value was either
+/// applied or stripped when neither happened.
+#[cfg(feature = "norn")]
+fn removed_environment(supplied: &[String]) -> Result<Vec<String>> {
+    for entry in supplied {
+        if entry.trim().is_empty() {
+            bail!("{NORN_UNSET_ENV_FLAG} entry has an empty variable name");
+        }
+        if entry.contains('=') {
+            bail!(
+                "{NORN_UNSET_ENV_FLAG} takes a variable NAME, got `{entry}` containing `=`. \
+                 This flag removes a variable from the spawned norn's environment; it never \
+                 sets one, so a KEY=VALUE pair here is a mistake to correct rather than \
+                 reinterpret."
+            );
+        }
+    }
+    Ok(supplied.to_vec())
 }
 
 /// The `KEY=VALUE` pairs to set on the spawned agent, in the order supplied.

@@ -61,12 +61,32 @@ fn advertising_no_descriptors_is_refused_by_the_same_gate() -> TestResult {
         .map(ToString::to_string)
         .collect::<Vec<_>>()
         .join("\n");
-    for action in ["assistant", "assistant_provision"] {
-        assert!(
-            rendered.contains(action),
-            "the refusal must name `{action}`; got:\n{rendered}"
-        );
+    // The demanded set is derived from the contract, not enumerated: every
+    // bodiless action must be named by the refusal, and no bodied action may
+    // be — the server runs declared bodies itself, so demanding one of a
+    // worker would refuse every honest registration on the queue.
+    let mut demanded = 0;
+    for action in &contract.actions {
+        if action.body.is_none() {
+            demanded += 1;
+            assert!(
+                rendered.contains(&action.name),
+                "the refusal must name `{}`; got:\n{rendered}",
+                action.name
+            );
+        } else {
+            assert!(
+                !rendered.contains(&action.name),
+                "the refusal must not demand the server-run `{}`; got:\n{rendered}",
+                action.name
+            );
+        }
     }
+    assert!(
+        demanded > 0,
+        "the document must declare at least one bodiless action, or this test \
+         refuses nothing and proves nothing"
+    );
     Ok(())
 }
 
@@ -246,16 +266,30 @@ fn the_agent_split_is_exactly_what_the_document_marks() -> TestResult {
          routing a plain handler there sends a workspace clone to norn as if it were a prompt"
     );
 
-    // Non-vacuity, both directions: a document with nothing marked, or with
-    // EVERYTHING marked, would satisfy the equalities above while proving
-    // nothing about the split.
+    // Non-vacuity on the agent side: a document with nothing marked would
+    // satisfy the equalities above while proving nothing. The plain side is
+    // derived, not demanded: since provision became a server-run declared
+    // body, the servable surface is exactly the agent-marked set, so the
+    // plain side must equal the document's unmarked bodiless actions —
+    // today that set is empty, and asserting emptiness where the contract
+    // says empty is the property, not a vacuity.
     assert!(
         !split.agent.is_empty(),
         "the document must mark at least one action `agent`, or this test passes vacuously"
     );
-    assert!(
-        !split.plain.is_empty(),
-        "the document must leave at least one action unmarked, or the split is not a split"
+    let mut expected_plain: Vec<String> = contract
+        .actions
+        .iter()
+        .filter(|action| !action.agent && action.body.is_none())
+        .map(|action| action.name.clone())
+        .collect();
+    expected_plain.sort();
+    let mut plain: Vec<String> = split.plain.iter().map(|d| d.name.clone()).collect();
+    plain.sort();
+    assert_eq!(
+        plain, expected_plain,
+        "the plain side of the split must be exactly the document's unmarked \
+         bodiless actions"
     );
     assert_eq!(
         split.agent.len() + split.plain.len(),

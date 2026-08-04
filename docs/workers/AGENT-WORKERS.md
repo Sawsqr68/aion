@@ -58,9 +58,43 @@ The rules it lives by, and why:
 
 ### The `norn` harness
 
-One optional setting: `--norn-binary` (env `AION_NORN_BINARY`) if `norn` is
-not on the worker's PATH. Everything else — account, model, session policy —
-is norn's own configuration.
+Every setting is optional — a norn that needs no extra arguments and no
+environment stripping is a complete configuration:
+
+| Flag | Required | What it decides |
+|---|---|---|
+| `--norn-binary` | no | the `norn` binary (env `AION_NORN_BINARY`) if `norn` is not on the worker's PATH; omitted means the adapter's own `norn`-on-PATH default |
+| `--norn-arg` | repeatable | one launch argument for the spawned norn, order preserved; hyphen-leading values accepted verbatim, because the arguments you most need to pass ARE flags (`--session-id`, `--resume-if-exists`, `--account`) |
+| `--norn-unset-env` | repeatable | a variable REMOVED from the spawned norn's environment only — e.g. `--norn-unset-env OPENAI_API_KEY` forces norn onto its OAuth login when a stray ambient key would otherwise take precedence and fail |
+
+Both repeatable flags are flag-only (no environment variable): an ordered
+list of arbitrary strings has no safe single-variable encoding, and even a
+variable *name* may contain a would-be separator.
+
+The adapter expands two run-identity placeholders in each `--norn-arg` at
+spawn time — `{workflow_id}` and `{activity_type}`; any other `{...}` text
+passes through literally. That makes the example worker's session-pinned
+invocation (below) reproducible without a crate:
+
+```
+aion worker agent examples/assistant/awl/assistant.awl \
+    --harness norn --liminal-address 127.0.0.1:50061 \
+    --norn-arg --workspace-root --norn-arg "$HOME/.aion/clones/{workflow_id}/repo" \
+    --norn-arg -C --norn-arg "$HOME/.aion/clones/{workflow_id}/repo" \
+    --norn-arg --session-id --norn-arg "{workflow_id}-{activity_type}" \
+    --norn-arg --resume-if-exists \
+    --norn-arg --account --norn-arg default \
+    --norn-unset-env OPENAI_API_KEY
+```
+
+The composed argv is asserted in the harness tests, not just observed
+through live runs — a flag only ever seen firing is untested in the case
+that matters.
+
+The verb also recognises norn's degraded-session refusal (see the 28-day
+story below) and attaches the route out to the activity failure: restart
+with `--norn-arg --allow-degraded-session`. The advice goes quiet exactly
+when that flag is already in the composed argv.
 
 ### The `acp` harness
 
@@ -133,12 +167,16 @@ provider has moved to a new epoch in the meantime, the exact provider
 transcript can no longer be replayed, and norn refuses to resume the
 session without explicit approval — so every round fails, on every retry.
 
-The worker recognises that specific refusal and attaches the route out to
-the activity failure: restart with `--norn-allow-degraded-session`. The
-tradeoff, stated so the decision is informed: the session resumes from a
-fresh provider epoch — the *conversation* is retained, provider-side
-fidelity is reduced. It is an operator opt-in with no default because that
-tradeoff is not the worker's to assume on anyone's behalf.
+The recognition and advice live in `aion-integration-norn` now, so both
+paths teach the same way, each naming its own restart spelling: this worker
+recognises that specific refusal and attaches the route out to the activity
+failure — restart with `--norn-allow-degraded-session` — and the built-in
+`aion worker agent` verb does the same, naming
+`--norn-arg --allow-degraded-session`. The tradeoff, stated so the decision
+is informed: the session resumes from a fresh provider epoch — the
+*conversation* is retained, provider-side fidelity is reduced. It is an
+operator opt-in with no default because that tradeoff is not the worker's
+to assume on anyone's behalf.
 
 ## One-command setup: `scripts/setup.sh`
 

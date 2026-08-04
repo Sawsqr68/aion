@@ -28,11 +28,32 @@ use aion_integrations::DynAgentHarness;
 
 use super::settings::HarnessConfig;
 
+/// How this verb spells Norn's degraded-session opt-in, for the advice attached to
+/// that refusal: the operator restarts the worker passing Norn's own flag through
+/// `--norn-arg`. Stated here because the spelling belongs to THIS command line — the
+/// adapter's advice machinery deliberately takes it as a parameter rather than
+/// guessing at a caller's flags.
+#[cfg(feature = "norn")]
+const NORN_DEGRADED_SESSION_OPT_IN: &str = "--norn-arg --allow-degraded-session";
+
 /// Builds the configured harness, erased for the worker serve path to hold.
+///
+/// The Norn adapter is wrapped in its own [`AdvisingHarness`] so the one Norn refusal
+/// an operator cannot otherwise get past — the degraded-session refusal after a
+/// provider-epoch change — surfaces carrying the restart flag that gets past it.
+/// Whether the opt-in was given is DERIVED from the composed argv itself
+/// (`argv_allows_degraded_session`), never tracked separately: the advice goes quiet
+/// exactly when `--allow-degraded-session` reaches the spawned `norn`.
+///
+/// [`AdvisingHarness`]: aion_integration_norn::AdvisingHarness
 pub(crate) fn build(config: &HarnessConfig) -> Arc<dyn DynAgentHarness> {
     match config {
         #[cfg(feature = "norn")]
-        HarnessConfig::Norn(norn) => Arc::new(build_norn(norn)),
+        HarnessConfig::Norn(norn) => Arc::new(aion_integration_norn::AdvisingHarness::new(
+            Arc::new(build_norn(norn)),
+            aion_integration_norn::argv_allows_degraded_session(&norn.args),
+            NORN_DEGRADED_SESSION_OPT_IN,
+        )),
         #[cfg(feature = "acp")]
         HarnessConfig::Acp(acp) => Arc::new(build_acp(acp)),
     }
@@ -42,15 +63,32 @@ pub(crate) fn build(config: &HarnessConfig) -> Arc<dyn DynAgentHarness> {
 ///
 /// With no binary configured the adapter's own constructor supplies its documented
 /// `norn`-on-`PATH` default, so the default lives in the library that owns the
-/// behaviour rather than being restated at this boundary.
+/// behaviour rather than being restated at this boundary. The operator's `--norn-arg`
+/// values are applied through the adapter's `with_arg` builder — which is what expands
+/// the `{workflow_id}` / `{activity_type}` run-identity placeholders at spawn time —
+/// and every `--norn-unset-env` name through `without_env`, which strips the variable
+/// from the SPAWNED child only and wins over inherited and set values alike.
+///
+/// `pub(super)` rather than private so the module's tests can assert the composed
+/// child invocation (`NornHarness::invocation`) — a flag only observed through a live
+/// agent run is untested in the case that matters.
 #[cfg(feature = "norn")]
-fn build_norn(config: &super::settings::NornConfig) -> aion_integration_norn::NornHarness {
+pub(super) fn build_norn(
+    config: &super::settings::NornConfig,
+) -> aion_integration_norn::NornHarness {
     use aion_integration_norn::NornHarness;
 
-    match &config.binary {
+    let mut harness = match &config.binary {
         Some(binary) => NornHarness::with_binary(binary),
         None => NornHarness::new(),
+    };
+    for arg in &config.args {
+        harness = harness.with_arg(arg.clone());
     }
+    for key in &config.unset_env {
+        harness = harness.without_env(key.clone());
+    }
+    harness
 }
 
 /// The ACP adapter for `config`.

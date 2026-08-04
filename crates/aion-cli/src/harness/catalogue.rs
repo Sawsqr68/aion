@@ -115,7 +115,11 @@ impl HarnessKind {
 
         match self {
             #[cfg(feature = "norn")]
-            Self::Norn => HarnessConfig::Norn(super::settings::NornConfig { binary: None }),
+            Self::Norn => HarnessConfig::Norn(super::settings::NornConfig {
+                binary: None,
+                args: Vec::new(),
+                unset_env: Vec::new(),
+            }),
             #[cfg(feature = "acp")]
             Self::Acp => HarnessConfig::Acp(super::settings::AcpConfig {
                 command: std::path::PathBuf::from("opencode"),

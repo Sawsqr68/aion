@@ -162,10 +162,13 @@ enum WorkerCommand {
     /// it decides whether an unattended agent may write files and run commands)
     /// and `--acp-exit-grace`, plus repeatable `--acp-arg` / `--acp-env`; ACP has
     /// no standard launch flag, so nothing about the command is inferred from an
-    /// agent's name. The `norn` harness takes an optional `--norn-binary`. A flag
-    /// configuring a harness this invocation is not serving is REFUSED, never
-    /// ignored: a flag that silently does nothing is how an operator comes to
-    /// believe a policy is in force when it is not.
+    /// agent's name. The `norn` harness's settings are all optional: `--norn-binary`
+    /// if `norn` is not on the worker's PATH, repeatable `--norn-arg` pass-through
+    /// arguments (with `{workflow_id}` / `{activity_type}` expanded per run), and
+    /// repeatable `--norn-unset-env` to strip a variable from the spawned norn's
+    /// environment. A flag configuring a harness this invocation is not serving is
+    /// REFUSED, never ignored: a flag that silently does nothing is how an operator
+    /// comes to believe a policy is in force when it is not.
     ///
     /// `--check` prints the exact action surface this worker would advertise, the
     /// resolved harness, and the intervention controls that harness advertises,

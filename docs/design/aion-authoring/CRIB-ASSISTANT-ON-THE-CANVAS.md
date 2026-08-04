@@ -51,8 +51,7 @@ where the input JSON is:
 
 ```json
 {"objective":"<what you want it to do>",
- "repo_path":"/Users/tom/Developer/ablative/stack/aion",
- "max_rounds":50,"max_nudges":20}
+ "repo_path":"/Users/tom/Developer/ablative/stack/aion"}
 ```
 
 Talk to it — this is the continue signal:
