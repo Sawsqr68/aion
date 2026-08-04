@@ -1,8 +1,9 @@
 # #139 live cut — sequence for moving the running assistant onto the bodied provision
 
-**Date:** 2026-08-05. **Seat:** Vesper Lynd. **Status:** PROPOSED — awaiting
-Waffles' ruling; server-swap step additionally needs Tom's go (his live
-session). Companion: `BRIEF-139-LEG-A-REWORK.md`, `BUNDLE-139-NOTES.md`.
+**Date:** 2026-08-05. **Seat:** Vesper Lynd. **Status:** RATIFIED by Waffles
+2026-08-05 (with the step-4 measurement gate below); server-swap step
+awaits Tom's go, which Waffles holds and will raise at the next natural
+touchpoint. Until his word returns: no build, no swap, no deploy. Companion: `BRIEF-139-LEG-A-REWORK.md`, `BUNDLE-139-NOTES.md`.
 
 ## The facts the sequence is built on (all code-verified, file:line held)
 
@@ -69,10 +70,18 @@ the interpreter with empty services) intersects any long-running resumed
 workflow. The Aug 4 reboot already exercised this path on these same runs
 without observed loss, but the risk is Tom's to accept alongside the swap.
 
-**Step 4 — the cut itself.** `aion deploy
-examples/assistant/awl/assistant_spike.awl`, then `assistant.awl`. Each
-deploy routes on return. Old runs keep replaying `6f43c809`; new starts
-resolve to the bodied version.
+**Step 4 — the cut itself, GATED ON A MEASUREMENT (Waffles' condition,
+ratified 2026-08-05).** The deploy does not fire because the swap was
+performed; it fires because the RUNNING server proves it carries the
+expansion machinery. Two live facts, both from the server itself, both
+required: (a) `/build` reports a commit at or after `fe702945` (the #123
+machinery — the running binary says what code it is), and (b) the startup
+banner carries the `workspace_root` field with a resolved path (the field
+does not exist in any earlier binary, and a value rather than
+`unresolvable:` proves the root actually resolved). Only then: `aion
+deploy examples/assistant/awl/assistant_spike.awl`, then `assistant.awl`.
+Each deploy routes on return. Old runs keep replaying `6f43c809`; new
+starts resolve to the bodied version.
 
 **Step 5 — proof.** Start a spike run: provision executes SERVER-SIDE
 (first live exercise of the expansion), stdout in history must be EXACTLY
