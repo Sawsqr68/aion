@@ -1,5 +1,36 @@
 # 📍 SEAT RESUME — 2026-08-04 (S)
 
+## ✅ SWAP EXECUTED ON TOM'S GO (02:25Z "you can do what you need to do")
+
+- Old 99844 drained gracefully; NEW SERVER pid 48168 = installed
+  `~/.cargo/bin/aion` 0.11.0, same ports/config/store. `/build` body names
+  0.11.0; console 200; 21 executions intact; deploy smoke green; worker
+  77969 re-registered on its own; REAL assistant round proven ("I can hear
+  you." — gpt-5.6-sol) then cancelled. Startup logged 6 dispatch-eligibility
+  withdrawals (liveness ping raced connection setup) — SELF-HEALED, dispatch
+  proven by the round. Log: ~/.aion/server.log.20260804.
+- **Assistant UPGRADED live d9774285→67128ff6** (current awl/assistant.awl:
+  agent marker, query surface, corrected teaching text; live d977 predated
+  the Jul-30/31 document edits). Proven by a live round on 67128
+  ("The updated aion AWL authoring assistant is live."), cancelled clean.
+  Rollback: `aion route` back to d977 (still loaded).
+- **scripts/setup.sh SHIPPED + PROVEN** (Tom's one-command setup ask):
+  clones repo if standalone, installs aion-cli if missing, chmod-700 home,
+  starts server (banner-derived addresses, /build BODY readiness), deploys
+  awl/assistant.awl (the tracked truth — assistant.aion archive is
+  GITIGNORED and stale, do not use), builds+starts worker, waits for
+  registration. Proven end-to-end TWICE on isolated AION_HOME
+  (~/.aion-setup-test, offset ports, torn down): fresh path + idempotent
+  re-run path, plus a real agent round on the test server. Re-run on Tom's
+  box = clean no-op (his server/worker detected and left alone).
+  ⚠️ `~/.local/bin/python3` is a LINUX x86-64 ELF on this macOS box —
+  broken for anything bash resolves; the script was rewritten sed-only
+  because of it. Tell Tom sometime.
+- Tom's clarified direction: the REAL target is install-for-a-stranger with
+  no help — script is today's answer; #139 (assistant inside the aion
+  distribution, no repo needed) is the proper build. Tom also said the
+  /build endpoint suggestion wasn't helpful — dropped, don't re-raise.
+
 **Supersedes R. Read this first.** I am **Vesper Lynd**, session
 `5849e0d8-4802-4869-8e0f-9f7fd187e198`. Sign `— Vesper`. Fable is the MODEL,
 not my name.
