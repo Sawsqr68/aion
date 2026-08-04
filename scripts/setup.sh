@@ -58,7 +58,11 @@ if [ ! -f "$REPO_ROOT/examples/assistant/awl/assistant.awl" ]; then
     REPO_ROOT="${AION_CHECKOUT_DIR:-$PWD/aion}"
     if [ ! -f "$REPO_ROOT/examples/assistant/awl/assistant.awl" ]; then
         say "Cloning the aion repository into $REPO_ROOT"
-        git clone "$AION_REPO_URL" "$REPO_ROOT"
+        # Depth-1 on purpose: the repository's HISTORY carries ~2 GiB of
+        # build artifacts committed by an old gate pipeline (removed from
+        # tracking, still in every full clone's pack). A shallow clone skips
+        # all of it — the build needs only the working tree.
+        git clone --depth 1 "$AION_REPO_URL" "$REPO_ROOT"
     fi
 fi
 
