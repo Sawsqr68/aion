@@ -4,7 +4,9 @@ This is the assistant's AWL reference: the workflow-language surface accepted
 by the repository's `aion-awl` parser and checker. It is distilled from
 `crates/aion-awl/src/`, checker-valid rev-2 fixtures, and deployed `.awl`
 examples. If an installed `aion awl check` disagrees, its diagnostic and that
-binary's source win.
+binary's source win on everything the check sees — but `check` runs parse and
+typecheck only, and a further band of refusals arrives only when the document
+is compiled (§15).
 
 That precedence rule is live, not theoretical. The published `aion` crate
 (0.11.0) carries the full surface described here; if an older installed binary
@@ -64,8 +66,11 @@ Identifiers are `snake_case`; nominal type names and enum variants are
 ## 2. Values and types
 
 Built-ins are `Bool`, `Int`, `Float`, `String`, `Nil`, `Dir`, lists `[T]`, and
-optional fields `T?`. Optional means absent; JSON `null` is invalid. `[T?]` is
-invalid, while `[T]?` means the whole field can be absent.
+optional fields `T?`. Optional means absent; JSON `null` is invalid. `[T?]`
+cannot be written as a declared type
+(`header-types/invalid/list_element_optional.awl`), while `[T]?` means the
+whole field can be absent. The `[T?]` shape itself does exist in one place:
+a tolerant `collect binding? -> results` binds exactly it (§8).
 
 Record and enum declarations:
 
@@ -92,8 +97,13 @@ type Inline = schema {
 }
 ```
 
-Imports resolve relative to the `.awl` document. Unsupported schema structure,
-missing files, invalid JSON, and null-admitting types are check errors.
+Imports resolve relative to the `.awl` document. Missing files, invalid JSON,
+and null-admitting types are check errors, and unsupported schema structure is
+refused by name: `oneOf`, `anyOf`, `patternProperties`, and an external `$ref`
+each carry their own diagnostic (`schema-doors/invalid/import_oneof.awl`,
+`import_anyof.awl`, `import_patternprops.awl`, `import_external_ref.awl`,
+`import_null_type.awl`). A `$ref` into the schema's own `$defs` is supported
+(`schema-doors/valid/import_nested_defs.awl`).
 
 Constants are compile-time values:
 
@@ -107,7 +117,9 @@ const literal_schema = json { "type": "string" }
 ```
 
 Constants may use literals, lists, `json` blocks, `schema of Type`, and constant
-concatenation. They cannot depend on runtime bindings.
+concatenation. They cannot depend on runtime bindings. `schema of Type` is a
+constant-position form only: in a step-body expression it checks clean but does
+not lower (§15) — bind it to a `const` and use the constant.
 
 Durations are positive integer literals with `s`, `m`, `h`, or `d`, such as
 `30s`, `5m`, `2h`, and `7d`. `workflow.id` is the durable execution identifier.
@@ -127,7 +139,12 @@ Durations are positive integer literals with `s`, `m`, `h`, or `d`, such as
   and maps it to the engine's completed or failed status.
 
 Terminal routes must supply the declared outcome type, either by construction
-or with an already-bound value of that type.
+or with an already-bound value of that type. The declared type is not
+restricted to records: builtins and lists are outcome types too, routed as
+value payloads — `route done(note)` against `outcome done: type String`
+(`flow-shape/valid/value_route_payload.awl`), or `type [String]`
+(`flow-shape/valid/region_pure_decision.awl`). Subflow outcome declarations
+take the same type forms.
 
 ## 4. Workers, actions, and calls
 
@@ -155,7 +172,7 @@ comma-separated keys are exactly:
 
 | Key | Form | Meaning |
 |---|---|---|
-| `advisory` | bare marker | The action's failure never faults its calling step, and it is not a completion dependency of its layer. Because it can promise no value, an advisory call cannot bind a result. |
+| `advisory` | bare marker | The action's failure never faults its calling step, and it is not a completion dependency of its layer. Because it can promise no value, an advisory call cannot bind a result or serve as a pipe stage (§6). |
 | `agent` | bare marker | The action is an agent seam (below). |
 | `node` | `node NAME` | Pins dispatch to a worker node label. |
 | `timeout` | `timeout DURATION` | Per-activity timeout. |
@@ -271,12 +288,22 @@ subflow review_once(repo: String)
 ```
 
 A subflow has typed parameters, exactly one typed outcome, and its own steps.
-Call it like an action and bind the result. It compiles into the containing
-workflow; it is not independently deployed or observed. Subflows may nest but
-cannot recurse.
+An invocation runs as its own step: the call must be the ONLY statement of a
+top-level step body — never beside other statements, never inside a `fork`,
+`loop`, `on failure` block, or substep, and never a pipe stage — and binds the
+outcome value with `->` (`flow-shape/valid/dev_flow.awl`). It compiles into
+the containing workflow; it is not independently deployed or observed.
+Subflows may nest but cannot recurse.
 
 Nested `step` declarations are also accepted inside a step body. They share the
 parent's inputs and form a scoped graph; routes may not escape that scope.
+Substeps compile only as the TRAILING block of an ordinary step body — every
+statement after the first substep must be another substep — and the parent
+step must carry outcome clauses to route on after the group settles. A substep
+cannot nest further substeps, cannot carry `after` dependencies or a
+`max … visits` bound, and cannot sit inside a loop body, fork branch, or
+`on failure` block. These substep shape rules are enforced when the document
+is compiled, not by `aion awl check` (§15).
 
 ## 6. Steps, dependencies, and calls
 
@@ -290,9 +317,13 @@ step verify after build, policy
 ```
 
 A step starts after all named dependencies complete. Independent steps that
-become eligible together run concurrently. The checker rejects unknown targets,
-cycles through `after`, unreachable steps, and bindings that are not available
-on every path.
+become eligible together compile to one parallel dispatch only when EVERY
+member of the layer is a pure dispatch: no outcome clauses, no `on failure`,
+no `max … visits`, a body of exactly one call statement, and that call naming
+a declared action — not a child, not an advisory action. A layer with any
+other member runs in written order instead. The checker rejects unknown
+targets, cycles through `after`, unreachable steps, and bindings that are not
+available on every path.
 
 Bind a call with `->`. Pipe a value with `|>`:
 
@@ -301,12 +332,38 @@ request |> normalize |> .repo |> inspect -> report
 report |> route done
 ```
 
-A pipe action takes the piped value as its one argument. Available deterministic
+A pipe action takes the piped value as its one argument, so a stage must be
+declared with exactly one parameter — a multi-parameter action or child cannot
+be a stage, and neither can an advisory action
+(`declarations/invalid/advisory_pipe_stage.awl`). A plain expression also
+binds as a statement with the same arrow — `"run: " + result -> summary`
+(`ergonomics/valid/flow_vocab_b1.awl`). Available deterministic
 value operations include field access, literal indexing (`items[0]`), string
 `+`, comparisons, boolean `not`/`and`/`or`, and collection operations
 `filter`, `map`, `sort`, `count`, `any`, and `all`. Predicates include
 `is empty`, `is present`, and `is absent`. There are no user functions or
 general arithmetic; put computation in a worker action.
+
+### Guards narrow optionals
+
+A guard that proves an access path present narrows that path from `T?` to `T`
+wherever the proof holds. Within one boolean chain, `and` proves each
+conjunct's `is present` for the operands after it, so
+`when nudge.end is present and nudge.end` typechecks, and proofs chain — `a is
+present and a.b is present` narrows `a.b` because the first proof already made
+`a` a record (`step-bodies/valid/guard_chain_carries_every_proof.awl`). `or`
+proves each disjunct's `is absent` on its false edge:
+`when detail is absent or detail.approved` reads `.approved` only where
+`detail` is present (`schema-doors/valid/short_circuit_optional.awl`).
+
+An outcome guard's proofs hold through its whole arm, including the route
+payload (`step-bodies/valid/guard_narrows_an_optional_field.awl` and
+`guard_narrows_a_deep_optional_field.awl`). Narrowing keys on the exact access
+path, not just on whole bindings. Proofs never escape their arm and never flow
+backwards to statements before the guard; an optional used without a proof is
+a check error (`loop-outcomes/invalid/optional_used_unguarded.awl`,
+`step-bodies/invalid/narrowing_does_not_escape_its_arm.awl`,
+`step-bodies/invalid/proof_does_not_flow_backwards.awl`).
 
 ## 7. Selection, outcomes, and routes
 
@@ -321,7 +378,15 @@ step choose
 ```
 
 The first true `when` wins. `otherwise` is the complement and must be last.
-Conditional outcomes must be exhaustive. A route names either another step or
+Conditional outcomes must be exhaustive. Exhaustive normally means an
+`otherwise` arm, with one proved exception: when every arm's guard compares
+the SAME subject against a bare enum variant and every variant of the enum is
+covered, the set is total and needs no `otherwise`
+(`loop-outcomes/valid/enum_when_totality.awl`); an uncovered variant is a
+check error naming that variant
+(`loop-outcomes/invalid/enum_variant_uncovered.awl`). Enum variants are
+referenced bare in expressions as `TitleCase` names — `result.category ==
+Urgent`. A route names either another step or
 a workflow/subflow outcome. A body-less step containing only outcomes is a pure
 decision. A route can also be an ordinary final statement:
 
@@ -344,8 +409,11 @@ fork item in items
 join -> reports
 ```
 
-Bare `fork` runs branches in parallel and joins results in input order. Add
-`sequential` to run one item at a time in input order:
+The collection form runs one branch per item in parallel and joins results in
+input order. Its body compiles only as exactly one unbound call, which may
+name an action or a child — a per-item child fan-out is a checked, lowered
+shape (`dag-fork/valid/child_collection_fork.awl`). Add `sequential` to run
+one item at a time in input order:
 
 ```awl
 fork item in items sequential
@@ -353,8 +421,9 @@ fork item in items sequential
 join -> receipts
 ```
 
-Named branches run heterogeneous calls concurrently and use `join` without a
-collection binding:
+A bare `fork` — the header with no collection — opens named branches, which
+run heterogeneous calls concurrently and use `join` without a collection
+binding:
 
 ```awl
 fork
@@ -362,6 +431,10 @@ fork
   fetch_history(id: request.id) -> history
 join
 ```
+
+A named branch compiles only as an action call (a result binding is fine);
+child calls in named branches do not lower. Both fork body shapes are
+compile-time rules, not check-time (§15).
 
 ### Multi-step `distribute` / `sequence` regions
 
@@ -380,13 +453,18 @@ step close
 
 `distribute` executes item tracks in parallel. Replace it with `sequence` to
 execute tracks one at a time in collection order. The opener's region operation
-must be its only statement. `collect` must be the first statement of the close
-step and closes the nearest region. Results preserve input order; an empty
+must be its only statement. `collect` must be the FIRST statement of the close
+step and closes the nearest region — further statements may follow it
+(`flow-shape/valid/sequence_region_loopback.awl` counts and judges the
+collected list in the same step). Results preserve input order; an empty
 input collects to `[]`.
 
 Strict `collect report -> reports` fails the run when an item fails. Tolerant
-`collect report? -> reports` preserves one optional slot per input item and
-keeps failure detail in history. Regions may nest, but each inner region must
+`collect report? -> reports` binds `reports` as `[Report?]` — one optional
+slot per input item, in item order, with failure detail kept in history. That
+is the one way the `[T?]` shape exists (§2); each slot is an optional and must
+be proved present before its fields are read, exactly like any other `T?`
+(§6). Regions may nest, but each inner region must
 close before its outer region; routes cannot enter or escape an open region.
 
 ## 9. Bounded iteration
@@ -415,6 +493,10 @@ step review
   max 3 visits
 ```
 
+The visit bound is an expression over inputs and consts, not only a literal —
+`max max_polish_rounds visits`
+(`loop-outcomes/valid/backward_route_bounded_cycle.awl`).
+
 Use the shape that matches the work; never emulate an unbounded loop.
 
 ## 10. Waits, timeouts, signals, and sleep
@@ -425,6 +507,9 @@ Declare a signal in the header, then wait for it:
 step hold
   wait approval -> answer
 ```
+
+The binding is mandatory: `wait approval` without `-> answer` is a parse error
+(`step-bodies/invalid/wait_missing_binding.awl`).
 
 A timed wait binds an optional value because expiry is absence:
 
@@ -604,3 +689,55 @@ carries one fixture per rule (for example
 Those fixture paths are under `crates/aion-awl/tests/fixtures/rev2/`. Production
 examples under `examples/*/awl/` show the same constructs in deployed workflows.
 Run `aion awl check` on the actual document after every change.
+
+## 15. What `aion awl check` does not check
+
+`aion awl check` runs the parser and the typechecker, nothing further. The
+compile behind `aion awl emit`, `aion deploy`, and `aion run` lowers the
+checked document, and lowering refuses a further band of shapes that check
+clean, each with a diagnostic naming the shape ("does not yet lower …",
+anchored to a line). A clean check is necessary, not sufficient; the compile
+has the final word on these.
+
+Inside an `on failure` block, lowering refuses a substep, a per-item region, a
+bounded loop, a fork, a timeout wait (an untimed `wait` lowers), and a child
+spawn — each named in its diagnostic, for example "a bounded loop inside an
+`on failure` block". A guarded step whose body leaves "a fallible result the
+`on failure` edge cannot guard in place (a conditional prelude or an
+outcome-guard result)" refuses with exactly that phrasing.
+
+Fork body shapes (§8):
+
+- A collection fork body must be exactly one unbound call — "a collection
+  fork body beyond one unbound call". That one call may name an action or a
+  child (`dag-fork/valid/child_collection_fork.awl`).
+- A named-fork branch must be an action call: a child call refuses as "child
+  calls inside named fork branches", and any other statement as "a named fork
+  branch beyond an action call".
+
+Substeps (§5):
+
+- `after` on a substep parses and checks but refuses at compile — "`after`
+  dependencies on substeps".
+- `max … visits` on a substep refuses — "a `max … visits` bound on a substep".
+- A substep inside a loop body, fork branch, or `on failure` block refuses —
+  "a substep outside a step body's trailing block". Substeps lower only as the
+  trailing block of an ordinary step body whose parent carries outcome
+  clauses.
+
+Literal indexing (`items[0]`) refuses in four positions: a parallel fork
+branch ("indexing inside a parallel fork branch" — a `sequential` collection
+fork accepts it), a parallel per-item track ("indexing inside a parallel
+per-item track" — `distribute` only; `sequence` tracks accept it), an outcome
+guard ("indexing inside an outcome guard"), and a visit bound ("indexing
+inside a `max … visits` bound").
+
+Three more:
+
+- `sort` requires a comparable key — "`sort` over a non-comparable key (needs
+  Int, Float, String)". The checker accepts any accessor; comparability is
+  enforced at compile.
+- `schema of Type` outside constant position refuses (§2) — bind it to a
+  `const` and use the constant.
+- A route targeting a step the plan folded into the middle of a fall-through
+  chain refuses — "route to a mid-chain step".

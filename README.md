@@ -75,20 +75,28 @@ The AWL language itself is in [`docs/authoring/AWL.md`](docs/authoring/AWL.md).
 
 ## Documentation
 
+The full map is **[docs/README.md](docs/README.md)** — every document, one
+line each. The load-bearing ones:
+
 | Document | What it covers |
 |---|---|
 | [Getting started](docs/GETTING-STARTED.md) | Zero to completed workflow on published artifacts |
+| [setup.sh](scripts/setup.sh) | One command: server + console + assistant + norn worker (`curl -fsSL https://raw.githubusercontent.com/ablative-io/aion/main/scripts/setup.sh \| bash`) |
 | [AWL](docs/authoring/AWL.md) | The AWL surface: the verbs, the authoring loop, and where the language reference lives |
 | [AWL language reference](examples/assistant/resources/AWL-REFERENCE.md) | The complete checked AWL grammar: types, workers, steps, forks, regions, loops, waits, signals, queries |
 | [Declared commands](docs/workers/DECLARED-COMMANDS.md) | `run "…"` action bodies — what is guaranteed and what is not (**there is no sandbox**) |
 | [Workflow authoring guide](docs/authoring/workflows.md) | The Gleam entry contract, determinism rules, timers, signals, queries, children |
 | [Activities & workers guide](docs/workers/activities-and-workers.md) | Worker scaffolding, failure classification, retry semantics |
+| [Worker authoring guide](docs/workers/WORKER-AUTHORING.md) | Writing an activity worker as a Rust crate, from the proven reference |
+| [Agent workers](docs/workers/AGENT-WORKERS.md) | `aion worker agent`, the norn-backed assistant worker, session pinning |
 | [Schema codegen guide](docs/authoring/codegen.md) | Generate Gleam types + JSON codecs from your schemas; `--check` CI gate; supported subset |
 | [Operations guide](docs/operations/operations.md) | Full config reference, deploy/versioning, persistence & recovery, metrics |
+| [Ops console](docs/operations/ops-console.md) | The embedded web console: every view and what an operator can do from each |
 | [Errors reference](docs/operations/errors.md) | Every error code and what to do about it |
 | [API overview](docs/operations/API.md) | HTTP/JSON, gRPC, WebSocket transports |
 | [Packaging reference](docs/authoring/packaging.md) | `workflow.toml` and the `.aion` format |
 | [Order saga walkthrough](docs/examples/order-saga.md) | The flagship example: retries, timeout races, child workflows, compensation |
+| [Examples index](examples/README.md) | All thirty runnable examples, starter ones first |
 
 ## Why Gleam + Rust + BEAM
 

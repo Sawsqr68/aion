@@ -30,6 +30,7 @@ codes: `1` for errors, `2` for CLI usage mistakes.
 | `namespace_denied` | 403 | `PermissionDenied` | Caller not authorized for the requested namespace. |
 | `invalid_input` | 400/413 | `InvalidArgument` | Malformed body, identifier, or archive; oversized deploy uploads (413) name the violated config key (`deploy.max_archive_bytes` / `deploy.max_inflated_bytes`). |
 | `not_running` | 409 | `FailedPrecondition` | The operation needs a live workflow but the run is terminal (completed/failed/cancelled/timed out) or otherwise unable to answer. |
+| `invalid_state` | 409 | `FailedPrecondition` | A precondition on the target's current state failed: the run exists but is in the wrong state for the operation — reopening a run that is not a terminal `Failed`/`Cancelled`, pausing a run that is not `Running`, resuming one that is not `Paused`. The message names the actual status; inspect it with `aion describe <id>`. Distinct from `not_found` (absent) and `backend` (internal failure). |
 | `unknown_query` | 400 | `InvalidArgument` | No query handler registered under that name (wrong name, or the workflow has not reached its registration code yet). |
 | `query_timeout` | 408 | `DeadlineExceeded` | No handler reply within the server's `runtime.query_timeout_ms` — the workflow is busy between yield points. |
 | `query_failed` | 500 | `Internal` | The query handler ran and reported an application-level failure. |
@@ -37,6 +38,7 @@ codes: `1` for errors, `2` for CLI usage mistakes.
 | `lagged` | 429 | `ResourceExhausted` | An event-stream consumer fell behind the bounded channel and was disconnected. Reconnect; per-workflow streams resume with `resume_from_seq`. |
 | `deploy_denied` | 403 | `PermissionDenied` | No deploy grant. Supply the `deploy` token claim, or in development the `x-aion-deploy: true` header (the CLI sends it automatically). |
 | `version_pinned` | 409 | `FailedPrecondition` | Deploy unload/route refused: the version is route-active or pinned by a live run, a recoverable run, or an in-flight start. The message names the holder. |
+| `not_owner` | 409 | `Aborted` | The targeted shard is owned by a different cluster node; the request was fenced. Not a connectivity fault — the server answered. A retryable routing signal: ownership moves as the cluster fails over, so retry (the routing edge re-resolves the owner) or point `--endpoint` at another node. |
 | `unauthenticated` / `unavailable` | 401/503 | `Unauthenticated`/`Unavailable` | Missing/invalid credentials; server draining or unreachable. |
 | `backend` | 500/503 | `Internal`/`Unavailable` | Storage, serialization, or internal runtime failure; also deploy mutations refused during drain (503, with an explicit message). |
 

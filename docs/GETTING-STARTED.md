@@ -224,7 +224,7 @@ aion server --config aion.toml
 In terminal 2, start the worker:
 
 ```sh
-aion worker shell --manifest worker.toml
+aion worker shell --manifest worker.toml --awl my_flow.awl
 ```
 
 ## Compile, deploy, start, and await — in one motion

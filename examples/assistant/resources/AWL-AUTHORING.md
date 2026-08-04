@@ -155,9 +155,10 @@ See the checked `flow-shape/valid/dev_flow.awl` fixture for the complete shape.
 
 ## 5. Choose parallelism explicitly
 
-For multiple statements within one step, `fork ... join` is accepted. Bare
-`fork` is parallel; add `sequential` to process collection items one at a time
-in input order.
+For multiple statements within one step, `fork ... join` is accepted. The
+collection form (`fork item in items`) is parallel; add `sequential` to
+process collection items one at a time in input order. A bare `fork` — the
+header with no collection — opens named branches for heterogeneous calls.
 
 For a multi-step per-item track, use a region. `distribute` runs item tracks in
 parallel; `sequence` runs them one at a time. Both must be closed by `collect`:
@@ -173,7 +174,10 @@ step gather
   collect report -> reports
 ```
 
-The opening and closing steps contain only their region operation. Use
+The opening step contains only its region operation; the closing step's
+`collect` must come first, and further statements may follow it
+(`crates/aion-awl/tests/fixtures/rev2/flow-shape/valid/sequence_region_loopback.awl`
+counts and judges the collected list in the same step). Use
 `collect report? -> reports` only when a failed item should produce an absent
 slot instead of failing the whole run. Read `AWL-REFERENCE.md` for ordering and
 nesting rules.

@@ -8,32 +8,58 @@ aion server --config aion.toml
 ```
 
 There is no separate server binary — `aion-server` on crates.io is the
-server **library** that `aion server` embeds. Aion is **single-node**: one
-server process owns the store; there is no clustering.
+server **library** that `aion server` embeds. Aion runs **single-node by
+default**: one server process owns the store. The haematite backend can
+additionally run distributed across nodes via the optional `[store.cluster]`
+section (see the key reference below); with the section absent the store is
+byte-identical to the single-node path.
 
 ## Configuration
 
 The server starts from built-in defaults, then applies config-file values,
-then `AION_*` environment overrides. When `--config` is omitted it
-auto-discovers `aion.toml` in the working directory; with neither, it runs
-on development defaults — but the two always-required keys below must then
-come from the environment.
+then `AION_*` environment overrides, then `aion server` flags — last layer
+wins. When `--config` is omitted it auto-discovers `aion.toml` in the
+working directory (then `<home>/config.toml`); with neither, it runs on the
+built-in defaults. **An empty config boots**: every always-mounted surface
+has a default, and keys only become required when the operator commissions
+the surface they belong to.
 
-### Required keys (startup fails naming the missing key)
+### `aion server` flags
 
-| Key | Why required |
+| Flag | Effect |
 |---|---|
-| `runtime.query_timeout_ms` | The server always mounts `/workflows/query`; the reply deadline is an explicit operator decision. |
-| `websocket.event_broadcast_capacity` | The server always mounts `/events/stream`; channel capacity must be sized for global event volume. |
-| `deploy.max_archive_bytes` | Required when `deploy.enabled = true`; upload-size ceiling for `.aion` archives. |
-| `deploy.max_inflated_bytes` | Required when `deploy.enabled = true`; decompressed-contents ceiling. Must be **>= `max_archive_bytes`** (a DEFLATE bomb under the upload ceiling can inflate ~1000:1). |
+| `--config <path>` | Explicit TOML config file; skips auto-discovery. |
+| `--listen-address <addr>` | Override `server.listen_address` (HTTP/JSON + ops console). |
+| `--grpc-address <addr>` | Override `server.grpc_address` — the server's **own bind address**. The global `--endpoint` is a *client* dial address; `aion server` refuses to start if it is passed rather than silently binding the default port. |
+| `--store-url <path>` | Set `store.url` **and select the libSQL backend** (an implicit `haematite`/`memory` backend is coerced to `libsql` — haematite ignores `store.url`, so the flag is only meaningful as a libSQL choice). |
+| `--scheduler-threads <n>` | Override `runtime.scheduler_threads`; must be non-zero. |
+| `--drain-timeout <seconds>` | Override `drain.timeout_seconds`; must be non-zero. |
+| `--workflow-package <path>` | Extra `.aion` archive loaded at startup; repeatable (see "Boot-time loads"). |
+| `--gleam-path <path>` | Set `authoring.gleam_path`: commissions the server-side Gleam authoring loop and mounts `/authoring/*`; requires `--authoring-project-root`. |
+| `--authoring-project-root <path>` | Set `authoring.project_root`: the built Gleam project submitted source is written into and packaged from. |
+| `--open` | Open the ops console in the default browser once the HTTP listener accepts connections. Best-effort: failures are logged and never affect the server run. |
 
-Validation failures are loud and name both the TOML key and its environment
-override, e.g.:
+### Conditionally required keys (startup fails naming the missing key)
+
+| Key | Required when |
+|---|---|
+| `store.url` | `store.backend = "libsql"`. |
+| `auth.jwks_url` | `auth.enabled = true`. |
+| `authoring.project_root` | `authoring.gleam_path` is set. |
+| `store.cluster.node_id`, `store.cluster.bind_address` | a `[store.cluster]` section is present (and each `[[store.cluster.peers]]` entry needs `name` + `address`). |
+| `outbox.reconcile_interval_ms` **and** `outbox.reconcile_stale_after_ms` | either one is set — the pair is both-or-neither; both absent leaves reconciliation dark. |
+| `outbox.liminal_listen_address` | `outbox.enabled = true` with `transport = "liminal"` (surfaced when the dispatcher spawns). |
+
+Tuning knobs (`runtime.query_timeout_ms`, the websocket capacities, the
+deploy ceilings, the outbox knobs, the observability bounds) default when
+**omitted** but reject an explicit `0`. Validation failures are loud and
+name both the TOML key and its environment override, e.g.:
 
 ```
-runtime.query_timeout_ms is required and has no default: ... set
-runtime.query_timeout_ms (or AION_RUNTIME_QUERY_TIMEOUT_MS) to a positive
+runtime.query_timeout_ms must be a positive integer when set (the server
+always mounts /workflows/query, so a zero deadline would fail every query
+immediately); omit runtime.query_timeout_ms (or
+AION_RUNTIME_QUERY_TIMEOUT_MS) to use the default, or set it to a positive
 number of milliseconds
 ```
 
@@ -45,62 +71,205 @@ workflow_packages = []                  # default: []; .aion files in the
                                         # working directory are auto-discovered
 
 [server]
-listen_address = "127.0.0.1:8080"       # default; HTTP/JSON + dashboard
+listen_address = "127.0.0.1:8080"       # default; HTTP/JSON + ops console
 grpc_address = "127.0.0.1:50051"        # default; gRPC API + worker protocol
                                         # both need explicit non-zero ports
+cors_allowed_origins = []               # default: empty — the SECURE default:
+                                        # no cross-origin request permitted, no
+                                        # CORS layer installed. Entries are
+                                        # exact origins (scheme://host[:port],
+                                        # no path, no wildcard) matched against
+                                        # the browser's Origin header
 
 [store]
 backend = "haematite"                   # default; durable ablative event store.
-                                        # "libsql" = lightweight embedded backend
-                                        # (libsql-backend feature); "memory" =
-                                        # ephemeral, loses state on stop
-data_dir = "aion-data"                  # default ("aion-data"); REQUIRED when
-                                        # backend = "haematite": database dir,
-                                        # created on start
-shard_count = 1                         # default; shards on a fresh haematite db
+                                        # "libsql" = lightweight embedded backend;
+                                        # "memory" = ephemeral, loses state on stop
+data_dir = "…"                          # haematite database directory, created
+                                        # on start; defaults to <home>/data (see
+                                        # "The Aion home"). haematite only
+shard_count = 64                        # default; virtual shards created on a
+                                        # FRESH haematite db. Immutable at create
+                                        # (routing is BLAKE3(key) % shard_count,
+                                        # no reshard path); opening an existing
+                                        # db, the on-disk count always wins
+owned_shards = []                       # default: empty = this node owns ALL
+                                        # shards (the single-node default). Set =
+                                        # static shard assignment for multi-node
+                                        # haematite; ignored by memory/libsql
 # url = "aion.db"                       # REQUIRED when backend = "libsql":
-                                        # embedded libSQL file, created on start
+                                        # embedded libSQL file, created on start;
+                                        # ignored by haematite
+
+# Optional distributed-haematite membership. Absent (the default) = the
+# single-node path, byte-identical to before the section existed. Only valid
+# when backend = "haematite". A cluster of one — node_id + bind_address, no
+# members/peers — is valid and self-quorums.
+# [store.cluster]
+# node_id = "node-0@127.0.0.1"          # REQUIRED: this node's unique
+                                        # distribution name
+# bind_address = "127.0.0.1:7000"       # REQUIRED: replication/quorum listener
+# members = []                          # FULL membership by node id — the
+                                        # quorum DENOMINATOR, never the
+                                        # reachable subset; empty is treated
+                                        # as [node_id]
+# failover_poll_interval_ms = 500       # default; peer-liveness poll cadence
+# failover_confirmations = 3            # default; consecutive disconnected
+                                        # polls before a dead peer's shards
+                                        # are adopted (must be >= 1)
+# [[store.cluster.peers]]               # dialable peers; none for a cluster of one
+# name = "node-1@127.0.0.1"             # REQUIRED: matches the peer's node_id
+# address = "127.0.0.1:7001"            # REQUIRED: peer replication endpoint
+# grpc_address = "127.0.0.1:60051"      # optional: peer client-API address for
+                                        # request forwarding; absent = a typed
+                                        # NotOwner error instead of forwarding
+# owned_shards = [32, 33]               # shards the peer owns; must be declared
+                                        # here for automatic failover to know
+                                        # what to adopt when the peer dies
 
 [runtime]
 scheduler_threads = 1                   # default; must be > 0
-query_timeout_ms = 10000                # REQUIRED, no default
+query_timeout_ms = 10000                # default; reply deadline for
+                                        # /workflows/query. Explicit 0 rejected
 
 [drain]
 timeout_seconds = 30                    # default; graceful shutdown bound
 
 [auth]
 enabled = false                         # default; dev mode trusts headers
-jwks_url = ""                           # REQUIRED when enabled = true
-jwks_refresh_seconds = 300              # default
+jwks_url = ""                           # REQUIRED (non-empty) when enabled = true
+jwks_refresh_seconds = 300              # default; must be > 0
 
 [metrics]
 enabled = true                          # default; serves GET /metrics
 
 [namespaces]
 default = "default"                     # default namespace name
+auto_create = "open"                    # default; a worker registering for an
+                                        # unseen namespace durably mints it.
+                                        # "closed" rejects instead (the escape
+                                        # hatch is an explicit POST /namespaces)
+max_in_flight_activities = 1024         # default; cluster-wide per-namespace
+                                        # concurrent-activity ceiling for
+                                        # namespaces with no explicit override.
+                                        # Stored-only today — nothing enforces
+                                        # it yet
 
-[websocket]
-outbound_buffer_bound = 32              # default; per-connection buffer
-event_broadcast_capacity = 1024         # REQUIRED, no default
+[ops_console]                           # canonical name; the legacy [dashboard]
+                                        # spelling is accepted as a serde alias
+source = "Embedded"                     # default: the compile-time embedded
+                                        # console bundle
+# source = { FileSystem = { asset_path = "/srv/console" } }
+                                        # serve an operator-supplied built
+                                        # bundle directory instead
+
+[namespace]
+mode = "SharedEngine"                   # default; namespace resolver mode
+# mode = { SingleTenant = { namespace = "only" } }
 
 [worker]
 heartbeat_window = 30000                # default (ms); heartbeat cadence
                                         # advertised to workers in RegisterAck
                                         # (see "Workers and activity duration")
 
+[worker.queue_service]                  # R1 dispatch policy; section absent =
+                                        # every queue strict, no clocks
+default_policy = "strict"               # default; a dispatch to a structurally
+                                        # unserved queue refuses rather than
+                                        # starting a lie. "durable_pending" =
+                                        # mark the run unserved and park it
+                                        # durably until a worker arrives
+# service_availability_deadline = 45000 # (ms) how long a dispatch waits for a
+                                        # compatible worker to EXIST before a
+                                        # typed refusal; unset = unbounded.
+                                        # Applies to strict-policy queues only
+# schedule_to_start_timeout = 5000      # (ms) how long a dispatch tries to
+                                        # hand its task to a live compatible
+                                        # worker; unset = one attempt
+# [[worker.queue_service.overrides]]    # written per-queue opt-ins; the first
+                                        # entry matching a dispatch wins
+# namespace = "lab"                     # optional; absent = every namespace
+# task_queue = "general"                # REQUIRED
+# policy = "durable_pending"            # REQUIRED
+
+[websocket]
+outbound_buffer_bound = 32              # default; per-connection buffer
+event_broadcast_capacity = 256          # default; engine-global /events/stream
+                                        # channel. Lag is filter-blind — size
+                                        # for global event volume across all
+                                        # namespaces. Explicit 0 rejected
+cluster_broadcast_capacity = 64         # default; low-rate cluster-topology
+                                        # channel backing the WS3 cluster
+                                        # subscription. Explicit 0 rejected
+
 [deploy]
 enabled = false                         # default: surface dark — /deploy/*
                                         # not mounted, gRPC DeployService
                                         # answers Unimplemented
-max_archive_bytes = 16777216            # default 64 MiB when enabled; override
-max_inflated_bytes = 67108864           # default 256 MiB when enabled; when set,
-                                        # must be >= max_archive_bytes
+max_archive_bytes = 67108864            # default 64 MiB when enabled; upload
+                                        # ceiling for .aion archives
+max_inflated_bytes = 268435456          # default 256 MiB when enabled; must be
+                                        # >= max_archive_bytes (a DEFLATE bomb
+                                        # under the upload ceiling can inflate
+                                        # ~1000:1)
+
+[authoring]
+# workspace_dir = "…"                   # AWL studio root, on by default;
+                                        # defaults to <home>/authoring (see
+                                        # "The Aion home")
+# gleam_path = "/usr/local/bin/gleam"   # commissions the server-side Gleam
+                                        # authoring loop and mounts
+                                        # /authoring/*; no default — absent,
+                                        # the server compiles no Gleam
+# project_root = "/srv/aion/flows"      # REQUIRED when gleam_path is set; a
+                                        # built Gleam project (gleam.toml, the
+                                        # aion_flow dependency, workflow.toml,
+                                        # schemas/) the operator provisions
+
+[dev]
+enabled = false                         # default: /dev/* not mounted, no
+                                        # per-run activity-mock decorator. The
+                                        # on/off gate is the only knob
+
+[outbox]                                # durable-outbox fan-out dispatcher
+enabled = false                         # default: dispatcher never spawned
+poll_interval_ms = 20                   # default when enabled; claim-sweep cadence
+batch_size = 16                         # default when enabled; rows claimed per sweep
+max_attempts = 5                        # default when enabled; attempts before
+                                        # a row is dead-lettered to failed
+backoff_base_ms = 50                    # default when enabled; first-retry backoff
+backoff_multiplier = 2                  # default when enabled; geometric growth
+                                        # per prior attempt (must be >= 1)
+backoff_max_ms = 1000                   # default when enabled; per-retry backoff
+                                        # ceiling (must be >= backoff_base_ms)
+# reconcile_interval_ms = 30000         # stale-claim reconciliation sweep — NO
+# reconcile_stale_after_ms = 60000      # defaults: both absent = reconciliation
+                                        # dark; setting either requires both
+transport = "liminal"                   # default in the stock build (the
+                                        # liminal-transport feature); a slim
+                                        # build without it defaults to "grpc"
+# liminal_listen_address = "0.0.0.0:7400"
+                                        # REQUIRED when transport = "liminal":
+                                        # the address the SERVER listens on for
+                                        # inbound liminal worker connections
+                                        # (workers connect in and self-register)
+
+[observability]
+max_event_bytes = 262144                # default (256 KiB); ceiling on one
+                                        # persisted transcript event's
+                                        # serialized size (oversized events
+                                        # are truncated before persisting)
+max_stream_events = 20000               # default; retained events per
+                                        # (workflow, activity, attempt)
+                                        # transcript stream — past the cap one
+                                        # marker record is kept and further
+                                        # events stay live-only
 ```
 
-(`[tls]` keys exist but are currently unsupported and rejected by
-validation; `[dashboard]` and `[namespace]` select dashboard asset source
-and namespace resolver mode — see [`docs/API.md`](API.md) for the
-namespace/auth trust model.)
+(`[tls]` keys parse — `certificate_chain_path` and `private_key_path` — but
+the server refuses to start with TLS material configured until transport
+TLS is wired. See [`docs/API.md`](API.md) for the namespace/auth trust
+model.)
 
 ### The Aion home (`~/.aion` and `AION_HOME`)
 
@@ -152,9 +321,41 @@ without them sharing state.
 
 ### Environment overrides
 
-Every key: `AION_<SECTION>_<KEY>`, uppercase, underscores. `AION_HOME` is
-**not** one of these — it is the home resolver above, not a config key.
-Examples:
+Overrides follow `AION_<SECTION>_<KEY>` (uppercase, underscores), but they
+are an **explicit allowlist**, not a generated mapping over every key. The
+supported variables are:
+
+- `AION_SERVER_LISTEN_ADDRESS`, `AION_SERVER_GRPC_ADDRESS`,
+  `AION_SERVER_CORS_ALLOWED_ORIGINS` (comma-separated; empty clears the list)
+- `AION_STORE_BACKEND`, `AION_STORE_URL` (selects libSQL, like
+  `--store-url`), `AION_STORE_DATA_DIR`, `AION_STORE_SHARD_COUNT`
+- `AION_RUNTIME_SCHEDULER_THREADS`, `AION_RUNTIME_QUERY_TIMEOUT_MS`
+- `AION_DRAIN_TIMEOUT_SECONDS`
+- `AION_AUTH_ENABLED`, `AION_AUTH_JWKS_URL`, `AION_AUTH_JWKS_REFRESH_SECONDS`
+- `AION_METRICS_ENABLED`
+- `AION_NAMESPACES_DEFAULT`
+- `AION_WEBSOCKET_OUTBOUND_BUFFER_BOUND`,
+  `AION_WEBSOCKET_EVENT_BROADCAST_CAPACITY`,
+  `AION_WEBSOCKET_CLUSTER_BROADCAST_CAPACITY`
+- `AION_DEPLOY_ENABLED`, `AION_DEPLOY_MAX_ARCHIVE_BYTES`,
+  `AION_DEPLOY_MAX_INFLATED_BYTES`
+- `AION_DEV_ENABLED`
+- `AION_AUTHORING_GLEAM_PATH`, `AION_AUTHORING_PROJECT_ROOT`,
+  `AION_AUTHORING_WORKSPACE_DIR`
+- `AION_OUTBOX_ENABLED`, `AION_OUTBOX_POLL_INTERVAL_MS`,
+  `AION_OUTBOX_BATCH_SIZE`, `AION_OUTBOX_MAX_ATTEMPTS`,
+  `AION_OUTBOX_BACKOFF_BASE_MS`, `AION_OUTBOX_BACKOFF_MULTIPLIER`,
+  `AION_OUTBOX_BACKOFF_MAX_MS`, `AION_OUTBOX_RECONCILE_INTERVAL_MS`,
+  `AION_OUTBOX_RECONCILE_STALE_AFTER_MS`,
+  `AION_OUTBOX_LIMINAL_LISTEN_ADDRESS`
+- `AION_OBSERVABILITY_MAX_EVENT_BYTES`, `AION_OBSERVABILITY_MAX_STREAM_EVENTS`
+
+Structured values — `[store.cluster]`, `store.owned_shards`,
+`[worker.queue_service]`, `worker.heartbeat_window`, `[ops_console]`,
+`[namespace]`, `[tls]`, `namespaces.auto_create`,
+`namespaces.max_in_flight_activities`, `outbox.transport`, and
+`workflow_packages` — are config-file (or flag) only. `AION_HOME` is **not**
+a config key — it is the home resolver above. Examples:
 
 ```sh
 AION_SERVER_GRPC_ADDRESS=127.0.0.1:60051
@@ -162,10 +363,7 @@ AION_STORE_BACKEND=haematite            # default; "libsql" or "memory" to opt o
 AION_STORE_DATA_DIR=aion-data           # haematite database directory
 # AION_STORE_BACKEND=libsql AION_STORE_URL=aion.db   # lightweight embedded opt-out
 AION_RUNTIME_QUERY_TIMEOUT_MS=10000
-AION_WEBSOCKET_EVENT_BROADCAST_CAPACITY=1024
 AION_DEPLOY_ENABLED=true
-AION_DEPLOY_MAX_ARCHIVE_BYTES=16777216
-AION_DEPLOY_MAX_INFLATED_BYTES=67108864
 ```
 
 Unknown `AION_*` variables are ignored. `AION_LOG` sets the tracing filter
@@ -303,13 +501,51 @@ sourcing — but in-flight activities will re-dispatch on recovery.
 ## Operating runs
 
 ```sh
-aion list [--status running|completed|failed|cancelled|timed-out|continued-as-new]
+aion list [--status running|paused|completed|failed|cancelled|timed-out|continued-as-new]
 aion describe <workflow-id> [--run-id <id>] [--raw] --pretty
-aion start <workflow-type> --input '<json>'
+aion start <workflow-type> --input '<json>'      # or --input-file <path>
 aion signal <workflow-id> <signal-name> --payload '<json>'
 aion query <workflow-id> <query-name>
 aion cancel <workflow-id> [--reason '<text>']
+aion pause <workflow-id> [--reason '<text>']
+aion resume <workflow-id>
+aion reopen <workflow-id>
+aion inspect <workflow-id> [--run-id <id>] [--from <seq> --mock '<json>']
 ```
+
+Every id-taking verb accepts `--run-id`; omitted, it targets the latest run.
+
+- **`pause` / `resume`** — `pause` durably holds **new** activity dispatch
+  while preserving all durable state: the run projects the non-terminal
+  `Paused` status, in-flight work keeps recording (timer fires, signal
+  receipts, drained completions), and the hold survives `kill -9` — a
+  paused run is not respawned at recovery, and its pending dispatch rows
+  are never claimed while paused. `resume` releases the hold and the run
+  proceeds to completion. Cancel of a paused run still works; the full
+  semantics (dispatch-hold ruling, replay-invisible markers, the
+  crashed-while-paused resume path) are in
+  [`docs/contracts/PAUSE-RESUME-DESIGN.md`](../contracts/PAUSE-RESUME-DESIGN.md).
+- **`reopen`** — reopens a terminal-reopenable (**Failed** or
+  **Cancelled**) run and re-drives it from its recorded history.
+- **`inspect`** — a time-travel debugger over a recorded run's event-store
+  oplog, using the same `describe` read every other command uses (no
+  debug-only log, no second store). For each recorded event it prints the
+  workflow-visible state projection and the recorded `now()` for that step;
+  `random()` is surfaced as a run-level draw-ordinal projection, not a
+  per-step value. On a non-determinism fault it prints the exact divergent
+  command (expected vs found at the sequence). With `--from <seq> --mock
+  '<json>'` it runs a **what-if** re-run from the chosen event with a
+  mocked outcome — entirely in-memory and read-only, never writing the
+  event log. `--from` and `--mock` are required together. `--mock` shapes:
+
+  ```json
+  {"kind":"activity_completed","result":<json>}
+  {"kind":"activity_failed","message":"..."}
+  {"kind":"child_completed","result":<json>}
+  {"kind":"child_failed","message":"..."}
+  {"kind":"signal_delivered","payload":<json>}
+  {"kind":"timer_fired"}
+  ```
 
 Global CLI flags: `--endpoint` (default `127.0.0.1:50051`), `--namespace`
 (default `default`), `--subject` (default `cli-user`), `--token`,
@@ -320,3 +556,71 @@ when there is an actionable next step — see the
 Health endpoints: `GET /health/live`, `GET /health/ready`. Event streaming:
 `GET /events/stream` (WebSocket; see [`docs/API.md`](API.md) for
 subscription shapes and resumption cursors).
+
+## Schedules
+
+A schedule is a durable server-side resource that starts workflow
+executions on a cadence. Its configuration (`aion_core::ScheduleConfig`)
+carries:
+
+- **`trigger`** — `{"Cron": {"expression": "0 2 * * *"}}` or
+  `{"Interval": {"period": {"secs": 300, "nanos": 0}}}`.
+- **`overlap_policy`** — what a tick does while an earlier triggered run is
+  still active: `"Skip"` (default), `"BufferOne"` (keep at most one
+  buffered tick), `"CancelPrevious"`, or `"AllowAll"`.
+- **`catch_up_policy`** — what happens to ticks missed while the scheduler
+  was unavailable: `"One"` (default; start one representative missed
+  tick), `"All"`, or `"Skip"`.
+- **`workflow_type`** — the workflow started on each fire.
+- **`input`** — the opaque payload supplied to every triggered execution
+  (`{"content_type": "Json", "bytes": [...]}` — UTF-8 JSON bytes).
+- **`search_attributes`** — stamped on every triggered execution. The
+  server force-stamps `aion.namespace` with the authorized namespace, so a
+  schedule can never start runs in another tenant; the namespace recorded
+  at creation is the schedule's immutable owner.
+
+Schedule ids are server-generated UUIDs. `overlap_policy` and
+`catch_up_policy` may be omitted and take their defaults.
+
+**There is no `aion` CLI verb for schedules.** The surface is seven HTTP
+routes and the seven matching gRPC RPCs (`CreateSchedule`,
+`UpdateSchedule`, `PauseSchedule`, `ResumeSchedule`, `DeleteSchedule`,
+`ListSchedules`, `DescribeSchedule`):
+
+| Method | Route | Request |
+|---|---|---|
+| `POST` | `/schedules` | JSON body: `namespace` + `config` envelope (below). Returns `201` with `schedule_id` and a `state` envelope. |
+| `GET` | `/schedules?namespace=<ns>` | List the namespace's schedules (state envelopes). |
+| `GET` | `/schedules/{id}?namespace=<ns>` | Describe one schedule. |
+| `PUT` | `/schedules/{id}` | JSON body: `namespace` + replacement `config` envelope; the id comes from the path. Cannot migrate a schedule between tenants. |
+| `DELETE` | `/schedules/{id}?namespace=<ns>` | Delete the schedule. |
+| `POST` | `/schedules/{id}/pause?namespace=<ns>` | Stop firing; state is preserved. |
+| `POST` | `/schedules/{id}/resume?namespace=<ns>` | Resume firing. |
+
+The `config` rides in the standard wire envelope: `{namespace, request_id,
+payload}` where `payload.content_type` is `"application/json"` and
+`payload.bytes` is the serialized `ScheduleConfig` as a **JSON byte array**
+(the same envelope form the rest of the HTTP API uses — see
+[`docs/API.md`](API.md)). Creating a schedule with `curl`, using `jq` to
+build the byte arrays (`explode` yields code points, which equal UTF-8
+bytes for ASCII config text; `[110,117,108,108]` is `null`):
+
+```sh
+config='{"trigger":{"Cron":{"expression":"0 2 * * *"}},"workflow_type":"nightly_report","input":{"content_type":"Json","bytes":[110,117,108,108]}}'
+jq -n --arg ns default --arg cfg "$config" \
+  '{namespace: $ns,
+    config: {namespace: $ns, request_id: null,
+             payload: {content_type: "application/json",
+                       bytes: ($cfg | explode)}}}' |
+curl -sS -X POST http://127.0.0.1:8080/schedules \
+  -H 'content-type: application/json' --data-binary @-
+```
+
+Pause, resume, describe, and delete then take the returned id directly:
+
+```sh
+curl -sS -X POST "http://127.0.0.1:8080/schedules/<uuid>/pause?namespace=default"
+curl -sS -X POST "http://127.0.0.1:8080/schedules/<uuid>/resume?namespace=default"
+curl -sS "http://127.0.0.1:8080/schedules/<uuid>?namespace=default"
+curl -sS -X DELETE "http://127.0.0.1:8080/schedules/<uuid>?namespace=default"
+```

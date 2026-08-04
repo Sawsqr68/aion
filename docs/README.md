@@ -25,8 +25,8 @@ is listed at the bottom so you know what it is when you trip over it.
   artifact derived from authored Gleam types.
 - [packaging.md](authoring/packaging.md) — `aion package`: turning a Gleam
   workflow project into the `.aion` archive the server loads.
-- [aion-authoring-dx.md](authoring/aion-authoring-dx.md) — the authoring
-  developer-experience surface end to end: commands, flags, routes, studio.
+- [aion-authoring-dx.md](authoring/aion-authoring-dx.md) — the `aion dev`
+  instant loop, `aion new` templates, and the authoring dev routes.
 
 ## `workers/` — serving activities
 
@@ -41,11 +41,15 @@ is listed at the bottom so you know what it is when you trip over it.
   norn-backed example worker, plus session pinning and the one-command setup.
 - [DECLARED-COMMANDS.md](workers/DECLARED-COMMANDS.md) — actions that carry
   a body in the AWL document and are run by the server; no worker involved.
+- [SHELL-WORKER-MANIFEST.md](workers/SHELL-WORKER-MANIFEST.md) — the
+  `worker.toml` field reference for `aion worker shell`.
 
 ## `operations/` — running Aion
 
 - [operations.md](operations/operations.md) — running, configuring,
   deploying to, and recovering an Aion server.
+- [ops-console.md](operations/ops-console.md) — the web console embedded in
+  the server binary: every view, and what an operator can do from each.
 - [API.md](operations/API.md) — the API surface: HTTP, gRPC, WebSocket, and
   the client/worker SDKs, with implementation status.
 - [errors.md](operations/errors.md) — the one stable error taxonomy across
@@ -68,6 +72,25 @@ is listed at the bottom so you know what it is when you trip over it.
 - [WORKFLOW-AUTHORING-AGENT-IDEA.md](vision/WORKFLOW-AUTHORING-AGENT-IDEA.md)
   — captured idea: variable-liveness testing and a specialised authoring
   agent.
+
+## SDKs — writing callers and workers in your language
+
+Each SDK documents itself where it lives:
+
+- [gleam/aion_flow](../gleam/aion_flow/README.md) — the typed Gleam workflow
+  SDK (the other first-class authoring surface).
+- [gleam/aion_client](../gleam/aion_client/README.md) — the Gleam caller SDK.
+- [crates/aion-client](../crates/aion-client/README.md) — the Rust caller SDK.
+- [crates/aion-worker](../crates/aion-worker/README.md) — the Rust worker SDK.
+- [sdks/python](../sdks/python/aion-client/README.md) — Python caller and
+  [worker](../sdks/python/aion-worker/README.md) SDKs.
+- [sdks/typescript](../sdks/typescript/aion-client/README.md) — TypeScript
+  caller and [worker](../sdks/typescript/aion-worker/README.md) SDKs.
+
+## Examples
+
+[examples/README.md](../examples/README.md) indexes all thirty runnable
+examples, starter ones first.
 
 ## `demo/` — driving it live
 

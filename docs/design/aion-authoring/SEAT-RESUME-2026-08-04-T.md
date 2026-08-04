@@ -1,5 +1,39 @@
 # 📍 SEAT RESUME — 2026-08-04 (T)
 
+## 🔴 LIVE UPDATE: docs COMPLETENESS SWEEP (Tom 03:36Z: "documentation for
+## absolutely everything") — MID-FLIGHT, supersedes the closed docs order
+
+Two audits ran (whole-product coverage + AWL reference vs code). Writers
+dispatched on disjoint files; 4 died on a usage limit mid-write and were
+RESUMED via SendMessage after Tom's /login (research context intact).
+
+DONE + seat-verified: docs/operations/ops-console.md (247 ln, new) ·
+docs/operations/API.md (23→64 verified routes, gRPC+WS tables) ·
+examples/README.md (30/30, links clean) · errors.md (all 14 wire codes) ·
+docs/workers/SHELL-WORKER-MANIFEST.md (fields match struct) ·
+GETTING-STARTED.md shell-worker cmd +--awl (required flag) ·
+docs/README.md wiring (console+manifest entries, SDK section ×8 links
+verified, examples link, honest aion-authoring-dx line) · root README
+(docs/README.md pointer + new rows) ·
+docs/design/aion-authoring/WORKER-TELEMETRY-DIRECTION.md (Tom's 04:00Z
+two-plane telemetry ruling: durable history lean, live stream unrecorded,
+worker-local capture; replay never reads telemetry).
+
+SWEEP COMPLETE (this commit): all five writers landed. operations.md
+322→626 ln (full config ref regenerated — old "Required keys" table was
+WRONG: those keys default now; deploy ceilings are 64/256 MiB not 16/64;
+shard_count default 64 verified sections.rs:657; env overlay is a
+33-var allowlist not a pattern; [tls] parses-then-refused not rejected) ·
+AWL-REFERENCE.md amended per the 8-item order incl. NEW §15 "what check
+does not check" + guard-narrowing section; amender CORRECTED 5 audit
+claims on verification (pipe-stage arity is a CHECK rule not lowering;
+only TIMED waits refused in on-failure — count_wait_fns gates on
+timeout.is_some; indexing refusals are parallel-forms-only; fixture path;
+named-fork branches may bind) — all 5 overrides re-verified at seat's
+hand · link check zero broken across all 11 changed files · worker
+rebuilt release clean (77969 untouched). Lane order told to Tom
+(silence-default): #139 → telemetry+#59 as one lane.
+
 **Supersedes S. Read this first.** I am **Vesper Lynd**, session
 `5849e0d8-4802-4869-8e0f-9f7fd187e198`. Sign `— Vesper`. Fable is the MODEL,
 not my name.
