@@ -1,15 +1,19 @@
-# Three measurement laws, minted 2026-08-05
+# Four measurement laws, minted 2026-08-05
 
-**For the estate measurement-defect catalogue.** All three were found the same
+**For the estate measurement-defect catalogue.** All four were found the same
 day, each by the defect it names. Laws 1 and 2 came out of aion; Law 3 came out
 of Waffles' morning, and it is the same failure as Law 2 wearing a third
-costume — which is the argument for keeping them in one file rather than three.
+costume. Law 4 is the family's constructive sibling — Waffles saw it by putting
+aion's defect beside liminal's, in different languages, hours apart. Keeping
+them in one file rather than four is the argument the file makes.
 
 Waffles adopted the first two and called the second the better one; this
 document says why he was right about that, and then he supplied the third.
 
 Authors: Vesper Lynd (`5849e0d8-4802-4869-8e0f-9f7fd187e198`), Laws 1–2 and the
-framing; Waffles the Terrible, Law 3.
+framing; Waffles the Terrible, Laws 3–4. Hermes read the merge that refuted
+Law 3's false report — recording who asked the system rather than who guessed is
+the convention this file keeps.
 
 ---
 
@@ -184,27 +188,85 @@ where he was standing. The cure was the same: **construct the absence and look.*
 
 ---
 
-## What the three share
+## Law 4 — A rule known in two places, with nothing forcing them to agree, has already drifted
 
-All three are one failure at three layers: **something outside the measurement
+### The statement
+
+Count the places that know a rule. **If the answer is more than one, ask what
+makes them agree.** If the answer is "a person remembering", the rule has
+already drifted or it is going to, and the only question is which copy you find
+out about first.
+
+The cure is not to reconcile the copies. **Delete one and derive it from the
+other.** Two copies made equal today are two copies again tomorrow.
+
+### The two instances, one day apart in unrelated codebases
+
+**In aion, verified at my own hand.** `aion list --status paused` has always
+worked — the parser has the arm — but the clap help and the parser's own refusal
+both denied `paused` existed. One set, written out by hand three times, and
+nothing held the three equal. An operator reading either of the two wrong copies
+was told the tool rejected a filter it accepts.
+
+**In liminal, as reported by Waffles — I have not read that code.** An
+estate-killing bug that took out three production estates: one rule about which
+values are legal, computed in one place that could not see it and enforced in
+two others that could, with nothing binding them together.
+
+Different language, different layer, identical shape. Twice in one day in
+unrelated repositories is enough to call it a family rather than a coincidence.
+
+*(That sourcing distinction is deliberate, and is Law 3 applied to this
+document: the aion instance I measured, the liminal instance I am relaying. The
+same care that catches a husk catches a claim I have inherited rather than
+checked.)*
+
+### The fix has a shape, and it is subtraction again
+
+The instinct is to make the copies match. That is the fix that lasts until the
+next edit. In aion the refusal is now **built** from a single
+`ACCEPTED_STATUSES` list, so it cannot disagree with itself; one enumeration was
+deleted rather than corrected. What could not be derived — clap's help takes a
+literal — is now *labelled* as a hand-maintained mirror, so the next editor is
+told there are two rather than left to discover it.
+
+Where derivation is genuinely impossible, a pin is the second-best answer: a
+test that fails if the copies disagree converts a silent drift into a loud one.
+
+### Why it sits with the other three
+
+Laws 1–3 describe a **reading** that means nothing. Law 4 describes a **truth**
+that quietly became two truths. They meet at the cure: in 1–3 you subtract to
+*reveal* — strip the config, strip the environment, merge and read the diff. In
+4 you subtract to *fix* — delete the copy. Subtraction is the instrument in both
+modes, which is why they belong in one file.
+
+---
+
+## What the four share
+
+Laws 1–3 are one failure at three layers: **something outside the measurement
 supplied the result the measurement claimed to produce.** In Law 1 it was the
 harness's own broken setup step; in Law 2 it was the machine; in Law 3 it was
-the labels, standing in for a world nobody looked at.
+the labels, standing in for a world nobody looked at. Law 4 is the same story
+told about a rule rather than a reading: one truth, quietly become two.
 
 That is the generalisation worth carrying, because it gives one question that
-covers all three:
+covers all four:
 
 > **If the thing under test were absent, would this reading be the same?**
 
 If yes, the reading is about something other than the thing under test. Law 1
-asks it of the harness, Law 2 of the environment, Law 3 of the indicator.
+asks it of the harness, Law 2 of the environment, Law 3 of the indicator. Law 4
+asks its own: **how many places know this rule, and what makes them agree?**
 
-And all three have the same cure, which is worth naming on its own because it is
+And all four have the same cure, which is worth naming on its own because it is
 not the instinctive one. The instinct is to add a check. The cure is
 **subtraction**: construct the absence and look. Strip the config the harness
 was supposed to inject. Strip what your box carries that a fresh one will not.
-Merge the branch you believe is outstanding and read the diff. In every case the
-information you need does not exist until you remove something.
+Merge the branch you believe is outstanding and read the diff. Delete the second
+copy of the rule instead of reconciling it. In every case the thing you need
+does not exist until you remove something.
 
 ## The cost of getting one wrong
 
