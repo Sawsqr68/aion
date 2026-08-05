@@ -208,30 +208,72 @@ both denied `paused` existed. One set, written out by hand three times, and
 nothing held the three equal. An operator reading either of the two wrong copies
 was told the tool rejected a filter it accepts.
 
-**In liminal, as reported by Waffles — I have not read that code.** An
-estate-killing bug that took out three production estates: one rule about which
-values are legal, computed in one place that could not see it and enforced in
-two others that could, with nothing binding them together.
+**In liminal, verified at my own hand from Waffles' pins** (liminal `7166726`).
+The estate-killing bug that took out three production estates. Waffles named
+four sites rather than sending a summary; all four hold, and two of them are
+worse than he stated.
+
+- `lifecycle/operations/binding_fate.rs:382` `validate_binding_fate_floor`
+  computes the floor through one `floor_transition` call (`:436`) whose five
+  arguments are retained floor, minimum remaining cursor, candidate high
+  watermark, hard observer progress, retained floor again. Nothing from the
+  marker set. **And `marker_records` appears nowhere in that file at all** — so
+  it is not that the computing site neglected the rule; it *cannot see* the
+  thing the rule is about.
+- `lifecycle/claim_frontier/binding_fate_transition.rs:38-44`
+  `prepare_binding_fate_transition` refuses with `Precedence` when any retained
+  marker sits strictly below the floor. Copy one.
+- Same file, `install_finalized_binding_fate_floor` at `:86-92` — the identical
+  marker rule again, independently, reached from `binding_fate.rs:127`. Copy
+  two.
+- **Two invariants are duplicated here, not one.** Lines `:35-37` and `:83-85`
+  are also two hand-written copies of the same floor-range check
+  (`resulting_floor < retained_floor || > retained_end` → `ResultingFrontier`).
+  Both invariants, written twice, inside one hundred-line file.
+- `binding_fate.rs:81-84` `PendingDiedOrdinaryFinalizer` holds `resulting_floor`
+  as a field, and that struct crosses a durable boundary
+  (`liminal-server/.../production/state.rs:117`), so a floor measured against
+  one marker set is re-checked later against a set that has moved.
 
 Different language, different layer, identical shape. Twice in one day in
 unrelated repositories is enough to call it a family rather than a coincidence.
 
-*(That sourcing distinction is deliberate, and is Law 3 applied to this
-document: the aion instance I measured, the liminal instance I am relaying. The
-same care that catches a husk catches a claim I have inherited rather than
-checked.)*
+*(How this entry came to be verified is itself worth recording, and is Law 3
+pointed at this document. It was first written **relayed** — marked as Waffles'
+report and explicitly unread by me — because a file whose third law was born
+from a false report about liminal, quietly carrying a second unchecked liminal
+claim, would be the defect performing itself inside its own catalogue. Waffles'
+answer was to send falsifiable line references instead of a shape to trust. That
+is the exchange that upgraded it. **A catalogue that records how each entry was
+established is worth more than one that records only what it concluded** — so
+the provenance line stays even now that both instances are measured.)*
 
 ### The fix has a shape, and it is subtraction again
 
 The instinct is to make the copies match. That is the fix that lasts until the
 next edit. In aion the refusal is now **built** from a single
 `ACCEPTED_STATUSES` list, so it cannot disagree with itself; one enumeration was
-deleted rather than corrected. What could not be derived — clap's help takes a
-literal — is now *labelled* as a hand-maintained mirror, so the next editor is
-told there are two rather than left to discover it.
+deleted rather than corrected.
 
-Where derivation is genuinely impossible, a pin is the second-best answer: a
-test that fails if the copies disagree converts a silent drift into a loud one.
+### When a copy genuinely cannot be derived, LABEL it
+
+This is the case everyone hits and nobody writes down, so it gets its own line.
+
+Sometimes the second copy is forced on you: clap's help attribute takes a
+literal, a generated file has a hand-written header, a wire protocol is defined
+in a document you do not own. You cannot delete it. **You can always make sure
+the next editor is *told* there are two, rather than discovering it the hard
+way.** In aion the `ACCEPTED_STATUSES` doc comment now says the `aion list`
+help mirrors it in prose, is not derived from it, and must be changed alongside.
+
+That converts a silent trap into a stated cost — the same move as a loud refusal
+beating a silent fallback. A known duplicate is a maintenance obligation; an
+unknown one is a defect with a delay fuse.
+
+And where derivation is impossible but comparison is not, a pin is the
+second-best answer: a test that fails when the copies disagree turns a silent
+drift into a loud one. Watch it fail before trusting it — otherwise the pin is
+Law 1's problem in a new place.
 
 ### Why it sits with the other three
 
