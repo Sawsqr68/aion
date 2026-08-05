@@ -150,3 +150,78 @@ Backticked commit messages via `git commit -F -`. Do not edit `CLAUDE.md`.
 
 Live pids, untouched all session: server **45425**, worker **48399**, both from
 the repo root. Server log: scratchpad `server.log`.
+
+---
+
+## ✅ #103 CLOSED — `be29abd8e`, pushed (added to this marker after AM was cut)
+
+**Both remedies the task asked for already existed six days before it was
+filed.** The task (filed 2026-07-30) wanted "either a per-event fetch-full-
+payload route, or the console requesting unelided payloads on the detail view".
+Both landed **2026-07-24**:
+
+- `POST /workflows/event` — `7f23dd774`, *"windowed history and payload-on-demand
+  endpoints"*. Returns the raw store `Event`, no elision at any limit.
+- The console's `PayloadView` — `20db93de7` — renders an elided payload as a
+  **"3.7 KB — load" button** wired to that route, with its own
+  `payload-on-demand.test.tsx`.
+
+The third claim ("the field is undiscoverable, not documented") was TRUE when
+written and was **closed 2026-08-04** by `4c5e459f`, which documents
+`payload_limit_bytes` in API.md.
+
+**The observation itself is real and current** — reproduced live on a 3787-byte
+agent prompt, which is exactly the task's complaint. But the scope was
+overstated: **only `/workflows/history` elides.** Measured on the same event,
+all four ways:
+
+| request | result |
+|---|---|
+| `POST /workflows/history` (defaults) | `{"__elided":true,"size_bytes":3787}` |
+| `POST /workflows/history` `payload_limit_bytes: 0` | 3787 bytes, whole |
+| `POST /workflows/event` seq 1 | 3787 bytes, whole |
+| `POST /workflows/describe` `include_history` | 3787 bytes, whole |
+
+The CLI never meets this at all — it reads through gRPC `describe`, which has no
+elision.
+
+**The one genuine residual, now fixed:** API.md documented the field and its
+2048 default but not that **`payload_limit_bytes: 0` disables elision
+entirely** (`history.rs:191`, `if payload_limit != 0`). Zero reads naturally as
+"a limit of zero bytes" — exactly backwards — so a reader wanting whole
+payloads would pass a large number. The line now says what 0 means and that
+this window is the only route that elides.
+
+**No test added, deliberately.** Both behaviours were already pinned
+(`history_elides_only_payload_bytes_strictly_above_the_boundary` covers the
+boundary AND the 0 case; `event_fetch_returns_full_payload_and_typed_not_found`
+covers the whole-payload route). The commit makes the documentation say what
+the tests already hold. Adding a third test would have been coverage theatre.
+
+### 🔴 The pattern — second instance in two days
+
+#101 and #103 were both filed against a state that was already stale, and in
+both cases the thing declared missing was **findable in one command**.
+
+- #101: "nothing tells an operator the verb exists" — the doc section had
+  existed for six weeks.
+- #103: "wanted: a per-event fetch-full-payload route" — it had shipped six
+  days earlier, under the name *payload-on-demand*.
+
+Common shape: **filed at the end of a long live session, from a real
+observation, with the remedy inferred to be absent rather than searched for.**
+The observation is the valuable part and was right both times. The inference
+was wrong both times.
+
+**Standing check before building anything a task calls missing:**
+`git log -S "<the remedy's likely name>"` and one grep of the route table.
+Two commands. Absence is the cheapest claim in the world to falsify, and the
+most expensive one to act on while wrong.
+
+### Observation NOT acted on
+
+`DEFAULT_PAYLOAD_LIMIT_BYTES` (2048) and `DEFAULT_HISTORY_LIMIT` are hardcoded
+constants. Against CLAUDE.md's *no arbitrary limits / no assumed defaults* rule
+that is at least a question, but it is the **#94 shape** — a configured value
+needing discussion, not a defect to patch unilaterally. Named here, routed to
+Waffles, not built.
