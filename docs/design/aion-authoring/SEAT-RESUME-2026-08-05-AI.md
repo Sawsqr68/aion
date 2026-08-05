@@ -53,15 +53,38 @@ rule **because that is what the assistant teaches from** — it showed
   documents the doc example gate scans, so its 19 `run` examples are unchecked.
   **Be honest when doing this:** adding it would catch syntax/type drift but
   would NOT have caught the `$$` trap, which is a runtime semantic.
-- **#145 NOT STARTED:** the two-bodies refusal says *"redeploy so one body
-  remains"* — but redeploying is what created the second body, and the
-  route-active version cannot be unloaded (`RouteActive`). The order that works,
-  and what the message should say:
-  `aion deploy FILE.awl` → `aion unload <type> <old-hash>` → run.
-  `aion deploy` already prints `superseded_versions`, so the refusal has the
-  hash it needs. Fix in `crates/aion-server/src/worker/declared_body.rs`,
-  `DeclaredBodyLookup::Ambiguous` arm. Bites on the SECOND iteration of every
-  bodied document.
+- **✅ #145 CLOSED (`fc1c10cc`, pushed).** See the section below.
+
+## ✅ #145 CLOSED — a refusal now carries what the operator needs to act
+
+`fc1c10cc`, pushed. `DeclaredBodyLookup::Ambiguous` carries the declaring
+versions instead of a count — hash, workflow types, route-active — and
+`crates/aion-server/src/worker/declared_body_ambiguity.rs` turns them into
+runnable `aion unload <type> <hash>` commands. Three situations, three remedies:
+superseded version left behind (retire it) · nothing route-active (deploy first,
+THEN retire) · two route-active packages that genuinely disagree (nothing to
+retire — reconcile the documents).
+
+**The oracle is the deploy API's own parser, not a length.** A short hash is
+refused by `decode_version_target`, so an abbreviated one would print a command
+that cannot run. `the_printed_hash_parses_back_as_a_content_hash` takes a real
+`ContentHash` through the same `to_string` the engine reader uses and parses the
+printed token back. Watched failing against a deliberately truncated hash:
+`InvalidLength { found: 8 }`, four tests dead.
+
+Gates on this tree: clippy `-p aion-server --all-targets -D warnings` EXIT=0 ·
+`cargo test -p aion-server` **944 passed / 0 failed**, EXIT=0, 45 targets · doc
+example gate EXIT=0, 41 PASS / 1 UNVERIFIABLE / 2 ILLUSTRATIVE / 0 FAIL
+(unchanged). One libSQL flake mid-run —
+`schedule_namespace_enforcement_survives_restart`, *"bad parameter or other API
+misuse"*, the known **#85** shape — passed alone and in the clean full re-run,
+and is nowhere near this change. **Note the trap it exposed:** `cargo test`
+STOPS at the first failing target, so a red run's totals are truncated, not
+comparable. Re-run clean before quoting a number.
+
+Docs moved with it: `DECLARED-COMMANDS.md` gains *"Changing a body makes a NEW
+version, and the old one stays"* (deploy → unload → run); the findings doc
+records finding 2 closed.
 
 ## Method notes worth keeping
 
@@ -96,4 +119,6 @@ the repo root. Server log: scratchpad `server.log` (fd 1 and 2, still open).
 
 `23f1e2af` (battery re-earned on the final tree — an embedded asset is source) ·
 `9dc54b49` (git-sweep example + three findings) ·
-`483c933a` (#144 docs: no `$$` escape inside single quotes).
+`483c933a` (#144 docs: no `$$` escape inside single quotes) ·
+`0ce74ea0` (this marker) ·
+`fc1c10cc` (#145: the refusal names a followable remedy).
