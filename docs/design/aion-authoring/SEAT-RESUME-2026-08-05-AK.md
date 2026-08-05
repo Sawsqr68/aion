@@ -90,14 +90,30 @@ refusal is filed under `#### When the disagreement IS refused`, the one case
 that still reaches it. `DECLARED-BODY-FINDINGS-2026-08-05.md` finding 2 records
 what closing #145 did not close.
 
-## 🔴 Open, for Waffles — not acted on
+## ✅ R2.4 discharged — ruled, then amended into the brief
 
-`BRIEF-139-LEG-A-REWORK.md` **R2.4** orders two documents to carry a
-byte-identical body forever, explicitly because "different bodies for one action
-name refuse every dispatch terminally". That is a workaround for the defect
-`e314caf1` removes, so the order may now be relaxable. **The brief is a ratified
-work order and I have not touched it.** Recorded in the findings doc; raised
-with Waffles.
+`BRIEF-139-LEG-A-REWORK.md` **R2 item 4** (cited throughout as R2.4 — the brief
+numbers items under `## R2`, there is no literal string "R2.4" in it) ordered
+`assistant.awl` and `assistant_spike.awl` to carry a byte-identical
+`assistant_provision` body forever, because they share queue `default`.
+Waffles ruled it discharged on evidence at 07:40Z, and ruled the FORM too:
+**not a quiet edit — an amendment recorded in the brief itself**, naming
+`e314caf1`, with the reason the requirement existed, so a reader in a month
+sees the rule was real and was retired on evidence rather than evaporating.
+No re-ratification; a requirement discharged by its own terms.
+
+Landed as **Amendment 1** at the foot of the brief, plus an inline ⚠️ pointer
+on item 4 itself so a reader who stops at the requirement still learns it
+moved. It states both permissions separately, because they are different and
+only the second matters: *you may stop copying the body*, and **the two
+documents are now allowed to carry genuinely different bodies.** It also
+states the residual — divergence reintroduces the terminal refusal on the one
+path where a run's version cannot be named — and records the state at the time
+of amendment (both bodies byte-identical, sha256 `e377d3e8…`), so the starting
+position is on the record.
+
+**The rule underneath, worth more than the amendment:** one truth kept in two
+places, equal only because a person keeps it equal, has drifted or it will.
 
 ## Board
 

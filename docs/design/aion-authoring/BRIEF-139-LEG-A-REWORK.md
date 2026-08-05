@@ -99,6 +99,9 @@ carry dead `max_rounds`/`max_nudges`/`workspace_root` inputs.**
 4. **Byte-identical body across both documents** — they share queue
    `default`; different bodies for one action name refuse every dispatch
    terminally (`declared_body.rs` Ambiguous arm). Copy, don't retype.
+   **⚠️ DISCHARGED 2026-08-05 — see Amendment 1 at the foot of this brief.
+   The defect this guarded against is fixed; the documents are now allowed
+   to differ. Read the amendment before acting on this item.**
 5. Update the in-document comments that say the CALLER states the root — the
    server states it now. Keep the draft's excellent comments on collision
    discipline and the stdout contract; adjust the `Provisioned` doc to name
@@ -152,6 +155,63 @@ carry dead `max_rounds`/`max_nudges`/`workspace_root` inputs.**
 
 Files touched with line counts; every gate command + verbatim tail of its
 output; the exact final body command string (both documents — confirm
-byte-identical, e.g. matching shasum of the extracted body line); any
-diagnostic, refusal, or surprise, verbatim; anything this brief got wrong
-about the code as found.
+byte-identical, e.g. matching shasum of the extracted body line — **see
+Amendment 1: this confirmation is no longer required**); any diagnostic,
+refusal, or surprise, verbatim; anything this brief got wrong about the code
+as found.
+
+## Amendment 1 — R2.4 discharged (2026-08-05)
+
+**Ruled by Waffles the Terrible, 07:40Z, on evidence. Not a scope change and
+not a re-ratification: a requirement discharged by its own terms.**
+
+**Why R2.4 existed.** Declared-body resolution read the whole task queue
+rather than the dispatching run's own package version, so two retained
+versions declaring different commands for one action name refused every
+dispatch terminally. Both documents share queue `default` and both declare
+`assistant_provision`, so any difference between their bodies took the queue
+down — which had already happened once, and `assistant_spike.awl`'s own
+header records it. Ordering the two bodies byte-identical was the only
+defence available at the time, and it was the correct call.
+
+**What discharges it.** `e314caf1` (task #84). Resolution now takes the
+dispatching run's identity and treats that run's own package version's
+contract as the sole authority on what its actions execute. Two documents are
+two packages, so they are two content hashes, so they are two versions: a run
+of `assistant.awl` reads `assistant.awl`'s body and a run of
+`assistant_spike.awl` reads its own. There is no longer a queue-level
+question to disagree about.
+
+**The permission this grants, stated explicitly.** These are two different
+permissions and only the second one matters:
+
+- You may stop copying the body between the two documents.
+- **The two documents are now allowed to carry genuinely DIFFERENT
+  `assistant_provision` bodies.** Divergence is legitimate, not tolerated
+  drift. Neither document's body is a constraint on the other, and no future
+  edit to one needs to be mirrored into the other.
+
+**The one residual, stated so it is not discovered later.** The queue-wide
+reading — and with it the ambiguity refusal — survives in exactly one case:
+where the server cannot name the version a run is pinned to (its registry
+handle is gone, or the registry is unreadable). If the two bodies have
+diverged *and* a dispatch hits that path, it still refuses terminally rather
+than guess. This is a degraded-path behaviour, not the normal one, and it is
+by design: without the run's identity, choosing IS the guess the refusal
+exists to prevent. Diverge freely; just know that this failure mode is the
+price, and that keeping them identical is what makes it impossible.
+
+**State at the time of amendment**, so the starting position is on the
+record: both bodies are currently byte-identical —
+`sha256 e377d3e871f7e68f25081f62bd0d52e3e59f2a17c7d47940ba6d68376737d99e`
+(`assistant.awl:272`, `assistant_spike.awl:153`). Nothing about them is
+changed by this amendment; the obligation to keep them that way is what
+ends.
+
+**Why this is recorded rather than deleted.** One truth kept in two places,
+equal only because a person keeps it equal, is a standing hazard — it has
+drifted or it will. R2.4 was that shape, and it was load-bearing anyway. A
+reader in a month must be able to see that the rule was real, was necessary,
+and was retired on evidence — not that it quietly evaporated.
+
+Recorded in `DECLARED-BODY-FINDINGS-2026-08-05.md` §2 and seat marker AK.

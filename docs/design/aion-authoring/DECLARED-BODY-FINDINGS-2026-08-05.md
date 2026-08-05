@@ -99,10 +99,27 @@ Resolution now takes the dispatching run's identity and reads its own version's
 contract as the sole authority; it never borrows another version's body. The
 queue-wide reading — and therefore the refusal above — survives only for the
 case where the run's version cannot be named at all, because without the run's
-identity, choosing IS the guess the refusal exists to prevent. Note what this
-retires: `BRIEF-139-LEG-A-REWORK.md` R2.4 orders two documents to carry a
-byte-identical body forever, a workaround for exactly this defect. **The brief
-is a ratified work order and is not to be edited without Waffles.**
+identity, choosing IS the guess the refusal exists to prevent.
+
+**And it retired a standing order.** `BRIEF-139-LEG-A-REWORK.md` R2.4 required
+`assistant.awl` and `assistant_spike.awl` to carry a byte-identical
+`assistant_provision` body forever, because they share queue `default` and any
+difference took the queue down — which had already happened once. Waffles ruled
+it discharged on evidence (07:40Z), recorded as **Amendment 1 in the brief
+itself** rather than by quiet edit: a ratified order that changes must show its
+own history, so the next reader sees the rule was real, was load-bearing, and
+was retired against a commit. The amendment states the permission explicitly,
+because "stop copying this" and "these may now differ" are different
+permissions and the second is the one that matters — the two documents are now
+allowed to diverge. Residual, stated there and here: divergence reintroduces a
+terminal refusal on the one path where a run's version cannot be named. That is
+the price of diverging, and keeping the bodies identical is what makes it
+impossible.
+
+**The rule underneath it, which outlives this brief:** one truth kept in two
+places, equal only because a person keeps it equal, has drifted or it will.
+Count the places that know a rule; if it is more than one and only diligence
+holds them together, that is a defect waiting rather than a discipline working.
 
 ## 3. The authoring root is the home default, not the working directory
 
