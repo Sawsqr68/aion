@@ -1,0 +1,632 @@
+<title>AWL — the workflow language</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --ground: #EEF1F5;
+    --ground-2: #E3E8EE;
+    --panel: #FBFCFD;
+    --ink: #171C24;
+    --ink-soft: #4A5462;
+    --ink-faint: #7A8492;
+    --rule: #CFD6DF;
+    --brass: #9A6A20;
+    --brass-bright: #C08A45;
+    --teal: #37697A;
+    --plum: #7A4A6B;
+    --shadow: 0 1px 2px rgba(23, 28, 36, .06), 0 8px 24px rgba(23, 28, 36, .06);
+
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0F131A;
+      --ground-2: #161C25;
+      --panel: #151A22;
+      --ink: #DEE4EC;
+      --ink-soft: #A2ADBB;
+      --ink-faint: #6F7B8A;
+      --rule: #2A323D;
+      --brass: #C08A45;
+      --brass-bright: #DCA860;
+      --teal: #6FA9B8;
+      --plum: #B98BAA;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px rgba(0, 0, 0, .35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0F131A;
+    --ground-2: #161C25;
+    --panel: #151A22;
+    --ink: #DEE4EC;
+    --ink-soft: #A2ADBB;
+    --ink-faint: #6F7B8A;
+    --rule: #2A323D;
+    --brass: #C08A45;
+    --brass-bright: #DCA860;
+    --teal: #6FA9B8;
+    --plum: #B98BAA;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px rgba(0, 0, 0, .35);
+  }
+  :root[data-theme="light"] {
+    --ground: #EEF1F5;
+    --ground-2: #E3E8EE;
+    --panel: #FBFCFD;
+    --ink: #171C24;
+    --ink-soft: #4A5462;
+    --ink-faint: #7A8492;
+    --rule: #CFD6DF;
+    --brass: #9A6A20;
+    --brass-bright: #C08A45;
+    --teal: #37697A;
+    --plum: #7A4A6B;
+    --shadow: 0 1px 2px rgba(23, 28, 36, .06), 0 8px 24px rgba(23, 28, 36, .06);
+  }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .deck { position: relative; }
+
+  .slide {
+    display: none;
+    min-height: 100svh;
+    box-sizing: border-box;
+    padding: clamp(2rem, 5vw, 4.5rem) clamp(1.25rem, 6vw, 6rem) 5.5rem;
+    flex-direction: column;
+    justify-content: center;
+    gap: clamp(1rem, 2.2vw, 1.9rem);
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  .slide.is-current { display: flex; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: clamp(.68rem, 1vw, .78rem);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--brass);
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+  }
+  .eyebrow::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--rule);
+  }
+
+  h1, h2 {
+    font-family: var(--mono);
+    font-weight: 600;
+    letter-spacing: -.02em;
+    text-wrap: balance;
+    margin: 0;
+    line-height: 1.12;
+  }
+  h1 { font-size: clamp(2.4rem, 7vw, 5rem); }
+  h2 { font-size: clamp(1.5rem, 3.6vw, 2.6rem); }
+
+  .lede {
+    font-size: clamp(1.05rem, 1.9vw, 1.45rem);
+    line-height: 1.5;
+    max-width: 62ch;
+    color: var(--ink-soft);
+    margin: 0;
+    text-wrap: pretty;
+  }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  .points {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: .85rem;
+    max-width: 64ch;
+  }
+  .points li {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: .85rem;
+    align-items: baseline;
+    font-size: clamp(1rem, 1.6vw, 1.22rem);
+    line-height: 1.45;
+    color: var(--ink-soft);
+  }
+  .points li::before {
+    content: "—";
+    font-family: var(--mono);
+    color: var(--brass);
+  }
+  .points strong { color: var(--ink); font-weight: 600; }
+
+  .cols {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+    gap: clamp(1rem, 2.5vw, 2rem);
+    align-items: start;
+  }
+
+  pre {
+    margin: 0;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    box-shadow: var(--shadow);
+    padding: clamp(.9rem, 1.8vw, 1.5rem) clamp(1rem, 2vw, 1.6rem);
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: clamp(.82rem, 1.32vw, 1.06rem);
+    line-height: 1.62;
+    tab-size: 2;
+  }
+  pre code { font: inherit; color: var(--ink); }
+
+  .tok-kw { color: var(--brass); font-weight: 600; }
+  .tok-type { color: var(--teal); }
+  .tok-str { color: var(--plum); }
+  .tok-com { color: var(--ink-faint); font-style: italic; }
+  .tok-pipe { color: var(--brass-bright); font-weight: 700; }
+
+  .caption {
+    font-family: var(--mono);
+    font-size: clamp(.72rem, 1.1vw, .84rem);
+    color: var(--ink-faint);
+    line-height: 1.5;
+    max-width: 70ch;
+    margin: 0;
+  }
+  .caption b { color: var(--brass); font-weight: 600; }
+
+  .note {
+    border-left: 2px solid var(--brass);
+    padding: .1rem 0 .1rem 1rem;
+    color: var(--ink-soft);
+    font-size: clamp(.95rem, 1.5vw, 1.12rem);
+    line-height: 1.5;
+    max-width: 64ch;
+  }
+  .note strong { color: var(--ink); }
+
+  .stamp {
+    display: inline-flex;
+    align-items: center;
+    gap: .55rem;
+    font-family: var(--mono);
+    font-size: clamp(.7rem, 1.05vw, .8rem);
+    letter-spacing: .04em;
+    color: var(--ink-soft);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: .42rem .95rem;
+    background: var(--panel);
+    width: fit-content;
+  }
+  .stamp::before {
+    content: "";
+    width: .5rem;
+    height: .5rem;
+    border-radius: 50%;
+    background: var(--brass);
+  }
+
+  /* The rail is the deck's own event history: one tick per slide, replayed. */
+  .rail {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: clamp(.6rem, 2vw, 1.4rem);
+    padding: .7rem clamp(1.25rem, 6vw, 6rem) 1rem;
+    background: linear-gradient(to top, var(--ground) 62%, transparent);
+    font-family: var(--mono);
+    font-size: .74rem;
+    color: var(--ink-faint);
+  }
+  .ticks { display: flex; gap: 3px; flex: 1; align-items: flex-end; }
+  .tick {
+    flex: 1;
+    height: 3px;
+    background: var(--rule);
+    border: 0;
+    padding: 0;
+    border-radius: 1px;
+    cursor: pointer;
+    transition: height .18s ease, background .18s ease;
+  }
+  .tick:hover { height: 9px; background: var(--ink-faint); }
+  .tick.seen { background: var(--ink-faint); }
+  .tick.now { background: var(--brass); height: 11px; }
+  .tick:focus-visible { outline: 2px solid var(--brass); outline-offset: 3px; }
+
+  .counter { font-variant-numeric: tabular-nums; letter-spacing: .05em; white-space: nowrap; }
+  .hint { white-space: nowrap; }
+  @media (max-width: 640px) { .hint { display: none; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="deck" id="deck">
+
+  <section class="slide">
+    <p class="eyebrow">Aion · workflow authoring</p>
+    <h1>AWL</h1>
+    <p class="lede">A small language for workflows that <strong>survive</strong> — a process that can crash on step nine of ten and carry on from step nine, or sleep for three months and wake up in the same thought.</p>
+    <span class="stamp">every example on these slides passes <code>aion awl check</code></span>
+    <p class="caption">12 documents, checked against <b>aion 0.11.0</b> before this deck was written. Nothing here is illustrative-only.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">The problem</p>
+    <h2>Long work outlives the process running it</h2>
+    <ul class="points">
+      <li>A job takes four hours. The machine reboots at hour three.</li>
+      <li>A contract waits on a signature that arrives in nine days.</li>
+      <li>Step six charged a card. Step seven failed. <strong>Do not charge it twice.</strong></li>
+    </ul>
+    <p class="note">Ordinary code has no memory of where it was. You end up rebuilding the same machinery every time — a state table, a retry loop, a way to ask "did that already happen?" <strong>That machinery is the product here, and the language is how you reach it.</strong></p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">The mechanism</p>
+    <h2>Write it down, then replay it</h2>
+    <ul class="points">
+      <li>Every side effect is <strong>recorded</strong> as it happens — the call, and what came back.</li>
+      <li>To recover, the workflow is <strong>re-run from the top</strong>.</li>
+      <li>Anything already recorded returns its old answer <strong>instead of happening again</strong>.</li>
+    </ul>
+    <p class="note">So recovery isn't a special path with its own bugs — it's the ordinary path, reading from history until it runs out. The price is that workflow code must be <strong>deterministic</strong>: same history in, same decisions out. That single constraint is what shapes the whole language.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">A complete workflow</p>
+    <h2>Everything, in eleven lines</h2>
+    <pre><code>//! Greet a name, then shout it — the first workflow written in AWL and run for real.
+workflow awl_hello
+  input name: String
+  outcome shouted: type Shouted, route success
+
+type Greeting { greeting: String }
+type Shouted  { text: String }
+
+worker awl_hello
+  action greet(name: String) -> Greeting
+  action shout(text: String) -> Shouted
+
+step greet_and_shout
+  name |> greet |> .greeting |> shout |> route shouted</code></pre>
+    <p class="caption">Verbatim from <b>examples/awl-hello/awl_hello.awl</b> — deployed and run for real, not written for this slide.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Reading it</p>
+    <h2>The pipeline is the spine</h2>
+    <pre><code>name |> greet |> .greeting |> shout |> route shouted</code></pre>
+    <ul class="points">
+      <li><strong>name</strong> — the workflow's input.</li>
+      <li><strong>|> greet</strong> — hand it to an action. Something outside runs it.</li>
+      <li><strong>|> .greeting</strong> — reach into the result.</li>
+      <li><strong>|> route shouted</strong> — finish, through a named outcome.</li>
+    </ul>
+    <p class="note">Read left to right and you have the whole flow. Each stage is a durable point: if the process dies after <strong>greet</strong>, the replay doesn't greet twice.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Types</p>
+    <h2>Records, enums, and absence</h2>
+    <pre><code>type Request  { title: String, detail: String?, tags: [String] }
+type Decision { verdict: Verdict, note: String }
+type Verdict = Approve | Revise | Reject</code></pre>
+    <ul class="points">
+      <li><strong>String?</strong> means the field may be <strong>absent</strong> — and absent is not <code>null</code>.</li>
+      <li>An optional cannot be read until it's been <strong>proved present</strong>.</li>
+      <li>Built-ins are Bool, Int, Float, String, Nil, Dir, and lists.</li>
+    </ul>
+    <p class="note">There is no arithmetic and there are no user functions. If something needs computing, it happens in a worker — <strong>which is exactly the determinism rule showing up as syntax.</strong></p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Where work happens</p>
+    <h2>Workers and actions</h2>
+    <pre><code>worker dev
+  action build(repo: String, clean: Bool) -> Build
+    node builder, timeout 30m, retry 2 backoff 10s..2m
+
+step compile
+  build(repo: request.repo, clean: true) -> built
+  built |> route done</code></pre>
+    <ul class="points">
+      <li>A <strong>worker</strong> block names a task queue and the actions it serves.</li>
+      <li>The workflow never runs the work — it <strong>dispatches</strong> it and records the answer.</li>
+      <li>Arguments are always named. Types are checked on both sides.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Operational reality, in the language</p>
+    <h2>The config line</h2>
+    <pre><code>action build(repo: String, clean: Bool) -> Build
+  node builder, timeout 30m, retry 2 backoff 10s..2m</code></pre>
+    <ul class="points">
+      <li><strong>node</strong> — pin this work to a particular machine.</li>
+      <li><strong>timeout</strong> — how long this one call may take.</li>
+      <li><strong>retry</strong> — <code>retry 3 every 30s</code>, or a backoff range.</li>
+      <li><strong>advisory</strong> — this call is allowed to fail without failing the step.</li>
+    </ul>
+    <p class="note">Retry, timeout and placement are not deployment configuration living in another file. They are <strong>in the document, next to the call</strong>, versioned with it and visible to whoever reads it.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Ending, and branching</p>
+    <h2>Outcomes are the only way out</h2>
+    <pre><code>step choose
+  inspect(repo: request.repo) -> findings
+  summarise(findings: findings) -> summary
+  outcome blocked: when findings |> any(.blocking), route remediation(summary)
+  outcome clear: otherwise, route done(summary)</code></pre>
+    <ul class="points">
+      <li>The first true <strong>when</strong> wins; <strong>otherwise</strong> is the complement and comes last.</li>
+      <li>Branches must be <strong>exhaustive</strong> — the checker refuses a gap.</li>
+      <li>Cover every variant of an enum and you may drop the <code>otherwise</code>.</li>
+    </ul>
+    <p class="note">There is no <code>if</code> and no <code>select</code>. A decision is a named, typed, total set of outcomes — so <strong>a run can always say which arm it took, and why.</strong></p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Doing many things at once</p>
+    <h2>One call per item — fork and join</h2>
+    <pre><code>step scan
+  fork item in request.repos
+    inspect(repo: item.name)
+  join -> findings
+  tally(findings: findings) -> report
+  report |> route done</code></pre>
+    <p class="note">One branch per item, genuinely in parallel, joined back <strong>in input order</strong> — so the result list is deterministic even though the work was not. Add <code>sequential</code> to walk them one at a time instead.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Doing many things at once</p>
+    <h2>When each item needs a graph, not a call</h2>
+    <pre><code>step open
+  distribute item in request.repos
+
+step work
+  build(repo: item.name) -> built
+  verify(name: built.name) -> checked
+
+step close
+  collect checked -> results
+  tally(results: results) -> report
+  report |> route done</code></pre>
+    <ul class="points">
+      <li><strong>distribute</strong> runs a whole region of steps per item, in parallel.</li>
+      <li><strong>sequence</strong> is the same shape, one item at a time.</li>
+      <li><code>collect checked?</code> tolerates failures — one optional slot per item.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Waiting</p>
+    <h2>Expiry is absence</h2>
+    <pre><code>step hold
+  wait approval timeout 2h -> answer
+  outcome approved: when answer is present, route done(by: answer.reviewer)
+  outcome expired: otherwise, route failed(reason: "approval timed out")</code></pre>
+    <ul class="points">
+      <li>A timed wait binds an <strong>optional</strong>, because expiry is simply nothing arriving.</li>
+      <li>Proving it present <strong>narrows the type</strong> — inside that arm, <code>answer.reviewer</code> is readable.</li>
+      <li>Outside that arm it isn't. The proof does not leak.</li>
+    </ul>
+    <p class="note">This wait is durable. Two hours, two months — the process can die and restart underneath it, and the deadline still lands.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Repeating</p>
+    <h2>Every loop is bounded. There is no other kind.</h2>
+    <pre><code>loop round = initial counting cycles
+  improve(prior: round) -> round
+  until round.complete
+  max max_rounds</code></pre>
+    <ul class="points">
+      <li>The body runs at least once and must <strong>rebind</strong> the threaded value.</li>
+      <li><strong>max is mandatory</strong> — the checker will not accept a loop without one.</li>
+      <li>The step must then say what completion means and what exhaustion means.</li>
+    </ul>
+    <p class="note">A workflow that can run forever is one that can bill forever, or hold a resource forever. <strong>The language refuses to express it.</strong></p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">When it goes wrong</p>
+    <h2>Compensation has to end somewhere</h2>
+    <pre><code>step ship
+  publish(ids: request.asset_ids) -> receipt
+  receipt |> route done
+  on failure
+    remove_assets(ids: request.asset_ids)
+    route failed(reason: "publish failed after compensation")</code></pre>
+    <p class="note">An <code>on failure</code> block <strong>must end in a route</strong>. You can clean up, and you can decide what the failure means — but you cannot quietly swallow it and carry on as though nothing happened.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">No worker required</p>
+    <h2>The document can carry the command</h2>
+    <pre><code>worker shell_box
+  action stamp(text: String) -> RunOutcome
+    run "echo $text"
+
+step stamp_it
+  text |> stamp |> route stamped</code></pre>
+    <ul class="points">
+      <li>The server runs it. There is <strong>no Rust, no SDK, no process to deploy</strong>.</li>
+      <li>The command is sealed into the package's identity when you deploy.</li>
+      <li>Arguments arrive whole — <strong>never through a shell</strong>, so nothing inside them can execute.</li>
+    </ul>
+    <p class="caption">Verbatim from <b>examples/shell-run/shell_run.awl</b>.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Agents as ordinary work</p>
+    <h2>A prompt in, a reply out</h2>
+    <pre><code>worker assistants
+  action ask(prompt: String) -> String
+    agent, timeout 10m</code></pre>
+    <p class="note">The <strong>agent</strong> marker says one thing: this action's String argument is a <strong>prompt</strong> and its String result is a <strong>reply</strong>. That is the whole contract an adapter needs to hand the call to an agent instead of running it as ordinary work.</p>
+    <p class="lede">Which means an agent's turn is just an activity — recorded, retried, timed out, and <strong>replayed from history like everything else</strong>.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">The tools</p>
+    <h2>Four verbs and an editor</h2>
+    <pre><code>aion awl check  flow.awl     # parse and typecheck
+aion awl fmt    flow.awl     # canonical formatting
+aion deploy     flow.awl     # compile, load, and route it live
+aion run        flow.awl --input '{"name":"Ada"}'</code></pre>
+    <ul class="points">
+      <li><strong>deploy</strong> is the route flip — the new version is live when it returns.</li>
+      <li><strong>run</strong> is the whole loop: compile, deploy, start, wait for the answer.</li>
+      <li>There's a language server too — completion, go-to-definition, rename.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Being straight about it</p>
+    <h2>What <code>check</code> does not check</h2>
+    <ul class="points">
+      <li><code>aion awl check</code> runs the <strong>parser and the typechecker</strong>. That is all it runs.</li>
+      <li>Compiling refuses a further band of shapes — each with a diagnostic naming the shape and the line.</li>
+      <li>So <strong>a clean check is necessary, not sufficient.</strong> The compile has the last word.</li>
+    </ul>
+    <p class="note">Worth saying out loud rather than discovering later: examples include a bounded loop inside an <code>on failure</code> block, and indexing inside a parallel branch. <strong>They fail loudly, at compile, pointing at the line.</strong></p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Try it</p>
+    <h2>One clone, one script</h2>
+    <pre><code>git clone …/aion &amp;&amp; cd aion
+scripts/setup.sh</code></pre>
+    <p class="lede">A running server, the web console, and an authoring assistant you can talk to — then write a <code>.awl</code>, check it, and deploy it in one command.</p>
+    <p class="caption">Every AWL example in this deck was checked with <b>aion awl check</b> against <b>0.11.0</b> before the slide was written. Two are lifted verbatim from workflows that have been deployed and run.</p>
+  </section>
+
+</div>
+
+<nav class="rail" aria-label="Slide navigation">
+  <span class="counter" id="counter">01 / 19</span>
+  <div class="ticks" id="ticks"></div>
+  <span class="hint">← → to move · F for full screen</span>
+</nav>
+
+<script>
+  (function () {
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+    var ticks = document.getElementById('ticks');
+    var counter = document.getElementById('counter');
+    var current = 0;
+
+    // ---- syntax marking -------------------------------------------------
+    // Split on comments and strings FIRST so keywords inside them are left
+    // alone, then mark keywords and TitleCase type names in the remainder.
+    var KEYWORDS = ['workflow', 'input', 'outcome', 'signal', 'query', 'send', 'const', 'type',
+      'worker', 'action', 'child', 'subflow', 'step', 'route', 'when', 'otherwise', 'after',
+      'fork', 'join', 'distribute', 'sequence', 'collect', 'loop', 'until', 'max', 'visits',
+      'wait', 'sleep', 'timeout', 'retry', 'every', 'backoff', 'node', 'on', 'failure',
+      'agent', 'advisory', 'run', 'spawn', 'counting', 'sequential', 'is', 'present', 'absent',
+      'success', 'failure', 'true', 'false', 'any'];
+    var kwRe = new RegExp('\\b(' + KEYWORDS.join('|') + ')\\b', 'g');
+
+    function esc(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function markPlain(text) {
+      var out = esc(text);
+      out = out.replace(kwRe, '<span class="tok-kw">$1</span>');
+      out = out.replace(/\b([A-Z][A-Za-z0-9]*)\b/g, '<span class="tok-type">$1</span>');
+      out = out.replace(/\|&gt;/g, '<span class="tok-pipe">|&gt;</span>');
+      return out;
+    }
+
+    function highlight(source) {
+      var parts = source.split(/(\/\/[^\n]*|"[^"\n]*")/g);
+      var html = '';
+      for (var i = 0; i < parts.length; i++) {
+        var part = parts[i];
+        if (!part) continue;
+        if (part.indexOf('//') === 0) {
+          html += '<span class="tok-com">' + esc(part) + '</span>';
+        } else if (part.charAt(0) === '"') {
+          html += '<span class="tok-str">' + esc(part) + '</span>';
+        } else {
+          html += markPlain(part);
+        }
+      }
+      return html;
+    }
+
+    Array.prototype.forEach.call(document.querySelectorAll('pre code'), function (block) {
+      block.innerHTML = highlight(block.textContent);
+    });
+
+    // ---- navigation -----------------------------------------------------
+    slides.forEach(function (slide, index) {
+      var tick = document.createElement('button');
+      tick.className = 'tick';
+      tick.type = 'button';
+      tick.setAttribute('aria-label', 'Slide ' + (index + 1));
+      tick.addEventListener('click', function () { show(index); });
+      ticks.appendChild(tick);
+    });
+
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+    function show(index) {
+      current = Math.max(0, Math.min(slides.length - 1, index));
+      slides.forEach(function (slide, i) {
+        slide.classList.toggle('is-current', i === current);
+      });
+      Array.prototype.forEach.call(ticks.children, function (tick, i) {
+        tick.classList.toggle('now', i === current);
+        tick.classList.toggle('seen', i < current);
+      });
+      counter.textContent = pad(current + 1) + ' / ' + pad(slides.length);
+      if (location.hash !== '#' + (current + 1)) {
+        history.replaceState(null, '', '#' + (current + 1));
+      }
+      window.scrollTo(0, 0);
+    }
+
+    document.addEventListener('keydown', function (event) {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      var key = event.key;
+      if (key === 'ArrowRight' || key === 'PageDown' || key === ' ') {
+        event.preventDefault(); show(current + 1);
+      } else if (key === 'ArrowLeft' || key === 'PageUp') {
+        event.preventDefault(); show(current - 1);
+      } else if (key === 'Home') {
+        event.preventDefault(); show(0);
+      } else if (key === 'End') {
+        event.preventDefault(); show(slides.length - 1);
+      } else if (key === 'f' || key === 'F') {
+        event.preventDefault();
+        if (document.fullscreenElement) { document.exitFullscreen(); }
+        else if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen();
+        }
+      }
+    });
+
+    var start = parseInt((location.hash || '').slice(1), 10);
+    show(isNaN(start) ? 0 : start - 1);
+  })();
+</script>
