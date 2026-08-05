@@ -102,9 +102,17 @@ say "Checking the aion CLI"
 if command -v aion >/dev/null; then
     note "aion already installed: $(aion --version 2>/dev/null || echo '(version unavailable)')"
 else
-    note "aion not found — installing the published aion-cli crate."
+    # Installed FROM THE CLONE, not from crates.io. This script and the server
+    # it drives share a contract — the startup banner it reads fields out of —
+    # and a published crate is a second copy of that contract with nothing
+    # forcing it to agree with this file. It has already disagreed once: the
+    # banner's `workspace_root`, which this script requires, was added after
+    # 0.11.0 was published, so `cargo install aion-cli` produced a server this
+    # script could not finish against. Building from the tree this script
+    # ships in makes the two agree by construction.
+    note "aion not found — installing from this checkout ($REPO_ROOT)."
     note "A cold install compiles the whole server and can take ~25 minutes."
-    cargo install aion-cli
+    cargo install --path "$REPO_ROOT/crates/aion-cli"
     command -v aion >/dev/null || fail "cargo install finished but aion is not on PATH — is ~/.cargo/bin on your PATH?"
     note "installed: $(aion --version)"
 fi
@@ -155,11 +163,29 @@ CONFIG
     note "On a shared machine, read that file before going further."
 fi
 
+# The server's own last ERROR line, which says WHY it would not start — an
+# unsafe store path, an address already bound, a config it would not accept.
+# A timeout only establishes that nothing answered; this establishes the cause,
+# and the cause is what the operator needs.
+server_failure_reason() {
+    local reason
+    # `[^"]*` rather than `.*`: a greedy match runs past the end of the error
+    # string and drags the following JSON fields into the message the operator
+    # reads. Stopping at the closing quote costs a truncated reason only if the
+    # error text itself contains an escaped quote, which is the better trade.
+    reason="$(grep '"level":"ERROR"' "$SERVER_LOG" 2>/dev/null | tail -1 \
+        | sed -n 's/.*"error":"\([^"]*\)".*/\1/p')"
+    [ -n "$reason" ] || return 1
+    printf '%s\n' "$reason"
+}
+
 say "Starting the Aion server"
+SERVER_PID=""
 if server_is_up; then
     note "this Aion home's server is already up — leaving it alone"
 else
-    ( cd "$AION_HOME" && nohup aion server >"$SERVER_LOG" 2>&1 & )
+    ( cd "$AION_HOME" && nohup aion server >"$SERVER_LOG" 2>&1 & echo $! >"$AION_HOME/server.pid" )
+    SERVER_PID="$(cat "$AION_HOME/server.pid" 2>/dev/null || true)"
     note "launched; log: $SERVER_LOG"
 fi
 
@@ -170,16 +196,44 @@ for _ in $(seq 1 120); do
         SERVER_READY=yes
         break
     fi
+    # A server that has already exited will never answer, so waiting out the
+    # full deadline buys nothing and buries the reason under two minutes of
+    # silence. The worker startup loop below has always done this; the server
+    # loop needs it for exactly the same reason.
+    if [ -n "$SERVER_PID" ] && ! kill -0 "$SERVER_PID" 2>/dev/null; then
+        if REASON="$(server_failure_reason)"; then
+            fail "the server exited during startup: $REASON
+   (full log: $SERVER_LOG)"
+        fi
+        fail "the server exited during startup and its log records no error — see $SERVER_LOG"
+    fi
     sleep 1
 done
-[ -n "$SERVER_READY" ] || fail "server did not become ready within 120s — see $SERVER_LOG"
+if [ -z "$SERVER_READY" ]; then
+    if REASON="$(server_failure_reason)"; then
+        fail "the server did not become ready within 120s: $REASON
+   (full log: $SERVER_LOG)"
+    fi
+    fail "server did not become ready within 120s — see $SERVER_LOG"
+fi
 HTTP_ADDRESS="$(banner_field http_address)"
 GRPC_ADDRESS="$(banner_field grpc_address)" || fail "startup banner carries no grpc_address — see $SERVER_LOG"
 SERVER_BUILD="$(curl -sf "http://$HTTP_ADDRESS/build")"
 note "server up at http://$HTTP_ADDRESS — $SERVER_BUILD"
 
 say "Reading the server's workspace root"
-WORKSPACE_ROOT="$(banner_field workspace_root)" || fail "startup banner carries no workspace_root — see $SERVER_LOG"
+# An `aion` that was already on PATH never went through the install step above,
+# so it can be any version — including one older than the banner field this
+# script needs. Say which mismatch it is and how to end it, rather than
+# reporting an absent field and leaving the operator to work out why.
+WORKSPACE_ROOT="$(banner_field workspace_root)" || fail "this server's startup banner carries no \`workspace_root\`.
+   That field is what tells the assistant worker where the server will look for
+   repositories, and a server that does not publish it predates this script.
+   The \`aion\` in use is $(command -v aion) ($(aion --version 2>/dev/null || echo 'version unavailable')).
+   Install the CLI from this checkout so the two agree:
+       cargo install --path $REPO_ROOT/crates/aion-cli
+   then stop the running server and re-run this script.
+   (server log: $SERVER_LOG)"
 case "$WORKSPACE_ROOT" in
     "unresolvable:"*)
         fail "the server's workspace root is unresolvable, so declared provisioning cannot dispatch — $WORKSPACE_ROOT (see $SERVER_LOG)"
