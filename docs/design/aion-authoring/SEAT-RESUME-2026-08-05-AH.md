@@ -98,10 +98,29 @@ newer `aion` puts the broken console back. Backup: scratchpad `config.toml.bak`.
 
 Live pids: server **45425**, worker **48399**, both from repo root.
 
-## Still owed
+## ✅ CLOSED after the marker was written — `d8e6d568`, pushed
 
-- `AWL-REFERENCE.md:92` imports `schemas/existing.schema.json`, absent from the
-  repo — recorded UNVERIFIABLE, deliberately not papered over.
+`AWL-REFERENCE.md:92` is no longer UNVERIFIABLE. The recorded reason ("the
+repository does not contain the schema") described a missing capability in the
+GATE, not a defect in the documentation — the gate had no way to put a file
+where an import looks. `Spec.fixtures` now writes files beside the composed
+document (where AWL resolves imports from, NOT the process cwd), and
+`describe()` names each supplied fixture in the row so the PASS cannot be
+misread as "copy this and it runs" when the reader brings their own schema.
+
+Reaching the checker exposed a latent scaffold defect: the default tail routed
+`done(summary, message)` while `GATE_TYPES` declares `GateResult { summary }`
+only, so ANY block using the pure default scaffold would have failed on the
+scaffold rather than its own content. This block was simply the first to use it
+unmodified. Corrected.
+
+**Measured: 41 PASS / 1 UNVERIFIABLE / 2 ILLUSTRATIVE / 0 FAIL, exit 0**
+(was 40 / 2 / 2 / 1). Every PASS still survives the corruption control. The one
+remaining UNVERIFIABLE is `AWL-REFERENCE.md:85` — two expression forms shown
+out of statement position; checking them needs a binding that would change the
+fragment. That reason is about the block, so it stands.
+
+## Still owed
 - 🔴 #142 — merge `fix/worker-shell-dial-and-audibility` when the #139 cut
   clears, then run the operator's real command.
 - #141 — wire-with-oracle sweep. *The oracle must not read both sides from the
