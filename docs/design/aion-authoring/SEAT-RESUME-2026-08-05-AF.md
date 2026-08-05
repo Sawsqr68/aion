@@ -58,10 +58,40 @@ to `item_announcer` / `review_reporter`. A rename, not a deletion — nothing to
 route. Gate re-run: exit 0, 40 PASS / 0 FAIL, findings doc re-derives
 byte-identical.
 
-### 🔴 STILL OPEN — the gate does not read prose
-The gate checks ```awl blocks. It does **not** check the documents' claims
-about commands and flags; those three were verified by hand above. A `--flag`
-renamed in `aion-cli` would leave every one of them silently false.
+## 1b. COMMAND GATE — BUILT AND GREEN ✅ (`de4cc3ca`)
+
+The prose gap named above is closed. `docs/authoring/doc_command_gate.py` walks
+the real `--help` tree and judges all 94 distinct `aion …` strings across seven
+documents (the six above plus `examples/assistant/resources/COMMANDS.md`).
+
+**92 PASS · 1 ABSENT · 1 BINARY-ONLY · 0 FAIL.** Report is **generated**:
+`docs/design/aion-authoring/DOC-COMMAND-GATE-FINDINGS.md`. Do not hand-edit.
+
+```
+python3 docs/authoring/doc_command_gate.py --self-check   # prove the refusals fire
+python3 docs/authoring/doc_command_gate.py --write        # judge + regenerate
+```
+
+A PASS establishes only that the path resolves and every flag is accepted —
+**not** that the flag means what the sentence says. The report states this.
+
+### What it found — nearly all of it in the gate's own controls
+1. Corrupting each claim caught **21 false passes** in run one: a bogus token in
+   *subcommand* position was filed as a positional and waved through.
+2. 17 more "failures" were the walk refusing root-level global flags written
+   *before* the subcommand — the form every operator command uses.
+3. The one genuine finding is a **true negative**: `WORKERS.md` names
+   `aion worker python` to say no script host ships. The gate could not tell
+   "this works" from "this does not exist". Denials are now declared in
+   `ASSERTED_ABSENT` and checked **both ways** — build one and its denial fails.
+4. 🔴 The coverage baseline was computed *with the extractor it audits*, so
+   crippling the extractor reported zero misses. Now an independent expression
+   (`BACKTICK_SPAN`). My own catalogued law, broken by my own hand again.
+5. Denials keyed on the whole line never matched a command carrying arguments.
+   Keyed on the resolved command path now.
+
+`--self-check` re-proves all four refusals on demand; each exists because the
+first version of the check it exercises passed while broken.
 
 Also standing: `AWL-REFERENCE.md:92` imports `schemas/existing.schema.json`,
 which the repository does not contain — recorded UNVERIFIABLE, deliberately not
