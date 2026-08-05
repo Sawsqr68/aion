@@ -38,14 +38,37 @@ whole reason it sat overnight). Its biggest catches:
   empty). Fixed in the same commit, and the cancellation section now states the
   `timeout_ms` fact too, so the two accounts cannot diverge again.
 
-### 3. The vacuous-green write-up: WRITTEN, LANDED, SENT
+### 3. The vacuous-green write-up: WRITTEN, LANDED, SENT — and now THREE laws
 
-`docs/design/aion-authoring/MEASUREMENT-LAWS-2026-08-05.md` (`d313806f`).
-Both laws with their incidents and guards, plus the argument for why Waffles
-was right that the second is the better one: Law 1 is a harness lying to
-itself and an internal assertion fixes it; Law 2 is the environment lying to a
-correct harness, which no internal check can ever detect — the only instrument
-is subtraction. DM'd to Waffles.
+`docs/design/aion-authoring/MEASUREMENT-LAWS-2026-08-05.md` (`d313806f`;
+third law `bebdf776`). DM'd to Waffles, who replied adopting my framing as the
+true reason Law 2 is the harder one — Law 1 is a harness lying to itself and an
+internal assertion fixes it; Law 2 is the environment lying to a correct
+harness, which no internal check can ever detect. He then supplied **Law 3**
+from his own morning (an indicator that cannot distinguish a husk from a debt is
+not a measurement, it is a mood — his false "liminal sitting on 1500 unlanded
+lines" report, which was two dead branch pointers), and left the call to me. It
+is in.
+
+All three now share one statement: something outside the measurement supplied
+the result it claimed to produce — the setup step, the machine, the labels. One
+question: **if the thing under test were absent, would this reading be the
+same?** One cure, and it is not the instinctive one: **subtraction**.
+
+The file also records why we write them down: **a wrong measurement reassigns
+blame.** Tom went at Hermes for a failure that was Waffles'.
+
+### 4. Three code truth-defects the comb surfaced: LANDED (`c298bbcd`)
+
+`aion list --status paused` has always worked; both the clap help
+(`main.rs:407`) and the parser's refusal (`payload.rs`) denied it existed — two
+hand-written enumerations of one set. The refusal is now BUILT from a single
+`ACCEPTED_STATUSES`, and a new pin closes the other direction (every advertised
+spelling must parse). **Watched failing before trusting it**: an `abandoned`
+entry the parser rejects fails with "`abandoned` is advertised as accepted but
+the parser refuses it"; restored, re-ran green. Also fixed: `main.rs:213` cited
+the non-existent `docs/guides/codegen.md`, and the CORS doc comment omitted
+`PUT`. clippy `-p aion-cli` and `-p aion-server` `--all-targets`: exit 0 each.
 
 ## Landed and pushed this session (main), in order
 
@@ -73,12 +96,8 @@ untracked directories.
   server: `connected_workers` **0** vs **1**. Likely fix: route the worker
   verbs through `normalize_endpoint` too, plus a tracing subscriber so the
   redial driver's warnings are visible.
-- `aion list --status paused` works, but the clap help (`main.rs:407`) and the
-  parser's error message (`payload.rs:43`) both omit `paused`.
-- `crates/aion-cli/src/main.rs:213` cites `docs/guides/codegen.md`; the file is
-  `docs/authoring/codegen.md`.
-- `crates/aion-server/src/api/http/router.rs:89` says the CORS layer allows
-  "GET, POST, and OPTIONS preflight"; line 112 also allows `PUT`.
+- ~~`aion list --status paused`~~, ~~the `codegen.md` path~~, ~~the CORS
+  comment~~ — **all three FIXED and landed at `c298bbcd`.**
 - `CLAUDE.md`'s crate list omits `aion-integration-acp`, a real workspace
   member (21 `crates/*` members; the list names 20). Tom's file — flagged only.
 
