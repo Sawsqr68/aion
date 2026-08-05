@@ -456,10 +456,55 @@ The honest enforcement points in aion, best first:
 1. **`CLAUDE.md`** — injected into every agent's context automatically, so a line
    there is not remembered, it is *present*. That is the only genuinely
    mechanical option available today. It is Tom's file and a change to how
-   everyone works, so it is **asked for, not taken** (Waffles, 2026-08-05).
+   everyone works, so it is **asked for, not taken** (Waffles, 2026-08-05, who
+   carries it to Tom with the argument attached — he should see the reasoning,
+   not a diff). **The proposal is written out below.**
 2. **The brief workflow** — acceptance criteria that name the operator's command
    rather than a component.
 3. This table, cited by hand in reviews. Weakest, and named as weakest.
+
+### The proposal for `CLAUDE.md` — for Tom, through Waffles
+
+**What is being asked.** Two lines added to `CLAUDE.md`, in the Code Review
+section. Nothing else changes.
+
+> **Gate the operator's command, not a component of it.** A proof must run what
+> the operator actually runs — same arguments, same environment — not the piece
+> you had a theory about. Ten green components still do not compose.
+>
+> Before reporting anything green, run the six-row check in
+> `docs/design/aion-authoring/MEASUREMENT-LAWS-2026-08-05.md`.
+
+**Why it would matter to you.** Every agent working in this repository reads
+`CLAUDE.md` automatically, at the start of every session. So a rule written
+there is *in front of them* when they work. A rule written anywhere else — a
+design document, a review habit, a thing I remember — only works if somebody
+thinks to go and look, and the evidence from one night says that is not good
+enough:
+
+- Your own case, 23 July: a check passed using a throwaway session while the
+  real thing resumes a named one and needs an extra flag. The check was green
+  and the job could never have run.
+- Waffles' case, tonight: he tested the part he had a theory about instead of
+  the part you actually run, and the estate died at a door his test never
+  opened.
+- Then, minutes after paying for that, he read my work and told me my own test
+  passed the same rule. It did not. **He had just lost an estate to this exact
+  mistake and still could not see it in someone else's work.**
+
+That last one is the argument. This is not something people fail to know. It is
+something people fail to *apply while concentrating*, which is what a line in
+front of them fixes and a document does not.
+
+**The cost.** Two lines of context in every session, forever. That is real and
+it is why it is being asked for rather than taken.
+
+**Recommendation.** Add them. The cheapest failure of this kind costs an
+afternoon; the ones this week cost an estate and, in July, a first flight in
+front of you.
+
+**If you say nothing, nothing happens** — the rule stays in the design document,
+which is where it is now.
 
 There is no CI to hang it on, and **verifying that claim is itself a worked
 example of row 3.** The obvious readings both mislead:
@@ -479,6 +524,36 @@ was publish "no CI" citing a task row, which would have been right by luck.)
 
 **The transferable part: `gh workflow list` reports the file's state, not the
 repository's capability to run it.** Ask the permissions endpoint.
+
+### Configuration and capacity are two different questions
+
+Waffles' widening, and it is the general form: **whenever a tool reports on a
+thing's configuration, ask what reports on its capacity to act.** An enabled
+cron with no scheduler running. A registered hook on a disabled integration. A
+seat in a roster whose process never starts. A workflow marked `active` in a
+repository where Actions is off.
+
+Almost every dashboard answers the first question, because configuration is
+cheap to read and capacity usually is not. Neither reading is dishonest — the
+workflow file really is active, as a file. The failure is that the honest answer
+to the wrong question is indistinguishable from the answer you wanted.
+
+### Liveness fails in both directions
+
+Two instances the same night, from opposite ends:
+
+- **Up and not working.** `aion worker shell` connected to nothing, stayed up,
+  and served no dispatches. Which is why the check that means anything is
+  registration (`connected_workers`), not the process table.
+- **Up and already finished.** Waffles stopped a test estate; the kernel took
+  every seat down correctly and then never exited — idle, zero children, wedged
+  at its own last step. Work complete, process alive.
+
+So "the process is running" cannot distinguish *not yet working*, *working*,
+*never going to work*, and *finished and stuck*. It is a husk indicator in the
+row-3 sense, and it is the most widely trusted one there is. **Liveness is
+evidence of a process, never of progress.** Pair it with something that reports
+the work: a registration, a completion event, a sequence number that moves.
 
 ## Catalogue neighbours
 
