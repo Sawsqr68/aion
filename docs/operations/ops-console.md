@@ -42,8 +42,8 @@ Every view shares the same chrome:
   operation and never mutates anything itself.
 
 Global keyboard shortcuts (all rebindable; the palette chip shows your
-real binding): `g w` workflows, `g e` event search, `g n` namespaces,
-`g a` assistant, `/` focus search. `mod` is `⌘`/`Super`, never Control.
+real binding): `g w` workflows, `g n` namespaces, `g a` assistant. `mod`
+is `⌘`/`Super`, never Control.
 
 ## Workflows (`/`)
 
@@ -100,16 +100,6 @@ inferred from state).
 Two mutating controls live here: **create a namespace**
 (`POST /namespaces`) and **edit a namespace's placement**
 (`PUT /namespaces/{name}/placement`).
-
-## Search (`/search`)
-
-Event-level search across the selected namespace. All fields are optional
-and combine: event type, workflow type, activity type, error text, and a
-recorded after/before window. Each result deep-links into the workflow
-detail swimlane at the matching event (`/workflows/:id?seq=N`). Form state
-survives navigation (sessionStorage draft); no namespace, an empty query,
-or a server failure each surface as visible state — results are never
-fabricated.
 
 ## Actions (`/actions`)
 
@@ -242,6 +232,6 @@ actions is:
 | Authoring | create/save/format documents, apply structured edits, save layout | `/awl/*` |
 | Authoring | guided ship-and-run (deploy + start) | deploy + start APIs |
 
-Everything else — lists, timelines, transcripts, search, incidents,
-failover — only reads. Mutating affordances the server does not grant or
+Everything else — lists, timelines, transcripts, incidents, failover —
+only reads. Mutating affordances the server does not grant or
 mount are hidden or rendered as explicit disabled states, never faked.

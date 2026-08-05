@@ -6,7 +6,6 @@ import { generatePath } from 'react-router';
 // without a circular-init hazard.
 export const workflowListPath = '/';
 export const workflowDetailPath = '/workflows/:id';
-export const searchPath = '/search';
 export const incidentsPath = '/incidents';
 export const failoverPath = '/failover';
 export const actionsPath = '/actions';
@@ -28,10 +27,6 @@ export function workflowListHref() {
 export function workflowDetailHref(workflowId: string, seq?: number) {
   const base = generatePath(workflowDetailPath, { id: workflowId });
   return seq === undefined ? base : `${base}?seq=${seq}`;
-}
-
-export function searchHref() {
-  return searchPath;
 }
 
 export function incidentsHref() {

@@ -4,7 +4,6 @@ import {
   failoverPath,
   incidentsPath,
   namespacesPath,
-  searchPath,
   workflowListPath,
 } from '@/app/routePaths';
 
@@ -32,12 +31,6 @@ const NAVIGATE_VERBS: readonly PaletteVerb[] = [
     title: 'Go to namespaces',
     keywords: ['registry', 'tenants', 'navigate'],
     href: namespacesPath,
-  },
-  {
-    id: 'verb:go-search',
-    title: 'Go to event search',
-    keywords: ['events', 'find', 'navigate'],
-    href: searchPath,
   },
   {
     id: 'verb:go-actions',

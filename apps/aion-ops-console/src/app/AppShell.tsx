@@ -14,7 +14,6 @@ import {
   failoverPath,
   incidentsPath,
   namespacesPath,
-  searchPath,
   workflowDetailPath,
   workflowListPath,
 } from './routePaths';
@@ -23,7 +22,6 @@ import {
 const NAV_ITEMS: readonly AppNavItem[] = [
   { href: workflowListPath, label: 'Workflows', activePrefix: workflowListPath },
   { href: namespacesPath, label: 'Namespaces', activePrefix: namespacesPath },
-  { href: searchPath, label: 'Search', activePrefix: searchPath },
   { href: actionsPath, label: 'Actions', activePrefix: actionsPath },
   { href: assistantPath, label: 'Assistant', activePrefix: assistantPath },
   { href: authoringPath, label: 'Authoring', activePrefix: authoringPath },

@@ -5,7 +5,7 @@ import { createMemoryRouter } from 'react-router';
 
 import { App } from './App';
 import { connectWebSocketLifecycle } from './providers';
-import { failoverPath, incidentsPath, searchPath, workflowListPath } from './routePaths';
+import { actionsPath, failoverPath, incidentsPath, workflowListPath } from './routePaths';
 import { appRoutes } from './routes';
 
 const workflow = {
@@ -31,12 +31,12 @@ const workflowStartedEvent = {
 };
 
 // Every Phase-1 route must mount inside the shell without crashing. Lazy routes
-// (search, incidents) render their Suspense fallback under SSR; the assertion is
-// that the shell chrome is present and nothing throws.
+// (actions, incidents) render their Suspense fallback under SSR; the assertion
+// is that the shell chrome is present and nothing throws.
 const SHELL_ROUTES = [
   workflowListPath,
   '/workflows/workflow-1',
-  searchPath,
+  actionsPath,
   incidentsPath,
   failoverPath,
 ];
@@ -48,7 +48,7 @@ test('mounts every Phase-1 route inside the persistent shell without crashing', 
     expect(markup).toContain('Aion Ops Console');
     // Persistent nav is present on every route.
     expect(markup).toContain('>Workflows<');
-    expect(markup).toContain('>Search<');
+    expect(markup).toContain('>Actions<');
     expect(markup).toContain('>Incidents<');
     expect(markup).toContain('>Failover<');
     expect(markup).toContain('Namespace');
@@ -60,9 +60,9 @@ test('marks exactly the active route in the nav with aria-current', () => {
   expect(countAriaCurrent(onList)).toBe(1);
   expect(activeNavLabel(onList)).toBe('Workflows');
 
-  const onSearch = renderApp(searchPath);
-  expect(countAriaCurrent(onSearch)).toBe(1);
-  expect(activeNavLabel(onSearch)).toBe('Search');
+  const onActions = renderApp(actionsPath);
+  expect(countAriaCurrent(onActions)).toBe(1);
+  expect(activeNavLabel(onActions)).toBe('Actions');
 
   const onIncidents = renderApp(incidentsPath);
   expect(activeNavLabel(onIncidents)).toBe('Incidents');

@@ -25,13 +25,6 @@ export type WorkflowPage<T> = {
   hasMore: boolean;
 };
 
-/** One event-search hit: the matched event plus its locating coordinates. */
-export type EventSearchResult = {
-  event: Event;
-  workflowId: WorkflowId;
-  seq: number;
-};
-
 export type WorkflowQueryResponse =
   | WorkflowSummary[]
   | {
@@ -220,21 +213,6 @@ type RawWorkflowVersion = {
 
 export type ListVersionsResponse = RawWorkflowVersion[] | { versions?: RawWorkflowVersion[] };
 
-type RawEventSearchResult = {
-  event?: unknown;
-  workflow_id?: WorkflowId;
-  seq?: number;
-};
-
-export type EventSearchResponse =
-  | RawEventSearchResult[]
-  | {
-      results?: RawEventSearchResult[];
-      items?: RawEventSearchResult[];
-      next_cursor?: string | null;
-      has_more?: boolean;
-    };
-
 export function normalizeWorkflowPage(
   response: WorkflowQueryResponse,
   requestedLimit: number
@@ -264,25 +242,6 @@ export function normalizeHistory(response: HistoryResponse): Event[] {
   return ([...events] as Event[]).sort(
     (left, right) => left.data.envelope.seq - right.data.envelope.seq
   );
-}
-
-export function normalizeEventSearch(
-  response: EventSearchResponse,
-  requestedLimit: number
-): WorkflowPage<EventSearchResult> {
-  const rawList = Array.isArray(response) ? response : (response.results ?? response.items ?? []);
-
-  const items = rawList.map(toEventSearchResult);
-
-  if (Array.isArray(response)) {
-    return { items, nextCursor: null, hasMore: items.length >= requestedLimit };
-  }
-
-  return {
-    items,
-    nextCursor: response.next_cursor ?? null,
-    hasMore: response.has_more ?? response.next_cursor != null,
-  };
 }
 
 export function normalizeNamespaces(response: NamespacesResponse): Namespace[] {
@@ -394,14 +353,6 @@ function requireString(value: unknown, field: string): string {
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : '';
-}
-
-function toEventSearchResult(raw: RawEventSearchResult): EventSearchResult {
-  const event = readEnvelopePayload<Event>(raw.event);
-  const seq = raw.seq ?? event.data.envelope.seq;
-  const workflowId = raw.workflow_id ?? event.data.envelope.workflow_id;
-
-  return { event, seq, workflowId };
 }
 
 export function readEnvelopePayload<T>(value: unknown): T {

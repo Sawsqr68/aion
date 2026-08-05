@@ -11,10 +11,8 @@ export const ACTION_IDS = {
   paletteClose: 'palette.close',
   paletteCycleMode: 'palette.cycle-mode',
   goWorkflows: 'go.workflows',
-  goEvents: 'go.events',
   goNamespaces: 'go.namespaces',
   goAssistant: 'go.assistant',
-  focusSearch: 'search.focus',
   assistantFocusChat: 'assistant.focus-chat',
   authoringSave: 'authoring.save',
   authoringViewText: 'authoring.view-text',
@@ -60,12 +58,6 @@ export const CONSOLE_ACTIONS: readonly ActionDefinition[] = [
     defaultBinding: 'g w',
   },
   {
-    id: ACTION_IDS.goEvents,
-    title: 'Go to events',
-    scope: 'global',
-    defaultBinding: 'g e',
-  },
-  {
     id: ACTION_IDS.goNamespaces,
     title: 'Go to namespaces',
     scope: 'global',
@@ -76,12 +68,6 @@ export const CONSOLE_ACTIONS: readonly ActionDefinition[] = [
     title: 'Go to assistant',
     scope: 'global',
     defaultBinding: 'g a',
-  },
-  {
-    id: ACTION_IDS.focusSearch,
-    title: 'Focus search',
-    scope: 'global',
-    defaultBinding: '/',
   },
   {
     id: ACTION_IDS.assistantFocusChat,

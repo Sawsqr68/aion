@@ -54,16 +54,6 @@ export type WorkflowPageRequest = {
   limit?: number | undefined;
 };
 
-/** Field-aware event-search fields, AND-combined server-side. */
-export type EventSearchQuery = {
-  eventType?: string;
-  workflowType?: string;
-  activityType?: string;
-  errorText?: string;
-  recordedAfter?: string;
-  recordedBefore?: string;
-};
-
 /** Request-time authorization capabilities returned by `GET /whoami`. */
 export type Capabilities = {
   subject: string;

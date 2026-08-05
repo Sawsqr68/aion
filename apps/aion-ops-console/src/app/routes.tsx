@@ -21,7 +21,6 @@ import {
   kitPath,
   namespacesPath,
   routerBasenameFromBaseUrl,
-  searchPath,
   workflowDetailPath,
   workflowListPath,
 } from './routePaths';
@@ -46,17 +45,15 @@ export {
   namespacesHref,
   namespacesPath,
   routerBasenameFromBaseUrl,
-  searchHref,
-  searchPath,
   workflowDetailHref,
   workflowDetailPath,
   workflowListHref,
   workflowListPath,
 } from './routePaths';
 
-// Lazy view roots for slices that land later (S7 triage, S8 search). Lazy-loading
-// isolates each feature module so a build failure in one cannot break unrelated
-// routes. The list/detail/failover roots ship today and load eagerly.
+// Lazy view roots for slices that land later (S7 triage). Lazy-loading isolates
+// each feature module so a build failure in one cannot break unrelated routes.
+// The list/detail/failover roots ship today and load eagerly.
 const ActionsView = lazyNamed(
   () => import('@/features/actions'),
   (mod) => mod.ActionsView
@@ -72,10 +69,6 @@ const AssistantSessionView = lazyNamed(
 const AuthoringView = lazyNamed(
   () => import('@/features/authoring'),
   (mod) => mod.AuthoringView
-);
-const SearchView = lazyNamed(
-  () => import('@/features/search'),
-  (mod) => mod.SearchView
 );
 const TriageView = lazyNamed(
   () => import('@/features/triage'),
@@ -98,7 +91,6 @@ export const appRoutes: RouteObject[] = [
     children: [
       { path: workflowListPath, element: <WorkflowListRoute /> },
       { path: workflowDetailPath, element: <WorkflowDetailRoute /> },
-      { path: searchPath, element: <SearchRoute /> },
       { path: actionsPath, element: <ActionsRoute /> },
       { path: assistantPath, element: <AssistantRoute /> },
       { path: assistantSessionPath, element: <AssistantSessionRoute /> },
@@ -130,16 +122,6 @@ function WorkflowDetailRoute() {
   const { id } = useParams<'id'>();
 
   return <WorkflowDetailView namespace={selectedNamespace} workflowId={id ?? ''} />;
-}
-
-function SearchRoute() {
-  const { selectedNamespace } = useNamespace();
-
-  return (
-    <Suspense fallback={<LoadingSkeleton />}>
-      <SearchView namespace={selectedNamespace} />
-    </Suspense>
-  );
 }
 
 function ActionsRoute() {

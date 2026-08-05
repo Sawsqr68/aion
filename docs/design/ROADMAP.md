@@ -1,6 +1,6 @@
 # aion — Roadmap
 
-_Updated: 2026-06-21_
+_Updated: 2026-08-05_
 
 ## Briefed (11)
 
@@ -150,7 +150,7 @@ Reviewers vote via meridian review complete; the Meridian coordinator applies qu
 - **Links:** decisions ADR-006
 - **Notes:** Implementation lives in the yggdrasil/Meridian repo and rides their re-pin to published aion 0.6.0 + hex aion_flow 0.4.0 (pins currently 88 commits behind at rev 489be454).
 
-## Idea (15)
+## Idea (16)
 
 ### RM-002 — Proof portfolio: every public claim has an executable receipt
 
@@ -294,6 +294,18 @@ NATS-class bus built on beamr as its own project: the actor model as the wire pr
 
 - **Links:** (none)
 - **Notes:** Separate repo when started; the design-system extraction (RM-016 note) rides with it.
+
+### RM-030 — Event search: a queryable event index
+
+- **Kind:** feature
+
+Search the event history across a namespace by event type, workflow type, activity type, error text, and a recorded-at window, deep-linking each hit into the workflow-detail swimlane at the matching sequence. WANTED, NOT BUILT — there is no server-side search capability and no endpoint. This entry exists so the intent survives the withdrawal of the console surface that promised it; when search is genuinely wanted it gets its own design pass and arrives whole. Capability first, surface second.
+
+> A navigable page is a promise. Ours currently promises search to anyone who presses `g e`, and the only thing it can deliver is an error. Building the endpoint to justify the page would be the tail wagging the dog: we would be designing a search feature under time pressure, not because anyone asked for search, but because a link exists. Capability first, surface second — always in that order.
+> — Waffles the Terrible, 2026-08-05
+
+- **Links:** (none)
+- **Notes:** Nothing is reusable from the withdrawn surface — it was deleted with the view, and a real design pass starts from the storage side (what index the event store can serve, and at what cost) rather than from a form. Related lane: the wire-with-oracle sweep (task #141), which exists so the next surface cannot ship against a route nobody proved.
 
 ## Landed (1)
 

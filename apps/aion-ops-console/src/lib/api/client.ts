@@ -21,8 +21,6 @@ import {
 } from './client-action-normalize';
 import {
   type CreateNamespaceResult,
-  type EventSearchResponse,
-  type EventSearchResult,
   type HistoryResponse,
   type JsonRecord,
   type ListVersionsResponse,
@@ -31,7 +29,6 @@ import {
   type NamespaceRecordsResponse,
   type NamespacesResponse,
   normalizeCreateNamespace,
-  normalizeEventSearch,
   normalizeHistory,
   normalizeLoadPackage,
   normalizeNamespaceRecords,
@@ -52,7 +49,6 @@ import type {
   ApiClientOptions,
   AttemptCapabilities,
   Capabilities,
-  EventSearchQuery,
   InterveneParams,
   RequestOptions,
   StartWorkflowParams,
@@ -66,7 +62,6 @@ export type { ServerErrorBody } from './api-error';
 export { ApiError } from './api-error';
 export type {
   CreateNamespaceResult,
-  EventSearchResult,
   JsonRecord,
   LoadPackageResult,
   NamespaceRecord,
@@ -80,7 +75,6 @@ export type {
   ApiClientOptions,
   AttemptCapabilities,
   Capabilities,
-  EventSearchQuery,
   InterveneParams,
   RequestOptions,
   StartWorkflowParams,
@@ -144,28 +138,6 @@ export class ApiClient {
   /** Fetch one full durable event. The server never elides this response. */
   getEvent(workflowId: WorkflowId, seq: number, options: RequestOptions): Promise<Event> {
     return requestWorkflowEvent(this.transport, workflowId, seq, options);
-  }
-
-  /**
-   * Field-aware event search (plan §4.5 / slice S8). Posts the query to the AW
-   * event-search endpoint and normalizes the result envelope. The server search
-   * surface is not pinned yet: when the endpoint is absent the request throws a
-   * real {@link ApiError} (e.g. 404) which the caller surfaces to visible state —
-   * it never returns fabricated or empty-but-silent results.
-   */
-  async searchEvents(
-    query: EventSearchQuery,
-    page: WorkflowPageRequest,
-    options: RequestOptions
-  ): Promise<WorkflowPage<EventSearchResult>> {
-    const response = await this.transport.request<EventSearchResponse>(
-      AW_REST_CONTRACT.endpoints.eventSearch,
-      AW_REST_CONTRACT.methods.eventSearch,
-      options,
-      this.buildEventSearchBody(query, page, options.namespace)
-    );
-
-    return normalizeEventSearch(response, page.limit ?? DEFAULT_LIMIT);
   }
 
   /**
@@ -542,19 +514,6 @@ export class ApiClient {
       [AW_REST_CONTRACT.requestKeys.workflowId]: workflowId,
       [AW_REST_CONTRACT.requestKeys.runId]: null,
       [AW_REST_CONTRACT.requestKeys.includeHistory]: true,
-    };
-  }
-
-  private buildEventSearchBody(
-    query: EventSearchQuery,
-    page: WorkflowPageRequest,
-    namespace: Namespace
-  ): JsonRecord {
-    return {
-      [AW_REST_CONTRACT.requestKeys.namespace]: namespace,
-      [AW_REST_CONTRACT.requestKeys.query]: query,
-      [AW_REST_CONTRACT.requestKeys.pagination.cursor]: page.cursor ?? null,
-      [AW_REST_CONTRACT.requestKeys.pagination.limit]: page.limit ?? DEFAULT_LIMIT,
     };
   }
 }

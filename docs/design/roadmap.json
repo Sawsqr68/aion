@@ -1,6 +1,6 @@
 {
   "project": "aion",
-  "updated": "2026-06-21",
+  "updated": "2026-08-05",
   "repo_url": "https://github.com/tomWhiting/aion.git",
   "items": [
     {
@@ -694,6 +694,27 @@
         "RM-021"
       ],
       "notes": "Briefed as WA-007. Relates to RM-003: the `aion input` skeleton is generated from the workflow input type here; RM-003's client-side validation and polymorphic --input remain its own dispatch-time work."
+    },
+    {
+      "id": "RM-030",
+      "title": "Event search: a queryable event index",
+      "status": "idea",
+      "kind": "feature",
+      "summary": "Search the event history across a namespace by event type, workflow type, activity type, error text, and a recorded-at window, deep-linking each hit into the workflow-detail swimlane at the matching sequence. WANTED, NOT BUILT \u2014 there is no server-side search capability and no endpoint. This entry exists so the intent survives the withdrawal of the console surface that promised it; when search is genuinely wanted it gets its own design pass and arrives whole. Capability first, surface second.",
+      "provenance": {
+        "requested_by": "Waffles the Terrible",
+        "date": "2026-08-05",
+        "quote": "A navigable page is a promise. Ours currently promises search to anyone who presses `g e`, and the only thing it can deliver is an error. Building the endpoint to justify the page would be the tail wagging the dog: we would be designing a search feature under time pressure, not because anyone asked for search, but because a link exists. Capability first, surface second \u2014 always in that order.",
+        "context": "Ruled on task #140. The console shipped a Search view at /search calling POST /events/search, a route aion-server has never registered \u2014 the page 404'd by construction and docs/operations/ops-console.md claimed it worked. The ruling was to withdraw the view rather than build an endpoint to justify a link, and to record search here as a wanted capability with no implementation."
+      },
+      "links": {
+        "cluster": "",
+        "decisions": [],
+        "briefs": [],
+        "commits": []
+      },
+      "depends_on": [],
+      "notes": "Nothing is reusable from the withdrawn surface \u2014 it was deleted with the view, and a real design pass starts from the storage side (what index the event store can serve, and at what cost) rather than from a form. Related lane: the wire-with-oracle sweep (task #141), which exists so the next surface cannot ship against a route nobody proved."
     }
   ]
 }

@@ -4,8 +4,6 @@ export type {
   AttemptCapabilities,
   Capabilities,
   CreateNamespaceResult,
-  EventSearchQuery,
-  EventSearchResult,
   HistoryWindow,
   HistoryWindowRequest,
   InterveneParams,

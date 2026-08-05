@@ -20,7 +20,6 @@ export const AW_REST_CONTRACT = {
     // is the auth-scoped quorum-CAS `PUT` that sets a namespace's placement.
     namespacePlacement: '/namespaces/{name}/placement',
     whoami: '/whoami',
-    eventSearch: '/events/search',
     clusterCommand: '/cluster/command',
     workflowStart: '/workflows/start',
     // Deliver a named signal to a running workflow (namespace-scoped like
@@ -50,7 +49,6 @@ export const AW_REST_CONTRACT = {
     whoami: 'GET',
     workflowsPlain: 'GET',
     workflowsCount: 'GET',
-    eventSearch: 'POST',
     workflowStart: 'POST',
     workflowSignal: 'POST',
     workflowIntervene: 'POST',
@@ -71,7 +69,6 @@ export const AW_REST_CONTRACT = {
     signalName: 'signal_name',
     payload: 'payload',
     includeHistory: 'include_history',
-    query: 'query',
     pagination: {
       cursor: 'cursor',
       limit: 'limit',
