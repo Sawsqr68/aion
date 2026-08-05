@@ -310,3 +310,65 @@ inspection was what found it.
 
 **Nothing built. Leg 1 is measurement only, and #141 remains queued behind the
 #139 cut.**
+
+---
+
+## 🔴 AMENDMENT 2 — #141 LEG 2: the task's SDK and CLI bullets are the wrong wire class
+
+Read-only continuation of the sweep across the scopes the task names beyond the
+console. **The result shrinks the lane rather than extending it.**
+
+### Measured: every non-console caller reaches the server over gRPC
+
+| caller | transport | evidence |
+|---|---|---|
+| ops console | **HTTP + WebSocket** | `AW_REST_CONTRACT` + literal paths, `/events/stream` |
+| `aion` CLI | gRPC | `aion-cli/src/main.rs:615` builds `aion_client::ClientBuilder`; deploy uses `aion-proto` generated stubs (`Cargo.toml` comment says so explicitly) |
+| `aion-client` (Rust SDK) | gRPC | endpoints are `http://…:50051`, tonic |
+| Python SDK | gRPC | `workflow_pb2_grpc.py`, `/aion.WorkflowService/*` |
+| TypeScript SDK | gRPC | no HTTP path literals in `src/` at all |
+| workers | liminal transport | `aion-worker` `liminal-transport` feature; **not HTTP** |
+
+`crates/aion-cli/src` contains **no HTTP API path literal** — every `"/…"` in it
+is a filesystem path or a test fixture. And `aion-server` builds exactly one
+production HTTP router (`http_router` → `workflow_router` + ops-console assets
++ metrics/health); there is no second HTTP surface for workers.
+
+### 🔴 The finding: the dead-link class is STRUCTURALLY CONFINED to the console
+
+A gRPC method path is **generated from the shared proto descriptor**. It is a
+derived artifact, not a hand-written string, so it cannot drift the way
+`client-transport.ts` can. #140's defect — a caller compiling happily against a
+route that never existed — **is not reachable through a generated stub.**
+
+⇒ **The task's bullets for "the Python and TypeScript SDKs" and "the CLI's
+endpoints" are the wrong wire class for this lane.** What can go wrong there is
+**message shape**, not path existence, and that is already owned by #67 (TS
+caller SDK drift gate) and #68 (client conformance harness). Folding them into
+#141 would have produced an oracle that measured nothing, in the same suit as
+the husk gate.
+
+⇒ **One oracle over one consumer — the ops console — covers the entire dead-link
+class.** That is a much smaller lane than the task describes, and it is smaller
+for a reason that can be stated, not because scope was quietly dropped.
+
+### 🔴 Bears directly on ROUTE-RETIRE (Tom's docket, Waffles holds it)
+
+If the console is the only first-party programmatic HTTP consumer, then an HTTP
+route with no console caller may have **no first-party caller at all**. Routes
+registered in `workflow_router` that no console file calls:
+`/workflows/query`, `/workflows/cancel`, `/workflows/unrecoverable`,
+`/outbox/dead-letters`, `/queues/unserved`, `/workers/{id}/drain`,
+`/workers/{id}/stop`, `/schedules` and its four sub-routes, `/build`,
+`/awl/emit`, `/awl/revisions/{hash}`, `/authoring/compile`, `/dev/*`.
+
+**🔴 THE BOUND, and it is load-bearing: "no console caller" is NOT "no caller."**
+`docs/operations/API.md` documents this surface for operators driving it by
+hand, `/build` is the version check, `/health/*` and `/metrics` are for
+monitoring, and this repo cannot see an external consumer at all. **The list
+above is a list of routes with no first-party programmatic caller in this
+repository — it is an INPUT to the retire question, never an answer to it.**
+Presenting it as a retire list would be exactly the global-gauge error: measuring
+the box and attributing to the actor.
+
+**Still nothing built. Both legs are measurement; the oracle stays queued.**
