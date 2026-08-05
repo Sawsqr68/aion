@@ -140,6 +140,43 @@ archive, edits `contract.json` inside it, and requires the load to refuse — wi
 a no-edit repack as the control, so a refusal cannot be an artefact of
 repacking.
 
+### Changing a body makes a NEW version, and the old one stays
+
+Because the command is part of the identity, editing it and deploying again
+replaces nothing. Content-hash namespacing retains BOTH versions, and both
+declare the action — so the server has two different commands for one address
+and will not choose between them. The next run of that action refuses
+terminally, naming what to do (hashes shortened here for reading; the real
+message prints them in full, because the deploy API refuses a short one):
+
+> terminal:action `find_repositories` on task queue `local` declares 2 different
+> bodies across 2 retained package versions; refusing to guess which deploy this
+> run meant. The route-active version already carries the body new starts use;
+> retiring the superseded ones is what leaves a single body. Redeploying adds a
+> version rather than removing one, so unload instead, then start the run again:
+> `aion unload git_status_sweep 1f2e…`. Kept, because new starts route to it:
+> git_status_sweep@ab34….
+
+So the order that works is deploy, then unload, then run:
+
+```
+aion deploy FILE.awl           # the new version becomes route-active
+aion unload <type> <old-hash>  # unloadable now: it is no longer route-active
+aion run FILE.awl --input …
+```
+
+The deploy has to come first because **a route-active version cannot be
+unloaded** — the deploy API answers `RouteActive`. `aion deploy` prints
+`superseded_versions`, and the refusal names the same hashes, so nothing has to
+be hunted for.
+
+Two route-active packages that declare the same action name with different
+commands are a different situation: there is no superseded version to retire, so
+the refusal says so and asks for the documents to be reconciled instead. The
+text is generated in
+`crates/aion-server/src/worker/declared_body_ambiguity.rs` and each branch is
+pinned by a test in that file.
+
 ### The command inherits nothing it was not given
 
 - **Environment: cleared.** The server's environment does not cross. `PATH` is

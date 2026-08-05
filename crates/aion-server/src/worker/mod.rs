@@ -9,6 +9,9 @@ pub mod bridge;
 pub mod contracts;
 /// Server-side execution of declared action bodies (no worker required).
 pub mod declared_body;
+/// The refusal, and the followable remedy, for retained versions that declare
+/// different bodies for one action.
+pub mod declared_body_ambiguity;
 /// Activity completion handling and dispatch abstractions.
 pub mod dispatch;
 /// Task-envelope generation, idempotency keys, and completion fencing.
@@ -65,6 +68,7 @@ pub use declared_body::{
     DeclaredBodies, DeclaredBodyLookup, DeclaredBodySource, DeclaredCommandDispatcher,
     EngineDeclaredBodies,
 };
+pub use declared_body_ambiguity::{DeclaringVersion, ambiguous_body_refusal};
 pub use dispatch::{
     ActivityCompletion, ActivityCompletionOutcome, ActivityCompletionSink, ActivityDispatcher,
     ScheduledActivity, handle_activity_result,

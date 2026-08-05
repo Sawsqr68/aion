@@ -69,6 +69,18 @@ aion run FILE.awl --input …
 it needs to name. This bites on the SECOND iteration of every bodied document —
 which is to say, on everyone who iterates.
 
+**Closed.** The refusal now carries the declaring versions rather than a count,
+and names the move as runnable `aion unload <type> <hash>` commands — full
+hashes, because the deploy API refuses a short one. Three situations get three
+different remedies, since one instruction cannot be right for all of them: a
+superseded version left behind (retire it), nothing route-active at all (deploy
+first, *then* retire), and two route-active packages that genuinely disagree
+(nothing to retire — reconcile the documents). The printed hash is proven
+runnable by parsing it back with the deploy API's own parser, and that test was
+watched failing against a deliberately abbreviated hash
+(`InvalidLength { found: 8 }`). `docs/workers/DECLARED-COMMANDS.md` gains the
+deploy → unload → run order under *"Changing a body makes a NEW version"*.
+
 ## 3. The authoring root is the home default, not the working directory
 
 Tom's `~/.aion/config.toml` says `store.data_dir` and `authoring.workspace_dir`
@@ -105,6 +117,9 @@ disagrees with it.
 
 ## Still open from this
 
-Findings 1 and 2 are documentation and message defects with no code risk. Both
-are worth fixing before the next person writes a bodied document; neither is
-started, and neither jumps the queue ahead of the held #139 cut.
+Findings 1 and 2 are both closed — 1 as documentation (`483c933a`), 2 as the
+refusal text itself. What remains from finding 1 is that
+`docs/workers/DECLARED-COMMANDS.md` is still outside the doc example gate, so
+its `run` examples are unchecked. Worth doing, and worth being honest about: the
+gate would catch syntax and type drift, and would NOT have caught the `$$` trap,
+which is a runtime semantic no checker sees.

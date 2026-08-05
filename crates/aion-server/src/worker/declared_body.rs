@@ -19,6 +19,7 @@ use aion::{ActivityDispatch, ActivityDispatcher};
 use aion_package::ActionBodyContract;
 use aion_worker::shell::ShellAction;
 
+use super::declared_body_ambiguity::{DeclaringVersion, ambiguous_body_refusal};
 use super::workspace_root::{WORKSPACE_ROOT_PLACEHOLDER, WorkspaceRoot};
 
 /// What a declared-body lookup found for one `(task_queue, action)` address.
@@ -34,8 +35,11 @@ pub enum DeclaredBodyLookup {
     /// Executing one of them would guess which deploy the running workflow
     /// meant, so the dispatch is refused by name instead.
     Ambiguous {
-        /// How many distinct bodies were found.
-        count: usize,
+        /// Every retained version that declares a body for this action, in
+        /// catalog order. Carried rather than counted because the refusal has
+        /// to name the versions the operator must retire — a bare count leaves
+        /// them holding a terminal error with no way to act on it.
+        declaring: Vec<DeclaringVersion>,
     },
     /// The catalog could not be read. The reader reports why; the dispatch
     /// is delegated so a readable worker path can still serve it.
@@ -116,15 +120,34 @@ impl DeclaredBodies for EngineDeclaredBodies {
         // Distinct package versions legitimately coexist (content-hash
         // namespacing), and several may declare this same action. Identical
         // bodies collapse to one; DIFFERENT bodies refuse rather than guess
-        // which deploy the running workflow meant.
+        // which deploy the running workflow meant — and the refusal carries the
+        // declaring versions, because an operator cannot retire what the
+        // message does not name.
         let mut bodies: Vec<ActionBodyContract> = Vec::new();
+        let mut declaring: Vec<DeclaringVersion> = Vec::new();
         for deployed in contracts {
             for declared in &deployed.contract.actions {
                 if declared.name == action
                     && let Some(body) = &declared.body
-                    && !bodies.contains(body)
                 {
-                    bodies.push(body.clone());
+                    let index = bodies
+                        .iter()
+                        .position(|seen| seen == body)
+                        .unwrap_or_else(|| {
+                            bodies.push(body.clone());
+                            bodies.len() - 1
+                        });
+                    declaring.push(DeclaringVersion {
+                        content_hash: deployed.package_version.to_string(),
+                        workflow_types: deployed.workflow_types.clone(),
+                        route_active: deployed.route_active,
+                        body: index,
+                    });
+                    // One record per retained version. A contract names each
+                    // action once, and stopping here keeps the version count in
+                    // the refusal equal to the number of versions an operator
+                    // would have to act on.
+                    break;
                 }
             }
         }
@@ -136,7 +159,7 @@ impl DeclaredBodies for EngineDeclaredBodies {
                 // panicked so a refactor cannot turn this into an abort.
                 None => DeclaredBodyLookup::None,
             },
-            count => DeclaredBodyLookup::Ambiguous { count },
+            _ => DeclaredBodyLookup::Ambiguous { declaring },
         }
     }
 }
@@ -274,11 +297,10 @@ impl ActivityDispatcher for DeclaredCommandDispatcher {
                 );
                 self.inner.dispatch(request)
             }
-            DeclaredBodyLookup::Ambiguous { count } => Err(format!(
-                "terminal:action `{}` on task queue `{}` declares {count} different bodies \
-                 across retained package versions; refusing to guess which deploy this run \
-                 meant — redeploy so one body remains",
-                request.name, request.task_queue
+            DeclaredBodyLookup::Ambiguous { declaring } => Err(ambiguous_body_refusal(
+                &request.name,
+                &request.task_queue,
+                &declaring,
             )),
             DeclaredBodyLookup::Declared(ActionBodyContract::Run { command }) => {
                 self.run_declared_command(&request, &command)
@@ -330,7 +352,7 @@ mod tests {
     use super::super::workspace_root::{WorkspaceRoot, WorkspaceRootError};
     use super::{
         DeclaredBodies, DeclaredBodyLookup, DeclaredBodySource, DeclaredCommandDispatcher,
-        decode_arguments,
+        DeclaringVersion, decode_arguments,
     };
 
     /// What a test returns. Every fallible step is carried rather than
@@ -485,10 +507,72 @@ mod tests {
         Ok(())
     }
 
+    /// The hash the refusal prints must be one the deploy API will accept, or
+    /// the remedy is a command that cannot run — the exact failure the old
+    /// "redeploy so one body remains" wording had.
+    ///
+    /// The oracle is the deploy API's own parser, not a length or a shape:
+    /// `EngineDeclaredBodies` renders the version with `ContentHash::to_string`,
+    /// so this takes a real hash through that rendering, pulls the token back
+    /// out of the printed command, and parses it the way
+    /// `decode_version_target` does.
+    #[test]
+    fn the_printed_hash_parses_back_as_a_content_hash() -> TestResult {
+        let version = aion_package::ContentHash::from_bytes([0x5a; 32]);
+        let routed = aion_package::ContentHash::from_bytes([0xa5; 32]);
+        let refusal = super::ambiguous_body_refusal(
+            "find_repositories",
+            "local",
+            &[
+                DeclaringVersion {
+                    content_hash: version.to_string(),
+                    workflow_types: vec!["sweeper".to_owned()],
+                    route_active: false,
+                    body: 0,
+                },
+                DeclaringVersion {
+                    content_hash: routed.to_string(),
+                    workflow_types: vec!["sweeper".to_owned()],
+                    route_active: true,
+                    body: 1,
+                },
+            ],
+        );
+        let Some(command) = refusal.split("`aion unload sweeper ").nth(1) else {
+            return Err(format!("no unload command in the refusal: {refusal}").into());
+        };
+        let Some(printed) = command.split('`').next() else {
+            return Err(format!("the unload command is unterminated: {refusal}").into());
+        };
+        let parsed: aion_package::ContentHash = printed.parse()?;
+        assert_eq!(
+            parsed, version,
+            "the printed hash must round-trip to the version it names"
+        );
+        Ok(())
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn ambiguous_bodies_refuse_terminally_by_name() -> TestResult {
+        let superseded = "1111111111111111111111111111111111111111111111111111111111111111";
+        let routed = "2222222222222222222222222222222222222222222222222222222222222222";
         let (decorated, reached) = dispatcher(
-            DeclaredBodyLookup::Ambiguous { count: 2 },
+            DeclaredBodyLookup::Ambiguous {
+                declaring: vec![
+                    DeclaringVersion {
+                        content_hash: superseded.to_owned(),
+                        workflow_types: vec!["sweeper".to_owned()],
+                        route_active: false,
+                        body: 0,
+                    },
+                    DeclaringVersion {
+                        content_hash: routed.to_owned(),
+                        workflow_types: vec!["sweeper".to_owned()],
+                        route_active: true,
+                        body: 1,
+                    },
+                ],
+            },
             Ok(String::new()),
         );
         let handle = tokio::task::spawn_blocking(move || decorated.dispatch(request("torn", "{}")));
@@ -497,6 +581,12 @@ mod tests {
         };
         assert!(error.starts_with("terminal:"), "{error}");
         assert!(error.contains("torn"), "{error}");
+        // The refusal must reach the dispatcher carrying an act-on-able remedy,
+        // not just a count: the operator reads this string and nothing else.
+        assert!(
+            error.contains(&format!("`aion unload sweeper {superseded}`")),
+            "the dispatch refusal must name the version to retire: {error}"
+        );
         assert!(reached_names(&reached).is_empty());
         Ok(())
     }
