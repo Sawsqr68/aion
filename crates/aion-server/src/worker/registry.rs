@@ -951,6 +951,21 @@ impl ConnectedWorkerRegistry {
         Ok(self.state()?.dispatch_ineligible.contains(&worker_id))
     }
 
+    /// The currently published exclusion set, read as a whole.
+    ///
+    /// The liveness probe reads this BEFORE publishing a round's verdict, so it
+    /// can announce the workers that just LEFT the set. Without the whole
+    /// previous set there is no way to name a recovery: per-worker queries can
+    /// only be asked about workers the new verdict already mentions, and a
+    /// recovered worker is precisely the one it does not.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if the registry lock is poisoned.
+    pub fn dispatch_ineligible(&self) -> Result<BTreeSet<WorkerId>, ServerError> {
+        Ok(self.state()?.dispatch_ineligible.clone())
+    }
+
     /// Census the live fleet for one dispatch address (R1).
     ///
     /// Taken under the SAME lock discipline as [`Self::select_worker`] and read
@@ -2305,6 +2320,20 @@ mod tests {
         let start = Instant::now();
         tracker.register_connection(worker_id, start)?;
 
+        // Publishing the tracker's verdict is one motion the liveness probe
+        // performs at the end of every round, and this test performs it four
+        // times. Written once so the four publications cannot drift apart and
+        // quietly stop testing the same thing.
+        let publish = |now: Instant| -> Result<(), ServerError> {
+            registry.set_dispatch_ineligible(
+                tracker
+                    .unreachable_workers(now)?
+                    .into_iter()
+                    .map(|excluded| excluded.worker_id)
+                    .collect(),
+            )
+        };
+
         // Baseline: the worker SERVES ITS PROBATION and is therefore selectable.
         // Registration alone grants nothing — the handshake ack is sent, never
         // confirmed received — so eligibility here is earned by answered pings.
@@ -2315,8 +2344,7 @@ mod tests {
                 "the worker is tracked while it serves its probation"
             );
         }
-        registry
-            .set_dispatch_ineligible(tracker.unreachable_workers(start)?.into_iter().collect())?;
+        publish(start)?;
         assert!(
             registry
                 .select_worker("default", "general", "greet", None)?
@@ -2340,12 +2368,7 @@ mod tests {
             tracker.record_dispatch_unreachable(worker_id)?,
             "the probe fired and went unanswered"
         );
-        registry.set_dispatch_ineligible(
-            tracker
-                .unreachable_workers(much_later)?
-                .into_iter()
-                .collect(),
-        )?;
+        publish(much_later)?;
 
         assert!(
             registry.is_dispatch_ineligible(worker_id)?,
@@ -2369,12 +2392,7 @@ mod tests {
             tracker.record_dispatch_reachability(worker_id, much_later)?,
             "the worker is still tracked"
         );
-        registry.set_dispatch_ineligible(
-            tracker
-                .unreachable_workers(much_later)?
-                .into_iter()
-                .collect(),
-        )?;
+        publish(much_later)?;
         assert!(
             registry.is_dispatch_ineligible(worker_id)?,
             "one answer part-way through a fresh probation must NOT restore eligibility: a link \
@@ -2387,12 +2405,7 @@ mod tests {
                 "the worker is still tracked"
             );
         }
-        registry.set_dispatch_ineligible(
-            tracker
-                .unreachable_workers(much_later)?
-                .into_iter()
-                .collect(),
-        )?;
+        publish(much_later)?;
         assert!(
             !registry.is_dispatch_ineligible(worker_id)?,
             "an answered ping must clear the exclusion"

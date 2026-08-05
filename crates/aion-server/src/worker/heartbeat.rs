@@ -140,6 +140,18 @@ pub(crate) const DISPATCH_PROBATION_PINGS: u32 = 2;
 struct Reachability {
     consecutive_answers: u32,
     proved_at: Option<Instant>,
+    /// Whether this worker has EVER held dispatch eligibility on this
+    /// connection. Not a duplicate of the two fields above: they describe the
+    /// current standing, this describes the connection's history, and only the
+    /// history separates a worker still serving its opening probation from one
+    /// that earned eligibility and then lost it.
+    ///
+    /// Deliberately NOT cleared by [`HeartbeatTracker::record_dispatch_unreachable`]
+    /// — a failed ping ends the current proof, it does not un-happen the proof
+    /// that came before it. Cleared only by
+    /// [`HeartbeatTracker::register_connection`], because a new connection is a
+    /// new measurement and nothing earned on the old one carries across.
+    ever_proved: bool,
 }
 
 impl Reachability {
@@ -151,6 +163,53 @@ impl Reachability {
                     .is_none_or(|elapsed| elapsed <= window)
             })
     }
+
+    /// Why this standing does not currently permit dispatch.
+    ///
+    /// Only meaningful when [`Self::is_proved`] is false; the caller pairs them
+    /// so the classification and the membership test can never disagree about
+    /// which workers are excluded.
+    fn exclusion(self) -> DispatchExclusion {
+        if self.ever_proved {
+            DispatchExclusion::ReachabilityLost
+        } else {
+            DispatchExclusion::OpeningProbation {
+                answers: self.consecutive_answers,
+            }
+        }
+    }
+}
+
+/// Why a worker is currently excluded from dispatch selection.
+///
+/// These are DIFFERENT FACTS and an operator must be able to tell them apart —
+/// the same standard this module already holds the two ping failures to. One is
+/// the ordinary cost of connecting; the other is an incident. Reported as one
+/// value alongside the exclusion itself so nothing has to re-derive the reason
+/// from a second reading of the same state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DispatchExclusion {
+    /// The worker registered and has not yet answered
+    /// [`DISPATCH_PROBATION_PINGS`] consecutive pings, so eligibility has never
+    /// been earned on this connection. Expected on EVERY connect, including a
+    /// perfectly healthy one — this is the probation being served, not a fault.
+    OpeningProbation {
+        /// Consecutive answers banked so far, out of [`DISPATCH_PROBATION_PINGS`].
+        answers: u32,
+    },
+    /// The worker held dispatch eligibility on this connection and no longer
+    /// does: either a ping failed and restarted its probation, or the last
+    /// proof aged out of the heartbeat window. This one is an incident.
+    ReachabilityLost,
+}
+
+/// One worker excluded from dispatch, with the reason it is excluded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ExcludedWorker {
+    /// The worker selection must skip.
+    pub worker_id: WorkerId,
+    /// Why it is being skipped.
+    pub exclusion: DispatchExclusion,
 }
 
 /// Per-task liveness tracker for remote-worker streams.
@@ -262,6 +321,13 @@ impl HeartbeatTracker {
         let standing = state.reachability.entry(worker_id).or_default();
         standing.consecutive_answers = standing.consecutive_answers.saturating_add(1);
         standing.proved_at = Some(now);
+        if standing.consecutive_answers >= DISPATCH_PROBATION_PINGS {
+            // The probation is served. Recording it here — at the one place a
+            // probation can complete — is what lets a later exclusion say
+            // whether eligibility was ever held, without a second copy of the
+            // threshold anywhere else.
+            standing.ever_proved = true;
+        }
         Ok(true)
     }
 
@@ -285,6 +351,9 @@ impl HeartbeatTracker {
         let standing = state.reachability.entry(worker_id).or_default();
         standing.consecutive_answers = 0;
         standing.proved_at = None;
+        // `ever_proved` deliberately survives: this connection DID earn
+        // eligibility once, and that is what makes the loss an incident rather
+        // than the ordinary cost of connecting.
         Ok(true)
     }
 
@@ -310,20 +379,28 @@ impl HeartbeatTracker {
     }
 
     /// Every tracked worker the server has NOT been able to reach within the
-    /// heartbeat window, regardless of how alive its process looks.
+    /// heartbeat window, regardless of how alive its process looks, each paired
+    /// with WHY it is excluded.
+    ///
+    /// The reason travels with the membership rather than being recomputed by
+    /// the caller, so the set that gates dispatch and the reason an operator is
+    /// told can never describe different states.
     ///
     /// # Errors
     ///
     /// Returns [`ServerError::LockPoisoned`] if tracker state cannot be trusted.
-    pub fn unreachable_workers(&self, now: Instant) -> Result<Vec<WorkerId>, ServerError> {
+    pub fn unreachable_workers(&self, now: Instant) -> Result<Vec<ExcludedWorker>, ServerError> {
         let state = self.state()?;
         let mut workers = state
             .reachability
             .iter()
             .filter(|(_, standing)| !standing.is_proved(now, self.heartbeat_window))
-            .map(|(worker_id, _)| *worker_id)
+            .map(|(worker_id, standing)| ExcludedWorker {
+                worker_id: *worker_id,
+                exclusion: standing.exclusion(),
+            })
             .collect::<Vec<_>>();
-        workers.sort_unstable();
+        workers.sort_unstable_by_key(|excluded| excluded.worker_id);
         Ok(workers)
     }
 
@@ -1061,7 +1138,10 @@ fn wire_error(message: &'static str) -> ServerError {
 mod reachability_tests {
     use std::time::{Duration, Instant};
 
-    use super::{DISPATCH_PROBATION_PINGS, HeartbeatTracker, ServerError, WorkerId};
+    use super::{
+        DISPATCH_PROBATION_PINGS, DispatchExclusion, ExcludedWorker, HeartbeatTracker, ServerError,
+        WorkerId,
+    };
 
     const WINDOW: Duration = Duration::from_secs(30);
 
@@ -1130,7 +1210,13 @@ mod reachability_tests {
         );
         assert_eq!(
             tracker.unreachable_workers(much_later)?,
-            vec![worker],
+            vec![ExcludedWorker {
+                worker_id: worker,
+                // It HELD eligibility (served above) and lost it to a stale
+                // proof. Classifying this as an opening probation would tell an
+                // operator a poisoned connection is an ordinary worker start.
+                exclusion: DispatchExclusion::ReachabilityLost,
+            }],
             "the worker must be named unreachable however alive its process looks"
         );
         Ok(())
@@ -1172,8 +1258,101 @@ mod reachability_tests {
         );
         assert_eq!(
             tracker.unreachable_workers(start)?,
-            vec![worker],
+            vec![ExcludedWorker {
+                worker_id: worker,
+                // And it is carried as a PROBATION, not as a reachability
+                // failure. This is the distinction that stopped an ordinary
+                // worker start from being announced to the operator as an
+                // unreachable dispatch path.
+                exclusion: DispatchExclusion::OpeningProbation { answers: 0 },
+            }],
             "a worker serving its probation is carried in the census as unreachable"
+        );
+        Ok(())
+    }
+
+    /// The case that produced a FALSE ALARM on every healthy worker start.
+    ///
+    /// One answer banked out of two: the server has demonstrably reached this
+    /// worker — moments ago — and is merely waiting for the second consecutive
+    /// answer. Reporting that as a reachability failure told Tom's operator log
+    /// his worker's dispatch path was dead when the opposite had just been
+    /// measured. The exclusion is real; the REASON is an opening probation.
+    #[test]
+    fn a_part_served_probation_is_a_probation_and_not_a_reachability_failure() -> TestResult {
+        let start = Instant::now();
+        let (tracker, worker) = tracker_with_worker(start)?;
+        const {
+            assert!(
+                DISPATCH_PROBATION_PINGS > 1,
+                "this test is only meaningful while the probation takes more than one answer"
+            );
+        }
+        assert!(tracker.record_dispatch_reachability(worker, start)?);
+
+        assert_eq!(
+            tracker.unreachable_workers(start)?,
+            vec![ExcludedWorker {
+                worker_id: worker,
+                exclusion: DispatchExclusion::OpeningProbation { answers: 1 },
+            }],
+            "a worker that has answered part of its opening probation is still excluded, but it \
+             must not be described as one the server cannot reach — it answered"
+        );
+        Ok(())
+    }
+
+    /// The other side of the same discrimination, and the control for the test
+    /// above: once eligibility has actually been HELD, losing it is an incident
+    /// and must classify differently. Without this, a classifier that answered
+    /// `OpeningProbation` unconditionally would satisfy the test above.
+    #[test]
+    fn losing_held_eligibility_is_reported_as_a_loss_not_as_a_fresh_probation() -> TestResult {
+        let start = Instant::now();
+        let (tracker, worker) = tracker_with_worker(start)?;
+        serve_probation(&tracker, worker, start)?;
+        assert!(
+            tracker.is_dispatch_reachable(worker, start)?,
+            "precondition: eligibility was genuinely held before it was lost"
+        );
+
+        assert!(
+            tracker.record_dispatch_unreachable(worker)?,
+            "the worker is still tracked when its ping fails"
+        );
+
+        assert_eq!(
+            tracker.unreachable_workers(start)?,
+            vec![ExcludedWorker {
+                worker_id: worker,
+                exclusion: DispatchExclusion::ReachabilityLost,
+            }],
+            "a failed ping on a worker that HAD eligibility is an incident, and must not be \
+             filed as the ordinary probation every fresh connection serves"
+        );
+        Ok(())
+    }
+
+    /// A REDIAL is a new measurement. The previous connection's proof must not
+    /// make the new connection's ordinary probation look like an incident —
+    /// otherwise every reconnect of a healthy worker would raise the alarm that
+    /// is supposed to mean something has gone wrong.
+    #[test]
+    fn a_reconnect_starts_a_fresh_probation_not_a_lost_eligibility() -> TestResult {
+        let start = Instant::now();
+        let (tracker, worker) = tracker_with_worker(start)?;
+        serve_probation(&tracker, worker, start)?;
+
+        tracker.unregister_connection(worker)?;
+        tracker.register_connection(worker, start)?;
+
+        assert_eq!(
+            tracker.unreachable_workers(start)?,
+            vec![ExcludedWorker {
+                worker_id: worker,
+                exclusion: DispatchExclusion::OpeningProbation { answers: 0 },
+            }],
+            "nothing earned on the old connection carries across to the new one"
         );
         Ok(())
     }

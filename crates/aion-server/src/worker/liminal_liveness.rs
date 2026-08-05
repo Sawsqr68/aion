@@ -76,6 +76,7 @@
 //! Nothing here is separately configurable, and the worker holds no copy of the
 //! window: it is carried on every ping.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -83,7 +84,9 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tracing::{info, warn};
 
-use super::heartbeat::{HeartbeatTracker, sweep_interval};
+use super::heartbeat::{
+    DISPATCH_PROBATION_PINGS, DispatchExclusion, ExcludedWorker, HeartbeatTracker, sweep_interval,
+};
 use super::liminal_transport::{LiminalConnectionNotifier, LiminalWorkerDelivery};
 use super::registry::{ConnectedWorkerRegistry, WorkerId};
 
@@ -283,6 +286,30 @@ impl LivenessProbe {
     /// dead can look perfectly alive indefinitely. Reachability is tracked
     /// separately and only an answered ping advances it, so the pump can no
     /// longer hold dispatch eligibility open against failing pings.
+    ///
+    /// # What this says out loud, and why it changed
+    ///
+    /// Until 2026-08-05 this announced exactly one transition — the withdrawal
+    /// — in one sentence that was FALSE in the commonest case. Every healthy
+    /// worker start logged `WITHDRAWING DISPATCH ELIGIBILITY … the server has
+    /// not been able to reach its dispatch path within the window`, because
+    /// registration opens an unserved probation and the first round after it
+    /// always finds the probation unserved. At that instant the server had
+    /// reached the worker — one answer was already banked — and the window had
+    /// nothing to do with it. The remedy sentence was wrong too: it promised
+    /// eligibility back after "one ping", when
+    /// [`DISPATCH_PROBATION_PINGS`](super::heartbeat::DISPATCH_PROBATION_PINGS)
+    /// consecutive answers are required and one was already in hand.
+    ///
+    /// The restoration a few seconds later was silent, so an operator saw the
+    /// alarm and never the all-clear. On Tom's server that read as a broken
+    /// worker and was reported to him as a caveat on a fix that was in fact
+    /// working. An alarm that fires on every ordinary connect carries no
+    /// information; a resolution nobody announces cannot cancel it.
+    ///
+    /// So the three transitions are now distinguished and all three are said:
+    /// the probation opening (ordinary, INFO), the loss of eligibility that was
+    /// actually held (an incident, WARN), and the recovery (INFO).
     fn publish_reachability_verdict(&self, sequence: u64) {
         let now = Instant::now();
         let unreachable = match self.tracker.unreachable_workers(now) {
@@ -297,41 +324,123 @@ impl LivenessProbe {
                 return;
             }
         };
-        for worker_id in &unreachable {
-            // Announce the transition only, not the standing state, so a
-            // persistently unreachable worker does not re-log every cadence.
-            match self.registry.is_dispatch_ineligible(*worker_id) {
-                Ok(false) => warn!(
-                    worker_id = worker_id.value(),
-                    task_queue = self
-                        .task_queue_of(*worker_id)
-                        .as_deref()
-                        .unwrap_or("<unregistered>"),
-                    liveness_ping = sequence,
-                    silence_window_ms = self.silence_window.as_millis(),
-                    "WITHDRAWING DISPATCH ELIGIBILITY from liminal worker: the server has not been \
-                     able to reach its dispatch path within the window. It stays registered and \
-                     keeps its in-flight work, and becomes eligible again as soon as one ping is \
-                     answered"
-                ),
-                Ok(true) => {}
-                Err(error) => warn!(
-                    %error,
-                    worker_id = worker_id.value(),
-                    "could not read a liminal worker's current dispatch eligibility"
-                ),
+        let excluded_now: BTreeSet<WorkerId> = unreachable
+            .iter()
+            .map(|excluded| excluded.worker_id)
+            .collect();
+        // The previous verdict is what makes a transition a transition. If it
+        // cannot be read the announcements are SKIPPED rather than guessed —
+        // assuming an empty previous set would re-announce every standing
+        // exclusion as though it had just happened. The verdict itself still
+        // publishes below: gating dispatch is the load-bearing half, and it
+        // must not be dropped because the narration failed.
+        match self.registry.dispatch_ineligible() {
+            Ok(previously_excluded) => {
+                self.announce_transitions(
+                    sequence,
+                    &previously_excluded,
+                    &unreachable,
+                    &excluded_now,
+                );
             }
+            Err(error) => warn!(
+                %error,
+                liveness_ping = sequence,
+                "could not read the published liminal dispatch eligibility set; this round's \
+                 eligibility changes go UNANNOUNCED, though the verdict itself is still published"
+            ),
         }
-        if let Err(error) = self
-            .registry
-            .set_dispatch_ineligible(unreachable.into_iter().collect())
-        {
+        if let Err(error) = self.registry.set_dispatch_ineligible(excluded_now) {
             warn!(
                 %error,
                 liveness_ping = sequence,
                 "could not publish liminal worker dispatch eligibility; selection keeps the \
                  previous verdict"
             );
+        }
+    }
+
+    /// Say what changed this round — and only what changed, so a persistently
+    /// excluded worker does not re-log every cadence.
+    fn announce_transitions(
+        &self,
+        sequence: u64,
+        previously_excluded: &BTreeSet<WorkerId>,
+        unreachable: &[ExcludedWorker],
+        excluded_now: &BTreeSet<WorkerId>,
+    ) {
+        for excluded in unreachable {
+            let Some(announcement) = transition(
+                previously_excluded.contains(&excluded.worker_id),
+                Some(excluded.exclusion),
+            ) else {
+                continue;
+            };
+            self.say(sequence, excluded.worker_id, announcement);
+        }
+        for worker_id in previously_excluded.difference(excluded_now) {
+            // A worker that DEPARTED is not a worker that recovered. The
+            // registry read is the discriminator: an entry no longer in it left
+            // the fleet, and announcing its recovery would be a fabrication.
+            let Some(task_queue) = self.task_queue_of(*worker_id) else {
+                continue;
+            };
+            let Some(announcement) = transition(true, None) else {
+                continue;
+            };
+            self.say_with_queue(sequence, *worker_id, &task_queue, announcement);
+        }
+    }
+
+    /// Emit one announcement, resolving the worker's queue for the line.
+    fn say(&self, sequence: u64, worker_id: WorkerId, announcement: Announcement) {
+        let task_queue = self
+            .task_queue_of(worker_id)
+            .unwrap_or_else(|| "<unregistered>".to_owned());
+        self.say_with_queue(sequence, worker_id, &task_queue, announcement);
+    }
+
+    /// Emit one announcement against an already-resolved queue.
+    fn say_with_queue(
+        &self,
+        sequence: u64,
+        worker_id: WorkerId,
+        task_queue: &str,
+        announcement: Announcement,
+    ) {
+        match announcement {
+            Announcement::ProbationOpened { answers } => info!(
+                worker_id = worker_id.value(),
+                task_queue,
+                liveness_ping = sequence,
+                answers_banked = answers,
+                answers_required = DISPATCH_PROBATION_PINGS,
+                "liminal worker is SERVING ITS DISPATCH PROBATION: it has answered {answers} of \
+                 {DISPATCH_PROBATION_PINGS} consecutive liveness pings since it connected, and is \
+                 not selected for dispatch until the run is complete. This is the ordinary cost of \
+                 connecting — every healthy worker start passes through it — not a fault, and not \
+                 a statement that anything is unreachable"
+            ),
+            Announcement::EligibilityWithdrawn => warn!(
+                worker_id = worker_id.value(),
+                task_queue,
+                liveness_ping = sequence,
+                answers_required = DISPATCH_PROBATION_PINGS,
+                silence_window_ms = self.silence_window.as_millis(),
+                "WITHDRAWING DISPATCH ELIGIBILITY from liminal worker: it had PROVED its dispatch \
+                 path reachable on this connection and the server can no longer prove it — either \
+                 a liveness ping failed or the last proof aged out of the window. It stays \
+                 registered and keeps its in-flight work, and becomes eligible again after \
+                 {DISPATCH_PROBATION_PINGS} consecutive answered pings"
+            ),
+            Announcement::EligibilityRestored => info!(
+                worker_id = worker_id.value(),
+                task_queue,
+                liveness_ping = sequence,
+                "DISPATCH ELIGIBILITY RESTORED to liminal worker: it has answered a full run of \
+                 consecutive liveness pings, so the server can again prove it reaches this \
+                 worker's dispatch path. Dispatch selection includes it from now"
+            ),
         }
     }
 
@@ -446,6 +555,51 @@ impl LivenessProbe {
 /// async. Every failure is rendered as a reason string, because at this layer
 /// the distinction that matters is "answered" vs "did not answer" — the typed
 /// error text rides into the WARN verbatim.
+/// A change in one worker's dispatch standing that the operator must be told
+/// about — never the standing state itself, so a persistently excluded worker
+/// does not re-log every cadence.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Announcement {
+    /// A freshly connected worker began serving its probation. Ordinary.
+    ProbationOpened {
+        /// Consecutive answers banked when the probation was announced.
+        answers: u32,
+    },
+    /// A worker that HELD eligibility lost it. An incident.
+    EligibilityWithdrawn,
+    /// A worker that was excluded is dispatchable again.
+    EligibilityRestored,
+}
+
+/// The whole truth table for one worker's standing between two rounds.
+///
+/// Pure and total on purpose: the four inputs are exhaustively enumerated in
+/// the tests, which is the only way to be sure the alarming half and the
+/// reassuring half are both reachable. The old code had no such function — the
+/// decision was inlined and only ever produced one of the three lines, so the
+/// missing two were invisible.
+const fn transition(
+    was_excluded: bool,
+    now_excluded: Option<DispatchExclusion>,
+) -> Option<Announcement> {
+    match (was_excluded, now_excluded) {
+        // Newly excluded. WHICH exclusion decides whether this is news.
+        (false, Some(DispatchExclusion::OpeningProbation { answers })) => {
+            Some(Announcement::ProbationOpened { answers })
+        }
+        (false, Some(DispatchExclusion::ReachabilityLost)) => {
+            Some(Announcement::EligibilityWithdrawn)
+        }
+        // Left the exclusion set: the all-clear.
+        (true, None) => Some(Announcement::EligibilityRestored),
+        // No CHANGE in standing, by either route: a worker still excluded (its
+        // exclusion was announced when it began, and repeating it every cadence
+        // is how a log stops being read), or one that was eligible and stayed
+        // eligible. Both are silence, for different reasons.
+        (true, Some(_)) | (false, None) => None,
+    }
+}
+
 /// Why one liveness round produced no proof of dispatch reachability.
 ///
 /// The two cases are different facts about different parties and an operator
@@ -491,7 +645,59 @@ mod tests {
     use super::super::heartbeat::{DISPATCH_PROBATION_PINGS, HeartbeatTracker};
     use super::super::liminal_transport::LiminalConnectionNotifier;
     use super::super::registry::{ConnectedWorkerRegistry, WorkerId};
-    use super::{LivenessPing, LivenessPong, LivenessProbe, PingFailure};
+    use super::{
+        Announcement, DispatchExclusion, LivenessPing, LivenessPong, LivenessProbe, PingFailure,
+        transition,
+    };
+
+    /// The WHOLE truth table, enumerated. Four inputs, and every one of them is
+    /// asserted here — which is the only way to be sure both the alarming and
+    /// the reassuring outcomes are reachable.
+    ///
+    /// The version of this logic that shipped until 2026-08-05 could emit
+    /// exactly one of these lines. The other two were not wrong; they did not
+    /// exist, so an operator saw the withdrawal on every healthy worker start
+    /// and never saw the recovery that followed seconds later.
+    #[test]
+    fn every_standing_change_has_exactly_one_announcement() {
+        assert_eq!(
+            transition(
+                false,
+                Some(DispatchExclusion::OpeningProbation { answers: 1 })
+            ),
+            Some(Announcement::ProbationOpened { answers: 1 }),
+            "a fresh connection serving its probation is ORDINARY and must not be announced as a \
+             worker the server cannot reach"
+        );
+        assert_eq!(
+            transition(false, Some(DispatchExclusion::ReachabilityLost)),
+            Some(Announcement::EligibilityWithdrawn),
+            "losing eligibility that was actually held is the incident the WARN exists for"
+        );
+        assert_eq!(
+            transition(true, None),
+            Some(Announcement::EligibilityRestored),
+            "the all-clear must be said out loud — an alarm nobody cancels is read as ongoing"
+        );
+        assert_eq!(
+            transition(true, Some(DispatchExclusion::ReachabilityLost)),
+            None,
+            "a standing exclusion must not re-log every cadence"
+        );
+        assert_eq!(
+            transition(
+                true,
+                Some(DispatchExclusion::OpeningProbation { answers: 0 })
+            ),
+            None,
+            "including while a still-excluded worker is still serving its probation"
+        );
+        assert_eq!(
+            transition(false, None),
+            None,
+            "an eligible worker that stayed eligible is not news"
+        );
+    }
 
     /// The ping/pong pair round-trips with stable field names — the cross-crate
     /// wire contract with `aion-worker`'s mirror of these types. A drift here is
