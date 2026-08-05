@@ -179,3 +179,134 @@ Backticked commit messages via `git commit -F -`. Do not edit `CLAUDE.md`.
 
 Live pids, untouched all session: server **45425**, worker **48399**, both from
 the repo root.
+
+---
+
+## 🔴 AMENDMENT 1 to this marker — my #107 enumeration was WRONG
+
+Written after Waffles verified the report at their own hands and named two
+`parent: None` sites I had not listed. **Amending rather than editing the claim
+above**, so the error stays legible.
+
+**The false claim, §"Verified, with citations" item 4:** *"The only production
+sites assigning `parent` are two hardcoded `None`s (`clean_dtos.rs:321`,
+`memory.rs:753`)."* A universal negative about a codebase — exactly the class I
+had just finished ruling on — and I wrote it from a partial grep. The command
+that falsifies it is one line:
+`grep -rn "parent: None\|parent: Some" crates/ --include="*.rs"`.
+
+### The corrected enumeration — FOUR sites, and they are not alike
+
+| site | what it is | verdict |
+|---|---|---|
+| `aion-server/src/api/http/clean_dtos.rs:321` | HTTP surface, store summary → core summary | fabricates `None` |
+| **`aion-client/src/ops.rs:663`** | **Rust caller SDK, the same conversion** | **fabricates `None` — I MISSED THIS** |
+| `aion-store/src/memory.rs:753` | in-memory visibility projection | fabricates `None` |
+| `aion-core/src/filter.rs:133` (`from_history`) | projection from event history | **NOT a defect — correctly justified** |
+
+`ops.rs:888` is a test helper inside `mod tests`, not a production site.
+
+**Why the miss matters:** `aion-client` is the Rust caller SDK. So the field
+that cannot be populated is fabricated on **three** independent paths, not one,
+and the false `"parent": null` reaches SDK consumers as well as HTTP consumers.
+The blast radius of the wire finding is wider than I reported it.
+
+### 🔴 The site I nearly reported as the WORST is the one that is RIGHT
+
+`WorkflowSummary::from_history` also hardcodes `parent: None`, and read cold it
+looks like the most damning site of all — the projection that reads the history
+itself, discarding the linkage. **It is correct, and its doc comment says why:**
+
+> *"Parent linkage is not present in a child workflow's own history, so this
+> helper leaves `parent` unset."*
+
+True. `ChildWorkflowStarted` is recorded in the **parent's** history; the child's
+own history carries `WorkflowStarted` and nothing about who asked for it. No
+amount of reading the child's events can recover the parent.
+
+**That is the structural finding, and it is worth more than the defect list:
+the relation cannot be derived after the fact — it must be WRITTEN at the moment
+the child is started**, into the child's start envelope or its visibility row.
+Anyone who plans to "just project it from history" will find there is nothing
+there to project. Reading the justification is what produced this; the
+assertion-message rule cuts both ways.
+
+### And the filter itself is not a husk — only the STORE case is
+
+`aion-core/src/filter.rs:378-388`, `parent_filter_matches_parent_workflow_id`,
+asserts positively (`filter.matches(matching_summary)`) **and** negatively
+(a summary with `parent: None` must not match). That test would fail if the
+matching logic broke. So the earlier finding narrows and gets sharper: **the
+core filter logic is genuinely proven; the husk is specifically the STORE
+CONTRACT case** at `conformance.rs:578-585`, which asserts emptiness and cannot
+fail. Two levels, opposite verdicts, and the wide claim "the parent filter is
+untested" would have been false.
+
+**Method note for myself:** I caught #107's base-rate trap and then walked
+straight into a universal-negative in the same report. The check is cheap and I
+did not run it because the claim felt like bookkeeping rather than a claim.
+See [[confidence-is-what-stops-you-measuring]] — this is its third instance in
+three days, and the first one that is mine twice over.
+
+---
+
+## 🔬 #141 LEG 1 MEASURED — console REST contract vs server registration
+
+Started the wire-with-oracle lane at its cheapest named leg. **Read-only; no
+oracle written yet.**
+
+### Result: the contract table has NO dead link
+
+All 21 paths in `AW_REST_CONTRACT.endpoints`
+(`apps/aion-ops-console/src/lib/api/client-transport.ts:6-39`) are registered in
+`workflow_router` (`crates/aion-server/src/api/http/router.rs:181-283`), methods
+included. Checked by hand, both lists read whole. **This leg finds no bug — its
+value is the oracle, not a hunt.**
+
+### 🔴 But the contract table is NOT the console's REST surface
+
+The table covers 21 endpoints. The console also calls, with literal paths in
+other files and no contract entry: `/awl/check`, `/awl/fmt`, `/awl/edit`,
+`/awl/scaffold`, `/awl/deploy`, `/awl/documents`, `/awl/documents/{path}`,
+`/awl/layout/{path}`, `/awl/deployed`, `/awl/deployed/{type}/{hash}`,
+`/awl/workers/availability`, `/awl/runs/{id}`, `/awl/runs/{id}/binding`,
+`/workflows/transcript`, `/workflows/transcripts`, `/events/stream`,
+`/health/live`, `/metrics`. **An oracle over the contract table alone would
+cover barely half the calls and read as full coverage** — the denominator trap
+again. #140's dead link lived outside this table, which is precisely why hand
+inspection was what found it.
+
+### 🔴 Two traps any path-scraping oracle must handle
+
+1. **The console's own SPA routes look identical to server routes.**
+   `app/routePaths.ts` declares `/workflows/:id` and `/authoring`;
+   `TimelineEntry.tsx` builds `/workflows/${childWorkflowId}` as a browser link.
+   None is a server call. A scraper that treats them as calls reports dead links
+   that were never wires.
+2. **A negation reads as a citation.** `features/failover/lib/clusterConfig.ts:7`
+   contains the string `/cluster/shards`, which is registered nowhere — but the
+   line is a comment stating *"No `/cluster/shards` endpoint"*. I flagged it as a
+   candidate dead link and it survived exactly one read. **A grep cannot tell an
+   assertion from its denial.**
+
+### Design constraints carried forward for the oracle
+
+- The absent side must come from the **server's own registration**, per the task.
+  Axum exposes no route table, so the workable oracle is to build the production
+  router in-process and issue one request per declared call, asserting the router
+  did not answer "no such route."
+- **The discriminator matters:** a router miss is a 404 with an *empty* body; a
+  handler 404 (`WorkflowTypeNotFound` and friends) carries a JSON `WireError`.
+  Method mismatch is a 405, also empty. So the assertion is *not (404-or-405
+  with an empty body)*, never status alone.
+- **Feature-gated families must be mounted for the run:** `/deploy/*`,
+  `/authoring/*` and `/dev/*` answer a plain 404 when switched off, deliberately
+  *"indistinguishable from an unmounted route family"* (`router.rs:122-148`).
+  A test on default config would score the deploy endpoints dead.
+- `clusterCommand` is in `endpoints` but has **no `methods` entry** — the `'POST'`
+  is a literal at `client.ts:158`. A (path, method) pair oracle keyed on
+  `methods` silently drops it. **Key on `endpoints`, join methods, and assert
+  the two objects have the same key set**, or the denominator lies.
+
+**Nothing built. Leg 1 is measurement only, and #141 remains queued behind the
+#139 cut.**
