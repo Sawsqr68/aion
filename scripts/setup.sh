@@ -116,6 +116,36 @@ mkdir -p "$AION_HOME"
 chmod 700 "$AION_HOME"
 note "ready (owner-only permissions)"
 
+HOME_CONFIG="$AION_HOME/config.toml"
+if [ -f "$HOME_CONFIG" ]; then
+    note "existing config kept as-is: $HOME_CONFIG"
+else
+    # Config discovery is READ-ONLY (config/home.rs): with no config file the
+    # server boots on built-in defaults, and both surfaces this script needs
+    # are dark there — the deploy gRPC service is mounted only when
+    # `deploy.enabled` (run.rs), and the liminal listener remote workers
+    # connect IN to exists only when the outbox is commissioned. Without this
+    # file the deploy step below has nothing to talk to and the worker has
+    # nothing to dial. Only the two `enabled` switches are written: every
+    # other value in both sections already has a default that applies once
+    # the surface is on, and this script invents none of them.
+    cat >"$HOME_CONFIG" <<'CONFIG'
+# Written by scripts/setup.sh on first run, because this Aion home had no
+# config and both surfaces below are dark by default. Yours to edit.
+
+# Lets `aion deploy` reach the server's deploy service.
+[deploy]
+enabled = true
+
+# Commissions the outbox, which hosts the liminal listener that remote
+# workers — including the assistant worker — connect in to.
+[outbox]
+enabled = true
+CONFIG
+    chmod 600 "$HOME_CONFIG"
+    note "wrote a minimal config enabling the deploy and worker surfaces: $HOME_CONFIG"
+fi
+
 say "Starting the Aion server"
 if server_is_up; then
     note "this Aion home's server is already up — leaving it alone"
