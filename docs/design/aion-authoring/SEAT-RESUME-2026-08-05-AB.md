@@ -118,6 +118,59 @@ untracked directories.
    line there changes how every agent in the repo works. Silence = it stays a
    design document.
 
+## 🔴 LIVE COMMITMENT TO TOM — the fresh-machine setup test. NOT STARTED.
+
+**Tom gave the GO 2026-08-05 ~02:33 AEST** ("happy for you to do all of that").
+The ask I made and he approved: **run `scripts/setup.sh` the way a stranger
+would** — clean clone, clean home, nothing borrowed from this box — and fix
+whatever falls over. This is Law 2 and Law 5 applied to the thing Tom is about
+to hand other people.
+
+**Guards, non-negotiable** (I named these to him, so they are promised):
+- Must NOT touch his live server or store. `scripts/setup.sh` defaults to
+  `~/.aion` and port 8080 — **exactly** his live setup. Isolate: separate
+  `AION_HOME`, separate ports, separate clone directory.
+- ⛔ **The estate-wide worker-rebuild freeze still stands.** An isolated worker
+  that registers only with its own isolated server is the intent; verify it
+  cannot reach :8080.
+- Cold full build wants serious disk (~40 GiB free — see the
+  `cold-build-disk-headroom` memory). CHECK FIRST.
+- ⛔ Never bare `cargo clean`; no custom CARGO_TARGET_DIR.
+
+What I told him is unproven: nobody has run it on a genuinely fresh machine
+since the config-writing fix landed. The likely stopper for others is **norn**
+— installed and signed in, or the script refuses by design.
+
+## 🔴 TOM: NEVER PUBLISH ARTIFACTS. He does not like sharing them.
+
+Asked for "a slide deck or something"; I published an Artifact and he said
+plainly he doesn't want one. **The deliverable is a FILE HE OPENS LOCALLY.**
+The Artifact tool has no delete — I told him so straight, said it is private
+unless shared, and that he can remove it from his gallery himself. Do not
+publish another.
+
+## ✅ The AWL deck: DONE (`dd2a6d87`), `docs/authoring/awl-deck.html`
+
+Standalone HTML — doctype/head/body, everything inline, **zero external
+references** (verified). `open docs/authoring/awl-deck.html`. Arrows move, F
+full-screens. 19 slides: three on *why*, then a whole workflow in 11 lines
+before any theory, then one idea per slide, closing on what `aion awl check`
+does NOT catch.
+
+**Accuracy was gated, not intended:** every AWL example became a complete
+document and went through `aion awl check` against installed 0.11.0 before it
+was allowed on a slide. 12 documents, 12 clean, including re-checking the two
+lifted verbatim from the repo (`awl_hello`, `shell_run`) because
+"known-good example" is a label. **The gate paid**: my `wait` slide used
+`answer!.reviewer` — there is no `!` unwrap in AWL, the checker refused it as a
+stray character, and the real rule (an outcome guard's proof holds through the
+whole arm including the route payload) is the better teaching example.
+
+## ⏳ TOM WANTS A DOCUMENTATION SITE — "start thinking about that"
+
+His words, 2026-08-05. NOT a build order yet. I told him I'd **come back with a
+shape rather than start it tonight.** That reply is owed.
+
 ## ⚠️ CI READS ALIVE AND IS DEAD — do not trust the obvious three
 
 Verified at my hand 2026-08-05. Two workflow files exist, `gh workflow list`
