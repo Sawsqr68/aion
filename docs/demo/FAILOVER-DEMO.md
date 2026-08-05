@@ -12,8 +12,10 @@ All failover intelligence lives in shipped library code (the SS-5b
 `collect_four` fan-out fixture is the workload behind a clean seam, swappable
 for a real Norn agent later (see "Swapping in a real agent" below).
 
-There is no web UI here — this is the backend + a stable status surface a
-ops console can poll. The ops console plan ships separately.
+The demo itself drives the CLI, so you can run the whole thing without a
+browser. But the ops console is not separate any more: it is embedded in every
+`aion` binary and its `/failover` view watches this exact demo live. See
+[Web ops console](#web-ops-console-the-failover-view) below.
 
 ## One command
 
@@ -255,10 +257,21 @@ in-flight parked-resume path is owned by a separate durability track.
 
 ## Regression test
 
-The same workload + kill-9 exactly-once path is covered as an `--ignored`
-OS-process integration test:
+The same workload + kill-9 exactly-once path is covered by an OS-process
+integration test. It spawns a real 3-node cluster and takes minutes, so it does
+not run on a plain `cargo test` — but it is **not** `#[ignore]`d (the house
+rules ban that). It is gated at runtime on `AION_RUN_COSTLY_TESTS`, and a
+default run prints a checked `COSTLY_PROOF_SKIPPED (PROVES NOTHING)` line
+naming the claim it did not establish (`tests/common/costly_gate.rs`).
+
+To actually run it, set the variable:
 
 ```bash
+AION_RUN_COSTLY_TESTS=1 \
 cargo test -p aion-cli --features haematite-backend,liminal-transport \
-  --test lsub5b_osproc_kill9_failover_e2e -- --ignored --nocapture
+  --test lsub5b_osproc_kill9_failover_e2e -- --nocapture
 ```
+
+Without `AION_RUN_COSTLY_TESTS` the command still exits 0 — the gate returns
+`Ok(())` after announcing the skip. A green run is only a proof when that
+variable was set.
