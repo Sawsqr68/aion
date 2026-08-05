@@ -7,10 +7,12 @@ is listed at the bottom so you know what it is when you trip over it.
 
 ## Start
 
-- [GETTING-STARTED.md](GETTING-STARTED.md) — nothing to a completed durable
-  workflow using only published artifacts; no repository checkout needed.
-  The one-command alternative is `scripts/setup.sh` at the repository root,
-  which also deploys the assistant and starts its worker.
+- [GETTING-STARTED.md](GETTING-STARTED.md) — the guided path, three ways in:
+  **Part 0** is one command (`scripts/setup.sh`) that leaves you with a
+  running server, the web console, an assistant you can talk to, and the
+  prerequisite, verification, and troubleshooting tables that go with it;
+  **Part 1** builds the same thing by hand in AWL from published artifacts
+  alone, no checkout; **Part 2** is the typed Gleam path.
 
 ## `authoring/` — writing workflows
 

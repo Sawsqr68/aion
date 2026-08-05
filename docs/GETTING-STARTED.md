@@ -1,33 +1,190 @@
 # Getting started with Aion
 
-This guide takes you from nothing to a completed durable workflow using only
-published artifacts — no repository checkout.
+Aion is a durable workflow engine. A workflow written for it survives crashes,
+reboots, and months of sleep, and resumes exactly where it was — the engine
+records every step and replays that history instead of re-doing work.
 
-Aion has two first-class authoring surfaces, and this guide covers both:
+This guide takes you from nothing to a running system, three ways. They are
+ordered by how much you want to see happen versus how much you want to
+understand while it does.
 
-- **[Part 1 — AWL](#part-1--the-awl-path)**, Aion's workflow language. One
-  `.awl` file declares the whole workflow, and `aion run` compiles, deploys,
-  starts, and awaits it in one motion. **Start here.**
-- **[Part 2 — Gleam](#part-2--the-gleam-path)**, for workflows that need real
-  typed code: `aion generate` derives codecs and schemas from your types, and
-  `aion package` produces a `.aion` archive.
+| | What you get | What it costs |
+|---|---|---|
+| **[Part 0 — one command](#part-0--the-one-command)** | A running server, the web console, and an AI authoring assistant you can talk to | A repository clone and one script |
+| **[Part 1 — AWL by hand](#part-1--the-awl-path)** | The same engine, built up step by step, in Aion's own workflow language | Published artifacts only — no checkout |
+| **[Part 2 — Gleam](#part-2--the-gleam-path)** | The typed-code path, for workflows that need real code | A Gleam toolchain as well |
 
-Either way you will install the CLI, run the server, serve an activity, and
-then deploy, start, signal, and complete a run — and kill the server mid-run to
-watch it survive.
+Parts 1 and 2 are the ones that teach you the system. Part 0 is the one that
+shows you it exists. If you only have ten minutes, take Part 0; if you are
+going to build on this, come back and walk Part 1.
 
-Working from a repository checkout instead? Use
+Working from a repository checkout and want a bundled example instead? Use
 [`examples/awl-hello/README.md`](../examples/awl-hello/README.md) for AWL or
 [`examples/hello-world/README.md`](../examples/hello-world/README.md) for
 Gleam.
 
+## Two habits worth having before you start
+
+Both of these are the difference between a setup that works and a setup you
+merely believe works.
+
+**Verify, then proceed.** Every step below says what success looks like. If
+you did not see it, the step did not succeed — diagnose it before moving on.
+Do not read a command's silence as its approval. This matters more here than
+in most systems, because a status code is not evidence: the console answers
+`200 text/html` for any path it does not recognise, so a reachable URL proves
+nothing on its own. Read the *body*.
+
+**Never restart the server as a reflex.** If something looks wrong, read the
+logs first — `~/.aion/server.log` and, once Part 0 has run,
+`~/.aion/assistant-worker.log`. A durable engine's server holds live state.
+Restarting is a deliberate act, not a troubleshooting twitch, and it destroys
+the evidence you needed to find out what was actually wrong.
+
 ## Prerequisites
 
-- Rust toolchain and Cargo ([rustup](https://rustup.rs) recommended)
-- **Part 2 only:** [Gleam](https://gleam.run/getting-started/installing/) with
-  Erlang/OTP on your `PATH`. AWL needs no Gleam toolchain.
+| Requirement | Check | Success looks like | Needed for |
+|---|---|---|---|
+| Rust toolchain and Cargo ([rustup](https://rustup.rs)) | `cargo --version` | a version line | everything |
+| git | `git --version` | a version line | Part 0 |
+| [norn](https://github.com/ablative-io/norn), installed and signed in | `norn --version` | a version line | Part 0 only |
+| [Gleam](https://gleam.run/getting-started/installing/) with Erlang/OTP on `PATH` | `gleam --version` | a version line | Part 2 only |
 
-## 1. Install the CLI
+**On norn, stated plainly:** norn is the agent runtime the assistant thinks
+with. `scripts/setup.sh` **refuses to start without it** — it is checked in the
+script's first step and is a hard failure, not a degradation. That is a
+property of the setup script, not of Aion: the server, the console, and both
+authoring surfaces need no norn at all, which is why Parts 1 and 2 never
+mention it. If you do not have norn, skip Part 0 and start at Part 1; you lose
+the assistant and nothing else.
+
+The repository is public, so the clone in Part 0 needs no GitHub account and no
+authentication.
+
+# Part 0 — the one command
+
+## Run it
+
+```sh
+git clone --depth 1 https://github.com/ablative-io/aion.git
+cd aion
+bash scripts/setup.sh
+```
+
+The script also works standalone, with no clone at all — it will clone the
+repository itself, into `./aion` or wherever `AION_CHECKOUT_DIR` points:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ablative-io/aion/main/scripts/setup.sh | bash
+```
+
+It is safe to re-run. Every step detects work already done and skips it: an
+already-running server for this Aion home is left alone, a current worker
+binary is not rebuilt, and an existing config is never overwritten.
+
+## What it does, in order
+
+It announces each step as it goes.
+
+1. **Checks prerequisites** — `git`, `cargo`, `norn`. Any missing one stops
+   the script by name.
+2. **Installs the `aion` CLI** if it is not already on `PATH`. **A cold
+   install compiles the whole server and takes around 25 minutes.** That is
+   expected; let it run. If `aion` is still missing when it finishes, the
+   cause is almost always that `~/.cargo/bin` is not on your `PATH` — the
+   script says exactly that.
+3. **Prepares `~/.aion`**, the server's home, with owner-only permissions
+   (`chmod 700`). The server's path-safety gate refuses a store with a group-
+   or world-writable ancestor, so doing this up front means it never fires.
+4. **Writes a minimal `config.toml`** if that home has none, enabling only the
+   two surfaces the rest of the script needs — `[deploy]`, so `aion deploy`
+   has something to talk to, and `[outbox]`, which hosts the listener remote
+   workers connect in to. Both ship dark by default. The file it writes says
+   in comments what each one opens and what that means; it is yours to edit,
+   and it is created `chmod 600`.
+5. **Starts the server** and waits up to 120 seconds for it to actually
+   answer — proven by the body of `/build`, not by a status code.
+6. **Reads the server's workspace root** out of its own JSON startup banner
+   and threads that one resolved value to the worker, so both sides cannot
+   disagree about where session workspaces live.
+7. **Deploys the assistant workflow** (`examples/assistant/awl/assistant.awl`).
+8. **Builds and starts the assistant worker**, then waits up to 30 seconds for
+   it to register with the server — and fails loudly if it exits first.
+
+## What success looks like
+
+A final block naming the addresses it actually bound:
+
+```
+==> Done
+    Console:         http://127.0.0.1:8080
+    Server build:    {"version":"0.11.0", …}
+    Server log:      /Users/you/.aion/server.log
+    Worker log:      /Users/you/.aion/assistant-worker.log
+```
+
+The port comes from the server's own startup banner. Trust the printed
+address, not this example.
+
+If the script fails, it says why and names the log to read. Read the tail of
+that log, fix the named problem, and re-run the script.
+
+## Verify it for yourself
+
+Two checks, and they are the ones that would catch a partial setup:
+
+```sh
+curl -s http://127.0.0.1:8080/build        # one JSON line containing "version"
+grep 'connected and registered' ~/.aion/assistant-worker.log
+```
+
+The first proves a real Aion server is answering — remember that the console's
+fallback returns `200` for anything, so the JSON body is the evidence and the
+status code is not. The second proves the worker is actually serving, rather
+than merely running.
+
+Then open the printed console address in a browser. You should see the ops
+console: workflows, runs, history, and the authoring surface.
+
+## Your first assistant session
+
+In the console, pick the **assistant** workflow and start a run. It takes
+exactly two inputs:
+
+- **objective** — what you want, in your own words. It must not be blank.
+- **repo_path** — a git repository for the assistant to work against, as a
+  local path or a clone URL. Leaving it empty is fine, and means a scratch
+  workspace.
+
+The session is a conversation. Each message you send continues the *same*
+assistant, with its full memory, for as long as you keep it open — days or
+weeks. The session survives server restarts, because it is a durable workflow
+like any other; that is the whole point. Ending it is an explicit action in
+the console. There are no round limits.
+
+## When something is wrong — where to look first
+
+| Symptom | First look |
+|---|---|
+| `aion: command not found` after the install step | `~/.cargo/bin` is not on your `PATH` |
+| The script stops at "Waiting for the server to answer" | tail `~/.aion/server.log` — the last error line names the cause |
+| The worker "did not register within 30s" | `norn` missing or not signed in; tail `~/.aion/assistant-worker.log` |
+| Console loads, but the assistant never answers | the worker log again — is it still running? `pgrep -fl agent-dev-worker` |
+| "the server's workspace root is unresolvable" | the server booted but could not resolve `<AION_HOME>/clones`; the reason is in the banner and in `~/.aion/server.log` |
+| The clone fails | network, not access — the repository is public |
+
+The two logs are the whole diagnostic surface: `~/.aion/server.log` and
+`~/.aion/assistant-worker.log`. Read them before changing anything.
+
+---
+
+Everything from here on is the manual path. It uses only published artifacts —
+no repository checkout — and builds the same system a piece at a time so you
+can see what each piece does. If Part 0 has already run, the CLI is installed
+and a server is up; you can skip the next section and go straight to
+[Part 1](#part-1--the-awl-path).
+
+## Install the CLI
 
 ```sh
 cargo install aion-cli --locked
@@ -184,7 +341,7 @@ activity failure, with AWL's declared `retry` policy deciding whether another
 attempt is scheduled.
 
 For anything beyond command wiring, write a real worker against a worker SDK —
-[Part 2, step 4](#4-write-the-activity-worker) shows the Rust one, and the
+[Part 2, step 3](#3-write-the-activity-worker) shows the Rust one, and the
 [activities and workers guide](workers/activities-and-workers.md) covers failure
 classification, heartbeats, and cancellation.
 
@@ -192,7 +349,7 @@ classification, heartbeats, and cancellation.
 
 The server reads a TOML config file. Create `aion.toml` in a fresh working
 directory — the settings are explained in full in
-[step 5 of Part 2](#5-configure-and-run-the-server):
+[step 4 of Part 2](#4-configure-and-run-the-server):
 
 ```toml
 [server]
@@ -318,7 +475,7 @@ Gleam is the surface for workflows that need real typed code. The steps below
 build the same shape as Part 1 — one activity, one signal, one query — in
 Gleam, and package it into a versioned `.aion` archive.
 
-## 2. Write the workflow
+## 1. Write the workflow
 
 Workflows are written in [Gleam](https://gleam.run) with the
 [`aion_flow`](https://hex.pm/packages/aion_flow) SDK and compiled to BEAM
@@ -501,7 +658,7 @@ The full authoring surface — timers, timeout races, child workflows,
 determinism rules — is in the
 [workflow authoring guide](authoring/workflows.md).
 
-## 3. Describe and build the package
+## 2. Describe and build the package
 
 Add `workflow.toml` next to `gleam.toml`:
 
@@ -596,7 +753,7 @@ names its reason.)
 (`aion package . --build` compiles and packages in one step. The full
 packaging reference is [`docs/authoring/packaging.md`](authoring/packaging.md).)
 
-## 4. Write the activity worker
+## 3. Write the activity worker
 
 Activities run outside the workflow VM, in workers you write against a worker
 SDK (Rust here; Python and TypeScript SDKs also exist under `sdks/`). The
@@ -668,7 +825,7 @@ object the workflow's `greeting_codec` decodes. Failure classification,
 retries, heartbeats, and cancellation are covered in the
 [activities and workers guide](workers/activities-and-workers.md).
 
-## 5. Configure and run the server
+## 4. Configure and run the server
 
 The server reads a TOML config file. Two things in it are load-bearing:
 `[deploy] enabled = true`, because the deploy surface is dark by default and
@@ -729,7 +886,7 @@ addresses. Leave it running. In terminal 2, start the worker:
 cargo run --manifest-path my-worker/Cargo.toml
 ```
 
-## 6. Deploy and run the workflow
+## 5. Deploy and run the workflow
 
 In terminal 3, deploy the archive to the running server:
 
@@ -764,7 +921,7 @@ aion query <workflow-id> status
 You should see `{"result":"awaiting_approval"}`. Queries are answered live by the
 handler the workflow registered — they read state, never change it.
 
-## 7. Prove the durability
+## 6. Prove the durability
 
 While the run is waiting, kill the server hard:
 
@@ -783,7 +940,7 @@ the run's event history, and the run is waiting for `approval` again —
 exactly where it was. The `greet` activity is **not** re-executed; replay
 returns its recorded result.
 
-## 8. Approve and complete
+## 7. Approve and complete
 
 ```sh
 aion signal <workflow-id> approval --payload '{"approver":"ada"}'
@@ -800,7 +957,7 @@ returns `error[not_running]`. That is expected: terminal runs are inspected
 with `describe`, not queried. See the
 [errors reference](operations/errors.md) for every error code.
 
-## 9. Versions, routing, rollback
+## 8. Versions, routing, rollback
 
 Each deployed package version is identified by its content hash, and new
 starts route to one version per workflow type:
@@ -816,6 +973,23 @@ starts use the routed version. The full deploy, versioning, and recovery
 model is in the [operations guide](operations/operations.md).
 
 ## Where to go next
+
+If you want a route rather than a list, read these four in this order. They
+take you from the language, through the one capability that can hurt you, to
+how the assistant you met in Part 0 is actually wired:
+
+1. [`docs/authoring/AWL.md`](authoring/AWL.md) — AWL end to end: every verb and
+   the authoring loop.
+2. [Declared commands](workers/DECLARED-COMMANDS.md) — read this **before**
+   writing your first `run "…"` action body. **There is no sandbox.**
+3. [`examples/assistant/resources/`](../examples/assistant/resources/) — the
+   assistant's own operating manual: its environment, authoring method,
+   commands, the complete AWL language reference, and workers. What the
+   assistant knows, you can read too.
+4. [Agent workers](workers/AGENT-WORKERS.md) — how agent-backed workers like
+   the assistant's are wired, including session pinning.
+
+The rest, by subject:
 
 - [`docs/authoring/AWL.md`](authoring/AWL.md) — the AWL surface: every verb, the authoring loop,
   and the full language reference.

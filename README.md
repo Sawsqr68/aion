@@ -13,9 +13,37 @@ the BEAM VM — with a Rust persistence and transport layer around it.
 cargo install aion-cli --locked   # installs the `aion` binary
 ```
 
-**Start here: [Getting started](docs/GETTING-STARTED.md)** — zero to a
-completed durable workflow, in AWL, with every file you need inline.
-The AWL language itself is in [`docs/authoring/AWL.md`](docs/authoring/AWL.md).
+**Start here: [Getting started](docs/GETTING-STARTED.md)** — three ways in,
+from one command that gives you a running server, the web console, and an AI
+authoring assistant, through to building the same thing by hand in AWL and in
+Gleam, with every file you need inline. The AWL language itself is in
+[`docs/authoring/AWL.md`](docs/authoring/AWL.md).
+
+The short version, once `aion` is installed and a server is running:
+
+```sh
+aion awl check my_flow.awl                        # local: parse + typecheck
+aion run my_flow.awl --input '{"name":"Ada"}'     # compile, deploy, start, await
+```
+
+Read [`docs/workers/DECLARED-COMMANDS.md`](docs/workers/DECLARED-COMMANDS.md)
+before writing a `run "…"` action body. **There is no sandbox.**
+
+### Working from a checkout?
+
+To run the bundled examples from source rather than published artifacts:
+
+- [`examples/hello-world/README.md`](examples/hello-world/README.md) — the
+  first run: build, package, serve, and operate the hello-world workflow.
+- [`examples/order-fulfillment/README.md`](examples/order-fulfillment/README.md)
+  — the flagship saga (retries, signal/timeout race, child workflow,
+  compensation), walked through in
+  [`docs/examples/order-saga.md`](docs/examples/order-saga.md).
+- [`dev-config.toml`](dev-config.toml) — the local development server config;
+  run the server from source with
+  `cargo run -p aion-cli -- server --config dev-config.toml`.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — the gates, and the one command that
+  runs all of them.
 
 > Aion is the Greek conception of eternal, unbounded time — distinct from
 > Chronos, who is sequential, ticking time. A workflow that sleeps for three
