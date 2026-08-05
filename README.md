@@ -65,8 +65,11 @@ The AWL language itself is in [`docs/authoring/AWL.md`](docs/authoring/AWL.md).
   trail preserved. Workflow-driven bounded retry loops remain available on
   top (the [order-saga example](docs/examples/order-saga.md) shows the
   pattern).
-- The ops console UI is under development; the CLI and HTTP API are the
-  operating surfaces.
+- The ops console is always embedded in the binary — there is no cargo
+  feature and no "not embedded" state, so a plain `cargo install` serves the
+  real UI at `/`
+  ([`crates/aion-server/src/ops_console/assets.rs`](crates/aion-server/src/ops_console/assets.rs)).
+  The CLI and HTTP API cover the same ground for scripted operation.
 - Cooperative cancellation covers worker shutdown/drain only. There is no
   cancel frame in the worker protocol, so the server cannot cancel a
   specific in-flight activity; the SDK sets the cancellation flag when a
@@ -89,7 +92,7 @@ line each. The load-bearing ones:
 | [Activities & workers guide](docs/workers/activities-and-workers.md) | Worker scaffolding, failure classification, retry semantics |
 | [Worker authoring guide](docs/workers/WORKER-AUTHORING.md) | Writing an activity worker as a Rust crate, from the proven reference |
 | [Agent workers](docs/workers/AGENT-WORKERS.md) | `aion worker agent`, the norn-backed assistant worker, session pinning |
-| [Schema codegen guide](docs/authoring/codegen.md) | Generate Gleam types + JSON codecs from your schemas; `--check` CI gate; supported subset |
+| [Types-first codegen guide](docs/authoring/codegen.md) | Derive JSON codecs and emit `schemas/*.json` from your authored Gleam types; `--check` CI gate; supported subset |
 | [Operations guide](docs/operations/operations.md) | Full config reference, deploy/versioning, persistence & recovery, metrics |
 | [Ops console](docs/operations/ops-console.md) | The embedded web console: every view and what an operator can do from each |
 | [Errors reference](docs/operations/errors.md) | Every error code and what to do about it |
@@ -137,20 +140,26 @@ The whole-system design lives in
 | `aion-store-haematite` | Default durable store; single-node or distributed with `[store.cluster]` |
 | `aion-store-libsql` | Alternative durable store over libSQL |
 | `aion-package` | The `.aion` package format, content-hash versioning |
+| `aion-toolchain` | Server-side Gleam authoring toolchain: spawns the external `gleam` binary to compile and type-check submitted source, then packages a verified `.aion`. Embeds no compiler |
 | `aion-awl` | AWL parser, checker, formatter, schema derivation, and compiler |
 | `aion-awl-lsp` | AWL language-server adapter |
 | `aion-awl-package` | AWL-native `.aion` package assembly |
 | `aion` | The engine: lifecycle, durability/replay, timers, signals, queries |
 | `aion-proto` | Shared wire contract (gRPC + serde) |
+| `aion-proto-generated` | Machine-generated tonic/prost gRPC stubs, isolated from the hand-written `aion-proto` so their relaxed lint policy stays in `Cargo.toml` |
 | `aion-darwin-acl` | Single-snapshot native macOS ACL decoder for the server's path-safety gate |
 | `aion-server` | Server library: HTTP/gRPC/WebSocket + worker protocol |
 | `aion-worker` | Rust remote-worker SDK (library — scaffold your own binary) |
 | `aion-client` | Rust caller SDK |
+| `aion-integrations` | Harness-integration SDK: the neutral `AgentHarness`/`AgentSession` seam plus the reusable building blocks an adapter would otherwise hand-roll |
+| `aion-integration-norn` | First-party Norn adapter — the one place in the workspace that names Norn's JSON-RPC contract |
+| `aion-integration-cli` | Second, independent adapter: an observability-only plain-stdout CLI agent that advertises no intervention capabilities |
+| `aion-integration-acp` | First-party Agent Client Protocol adapter: any ACP agent subprocess over newline-delimited JSON-RPC stdio |
 | `aion-cli` | The `aion` binary: server, packaging, deploy, workflow operations |
 | `gleam/aion_flow` | The Gleam authoring SDK ([Hex](https://hex.pm/packages/aion_flow)) |
 | `gleam/aion_client` | The Gleam caller SDK |
 | `sdks/python/*`, `sdks/typescript/*` | Worker + client SDKs |
-| `apps/aion-ops-console` | Ops console UI under development |
+| `apps/aion-ops-console` | The ops console UI source (React + Vite); its build output is committed to `crates/aion-server/ops-console-embed/` and embedded in every server binary |
 
 ## Repository layout
 
@@ -159,7 +168,7 @@ crates/            Rust crates (engine, store, package, proto, server, worker, c
 gleam/             Gleam packages (aion_flow authoring SDK, aion_client)
 sdks/python/       Python worker + client SDKs
 sdks/typescript/   TypeScript worker + client SDKs
-apps/              The under-development ops console (React + Vite)
+apps/              Ops console UI source (React + Vite); built output is embedded in the server
 conformance/       Cross-language conformance suites
 examples/          Working examples (hello-world first, order-fulfillment flagship)
 docs/              User documentation; docs/design/ holds the full design

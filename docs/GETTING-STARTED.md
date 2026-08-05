@@ -200,14 +200,22 @@ listen_address = "127.0.0.1:8080"
 grpc_address = "127.0.0.1:50051"
 
 [runtime]
-query_timeout_ms = 10000            # REQUIRED, no default
+query_timeout_ms = 10000            # optional; defaults to 10000
 
 [websocket]
-event_broadcast_capacity = 1024     # REQUIRED, no default
+event_broadcast_capacity = 1024     # optional; defaults to 256
 
 [deploy]
 enabled = true                      # REQUIRED for `aion deploy` / `aion run`
 ```
+
+Only `[deploy] enabled` earns its place here: the deploy surface is dark by
+default, so `aion deploy` and `aion run` have nothing to talk to without it.
+Every other key above has a default and can be omitted (see
+[`crates/aion-server/src/config/defaults.rs`](../crates/aion-server/src/config/defaults.rs));
+they are spelled out so you can see what you are tuning. Set either tuning key
+to `0` and startup fails naming it — a zero query deadline or a zero-capacity
+broadcast channel is a misconfiguration, not a request for the default.
 
 The store needs no configuration: the stock binary defaults to the haematite
 backend, and its data directory defaults to `~/.aion/data`. Set `AION_HOME` to
@@ -401,8 +409,12 @@ fn greet(input: HelloInput) -> Result(String, FlowError) {
 fn greet_activity(
   input: HelloInput,
 ) -> activity.Activity(HelloInput, GreetingOutput) {
-  // The final argument is a local implementation used only by the
-  // `aion/testing` harness; a deployed workflow always dispatches to a worker.
+  // The final argument is the runner. With no `activity.execution_tier`
+  // decorator the activity dispatches on the remote worker wire and the
+  // runner is used only by the `aion/testing` harness — which is this
+  // workflow. Decorate with `activity.execution_tier(_, activity.InVm)` and
+  // the engine runs this same runner live, in a linked child process of the
+  // workflow process, recording byte-identical history.
   activity.new("greet", input, input_codec(), greeting_codec(), local_greet)
 }
 
@@ -595,7 +607,7 @@ Rust SDK is a **library** — `cargo install aion-worker` fails with
 cd ..
 cargo new my-worker
 cd my-worker
-cargo add aion-worker@0.5
+cargo add aion-worker@0.11
 cargo add tokio --features macros,rt-multi-thread
 cargo add serde --features derive
 cargo add serde_json
@@ -658,10 +670,18 @@ retries, heartbeats, and cancellation are covered in the
 
 ## 5. Configure and run the server
 
-The server reads a TOML config file. Two keys have **no default** and must be
-set (`runtime.query_timeout_ms`, `websocket.event_broadcast_capacity`), and
-the `[deploy]` section must be enabled — with both size ceilings — for
-`aion deploy` to work. Missing keys fail startup with an error naming the key.
+The server reads a TOML config file. Two things in it are load-bearing:
+`[deploy] enabled = true`, because the deploy surface is dark by default and
+`aion deploy` has nothing to talk to without it; and `store.url`, which is
+required once you select the libSQL backend. The tuning knobs all have
+defaults and may be omitted — `runtime.query_timeout_ms` (10000),
+`websocket.event_broadcast_capacity` (256), and, once deploy is enabled, both
+size ceilings (64 MiB archive / 256 MiB inflated). They are written out here so
+you can see what you are tuning. An explicit `0` is a different matter: it
+fails startup with an error naming the key, because a zero deadline, a
+zero-capacity channel, or a zero upload ceiling is a misconfiguration rather
+than a request for the default
+([`crates/aion-server/src/config/defaults.rs`](../crates/aion-server/src/config/defaults.rs)).
 
 Create `aion.toml` in a fresh working directory:
 
@@ -675,11 +695,11 @@ backend = "libsql"                  # durable; "memory" loses state on stop
 url = "aion.db"                     # embedded libSQL file, created on start
 
 [runtime]
-# REQUIRED, no default: reply deadline for workflow queries, in milliseconds.
+# Reply deadline for workflow queries, in milliseconds. Optional; 10000 when omitted.
 query_timeout_ms = 10000
 
 [websocket]
-# REQUIRED, no default: capacity of the global live-event broadcast channel.
+# Capacity of the global live-event broadcast channel. Optional; 256 when omitted.
 event_broadcast_capacity = 1024
 
 [deploy]
@@ -805,8 +825,9 @@ model is in the [operations guide](operations/operations.md).
   determinism rules, timers, signals, queries, child workflows.
 - [Activities and workers guide](workers/activities-and-workers.md) — worker
   scaffolding, failure classification, retry semantics as they actually are.
-- [Schema codegen guide](authoring/codegen.md) — generate Gleam types and JSON
-  codecs from your schemas; `--check` in CI; the supported subset.
+- [Types-first codegen guide](authoring/codegen.md) — derive JSON codecs and
+  emit `schemas/*.json` from your authored Gleam types; `--check` in CI; the
+  supported subset.
 - [Operations guide](operations/operations.md) — full config reference, deploy
   surface, persistence and recovery, metrics.
 - [Errors reference](operations/errors.md) — every error code, with hints.

@@ -4,53 +4,82 @@
 > first-class authoring surfaces, and AWL is the other one: an `.awl` document
 > declares its own types, workers, and actions, needs no `aion generate` step,
 > and is compiled directly by `aion deploy` / `aion run`. If you are authoring
-> in AWL, start at [`docs/AWL.md`](AWL.md) instead.
+> in AWL, start at [`docs/authoring/AWL.md`](AWL.md) instead.
 
 Within a Gleam workflow package, authoring follows one rule (ADR-014): **the
-typed Gleam declaration is the single source of truth for that package.** You
-declare an activity once — its name, its tier, and its typed input and output —
-and `aion generate` derives everything that must agree byte-for-byte across the
-workflow, the codecs, the worker, and the wire goldens. Inside a Gleam package
-there is no second manifest to keep in step, and a hand-edit to any generated
-file is a build error.
+authored Gleam types and declarations are the single source of truth for that
+package.** You write the boundary types once and declare an activity once — its
+name, its tier, and its typed input and output — and `aion generate` derives
+everything that must agree byte-for-byte across the workflow, the codecs, the
+JSON schemas, the worker, and the wire goldens. Inside a Gleam package there is
+no second manifest and no authored schema to keep in step, and a hand-edit to
+any generated file is a build error.
 
 This guide walks the model end to end using `examples/order-saga`.
 
 ## The model
 
-For each activity you write exactly two things:
+You write exactly three things:
 
-1. **The declaration** — one entry in your package's `manifest()`.
-2. **The body** — the side-effecting code that runs the activity (a Gleam
-   function for the in-VM test double, and/or a handler in your worker for the
-   remote tier).
+1. **The boundary types** — one `pub type` per activity input and output value
+   type, in `src/<package>_io.gleam`.
+2. **The declaration** — one entry in your package's `manifest()`.
+3. **The body** — the side-effecting code that runs the activity (a Gleam
+   function for the in-VM tier, and/or a handler in your worker for the remote
+   tier).
 
-Everything else is generated:
+Everything wire-shaped is generated from those:
 
 | Generated file | What it is |
 | --- | --- |
-| `src/<package>_io.gleam` | The value types and their JSON codecs, from `schemas/*.json`. |
-| `src/<package>_codecs.gleam` | One typed `Codec` per value type, wrapping the io encoders/decoders. |
+| `src/<package>_codecs.gleam` | Per value type: a `<prefix>_to_json` encoder, a `<prefix>_decoder`, and a typed `<prefix>_codec()`. |
+| `schemas/<snake_type>.json` | One emitted JSON Schema document per public type, each carrying a `$comment` generated marker. |
 | `src/<package>_activity_wrappers.gleam` | One `activity.new(...)` constructor per declaration, pairing the engine name, codecs, and body. |
 | `worker/worker.py` or `worker/src/main.rs` | Worker plumbing that decodes each task and routes it to your handler. |
 | `test/<package>_wire_compat_test.gleam` | A wire-compat golden per remote value type, pinning its encoded shape. |
 | the `activities` list in `workflow.toml` | The declared activity names, in declaration order. |
 
-Generated files carry a `do not edit` header. Run `aion generate <project>` to
-(re)write them, and `aion generate <project> --check` in CI: it regenerates
-every file in memory and exits non-zero if any on-disk copy has drifted.
+Generated files carry a `do not edit` header (schemas carry the `$comment`
+marker). Run `aion generate <project>` to (re)write them, and
+`aion generate <project> --check` in CI: it regenerates every file in memory and
+exits non-zero if any on-disk copy has drifted.
 
-## 1. Describe the value types as schemas
+## 1. Author the boundary types
 
-Each activity input and output value type is a JSON Schema under `schemas/`. The
-file stem becomes the Gleam type name (`order_input.json` → `OrderInput`). The
-supported subset is objects (with `required` and `additionalProperties: false`),
-string enums, arrays, and the scalar types; see
-[`docs/guides/codegen.md`](codegen.md) for the full table.
+The direction is **types-first** (ADR-014, resolved 2026-07-02, implemented in
+`crates/aion-cli/src/generate.rs`): `src/<package>_io.gleam` is authored by
+hand and the `schemas/*.json` documents are *emitted from it* — never the
+reverse. There is no schemas-to-Gleam step; the `aion codegen` subcommand that
+did that has been removed, and a stray unmarked `*.json` in `schemas/` is an
+error, because it would be a second source of truth.
+
+The module is types-only: declaring a function, constant, or type alias in it
+is a loud error, since the codecs are generated *from* the types rather than
+hand-written beside them. The supported subset is single-constructor records
+with labelled fields, all-zero-arity constructor enums, the scalars, `List(t)`,
+`option.Option(t)` at field position, and references to sibling types in the
+same module; see [the types-first codegen guide](codegen.md) for the full table
+and everything deliberately out of scope.
+
+```gleam
+// src/aion_order_saga_io.gleam
+/// Input of the order-fulfillment workflow and its first activity.
+pub type OrderInput {
+  OrderInput(
+    order_id: String,
+    item: String,
+    quantity: Int,
+    amount: Int,
+  )
+}
+```
+
+`aion generate` emits the matching document, whose name comes from the type
+(`OrderInput` → `schemas/order_input.json`):
 
 ```json
-// schemas/order_input.json
 {
+  "$comment": "Generated by aion generate from src/aion_order_saga_io.gleam — do not edit; run `aion generate`.",
   "type": "object",
   "required": ["order_id", "item", "quantity", "amount"],
   "additionalProperties": false,
@@ -62,6 +91,9 @@ string enums, arrays, and the scalar types; see
   }
 }
 ```
+
+Migrating a project that still authors its schemas? The mechanical steps are in
+[the codegen guide](codegen.md#migrating-a-schema-first-project-aion-codegen-is-gone).
 
 ## 2. Declare each activity
 
@@ -115,12 +147,14 @@ byte-identical round-trip depends on it.
 aion generate examples/order-saga
 ```
 
-`aion generate` runs your `manifest()` through the Gleam toolchain to read the
-declarations, then writes the io, codecs, wrappers, worker, and golden files and
-syncs the `workflow.toml` activities list. (To do this it builds your package;
-modules that import the generated wrappers are set aside for the build and
-restored afterward, so a fresh project — with no wrappers yet — still generates
-cleanly.)
+`aion generate` makes two Gleam toolchain passes: the first reads the boundary
+types out of `src/<package>_io.gleam` via `gleam export package-interface` (the
+compiler does the type reading), the second runs your `manifest()` to read the
+declarations. It then writes the codecs, the emitted schemas, the wrappers, the
+worker, and the golden files, and syncs the `workflow.toml` activities list.
+(Both passes build your package, so the generated modules and every module that
+transitively imports them are set aside for the build and restored afterward —
+a fresh project, with none of them on disk yet, still generates cleanly.)
 
 ## 4. Use the wrappers in your workflow
 
@@ -169,8 +203,8 @@ aion generate examples/order-saga --check
 Run this in CI. If anyone hand-edits a generated file or a declaration drifts
 from the generated output, `--check` exits non-zero and names the file. Deleting
 every generated file and re-running `aion generate` reproduces them
-byte-identically, so the generated tree is always a pure function of your
-declarations and schemas.
+byte-identically, so the generated tree is always a pure function of your types
+and declarations.
 
 See [`examples/order-saga/README.md`](../../examples/order-saga/README.md) for the
 full run-it-locally walkthrough, including the worker and the compensation

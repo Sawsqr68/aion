@@ -17,9 +17,13 @@
 ## Provenance
 
 - **Branch/commit:** `main` @ `91b8acbc` (pushed). Built/verified 2026-06-21.
+  **Everything below describes the surface as of that date**, except where a
+  later correction is marked inline. The build and test observations in §10 and
+  §11 are that day's readings, not standing facts — re-run them before relying
+  on them.
 - **Briefs:** `docs/design/aion-authoring/briefs/WA-002.json`, `WA-006.json`, `WA-007.json`.
 - **Design:** `docs/design/aion-authoring/{DESIGN,CHECKLIST,USER-STORIES}.md`; ADRs in `docs/design/DECISIONS.md`.
-- **Invariants & standards:** `/Users/tom/Developer/ablative/aion/CLAUDE.md`.
+- **Invariants & standards:** `/Users/tom/Developer/ablative/stack/aion/CLAUDE.md`.
 
 ---
 
@@ -35,7 +39,7 @@ below wrap an author loop around that one module.
 > `aion awl check|fmt|emit|scaffold|schema|lsp`, `aion deploy <file.awl>`, and
 > `aion run <file.awl> --input <json>`. An AWL document carries its own types
 > and contracts and is compiled directly — it has no `aion generate` step and
-> no `workflow.toml`. See [`docs/AWL.md`](AWL.md). The `aion dev`,
+> no `workflow.toml`. See [`docs/authoring/AWL.md`](AWL.md). The `aion dev`,
 > `aion new`, `aion generate`, `aion check --deterministic`, and `aion input`
 > commands documented in this guide are the **Gleam** package loop.
 
@@ -45,12 +49,12 @@ bug, not a style nit:
 1. **Type-erased events.** The engine/store carry opaque `Payload` bytes; only the Gleam SDK knows types.
 2. **Determinism boundary.** Workflow code is re-executed on replay and must be a pure function of recorded history. Time = `workflow.now()`; entropy = `workflow.random()`/`workflow.random_int()`. **No wall clock, no entropy source** in workflow-visible paths. This is exactly what `aion check --deterministic` enforces statically.
 3. **Single writer per workflow.** Exactly one `Recorder` appends per workflow. **Never call `EventStore::append` directly.** The dev surface honours this — it drives the real engine, never the store's append path.
-4. **Status is a projection** of history (Running/Completed/Failed/Cancelled/TimedOut); residency (Resident/Suspended) is orthogonal. A suspended run waiting on a signal is still `Running`.
+4. **Status is a projection** of history — the seven variants of `WorkflowStatus` (`crates/aion-core/src/status.rs`) are `Running`, `Completed`, `Failed`, `Cancelled`, `TimedOut`, `ContinuedAsNew`, and `Paused`. `Paused` is **non-terminal**: it is a `WorkflowPaused` marker with no later `WorkflowResumed`, and the run can still complete, fail, or be cancelled. Residency (Resident/Suspended) is orthogonal — there is no `Suspended` status, and a suspended run waiting on a signal is still `Running`.
 5. **Content-hash module namespacing.** Each package version is an immutable module `logical_name$hash`. This is what lets `aion dev` hot-load a new version while in-flight runs stay pinned to theirs.
 
 ADRs the DX surface encodes — an agent extending this code **must** uphold them:
 
-- **ADR-001 — no invented defaults/limits/caps.** Configurable values come from the operator/author or are omitted. Examples enforced here: `aion dev --gleam-path` is **required** (no default binary); the watch loop has **no default poll interval**; the agent scaffold's review deadline is a **required input field**; `aion input` skeletons carry **no default values**; `[authoring].project_root` and `[deploy].max_*_bytes` are **required when their surface is enabled**.
+- **ADR-001 — no invented defaults/limits/caps.** Configurable values come from the operator/author or are omitted. Examples enforced here: `aion dev --gleam-path` is **required** (no default binary); the watch loop has **no default poll interval**; the agent scaffold's review deadline is a **required input field**; `aion input` skeletons carry **no default values**; `[authoring].project_root` is **required when `gleam_path` is set**. The `[deploy].max_*_bytes` ceilings are the deliberate exception and are **optional**: they are security ceilings rather than behavioural values, so enabling deploy fills them with conservative defaults (64 MiB / 256 MiB) rather than refusing to boot for want of a knob — see §6 and `crates/aion-server/src/config/defaults.rs`.
 - **ADR-002 — no backwards-compat/zombie/dead code.** Replace and delete; never leave a dormant alternative.
 - **ADR-003 — no default deadlines.** Agent step/approval deadlines are author-chosen.
 - **ADR-011 — agent runtime stays worker-side.** The `aion new agent` scaffold bundles no LLM/agent runtime; the agent step is a parameterised, worker-served activity.
@@ -107,7 +111,7 @@ aion new <name> --template agent --worker rust
 
 **Emits** (`crates/aion-cli/templates/agent/`): `src/<name>_io.gleam` (the **authored boundary types**, the types-first source of truth), `src/<name>_codecs.gleam` (**pre-generated** JSON codecs), `schemas/{input,output,step_input,step_output,decision,review_signal,agent_status}.json` (**pre-generated**, marker-carrying), `src/<name>.gleam` (the workflow, from `project.gleam`), `workflow.toml`, `README.md`, and a `worker/` crate (`Cargo.toml` + `src/main.rs` with trivial echo handlers — replace these with your agent driver). Prints a JSON `NewOutput { project, path, template, worker, files, next_steps }`.
 
-The scaffold is on the types-first generated path (like `hello-world` and `dev-pipeline`): the shipped codecs module and schemas are byte-identical to what `aion generate` reproduces from `src/<name>_io.gleam`, so `aion generate . --check` passes on a fresh scaffold. Because the template pins the published hex `aion_flow` 0.4.x (which predates `activity.declare`/`aion/manifest` and `workflow.entrypoint`), the workflow keeps the generated-marker `run` adapter and the worker `main.rs` stays hand-authored with structs mirroring the step types; the declared-activities `manifest()` path (generated wrappers, worker `main.rs`, wire-compat golden) lands with the 0.5.0 publish. See §7 for its anatomy.
+The scaffold is on the types-first generated path (like `hello-world` and `dev-pipeline`): the shipped codecs module and schemas are byte-identical to what `aion generate` reproduces from `src/<name>_io.gleam`, so `aion generate . --check` passes on a fresh scaffold. Because the template pins the published hex `aion_flow` 0.4.x (`crates/aion-cli/templates/shared/gleam.toml`, which predates `activity.declare`/`aion/manifest` and `workflow.entrypoint`), the workflow keeps the generated-marker `run` adapter and the worker `main.rs` stays hand-authored with structs mirroring the step types. It is still on that pin: `aion_flow` 0.5.0 and 0.7.0 have since been published to Hex and the `dev-pipeline` template moved to `>= 0.5.0`, but the agent template did not, so it has no declared-activities `manifest()` path (generated wrappers, worker `main.rs`, wire-compat golden) yet. See §7 for its anatomy.
 
 ### 4.2 `aion dev [path] --gleam-path <PATH> [--debounce-ms <MS>]` (WA-002)
 
@@ -226,9 +230,17 @@ Response `ReplayRunResponse { replayed_workflow_id, workflow_type, workflow_id, 
 
 > **Sharp edge (read this).** Replay reads the failed run's recorded `WorkflowStarted`
 > (type + input) and **starts a fresh run** of the same workflow through the real engine. It is
-> **not** resume-from-the-failed-step. It rejects any run not in `Failed` status. True
-> resume semantics switch on when `Engine::reopen_workflow` (AD-012) lands — `replay_run`
-> (`dev_ui/handlers.rs`) is the single switch-point. Do not describe `/dev/replay` as "resume".
+> **not** resume-from-the-failed-step. It rejects any run not in `Failed` status. Do not
+> describe `/dev/replay` as "resume".
+>
+> True resume landed elsewhere and this endpoint was **not** switched over to it.
+> `Engine::reopen_workflow` (AD-012) is live (`crates/aion/src/engine/api.rs`) and reachable
+> as `aion reopen <workflow-id>`: it appends a single `WorkflowReopened` superseding the
+> terminal event and re-drives the **same** run through the recovery path, so replay returns
+> every recorded result and only the reopened / in-flight step re-dispatches. It accepts a
+> terminal `Failed` **or** `Cancelled` run. `replay_run` (`dev_ui/handlers.rs`) still does the
+> start-fresh thing described above and remains the single switch-point if the dev endpoint is
+> ever moved onto reopen.
 
 ---
 
@@ -316,7 +328,8 @@ aion check --deterministic .
 aion generate . --check     # CI drift gate
 
 # 4. Start a server with the dev + deploy surfaces enabled (config or env):
-#      AION_DEPLOY_ENABLED=true AION_DEPLOY_MAX_ARCHIVE_BYTES=... AION_DEPLOY_MAX_INFLATED_BYTES=...
+#      AION_DEPLOY_ENABLED=true      # the ceilings default; set AION_DEPLOY_MAX_ARCHIVE_BYTES /
+#                                    # AION_DEPLOY_MAX_INFLATED_BYTES only to override them
 #      AION_DEV_ENABLED=true
 aion server --config server.toml
 
@@ -344,7 +357,7 @@ curl -XPOST localhost:8080/dev/mocks \
 
 - **`--gleam-path` is required** for `aion dev`; there is no default `gleam` binary (ADR-001).
 - **`aion dev` needs the server's `[deploy]` enabled** (hot-load uses the deploy RPC) and `[dev].enabled` for the `/dev/*` endpoints.
-- **`/dev/replay` is start-fresh, not resume** (only `Failed` runs; AD-012 will add true resume). Never call it "resume".
+- **`/dev/replay` is start-fresh, not resume** (only `Failed` runs). Never call it "resume". True resume is `Engine::reopen_workflow` / `aion reopen` (AD-012, landed) on a different path; `/dev/replay` was not moved onto it — see §5.
 - **Dev surface and authoring/deploy surfaces are dark by default** — nothing dev-specific is reachable until explicitly enabled; mocking is a decorator, never a mock-only engine (CN4).
 - **Activity mocking targets `workflow_id`** (the run), not a `run_id` field — see `RegisterMockRequest`.
 - **`aion input <workflow_type>` requires the type positional** and lists available types on a miss; it does not auto-pick a sole workflow.
@@ -352,15 +365,21 @@ curl -XPOST localhost:8080/dev/mocks \
 - **Determinism analysis does not follow `let`-aliased function values** (§8) — a known, documented gap.
 - **The agent template requires `--worker rust`**; the review deadline (`review_timeout_ms`) and step deadlines are never defaulted.
 - **Runtime-gated tests:** the gleam/worker E2Es (`dev_hot_reload_e2e`, `new_agent_e2e`, `authoring_quality_e2e`, etc.) detect a missing toolchain at runtime, print a skip line, and return `Ok(())` — they are **never** `#[ignore]`. Run them with `gleam`/`cargo` on `PATH` to exercise the full loop.
-- **Known unrelated red test:** `crates/aion-cli/tests/stacked_dev_live_e2e.rs` fails in sandboxes where it cannot spawn `cargo` for the worker build (`No such file or directory`). It is pre-existing, untouched by this cluster, and not a regression.
+- **Red test observed on 2026-06-21:** `crates/aion-cli/tests/stacked_dev_live_e2e.rs` failed in sandboxes where it could not spawn `cargo` for the worker build (`No such file or directory`). It was pre-existing, untouched by this cluster, and not a regression. That was one day's reading of one environment — the test file is still there; re-run it before treating it as red or green.
 
 ## 11. Verification
+
+These are the commands that were run on 2026-06-21, not a standing claim about
+the current tree. Run them yourself:
 
 ```bash
 cargo fmt --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace          # green except the env-bound stacked_dev_live_e2e noted above
+cargo test --workspace
 ```
+
+On that date the workspace suite was green apart from the environment-bound
+`stacked_dev_live_e2e` noted in §10.
 
 Quality bar (CLAUDE.md): no `unwrap`/`expect`/`panic`/`todo`/`unreachable` in library code; no
 `#[allow]`/`#[ignore]` bypasses; `mod.rs` is only `pub mod` + re-exports; no file > 500 code-LOC.

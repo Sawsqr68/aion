@@ -79,7 +79,7 @@ fine and free — it just re-runs identically.
 
 ## Activities
 
-An activity is a typed value describing one remote side effect:
+An activity is a typed value describing one recorded side effect:
 
 ```gleam
 import aion/activity
@@ -90,21 +90,31 @@ fn charge_activity(input: ChargeInput) -> activity.Activity(ChargeInput, Receipt
     input,
     charge_input_codec(),
     receipt_codec(),
-    local_charge,          // test-harness implementation; never runs deployed
+    local_charge,          // the runner — see the two notes below
   )
 }
 ```
 
 `workflow.run(charge_activity(input))` encodes the input, records the
-dispatch, and suspends until a worker reports a result; the output codec
+dispatch, and suspends until a result is reported — by a connected worker on
+the remote wire, or by the runner itself on the in-VM tier; the output codec
 decodes the recorded payload. On replay, the recorded result is returned
 without re-dispatching.
 
 Two things trip people up:
 
-- The final argument to `activity.new` is a **local implementation used only
-  by the `aion/testing` harness**. A deployed workflow always dispatches to
-  a remote worker; if no worker serves the activity type, the run waits.
+- The final argument to `activity.new` is the **runner**. With no
+  `activity.execution_tier` decorator the activity dispatches on the remote
+  worker wire and the runner is used only by the `aion/testing` harness; if no
+  worker serves the activity type, the run waits. Decorate the activity with
+  `activity.execution_tier(_, activity.InVm)` and that same runner becomes the
+  deployed body: the engine executes it once, live, in a linked child process
+  of the workflow process — no worker, no task-queue routing — while the
+  recorded `ActivityScheduled`/`ActivityStarted`/terminal history and the
+  replay semantics stay byte-identical to a remote dispatch
+  (`gleam/aion_flow/src/aion/activity.gleam`,
+  `crates/aion/src/runtime/nif_activity_in_vm.rs`). The tier is routing, not
+  workflow-visible state, so it is deliberately never recorded.
 - Every activity name must be declared in `workflow.toml`'s `activities`
   list — packaging fails otherwise.
 
@@ -113,18 +123,56 @@ Failures arrive as typed `error.ActivityError` values: `Retryable` and
 `ActivityDecodeFailed`, `ActivityTimedOut`, `ActivityCancelled`,
 `ActivityNonDeterministic`, and `ActivityEngineFailure`.
 
-### Retries are workflow-driven today
+### Retries: engine-driven from the policy you declare
 
-`activity.new` attaches no retry policy and the activity runs exactly once
-per dispatch. You can attach an explicit `RetryPolicy` (with exponential,
-linear, or fixed backoff), and the engine records it — but **engine-side
-automatic re-dispatch from that policy is not wired up yet**; dispatch
-always stamps attempt 1. Today the honest, replay-deterministic pattern is a
-workflow-driven retry loop: match `Error(error.Retryable(..))`, sleep a
-durable backoff (`workflow.sleep`), and dispatch a fresh attempt. Each
-attempt is its own recorded dispatch, so retry counts replay exactly.
+`activity.new` attaches no retry policy, and an activity without one carries
+`"retry": null` on the dispatch wire and runs **exactly once** — there is no
+engine-imposed default. Attach a policy explicitly with
+`activity.retry(_, RetryPolicy(max_attempts:, backoff:))`, choosing
+exponential, linear, or fixed backoff.
+
+The engine consumes that policy. It rides in the dispatch `config` JSON
+(`gleam/aion_flow/src/aion/internal/activity_dispatch.gleam`, `retry_config`),
+is decoded by
+[`crates/aion/src/runtime/nif_activity_retry.rs`](../../crates/aion/src/runtime/nif_activity_retry.rs),
+and drives the completion-task retry loop in
+[`nif_activity_retry_dispatch.rs`](../../crates/aion/src/runtime/nif_activity_retry_dispatch.rs)
+(spawned from `nif_activity_dispatch.rs`): a retryable-class failure with
+budget left is recorded durably as a non-terminal `ActivityFailed` (kind
+`Retryable`), backed off, and re-dispatched with the **same ordinal and
+routing at the incremented attempt**. Only the final outcome reaches workflow
+code — a non-retryable failure, an absent policy, or an exhausted budget
+delivers with the last reason verbatim.
+
+The details worth knowing:
+
+- **The policy comes from the author, never the engine.** `max_attempts` is
+  the SDK's *total* attempt budget, so `3` means at most two retries after the
+  first delivery. AWL's `retry N` means N *further* attempts and is lowered to
+  `N + 1` at emission, so both surfaces meet the same engine contract.
+- **Classification is the worker's, not a heuristic.** The worker reports a
+  structured `ActivityErrorKind`; the server seam collapses it into the
+  `retryable:` / `terminal:` reason vocabulary the loop matches on.
+- **A lost worker is attempt-neutral.** A transport-domain worker death (the
+  activity never ran) consumes no authored budget and re-dispatches the same
+  attempt; the server's own transport-loss budget bounds that, so the composed
+  system still terminates.
+- **The backoff sleep is task-local, not a durable timer.** A crash mid-backoff
+  recovers through replay: the dangling retryable failure re-dispatches the
+  activity live at the next attempt.
+- **The in-VM tier is not covered.** The retry loop is the remote completion
+  task; `activity.execution_tier(_, activity.InVm)` dispatches on an arity-4
+  wire that runs one attempt and owns no timeout, so an in-VM activity stays
+  single-attempt and a workflow-driven loop is the way to retry it. A settled
+  fan-out combinator refuses a policy-bearing in-VM member outright
+  (`ActivityEngineFailure`) rather than silently discarding its contract.
+
+A workflow-driven retry loop remains available on top for anything the
+declared policy cannot express: match `Error(error.Retryable(..))`, sleep a
+durable backoff (`workflow.sleep`), and dispatch a fresh attempt. Each attempt
+is its own recorded dispatch, so retry counts replay exactly.
 [`examples/order-fulfillment/`](../../examples/order-fulfillment/) implements
-this with a bounded attempt budget. See the
+that pattern with a bounded attempt budget. See the
 [activities and workers guide](../workers/activities-and-workers.md) for the
 worker-side view.
 
