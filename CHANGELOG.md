@@ -3,6 +3,61 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## Unreleased
+
+Landed on `main` since the 0.11.0 publish. Nothing here has been released to
+crates.io yet.
+
+- **One-command setup.** `scripts/setup.sh` takes a machine from nothing to a
+  running server with the console, the assistant workflow deployed, and the
+  assistant worker connected and serving it. It is safe to re-run: every step
+  detects work already done and skips it. Run standalone it clones the
+  repository itself — shallowly, on purpose, because the history carries about
+  2 GiB of build artifacts committed by an old gate pipeline.
+- **The setup script now works on a machine that has never run Aion.** It
+  could not before: it created the Aion home but wrote no `config.toml`, and
+  both surfaces it needs — the deploy gRPC service and the outbox's liminal
+  worker listener — are dark when their config section is absent. Every proof
+  had run on a home that already carried a config, so the one condition that
+  mattered was never tested. It now writes a minimal config when none exists,
+  enabling exactly those two switches and inventing no other value. The file
+  and the script's own output both say what enabling deploy MEANS: deploying
+  runs code on this server, which is why it ships off, and it listens on
+  localhost only.
+- **`{workspace_root}`: a declared action body can learn where to work.** A
+  declared body runs with its environment cleared to `PATH` alone, so it
+  cannot expand `~` or read a variable to find where session workspaces live,
+  and the start contract deliberately does not carry the location — it is a
+  property of the server, not of any one run. A command may now carry the
+  literal placeholder `{workspace_root}`, which the server replaces with its
+  own resolved root (`<AION_HOME>/clones`) before the command is parsed.
+  Resolved once at startup and read everywhere, including the startup banner's
+  `workspace_root` field; a resolution failure is carried rather than raised,
+  so the server still boots and the refusal lands at the first
+  placeholder-bearing dispatch. Two refusals guard the splice: every
+  occurrence must stand alone as a whole unquoted argv word, and a root whose
+  text would change the command's parsed shape is refused rather than spliced.
+  Both are terminal. Documented in full in `docs/workers/DECLARED-COMMANDS.md`.
+- **No caps on the assistant**, and the built-in agent worker reaches norn
+  parity — the operator can name the model.
+- **The ops console's Search view is withdrawn.** It was a navigable page at
+  `/search`, in the nav, on `g e` and `/`, calling `POST /events/search` — a
+  route the server has never registered. It 404'd by construction for every
+  operator who reached it. Rather than build an endpoint to justify a link,
+  the view is removed along with the client layer beneath it, and event search
+  is recorded as a wanted capability with no implementation (roadmap RM-030).
+  The `g e` and `/` keybindings are gone with it.
+- **Documentation.** The `docs/` tree is organised into `authoring/`,
+  `workers/`, `operations/`, `contracts/` and `vision/` with a front door at
+  `docs/README.md`. `CONTRIBUTING.md` now carries the real gates
+  (`scripts/battery.sh`) instead of a list of gitignored artifacts. Three
+  wrong status codes are corrected in `docs/operations/errors.md`
+  (`not_running` is 412, `sequence_conflict`'s gRPC code is `Aborted`, and the
+  `unauthenticated`/`unavailable` row named codes that do not exist), and the
+  failover demo's regression command — which had quietly become a no-op that
+  printed green after the test moved from `#[ignore]` to runtime gating — now
+  sets `AION_RUN_COSTLY_TESTS` and says what a green run without it proves.
+
 ## 0.11.0 — 2026-08-01
 
 - **Every valid AWL document in the corpus now deploys on the direct
