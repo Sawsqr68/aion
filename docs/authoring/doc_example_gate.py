@@ -41,6 +41,7 @@ REPORT = ROOT / "docs/design/aion-authoring/DOC-EXAMPLE-GATE-FINDINGS.md"
 SOURCES = [
     "docs/GETTING-STARTED.md",
     "docs/authoring/AWL.md",
+    "docs/workers/DECLARED-COMMANDS.md",
     "docs/workers/SHELL-WORKER-MANIFEST.md",
     "examples/assistant/resources/AWL-REFERENCE.md",
     "examples/assistant/resources/AWL-AUTHORING.md",

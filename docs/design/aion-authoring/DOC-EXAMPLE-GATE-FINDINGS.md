@@ -13,7 +13,7 @@ Re-run it to re-verify; do not hand-edit this file.
 | `ILLUSTRATIVE` | a deliberately unrunnable block whose own prose says so |
 | `UNVERIFIABLE` | cannot be checked, with the reason stated |
 
-**ILLUSTRATIVE: 2**  **PASS: 41**  **UNVERIFIABLE: 1**
+**ILLUSTRATIVE: 2**  **PASS: 43**  **UNVERIFIABLE: 1**
 
 ## How a `PASS` was earned
 
@@ -34,6 +34,8 @@ Nothing failed.
 | `docs/GETTING-STARTED.md:229` | PASS | scaffold: none — a complete document |
 | `docs/authoring/AWL.md:10` | PASS | scaffold: none — a complete document |
 | `docs/authoring/AWL.md:108` | PASS | scaffold: decls; borrows Report, Finding |
+| `docs/workers/DECLARED-COMMANDS.md:6` | PASS | scaffold: decls |
+| `docs/workers/DECLARED-COMMANDS.md:265` | PASS | scaffold: decls |
 | `docs/workers/SHELL-WORKER-MANIFEST.md:103` | PASS | scaffold: none — a complete document |
 | `examples/assistant/resources/AWL-REFERENCE.md:21` | ILLUSTRATIVE | the canonical-order skeleton; its own prose says 'the sample illustrates declaration placement; adapt the flow rather than copying unused declarations' |
 | `examples/assistant/resources/AWL-REFERENCE.md:78` | PASS | scaffold: decls |

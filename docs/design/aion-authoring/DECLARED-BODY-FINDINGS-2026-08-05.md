@@ -118,8 +118,21 @@ disagrees with it.
 ## Still open from this
 
 Findings 1 and 2 are both closed — 1 as documentation (`483c933a`), 2 as the
-refusal text itself. What remains from finding 1 is that
-`docs/workers/DECLARED-COMMANDS.md` is still outside the doc example gate, so
-its `run` examples are unchecked. Worth doing, and worth being honest about: the
-gate would catch syntax and type drift, and would NOT have caught the `$$` trap,
-which is a runtime semantic no checker sees.
+refusal text itself.
+
+`docs/workers/DECLARED-COMMANDS.md` is now inside the doc example gate, and it
+paid immediately: **its opening example returned a type nothing declared.**
+`RunOutcome` appeared twice in the document and was defined nowhere, so a reader
+copying the very first block got `unknown type RunOutcome`. Watched failing
+before the fix — `FAIL … 10:33: error: unknown type RunOutcome`, gate EXIT=1.
+Both examples now declare what they return, and the document states the result
+shape (`exit_code`, `stdout`, `stderr`, subsets allowed) it had never written
+down.
+
+What the gate holds, precisely: **two** of the document's seven fenced blocks.
+The other five are annotated illustrations — argv arrows, the ✅/❌ contrast
+pair, a shell transcript — and tagging them ` ```awl ` to raise the number would
+report coverage of text that was never a document. And the honest limit stands:
+the gate catches syntax and type drift. It would **not** have caught the `$$`
+trap, which is a runtime semantic no checker sees — the ✅/❌ pair it cannot
+check is exactly the pair whose two halves both check.

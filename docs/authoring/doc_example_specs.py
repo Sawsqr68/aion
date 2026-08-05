@@ -36,6 +36,14 @@ SPECS: dict[str, Spec] = {
     # ---------------------------------------------------------------- whole
     "docs_GETTING-STARTED__01": Spec(place="whole"),
     "docs_authoring_AWL__01": Spec(place="whole"),
+    # DECLARED-COMMANDS.md holds seven fenced blocks; only these two are AWL.
+    # The other five are annotated illustrations — argv arrows, a ✅/❌ contrast
+    # pair, a shell transcript — and tagging them ```awl to raise the count
+    # would report coverage of text that was never a document. What the gate
+    # can hold is the two real fragments, and what it cannot hold is stated in
+    # the doc's own findings note.
+    "docs_workers_DECLARED-COMMANDS__01": Spec(),
+    "docs_workers_DECLARED-COMMANDS__02": Spec(),
     "docs_workers_SHELL-WORKER-MANIFEST__01": Spec(place="whole"),
     "examples_assistant_resources_AWL-AUTHORING__01": Spec(place="whole"),
     "examples_assistant_resources_AWL-REFERENCE__01": Spec(

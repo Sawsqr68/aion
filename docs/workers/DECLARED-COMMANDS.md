@@ -2,13 +2,19 @@
 
 An AWL action can carry a body:
 
-```
+```awl
+type RunOutcome { exit_code: Int, stdout: String, stderr: String }
+
 worker shell_box
   action stamp(text: String) -> RunOutcome
     run "echo $text"
 ```
 
 The server executes that command directly. No worker process, no Rust crate.
+
+The result of a body is always those three members — the action's return type
+names them, and it may name a subset if the run's exit status or its stderr is
+not what the workflow goes on to use.
 
 This document exists because that is a **capability**, and a capability that
 looks like a sandbox and is not one is worse than no sandbox at all — an
@@ -255,9 +261,11 @@ So the server states it. A declared command may carry the literal placeholder
 `{workspace_root}`, and the server replaces every occurrence with its own
 resolved workspace root before the command is parsed:
 
-```
+```awl
+type Provisioned { stdout: String }
+
 worker provisioner
-  action provision(run_id: String) -> RunOutcome
+  action provision(run_id: String) -> Provisioned
     run "sh -c 'mkdir -p \"$1/$2\" && printf %s \"$1/$2\"' -- {workspace_root} $run_id"
 ```
 
