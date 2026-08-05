@@ -127,6 +127,22 @@ untracked directories.
 - `CLAUDE.md`'s crate list omits `aion-integration-acp`, a real workspace
   member (21 `crates/*` members; the list names 20). Tom's file — flagged only.
 
+## Live-state health check — 2026-08-05 ~11:25 AEST, ALL GREEN
+
+Verified this tick, not assumed:
+
+- **Server pid 85467 on :8080**, `/build` body reports `0.11.0`.
+- **Assistant worker pid 66189 is REGISTERED, not merely running.** Process
+  liveness is NOT the check — that is exactly the distinction the `aion worker
+  shell` blocker turns on. The real check is
+  `POST /awl/workers/availability {"task_queue":"default","namespace":"default"}`
+  → `{"available":true,"connected_workers":1}`.
+- ⚠️ **`GET /workers` is NOT a route** — it returns the console's SPA fallback
+  (200 text/html). Do not read that as a worker listing; it is the trap
+  documented in `docs/GETTING-STARTED.md`. The availability POST above is the
+  route.
+- Tree clean (three NO-SWEEP dirs only), `origin/main...main` = 0/0.
+
 ## Live state — unchanged
 
 - 🔴 **WORKER REBUILDS FROZEN ESTATE-WIDE** until the #139 live cut lands.
