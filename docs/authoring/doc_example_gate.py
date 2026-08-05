@@ -191,10 +191,10 @@ GATE_OUTCOMES = [
 def compose(block: Block, spec: Spec) -> str:
     """Build the document that will be checked."""
     if spec.place == "whole":
-        return block.body if block.body.startswith("//!") else (
-            "//! Narration supplied by the gate; the block itself carries none.\n"
-            + block.body
-        )
+        # Deliberately NOT lending narration here. A `//!` line the gate supplies
+        # is a line the reader does not get, and a whole-document block that only
+        # passes because the gate patched it is a block the reader cannot copy.
+        return block.body
 
     types = [PIECES[n] for n in spec.needs if n in TYPE_PIECES]
     actions = [PIECES[n] for n in spec.needs if n not in TYPE_PIECES]

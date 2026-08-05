@@ -13,7 +13,7 @@ Re-run it to re-verify; do not hand-edit this file.
 | `ILLUSTRATIVE` | a deliberately unrunnable block whose own prose says so |
 | `UNVERIFIABLE` | cannot be checked, with the reason stated |
 
-**FAIL: 5**  **ILLUSTRATIVE: 2**  **PASS: 35**  **UNVERIFIABLE: 2**
+**ILLUSTRATIVE: 2**  **PASS: 40**  **UNVERIFIABLE: 2**
 
 ## How a `PASS` was earned
 
@@ -25,11 +25,7 @@ survived that control.
 
 ## The failures
 
-- `examples/assistant/resources/AWL-REFERENCE.md:549` — 2:1: error: workflow `gated_item` declares no outcomes; at least one `outcome <name>: type <Type>, route success|failure` is required
-- `examples/assistant/resources/AWL-REFERENCE.md:601` — 2:1: error: workflow `gated_review` declares no outcomes; at least one `outcome <name>: type <Type>, route success|failure` is required
-- `examples/assistant/resources/AWL-REFERENCE.md:627` — 23:3: error: step `gate` contains a `loop` but declares no outcome clauses — an exhausted loop (`max` reached with `until` still false) would fall through indistinguishably from success; add conditional outcomes (`when`/`otherwise`) covering the exhausted case
-- `examples/assistant/resources/AWL-AUTHORING.md:207` — 2:1: error: workflow `gated_item` declares no outcomes; at least one `outcome <name>: type <Type>, route success|failure` is required
-- `examples/assistant/resources/AWL-AUTHORING.md:224` — 2:1: error: workflow `gated_review` declares no outcomes; at least one `outcome <name>: type <Type>, route success|failure` is required
+Nothing failed.
 
 ## Every block
 
@@ -64,9 +60,9 @@ survived that control.
 | `examples/assistant/resources/AWL-REFERENCE.md:507` | PASS | scaffold: steps; borrows Approval |
 | `examples/assistant/resources/AWL-REFERENCE.md:517` | PASS | scaffold: steps; borrows Approval |
 | `examples/assistant/resources/AWL-REFERENCE.md:532` | PASS | scaffold: stmts; borrows Receipt, remove_assets, publish |
-| `examples/assistant/resources/AWL-REFERENCE.md:549` | FAIL | 2:1: error: workflow `gated_item` declares no outcomes; at least one `outcome <name>: type <Type>, route success\|failure` is required |
-| `examples/assistant/resources/AWL-REFERENCE.md:601` | FAIL | 2:1: error: workflow `gated_review` declares no outcomes; at least one `outcome <name>: type <Type>, route success\|failure` is required |
-| `examples/assistant/resources/AWL-REFERENCE.md:627` | FAIL | 23:3: error: step `gate` contains a `loop` but declares no outcome clauses — an exhausted loop (`max` reached with `until` still false) would fall through indistinguishably from success; add conditional outcomes (`when`/`otherwise`) covering the exhausted case |
+| `examples/assistant/resources/AWL-REFERENCE.md:549` | PASS | scaffold: none — a complete document |
+| `examples/assistant/resources/AWL-REFERENCE.md:605` | PASS | scaffold: none — a complete document |
+| `examples/assistant/resources/AWL-REFERENCE.md:635` | PASS | scaffold: steps; borrows Status, Decision, GaveUp, evaluate |
 | `examples/assistant/resources/AWL-AUTHORING.md:17` | PASS | scaffold: none — a complete document |
 | `examples/assistant/resources/AWL-AUTHORING.md:48` | PASS | scaffold: decls |
 | `examples/assistant/resources/AWL-AUTHORING.md:63` | PASS | scaffold: decls; borrows Report, Finding |
@@ -74,8 +70,8 @@ survived that control.
 | `examples/assistant/resources/AWL-AUTHORING.md:132` | PASS | scaffold: steps; borrows Request, Report, Finding, inspect |
 | `examples/assistant/resources/AWL-AUTHORING.md:146` | PASS | scaffold: decls; borrows Report, Finding, Request |
 | `examples/assistant/resources/AWL-AUTHORING.md:167` | PASS | scaffold: steps; borrows Item, Report, Finding, inspect |
-| `examples/assistant/resources/AWL-AUTHORING.md:207` | FAIL | 2:1: error: workflow `gated_item` declares no outcomes; at least one `outcome <name>: type <Type>, route success\|failure` is required |
-| `examples/assistant/resources/AWL-AUTHORING.md:224` | FAIL | 2:1: error: workflow `gated_review` declares no outcomes; at least one `outcome <name>: type <Type>, route success\|failure` is required |
+| `examples/assistant/resources/AWL-AUTHORING.md:207` | PASS | scaffold: none — a complete document |
+| `examples/assistant/resources/AWL-AUTHORING.md:230` | PASS | scaffold: none — a complete document |
 | `examples/assistant/resources/WORKERS.md:39` | PASS | scaffold: decls |
 | `examples/assistant/resources/WORKERS.md:80` | PASS | scaffold: decls; borrows CommandResult |
 | `examples/assistant/resources/WORKERS.md:167` | PASS | scaffold: decls |

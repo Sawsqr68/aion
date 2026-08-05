@@ -173,9 +173,11 @@ SPECS: dict[str, Spec] = {
         needs=["Status", "Decision", "GaveUp", "evaluate"],
         inputs=["item_id: String", "max_passes: Int"],
         queries=["review_status: Status"],
-        extra_outcomes=["outcome gave_up: type GaveUp, route failure"],
-        head="step announce\n  answer review_status(phase: \"announcing\")\n  route gate",
-        tail=END,
+        outcomes=[
+            "outcome done: type Status, route success",
+            "outcome gave_up: type GaveUp, route failure",
+        ],
+        head='step announce\n  answer review_status(phase: "announcing")\n  route gate',
     ),
     "examples_assistant_resources_AWL-AUTHORING__05": Spec(
         place="steps",

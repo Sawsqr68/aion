@@ -546,11 +546,14 @@ another running workflow, addressed by its durable id.
 Declare what you send in the workflow header, then send it from a step body:
 
 ```awl
+//! Announce an item to its coordinator as it is gated.
 workflow gated_item
   input coordinator_id: String
+  input item_id: String
   send heartbeat: Nil
   send progress: Progress
   send verdict: String
+  outcome done: type Progress, route success
 
 type Progress { item: String, state: String }
 
@@ -559,6 +562,7 @@ step announce
   send progress(item: item_id, state: "started") to coordinator_id
   send verdict("gated: " + item_id) to coordinator_id
   send progress(item: item_id, state: "gated") to workflow.id
+  route done(item: item_id, state: "gated")
 ```
 
 The payload takes the same three forms a route payload does:
@@ -598,6 +602,7 @@ the answer. `answer` registers the value, computed from the bindings in scope
 at that point.
 
 ```awl
+//! Review an item, reporting live progress to whoever asks.
 workflow gated_review
   input item_id: String
   input max_passes: Int
@@ -606,6 +611,7 @@ workflow gated_review
   query heartbeat: Nil
   query notes: [String]
   query last_note: String?
+  outcome done: type Status, route success
 
 type Status { phase: String, note: String? }
 
@@ -614,6 +620,8 @@ step announce
   answer passes_left(max_passes)
   answer heartbeat
   answer notes([item_id])
+  answer last_note(item_id)
+  route done(phase: "announced")
 ```
 
 `answer` takes the same payload forms as `send`: named record fields, a bare
@@ -631,6 +639,8 @@ step gate after announce
     until verdict.approved
     max max_passes
   answer review_status(phase: "settled", note: item_id)
+  outcome settled: when verdict.approved, route done(phase: "settled")
+  outcome exhausted: otherwise, route gave_up(item: item_id)
   on failure
     answer review_status(phase: "failed", note: "the gate faulted")
     route gave_up(item: item_id)

@@ -100,6 +100,7 @@ document does not declare is likewise refused, by name.
 For this document:
 
 ```awl
+//! Greet a name, using a worker that serves the whole `my_flow` queue.
 workflow my_flow
   input name: String
   outcome greeted: type Greeting, route success

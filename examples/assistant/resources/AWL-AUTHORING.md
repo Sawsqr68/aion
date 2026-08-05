@@ -204,12 +204,18 @@ and both are in the language today — never say otherwise.
 **`send` signals another running workflow**, addressed by its durable id:
 
 ```awl
+//! Announce an item to its coordinator.
 workflow gated_item
   input coordinator_id: String
+  input item_id: String
   send progress: Progress
+  outcome done: type Progress, route success
+
+type Progress { item: String, state: String }
 
 step announce
   send progress(item: item_id, state: "started") to coordinator_id
+  route done(item: item_id, state: "started")
 ```
 
 The target is a workflow id, which is a `String` — `workflow.id`, an input, or
@@ -221,11 +227,16 @@ inbound `signal` is not sendable; declare the outbound direction too.
 registers the value:
 
 ```awl
+//! Report review progress to whoever asks.
 workflow gated_review
   query review_status: Status
+  outcome done: type Status, route success
+
+type Status { phase: String }
 
 step announce
   answer review_status(phase: "announcing")
+  route done(phase: "announcing")
 ```
 
 Every declared query must be answered somewhere in the document or the check
