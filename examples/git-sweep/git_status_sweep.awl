@@ -1,0 +1,55 @@
+//! Sweep a directory for git repositories and record `git status` for each.
+//!
+//! Every action is implemented by the document itself with a `run` body, so
+//! there is no worker to build and no process to start — the server runs the
+//! commands. Both paths must be ABSOLUTE: a declared body runs in whatever
+//! directory the server was started from, which the document cannot see.
+//!
+//! On the dollars below: inside SINGLE quotes a declared command is taken
+//! literally, so `$1`, `$2` and `$d` pass straight through to `sh` and must NOT
+//! be written `$$1`. The `$$` escape is for a literal dollar OUTSIDE single
+//! quotes. Getting this backwards does not fail — `$$1` reaches `sh` as the
+//! shell's own `$$` (the process id) followed by `1`, which silently matches
+//! nothing and reports success.
+workflow git_status_sweep
+  input root: String
+  input report_path: String
+
+  outcome swept: type SweepReport, route success
+
+/// The full result of a declared command body.
+type SweepReport { exit_code: Int, stdout: String, stderr: String }
+/// Just the captured output, when the exit status is not the interesting part.
+type Stdout      { stdout: String }
+
+worker local
+  /// Name every immediate subdirectory of `root` that is a git repository.
+  /// Recorded as its own step so the list lands in durable history and can be
+  /// read back long after the run.
+  ///
+  /// `if … fi` rather than `[ … ] && echo`: an AND-list whose test fails on the
+  /// LAST iteration leaves the loop — and so the whole command — at exit 1,
+  /// which reads as a failed sweep when the only news is that the last
+  /// directory was not a repository.
+  action find_repositories(root: String) -> Stdout
+    run "sh -c 'for d in \"$1\"/*/; do if [ -e \"$d.git\" ]; then echo \"$d\"; fi; done' -- $root"
+
+  /// Run `git status` in each repository found under `root`, one block per
+  /// repository. `2>&1` keeps a repository that refuses to answer in the report
+  /// rather than losing its complaint to stderr.
+  action collect_status(root: String) -> Stdout
+    run "sh -c 'for d in \"$1\"/*/; do if [ -e \"$d.git\" ]; then echo \"=== $d\"; git -C \"$d\" status --short --branch 2>&1; echo; fi; done' -- $root"
+
+  /// Write the collected report to an absolute path.
+  action save_report(report_path: String, body: String) -> SweepReport
+    run "sh -c 'printf %s \"$2\" > \"$1\"' -- $report_path $body"
+
+step find
+  find_repositories(root: root) -> found
+
+step gather after find
+  collect_status(root: root) -> report
+
+step save after gather
+  save_report(report_path: report_path, body: report.stdout) -> saved
+  route swept(exit_code: saved.exit_code, stdout: saved.stdout, stderr: saved.stderr)
