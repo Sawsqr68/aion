@@ -134,6 +134,12 @@ else
 # config and both surfaces below are dark by default. Yours to edit.
 
 # Lets `aion deploy` reach the server's deploy service.
+#
+# What that MEANS: deploying is running code on this server — a deployed
+# workflow executes here. The surface ships dark for that reason. It listens
+# on localhost only, so it is reachable by whoever can already run commands
+# on this machine; on a shared or multi-user box, decide deliberately whether
+# that set is the set you want, and turn this off when you are done deploying.
 [deploy]
 enabled = true
 
@@ -143,7 +149,10 @@ enabled = true
 enabled = true
 CONFIG
     chmod 600 "$HOME_CONFIG"
-    note "wrote a minimal config enabling the deploy and worker surfaces: $HOME_CONFIG"
+    note "wrote a minimal config: $HOME_CONFIG"
+    note "it enables the deploy surface — deploying runs code on this server,"
+    note "which is why that ships off by default. It listens on localhost only."
+    note "On a shared machine, read that file before going further."
 fi
 
 say "Starting the Aion server"
