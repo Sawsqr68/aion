@@ -1,5 +1,11 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AWL — the workflow language</title>
 <style>
+  *, *::before, *::after { box-sizing: border-box; }
   :root {
     color-scheme: light dark;
     --ground: #EEF1F5;
@@ -256,6 +262,8 @@
     * { transition: none !important; animation: none !important; }
   }
 </style>
+</head>
+<body>
 
 <div class="deck" id="deck">
 
@@ -630,3 +638,5 @@ scripts/setup.sh</code></pre>
     show(isNaN(start) ? 0 : start - 1);
   })();
 </script>
+</body>
+</html>
