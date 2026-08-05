@@ -205,7 +205,7 @@ and both are in the language today — never say otherwise.
 
 ```awl
 //! Announce an item to its coordinator.
-workflow gated_item
+workflow item_announcer
   input coordinator_id: String
   input item_id: String
   send progress: Progress
@@ -228,7 +228,7 @@ registers the value:
 
 ```awl
 //! Report review progress to whoever asks.
-workflow gated_review
+workflow review_reporter
   query review_status: Status
   outcome done: type Status, route success
 

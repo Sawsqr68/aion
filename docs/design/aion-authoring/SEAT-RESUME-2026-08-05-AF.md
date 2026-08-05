@@ -33,9 +33,35 @@ unmeasured at marker AE.
    `docs/workers/SHELL-WORKER-MANIFEST.md`'s worked example as passing on the
    gate's charity. Its narration now lives in the document.
 
-### 🔴 STILL OPEN (not fixed — needs a decision, not a mechanical edit)
-`gated_item` / `gated_review` exist in **two documents with differing copies**.
-Both check now. **Which copy survives is a deletion decision.** Route it.
+### The "two copies" item — CLOSED BY MEASUREMENT, and the diagnosis was wrong
+
+This section originally said `gated_item`/`gated_review` were two differing
+copies and that choosing a survivor was a deletion decision to route. Measured
+before routing, and the premise did not hold:
+
+- The two are **not** copies of one rule. `AWL-AUTHORING.md` §7a demonstrates
+  the minimum — one `send`, one `query`. `AWL-REFERENCE.md` §12/§13 demonstrate
+  every payload form. Different scope of demonstration, same language.
+- **They disagree on nothing.** Every claim AUTHORING §7a makes about targets,
+  payload forms, inbound-`signal` refusal, and must-answer was checked against
+  REFERENCE §12/§13 and agrees. AUTHORING already names REFERENCE as the
+  authority in-text, so the *rule* lives in one place — the Law-4 cure was
+  present the whole time.
+- Both prose command claims were verified against the binary, not assumed:
+  `aion query WORKFLOW_ID QUERY_NAME` exists; `aion awl schema --queries`
+  exists and is documented as "the read-only surface … every declared `query`
+  name". `AWL-REFERENCE.md:664` states the completed-run rule identically.
+
+The one real defect was narrow: the small examples wore the **same names** as
+the exhaustive ones, so a reader meeting both concludes one is stale. Renamed
+to `item_announcer` / `review_reporter`. A rename, not a deletion — nothing to
+route. Gate re-run: exit 0, 40 PASS / 0 FAIL, findings doc re-derives
+byte-identical.
+
+### 🔴 STILL OPEN — the gate does not read prose
+The gate checks ```awl blocks. It does **not** check the documents' claims
+about commands and flags; those three were verified by hand above. A `--flag`
+renamed in `aion-cli` would leave every one of them silently false.
 
 Also standing: `AWL-REFERENCE.md:92` imports `schemas/existing.schema.json`,
 which the repository does not contain — recorded UNVERIFIABLE, deliberately not
