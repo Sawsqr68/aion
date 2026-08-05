@@ -10,15 +10,41 @@ export const ASSISTANT_WORKFLOW_TYPE = 'assistant';
 
 /**
  * The ONE control signal the session listens on — the engine's selective
- * receive parks on exactly this name, discriminating in the payload:
- * `{ message }` starts the next round, `{ end: true }` ends the session
- * (OperatorEnded). There is deliberately NO separate end signal.
+ * receive parks on exactly this name, discriminating in the payload. There is
+ * deliberately NO separate end signal.
+ *
+ * The workflow declares `type Continuation { message: String, end: Bool }`.
+ * NEITHER field is optional, so the package contract rejects a payload carrying
+ * only one of them. Sending `{ message }` alone was refused with `"end" is a
+ * required property` and `{ end: true }` alone would have been refused with the
+ * mirror of it — the console could neither continue a session nor finish one.
+ *
+ * Build every payload through the two functions below and never inline an
+ * object literal at a call site; `assistant.contract.test.ts` reads the field
+ * list off the workflow document itself and fails if either builder drifts
+ * from it.
  */
 export const ASSISTANT_CONTINUE_SIGNAL = 'assistant_continue';
 
-/** The end-of-session payload for {@link ASSISTANT_CONTINUE_SIGNAL}. */
+/**
+ * Continue the session with the operator's next prompt.
+ *
+ * `end: false` is not padding — the contract requires the field, and its value
+ * is the discriminator that keeps the session open.
+ */
+export function assistantContinuePayload(message: string): JsonRecord {
+  return { message, end: false };
+}
+
+/**
+ * Finish the session cleanly as `OperatorEnded`.
+ *
+ * The empty message is the workflow's own documented no-op: "Blank is a no-op
+ * nudge that does not spend a round." Ending carries no prompt, but the field
+ * is still required, so it travels blank rather than absent.
+ */
 export function assistantEndPayload(): JsonRecord {
-  return { end: true };
+  return { message: '', end: true };
 }
 
 /** The `POST /workflows/start` input for an assistant session. */

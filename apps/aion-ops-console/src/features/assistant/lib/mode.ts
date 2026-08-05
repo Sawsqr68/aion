@@ -11,7 +11,7 @@ import type { WorkflowSummary } from '@/types';
  *   (interrupt priority) at that attempt.
  * - `awaiting`: the workflow is open but no attempt is live → the round ended
  *   and the workflow is parked on its signal receive → send =
- *   `assistant_continue { message }`.
+ *   `assistant_continue { message, end: false }`.
  * - `connecting`: the attempt enumeration hasn't answered yet — sending has no
  *   trustworthy target, so the dock isn't offered.
  * - `ended`: the workflow is terminal; the session is over.

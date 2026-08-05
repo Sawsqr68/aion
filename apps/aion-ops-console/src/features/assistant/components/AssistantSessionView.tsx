@@ -11,7 +11,11 @@ import { ACTION_IDS, useAction } from '@/lib/keybindings';
 import type { InterventionOutcome, Namespace, WorkflowId } from '@/types';
 
 import { useAssistantSignal } from '../hooks/useAssistantSignal';
-import { ASSISTANT_CONTINUE_SIGNAL, assistantEndPayload } from '../lib/contract';
+import {
+  ASSISTANT_CONTINUE_SIGNAL,
+  assistantContinuePayload,
+  assistantEndPayload,
+} from '../lib/contract';
 import {
   type AssistantChatMode,
   deriveAssistantMode,
@@ -26,8 +30,9 @@ import {
  * (see {@link deriveAssistantMode}): while an attempt is live it intervenes
  * (InjectMessage, interrupt priority — the existing NOI-7 path); when the round
  * has ended and the workflow awaits continuation it signals
- * `assistant_continue { message }`. Ending the session sends the SAME signal
- * with the `{ end: true }` payload — the workflow listens on exactly one name.
+ * `assistant_continue { message, end: false }`. Ending the session sends the
+ * SAME signal with `{ message: '', end: true }` — the workflow listens on
+ * exactly one name and BOTH fields are required on every send.
  * All state is real — history + socket + live-attempt enumeration; no polling.
  */
 
@@ -167,7 +172,7 @@ export function AssistantSessionView({ namespace, workflowId }: AssistantSession
       return;
     }
     if (mode === 'awaiting') {
-      void signal.submit(ASSISTANT_CONTINUE_SIGNAL, { message }).catch(() => {});
+      void signal.submit(ASSISTANT_CONTINUE_SIGNAL, assistantContinuePayload(message)).catch(() => {});
     }
   };
 
@@ -181,8 +186,9 @@ export function AssistantSessionView({ namespace, workflowId }: AssistantSession
   };
 
   const endSession = () => {
-    // Contract: `assistant_continue { end: true }` — the one signal name the
-    // workflow's selective receive parks on; the payload discriminates.
+    // Contract: `assistant_continue { message, end }` — the one signal name the
+    // workflow's selective receive parks on; `end` discriminates and `message`
+    // is required even here, where there is nothing to say.
     void signal.submit(ASSISTANT_CONTINUE_SIGNAL, assistantEndPayload()).catch(() => {});
   };
 

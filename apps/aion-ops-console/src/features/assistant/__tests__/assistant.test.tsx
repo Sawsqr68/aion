@@ -121,7 +121,12 @@ test('ending a session rides the ONE continue signal with the end discriminator'
   // The workflow's selective receive parks on exactly `assistant_continue`;
   // there is deliberately NO separate end signal name in the contract.
   expect(ASSISTANT_CONTINUE_SIGNAL).toBe('assistant_continue');
-  expect(assistantEndPayload()).toEqual({ end: true });
+  // `Continuation` declares message AND end, neither optional. This assertion
+  // used to read `{ end: true }` and passed for as long as the console could
+  // not end a session at all — it was checking the console's belief against
+  // itself. `assistant.contract.test.ts` reads the field list off the workflow
+  // document so the pair cannot agree with each other and be wrong together.
+  expect(assistantEndPayload()).toEqual({ message: '', end: true });
 });
 
 // --- the docked chat makes its send verb obvious per mode ---
