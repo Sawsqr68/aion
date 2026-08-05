@@ -109,19 +109,60 @@ untracked directories.
 
 1. **Task #141** — the wire-with-oracle sweep. LANE, no date. My constraint,
    adopted estate-wide: *the oracle must not read both sides from the caller.*
-2. The unowned code defects below want a ruling, not a unilateral patch.
+2. **When the #139 cut clears: merge `fix/worker-shell-dial-and-audibility`.**
+   Written, gated, pushed, waiting. See the entry below.
+
+## 🔴 A practice minted this session — a held question nobody holds is dropped
+
+I wrote "needs a ruling, not a unilateral patch" into a marker and then never
+asked anyone. Caught it myself a tick later. Waffles' rule, adopted:
+**anything marked as needing a ruling goes out as a question the SAME TICK,
+even a one-liner** — the cost of asking is a sentence, the cost of not asking is
+however long it sits. A note to your future self is the weakest enforcement
+there is; a held question that nobody is holding isn't held, it's dropped with
+good manners.
 
 ## Code defects the comb surfaced — NOT doc fixes, unowned
 
-- 🔴 **`aion worker shell` silently never connects.** It takes the endpoint
-  RAW (`crates/aion-cli/src/main.rs:510`) while the client verbs go through
-  `normalize_endpoint` (`:598`, `:615`). `DEFAULT_ENDPOINT` is the scheme-less
-  `127.0.0.1:50051` (`:44`), so a worker started without `--endpoint http://…`
-  never connects — and the verb installs no tracing subscriber, so nothing
-  says so. Agent C proved it with a paired treatment/control against the live
-  server: `connected_workers` **0** vs **1**. Likely fix: route the worker
-  verbs through `normalize_endpoint` too, plus a tracing subscriber so the
-  redial driver's warnings are visible.
+- ✅ **`aion worker shell` silently never connects — FIXED, GATED, AND HELD ON
+  A BRANCH.** `fix/worker-shell-dial-and-audibility` (`ff6d6317`, pushed).
+  **🔴 TRIGGER: the #139 live cut clearing. When it clears, this MERGES — it
+  does not start.**
+
+  Waffles ruled hold-but-author 2026-08-05: landing source rebuilds nothing,
+  but a change to the worker connection path sitting on main *during* a cut is
+  what makes a cut hard to reason about, and with the live worker registered
+  the defect bites no one — no urgency term to trade against the cut risk, so
+  no trade. He asked for it written and gated rather than queued as an idea,
+  because "we'll do it after the cut" is how a fix becomes one that never
+  travels. (His night's evidence: three estates died over five days to a defect
+  already fixed on liminal main — nobody walked it the last step.)
+
+  **Two defects wore one report, and both are fixed at the SHAPE, not the site**
+  (his call, and the right one):
+  - Normalisation moved INTO `Cli::endpoint()`, which now returns a `String`
+    that always carries a scheme. Adding the missing wrapper at the one bad
+    site would have left the rule — "a dial address carries a scheme" — known
+    in as many places as there are callers. **This is Law 4 in the codebase's
+    own voice**, and the cure was the prescribed one: delete the copies, derive
+    from one place. The lone remaining reader of the raw flag,
+    `server_endpoint_refusal`, needs "nobody said" and the operator's literal
+    text; it refuses and never dials.
+  - `worker_shell::run` now installs the tracing subscriber, exactly as
+    `worker_agent::serve` already did **and for the reason its own comment
+    gives**. The agent verb knew the rule; the shell verb did not — the same
+    disease as the endpoint, one file over.
+  - Gate: `every_dial_address_the_cli_hands_out_carries_a_scheme`, pinned on
+    the ACCESSOR not on a list of dial sites, because a list of sites is an
+    enumeration a new verb joins unnoticed. Watched failing first (control:
+    normalisation removed → scheme-less address reported, exit 101); restored
+    214 passed / 0 failed; clippy `-p aion-cli --all-targets` exit 0.
+
+  I did **not** split the audibility half to land now, though Waffles offered
+  it. One correction to his argument for the record: the path is not universally
+  dead — an operator who passes `--endpoint http://…` connects today, so the
+  subscriber change does touch a working configuration. Small, but the point of
+  the hold is not to reason about small.
 - ~~`aion list --status paused`~~, ~~the `codegen.md` path~~, ~~the CORS
   comment~~ — **all three FIXED and landed at `c298bbcd`.**
 - `CLAUDE.md`'s crate list omits `aion-integration-acp`, a real workspace
