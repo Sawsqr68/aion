@@ -19,10 +19,45 @@ that code disagree, the code wins.
 ## What a worker is
 
 A worker is a standalone binary that dials the Aion server's liminal listen
-address (default `127.0.0.1:50061` — the server config's
-`[outbox] liminal_listen_address`), registers itself, and serves **activity
-handlers**. The server pushes dispatched activities to it; the worker executes
-them and returns JSON results that land in durable workflow history.
+address (the server config's `[outbox] liminal_listen_address`), registers
+itself, and serves **activity handlers**. The server pushes dispatched
+activities to it; the worker executes them and returns JSON results that land
+in durable workflow history.
+
+> **The liminal listener exists only when the outbox is enabled, and its
+> address has no default.** Both halves bite an operator standing a worker up
+> against a stock server, so read them before you debug a worker that will not
+> connect.
+>
+> `[outbox] enabled` defaults to **false**
+> (`crates/aion-server/src/config/sections.rs`, `OutboxConfig`), and the
+> listener is spawned inside the outbox gate — with the flag off,
+> `maybe_spawn_outbox_dispatcher` returns before binding anything
+> (`crates/aion-server/src/run.rs`). So a server booted with no config file at
+> all has **no port for a worker to dial**, and the worker's dial is simply
+> refused, forever, with nothing on the server side saying why.
+>
+> `liminal_listen_address` is an `Option<String>` with **no server default** —
+> not `127.0.0.1:50061`, not anything. With the outbox on and the transport
+> `liminal` (the default whenever `liminal-transport` is compiled, which it is
+> in the standard build), a missing address is a boot-time configuration
+> refusal naming the field. Commissioning both looks like this:
+>
+> ```toml
+> [outbox]
+> enabled = true
+> liminal_listen_address = "127.0.0.1:50061"
+> ```
+>
+> `outbox.enabled = true` additionally requires a durable store
+> (`store.backend = "libsql"` or `"haematite"`); the in-memory store has no
+> outbox table and commissioning against it is a configuration error.
+>
+> **Read the address the server actually bound**, rather than assuming the one
+> you configured: the server log's `liminal server listener bound` line
+> carries it. `scripts/setup.sh` does exactly that, and writes a minimal
+> config enabling `[outbox]` on a fresh Aion home for precisely this reason —
+> see [AGENT-WORKERS.md](AGENT-WORKERS.md#one-command-setup-scriptssetupsh).
 
 Workers are consumed by workflow documents (`.awl` files, or Gleam-authored
 workflows). The document declares actions with typed inputs/outputs and pins
@@ -146,9 +181,15 @@ RedialTiming::new(..), &stop, agent_harness_or_none, on_registered)`.
 Spawn one thread per agent connection; serve the shell connection on the main
 thread and write a **readiness file** in its `on_registered` callback so
 supervisors can await "connected". Standard CLI surface (mirror dev-brief's
-`main_args.rs`): `--address` (repeatable candidates; default
-`127.0.0.1:50061`), `--identity`, `--ready-file`, `--norn-bin` (or `NORN_BIN`
-env), plus whatever the package needs. Unknown flags are a loud error.
+`main_args.rs`): `--address` (repeatable candidates), `--identity`,
+`--ready-file`, `--norn-bin` (or `NORN_BIN` env), plus whatever the package
+needs. Unknown flags are a loud error.
+
+dev-brief defaults `--address` to `127.0.0.1:50061`
+(`main_args.rs::DEFAULT_ADDRESS`). That is a convention **the worker** picks,
+not a value the server publishes — the server has no default listen address at
+all (above). Keep the convention if you like it, and pass the flag explicitly
+whenever the server bound elsewhere.
 
 Workers are started **manually or by Aion-native supervision — never add new
 launchd jobs.**

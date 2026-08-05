@@ -30,10 +30,15 @@ There is:
   the server process can;
 - **no network restriction**;
 - **no user or privilege drop** — the command runs as whoever runs the server;
-- **no resource limit** — no CPU, memory, file-descriptor, or wall-clock cap
-  beyond the activity's own timeout and cancellation.
+- **no resource limit** — no CPU, memory, file-descriptor, or wall-clock cap of
+  any kind. Not "none beyond the timeout": a declared `run "…"` has **no
+  external bound at all**. A per-activity `timeout` is carried to the engine as
+  `timeout_ms` and read by nothing, and cancellation of a declared body is not
+  wired (both stated in full below). Once the command is spawned, the only
+  thing that ends it is the command itself.
 
-A declared command can do anything the server's operating-system user can do.
+A declared command can do anything the server's operating-system user can do,
+for as long as it likes.
 
 **What protects you is review, not runtime enforcement.** A declared command is
 source code in a `.awl` file. It is read at authoring, it is checked at compile,
@@ -120,6 +125,15 @@ What this means in practice: a declared body runs to completion (or to its own
 failure) once it has started. Cancelling the workflow does not reach into a
 running `run "…"`. Do not rely on cancellation to bound a command — bound it in
 the command, with the program's own timeout.
+
+**Nor does a declared `timeout` bound it.** A per-activity timeout written in
+AWL, or attached in the Gleam SDK, travels to the engine inside the dispatch
+config as `timeout_ms` — and nothing on the Rust side reads that field. It is
+carried, not consumed. So the two things an author would reach for to put a
+ceiling on a declared body — cancellation and a timeout — are both inert, which
+is why "bound it in the command" is the whole of the advice and not the
+cautious version of it. The workflow-level `timeout_seconds` still bounds the
+RUN, but it does not stop a command already spawned.
 
 ### Values are delivered exactly, or refused
 

@@ -4,18 +4,35 @@ The built-in shell worker maps declared AWL actions to host commands, with no
 Rust crate and no source code of your own:
 
 ```sh
-aion worker shell --manifest worker.toml --awl my_flow.awl
+aion --endpoint http://127.0.0.1:50051 worker shell \
+    --manifest worker.toml --awl my_flow.awl
 ```
 
-Both flags are required. The manifest carries **wiring only** — which queue to
-serve, and which command each action runs. Everything typed stays in the `.awl`
+Both `--manifest` and `--awl` are required, and so in practice is
+`--endpoint` — see below. The manifest carries **wiring only** — which queue
+to serve, and which command each action runs. Everything typed stays in the `.awl`
 document: input/output schemas, `timeout`, and `retry` are the document's, the
 worker advertises the document's own schemas verbatim, and output shape is
 enforced by the workflow decoder exactly as for every other worker. A manifest
 cannot widen, narrow, or restate a contract; it can only wire one.
 
-The worker dials the server's gRPC endpoint from the global `--endpoint` flag
-(default `127.0.0.1:50051`; a missing scheme is read as `http://`).
+The worker dials the server's gRPC endpoint from the global `--endpoint` flag,
+and **that endpoint must carry a scheme**:
+
+```sh
+aion --endpoint http://127.0.0.1:50051 worker shell --manifest worker.toml --awl my_flow.awl
+```
+
+The global flag's fallback value is the bare `127.0.0.1:50051`, and this verb
+passes it to the worker SDK verbatim — the client verbs prepend `http://` to a
+scheme-less endpoint (`normalize_endpoint`), and this one does not
+(`crates/aion-cli/src/main.rs`). A worker started without `--endpoint`, or
+with a scheme-less one, therefore never connects; and because the verb
+installs no tracing subscriber, the redial driver's failures go nowhere and
+the process just sits there. **Silence from `aion worker shell` is not
+success.** Confirm the worker actually arrived — `POST
+/awl/workers/availability {"namespace":"…","task_queue":"…","activity_types":[…]}`
+answers `connected_workers` — before concluding it is serving.
 
 Ground truth for everything below: `crates/aion-cli/src/worker_shell.rs`.
 
@@ -47,6 +64,13 @@ Ground truth for everything below: `crates/aion-cli/src/worker_shell.rs`.
 There is deliberately no `timeout`, no `retry`, and no `cwd` field. Timeout
 and retry belong to the action's declaration in the `.awl`; the command runs
 in whatever working directory the worker was started in.
+
+A declared `retry` really does govern re-dispatch — the engine's retry loop
+consumes it (see
+[activities-and-workers.md](activities-and-workers.md#retry-semantics)). A
+declared `timeout` does **not** stop a running command: it travels to the
+engine in the dispatch config and nothing reads it today. Bound a command that
+must not run forever inside the command, with the program's own timeout.
 
 ### Placeholders
 
@@ -117,7 +141,11 @@ result = "json"                 # stdout must be JSON matching `Greeting`
 - A **non-zero exit** is a **retryable** failure carrying the command's own
   stderr; the document's declared `retry` policy decides whether another
   attempt is scheduled. So is a program that could not be spawned (missing
-  binary, permissions).
+  binary, permissions) — `ProcessGroupError::Spawn` is classified retryable
+  here. Note the asymmetry with a declared `run` body, whose spawn failure is
+  **terminal** in every arm (`crates/aion-worker/src/shell/action.rs`,
+  `spawn_failure`) — do not carry an expectation from
+  [`DECLARED-COMMANDS.md`](DECLARED-COMMANDS.md) across to this worker.
 - A process-containment failure, and stdout that is not valid JSON under
   `result = "json"`, are **terminal**: retrying cannot change them.
 - stdout and stderr are read as UTF-8 (lossily, invalid bytes replaced) and
@@ -131,8 +159,10 @@ The commands a manifest wires are **host commands**, exactly as
 [`DECLARED-COMMANDS.md`](DECLARED-COMMANDS.md) describes for `run` bodies —
 read that document's security section in full, because most of it applies
 here unchanged. There is no allowlist, no denylist, no filesystem confinement,
-no network restriction, no privilege drop, and no resource limit beyond the
-action's own timeout and cancellation. A wired command can do anything the
+no network restriction, no privilege drop, and no resource limit — no CPU,
+memory, file-descriptor, or wall-clock cap. Cancellation is the one thing that
+stops a running command from outside it, and a declared `timeout` is not (see
+the `[[action]]` note above). A wired command can do anything the
 operating-system user who ran `aion worker shell` can do.
 
 The value-substitution guarantee does hold: a parameter value becomes exactly
