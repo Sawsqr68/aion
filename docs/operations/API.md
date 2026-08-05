@@ -52,7 +52,7 @@ The HTTP router mounts several route families, some of which are dark by default
 |---|---|---|
 | `GET` | `/workflows` | Visibility list. Query parameters: `namespace` (required), optional `workflow_type`, `status`, `started_after`, `started_before`, `closed_after`, `closed_before`, `search_attributes`, `limit`, `offset`. Returns a JSON array of `WorkflowSummary` values. |
 | `GET` | `/workflows/count` | Same query parameters as `/workflows`; returns `{ "count": <number> }`. |
-| `POST` | `/workflows/start` | Start a workflow. Body: `namespace`, `workflow_type`, optional `input` (an ordinary JSON value or a `ProtoPayload` envelope with `content_type` and byte-array `bytes`). Returns `workflow_id` + `run_id`. |
+| `POST` | `/workflows/start` | Start a workflow. Body: `namespace`, `workflow_type`, optional `input` (an ordinary JSON value, or a payload envelope `{"content_type":"Json","bytes":[…]}` — **the same spelling this API emits**, so a payload read off a run can be resubmitted verbatim). The gRPC wire spelling `"application/json"` is refused here: it is the other transport's form, and the layer below this one does not accept it. Returns `workflow_id` + `run_id`. |
 | `POST` | `/workflows/signal` | Deliver a named signal. Body: `namespace`, `workflow_id`, optional `run_id`, `signal_name`, optional `payload`. Empty acknowledgement object. |
 | `POST` | `/workflows/query` | Synchronous live query into the running workflow. Body: `namespace`, `workflow_id`, optional `run_id`, `query_name`. Result or typed error — see [Query semantics](#query-semantics). |
 | `POST` | `/workflows/cancel` | Request cancellation. Body: `namespace`, `workflow_id`, optional `run_id`, `reason`. Empty acknowledgement object. |
@@ -80,56 +80,66 @@ curl -sS -X POST http://127.0.0.1:8080/workflows/start \
   -d '{"namespace":"default","workflow_type":"hello_world","input":{"name":"Ada"}}'
 ```
 
-A successful start returns the assigned identifiers as nested objects:
+A successful start returns the assigned identifiers as plain UUID strings:
 
 ```json
-{"workflow_id":{"uuid":"<workflow-id>"},"run_id":{"uuid":"<run-id>"}}
+{"workflow_id":"<workflow-id>","run_id":"<run-id>"}
 ```
 
-(`aion start` flattens this to `{"workflow_id":"<workflow-id>","run_id":"<run-id>"}` in its own output.)
+To submit a payload rather than a bare JSON value — for instance one read back off another run — use the envelope form, whose `bytes` is a JSON array of integers:
 
-For non-JSON binary payloads, use the envelope form with `bytes` as a JSON array of integers. For the hello-world tutorial, the `aion` CLI is the recommended path because it handles payload encoding for you.
+```json
+{"namespace":"default","workflow_type":"hello_world","input":{"content_type":"Json","bytes":[123,34,110,97,109,101,34,58,34,65,100,97,34,125]}}
+```
+
+`Json` is the only content type the engine has, so the envelope buys round-tripping, not extra encodings. For the hello-world tutorial, the `aion` CLI is the recommended path because it handles payload encoding for you.
 
 ### List and describe response shapes
 
-`GET /workflows` returns a plain JSON array of visibility summaries. Each element carries a top-level `status`:
+`GET /workflows` returns a plain JSON array of `WorkflowSummary` values. Each element carries a top-level `status`:
 
 ```json
 [
   {
     "workflow_id": "<workflow-id>",
-    "run_id": "<run-id>",
     "workflow_type": "hello_world",
     "status": "Completed",
-    "start_time": "2026-01-01T00:00:00Z",
-    "close_time": "2026-01-01T00:00:01Z",
-    "search_attributes": { "aion.namespace": { "type": "String", "data": "default" } }
+    "started_at": "2026-01-01T00:00:00Z",
+    "ended_at": "2026-01-01T00:00:01Z",
+    "parent": null
   }
 ]
 ```
 
-`POST /workflows/describe` does **not** return a top-level `status`. It returns a `summary` envelope plus a `history` array of event envelopes; the workflow's projected status lives inside the decoded summary at `summary.payload.data.status`:
+`failed_step` and `failure_reason` are additional fields present **only** on a workflow whose terminal event is `WorkflowFailed`; they are omitted entirely otherwise, so a healthy row has no empty failure columns. There is no `run_id`, `start_time`, `close_time`, or `search_attributes` on a summary — the namespace is the request's, not the row's.
+
+`POST /workflows/describe` does **not** return a top-level `status`. It returns `summary`, `history`, and `unserved`; the workflow's projected status is at `summary.status`. The summary is the same `WorkflowSummary` shape as the list, and the history entries are plain `Event` values — the server decodes the protobuf envelopes before answering, so no `{content_type, data}` wrappers reach an HTTP caller:
 
 ```json
 {
   "summary": {
-    "namespace": "default",
-    "request_id": null,
-    "payload": {
-      "content_type": "application/json",
+    "workflow_id": "<workflow-id>",
+    "workflow_type": "hello_world",
+    "status": "Completed",
+    "started_at": "2026-01-01T00:00:00Z",
+    "ended_at": "2026-01-01T00:00:01Z",
+    "parent": null
+  },
+  "history": [
+    {
+      "type": "WorkflowStarted",
       "data": {
-        "workflow_id": "<workflow-id>",
+        "envelope": { "seq": 1, "recorded_at": "2026-01-01T00:00:00Z", "workflow_id": "<workflow-id>" },
         "workflow_type": "hello_world",
-        "status": "Completed",
-        "started_at": "2026-01-01T00:00:00Z",
-        "ended_at": "2026-01-01T00:00:01Z",
-        "parent": null
+        "input": { "content_type": "Json", "bytes": [123, 125] }
       }
     }
-  },
-  "history": [ { "namespace": "default", "request_id": null, "payload": { "content_type": "application/json", "data": { "...": "event" } } } ]
+  ],
+  "unserved": []
 }
 ```
+
+The `input` above is exactly the envelope `POST /workflows/start` accepts, which is the point: a payload read off a run can be handed straight back. `unserved` is a live-fleet verdict, not a decode of history — an empty list is the healthy answer, and a non-empty one distinguishes "a worker is working on it" from "it is parked with nobody to take it", which the projected `Running` status alone cannot express.
 
 `POST /workflows/list` returns the raw wire form — `{"summaries":[...]}` with serde-encoded envelopes whose payload `bytes` are JSON byte arrays. Prefer `GET /workflows` or `aion list` for human-readable output.
 
@@ -324,6 +334,8 @@ Mounted only when `[deploy] enabled = true`; otherwise every RPC answers `Unimpl
 ## WebSocket event streaming
 
 Connect to `ws://<server>/events/stream` and then send one JSON text or binary message that selects the subscription. The server ignores ping/pong frames while waiting, but closes the stream with an input error if the subscription is missing or malformed. The socket is one-subscription-per-socket: a client wanting two streams opens two sockets.
+
+Subscription messages are the **wire (protobuf) shapes**, so ids are nested — `{"uuid": "…"}` — unlike the REST routes above, which take and return plain UUID strings. This asymmetry is real: copying an id out of a REST response into a subscription message needs the wrapper added.
 
 Supported subscription messages:
 

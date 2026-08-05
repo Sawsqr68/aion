@@ -543,6 +543,8 @@ mod tests {
         assert_start_missing_workflow(&router).await?;
         assert_start_plain_json_missing_workflow(&router).await?;
         assert_start_invalid_payload_envelope(&router).await?;
+        assert_start_emitted_envelope_reaches_type_resolution(&router).await?;
+        assert_start_grpc_spelling_is_refused(&router).await?;
 
         visibility_store
             .record_visibility(VisibilityRecord {
@@ -643,13 +645,18 @@ mod tests {
         Ok(())
     }
 
+    /// A well-spelled envelope with malformed `bytes` is refused.
+    ///
+    /// The content type here must be the form this API emits (`"Json"`), or the
+    /// refusal would come from the content type and this assertion would stop
+    /// measuring what it names.
     async fn assert_start_invalid_payload_envelope(
         router: &Router,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let invalid_start = json!({
             "namespace": NAMESPACE,
             "workflow_type": "missing-workflow",
-            "input": { "content_type": "application/json", "bytes": "not-a-byte-array" },
+            "input": { "content_type": "Json", "bytes": "not-a-byte-array" },
         });
         let response = router
             .clone()
@@ -659,6 +666,71 @@ mod tests {
         let error: WireError = read_json(response).await?;
         assert_eq!(error.code, WireErrorCode::InvalidInput);
         assert!(error.message.contains("{\"name\":\"Ada\"}"));
+        Ok(())
+    }
+
+    /// A payload READ off a run, resubmitted verbatim, must reach the engine.
+    ///
+    /// Measured at the route, because that is where the defect lived: a
+    /// function-level check of the normaliser cannot show that the whole start
+    /// path lets the emitted form through. The oracle is the emitted form
+    /// itself — serialised from an `aion_core::Payload` exactly as history and
+    /// describe serialise it — so this cannot pass by spelling the same string
+    /// on both sides.
+    ///
+    /// `WorkflowTypeNotFound` IS the pass: it can only be reached by getting
+    /// past payload normalisation. Its control is
+    /// [`assert_start_plain_json_missing_workflow`], which reaches the same
+    /// verdict with a plain input — so the two differ in nothing but the
+    /// payload form.
+    async fn assert_start_emitted_envelope_reaches_type_resolution(
+        router: &Router,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let emitted = aion_core::Payload::from_json(&json!({ "name": "Ada" }))?;
+        let as_this_api_returns_it = serde_json::to_value(&emitted)?;
+        assert_eq!(
+            as_this_api_returns_it.get("content_type"),
+            Some(&json!("Json")),
+            "the emitted content type moved; this round-trip no longer tests the read form"
+        );
+
+        let start = json!({
+            "namespace": NAMESPACE,
+            "workflow_type": "missing-workflow",
+            "input": as_this_api_returns_it,
+        });
+        let response = router
+            .clone()
+            .oneshot(json_request("/workflows/start", &start)?)
+            .await?;
+        assert_eq!(
+            response.status(),
+            StatusCode::NOT_FOUND,
+            "an emitted payload envelope must pass normalisation and reach type resolution"
+        );
+        let error: WireError = read_json(response).await?;
+        assert_eq!(error.code, WireErrorCode::NotFound);
+        assert_eq!(error.error_type.as_deref(), Some("WorkflowTypeNotFound"));
+        Ok(())
+    }
+
+    /// The gRPC wire spelling is not the HTTP envelope form, and accepting it
+    /// here would hand the next layer a content type it refuses.
+    async fn assert_start_grpc_spelling_is_refused(
+        router: &Router,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let start = json!({
+            "namespace": NAMESPACE,
+            "workflow_type": "missing-workflow",
+            "input": { "content_type": "application/json", "bytes": [123, 125] },
+        });
+        let response = router
+            .clone()
+            .oneshot(json_request("/workflows/start", &start)?)
+            .await?;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let error: WireError = read_json(response).await?;
+        assert_eq!(error.code, WireErrorCode::InvalidInput);
         Ok(())
     }
 

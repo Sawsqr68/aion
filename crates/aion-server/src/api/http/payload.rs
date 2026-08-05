@@ -8,11 +8,21 @@ use super::error::HttpWireError;
 
 pub(crate) const JSON_CONTENT_TYPE: &str = "application/json";
 
+/// Normalise a start/signal `input` into the proto payload the engine takes.
+///
+/// An ordinary JSON value is wrapped. An explicit envelope is decoded as
+/// [`aion_core::Payload`] — **the same shape this API emits** on history and
+/// describe — so a payload read off a run can be handed straight back. The
+/// envelope previously decoded as a `ProtoPayload`, whose `content_type` is
+/// the gRPC wire string; that made the read form (`"Json"`) unusable as input
+/// and let this layer accept content types the next one refuses.
 pub(super) fn http_input_payload(
     input: Value,
 ) -> Result<aion_proto::convert::ProtoPayload, WireError> {
     if is_payload_envelope(&input) {
-        serde_json::from_value(input).map_err(|_error| invalid_start_input())
+        serde_json::from_value::<aion_core::Payload>(input)
+            .map(aion_proto::convert::ProtoPayload::from)
+            .map_err(|_error| invalid_start_input())
     } else {
         serde_json::to_vec(&input)
             .map(|bytes| aion_proto::convert::ProtoPayload {
@@ -33,7 +43,8 @@ fn invalid_start_input() -> WireError {
     WireError::invalid_input(
         "start workflow request must be JSON shaped like \
          {\"namespace\":\"tenant-a\",\"workflow_type\":\"example\",\"input\":{\"name\":\"Ada\"}} \
-         or {\"namespace\":\"tenant-a\",\"workflow_type\":\"example\",\"input\":{\"content_type\":\"application/json\",\"bytes\":[123,125]}}",
+         or {\"namespace\":\"tenant-a\",\"workflow_type\":\"example\",\"input\":{\"content_type\":\"Json\",\"bytes\":[123,125]}} \
+         — the envelope form is the one this API returns for payloads, so a value read off a run can be resubmitted unchanged",
     )
 }
 
@@ -83,7 +94,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn http_start_input_normalization_accepts_plain_json_and_legacy_envelope()
+    fn http_start_input_normalization_accepts_plain_json_and_an_envelope()
     -> Result<(), Box<dyn std::error::Error>> {
         let plain = http_input_payload(json!({ "name": "Ada" }))?;
         assert_eq!(plain.content_type, JSON_CONTENT_TYPE);
@@ -92,22 +103,52 @@ mod tests {
             json!({ "name": "Ada" })
         );
 
-        let envelope = json!({
-            "content_type": "application/json; charset=utf-8",
-            "bytes": [123, 34, 110, 97, 109, 101, 34, 58, 34, 65, 100, 97, 34, 125],
-        });
-        let legacy = http_input_payload(envelope)?;
-        assert_eq!(legacy.content_type, "application/json; charset=utf-8");
-        assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(&legacy.bytes)?,
-            json!({ "name": "Ada" })
-        );
-
-        let malformed = http_input_payload(
-            json!({ "content_type": "application/json", "bytes": "not-a-byte-array" }),
-        );
+        let malformed =
+            http_input_payload(json!({ "content_type": "Json", "bytes": "not-a-byte-array" }));
         assert!(matches!(malformed, Err(error) if error.code == WireErrorCode::InvalidInput));
 
         Ok(())
+    }
+
+    /// The whole point of the envelope form: a payload READ off a run must be
+    /// resubmittable unchanged.
+    ///
+    /// The oracle is the emitted form itself, not a literal I chose — the
+    /// envelope is serialised from an `aion_core::Payload` exactly as history
+    /// and describe serialise it, so this cannot pass by my writing the same
+    /// spelling on both sides of the comparison.
+    #[test]
+    fn a_payload_serialised_the_way_this_api_emits_it_is_accepted_as_input()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let emitted = aion_core::Payload::from_json(&json!({ "name": "Ada" }))?;
+        let as_this_api_returns_it = serde_json::to_value(&emitted)?;
+
+        // Guard the guard: if the emitted spelling ever stops being `Json`,
+        // this test is no longer exercising the read form and must be
+        // revisited rather than quietly passing on something else.
+        assert_eq!(
+            as_this_api_returns_it.get("content_type"),
+            Some(&json!("Json")),
+            "the emitted content type moved; this round-trip no longer tests the read form"
+        );
+
+        let resubmitted = http_input_payload(as_this_api_returns_it)?;
+        assert_eq!(resubmitted.content_type, JSON_CONTENT_TYPE);
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&resubmitted.bytes)?,
+            json!({ "name": "Ada" })
+        );
+        Ok(())
+    }
+
+    /// The gRPC wire spelling is NOT the HTTP envelope form. Accepting it here
+    /// is what let this layer take content types the next layer refuses.
+    #[test]
+    fn the_grpc_wire_spelling_is_refused_as_an_http_envelope() {
+        let refused = http_input_payload(json!({
+            "content_type": "application/json",
+            "bytes": [123, 125],
+        }));
+        assert!(matches!(refused, Err(error) if error.code == WireErrorCode::InvalidInput));
     }
 }
