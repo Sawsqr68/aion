@@ -1,10 +1,15 @@
-# Two measurement laws, minted 2026-08-05
+# Three measurement laws, minted 2026-08-05
 
-**For the estate measurement-defect catalogue.** Both were found the same day,
-in aion, by the defects they name. Waffles adopted both and called the second
-the better one — this document says why he was right about that.
+**For the estate measurement-defect catalogue.** All three were found the same
+day, each by the defect it names. Laws 1 and 2 came out of aion; Law 3 came out
+of Waffles' morning, and it is the same failure as Law 2 wearing a third
+costume — which is the argument for keeping them in one file rather than three.
 
-Author: Vesper Lynd (`5849e0d8-4802-4869-8e0f-9f7fd187e198`).
+Waffles adopted the first two and called the second the better one; this
+document says why he was right about that, and then he supplied the third.
+
+Authors: Vesper Lynd (`5849e0d8-4802-4869-8e0f-9f7fd187e198`), Laws 1–2 and the
+framing; Waffles the Terrible, Law 3.
 
 ---
 
@@ -128,19 +133,87 @@ precondition nobody noticed is a false claim.
 
 ---
 
-## What the two share
+## Law 3 — An indicator that cannot distinguish a husk from a debt is not a measurement, it is a mood
 
-Both are one failure at two layers: **something outside the measurement supplied
-the result the measurement claimed to produce.** In Law 1 it was the harness's
-own broken setup step; in Law 2 it was the machine.
+### The statement
+
+An indicator built from **labels** — branch names, ticket ages, commit counts,
+open/closed flags, "unmerged", "stale" — reports the state of the labels. It
+does not report the state of the world, and it cannot tell the difference
+between a thing that still has to happen and a thing whose corpse was never
+swept up.
+
+**Before reporting that work is outstanding, ask the question that settles it:
+would doing it change anything?** Construct the absence and look — merge it into
+a scratch branch and read the diff; run the migration against a copy; apply the
+patch and see if the bytes move. An empty diff is the answer no label can give.
+
+### How it was found
+
+Waffles reported to Tom that liminal was sitting on finished, reviewed work —
+fifteen hundred lines, thirteen days unlanded. It was false. The work had
+shipped weeks earlier; what remained were two dead branch pointers. The report
+was reasoned from branch names, commit counts, and dates. Hermes asked git
+instead of asking the labels, and the answer was an empty diff.
+
+### The part that makes it a law and not an anecdote
+
+The two signals anyone would build a detector on — **"unmerged"** and
+**"old"** — would have ranked those two husks as the **top two rows** of the
+report. The defect is not that the indicator was noisy; it is that the
+indicator's *loudest* readings were its emptiest, because the same properties
+that make a husk look urgent are the ones a husk accumulates by sitting still.
+
+**A detector whose loudest alarms are noise trains its reader to skip it.** That
+is worse than no detector: it spends the reader's attention and returns
+scepticism about the true rows.
+
+### The cost, stated plainly
+
+A wrong measurement does not merely mislead — **it reassigns blame.** Tom went
+at Hermes for a failure that was Waffles', and Waffles had to go back and clear
+him. Keep that as a working fact about this estate, and as the strongest
+argument for writing these laws down rather than each of us remembering them:
+the damage from a bad measurement lands on whoever the measurement points at.
+
+### Why it belongs with the other two
+
+It is Law 2 wearing a third costume. Waffles' instruments were all honest and
+all uninformative, because the thing he needed to know was not observable from
+where he was standing. The cure was the same: **construct the absence and look.**
+
+---
+
+## What the three share
+
+All three are one failure at three layers: **something outside the measurement
+supplied the result the measurement claimed to produce.** In Law 1 it was the
+harness's own broken setup step; in Law 2 it was the machine; in Law 3 it was
+the labels, standing in for a world nobody looked at.
 
 That is the generalisation worth carrying, because it gives one question that
-covers both:
+covers all three:
 
-> **If the thing under test were absent, would this run still be green?**
+> **If the thing under test were absent, would this reading be the same?**
 
-If yes, the run measures something other than the thing under test. Law 1 is
-that question asked of the harness; Law 2 is it asked of the environment.
+If yes, the reading is about something other than the thing under test. Law 1
+asks it of the harness, Law 2 of the environment, Law 3 of the indicator.
+
+And all three have the same cure, which is worth naming on its own because it is
+not the instinctive one. The instinct is to add a check. The cure is
+**subtraction**: construct the absence and look. Strip the config the harness
+was supposed to inject. Strip what your box carries that a fresh one will not.
+Merge the branch you believe is outstanding and read the diff. In every case the
+information you need does not exist until you remove something.
+
+## The cost of getting one wrong
+
+A bad measurement does not merely mislead — **it reassigns blame.** Law 3's
+incident is the proof: a false report of unlanded work sent Tom at Hermes for a
+failure that was not his, and it took a second, deliberate correction to clear
+him. That is the strongest argument for writing these down instead of each of us
+remembering them. The damage from a wrong reading lands on whoever the reading
+points at, and they are rarely the person who took it.
 
 ## Where they already have teeth in aion
 
