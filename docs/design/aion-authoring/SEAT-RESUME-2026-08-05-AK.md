@@ -115,6 +115,47 @@ position is on the record.
 **The rule underneath, worth more than the amendment:** one truth kept in two
 places, equal only because a person keeps it equal, has drifted or it will.
 
+## #101 re-measured — one of its claims was false, one is closed, one is real
+
+Taken up because #145 plausibly discharged part of it. Measured rather than
+reasoned; the task splits four ways.
+
+1. **"Versions CAN be unloaded"** — correct, and already recorded. Nothing to
+   build.
+2. **"The real gap is ergonomics: nothing tells an operator the verb exists"**
+   — **FALSE, and it was false when written (2026-07-31).**
+   `docs/GETTING-STARTED.md` has carried a whole section — *"## 8. Versions,
+   routing, rollback"*, with `aion versions` / `route` / `unload` — since
+   **2026-06-12** (`359c95631`), six weeks earlier and before the #80 incident
+   the task cites. `git log -S "aion unload"` on that file returns exactly one
+   commit, so the string was added once and never removed: continuously
+   present. `docs/operations/operations.md` and `operations/API.md` carry it
+   too.
+3. **The narrower true claim — the failure did not point at the remedy** —
+   was real, and is **closed by #145** (`fc1c10cc`): the ambiguity refusal now
+   prints runnable `aion unload <type> <hash>` commands with full hashes.
+   That is what the #80 operator actually lacked; not a doc, a signpost at the
+   moment of failure.
+4. **The residual capability gap — real, verified today.** A type's
+   route-active version cannot be unloaded and **there is no route-retire
+   path**: `grep` for `retire_route` / `remove_route` / `fn undeploy` across
+   `crates/` returns nothing relevant (the `retire` hits are timers, deadlines
+   and process exits). So version accumulation is bounded by what the operator
+   unloads; **type accumulation is not bounded at all.**
+
+**Item 4 is the only live one, and it is a decision, not a fix.** Decision
+record #62 D2 ruled manual unload with engine-enforced safety, the embedding
+platform owning *when*, and deliberately no auto-GC inside aion. Whether a
+type should be retirable at all is a new question against that ruling, not an
+oversight to patch — **do not build a route-retire path without Waffles.** It
+also feeds #105 (Manifold condition 2), whose evidence #101 says it is; the
+correction to item 2 should travel with it.
+
+**Method note:** the claim that failed was the one stated most confidently and
+never measured. Dating a doc line is two commands (`git log -S` plus a read),
+and it overturned a six-week-old belief that had already been cited as
+evidence to Waffles.
+
 ## Board
 
 - ✅ #84 (`e314caf1`), ✅ #144 (`483c933a` + `4bed6a81`), ✅ #145 (`fc1c10cc`).
