@@ -1,0 +1,42 @@
+//! Steps, dependencies, outcomes, guards, and routes.
+workflow decisions
+  input repo: String
+  input note: String?
+  outcome done: type Summary, route success
+  outcome failed: type Failure, route failure
+
+type Summary  { text: String }
+type Failure  { reason: String }
+type Finding  { title: String, blocking: Bool }
+type Report   { findings: [Finding], category: Category }
+type Category = Urgent | Routine | Ignorable
+
+worker desk
+  action inspect(repo: String) -> Report
+  action escalate(repo: String) -> Summary
+
+step prepare
+  inspect(repo: repo) -> report
+
+/// `after` names dependencies. This step waits for `prepare`.
+step triage after prepare
+  // The first true `when` wins; `otherwise` is the complement and must be last.
+  outcome blocked: when report.findings |> any(.blocking), route urgent_path
+  outcome clear: otherwise, route sort_it
+
+step urgent_path
+  escalate(repo: repo) -> summary
+  route done(text: summary.text)
+
+/// Every variant of the enum is covered against the same subject,
+/// so this set is total and needs no `otherwise`.
+step sort_it
+  outcome hot: when report.category == Urgent, route urgent_path
+  outcome normal: when report.category == Routine, route file_it
+  outcome drop: when report.category == Ignorable, route file_it
+
+step file_it
+  // A guard's proof holds through the whole arm, including the route payload:
+  // `note` is `String?` above and plain `String` here.
+  outcome noted: when note is present, route done(text: note)
+  outcome plain: otherwise, route done(text: "no note")

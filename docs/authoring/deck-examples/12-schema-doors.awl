@@ -1,0 +1,30 @@
+//! Schema doors: a JSON Schema becomes a checked AWL type.
+workflow schema_demo
+  input repo: String
+  outcome done: type Report, route success
+
+/// An inline schema. `oneOf`, `anyOf`, `patternProperties` and external
+/// `$ref` are each refused by name; a `$ref` into the schema's own
+/// `$defs` is supported.
+type Payload = schema {
+  "type": "object",
+  "required": ["value"],
+  "properties": { "value": { "type": "string" } }
+}
+
+type Report { title: String }
+
+/// `schema of Type` is a CONSTANT-position form. Bind it, then use the const.
+const report_schema = schema of Report
+const guidance = """
+Return only the requested result.
+"""
+
+worker desk
+  action extract(repo: String, shape: String, brief: String) -> Payload
+  action render(value: String) -> Report
+
+step go
+  extract(repo: repo, shape: report_schema, brief: guidance) -> payload
+  render(value: payload.value) -> report
+  report |> route done

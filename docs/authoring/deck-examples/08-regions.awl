@@ -1,0 +1,40 @@
+//! distribute / sequence regions, and both collect modes.
+workflow regions_demo
+  input repos: [String]
+  outcome done: type Tally, route success
+
+type Tally  { count: Int }
+type Report { title: String }
+
+worker desk
+  action inspect(repo: String) -> Report
+  action count_all(reports: [Report]) -> Tally
+
+/// A region is for when every item needs a GRAPH of steps, not one call.
+/// The opener's region operation must be its only statement.
+step open
+  distribute repo in repos
+
+step work
+  inspect(repo: repo) -> report
+
+step close
+  // `collect` must be the FIRST statement of the closing step.
+  // Strict: one item failing fails the run.
+  collect report -> reports
+  count_all(reports: reports) -> tally
+
+/// `sequence` is the same shape, one track at a time in collection order.
+step open_again after close
+  sequence repo in repos
+
+step work_again
+  inspect(repo: repo) -> maybe
+
+step close_again
+  // Tolerant: `maybe?` binds [Report?] — one optional slot per input item,
+  // in item order, with the failure detail kept in history.
+  collect maybe? -> maybes
+  // Further statements may follow the collect, in the same step.
+  maybes |> count -> attempted
+  route done(count: attempted)

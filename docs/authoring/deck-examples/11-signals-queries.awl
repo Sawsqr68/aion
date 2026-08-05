@@ -1,0 +1,42 @@
+//! `send`: signalling another run. `query`/`answer`: the read-only surface.
+workflow gated_item
+  input coordinator_id: String
+  input item_id: String
+  input max_passes: Int
+  // What this workflow may send to others.
+  send heartbeat: Nil
+  send progress: Progress
+  // What an operator may ask a RUNNING instance, and the answer's type.
+  query review_status: Status
+  query passes_left: Int
+  outcome done: type Summary, route success
+  outcome gave_up: type Failure, route failure
+
+type Progress { item: String, state: String }
+type Status   { phase: String, note: String? }
+type Summary  { text: String }
+type Failure  { reason: String }
+type Verdict  { approved: Bool }
+
+worker desk
+  action evaluate(item: String) -> Verdict
+
+step announce
+  // The target is another run's durable workflow id.
+  send heartbeat to coordinator_id
+  send progress(item: item_id, state: "started") to coordinator_id
+  // `answer` registers the value from the bindings in scope right here.
+  answer review_status(phase: "announcing", note: "nobody has looked yet")
+  answer passes_left(max_passes)
+
+step gate after announce
+  loop verdict = Verdict(approved: false)
+    // Re-answering inside the loop is what makes a long run
+    // report live progress to whoever is watching.
+    answer review_status(phase: "reviewing")
+    evaluate(item: item_id) -> verdict
+    until verdict.approved
+    max max_passes
+  answer review_status(phase: "settled", note: item_id)
+  outcome settled: when verdict.approved, route done(text: item_id)
+  outcome exhausted: otherwise, route gave_up(reason: "no verdict in time")

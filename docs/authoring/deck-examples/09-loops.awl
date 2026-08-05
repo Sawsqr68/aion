@@ -1,0 +1,35 @@
+//! Bounded iteration: the value loop and the flow loop.
+workflow loops_demo
+  input repo: String
+  input max_rounds: Int
+  outcome done: type Report, route success
+  outcome failed: type Failure, route failure
+
+type Report  { title: String, complete: Bool, blocking: Bool }
+type Failure { reason: String }
+
+worker desk
+  action improve(prior: Report) -> Report
+  action inspect(repo: String) -> Report
+
+/// A value loop threads ONE value through the body.
+step polish
+  // The body runs at least once and must rebind the threaded value.
+  // `max` is mandatory. `counting` binds the number of completed iterations.
+  loop round = Report(title: "first", complete: false, blocking: false) counting cycles
+    improve(prior: round) -> round
+    until round.complete
+    max max_rounds
+  // A step containing a loop needs outcomes that separate
+  // finishing the work from running out of rounds.
+  outcome settled: when round.complete, route review
+  outcome ran_out: otherwise, route failed(reason: "exhausted the rounds")
+
+/// A flow loop is a BACKWARD route, and needs a real bound to be accepted.
+step review
+  inspect(repo: repo) -> report
+  outcome again: when report.blocking, route review
+  outcome finished: otherwise,
+    route done(title: report.title, complete: true, blocking: false)
+  // The bound may be any expression over inputs and consts, not just a literal.
+  max 3 visits

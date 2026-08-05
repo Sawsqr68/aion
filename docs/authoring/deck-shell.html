@@ -1,0 +1,447 @@
+<!doctype html>
+<!--
+  GENERATED FILE — do not edit awl-deck.html by hand.
+
+  Every AWL snippet on these slides is sliced out of a complete document under
+  docs/authoring/deck-examples/, and build-deck.py refuses to write this file
+  unless `aion awl check` passes on every one of them. Edit the examples or
+  build-deck.py, then re-run:
+
+      python3 docs/authoring/build-deck.py
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWL — the syntax, keyword by keyword</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :root {
+    color-scheme: light dark;
+    --ground: #EEF1F5;
+    --ground-2: #E3E8EE;
+    --panel: #FBFCFD;
+    --ink: #171C24;
+    --ink-soft: #4A5462;
+    --ink-faint: #7A8492;
+    --rule: #CFD6DF;
+    --brass: #9A6A20;
+    --brass-bright: #C08A45;
+    --teal: #37697A;
+    --plum: #7A4A6B;
+    --shadow: 0 1px 2px rgba(23, 28, 36, .06), 0 8px 24px rgba(23, 28, 36, .06);
+
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0F131A;
+      --ground-2: #161C25;
+      --panel: #151A22;
+      --ink: #DEE4EC;
+      --ink-soft: #A2ADBB;
+      --ink-faint: #6F7B8A;
+      --rule: #2A323D;
+      --brass: #C08A45;
+      --brass-bright: #DCA860;
+      --teal: #6FA9B8;
+      --plum: #B98BAA;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px rgba(0, 0, 0, .35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0F131A;
+    --ground-2: #161C25;
+    --panel: #151A22;
+    --ink: #DEE4EC;
+    --ink-soft: #A2ADBB;
+    --ink-faint: #6F7B8A;
+    --rule: #2A323D;
+    --brass: #C08A45;
+    --brass-bright: #DCA860;
+    --teal: #6FA9B8;
+    --plum: #B98BAA;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px rgba(0, 0, 0, .35);
+  }
+  :root[data-theme="light"] {
+    --ground: #EEF1F5;
+    --ground-2: #E3E8EE;
+    --panel: #FBFCFD;
+    --ink: #171C24;
+    --ink-soft: #4A5462;
+    --ink-faint: #7A8492;
+    --rule: #CFD6DF;
+    --brass: #9A6A20;
+    --brass-bright: #C08A45;
+    --teal: #37697A;
+    --plum: #7A4A6B;
+    --shadow: 0 1px 2px rgba(23, 28, 36, .06), 0 8px 24px rgba(23, 28, 36, .06);
+  }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .deck { position: relative; }
+
+  .slide {
+    display: none;
+    min-height: 100svh;
+    box-sizing: border-box;
+    padding: clamp(2rem, 5vw, 4rem) clamp(1.25rem, 6vw, 6rem) 5.5rem;
+    flex-direction: column;
+    justify-content: center;
+    gap: clamp(.85rem, 1.9vw, 1.5rem);
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  .slide.is-current { display: flex; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: clamp(.68rem, 1vw, .78rem);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--brass);
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    margin: 0;
+  }
+  .eyebrow::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--rule);
+  }
+
+  h1, h2 {
+    font-family: var(--mono);
+    font-weight: 600;
+    letter-spacing: -.02em;
+    text-wrap: balance;
+    margin: 0;
+    line-height: 1.12;
+  }
+  h1 { font-size: clamp(2.4rem, 7vw, 5rem); }
+  h2 { font-size: clamp(1.35rem, 3.1vw, 2.25rem); }
+
+  .lede {
+    font-size: clamp(1.02rem, 1.8vw, 1.35rem);
+    line-height: 1.5;
+    max-width: 64ch;
+    color: var(--ink-soft);
+    margin: 0;
+    text-wrap: pretty;
+  }
+  .lede strong { color: var(--ink); font-weight: 600; }
+  .lede code, .points code, .note code {
+    font-family: var(--mono);
+    font-size: .92em;
+    color: var(--brass);
+  }
+
+  /* The bare grammatical form: what you type, with the parts named. */
+  .form {
+    font-family: var(--mono);
+    font-size: clamp(.84rem, 1.35vw, 1.08rem);
+    line-height: 1.55;
+    color: var(--ink);
+    border-left: 3px solid var(--brass);
+    padding: .3rem 0 .3rem 1.1rem;
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-x: auto;
+  }
+  .form .opt { color: var(--ink-faint); }
+  .form .slot { color: var(--teal); font-style: italic; }
+
+  .points {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+    max-width: 68ch;
+  }
+  .points li {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: .8rem;
+    align-items: baseline;
+    font-size: clamp(.96rem, 1.45vw, 1.12rem);
+    line-height: 1.45;
+    color: var(--ink-soft);
+  }
+  .points li::before {
+    content: "—";
+    font-family: var(--mono);
+    color: var(--brass);
+  }
+  .points strong { color: var(--ink); font-weight: 600; }
+
+  /* Rules that will actually stop your document checking. */
+  .points.bite li::before { content: "!"; color: var(--plum); font-weight: 700; }
+
+  .cols {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+    gap: clamp(1rem, 2.5vw, 2rem);
+    align-items: start;
+  }
+
+  pre {
+    margin: 0;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    box-shadow: var(--shadow);
+    padding: clamp(.85rem, 1.7vw, 1.4rem) clamp(1rem, 2vw, 1.6rem);
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: clamp(.8rem, 1.26vw, 1.02rem);
+    line-height: 1.6;
+    tab-size: 2;
+  }
+  pre code { font: inherit; color: var(--ink); }
+
+  .tok-kw { color: var(--brass); font-weight: 600; }
+  .tok-type { color: var(--teal); }
+  .tok-str { color: var(--plum); }
+  .tok-com { color: var(--ink-faint); font-style: italic; }
+  .tok-pipe { color: var(--brass-bright); font-weight: 700; }
+
+  .caption {
+    font-family: var(--mono);
+    font-size: clamp(.72rem, 1.1vw, .84rem);
+    color: var(--ink-faint);
+    line-height: 1.5;
+    max-width: 74ch;
+    margin: 0;
+  }
+  .caption b { color: var(--brass); font-weight: 600; }
+
+  /* Where the snippet above came from. Every one is a real, checked file. */
+  .src {
+    font-family: var(--mono);
+    font-size: clamp(.68rem, 1vw, .78rem);
+    color: var(--ink-faint);
+    margin: 0;
+    letter-spacing: .01em;
+  }
+  .src b { color: var(--ink-soft); font-weight: 500; }
+
+  .note {
+    border-left: 2px solid var(--brass);
+    padding: .1rem 0 .1rem 1rem;
+    color: var(--ink-soft);
+    font-size: clamp(.94rem, 1.45vw, 1.08rem);
+    line-height: 1.5;
+    max-width: 66ch;
+  }
+  .note strong { color: var(--ink); }
+
+  .stamp {
+    display: inline-flex;
+    align-items: center;
+    gap: .55rem;
+    font-family: var(--mono);
+    font-size: clamp(.7rem, 1.05vw, .8rem);
+    letter-spacing: .04em;
+    color: var(--ink-soft);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: .42rem .95rem;
+    background: var(--panel);
+    width: fit-content;
+  }
+  .stamp::before {
+    content: "";
+    width: .5rem;
+    height: .5rem;
+    border-radius: 50%;
+    background: var(--brass);
+  }
+
+  table.kw {
+    border-collapse: collapse;
+    font-size: clamp(.86rem, 1.3vw, 1rem);
+    color: var(--ink-soft);
+    width: 100%;
+  }
+  table.kw td {
+    border-top: 1px solid var(--rule);
+    padding: .42rem .9rem .42rem 0;
+    vertical-align: baseline;
+  }
+  table.kw td:first-child {
+    font-family: var(--mono);
+    color: var(--brass);
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  .scroller { overflow-x: auto; }
+
+  /* The rail is the deck's own event history: one tick per slide, replayed. */
+  .rail {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: clamp(.6rem, 2vw, 1.4rem);
+    padding: .7rem clamp(1.25rem, 6vw, 6rem) 1rem;
+    background: linear-gradient(to top, var(--ground) 62%, transparent);
+    font-family: var(--mono);
+    font-size: .74rem;
+    color: var(--ink-faint);
+  }
+  .ticks { display: flex; gap: 3px; flex: 1; align-items: flex-end; }
+  .tick {
+    flex: 1;
+    height: 3px;
+    background: var(--rule);
+    border: 0;
+    padding: 0;
+    border-radius: 1px;
+    cursor: pointer;
+    transition: height .18s ease, background .18s ease;
+  }
+  .tick:hover { height: 9px; background: var(--ink-faint); }
+  .tick.seen { background: var(--ink-faint); }
+  .tick.now { background: var(--brass); height: 11px; }
+  .tick:focus-visible { outline: 2px solid var(--brass); outline-offset: 3px; }
+
+  .counter { font-variant-numeric: tabular-nums; letter-spacing: .05em; white-space: nowrap; }
+  .hint { white-space: nowrap; }
+  @media (max-width: 640px) { .hint { display: none; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+<!--SLIDES-->
+</div>
+
+<nav class="rail" aria-label="Slide navigation">
+  <span class="counter" id="counter">01 / 01</span>
+  <div class="ticks" id="ticks"></div>
+  <span class="hint">← → to move · F for full screen</span>
+</nav>
+
+<script>
+  (function () {
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+    var ticks = document.getElementById('ticks');
+    var counter = document.getElementById('counter');
+    var current = 0;
+
+    // ---- syntax marking -------------------------------------------------
+    // Split on comments and strings FIRST so keywords inside them are left
+    // alone, then mark keywords and TitleCase type names in the remainder.
+    var KEYWORDS = ['workflow', 'input', 'outcome', 'signal', 'query', 'answer', 'send', 'to',
+      'const', 'type', 'schema', 'json', 'of',
+      'worker', 'action', 'child', 'subflow', 'step', 'route', 'when', 'otherwise', 'after',
+      'fork', 'in', 'join', 'distribute', 'sequence', 'collect', 'loop', 'until', 'max', 'visits',
+      'wait', 'sleep', 'timeout', 'retry', 'every', 'backoff', 'node', 'on', 'failure',
+      'agent', 'advisory', 'run', 'spawn', 'counting', 'sequential', 'is', 'present', 'absent',
+      'success', 'true', 'false', 'and', 'or', 'not',
+      'any', 'all', 'count', 'filter', 'map', 'sort', 'empty'];
+    var kwRe = new RegExp('\\b(' + KEYWORDS.join('|') + ')\\b', 'g');
+
+    function esc(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function markPlain(text) {
+      var out = esc(text);
+      out = out.replace(kwRe, '<span class="tok-kw">$1</span>');
+      out = out.replace(/\b([A-Z][A-Za-z0-9]*)\b/g, '<span class="tok-type">$1</span>');
+      out = out.replace(/\|&gt;/g, '<span class="tok-pipe">|&gt;</span>');
+      return out;
+    }
+
+    function highlight(source) {
+      var parts = source.split(/(\/\/[^\n]*|"[^"\n]*")/g);
+      var html = '';
+      for (var i = 0; i < parts.length; i++) {
+        var part = parts[i];
+        if (!part) continue;
+        if (part.indexOf('//') === 0) {
+          html += '<span class="tok-com">' + esc(part) + '</span>';
+        } else if (part.charAt(0) === '"') {
+          html += '<span class="tok-str">' + esc(part) + '</span>';
+        } else {
+          html += markPlain(part);
+        }
+      }
+      return html;
+    }
+
+    Array.prototype.forEach.call(document.querySelectorAll('pre code'), function (block) {
+      block.innerHTML = highlight(block.textContent);
+    });
+
+    // ---- navigation -----------------------------------------------------
+    slides.forEach(function (slide, index) {
+      var tick = document.createElement('button');
+      tick.className = 'tick';
+      tick.type = 'button';
+      tick.setAttribute('aria-label', 'Slide ' + (index + 1));
+      tick.addEventListener('click', function () { show(index); });
+      ticks.appendChild(tick);
+    });
+
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+    function show(index) {
+      current = Math.max(0, Math.min(slides.length - 1, index));
+      slides.forEach(function (slide, i) {
+        slide.classList.toggle('is-current', i === current);
+      });
+      Array.prototype.forEach.call(ticks.children, function (tick, i) {
+        tick.classList.toggle('now', i === current);
+        tick.classList.toggle('seen', i < current);
+      });
+      counter.textContent = pad(current + 1) + ' / ' + pad(slides.length);
+      if (location.hash !== '#' + (current + 1)) {
+        history.replaceState(null, '', '#' + (current + 1));
+      }
+      window.scrollTo(0, 0);
+    }
+
+    document.addEventListener('keydown', function (event) {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      var key = event.key;
+      if (key === 'ArrowRight' || key === 'PageDown' || key === ' ') {
+        event.preventDefault(); show(current + 1);
+      } else if (key === 'ArrowLeft' || key === 'PageUp') {
+        event.preventDefault(); show(current - 1);
+      } else if (key === 'Home') {
+        event.preventDefault(); show(0);
+      } else if (key === 'End') {
+        event.preventDefault(); show(slides.length - 1);
+      } else if (key === 'f' || key === 'F') {
+        event.preventDefault();
+        if (document.fullscreenElement) { document.exitFullscreen(); }
+        else if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen();
+        }
+      }
+    });
+
+    var start = parseInt((location.hash || '').slice(1), 10);
+    show(isNaN(start) ? 0 : start - 1);
+  })();
+</script>
+</body>
+</html>

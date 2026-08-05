@@ -1,9 +1,19 @@
 <!doctype html>
+<!--
+  GENERATED FILE — do not edit awl-deck.html by hand.
+
+  Every AWL snippet on these slides is sliced out of a complete document under
+  docs/authoring/deck-examples/, and build-deck.py refuses to write this file
+  unless `aion awl check` passes on every one of them. Edit the examples or
+  build-deck.py, then re-run:
+
+      python3 docs/authoring/build-deck.py
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AWL — the workflow language</title>
+<title>AWL — the syntax, keyword by keyword</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   :root {
@@ -83,10 +93,10 @@
     display: none;
     min-height: 100svh;
     box-sizing: border-box;
-    padding: clamp(2rem, 5vw, 4.5rem) clamp(1.25rem, 6vw, 6rem) 5.5rem;
+    padding: clamp(2rem, 5vw, 4rem) clamp(1.25rem, 6vw, 6rem) 5.5rem;
     flex-direction: column;
     justify-content: center;
-    gap: clamp(1rem, 2.2vw, 1.9rem);
+    gap: clamp(.85rem, 1.9vw, 1.5rem);
     max-width: 1180px;
     margin: 0 auto;
   }
@@ -101,6 +111,7 @@
     display: flex;
     align-items: center;
     gap: .7rem;
+    margin: 0;
   }
   .eyebrow::after {
     content: "";
@@ -118,17 +129,37 @@
     line-height: 1.12;
   }
   h1 { font-size: clamp(2.4rem, 7vw, 5rem); }
-  h2 { font-size: clamp(1.5rem, 3.6vw, 2.6rem); }
+  h2 { font-size: clamp(1.35rem, 3.1vw, 2.25rem); }
 
   .lede {
-    font-size: clamp(1.05rem, 1.9vw, 1.45rem);
+    font-size: clamp(1.02rem, 1.8vw, 1.35rem);
     line-height: 1.5;
-    max-width: 62ch;
+    max-width: 64ch;
     color: var(--ink-soft);
     margin: 0;
     text-wrap: pretty;
   }
   .lede strong { color: var(--ink); font-weight: 600; }
+  .lede code, .points code, .note code {
+    font-family: var(--mono);
+    font-size: .92em;
+    color: var(--brass);
+  }
+
+  /* The bare grammatical form: what you type, with the parts named. */
+  .form {
+    font-family: var(--mono);
+    font-size: clamp(.84rem, 1.35vw, 1.08rem);
+    line-height: 1.55;
+    color: var(--ink);
+    border-left: 3px solid var(--brass);
+    padding: .3rem 0 .3rem 1.1rem;
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-x: auto;
+  }
+  .form .opt { color: var(--ink-faint); }
+  .form .slot { color: var(--teal); font-style: italic; }
 
   .points {
     margin: 0;
@@ -136,15 +167,15 @@
     list-style: none;
     display: flex;
     flex-direction: column;
-    gap: .85rem;
-    max-width: 64ch;
+    gap: .6rem;
+    max-width: 68ch;
   }
   .points li {
     display: grid;
     grid-template-columns: auto 1fr;
-    gap: .85rem;
+    gap: .8rem;
     align-items: baseline;
-    font-size: clamp(1rem, 1.6vw, 1.22rem);
+    font-size: clamp(.96rem, 1.45vw, 1.12rem);
     line-height: 1.45;
     color: var(--ink-soft);
   }
@@ -154,6 +185,9 @@
     color: var(--brass);
   }
   .points strong { color: var(--ink); font-weight: 600; }
+
+  /* Rules that will actually stop your document checking. */
+  .points.bite li::before { content: "!"; color: var(--plum); font-weight: 700; }
 
   .cols {
     display: grid;
@@ -168,11 +202,11 @@
     border: 1px solid var(--rule);
     border-radius: 3px;
     box-shadow: var(--shadow);
-    padding: clamp(.9rem, 1.8vw, 1.5rem) clamp(1rem, 2vw, 1.6rem);
+    padding: clamp(.85rem, 1.7vw, 1.4rem) clamp(1rem, 2vw, 1.6rem);
     overflow-x: auto;
     font-family: var(--mono);
-    font-size: clamp(.82rem, 1.32vw, 1.06rem);
-    line-height: 1.62;
+    font-size: clamp(.8rem, 1.26vw, 1.02rem);
+    line-height: 1.6;
     tab-size: 2;
   }
   pre code { font: inherit; color: var(--ink); }
@@ -188,18 +222,28 @@
     font-size: clamp(.72rem, 1.1vw, .84rem);
     color: var(--ink-faint);
     line-height: 1.5;
-    max-width: 70ch;
+    max-width: 74ch;
     margin: 0;
   }
   .caption b { color: var(--brass); font-weight: 600; }
+
+  /* Where the snippet above came from. Every one is a real, checked file. */
+  .src {
+    font-family: var(--mono);
+    font-size: clamp(.68rem, 1vw, .78rem);
+    color: var(--ink-faint);
+    margin: 0;
+    letter-spacing: .01em;
+  }
+  .src b { color: var(--ink-soft); font-weight: 500; }
 
   .note {
     border-left: 2px solid var(--brass);
     padding: .1rem 0 .1rem 1rem;
     color: var(--ink-soft);
-    font-size: clamp(.95rem, 1.5vw, 1.12rem);
+    font-size: clamp(.94rem, 1.45vw, 1.08rem);
     line-height: 1.5;
-    max-width: 64ch;
+    max-width: 66ch;
   }
   .note strong { color: var(--ink); }
 
@@ -224,6 +268,25 @@
     border-radius: 50%;
     background: var(--brass);
   }
+
+  table.kw {
+    border-collapse: collapse;
+    font-size: clamp(.86rem, 1.3vw, 1rem);
+    color: var(--ink-soft);
+    width: 100%;
+  }
+  table.kw td {
+    border-top: 1px solid var(--rule);
+    padding: .42rem .9rem .42rem 0;
+    vertical-align: baseline;
+  }
+  table.kw td:first-child {
+    font-family: var(--mono);
+    color: var(--brass);
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  .scroller { overflow-x: auto; }
 
   /* The rail is the deck's own event history: one tick per slide, replayed. */
   .rail {
@@ -266,271 +329,657 @@
 <body>
 
 <div class="deck" id="deck">
-
   <section class="slide">
-    <p class="eyebrow">Aion · workflow authoring</p>
+    <p class="eyebrow">Aion · the AWL language</p>
     <h1>AWL</h1>
-    <p class="lede">A small language for workflows that <strong>survive</strong> — a process that can crash on step nine of ten and carry on from step nine, or sleep for three months and wake up in the same thought.</p>
-    <span class="stamp">every example on these slides passes <code>aion awl check</code></span>
-    <p class="caption">12 documents, checked against <b>aion 0.11.0</b> before this deck was written. Nothing here is illustrative-only.</p>
+    <p class="lede">A walkthrough of the syntax, one keyword at a time: what you type, what it means, and the rule that stops you when you get it wrong.</p>
+    <span class="stamp">every snippet is sliced from a document that passes aion awl check</span>
+    <p class="caption">The twelve documents these slides quote live in <b>docs/authoring/deck-examples/</b>. This file is generated from them by <b>build-deck.py</b>, which refuses to write the deck if any of them stops checking — so a claim on a slide cannot outlive the code that made it true.</p>
   </section>
 
   <section class="slide">
-    <p class="eyebrow">The problem</p>
-    <h2>Long work outlives the process running it</h2>
+    <p class="eyebrow">The file</p>
+    <h2>One file declares one workflow</h2>
+    <p class="form">//! narration          <span class="opt">← required, and first</span>
+workflow <span class="slot">name</span>
+  <span class="slot">header declarations</span>
+
+const / type / worker  <span class="opt">← what the flow is made of</span>
+step <span class="slot">name</span>               <span class="opt">← the flow itself</span></p>
+    <pre><code>//! Types, constants, and the shape of a document.
+workflow basics
+  timeout 2h
+  input repo: String
+  input note: String?
+  outcome done: type Report, route success
+  outcome failed: type Failure, route failure</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/01-basics.awl</b> — a complete document, checked</p>
     <ul class="points">
-      <li>A job takes four hours. The machine reboots at hour three.</li>
-      <li>A contract waits on a signature that arrives in nine days.</li>
-      <li>Step six charged a card. Step seven failed. <strong>Do not charge it twice.</strong></li>
+      <li><code>//!</code> narrates the workflow. It must be the first thing in the file.</li>
+      <li><code>///</code> documents the declaration below it — a type, a field, an action, a step.</li>
+      <li><code>//</code> is an ordinary comment, and the only kind allowed inside a step body.</li>
+      <li>Identifiers are <code>snake_case</code>. Type names and enum variants are <code>TitleCase</code>.</li>
+      <li>Two-space indentation. It is significant.</li>
     </ul>
-    <p class="note">Ordinary code has no memory of where it was. You end up rebuilding the same machinery every time — a state table, a retry loop, a way to ask "did that already happen?" <strong>That machinery is the product here, and the language is how you reach it.</strong></p>
   </section>
 
   <section class="slide">
-    <p class="eyebrow">The mechanism</p>
-    <h2>Write it down, then replay it</h2>
+    <p class="eyebrow">workflow</p>
+    <h2>The header is the contract</h2>
+    <p class="form">workflow <span class="slot">name</span>
+  timeout <span class="slot">2h</span>            <span class="opt">optional</span>
+  input   <span class="slot">name: Type</span>
+  signal  <span class="slot">name: Type</span>     <span class="opt">what it can be sent</span>
+  send    <span class="slot">name: Type</span>     <span class="opt">what it can send</span>
+  query   <span class="slot">name: Type</span>     <span class="opt">what it can be asked</span>
+  outcome <span class="slot">name</span>: type <span class="slot">T</span>, route success|failure</p>
+    <pre><code>workflow gated_item
+  input coordinator_id: String
+  input item_id: String
+  input max_passes: Int
+  // What this workflow may send to others.
+  send heartbeat: Nil
+  send progress: Progress
+  // What an operator may ask a RUNNING instance, and the answer&#x27;s type.
+  query review_status: Status
+  query passes_left: Int
+  outcome done: type Summary, route success
+  outcome gave_up: type Failure, route failure</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/11-signals-queries.awl</b> — a complete document, checked</p>
     <ul class="points">
-      <li>Every side effect is <strong>recorded</strong> as it happens — the call, and what came back.</li>
-      <li>To recover, the workflow is <strong>re-run from the top</strong>.</li>
-      <li>Anything already recorded returns its old answer <strong>instead of happening again</strong>.</li>
+      <li><strong>Inputs</strong> are what a caller supplies when it starts the run.</li>
+      <li><strong>Outcomes are the only way out.</strong> Each one names the type of its payload and whether it lands as a success or a failure.</li>
     </ul>
-    <p class="note">So recovery isn't a special path with its own bugs — it's the ordinary path, reading from history until it runs out. The price is that workflow code must be <strong>deterministic</strong>: same history in, same decisions out. That single constraint is what shapes the whole language.</p>
-  </section>
-
-  <section class="slide">
-    <p class="eyebrow">A complete workflow</p>
-    <h2>Everything, in eleven lines</h2>
-    <pre><code>//! Greet a name, then shout it — the first workflow written in AWL and run for real.
-workflow awl_hello
-  input name: String
-  outcome shouted: type Shouted, route success
-
-type Greeting { greeting: String }
-type Shouted  { text: String }
-
-worker awl_hello
-  action greet(name: String) -> Greeting
-  action shout(text: String) -> Shouted
-
-step greet_and_shout
-  name |> greet |> .greeting |> shout |> route shouted</code></pre>
-    <p class="caption">Verbatim from <b>examples/awl-hello/awl_hello.awl</b> — deployed and run for real, not written for this slide.</p>
-  </section>
-
-  <section class="slide">
-    <p class="eyebrow">Reading it</p>
-    <h2>The pipeline is the spine</h2>
-    <pre><code>name |> greet |> .greeting |> shout |> route shouted</code></pre>
-    <ul class="points">
-      <li><strong>name</strong> — the workflow's input.</li>
-      <li><strong>|> greet</strong> — hand it to an action. Something outside runs it.</li>
-      <li><strong>|> .greeting</strong> — reach into the result.</li>
-      <li><strong>|> route shouted</strong> — finish, through a named outcome.</li>
+    <ul class="points bite">
+      <li>A workflow needs at least one terminal outcome, and must not fall off the end of its last step.</li>
     </ul>
-    <p class="note">Read left to right and you have the whole flow. Each stage is a durable point: if the process dies after <strong>greet</strong>, the replay doesn't greet twice.</p>
   </section>
 
   <section class="slide">
-    <p class="eyebrow">Types</p>
+    <p class="eyebrow">type</p>
     <h2>Records, enums, and absence</h2>
-    <pre><code>type Request  { title: String, detail: String?, tags: [String] }
-type Decision { verdict: Verdict, note: String }
-type Verdict = Approve | Revise | Reject</code></pre>
+    <p class="form">type <span class="slot">Name</span> { <span class="slot">field</span>: <span class="slot">Type</span>, <span class="slot">other</span>: <span class="slot">Type</span>? }
+type <span class="slot">Name</span> = <span class="slot">Variant</span> | <span class="slot">Variant</span></p>
+    <pre><code>  outcome done: type Summary, route success
+  outcome failed: type Failure, route failure
+
+type Summary  { text: String }
+type Failure  { reason: String }
+type Finding  { title: String, blocking: Bool }
+type Report   { findings: [Finding], category: Category }
+type Category = Urgent | Routine | Ignorable</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/06-steps-outcomes.awl</b> — a complete document, checked</p>
     <ul class="points">
-      <li><strong>String?</strong> means the field may be <strong>absent</strong> — and absent is not <code>null</code>.</li>
-      <li>An optional cannot be read until it's been <strong>proved present</strong>.</li>
-      <li>Built-ins are Bool, Int, Float, String, Nil, Dir, and lists.</li>
+      <li>Built-ins: <code>Bool</code>, <code>Int</code>, <code>Float</code>, <code>String</code>, <code>Nil</code>, <code>Dir</code>, lists <code>[T]</code>, optionals <code>T?</code>.</li>
+      <li><strong>Optional means absent</strong> — the field simply is not there. A JSON <code>null</code> is invalid, not empty.</li>
+      <li>Enum variants are written bare in expressions: <code>report.category == Urgent</code>.</li>
     </ul>
-    <p class="note">There is no arithmetic and there are no user functions. If something needs computing, it happens in a worker — <strong>which is exactly the determinism rule showing up as syntax.</strong></p>
+    <ul class="points bite">
+      <li><code>[T?]</code> cannot be declared. It exists in exactly one place in the language — a tolerant <code>collect</code>. <code>[T]?</code> is different: the whole list may be absent.</li>
+    </ul>
   </section>
 
   <section class="slide">
-    <p class="eyebrow">Where work happens</p>
-    <h2>Workers and actions</h2>
+    <p class="eyebrow">schema</p>
+    <h2>A JSON Schema becomes a checked type</h2>
+    <p class="form">type <span class="slot">Name</span> = schema("<span class="slot">path.schema.json</span>")
+type <span class="slot">Name</span> = schema { <span class="slot">inline JSON Schema</span> }</p>
+    <pre><code>/// An inline schema. `oneOf`, `anyOf`, `patternProperties` and external
+/// `$ref` are each refused by name; a `$ref` into the schema&#x27;s own
+/// `$defs` is supported.
+type Payload = schema {
+  &quot;type&quot;: &quot;object&quot;,
+  &quot;required&quot;: [&quot;value&quot;],
+  &quot;properties&quot;: { &quot;value&quot;: { &quot;type&quot;: &quot;string&quot; } }
+}</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/12-schema-doors.awl</b> — a complete document, checked</p>
+    <ul class="points">
+      <li>Import paths resolve relative to the <code>.awl</code> document.</li>
+      <li>This is how AWL meets a shape somebody else already defined, without retyping it.</li>
+    </ul>
+    <ul class="points bite">
+      <li><code>oneOf</code>, <code>anyOf</code>, <code>patternProperties</code> and an external <code>$ref</code> are each refused <em>by name</em>, with their own diagnostic. A <code>$ref</code> into the schema's own <code>$defs</code> is supported.</li>
+      <li>A null-admitting type is a check error — absence is <code>T?</code>, not <code>null</code>.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">const</p>
+    <h2>Compile-time values, and only those</h2>
+    <p class="form">const <span class="slot">name</span> = <span class="slot">value</span></p>
+    <pre><code>/// `schema of Type` is a CONSTANT-position form. Bind it, then use the const.
+const report_schema = schema of Report
+const guidance = &quot;&quot;&quot;
+Return only the requested result.
+&quot;&quot;&quot;</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/12-schema-doors.awl</b> — a complete document, checked</p>
+    <ul class="points">
+      <li>Literals, lists, <code>json { … }</code> blocks, <code>schema of Type</code>, and concatenation of constants.</li>
+      <li>Triple-quoted strings carry multi-line text — prompts, briefs, instructions.</li>
+    </ul>
+    <ul class="points bite">
+      <li>A constant cannot depend on a runtime binding.</li>
+      <li><code>schema of Type</code> is a <strong>constant-position form only</strong>. Written inside a step body it checks clean and then does not lower — bind it to a <code>const</code> and use the constant.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">worker · action</p>
+    <h2>Where the work actually happens</h2>
+    <p class="form">worker <span class="slot">task_queue</span>
+  action <span class="slot">name</span>(<span class="slot">param</span>: <span class="slot">Type</span>) -> <span class="slot">ResultType</span></p>
     <pre><code>worker dev
-  action build(repo: String, clean: Bool) -> Build
+  /// The config line: at most one, comma-separated keys.
+  action build(repo: String, clean: Bool) -&gt; Build
     node builder, timeout 30m, retry 2 backoff 10s..2m
-
-step compile
-  build(repo: request.repo, clean: true) -> built
-  built |> route done</code></pre>
+  /// Exactly one parameter, so it can be a pipe stage.
+  action normalize(repo: String) -&gt; Repo</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/02-workers.awl</b> — a complete document, checked</p>
     <ul class="points">
-      <li>A <strong>worker</strong> block names a task queue and the actions it serves.</li>
-      <li>The workflow never runs the work — it <strong>dispatches</strong> it and records the answer.</li>
-      <li>Arguments are always named. Types are checked on both sides.</li>
+      <li>The <code>worker</code> name is the <strong>task queue</strong> the call is dispatched to.</li>
+      <li>An <code>action</code> declares the contract. Both sides check it — the workflow when it calls, the worker when it registers.</li>
+      <li>Arguments are always named at the call site. There is no positional call.</li>
     </ul>
   </section>
 
   <section class="slide">
-    <p class="eyebrow">Operational reality, in the language</p>
-    <h2>The config line</h2>
-    <pre><code>action build(repo: String, clean: Bool) -> Build
-  node builder, timeout 30m, retry 2 backoff 10s..2m</code></pre>
+    <p class="eyebrow">the config line</p>
+    <h2>Operational reality, in the language</h2>
+    <p class="form">  action <span class="slot">name</span>(…) -> <span class="slot">T</span>
+    node <span class="slot">N</span>, timeout <span class="slot">D</span>, retry <span class="slot">N</span> every <span class="slot">D</span>
+    <span class="opt">… or retry N backoff MIN..MAX, or advisory, or agent</span></p>
+    <pre><code>/// The config line: at most one, comma-separated keys.
+action build(repo: String, clean: Bool) -&gt; Build
+  node builder, timeout 30m, retry 2 backoff 10s..2m
+/// Exactly one parameter, so it can be a pipe stage.
+action normalize(repo: String) -&gt; Repo
+/// advisory: its failure never faults the step, so it cannot bind a result.</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/02-workers.awl</b> — a complete document, checked</p>
     <ul class="points">
-      <li><strong>node</strong> — pin this work to a particular machine.</li>
-      <li><strong>timeout</strong> — how long this one call may take.</li>
-      <li><strong>retry</strong> — <code>retry 3 every 30s</code>, or a backoff range.</li>
-      <li><strong>advisory</strong> — this call is allowed to fail without failing the step.</li>
+      <li>At most <strong>one</strong> config line per action, comma-separated.</li>
+      <li>A call site may override <code>node</code> and <code>timeout</code> — nothing else.</li>
+      <li><code>advisory</code> means a failure never faults the step. Because it might not have run, an advisory call <strong>cannot bind a result</strong>.</li>
     </ul>
-    <p class="note">Retry, timeout and placement are not deployment configuration living in another file. They are <strong>in the document, next to the call</strong>, versioned with it and visible to whoever reads it.</p>
   </section>
 
   <section class="slide">
-    <p class="eyebrow">Ending, and branching</p>
-    <h2>Outcomes are the only way out</h2>
-    <pre><code>step choose
-  inspect(repo: request.repo) -> findings
-  summarise(findings: findings) -> summary
-  outcome blocked: when findings |> any(.blocking), route remediation(summary)
-  outcome clear: otherwise, route done(summary)</code></pre>
+    <p class="eyebrow">agent</p>
+    <h2>An agent is ordinary work</h2>
+    <p class="form">    agent<span class="opt">   — this parameter is a prompt, this result is the reply</span></p>
+    <pre><code>worker assistants
+  /// `agent` says: this parameter is a PROMPT and this result is the REPLY.
+  action ask(prompt: String) -&gt; String
+    agent, timeout 10m</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/03-agent-seam.awl</b> — a complete document, checked</p>
     <ul class="points">
-      <li>The first true <strong>when</strong> wins; <strong>otherwise</strong> is the complement and comes last.</li>
-      <li>Branches must be <strong>exhaustive</strong> — the checker refuses a gap.</li>
-      <li>Cover every variant of an enum and you may drop the <code>otherwise</code>.</li>
+      <li>One <code>String</code> parameter goes out as the prompt; one <code>String</code> comes back as the reply.</li>
+      <li>Everything else about it is a normal action — same retries, same timeout, same recording in history.</li>
     </ul>
-    <p class="note">There is no <code>if</code> and no <code>select</code>. A decision is a named, typed, total set of outcomes — so <strong>a run can always say which arm it took, and why.</strong></p>
+    <ul class="points bite">
+      <li>The checker refuses any other shape. <code>agent</code> is not a label you can put on an arbitrary action.</li>
+    </ul>
   </section>
 
   <section class="slide">
-    <p class="eyebrow">Doing many things at once</p>
-    <h2>One call per item — fork and join</h2>
-    <pre><code>step scan
-  fork item in request.repos
-    inspect(repo: item.name)
-  join -> findings
-  tally(findings: findings) -> report
-  report |> route done</code></pre>
-    <p class="note">One branch per item, genuinely in parallel, joined back <strong>in input order</strong> — so the result list is deterministic even though the work was not. Add <code>sequential</code> to walk them one at a time instead.</p>
+    <p class="eyebrow">run</p>
+    <h2>The document can carry the command</h2>
+    <p class="form">    run "<span class="slot">command $param</span>"</p>
+    <pre><code>worker greeter
+  /// Interpolation is this action&#x27;s own parameters only, as $name or ${name}.
+  action greet(name: String) -&gt; RunOutcome
+    run &quot;echo hello $name&quot;
+  /// A config line and a body coexist.
+  action shout(text: String) -&gt; Stdout
+    node shell, timeout 30s
+    run &quot;printf %s ${text}&quot;</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/04-declared-command.awl</b> — a complete document, checked</p>
+    <ul class="points">
+      <li>A declared body needs <strong>no worker process</strong> — the server runs it.</li>
+      <li>The result type is a subset of <code>{ exit_code: Int, stdout: String, stderr: String }</code>: ask for the fields you need.</li>
+      <li>Interpolation reaches the action's own parameters only, as <code>$name</code> or <code>${name}</code>.</li>
+    </ul>
+    <ul class="points bite">
+      <li><strong>There is no sandbox.</strong> A declared body runs with the server's authority, on the server's machine.</li>
+    </ul>
   </section>
 
   <section class="slide">
-    <p class="eyebrow">Doing many things at once</p>
+    <p class="eyebrow">child · spawn</p>
+    <h2>A child is its own durable workflow</h2>
+    <p class="form">child <span class="slot">name</span>(<span class="slot">p</span>: <span class="slot">T</span>) -> <span class="slot">R</span>
+
+  <span class="slot">name</span>(<span class="slot">p</span>: <span class="slot">v</span>) -> <span class="slot">binding</span>   <span class="opt">waits for it</span>
+  spawn <span class="slot">name</span>(<span class="slot">p</span>: <span class="slot">v</span>)     <span class="opt">starts it and moves on</span></p>
+    <pre><code>/// A child waits for its result. `spawn` starts one without waiting.
+child review_round(repo: String, round: Int) -&gt; Report
+
+subflow review_once(repo: String)
+  outcome out: type Report
+
+  step run
+    inspect(repo: repo) -&gt; report
+    route out(report)
+
+step first
+  review_round(repo: repo, round: 1) -&gt; from_child
+  route second
+
+step second
+  spawn review_round(repo: repo, round: 2)
+  route third</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/05-children-subflows.awl</b> — a complete document, checked</p>
+    <ul class="points">
+      <li>A child has its own history, its own id, and its own lifetime. It survives the parent finishing.</li>
+      <li><code>spawn</code> is fire-and-continue: no result, no wait.</li>
+    </ul>
+    <ul class="points bite">
+      <li>Cancelling a parent does not cascade to its children. That is the stated contract, not an oversight.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">subflow</p>
+    <h2>A subflow is an inline graph</h2>
+    <p class="form">subflow <span class="slot">name</span>(<span class="slot">p</span>: <span class="slot">T</span>)
+  outcome <span class="slot">out</span>: type <span class="slot">R</span>
+  step <span class="slot">…</span></p>
+    <pre><code>subflow review_once(repo: String)
+  outcome out: type Report
+
+  step run
+    inspect(repo: repo) -&gt; report
+    route out(report)
+
+step first
+  review_round(repo: repo, round: 1) -&gt; from_child
+  route second
+
+step second
+  spawn review_round(repo: repo, round: 2)
+  route third
+
+/// A subflow invocation is the ONLY statement of its step.
+step third
+  review_once(repo: repo) -&gt; from_subflow
+
+step fourth
+  route done(title: from_subflow.title)</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/05-children-subflows.awl</b> — a complete document, checked</p>
+    <ul class="points">
+      <li>Same history, same run — a subflow is a way to name a piece of the graph, not a separate execution.</li>
+    </ul>
+    <ul class="points bite">
+      <li>A subflow invocation must be the <strong>only statement of its step</strong>. Bind it with <code>-&gt;</code>, then route from the next step.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">step · after</p>
+    <h2>Steps, and what waits for what</h2>
+    <p class="form">step <span class="slot">name</span>
+step <span class="slot">name</span> after <span class="slot">other</span>, <span class="slot">another</span></p>
+    <pre><code>step prepare
+  inspect(repo: repo) -&gt; report
+
+/// `after` names dependencies. This step waits for `prepare`.
+step triage after prepare
+  // The first true `when` wins; `otherwise` is the complement and must be last.
+  outcome blocked: when report.findings |&gt; any(.blocking), route urgent_path
+  outcome clear: otherwise, route sort_it</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/06-steps-outcomes.awl</b> — a complete document, checked</p>
+    <ul class="points">
+      <li>Statements inside a step run in written order.</li>
+      <li>A step with no <code>after</code> and no incoming route falls through from the step written before it.</li>
+      <li><code>after</code> makes the dependency explicit — the step starts once all the named steps are done.</li>
+    </ul>
+    <ul class="points bite">
+      <li>The checker rejects unknown targets, cycles through <code>after</code>, unreachable steps, and any binding that is not available on <em>every</em> path reaching its use.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">-&gt; and |&gt;</p>
+    <h2>Bind an answer, or pipe a value</h2>
+    <p class="form"><span class="slot">call</span>(…) -> <span class="slot">binding</span>
+<span class="slot">value</span> |> <span class="slot">stage</span> |> .<span class="slot">field</span> |> <span class="slot">action</span> -> <span class="slot">binding</span></p>
+    <pre><code>step piped after make
+  repo |&gt; normalize |&gt; .repo |&gt; build_one -&gt; also
+  route done(artifact: also.artifact)</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/02-workers.awl</b> — a complete document, checked</p>
+    <ul class="points">
+      <li>A pipe stage receives the piped value as its <strong>single argument</strong>, so it must be declared with exactly one parameter.</li>
+      <li><code>.field</code> is a stage too — pull a field out mid-pipe.</li>
+      <li>A plain expression binds with the same arrow: <code>"run: " + result -&gt; summary</code>.</li>
+    </ul>
+    <ul class="points bite">
+      <li>A multi-parameter action, a child, and an advisory action can none of them be a pipe stage.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">expressions · guards</p>
+    <h2>What you can say without a worker</h2>
+    <p class="form"><span class="slot">path</span> is present   <span class="slot">path</span> is absent   <span class="slot">list</span> is empty
+<span class="slot">list</span> |> filter · map · sort · count · any · all</p>
+    <pre><code>step file_it
+  // A guard&#x27;s proof holds through the whole arm, including the route payload:
+  // `note` is `String?` above and plain `String` here.
+  outcome noted: when note is present, route done(text: note)
+  outcome plain: otherwise, route done(text: &quot;no note&quot;)</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/06-steps-outcomes.awl</b> — a complete document, checked</p>
+    <ul class="points">
+      <li>Field access, literal indexing (<code>items[0]</code>), string <code>+</code>, comparisons, <code>not</code>/<code>and</code>/<code>or</code>, and the collection operations.</li>
+      <li><strong>No user functions and no general arithmetic.</strong> Computation belongs in a worker action, where it can be recorded.</li>
+      <li>A guard that proves a path present <strong>narrows it from <code>T?</code> to <code>T</code></strong> for the whole arm — including the route payload.</li>
+    </ul>
+    <ul class="points bite">
+      <li>Proofs never escape their arm and never flow backwards. An optional read without a proof is a check error naming the path.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">outcome · when · otherwise · route</p>
+    <h2>Branching is a set of outcomes</h2>
+    <p class="form">  outcome <span class="slot">name</span>: when <span class="slot">condition</span>, route <span class="slot">target</span>
+  outcome <span class="slot">name</span>: otherwise, route <span class="slot">target</span></p>
+    <pre><code>step triage after prepare
+  // The first true `when` wins; `otherwise` is the complement and must be last.
+  outcome blocked: when report.findings |&gt; any(.blocking), route urgent_path
+  outcome clear: otherwise, route sort_it
+
+step urgent_path
+  escalate(repo: repo) -&gt; summary
+  route done(text: summary.text)
+
+/// Every variant of the enum is covered against the same subject,
+/// so this set is total and needs no `otherwise`.
+step sort_it
+  outcome hot: when report.category == Urgent, route urgent_path
+  outcome normal: when report.category == Routine, route file_it
+  outcome drop: when report.category == Ignorable, route file_it</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/06-steps-outcomes.awl</b> — a complete document, checked</p>
+    <ul class="points">
+      <li>There is no <code>select</code> and no <code>if</code>. The first true <code>when</code> wins.</li>
+      <li>A <code>route</code> names another step, or a workflow or subflow outcome.</li>
+      <li>A step containing only outcomes is a pure decision.</li>
+    </ul>
+    <ul class="points bite">
+      <li><code>otherwise</code> is the complement and must be last. Conditional outcomes must be <strong>exhaustive</strong>.</li>
+      <li>One proved exception: if every arm compares the <em>same subject</em> against a bare enum variant and every variant is covered, the set is total on its own. An uncovered variant is an error that names it.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">fork · join</p>
+    <h2>One call per item, in parallel</h2>
+    <p class="form">fork <span class="slot">item</span> in <span class="slot">items</span> <span class="opt">[sequential]</span>
+  <span class="slot">one unbound call</span>
+join -> <span class="slot">results</span>
+
+fork                      <span class="opt">bare: named branches</span>
+  <span class="slot">a(…)</span> -> <span class="slot">x</span>
+  <span class="slot">b(…)</span> -> <span class="slot">y</span>
+join</p>
+    <pre><code>step fan
+  // Collection form: one branch per item, in parallel, joined in INPUT order.
+  // The body is exactly one unbound call.
+  fork repo in repos
+    inspect(repo: repo)
+  join -&gt; reports
+
+step ordered after fan
+  // `sequential` runs one item at a time, still in input order.
+  fork repo in repos sequential
+    publish(repo: repo)
+  join -&gt; receipts</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/07-fork-join.awl</b> — a complete document, checked</p>
+    <ul class="points">
+      <li>The collection form runs one branch per item and joins the results <strong>in input order</strong>, however they finish.</li>
+      <li><code>sequential</code> runs them one at a time, still in input order.</li>
+      <li>A bare <code>fork</code> opens named branches: different calls, run concurrently, each binding its own result.</li>
+    </ul>
+    <ul class="points bite">
+      <li>The collection body compiles only as <strong>exactly one unbound call</strong> — an action or a child. Named branches compile only as action calls.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">distribute · sequence · collect</p>
     <h2>When each item needs a graph, not a call</h2>
+    <p class="form">step <span class="slot">open</span>
+  distribute <span class="slot">item</span> in <span class="slot">items</span>   <span class="opt">or: sequence</span>
+
+step <span class="slot">work</span>
+  <span class="slot">…several steps per item…</span>
+
+step <span class="slot">close</span>
+  collect <span class="slot">binding</span> -> <span class="slot">results</span></p>
     <pre><code>step open
-  distribute item in request.repos
+  distribute repo in repos
 
 step work
-  build(repo: item.name) -> built
-  verify(name: built.name) -> checked
+  inspect(repo: repo) -&gt; report
 
 step close
-  collect checked -> results
-  tally(results: results) -> report
-  report |> route done</code></pre>
+  // `collect` must be the FIRST statement of the closing step.
+  // Strict: one item failing fails the run.
+  collect report -&gt; reports
+  count_all(reports: reports) -&gt; tally</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/08-regions.awl</b> — a complete document, checked</p>
     <ul class="points">
-      <li><strong>distribute</strong> runs a whole region of steps per item, in parallel.</li>
-      <li><strong>sequence</strong> is the same shape, one item at a time.</li>
-      <li><code>collect checked?</code> tolerates failures — one optional slot per item.</li>
+      <li><code>distribute</code> runs the item tracks in parallel; <code>sequence</code> runs them one at a time in collection order.</li>
+      <li>Results preserve input order. An empty input collects to <code>[]</code>.</li>
+      <li>Regions may nest, but an inner region must close before its outer one, and a route may not enter or escape an open region.</li>
+    </ul>
+    <ul class="points bite">
+      <li>The opener's region operation must be its <strong>only</strong> statement, and <code>collect</code> must be the <strong>first</strong> statement of the closing step.</li>
     </ul>
   </section>
 
   <section class="slide">
-    <p class="eyebrow">Waiting</p>
+    <p class="eyebrow">collect ?</p>
+    <h2>Tolerating the item that failed</h2>
+    <p class="form">  collect <span class="slot">binding</span>  -> <span class="slot">results</span>    <span class="opt">strict: one failure fails the run</span>
+  collect <span class="slot">binding</span>? -> <span class="slot">results</span>    <span class="opt">tolerant: [T?], one slot per item</span></p>
+    <pre><code>step close_again
+  // Tolerant: `maybe?` binds [Report?] — one optional slot per input item,
+  // in item order, with the failure detail kept in history.
+  collect maybe? -&gt; maybes
+  // Further statements may follow the collect, in the same step.
+  maybes |&gt; count -&gt; attempted
+  route done(count: attempted)</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/08-regions.awl</b> — a complete document, checked</p>
+    <ul class="points">
+      <li>Tolerant <code>collect</code> is the one place in the language where <code>[T?]</code> exists. One optional slot per input item, in item order.</li>
+      <li>The failure detail is not discarded — it stays in history.</li>
+    </ul>
+    <ul class="points bite">
+      <li>Every slot is an ordinary optional. It must be proved present before its fields are read, exactly like any other <code>T?</code>.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">loop · until · max</p>
+    <h2>Threading one value through a bounded loop</h2>
+    <p class="form">  loop <span class="slot">binding</span> = <span class="slot">initial</span> <span class="opt">[counting n]</span>
+    <span class="slot">…body, which must rebind `binding`…</span>
+    until <span class="slot">condition</span>
+    max <span class="slot">N</span></p>
+    <pre><code>step polish
+  // The body runs at least once and must rebind the threaded value.
+  // `max` is mandatory. `counting` binds the number of completed iterations.
+  loop round = Report(title: &quot;first&quot;, complete: false, blocking: false) counting cycles
+    improve(prior: round) -&gt; round
+    until round.complete
+    max max_rounds
+  // A step containing a loop needs outcomes that separate
+  // finishing the work from running out of rounds.
+  outcome settled: when round.complete, route review
+  outcome ran_out: otherwise, route failed(reason: &quot;exhausted the rounds&quot;)</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/09-loops.awl</b> — a complete document, checked</p>
+    <ul class="points">
+      <li>The body runs at least once, and must rebind the one threaded value.</li>
+      <li><code>counting</code> binds the number of completed iterations.</li>
+    </ul>
+    <ul class="points bite">
+      <li><code>max</code> is <strong>mandatory</strong>.</li>
+      <li><code>route</code> is not allowed inside the body.</li>
+      <li>A step containing a loop needs outcomes that distinguish <em>finishing</em> from <em>running out</em>.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">max N visits</p>
+    <h2>A backward route is a loop, and must say so</h2>
+    <p class="form">  outcome <span class="slot">again</span>: when <span class="slot">condition</span>, route <span class="slot">an earlier step</span>
+  max <span class="slot">N</span> visits</p>
+    <pre><code>step review
+  inspect(repo: repo) -&gt; report
+  outcome again: when report.blocking, route review
+  outcome finished: otherwise,
+    route done(title: report.title, complete: true, blocking: false)
+  // The bound may be any expression over inputs and consts, not just a literal.
+  max 3 visits</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/09-loops.awl</b> — a complete document, checked</p>
+    <ul class="points">
+      <li>The bound may be any expression over inputs and constants — <code>max max_polish_rounds visits</code> is legal.</li>
+      <li>The <code>visits</code> count is available inside guards, so a flow loop can behave differently on its last pass.</li>
+    </ul>
+    <p class="note"><strong>There is no unbounded loop in AWL.</strong> Both loop shapes carry a real bound, and the checker will not accept a cycle without one. A durable workflow that can spin forever is a workflow nobody can reason about.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">wait · sleep</p>
     <h2>Expiry is absence</h2>
+    <p class="form">  wait <span class="slot">signal</span> -> <span class="slot">binding</span>
+  wait <span class="slot">signal</span> timeout <span class="slot">2h</span> -> <span class="slot">binding</span>   <span class="opt">binds T?</span>
+  sleep <span class="slot">30s</span></p>
     <pre><code>step hold
-  wait approval timeout 2h -> answer
-  outcome approved: when answer is present, route done(by: answer.reviewer)
-  outcome expired: otherwise, route failed(reason: "approval timed out")</code></pre>
+  // A durable timer. The run can be evicted and resumed across it.
+  sleep 30s
+  // A TIMED wait binds an OPTIONAL, because expiry is absence.
+  // A plain `wait approval -&gt; answer` binds Decision and waits forever.
+  wait approval timeout 2h -&gt; answer
+  outcome approved: when answer is present and answer.approved, route ship
+  outcome refused: when answer is present, route failed(reason: &quot;not approved&quot;)
+  outcome expired: otherwise, route failed(reason: &quot;approval timed out&quot;)</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/10-waits-failure.awl</b> — a complete document, checked</p>
     <ul class="points">
-      <li>A timed wait binds an <strong>optional</strong>, because expiry is simply nothing arriving.</li>
-      <li>Proving it present <strong>narrows the type</strong> — inside that arm, <code>answer.reviewer</code> is readable.</li>
-      <li>Outside that arm it isn't. The proof does not leak.</li>
+      <li>A plain <code>wait</code> waits as long as it takes — days, weeks — and binds the signal's type.</li>
+      <li>A <strong>timed</strong> wait binds an optional, because the way a timeout shows up is that nothing is there.</li>
+      <li><code>sleep</code> is a durable timer. The run can be evicted from memory and resumed across it.</li>
     </ul>
-    <p class="note">This wait is durable. Two hours, two months — the process can die and restart underneath it, and the deadline still lands.</p>
+    <ul class="points bite">
+      <li>The binding is mandatory: <code>wait approval</code> without <code>-&gt; answer</code> is a parse error.</li>
+      <li>Three timeouts, three places: an <strong>action</strong> or call timeout, the <strong>workflow</strong> header timeout, and a <strong>wait</strong> timeout. They are distinct and do not substitute for each other.</li>
+    </ul>
   </section>
 
   <section class="slide">
-    <p class="eyebrow">Repeating</p>
-    <h2>Every loop is bounded. There is no other kind.</h2>
-    <pre><code>loop round = initial counting cycles
-  improve(prior: round) -> round
-  until round.complete
-  max max_rounds</code></pre>
+    <p class="eyebrow">send … to</p>
+    <h2>Signalling another running workflow</h2>
+    <p class="form">  send <span class="slot">name</span>: <span class="slot">Type</span>        <span class="opt">in the header</span>
+
+  send <span class="slot">name</span> to <span class="slot">workflow_id</span>
+  send <span class="slot">name</span>(<span class="slot">field</span>: <span class="slot">v</span>) to <span class="slot">workflow_id</span></p>
+    <pre><code>step announce
+  // The target is another run&#x27;s durable workflow id.
+  send heartbeat to coordinator_id
+  send progress(item: item_id, state: &quot;started&quot;) to coordinator_id</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/11-signals-queries.awl</b> — a complete document, checked</p>
     <ul class="points">
-      <li>The body runs at least once and must <strong>rebind</strong> the threaded value.</li>
-      <li><strong>max is mandatory</strong> — the checker will not accept a loop without one.</li>
-      <li>The step must then say what completion means and what exhaustion means.</li>
+      <li><code>wait</code> receives a signal; <code>send</code> is the other direction.</li>
+      <li>The target is another run's <strong>durable workflow id</strong> — usually passed in as an input.</li>
+      <li>A <code>Nil</code> signal carries no payload: <code>send heartbeat to …</code>.</li>
     </ul>
-    <p class="note">A workflow that can run forever is one that can bill forever, or hold a resource forever. <strong>The language refuses to express it.</strong></p>
   </section>
 
   <section class="slide">
-    <p class="eyebrow">When it goes wrong</p>
+    <p class="eyebrow">query · answer</p>
+    <h2>What an operator can ask a running workflow</h2>
+    <p class="form">  query <span class="slot">name</span>: <span class="slot">Type</span>       <span class="opt">in the header</span>
+
+  answer <span class="slot">name</span>(<span class="slot">payload</span>)</p>
+    <pre><code>step gate after announce
+  loop verdict = Verdict(approved: false)
+    // Re-answering inside the loop is what makes a long run
+    // report live progress to whoever is watching.
+    answer review_status(phase: &quot;reviewing&quot;)
+    evaluate(item: item_id) -&gt; verdict
+    until verdict.approved
+    max max_passes</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/11-signals-queries.awl</b> — a complete document, checked</p>
+    <ul class="points">
+      <li><code>answer</code> registers a value computed from the bindings in scope <em>at that point</em>.</li>
+      <li>Re-answering inside a loop is what makes a long-running job report live progress.</li>
+      <li>Read it with <code>aion query &lt;workflow-id&gt; &lt;name&gt;</code>. A finished run no longer answers — inspect it with <code>aion describe</code>.</li>
+    </ul>
+    <ul class="points bite">
+      <li><strong>Every declared query must be answered somewhere</strong> or the check fails. The search is syntactic and descends into subflows, fork bodies, loop bodies, substeps and <code>on failure</code> blocks.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">on failure</p>
     <h2>Compensation has to end somewhere</h2>
+    <p class="form">  on failure
+    <span class="slot">…undo what was done…</span>
+    route <span class="slot">an outcome</span></p>
     <pre><code>step ship
-  publish(ids: request.asset_ids) -> receipt
-  receipt |> route done
+  publish(repo: repo) -&gt; summary
+  route done(text: summary.text)
+  // Compensation runs when the step faults. It MUST end in a route —
+  // silently swallowing a failure is a check error.
   on failure
-    remove_assets(ids: request.asset_ids)
-    route failed(reason: "publish failed after compensation")</code></pre>
-    <p class="note">An <code>on failure</code> block <strong>must end in a route</strong>. You can clean up, and you can decide what the failure means — but you cannot quietly swallow it and carry on as though nothing happened.</p>
-  </section>
-
-  <section class="slide">
-    <p class="eyebrow">No worker required</p>
-    <h2>The document can carry the command</h2>
-    <pre><code>worker shell_box
-  action stamp(text: String) -> RunOutcome
-    run "echo $text"
-
-step stamp_it
-  text |> stamp |> route stamped</code></pre>
+    remove_assets(repo: repo)
+    route failed(reason: &quot;publish failed after compensation&quot;)</code></pre>
+    <p class="src">from <b>docs/authoring/deck-examples/10-waits-failure.awl</b> — a complete document, checked</p>
     <ul class="points">
-      <li>The server runs it. There is <strong>no Rust, no SDK, no process to deploy</strong>.</li>
-      <li>The command is sealed into the package's identity when you deploy.</li>
-      <li>Arguments arrive whole — <strong>never through a shell</strong>, so nothing inside them can execute.</li>
+      <li>An action failure fails its step <em>after</em> its declared retries are spent.</li>
+      <li><code>on failure</code> is where you put the undo: cancel the booking, delete the uploaded assets, release the lock.</li>
     </ul>
-    <p class="caption">Verbatim from <b>examples/shell-run/shell_run.awl</b>.</p>
-  </section>
-
-  <section class="slide">
-    <p class="eyebrow">Agents as ordinary work</p>
-    <h2>A prompt in, a reply out</h2>
-    <pre><code>worker assistants
-  action ask(prompt: String) -> String
-    agent, timeout 10m</code></pre>
-    <p class="note">The <strong>agent</strong> marker says one thing: this action's String argument is a <strong>prompt</strong> and its String result is a <strong>reply</strong>. That is the whole contract an adapter needs to hand the call to an agent instead of running it as ordinary work.</p>
-    <p class="lede">Which means an agent's turn is just an activity — recorded, retried, timed out, and <strong>replayed from history like everything else</strong>.</p>
-  </section>
-
-  <section class="slide">
-    <p class="eyebrow">The tools</p>
-    <h2>Four verbs and an editor</h2>
-    <pre><code>aion awl check  flow.awl     # parse and typecheck
-aion awl fmt    flow.awl     # canonical formatting
-aion deploy     flow.awl     # compile, load, and route it live
-aion run        flow.awl --input '{"name":"Ada"}'</code></pre>
-    <ul class="points">
-      <li><strong>deploy</strong> is the route flip — the new version is live when it returns.</li>
-      <li><strong>run</strong> is the whole loop: compile, deploy, start, wait for the answer.</li>
-      <li>There's a language server too — completion, go-to-definition, rename.</li>
+    <ul class="points bite">
+      <li>It <strong>must end in a route</strong>. Swallowing a failure silently is not something the language will let you write.</li>
     </ul>
   </section>
 
   <section class="slide">
-    <p class="eyebrow">Being straight about it</p>
-    <h2>What <code>check</code> does not check</h2>
-    <ul class="points">
-      <li><code>aion awl check</code> runs the <strong>parser and the typechecker</strong>. That is all it runs.</li>
-      <li>Compiling refuses a further band of shapes — each with a diagnostic naming the shape and the line.</li>
-      <li>So <strong>a clean check is necessary, not sufficient.</strong> The compile has the last word.</li>
-    </ul>
-    <p class="note">Worth saying out loud rather than discovering later: examples include a bounded loop inside an <code>on failure</code> block, and indexing inside a parallel branch. <strong>They fail loudly, at compile, pointing at the line.</strong></p>
+    <p class="eyebrow">the short list</p>
+    <h2>The rules that actually bite</h2>
+    <div class="scroller"><table class="kw">
+      <tr><td>//! first</td><td>narration before <code>workflow</code>, or it is not a document</td></tr>
+      <tr><td>outcome</td><td>at least one terminal outcome; never fall off the last step</td></tr>
+      <tr><td>otherwise</td><td>last, and conditional outcomes must be exhaustive</td></tr>
+      <tr><td>max</td><td>mandatory on <code>loop</code>; <code>max N visits</code> on any backward route</td></tr>
+      <tr><td>wait</td><td>the <code>-&gt; binding</code> is not optional; a timed wait binds <code>T?</code></td></tr>
+      <tr><td>on failure</td><td>must end in a route</td></tr>
+      <tr><td>query</td><td>every declared query must be answered somewhere</td></tr>
+      <tr><td>subflow</td><td>its invocation is the only statement of its step</td></tr>
+      <tr><td>collect</td><td>the first statement of the closing step; the opener has only its region line</td></tr>
+      <tr><td>fork</td><td>collection body is exactly one unbound call</td></tr>
+      <tr><td>advisory</td><td>cannot bind a result — it may not have run</td></tr>
+      <tr><td>T?</td><td>must be proved present before it is read; proofs stay inside their arm</td></tr>
+    </table></div>
+    <p class="caption"><b>aion awl check</b> is parser and typechecker. A further band of refusals — the compile-time shape rules for fork bodies and region lowering among them — arrives at <b>aion deploy</b>. A document that checks is not yet a document that compiles.</p>
   </section>
 
   <section class="slide">
-    <p class="eyebrow">Try it</p>
-    <h2>One clone, one script</h2>
-    <pre><code>git clone …/aion &amp;&amp; cd aion
-scripts/setup.sh</code></pre>
-    <p class="lede">A running server, the web console, and an authoring assistant you can talk to — then write a <code>.awl</code>, check it, and deploy it in one command.</p>
-    <p class="caption">Every AWL example in this deck was checked with <b>aion awl check</b> against <b>0.11.0</b> before the slide was written. Two are lifted verbatim from workflows that have been deployed and run.</p>
-  </section>
+    <p class="eyebrow">the commands</p>
+    <h2>What to type</h2>
+    <p class="lede">Check while you write. Deploy when it checks. <code>aion run</code> compiles, deploys, starts and waits — the whole loop in one line.</p>
+    <p class="form">aion awl check  <span class="slot">FILE.awl</span>        parse and typecheck
+aion awl fmt    <span class="slot">FILE.awl</span>        canonical form
+aion awl schema <span class="slot">FILE.awl</span>        the input, output and query schemas
+aion awl emit   <span class="slot">FILE.awl</span>        what it compiles to
 
+aion deploy     <span class="slot">FILE.awl</span>        compile and deploy, one motion
+aion run        <span class="slot">FILE.awl</span> --input <span class="slot">JSON</span></p>
+    <p class="caption">To re-verify this deck: <b>python3 docs/authoring/build-deck.py</b>. It checks every document under <b>docs/authoring/deck-examples/</b> and refuses to write <b>awl-deck.html</b> unless all of them pass.</p>
+  </section>
 </div>
 
 <nav class="rail" aria-label="Slide navigation">
-  <span class="counter" id="counter">01 / 19</span>
+  <span class="counter" id="counter">01 / 01</span>
   <div class="ticks" id="ticks"></div>
   <span class="hint">← → to move · F for full screen</span>
 </nav>
@@ -545,12 +994,14 @@ scripts/setup.sh</code></pre>
     // ---- syntax marking -------------------------------------------------
     // Split on comments and strings FIRST so keywords inside them are left
     // alone, then mark keywords and TitleCase type names in the remainder.
-    var KEYWORDS = ['workflow', 'input', 'outcome', 'signal', 'query', 'send', 'const', 'type',
+    var KEYWORDS = ['workflow', 'input', 'outcome', 'signal', 'query', 'answer', 'send', 'to',
+      'const', 'type', 'schema', 'json', 'of',
       'worker', 'action', 'child', 'subflow', 'step', 'route', 'when', 'otherwise', 'after',
-      'fork', 'join', 'distribute', 'sequence', 'collect', 'loop', 'until', 'max', 'visits',
+      'fork', 'in', 'join', 'distribute', 'sequence', 'collect', 'loop', 'until', 'max', 'visits',
       'wait', 'sleep', 'timeout', 'retry', 'every', 'backoff', 'node', 'on', 'failure',
       'agent', 'advisory', 'run', 'spawn', 'counting', 'sequential', 'is', 'present', 'absent',
-      'success', 'failure', 'true', 'false', 'any'];
+      'success', 'true', 'false', 'and', 'or', 'not',
+      'any', 'all', 'count', 'filter', 'map', 'sort', 'empty'];
     var kwRe = new RegExp('\\b(' + KEYWORDS.join('|') + ')\\b', 'g');
 
     function esc(s) {

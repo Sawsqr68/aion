@@ -1,0 +1,36 @@
+//! fork / join — the three shapes, all inside one step.
+workflow parallel_demo
+  input repos: [String]
+  outcome done: type Tally, route success
+
+type Tally  { count: Int }
+type Report { title: String }
+
+worker desk
+  action inspect(repo: String) -> Report
+  action publish(repo: String) -> Report
+  action fetch_profile(id: String) -> Report
+  action fetch_history(id: String) -> Report
+
+step fan
+  // Collection form: one branch per item, in parallel, joined in INPUT order.
+  // The body is exactly one unbound call.
+  fork repo in repos
+    inspect(repo: repo)
+  join -> reports
+
+step ordered after fan
+  // `sequential` runs one item at a time, still in input order.
+  fork repo in repos sequential
+    publish(repo: repo)
+  join -> receipts
+
+step named after ordered
+  // A bare fork opens NAMED branches: different calls, run concurrently,
+  // each binding its own result. `join` takes no collection binding.
+  fork
+    fetch_profile(id: "me") -> profile
+    fetch_history(id: "me") -> history
+  join
+  reports |> count -> seen
+  route done(count: seen)

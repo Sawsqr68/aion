@@ -1,0 +1,34 @@
+//! Waiting for the outside world, sleeping, and compensating on failure.
+workflow waits_demo
+  timeout 7d
+  input repo: String
+  signal approval: Decision
+  outcome done: type Summary, route success
+  outcome failed: type Failure, route failure
+
+type Decision { approved: Bool }
+type Summary  { text: String }
+type Failure  { reason: String }
+
+worker desk
+  action publish(repo: String) -> Summary
+  action remove_assets(repo: String) -> Summary
+
+step hold
+  // A durable timer. The run can be evicted and resumed across it.
+  sleep 30s
+  // A TIMED wait binds an OPTIONAL, because expiry is absence.
+  // A plain `wait approval -> answer` binds Decision and waits forever.
+  wait approval timeout 2h -> answer
+  outcome approved: when answer is present and answer.approved, route ship
+  outcome refused: when answer is present, route failed(reason: "not approved")
+  outcome expired: otherwise, route failed(reason: "approval timed out")
+
+step ship
+  publish(repo: repo) -> summary
+  route done(text: summary.text)
+  // Compensation runs when the step faults. It MUST end in a route —
+  // silently swallowing a failure is a check error.
+  on failure
+    remove_assets(repo: repo)
+    route failed(reason: "publish failed after compensation")
