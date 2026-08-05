@@ -62,11 +62,24 @@ the thing under test were absent, would this reading be the same?** One cure,
 and it is not the instinctive one: **subtraction** — in Laws 1-3 to REVEAL, in
 Law 4 to FIX (delete the copy, derive the rest).
 
-🔴 **In the file, the aion instance is marked verified-at-my-hand and the
-liminal one marked relayed-from-Waffles-and-not-read-by-me.** Keep that
-distinction if the file is edited: Law 3 was born from a false report about
-liminal, so a document relaying a second liminal claim unmarked would be the
-defect it catalogues.
+Law 4's liminal instance was first written **relayed** — marked as Waffles'
+report and explicitly unread by me — because Law 3 was born from a false report
+about liminal, so a document carrying a second unchecked liminal claim would be
+the defect performing itself inside its own catalogue. Waffles answered with
+falsifiable line references rather than a summary. **I read all four at my own
+hand against liminal `7166726`; all four hold, and two are worse than stated**
+(`marker_records` appears NOWHERE in `operations/binding_fate.rs` — the
+computing site is structurally blind to the rule's subject, not merely careless;
+and TWO invariants are duplicated in
+`claim_frontier/binding_fate_transition.rs`, the marker rule AND the floor-range
+check, each written twice in one hundred-line file). Entry upgraded to verified
+at `aa8dbf23`.
+
+🔴 **The provenance note STAYS even though both instances are now measured** —
+a catalogue that records HOW each entry was established is worth more than one
+that records only what it concluded. Do not tidy it away.
+
+I read liminal and changed nothing in it. Aion is where I write.
 
 The file also records why we write them down: **a wrong measurement reassigns
 blame.** Tom went at Hermes for a failure that was Waffles'.
