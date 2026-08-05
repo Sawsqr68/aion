@@ -49,10 +49,7 @@ rule **because that is what the assistant teaches from** — it showed
 
 ## Still open — tasks #144 (part done) and #145
 
-- **#144 remainder:** `docs/workers/DECLARED-COMMANDS.md` is NOT one of the six
-  documents the doc example gate scans, so its 19 `run` examples are unchecked.
-  **Be honest when doing this:** adding it would catch syntax/type drift but
-  would NOT have caught the `$$` trap, which is a runtime semantic.
+- **✅ #144 CLOSED (`4bed6a81`, pushed).** See the section below.
 - **✅ #145 CLOSED (`fc1c10cc`, pushed).** See the section below.
 
 ## ✅ #145 CLOSED — a refusal now carries what the operator needs to act
@@ -85,6 +82,28 @@ comparable. Re-run clean before quoting a number.
 Docs moved with it: `DECLARED-COMMANDS.md` gains *"Changing a body makes a NEW
 version, and the old one stays"* (deploy → unload → run); the findings doc
 records finding 2 closed.
+
+## ✅ #144 CLOSED — and adding a doc to the gate was not the one-liner it looked
+
+`4bed6a81`, pushed. `DECLARED-COMMANDS.md` had **zero ` ```awl ` fences** — all
+seven blocks untagged. Adding the path to `SOURCES` alone would have extracted
+nothing and reported coverage of a document the gate never read. Two blocks are
+real AWL (tagged + specced); the other five are annotated illustrations, and
+tagging them to raise the count would report coverage of text that was never a
+document. The specs entry says so where the next person will look.
+
+**It paid on the first run.** The document's opening example returned
+`RunOutcome`, a type it named twice and declared nowhere: a reader copying the
+very first block got `unknown type RunOutcome`. Watched failing before the fix
+(gate EXIT=1, `FAIL … 10:33`). Both examples now declare their return type, and
+the doc states the result shape — `exit_code`, `stdout`, `stderr`, subsets
+allowed — which it had never written down.
+
+Gate now: EXIT=0, 46 blocks / 7 documents, **43 PASS / 1 UNVERIFIABLE /
+2 ILLUSTRATIVE / 0 FAIL** (was 41 PASS from 6). Both new blocks pass with an
+EMPTY scaffold. The stated limit stands: the gate catches syntax and type drift
+and would NOT have caught the `$$` trap — the ✅/❌ pair it cannot check is
+exactly the pair whose two halves both check.
 
 ## Method notes worth keeping
 
@@ -121,4 +140,10 @@ the repo root. Server log: scratchpad `server.log` (fd 1 and 2, still open).
 `9dc54b49` (git-sweep example + three findings) ·
 `483c933a` (#144 docs: no `$$` escape inside single quotes) ·
 `0ce74ea0` (this marker) ·
-`fc1c10cc` (#145: the refusal names a followable remedy).
+`fc1c10cc` (#145: the refusal names a followable remedy) ·
+`2d5d3a6c` (this marker, #145) ·
+`4bed6a81` (#144: the doc joins the gate; the gate finds an undeclared type).
+
+**Board after this:** #144 and #145 both closed. What is left is all held or
+queued, not startable: #139 live cut and #142 wait on Tom; #141 queues behind
+the parked cut; the 0.11.1 decision is his and unanswered.
