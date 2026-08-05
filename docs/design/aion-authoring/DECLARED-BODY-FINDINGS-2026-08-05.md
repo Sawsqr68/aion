@@ -81,6 +81,29 @@ watched failing against a deliberately abbreviated hash
 (`InvalidLength { found: 8 }`). `docs/workers/DECLARED-COMMANDS.md` gains the
 deploy → unload → run order under *"Changing a body makes a NEW version"*.
 
+**And then the refusal itself turned out to be mostly wrong (task #84).** Making
+the remedy followable was the right fix for the message; it was not the fix for
+*why the message appeared*. A body is a property of the run's own package
+version, not of the task queue — content-hash namespacing pins each run to
+exactly one version for its whole life. Resolution ignored that and read the
+whole queue, so a second deploy killed work already in flight: a run started
+under version A failed **terminally** at its next bodied activity because
+version B — which that run would never execute — declared an edited command.
+Nothing about the run had changed. That is a durability violation, not an
+ergonomic one, and it is the same principle the ADVISORY class already honours
+(`crates/aion/src/runtime/nif_activity_advisory.rs` resolves by
+`(workflow_type, loaded_version)` so "a hot redeploy … never retroactively
+reclasses an in-flight run's activities").
+
+Resolution now takes the dispatching run's identity and reads its own version's
+contract as the sole authority; it never borrows another version's body. The
+queue-wide reading — and therefore the refusal above — survives only for the
+case where the run's version cannot be named at all, because without the run's
+identity, choosing IS the guess the refusal exists to prevent. Note what this
+retires: `BRIEF-139-LEG-A-REWORK.md` R2.4 orders two documents to carry a
+byte-identical body forever, a workaround for exactly this defect. **The brief
+is a ratified work order and is not to be edited without Waffles.**
+
 ## 3. The authoring root is the home default, not the working directory
 
 Tom's `~/.aion/config.toml` says `store.data_dir` and `authoring.workspace_dir`

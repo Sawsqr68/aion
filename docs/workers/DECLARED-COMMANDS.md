@@ -146,14 +146,49 @@ archive, edits `contract.json` inside it, and requires the load to refuse — wi
 a no-edit repack as the control, so a refusal cannot be an artefact of
 repacking.
 
-### Changing a body makes a NEW version, and the old one stays
+### Changing a body makes a NEW version, and a run in flight keeps its own
 
 Because the command is part of the identity, editing it and deploying again
-replaces nothing. Content-hash namespacing retains BOTH versions, and both
-declare the action — so the server has two different commands for one address
-and will not choose between them. The next run of that action refuses
-terminally, naming what to do (hashes shortened here for reading; the real
-message prints them in full, because the deploy API refuses a short one):
+replaces nothing: content-hash namespacing retains BOTH versions, and both
+declare the action. That is not a conflict, because **a body is a property of
+the run's package version, not of the task queue.** A run is pinned to exactly
+one version for its whole life, and that version's contract is the sole
+authority on what its actions execute:
+
+- A run started before the redeploy keeps executing the OLD command, to the end
+  — including a run that was asleep for a month. It will never execute the new
+  version, so the new version's body is not its business.
+- Every run started after the redeploy gets the new command, because the new
+  version is the one `aion deploy` makes route-active.
+
+So editing a body and deploying is safe while work is in flight. Deploy when you
+need to; nothing already running is disturbed:
+
+```
+aion deploy FILE.awl   # the new version becomes route-active; new starts use it
+aion run FILE.awl --input …
+```
+
+Retiring the superseded version is housekeeping, not a fix. It is `aion unload
+<type> <old-hash>`, and the deploy has to come first because **a route-active
+version cannot be unloaded** — the deploy API answers `RouteActive`. `aion
+deploy` prints `superseded_versions`, so the hashes do not have to be hunted
+for. Unloading a version a run is still using will not silently change that
+run's body; there is no version left to read one from, and the action is
+delegated to a worker instead.
+
+Selection is in `crates/aion-server/src/worker/declared_body_selection.rs`,
+pinned there by `an_in_flight_run_keeps_its_own_versions_body_after_a_redeploy`.
+
+#### When the disagreement IS refused
+
+One case remains where two retained versions declaring different bodies stops a
+dispatch: when the server cannot name which version the run is pinned to — its
+registry handle is gone, or the registry could not be read at all. Without the
+run's identity, choosing a body would be exactly the guess the refusal exists to
+prevent, so the dispatch refuses terminally and names what to retire (hashes
+shortened here for reading; the real message prints them in full, because the
+deploy API refuses a short one):
 
 > terminal:action `find_repositories` on task queue `local` declares 2 different
 > bodies across 2 retained package versions; refusing to guess which deploy this
@@ -162,19 +197,6 @@ message prints them in full, because the deploy API refuses a short one):
 > version rather than removing one, so unload instead, then start the run again:
 > `aion unload git_status_sweep 1f2e…`. Kept, because new starts route to it:
 > git_status_sweep@ab34….
-
-So the order that works is deploy, then unload, then run:
-
-```
-aion deploy FILE.awl           # the new version becomes route-active
-aion unload <type> <old-hash>  # unloadable now: it is no longer route-active
-aion run FILE.awl --input …
-```
-
-The deploy has to come first because **a route-active version cannot be
-unloaded** — the deploy API answers `RouteActive`. `aion deploy` prints
-`superseded_versions`, and the refusal names the same hashes, so nothing has to
-be hunted for.
 
 Two route-active packages that declare the same action name with different
 commands are a different situation: there is no superseded version to retire, so

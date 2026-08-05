@@ -12,6 +12,9 @@ pub mod declared_body;
 /// The refusal, and the followable remedy, for retained versions that declare
 /// different bodies for one action.
 pub mod declared_body_ambiguity;
+/// Which retained version's body a declared-command dispatch runs — the
+/// dispatching run's own, not the queue's.
+pub mod declared_body_selection;
 /// Activity completion handling and dispatch abstractions.
 pub mod dispatch;
 /// Task-envelope generation, idempotency keys, and completion fencing.
@@ -66,9 +69,10 @@ pub use backpressure::{Backpressure, OwnedShardFraction};
 pub use bridge::{OutboxDeliveryCallback, PendingActivities, WorkerActivityDispatcher};
 pub use declared_body::{
     DeclaredBodies, DeclaredBodyLookup, DeclaredBodySource, DeclaredCommandDispatcher,
-    EngineDeclaredBodies,
+    DispatchingRun, EngineDeclaredBodies,
 };
 pub use declared_body_ambiguity::{DeclaringVersion, ambiguous_body_refusal};
+pub use declared_body_selection::select_declared_body;
 pub use dispatch::{
     ActivityCompletion, ActivityCompletionOutcome, ActivityCompletionSink, ActivityDispatcher,
     ScheduledActivity, handle_activity_result,

@@ -16,10 +16,11 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
 
 use aion::{ActivityDispatch, ActivityDispatcher};
-use aion_package::ActionBodyContract;
+use aion_package::{ActionBodyContract, ContentHash};
 use aion_worker::shell::ShellAction;
 
 use super::declared_body_ambiguity::{DeclaringVersion, ambiguous_body_refusal};
+use super::declared_body_selection::select_declared_body;
 use super::workspace_root::{WORKSPACE_ROOT_PLACEHOLDER, WorkspaceRoot};
 
 /// What a declared-body lookup found for one `(task_queue, action)` address.
@@ -46,10 +47,29 @@ pub enum DeclaredBodyLookup {
     Unreadable(String),
 }
 
+/// Which run a declared-body lookup is being made for.
+///
+/// A body is a property of the run's own package version, not of the queue, so
+/// the lookup cannot answer correctly without knowing whose dispatch it is —
+/// see [`super::declared_body_selection`].
+#[derive(Clone, Copy, Debug)]
+pub struct DispatchingRun<'a> {
+    /// The workflow the activity belongs to.
+    pub workflow_id: &'a aion_core::WorkflowId,
+    /// The concrete run within that workflow.
+    pub run_id: &'a aion_core::RunId,
+}
+
 /// A reader over the deployed contracts' declared action bodies.
 pub trait DeclaredBodies: Send + Sync {
-    /// Look up the declared body for `action` on `task_queue`.
-    fn body_for(&self, task_queue: &str, action: &str) -> DeclaredBodyLookup;
+    /// Look up the declared body for `action` on `task_queue`, as the run
+    /// issuing the dispatch sees it.
+    fn body_for(
+        &self,
+        task_queue: &str,
+        action: &str,
+        run: DispatchingRun<'_>,
+    ) -> DeclaredBodyLookup;
 }
 
 /// Shared, install-once handle the dispatcher holds from construction and the
@@ -85,9 +105,14 @@ impl DeclaredBodySource {
     /// reader is installed yet — before the engine exists nothing has been
     /// deployed, so there is no body a dispatch could be missing.
     #[must_use]
-    pub fn body_for(&self, task_queue: &str, action: &str) -> DeclaredBodyLookup {
+    pub fn body_for(
+        &self,
+        task_queue: &str,
+        action: &str,
+        run: DispatchingRun<'_>,
+    ) -> DeclaredBodyLookup {
         self.inner.get().map_or(DeclaredBodyLookup::None, |source| {
-            source.body_for(task_queue, action)
+            source.body_for(task_queue, action, run)
         })
     }
 }
@@ -111,56 +136,58 @@ impl std::fmt::Debug for EngineDeclaredBodies {
     }
 }
 
+impl EngineDeclaredBodies {
+    /// The package version `run` is pinned to, or `None` when the registry
+    /// cannot name it.
+    ///
+    /// Two ways to reach `None`, and both are reported rather than swallowed:
+    /// the run has no handle (it left the registry), or the registry could not
+    /// be read at all. Neither is a reason to guess a body — the caller falls
+    /// back to the queue-wide reading, which refuses on disagreement.
+    fn version_of(&self, run: DispatchingRun<'_>) -> Option<ContentHash> {
+        match self.engine.registry().get(run.workflow_id, run.run_id) {
+            Ok(Some(handle)) => Some(handle.loaded_version().clone()),
+            Ok(None) => {
+                tracing::warn!(
+                    operation = "declared_command_dispatch",
+                    workflow_id = %run.workflow_id,
+                    run_id = %run.run_id,
+                    "no registry handle for the dispatching run; resolving its body \
+                     from the whole queue instead of from its own package version"
+                );
+                None
+            }
+            Err(error) => {
+                tracing::error!(
+                    operation = "declared_command_dispatch",
+                    workflow_id = %run.workflow_id,
+                    run_id = %run.run_id,
+                    %error,
+                    "registry unreadable while resolving the dispatching run's version; \
+                     resolving its body from the whole queue instead"
+                );
+                None
+            }
+        }
+    }
+}
+
 impl DeclaredBodies for EngineDeclaredBodies {
-    fn body_for(&self, task_queue: &str, action: &str) -> DeclaredBodyLookup {
+    fn body_for(
+        &self,
+        task_queue: &str,
+        action: &str,
+        run: DispatchingRun<'_>,
+    ) -> DeclaredBodyLookup {
         let contracts = match self.engine.worker_contracts_for_queue(task_queue) {
             Ok(contracts) => contracts,
             Err(error) => return DeclaredBodyLookup::Unreadable(error.to_string()),
         };
-        // Distinct package versions legitimately coexist (content-hash
-        // namespacing), and several may declare this same action. Identical
-        // bodies collapse to one; DIFFERENT bodies refuse rather than guess
-        // which deploy the running workflow meant — and the refusal carries the
-        // declaring versions, because an operator cannot retire what the
-        // message does not name.
-        let mut bodies: Vec<ActionBodyContract> = Vec::new();
-        let mut declaring: Vec<DeclaringVersion> = Vec::new();
-        for deployed in contracts {
-            for declared in &deployed.contract.actions {
-                if declared.name == action
-                    && let Some(body) = &declared.body
-                {
-                    let index = bodies
-                        .iter()
-                        .position(|seen| seen == body)
-                        .unwrap_or_else(|| {
-                            bodies.push(body.clone());
-                            bodies.len() - 1
-                        });
-                    declaring.push(DeclaringVersion {
-                        content_hash: deployed.package_version.to_string(),
-                        workflow_types: deployed.workflow_types.clone(),
-                        route_active: deployed.route_active,
-                        body: index,
-                    });
-                    // One record per retained version. A contract names each
-                    // action once, and stopping here keeps the version count in
-                    // the refusal equal to the number of versions an operator
-                    // would have to act on.
-                    break;
-                }
-            }
-        }
-        match bodies.len() {
-            0 => DeclaredBodyLookup::None,
-            1 => match bodies.pop() {
-                Some(body) => DeclaredBodyLookup::Declared(body),
-                // Unreachable by the length check; classified rather than
-                // panicked so a refactor cannot turn this into an abort.
-                None => DeclaredBodyLookup::None,
-            },
-            _ => DeclaredBodyLookup::Ambiguous { declaring },
-        }
+        // The RAW retained set is the right input here, unlike worker admission
+        // (see `Engine::worker_contracts_for_queue`): a run pinned to a version
+        // nothing else can reach still has to execute that version's body. What
+        // narrows the answer is the run's own identity, not reachability.
+        select_declared_body(&contracts, action, self.version_of(run).as_ref())
     }
 }
 
@@ -281,7 +308,14 @@ impl std::fmt::Debug for DeclaredCommandDispatcher {
 
 impl ActivityDispatcher for DeclaredCommandDispatcher {
     fn dispatch(&self, request: ActivityDispatch) -> Result<String, String> {
-        match self.bodies.body_for(&request.task_queue, &request.name) {
+        let run = DispatchingRun {
+            workflow_id: &request.workflow_id,
+            run_id: &request.run_id,
+        };
+        match self
+            .bodies
+            .body_for(&request.task_queue, &request.name, run)
+        {
             DeclaredBodyLookup::None => self.inner.dispatch(request),
             DeclaredBodyLookup::Unreadable(reason) => {
                 // Delegated, not refused: a catalog read failure must not
@@ -352,7 +386,7 @@ mod tests {
     use super::super::workspace_root::{WorkspaceRoot, WorkspaceRootError};
     use super::{
         DeclaredBodies, DeclaredBodyLookup, DeclaredBodySource, DeclaredCommandDispatcher,
-        DeclaringVersion, decode_arguments,
+        DeclaringVersion, DispatchingRun, decode_arguments,
     };
 
     /// What a test returns. Every fallible step is carried rather than
@@ -381,8 +415,39 @@ mod tests {
     }
 
     impl DeclaredBodies for FixedBodies {
-        fn body_for(&self, _task_queue: &str, _action: &str) -> DeclaredBodyLookup {
+        fn body_for(
+            &self,
+            _task_queue: &str,
+            _action: &str,
+            _run: DispatchingRun<'_>,
+        ) -> DeclaredBodyLookup {
             self.lookup.clone()
+        }
+    }
+
+    /// A reader that records whose dispatch it was asked about.
+    ///
+    /// The selection rule is unit-tested on its own inputs, which proves the
+    /// rule and nothing about the plumbing. This double closes that gap: it
+    /// captures the [`DispatchingRun`] the dispatcher hands over, so the
+    /// identity can be compared against the request it came from.
+    struct RecordingBodies {
+        seen: Arc<Mutex<Vec<(WorkflowId, RunId)>>>,
+    }
+
+    impl DeclaredBodies for RecordingBodies {
+        fn body_for(
+            &self,
+            _task_queue: &str,
+            _action: &str,
+            run: DispatchingRun<'_>,
+        ) -> DeclaredBodyLookup {
+            let observed = (run.workflow_id.clone(), run.run_id.clone());
+            match self.seen.lock() {
+                Ok(mut seen) => seen.push(observed),
+                Err(poisoned) => poisoned.into_inner().push(observed),
+            }
+            DeclaredBodyLookup::None
         }
     }
 
@@ -778,5 +843,49 @@ mod tests {
             input.is_empty(),
             "input `{input}` must have been refused by shape"
         );
+    }
+
+    /// The selection rule cannot be right if it is asked about the wrong run.
+    ///
+    /// `select_declared_body` is unit-tested on inputs the test itself
+    /// constructs, which proves the rule and nothing about the plumbing. This
+    /// asserts the other half: the identity the dispatcher hands the reader is
+    /// the identity of the dispatch it is serving, not a placeholder and not
+    /// another run's.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_reader_is_asked_about_the_run_that_is_dispatching() -> TestResult {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let bodies = DeclaredBodySource::default();
+        bodies.install(Arc::new(RecordingBodies {
+            seen: Arc::clone(&seen),
+        }));
+        let reached = Arc::new(Mutex::new(Vec::new()));
+        let decorated = DeclaredCommandDispatcher::new(
+            Arc::new(RecordingInner {
+                reached: Arc::clone(&reached),
+                reply: Ok("\"worker-served\"".to_owned()),
+            }),
+            bodies,
+            tokio::runtime::Handle::current(),
+            WorkspaceRoot::from_resolution(Ok(std::env::temp_dir())),
+        );
+
+        let dispatch = request("plain", "{}");
+        let expected = (dispatch.workflow_id.clone(), dispatch.run_id.clone());
+        let handle = tokio::task::spawn_blocking(move || decorated.dispatch(dispatch));
+        handle
+            .await?
+            .map_err(|error| format!("dispatch failed: {error}"))?;
+
+        let observed = match seen.lock() {
+            Ok(observed) => observed.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        };
+        assert_eq!(
+            observed,
+            vec![expected],
+            "the body reader must be asked about the dispatching run itself"
+        );
+        Ok(())
     }
 }
