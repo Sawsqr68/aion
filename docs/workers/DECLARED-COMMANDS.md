@@ -98,16 +98,28 @@ repacking.
   credentials with `run "env"`.
 - **stdin: closed.** Never the host's. `run "cat"` reads end-of-file
   immediately rather than blocking the activity forever on a terminal.
-- **Working directory: explicit or inherited.** Set it whenever a command names
-  a relative path — absent, the command inherits the host's cwd, which is a
-  property of how the server was launched and not something a package author can
-  see.
+- **Working directory: the server's own.** A body executed by the server runs in
+  whatever directory the server was launched from
+  (`crates/aion-server/src/worker/declared_body.rs` builds a `ShellAction` and
+  sets no working directory). That is a property of how the operator started the
+  process, and a package author cannot see it — so **never write a relative path
+  in a declared body.** Use `{workspace_root}` (below) or an absolute path. The
+  worker SDK's own `ShellAction` API does let an embedder set a working
+  directory; the server-run path does not use it.
 
-### Cancellation kills the whole tree
+### Cancellation of a declared body is NOT wired
 
-The command runs in its own process group. Cancelling the activity terminates
-that group (SIGTERM, then SIGKILL after a grace period), so a command that
-spawned children does not leave them running.
+Read this one carefully, because the surrounding machinery makes it look
+otherwise. The worker SDK builds an `ActivityContext` with a cancellation
+handle, and the server's dispatcher constructs one — but **nothing cancels a
+single declared-command attempt today**. The handle is held and dropped after
+the command returns, deliberately, so that a future wiring cannot race a handle
+that died early. The code says so at the drop site.
+
+What this means in practice: a declared body runs to completion (or to its own
+failure) once it has started. Cancelling the workflow does not reach into a
+running `run "…"`. Do not rely on cancellation to bound a command — bound it in
+the command, with the program's own timeout.
 
 ### Values are delivered exactly, or refused
 
@@ -134,6 +146,97 @@ The author closes it by writing `--` in the declaration, exactly as they would
 in any script. Both halves are pinned in the test suite so the behaviour is
 recorded rather than discovered.
 
+## `{workspace_root}` — how a body learns where to work
+
+A declared body runs with its environment cleared to `PATH` alone, so it cannot
+expand `~`, read `$HOME`, or consult a variable to find out where on disk it is
+allowed to work. The workflow's start input cannot carry the location either:
+where session workspaces live is a property of **the server**, not of any one
+run, and putting it in the start contract would mean every caller had to know
+it and every recorded history would carry a caller's guess.
+
+So the server states it. A declared command may carry the literal placeholder
+`{workspace_root}`, and the server replaces every occurrence with its own
+resolved workspace root before the command is parsed:
+
+```
+worker provisioner
+  action provision(run_id: String) -> RunOutcome
+    run "sh -c 'mkdir -p \"$1/$2\" && printf %s \"$1/$2\"' -- {workspace_root} $run_id"
+```
+
+That is the teaching form of a real, shipped body. The production one — a full
+session-workspace provisioner, with its placement pinned by a test that
+compiles the actual documents (`the_shipped_provision_commands_pass_the_placement_guard`)
+— is in `examples/assistant/awl/assistant.awl`. Copy its shape, not this one's
+brevity, when you write your own.
+
+**Where the root is.** `<AION_HOME>/clones` — derived once from the aion home,
+with no separate configurable value. The home is already the operator's single
+answer to "where does this server's state live", and resolving a second answer
+here is exactly how two components come to disagree about one path. Durable
+history records workspace paths, so they must survive a reboot: never the OS
+temp directory.
+
+**When it resolves.** Once, at server-state construction. Every consumer — the
+dispatcher and the startup banner — reads that one value rather than
+re-deriving it. A resolution failure does **not** stop the server booting; it is
+carried, and surfaces as a terminal dispatch refusal at the first
+placeholder-bearing body. A body that does not use the placeholder is untouched
+by a failed resolution.
+
+**How to see it.** The server's JSON startup banner carries a `workspace_root`
+field. A resolved root appears as its path; a failed one appears as
+`unresolvable: <reason>` — never a fabricated value. Reading the banner does
+not create the directory.
+
+**The directory.** Created at first expansion, idempotently, owner-only
+(`0700`), because it holds operator repositories and agent working trees and
+nothing else on the host should get a default read into them. A root that
+already exists keeps whatever permissions the operator gave it — those are the
+operator's own configuration, not the server's to correct.
+
+### The two refusals, and why they exist
+
+Expansion happens on the raw command **string**, before the template layer
+parses it into an argv. That is what makes the placeholder useful — and it is
+also why two things are checked rather than assumed.
+
+**The placeholder must stand alone as one whole, unquoted argv word.** These are
+all refused (`the declared command carries {workspace_root} …`):
+
+```
+run "sh -c '{workspace_root}'"     inside single quotes
+run "echo \"{workspace_root}\""    inside double quotes
+run "echo x{workspace_root}"       glued to adjacent text
+run "echo {workspace_root}/sub"    glued to adjacent text
+run "echo ${workspace_root}"       the `$` makes it a parameter reference
+```
+
+In every one of those the spliced root would become a *fragment* of some larger
+word, so what executed would not be the path the server resolved. Refusing by
+name beats running somewhere else quietly. To build a path underneath the root,
+pass the root as its own word and join inside the program — as the example
+above does with `"$1/$2"`.
+
+**The root itself must not change the command's parsed shape.** A root
+containing whitespace (splits a word), `$` (opens a parameter reference), a
+quote (opens a quoted region), or a NUL (cannot cross `execve`) is refused
+rather than spliced. The root is server-controlled, so this refusal is
+theoretical — it is checked because "theoretical" is not "impossible".
+
+Every one of these refusals is **terminal**. The root is a property of the
+server's configuration and filesystem; retrying the dispatch cannot change it.
+
+### Why braces, and what happens if expansion is ever skipped
+
+`{name}` is literal text to both the AWL checker and the worker SDK's command
+template — `$name` and `${name}` are the only parameter forms either recognises.
+So a command carrying `{workspace_root}` checks clean at authoring time, and if
+it ever reached an executor unexpanded it would fail loudly trying to use a
+nonexistent `{workspace_root}` directory, rather than silently running in the
+wrong place.
+
 ## What happens on failure
 
 A non-zero exit is **retryable by default** — the common causes (a busy
@@ -156,6 +259,7 @@ twice at once.
 | Execution, environment, failure classification | `crates/aion-worker/src/shell/action.rs` |
 | Registration as an activity | `crates/aion-worker/src/shell/registry.rs` |
 | Server-side execution of a deployed body | `crates/aion-server/src/worker/declared_body.rs` |
+| `{workspace_root}` resolution, expansion, and both refusals | `crates/aion-server/src/worker/workspace_root.rs` |
 | Authoring-time checks | `crates/aion-awl/src/checker/bodies.rs` |
 | Identity sealing | `crates/aion-package/src/contract.rs` |
 | Sealing broken, not read | `crates/aion-awl-package/tests/declared_command_sealing.rs` |
