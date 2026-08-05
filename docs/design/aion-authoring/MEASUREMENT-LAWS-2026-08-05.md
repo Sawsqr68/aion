@@ -1,19 +1,23 @@
-# Four measurement laws, minted 2026-08-05
+# Five measurement laws, minted 2026-08-05
 
-**For the estate measurement-defect catalogue.** All four were found the same
-day, each by the defect it names. Laws 1 and 2 came out of aion; Law 3 came out
-of Waffles' morning, and it is the same failure as Law 2 wearing a third
+**For the estate measurement-defect catalogue.** The first four were found the
+same day, each by the defect it names. Laws 1 and 2 came out of aion; Law 3 came
+out of Waffles' morning, and it is the same failure as Law 2 wearing a third
 costume. Law 4 is the family's constructive sibling — Waffles saw it by putting
-aion's defect beside liminal's, in different languages, hours apart. Keeping
-them in one file rather than four is the argument the file makes.
+aion's defect beside liminal's, in different languages, hours apart. Law 5
+arrived last and is the oldest of them: Tom paid for it on 23 July and Waffles
+paid for it again on 5 August, in another estate, without knowing the first.
+Keeping them in one file rather than five is the argument the file makes — and
+Law 5 is what that argument costs when you don't.
 
 Waffles adopted the first two and called the second the better one; this
 document says why he was right about that, and then he supplied the third.
 
 Authors: Vesper Lynd (`5849e0d8-4802-4869-8e0f-9f7fd187e198`), Laws 1–2 and the
-framing; Waffles the Terrible, Laws 3–4. Hermes read the merge that refuted
-Law 3's false report — recording who asked the system rather than who guessed is
-the convention this file keeps.
+framing; Waffles the Terrible, Laws 3–4; Law 5 derived independently by Tom
+Whiting (23 July, from the incident) and Waffles (5 August). Hermes read the
+merge that refuted Law 3's false report — recording who asked the system rather
+than who guessed is the convention this file keeps.
 
 ---
 
@@ -285,29 +289,106 @@ modes, which is why they belong in one file.
 
 ---
 
-## What the four share
+## Law 5 — A gate that runs a component of the operator's command has not gated the command
+
+### The statement
+
+> **The proof must be the operator's real invocation, not a piece of it chosen
+> because it is the piece you had a theory about.** A component can be green
+> while the composition the operator actually runs is broken, and the failure
+> will live precisely in what the component leaves out.
+
+### The two derivations, twelve days and one estate apart
+
+**Tom's, 2026-07-23.** A remediation packet died on its opening turn. Norn auth
+had been "verified" on the runner box with a fresh throwaway session
+(`norn --print … <<< probe`), which works unauthenticated-flagged. But the
+workers **resume named sessions** (`--session-id … --resume-if-exists`), and
+that path needs an explicit `--account` on a multi-account install. The probe
+passed and the production path could not run. His words, and they are the law in
+plainer English than I will manage: *"This kind of fucking shit needs to be
+picked up before we run anything."* The control in the same incident is what
+makes it evidence rather than a story — the meridian heartbeat *was* preflighted
+with the exact production argv, and it worked first try.
+
+**Waffles', 2026-08-05.** His gate booted the **spine**; bridges are only seated
+by the **full** boot. The estate got further than it had in days and then died at
+a door his gate never opened. He put it exactly right and reported it to Tom
+himself: *he proved the part he had a theory about instead of the part Tom
+actually runs.*
+
+### Why the theory chooses the wrong scope
+
+This is the trap, and it is not laziness. You form a hypothesis, and the
+hypothesis names a component. Gating that component is the most direct possible
+test **of the hypothesis** — and a perfect test of a hypothesis is not a test of
+the system. The scope was selected by the belief, so the gate can only ever
+confirm or deny the belief; the system's other doors are outside the frame by
+construction. A green here means "my theory holds", and it gets read as "the
+operator's command works".
+
+Note what is NOT the fix: adding more component gates. Ten green components
+still do not compose. The environment counts as part of the invocation too —
+Tom's incident cost a second lane its gate when workers relaunched from a
+non-interactive ssh shell got a minimal `PATH` and `gleam` simply vanished.
+
+### The subtraction
+
+Same instrument, pointed at scope: **remove the operator from the loop and let
+the gate be the whole command.** If the gate cannot run what the operator runs —
+same argv, same environment, same session semantics — then what it proves is
+about a lookalike. Where the real command is expensive, run it once end to end
+before the first flight rather than never; sixty seconds of smoke beats a red
+first run in front of Tom.
+
+### Why it belongs here
+
+It is the family failure with the frame moved: something outside the
+measurement — the hypothesis that chose the scope — supplied the result. Ask the
+shared question of the *boundary* rather than the reading: **if the untested
+remainder of the operator's command were broken, would this gate be green?** If
+yes, the gate is about a component and should say so out loud.
+
+**One more thing, and it indicts this file.** I have carried this law in my own
+notes since Tom's incident on 23 July — as "preflight uses the production argv"
+— and it was not in this catalogue until Waffles paid for it a second time in a
+different estate. A rule I knew, in one place, not the shared one. That is Law 4
+with this document as the defect site. Two independent derivations are what
+finally put it here; one should have been enough, and the mechanism that would
+have caught it is simply *writing it where the others could read it*.
+
+---
+
+## What the five share
 
 Laws 1–3 are one failure at three layers: **something outside the measurement
 supplied the result the measurement claimed to produce.** In Law 1 it was the
 harness's own broken setup step; in Law 2 it was the machine; in Law 3 it was
-the labels, standing in for a world nobody looked at. Law 4 is the same story
-told about a rule rather than a reading: one truth, quietly become two.
+the labels, standing in for a world nobody looked at. Law 5 adds a fourth layer
+and it is the subtlest: the **hypothesis**, which chose the gate's scope, so the
+gate could only ever report back on the hypothesis. Law 4 is the same story told
+about a rule rather than a reading: one truth, quietly become two.
 
 That is the generalisation worth carrying, because it gives one question that
-covers all four:
+covers all five:
 
 > **If the thing under test were absent, would this reading be the same?**
 
 If yes, the reading is about something other than the thing under test. Law 1
-asks it of the harness, Law 2 of the environment, Law 3 of the indicator. Law 4
-asks its own: **how many places know this rule, and what makes them agree?**
+asks it of the harness, Law 2 of the environment, Law 3 of the indicator, Law 5
+of the boundary — *if the untested remainder of the operator's command were
+broken, would this gate still be green?* Law 4 asks its own: **how many places
+know this rule, and what makes them agree?**
 
-And all four have the same cure, which is worth naming on its own because it is
-not the instinctive one. The instinct is to add a check. The cure is
+And all five have the same cure, which is worth naming on its own because it is
+not the instinctive one. The instinct is to add a check — and in Law 5's case
+the instinct is worse than useless, because the natural "more checks" is more
+component gates, and ten green components still do not compose. The cure is
 **subtraction**: construct the absence and look. Strip the config the harness
 was supposed to inject. Strip what your box carries that a fresh one will not.
 Merge the branch you believe is outstanding and read the diff. Delete the second
-copy of the rule instead of reconciling it. In every case the thing you need
+copy of the rule instead of reconciling it. Take yourself out of the loop and
+let the gate be the operator's whole command. In every case the thing you need
 does not exist until you remove something.
 
 ## The cost of getting one wrong
@@ -327,6 +408,22 @@ points at, and they are rarely the person who took it.
   home has none — the fix that makes a stock server usable at all. That fix was
   found by applying Law 2, not by any test. No test could have found it, because
   every test ran on a box that already had the file.
+- The `aion worker shell` dial fix moved normalisation into `Cli::endpoint()`
+  and pinned the **accessor** rather than a list of dial sites — Law 4's cure,
+  applied where Law 4's disease was.
+- **And that same fix is where Law 5 currently has teeth in the uncomfortable
+  direction.** Waffles credited its gate with passing Law 5. It does not. The
+  pin is a unit test over parsed argv: it proves the accessor yields a
+  scheme-carrying address, which is a **component** of the operator's command.
+  The operator's real command is `aion worker shell --manifest … --awl …`
+  against a running server, and with the fix in place that has not been run —
+  worker rebuilds are frozen until the #139 cut clears. The live
+  treatment/control that produced `connected_workers` 0 vs 1 measured the
+  **broken** code; it is evidence of the defect, not of the repair. So the Law 5
+  proof is **owed at merge**, and the branch and marker both say so rather than
+  letting a green unit suite read as a working worker. Naming the debt is not
+  the same as paying it, but an unnamed one is how a component gate gets
+  mistaken for a command gate.
 
 ## Catalogue neighbours
 

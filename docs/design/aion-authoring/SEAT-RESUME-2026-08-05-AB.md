@@ -162,7 +162,18 @@ good manners.
   it. One correction to his argument for the record: the path is not universally
   dead — an operator who passes `--endpoint http://…` connects today, so the
   subscriber change does touch a working configuration. Small, but the point of
-  the hold is not to reason about small.
+  the hold is not to reason about small. **He accepted the correction and
+  withdrew the argument.**
+
+  🔴 **A DEBT OWED AT MERGE, stated so a green suite cannot be misread.** The
+  pin is a UNIT test over parsed argv — a component of the operator's command,
+  not the command. `aion worker shell --manifest … --awl …` against a running
+  server has **not** been run with the fix in place, because worker rebuilds are
+  frozen. The live `connected_workers` 0-vs-1 control measured the **broken**
+  code: it proves the defect, not the repair. **When the cut clears, run the
+  operator's real command before calling this closed.** (Waffles credited the
+  gate with passing Law 5; it does not, and I told him so. Law 5 is in the
+  measurement-laws file now — his own miss and Tom's 23 July one, same law.)
 - ~~`aion list --status paused`~~, ~~the `codegen.md` path~~, ~~the CORS
   comment~~ — **all three FIXED and landed at `c298bbcd`.**
 - `CLAUDE.md`'s crate list omits `aion-integration-acp`, a real workspace
