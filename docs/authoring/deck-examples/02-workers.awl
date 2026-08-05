@@ -1,0 +1,30 @@
+//! Worker blocks, the action config line, calls, and pipes.
+workflow workers_demo
+  input repo: String
+  outcome done: type Build, route success
+
+type Build { artifact: String }
+type Repo  { repo: String }
+
+worker dev
+  /// The config line: at most one, comma-separated keys.
+  action build(repo: String, clean: Bool) -> Build
+    node builder, timeout 30m, retry 2 backoff 10s..2m
+  /// Exactly one parameter, so it can be a pipe stage.
+  action normalize(repo: String) -> Repo
+  /// advisory: its failure never faults the step, so it cannot bind a result.
+  action notify(repo: String) -> Build
+    advisory
+
+step make
+  notify(repo: repo)
+  build(repo: repo, clean: true) -> built
+    node urgent, timeout 5m
+  built |> route done
+
+step piped after make
+  repo |> normalize |> .repo |> build_one -> also
+  route done(artifact: also.artifact)
+
+worker dev2
+  action build_one(repo: String) -> Build

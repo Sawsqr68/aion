@@ -1,0 +1,25 @@
+//! Types, constants, and the shape of a document.
+workflow basics
+  timeout 2h
+  input repo: String
+  input note: String?
+  outcome done: type Report, route success
+  outcome failed: type Failure, route failure
+
+const attempts = 3
+const guidance = """
+Use the repository evidence. Return only the requested result.
+"""
+
+/// A record: named, typed fields. `detail: String?` may be absent.
+type Report  { title: String, blocking: Bool, detail: String? }
+type Failure { reason: String }
+/// An enum: a closed set of variants, referenced bare as TitleCase.
+type Decision = Approve | Revise | Reject
+
+worker basics
+  action inspect(repo: String) -> Report
+
+step look
+  inspect(repo: repo) -> report
+  report |> route done

@@ -1,0 +1,21 @@
+//! A declared body: the document IS the implementation, run by the server.
+workflow command_demo
+  input name: String
+  outcome done: type Stdout, route success
+
+type RunOutcome { exit_code: Int, stdout: String, stderr: String }
+type Stdout     { stdout: String }
+
+worker greeter
+  /// Interpolation is this action's own parameters only, as $name or ${name}.
+  action greet(name: String) -> RunOutcome
+    run "echo hello $name"
+  /// A config line and a body coexist.
+  action shout(text: String) -> Stdout
+    node shell, timeout 30s
+    run "printf %s ${text}"
+
+step say
+  greet(name: name) -> greeted
+  shout(text: greeted.stdout) -> shouted
+  shouted |> route done

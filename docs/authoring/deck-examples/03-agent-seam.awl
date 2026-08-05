@@ -1,0 +1,13 @@
+//! An agent seam: a String prompt in, a String reply out.
+workflow agent_demo
+  input question: String
+  outcome done: type String, route success
+
+worker assistants
+  /// `agent` says: this parameter is a PROMPT and this result is the REPLY.
+  action ask(prompt: String) -> String
+    agent, timeout 10m
+
+step think
+  ask(prompt: question) -> reply
+  reply |> route done

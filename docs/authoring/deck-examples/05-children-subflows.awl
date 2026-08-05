@@ -1,0 +1,34 @@
+//! Children are separate durable workflows; subflows are inline graphs.
+workflow composition
+  input repo: String
+  outcome done: type Report, route success
+
+type Report { title: String }
+
+worker dev
+  action inspect(repo: String) -> Report
+
+/// A child waits for its result. `spawn` starts one without waiting.
+child review_round(repo: String, round: Int) -> Report
+
+subflow review_once(repo: String)
+  outcome out: type Report
+
+  step run
+    inspect(repo: repo) -> report
+    route out(report)
+
+step first
+  review_round(repo: repo, round: 1) -> from_child
+  route second
+
+step second
+  spawn review_round(repo: repo, round: 2)
+  route third
+
+/// A subflow invocation is the ONLY statement of its step.
+step third
+  review_once(repo: repo) -> from_subflow
+
+step fourth
+  route done(title: from_subflow.title)

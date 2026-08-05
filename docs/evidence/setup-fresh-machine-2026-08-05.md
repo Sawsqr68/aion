@@ -123,11 +123,33 @@ For the case the install branch never reaches — an older `aion` already on
 PATH — the banner failure now names the mismatch, the binary in use, its
 version, and the exact command to end it, instead of reporting an absent field.
 
+## A second thing the fix bought, unplanned
+
+Installing from the checkout restores the server's ability to say what code it
+is. Compare the two servers running side by side on this box:
+
+```
+published 0.11.0:        "commit":"unknown",  "dirty":"unknown"
+built from the checkout: "commit":"369b2dab…", "dirty":"false"
+```
+
+A crates.io install has no repository to read, so its `/build` endpoint reports
+`unknown` — the server cannot identify its own source. That is the capability
+#123 exists to provide, silently absent on every published install. Building
+from the checkout gives it back, with a clean-tree flag alongside it.
+
+Worth stating plainly: this is a consequence of the change, not a reason it was
+made. The reason was the skew.
+
 ## Status
 
 - Server-startup failure reporting: **fixed and measured** (120s→2s, cause
   named, control run both ways).
-- Version skew: **fixed**; the install-from-checkout run is the verification
-  and is the remaining step.
-- Deploy, worker build, and worker registration: **not yet reached**. They have
-  not been measured and nothing here should be read as saying they pass.
+- Version skew: **fixed and verified**. The install-from-checkout run went the
+  whole way.
+- **The full path passes.** `==> Done`; console on 127.0.0.1:18080; assistant
+  deployed (`content_hash ae8b0ea1…`, `route_changed: true`); worker pid 14366
+  running with `--address 127.0.0.1:18061`; one registration recorded
+  server-side.
+- Tom's server (pid 85467) answering on 8080 throughout, his worker (pid 66189)
+  still on 50061. Neither touched.
