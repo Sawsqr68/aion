@@ -162,11 +162,24 @@ into the demo today — keep the mesh on a trusted network.
 
 ### Ops console CORS across hosts
 
-`[server] cors_allowed_origins` is secure-by-default: only the listed origins
-may call the node's HTTP API cross-origin, and it defaults to the local Vite dev
-server (`http://localhost:5173`, `http://127.0.0.1:5173`). An ops console served
-from a routable host would be blocked until you add its origin. Set it at
-generation time:
+`[server] cors_allowed_origins` is secure-by-default, and the default is
+**empty**: with no origins configured the server installs no `CorsLayer` at all,
+so no cross-origin request is permitted (`cors_layer` in
+`crates/aion-server/src/api/http/router.rs`; `ServerSection` in
+`crates/aion-server/src/config/sections.rs`). There is no wildcard and no
+allow-all. When the list is non-empty the layer answers preflight and emits
+`Access-Control-Allow-Origin` for exactly those origins — matched as exact
+strings (scheme + host + port), for `GET`/`POST`/`PUT`/`OPTIONS` with the
+`content-type`, `authorization`, `x-aion-namespaces`, and `x-aion-subject`
+headers.
+
+The `http://localhost:5173` / `http://127.0.0.1:5173` pair is not a server
+default — it is what the demo generator writes into each node's config when you
+give it nothing else (`scripts/demo/lib.sh`). The console embedded in the server
+and served from the node itself is same-origin and never touches this at all;
+CORS matters only for a console served from somewhere else, such as a Vite dev
+server on a routable host, and that console is blocked until you add its origin.
+Set it at generation time:
 
 ```bash
 DEMO_HOSTS="100.64.0.1 100.64.0.2 100.64.0.3" \

@@ -2,8 +2,8 @@
 
 > Status: **RATIFIED & IMPLEMENTED** (#204 v1, 2026-07-05). The one load-bearing
 > §4 decision is ruled below. Captured 2026-07-02; produced alongside the reopen
-> build (`docs/WORKFLOW-REOPEN-DESIGN.md`) as a sibling front-end on the recovery
-> machinery.
+> build (`docs/archive/WORKFLOW-REOPEN-DESIGN.md`) as a sibling front-end on the
+> recovery machinery.
 
 ## 0. §4 ruling (the discharged gate)
 
@@ -50,10 +50,16 @@ Consequences of the ruling, as built:
 - **Cancel of a Paused run** removes it from the hold set so its rows are not
   leaked; a subsequent reopen of the cancelled run works, the pause/resume markers
   being replay-invisible. Known limitation (v1): cancel of a run that was paused
-  and then crashed (durably `Paused`, deliberately not resident) still returns
-  `WorkflowNotFound` because `terminate.rs` requires a registry handle — the
-  operator path is resume-then-cancel. Reaching a durable, non-terminal,
-  never-respawned run with cancel is deferred (it is the general
+  and then crashed (durably `Paused`, deliberately not resident) is still
+  refused, and the refusal is now `EngineError::NoResidencyVerdict`, not
+  `WorkflowNotFound`. `terminate::cancel` no longer refuses a handle-less run
+  outright — it hands it to `lifecycle/cancel_never_alive.rs` (#117(c)) — but
+  that path must cite a recorded residency verdict, and a paused run has none
+  (it was excluded from recovery on purpose, not found unrecoverable). The verb
+  therefore names the true state: the run exists and is readable, and this
+  engine has no recorded reason it could not be made resident. The operator path
+  remains resume-then-cancel. Reaching a durable, non-terminal, never-respawned
+  run with cancel is still deferred (it is the general
   `cancel-without-a-live-handle` gap, not specific to pause).
 - **Mixed-version note:** an OLD binary reading a NEW history containing
   `WorkflowPaused` fails serde decode entirely — the same accepted precedent set
@@ -211,7 +217,7 @@ finish** and only withhold *new* dispatch?
   the same bounded "continue from the session, not cold restart" reopen accepts.
 - Con: at-least-once — a quiesced-then-resumed activity may run twice if it
   completed on the worker in the tear-down window; activities must be idempotent
-  (already a standing requirement, WORKFLOW-RESILIENCE §4).
+  (already a standing requirement, `docs/archive/WORKFLOW-RESILIENCE.md` §4).
 
 **Option B — finish in-flight, withhold new dispatch.**
 - Pause records `WorkflowPaused` and flips residency to `Suspended` but leaves the

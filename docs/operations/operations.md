@@ -292,13 +292,34 @@ Config file discovery reads the first of these that exists
 3. `<home>/config.toml`;
 4. built-in defaults.
 
-Two paths default *below* the home
-(`crates/aion-server/src/config/resolution.rs`, `defaults.rs`):
+Three paths live *below* the home. Two are config keys with defaults
+(`crates/aion-server/src/config/resolution.rs`, `defaults.rs`); the third is
+derived and has no key at all:
 
-| Config key | Default | What it holds |
+| Path | Config key | What it holds |
 |---|---|---|
-| `store.data_dir` | `<home>/data` | the haematite database directory |
-| `authoring.workspace_dir` | `<home>/authoring` | the authoring/AWL workspace root |
+| `<home>/data` | `store.data_dir` | the haematite database directory |
+| `<home>/authoring` | `authoring.workspace_dir` | the authoring/AWL workspace root |
+| `<home>/clones` | *none — derived* | session workspaces: the repositories and agent working trees a declared action body runs in |
+
+`clones/` is the **workspace root** (`crates/aion-server/src/worker/workspace_root.rs`).
+A declared action body runs with its environment cleared to `PATH` only, so it
+cannot expand `~` or read a variable to learn where workspaces live; instead it
+may carry the literal placeholder `{workspace_root}`, and the dispatch path
+replaces every occurrence with this path before the command is parsed. There is
+deliberately no configurable value — the home is already the operator's one
+answer to where a server's state lives, and a second answer is how two
+components come to disagree about one path. Durable history records workspace
+paths, which is why they live under the home and never in the OS temp
+directory.
+
+Unlike the other two roots, `clones/` is **not** provisioned at boot: it is
+created (recursively, `0700`) at the moment a placeholder-bearing body is first
+dispatched, and an already-existing directory is left exactly as found. The
+path is resolved once at state construction and reported on the startup banner
+as `workspace_root`; a resolution failure is carried rather than raised, so
+boot proceeds and the failure surfaces as a terminal refusal of the one
+dispatch that needed it.
 
 A legacy `./aion-data` or `./aion-authoring` directory in the working directory
 is still adopted **only when the home was derived** from `$HOME`; setting
@@ -369,6 +390,43 @@ AION_DEPLOY_ENABLED=true
 Unknown `AION_*` variables are ignored. `AION_LOG` sets the tracing filter
 (takes precedence over `RUST_LOG`); logs are JSON on stdout — pipe through
 `jq` for interactive reading.
+
+### The startup banner
+
+Once config is resolved and server state is built — but before either
+transport binds — the server emits exactly one `INFO` line whose message is
+`aion-server startup banner` (`crates/aion-server/src/run.rs`). It is the
+**supported way to read a running server's own resolved settings**, including
+the addresses it is about to bind: read the value the server states rather than
+re-deriving it from config, because config layering, flags, and env overrides
+all land before this line is written.
+
+Because logs are JSON on stdout, one `jq` filter pulls it out:
+
+```sh
+aion server --config aion.toml | jq -c 'select(.fields.message == "aion-server startup banner")'
+```
+
+Sixteen fields ride on it:
+
+| Field | What it carries |
+|---|---|
+| `version` | the `aion-server` crate version (`CARGO_PKG_VERSION`) |
+| `build` | the full build identity line — `<version>+<commit>[-dirty] built <rfc3339>` |
+| `commit` | the source commit this binary was built from, or `unknown` for a build with no repository (a crates.io tarball, a vendored copy). A crate version cannot distinguish two builds from different commits of the same version; this can. The same identity is served at `GET /build` |
+| `grpc_address` | the resolved gRPC + worker-protocol bind address |
+| `http_address` | the resolved HTTP/JSON + ops-console bind address |
+| `default_namespace` | `namespaces.default` as resolved |
+| `namespace_mode` | `SharedEngine` or `SingleTenant` |
+| `store_backend` | `haematite`, `libsql`, or `memory` |
+| `auth_enabled` | whether `[auth]` is commissioned |
+| `deploy_enabled` | whether the deploy surface is mounted |
+| `metrics_enabled` | whether `GET /metrics` serves |
+| `workspace_root` | the resolved `<home>/clones` path declared bodies expand `{workspace_root}` with, or the literal text `unresolvable: <reason>` — never a fabricated path |
+| `workflow_package_count` | how many boot-time `.aion` archives were resolved |
+| `workflow_packages` | those archive paths, in load order |
+| `owned_shards` | this node's statically assigned shard set from `[store] owned_shards` |
+| `owns_all_shards` | `true` when that set is empty — the single-node default |
 
 ## Loading workflow code: two paths, one model
 
@@ -474,19 +532,40 @@ an hour. A running activity is bounded only by:
 
 1. **The workflow's own `timeout_seconds`** — the deadline the workflow
    author declared for the whole run.
-2. **Worker liveness.** A worker whose gRPC stream ends — process death,
-   network disconnect, expired token — is declared lost immediately: every
-   activity in flight on it is failed back to the engine as a *retryable*
-   lost-worker error, and the workflow's retry policy decides re-dispatch.
-   Nothing hangs waiting on a dead worker.
+2. **Worker liveness**, detected two ways. A worker whose gRPC stream ends —
+   process death, network disconnect, expired token — is declared lost
+   immediately. A worker whose connection stays open but goes *silent* past
+   `[worker] heartbeat_window` is expired by the heartbeat sweeper, which the
+   server always commissions (`HeartbeatSweeper` in
+   `crates/aion-server/src/worker/heartbeat.rs`, spawned unconditionally in
+   `crates/aion-server/src/run.rs`; cadence is a quarter-window, clamped to
+   `[1s, window]`). Either way the worker is deregistered and its in-flight
+   activities are failed back to the engine. Nothing hangs waiting on a dead
+   worker.
 
-`[worker] heartbeat_window` is the heartbeat cadence the server advertises
-to workers in `RegisterAck` (workers report progress with explicit
-`heartbeat(details)` calls), and the grace period an expired-token stream
-gets to re-authenticate. It does **not** cap activity duration: a connected
-worker that simply has not heartbeated is not failed. Window-based expiry
-for hung-but-connected workers is on the roadmap together with engine-level
-heartbeat timeouts (see `docs/ROADMAP.md`).
+   Worker loss is a **transport-domain** failure, deliberately *not* the
+   action's `retryable:` class
+   (`crates/aion-server/src/worker/transport_loss.rs`): the activity never
+   produced a result, so it consumes none of the authored retry budget and is
+   re-dispatched at the **same attempt**. That neutrality is bounded by the
+   transport's own ceiling — four `heartbeat_window`s of wall clock from an
+   execution site's first loss, with no separate knob — after which the failure
+   names itself as transport exhaustion rather than wearing the action's name.
+   An operator reading a terminal event can always tell "your action is red"
+   from "your infrastructure is flapping".
+
+`[worker] heartbeat_window` is the heartbeat cadence the server advertises to
+workers in `RegisterAck`, the silence threshold the sweeper expires against,
+and the grace period an expired-token stream gets to re-authenticate. It does
+**not** cap activity duration: what refreshes liveness is any frame from the
+worker, and the worker runtime pumps automatic payload-free liveness beats at a
+quarter-window cadence, so a healthy worker running an hour-long activity is
+never expired. Explicit `heartbeat(details)` calls carry operator-visible
+progress on top of that; a beat without a payload never erases the last
+progress report. Author-declared per-activity timeouts are still unbuilt: the
+Gleam SDK emits a `timeout_ms` field into each dispatch's `config` JSON and no
+engine component reads it (tracked under Track F of
+[`docs/vision/ROADMAP.md`](../vision/ROADMAP.md)).
 
 ## Shutdown and drain
 

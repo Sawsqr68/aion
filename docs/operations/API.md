@@ -179,8 +179,8 @@ The deploy surface is **dark by default**. It mounts only when commissioned in s
 ```toml
 [deploy]
 enabled = true                 # default false: routes not mounted (HTTP 404, gRPC Unimplemented)
-max_archive_bytes = 16777216   # default 64 MiB when enabled — override to size for your packages
-max_inflated_bytes = 67108864  # default 256 MiB when enabled — when set, must be >= max_archive_bytes
+max_archive_bytes = 67108864    # default 64 MiB when enabled — override to size for your packages
+max_inflated_bytes = 268435456  # default 256 MiB when enabled — when set, must be >= max_archive_bytes
 ```
 
 `max_archive_bytes` (env override `AION_DEPLOY_MAX_ARCHIVE_BYTES`; `AION_DEPLOY_ENABLED` gates the mount) is enforced while reading the upload on both transports; oversized archives are refused with `413` / `InvalidArgument` naming the key.

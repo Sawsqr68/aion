@@ -1,6 +1,16 @@
 # Aion Roadmap — current as of 2026-06-30
 
-> **This is the canonical forward roadmap.** It reconciles three planning
+> **What this document is.** A vision roadmap written before AWL. It predates
+> the decision to build Aion's own workflow language, which has since shipped
+> and is first-class: `.awl` documents, the `aion awl check|fmt|emit|schema`
+> verbs, `aion deploy <file.awl>`, and `aion run <file.awl>`
+> (`crates/aion-awl`, `crates/aion-awl-lsp`, `crates/aion-awl-package`). Every
+> authoring section below still frames authoring as Gleam-only and is
+> **superseded** on that point; the direction it sets on the other tracks is
+> why it is retained. Individual claims about engine state have been corrected
+> where they went false — see the marked entries under Track F.
+
+> **Written as the canonical forward roadmap (2026-06-30).** It reconciles three planning
 > surfaces: the live task tracker, the strategic design docs
 > ([`CONTROL-PLANE.md`](../design/CONTROL-PLANE.md),
 > [`HAEMATITE-CLUSTER-SOURCE-OF-TRUTH.md`](../design/HAEMATITE-CLUSTER-SOURCE-OF-TRUTH.md),
@@ -28,7 +38,8 @@ the unclaimed quadrant vs Temporal/Inngest/Restate/DBOS/Hatchet
 ## Where we are (the foundation — shipped & proven)
 
 - **Durable execution**: workflows, durable timers, signals, queries, outbox
-  fan-out, continue-as-new, package deploy. Published stack on crates.io (0.8.0).
+  fan-out, continue-as-new, package deploy. Published stack on crates.io; the
+  workspace version is **0.11.0** (root `Cargo.toml`, `[workspace.package]`).
 - **Distribution & failover**: active-active haematite (quorum + epoch fence +
   shard election), cross-node request routing, liminal `namespace × task_queue
   × node` dispatch. **Cross-node `kill -9` failover WORKS and is proven** — both
@@ -149,17 +160,41 @@ The "stop regressions silently rotting" track. **The keystone gap.**
   | Abandon`, required arg); **implementation still queued** (no
   `ParentClosePolicy` in the engine yet). Propagate on all parent terminals,
   recursively; recovery re-arms pending propagations.
-- **Worker heartbeats** — CONFIRMED WANTED. `HeartbeatTracker` exists but
-  `fail_expired_workers` is not driven by any loop; wire it + `heartbeat(details)`
-  queryable live state + heartbeat timeouts for hung activities.
-- **Per-activity author-declared timeouts** — the `config` JSON seam already
-  reaches the dispatch wait; thread an author timeout onto it (pairs with
-  heartbeat timeouts).
-- **Engine-side retry from `RetryPolicy`** — not wired; decide whether
-  engine-side retry is wanted or the workflow-driven bounded-loop pattern is the
-  permanent answer.
-- **No-worker dispatch should PARK, not fail** — an activity with no connected
-  worker currently fails the run; a durability engine should wait.
+- ✅ **DELIVERED (#176)** — **Worker heartbeats.** `fail_expired_workers` now has
+  a production driver: `HeartbeatSweeper`
+  (`crates/aion-server/src/worker/heartbeat.rs`), spawned unconditionally at
+  boot (`crates/aion-server/src/run.rs`) on a quarter-window cadence derived
+  from `worker.heartbeat_window`, with no separate knob. A worker whose
+  connection stays open but goes silent past the window is deregistered with
+  the provable `WorkerDeathReason::Timeout` and its in-flight tasks surface as
+  transport-domain losses. `heartbeat(details)` progress is tracked per task,
+  and the worker runtime pumps payload-free liveness beats so a healthy worker
+  running an over-window activity is never falsely expired.
+- **Per-activity author-declared timeouts** — still open. The SDK already emits
+  `timeout_ms` into the dispatch `config` JSON
+  (`gleam/aion_flow/src/aion/internal/activity_dispatch.gleam`) and no engine
+  component reads it; thread an author timeout onto the dispatch wait.
+- ✅ **DELIVERED (#197)** — **Engine-side retry from `RetryPolicy`.** The
+  question below is answered: engine-side retry is built and workflow-driven
+  loops are no longer the only pattern. `crates/aion/src/runtime/nif_activity_retry.rs`
+  decodes the SDK-declared policy and supplies classification and backoff math;
+  `nif_activity_retry_dispatch.rs` records each failed attempt durably as a
+  non-terminal `ActivityFailed` (kind `Retryable`) and re-dispatches the same
+  ordinal at the incremented attempt. Absence semantics are the SDK's —
+  `"retry": null` runs exactly once, and the engine imposes no default policy
+  (ADR-001). Covers the `ActivityDispatcher` (remote/worker) tier; in-VM thunk
+  dispatches stay single-attempt.
+- ✅ **DELIVERED (R1)** — **No-worker dispatch parks or waits; it does not fail
+  the run.** Under the default `strict` policy a dispatch to a *declared* queue
+  with no compatible worker waits for one to exist, bounded by
+  `worker.queue_service.service_availability_deadline` — unset means unbounded,
+  and the wait is now typed and queryable rather than silent. The written
+  per-queue `durable_pending` opt-in instead marks the run unserved immediately
+  and parks it durably until a worker arrives
+  (`crates/aion-server/src/worker/queue_service/policy.rs`). Only *structural*
+  unservability — a queue no deployed contract declares — still refuses
+  immediately, on the grounds that pending on it would be the lie the policy
+  exists to avoid.
 - **mint-or-resume on crash** (stacked-dev worker) — resume the same norn
   session on a kill-9 mid-`dev` instead of always minting.
 
@@ -214,7 +249,9 @@ The "stop regressions silently rotting" track. **The keystone gap.**
   replay-deterministic; the agent guarantee is the activity boundary
   (recorded-once, never-re-run), not determinism-freedom. No
   no-determinism-for-agents positioning.
-- **Engine-side retry** (Track F) — wanted, or is workflow-driven the answer?
+- **Engine-side retry** (Track F) — ✅ RESOLVED by the build: engine-side retry
+  from the declared `RetryPolicy` shipped (#197), so workflow-driven loops are a
+  choice, not the only answer. See Track F.
 
 ## Coverage map (every open item → track)
 
@@ -225,7 +262,7 @@ The "stop regressions silently rotting" track. **The keystone gap.**
 | Public CI, CI-harden kill-9 gates, #113 flake, #144 consumption seam, known flakes | C |
 | #146-build (dynamic membership), #147 auto-discovery, #116 fan-out/storage, scale-out proof | D |
 | CLI ergonomics, `aion dev`, run timeline, Elixir SDK, DSL, WASM runtime, #125, #130 | E |
-| Parent-close, heartbeats, per-activity timeouts, engine retry, no-worker-park, mint-or-resume | F |
+| Parent-close, per-activity timeouts, mint-or-resume (heartbeats, engine retry, and no-worker-park have since landed) | F |
 | #150 AD-012, #149 branches, #151 config split, #153 install UX, Meridian integration | G |
 
 *Last reconciled 2026-06-30 (post #157 failover fix + CONTROL-PLANE.md). When an

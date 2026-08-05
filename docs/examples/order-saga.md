@@ -66,9 +66,14 @@ fn charge_with_retries(input, attempt) {
 ```
 
 Each retry is a *fresh recorded dispatch* whose input carries the attempt
-number, so the attempt count is replay-deterministic. (Engine-side automatic
-retry from the declared policy is not wired yet — see
-[Findings](#findings-from-building-this-showcase).)
+number, so the attempt count is replay-deterministic. The workflow-driven loop
+is no longer the only option: the engine decodes the declared `RetryPolicy` out
+of the dispatch config and drives the retries itself for every activity that
+goes through the `ActivityDispatcher` seam — the remote/worker tier
+(`crates/aion/src/runtime/nif_activity_retry.rs` and
+`nif_activity_retry_dispatch.rs`; in-VM thunk activities stay single-attempt).
+This example keeps the explicit loop because it makes the attempt count part of
+the workflow's own state, visible through the `order_status` query.
 
 ### Signal raced against a durable timeout
 
@@ -194,20 +199,32 @@ verified empirically; see the test sources for the guards that encode them):
    pump closure body is a single native call on captured values
    (`aion_flow` `timer.sleep`, `signal.receive`, `child.await`) — also the
    documented re-execution-safety contract for await fun bodies.
-3. **Engine-side automatic activity retry is unbuilt.** The SDK encodes the
-   declared `RetryPolicy` into the dispatch config and the wire carries a
-   one-based attempt, but no engine component consumes the policy; every
-   dispatch is stamped attempt 1
-   (`crates/aion/src/runtime/nif_activity_dispatch.rs`,
-   `FIRST_DELIVERY_ATTEMPT`). Workflow-driven retry loops are the supported
-   pattern today.
-4. **In-VM dispatcher failures are always recorded `Terminal`.** The
-   `ActivityDispatcher` seam records every failure as
-   `ActivityErrorKind::Terminal` and leaves the `retryable:`/`terminal:`
-   prefix in the recorded message
-   (`crates/aion/src/runtime/handle/delivery.rs`, `activity_failure`); only
-   the Gleam SDK interprets the prefix. Durable history therefore
-   misclassifies transient failures.
+3. **Engine-side automatic activity retry was unbuilt when this was written
+   (since built, #197).** The SDK had always shipped the declared `RetryPolicy`
+   in the dispatch config and no engine component consumed it. It does now:
+   `crates/aion/src/runtime/nif_activity_retry.rs` decodes the policy and
+   supplies the classification and backoff math, and the completion-task loop
+   in `nif_activity_retry_dispatch.rs` records each failed attempt durably and
+   re-dispatches at the incremented attempt on the same ordinal. Absence
+   semantics are the SDK's: `"retry": null` means run exactly once, and the
+   engine imposes no default policy. The retry loop covers the
+   `ActivityDispatcher` (remote/worker) tier; in-VM thunk dispatches remain
+   single-attempt, because an in-VM retry has to be driven from a seam that
+   holds the runner.
+4. **The `retryable:`/`terminal:` classification is engine-visible (it was not
+   when this was written).** The prefix is not an SDK-private convention: the
+   worker reports a structured `ActivityErrorKind` on the wire, the server seam
+   collapses it into `retryable:<message>` / `terminal:<message>`, and
+   `is_retryable_reason` in `nif_activity_retry.rs` reads it as exactly that
+   structured kind. A retryable-class failure with budget left is recorded as a
+   **non-terminal `ActivityFailed` with `ActivityErrorKind::Retryable`**
+   (`record_retry_event` in `nif_activity_retry_dispatch.rs`), so durable
+   history distinguishes a transient attempt from a terminal one. The
+   plain-delivery helper `activity_failure`
+   (`crates/aion/src/runtime/handle/delivery.rs`) still stamps `Terminal` and
+   passes the prefixed reason through verbatim — that is the *final* outcome
+   handed to workflow code after the retry loop has stood down, not a
+   misclassification of a retry.
 5. **Example behavioral tests used to skip silently when archives were not
    built (fixed).** These suites previously skipped when `.aion` archives
    were absent, so a green run did not imply the Gleam SDK path was
