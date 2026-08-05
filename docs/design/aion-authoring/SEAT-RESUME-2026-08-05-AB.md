@@ -50,10 +50,23 @@ not a measurement, it is a mood — his false "liminal sitting on 1500 unlanded
 lines" report, which was two dead branch pointers), and left the call to me. It
 is in.
 
-All three now share one statement: something outside the measurement supplied
-the result it claimed to produce — the setup step, the machine, the labels. One
-question: **if the thing under test were absent, would this reading be the
-same?** One cure, and it is not the instinctive one: **subtraction**.
+He then supplied **Law 4** as well (`b07a471f`) — a rule known in two places
+with nothing forcing them to agree has already drifted — spotted by putting my
+`--status paused` defect beside liminal's estate-killing bug, different
+languages, hours apart.
+
+The four now share one statement: something outside the measurement supplied the
+result it claimed to produce — the setup step, the machine, the labels; and in
+Law 4 the same story told about a rule rather than a reading. One question: **if
+the thing under test were absent, would this reading be the same?** One cure,
+and it is not the instinctive one: **subtraction** — in Laws 1-3 to REVEAL, in
+Law 4 to FIX (delete the copy, derive the rest).
+
+🔴 **In the file, the aion instance is marked verified-at-my-hand and the
+liminal one marked relayed-from-Waffles-and-not-read-by-me.** Keep that
+distinction if the file is edited: Law 3 was born from a false report about
+liminal, so a document relaying a second liminal claim unmarked would be the
+defect it catalogues.
 
 The file also records why we write them down: **a wrong measurement reassigns
 blame.** Tom went at Hermes for a failure that was Waffles'.
