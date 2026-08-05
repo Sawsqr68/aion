@@ -210,7 +210,7 @@ enum ClientCommand {
     /// do-not-edit and derived, so a type or activity is declared once
     /// instead of hand-mirrored across files. Types outside the supported
     /// subset fail loudly naming the type and field; see
-    /// docs/guides/codegen.md. With `--check`, regenerates everything in
+    /// docs/authoring/codegen.md. With `--check`, regenerates everything in
     /// memory and exits non-zero if any on-disk generated file differs (CI
     /// drift gate).
     Generate {
@@ -404,7 +404,7 @@ enum RemoteCommand {
     },
     /// List workflow executions.
     List {
-        /// Optional workflow status filter. Accepted values: running, completed, failed, cancelled, timed-out, continued-as-new.
+        /// Optional workflow status filter. Accepted values: running, completed, failed, cancelled, timed-out, continued-as-new, paused.
         #[arg(long, value_parser = parse_status)]
         status: Option<WorkflowStatus>,
     },

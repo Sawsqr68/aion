@@ -30,6 +30,33 @@ pub(crate) fn parse_run_id(raw: &str) -> Result<RunId> {
     Ok(RunId::new(uuid))
 }
 
+/// Every status `parse_status` accepts, in the canonical spelling an operator
+/// should type. `Paused` is one of them: it is a real, non-terminal status, and
+/// omitting it from the refusal (and from the `aion list` help) told operators
+/// the tool rejected a filter it has always accepted.
+///
+/// Named once and the refusal is BUILT from it, so the message can no longer
+/// disagree with what the parser accepts. The pin in [`tests`] closes the other
+/// direction: every entry here must actually parse, so adding a spelling to the
+/// list without a match arm fails at the gate.
+///
+/// The `aion list --status` help in `main.rs` mirrors this list in prose and is
+/// not derived from it — clap's help takes a literal. Change both together.
+const ACCEPTED_STATUSES: [&str; 7] = [
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+    "timed-out",
+    "continued-as-new",
+    "paused",
+];
+
+/// The refusal a bad `--status` produces, naming every accepted spelling.
+fn accepted_statuses_message() -> String {
+    format!("expected one of {}", ACCEPTED_STATUSES.join(", "))
+}
+
 pub(crate) fn parse_status(raw: &str) -> Result<WorkflowStatus, String> {
     match status_key(raw).as_str() {
         "running" => Ok(WorkflowStatus::Running),
@@ -39,9 +66,7 @@ pub(crate) fn parse_status(raw: &str) -> Result<WorkflowStatus, String> {
         "timedout" | "timed-out" => Ok(WorkflowStatus::TimedOut),
         "continuedasnew" | "continued-as-new" => Ok(WorkflowStatus::ContinuedAsNew),
         "paused" => Ok(WorkflowStatus::Paused),
-        _ => Err(String::from(
-            "expected one of running, completed, failed, cancelled, timed-out, continued-as-new",
-        )),
+        _ => Err(accepted_statuses_message()),
     }
 }
 
@@ -59,7 +84,10 @@ fn status_key(raw: &str) -> String {
 mod tests {
     use serde_json::json;
 
-    use super::{json_payload, parse_run_id, parse_status, parse_workflow_id, payload_to_json};
+    use super::{
+        ACCEPTED_STATUSES, json_payload, parse_run_id, parse_status, parse_workflow_id,
+        payload_to_json,
+    };
     use aion_core::WorkflowStatus;
 
     #[test]
@@ -84,6 +112,30 @@ mod tests {
             parse_status("ContinuedAsNew"),
             Ok(WorkflowStatus::ContinuedAsNew)
         );
+    }
+
+    /// The refusal and the match arms are two enumerations of one set, and they
+    /// drifted: `paused` parsed fine while both the refusal and the `aion list`
+    /// help denied it existed. This pins them together — every accepted spelling
+    /// must parse AND be named in the refusal, so adding a status without
+    /// mentioning it fails here rather than misinforming an operator.
+    #[test]
+    fn every_accepted_status_parses_and_is_named_in_the_refusal() -> anyhow::Result<()> {
+        let Err(refusal) = parse_status("no-such-status") else {
+            anyhow::bail!("an unknown status must be refused");
+        };
+
+        for status in ACCEPTED_STATUSES {
+            assert!(
+                parse_status(status).is_ok(),
+                "`{status}` is advertised as accepted but the parser refuses it"
+            );
+            assert!(
+                refusal.contains(status),
+                "the refusal must name `{status}`; got: {refusal}"
+            );
+        }
+        Ok(())
     }
 
     #[test]
