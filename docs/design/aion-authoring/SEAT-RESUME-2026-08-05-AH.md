@@ -120,6 +120,28 @@ remaining UNVERIFIABLE is `AWL-REFERENCE.md:85` — two expression forms shown
 out of statement position; checking them needs a binding that would change the
 fragment. That reason is about the block, so it stands.
 
+## ✅ The battery re-earned on the FINAL tree
+
+`battery-re-runs-on-new-tree` applied honestly, and it caught me mid-sentence.
+I was about to record "docs-only since the battery" — **that was false.**
+`b20d2da1` rewrote bytes under `crates/aion-server/ops-console-embed/`, and
+`rust_embed` makes those a COMPILE INPUT of the crate. A green earned before
+them is green on a different tree.
+
+The two verdicts have different inputs, so they were settled differently:
+
+- **clippy** reads Rust source and manifests. `git diff 2467e6d4..HEAD -- '*.rs'`
+  and the same for `Cargo.toml`/`Cargo.lock` are both **EMPTY** — byte-identical,
+  so the clean verdict carries and re-running it would prove nothing new.
+- **the compiler and the tests** read the assets too, so that verdict was
+  re-earned at HEAD: `cargo test -p aion-server`, **EXIT=0**, 45 verdict lines
+  counted (not prose) totalling **937 passed / 0 failed / 0 ignored**.
+  Log: scratchpad `aion-server-head.log`.
+
+The rule this makes concrete: *"nothing but docs changed"* is a claim about the
+BUILD GRAPH, not about file extensions. An asset directory inside a crate is
+source as far as the compiler is concerned.
+
 ## Still owed
 - 🔴 #142 — merge `fix/worker-shell-dial-and-audibility` when the #139 cut
   clears, then run the operator's real command.
