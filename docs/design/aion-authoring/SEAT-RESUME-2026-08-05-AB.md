@@ -109,8 +109,28 @@ untracked directories.
 
 1. **Task #141** — the wire-with-oracle sweep. LANE, no date. My constraint,
    adopted estate-wide: *the oracle must not read both sides from the caller.*
-2. **When the #139 cut clears: merge `fix/worker-shell-dial-and-audibility`.**
+2. **When the #139 cut clears: merge `fix/worker-shell-dial-and-audibility`** —
+   and then **run the operator's real command**, which the unit pin does not.
    Written, gated, pushed, waiting. See the entry below.
+3. **⏳ WITH WAFFLES, NOT ME: a two-line `CLAUDE.md` proposal**, written out in
+   full in `MEASUREMENT-LAWS-2026-08-05.md` (`c4f4a65c`). He carries it to Tom
+   with the argument attached. **Do not edit `CLAUDE.md`** — it is Tom's, and a
+   line there changes how every agent in the repo works. Silence = it stays a
+   design document.
+
+## ⚠️ CI READS ALIVE AND IS DEAD — do not trust the obvious three
+
+Verified at my hand 2026-08-05. Two workflow files exist, `gh workflow list`
+reports both **`active`**, and `gh run list` shows history including a
+*scheduled* run. **All three are husks.** The authority is
+`gh api repos/ablative-io/aion/actions/permissions` → `{"enabled": false}`.
+Actions is off at the REPOSITORY level: the workflows fire never, the history is
+a fossil (last run 2026-07-26). Any workflow-file gate added here would be
+committed, listed, called active, and dead. Task #71 carries the detail.
+
+**`gh workflow list` reports the FILE's state, not the repository's capacity to
+run it.** General form (Waffles): when a tool reports a thing's *configuration*,
+ask what reports its *capacity to act*.
 
 ## 🔴 A practice minted this session — a held question nobody holds is dropped
 
