@@ -76,6 +76,51 @@ build a pipe. `run "x > f"` does not redirect. An author who wants a shell must
 name one — `run "sh -c 'a | b'"` — and doing so is visible in review, which is
 the point.
 
+### Inside single quotes there is no `$$` escape — and getting it wrong is SILENT
+
+A declared command has three regions, and the dollar means something different
+in each:
+
+| Region | `$name` / `${name}` | `$$` |
+| --- | --- | --- |
+| bare | a parameter | one literal `$` |
+| `"double quotes"` | a parameter (the quotes only group the word) | one literal `$` |
+| `'single quotes'` | **literal text** — no substitution | **two literal `$`** |
+
+Single quotes take their contents literally, *including the dollar*. So inside
+them the escape is not merely unnecessary, it is wrong: `$$` passes through
+unchanged, and `sh` then reads it as **its own process id**.
+
+Each row is pinned by a test in `crates/aion-worker/src/shell/template.rs` —
+`single_quotes_are_literal_including_dollar_signs` (`echo '$name'` renders the
+argument `$name`, unsubstituted) and `a_doubled_dollar_is_a_literal_dollar`
+(`echo $$name` renders `$name`). The bare and double-quoted regions share one
+code path, `push_parameter`, which is why they behave alike.
+
+That is why the `{workspace_root}` example below writes `"$1/$2"` and not
+`"$$1/$$2"`. Those are `sh`'s positional parameters — already literal because
+they sit inside single quotes — and they are how a parameter reaches the script:
+pass it as a word after the script, then refer to it positionally.
+
+```
+run "sh -c 'echo \"$1\"' -- $path"     ✅ $path arrives as sh's $1
+run "sh -c 'echo \"$$1\"' -- $path"    ❌ sh reads $$ as its pid, then a bare 1
+```
+
+**Nothing catches the second form.** It is valid AWL, it passes `aion awl
+check`, and `$$` is valid shell — so the command runs, exits 0, and reports
+success while having globbed against a directory named after a process id and
+redirected into a file of the same name.
+
+A measured instance is written up in
+[`DECLARED-BODY-FINDINGS-2026-08-05.md`](../design/aion-authoring/DECLARED-BODY-FINDINGS-2026-08-05.md):
+the run returned `exit_code: 0` with empty output, wrote nothing to the path the
+author named, and left a pid-named file in the server's working directory. Its
+result payload was byte-identical to the correct run's.
+
+The lesson generalises past this one escape: for a bodied action **the exit
+status is not an oracle.** Check the effect the command was written to have.
+
 ### A caller can never choose which program runs
 
 `run "$program arg"` is refused at check time, and refused again by the

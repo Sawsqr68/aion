@@ -180,6 +180,16 @@ is exactly one `run` body per action, and there is no shell: `run "a | b"`
 passes `|` and `b` as arguments. An author who wants a shell names one —
 `run "sh -c 'a | b'"` — which is visible in review.
 
+**Inside those single quotes everything is literal, the dollar included, so
+there is no `$$` escape there.** `$$` is how you write a literal dollar in the
+bare and double-quoted regions; inside single quotes write `$1` and `$d`
+plainly. A parameter reaches the script by being passed as a word after it and
+read positionally: `run "sh -c 'echo \"$1\"' -- $path"`. Writing `$$1` there is
+not a syntax error and not a check failure — `sh` reads `$$` as its own process
+id, so the command runs, exits 0, and reports success having done the wrong
+thing. For a bodied action the exit status is not an oracle; check the effect
+the command was written to have.
+
 **`docs/workers/DECLARED-COMMANDS.md` is required reading before you write one.** In
 summary: THERE IS NO SANDBOX. No allowlist, no denylist, no filesystem
 confinement, no network restriction, no privilege drop, no resource limit. A
