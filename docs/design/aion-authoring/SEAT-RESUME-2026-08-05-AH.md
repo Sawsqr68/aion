@@ -1,0 +1,123 @@
+# Seat resume — marker AH, 5 August 2026
+
+Supersedes AG. AG's shipped record still stands; the defect AG opened is
+CLOSED here, and its diagnosis was wrong.
+
+## ✅ CLOSED — the "worker eligibility flaps" defect was a REPORTING defect
+
+Marker AG recorded: *"the withdrawal is firing on ping count, not elapsed
+silence"* and told Tom the agent might not answer. **Measured before touching
+anything, and the conclusion was wrong in the way that mattered.**
+
+### The measurement
+
+- `lsof -p 45425` — the running server holds the scratchpad `server.log` open
+  on fd 1 AND fd 2. The log is live, so silence in it is a fact about the
+  server, not about my capture.
+- Worker registered 04:32:36.689Z. At 04:38:43Z that is 367 s. Cadence is
+  7500 ms (`liminal worker liveness probe started` says so), so ~49 probe
+  rounds had run.
+- `apply_answer` logs a WARN on EVERY failed ping, EVERY round — two distinct
+  loud lines (`THE SERVER COULD NOT ASK` / `did not answer`). **Zero appeared.**
+
+The failure path is loud by construction, so 49 rounds of silence is POSITIVE
+evidence that every ping was answered — not absence of evidence. The worker had
+been dispatch-eligible since ~04:32:46Z, ten seconds after it registered.
+
+**There was no dispatch defect. The caveat I gave Tom was unnecessary.**
+
+### What was actually wrong
+
+`register_connection` opens an UNSERVED probation, so the first probe round
+after ANY registration finds the probation unserved and announces a transition.
+The line it announced was false:
+
+- *"the server has not been able to reach its dispatch path within the window"*
+  — at that instant one answer was already banked. The server HAD reached it.
+- *"becomes eligible again as soon as one ping is answered"* —
+  `DISPATCH_PROBATION_PINGS` is 2 consecutive, and one was already in hand.
+- The restoration 7.5 s later was **silent**. Withdrawal announced, recovery not.
+
+So every healthy worker start printed an alarm and no all-clear. An alarm that
+fires on every ordinary connect carries no information, and a resolution nobody
+announces cannot cancel it. It fooled me, reading the code with the history.
+
+### The fix — `2467e6d4`, pushed
+
+`crates/aion-server/src/worker/{heartbeat,liminal_liveness,registry}.rs`.
+
+- `Reachability` gains `ever_proved`, set where a probation completes, cleared
+  ONLY by `register_connection` (a redial is a new measurement).
+- `unreachable_workers` now returns `ExcludedWorker { worker_id, exclusion }` —
+  the reason travels WITH the membership, so the set that gates dispatch and the
+  reason the operator is told cannot describe different states.
+- Three announcements where there was one: `OpeningProbation` (INFO, says it is
+  the ordinary cost of connecting), `ReachabilityLost` (WARN, says eligibility
+  was actually HELD), `EligibilityRestored` (INFO, new — the all-clear).
+- `transition()` is pure and total; the test enumerates **all four inputs**.
+  The old inlined decision could only ever emit one of the three lines, which is
+  why the missing two were invisible.
+- `ConnectedWorkerRegistry::dispatch_ineligible()` added — a recovery is
+  precisely the worker the NEW verdict does not mention, so per-worker queries
+  cannot find one. If it cannot be read the announcements are SKIPPED, never
+  guessed; the verdict itself still publishes.
+
+**Control run at my hand:** collapsing `exclusion()` to always report
+`ReachabilityLost` fails exactly 3 tests (750 passed / 3 failed) and no others.
+Restored: 753 / 0. `clippy -D warnings` clean — 3 findings fixed in the CODE
+(match arms merged, `const {}` assert, a 4-fold repetition extracted), no
+`#[allow]`.
+
+## ✅ The embed is committed — `b20d2da1`, pushed
+
+`cargo xtask build-ops-console`. **Verified against the artifact:** the embedded
+JS carries `return{message:e,end:!1}` and `return{message:"",end:!0}`.
+
+A clean clone now builds a console that can drive the assistant. That retires
+the `[ops_console] source = { FileSystem = … }` override — **but only for a
+binary built from `b20d2da1` or later.**
+
+## 🔴 THE GAP TOM'S ASK EXPOSED — crates.io still ships the broken console
+
+`README.md` says `cargo install aion-cli --locked`. crates.io max version is
+**0.11.0** (verified via the registry API, versions list `['0.11.0','0.10.0',…]`).
+0.11.0 predates the assistant fix (`9b30ca5e`, today). So **anyone following the
+published instructions today installs a console whose chat cannot work.**
+
+The instructions are not missing. The ARTIFACT they point at is stale.
+
+**This is Tom's call: cut 0.11.1, or leave it.** Raised with him 2026-08-05.
+Nothing published without his word.
+
+## 🔴 TOM'S MACHINE — do not remove the config line yet
+
+`~/.aion/config.toml` carries the `[ops_console] FileSystem` override pointing
+at `apps/aion-ops-console/dist`. His server is the **installed 0.11.0**, whose
+embedded bundle is still the broken one. Removing that line before he installs a
+newer `aion` puts the broken console back. Backup: scratchpad `config.toml.bak`.
+
+Live pids: server **45425**, worker **48399**, both from repo root.
+
+## Still owed
+
+- `AWL-REFERENCE.md:92` imports `schemas/existing.schema.json`, absent from the
+  repo — recorded UNVERIFIABLE, deliberately not papered over.
+- 🔴 #142 — merge `fix/worker-shell-dial-and-audibility` when the #139 cut
+  clears, then run the operator's real command.
+- #141 — wire-with-oracle sweep. *The oracle must not read both sides from the
+  caller.*
+- Docs site — silence-default: nothing gets built.
+
+## Standing constraints (unchanged)
+
+🔴 Worker rebuilds frozen until the #139 cut — the console is not a worker.
+🔴 beamr JIT blocker with Artemis. ⛔ Never `git add -A` here (the three
+`.aion-*` untracked snapshot dirs must never be swept). ⛔ Never bare
+`cargo clean`. Backticked commit messages via `git commit -F -`. Do not edit
+`CLAUDE.md`. Tom DM: `dm:c9255b2a-5731-4d17-8124-e3bfa2224186`.
+
+## Commits today, all pushed
+
+`adecb099` · `de4cc3ca` · `309b7f18` · `9b30ca5e` · `947aae32` ·
+`2467e6d4` (eligibility reporting) · `b20d2da1` (embed).
+`git status` clean but for the three NO-SWEEP dirs.
