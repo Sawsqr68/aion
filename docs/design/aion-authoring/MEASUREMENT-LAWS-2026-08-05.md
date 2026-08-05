@@ -425,6 +425,61 @@ points at, and they are rarely the person who took it.
   the same as paying it, but an unnamed one is how a component gate gets
   mistaken for a command gate.
 
+## The checklist — because knowing a law privately is indistinguishable from not knowing it
+
+Waffles handed me a Law 5 pass on my own gate **one message after paying for
+Law 5 with an estate**. He named it himself: it survived his full attention and
+failed anyway. That is the argument for a checklist over a principle, and it is
+the same argument as Law 4 — a rule enforced by "a person remembering" has
+already drifted. These laws included.
+
+Run these against any green before reporting it. Each is one question with one
+action; none of them requires having read the essay above.
+
+| # | Ask | If the answer is bad |
+|---|---|---|
+| 1 | Did the harness **construct** the condition under test (extract, copy, generate, patch, enable)? | Make it assert the condition landed and exit non-zero otherwise. A silently-empty treatment is a second control. |
+| 2 | Does **this box** carry something a fresh one would not — a config, a binary, a credential, an env var? | Construct the absence: run it where that thing is missing. No in-run check can find this. |
+| 3 | Does the indicator distinguish a **husk** from a **debt** — an empty thing from a real one? | If not, it will rank the emptiest rows top. Ask the system (merge and read the diff), don't reason from labels. |
+| 4 | How many places know this rule, and **what makes them agree**? | If the answer is "a person remembering": delete one and derive it. If derivation is impossible, LABEL the mirror. |
+| 5 | Is the gate the **operator's real command**, or a component of it chosen because you had a theory about it? | Run the whole command — same argv, same environment, same session semantics. More component gates make it worse. |
+| 6 | Did you watch it **fail** before trusting it? | A pin never seen red is Law 1 wearing a test's clothes. |
+
+And the one question behind all of them, for when the table doesn't fit the
+situation: **if the thing under test were absent, would this reading be the
+same?**
+
+⚠️ **This section is a document, and a document is remembering with extra
+steps** unless something puts it in front of you at the moment you write a gate.
+The honest enforcement points in aion, best first:
+
+1. **`CLAUDE.md`** — injected into every agent's context automatically, so a line
+   there is not remembered, it is *present*. That is the only genuinely
+   mechanical option available today. It is Tom's file and a change to how
+   everyone works, so it is **asked for, not taken** (Waffles, 2026-08-05).
+2. **The brief workflow** — acceptance criteria that name the operator's command
+   rather than a component.
+3. This table, cited by hand in reviews. Weakest, and named as weakest.
+
+There is no CI to hang it on, and **verifying that claim is itself a worked
+example of row 3.** The obvious readings both mislead:
+
+- `.github/workflows/` contains `ci.yml` and `ops-console-embed.yml`.
+- `gh workflow list` reports both as **`active`**.
+- `gh run list` shows a full history, including a *scheduled* run.
+
+Every one of those is a husk. The authority is
+`gh api repos/ablative-io/aion/actions/permissions` → **`{"enabled": false}`**.
+Actions is off at the repository level, so the "active" workflows fire never and
+the run history is a fossil — last run 2026-07-26, and today is 2026-08-05. A
+workflow-file gate added here would be committed, listed, described as active,
+and dead. (Task #71 says so and is correct; I checked anyway, because a task row
+is a label, and reasoning from labels is what row 3 is about. What I nearly did
+was publish "no CI" citing a task row, which would have been right by luck.)
+
+**The transferable part: `gh workflow list` reports the file's state, not the
+repository's capability to run it.** Ask the permissions endpoint.
+
 ## Catalogue neighbours
 
 Sits beside [[base-rate-before-attribution]] (measure how often the outcome
