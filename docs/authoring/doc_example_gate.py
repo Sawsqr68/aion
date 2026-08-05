@@ -159,6 +159,14 @@ class Spec:
     borrows; `inputs`, `outcomes` and `tail` supply the rest of the surrounding
     document. `unverifiable` states, in the document's own terms, why a block
     cannot be checked at all.
+
+    `fixtures` supplies files the fragment IMPORTS, written beside the composed
+    document at the relative paths the fragment names. A block that imports a
+    schema is otherwise unverifiable for a reason that says nothing about the
+    block — the gate simply had no way to put the file where the import looks.
+    Supplying it verifies the construct; every fixture is named in the report
+    row so a PASS never reads as "copy this and it runs" when the reader must
+    bring the file themselves.
     """
 
     place: str = "decls"  # whole | decls | stmts | steps
@@ -172,6 +180,7 @@ class Spec:
     stmt_head: str = ""  # statements written before the fragment, inside its step
     head: str = ""  # steps written BEFORE the fragment
     tail: str = ""  # steps written AFTER the fragment
+    fixtures: dict[str, str] = field(default_factory=dict)  # relpath -> contents
     unverifiable: str = ""
     illustrative: str = ""  # a complete document that deliberately does not check
 
@@ -222,7 +231,11 @@ def compose(block: Block, spec: Spec) -> str:
         lines.append(block.body)
         lines.append("")
         lines.append(spec.head.rstrip("\n") if spec.head else "")
-        lines.append(spec.tail.rstrip("\n") if spec.tail else "step gate_end\n  route done(summary: \"ok\", message: \"ok\")")
+        # The default tail routes exactly the fields GATE_TYPES declares on
+        # `GateResult` — no more. It used to route a `message` too, which
+        # `GateResult` does not have, so any block relying on the pure default
+        # scaffold failed on the SCAFFOLD rather than on its own content.
+        lines.append(spec.tail.rstrip("\n") if spec.tail else "step gate_end\n  route done(summary: \"ok\")")
     elif spec.place == "steps":
         if spec.head:
             lines.append(spec.head.rstrip("\n"))
@@ -260,9 +273,22 @@ def corrupt(body: str) -> str | None:
 # --------------------------------------------------------------------------
 
 
-def check(binary: str, text: str, workdir: Path, name: str) -> tuple[bool, str]:
+def check(
+    binary: str,
+    text: str,
+    workdir: Path,
+    name: str,
+    fixtures: dict[str, str] | None = None,
+) -> tuple[bool, str]:
     path = workdir / f"{name}.awl"
     path.write_text(text, encoding="utf-8")
+    for relative, contents in (fixtures or {}).items():
+        # Imports resolve relative to the .awl document, so the fixture is
+        # written relative to the document — not to the process's cwd, which
+        # would make the check pass for a reason the documentation never states.
+        target = path.parent / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(contents, encoding="utf-8")
     result = subprocess.run(
         [binary, "awl", "check", str(path)],
         capture_output=True,
@@ -311,7 +337,7 @@ def main() -> int:
             rows.append((block, "UNVERIFIABLE", spec.unverifiable))
             continue
         text = compose(block, spec)
-        ok, message = check(binary, text, workdir, block.name)
+        ok, message = check(binary, text, workdir, block.name, spec.fixtures)
         if spec.illustrative:
             verdict = "ILLUSTRATIVE" if not ok else "ILLUSTRATIVE-BUT-CHECKS"
             rows.append((block, verdict, spec.illustrative))
@@ -360,6 +386,10 @@ def describe(spec: Spec) -> str:
     parts = [spec.place]
     if spec.needs:
         parts.append("borrows " + ", ".join(spec.needs))
+    if spec.fixtures:
+        # Named, not counted. A row that says "1 fixture" hides WHICH file the
+        # reader has to bring, which is the only part of this they need.
+        parts.append("gate supplies " + ", ".join(sorted(spec.fixtures)))
     return "; ".join(parts)
 
 

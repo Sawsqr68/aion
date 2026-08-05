@@ -18,6 +18,20 @@ from doc_example_gate import Spec
 REPORT_OUTCOME = ["outcome done: type Report, route success"]
 END = 'step gate_end\n  route done(summary: "ok")'
 
+# The file the schema-door block imports. Deliberately ORDINARY — an object
+# with required and optional properties and nothing exotic — because the block
+# demonstrates the import, not the schema. Anything clever here would risk the
+# row failing for a reason the documentation never claimed.
+SCHEMA_DOOR_FIXTURE = """{
+  "type": "object",
+  "required": ["id"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "note": { "type": "string" }
+  }
+}
+"""
+
 SPECS: dict[str, Spec] = {
     # ---------------------------------------------------------------- whole
     "docs_GETTING-STARTED__01": Spec(place="whole"),
@@ -199,10 +213,12 @@ SPECS: dict[str, Spec] = {
             "requires adding a binding, which would change the fragment"
         )
     ),
+    # The schema-door block was filed UNVERIFIABLE for a reason that said
+    # nothing about the block: the gate had no way to put a file where the
+    # import looks. It does now, so the construct is checked for real. The
+    # reader still brings their own schema — the report row names the file the
+    # gate supplied, so this PASS cannot be read as "copy it and it runs".
     "examples_assistant_resources_AWL-REFERENCE__04": Spec(
-        unverifiable=(
-            "imports `schemas/existing.schema.json`, which the repository does not "
-            "contain — a reader copying this block cannot make it check either"
-        )
+        fixtures={"schemas/existing.schema.json": SCHEMA_DOOR_FIXTURE},
     ),
 }

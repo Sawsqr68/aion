@@ -13,7 +13,7 @@ Re-run it to re-verify; do not hand-edit this file.
 | `ILLUSTRATIVE` | a deliberately unrunnable block whose own prose says so |
 | `UNVERIFIABLE` | cannot be checked, with the reason stated |
 
-**ILLUSTRATIVE: 2**  **PASS: 40**  **UNVERIFIABLE: 2**
+**ILLUSTRATIVE: 2**  **PASS: 41**  **UNVERIFIABLE: 1**
 
 ## How a `PASS` was earned
 
@@ -38,7 +38,7 @@ Nothing failed.
 | `examples/assistant/resources/AWL-REFERENCE.md:21` | ILLUSTRATIVE | the canonical-order skeleton; its own prose says 'the sample illustrates declaration placement; adapt the flow rather than copying unused declarations' |
 | `examples/assistant/resources/AWL-REFERENCE.md:78` | PASS | scaffold: decls |
 | `examples/assistant/resources/AWL-REFERENCE.md:85` | UNVERIFIABLE | two expression forms shown out of statement position — checking them requires adding a binding, which would change the fragment |
-| `examples/assistant/resources/AWL-REFERENCE.md:92` | UNVERIFIABLE | imports `schemas/existing.schema.json`, which the repository does not contain — a reader copying this block cannot make it check either |
+| `examples/assistant/resources/AWL-REFERENCE.md:92` | PASS | scaffold: decls; gate supplies schemas/existing.schema.json |
 | `examples/assistant/resources/AWL-REFERENCE.md:111` | PASS | scaffold: decls; borrows Report, Finding |
 | `examples/assistant/resources/AWL-REFERENCE.md:154` | PASS | scaffold: decls; borrows Build |
 | `examples/assistant/resources/AWL-REFERENCE.md:163` | PASS | scaffold: stmts; borrows Request, Build, build |
