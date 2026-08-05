@@ -60,7 +60,59 @@ All in `apps/aion-ops-console/`:
 **Control run at my hand:** breaking `assistantContinuePayload` back to
 `{ message }` makes the new gate report 2 fail / 3 pass. It bites.
 
-## 🔴 WHAT REMAINS — the part Tom is waiting on
+## ✅ SHIPPED AND LIVE-PROVEN — Tom told to refresh (04:33Z)
+
+Commit `9b30ca5e`, pushed. All steps below were carried out and verified.
+
+1. `bun run build` → `apps/aion-ops-console/dist/`. **Artifact verified**, not
+   source: the built JS carries `SX(e){return{message:e,end:!1}}` and
+   `EX(){return{message:"",end:!0}}`.
+2. `~/.aion/config.toml` gained `[ops_console] source = { FileSystem = {
+   asset_path = ".../apps/aion-ops-console/dist" } }`, with an in-file comment
+   saying why and when to remove it. **Backup:** scratchpad `config.toml.bak`.
+3. Old server pid 85467 stopped; restarted from repo root as bare `aion server`
+   → **pid 45425**. Data root resolved to `.../aion/aion-data` (his real store).
+4. **Verified at the wire, not on disk:** HTTP 200 on :8080 · `aion versions`
+   non-empty · the bundle *fetched over HTTP from his server* carries both
+   fields · parked run still `Running`.
+5. **End-to-end proof:** sent `{"message":"","end":false}` (the workflow's own
+   documented no-op nudge, so it cost Tom nothing) → `accepted: true`, and
+   `SignalReceived` is now event 9. **The contract refusal is gone.**
+
+## 🔴 NEW DEFECT FOUND WHILE VERIFYING — worker dispatch eligibility flaps
+
+Worker pid 66189 (`./examples/agent-dev/worker/target/release/agent-dev-worker
+--address 127.0.0.1:50061 --norn-account default`, cwd = repo root) was
+restarted with **identical argv** → **pid 48399**. Not a rebuild; the freeze
+holds.
+
+It registers and is withdrawn ~2 seconds later, on a *fresh* connection:
+
+```
+04:32:36 INFO  registered liminal worker in-band  identity=agent-dev-worker task_queue=default
+04:32:38 WARN  WITHDRAWING DISPATCH ELIGIBILITY … has not been able to reach its
+               dispatch path within the window  liveness_ping=2 silence_window_ms=30000
+```
+
+Two seconds is far inside the 30 s silence window, so the withdrawal is firing
+on ping *count*, not elapsed silence — worth reading against #58 (liveness probe
+poisoned its own connection, closed 2abcdd47/2460103d/30e28488) and the held
+branch `fix/worker-shell-dial-and-audibility` (#142). **Do not assume #58
+regressed without measuring; the same symptom can have a different cause.**
+
+Consequence, stated to Tom honestly: the signal lands, but the next agent round
+may not be dispatched. He was told to try it and report.
+
+Server log kept at scratchpad `server.log`; worker log at `worker.log`.
+
+## 🔴 STILL OWED
+
+- `cargo xtask build-ops-console` to regenerate
+  `crates/aion-server/ops-console-embed/` and commit, so the next binary is
+  correct and the `[ops_console]` config override can be removed.
+- The worker eligibility defect above.
+
+## Original plan (kept — it is what was executed)
 
 He cannot see any of this yet. His server serves the **compile-time embedded**
 bundle, so source fixes are invisible until the assets he is served change.
