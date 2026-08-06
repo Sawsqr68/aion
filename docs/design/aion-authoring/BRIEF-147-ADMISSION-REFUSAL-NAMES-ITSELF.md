@@ -135,6 +135,64 @@ but because a stale or unbounded key map is its own defect and the eviction
 condition (a successful admission for that key; a disconnect) has to be right.
 Do not let the map grow without a stated reason it cannot.
 
+#### R1b design, for Waffles' gated review — submitted before writing
+
+Waffles' condition: *bounded by construction, entries cleared on admission or
+departure, because an unbounded key map keyed on refused identities is a slow
+leak wearing a diagnostic's clothes.*
+
+**The trap, named first.** The obvious key is
+`(identity, task_queue, node)` — and `identity` is a **client-supplied string**.
+A refused worker that varies its identity per dial grows the map forever, and
+"bounded by construction" would be false while the code looked right. A refused
+connection never enters the registry, so nothing else would ever evict it. **A
+map keyed on anything the refused party controls cannot be bounded by
+construction.**
+
+**The design: key on what the SERVER controls, put the client's part in the
+value.**
+
+- **Key:** `(task_queue, node)` — both server-derived, and already enumerated by
+  the gate from the deployed catalog. **The map cannot hold more entries than
+  the catalog has queue/node pairs**, which is the bound, and it is structural
+  rather than enforced.
+- **Value:** a digest over `(identity, details)` — the whole refusal, including
+  who was refused.
+
+Checked against R1a's four cases:
+
+| Case | Digest | Speaks? | Wanted |
+|---|---|---|---|
+| same worker redials identically | unchanged | no | ✅ |
+| reason changes (same worker) | changes | yes | ✅ |
+| a different worker build, same queue | changes (identity is in it) | yes | ✅ |
+| two differently-broken workers alternating on one queue | flips each dial | both speak, every dial | ⚠️ see below |
+
+**The fourth case is a real cost and it is stated rather than hidden.** Two
+distinct broken workers hammering one queue will each re-log on every dial —
+the #94 volume returns for that shape. I am accepting it rather than adding a
+cap, on the grounds that **two independent faults on one queue is a situation an
+operator should hear about repeatedly**, and any suppression that survives it
+would have to suppress genuinely new information. If review disagrees, the
+alternative is a per-queue set of digests, which reintroduces the unbounded
+client-controlled dimension by the back door.
+
+**Clearing, both directions:**
+- **On admission** — a successful `validate_worker_contracts` for a
+  `(task_queue, node)` removes that entry, so a worker that is fixed and then
+  breaks again is heard immediately rather than being suppressed by its own
+  history.
+- **On departure** — entries whose `task_queue` no longer appears in the
+  admission catalog are pruned lazily on the next admission call. No timer, no
+  sweeper, bounded work per call, and the catalog read already happens on that
+  path. **Departure needs no new mechanism because the gate already asks the
+  catalog what exists.**
+
+**Ownership:** the handle is passed into `validate_worker_contracts` as a
+parameter. Both callers already assemble this call and both have somewhere to
+hold it (`ServerState` for gRPC, the notifier for liminal). This keeps the
+single-log-site property that is the whole point of R1.
+
 ## R2 — the availability hint stops naming a remedy that cannot be followed
 
 `crates/aion-server/src/awl/run_loop.rs:275`:
