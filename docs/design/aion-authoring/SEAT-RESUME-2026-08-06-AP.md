@@ -152,3 +152,40 @@ the wrong reason) · `a-verdict-invariant-to-the-error-cannot-see-it` ·
 `a-census-is-decisive-only-over-what-is-not-exported` (`Replay::now()` has no
 caller *in this repository*, and `Replay` is exported) ·
 `withdrawal-proven-against-the-artifact` · `confidence-is-what-stops-you-measuring`.
+
+---
+
+# AMENDMENT — Waffles' dispositions, 2026-08-06T00:06Z
+
+Board row #116 now carries the shared-queue item **with my bound attached
+verbatim**. Nothing waits on Waffles; all of the below is authorised.
+
+1. **Shared-queue refusal is MINE to drive, in two steps.**
+   - **Axis check — DONE**, see amendment 1 on
+     `SHARED-QUEUE-SILENT-REFUSAL-2026-08-06.md` (`52e3ce852`). Verdict: **NOT
+     a regression** of #78 or #80; both documented narrowings apply correctly
+     and my case legitimately defeats both, so the gate refusing is designed.
+     The defect is that the refusal is invisible **server-side**.
+   - **Fix brief — NEXT.** Waffles' standing condition, binding whichever way
+     the axis fell: **the admission refusal must name itself, server-side,
+     whatever else changes.** A worker refused at registration with zero bytes
+     on either side is the no-silent-failures law in its purest form, and
+     registration-time refusal detached from the deploy that caused it is the
+     *worst* variant — the operator debugging it is looking at the wrong event
+     entirely. Their words: *the crash is kinder than the silence.*
+2. **#7 (GitHub): real, mine, RED-FIRST.** The fault-injection harness one
+   directory away makes the red cheap, and "no deliberate pin breaks" means the
+   fix has no politics. Same projection-lies class as the rest.
+3. **#9: REPLY, DON'T BUILD — authorised.** Draft the GitHub reply pointing at
+   our #90 experience and the revert at `64aa16c99`, factual and short.
+   **Send it past Waffles before it posts** — outward-facing — but the decision
+   is made.
+4. **#6: file the missing pin as its own row.** A pin green under total
+   blocking and green under perfect fan-out pins nothing. The
+   `max_concurrency`-silently-ignored-on-liminal half is **a real second defect
+   wearing a stale issue's number**.
+
+**Their read of my `/tmp` mutation slip:** *"a check that dies before reaching
+its gate reads identically to a check that passed. That's the third instrument
+this week that couldn't distinguish its own failure from its subject's — it's
+becoming the estate's central law."*
