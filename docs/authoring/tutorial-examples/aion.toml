@@ -1,0 +1,25 @@
+# Development server config for `aion server --config aion.toml`.
+# The ports here are deliberately not 8080/50051, so this tutorial cannot
+# collide with a server you already have running.
+
+[server]
+listen_address = "127.0.0.1:8099"
+grpc_address = "127.0.0.1:50099"
+
+[store]
+backend = "haematite"
+# A FULL path, always. A relative one is resolved against whatever folder you
+# started the server from.
+data_dir = "/Users/you/my-first-flow/aion-data"
+
+[runtime]
+query_timeout_ms = 10000
+
+[websocket]
+event_broadcast_capacity = 1024
+cluster_broadcast_capacity = 64
+
+[deploy]
+enabled = true
+max_archive_bytes = 16777216
+max_inflated_bytes = 67108864

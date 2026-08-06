@@ -1,0 +1,745 @@
+<!doctype html>
+<!--
+  GENERATED FILE — do not edit awl-deck.html by hand.
+
+  Every AWL snippet on these slides is sliced out of a complete document under
+  docs/authoring/deck-examples/, and build-deck.py refuses to write this file
+  unless `aion awl check` passes on every one of them. Edit the examples or
+  build-deck.py, then re-run:
+
+      python3 docs/authoring/build-deck.py
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your first Aion workflow — start to finish</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :root {
+    color-scheme: light dark;
+    --ground: #EEF1F5;
+    --ground-2: #E3E8EE;
+    --panel: #FBFCFD;
+    --ink: #171C24;
+    --ink-soft: #4A5462;
+    --ink-faint: #7A8492;
+    --rule: #CFD6DF;
+    --brass: #9A6A20;
+    --brass-bright: #C08A45;
+    --teal: #37697A;
+    --plum: #7A4A6B;
+    --shadow: 0 1px 2px rgba(23, 28, 36, .06), 0 8px 24px rgba(23, 28, 36, .06);
+
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0F131A;
+      --ground-2: #161C25;
+      --panel: #151A22;
+      --ink: #DEE4EC;
+      --ink-soft: #A2ADBB;
+      --ink-faint: #6F7B8A;
+      --rule: #2A323D;
+      --brass: #C08A45;
+      --brass-bright: #DCA860;
+      --teal: #6FA9B8;
+      --plum: #B98BAA;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px rgba(0, 0, 0, .35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0F131A;
+    --ground-2: #161C25;
+    --panel: #151A22;
+    --ink: #DEE4EC;
+    --ink-soft: #A2ADBB;
+    --ink-faint: #6F7B8A;
+    --rule: #2A323D;
+    --brass: #C08A45;
+    --brass-bright: #DCA860;
+    --teal: #6FA9B8;
+    --plum: #B98BAA;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 30px rgba(0, 0, 0, .35);
+  }
+  :root[data-theme="light"] {
+    --ground: #EEF1F5;
+    --ground-2: #E3E8EE;
+    --panel: #FBFCFD;
+    --ink: #171C24;
+    --ink-soft: #4A5462;
+    --ink-faint: #7A8492;
+    --rule: #CFD6DF;
+    --brass: #9A6A20;
+    --brass-bright: #C08A45;
+    --teal: #37697A;
+    --plum: #7A4A6B;
+    --shadow: 0 1px 2px rgba(23, 28, 36, .06), 0 8px 24px rgba(23, 28, 36, .06);
+  }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .deck { position: relative; }
+
+  .slide {
+    display: none;
+    min-height: 100svh;
+    box-sizing: border-box;
+    padding: clamp(2rem, 5vw, 4rem) clamp(1.25rem, 6vw, 6rem) 5.5rem;
+    flex-direction: column;
+    justify-content: center;
+    gap: clamp(.85rem, 1.9vw, 1.5rem);
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  .slide.is-current { display: flex; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: clamp(.68rem, 1vw, .78rem);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--brass);
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    margin: 0;
+  }
+  .eyebrow::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--rule);
+  }
+
+  h1, h2 {
+    font-family: var(--mono);
+    font-weight: 600;
+    letter-spacing: -.02em;
+    text-wrap: balance;
+    margin: 0;
+    line-height: 1.12;
+  }
+  h1 { font-size: clamp(2.4rem, 7vw, 5rem); }
+  h2 { font-size: clamp(1.35rem, 3.1vw, 2.25rem); }
+
+  .lede {
+    font-size: clamp(1.02rem, 1.8vw, 1.35rem);
+    line-height: 1.5;
+    max-width: 64ch;
+    color: var(--ink-soft);
+    margin: 0;
+    text-wrap: pretty;
+  }
+  .lede strong { color: var(--ink); font-weight: 600; }
+  .lede code, .points code, .note code {
+    font-family: var(--mono);
+    font-size: .92em;
+    color: var(--brass);
+  }
+
+  /* The bare grammatical form: what you type, with the parts named. */
+  .form {
+    font-family: var(--mono);
+    font-size: clamp(.84rem, 1.35vw, 1.08rem);
+    line-height: 1.55;
+    color: var(--ink);
+    border-left: 3px solid var(--brass);
+    padding: .3rem 0 .3rem 1.1rem;
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-x: auto;
+  }
+  .form .opt { color: var(--ink-faint); }
+  .form .slot { color: var(--teal); font-style: italic; }
+
+  .points {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+    max-width: 68ch;
+  }
+  .points li {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: .8rem;
+    align-items: baseline;
+    font-size: clamp(.96rem, 1.45vw, 1.12rem);
+    line-height: 1.45;
+    color: var(--ink-soft);
+  }
+  .points li::before {
+    content: "—";
+    font-family: var(--mono);
+    color: var(--brass);
+  }
+  .points strong { color: var(--ink); font-weight: 600; }
+
+  /* Rules that will actually stop your document checking. */
+  .points.bite li::before { content: "!"; color: var(--plum); font-weight: 700; }
+
+  .cols {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+    gap: clamp(1rem, 2.5vw, 2rem);
+    align-items: start;
+  }
+
+  pre {
+    margin: 0;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    box-shadow: var(--shadow);
+    padding: clamp(.85rem, 1.7vw, 1.4rem) clamp(1rem, 2vw, 1.6rem);
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: clamp(.8rem, 1.26vw, 1.02rem);
+    line-height: 1.6;
+    tab-size: 2;
+  }
+  pre code { font: inherit; color: var(--ink); }
+
+  .tok-kw { color: var(--brass); font-weight: 600; }
+  .tok-type { color: var(--teal); }
+  .tok-str { color: var(--plum); }
+  .tok-com { color: var(--ink-faint); font-style: italic; }
+  .tok-pipe { color: var(--brass-bright); font-weight: 700; }
+
+  .caption {
+    font-family: var(--mono);
+    font-size: clamp(.72rem, 1.1vw, .84rem);
+    color: var(--ink-faint);
+    line-height: 1.5;
+    max-width: 74ch;
+    margin: 0;
+  }
+  .caption b { color: var(--brass); font-weight: 600; }
+
+  /* Where the snippet above came from. Every one is a real, checked file. */
+  .src {
+    font-family: var(--mono);
+    font-size: clamp(.68rem, 1vw, .78rem);
+    color: var(--ink-faint);
+    margin: 0;
+    letter-spacing: .01em;
+  }
+  .src b { color: var(--ink-soft); font-weight: 500; }
+
+  .note {
+    border-left: 2px solid var(--brass);
+    padding: .1rem 0 .1rem 1rem;
+    color: var(--ink-soft);
+    font-size: clamp(.94rem, 1.45vw, 1.08rem);
+    line-height: 1.5;
+    max-width: 66ch;
+  }
+  .note strong { color: var(--ink); }
+
+  .stamp {
+    display: inline-flex;
+    align-items: center;
+    gap: .55rem;
+    font-family: var(--mono);
+    font-size: clamp(.7rem, 1.05vw, .8rem);
+    letter-spacing: .04em;
+    color: var(--ink-soft);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: .42rem .95rem;
+    background: var(--panel);
+    width: fit-content;
+  }
+  .stamp::before {
+    content: "";
+    width: .5rem;
+    height: .5rem;
+    border-radius: 50%;
+    background: var(--brass);
+  }
+
+  table.kw {
+    border-collapse: collapse;
+    font-size: clamp(.86rem, 1.3vw, 1rem);
+    color: var(--ink-soft);
+    width: 100%;
+  }
+  table.kw td {
+    border-top: 1px solid var(--rule);
+    padding: .42rem .9rem .42rem 0;
+    vertical-align: baseline;
+  }
+  table.kw td:first-child {
+    font-family: var(--mono);
+    color: var(--brass);
+    white-space: nowrap;
+    font-weight: 600;
+  }
+  .scroller { overflow-x: auto; }
+
+  /* The rail is the deck's own event history: one tick per slide, replayed. */
+  .rail {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: clamp(.6rem, 2vw, 1.4rem);
+    padding: .7rem clamp(1.25rem, 6vw, 6rem) 1rem;
+    background: linear-gradient(to top, var(--ground) 62%, transparent);
+    font-family: var(--mono);
+    font-size: .74rem;
+    color: var(--ink-faint);
+  }
+  .ticks { display: flex; gap: 3px; flex: 1; align-items: flex-end; }
+  .tick {
+    flex: 1;
+    height: 3px;
+    background: var(--rule);
+    border: 0;
+    padding: 0;
+    border-radius: 1px;
+    cursor: pointer;
+    transition: height .18s ease, background .18s ease;
+  }
+  .tick:hover { height: 9px; background: var(--ink-faint); }
+  .tick.seen { background: var(--ink-faint); }
+  .tick.now { background: var(--brass); height: 11px; }
+  .tick:focus-visible { outline: 2px solid var(--brass); outline-offset: 3px; }
+
+  .counter { font-variant-numeric: tabular-nums; letter-spacing: .05em; white-space: nowrap; }
+  .hint { white-space: nowrap; }
+  @media (max-width: 640px) { .hint { display: none; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+  <section class="slide">
+    <p class="eyebrow">Aion — from nothing</p>
+    <h1>Your first workflow, start to finish</h1>
+    <p class="lede">Eight steps. No Rust, no Gleam, no compiler. At the end you have a workflow that ran a real command on your machine and kept the answer forever.</p>
+    <p class="caption">Every command and every file in this deck was run end to end before it was written down.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">What you end up with</p>
+    <h2>A run you can point at</h2>
+    <ul class="points">
+      <li>A workflow you wrote yourself, in a file you can read.</li>
+      <li>A worker that ran a real command — no code, just a wiring file.</li>
+      <li>A completed run, with its whole history on disk.</li>
+      <li>All of it visible in the console in your browser.</li>
+    </ul>
+    <p class="note">If you can do this, you can do the big version. The big version is the same five pieces, more times.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Before you start</p>
+    <h2>One binary. Check it is there.</h2>
+    <pre class="cmd"><code>aion --version</code></pre>
+    <pre class="out"><code>aion 0.11.0</code></pre>
+    <ul class="points">
+      <li>That one binary is the server, the worker, and the tools.</li>
+      <li>Nothing else to install.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 1 of 8</p>
+    <h2>Pick a folder and write the config</h2>
+    <p class="lede">One file tells the server which ports to use and where to keep its data.</p>
+    <pre><code>[server]
+listen_address = &quot;127.0.0.1:8099&quot;
+grpc_address = &quot;127.0.0.1:50099&quot;
+
+[store]
+backend = &quot;haematite&quot;
+data_dir = &quot;/Users/you/my-first-flow/aion-data&quot;
+
+[runtime]
+query_timeout_ms = 10000
+
+[websocket]
+event_broadcast_capacity = 1024
+cluster_broadcast_capacity = 64
+
+[deploy]
+enabled = true
+max_archive_bytes = 16777216
+max_inflated_bytes = 67108864</code></pre>
+    <p class="src">from <b>docs/authoring/tutorial-examples/aion.toml</b> — a complete file, checked</p>
+    <p class="note">🔴 <b>Use a full path for <code>data_dir</code>.</b> A relative path is resolved against whatever folder you happened to start the server from — start it from somewhere else and it looks like every run you ever did has vanished. Nothing is lost; you are just looking at a different store.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 1 of 8</p>
+    <h2>Start it</h2>
+    <pre class="cmd"><code>cd ~/my-first-flow
+aion server --config aion.toml</code></pre>
+    <ul class="points">
+      <li>Leave it running. Open a second terminal for everything else.</li>
+      <li>The console is now at <code>http://127.0.0.1:8099</code>.</li>
+    </ul>
+    <p class="note">If it refuses to start saying an ancestor <i>is not owner-controlled</i>, your folder is somewhere the whole machine can write to — <code>/tmp</code>, typically. Move it under your home folder. The refusal is the store protecting itself, and it names the exact folder at fault.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 1 of 8</p>
+    <h2>Where things land</h2>
+    <div class="scroller"><table class="kw">
+      <tr><td>your workflows</td><td><code>$AION_HOME/authoring/</code> — the server prints this as <code>authoring_root</code> on the line starting <i>aion-server authoring root resolved</i></td></tr>
+      <tr><td>the runs and their history</td><td>the <code>data_dir</code> you set — printed as <code>data_root</code> just above it</td></tr>
+    </table></div>
+    <p class="note">Both are printed at startup, every time. When something seems missing, read those two lines first — nine times in ten the answer is that you are looking in the other folder.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 2 of 8</p>
+    <h2>Make a new workflow</h2>
+    <p class="lede">Open the console, go to <b>Authoring</b>. At the top of the document list there is a box marked <b>New workflow</b>.</p>
+    <ul class="points">
+      <li>Type a name. Press <b>+</b>.</li>
+      <li>The name must be lowercase letters, digits and underscores, starting with a letter or underscore — <code>order_flow</code>, not <code>Order Flow</code>.</li>
+    </ul>
+    <p class="note">The name rule is not shown until you break it. Now you know it up front.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 2 of 8</p>
+    <h2>What you get</h2>
+    <p class="lede">Not a blank page — a document that already passes the checker.</p>
+    <pre><code>//! greet_flow workflow.
+workflow greet_flow
+  outcome done: type Placeholder, route success
+
+type Placeholder { value: String }</code></pre>
+    <p class="src">from <b>docs/authoring/tutorial-examples/00-skeleton.awl</b> — a complete file, checked</p>
+    <p class="caption">This is what the server writes for a workflow named <code>greet_flow</code>. It is parsed and reprinted before you ever see it, so it cannot hand you something the checker would reject.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 3 of 8</p>
+    <h2>Now write the real thing</h2>
+    <p class="lede">Replace the skeleton with this. It is the whole workflow.</p>
+    <pre><code>//! Your first Aion workflow: run one real command, and keep the answer forever.
+workflow first_flow
+  input folder: String
+  outcome done: type Listing, route success
+
+type Listing { found: String }
+
+worker desk
+  /// Runs a real command on your machine and hands the answer back.
+  action list_folder(folder: String) -&gt; String
+    timeout 30s
+
+step look
+  list_folder(folder: folder) -&gt; found
+  route done(found: found)</code></pre>
+    <p class="src">from <b>docs/authoring/tutorial-examples/first_flow.awl</b> — a complete file, checked</p>
+    <p class="caption">A complete document — this exact file was checked, deployed and run.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 3 of 8</p>
+    <h2>Line by line</h2>
+    <div class="scroller"><table class="kw">
+      <tr><td><code>workflow</code></td><td>its name — how you start it later</td></tr>
+      <tr><td><code>input</code></td><td>what you have to hand it to start</td></tr>
+      <tr><td><code>outcome</code></td><td>how it is allowed to end, and what it hands back</td></tr>
+      <tr><td><code>type</code></td><td>the shape of a piece of data</td></tr>
+      <tr><td><code>worker</code></td><td>a name for the thing that does real work — the queue</td></tr>
+      <tr><td><code>action</code></td><td>one job the worker can do, with its types and its time limit</td></tr>
+      <tr><td><code>step</code></td><td>a stage of the workflow</td></tr>
+      <tr><td><code>route</code></td><td>finish, this way, with this</td></tr>
+    </table></div>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 4 of 8</p>
+    <h2>Check it</h2>
+    <pre class="cmd"><code>aion awl check first_flow.awl</code></pre>
+    <pre class="out"><code>ok: first_flow.awl (1 step)</code></pre>
+    <ul class="points">
+      <li>Errors come out like a compiler's: file, line, column, reason.</li>
+      <li>Nothing has been deployed yet. This is free and instant.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 5 of 8</p>
+    <h2>The worker — what it actually is</h2>
+    <p class="lede">The workflow decides <i>what</i> should happen and in what order. It never does the work itself.</p>
+    <ul class="points">
+      <li>The worker is a separate process that does the real jobs.</li>
+      <li>That separation is the whole trick: the workflow can be replayed safely because it only ever decides.</li>
+      <li>For this tutorial the worker is the <code>aion</code> binary you already have. You write no code at all.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 5 of 8</p>
+    <h2>Wire the action to a command</h2>
+    <p class="lede">One small file. It says which queue to serve and what each action runs.</p>
+    <pre><code>[worker]
+name = &quot;desk&quot;
+task_queue = &quot;desk&quot;
+
+[[action]]
+name = &quot;list_folder&quot;
+command = [&quot;/bin/ls&quot;, &quot;-1&quot;, &quot;{input.folder}&quot;]
+result = &quot;text&quot;</code></pre>
+    <p class="src">from <b>docs/authoring/tutorial-examples/worker.toml</b> — a complete file, checked</p>
+    <p class="caption">Wiring only — the types, the timeout and the retries all stay in the <code>.awl</code>.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 5 of 8</p>
+    <h2>The rule that will bite you</h2>
+    <p class="lede">Keep one document per worker queue, and let that document declare every action on it.</p>
+    <ul class="points">
+      <li>A worker is only let in if it offers the <b>full</b> set of actions that <i>every</i> deployed document declares for its queue.</li>
+      <li>So a second workflow reusing the same <code>worker</code> name with a different action locks the queue for any single-document worker.</li>
+      <li>A worker already running keeps working — it breaks the next time you restart it, which is what makes it so confusing.</li>
+    </ul>
+    <p class="note">🔴 This fails <b>silently on both sides</b>: the worker prints nothing and stays alive, and the server logs no warning and no error. Measured on 0.11.0 — see <code>SHARED-QUEUE-SILENT-REFUSAL-2026-08-06.md</code>. Until it is fixed, the rule above is the way round it.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 6 of 8</p>
+    <h2>Deploy</h2>
+    <pre class="cmd"><code>aion --endpoint http://127.0.0.1:50099 \
+     deploy first_flow.awl</code></pre>
+    <pre class="out"><code>{&quot;workflow_type&quot;: &quot;first_flow&quot;,
+ &quot;content_hash&quot;: &quot;629b5141…&quot;,
+ &quot;freshly_loaded&quot;: true,
+ &quot;route_changed&quot;: true}</code></pre>
+    <ul class="points">
+      <li>The hash is the version's real name. Deploy it again unchanged and you get the same hash back.</li>
+      <li><code>route_changed: true</code> means new runs will use this one. Runs already going keep the version they started on.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 7 of 8</p>
+    <h2>Start the worker</h2>
+    <pre class="cmd"><code>aion --endpoint http://127.0.0.1:50099 worker shell \
+     --manifest worker.toml --awl first_flow.awl</code></pre>
+    <ul class="points">
+      <li>Leave it running too. A third terminal.</li>
+      <li>It needs the <code>.awl</code> as well as the manifest — the types come from the document, and only from there.</li>
+    </ul>
+    <p class="note">🔴 The <code>http://</code> is not optional here. Leave the scheme off and this worker never connects, and never says so.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 7 of 8</p>
+    <h2>Silence is not success</h2>
+    <p class="lede">A working shell worker prints nothing at all. So does a broken one. Ask the server instead.</p>
+    <pre class="cmd"><code>curl -s -X POST http://127.0.0.1:8099/awl/workers/availability \
+  -H &#x27;Content-Type: application/json&#x27; \
+  -d &#x27;{&quot;namespace&quot;:&quot;default&quot;,&quot;task_queue&quot;:&quot;desk&quot;,&#x27;\
+     &#x27;&quot;activity_types&quot;:[&quot;list_folder&quot;]}&#x27;</code></pre>
+    <pre class="out"><code>{&quot;available&quot;: true, &quot;task_queue&quot;: &quot;desk&quot;, &quot;connected_workers&quot;: 1}</code></pre>
+    <p class="note"><code>connected_workers</code> is the number that matters. If it is <code>0</code> while your worker process is plainly alive, you have hit the queue rule two slides back.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 8 of 8</p>
+    <h2>Run it</h2>
+    <pre class="cmd"><code>aion --endpoint http://127.0.0.1:50099 --pretty \
+     run first_flow.awl --input &#x27;{&quot;folder&quot;: &quot;/Users/you&quot;}&#x27;</code></pre>
+    <ul class="points">
+      <li><code>run</code> is the one-motion verb: compile, deploy, start, wait for the answer.</li>
+      <li>Day to day you would use <code>start</code> and let it go.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Step 8 of 8</p>
+    <h2>What comes back</h2>
+    <pre class="out"><code>{
+  &quot;workflow_type&quot;: &quot;first_flow&quot;,
+  &quot;workflow_id&quot;: &quot;e623051b-6901-4d91-87b4-3c6a2024c37c&quot;,
+  &quot;run_id&quot;: &quot;700da026-ac14-4955-a93e-d24bcbfc6c8e&quot;,
+  &quot;result&quot;: {
+    &quot;outcome&quot;: &quot;done&quot;,
+    &quot;payload&quot;: {
+      &quot;found&quot;: &quot;aion-data\naion.toml\nfirst_flow.awl\nworker.toml&quot;
+    }
+  }
+}</code></pre>
+    <p class="caption">The real output of this tutorial's own run. A command ran on the machine and its answer came back through the workflow.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Look at it</p>
+    <h2>In the console</h2>
+    <ul class="points">
+      <li><b>Workflows</b> lists the run: type, status, when it started and ended.</li>
+      <li>Open it for the history — every event, in order, exactly as it was recorded.</li>
+      <li>That history is the run. It is not a log <i>about</i> the run.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">What just happened</p>
+    <h2>Why any of this is worth the trouble</h2>
+    <p class="lede">The workflow never did the work. It decided, and every decision and every answer was written down before moving on.</p>
+    <ul class="points">
+      <li>Kill the server mid-run and start it again: it picks up from the recorded history rather than starting over.</li>
+      <li>The command that already ran is not run a second time — its recorded answer is handed back instead.</li>
+      <li>That is the whole point of Aion. Everything else is detail.</li>
+    </ul>
+    <p class="note">Worth doing next, on your own, once this run works: start something slow, <code>kill -9</code> the server halfway, start it again, and watch. That exercise is not part of this tutorial's proven path — try it and see for yourself.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">When it goes wrong</p>
+    <h2>Three silences, and what they mean</h2>
+    <div class="scroller"><table class="kw">
+      <tr><td>worker prints nothing</td><td>normal — it always does. Use the availability probe, never the absence of output.</td></tr>
+      <tr><td><code>connected_workers: 0</code><br>but the process is alive</td><td>the queue rule: two documents declare that queue with different actions. Merge them into one document.</td></tr>
+      <tr><td>your runs seem to have vanished</td><td>you started the server from a different folder and <code>data_dir</code> is relative. Check the <code>data_root</code> line at startup.</td></tr>
+    </table></div>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Where next</p>
+    <h2>You have the shape of it now</h2>
+    <ul class="points">
+      <li>The AWL deck covers the rest of the language — waits, signals, children, parallel work, failure handling.</li>
+      <li>The same five pieces scale up: document, worker, deploy, run, watch.</li>
+      <li>A worker that needs real code instead of a command is <code>aion awl scaffold</code> — it writes the crate for you.</li>
+    </ul>
+  </section>
+</div>
+
+<nav class="rail" aria-label="Slide navigation">
+  <span class="counter" id="counter">01 / 01</span>
+  <div class="ticks" id="ticks"></div>
+  <span class="hint">← → to move · F for full screen</span>
+</nav>
+
+<script>
+  (function () {
+    var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+    var ticks = document.getElementById('ticks');
+    var counter = document.getElementById('counter');
+    var current = 0;
+
+    // ---- syntax marking -------------------------------------------------
+    // Split on comments and strings FIRST so keywords inside them are left
+    // alone, then mark keywords and TitleCase type names in the remainder.
+    var KEYWORDS = ['workflow', 'input', 'outcome', 'signal', 'query', 'answer', 'send', 'to',
+      'const', 'type', 'schema', 'json', 'of',
+      'worker', 'action', 'child', 'subflow', 'step', 'route', 'when', 'otherwise', 'after',
+      'fork', 'in', 'join', 'distribute', 'sequence', 'collect', 'loop', 'until', 'max', 'visits',
+      'wait', 'sleep', 'timeout', 'retry', 'every', 'backoff', 'node', 'on', 'failure',
+      'agent', 'advisory', 'run', 'spawn', 'counting', 'sequential', 'is', 'present', 'absent',
+      'success', 'true', 'false', 'and', 'or', 'not',
+      'any', 'all', 'count', 'filter', 'map', 'sort', 'empty'];
+    var kwRe = new RegExp('\\b(' + KEYWORDS.join('|') + ')\\b', 'g');
+
+    function esc(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function markPlain(text) {
+      var out = esc(text);
+      out = out.replace(kwRe, '<span class="tok-kw">$1</span>');
+      out = out.replace(/\b([A-Z][A-Za-z0-9]*)\b/g, '<span class="tok-type">$1</span>');
+      out = out.replace(/\|&gt;/g, '<span class="tok-pipe">|&gt;</span>');
+      return out;
+    }
+
+    function highlight(source) {
+      var parts = source.split(/(\/\/[^\n]*|"[^"\n]*")/g);
+      var html = '';
+      for (var i = 0; i < parts.length; i++) {
+        var part = parts[i];
+        if (!part) continue;
+        if (part.indexOf('//') === 0) {
+          html += '<span class="tok-com">' + esc(part) + '</span>';
+        } else if (part.charAt(0) === '"') {
+          html += '<span class="tok-str">' + esc(part) + '</span>';
+        } else {
+          html += markPlain(part);
+        }
+      }
+      return html;
+    }
+
+    Array.prototype.forEach.call(document.querySelectorAll('pre code'), function (block) {
+      block.innerHTML = highlight(block.textContent);
+    });
+
+    // ---- navigation -----------------------------------------------------
+    slides.forEach(function (slide, index) {
+      var tick = document.createElement('button');
+      tick.className = 'tick';
+      tick.type = 'button';
+      tick.setAttribute('aria-label', 'Slide ' + (index + 1));
+      tick.addEventListener('click', function () { show(index); });
+      ticks.appendChild(tick);
+    });
+
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+    function show(index) {
+      current = Math.max(0, Math.min(slides.length - 1, index));
+      slides.forEach(function (slide, i) {
+        slide.classList.toggle('is-current', i === current);
+      });
+      Array.prototype.forEach.call(ticks.children, function (tick, i) {
+        tick.classList.toggle('now', i === current);
+        tick.classList.toggle('seen', i < current);
+      });
+      counter.textContent = pad(current + 1) + ' / ' + pad(slides.length);
+      if (location.hash !== '#' + (current + 1)) {
+        history.replaceState(null, '', '#' + (current + 1));
+      }
+      window.scrollTo(0, 0);
+    }
+
+    document.addEventListener('keydown', function (event) {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      var key = event.key;
+      if (key === 'ArrowRight' || key === 'PageDown' || key === ' ') {
+        event.preventDefault(); show(current + 1);
+      } else if (key === 'ArrowLeft' || key === 'PageUp') {
+        event.preventDefault(); show(current - 1);
+      } else if (key === 'Home') {
+        event.preventDefault(); show(0);
+      } else if (key === 'End') {
+        event.preventDefault(); show(slides.length - 1);
+      } else if (key === 'f' || key === 'F') {
+        event.preventDefault();
+        if (document.fullscreenElement) { document.exitFullscreen(); }
+        else if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen();
+        }
+      }
+    });
+
+    var start = parseInt((location.hash || '').slice(1), 10);
+    show(isNaN(start) ? 0 : start - 1);
+  })();
+</script>
+</body>
+</html>

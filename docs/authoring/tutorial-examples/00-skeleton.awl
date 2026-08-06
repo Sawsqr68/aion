@@ -1,0 +1,5 @@
+//! greet_flow workflow.
+workflow greet_flow
+  outcome done: type Placeholder, route success
+
+type Placeholder { value: String }

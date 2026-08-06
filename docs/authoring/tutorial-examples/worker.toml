@@ -1,0 +1,14 @@
+# Wiring only. Everything typed — input, output, timeout, retry — lives in the
+# .awl document. A manifest cannot widen or restate a contract, only wire one.
+
+[worker]
+# `task_queue` must equal a `worker <name>` block in the document.
+name = "desk"
+task_queue = "desk"
+
+[[action]]
+name = "list_folder"
+# argv, run directly — never through a shell. `{input.folder}` projects one
+# top-level field of the activity input.
+command = ["/bin/ls", "-1", "{input.folder}"]
+result = "text"
