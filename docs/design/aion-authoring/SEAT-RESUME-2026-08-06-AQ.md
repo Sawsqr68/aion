@@ -356,3 +356,258 @@ stated as a spend not a ceiling. Sending it releases the chanreg lane.
 (`cargo test -p aion-server --features liminal-transport --no-fail-fast`).
 On resume: `grep -E "^(test result|error)" ` that log. Count VERDICT LINES, not
 prose. Any red is a finding to fix, not a flake to re-run.
+
+---
+
+# AMENDMENT 4 — 2026-08-06, #147 close-out found a defect in its own bound
+
+## The suite verdict from amendment 3, read
+
+**47 verdict lines. 46 green. One red, and it was NOT a defect.**
+
+`build_identity::tests::the_stamped_commit_is_the_commit_that_is_checked_out`
+failed: stamped `3d034c686`, tree `28a814b58`. Established rather than assumed —
+
+- suite build started `2026-08-06T11:08:20+1000`
+- marker commit `28a814b58` landed `2026-08-06T11:08:29+1000`
+
+**Nine seconds.** I committed the marker while my own battery was mid-build. The
+build script stamped the tree it started on, its rerun triggers are correct
+(`.git/HEAD`, the named ref file AND `packed-refs` — the branch-moves case is
+explicitly handled), and #123's pin caught exactly what it was built to catch.
+
+🔴 **PROCESS LAW EARNED: do not commit while a battery is in flight.** The
+build-identity pin will fail, and the failure is indistinguishable at a glance
+from a stale-stamp defect. Land, then measure.
+
+## 🔴 THE REAL FINDING: R1b's bound was FALSE as shipped
+
+Waffles' condition 2 was *bounded by construction*. The approved R1b design
+justified it with *"`(task_queue, node)` — both server-derived, and already
+enumerated by the gate from the deployed catalog."*
+
+**Both arrive on the wire** — `worker_grpc.rs:652-653`,
+`liminal_transport.rs:1571-1572`. The design NAMED this trap in its own words
+(*"a map keyed on anything the refused party controls cannot be bounded by
+construction"*), moved `identity` out of the key, and **left `node` in it**.
+
+`dispatch_can_reach` demands every UNPINNED action of every locality, so a
+refused worker varying its advertised node allocated one entry per dial with
+nothing able to evict it — a refused connection never enters the registry.
+**Measured under control: 100 dials → 100 sites.**
+
+`task_queue` was bounded after all, but by a mechanism nobody had written down:
+a queue with no reachable contract demands nothing, so it ADMITS
+(`worker_contracts_for_admission` → empty) and never reaches the map.
+
+### Fixed, landed `fdd694c4b`, pushed
+
+`RefusalSite` is now built by the gate from the CATALOG
+(`contracts::refusal_site`). A node names a site only when a demanded action is
+pinned to it. An unreadable catalog is ONE site, not one per queue name tried.
+Bound: catalog queues × (pinned nodes + 1) + 1, every component server-derived.
+`clear_queue` wired to the queue-retired case (fossil-refusal hygiene, NOT the
+bound).
+
+**Control table — both directions, because a bound test alone is satisfiable by
+collapsing everything:**
+
+| mutation | `…never_pins_cannot_allocate_a_site` | `a_node_the_catalog_pins_is_a_site_of_its_own` |
+|---|---|---|
+| none (as built) | ok | ok |
+| key on the raw advertised node | **FAILED** (100 ≠ 1) | ok |
+| collapse every locality | ok | **FAILED** (1 ≠ 2) |
+
+Each control kills exactly its own test. `contracts.rs` restored `cmp`-verified
+byte-identical after both.
+
+Gate-level bound measured THROUGH `validate_worker_contracts` against a real
+deployed catalog carrying a node-pinned action (`V_PINNED` fixture), not
+asserted of a hand-built site.
+
+### 🔴 THE LAW THIS EARNED
+
+**A bound is a claim about every dimension the client can move, so it takes one
+witness per dimension.** The original test gave the refused party a thousand
+identities and proved only that `identity` had been kept out of the key — which
+it had. The dimension actually left open was never asked about, and **the
+module's own doc asserting it was safe is what stopped anyone checking.** A
+single witness over one dimension reads exactly like a proof of the whole claim.
+
+Sibling of `confidence-is-what-stops-you-measuring` and
+`assert-the-invariant-not-the-enumeration`.
+
+## State
+
+- `origin/main` = `fdd694c4b`. Tree clean but for the three NO-SWEEP dirs.
+- clippy `-p aion-server --all-targets --features liminal-transport -D warnings`
+  **EXIT=0**, no allows. 36 unit + 4 integration pins green.
+- Brief § AS BUILT and the incident record's § RESOLVED both written and
+  committed. **#94 closed by the transition rule.**
+- **Cally: row CLOSED AS INVALID BY CONSTRUCTION** — a net pool delta cannot be
+  closed by a sum of gross draws. My 11.49 GiB is NOT to be entered as a
+  summand. Sampler declined by Cally; board rule is now `du` at lane open/close.
+  Also corrected: `du` over-read is TREE-DEPENDENT — near 1 on `aion/target`
+  (df −5 vs du +4.0 over 00:24–00:31Z), not the 3–9× measured on shards.
+- **Full crate suite #2 RUNNING DETACHED** on the settled tree `fdd694c4b` →
+  `<scratchpad>/aion-server-suite2.log`. **Nothing may be committed until it
+  finishes** (see the process law above). On resume:
+  `grep -E "^test result" ` and count lines that do NOT say `0 failed`.
+- **Owed:** report R1/R1a/R1b/R2 + the bound correction to Waffles. **R3 stays
+  Waffles' to send — I do not send it.**
+- Tom's pids 45425 / 48399 untouched.
+
+---
+
+# AMENDMENT 5 — 2026-08-06T01:40Z, compaction marker
+
+## Waffles ACCEPTED #147 in full (01:36Z) — lane closed bar the suite result
+
+He took joint signature on the R1b defect: *"I banked your trap-law the hour you
+wrote it and then approved a key without asking the one question the law demands
+per dimension: where does this component ARRIVE from."*
+
+**BOTH proposed laws are ON THE ESTATE BOOKS as written:**
+
+1. **A bound is a claim about every dimension the client can move, so it takes
+   one witness per dimension.**
+2. **Do not commit while a battery is in flight** — the #123 build-identity pin
+   goes red and is indistinguishable at a glance from a real stale-stamp fault.
+
+**🔴 THE MECHANISM BEHIND BOTH, from Waffles, worth more than either law.**
+Hermes banked *"an arming probe that executes the path under test is a
+contaminant"* on the liminal lane the same hour — and in the SAME message failed
+to apply it, retracting a true finding on a contaminated instrument. Same shape
+as mine: I held the trap-law and asked it of one dimension only.
+
+⇒ **A LAW BANKED IS NOT A LAW APPLIED, AND THE WINDOW WHERE IT IS MOST LIKELY TO
+BE SKIPPED IS THE ONE RIGHT AFTER WRITING IT, WHEN IT FEELS MOST OWNED.**
+
+Also worth keeping, his phrasing: *"a bound nobody wrote down is not a bound,
+it's a coincidence with good posture"* — re `task_queue`, which was safe only via
+the unwritten admits-when-nothing-is-demanded path, now written down.
+
+**Nothing for him to re-gate.** R3 CONFIRMED HELD at his seat for Tom, untouched,
+after the liminal chain closes. **I do not send it.** He asked only for the suite
+result when it settles.
+
+## Suite #2 status at compaction: STILL RUNNING
+
+- verdict lines so far: **19**, of which NOT-"0 failed": **0**
+- lines matching `^error`: **0**
+- **lib target SETTLED GREEN: `796 passed; 0 failed`** — and 790→796 is its own
+  arithmetic check that exactly the six new tests landed and ran (4 audit-bound
+  witnesses + 2 gate-level).
+- log: `<scratchpad>/aion-server-suite2.log`, tree `fdd694c4b`
+
+## 🔴 A THIRD TRAP, EARNED WHILE WRITING THIS AMENDMENT
+
+`cat >> file <<MD` with an **unquoted** delimiter lets zsh evaluate backticks in
+the heredoc body — `` `task_queue` `` ran as a command and mangled the append.
+This is the known `git commit -m` backtick trap in a second costume.
+
+⇒ **Quote every heredoc delimiter (`<<'MD'`) whenever the body contains
+backticks, or write the file with the Write tool instead.** The commit-message
+memory names only `git commit`; the hazard is the SHELL, not the verb.
+
+## 🔴 ON RESUME, IN ORDER
+
+1. `grep -E "^test result" <scratchpad>/aion-server-suite2.log | grep -v " 0 failed"`
+   — count VERDICT LINES. Empty output + no `^error` = green.
+   **NO COMMITS until it is settled.**
+2. **Send the settled result to Waffles**
+   (`dm:896955e1-86dd-4d6a-9c25-f3f978b189a9`). That closes the #147 lane.
+   **R3 NOT sent.**
+3. Then Tom's "fix everything" queue, in order: **#7** completion-monitor
+   transient store error (red-first, harness `nif_child_watch.rs:1142`) · **#9**
+   operator-facing fact in `details` + a reply that goes past Waffles BEFORE it
+   posts · **#6** `max_concurrency` ignored on liminal + missing pin · **#5** AWL
+   `sum` combinator (bump `Keyword::ALL`'s `[Self; 57]` in the SAME change) ·
+   **#1** `workflow.now()` history tail vs replay position (`Replay::now()`
+   exists unwired).
+4. Chanreg measurement lane is RELEASED (Cally's row closed as invalid by
+   construction) but still queues behind #147.
+
+**Tom's pids 45425 (server) / 48399 (worker): untouched all session.**
+**origin/main = `fdd694c4b`.** Tree clean but for the three NO-SWEEP dirs.
+
+---
+
+# AMENDMENT 6 — 2026-08-06, suite settled GREEN, #147 lane closed
+
+## The verdict
+
+`cargo test -p aion-server --features liminal-transport --no-fail-fast`, tree
+`fdd694c4b`, run detached to `<scratchpad>/aion-server-suite2.log`:
+
+- **46 verdict lines**, every one `0 failed`
+- **0 verdict lines with a non-zero `ignored`** — nothing skipped its way to green
+- **0** lines matching `^failures:`, `^error`, or `thread ... panicked`
+- lib target **796 passed** (790 before, and 790→796 is the arithmetic check that
+  exactly the six new tests landed AND ran: 4 audit-bound witnesses + 2
+  gate-level)
+- 981 passed summed across all targets
+
+Two verdict lines read `1 passed; 795 filtered out` — those are child re-execs,
+where a test spawns a process running one named test. Expected, not a partial run.
+
+## 🔴 THE RESUME GREP IN AMENDMENT 5 WAS ITSELF MIS-KEYED
+
+Amendment 5 told the next seat to run:
+
+```
+grep -E "^test result" LOG | grep -v " 0 failed"
+```
+
+That printed one line, which for a moment looked like a failure:
+
+```
+test result_frames_are_acked_including_duplicates ... ok
+```
+
+It is not a verdict line. It is a TEST NAME that begins with `result`, and
+`^test result` matched it because the pattern was not anchored on the colon that
+actually distinguishes a verdict from a test name. The correct pattern is
+`^test result: `, with the colon and the space.
+
+⇒ **A COUNTER KEYED ON A PREFIX COUNTS EVERYTHING THAT SHARES THE PREFIX.** The
+estate already holds *count verdict lines, never prose* — this is the same law
+one level down: the thing that makes a verdict line a verdict line is its
+SEPARATOR, not its opening word, and a pattern that stops short of the separator
+is reading prose again. It failed in the safe direction here (a false alarm, not
+a false green) but the identical mistake in `grep -c` would have inflated the
+verdict count by one and nobody would have looked.
+
+Both directions matter, so the settled check is now three greps, not one:
+
+```
+grep -cE "^test result: " LOG                              # how many verdicts
+grep -E  "^test result: " LOG | grep -v "; 0 failed;"      # any red
+grep -E  "^test result: " LOG | grep -v "; 0 ignored;"     # any skipped
+grep -cE "^(failures:|error(\[|:)|thread .* panicked)" LOG # any harness death
+```
+
+The `; ` and `;` around `0 failed` matter for the same reason the colon does.
+
+## Lane state
+
+- **#147 CLOSED.** `origin/main = fdd694c4b`. Waffles accepted in full at 01:36Z;
+  both laws are on the estate books; **R3 stays at his seat, unsent by me.**
+- Suite result sent to Waffles, which was the one thing he asked for.
+- **Chanreg measurement lane is now unblocked** — it queued behind #147 and #147
+  is done. Cally's row stays closed as invalid by construction.
+
+## NEXT, in order (unchanged from Amendment 5 bar the head)
+
+1. **#7** completion-monitor transient store error — red-first, harness
+   `nif_child_watch.rs:1142`.
+2. **#9** operator-facing fact in `details` (`RETRY-CLASS-HONESTY-90.md` §5) —
+   **the reply goes past Waffles BEFORE it posts.**
+3. **#6** `max_concurrency` silently ignored on liminal + the missing pin.
+4. **#5** AWL `sum` combinator — bump `Keyword::ALL`'s `[Self; 57]` in the SAME
+   change.
+5. **#1** `workflow.now()` history tail vs replay position (`Replay::now()`
+   exists unwired).
+
+**Tom's pids 45425 (server) / 48399 (worker): untouched.** Worker rebuilds still
+frozen estate-wide until the #139 live cut.
