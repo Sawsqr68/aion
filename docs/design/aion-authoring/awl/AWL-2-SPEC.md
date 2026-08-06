@@ -497,7 +497,7 @@ Gone from AWL-0/1 (the parser of the new front end never accepts them):
 | `workflow.run(activity)` | call statement in a step body |
 | `workflow.map` | `fork x in xs … join` |
 | `workflow.all` | named-branch `fork … join` |
-| sequential fold | `fork … sequential` or `loop` |
+| sequential fold | **not expressible** — see below |
 | `child.spawn`/`await` | `child` declaration + call |
 | `child.spawn` (detached) | `spawn` |
 | `signal.receive` | `wait <signal>` |
@@ -507,6 +507,19 @@ Gone from AWL-0/1 (the parser of the new front end never accepts them):
 | `continue_as_new` | deferred (unbounded loop gate, unchanged) |
 | `workflow.now/random` | deliberately absent (unchanged) |
 | codecs / schemas / start form | derived from `type`/`input`/`outcome` decls |
+
+**Sequential fold is not expressible in AWL-2**, and this table previously
+claimed it was. The three mechanisms that would be needed are pairwise
+incompatible: `fork` iterates a collection but carries no accumulator
+(`ForkStmt` has `header`/`body`/`join` and no threaded value); `loop` threads
+exactly one value between iterations but has no collection binding; and
+indexing is literal-only — `Expr::Index` stores `index: u64` and its own doc
+comment reads *"Computed indices are unwritable"*, so a loop counter can never
+be used as a subscript. A numeric fold over a runtime-length collection
+therefore has to be a worker action today. Tracked as issue #5, which proposes
+`sum` as a seventh `CombinatorKind` — a fixed type rule and no new binding
+form — ahead of a general `reduce`, which would need a two-argument lambda the
+language has nowhere else.
 
 ## Canonical formatting (printer contract)
 
