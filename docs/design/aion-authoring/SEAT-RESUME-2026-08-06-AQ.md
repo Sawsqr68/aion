@@ -348,3 +348,11 @@ SAME change) · #1 `workflow.now()` history tail vs replay position
 stated as a spend not a ceiling. Sending it releases the chanreg lane.
 
 **Tom's pids 45425 (server) / 48399 (worker): untouched all session.**
+
+**LANDED `3d034c686`, pushed** — `origin/main` = `3d034c686`.
+
+**Full crate suite RUNNING DETACHED** →
+`/private/tmp/claude-501/-Users-tom-Developer-ablative-stack-aion/5849e0d8-4802-4869-8e0f-9f7fd187e198/scratchpad/aion-server-suite.log`
+(`cargo test -p aion-server --features liminal-transport --no-fail-fast`).
+On resume: `grep -E "^(test result|error)" ` that log. Count VERDICT LINES, not
+prose. Any red is a finding to fix, not a flake to re-run.
