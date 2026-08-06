@@ -1,0 +1,165 @@
+# Seat resume — marker AQ, 6 August 2026
+
+Supersedes AP. **Latest letter wins.** AP holds the #146 tutorial self-run, the
+five-issue triage, and Waffles' four dispositions; that record stands.
+
+`origin/main` = `d32a41977`. Tree carries the #147 red-first working set,
+uncommitted at time of writing (see "In flight"). **Tom's pids 45425 (server)
+and 48399 (worker) untouched.**
+
+## 🔴 #147 — the shape of the defect CHANGED, and it is worse
+
+Amendment 2 to `SHARED-QUEUE-SILENT-REFUSAL-2026-08-06.md` reads the liminal
+half that amendment 1 left open.
+
+**One gate, two callers, opposite observability.**
+`contracts.rs:120` `validate_worker_contracts` is the single gate. The liminal
+transport funnels every refusal through `admit_registration`
+(`liminal_transport.rs:1592`) and names it at WARN with pid, identity, queue,
+namespaces, **both** advertised sets and the reason — pinned by
+`tests/dead_man_switch_refusal_logs.rs:83`. The gRPC caller
+(`worker_grpc.rs:67`) names **nothing**.
+
+**And this defect was already found, fixed and pinned once.**
+`admit_registration`'s doc comment records it: *on 2026-07-29 a worker was
+refused on every single dial with the server silent on all of them, and "the
+refused process looked merely asleep."* That is verbatim what I measured on
+2026-08-06 on the other transport. **The fix landed in one CALLER instead of in
+the shared gate, so the second transport re-manifested it within a week with
+nothing in the tree able to notice.**
+
+Sharpest detail: `worker_grpc.rs:632-640` **does** log — a WARN for the case
+where the check was *skipped* for want of an engine handle. The refusal branch
+thirty lines below is the one branch with no voice. An instrument that reports
+its excuses and swallows its verdicts.
+
+⇒ `one-truth-in-two-places-has-drifted`, literal form. **Cure is subtraction:
+the naming goes into the gate, not into a second copy of the liminal log.**
+
+**Brief:** `BRIEF-147-ADMISSION-REFUSAL-NAMES-ITSELF.md` (`d32a41977`).
+R1 gate-side naming · R1a transition rule (identical repeat = silence; a
+semantic, not an interval or cap — **this closes #94 in the same motion**) ·
+R1b the transition-state owner · R2 the availability hint · R3 routed to Tom.
+
+### Waffles' dispositions on the brief (00:16Z) — ALL BINDING
+
+1. **One motion approved.** R1 + R1a together; splitting would land a defective
+   log volume on a second transport.
+2. **The transition-state map gets its lifecycle review BEFORE it is written** —
+   bounded by construction, entries cleared on admission or departure. *"An
+   unbounded key map keyed on refused identities is a slow leak wearing a
+   diagnostic's clothes."*
+3. **The amended pin must still fail when the naming is absent.** Amend, never
+   delete. *"A guard that can't be shown to fail without the fix asserts on the
+   world it happens to be in."*
+4. **R3 is Waffles' to hold, stamped** — goes to Tom after the liminal chain
+   closes. **I do not send it.**
+
+## In flight — the red-first working set (UNCOMMITTED)
+
+- **NEW** `tests/test_support/capture.rs` — the `tracing` capture layer, was
+  duplicated byte-identically in two test files whose doc comments had already
+  **drifted** (they disagreed about whether the layer captures process-wide or
+  thread-locally; neither described the layer — that is a property of how the
+  subscriber is INSTALLED). Extracted, with the installation trap documented.
+  **140 lines subtracted, 10 added.**
+- **NEW** `tests/test_support/grpc_admission.rs` — shared gRPC admission harness.
+  ⚠️ **`runtime_config` is duplicated across 19 test files in this crate.** Out
+  of scope to fix and **named in the module rather than quietly widened**; this
+  deduplicates only the two on this lane's path so the lane adds no 20th copy.
+- **NEW** `tests/grpc_admission_refusal_logs.rs` — the red. Own binary (the
+  tonic server runs in a `tokio::spawn`, so only a GLOBAL subscriber sees it).
+  Four phases: named at all · identical repeats silent · **changed reason speaks
+  again** · a different build speaks for itself.
+- **EDITED** `worker_contract_registration.rs`, `dead_man_switch_refusal_logs.rs`,
+  `unserved_queue_honesty.rs` — rewired onto the shared support.
+
+**Not yet written:** the R1/R1a implementation itself, and R2's red (it depends
+on R1b's audit handle, which is gated on Waffles' lifecycle review).
+
+## 🔴 THE WATCHDOG FINDING — a second road to a class Cally found tonight
+
+Waffles gated the cold build (`stack/aion/target` was deleted whole by Tom's
+reclaim) behind declaring the draw and running under band terms. Declared to
+Cally and Athena; both cleared it. Cally required an **arming-time actuator
+check** because Hermes's watchdog had been falsified an hour earlier: its
+`pkill -f "$LANE"` matched only its own command line, so on a trip it would kill
+itself, write a clean ABORTED receipt, and let the build run on through the
+floor. Their mechanism: **`cwd` is not in `argv`** — a `-f` pattern can address
+a process by what it was *typed as*, never by *where it runs*.
+
+**My control failed on its first run, and caught a different instance.** The
+pgid file was never written, so my target variable was **empty**, so
+`kill -TERM -- "-$PGID"` evaluated to **`kill -TERM -- -`** — which SIGTERMed my
+own shell (exit 144).
+
+★ **`kill -- -` IS NOT A NO-OP. AN UNSET TARGET IN A GROUP-KILL ACTUATOR DOES
+NOT FAIL CLOSED — IT RESOLVES TO SOMETHING, AND THAT SOMETHING IS YOU.** Same
+terminal state as the name-based failure (actuator dead, build alive, receipt
+clean) reached with no pattern matching anywhere. **The class is wider than
+`pkill -f`: it is any actuator whose target can be empty at fire time.** The
+review question is not "is the pattern right" but **"what does this fire at when
+the target resolves to nothing?"**
+
+Fixes: the actuator **refuses to fire at anything that is not a positive
+integer**; and the target is no longer *named* at all — I launch the build, so I
+own its process group (`perl -e 'setpgrp(0,0)'` writes the pgid; the watchdog
+kills `-PGID`). The addressing problem is dissolved, not worked around.
+
+**Positive control, against a real sacrificial group, before arming:** target
+group `98577` vs my shell's `98574` (**distinct** — the thing that was false for
+Hermes); 3 members before including **both child sleeps** (so it reaches
+rustc-equivalents); **0 after**; actuator survived.
+
+Scratchpad: `pgleader.py` (superseded by the perl one-liner — the `python3` on
+PATH cannot exec under `nohup`), `watchdog.sh`, `floor.gib`, `build.log`,
+`watch.log`, `build.pgid`.
+
+### Disk terms accepted by Cally and Athena
+
+- Fire time **00:23:39Z, 138 GiB available, floor 40 GiB** (floor read from a
+  file every sample so it can be raised mid-flight).
+- Sampling 20s. `df` = the **box**, not me. `du` on `aion/target` = my draw,
+  and it is **target-only** — `~/.cargo` sampled separately, because a from-zero
+  `target` is not a from-zero cargo (Athena).
+- **An abort stops the bleeding; it does not recover space.** In the receipt
+  verbatim.
+- ⚠️ **Cally's correction, accepted:** my ~25-37 GiB prior is **suspect by
+  category** — an accumulated `target/` is a HISTORY, not a build cost. Doug's
+  full cold iridium workspace measured **3.04 GiB** against a 45.9 GiB
+  contingency. **My `du` lands with no prior attached.**
+- ⛔ `.aion-accepted-binary-20260731/aion` is now the **SOLE** copy of Tom's
+  accepted build (`target/release` went in the same reclaim). Never touch it,
+  never a bare `cargo clean` near stack/aion.
+
+## Standing constraints (unchanged)
+
+🔴 Worker rebuilds frozen until the #139 cut — **not touched**.
+🔴 Tom's `~/.aion/config.toml` `[ops_console] source = { FileSystem = … }` stays
+until he installs a binary from `b20d2da1`+. 🔴 beamr JIT blocker with Artemis.
+⛔ Never `git add -A` here — name paths. ⛔ NO WORKTREES; one mutating lane.
+⛔ Never publish artifacts for Tom. Backticked commit messages via
+`git commit -F -`. Do not edit `CLAUDE.md`. Never mention prospekt.
+NO-SWEEP untracked: `.aion-accepted-binary-20260731/`,
+`.aion-jjuabk-snapshot-20260731/`, `.aion-data-preswap-20260804/`.
+⚠️ A store cannot live under `/tmp` — path-safety gate refuses a world-writable
+ancestor.
+
+## Board
+
+- ✅ #146 self-run done; **remaining: walk it with Tom.**
+- 🔨 **#147 IN FLIGHT** — brief landed, red written, build running.
+- 🆕 **#94 rides #147's R1a** (transition rule lands in the shared gate).
+- 🔜 **#7 (GitHub)** red-first; **#9** reply drafted past Waffles before posting;
+  **#6** missing pin + `max_concurrency`-ignored-on-liminal as their own rows.
+- Held on Tom: #139 live cut, #142, the 0.11.1 decision, and the deck question
+  (him-over-shoulder vs someone-alone).
+
+## Method memories earned or re-earned at this marker
+
+`one-truth-in-two-places-has-drifted` (the whole #147 finding) ·
+`mutation-must-sit-on-the-tests-path` (the red's phase 3 exists because a
+suppression rule that only ever suppresses is indistinguishable from never
+logging) · **new, unwritten:** *an actuator whose target can be empty does not
+fail closed* · `a-stated-reason-is-evidence-both-ways` ·
+`sampling-cannot-establish-quiet` (a sampled peak is a lower bound).
