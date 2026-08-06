@@ -163,3 +163,88 @@ suppression rule that only ever suppresses is indistinguishable from never
 logging) · **new, unwritten:** *an actuator whose target can be empty does not
 fail closed* · `a-stated-reason-is-evidence-both-ways` ·
 `sampling-cannot-establish-quiet` (a sampled peak is a lower bound).
+
+---
+
+# AMENDMENT — RED CONFIRMED, and the exact next steps
+
+## 🔴 The red is confirmed and its evidence is the best statement of the defect
+
+`cargo test -p aion-server --test grpc_admission_refusal_logs` — **FAILED**, at
+phase 1, with its own message:
+
+> *the server refused the registration and logged NOTHING about it; captured:*
+> **312 events captured in total (0 from aion targets, 312 from elsewhere — the
+> subscriber was demonstrably live). NO aion-target events at all.**
+
+Both halves matter:
+- `assert!(first.is_err())` **passed first**, so the refusal genuinely happened.
+  The subject occurred; the test is not vacuous.
+- 312 events from `h2`/`hyper`/`tonic`/`mio` reached the subscriber during that
+  refusal. **The instrument is demonstrably live, so the absence is real
+  absence.** Absence paired with survival is the only form that proves anything.
+
+`render` in `tests/test_support/capture.rs` was rewritten to make this readable:
+aion-target events in full, everything else reduced to per-target counts. **The
+counts are load-bearing, not politeness** — they are what proves the subscriber
+was alive.
+
+## Measured disk draw — OWED TO CALLY, send it
+
+**`du` on `aion/target` = 4.42 GiB** at build completion (from `watch.log`).
+`~/.cargo` **flat at 12.05 GiB throughout — +0**, so this lane pulled nothing
+from the shared cache. State it **target-only** and as a **spend, not a
+ceiling** (a peak allowance is added before it enters Σ). Cally's re-scaling was
+right: the ~25-37 GiB prior was archaeology, not build cost. Fire 00:23:39Z,
+138 GiB avail, floor 40, watchdog stood down cleanly on group exit.
+
+**Cally has queued the chanreg measurement lane to me, to open once #147 lands** —
+Athena's terms 1-9 plus Cally's added term (no other cold lane on the box during
+the cache window). Full terms in the 00:29:32Z DM.
+
+## 🔴 TOM'S ORDER, 00:30Z: "make sure that all gets fixed"
+
+Everything, not just #7. I answered in plain language with the six-item
+programme and he confirmed at 00:32Z. Order: **#147 first (half-built), then
+down the list.** #9's public reply still goes past Waffles before posting.
+
+## WHERE THE IMPLEMENTATION IS — resume exactly here
+
+**Written and on disk:** `crates/aion-server/src/worker/admission_audit.rs`.
+`AdmissionAudit` with `should_name`, `clear_admitted`, `clear_queue`,
+`remembered_sites`. Keyed `(task_queue, node)` — server-derived — with the
+digest over the client's part. Poisoned lock **recovers and still names**,
+because declining to log would recreate the defect.
+
+**Home decided:** `ConnectedWorkerRegistry` (`registry.rs:288`), which is
+`#[derive(Clone)]` over `Arc<Mutex<RegistryState>>`, so an added
+`Arc<AdmissionAudit>` field is shared across clones. **Both callers already hold
+the registry**, so this is ONE home rather than the two the brief anticipated.
+
+**Remaining, in order:**
+1. `admission_audit_tests.rs` — the unit tests the module already `#[path]`s to
+   (it will not compile until this exists).
+2. Add `audit: Arc<AdmissionAudit>` to `ConnectedWorkerRegistry` + accessor.
+3. `contracts.rs`: add the audit parameter; at the `Ok(())` return (`:146`) call
+   `clear_admitted`; at the `Mismatch` construction (`:148`) consult
+   `should_name` and `tracing::warn!` with message **`REFUSED worker
+   registration`** and fields `task_queue`, `node`, `identity`, `reason`. The
+   constant the red asserts on is `REFUSAL` in
+   `tests/grpc_admission_refusal_logs.rs`.
+4. Thread the audit through both callers: `worker_grpc.rs:625-666` wrapper and
+   `liminal_transport.rs:1568` `validate_registration_contract`.
+5. **Restructure the liminal caller** so it stops restating the contract class
+   (`on_worker_registered`'s `inspect_err`, `:1687-1712`) and keeps its log for
+   the classes the gate cannot see.
+6. **Amend** `tests/dead_man_switch_refusal_logs.rs:83` to assert the gate's
+   message. **Waffles' condition: it must still FAIL with the naming absent —
+   show that, don't claim it.**
+7. R2: the availability hint at `awl/run_loop.rs:275` reads the audit so it can
+   tell "none started" from "one refused".
+8. `cargo clippy --workspace --all-targets -- -D warnings` + `cargo fmt`.
+
+⚠️ **Unused-import/dead-code warnings are live** in
+`tests/test_support/grpc_admission.rs` (`action_named`, `descriptor_for`,
+`register`, `register_on_node` unused from the refusal-logs binary). Clippy is
+`-D warnings`, so these must be resolved — the honest fix is that each test
+binary only imports what it uses, not an allow.

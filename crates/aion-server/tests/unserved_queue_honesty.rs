@@ -27,9 +27,12 @@ use aion::{ActivityDispatch, ActivityDispatcher as _};
 use aion_core::{ActivityId, RunId, WorkflowId};
 use aion_server::worker::{ConnectedWorkerRegistry, HeartbeatTracker, WorkerActivityDispatcher};
 use tracing::Level;
-use tracing::field::{Field, Visit};
-use tracing_subscriber::Layer;
-use tracing_subscriber::layer::{Context, SubscriberExt as _};
+
+#[path = "test_support/capture.rs"]
+mod capture;
+
+use capture::{CaptureLayer, CapturedEvent};
+use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::registry::Registry;
 
 type TestError = Box<dyn std::error::Error>;
@@ -38,68 +41,6 @@ type TestError = Box<dyn std::error::Error>;
 /// captured tracing output. The pre-R1 seam re-emits its unreasoned INFO every
 /// 500ms, so this window covers several park iterations.
 const OBSERVATION_WINDOW: Duration = Duration::from_millis(2_500);
-
-/// One captured `tracing` event: level, message, and rendered field values.
-#[derive(Clone, Debug)]
-struct CapturedEvent {
-    level: Level,
-    message: String,
-    fields: BTreeMap<String, String>,
-}
-
-#[derive(Default)]
-struct FieldVisitor {
-    message: String,
-    fields: BTreeMap<String, String>,
-}
-
-impl Visit for FieldVisitor {
-    fn record_str(&mut self, field: &Field, value: &str) {
-        self.store(field.name(), value.to_owned());
-    }
-
-    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
-        self.store(field.name(), format!("{value:?}"));
-    }
-
-    fn record_u64(&mut self, field: &Field, value: u64) {
-        self.store(field.name(), value.to_string());
-    }
-
-    fn record_i64(&mut self, field: &Field, value: i64) {
-        self.store(field.name(), value.to_string());
-    }
-}
-
-impl FieldVisitor {
-    fn store(&mut self, name: &str, value: String) {
-        if name == "message" {
-            self.message = value;
-        } else {
-            self.fields.insert(name.to_owned(), value);
-        }
-    }
-}
-
-/// Collects every event emitted on the subscriber's thread into a shared log.
-struct CaptureLayer {
-    events: Arc<Mutex<Vec<CapturedEvent>>>,
-}
-
-impl<S: tracing::Subscriber> Layer<S> for CaptureLayer {
-    fn on_event(&self, event: &tracing::Event<'_>, _context: Context<'_, S>) {
-        let mut visitor = FieldVisitor::default();
-        event.record(&mut visitor);
-        let captured = CapturedEvent {
-            level: *event.metadata().level(),
-            message: visitor.message,
-            fields: visitor.fields,
-        };
-        if let Ok(mut events) = self.events.lock() {
-            events.push(captured);
-        }
-    }
-}
 
 fn dispatch_to_unserved_queue() -> ActivityDispatch {
     ActivityDispatch {
