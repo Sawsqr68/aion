@@ -272,6 +272,85 @@ a setup fault.
   fails if the naming is removed.
 - Admission semantics are **unchanged**. R3 is not built.
 
+---
+
+## AS BUILT — 2026-08-06
+
+**Commits:** `d4d915f18` (red + the audit), `3d034c686` (the gate names itself),
+and the R1b bound correction below. R1, R1a, R1b and R2 are built; **#94 is
+closed by the transition rule**, in the same motion, as recommended and
+approved.
+
+### Where the build DEPARTED from this brief, and why
+
+**1. The remembered value is the whole refusal, not a digest of it.**
+R1b specified *"a digest over `(identity, details)`"*. R2 has to SAY the reason
+to the operator, and a digest can answer "different?" and nothing else. Keeping
+the refusal itself served both readers and **deleted `DefaultHasher` entirely** —
+the remedy removed code rather than adding it.
+
+**2. The catalog-read failure names itself too.** The brief scoped the naming to
+the `Mismatch` branch. Leaving `Catalog` voiceless would have reproduced the
+defect's own shape: the gRPC path already logged the case where it SKIPPED the
+check while swallowing the case where it refused.
+
+**3. 🔴 The R1b bound as approved was FALSE, and the fix is recorded here rather
+than quietly.** Waffles' condition was *bounded by construction*. The approved
+design justified that with *"`(task_queue, node)` — both server-derived, and
+already enumerated by the gate from the deployed catalog."* **Both arrive on the
+wire** in the registration request (`worker_grpc.rs:652-653`,
+`liminal_transport.rs:1571-1572`). The design named the trap — *"a map keyed on
+anything the refused party controls cannot be bounded by construction"* — moved
+`identity` out of the key, and **left `node` in it**, which is the same
+dimension by another name.
+
+Measured consequence: `dispatch_can_reach` demands every UNPINNED action of
+every locality, so a refused worker varying its advertised node allocated one
+entry per dial without limit. Confirmed by control: with the advertised node
+used as the key, 100 dials produce **100 sites**.
+
+`task_queue` turned out to be bounded — but by a mechanism nobody had written
+down, not by the one the brief claimed. A queue holding no reachable contract
+demands nothing, so it **admits** rather than refuses and never reaches the map
+at all.
+
+⇒ **The site is now derived from the CATALOG** (`contracts::refusal_site`), as
+the type `RefusalSite`. A node names a site only when some demanded action is
+pinned to it; a node the catalog never mentions cannot have changed the verdict,
+so every such connection is one site. An unreadable catalog is **one** site
+rather than one per queue name tried. Bound: catalog queues × (their pinned
+nodes + 1) + 1 — every component server-derived.
+
+That collapse is also more truthful than the original: two connections owing an
+identical action set and failing identically are ONE fault, and reporting them
+separately was #94 volume for no information.
+
+**Both directions are controlled**, because a bound test alone can be satisfied
+by collapsing everything:
+
+| mutation | `…never_pins_cannot_allocate_a_site` | `a_node_the_catalog_pins_is_a_site_of_its_own` |
+|---|---|---|
+| none (as built) | ok | ok |
+| key on the raw advertised node (the original defect) | **FAILED** (100 ≠ 1) | ok |
+| collapse every locality into one site | ok | **FAILED** (1 ≠ 2) |
+
+Each control kills exactly its own test.
+
+**4. `clear_queue` is wired to the queue-retired case**, which R1b described as
+lazy departure pruning. It is hygiene against a fossil refusal silencing the
+first refusal after a redeploy — **not** the bound, which is structural.
+
+### The lesson this brief earned
+
+**A bound is a claim about every dimension the client can move, so it takes one
+witness per dimension.** The original test gave the refused party a thousand
+identities and proved only that `identity` had been kept out of the key. The
+dimension that was actually open was never asked about, and the module's own doc
+asserted it was safe. `admission_audit_tests.rs` now carries one witness each
+for identities, nodes and queues, and the gate-level bound is measured through
+`validate_worker_contracts` against a real deployed catalog rather than assumed
+of it.
+
 ## Not in scope, and said plainly
 
 - The worker's own silence. `aion worker shell` installs no tracing subscriber

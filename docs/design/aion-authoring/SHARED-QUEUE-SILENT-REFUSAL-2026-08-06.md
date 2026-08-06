@@ -229,3 +229,48 @@ no voice.
 ⇒ The defect is `one-truth-in-two-places-has-drifted` in literal form, and the
 cure is subtraction: the naming belongs in the gate, not in a second copy of the
 liminal log. That is R1 of the brief.
+
+---
+
+## RESOLVED — 2026-08-06
+
+The naming moved **into** `validate_worker_contracts`, and the liminal caller
+**stopped restating it**. One site down from two, not a second copy added. A
+third transport cannot forget to log a refusal, because logging is no longer
+something a transport does.
+
+`dead_man_switch_refusal_logs.rs` was **amended, not replaced** — the message it
+reads for changed from the caller's `REFUSED liminal worker registration` to the
+gate's `REFUSED worker registration`; the property it pins is untouched, and it
+still fails when the naming is removed. Both refusal-log pins were watched
+failing with the `tracing::warn!` deleted and passing with it restored
+byte-identically.
+
+**#94 is closed in the same motion.** A refused worker redials forever, so the
+gate emits its diagnosis when the refusal for a site is new or different and
+meets an identical repeat with silence. That is a transition rule and not a rate
+limit: no interval, no count, no cap, nothing configurable — NO ARBITRARY LIMITS
+holds. Adding a log to the second transport without it would have given #94's
+12 MB/hour a second host.
+
+### The close-out found a second defect, in the fix's own bound
+
+The first cut keyed the transition map on `(task_queue, node)` and its doc
+called both *server-derived*. **Both arrive on the wire.** The design had named
+that exact trap and then walked into half of it — `identity` was kept out of the
+key, `node` was not. A refused worker varying its advertised node grew the map
+per dial; measured under control, 100 dials produced 100 entries.
+
+The site is now derived from the deployed catalog rather than the request, so
+nothing a refused party can say allocates an entry. Full record, including the
+two-direction control table, in
+`BRIEF-147-ADMISSION-REFUSAL-NAMES-ITSELF.md` § AS BUILT.
+
+**What generalises from it:** a bound is a claim about every dimension the
+client can move, so it takes one witness per dimension. A single witness over
+one dimension reads exactly like a proof of the whole claim — and the doc
+asserting the other dimension was safe is what stopped anyone checking.
+
+**R3 is unchanged and unbuilt.** Whether one queue shared across documents
+should be refusable at all remains a design question held at Waffles' seat for
+Tom. Nothing here changed admission semantics.

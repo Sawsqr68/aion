@@ -469,3 +469,126 @@ fn a_catalog_failure_is_classified_apart_from_a_mismatch() {
         "an unreadable catalog is not a contract disagreement: {message}"
     );
 }
+
+/// A queue whose actions are split between an unpinned one every worker owes
+/// and one pinned to a single node, so the demanded set genuinely DEPENDS on
+/// the connection's locality. Without a pin the site question would be trivial.
+const V_PINNED: &str = r"//! Worker-admission fixture with one node-pinned action.
+workflow pinned_admission
+  input url: String
+  outcome fetched: type Report, route success
+
+type Report { body: String }
+
+worker reports
+  action fetch(url: String) -> Report
+  action edge_probe(url: String) -> Report
+    node edge01
+
+step run
+  fetch(url: url) -> report
+  edge_probe(url: report.body) -> probe
+  route fetched(body: probe.body)
+";
+
+/// A worker advertising `fetch` with the wrong input type, so it is refused at
+/// EVERY locality — the refusal is held constant while only the node moves.
+fn wrong_fetch() -> Vec<ActivityDescriptor> {
+    vec![ActivityDescriptor {
+        name: "fetch".to_owned(),
+        input_schema: json!({
+            "type": "object",
+            "properties": {"url": {"type": "integer"}},
+            "required": ["url"]
+        }),
+        output_schema: json!({
+            "type": "object",
+            "properties": {"body": {"type": "string"}},
+            "required": ["body"]
+        }),
+    }]
+}
+
+/// **The bound, measured through the gate rather than assumed of it.**
+///
+/// `node` arrives in the registration request on both transports, so a refused
+/// worker choosing a fresh one per dial is the leak the design promised could
+/// not happen — and the first cut of #147 permitted exactly that, because it
+/// keyed the audit on the advertised node while calling it "server-derived".
+///
+/// A node the catalog pins nothing to cannot have changed the verdict: every
+/// unpinned action is demanded of every locality. So all such dials are ONE
+/// site, and a hundred invented hostnames buy a refused party one entry.
+#[tokio::test]
+async fn an_advertised_node_the_catalog_never_pins_cannot_allocate_a_site() -> TestResult {
+    let engine = engine().await?;
+    deploy(&engine, V_PINNED).await?;
+    let audit = AdmissionAudit::new();
+
+    for dial in 0..100 {
+        let invented = format!("host-{dial}");
+        let refused = validate_worker_contracts(
+            &engine,
+            &audit,
+            "reports",
+            Some(&invented),
+            "probe-build",
+            advertisement(&names(&["fetch"]), &wrong_fetch()),
+        );
+        assert!(
+            refused.is_err(),
+            "dial {dial} must actually be REFUSED, or the site count below is \
+             measuring an empty map and would pass for the wrong reason"
+        );
+    }
+
+    assert_eq!(
+        audit.remembered_sites(),
+        1,
+        "a hundred invented localities are one fault: they owe an identical \
+         action set and fail identically. A map the refused party can grow is \
+         a slow leak wearing a diagnostic's clothes"
+    );
+    Ok(())
+}
+
+/// The other half, without which the collapse above could be achieved by
+/// simply ignoring the node — which would silence a genuinely different fault.
+///
+/// A node the catalog DOES pin to owes a strictly larger action set, so it is a
+/// different fault at a different place and must be its own site.
+#[tokio::test]
+async fn a_node_the_catalog_pins_is_a_site_of_its_own() -> TestResult {
+    let engine = engine().await?;
+    deploy(&engine, V_PINNED).await?;
+    let audit = AdmissionAudit::new();
+
+    let unpinned = validate_worker_contracts(
+        &engine,
+        &audit,
+        "reports",
+        Some("some-random-host"),
+        "probe-build",
+        advertisement(&names(&["fetch"]), &wrong_fetch()),
+    );
+    assert!(unpinned.is_err(), "the unpinned locality is refused");
+    assert_eq!(audit.remembered_sites(), 1);
+
+    let pinned = validate_worker_contracts(
+        &engine,
+        &audit,
+        "reports",
+        Some("edge01"),
+        "probe-build",
+        advertisement(&names(&["fetch"]), &wrong_fetch()),
+    );
+    assert!(pinned.is_err(), "the pinned locality is refused too");
+    assert_eq!(
+        audit.remembered_sites(),
+        2,
+        "`edge01` owes `edge_probe` as well, which no other locality owes, so \
+         its refusal is a different fault and collapsing it into the unpinned \
+         site would silence it"
+    );
+    Ok(())
+}

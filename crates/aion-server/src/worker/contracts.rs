@@ -8,12 +8,12 @@
 
 use std::collections::BTreeSet;
 
-use aion::AdmissionReason;
+use aion::{AdmissionReason, QueueAdmission};
 use aion_package::ActivityDescriptor;
 
 mod refusal;
 
-use super::admission_audit::AdmissionAudit;
+use super::admission_audit::{AdmissionAudit, RefusalSite};
 use refusal::render_mismatch;
 
 /// What a registering worker announced about itself, in the TWO independent
@@ -139,10 +139,18 @@ pub fn validate_worker_contracts(
             // refusal branch voiceless is how this defect survived a fix: the
             // gRPC path logged the SKIPPED case and swallowed the verdict.
             let refusal = ContractAdmissionError::Catalog { source };
-            name_refusal(audit, task_queue, node, identity, &refusal.to_string());
+            name_refusal(
+                audit,
+                &RefusalSite::CatalogUnreadable,
+                task_queue,
+                node,
+                identity,
+                &refusal.to_string(),
+            );
             return Err(refusal);
         }
     };
+    let site = refusal_site(&admission, task_queue, node);
     let mut disagreements = Vec::new();
     for required in &admission.required {
         for diff in aion_package::contract_diffs(
@@ -162,7 +170,15 @@ pub fn validate_worker_contracts(
         // This site is being SERVED. Forget its last refusal so a worker that is
         // fixed, admitted, and then breaks again is heard immediately instead of
         // silenced by its own history.
-        audit.clear_admitted(task_queue, node);
+        audit.clear_admitted(&site);
+        if admission.required.is_empty() {
+            // The queue demands nothing of ANYONE now — every version on it has
+            // been unloaded or has stopped being reachable. Any refusal still
+            // remembered against it was recorded when the catalog still demanded
+            // something, so it is a fossil, and a fossil would silence the first
+            // refusal after the queue is redeployed.
+            audit.clear_queue(task_queue);
+        }
         return Ok(());
     }
     // Named from the ERROR's own rendering, never from `details` alone: the
@@ -174,8 +190,44 @@ pub fn validate_worker_contracts(
         task_queue: task_queue.to_owned(),
         details: render_mismatch(&admission, node, advertised, &disagreements),
     };
-    name_refusal(audit, task_queue, node, identity, &refusal.to_string());
+    name_refusal(
+        audit,
+        &site,
+        task_queue,
+        node,
+        identity,
+        &refusal.to_string(),
+    );
     Err(refusal)
+}
+
+/// Which refusal site this connection belongs to, derived from the CATALOG.
+///
+/// A node names a site of its own only when some action demanded of this
+/// connection is pinned to it. Otherwise the node cannot have changed the
+/// verdict — [`aion_package::contract_diffs`] demands every unpinned action of
+/// every locality — so all such connections are one site.
+///
+/// **This is the bound.** `task_queue` and `node` both arrive on the wire, so
+/// keying on them directly lets a refused worker allocate a map entry per dial
+/// by varying either. The first cut of #147 moved `identity` out of the key and
+/// left `node` in it, which defeated half the trap it had itself named. Here
+/// the queue is bounded because a queue with no reachable contract demands
+/// nothing and is ADMITTED rather than remembered, and the node is bounded
+/// because it must match a pin the catalog carries.
+fn refusal_site(admission: &QueueAdmission, task_queue: &str, node: Option<&str>) -> RefusalSite {
+    let pinned = node.filter(|node| {
+        admission
+            .required
+            .iter()
+            .flat_map(|required| required.contract.contract.actions.iter())
+            .filter(|action| action.body.is_none())
+            .any(|action| action.node.as_deref() == Some(*node))
+    });
+    RefusalSite::Queue {
+        task_queue: task_queue.to_owned(),
+        node: pinned.map(ToOwned::to_owned),
+    }
 }
 
 /// The ONE place a contract refusal is spoken, for every transport.
@@ -192,14 +244,22 @@ pub fn validate_worker_contracts(
 /// Repeats are silent, and that is a transition rule rather than a rate limit:
 /// see [`AdmissionAudit`] for why an identical redial carries no information and
 /// why nothing here is a configurable cap.
+///
+/// `site` decides whether to SPEAK and is server-derived ([`refusal_site`]);
+/// `task_queue` and `node` are what the connection actually advertised and are
+/// only ever PRINTED. They diverge when the refusal is node-independent, or
+/// when the catalog could not be read at all, and the line reports the real
+/// ones because they are true facts about the dial being refused — the operator
+/// needs to know which dial produced this, even when the fault is not its own.
 fn name_refusal(
     audit: &AdmissionAudit,
+    site: &RefusalSite,
     task_queue: &str,
     node: Option<&str>,
     identity: &str,
     reason: &str,
 ) {
-    if !audit.should_name(task_queue, node, identity, reason) {
+    if !audit.should_name(site, identity, reason) {
         return;
     }
     tracing::warn!(
