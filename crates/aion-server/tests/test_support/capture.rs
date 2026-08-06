@@ -134,28 +134,30 @@ pub fn render(events: &[CapturedEvent]) -> String {
         .iter()
         .partition(|event| event.target.starts_with("aion"));
 
-    let mut out = format!(
-        "\n  {} events captured in total ({} from aion targets, {} from \
-         elsewhere — the subscriber was demonstrably live)",
+    let mut lines = vec![format!(
+        "{} events captured in total ({} from aion targets, {} from elsewhere \
+         — the subscriber was demonstrably live)",
         events.len(),
         subject.len(),
         other.len()
-    );
+    )];
     if subject.is_empty() {
-        out.push_str("\n  NO aion-target events at all.");
+        lines.push("NO aion-target events at all.".to_owned());
     }
-    for event in &subject {
-        out.push_str(&format!(
-            "\n  [{}] {}: {} {:?}",
+    lines.extend(subject.iter().map(|event| {
+        format!(
+            "[{}] {}: {} {:?}",
             event.level, event.target, event.message, event.fields
-        ));
-    }
+        )
+    }));
     let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
     for event in &other {
         *counts.entry(event.target.as_str()).or_default() += 1;
     }
-    for (target, count) in counts {
-        out.push_str(&format!("\n  ({count}× {target}, not shown)"));
-    }
-    out
+    lines.extend(
+        counts
+            .into_iter()
+            .map(|(target, count)| format!("({count}× {target}, not shown)")),
+    );
+    format!("\n  {}", lines.join("\n  "))
 }

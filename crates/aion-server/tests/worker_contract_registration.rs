@@ -13,22 +13,39 @@ use aion_proto::generated;
 mod grpc_admission;
 
 use grpc_admission::{
-    PARTITIONED_SOURCE, TestResult, action_named, descriptor_for, register, register_on_node,
-    state_from, state_with_contract,
+    TestResult, descriptor_for, mismatched_fetch, register, register_on_node, state_from,
+    state_with_contract,
 };
+
+/// A queue whose two actions are pinned to DIFFERENT nodes — the shape every
+/// multi-role worker serves, since the server routes by
+/// (namespace × `task_queue` × node) and a process serving both nodes must open
+/// one connection per node advertising only that node's actions.
+///
+/// This fixture and [`action_named`] live HERE rather than in the shared support
+/// module because this binary is their only consumer. Shared support carries the
+/// intersection; anything one binary alone wants belongs to that binary, which
+/// is exactly what an unused-import warning in the sibling is telling you.
+const PARTITIONED_SOURCE: &str = "//! Node-partitioned registration fixture.\nworkflow partitioned_registration\n  input url: String\n  outcome done: type Result, route success\n\ntype Result { ok: Bool }\n\nworker typed_queue\n  action fetch(url: String) -> Result\n    node netbox\n  action grade(url: String) -> Result\n    node shell\n\nstep call\n  fetch(url: url) -> fetched\n  grade(url: url) -> graded\n  route done(ok: fetched.ok and graded.ok)\n";
+
+/// The action contract the fixture declared under `name`.
+fn action_named(
+    actions: &[aion_package::ActionContract],
+    name: &str,
+) -> TestResult<aion_package::ActionContract> {
+    actions
+        .iter()
+        .find(|action| action.name == name)
+        .cloned()
+        .ok_or_else(|| format!("the fixture declared no action `{name}`").into())
+}
 
 #[tokio::test]
 async fn mismatched_worker_is_refused_with_field_level_diff() -> TestResult {
     let (state, action) = state_with_contract().await?;
-    let result = register(
-        state,
-        generated::ActivityDescriptor {
-            name: "fetch".to_owned(),
-            input_schema_json: serde_json::json!({"type":"string"}).to_string(),
-            output_schema_json: action.output_schema.to_string(),
-        },
-    )
-    .await?;
+    // The SAME mismatched advertisement its sibling binary drives, so the Status
+    // asserted here and the server log asserted there describe one refusal.
+    let result = register(state, mismatched_fetch(&action)).await?;
     let status = result.err().ok_or("mismatched registration was accepted")?;
 
     assert_eq!(status.code(), tonic::Code::FailedPrecondition);

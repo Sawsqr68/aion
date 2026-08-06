@@ -1,5 +1,7 @@
 //! Module declarations.
 
+/// Whether a contract refusal is new information, and therefore worth saying.
+pub mod admission_audit;
 /// Per-tenant keyed backpressure at the outbox claim (Control-Plane Phase 2,
 /// P2-Q2).
 pub mod backpressure;
@@ -65,6 +67,7 @@ pub mod transport_loss;
 /// Server-side `{workspace_root}` expansion for declared action bodies (#139).
 pub mod workspace_root;
 
+pub use admission_audit::AdmissionAudit;
 pub use backpressure::{Backpressure, OwnedShardFraction};
 pub use bridge::{OutboxDeliveryCallback, PendingActivities, WorkerActivityDispatcher};
 pub use declared_body::{

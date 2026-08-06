@@ -7,6 +7,7 @@
 use aion_package::{ActivityDescriptor, ExtractionLimits, Package};
 use serde_json::json;
 
+use super::super::admission_audit::AdmissionAudit;
 use super::{ContractAdmissionError, WorkerAdvertisement, validate_worker_contracts};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -169,6 +170,7 @@ async fn a_worker_matching_the_current_version_is_admitted_despite_a_stale_one()
 
     validate_worker_contracts(
         &engine,
+        &AdmissionAudit::new(),
         "payments",
         None,
         "drift-worker",
@@ -190,6 +192,7 @@ async fn a_worker_that_cannot_serve_the_routed_version_is_still_refused() -> Tes
 
     let Err(error) = validate_worker_contracts(
         &engine,
+        &AdmissionAudit::new(),
         "payments",
         None,
         "stale-worker",
@@ -246,6 +249,7 @@ async fn the_remedy_offers_unload_only_for_the_versions_that_can_be_unloaded() -
 
     let Err(error) = validate_worker_contracts(
         &engine,
+        &AdmissionAudit::new(),
         "payments",
         None,
         "stale-worker",
@@ -282,6 +286,7 @@ async fn a_queue_no_package_declares_admits_any_worker() -> TestResult {
 
     validate_worker_contracts(
         &engine,
+        &AdmissionAudit::new(),
         "other_queue",
         None,
         "unrelated-worker",
@@ -310,6 +315,7 @@ async fn a_name_without_a_contract_is_refused_with_a_message_that_names_the_gap(
     // Refused half: the name is advertised, the contract is not.
     let Err(error) = validate_worker_contracts(
         &engine,
+        &AdmissionAudit::new(),
         "payments",
         None,
         "name-only-worker",
@@ -352,6 +358,7 @@ async fn a_name_without_a_contract_is_refused_with_a_message_that_names_the_gap(
     // ONLY difference is that the contract is now advertised.
     validate_worker_contracts(
         &engine,
+        &AdmissionAudit::new(),
         "payments",
         None,
         "contract-worker",
@@ -372,6 +379,7 @@ async fn a_schema_mismatch_alone_never_reports_a_missing_contract() -> TestResul
 
     let Err(error) = validate_worker_contracts(
         &engine,
+        &AdmissionAudit::new(),
         "payments",
         None,
         "stale-worker",

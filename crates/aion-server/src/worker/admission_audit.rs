@@ -35,12 +35,29 @@
 //! design, which is the defect this whole change exists to kill.
 
 use std::collections::HashMap;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
 
 /// The server-derived identity of a refusal site.
 type SiteKey = (String, Option<String>);
+
+/// The refusal a site is currently sitting in.
+///
+/// The whole refusal is kept rather than a hash of it because two callers need
+/// it: the transition rule needs to know whether this refusal differs from the
+/// last, and the start-time availability hint needs to be able to SAY what the
+/// refusal was. A digest can answer the first question and nothing else, and a
+/// hint that can only say "something was refused" is the guess-in-the-grammar-
+/// of-a-diagnosis this change exists to delete.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RememberedRefusal {
+    /// The node this refusal was judged for, `None` when the connection
+    /// advertised no locality.
+    pub node: Option<String>,
+    /// The refused worker's build identity, as it advertised itself.
+    pub identity: String,
+    /// The gate's full rendering of why it refused.
+    pub reason: String,
+}
 
 /// Remembers the last contract refusal per `(task_queue, node)`, so an
 /// unchanged one can be met with silence.
@@ -52,8 +69,8 @@ type SiteKey = (String, Option<String>);
 /// finding behind #147 was one rule maintained in two places.
 #[derive(Debug, Default)]
 pub struct AdmissionAudit {
-    /// Last refusal digest per site. Bounded by the catalog's queue/node pairs.
-    last: Mutex<HashMap<SiteKey, u64>>,
+    /// Last refusal per site. Bounded by the catalog's queue/node pairs.
+    last: Mutex<HashMap<SiteKey, RememberedRefusal>>,
 }
 
 impl AdmissionAudit {
@@ -73,16 +90,46 @@ impl AdmissionAudit {
     /// unrelated thread panicked would turn one failure into exactly the silent
     /// refusal this module exists to prevent, so the guard is recovered and the
     /// call proceeds. Failing to speak is never the safe direction here.
-    pub fn should_name(&self, task_queue: &str, node: Option<&str>, digest_of: &str) -> bool {
+    pub fn should_name(
+        &self,
+        task_queue: &str,
+        node: Option<&str>,
+        identity: &str,
+        reason: &str,
+    ) -> bool {
         let key = (task_queue.to_owned(), node.map(ToOwned::to_owned));
-        let mut hasher = DefaultHasher::new();
-        digest_of.hash(&mut hasher);
-        let digest = hasher.finish();
+        let refusal = RememberedRefusal {
+            node: node.map(ToOwned::to_owned),
+            identity: identity.to_owned(),
+            reason: reason.to_owned(),
+        };
         let mut last = match self.last.lock() {
             Ok(guard) => guard,
             Err(poisoned) => poisoned.into_inner(),
         };
-        last.insert(key, digest) != Some(digest)
+        last.insert(key, refusal.clone()) != Some(refusal)
+    }
+
+    /// Every refusal currently remembered for `task_queue`, node-ordered.
+    ///
+    /// Read by the start-time availability hint. A queue with no connected
+    /// worker and a refusal on record is not an unstarted queue — it is a queue
+    /// whose worker is running and being turned away — and the two cannot be
+    /// told apart from the connected-worker count, because a refused connection
+    /// never reaches the registry.
+    #[must_use]
+    pub fn refusals_on_queue(&self, task_queue: &str) -> Vec<RememberedRefusal> {
+        let last = match self.last.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let mut refusals = last
+            .iter()
+            .filter(|((queue, _), _)| queue == task_queue)
+            .map(|(_, refusal)| refusal.clone())
+            .collect::<Vec<_>>();
+        refusals.sort_by(|left, right| left.node.cmp(&right.node));
+        refusals
     }
 
     /// Forget this site's refusal because a worker was just admitted for it.

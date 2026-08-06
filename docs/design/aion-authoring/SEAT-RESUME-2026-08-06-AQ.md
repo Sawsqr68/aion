@@ -248,3 +248,103 @@ the registry**, so this is ONE home rather than the two the brief anticipated.
 `register`, `register_on_node` unused from the refusal-logs binary). Clippy is
 `-D warnings`, so these must be resolved — the honest fix is that each test
 binary only imports what it uses, not an allow.
+
+---
+
+# AMENDMENT 3 — #147 R1/R1a/R1b/R2 BUILT AND GREEN (6 August 2026)
+
+**All eight committed steps are done.** `cargo clippy -p aion-server --all-targets
+--features liminal-transport -- -D warnings` → **EXIT=0**, no allows anywhere.
+`cargo fmt --all` run.
+
+## What landed
+
+1. **`worker/admission_audit.rs` + `admission_audit_tests.rs`** — 17 unit tests,
+   all green. The value is now a `RememberedRefusal { node, identity, reason }`,
+   **not a hash**: R2 needs to SAY the reason, and a digest can answer only
+   "different?". `DefaultHasher` deleted entirely (subtraction).
+   Key stays `(task_queue, node)` — server-derived, so bounded by construction;
+   `the_refused_party_cannot_grow_the_map` drives 1000 client-chosen identities
+   through one queue and asserts `remembered_sites() == 1`.
+2. **`worker/contracts.rs`** — `validate_worker_contracts` takes `&AdmissionAudit`;
+   `clear_admitted` on the `Ok(())` path; `name_refusal()` is the ONE log site,
+   message **`REFUSED worker registration`**, fields `task_queue` `node`
+   `identity` `reason`. **The catalog-failure branch names itself too** — leaving
+   one refusal branch voiceless is how this survived its first fix.
+   Named from `refusal.to_string()`, never `details` alone: the
+   `WORKER_CONTRACT_MISMATCH:` prefix lives in the Display and is what makes it
+   greppable. (Caught by the red — first implementation logged `details`.)
+3. **`worker/registry.rs`** — `audit: Arc<AdmissionAudit>` + `admission_audit()`.
+   Registry clones share one, so gRPC and liminal cannot drift again.
+4. **Both callers threaded** — `worker_grpc.rs`, `liminal_transport.rs`.
+5. **Liminal caller stops restating.** `on_worker_registered` now calls
+   `validate_registration_contract` FIRST and propagates it silently; the
+   transport's own WARN covers only the refusals it owns (supervisor, registry,
+   lease). `admit_registration`'s doc records why the contract check left it.
+6. **`awl/run_loop.rs` + `run_loop_tests.rs`** — R2. `unserved_hint()` reads
+   `refusals_on_queue()`. No refusal on record → the old scaffold text. A refusal
+   on record → *"A worker IS dialling task queue `X` and the server is REFUSING
+   it… Starting another worker will not help"* + build identity + reason + node
+   + a count of further refused connections. 4 tests.
+
+## The controls (Waffles' condition 3 — DEMONSTRATED, not claimed)
+
+Deleted the `tracing::warn!` from `name_refusal`, ran both pins, restored the
+file **byte-identically** (`cmp` verified):
+
+| pin | naming present | naming DELETED |
+|---|---|---|
+| `grpc_admission_refusal_logs` | ok | **FAILED** |
+| `dead_man_switch_refusal_logs` | ok | **FAILED** |
+
+The liminal absence report showed **875 events captured, 174 from aion targets**
+— absence paired with survival. Control log:
+`<scratchpad>/absence-control.log`.
+
+## Dead-code warnings resolved BY USE, zero allows
+
+- `mismatched_fetch` — `worker_contract_registration` now uses it instead of its
+  own byte-identical inline copy (one truth, one place).
+- `register`/`register_on_node`/`descriptor_for` — the refusal-logs binary uses
+  them (`descriptor_for` powers new PHASE 5: admitted → site cleared → the same
+  break speaks again).
+- `PARTITIONED_SOURCE` + `action_named` — MOVED into
+  `worker_contract_registration.rs`, its only consumer. Shared support carries
+  the intersection; a single-consumer helper belongs to that consumer.
+- `capture_log`/`render`/`target` — `dead_man` and `unserved_queue_honesty` now
+  use them (the latter's raw `{captured:?}` dump replaced by `render`).
+- **`panic_any` was clippy-denied** (`clippy::panic`). The poison fixture now
+  unwinds via an assertion WRITTEN TO FAIL (`assert!(held.is_err(), ...)` on a
+  healthy lock) — the harness's own failure mechanism, no exemption needed.
+- Two `too_many_lines` splits: both refusal-log tests are now named phase/half
+  functions.
+
+## Test state at this point
+
+- `-p aion-server --lib -- worker::admission_audit awl::run_loop` → 21 tests, ok
+- `--test grpc_admission_refusal_logs` ok · `--test dead_man_switch_refusal_logs`
+  ok · `--test worker_contract_registration` 4 ok · `--test unserved_queue_honesty` ok
+- **NOT YET RUN: the whole `aion-server` suite.** That is the next command.
+
+## Remaining on #147
+
+1. `cargo test -p aion-server --features liminal-transport` (full crate).
+2. Commit + push.
+3. Amend the brief + `SHARED-QUEUE-SILENT-REFUSAL-2026-08-06.md` with what was
+   built, and note **#94 is closed by the transition rule**.
+4. Tell Waffles: R1/R1a/R1b/R2 built, condition 3 discharged with the control
+   table above. R3 remains Waffles' to send to Tom — **I do not send it.**
+
+## Then, Tom's "fix everything" order (unchanged, in order)
+
+#7 completion-monitor transient store error (red-first, harness
+`nif_child_watch.rs:1142`) · #9 operator-facing fact in `details` + a reply that
+goes past Waffles BEFORE it posts · #6 `max_concurrency` ignored on liminal +
+missing pin · #5 AWL `sum` combinator (bump `Keyword::ALL`'s `[Self; 57]` in the
+SAME change) · #1 `workflow.now()` history tail vs replay position
+(`Replay::now()` exists unwired).
+
+**Owed to Cally:** measured `du` = **4.42 GiB target-only**, `~/.cargo` **+0**,
+stated as a spend not a ceiling. Sending it releases the chanreg lane.
+
+**Tom's pids 45425 (server) / 48399 (worker): untouched all session.**

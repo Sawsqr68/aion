@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use super::handlers::{CheckRequest, check_source};
 use super::revisions::{self, DeploymentRecord, RevisionError};
 use crate::authoring::AuthoringApiError;
+use crate::worker::admission_audit::RememberedRefusal;
 use crate::{CallerIdentity, ServerState};
 
 #[derive(Debug, Deserialize)]
@@ -272,9 +273,51 @@ pub fn worker_availability(
         task_queue: task_queue.clone(),
         connected_workers,
         scaffold_hint: (connected_workers == 0).then(|| {
-            format!("No connected worker serves task queue `{task_queue}`. Scaffold and run this worker from Workers & Actions, then retry start.")
+            unserved_hint(
+                &task_queue,
+                &state
+                    .worker_registry()
+                    .admission_audit()
+                    .refusals_on_queue(&task_queue),
+            )
         }),
     })
+}
+
+/// What to tell an operator whose queue has no connected worker.
+///
+/// `connected_workers` is counted from the registry of ADMITTED workers, and a
+/// worker refused at admission never reaches that registry — so the count is 0
+/// both when nothing was ever started and when something is running and being
+/// turned away on every dial. Telling the second operator to "scaffold and run
+/// this worker" describes the wrong problem entirely, and during the #146
+/// self-run it was the only signal there was.
+///
+/// So the refusal record decides which world this is. It is not a second
+/// mechanism: it is the state R1's naming already keeps, read.
+fn unserved_hint(task_queue: &str, refusals: &[RememberedRefusal]) -> String {
+    let Some(refusal) = refusals.first() else {
+        return format!(
+            "No connected worker serves task queue `{task_queue}`. Scaffold and \
+             run this worker from Workers & Actions, then retry start."
+        );
+    };
+    let others = match refusals.len() - 1 {
+        0 => String::new(),
+        1 => " One other connection was refused on this queue too.".to_owned(),
+        more => format!(" {more} other connections were refused on this queue too."),
+    };
+    let node = match &refusal.node {
+        Some(node) => format!(" on node `{node}`"),
+        None => String::new(),
+    };
+    format!(
+        "A worker IS dialling task queue `{task_queue}`{node} and the server is \
+         REFUSING it, so nothing serves the queue. Starting another worker will \
+         not help — this one has to be fixed. Worker build `{}` was refused \
+         because: {}{others}",
+        refusal.identity, refusal.reason
+    )
 }
 
 pub async fn status(root: &Path, deployment_id: &str) -> Result<RunStatusResponse, RunLoopError> {
@@ -322,3 +365,7 @@ fn error_type(error: &RunLoopError) -> &'static str {
         RunLoopError::WorkerRegistry(_) => "WorkerRegistry",
     }
 }
+
+#[cfg(test)]
+#[path = "run_loop_tests.rs"]
+mod run_loop_tests;

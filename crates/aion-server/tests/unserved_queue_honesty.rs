@@ -20,7 +20,7 @@
 //! typed refusal pins live next door in `unserved_queue_policies.rs`.
 
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 
 use aion::{ActivityDispatch, ActivityDispatcher as _};
@@ -31,7 +31,7 @@ use tracing::Level;
 #[path = "test_support/capture.rs"]
 mod capture;
 
-use capture::{CaptureLayer, CapturedEvent};
+use capture::{CaptureLayer, CapturedEvent, capture_log, render};
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::registry::Registry;
 
@@ -63,7 +63,7 @@ fn dispatch_to_unserved_queue() -> ActivityDispatch {
 /// taxonomy reason, and the age of the last compatible poller.
 #[test]
 fn parked_dispatch_on_an_unserved_queue_states_its_reason_at_warn() -> Result<(), TestError> {
-    let events: Arc<Mutex<Vec<CapturedEvent>>> = Arc::new(Mutex::new(Vec::new()));
+    let events = capture_log();
     let registry = ConnectedWorkerRegistry::default();
     let dispatcher = WorkerActivityDispatcher::new(
         registry.clone(),
@@ -110,7 +110,8 @@ fn parked_dispatch_on_an_unserved_queue_states_its_reason_at_warn() -> Result<()
     assert!(
         !reasoned.is_empty(),
         "a dispatch parked on an unserved queue emitted no reasoned event; \
-         captured instead: {captured:?}"
+         captured instead: {}",
+        render(&captured)
     );
     assert!(
         reasoned

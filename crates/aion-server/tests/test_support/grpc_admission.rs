@@ -25,8 +25,8 @@ use std::time::Duration;
 
 use aion_awl_package::compile_and_assemble_awl;
 use aion_package::{ExtractionLimits, Package};
-use aion_proto::generated::{self, worker_to_server};
 use aion_proto::generated::worker_protocol_client::WorkerProtocolClient;
+use aion_proto::generated::{self, worker_to_server};
 use aion_server::ServerState;
 use aion_server::api::worker_grpc::worker_service;
 use aion_server::config::{
@@ -42,12 +42,6 @@ pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 /// The fixture: queue `typed_queue` declaring one action, `fetch(url: String)`.
 pub const SOURCE: &str = "//! Registration contract fixture.\nworkflow contract_registration\n  input url: String\n  outcome done: type Result, route success\n\ntype Result { ok: Bool }\n\nworker typed_queue\n  action fetch(url: String) -> Result\n\nstep call\n  fetch(url: url) -> result\n  route done(ok: result.ok)\n";
-
-/// A queue whose two actions are pinned to DIFFERENT nodes — the shape every
-/// multi-role worker serves, since the server routes by
-/// (namespace × `task_queue` × node) and a process serving both nodes must open
-/// one connection per node advertising only that node's actions.
-pub const PARTITIONED_SOURCE: &str = "//! Node-partitioned registration fixture.\nworkflow partitioned_registration\n  input url: String\n  outcome done: type Result, route success\n\ntype Result { ok: Bool }\n\nworker typed_queue\n  action fetch(url: String) -> Result\n    node netbox\n  action grade(url: String) -> Result\n    node shell\n\nstep call\n  fetch(url: url) -> fetched\n  grade(url: url) -> graded\n  route done(ok: fetched.ok and graded.ok)\n";
 
 /// The runtime configuration both admission binaries serve under.
 pub fn runtime_config() -> RuntimeConfig {
@@ -120,18 +114,6 @@ pub async fn state_from(
     Ok((state, actions))
 }
 
-/// The action contract the fixture declared under `name`.
-pub fn action_named(
-    actions: &[aion_package::ActionContract],
-    name: &str,
-) -> TestResult<aion_package::ActionContract> {
-    actions
-        .iter()
-        .find(|action| action.name == name)
-        .cloned()
-        .ok_or_else(|| format!("the fixture declared no action `{name}`").into())
-}
-
 /// The wire descriptor advertising an action exactly as its contract declares it.
 pub fn descriptor_for(action: &aion_package::ActionContract) -> generated::ActivityDescriptor {
     generated::ActivityDescriptor {
@@ -165,10 +147,12 @@ pub async fn register_on_node(
 
 /// Dial `stream_worker` under an explicit worker-build `identity`.
 ///
-/// The transition rule is keyed on (identity, queue, node), so a test proving a
-/// CHANGED refusal speaks again needs to hold identity fixed while the reason
-/// moves — and a test proving two distinct workers each get named needs the
-/// opposite. Both need this to be a parameter, not a constant.
+/// The refusal-transition rule is keyed on (queue, node) — never on anything the
+/// refused party supplies — and the build identity rides in the remembered
+/// VALUE. So a test proving a CHANGED refusal speaks again holds identity fixed
+/// while the reason moves, and a test proving a redeployed-but-still-broken
+/// worker is heard again moves the identity alone. Both need this to be a
+/// parameter, not a constant.
 pub async fn register_as(
     state: ServerState,
     node: String,

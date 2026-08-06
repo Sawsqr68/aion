@@ -8,6 +8,16 @@
 //! cause — a named field, in a named schema, of a named package version — was
 //! sitting in an ack nobody printed.
 //!
+//! **Amended 2026-08-06 (#147), not replaced.** The fix this pin guarded was
+//! written into the liminal CALLER, and within a week the gRPC transport
+//! re-manifested the identical silent refusal because nothing held the two
+//! callers to one rule. The naming moved INTO the shared admission gate and the
+//! liminal caller stopped restating it, so the message this pin reads for
+//! changed from `REFUSED liminal worker registration` to the gate's own
+//! `REFUSED worker registration`. The PROPERTY is untouched: a contract-refused
+//! worker must be named by the server and by itself, on the first dial. Only
+//! the site that speaks moved — one site down from two.
+//!
 //! This pin stands up a REAL liminal listener with a REAL deployed AWL contract
 //! and dials it with a REAL worker whose activity input type is incompatible,
 //! then asserts on what BOTH sides actually logged. It owns its whole test
@@ -19,8 +29,8 @@
 
 use std::error::Error;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use aion_package::{ExtractionLimits, Package};
@@ -38,7 +48,14 @@ use tracing_subscriber::util::SubscriberInitExt as _;
 #[path = "test_support/capture.rs"]
 mod capture;
 
-use capture::{CaptureLayer, CapturedEvent, render};
+use capture::{CaptureLayer, CapturedEvent, capture_log, render};
+
+/// The message the shared admission gate emits when it refuses a worker.
+///
+/// The gate's, deliberately — not this transport's. A per-caller log is a
+/// convention the next transport can forget, and #147 is the record of one
+/// forgetting it.
+const REFUSAL: &str = "REFUSED worker registration";
 
 type TestError = Box<dyn Error + Send + Sync>;
 type TestResult = Result<(), TestError>;
@@ -83,7 +100,7 @@ fn test_error(message: impl std::fmt::Display) -> TestError {
 /// sleeping — so neither assertion below finds anything to read.
 #[tokio::test(flavor = "multi_thread")]
 async fn a_refused_registration_is_named_in_both_logs_on_the_first_dial() -> TestResult {
-    let events: Arc<Mutex<Vec<CapturedEvent>>> = Arc::new(Mutex::new(Vec::new()));
+    let events = capture_log();
     Registry::default()
         .with(CaptureLayer {
             events: Arc::clone(&events),
@@ -102,13 +119,10 @@ async fn a_refused_registration_is_named_in_both_logs_on_the_first_dial() -> Tes
     while Instant::now() < deadline {
         let both_spoke = {
             let captured = events.lock().map_err(|_| "capture log poisoned")?;
-            captured.iter().any(|event| {
-                event
-                    .message
-                    .contains("REFUSED liminal worker registration")
-            }) && captured
-                .iter()
-                .any(|event| event.message.contains("liminal worker dial failed"))
+            captured.iter().any(|event| event.message.contains(REFUSAL))
+                && captured
+                    .iter()
+                    .any(|event| event.message.contains("liminal worker dial failed"))
         };
         if both_spoke {
             break;
@@ -119,19 +133,20 @@ async fn a_refused_registration_is_named_in_both_logs_on_the_first_dial() -> Tes
     server.shutdown()?;
     let captured = events.lock().map_err(|_| "capture log poisoned")?.clone();
 
-    // ---- the SERVER half: the refusal it sent is the refusal it logged ----
+    the_server_named_the_refusal_it_sent(&captured)?;
+    the_worker_named_its_own_refusal(&captured, address)
+}
+
+/// The SERVER half: the refusal it sent is the refusal it logged.
+fn the_server_named_the_refusal_it_sent(captured: &[CapturedEvent]) -> TestResult {
     let refusals: Vec<&CapturedEvent> = captured
         .iter()
-        .filter(|event| {
-            event
-                .message
-                .contains("REFUSED liminal worker registration")
-        })
+        .filter(|event| event.message.contains(REFUSAL))
         .collect();
     let refusal = refusals.first().ok_or_else(|| {
         test_error(format!(
             "the server refused every dial and logged NONE of them; captured: {}",
-            render(&captured)
+            render(captured)
         ))
     })?;
     assert_eq!(
@@ -158,8 +173,38 @@ async fn a_refused_registration_is_named_in_both_logs_on_the_first_dial() -> Tes
         Some("refusal-pin-worker"),
         "the refusal must name the worker build: {refusal:?}"
     );
+    // The refusal must state the LOCALITY it judged, because a worker is held
+    // only to the actions a dispatch on its node can reach, and a refusal that
+    // omits it cannot be told apart from a refusal about another node. Asserted
+    // against the REASON rather than a literal: this worker advertises whatever
+    // node the box is called, so a hardcoded value would pin the machine that
+    // happened to run the test instead of the agreement being checked.
+    let node = refusal
+        .fields
+        .get("node")
+        .ok_or_else(|| test_error(format!("the refusal named no node: {refusal:?}")))?;
+    let advertised = node
+        .strip_prefix("Some(\"")
+        .and_then(|node| node.strip_suffix("\")"))
+        .ok_or_else(|| {
+            test_error(format!(
+                "this worker advertises its host as its node, so the refusal must \
+                 carry one — `None` here would mean admission judged a different \
+                 connection from the one that dialled: {refusal:?}"
+            ))
+        })?;
+    assert!(
+        reason.contains(&format!("advertises node `{advertised}`")),
+        "the node FIELD and the node the diagnosis reasoned about must be the \
+         same node, or the line is two different refusals spliced together: \
+         {refusal:?}"
+    );
 
-    // ---- the WORKER half: it names its own refusal, on its first dial ----
+    Ok(())
+}
+
+/// The WORKER half: it names its own refusal, on its first dial.
+fn the_worker_named_its_own_refusal(captured: &[CapturedEvent], address: SocketAddr) -> TestResult {
     let dials: Vec<&CapturedEvent> = captured
         .iter()
         .filter(|event| event.message.contains("liminal worker dial failed"))
@@ -167,7 +212,7 @@ async fn a_refused_registration_is_named_in_both_logs_on_the_first_dial() -> Tes
     let dial = dials.first().ok_or_else(|| {
         test_error(format!(
             "the worker was refused on every dial and said NOTHING; captured: {}",
-            render(&captured)
+            render(captured)
         ))
     })?;
     assert_eq!(dial.level, Level::WARN, "{dial:?}");
@@ -326,4 +371,3 @@ fn reserve_loopback_port() -> Result<SocketAddr, TestError> {
     drop(listener);
     Ok(address)
 }
-

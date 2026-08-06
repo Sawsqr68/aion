@@ -14,6 +14,7 @@ use crate::config::AutoCreate;
 use crate::error::ServerError;
 use crate::namespace::{CallerIdentity, NamespaceGuard, NamespaceMinter, NamespaceOperation};
 use crate::observability::Metrics;
+use crate::worker::admission_audit::AdmissionAudit;
 
 /// The literal task queue an empty/absent selector normalizes to.
 ///
@@ -297,6 +298,14 @@ pub struct ConnectedWorkerRegistry {
     /// durably records (open) or gates (closed) each authorized namespace.
     minter: Option<NamespaceMinter>,
     worker_arrived: Arc<Notify>,
+    /// The refusal side of this registry's ledger, shared by every transport.
+    ///
+    /// The registry records who was ADMITTED; this records who was turned away,
+    /// so a repeated identical refusal can be met with silence. It lives here
+    /// because both callers of the admission gate already hold the registry, so
+    /// one home serves both — and one shared record is what stops the two
+    /// transports drifting apart the way #147 found them.
+    audit: Arc<AdmissionAudit>,
 }
 
 impl Default for ConnectedWorkerRegistry {
@@ -307,6 +316,7 @@ impl Default for ConnectedWorkerRegistry {
             cluster_publisher: None,
             minter: None,
             worker_arrived: Arc::new(Notify::new()),
+            audit: Arc::new(AdmissionAudit::new()),
         }
     }
 }
@@ -321,7 +331,16 @@ impl ConnectedWorkerRegistry {
             cluster_publisher: None,
             minter: None,
             worker_arrived: Arc::new(Notify::new()),
+            audit: Arc::new(AdmissionAudit::new()),
         }
+    }
+
+    /// The admission audit every registration transport names its refusals
+    /// through. Clones of a registry share one, so a worker refused over gRPC
+    /// and then over liminal is one site, not two.
+    #[must_use]
+    pub fn admission_audit(&self) -> &AdmissionAudit {
+        &self.audit
     }
 
     /// Attach the WS3 cluster-event publisher so worker topology changes are

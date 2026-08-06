@@ -1567,6 +1567,7 @@ impl LiminalConnectionNotifier {
             .collect::<std::collections::BTreeSet<_>>();
         super::contracts::validate_worker_contracts(
             engine,
+            self.registry.admission_audit(),
             &registration.task_queue,
             registration.node.as_deref(),
             &registration.identity,
@@ -1580,21 +1581,28 @@ impl LiminalConnectionNotifier {
         })
     }
 
-    /// Admit one connecting worker, or refuse it with a structured reason.
+    /// Admit one connecting worker past the TRANSPORT's own refusals, or refuse
+    /// it with a structured reason.
     ///
-    /// Split out of [`ConnectionNotifier::on_worker_registered`] so EVERY
-    /// refusal — contract mismatch, unbound supervisor, registry error, lease
-    /// failure — funnels through exactly one place that logs it. Before this
+    /// Split out of [`ConnectionNotifier::on_worker_registered`] so every
+    /// refusal this transport owns — unbound supervisor, registry error, lease
+    /// failure — funnels through exactly one place that logs it. Before that
     /// split the rejection reason was carried in the `Rejected` ack and logged
     /// NOWHERE: on 2026-07-29 a worker whose `.v4` contract field-mismatched was
     /// refused on every single dial with the server silent on all of them, and
     /// the refused process looked merely asleep.
+    ///
+    /// **The contract check is deliberately NOT here.** That 2026-07-29 fix was
+    /// made in this caller rather than at the shared gate, and within a week the
+    /// gRPC transport re-manifested the identical silent refusal with nothing in
+    /// the tree able to notice (#147). The gate now names its own refusal for
+    /// every transport, so the contract check runs BEFORE this function and its
+    /// error propagates from here already spoken for.
     fn admit_registration(
         &self,
         pid: u64,
         registration: &WireWorkerRegistration,
     ) -> Result<(), LiminalServerError> {
-        self.validate_registration_contract(registration)?;
         // The delivery leg needs the supervisor to push to this connection. In
         // correct wiring it is bound before any connection is accepted; a missing
         // binding is a rejected registration, never a panic.
@@ -1682,10 +1690,16 @@ impl ConnectionNotifier for LiminalConnectionNotifier {
         pid: u64,
         registration: &WireWorkerRegistration,
     ) -> Result<(), LiminalServerError> {
-        // Every refusal is NAMED on the server, at WARN, with the queue, the
-        // worker build identity, and the structured reason — the same reason
-        // that rides back in the `Rejected` ack, so both sides' logs carry
-        // identical text and a refused worker can be diagnosed from either end.
+        // The contract gate NAMES its own refusal, for every transport, with the
+        // queue, the node, the worker build identity and the structured reason.
+        // So this path propagates that refusal SILENTLY rather than restating
+        // it: a second copy of the same log is how #147 happened, and a log
+        // written twice per refusal is #94's 12 MB/hour with a second author.
+        self.validate_registration_contract(registration)?;
+        // Every refusal this TRANSPORT owns is named here instead, at WARN, with
+        // the same reason that rides back in the `Rejected` ack, so both sides'
+        // logs carry identical text and a refused worker can be diagnosed from
+        // either end.
         self.admit_registration(pid, registration)
             .inspect_err(|error| {
                 // The two advertised sets are logged SEPARATELY and named for
