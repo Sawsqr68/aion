@@ -97,3 +97,99 @@ are now measured, not assumed.
   documented operator surface.
 - **`"parent": null`** appears on every listing row, which is #107 showing up
   live in the listing the console reads.
+
+---
+
+# AMENDMENT 1 — the mechanism is read, and the silence is explained
+
+Added 2026-08-06 after Waffles' disposition (drive it, and *the admission
+refusal must name itself server-side whatever else changes*). Tree `d78a38308`.
+
+## The refusal is real, rich, and never logged
+
+The gate is **not** missing. `crates/aion-server/src/worker/contracts.rs:120`
+`validate_worker_contracts` builds `ContractAdmissionError::Mismatch`, whose
+own doc comment (`contracts.rs:73-79`) says the whole diagnosis rides in
+`details` — which package version, why it was held, which action, which field,
+expected vs advertised, and the operator remedy — because *"A refused worker
+retries silently forever otherwise, and the message is the only thing standing
+between a two-minute fix and an hour of guessing."*
+
+**That message is produced and then thrown at the wire.**
+`crates/aion-server/src/api/worker_grpc.rs:67`:
+
+```rust
+validate_worker_contracts(&self.state, &register)?;
+```
+
+and the mapping at `worker_grpc.rs:659-666` turns `Mismatch` into
+`Status::failed_precondition(error.to_string())`. The `?` propagates that
+`Status` straight out of the streaming handler. **No `tracing` call anywhere on
+this path**, so the server emits nothing — which is exactly the measured
+result: 0 ERROR, 0 WARN, no line at all, and no `WorkerId`, because the
+refusal happens *before* `accept_registration` at `worker_grpc.rs:73`.
+
+The diagnosis therefore exists in full and is delivered only to the worker.
+
+## Why the worker is silent too — the second half of the pair
+
+`docs/workers/SHELL-WORKER-MANIFEST.md` already records that
+`aion worker shell` **installs no tracing subscriber**, so the redial driver's
+failures "go nowhere and the process just sits there." The refusal Status
+arrives, the redial loop swallows it, and the manifest doc's own warning —
+*"Silence from `aion worker shell` is not success"* — is the documented
+consequence.
+
+⇒ **The silence is not one defect but two halves meeting:** the server declines
+to log a refusal it has fully diagnosed, and the client that receives it has no
+subscriber to print it. Either half alone would have left a trail. Fixing only
+the client would still leave an operator with no server-side record; fixing
+only the server satisfies Waffles' standing condition. **Both should move.**
+
+## Axis: this is NOT a regression of #78 — it is the narrowing working correctly
+
+`contracts.rs:102-119` documents two deliberate narrowings, "because a worker
+that is doing its whole job must not be refused": only **reachable** package
+versions are held (that is #80's axis — a stale non-routed deploy no longer
+poisons a queue), and within those, only the actions whose dispatch can reach
+this connection's **node** (that is #78's axis — node-partitioned workers).
+
+My case defeats **both** narrowings legitimately. Both documents were freshly
+deployed and routed (`route_changed: true` on each), so both are reachable —
+narrowing 1 does not apply. Neither declared a node, so every action is
+reachable from the connection — narrowing 2 does not apply. The gate then
+correctly demands the union and correctly refuses a worker offering half of it.
+
+**So the refusal is the designed behaviour, not a regression.** The defect is
+narrower and sharper than the original write-up implied:
+
+1. **The refusal is invisible server-side** (Waffles' condition — a violation
+   of no-silent-failures in its purest form, and the worst variant, because a
+   registration-time refusal is detached from the deploy that caused it, so the
+   operator debugging it is looking at the wrong event entirely).
+2. **The availability hint names the wrong remedy** — *"Scaffold and run this
+   worker … then retry start"* to an operator whose worker is already running
+   and being refused.
+3. **Whether one queue shared across documents should be refusable at all is a
+   design question**, not a bug: content-hash namespacing means a queue
+   accumulates every reachable version's demands, so "one document per queue"
+   is currently a load-bearing authoring rule that nothing states or enforces.
+
+## Contradiction resolved: task #94 is about a different path
+
+Task #94 records *"a contract-refused worker reconnects at 2/second forever and
+the server re-logs the full refusal each time — 12MB/hour."* That is the
+opposite of the measured silence here, and both are true: #94 is the
+**liminal** transport's admission call
+(`worker/liminal_transport.rs:1568`), which does log; this is the **gRPC**
+registration path (`api/worker_grpc.rs:67`), which does not. Two callers of one
+gate, opposite observability. That divergence is itself the finding — the same
+rule known in two places, disagreeing.
+
+## Still not established
+
+- I have not read `liminal_transport.rs:1568`'s logging in detail, only that
+  #94 attributes re-logging to it; the gRPC/liminal contrast above should be
+  confirmed at that line before it is quoted as fact.
+- Nothing was built, run, or tested for this amendment — it is a source read
+  against an already-measured behaviour.
