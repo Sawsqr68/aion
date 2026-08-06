@@ -188,8 +188,44 @@ rule known in two places, disagreeing.
 
 ## Still not established
 
-- I have not read `liminal_transport.rs:1568`'s logging in detail, only that
-  #94 attributes re-logging to it; the gRPC/liminal contrast above should be
-  confirmed at that line before it is quoted as fact.
+- ~~I have not read `liminal_transport.rs:1568`'s logging in detail~~ —
+  **discharged in amendment 2 below.**
 - Nothing was built, run, or tested for this amendment — it is a source read
   against an already-measured behaviour.
+
+---
+
+# AMENDMENT 2 — the liminal half is read, and this defect has been fixed before
+
+Added 2026-08-06 while writing the fix brief
+(`BRIEF-147-ADMISSION-REFUSAL-NAMES-ITSELF.md`). Tree `a5ce6c65d`. Source read
+only; nothing built or run.
+
+The contrast amendment 1 left unconfirmed is **confirmed, and stronger than #94
+attributed.** The liminal path funnels every refusal through
+`admit_registration` (`liminal_transport.rs:1592`) and names it at `WARN` in
+`on_worker_registered` (`:1687-1712`) with connection pid, identity, queue,
+namespaces, **both** advertised sets, and the structured reason — the same text
+that rides back in the `Rejected` ack. It is pinned by
+`tests/dead_man_switch_refusal_logs.rs:83`.
+
+`admit_registration`'s own doc comment records why it exists:
+
+> *Before this split the rejection reason was carried in the `Rejected` ack and
+> logged NOWHERE: on 2026-07-29 a worker whose `.v4` contract field-mismatched
+> was refused on every single dial with the server silent on all of them, and
+> **the refused process looked merely asleep**.*
+
+That is this defect, dated a week earlier, on the other transport. **It was
+found, fixed and pinned once — and the gRPC path never received the fix.**
+Nothing in the tree forces the two callers' observability to agree, so it
+drifted, and only a black-box self-run on the untreated transport could see it.
+
+One further detail sharpens it: `worker_grpc.rs:632-640` **does** log — a
+`tracing::warn!` for the case where the contract check was *skipped* for want of
+an engine handle. The refusal branch thirty lines below is the one branch with
+no voice.
+
+⇒ The defect is `one-truth-in-two-places-has-drifted` in literal form, and the
+cure is subtraction: the naming belongs in the gate, not in a second copy of the
+liminal log. That is R1 of the brief.

@@ -1,0 +1,226 @@
+# Brief 147 — the admission refusal names itself, server-side, on every transport
+
+**Task:** #147. **Defect record:** `SHARED-QUEUE-SILENT-REFUSAL-2026-08-06.md`
+(measurement + amendment 1). **Disposition:** Waffles, 2026-08-06T00:06Z — mine
+to drive, with one standing condition quoted in R1.
+
+**Status of the axis check:** discharged. This is **not** a regression of #78 or
+#80; both documented narrowings at `contracts.rs:102-119` apply correctly and my
+measured case legitimately defeats both. The gate refusing is designed
+behaviour. What follows is about the refusal being **unsayable**, not wrong.
+
+---
+
+## What is now established, at my own hand
+
+Amendment 1 read the gRPC half. This brief adds the liminal half, which was
+listed there as *"still not established"*, and it changes the shape of the work.
+
+### One gate. Two callers. Opposite observability.
+
+`crates/aion-server/src/worker/contracts.rs:120` `validate_worker_contracts` is
+the single gate. Both transports call it, and both construct the same fully
+diagnosed `ContractAdmissionError::Mismatch`.
+
+| | liminal transport | gRPC transport |
+|---|---|---|
+| Call site | `liminal_transport.rs:1568` via `validate_registration_contract` | `worker_grpc.rs:67` via a local wrapper at `:625-666` |
+| Funnelled through one admission fn | **yes** — `admit_registration:1592` | no |
+| Server-side log on refusal | **`tracing::warn!` "REFUSED liminal worker registration"** (`:1687-1712`) with pid, identity, queue, namespaces, **both** advertised sets, and the reason | **none** |
+| Pinned by a test | **yes** — `tests/dead_man_switch_refusal_logs.rs:83` | no |
+
+### The gRPC path logs the case where it *skipped* the check, and stays silent on the case where it *refused*
+
+`worker_grpc.rs:632-640` emits a `tracing::warn!` when the state carries no
+engine handle and the contract check is therefore skipped. The module imports
+`tracing` and already writes to it. The refusal branch — thirty lines below —
+maps to `Status::failed_precondition` and returns. The silence is not an
+oversight of plumbing; it is the one branch that was never given a voice.
+
+### The liminal side already carries my incident, verbatim, dated 2026-07-29
+
+`admit_registration`'s doc comment (`liminal_transport.rs:1592-1601`):
+
+> *Split out of `ConnectionNotifier::on_worker_registered` so EVERY refusal —
+> contract mismatch, unbound supervisor, registry error, lease failure — funnels
+> through exactly one place that logs it. Before this split the rejection reason
+> was carried in the `Rejected` ack and logged NOWHERE: on 2026-07-29 a worker
+> whose `.v4` contract field-mismatched was refused on every single dial with the
+> server silent on all of them, and **the refused process looked merely asleep**.*
+
+That is the phenomenon I measured on 2026-08-06, on the other transport, in an
+isolated world, with a control and a reversal. **This defect has already been
+found, diagnosed, fixed and pinned once — on one of its two hosts.** The other
+host never got the fix, and nothing in the tree could have noticed.
+
+⇒ This is `one-truth-in-two-places-has-drifted` in its literal form: the
+observability contract for an admission refusal is known at two call sites, with
+nothing forcing them to agree. It drifted. **The cure is subtraction, not a
+second copy of the liminal log.**
+
+---
+
+## R1 — the gate names its own refusal, once, for every caller
+
+> **Waffles' standing condition, binding whichever way the axis check fell:**
+> *the admission refusal must name itself, server-side, whatever else changes.*
+> A worker refused at registration with zero bytes on either side is the
+> no-silent-failures law in its purest form, and registration-time refusal
+> detached from the deploy that caused it is the worst variant — the operator
+> debugging it is looking at the wrong event entirely. *The crash is kinder than
+> the silence.*
+
+**The naming moves INTO `validate_worker_contracts`**, at the point it
+constructs `Mismatch`. Not into the gRPC wrapper. A per-caller log is a
+convention that a third transport can forget; a gate that speaks when it refuses
+cannot be forgotten by anyone, because there is nowhere else to put the refusal.
+
+The gate logs what the gate knows: `task_queue`, `node`, `identity`, and the
+full `details` string whose own doc comment (`contracts.rs:73-79`) says it is
+*"the only thing standing between a two-minute fix and an hour of guessing."*
+It does **not** learn `connection_pid` or `namespaces` — those are transport
+facts and belong to the transport's own record.
+
+**Consequence for the liminal caller, and it must be faced, not deferred.**
+Once the gate speaks, `on_worker_registered`'s `inspect_err` restates the
+contract reason a second time. Under NO BACKWARDS COMPATIBILITY the answer is to
+restructure, not to add alongside: the liminal caller keeps its log for the
+refusal classes the gate cannot see (unbound supervisor, registry error, lease
+failure) and stops restating the contract class.
+
+`tests/dead_man_switch_refusal_logs.rs:83`
+(`a_refused_registration_is_named_in_both_logs_on_the_first_dial`) asserts on the
+literal string `"REFUSED liminal worker registration"`. Its **stated contract** is
+that a refused registration is named on both sides on the first dial — which the
+gate's line satisfies. **Amend that assertion to the gate's message; do not
+delete the test, and do not weaken it to "some line was logged."** The pin's
+subject is the naming, and the naming survives. Record the amendment against
+this brief's commit, per the ratified-orders rule.
+
+### R1a — repeats are silence because they carry no new information
+
+#94 records the liminal path re-logging the full refusal on every redial —
+2/second, 12 MB/hour, *"observability buried."* Adding a log to the gRPC path
+naively gives that defect a second host. It must not ship that way.
+
+**The rule is a transition, not a cap.** The full diagnosis is emitted when the
+refusal for a given `(identity, task_queue, node)` is *new or different* —
+first refusal, changed reason, or a refusal following a successful admission.
+An identical repeat says nothing the first line did not, so it says nothing.
+
+This is a semantic, not a configured value, and it invents no default —
+**NO ARBITRARY LIMITS is not violated: there is no interval, no count, no cap.**
+A time-based throttle would violate it, and is refused here.
+
+Because the rule lives in the gate, **this closes #94 in the same motion rather
+than spreading it.** That is the payoff of subtraction, and it is the reason to
+do both together.
+
+> 🟡 **Decision for Waffles, with my recommendation.** One motion (R1 + R1a,
+> closing #94), or land gate-logging alone and take #94 separately?
+> **Recommend one motion.** Splitting it means knowingly landing a defective log
+> volume on a second transport, and the fix for that volume is the same three
+> lines in the same function.
+
+### R1b — the transition state needs an owner, and this is the real implementation cost
+
+`validate_worker_contracts` is a free function with no state. Transition
+tracking needs somewhere to live. **Pass a handle in as a parameter** — both
+callers already assemble this call, and both have somewhere to hold it
+(`ServerState` for gRPC, the notifier for liminal). Keying is
+`(identity, task_queue, node)` against a digest of `details`.
+
+**This part wants a review pass before it is written**, not because it is hard,
+but because a stale or unbounded key map is its own defect and the eviction
+condition (a successful admission for that key; a disconnect) has to be right.
+Do not let the map grow without a stated reason it cannot.
+
+## R2 — the availability hint stops naming a remedy that cannot be followed
+
+`crates/aion-server/src/awl/run_loop.rs:275`:
+
+> *"No connected worker serves task queue `desk2`. Scaffold and run this worker
+> from Workers & Actions, then retry start."*
+
+This is delivered to an operator whose worker **is** running and **is** being
+refused. Following it cannot help. It was the only signal I had during the
+self-run, and it described the wrong problem.
+
+The mechanism is at `:264-269`: `connected_workers` is counted from
+`all_workers()` — the registry of **admitted** workers. A refused worker never
+reaches the registry (the refusal precedes `accept_registration`,
+`worker_grpc.rs:73`), so the count is 0 in both worlds and the hint cannot tell
+them apart. **The hint is a guess in the grammar of a diagnosis.**
+
+R1b's audit state is what makes it answerable: when a refusal is on record for
+this queue, the hint names *that* — the queue is being served by a worker the
+server refused, and why — instead of telling the operator to start what they
+already started. Where no refusal is on record, the existing text is correct and
+stays.
+
+**This is not a second mechanism.** It is R1's state, read.
+
+## R3 — routed to Tom via Waffles, NOT built against
+
+Whether one queue shared across documents should be refusable **at all** is a
+design question, not a bug. Content-hash module namespacing means a queue
+accumulates every reachable version's demands, so *"one document per worker
+queue, carrying that queue's full action set"* is currently a load-bearing
+authoring rule that **nothing states and nothing enforces** — a beginner's
+natural second move walks into it.
+
+The tutorial (#146) now teaches the rule and teaches the availability probe as
+the way to confirm arrival. That is a documentation patch over a design seam.
+**Nothing in this brief changes admission semantics**, and nothing should until
+Tom has ruled.
+
+---
+
+## Red first
+
+The harness for the gRPC red already exists in the same file that pins the
+refusal itself: `tests/worker_contract_registration.rs` stands up a real gRPC
+service with real deployed AWL contracts and a `register()` helper, and
+`mismatched_worker_is_refused_with_field_level_diff:169` already drives a real
+refusal — it asserts only on the `Status` the *worker* receives, and says
+nothing about the server. The subscriber pattern for asserting on captured
+`tracing` output is in `dead_man_switch_refusal_logs.rs`.
+
+1. **Watch it fail.** A gRPC-path test asserting the server named the refusal —
+   red at `HEAD`, because it names nothing.
+2. **Watch the transition rule fail.** N identical refusals ⇒ one diagnosis; a
+   *changed* reason ⇒ a second. Both halves watched failing separately: a rule
+   that only ever suppresses is indistinguishable from one that never logs.
+3. **Watch the hint fail.** Availability probed against a queue with a refused
+   worker, asserting the response does **not** say "scaffold and run" — red now.
+
+**The mutation must sit on the test's path.** Earned the hard way on 2026-08-06:
+my tutorial's verb gate first refused for the wrong reason and read exactly like
+a pass. For each red above, confirm the failure message names the *subject*, not
+a setup fault.
+
+## Acceptance
+
+- A contract-refused registration is named server-side on **both** transports,
+  by the gate, at `WARN`, carrying the full `details` diagnosis.
+- The gRPC path, re-run against the measured scenario in
+  `SHARED-QUEUE-SILENT-REFUSAL-2026-08-06.md`, produces a server log line. The
+  original measurement — 0 ERROR, 0 WARN, 0 bytes — is the baseline, and it was
+  taken before this brief existed, so it is independent of what it measures.
+- Identical repeat refusals do not re-emit; a changed reason does.
+- The availability hint distinguishes *no worker* from *refused worker*.
+- No time interval, count, or cap is introduced anywhere in the change.
+- `dead_man_switch_refusal_logs.rs`'s pin is **amended, not deleted**, and still
+  fails if the naming is removed.
+- Admission semantics are **unchanged**. R3 is not built.
+
+## Not in scope, and said plainly
+
+- The worker's own silence. `aion worker shell` installs no tracing subscriber
+  (`docs/workers/SHELL-WORKER-MANIFEST.md`), so the refusal `Status` arrives and
+  the redial loop swallows it. Amendment 1 called the silence *"two halves
+  meeting"* and both halves should eventually move. **This brief moves the
+  server half**, which is Waffles' condition and the half an operator can reach
+  without rebuilding anything. The client half is held by the estate-wide worker
+  rebuild freeze until the #139 cut, and is #142's neighbourhood.
+- Anything that changes which workers are admitted.
