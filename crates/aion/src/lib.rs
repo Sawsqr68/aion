@@ -70,6 +70,14 @@ pub mod schedule;
 pub mod signal;
 /// Supervision tree models for engines, workflow types, and workflow instances.
 pub mod supervision;
+
+/// Thread-scoped tracing capture shared by the crate's operator-visibility
+/// proofs.
+#[cfg(test)]
+pub(crate) mod log_capture;
+/// Fault-injecting stores shared by the crate's retry proofs.
+#[cfg(test)]
+pub(crate) mod store_faults;
 /// Timer creation, recovery, and wake-up services.
 pub mod time;
 
@@ -85,6 +93,20 @@ pub use engine::{
     UnreachableContract, schedule_coordinator_workflow_id,
 };
 pub use engine_seam::EngineHandle;
+// Both appear in the public signature of `EngineError` — `ContentHash` in the
+// `version` field of `StartInputRefused`, `SignalRefused` and
+// `NoQueueDeclaration`, and `ContractIdentityError` as the `source` of
+// `ContractIdentity` — so a consumer of this crate cannot construct,
+// destructure, or exhaustively match those variants without them. Re-exported
+// here rather than leaving every downstream to take its own `aion-package`
+// dependency to reach types this crate's own API already hands them.
+//
+// Not speculative surface: `aion-client` declares no `aion-package` dependency
+// at all and its `transport::embedded` error-mapping tests construct
+// `aion::ContentHash` and `aion::ContractIdentityError` directly. Without these
+// two lines that crate cannot build the very `EngineError` values it exists to
+// translate — the hole is older than this change, and this is where it surfaced.
+pub use aion_package::{ContentHash, ContractIdentityError};
 pub use error::{EngineError, PinHolder, SignalRouterError};
 pub use loader::{
     ActivityServing, DeployedWorkerContract, LoadOutcome, LoadedWorkflow, SignalRefusalReason,
@@ -97,8 +119,8 @@ pub use registry::{
     WorkflowHandleParts,
 };
 pub use runtime::{
-    PARKED_ACTIVITY_REASON, Pid, RuntimeConfig, RuntimeHandle, RuntimeInput, SignalDeliveryConfig,
-    is_parked_reason,
+    CompletionRetryConfig, InvalidCompletionRetryLadder, PARKED_ACTIVITY_REASON, Pid,
+    RuntimeConfig, RuntimeHandle, RuntimeInput, SignalDeliveryConfig, is_parked_reason,
 };
 pub use schedule::{ScheduleError, next_fire_time, parse_cron_expression};
 pub use supervision::{

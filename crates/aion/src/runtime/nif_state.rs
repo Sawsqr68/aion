@@ -308,15 +308,21 @@ impl EngineNifState {
         now != snapshot || now == WAKE_EPOCH_EXITED
     }
 
-    /// Close the engine's child-task epoch: gate new arms, abort every
-    /// watcher and spawn-recovery task, and await each to quiescence (F4).
+    /// Close the engine-task epoch through the child bridge, if one is
+    /// installed: gate new arms, abort every watcher, spawn-recovery task and
+    /// completion retry, and await each to quiescence (F4).
     ///
-    /// Called from engine shutdown after the scheduler stops: a child task
-    /// still running past this point could double-write a parent history a
+    /// A task still running past this point could double-write a history a
     /// successor engine instance over the same store also records into.
-    pub(crate) fn shutdown_child_tasks(&self) {
+    ///
+    /// This is a **secondary** route and is idempotent. `RuntimeHandle::shutdown`
+    /// closes the same epoch unconditionally, which is what the completion
+    /// retry — a core lifecycle path — depends on; an epoch close reachable only
+    /// through an OPTIONAL bridge is not a close at all for an engine that never
+    /// installed one.
+    pub(crate) fn shutdown_engine_tasks(&self) {
         if let Some(bridge) = self.installed_child_bridge() {
-            bridge.shutdown_child_tasks();
+            bridge.shutdown_engine_tasks();
         }
     }
 
@@ -331,6 +337,26 @@ impl EngineNifState {
         if let Some(bridge) = self.installed_timer_bridge() {
             bridge.shutdown_timer_wheel();
         }
+    }
+
+    /// How many live-wheel timer tasks this engine currently has armed.
+    ///
+    /// The observable for [`Self::shutdown_timer_wheel`], and reachable through
+    /// the `Arc<EngineNifState>` a caller can hold ACROSS an engine's release —
+    /// which is what makes the drop the only variable between the two readings a
+    /// proof takes. Reading it through the `Engine` instead would be impossible
+    /// after the drop, and reading it through a fresh handle would observe a
+    /// different runtime.
+    ///
+    /// `0` for an engine that never installed a timer bridge, which is why a
+    /// proof must establish a non-zero reading BEFORE the drop: without that
+    /// control, "the wheel is empty afterwards" is satisfied by a fixture that
+    /// never armed anything, and that is exactly how the first form of the
+    /// engine-drop proof was blind to this half of `Drop`.
+    #[cfg(test)]
+    pub(crate) fn armed_wheel_timers(&self) -> usize {
+        self.installed_timer_bridge()
+            .map_or(0, |bridge| bridge.armed_wheel_timers())
     }
 
     /// Release every engine seam this state holds, breaking the

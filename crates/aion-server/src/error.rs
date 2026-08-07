@@ -512,6 +512,9 @@ fn engine_trace_fields(source: &EngineError) -> ErrorTraceFields<'_> {
         EngineError::InvalidState { .. } => simple_engine_fields("InvalidState", source),
         EngineError::ScheduleNotFound { .. } => simple_engine_fields("ScheduleNotFound", source),
         EngineError::ShuttingDown => simple_engine_fields("ShuttingDown", source),
+        EngineError::EngineTaskEpochClosed { .. } => {
+            simple_engine_fields("EngineTaskEpochClosed", source)
+        }
         EngineError::Store(store) => store_trace_fields(store),
         EngineError::Durability(durability) => durability_trace_fields(durability, source),
         EngineError::MissingStore => simple_engine_fields("MissingStore", source),
@@ -642,6 +645,27 @@ fn wire_from_engine(source: &EngineError) -> WireError {
         EngineError::ShuttingDown => {
             WireError::not_running_with_type("ShuttingDown", source.to_string())
         }
+        // The engine-task epoch closed before this run's terminal could be
+        // appended, so this process is no longer the run's single writer. The
+        // work was refused because the engine is going away, not because the
+        // request was wrong. Reachable only from an internal completion path,
+        // never from a request — but a total match is what keeps a new variant
+        // a COMPILE failure here rather than a silent default.
+        //
+        // 🔴 `backend`, NOT `not_running`, and an earlier revision of this arm
+        // had it wrong. The variant's own doc (`crates/aion/src/error.rs:389`)
+        // states the opposite of what `not_running` claims: "in both cases THE
+        // RUN STAYS `Running`", and a startup sweep re-installs a monitor. A
+        // caller told `not_running` is then sent to the CLI hint for that class
+        // (`aion-cli/src/render.rs:157-160`) — "the target run is no longer
+        // running; `aion list --status running` shows runs that can still serve
+        // queries" — which is false about this run twice over, and would have
+        // the operator hunting for a terminal that never landed. `backend`
+        // makes no claim about the run's state at all and carries the variant's
+        // own `Display`, which says exactly what happened; it is also the class
+        // this table already gives every other engine-internal refusal
+        // (`MissingStore`, `ConflictingEventPublisher`, `EventStreaming`).
+        E::EngineTaskEpochClosed { .. } => backend("EngineTaskEpochClosed", source),
         EngineError::Store(store) => wire_from_store(store),
         EngineError::Durability(durability) => engine::durability_wire(durability, source),
         E::MissingStore => backend("MissingStore", source),

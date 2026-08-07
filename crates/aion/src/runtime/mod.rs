@@ -4,6 +4,7 @@ mod cleanup_executor;
 /// Runtime configuration values passed to beamr.
 pub mod config;
 mod engine_nifs;
+pub(crate) mod engine_tasks;
 /// Runtime handle, process identifiers, and spawn input.
 pub mod handle;
 /// Loaded BEAM module representation.
@@ -24,7 +25,6 @@ mod nif_activity_retry_dispatch;
 mod nif_child;
 mod nif_child_engine;
 mod nif_child_spawn_retry;
-mod nif_child_tasks;
 mod nif_child_watch;
 mod nif_collect;
 mod nif_collect_dispatch;
@@ -45,6 +45,7 @@ mod nif_test_stores;
 pub(crate) mod nif_timeout;
 pub(crate) mod nif_timer;
 pub(crate) mod nif_timer_bridge;
+pub(crate) mod nif_timer_fire;
 mod nif_wake;
 /// Workflow process exit outcomes.
 pub mod outcome;
@@ -55,7 +56,9 @@ mod wake_confirm;
 /// Workflow module and entrypoint execution helpers.
 pub mod workflow;
 
-pub use config::{RuntimeConfig, SignalDeliveryConfig};
+pub use config::{
+    CompletionRetryConfig, InvalidCompletionRetryLadder, RuntimeConfig, SignalDeliveryConfig,
+};
 pub use handle::{Pid, RuntimeHandle, RuntimeInput};
 pub use nif::{Determinism, Mfa, NifEntry, NifRegistration};
 pub(crate) use nif_activity::install_nif_runtime_context;

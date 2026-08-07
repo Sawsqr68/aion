@@ -13,6 +13,16 @@ pub(super) struct ShutdownGate {
 
 #[derive(Default)]
 struct ShutdownGateInner {
+    /// Test-only injected `close_and_wait` failure.
+    ///
+    /// The real failure is mutex poison, which a test cannot arrange without
+    /// poisoning a lock the rest of the fixture then trips over. This exists
+    /// so `Engine::shutdown`'s FIRST fallible step can be made to fail — the
+    /// only way to reach its second-error reporting branch, which is the fix
+    /// for the swallowed-second-error defect and was executed by no test that
+    /// asserted on it (measured: deleting the report left 659 tests green).
+    #[cfg(test)]
+    forced_close_failure: std::sync::atomic::AtomicBool,
     state: Mutex<ShutdownState>,
     idle: Condvar,
 }
@@ -49,7 +59,27 @@ impl ShutdownGate {
         })
     }
 
+    /// Arm the injected `close_and_wait` failure. See `forced_close_failure`.
+    #[cfg(test)]
+    pub(super) fn force_close_failure(&self) {
+        self.inner
+            .forced_close_failure
+            .store(true, std::sync::atomic::Ordering::Release);
+    }
+
     pub(super) fn close_and_wait(&self) -> Result<(), EngineError> {
+        // The injected variant is the one THIS function can actually raise:
+        // both of its real error paths map a poisoned lock to
+        // `RegistryPoisoned`, so a fixture returning anything else would model
+        // a machine that does not exist.
+        #[cfg(test)]
+        if self
+            .inner
+            .forced_close_failure
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            return Err(EngineError::RegistryPoisoned);
+        }
         let mut state = self.state()?;
         state.shutting_down = true;
         while state.active_operations > 0 {

@@ -95,11 +95,15 @@ impl RetryLoopHarness {
             labels: std::collections::BTreeMap::new(),
             advisory: false,
         };
+        // Owned by the harness, and reachable through `seam.engine_tasks`, so a
+        // test can CLOSE the epoch and observe the retry loop stand down.
+        let engine_tasks = Arc::new(crate::runtime::engine_tasks::EngineTaskRuntime::new()?);
         Ok(Self {
             store,
             seam: RetryRecorderSeam {
                 recorder: Arc::new(tokio::sync::Mutex::new(recorder)),
                 run_id,
+                engine_tasks,
             },
             request,
             workflow_id,

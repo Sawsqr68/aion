@@ -4,7 +4,7 @@
 //! discipline to the parent's history.
 //!
 //! One watcher task is armed per `(parent pid, child workflow id)` await;
-//! arming is idempotent and registered in the engine's [`ChildTaskRuntime`]
+//! arming is idempotent and registered in the engine's [`EngineTaskRuntime`]
 //! (which gates arming during shutdown and aborts-then-awaits every task at
 //! epoch close). The loop treats the store as truth and each child-run
 //! `CompletionNotifier` as a doorbell: on every iteration it re-reads the
@@ -26,7 +26,7 @@ use crate::durability::current_run_segment;
 use crate::engine::delegated::run_has_terminal_history;
 use crate::lifecycle::completion::terminal_outcome_from_history;
 use crate::registry::{Registry, TerminalOutcome, WorkflowHandle};
-use crate::runtime::nif_child_tasks::ChildTaskRuntime;
+use crate::runtime::engine_tasks::{ArmOutcome, EngineTaskRuntime, sleep_backoff};
 use crate::runtime::{RuntimeHandle, SignalDeliveryConfig};
 
 /// Everything one watcher task needs; cheap clones of engine-owned seams.
@@ -39,7 +39,7 @@ pub(super) struct ChildWatchContext {
     /// Runtime boundary used to deliver the wake marker.
     pub(super) runtime: Arc<RuntimeHandle>,
     /// Task registry and executor this watcher is armed in.
-    pub(super) tasks: Arc<ChildTaskRuntime>,
+    pub(super) tasks: Arc<EngineTaskRuntime>,
     /// Builder-supplied backoff policy for registry-miss windows and
     /// transient record failures.
     pub(super) backoff: SignalDeliveryConfig,
@@ -52,9 +52,10 @@ pub(super) struct ChildWatchContext {
 /// Arm a child-terminal watcher for one `(parent pid, child id)` await.
 ///
 /// Idempotent: a second arm while a watcher for the same key is running is
-/// a no-op, and arming is refused once engine shutdown began. Returns
-/// whether a new watcher task was spawned.
-pub(super) fn arm_child_terminal_watch(context: ChildWatchContext) -> bool {
+/// a no-op, and arming is refused once engine shutdown began. Returns which
+/// of those happened — see [`ArmOutcome`], whose two refusals mean opposite
+/// things about whether the await has a watcher.
+pub(super) fn arm_child_terminal_watch(context: ChildWatchContext) -> ArmOutcome {
     let parent_pid = context.parent.pid();
     let child_id = context.child_workflow_id.clone();
     let tasks = Arc::clone(&context.tasks);
@@ -106,7 +107,7 @@ async fn run_watch(context: &ChildWatchContext) {
                     reason = %reason,
                     "child-terminal watcher record failed transiently; retrying with backoff"
                 );
-                sleep_backoff(&mut backoff, &context.backoff).await;
+                sleep_backoff(&mut backoff, context.backoff.max_backoff).await;
             }
             Err(RecordFailure::Invariant(reason)) => {
                 tracing::error!(
@@ -165,7 +166,7 @@ async fn wait_for_child_terminal(context: &ChildWatchContext) -> TerminalOutcome
                     error = %error,
                     "child-terminal watcher could not read child history; backing off"
                 );
-                sleep_backoff(&mut backoff, &context.backoff).await;
+                sleep_backoff(&mut backoff, context.backoff.max_backoff).await;
                 continue;
             }
         };
@@ -209,12 +210,12 @@ async fn wait_for_child_terminal(context: &ChildWatchContext) -> TerminalOutcome
                         }
                         // The handle already published (mid-CAN window where
                         // the store has not caught up): poll with backoff.
-                        sleep_backoff(&mut backoff, &context.backoff).await;
+                        sleep_backoff(&mut backoff, context.backoff.max_backoff).await;
                     }
                     // Registry miss: recovery registration window, CAN
                     // replacement window, or a recorded-but-not-yet-swept
                     // child. Bounded backoff between store re-reads.
-                    None => sleep_backoff(&mut backoff, &context.backoff).await,
+                    None => sleep_backoff(&mut backoff, context.backoff.max_backoff).await,
                 }
             }
         }
@@ -367,16 +368,6 @@ fn is_child_terminal_for(event: &Event, child_workflow_id: &WorkflowId) -> bool 
     )
 }
 
-async fn sleep_backoff(current: &mut std::time::Duration, policy: &SignalDeliveryConfig) {
-    tokio::time::sleep(*current).await;
-    let doubled = current.saturating_mul(2);
-    *current = if doubled > policy.max_backoff {
-        policy.max_backoff
-    } else {
-        doubled
-    };
-}
-
 /// Bound for one doorbell wait, advancing the polling ladder.
 ///
 /// Mirrors [`sleep_backoff`]'s progression but caps at the policy's
@@ -405,15 +396,15 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        ChildWatchContext, RecordDisposition, arm_child_terminal_watch, current_run_handle,
-        latest_run_id, record_parent_child_terminal,
+        ArmOutcome, ChildWatchContext, RecordDisposition, arm_child_terminal_watch,
+        current_run_handle, latest_run_id, record_parent_child_terminal,
     };
     use crate::durability::Recorder;
     use crate::registry::{
         CompletionNotifier, HandleResidency, Registry, TerminalOutcome, WorkflowHandle,
         WorkflowHandleParts,
     };
-    use crate::runtime::nif_child_tasks::ChildTaskRuntime;
+    use crate::runtime::engine_tasks::EngineTaskRuntime;
     use crate::runtime::{RuntimeConfig, RuntimeHandle, SignalDeliveryConfig};
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -482,7 +473,7 @@ mod tests {
             store,
             registry,
             runtime,
-            tasks: Arc::new(ChildTaskRuntime::new()?),
+            tasks: Arc::new(EngineTaskRuntime::new()?),
             backoff: fast_backoff(),
             parent,
             child_workflow_id,
@@ -521,13 +512,21 @@ mod tests {
         let first = arm_child_terminal_watch(context.clone());
         let second = arm_child_terminal_watch(context.clone());
 
-        assert!(first, "first arm must spawn a watcher");
-        assert!(!second, "second arm for the same key must be a no-op");
+        assert_eq!(first, ArmOutcome::Armed, "first arm must spawn a watcher");
+        // 🔴 ALREADY-armed, not merely "not armed": the second arm found a live
+        // watcher, which is the opposite of the epoch-closed refusal that would
+        // leave this await unwatched. A `bool` returned the same answer for
+        // both, so this line could not tell them apart.
+        assert_eq!(
+            second,
+            ArmOutcome::AlreadyArmed,
+            "second arm for the same key must find the existing watcher"
+        );
         assert_eq!(tasks.armed_watch_count(), 1);
 
         // A different child id under the same parent is its own watcher.
         context.child_workflow_id = WorkflowId::new_v4();
-        assert!(arm_child_terminal_watch(context));
+        assert_eq!(arm_child_terminal_watch(context), ArmOutcome::Armed);
         assert_eq!(tasks.armed_watch_count(), 2);
 
         tasks.shutdown();
@@ -543,7 +542,7 @@ mod tests {
         let runtime = Arc::new(RuntimeHandle::new(RuntimeConfig::new(Some(1)))?);
         let parent_a = started_handle(&store, WorkflowId::new_v4(), RunId::new_v4(), 31).await?;
         let parent_b = started_handle(&store, WorkflowId::new_v4(), RunId::new_v4(), 32).await?;
-        let tasks = Arc::new(ChildTaskRuntime::new()?);
+        let tasks = Arc::new(EngineTaskRuntime::new()?);
         for parent in [parent_a, parent_b] {
             let context = ChildWatchContext {
                 store: Arc::clone(&store),
@@ -554,7 +553,7 @@ mod tests {
                 parent,
                 child_workflow_id: WorkflowId::new_v4(),
             };
-            assert!(arm_child_terminal_watch(context));
+            assert_eq!(arm_child_terminal_watch(context), ArmOutcome::Armed);
         }
         assert_eq!(tasks.armed_watch_count(), 2);
 
@@ -715,7 +714,7 @@ mod tests {
             parent.clone(),
             child_id.clone(),
         )?;
-        assert!(arm_child_terminal_watch(context.clone()));
+        assert_eq!(arm_child_terminal_watch(context.clone()), ArmOutcome::Armed);
 
         // The watcher must wait through the CAN window (replacement not yet
         // registered) without recording anything.
@@ -804,7 +803,7 @@ mod tests {
             child_id.clone(),
         )?;
         let tasks = Arc::clone(&context.tasks);
-        assert!(arm_child_terminal_watch(context));
+        assert_eq!(arm_child_terminal_watch(context), ArmOutcome::Armed);
         tokio::time::sleep(Duration::from_millis(20)).await;
         assert_eq!(
             child_terminal_count(&store, parent.workflow_id(), &child_id).await?,
@@ -851,7 +850,7 @@ mod tests {
             parent.clone(),
             child_id.clone(),
         )?;
-        assert!(arm_child_terminal_watch(context));
+        assert_eq!(arm_child_terminal_watch(context), ArmOutcome::Armed);
         tokio::time::sleep(Duration::from_millis(20)).await;
         assert_eq!(
             child_terminal_count(&store, parent.workflow_id(), &child_id).await?,
@@ -915,7 +914,7 @@ mod tests {
             child_id.clone(),
         )?;
         let tasks = Arc::clone(&context.tasks);
-        assert!(arm_child_terminal_watch(context));
+        assert_eq!(arm_child_terminal_watch(context), ArmOutcome::Armed);
 
         // The record lands durably and the watcher exits cleanly despite the
         // undeliverable marker.
@@ -972,175 +971,13 @@ mod tests {
         Ok(())
     }
 
-    /// Delegating store whose `append` fails while a failure budget remains.
-    struct FlakyAppendStore {
-        inner: InMemoryStore,
-        remaining_failures: std::sync::atomic::AtomicU32,
-    }
-
-    impl FlakyAppendStore {
-        fn new() -> Self {
-            Self {
-                inner: InMemoryStore::default(),
-                remaining_failures: std::sync::atomic::AtomicU32::new(0),
-            }
-        }
-
-        fn fail_next_appends(&self, count: u32) {
-            self.remaining_failures
-                .store(count, std::sync::atomic::Ordering::Release);
-        }
-    }
-
-    #[async_trait::async_trait]
-    impl aion_store::ReadableEventStore for FlakyAppendStore {
-        async fn read_history(
-            &self,
-            workflow_id: &WorkflowId,
-        ) -> Result<Vec<Event>, aion_store::StoreError> {
-            self.inner.read_history(workflow_id).await
-        }
-
-        async fn read_history_from(
-            &self,
-            workflow_id: &WorkflowId,
-            from_seq: u64,
-        ) -> Result<Vec<Event>, aion_store::StoreError> {
-            self.inner.read_history_from(workflow_id, from_seq).await
-        }
-
-        async fn read_run_chain(
-            &self,
-            workflow_id: &WorkflowId,
-        ) -> Result<Vec<aion_store::RunSummary>, aion_store::StoreError> {
-            self.inner.read_run_chain(workflow_id).await
-        }
-
-        async fn list_workflow_ids(&self) -> Result<Vec<WorkflowId>, aion_store::StoreError> {
-            self.inner.list_workflow_ids().await
-        }
-
-        async fn list_active(&self) -> Result<Vec<WorkflowId>, aion_store::StoreError> {
-            self.inner.list_active().await
-        }
-
-        async fn list_paused(&self) -> Result<Vec<WorkflowId>, aion_store::StoreError> {
-            self.inner.list_paused().await
-        }
-
-        async fn query(
-            &self,
-            filter: &aion_core::WorkflowFilter,
-        ) -> Result<Vec<aion_core::WorkflowSummary>, aion_store::StoreError> {
-            self.inner.query(filter).await
-        }
-
-        async fn schedule_timer(
-            &self,
-            workflow_id: &WorkflowId,
-            timer_id: &aion_core::TimerId,
-            fire_at: chrono::DateTime<chrono::Utc>,
-        ) -> Result<(), aion_store::StoreError> {
-            self.inner
-                .schedule_timer(workflow_id, timer_id, fire_at)
-                .await
-        }
-
-        async fn expired_timers(
-            &self,
-            as_of: chrono::DateTime<chrono::Utc>,
-        ) -> Result<Vec<aion_store::TimerEntry>, aion_store::StoreError> {
-            self.inner.expired_timers(as_of).await
-        }
-    }
-
-    #[async_trait::async_trait]
-    impl aion_store::WritableEventStore for FlakyAppendStore {
-        async fn append(
-            &self,
-            token: aion_store::WriteToken,
-            workflow_id: &WorkflowId,
-            events: &[Event],
-            expected_seq: u64,
-        ) -> Result<(), aion_store::StoreError> {
-            let failing = self
-                .remaining_failures
-                .fetch_update(
-                    std::sync::atomic::Ordering::AcqRel,
-                    std::sync::atomic::Ordering::Acquire,
-                    |current| current.checked_sub(1),
-                )
-                .is_ok();
-            if failing {
-                return Err(aion_store::StoreError::Backend(
-                    "transient append failure injected by FlakyAppendStore".to_owned(),
-                ));
-            }
-            self.inner
-                .append(token, workflow_id, events, expected_seq)
-                .await
-        }
-    }
-
-    /// Package persistence is untouched by the injected append failures:
-    /// forward to the wrapped in-memory store.
-    #[async_trait::async_trait]
-    impl aion_store::PackageStore for FlakyAppendStore {
-        async fn put_package(
-            &self,
-            record: aion_store::PackageRecord,
-        ) -> Result<(), aion_store::StoreError> {
-            self.inner.put_package(record).await
-        }
-
-        async fn put_package_with_routes(
-            &self,
-            record: aion_store::PackageRecord,
-            route_workflow_types: &[String],
-        ) -> Result<(), aion_store::StoreError> {
-            self.inner
-                .put_package_with_routes(record, route_workflow_types)
-                .await
-        }
-
-        async fn list_packages(
-            &self,
-        ) -> Result<Vec<aion_store::PackageRecord>, aion_store::StoreError> {
-            self.inner.list_packages().await
-        }
-
-        async fn delete_package(
-            &self,
-            workflow_type: &str,
-            content_hash: &str,
-        ) -> Result<(), aion_store::StoreError> {
-            self.inner.delete_package(workflow_type, content_hash).await
-        }
-
-        async fn put_package_route(
-            &self,
-            workflow_type: &str,
-            content_hash: &str,
-        ) -> Result<(), aion_store::StoreError> {
-            self.inner
-                .put_package_route(workflow_type, content_hash)
-                .await
-        }
-
-        async fn list_package_routes(
-            &self,
-        ) -> Result<Vec<aion_store::PackageRouteRecord>, aion_store::StoreError> {
-            self.inner.list_package_routes().await
-        }
-    }
-
     /// F5: a transient record failure must be retried with backoff until the
     /// record lands — the parked parent is never abandoned for the epoch.
     /// Before the fix the watcher logged once and exited, leaving the parent
     /// parked forever; this test then failed its convergence deadline.
     #[tokio::test]
     async fn transient_record_failure_is_retried_until_the_terminal_lands() -> TestResult {
-        let flaky = Arc::new(FlakyAppendStore::new());
+        let flaky = Arc::new(crate::store_faults::FlakyStore::new());
         let store: Arc<dyn EventStore> = Arc::clone(&flaky) as Arc<dyn EventStore>;
         let registry = Arc::new(Registry::default());
         let runtime = Arc::new(RuntimeHandle::new(RuntimeConfig::new(Some(1)))?);
@@ -1171,7 +1008,7 @@ mod tests {
             child_id.clone(),
         )?;
         let tasks = Arc::clone(&context.tasks);
-        assert!(arm_child_terminal_watch(context));
+        assert_eq!(arm_child_terminal_watch(context), ArmOutcome::Armed);
 
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
         while child_terminal_count(&store, parent.workflow_id(), &child_id).await? != 1

@@ -24,6 +24,7 @@ use chrono::Utc;
 
 use crate::durability::{Command, CorrelationKey, Resolution, ResolveOutcome};
 use crate::engine_seam::{ChildWorkflowSpawnRequest, EngineHandle};
+use crate::runtime::engine_tasks::ArmOutcome;
 use crate::runtime::nif_child_engine::{ChildNifBridge, NifChildEngine};
 use crate::runtime::nif_child_watch::{ChildWatchContext, arm_child_terminal_watch};
 use crate::runtime::nif_state::{EngineNifState, PendingAwait};
@@ -211,14 +212,23 @@ fn recover_spawn_in_background(
             namespace: nif.workflow_handle().namespace().to_owned(),
         },
     );
-    if !armed {
-        // Shutdown gate or an already-armed task: either the next epoch's
-        // startup sweep repairs the recorded-but-never-started child, or the
-        // existing task already owns the obligation.
-        tracing::debug!(
+    match armed {
+        ArmOutcome::Armed => {}
+        ArmOutcome::AlreadyArmed => tracing::debug!(
             child_workflow_id = %child_workflow_id,
-            "spawn recovery not armed (already armed or epoch closing)"
-        );
+            "spawn recovery not armed: an existing task already owns the obligation"
+        ),
+        // A different fact, and it deserves a different level: nothing in this
+        // process owns the repair, and the recorded-but-never-started child
+        // stays that way until the next epoch's startup sweep runs. Saying
+        // "already armed or epoch closing" for both — which is what a `bool`
+        // forced — hid this one behind the harmless one.
+        ArmOutcome::EpochClosed => tracing::warn!(
+            child_workflow_id = %child_workflow_id,
+            "spawn recovery not armed: the engine-task epoch is closing, so the \
+             recorded child stays unstarted until the next epoch's startup sweep \
+             repairs it"
+        ),
     }
 }
 
@@ -366,7 +376,7 @@ fn await_child_step(
             // the Recorded path on the next wake.
             if super::nif_timeout::expired_scope_deadline(state, pid, nif.history()).is_some() {
                 state.pending_awaits.remove(&pid);
-                bridge.child_tasks().abort_watch(pid, child_workflow_id);
+                bridge.engine_tasks().abort_watch(pid, child_workflow_id);
                 return Ok(AwaitChildStep::ScopeExpired(
                     super::nif_timeout::SCOPE_EXPIRED_MESSAGE.to_owned(),
                 ));
@@ -376,13 +386,29 @@ fn await_child_step(
                 store: bridge.store(),
                 registry: bridge.registry_arc(),
                 runtime: bridge.runtime(),
-                tasks: bridge.child_tasks(),
+                tasks: bridge.engine_tasks(),
                 backoff: bridge.watch_backoff(),
                 parent: nif.workflow_handle(),
                 child_workflow_id: child_workflow_id.clone(),
             };
             // Idempotent: re-entries while the watcher runs are no-ops.
-            arm_child_terminal_watch(context);
+            //
+            // 🔴 The epoch-closed refusal is NOT a no-op and must not be
+            // swallowed: this parent is about to park on `pending_awaits` with
+            // nothing watching for the child's terminal, and only the next
+            // epoch's startup recovery re-installs the watcher. The park is
+            // still correct — the parent is durable and the successor resumes
+            // it — but an operator looking at a parked parent needs to be able
+            // to see why nothing is moving here.
+            if arm_child_terminal_watch(context) == ArmOutcome::EpochClosed {
+                tracing::warn!(
+                    child_workflow_id = %child_workflow_id,
+                    parent_pid = pid,
+                    "child-terminal watcher not armed: the engine-task epoch is \
+                     closing, so this parent parks unwatched until the next \
+                     epoch's startup recovery re-installs the watcher"
+                );
+            }
             state.pending_awaits.insert(
                 pid,
                 PendingAwait::Child {
@@ -442,7 +468,7 @@ fn scope_expired_before_child_terminal(
         return None;
     }
     state.pending_awaits.remove(&pid);
-    bridge.child_tasks().abort_watch(pid, child_workflow_id);
+    bridge.engine_tasks().abort_watch(pid, child_workflow_id);
     Some(super::nif_timeout::SCOPE_EXPIRED_MESSAGE.to_owned())
 }
 
@@ -707,7 +733,7 @@ mod tests {
                 search_attribute_schema: Arc::new(aion_core::SearchAttributeSchema::new()),
                 tokio_handle: tokio::runtime::Handle::current(),
                 watch_backoff: SignalDeliveryConfig::default(),
-            })?);
+            }));
             Ok(Self {
                 state: Arc::new(EngineNifState::default()),
                 bridge,
@@ -735,7 +761,7 @@ mod tests {
         }
 
         fn shutdown(self) -> TestResult {
-            self.bridge.shutdown_child_tasks();
+            self.bridge.shutdown_engine_tasks();
             self.runtime.shutdown()?;
             Ok(())
         }
@@ -864,12 +890,12 @@ mod tests {
         // First live arrival: pin set, watcher armed, suspend requested.
         assert_eq!(harness.step(), Ok(AwaitChildStep::Suspend));
         assert_eq!(harness.pinned_child(), Some(child.clone()));
-        assert_eq!(harness.bridge.child_tasks().armed_watch_count(), 1);
+        assert_eq!(harness.bridge.engine_tasks().armed_watch_count(), 1);
 
         // Wake re-entry with nothing recorded: same pin, no second watcher.
         assert_eq!(harness.step(), Ok(AwaitChildStep::Suspend));
         assert_eq!(harness.pinned_child(), Some(child));
-        assert_eq!(harness.bridge.child_tasks().armed_watch_count(), 1);
+        assert_eq!(harness.bridge.engine_tasks().armed_watch_count(), 1);
         harness.shutdown()
     }
 
@@ -1001,7 +1027,7 @@ mod tests {
             ))
         );
         assert_eq!(harness.pinned_child(), None);
-        assert_eq!(harness.bridge.child_tasks().armed_watch_count(), 0);
+        assert_eq!(harness.bridge.engine_tasks().armed_watch_count(), 0);
         assert_eq!(
             harness.store.read_history(&parent_id).await?,
             parent_history_before
@@ -1025,7 +1051,7 @@ mod tests {
 
         // Live first arrival: the watcher arms and the await parks.
         assert_eq!(harness.step(), Ok(AwaitChildStep::Suspend));
-        assert_eq!(harness.bridge.child_tasks().armed_watch_count(), 1);
+        assert_eq!(harness.bridge.engine_tasks().armed_watch_count(), 1);
 
         // The enclosing with_timeout deadline expires before any terminal.
         harness
@@ -1045,7 +1071,7 @@ mod tests {
         );
         assert_eq!(harness.pinned_child(), None);
         assert_eq!(
-            harness.bridge.child_tasks().armed_watch_count(),
+            harness.bridge.engine_tasks().armed_watch_count(),
             0,
             "the expired-scope abort must disarm the await's watcher (F1a)"
         );
@@ -1313,7 +1339,7 @@ mod tests {
             "error: {error}"
         );
         assert_eq!(harness.pinned_child(), None);
-        assert_eq!(harness.bridge.child_tasks().armed_watch_count(), 0);
+        assert_eq!(harness.bridge.engine_tasks().armed_watch_count(), 0);
         harness.shutdown()
     }
 }

@@ -18,7 +18,7 @@ use crate::lifecycle::start::{
 };
 use crate::loader::WorkflowCatalog;
 use crate::registry::{HandleResidency, Registry, WorkflowHandle};
-use crate::runtime::nif_child_tasks::ChildTaskRuntime;
+use crate::runtime::engine_tasks::EngineTaskRuntime;
 use crate::runtime::{RuntimeHandle, SignalDeliveryConfig};
 use crate::signal::SignalResumeHandoff;
 use crate::supervision::SupervisionTree;
@@ -34,9 +34,6 @@ pub(crate) struct ChildNifBridge {
     signal_handoff: Arc<SignalResumeHandoff>,
     search_attribute_schema: Arc<aion_core::SearchAttributeSchema>,
     tokio_handle: Handle,
-    /// Engine-owned executor and registry for child-terminal watchers and
-    /// spawn-recovery tasks; gated and abort-awaited at epoch close (F4).
-    child_tasks: Arc<ChildTaskRuntime>,
     /// Builder-supplied backoff policy for watcher registry-miss windows,
     /// transient record retries, and spawn-recovery retries.
     watch_backoff: SignalDeliveryConfig,
@@ -59,11 +56,10 @@ pub(crate) struct ChildNifBridgeParts {
 impl ChildNifBridge {
     /// Creates a bridge from engine components.
     ///
-    /// # Errors
-    ///
-    /// Returns [`EngineError::Runtime`] when the child-task runtime's worker
-    /// thread cannot be started.
-    pub(crate) fn new(parts: ChildNifBridgeParts) -> Result<Self, EngineError> {
+    /// Infallible: the bridge now borrows the engine task executor from the
+    /// runtime handle rather than starting one of its own, so there is nothing
+    /// left here that can fail.
+    pub(crate) fn new(parts: ChildNifBridgeParts) -> Self {
         let ChildNifBridgeParts {
             store,
             visibility_store,
@@ -76,7 +72,7 @@ impl ChildNifBridge {
             tokio_handle,
             watch_backoff,
         } = parts;
-        Ok(Self {
+        Self {
             store,
             visibility_store,
             runtime,
@@ -86,9 +82,8 @@ impl ChildNifBridge {
             signal_handoff,
             search_attribute_schema,
             tokio_handle,
-            child_tasks: Arc::new(ChildTaskRuntime::new()?),
             watch_backoff,
-        })
+        }
     }
 
     pub(crate) fn registry(&self) -> &Registry {
@@ -111,8 +106,17 @@ impl ChildNifBridge {
         self.tokio_handle.clone()
     }
 
-    pub(crate) fn child_tasks(&self) -> Arc<ChildTaskRuntime> {
-        Arc::clone(&self.child_tasks)
+    /// The engine-wide task executor, borrowed from the runtime handle.
+    ///
+    /// The bridge does not own one: an optional bridge must not be the only
+    /// route to an executor that a non-optional lifecycle path depends on.
+    ///
+    /// Named `engine_tasks`, not `child_tasks`: the executor it returns also
+    /// carries the process-exit completion retry, which is not a child concern
+    /// at all. A borrowed name that still says "child" is how the next reader
+    /// re-derives the assumption this method exists to correct.
+    pub(crate) fn engine_tasks(&self) -> Arc<EngineTaskRuntime> {
+        self.runtime.engine_tasks()
     }
 
     pub(crate) fn watch_backoff(&self) -> SignalDeliveryConfig {
@@ -137,13 +141,18 @@ impl ChildNifBridge {
 
     /// Abort every child-terminal watcher armed by an exited parent pid.
     pub(crate) fn abort_child_terminal_watches_for_parent(&self, parent_pid: u64) {
-        self.child_tasks.abort_watches_for_parent(parent_pid);
+        self.engine_tasks().abort_watches_for_parent(parent_pid);
     }
 
-    /// Close the epoch for engine-side child tasks: gate new arms, abort
-    /// every task, and await each to quiescence (F4).
-    pub(crate) fn shutdown_child_tasks(&self) {
-        self.child_tasks.shutdown();
+    /// Close the engine-task epoch: gate new arms, abort every task, and await
+    /// each to quiescence (F4).
+    ///
+    /// Idempotent, and no longer the only route to that close — `RuntimeHandle`
+    /// owns the executor and closes it from its own `shutdown`. This call
+    /// remains because a bridge that installed watchers should be able to say
+    /// so, not because anything depends on it happening here.
+    pub(crate) fn shutdown_engine_tasks(&self) {
+        self.engine_tasks().shutdown();
     }
 
     /// Start the child under its parent-recorded identity, inheriting the

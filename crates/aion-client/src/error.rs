@@ -174,10 +174,14 @@ pub enum ClientError {
     ///
     /// A ROUTING signal, not a connectivity one: the endpoint answered. It is
     /// transient — cluster ownership moves on failover and the caller may retry
-    /// or re-resolve — which is why it is retryable, but it must not be
+    /// or re-resolve — which is why it is worth retrying, but it must not be
     /// confused with [`ClientError::Unavailable`], whose remedy ("check your
     /// endpoint") is wrong here and sends the operator hunting a network fault
     /// that does not exist.
+    ///
+    /// "Retryable" here means the CALLER may retry, not that this SDK does it
+    /// for them: the only automatic retry in this crate is the event stream's
+    /// resume, and `stream.rs`'s `is_retryable` matches `Unavailable` alone.
     ///
     /// Maps from the wire error code `not_owner` / gRPC `ABORTED` with the typed
     /// detail present.

@@ -189,7 +189,17 @@ pub enum EngineSeamError {
         reason: String,
     },
 
-    /// AE could not arm or disarm the timer wheel.
+    /// A timer-wheel operation was refused: arming, disarming, or — since the
+    /// wheel gained a stand-down latch — the durable append that a fire or a
+    /// cancellation would otherwise have made after this engine's wheel was torn
+    /// down.
+    ///
+    /// That third case is not an arm or a disarm and is the reason this doc no
+    /// longer says it is. Callers that need to tell an orderly stand-down from a
+    /// genuine wheel fault classify on this variant
+    /// (`crate::runtime::nif_timer_fire::is_wheel_teardown`); the `reason`
+    /// string says which of the three happened, in words that are true of that
+    /// one — a refused cancel does not claim anything fired.
     #[error("timer wheel operation failed: {reason}")]
     TimerWheel {
         /// Human-readable timer-wheel failure reason.

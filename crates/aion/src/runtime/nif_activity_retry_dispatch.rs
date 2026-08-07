@@ -96,6 +96,23 @@ pub(super) struct RetryRecorderSeam {
     pub(super) recorder: Arc<tokio::sync::Mutex<Recorder>>,
     /// The run this dispatch was issued by.
     pub(super) run_id: aion_core::RunId,
+    /// The engine-task epoch this dispatch belongs to.
+    ///
+    /// 🔴 A FIELD, NOT AN ARGUMENT, DELIBERATELY. The completion task is the
+    /// FOURTH durable writer this process can hold open, and until this field
+    /// existed it was the one with no epoch check at all:
+    /// [`spawn_completion_task`] discards its `JoinHandle`, so the task is
+    /// detached on the host runtime and reached by neither `Drop for Engine`
+    /// nor `Engine::shutdown` — and between attempts it sleeps an
+    /// SDK-declared backoff with no ceiling. A released engine could therefore
+    /// wake a minute later and append `ActivityStarted` into a history a
+    /// successor has already adopted: `SequenceConflict` on the survivor at
+    /// best, and a replay resolving a command against an event the live run
+    /// never issued at worst. Invariant 3, and through it invariant 2.
+    ///
+    /// Carrying it on the SEAM rather than threading it through the three
+    /// call sites means a future record path cannot be written without one.
+    pub(super) engine_tasks: Arc<super::engine_tasks::EngineTaskRuntime>,
 }
 
 /// The retry loop's final disposition, carrying the attempt that produced it.
@@ -116,6 +133,31 @@ pub(super) enum RetryLoopTerminal {
     /// drain (#207): nothing may be delivered or recorded — the workflow stays
     /// suspended and post-restart replay re-dispatches the dangling ordinal.
     Parked,
+}
+
+/// The shared stand-down for a record refused because this engine's task epoch
+/// closed.
+///
+/// Named ONCE because both record sites in the retry loop take it, and a rule
+/// spelled out in two places is held equal only by diligence.
+///
+/// Deliberately NOT reported as `Settled`: nothing was recorded by anyone.
+/// This process simply stopped being the run's writer, and the owning engine
+/// re-derives the activity from the durable trail — which ends here exactly as
+/// a `kill -9` at this instant would leave it, the shape the parking path is
+/// already built for.
+fn stood_down_on_closed_epoch(request: &ActivityDispatch, attempt: u32) -> RetryLoopOutcome {
+    tracing::info!(
+        workflow_id = %request.workflow_id,
+        activity_id = %request.activity_id,
+        attempt,
+        "engine task epoch closed mid-retry; standing down rather than writing for a run this \
+         process no longer owns"
+    );
+    RetryLoopOutcome {
+        attempt,
+        terminal: RetryLoopTerminal::SettledElsewhere,
+    }
 }
 
 /// Classify a failed dispatch BEFORE any durable retry record: the parked
@@ -221,6 +263,9 @@ pub(super) async fn dispatch_with_retries(
                     terminal: RetryLoopTerminal::SettledElsewhere,
                 };
             }
+            RetryRecordOutcome::EpochClosed => {
+                return stood_down_on_closed_epoch(request, attempt);
+            }
             RetryRecordOutcome::RecordFailed(record_error) => {
                 tracing::warn!(
                     workflow_id = %request.workflow_id,
@@ -248,6 +293,9 @@ pub(super) async fn dispatch_with_retries(
                     attempt,
                     terminal: RetryLoopTerminal::SettledElsewhere,
                 };
+            }
+            RetryRecordOutcome::EpochClosed => {
+                return stood_down_on_closed_epoch(request, attempt);
             }
             RetryRecordOutcome::RecordFailed(record_error) => {
                 tracing::warn!(
@@ -378,6 +426,17 @@ async fn record_advisory_exhaustion(
     .await
     {
         RetryRecordOutcome::Recorded | RetryRecordOutcome::Settled => {}
+        // Advisory only, so there is nothing to fail — but it is still not the
+        // same event as `Settled`, and a reader of these logs must be able to
+        // tell "somebody else finished it" from "we stopped being the writer".
+        RetryRecordOutcome::EpochClosed => {
+            tracing::info!(
+                workflow_id = %request.workflow_id,
+                activity_id = %request.activity_id,
+                attempt,
+                "engine task epoch closed before the advisory exhaustion note could be recorded"
+            );
+        }
         RetryRecordOutcome::RecordFailed(record_error) => {
             tracing::warn!(
                 workflow_id = %request.workflow_id,
@@ -406,6 +465,11 @@ enum RetryRecordOutcome {
     /// The ordinal (or workflow) already has a recorded terminal; the loop
     /// must stop without recording or delivering anything further.
     Settled,
+    /// This engine's task epoch closed before the append could land, so this
+    /// process is no longer the run's single writer. Distinct from [`Settled`]
+    /// on purpose: nothing was recorded by anyone, the run is simply not ours
+    /// to write for any more, and the two must not be reported as one thing.
+    EpochClosed,
     RecordFailed(crate::durability::DurabilityError),
 }
 
@@ -418,6 +482,22 @@ async fn record_retry_event(
     record: RetryRecord,
 ) -> RetryRecordOutcome {
     let mut recorder = seam.recorder.lock().await;
+    // 🔴 THE EPOCH GATE, UNDER THE RECORDER LOCK. This is the last point at
+    // which this process can still decline to be a second writer: after it,
+    // the append is issued. Checking here rather than at spawn or between
+    // attempts is the same argument `EngineTaskRuntime::is_epoch_open` makes
+    // about itself — an earlier check can be walked past, because the attempt
+    // that passed it goes on to hold the engine open across a history read, a
+    // lock acquisition and a store round-trip before it writes anything.
+    //
+    // Refusing is the safe direction: nothing is lost that the owning engine
+    // cannot re-derive. The activity's durable trail simply ends where this
+    // process stopped being its writer, which is byte-equivalent to a
+    // `kill -9` at the same instant — the shape the parking path below is
+    // already built for.
+    if !seam.engine_tasks.is_epoch_open() {
+        return RetryRecordOutcome::EpochClosed;
+    }
     let history = match recorder.read_history().await {
         Ok(history) => history,
         Err(error) => return RetryRecordOutcome::RecordFailed(error),

@@ -13,6 +13,7 @@
 //! cycle back into the runtime — the same cycle-avoidance the timer bridge's
 //! `Weak<EngineNifState>` observes.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 
 use aion_core::{Event, RunId, TimerCancelCause, WorkflowId};
@@ -40,6 +41,16 @@ enum DeadlineDisposition {
     /// A competing terminal already won (or the deadline is no longer live);
     /// nothing to record and nothing to tear down.
     LoseCleanly,
+    /// This engine's timer wheel has been torn down; the run belongs to
+    /// whichever engine owns it now, so record nothing and tear nothing down.
+    ///
+    /// 🔴 DELIBERATELY NOT [`Self::LoseCleanly`], though both end in `Ok(())`.
+    /// `LoseCleanly` means a competing TERMINAL won and this run is settled;
+    /// `StoodDown` means this run is not settled at all and this engine has
+    /// merely stopped being the one entitled to speak for it. Folding them would
+    /// put an operator reading the debug line on the wrong trail, and this lane
+    /// exists precisely because one message was raised for two causes.
+    StoodDown,
 }
 
 /// Records `WorkflowTimedOut` and tears down a run whose deadline elapsed.
@@ -50,6 +61,24 @@ pub struct WorkflowDeadlineHandler {
     store: Arc<dyn EventStore>,
     visibility_store: Arc<dyn VisibilityStore>,
     registry: Arc<Registry>,
+    /// The timer bridge's own `shut_down` latch, SHARED (not copied).
+    ///
+    /// 🔴 THE DEADLINE PATH IS THE ONE DURABLE WRITER THE WHEEL'S APPEND
+    /// BOUNDARY CANNOT REACH. `TimerService::fire_timer_guarded` demuxes a
+    /// reserved `deadline:{run}` fire to this handler BEFORE the generic
+    /// record-then-deliver path, so the boundary refusal in
+    /// `TimerNifBridge::record_workflow_event` — which is what stops an ordinary
+    /// `TimerFired` from being appended by an engine that has stood down — is
+    /// never on a deadline's route. Without this flag a deadline task already
+    /// inside its poll when `shutdown_timer_wheel` ran would go on to append a
+    /// durable `WorkflowTimedOut` and tear the run down, for a run a successor
+    /// engine may already own: a second writer for one workflow, which is the
+    /// #119 breach and load-bearing invariant 3.
+    ///
+    /// `abort` cannot prevent it — a `JoinHandle::abort` does not stop a task
+    /// that has already entered a poll — so the refusal has to sit here, at the
+    /// point of writing.
+    stand_down: Arc<AtomicBool>,
 }
 
 impl WorkflowDeadlineHandler {
@@ -58,18 +87,25 @@ impl WorkflowDeadlineHandler {
     /// `runtime` is held weakly on purpose (see the module docs); the rest are
     /// the same durable store, visibility index, and active registry the
     /// `terminate::cancel` path uses.
+    ///
+    /// `stand_down` must be the timer bridge's OWN latch, shared by `Arc` — see
+    /// the field. A fresh flag here would compile, pass every test that sets it
+    /// directly, and gate nothing in production, because nothing would ever set
+    /// it.
     #[must_use]
     pub fn new(
         runtime: Weak<RuntimeHandle>,
         store: Arc<dyn EventStore>,
         visibility_store: Arc<dyn VisibilityStore>,
         registry: Arc<Registry>,
+        stand_down: Arc<AtomicBool>,
     ) -> Self {
         Self {
             runtime,
             store,
             visibility_store,
             registry,
+            stand_down,
         }
     }
 
@@ -97,20 +133,51 @@ impl WorkflowDeadlineHandler {
             .await?;
         match disposition {
             DeadlineDisposition::LoseCleanly => Ok(()),
+            DeadlineDisposition::StoodDown => {
+                // Not a fault and not a loss: an orderly stand-down. The durable
+                // deadline row is untouched and still live, so whichever engine
+                // owns the run re-arms it and times the run out there. DEBUG,
+                // like every other stand-down in the crate.
+                tracing::debug!(
+                    %workflow_id,
+                    %run_id,
+                    "workflow deadline abandoned: this engine's timer wheel has been torn down and the deadline stays live for its owner"
+                );
+                Ok(())
+            }
             DeadlineDisposition::Appended | DeadlineDisposition::ResumeTeardown => {
                 self.tear_down(&handle, &workflow_id, &run_id).await
             }
         }
     }
 
-    /// Decides — atomically under the recorder lock — whether to append a fresh
+    /// Whether this engine has stood down and may no longer speak for the run.
+    ///
+    /// The one place the flag and its ordering are named. `SeqCst` matters: it
+    /// is the same store `shutdown_timer_wheel` performs, and the total order
+    /// across the two is what makes "set before we looked" observable at all.
+    fn stood_down(&self) -> bool {
+        self.stand_down.load(Ordering::SeqCst)
+    }
+
+    /// Decides — under the recorder lock — whether to append a fresh
     /// `WorkflowTimedOut`, resume an interrupted teardown of an already-recorded
     /// one, or lose cleanly.
     ///
     /// The terminal re-check, the deadline-liveness re-check, and the terminal
-    /// append are one critical section: a concurrent complete/fail/cancel records
-    /// through the same recorder, so checking outside the lock could double-record
-    /// a terminal or let a cancelled deadline still time the run out.
+    /// append are one critical section: a concurrent complete/fail/cancel
+    /// records through the same recorder, so checking outside the lock could
+    /// double-record a terminal or let a cancelled deadline still time the run
+    /// out.
+    ///
+    /// 🔴 THE STAND-DOWN CHECK IS DELIBERATELY NOT IN THAT LIST. An earlier
+    /// version of this doc put it there, which was false and load-bearing:
+    /// `shutdown_timer_wheel` sets the flag with an atomic store and a map
+    /// drain, and neither it nor either of its callers (`Engine::shutdown`,
+    /// `Engine::drop`) ever takes a recorder lock. So this lock excludes other
+    /// RECORDER WRITERS and excludes nothing whatever about the flag. Naming a
+    /// mechanism that does not cover the case is the error this file has now
+    /// made twice; see the note on the check itself.
     async fn decide_disposition(
         &self,
         handle: &WorkflowHandle,
@@ -119,6 +186,28 @@ impl WorkflowDeadlineHandler {
     ) -> Result<DeadlineDisposition, crate::EngineError> {
         let recorder = handle.recorder();
         let mut recorder = recorder.lock().await;
+        // 🔴 CHECK-THEN-ACT, AND SAYING OTHERWISE WAS THE DEFECT. This read is
+        // NOT made decisive by the lock it sits under — see the note on this
+        // function. A stand-down landing after this load and before a write
+        // below is not excluded by anything here, and the `.await` on
+        // `read_history` is a real yield point in that window.
+        //
+        // What this read IS worth: it settles the common case (the engine had
+        // already stood down when the fire began) before spending a store round
+        // trip, and it is re-taken immediately before EVERY durable write that
+        // follows, so the exposed window is an instruction or two rather than a
+        // store round trip. That is narrowing, not closing, and the difference
+        // is the whole reason this comment is worded the way it is.
+        //
+        // It cannot be closed here. Closing it means the stand-down setter and
+        // this writer taking one common lock — but the setter runs in a `Drop`,
+        // synchronously, over every workflow at once, so making it take a
+        // per-workflow async recorder lock is not available at any price. A
+        // second lock spanning one workflow is what invariant 3 forbids
+        // outright.
+        if self.stood_down() {
+            return Ok(DeadlineDisposition::StoodDown);
+        }
         let history = self.store.read_history(workflow_id).await?;
         match terminal_outcome_from_history(&history, run_id) {
             Some(TerminalOutcome::TimedOut(_)) => {
@@ -147,6 +236,13 @@ impl WorkflowDeadlineHandler {
                     %run_id,
                     "workflow deadline elapsed but another terminal was already recorded; retiring the deadline and losing"
                 );
+                // Re-taken after the `read_history` await: the repair below is
+                // a durable write, and a stand-down during that round trip
+                // means it is no longer ours to make. The owner's own recovery
+                // re-arms the still-live deadline and repairs it there.
+                if self.stood_down() {
+                    return Ok(DeadlineDisposition::StoodDown);
+                }
                 crate::time::retire_run_deadline(&mut recorder, &history, run_id).await?;
                 Ok(DeadlineDisposition::LoseCleanly)
             }
@@ -162,6 +258,13 @@ impl WorkflowDeadlineHandler {
                         "workflow deadline elapsed but its timer was already retired; deadline loses"
                     );
                     return Ok(DeadlineDisposition::LoseCleanly);
+                }
+                // Re-taken immediately before the terminal. This is the write
+                // the whole stand-down exists to stop, and the `read_history`
+                // above was a yield point — so the load at the top of this
+                // function is too old to be the one that decides it.
+                if self.stood_down() {
+                    return Ok(DeadlineDisposition::StoodDown);
                 }
                 recorder
                     .record_workflow_timed_out(Utc::now(), WORKFLOW_TIMEOUT_DESCRIPTOR.to_owned())
@@ -303,10 +406,47 @@ impl WorkflowDeadlineHandler {
             );
             return Ok(());
         }
+        // 🔴 CHECK-THEN-ACT, exactly like the gate on the handle path — and for
+        // the same reason, not a different one. An earlier version of this
+        // comment drew a distinction ("honestly weaker than the other gate")
+        // that does not exist: neither gate is decisive, because the flag's
+        // setter takes no lock either path could share with it.
+        //
+        // What CANNOT be done is making it decisive — that needs the setter and
+        // this writer under one lock, and the setter is a synchronous `Drop`
+        // sweeping every workflow at once. What CAN be done, and now is, is
+        // re-reading before each of the three durable writes below: the earlier
+        // wording said it "cannot be strengthened", which conflated the two and
+        // was a limitation dressed up as a contract. One read guarding three
+        // writes separated by `.await` points left the second and third exposed
+        // for a whole visibility round trip.
+        if self.stood_down() {
+            tracing::debug!(
+                %workflow_id,
+                %run_id,
+                "unregistered deadline finalization abandoned: this engine's timer wheel has been torn down"
+            );
+            return Ok(());
+        }
         let head = history.iter().map(Event::seq).max().unwrap_or_default();
         let mut recorder = Recorder::resume_at(workflow_id.clone(), Arc::clone(&self.store), head);
         // Ordinary timers first (the deadline is retired LAST), then visibility.
+        //
+        // Re-read before each. Abandoning PART WAY through is safe here and is
+        // the point of the ordering: the deadline is retired last, so a run
+        // abandoned mid-teardown still has a live deadline, and the owner's
+        // recovery re-arms it and finishes the same idempotent steps. Carrying
+        // on instead would be this engine writing to a run it has just been
+        // told is not its own.
         record_ordinary_timer_retirements(&mut recorder, &history, run_id).await?;
+        if self.stood_down() {
+            tracing::debug!(
+                %workflow_id,
+                %run_id,
+                "unregistered deadline finalization abandoned after retiring ordinary timers: this engine's timer wheel has been torn down"
+            );
+            return Ok(());
+        }
         upsert_workflow_visibility(
             Arc::clone(&self.store),
             Arc::clone(&self.visibility_store),
@@ -314,6 +454,14 @@ impl WorkflowDeadlineHandler {
             run_id,
         )
         .await?;
+        if self.stood_down() {
+            tracing::debug!(
+                %workflow_id,
+                %run_id,
+                "unregistered deadline finalization abandoned before retiring the deadline: this engine's timer wheel has been torn down"
+            );
+            return Ok(());
+        }
         crate::time::retire_run_deadline(&mut recorder, &history, run_id).await?;
         Ok(())
     }

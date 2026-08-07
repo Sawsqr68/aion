@@ -34,6 +34,22 @@ struct TimedRun {
     catalog: Arc<crate::loader::WorkflowCatalog>,
 }
 
+/// A CLEAR stand-down latch, for the tests in this file that are about the
+/// disposition logic rather than the stand-down.
+///
+/// 🔴 THIS IS NOT WHERE THE STAND-DOWN GATE IS MEASURED, deliberately. A flag
+/// constructed here is one this file both sets and reads, which would make the
+/// treatment its own control: it could not tell a handler wired to the timer
+/// wheel's real latch from one wired to nothing. The gate is measured in
+/// `runtime::nif_timer_bridge::tests`, where the latch comes from an installed
+/// bridge and is set by `shutdown_timer_wheel` itself.
+///
+/// Its job here is to keep every test below on the NOT-stood-down path, so they
+/// keep measuring what they were written to measure.
+fn clear_stand_down() -> Arc<std::sync::atomic::AtomicBool> {
+    Arc::new(std::sync::atomic::AtomicBool::new(false))
+}
+
 /// Records a deadline `TimerStarted` for the run so its history looks armed.
 async fn arm_deadline(run: &TimedRun) -> Result<(), Box<dyn std::error::Error>> {
     let deadline_id = crate::time::deadline_timer_id(run.handle.run_id())?;
@@ -85,6 +101,7 @@ async fn timed_run() -> Result<TimedRun, Box<dyn std::error::Error>> {
         Arc::clone(&store),
         Arc::clone(&visibility_store),
         Arc::clone(&registry),
+        clear_stand_down(),
     );
     Ok(TimedRun {
         handler,
@@ -252,6 +269,7 @@ async fn cold_start_finalizes_timed_out_teardown_without_a_registered_handle() -
         Arc::clone(&store),
         Arc::clone(&visibility_store),
         Arc::clone(&registry),
+        clear_stand_down(),
     );
 
     // Two fires (as recover_due could re-drive across restarts) — still exactly
@@ -438,6 +456,7 @@ async fn teardown_failure_preserves_retry_anchors_then_resumes() -> TestResult {
         Arc::clone(&store),
         Arc::clone(&visibility_store),
         Arc::clone(&registry),
+        clear_stand_down(),
     );
 
     // First fire: the terminal records, then visibility fails and teardown is

@@ -67,6 +67,14 @@ pub(super) struct ProcessExitRegistry {
     callbacks: callback::ProcessExitCallbackDispatcher,
     park_bound: Duration,
     shutdown_timeout: Duration,
+    /// Force the next `begin_shutdown` to raise the drain failure a degraded
+    /// store produces, so the shutdown path's behaviour on a FAILING drain can
+    /// be measured rather than reasoned about. The real failures on this path
+    /// are lock poison and a drainer that will not stop inside its window;
+    /// neither can be produced deterministically from a test, which is why the
+    /// property went unpinned long enough to become a critical finding.
+    #[cfg(test)]
+    forced_shutdown_failure: AtomicBool,
     #[cfg(test)]
     pause_next_registration: AtomicBool,
     #[cfg(test)]
@@ -121,6 +129,8 @@ impl ProcessExitRegistry {
             callbacks,
             park_bound: shutdown_timeout / 2,
             shutdown_timeout,
+            #[cfg(test)]
+            forced_shutdown_failure: AtomicBool::new(false),
             #[cfg(test)]
             pause_next_registration: AtomicBool::new(false),
             #[cfg(test)]
@@ -253,8 +263,25 @@ impl ProcessExitRegistry {
         self.records.len()
     }
 
+    /// Arm the injected drain failure. See `forced_shutdown_failure`.
+    #[cfg(test)]
+    pub(super) fn force_shutdown_failure(&self) {
+        self.forced_shutdown_failure.store(true, Ordering::Release);
+    }
+
     /// Close spawn and callback admission, then snapshot every owned live pid.
     pub(super) fn begin_shutdown(&self) -> Result<Vec<Pid>, EngineError> {
+        // 🔴 The injected variant is the one THIS function can actually raise.
+        // It first returned `ProcessExitDrainerShutdownTimedOut`, which only
+        // `close_and_join_all` can produce — a fault wearing a label its
+        // injection point cannot issue, which is a fixture that models a
+        // machine that does not exist even when the property it measures
+        // survives. `lock_lifecycle` below is the real failure mode here, and
+        // `ProcessExitRegistryPoisoned` is what it returns.
+        #[cfg(test)]
+        if self.forced_shutdown_failure.load(Ordering::Acquire) {
+            return Err(EngineError::ProcessExitRegistryPoisoned);
+        }
         let mut lifecycle = self.lock_lifecycle()?;
         lifecycle.closed = true;
         let records: Vec<_> = self

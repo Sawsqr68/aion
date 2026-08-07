@@ -156,6 +156,50 @@ fn every_query_error_arm_maps_to_its_pinned_wire_code() {
     }
 }
 
+/// Both halves of `EngineTaskEpochClosed`'s server mapping — the wire error and
+/// the trace fields — pinned together, because they were added together and
+/// neither had a test.
+///
+/// 🔴 The class assertion is the load-bearing one and it is `Backend`, not
+/// `NotRunning`. The variant's own doc (`crates/aion/src/error.rs:389`) says
+/// "in both cases THE RUN STAYS `Running`", so `not_running` would be a false
+/// statement about the target dressed as a classification — and the CLI renders
+/// that class as "the target run is no longer running", which would send an
+/// operator looking for a terminal that never landed. A mutation putting
+/// `not_running_with_type` back turns this red.
+///
+/// The `error_type` is asserted on BOTH halves against the same literal, since
+/// the discriminator's whole purpose is to let an operator join a log line to a
+/// client branch, and two sides that name the variant differently cannot be
+/// joined at all.
+#[test]
+fn engine_task_epoch_closed_maps_to_typed_backend_on_both_halves() {
+    let error = ServerError::EngineCall {
+        source: EngineError::EngineTaskEpochClosed {
+            workflow_id: String::from("orders"),
+            run_id: String::from("019000ff-0000-7000-8000-000000000001"),
+        },
+    };
+
+    let wire = error.to_wire_error();
+    assert_eq!(
+        wire.code,
+        WireErrorCode::Backend,
+        "an epoch-closed refusal must not claim the run stopped running"
+    );
+    assert_eq!(wire.error_type.as_deref(), Some("EngineTaskEpochClosed"));
+    assert_eq!(error.trace_fields().error_type, "EngineTaskEpochClosed");
+
+    // The refused run is named in the message an operator actually reads —
+    // without it the class alone says a server failed, not WHICH run needs a
+    // sweep to repair it.
+    assert!(
+        wire.message.contains("orders"),
+        "the wire message dropped the workflow the refusal is about: {}",
+        wire.message
+    );
+}
+
 /// The trace discriminator for `HandlerFailed` matches the wire
 /// `error_type` so operators can correlate logs with client branches.
 #[test]

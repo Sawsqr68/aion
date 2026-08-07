@@ -15,6 +15,7 @@ use std::sync::Arc;
 use aion_core::{PackageVersion, Payload, WorkflowId};
 
 use crate::engine_seam::ChildWorkflowSpawnRequest;
+use crate::runtime::engine_tasks::{ArmOutcome, sleep_backoff};
 use crate::runtime::nif_child_engine::ChildNifBridge;
 
 /// Identity and payload of one recorded-but-not-yet-started child.
@@ -36,19 +37,20 @@ pub(super) struct RecordedChildSpawn {
 /// Arm a background task that starts the recorded child until it exists.
 ///
 /// Idempotent per child id; refused once engine shutdown began (the startup
-/// recovery sweep owns the repair in the next epoch). Returns whether a new
-/// retry task was armed.
+/// recovery sweep owns the repair in the next epoch). Returns which of those
+/// happened — see [`ArmOutcome`], whose two refusals mean opposite things about
+/// whether the repair has an owner.
 pub(super) fn ensure_child_started_in_background(
     bridge: &Arc<ChildNifBridge>,
     spawn: RecordedChildSpawn,
-) -> bool {
+) -> ArmOutcome {
     let task_bridge = Arc::clone(bridge);
     let child_id = spawn.child_workflow_id.clone();
     bridge
-        .child_tasks()
+        .engine_tasks()
         .arm_spawn_retry(child_id.clone(), async move {
             run_spawn_retry(&task_bridge, &spawn).await;
-            task_bridge.child_tasks().remove_spawn_retry(&child_id);
+            task_bridge.engine_tasks().remove_spawn_retry(&child_id);
         })
 }
 
@@ -59,7 +61,7 @@ pub(super) fn ensure_child_started_in_background(
 /// or by a startup sweep) and the task is done. The start attempt runs
 /// inline on the child-task runtime, so the F4 epoch close (abort *and*
 /// await every task before releasing the runtime) covers it: once
-/// `shutdown_child_tasks` returns, no retry attempt can append the child's
+/// `shutdown_engine_tasks` returns, no retry attempt can append the child's
 /// `WorkflowStarted` — a successor engine's startup sweep over the same
 /// store can never race a zombie attempt from this epoch (N-4). The exit
 /// monitors the start path installs capture the epoch-stable host handle
@@ -78,7 +80,7 @@ async fn run_spawn_retry(bridge: &Arc<ChildNifBridge>, spawn: &RecordedChildSpaw
                     error = %error,
                     "spawn recovery could not read the child history; backing off"
                 );
-                sleep_backoff(&mut backoff, &policy).await;
+                sleep_backoff(&mut backoff, policy.max_backoff).await;
                 continue;
             }
         }
@@ -121,21 +123,8 @@ async fn run_spawn_retry(bridge: &Arc<ChildNifBridge>, spawn: &RecordedChildSpaw
                 );
             }
         }
-        sleep_backoff(&mut backoff, &policy).await;
+        sleep_backoff(&mut backoff, policy.max_backoff).await;
     }
-}
-
-async fn sleep_backoff(
-    current: &mut std::time::Duration,
-    policy: &crate::runtime::SignalDeliveryConfig,
-) {
-    tokio::time::sleep(*current).await;
-    let doubled = current.saturating_mul(2);
-    *current = if doubled > policy.max_backoff {
-        policy.max_backoff
-    } else {
-        doubled
-    };
 }
 
 #[cfg(test)]
@@ -147,7 +136,7 @@ mod tests {
     use aion_core::{ContentType, Payload, WorkflowId};
     use aion_store::{EventStore, InMemoryStore};
 
-    use super::{RecordedChildSpawn, ensure_child_started_in_background};
+    use super::{ArmOutcome, RecordedChildSpawn, ensure_child_started_in_background};
     use crate::loader::WorkflowCatalog;
     use crate::registry::Registry;
     use crate::runtime::nif_child_engine::{ChildNifBridge, ChildNifBridgeParts};
@@ -184,7 +173,7 @@ mod tests {
             search_attribute_schema: Arc::new(aion_core::SearchAttributeSchema::new()),
             tokio_handle: tokio::runtime::Handle::current(),
             watch_backoff: fast_backoff(),
-        })?);
+        }));
         Ok((bridge, runtime))
     }
 
@@ -353,7 +342,7 @@ mod tests {
 
     /// N-4: the start attempt must die with the epoch. The attempt is parked
     /// inside `start_child_under_recorded_id`'s parent-history read when the
-    /// epoch closes; `shutdown_child_tasks` aborts AND awaits it, so by the
+    /// epoch closes; `shutdown_engine_tasks` aborts AND awaits it, so by the
     /// time shutdown returns the attempt future is dropped (parked count 0)
     /// and releasing the gate afterwards resumes nothing — no append can
     /// land after the epoch closed. Before the fix the attempt ran on the
@@ -384,19 +373,22 @@ mod tests {
             search_attribute_schema: Arc::new(aion_core::SearchAttributeSchema::new()),
             tokio_handle: tokio::runtime::Handle::current(),
             watch_backoff: fast_backoff(),
-        })?);
+        }));
 
-        assert!(ensure_child_started_in_background(
-            &bridge,
-            RecordedChildSpawn {
-                parent_workflow_id: parent.clone(),
-                child_workflow_id: child.clone(),
-                workflow_type: "never_loaded_child".to_owned(),
-                input: Payload::new(ContentType::Json, br#""input""#.to_vec()),
-                package_version: aion_core::PackageVersion::new("a".repeat(64)),
-                namespace: String::from("default"),
-            },
-        ));
+        assert_eq!(
+            ensure_child_started_in_background(
+                &bridge,
+                RecordedChildSpawn {
+                    parent_workflow_id: parent.clone(),
+                    child_workflow_id: child.clone(),
+                    workflow_type: "never_loaded_child".to_owned(),
+                    input: Payload::new(ContentType::Json, br#""input""#.to_vec()),
+                    package_version: aion_core::PackageVersion::new("a".repeat(64)),
+                    namespace: String::from("default"),
+                },
+            ),
+            ArmOutcome::Armed
+        );
 
         // The attempt reaches the gated parent read mid-flight.
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
@@ -409,7 +401,7 @@ mod tests {
 
         // Epoch close: abort AND await — the parked attempt future must be
         // dropped before shutdown returns.
-        bridge.shutdown_child_tasks();
+        bridge.shutdown_engine_tasks();
         assert_eq!(
             parked.load(Ordering::Acquire),
             0,
@@ -442,26 +434,29 @@ mod tests {
         let (bridge, runtime) = bridge_without_loaded_workflows()?;
         let child = WorkflowId::new_v4();
 
-        assert!(ensure_child_started_in_background(
-            &bridge,
-            recorded_spawn(&child)
-        ));
-        // Re-arming for the same recorded child is a no-op.
-        assert!(!ensure_child_started_in_background(
-            &bridge,
-            recorded_spawn(&child)
-        ));
-        assert_eq!(bridge.child_tasks().armed_spawn_retry_count(), 1);
+        assert_eq!(
+            ensure_child_started_in_background(&bridge, recorded_spawn(&child)),
+            ArmOutcome::Armed
+        );
+        // Re-arming for the same recorded child is a no-op — and it is the
+        // ALREADY-ARMED refusal, not the epoch-closed one. Under a `bool` these
+        // two were the same answer, so this line could not tell "the existing
+        // task owns it" from "the epoch shut the gate".
+        assert_eq!(
+            ensure_child_started_in_background(&bridge, recorded_spawn(&child)),
+            ArmOutcome::AlreadyArmed
+        );
+        assert_eq!(bridge.engine_tasks().armed_spawn_retry_count(), 1);
 
         // The type is never loadable, so the retry keeps failing internally:
         // nothing is started and nothing panics or surfaces.
         tokio::time::sleep(Duration::from_millis(30)).await;
         assert!(bridge.store().read_history(&child).await?.is_empty());
-        assert_eq!(bridge.child_tasks().armed_spawn_retry_count(), 1);
+        assert_eq!(bridge.engine_tasks().armed_spawn_retry_count(), 1);
 
         // Epoch close aborts and awaits the obligation.
-        bridge.shutdown_child_tasks();
-        assert_eq!(bridge.child_tasks().armed_spawn_retry_count(), 0);
+        bridge.shutdown_engine_tasks();
+        assert_eq!(bridge.engine_tasks().armed_spawn_retry_count(), 0);
         runtime.shutdown()?;
         Ok(())
     }
@@ -489,23 +484,23 @@ mod tests {
             .append(aion_store::WriteToken::recorder(), &child, &[event], 0)
             .await?;
 
-        assert!(ensure_child_started_in_background(
-            &bridge,
-            recorded_spawn(&child)
-        ));
+        assert_eq!(
+            ensure_child_started_in_background(&bridge, recorded_spawn(&child)),
+            ArmOutcome::Armed
+        );
 
         // The task observes the existing history and finishes without ever
         // attempting a start (the type is not loadable, so an attempted
         // start could never have produced this single-event history).
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
-        while bridge.child_tasks().armed_spawn_retry_count() != 0 {
+        while bridge.engine_tasks().armed_spawn_retry_count() != 0 {
             if std::time::Instant::now() > deadline {
                 return Err("spawn retry did not finish against existing history".into());
             }
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
         assert_eq!(bridge.store().read_history(&child).await?.len(), 1);
-        bridge.shutdown_child_tasks();
+        bridge.shutdown_engine_tasks();
         runtime.shutdown()?;
         Ok(())
     }

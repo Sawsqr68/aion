@@ -4,6 +4,8 @@
 pub mod cancel_never_alive;
 /// Workflow completion notification helpers.
 pub mod completion;
+/// Retrying one run's completion until its terminal lands durably.
+mod completion_retry;
 /// Continue-as-new lifecycle transition support.
 pub mod continue_as_new;
 /// Engine-side workflow-deadline timeout handler.

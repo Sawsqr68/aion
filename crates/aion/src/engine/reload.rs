@@ -13,7 +13,8 @@ use crate::loader::{DeclaredQueues, DeployedWorkerContract, LoadOutcome, Workflo
 use crate::{EngineError, WorkflowCatalog};
 
 use super::api::Engine;
-use super::builder::{WorkflowPackageSource, package_from_source};
+use super::builder::WorkflowPackageSource;
+use super::builder_assembly::package_from_source;
 
 impl Engine {
     /// Loads a validated package into the running engine and atomically

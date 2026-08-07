@@ -281,6 +281,10 @@ fn dispatch_activity_with_context(
                 labels,
                 advisory,
             };
+            // Taken BEFORE the call: argument evaluation is left-to-right, so
+            // `runtime` is moved into the second parameter before the seam
+            // literal is built.
+            let engine_tasks = runtime.engine_tasks();
             spawn_completion_task(
                 tokio_handle,
                 runtime,
@@ -288,6 +292,7 @@ fn dispatch_activity_with_context(
                 RetryRecorderSeam {
                     recorder: context.recorder(),
                     run_id: context.workflow_handle().run_id().clone(),
+                    engine_tasks,
                 },
                 context.pid(),
                 correlation.clone(),

@@ -50,6 +50,7 @@ async fn parked_dispatch_delivers_nothing_to_the_workflow_process() -> TestResul
         Arc::clone(&runtime),
         Arc::clone(&dispatcher) as Arc<dyn ActivityDispatcher>,
         super::RetryRecorderSeam {
+            engine_tasks: runtime.engine_tasks(),
             recorder: Arc::clone(&harness.seam.recorder),
             run_id: harness.seam.run_id.clone(),
         },

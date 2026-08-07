@@ -4,7 +4,7 @@
 //! the [`EngineHandle`] seam consumed by [`TimerService`], and owns the live
 //! timer wheel (armed tokio sleep tasks keyed per process and timer id).
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
@@ -23,16 +23,50 @@ use crate::engine_seam::{
 use crate::registry::Registry;
 use crate::runtime::nif_state::EngineNifState;
 use crate::runtime::nif_timer::NifTimerError;
+use crate::runtime::nif_timer_fire::{
+    TimerAppendError, active_run_has_terminal, event_kind, fire_wheel_timer,
+    wheel_torn_down_before_arming,
+};
 use crate::time::{DeadlineHandler, TimerService};
 
 pub(super) struct TimerNifBridge {
     pub(super) registry: Arc<Registry>,
-    store: Arc<dyn ReadableEventStore>,
+    pub(super) store: Arc<dyn ReadableEventStore>,
     pub(super) tokio_handle: Handle,
     /// Builder-supplied bound for the registry-registration birth wait.
     pub(super) birth_wait: crate::runtime::SignalDeliveryConfig,
     pending_timers: DashMap<(WorkflowProcessHandle, TimerId), PendingTimerTask>,
     next_timer_generation: AtomicU64,
+    /// Set by [`Self::shutdown_timer_wheel`] BEFORE it drains, and never
+    /// cleared: this engine's wheel is closed for good once teardown begins.
+    ///
+    /// 🔴 A DRAIN IS NOT A GATE, and until 2026-08-07 this bridge had only the
+    /// drain. `shutdown_timer_wheel` removed and aborted every task pending at
+    /// one instant, while [`Self::arm_timer`] spawned unconditionally — so a
+    /// workflow process still runnable on the beamr scheduler could reach
+    /// `sleep` after the drain and arm a fresh durable `TimerFired` writer.
+    /// `Engine::shutdown` was not exposed to it (it stops the scheduler before
+    /// draining), but `Drop for Engine` deliberately leaves the scheduler and
+    /// the seams alive, so the window it opened was unbounded — and what
+    /// escapes through it is precisely the #119 failover race this drain
+    /// exists to prevent: a released engine recording a `TimerFired` for a run
+    /// a successor has already adopted, which is a second writer for that run.
+    /// `Arc` so the append boundary can read it from inside the recorder lock:
+    /// [`Self::record_workflow_event`] hands a clone to the blocking future,
+    /// which is the only place the check can sit and still be decisive against
+    /// a task already past its `abort` point. See that function.
+    shut_down: Arc<AtomicBool>,
+    /// Test-only interleaving seam, fired inside [`Self::arm_timer`] after the
+    /// pre-arm gate and the spawn and immediately BEFORE the insert.
+    ///
+    /// It exists because the window this fix closes is a genuine two-thread
+    /// race with no natural trigger: a test that merely calls
+    /// `shutdown_timer_wheel` and then `arm_timer` exercises the pre-arm gate,
+    /// which was already correct, and would stay green with the post-insert
+    /// re-read deleted. Firing the teardown from exactly inside the window is
+    /// the only way to put a test on the path of the code being fixed.
+    #[cfg(test)]
+    arm_interleave: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
     // Weak: the engine state owns this bridge through its timer slot.
     nif_state: Weak<EngineNifState>,
     /// Engine-registered handler for reserved `deadline:{run_id}` fires,
@@ -152,6 +186,25 @@ impl TimerNifBridge {
     /// because the durable `TimerFired` is still recorded exactly once, by
     /// whichever engine actually owns the workflow when the timer elapses.
     pub(super) fn shutdown_timer_wheel(&self) {
+        // GATE FIRST, then drain — but the gate is only half the rule, and the
+        // half that lives here is not the load-bearing one.
+        //
+        // 🔴 OBSERVING THE FLAG AS UNSET DOES NOT PUT AN ENTRY IN THE MAP.
+        // `arm_timer` reads the flag, then does registry work, then spawns,
+        // and only THEN inserts — so an arm that passed the gate before this
+        // store can still be spawning while the snapshot below is taken, and
+        // its entry lands in a map already drained. That task would outlive
+        // the engine holding a live `Weak<EngineNifState>` (this `Drop`
+        // deliberately leaves the seams installed) and record a durable
+        // `TimerFired` for a run a successor may already own.
+        //
+        // What closes it is the SECOND read, in `arm_timer` after its insert.
+        // With `SeqCst` on this store and on both of that function's loads,
+        // the two are totally ordered: either this snapshot sees the entry and
+        // aborts it, or that second load sees the flag and retracts the arm.
+        // Neither side can be skipped, and the composition — not either half —
+        // is the guarantee.
+        self.shut_down.store(true, Ordering::SeqCst);
         let keys: Vec<(WorkflowProcessHandle, TimerId)> = self
             .pending_timers
             .iter()
@@ -162,6 +215,40 @@ impl TimerNifBridge {
                 pending.handle.abort();
             }
         }
+    }
+
+    /// Install the interleaving seam described on `arm_interleave`.
+    #[cfg(test)]
+    pub(super) fn set_arm_interleave(&self, hook: Arc<dyn Fn() + Send + Sync>) {
+        match self.arm_interleave.lock() {
+            Ok(mut slot) => *slot = Some(hook),
+            Err(poisoned) => *poisoned.into_inner() = Some(hook),
+        }
+    }
+
+    /// Fire the interleaving seam, if one is installed.
+    ///
+    /// The hook is cloned OUT of the lock before it runs: it calls back into
+    /// this bridge, and holding the lock across that call would deadlock a
+    /// hook that installs another.
+    #[cfg(test)]
+    fn fire_arm_interleave(&self) {
+        let hook = match self.arm_interleave.lock() {
+            Ok(slot) => slot.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        };
+        if let Some(hook) = hook {
+            hook();
+        }
+    }
+
+    /// How many wheel timer tasks are armed right now.
+    ///
+    /// See [`crate::runtime::nif_state::EngineNifState::armed_wheel_timers`] for
+    /// why this is read through the NIF state rather than off an `Engine`.
+    #[cfg(test)]
+    pub(super) fn armed_wheel_timers(&self) -> usize {
+        self.pending_timers.len()
     }
 
     fn workflow_id_for_process(
@@ -280,6 +367,15 @@ impl EngineHandle for TimerNifBridge {
     }
 
     fn arm_timer(&self, entry: TimerWheelEntry) -> Result<(), EngineSeamError> {
+        // 🔴 REFUSE ONCE THIS ENGINE'S WHEEL HAS BEEN TORN DOWN. Arming spawns
+        // a task that appends a durable `TimerFired`, so an arm after teardown
+        // is a second writer for a run a successor engine may already own.
+        // Refusing is the safe direction: the timer is still durable in
+        // history, and the owning engine's startup recovery re-arms it from
+        // there. See `shut_down` on this struct for the mechanism.
+        if self.shut_down.load(Ordering::SeqCst) {
+            return Err(wheel_torn_down_before_arming(&entry.timer_id));
+        }
         let workflow_id = self.workflow_id_for_process(entry.process)?;
         let key = (entry.process, entry.timer_id.clone());
         if let Some((_, previous)) = self.pending_timers.remove(&key) {
@@ -311,8 +407,45 @@ impl EngineHandle for TimerNifBridge {
                 }
             }
         });
+        // The window this function's second gate closes, made reachable by a
+        // test. Fired here — after the spawn, before the insert — because that
+        // is exactly where a concurrent `shutdown_timer_wheel` does its damage.
+        #[cfg(test)]
+        self.fire_arm_interleave();
+        let undo_key = key.clone();
         self.pending_timers
             .insert(key, PendingTimerTask { generation, handle });
+        // 🔴 RE-READ THE GATE AFTER THE INSERT. This is the half of the rule
+        // that actually closes the window; the check at the top of this
+        // function only saves the work of arming when teardown is already
+        // known. `shutdown_timer_wheel` can set the flag and take its snapshot
+        // anywhere between that check and this insert — across a registry
+        // read, a `remove`, and a `spawn` — and this entry would then land in a
+        // map that has already been drained, leaving a live task holding a
+        // `Weak<EngineNifState>` the engine's `Drop` deliberately keeps
+        // upgradable. It would record a durable `TimerFired` for a run a
+        // successor may already own: the #119 second-writer breach, and a
+        // violation of the single-writer invariant.
+        //
+        // `SeqCst` on the store and on both loads totally orders the two, so
+        // either the drain's snapshot contains this entry or this load sees
+        // the flag. There is no interleaving in which neither happens.
+        //
+        // 🔴 Retract by GENERATION IDENTITY, never by key alone. Removing by
+        // key retracts whatever occupies it now, which need not be this arm:
+        // this task could have completed and released its own entry, and a
+        // later arm taken the key, which we would then abort under the later
+        // arm's honest success. `EngineTaskRuntime::arm` takes the same care
+        // for the same reason.
+        if self.shut_down.load(Ordering::SeqCst) {
+            if let Some((_, pending)) = self
+                .pending_timers
+                .remove_if(&undo_key, |_, task| task.generation == generation)
+            {
+                pending.handle.abort();
+            }
+            return Err(wheel_torn_down_before_arming(&entry.timer_id));
+        }
         Ok(())
     }
 
@@ -358,8 +491,38 @@ impl EngineHandle for TimerNifBridge {
         let recorder = handle.recorder();
         let store = Arc::clone(&self.store);
         let workflow_id = workflow_id.clone();
+        let shut_down = Arc::clone(&self.shut_down);
+        // Carry the OUTCOME across the boundary, not just the id. A refused fire
+        // and a refused cancel are the same cause with opposite consequences for
+        // the run, and collapsing them here is exactly what let one sentence be
+        // raised for both — see `TimerAppendError::WheelTornDown`.
+        let (torn_down_timer, torn_down_is_cancel) = match &outcome {
+            TimerOutcome::Fired(timer_id) => (timer_id.clone(), false),
+            TimerOutcome::Cancelled(timer_id, _) => (timer_id.clone(), true),
+        };
         run_blocking(&self.tokio_handle, async move {
             let mut recorder = recorder.lock().await;
+            // 🔴 REFUSE THE APPEND IF THIS ENGINE'S WHEEL IS TORN DOWN. The
+            // arming gate cannot cover this: `shutdown_timer_wheel` aborts the
+            // armed tasks, but `JoinHandle::abort` does not stop a task that
+            // has already entered a poll, so a fire that reached this point
+            // before the abort landed would complete its append regardless.
+            // Read INSIDE the recorder lock — that is what makes the check
+            // decisive rather than another check-then-act. The refusal leaves
+            // the timer durable in history for whichever engine owns the run,
+            // which costs a FIRE nothing and costs a CANCEL a deferral, so the
+            // outcome travels with the refusal rather than being flattened out
+            // of it.
+            //
+            // Without this the wheel is the one durable writer in the crate
+            // with no boundary refusal at all, which is precisely the shape
+            // that produced the #119 failover race.
+            if shut_down.load(Ordering::SeqCst) {
+                return Err(TimerAppendError::WheelTornDown {
+                    timer_id: torn_down_timer,
+                    cancelled: torn_down_is_cancel,
+                });
+            }
             // Late-append refusal under the SAME recorder lock that records the
             // timer event: if the active run already recorded a terminal, refuse
             // ALL late timer appends (fire OR cancel) cleanly — no post-terminal
@@ -367,7 +530,10 @@ impl EngineHandle for TimerNifBridge {
             // post-terminal window is thereby refused rather than mutating a
             // terminal history, closing the whole late-timer class, not only the
             // deadline case.
-            let history = store.read_history(&workflow_id).await?;
+            let history = store
+                .read_history(&workflow_id)
+                .await
+                .map_err(TimerAppendError::append)?;
             if active_run_has_terminal(&history) {
                 // Late fire/cancel after the run terminated: append nothing and
                 // report the refusal so the caller withholds the mailbox wake.
@@ -375,37 +541,22 @@ impl EngineHandle for TimerNifBridge {
             }
             match outcome {
                 TimerOutcome::Fired(timer_id) => {
-                    recorder.record_timer_fired(recorded_at, timer_id).await?;
+                    recorder
+                        .record_timer_fired(recorded_at, timer_id)
+                        .await
+                        .map_err(TimerAppendError::append)?;
                 }
                 TimerOutcome::Cancelled(timer_id, cause) => {
                     recorder
                         .record_timer_cancelled(recorded_at, timer_id, cause)
-                        .await?;
+                        .await
+                        .map_err(TimerAppendError::append)?;
                 }
             }
             Ok(RecordOutcome::Recorded)
         })
-        .map_err(|error: Box<dyn std::error::Error + Send + Sync>| {
-            EngineSeamError::Recorder {
-                reason: error.to_string(),
-            }
-        })
+        .map_err(TimerAppendError::into_seam_error)
     }
-}
-
-/// Whether the workflow's active run segment has already recorded a terminal.
-///
-/// The active run is the one opened by the latest `WorkflowStarted`; a timer
-/// event that arrives after that run terminated is a late fire/cancel the bridge
-/// refuses to append.
-fn active_run_has_terminal(history: &[Event]) -> bool {
-    let Some(run_id) = history.iter().rev().find_map(|event| match event {
-        Event::WorkflowStarted { run_id, .. } => Some(run_id.clone()),
-        _ => None,
-    }) else {
-        return false;
-    };
-    crate::lifecycle::completion::terminal_outcome_from_history(history, &run_id).is_some()
 }
 
 /// Install the engine-scoped timer bridge used by raw NIF function pointers.
@@ -424,6 +575,9 @@ pub(crate) fn install_timer_nif_bridge(
         birth_wait,
         pending_timers: DashMap::new(),
         next_timer_generation: AtomicU64::new(0),
+        shut_down: Arc::new(AtomicBool::new(false)),
+        #[cfg(test)]
+        arm_interleave: Mutex::new(None),
         nif_state: Arc::downgrade(state),
         deadline_handler: Mutex::new(None),
         terminal_updates: Arc::new(DashSet::new()),
@@ -443,11 +597,29 @@ pub(crate) fn install_timer_nif_bridge(
 /// # Errors
 ///
 /// Returns the bridge-resolution error string when no timer bridge is installed.
-pub(crate) fn register_deadline_handler(
-    state: &EngineNifState,
-    handler: Arc<dyn DeadlineHandler>,
-) -> Result<(), String> {
+///
+/// 🔴 THE HANDLER IS BUILT HERE, FROM THIS BRIDGE'S OWN STAND-DOWN LATCH, and
+/// that is why this takes a constructor rather than a finished handler. The
+/// deadline handler is the one durable writer the wheel's append boundary never
+/// sees: `TimerService::fire_timer_guarded` demuxes a reserved `deadline:{run}`
+/// fire straight to it, ahead of the generic record-then-deliver path that
+/// [`TimerNifBridge::record_workflow_event`] guards. So the handler must read
+/// the same `shut_down` flag [`TimerNifBridge::shutdown_timer_wheel`] sets, or
+/// a deadline task already past its `abort` point records a durable
+/// `WorkflowTimedOut` for a run a successor engine owns.
+///
+/// Handing `build` the latch instead of accepting one alongside the handler is
+/// SUBTRACTION, not ceremony: a signature that took both would let a caller
+/// supply a freshly-constructed flag, which compiles, passes every test that
+/// sets that flag itself, and gates nothing in production — a fact known in two
+/// places with nothing forcing them to agree. Here there is only one place the
+/// flag can come from.
+pub(crate) fn register_deadline_handler<F>(state: &EngineNifState, build: F) -> Result<(), String>
+where
+    F: FnOnce(Arc<AtomicBool>) -> Arc<dyn DeadlineHandler>,
+{
     let bridge = timer_bridge(state).map_err(|error| error.to_string())?;
+    let handler = build(Arc::clone(&bridge.shut_down));
     match bridge.deadline_handler.lock() {
         Ok(mut slot) => *slot = Some(handler),
         Err(poisoned) => *poisoned.into_inner() = Some(handler),
@@ -492,102 +664,6 @@ where
             Err(panic) => std::panic::resume_unwind(panic),
         },
     )
-}
-
-/// Fire a due wheel timer, retrying a DEADLINE fire with bounded backoff while
-/// its history timer remains live.
-///
-/// The live wheel is one-shot and production runs no periodic recovery tick, so
-/// without this a transient timeout-teardown/fire failure would be dropped and
-/// never re-driven in the same engine epoch. Only a reserved `deadline:{run}`
-/// timer that is STILL live in durable history is retried; an ordinary timer's
-/// fire failure — or a deadline already retired/superseded — is logged and
-/// dropped exactly as before. The backoff interval grows and is capped (never a
-/// hot loop), attempts are bounded, and the durable deadline row stays live so
-/// restart recovery remains the final backstop.
-async fn fire_wheel_timer(
-    nif_state: &Weak<EngineNifState>,
-    workflow_id: &WorkflowId,
-    timer_id: &TimerId,
-    fire_at: DateTime<Utc>,
-) {
-    const MAX_ATTEMPTS: u32 = 6;
-    const INITIAL_BACKOFF: Duration = Duration::from_millis(200);
-    const MAX_BACKOFF: Duration = Duration::from_secs(30);
-
-    let mut backoff = INITIAL_BACKOFF;
-    for attempt in 1..=MAX_ATTEMPTS {
-        let Some(bridge) = nif_state
-            .upgrade()
-            .and_then(|state| timer_bridge(&state).ok())
-        else {
-            return;
-        };
-        let result = bridge
-            .service()
-            .fire_timer(workflow_id.clone(), timer_id.clone(), fire_at)
-            .await;
-        let Err(error) = result else {
-            return;
-        };
-        if !crate::time::is_deadline_timer(timer_id) {
-            tracing::warn!(error = %error, "timer wheel fire callback failed");
-            return;
-        }
-        // A deadline fire failed. It stays eligible for a bounded retry unless we
-        // can POSITIVELY confirm it is no longer live. A liveness-read error —
-        // e.g. the same store outage that failed the fire — is UNCERTAIN, not a
-        // reason to abandon the same-epoch drive: fall through to the backoff and
-        // the next attempt, whose `fire_timer` performs its own fresh liveness
-        // read and safely no-ops if another actor has since retired the deadline.
-        match deadline_remains_live(&bridge, workflow_id, timer_id).await {
-            Ok(false) => return,
-            Ok(true) => tracing::warn!(
-                error = %error,
-                attempt,
-                "workflow deadline fire failed while its timer is still live; retrying with backoff"
-            ),
-            Err(read_error) => tracing::warn!(
-                error = %error,
-                %read_error,
-                attempt,
-                "workflow deadline fire failed and its liveness could not be read (store outage?); treating as still-eligible and retrying with backoff"
-            ),
-        }
-        if attempt == MAX_ATTEMPTS {
-            break;
-        }
-        tokio::time::sleep(backoff).await;
-        backoff = backoff.saturating_mul(2).min(MAX_BACKOFF);
-    }
-    tracing::error!(
-        %workflow_id,
-        %timer_id,
-        "workflow deadline fire exhausted same-epoch retries; the durable timer stays live for restart recovery"
-    );
-}
-
-/// Whether the reserved deadline timer `timer_id` is still live in durable
-/// history (its run has not retired it), so a failed fire is worth retrying.
-async fn deadline_remains_live(
-    bridge: &TimerNifBridge,
-    workflow_id: &WorkflowId,
-    timer_id: &TimerId,
-) -> Result<bool, StoreError> {
-    let Some(run_id) = crate::time::deadline_run_id(timer_id) else {
-        return Ok(false);
-    };
-    let history = bridge.store.read_history(workflow_id).await?;
-    Ok(crate::time::outstanding_deadline_timer(&history, &run_id).is_some())
-}
-
-fn event_kind(event: &Event) -> &'static str {
-    match event {
-        Event::TimerFired { .. } => "TimerFired",
-        Event::TimerCancelled { .. } => "TimerCancelled",
-        Event::WithTimeoutCompleted { .. } => "WithTimeoutCompleted",
-        _ => "non-timer",
-    }
 }
 
 #[cfg(test)]

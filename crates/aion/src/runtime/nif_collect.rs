@@ -355,6 +355,7 @@ fn dispatch_unscheduled(
             super::nif_activity_dispatch::RetryRecorderSeam {
                 recorder: context.recorder(),
                 run_id: context.workflow_handle().run_id().clone(),
+                engine_tasks: deps.runtime.engine_tasks(),
             },
             context.pid(),
             super::nif_activity::correlation_id(*ordinal),

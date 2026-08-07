@@ -6,8 +6,12 @@ pub mod admission;
 pub mod api;
 /// Engine durable-schedule API surface and coordinator assembly.
 mod api_schedule;
+/// The workflow operations `Engine` exposes to a caller.
+mod api_workflow_ops;
 /// Engine construction and package source configuration.
 pub mod builder;
+/// The assembly steps `EngineBuilder::build` runs.
+mod builder_assembly;
 /// Delegated signal, query, and event-publishing seams.
 pub mod delegated;
 /// Double-adoption fence-ordering planner (ADR-021 clean-partial).

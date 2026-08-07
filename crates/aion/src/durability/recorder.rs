@@ -1095,8 +1095,7 @@ fn terminal_recorded_at(history: &[Event]) -> Option<DateTime<Utc>> {
 mod tests {
     use std::collections::HashMap;
     use std::future::Future;
-    use std::io;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     use aion_core::RunId;
     use aion_core::{
@@ -1112,7 +1111,6 @@ mod tests {
     use async_trait::async_trait;
     use chrono::{DateTime, Utc};
     use serde_json::json;
-    use tracing_subscriber::fmt::MakeWriter;
 
     use super::Recorder;
     use crate::durability::DurabilityError;
@@ -1135,50 +1133,6 @@ mod tests {
 
         async fn count_workflows(&self, _filter: ListWorkflowsFilter) -> Result<u64, StoreError> {
             Ok(0)
-        }
-    }
-
-    #[derive(Clone, Debug, Default)]
-    struct CapturedLogs {
-        buffer: Arc<Mutex<Vec<u8>>>,
-    }
-
-    impl CapturedLogs {
-        fn contents(&self) -> Result<String, Box<dyn std::error::Error>> {
-            let bytes = self
-                .buffer
-                .lock()
-                .map_err(|error| format!("captured log buffer lock poisoned: {error}"))?
-                .clone();
-            Ok(String::from_utf8(bytes)?)
-        }
-    }
-
-    struct CapturedLogWriter {
-        buffer: Arc<Mutex<Vec<u8>>>,
-    }
-
-    impl io::Write for CapturedLogWriter {
-        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-            self.buffer
-                .lock()
-                .map_err(|error| io::Error::other(format!("captured log lock poisoned: {error}")))?
-                .extend_from_slice(bytes);
-            Ok(bytes.len())
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl<'writer> MakeWriter<'writer> for CapturedLogs {
-        type Writer = CapturedLogWriter;
-
-        fn make_writer(&'writer self) -> Self::Writer {
-            CapturedLogWriter {
-                buffer: Arc::clone(&self.buffer),
-            }
         }
     }
 
@@ -1678,14 +1632,8 @@ mod tests {
         let run_id = RunId::new(uuid::Uuid::from_u128(100));
         let store = Arc::new(InMemoryStore::default());
         let visibility_store = Arc::new(FailingVisibilityStore);
-        let logs = CapturedLogs::default();
-        let subscriber = tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::WARN)
-            .with_writer(logs.clone())
-            .without_time()
-            .finish();
-        let dispatch = tracing::Dispatch::new(subscriber);
-        let guard = tracing::dispatcher::set_default(&dispatch);
+        let (logs, subscriber) = crate::log_capture::LogCapture::new()?;
+        let guard = tracing::subscriber::set_default(subscriber);
         let mut recorder = Recorder::new(workflow_id.clone(), store.clone())
             .with_visibility(run_id.clone(), visibility_store);
         let mut schema = SearchAttributeSchema::new();
@@ -1716,18 +1664,35 @@ mod tests {
         assert_eq!(history.len(), 2);
         assert_eq!(recorder.current_head(), 2);
 
-        let output = logs.contents()?;
-        assert!(
-            output.contains("visibility upsert failed after durable append"),
-            "captured warning did not include visibility-upsert failure message: {output}"
+        // ONE warning, and everything the operator needs is in THAT one. An
+        // earlier revision of this test held its own `Vec<u8>` capture and
+        // asserted over the joined rendering of every line, which could not
+        // tell one complete warning from five partial ones spread across five
+        // events — and, holding its own capture, never installed the
+        // interest floor that `crate::log_capture` exists to guarantee.
+        let warnings = logs.at_level("WARN")?;
+        assert_eq!(
+            warnings.len(),
+            1,
+            "the failed visibility upsert must produce exactly one WARN — more than one means the \
+             warning was split across events and no single line carries the whole fact: \
+             {warnings:?}"
         );
-        assert!(
-            output.contains("crash-consistency window"),
-            "captured warning did not name the crash-consistency window: {output}"
-        );
-        assert!(output.contains(&workflow_id.to_string()));
-        assert!(output.contains(&run_id.to_string()));
-        assert!(output.contains("visibility unavailable"));
+        let warning = warnings
+            .first()
+            .ok_or("the visibility-upsert warning was not captured at all")?;
+        for needle in [
+            "visibility upsert failed after durable append",
+            "crash-consistency window",
+            "visibility unavailable",
+            workflow_id.to_string().as_str(),
+            run_id.to_string().as_str(),
+        ] {
+            assert!(
+                warning.mentions(needle),
+                "the visibility-upsert warning did not mention `{needle}`: {warning}"
+            );
+        }
         Ok(())
     }
 

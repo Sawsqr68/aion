@@ -76,6 +76,15 @@ pub struct RuntimeHandle {
     pub(super) module_registry: Arc<ModuleRegistry>,
     pub(super) native_registry: Arc<BifRegistryImpl>,
     nif_state: Arc<super::nif_state::EngineNifState>,
+    /// Engine-owned executor for background tasks that append to durable
+    /// history: child-terminal watchers, spawn recovery, and process-exit
+    /// completion retries.
+    ///
+    /// Owned here rather than by any bridge because a bridge is optional and
+    /// these tasks are not. Its shutdown aborts AND awaits, which is what stops
+    /// a task outliving the epoch and becoming a second writer against a
+    /// successor engine over the same store.
+    engine_tasks: Arc<super::engine_tasks::EngineTaskRuntime>,
     activity_results: Arc<dashmap::DashMap<(Pid, Pid), Payload>>,
     activity_errors: Arc<dashmap::DashMap<(Pid, Pid), ActivityError>>,
     /// Per-workflow synchronization for retained activity delivery and death draining.
@@ -108,6 +117,7 @@ pub struct RuntimeHandle {
     registered_nif_modules: Arc<dashmap::DashSet<String>>,
     spawn_heaps: RetainedSpawnHeaps,
     signal_delivery: SignalDeliveryConfig,
+    completion_retry: super::config::CompletionRetryConfig,
     /// Flag gating the durable-outbox fan-out dispatch path; read by
     /// `nif_collect.rs` to route fresh fan-out members and completions.
     outbox_enabled: bool,
@@ -173,6 +183,7 @@ impl RuntimeHandle {
             module_registry,
             native_registry,
             nif_state,
+            engine_tasks: Arc::new(super::engine_tasks::EngineTaskRuntime::new()?),
             activity_results: Arc::new(dashmap::DashMap::new()),
             activity_errors: Arc::new(dashmap::DashMap::new()),
             activity_delivery_gates: dashmap::DashMap::new(),
@@ -183,6 +194,7 @@ impl RuntimeHandle {
             registered_nif_modules: Arc::new(dashmap::DashSet::new()),
             spawn_heaps: Arc::new(dashmap::DashMap::new()),
             signal_delivery: config.signal_delivery,
+            completion_retry: config.completion_retry,
             outbox_enabled: config.outbox_enabled,
             wake_confirmer,
             process_exits,
@@ -199,6 +211,15 @@ impl RuntimeHandle {
     /// Builder-supplied delivery/readiness policy for spawn-window waits.
     pub(crate) fn signal_delivery(&self) -> SignalDeliveryConfig {
         self.signal_delivery
+    }
+
+    /// Builder-supplied backoff ladder for durable completion retries.
+    ///
+    /// Deliberately not [`Self::signal_delivery`]: that policy bounds a
+    /// mailbox-enqueue wait measured in scheduler ticks, and a durable retry
+    /// against a failing store is a different question with a different answer.
+    pub(crate) fn completion_retry(&self) -> super::config::CompletionRetryConfig {
+        self.completion_retry
     }
 
     /// Whether the durable-outbox fan-out dispatch path is enabled.
@@ -490,11 +511,76 @@ impl RuntimeHandle {
         Ok(self.scheduler.is_linked(left, right))
     }
 
+    /// The engine-owned executor for durable background tasks.
+    ///
+    /// Every caller shares this one instance: the child bridge, spawn recovery
+    /// and the process-exit completion retry. A second executor with the same
+    /// epoch-close discipline would be the same rule in two places.
+    pub(crate) fn engine_tasks(&self) -> Arc<super::engine_tasks::EngineTaskRuntime> {
+        Arc::clone(&self.engine_tasks)
+    }
+
+    /// Arm the injected process-exit drain failure, so a test can make
+    /// [`Self::shutdown`] fail deterministically.
+    ///
+    /// Exists because none of the drain failures can be produced on demand,
+    /// which is how the "every teardown step still runs" property stayed
+    /// unpinned.
+    ///
+    /// 🔴 THE SET IS OPEN, AND TWO EARLIER REVISIONS OF THIS COMMENT CLAIMED
+    /// OTHERWISE. The first said they are all timeout-shaped. The second
+    /// replaced that with an eleven-variant enumeration — three timeout-shaped,
+    /// five poison-shaped, three panic-shaped — and asserted "what they share is
+    /// a precondition: each needs a stalled, poisoned or dead worker thread".
+    /// **Both are false, and the second is the more dangerous because it looks
+    /// exhaustive.**
+    ///
+    /// `close_and_join_all` ends with
+    /// `handle.join().map_err(|_| ProcessExitDrainerPanicked)??` — and the
+    /// SECOND `?` propagates the drainer thread's own `Result<(), EngineError>`
+    /// verbatim (`runtime/process_exit.rs`). Whatever that thread can return
+    /// reaches this function's caller. That includes at least
+    /// `ProcessExitEventStreamDisconnected` (`runtime/process_exit_drainer.rs`
+    /// — beamr disconnected its publisher) and
+    /// `ProcessExitOutcomeMissingAfterEvent` (a beamr contract breach surfaced
+    /// through `registry.process_event`). Neither is timeout-, poison- or
+    /// panic-shaped, and neither needs a worker thread of ours to be stalled,
+    /// poisoned or dead.
+    ///
+    /// So: **do not enumerate this set, and do not reason from a shared shape or
+    /// a shared precondition.** The property that actually holds, and the only
+    /// one this seam needs, is that none of them can be arranged by a test
+    /// through this type's public surface. `process_exits` stays private; this
+    /// is the one named seam, and it is `#[cfg(test)]` so it cannot reach a
+    /// shipped binary.
+    ///
+    /// The injected variant is `ProcessExitRegistryPoisoned` because that is
+    /// what the injection point (`begin_shutdown` → `lock_lifecycle`) can
+    /// actually raise. A fault wearing a label its own injection site cannot
+    /// issue is a fixture modelling a machine that does not exist.
+    ///
+    /// Crate-visible rather than module-visible because the property it exists
+    /// to measure lives at [`crate::Engine::shutdown`], one module over — a seam
+    /// only reachable from its own module cannot test the caller that wraps it.
+    #[cfg(test)]
+    pub(crate) fn force_process_exit_drain_failure(&self) {
+        self.process_exits.force_shutdown_failure();
+    }
+
     /// Shut down the embedded scheduler and wait for worker threads to stop.
     ///
     /// # Errors
     ///
-    /// Currently infallible; reserved for typed runtime shutdown failures.
+    /// Returns the **first** typed failure raised by the process-exit drain
+    /// (`begin_shutdown`, `close_and_join_all`) or the cleanup-executor drain.
+    /// Those failures are an OPEN set — see
+    /// [`Self::force_process_exit_drain_failure`] for why they cannot be
+    /// enumerated — and the shape does not matter here, because none of them
+    /// short-circuits this function: the error is carried to the end and
+    /// returned only after the
+    /// engine-task epoch has been closed and the scheduler stopped. See the
+    /// comment on `first_error` in the body for why that ordering is a
+    /// correctness requirement rather than a tidiness preference.
     pub fn shutdown(&self) -> Result<(), EngineError> {
         // Kill every still-live in-VM activity child before stopping the
         // scheduler so the singleton drainer can capture each durable outcome.
@@ -506,21 +592,97 @@ impl RuntimeHandle {
         for workflow_pid in workflow_pids {
             self.kill_in_vm_children(workflow_pid);
         }
-        for pid in self.process_exits.begin_shutdown()? {
-            if self.is_live(pid) {
-                self.scheduler.terminate_process(pid, ExitReason::Kill);
+        // 🔴 Every fallible drain below RECORDS its failure instead of
+        // returning it, so that the epoch close at the end of this function is
+        // reached on every path.
+        //
+        // The epoch close aborts and awaits tasks that append terminal events.
+        // A drain timeout is not an unrelated inconvenience — it is precisely
+        // the condition under which those tasks are still armed, because one
+        // degraded store both stalls the drain and is what the completion
+        // retries are waiting on. If a `?` here returned early, the retries
+        // would keep running; the operator, seeing a shutdown error, restarts;
+        // and the successor engine recovers the same histories while this
+        // process is still appending to them — two writers for one workflow,
+        // which is the invariant-3 violation this whole mechanism exists to
+        // prevent.
+        //
+        // Nothing downstream would catch it on THIS path either. `Drop for
+        // Engine` exists, and what it does is enumerated in exactly one place —
+        // its own doc comment, which is the authority; this comment deliberately
+        // does not repeat the list, because it has already been stale once (it
+        // named two of the three things that drop does, and was written when
+        // there were two). What matters here is the shared PROPERTY of every
+        // item on that list: none of them await, and none of them run at all
+        // while the caller still holds the engine to read this function's `Err`.
+        //
+        // `EngineTaskRuntime::drop` is no help under the
+        // same conditions: an attempt in flight holds its own strong handle, so
+        // that backstop is pinned shut for exactly the span of the append it
+        // would need to stop. Closing the epoch here is the only mechanism that
+        // is guaranteed to run, which is why it does not sit behind a `?`.
+        let mut first_error: Option<EngineError> = None;
+
+        match self.process_exits.begin_shutdown() {
+            Ok(pids) => {
+                for pid in pids {
+                    if self.is_live(pid) {
+                        self.scheduler.terminate_process(pid, ExitReason::Kill);
+                    }
+                }
             }
+            Err(error) => first_error = Some(error),
         }
+        // 🔴 EVERY FAILURE IS REPORTED, EVEN THOUGH ONLY ONE CAN BE RETURNED.
+        // Three steps below can each fail independently and the signature can
+        // carry one `EngineError`, so a later failure that is not the first
+        // would otherwise vanish with no trace at all — a swallowed `Result` in
+        // the teardown path of a durable engine, which this codebase forbids
+        // outright. `keep_shutdown_error` returns the first and emits every
+        // subsequent one at `error` level with the step that produced it.
         // Abort jobs may be blocked waiting for exactly the exits published
         // above, so drain the bounded executor only after every registered pid
         // has been force-unblocked.
-        self.cleanup_executor.shutdown()?;
+        keep_shutdown_error(
+            &mut first_error,
+            "cleanup_executor.shutdown",
+            self.cleanup_executor.shutdown(),
+        );
         // Pending wake follow-ups are moot once process observation is closed.
         self.wake_confirmer.shutdown();
-        self.process_exits.close_and_join_all()?;
+        keep_shutdown_error(
+            &mut first_error,
+            "process_exits.close_and_join_all",
+            self.process_exits.close_and_join_all(),
+        );
+        // Close the engine-task epoch here, after every process-exit callback
+        // has been drained (so an exit observed during teardown still gets its
+        // one attempt) and before the scheduler goes away.
+        //
+        // This must be on THIS path, not only on the child bridge's. The
+        // executor is owned here precisely because completion retries append
+        // terminal events on a core lifecycle path, and a core path's epoch
+        // close must not depend on whether an optional bridge was installed:
+        // a retry still running after this returns could append against a
+        // store a successor engine is also recovering (invariant 3).
+        //
+        // A second `shutdown` call is a no-op: it re-gates and re-sweeps the
+        // three already-empty maps `gate_and_abort` covers (`watches`,
+        // `spawn_retries`, `completion_retries`), finds the runtime slot empty,
+        // and returns without awaiting anything. That makes the bridge's own
+        // later call harmless
+        // because the two are strictly sequential (`Engine::shutdown` runs this
+        // one, then the bridge's). It does NOT mean "returning implies
+        // quiescence" for a hypothetical concurrent second caller — only the
+        // first call awaits.
+        self.engine_tasks.shutdown();
         self.scheduler.shutdown();
         self.spawn_heaps.clear();
-        Ok(())
+
+        match first_error {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
     }
 
     fn spawn_process(
@@ -697,6 +859,35 @@ impl RuntimeHandle {
         self.release_dead_spawn_heaps();
         self.spawn_heaps.len()
     }
+}
+
+/// Keep the FIRST teardown failure for the caller, and report every subsequent
+/// one rather than dropping it.
+///
+/// Teardown accumulates instead of failing fast — every step must run, because
+/// a skipped one leaves a durable writer armed. The cost of that choice is that
+/// more than one step can fail while only one `EngineError` can be returned.
+/// Reporting the others here is what keeps "accumulate and continue" from
+/// becoming "swallow and continue": the return value carries the first, the log
+/// carries the rest, and no failure is lost.
+fn keep_shutdown_error(
+    first_error: &mut Option<EngineError>,
+    step: &'static str,
+    result: Result<(), EngineError>,
+) {
+    let Err(error) = result else {
+        return;
+    };
+    if first_error.is_none() {
+        *first_error = Some(error);
+        return;
+    }
+    tracing::error!(
+        step,
+        error = %error,
+        "a further runtime-shutdown step failed after an earlier one; only the first failure \
+         can be returned, so this one is reported here"
+    );
 }
 
 fn runtime_error(reason: String) -> EngineError {

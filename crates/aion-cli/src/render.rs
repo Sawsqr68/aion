@@ -136,7 +136,10 @@ fn joined_chain(error: &anyhow::Error) -> String {
 /// Actionable per-class hints. Classes whose detail message is already
 /// self-sufficient (`already_exists`, `cancelled`, `invalid_input`,
 /// `backend`) carry none.
-const fn hint(error: &ClientError) -> Option<&'static str> {
+// Not `const`: the `ShuttingDown` arm below reads the runtime `error_type`
+// discriminator off the detail, and there is no const context — the sole
+// caller is the runtime render path above.
+fn hint(error: &ClientError) -> Option<&'static str> {
     match error {
         ClientError::NotFound { .. } => Some(
             "verify the workflow id, --run-id, and --namespace; workflows in \
@@ -154,6 +157,23 @@ const fn hint(error: &ClientError) -> Option<&'static str> {
             "the workflow does not register a query with this name; check the \
              query name against the workflow's query handlers",
         ),
+        // 🔴 THE CLASS IS NOT THE CAUSE. `not_running` carries two different
+        // situations, and the generic hint is actively wrong for one of them:
+        // `ShuttingDown` means the ENGINE stopped serving, not that this run
+        // ended — so telling the operator to go looking at `aion list` sends
+        // them after a terminal that never landed, and that command would fail
+        // in exactly the same way. Read the discriminator the wire and the
+        // embedded transport both carry.
+        ClientError::NotRunning { detail }
+            if detail.error_type.as_deref() == Some("ShuttingDown") =>
+        {
+            Some(
+                "the server is shutting down and is no longer accepting work; \
+                 the run itself is unaffected — wait for the server to come \
+                 back and retry, and expect other commands to fail the same \
+                 way until it does",
+            )
+        }
         ClientError::NotRunning { .. } => Some(
             "the target run is no longer running; `aion list --status \
              running` shows runs that can still serve queries and signals",
@@ -340,6 +360,49 @@ mod tests {
                  terminal"
             ),
             "got {output:?}"
+        );
+    }
+    /// F3: a `not_running` carrying `ShuttingDown` must NOT be given the
+    /// generic hint. The run is fine — the engine stopped serving — so the
+    /// generic text ("no longer running", "`aion list --status running`") is
+    /// wrong twice, and that command would fail identically.
+    ///
+    /// Killing mutation: delete the `ShuttingDown` guard arm in `hint`. Both
+    /// cases then render the same text and the `assert_ne!` fails.
+    #[test]
+    fn a_shutting_down_not_running_is_not_given_the_generic_hint() {
+        let shutting_down = rendered(
+            ClientError::NotRunning {
+                detail: ErrorDetail::with_type("engine is shutting down", "ShuttingDown"),
+            },
+            "signal",
+        );
+        // CONTROL: the same class WITHOUT the discriminator still gets the
+        // generic hint. Without this the assertion below would pass if the
+        // generic hint had simply been deleted for everyone.
+        let genuinely_ended = rendered(
+            ClientError::NotRunning {
+                detail: ErrorDetail::new("run 7 is Completed"),
+            },
+            "signal",
+        );
+        assert!(
+            genuinely_ended.contains("aion list --status running"),
+            "control: a plain not_running must still get the generic hint, or this test would \
+             pass against a hint that was merely removed: {genuinely_ended}"
+        );
+        assert_ne!(
+            shutting_down, genuinely_ended,
+            "the two situations must not render the same advice"
+        );
+        assert!(
+            !shutting_down.contains("aion list --status running"),
+            "a shutting-down engine cannot serve `aion list` either — sending the operator there \
+             is the same wrong turn this lane's F4 fix removed elsewhere: {shutting_down}"
+        );
+        assert!(
+            shutting_down.contains("shutting down"),
+            "the hint must name the real cause: {shutting_down}"
         );
     }
 }

@@ -5,24 +5,25 @@ use std::{num::NonZeroUsize, path::PathBuf, sync::Arc, time::Duration};
 use chrono::Utc;
 
 use aion_core::SearchAttributeSchema;
-use aion_package::{ExtractionLimits, Package};
+use aion_package::Package;
 use aion_store::visibility::VisibilityStore;
 use aion_store::{EventStore, InMemoryStore};
 
 use crate::{
     ActivityServing, EngineError, Registry, RuntimeConfig, RuntimeHandle, SignalDeliveryConfig,
-    SupervisionTree, WorkflowCatalog,
+    SupervisionTree,
     activity::bridge::ActivityDispatcher,
     durability::ActiveWorkflowRecoverySeam,
-    runtime::{
-        ChildNifBridge, ChildNifBridgeParts, NifEntry, NifRegistration, install_child_nif_bridge,
-        install_nif_runtime_context, install_query_bridge, install_signal_nif_bridge,
-        nif_determinism::{NifContextSource, install_nif_context_source},
-    },
+    runtime::{NifEntry, NifRegistration, install_signal_nif_bridge},
     signal::SignalResumeHandoff,
 };
 
 use super::api::{Engine, EngineComponents};
+use super::builder_assembly::{
+    ChildBridgeAssembly, assemble_startup_catalog, claim_owned_shards,
+    install_configured_child_nif_bridge, install_engine_nif_seams,
+    maybe_spawn_visibility_reconciliation,
+};
 use super::delegated::{DelegatedSeams, EventPublisher, QueryService, SignalRouter};
 use super::seams::{
     SeamAssembly, SignalRouterFactory, assemble_delegated_seams, wrap_event_streaming,
@@ -41,171 +42,10 @@ pub enum WorkflowPackageSource {
     Package(Box<Package>),
 }
 
-/// Install the engine-scoped NIF seams that are available before delegated
-/// seams exist: runtime context, timer bridge, deterministic context source,
-/// query bridge, and the optional activity dispatcher.
-///
-/// Returns the query mailbox engine handle installed in the query bridge, so
-/// `build()` can wire the concrete query-dispatch seam over the same
-/// delivery path the NIF-side `dispatch_query` uses.
-fn install_engine_nif_seams(
-    nif_state: &Arc<crate::runtime::EngineNifState>,
-    registry: &Arc<Registry>,
-    store: &Arc<dyn EventStore>,
-    runtime: &Arc<RuntimeHandle>,
-    activity_dispatcher: Option<Arc<dyn ActivityDispatcher>>,
-    query_timeout: Option<Duration>,
-) -> Arc<dyn crate::engine_seam::EngineHandle> {
-    install_nif_runtime_context(
-        nif_state,
-        Arc::clone(registry),
-        Arc::clone(runtime),
-        tokio::runtime::Handle::current(),
-    );
-    crate::runtime::nif_timer_bridge::install_timer_nif_bridge(
-        nif_state,
-        Arc::clone(registry),
-        Arc::clone(store),
-        tokio::runtime::Handle::current(),
-        runtime.signal_delivery(),
-    );
-    install_nif_context_source(
-        nif_state,
-        Arc::new(NifContextSource::new(
-            Arc::clone(registry),
-            tokio::runtime::Handle::current(),
-            Arc::clone(store),
-            runtime.signal_delivery(),
-        )),
-    );
-    let query_mailbox_engine = install_query_bridge(
-        nif_state,
-        Arc::clone(registry),
-        runtime,
-        tokio::runtime::Handle::current(),
-        query_timeout,
-    );
-    if let Some(dispatcher) = activity_dispatcher {
-        nif_state.set_activity_dispatcher(dispatcher);
-    }
-    query_mailbox_engine
-}
-
-/// Assemble the startup catalog: persisted runtime deploys reload first
-/// (with their persisted route pointers), then explicit operator-supplied
-/// sources load on top.
-///
-/// The order is the routing-intent precedence: a package named explicitly at
-/// THIS boot (`--workflow-package` / builder source) is the operator's newest
-/// instruction and wins the route for its type, while every persisted deploy
-/// still reloads so startup recovery — which runs after this and resolves
-/// each run's recorded pinned version — finds every version it needs.
-/// Operator-file sources are not persisted; only the runtime deploy seam
-/// writes package rows.
-async fn assemble_startup_catalog(
-    runtime: &RuntimeHandle,
-    store: &dyn EventStore,
-    sources: Vec<WorkflowPackageSource>,
-    serving: ActivityServing,
-) -> Result<Arc<WorkflowCatalog>, EngineError> {
-    let catalog = Arc::new(WorkflowCatalog::new_with_serving(serving));
-    crate::loader::persistence::reload_persisted_packages(runtime, catalog.as_ref(), store).await?;
-    for source in sources {
-        let package = package_from_source(source)?;
-        let outcome = catalog.load_package(runtime, &package).await?;
-        tracing::info!(
-            workflow_type = outcome.record.workflow_type(),
-            content_hash = %outcome.record.version(),
-            freshly_loaded = outcome.freshly_loaded,
-            "loaded workflow package {}",
-            outcome.record.workflow_type()
-        );
-    }
-    Ok(catalog)
-}
-
 impl From<Package> for WorkflowPackageSource {
     fn from(package: Package) -> Self {
         Self::Package(Box::new(package))
     }
-}
-
-fn spawn_visibility_reconciliation_task(
-    interval: Duration,
-    store: Arc<dyn EventStore>,
-    visibility_store: Arc<dyn VisibilityStore>,
-) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(interval).await;
-            if let Err(error) = crate::lifecycle::visibility::reconcile_visibility(
-                Arc::clone(&store),
-                Arc::clone(&visibility_store),
-            )
-            .await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "periodic visibility reconciliation failed; crash-consistency window may remain until a later reconciliation repairs visibility"
-                );
-            }
-        }
-    })
-}
-
-/// Apply owned-shard scoping to the store BEFORE any recovery or enumeration
-/// reads it, so a multi-shard node recovers only its shards.
-///
-/// `None` leaves the store untouched — the single-node default, where the store
-/// owns ALL shards and boot is byte-identical to today (the scoping hook is
-/// never called). `Some(set)` forwards through any store decorator to the
-/// sharded backend; a single-shard backend ignores it.
-fn apply_owned_shards(store: &dyn EventStore, owned_shards: Option<&[usize]>) {
-    if let Some(shards) = owned_shards {
-        store.set_owned_shards(Some(shards));
-    }
-}
-
-/// Win the per-shard election and become the live owner of each owned shard
-/// BEFORE startup recovery reads them (SS-2).
-///
-/// Ordering matters: this runs after [`apply_owned_shards`] (so the store is
-/// already scoped to this node's shards) and BEFORE
-/// [`recover_active_workflows_on_startup`], so a distributed backend's
-/// `become_live` union-merge has made every committed write on those shards
-/// locally present before recovery enumerates them. The election is driven
-/// through the type-erased [`ReadableEventStore::acquire_owned_shards`] seam,
-/// whose distributed implementation runs the blocking coordinator on a bare
-/// off-runtime thread — so calling it from this async `build()` honours
-/// haematite's no-blocking-election-inside-an-async-context constraint.
-///
-/// `None` (the single-node default) skips election entirely, and the seam is a
-/// no-op for every non-distributed backend even when a shard set is configured,
-/// so boot stays byte-identical to today.
-fn acquire_owned_shards(
-    store: &dyn EventStore,
-    owned_shards: Option<&[usize]>,
-) -> Result<(), EngineError> {
-    if let Some(shards) = owned_shards {
-        store.acquire_owned_shards(shards)?;
-    }
-    Ok(())
-}
-
-/// Spawn the periodic visibility reconciliation task when an interval is
-/// configured, returning its join handle; otherwise return `None`.
-fn maybe_spawn_visibility_reconciliation(
-    interval: Option<Duration>,
-    store: &Arc<dyn EventStore>,
-    visibility_store: &Arc<dyn VisibilityStore>,
-) -> Option<tokio::task::JoinHandle<()>> {
-    interval.map(|interval| {
-        spawn_visibility_reconciliation_task(
-            interval,
-            Arc::clone(store),
-            Arc::clone(visibility_store),
-        )
-    })
 }
 
 impl From<PathBuf> for WorkflowPackageSource {
@@ -250,6 +90,7 @@ pub struct EngineBuilder {
     visibility_store: Option<Arc<dyn VisibilityStore>>,
     scheduler_threads: Option<usize>,
     signal_delivery: SignalDeliveryConfig,
+    completion_retry: crate::runtime::CompletionRetryConfig,
     outbox_enabled: bool,
     bootstrap_schedule_coordinator: bool,
     owned_shards: Option<Vec<usize>>,
@@ -284,6 +125,7 @@ impl EngineBuilder {
             visibility_store: None,
             scheduler_threads: None,
             signal_delivery: SignalDeliveryConfig::default(),
+            completion_retry: crate::runtime::CompletionRetryConfig::default(),
             outbox_enabled: false,
             // The only field that defaults true: single-node engines seed the
             // schedule coordinator. A multi-node deployment disables it on nodes
@@ -421,6 +263,21 @@ impl EngineBuilder {
     #[must_use]
     pub const fn signal_delivery(mut self, signal_delivery: SignalDeliveryConfig) -> Self {
         self.signal_delivery = signal_delivery;
+        self
+    }
+
+    /// Record the caller-supplied durable completion-retry backoff ladder.
+    ///
+    /// Separate from [`Self::signal_delivery`] because the completion retry is
+    /// unbounded by attempts and sleeps between durable store round-trips; see
+    /// [`crate::runtime::CompletionRetryConfig`] for why sharing one ladder
+    /// between the two was a defect.
+    #[must_use]
+    pub const fn completion_retry(
+        mut self,
+        completion_retry: crate::runtime::CompletionRetryConfig,
+    ) -> Self {
+        self.completion_retry = completion_retry;
         self
     }
 
@@ -615,10 +472,11 @@ impl EngineBuilder {
     }
 
     /// Assemble the runtime configuration from the builder-supplied scheduler,
-    /// signal delivery, and outbox knobs.
+    /// signal delivery, completion-retry, and outbox knobs.
     fn runtime_config(&self) -> RuntimeConfig {
         RuntimeConfig::new(self.scheduler_threads)
             .with_signal_delivery(self.signal_delivery)
+            .with_completion_retry(self.completion_retry)
             .with_outbox_enabled(self.outbox_enabled)
     }
 
@@ -651,13 +509,7 @@ impl EngineBuilder {
         let visibility_store = self
             .visibility_store
             .ok_or(EngineError::MissingVisibilityStore)?;
-
-        apply_owned_shards(store.as_ref(), self.owned_shards.as_deref());
-        // SS-2: become the fenced live owner of this node's shards BEFORE any
-        // recovery enumerates them, so a distributed backend's `become_live`
-        // union-merge has landed every committed write locally first. No-op for
-        // single-node / non-distributed backends, so default boot is unchanged.
-        acquire_owned_shards(store.as_ref(), self.owned_shards.as_deref())?;
+        claim_owned_shards(store.as_ref(), self.owned_shards.as_deref())?;
 
         let runtime = Self::start_runtime_with_nifs(runtime_config, self.host_nifs)?;
 
@@ -762,106 +614,6 @@ impl EngineBuilder {
         engine.catchup_schedule_coordinator().await?;
         engine.recover_schedules_on_startup(Utc::now()).await?;
         Ok(engine)
-    }
-}
-
-/// Borrowed engine components assembled into the child NIF bridge.
-struct ChildBridgeAssembly<'a> {
-    nif_state: &'a Arc<crate::runtime::EngineNifState>,
-    store: &'a Arc<dyn EventStore>,
-    visibility_store: &'a Arc<dyn VisibilityStore>,
-    runtime: &'a Arc<RuntimeHandle>,
-    catalog: &'a Arc<WorkflowCatalog>,
-    registry: &'a Arc<Registry>,
-    supervision: &'a Arc<SupervisionTree>,
-    signal_handoff: &'a Arc<SignalResumeHandoff>,
-    search_attribute_schema: &'a Arc<aion_core::SearchAttributeSchema>,
-    /// The child-terminal watcher reuses the builder's delivery retry
-    /// policy for its registry-miss backoff windows.
-    watch_backoff: SignalDeliveryConfig,
-}
-
-/// Register the `WorkflowDeadlineHandler` on the timer bridge.
-///
-/// The handler holds the runtime weakly so the runtime → nif-state → bridge →
-/// handler chain never cycles back into the runtime (the documented
-/// cycle-avoidance the timer bridge observes with its `Weak<EngineNifState>`).
-///
-/// # Errors
-///
-/// Returns [`EngineError::Runtime`] when no timer bridge is installed.
-fn register_workflow_deadline_handler(
-    nif_state: &crate::runtime::EngineNifState,
-    runtime: &Arc<RuntimeHandle>,
-    store: &Arc<dyn EventStore>,
-    visibility_store: &Arc<dyn VisibilityStore>,
-    registry: &Arc<Registry>,
-) -> Result<(), EngineError> {
-    crate::runtime::nif_timer_bridge::register_deadline_handler(
-        nif_state,
-        Arc::new(crate::lifecycle::deadline::WorkflowDeadlineHandler::new(
-            Arc::downgrade(runtime),
-            Arc::clone(store),
-            Arc::clone(visibility_store),
-            Arc::clone(registry),
-        )),
-    )
-    .map_err(|error| EngineError::Runtime {
-        reason: format!("failed to register workflow deadline handler: {error}"),
-    })
-}
-
-fn install_configured_child_nif_bridge(
-    assembly: &ChildBridgeAssembly<'_>,
-) -> Result<(), EngineError> {
-    install_child_nif_bridge(
-        assembly.nif_state,
-        Arc::new(ChildNifBridge::new(ChildNifBridgeParts {
-            store: Arc::clone(assembly.store),
-            visibility_store: Arc::clone(assembly.visibility_store),
-            runtime: Arc::clone(assembly.runtime),
-            catalog: Arc::clone(assembly.catalog),
-            registry: Arc::clone(assembly.registry),
-            supervision: Arc::clone(assembly.supervision),
-            signal_handoff: Arc::clone(assembly.signal_handoff),
-            search_attribute_schema: Arc::clone(assembly.search_attribute_schema),
-            tokio_handle: tokio::runtime::Handle::current(),
-            watch_backoff: assembly.watch_backoff,
-        })?),
-    );
-    // The dispatch seam reads an action's declared advisory class off the
-    // package contract this catalog carries (RUNTIME-OPERATIONS.md R5).
-    assembly
-        .nif_state
-        .set_workflow_catalog(Arc::clone(assembly.catalog));
-    // Register the workflow-deadline handler here too: it needs the same
-    // teardown deps this assembly carries, and this runs before startup timer
-    // recovery, so an already-due `deadline:{run_id}` swept at boot routes to
-    // the engine rather than failing as an unhandled reserved fire.
-    register_workflow_deadline_handler(
-        assembly.nif_state,
-        assembly.runtime,
-        assembly.store,
-        assembly.visibility_store,
-        assembly.registry,
-    )
-}
-
-pub(super) fn package_from_source(source: WorkflowPackageSource) -> Result<Package, EngineError> {
-    match source {
-        WorkflowPackageSource::Path(path) => {
-            // Operator-local startup packages from config/CLI are trusted
-            // input; only the network deploy path extracts bounded.
-            Package::load_from_path(&path, ExtractionLimits::unbounded()).map_err(|error| {
-                EngineError::Load {
-                    reason: format!(
-                        "failed to load workflow package `{}`: {error}",
-                        path.display()
-                    ),
-                }
-            })
-        }
-        WorkflowPackageSource::Package(package) => Ok(*package),
     }
 }
 
@@ -1026,6 +778,454 @@ mod tests {
 
         engine.shutdown()?;
         Ok(())
+    }
+
+    /// 🔴 M-1. Releasing an engine WITHOUT shutting it down closes the epoch.
+    ///
+    /// `RuntimeHandle::shutdown` covers the explicit path. This covers the other
+    /// one, and it is not hypothetical: a completion retry appends terminal
+    /// events, so an engine dropped on an error path with a retry still armed
+    /// would keep writing to histories nobody believes this process still owns.
+    ///
+    /// The refcount backstop cannot serve here, which is the whole reason this
+    /// `Drop` exists. `EngineTaskRuntime::drop` fires only when the last strong
+    /// reference goes, and an in-flight attempt holds one for the entire attempt
+    /// — so at the instant the hazard is real, the backstop is pinned shut. This
+    /// gate is set by a `Drop` that runs regardless of who else holds a handle.
+    ///
+    /// The first assertion is the control: an engine that never opened the epoch
+    /// would satisfy the second trivially.
+    ///
+    /// 🔴 THE ENGINE IS BUILT WITH A RECONCILIATION INTERVAL, AND THAT IS NOT
+    /// INCIDENTAL. Its first form used a bare fixture with no interval, so no
+    /// reconciliation task was ever spawned — and a fixture that never starts
+    /// the thing under test cannot see whether releasing the engine stops it.
+    /// It could not: `Drop` did not abort `visibility_reconciliation_task`, and
+    /// dropping a `JoinHandle` DETACHES rather than cancels, so a released
+    /// engine left an unbounded loop holding both stores and calling
+    /// `reconcile_visibility`, which WRITES. Two properties are pinned here
+    /// because one `Drop` owns both: the epoch closes, and the writer stops.
+    ///
+    /// The writer half is measured by counting the loop's own ticks —
+    /// `reconcile_visibility` reads `list_workflows` unconditionally on every
+    /// pass — through a wrapper that delegates everything to a real store, so
+    /// what is observed is the production loop and not a stand-in for it. The
+    /// wait for two ticks before the drop is the positive control: it fails the
+    /// test if the loop was never running, which is the exact way the first
+    /// form of this test was vacuous.
+    #[tokio::test]
+    async fn dropping_an_engine_without_shutdown_closes_the_completion_retry_epoch()
+    -> Result<(), EngineError> {
+        let visibility = Arc::new(TickCountingVisibilityStore::default());
+        let engine = EngineBuilder::new()
+            .store(InMemoryStore::default())
+            .visibility_store_arc(Arc::clone(&visibility) as Arc<dyn VisibilityStore>)
+            .visibility_reconciliation_interval(Duration::from_millis(10))
+            .build()
+            .await?;
+        // Taken before the drop and held across it: reading through the engine
+        // afterwards is impossible, and reading a fresh handle would observe a
+        // different runtime.
+        let tasks = engine.runtime().engine_tasks();
+        assert!(
+            tasks.is_epoch_open(),
+            "control: a live engine's epoch must be open, or the assertion below is trivially \
+             satisfied"
+        );
+
+        // Positive control for the writer half: the loop must be observably
+        // running BEFORE the drop, or "it stopped" is a statement about a task
+        // that never started. Bounded so a stalled loop fails rather than hangs.
+        let ticking = tokio::time::timeout(Duration::from_secs(10), async {
+            while visibility.ticks() < 2 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await;
+        assert!(
+            ticking.is_ok(),
+            "control: the periodic reconciliation loop must be running before the engine is \
+             dropped, or this test measures nothing; it reached {} ticks",
+            visibility.ticks()
+        );
+
+        drop(engine);
+
+        assert!(
+            !tasks.is_epoch_open(),
+            "an engine released without an explicit shutdown must still close the epoch, or a \
+             completion retry can append a terminal for a run this process no longer owns"
+        );
+
+        // `abort` is asynchronous: it schedules cancellation, so give the
+        // runtime a window several intervals wide to deliver it before reading
+        // the baseline. Anything after that baseline is a task still looping.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let after_abort = visibility.ticks();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert_eq!(
+            visibility.ticks(),
+            after_abort,
+            "an engine released without an explicit shutdown must also stop the visibility \
+             reconciliation loop; it ticked again over twenty intervals after the drop, which \
+             means a detached task is still WRITING to a visibility store this process no longer \
+             owns"
+        );
+        Ok(())
+    }
+
+    /// How far ahead of "now" the shared wheel-timer fixture arms its deadline.
+    ///
+    /// 🔴 THIS IS A RACE MARGIN, NOT A TASTE. The release test has to reach
+    /// `drop(engine)` while the timer is still pending; if the deadline passes
+    /// first, the timer fires LEGITIMATELY and the test's own message blames
+    /// `Drop` for a surviving task that never survived — a red that reassigns
+    /// blame, which is worse than no test. The margin buys a window that the
+    /// two atomic reads and one drop between arming and release cannot
+    /// plausibly exhaust, and the release test asserts it was still inside that
+    /// window rather than assuming it.
+    const WHEEL_TIMER_ARMING_MARGIN: std::time::Duration = std::time::Duration::from_secs(2);
+
+    /// How far past the deadline both wheel-timer tests observe before reading
+    /// history — the fire path is asynchronous, so the deadline arriving is not
+    /// the same as the append having landed.
+    const WHEEL_TIMER_OBSERVATION_SLACK: std::time::Duration = std::time::Duration::from_secs(1);
+
+    /// A resident run with one live wheel timer, armed through the production
+    /// path, shared by the release test and its positive control. Returns the
+    /// workflow and the deadline it armed, because the release test has to
+    /// check it is still inside the arming window before it can attribute
+    /// anything to the release.
+    ///
+    /// 🔴 ONE FIXTURE, DELIBERATELY. The control's whole job is to show that
+    /// THIS arrangement's timer reaches the store; a second copy that drifted —
+    /// a different residency, a different timer name, a different deadline —
+    /// would control nothing while still reading as a control.
+    ///
+    /// The deadline has to arrive INSIDE the test. The hazard a released engine
+    /// leaves behind is a parked task that later wakes and records, so a
+    /// deadline beyond the test's own lifetime makes "nothing fired" true for a
+    /// reason that has nothing to do with the release. That is what
+    /// [`WHEEL_TIMER_ARMING_MARGIN`] trades against: near enough to observe,
+    /// far enough not to race the drop.
+    async fn arm_resident_run_with_wheel_timer(
+        engine: &crate::Engine,
+        store: &Arc<InMemoryStore>,
+    ) -> Result<(WorkflowId, chrono::DateTime<Utc>), Box<dyn std::error::Error>> {
+        use aion_store::EventStore;
+
+        use crate::durability::{Recorder, WorkflowStartRecord};
+        use crate::registry::{
+            CompletionNotifier, HandleResidency, WorkflowHandle, WorkflowHandleParts,
+        };
+
+        // The wheel is armed only for a workflow the registry resolves as
+        // `Resident`, and `TimerService::schedule` is the production path that
+        // arms it.
+        let workflow_id = WorkflowId::new_v4();
+        let run_id = aion_core::RunId::new_v4();
+        let timer_id = aion_core::TimerId::named("sleep")?;
+        let mut recorder = Recorder::new(
+            workflow_id.clone(),
+            Arc::clone(store) as Arc<dyn EventStore>,
+        );
+        recorder
+            .record_workflow_started(
+                Utc::now(),
+                WorkflowStartRecord {
+                    workflow_type: "checkout".to_owned(),
+                    input: payload()?,
+                    run_id: run_id.clone(),
+                    parent_run_id: None,
+                    package_version: aion_core::PackageVersion::new("a".repeat(64)),
+                },
+            )
+            .await?;
+        recorder
+            .record_timer_started(Utc::now(), timer_id.clone(), Utc::now())
+            .await?;
+        engine.registry().insert(
+            (workflow_id.clone(), run_id.clone()),
+            WorkflowHandle::new(WorkflowHandleParts {
+                workflow_id: workflow_id.clone(),
+                run_id,
+                pid: 1,
+                workflow_type: "checkout".to_owned(),
+                namespace: String::from("default"),
+                loaded_version: aion_package::ContentHash::from_bytes([9; 32]),
+                cached_status: WorkflowStatus::Running,
+                residency: HandleResidency::Resident,
+                recorder,
+                completion: CompletionNotifier::new(),
+            }),
+        )?;
+
+        let fire_at = Utc::now() + chrono::Duration::from_std(WHEEL_TIMER_ARMING_MARGIN)?;
+        crate::runtime::nif_timer_bridge::installed_timer_service(engine.runtime().nif_state())
+            .map_err(|error| format!("the engine installed no timer service: {error}"))?
+            .schedule(workflow_id.clone(), timer_id, fire_at)
+            .await?;
+        Ok((workflow_id, fire_at))
+    }
+
+    /// 🔴 M-1's THIRD WRITER, AND
+    /// `dropping_an_engine_without_shutdown_closes_the_completion_retry_epoch`
+    /// IS BLIND TO IT.
+    ///
+    /// `Drop for Engine` disarms the live timer wheel as well as closing the
+    /// engine-task epoch and aborting the reconciliation loop. That sibling's
+    /// fixture never arms a wheel timer, so deleting `shutdown_timer_wheel` from
+    /// `Drop` leaves every one of its assertions green — a fixture that never
+    /// starts the thing under test cannot see whether releasing the engine stops
+    /// it, which is the same defect that test's own comment records having had.
+    ///
+    /// The wheel is a DURABLE writer: a fired wheel timer records `TimerFired`
+    /// through the run's recorder. An engine released with one still armed
+    /// therefore appends to a history this process no longer owns — the #119
+    /// failover race reached through a different door, because
+    /// `RuntimeHandle::shutdown` stops the beamr scheduler while the armed tasks
+    /// live on the tokio runtime and are not reached by it. On the release path
+    /// there is no shutdown at all, so `Drop` is the only thing that can.
+    ///
+    /// The count is read through an `Arc<EngineNifState>` held ACROSS the drop,
+    /// so the release is the only variable between the two readings. The
+    /// pre-drop assertion is the control and it is not decoration: it is the
+    /// exact vacuity this test exists to close.
+    #[tokio::test]
+    async fn dropping_an_engine_without_shutdown_disarms_the_live_timer_wheel()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use aion_store::EventStore;
+
+        let store = Arc::new(InMemoryStore::default());
+        let engine = EngineBuilder::new()
+            .store_arc(Arc::clone(&store) as Arc<dyn EventStore>)
+            .visibility_store(InMemoryStore::default())
+            .build()
+            .await?;
+        // Held across the drop; see `EngineNifState::armed_wheel_timers`.
+        let nif_state = Arc::clone(engine.runtime().nif_state());
+        let (workflow_id, fire_at) = arm_resident_run_with_wheel_timer(&engine, &store).await?;
+        assert_eq!(
+            nif_state.armed_wheel_timers(),
+            1,
+            "control: the fixture must have actually armed a wheel timer, or the assertions below \
+             are satisfied by an engine that never had one — the exact way the sibling test above \
+             is blind to this half of `Drop`"
+        );
+
+        // 🔴 FIXTURE GUARD, NOT A CLAIM ABOUT `Drop`. Everything below reads a
+        // timer that has NOT yet fired; if the deadline has already passed, a
+        // `TimerFired` in history is the timer doing its job, and the decisive
+        // assertion would report it as a task that survived the release. That is
+        // a red which reassigns blame — the failure mode this guard exists to
+        // make impossible to mistake. Both readings are taken before the drop,
+        // so neither can be explained by it.
+        let before_drop = Utc::now();
+        assert!(
+            before_drop < fire_at,
+            "fixture: the arming window closed before the release was reached ({before_drop} is \
+             not before {fire_at}). This is a FIXTURE timing failure — most likely a loaded box — \
+             and NOT evidence about cancellation. Widen `WHEEL_TIMER_ARMING_MARGIN`; do not read \
+             this as `Drop` leaking a task."
+        );
+        let armed = store.read_history(&workflow_id).await?;
+        assert!(
+            !armed
+                .iter()
+                .any(|event| matches!(event, Event::TimerFired { .. })),
+            "fixture: the timer already fired before the engine was released, so this run cannot \
+             say anything about cancellation. Same remedy as above — widen the margin: {armed:#?}"
+        );
+
+        drop(engine);
+
+        assert_eq!(
+            nif_state.armed_wheel_timers(),
+            0,
+            "an engine released without an explicit shutdown must empty its live timer wheel"
+        );
+
+        // 🔴 AND THE TASK ITSELF IS GONE, WHICH THE COUNT ABOVE CANNOT SEE.
+        // `shutdown_timer_wheel` both removes the entry and aborts the handle;
+        // the count observes only the removal, so deleting the abort leaves it
+        // green while an armed task lives on. This waits past the deadline and
+        // reads the durable record, which is where a surviving task would show
+        // up — and the sibling test
+        // `a_live_wheel_timer_fires_when_the_engine_is_not_released` is its
+        // positive control: it proves this same fixture's timer DOES reach the
+        // store when nothing disarms it, so an empty reading here is a
+        // cancellation rather than a timer that was never going to arrive.
+        tokio::time::sleep(WHEEL_TIMER_ARMING_MARGIN + WHEEL_TIMER_OBSERVATION_SLACK).await;
+        let history = store.read_history(&workflow_id).await?;
+        assert!(
+            !history
+                .iter()
+                .any(|event| matches!(event, Event::TimerFired { .. })),
+            "an engine released without an explicit shutdown must CANCEL its wheel tasks, not \
+             merely forget them: a surviving task records `TimerFired` for a run this process no \
+             longer owns, which is a second writer for one workflow: {history:#?}"
+        );
+        Ok(())
+    }
+
+    /// 🔴 AND A DRAIN IS NOT A GATE. The test above proves the wheel is EMPTIED
+    /// by the release; this one proves it stays empty.
+    ///
+    /// `Drop for Engine` deliberately leaves the beamr scheduler running and the
+    /// engine seams installed, so a workflow process still runnable can reach
+    /// `sleep` a moment AFTER the drain and arm a fresh task — whose body is
+    /// `fire_wheel_timer`, a durable `TimerFired` append against a run a
+    /// successor engine may already own. That is the same second-writer breach
+    /// the drain exists to prevent, reached one instant later, and until
+    /// 2026-08-07 `arm_timer` had no check of any kind: it spawned
+    /// unconditionally.
+    ///
+    /// The scheduling call is the PRODUCTION path, not a direct poke at the
+    /// bridge, and it is made through an `Arc<EngineNifState>` held across the
+    /// drop — the same instrument the sibling above uses, and available for the
+    /// same reason (the drop does not clear the seams).
+    ///
+    /// Two controls, because refusal has two boring explanations. The first
+    /// schedule succeeds BEFORE the drop, so the fixture demonstrably reaches
+    /// the arming path at all; and the count is asserted `1` then `0` around the
+    /// release, so the post-drop `Err` cannot be a fixture that was never able
+    /// to arm anything.
+    #[tokio::test]
+    async fn arming_a_wheel_timer_after_the_engine_is_released_is_refused()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use aion_store::EventStore;
+
+        let store = Arc::new(InMemoryStore::default());
+        let engine = EngineBuilder::new()
+            .store_arc(Arc::clone(&store) as Arc<dyn EventStore>)
+            .visibility_store(InMemoryStore::default())
+            .build()
+            .await?;
+        let nif_state = Arc::clone(engine.runtime().nif_state());
+        // CONTROL 1: this fixture can arm. The call below is the same
+        // `TimerService::schedule` the post-drop attempt makes, and it succeeds.
+        let (workflow_id, _fire_at) = arm_resident_run_with_wheel_timer(&engine, &store).await?;
+        assert_eq!(
+            nif_state.armed_wheel_timers(),
+            1,
+            "control: the fixture must have armed a wheel timer through the production path, or \
+             the refusal below is satisfied by a fixture that could never arm one"
+        );
+
+        drop(engine);
+
+        // CONTROL 2: the release emptied the wheel, so what follows is measured
+        // against a torn-down wheel rather than a busy one.
+        assert_eq!(nif_state.armed_wheel_timers(), 0);
+
+        let refused = crate::runtime::nif_timer_bridge::installed_timer_service(&nif_state)
+            .map_err(|error| format!("the released engine's timer seam is gone: {error}"))?
+            .schedule(
+                workflow_id,
+                aion_core::TimerId::named("sleep-after-release")?,
+                Utc::now() + chrono::Duration::from_std(WHEEL_TIMER_ARMING_MARGIN)?,
+            )
+            .await;
+        let Err(error) = refused else {
+            return Err(
+                "arming a wheel timer through a released engine must be REFUSED: the task \
+                        it spawns appends a durable `TimerFired` for a run this process no longer \
+                        owns, which is a second writer for one workflow"
+                    .into(),
+            );
+        };
+        assert!(
+            error.to_string().contains("torn down"),
+            "the refusal must say WHY, so an operator reading it is not sent looking for a \
+             missing workflow or a bad timer id: {error}"
+        );
+        assert_eq!(
+            nif_state.armed_wheel_timers(),
+            0,
+            "the refused arm must leave nothing behind: a wheel entry inserted before the refusal \
+             would be a durable writer with no owner to cancel it"
+        );
+        Ok(())
+    }
+
+    /// The positive control for the assertion above: this fixture's wheel timer
+    /// really does reach the durable record when nothing disarms it.
+    ///
+    /// Without this, "no `TimerFired` after the drop" is equally well explained
+    /// by a fixture whose timer could never fire at all — a registry entry the
+    /// fire path rejects, a seam that was never installed, a deadline that never
+    /// arrives. An absence is only evidence when its presence has been shown
+    /// reachable by the same means.
+    #[tokio::test]
+    async fn a_live_wheel_timer_fires_when_the_engine_is_not_released()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use aion_store::EventStore;
+
+        let store = Arc::new(InMemoryStore::default());
+        let engine = EngineBuilder::new()
+            .store_arc(Arc::clone(&store) as Arc<dyn EventStore>)
+            .visibility_store(InMemoryStore::default())
+            .build()
+            .await?;
+        let (workflow_id, _) = arm_resident_run_with_wheel_timer(&engine, &store).await?;
+
+        tokio::time::sleep(WHEEL_TIMER_ARMING_MARGIN + WHEEL_TIMER_OBSERVATION_SLACK).await;
+
+        let history = store.read_history(&workflow_id).await?;
+        assert!(
+            history
+                .iter()
+                .any(|event| matches!(event, Event::TimerFired { .. })),
+            "the fixture's wheel timer must reach the store when the engine is still held, or \
+             the sibling test's absence proves nothing: {history:#?}"
+        );
+        drop(engine);
+        Ok(())
+    }
+
+    /// A visibility store that counts the periodic reconciliation loop's passes.
+    ///
+    /// Delegates every method to a real [`InMemoryStore`] so the loop under
+    /// observation does the same work it does in production; the counter is the
+    /// only addition. `list_workflows` is the tick site because
+    /// `reconcile_visibility` calls it unconditionally at the top of every pass,
+    /// so the count cannot be lowered by the store happening to be consistent.
+    #[derive(Default)]
+    struct TickCountingVisibilityStore {
+        inner: InMemoryStore,
+        list_calls: std::sync::atomic::AtomicUsize,
+    }
+
+    impl TickCountingVisibilityStore {
+        fn ticks(&self) -> usize {
+            self.list_calls.load(std::sync::atomic::Ordering::Acquire)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl VisibilityStore for TickCountingVisibilityStore {
+        async fn record_visibility(
+            &self,
+            record: aion_store::visibility::VisibilityRecord,
+        ) -> Result<(), aion_store::StoreError> {
+            self.inner.record_visibility(record).await
+        }
+
+        async fn list_workflows(
+            &self,
+            filter: ListWorkflowsFilter,
+        ) -> Result<Vec<aion_store::visibility::WorkflowSummary>, aion_store::StoreError> {
+            self.list_calls
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            self.inner.list_workflows(filter).await
+        }
+
+        async fn count_workflows(
+            &self,
+            filter: ListWorkflowsFilter,
+        ) -> Result<u64, aion_store::StoreError> {
+            self.inner.count_workflows(filter).await
+        }
     }
 
     fn capacity(value: usize) -> Result<NonZeroUsize, Box<dyn std::error::Error>> {
@@ -1225,6 +1425,43 @@ mod tests {
                 .scheduler_thread_count(),
             Some(4)
         );
+    }
+
+    /// The completion-retry ladder the caller set is the ladder the runtime is
+    /// started with.
+    ///
+    /// Asserting on `runtime_config()` rather than on a builder accessor is the
+    /// whole point: an accessor test would pass with the
+    /// `.with_completion_retry(self.completion_retry)` line deleted, because the
+    /// field would still hold what the setter put there while the runtime
+    /// silently ran on the inherited default. This is the only place that link
+    /// is held.
+    ///
+    /// The first assertion is the test's own control. It fixes that the chosen
+    /// ladder differs from the default, so the equality below cannot be
+    /// satisfied by a runtime configuration that ignored the builder entirely.
+    #[test]
+    fn the_completion_retry_ladder_reaches_the_runtime_configuration()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let chosen = crate::runtime::CompletionRetryConfig::try_new(
+            Duration::from_millis(250),
+            Duration::from_secs(7),
+        )?;
+        assert_ne!(
+            chosen,
+            crate::runtime::CompletionRetryConfig::default(),
+            "a ladder equal to the default could not distinguish wiring from inheritance"
+        );
+
+        assert_eq!(
+            EngineBuilder::new()
+                .completion_retry(chosen)
+                .runtime_config()
+                .completion_retry,
+            chosen,
+            "the runtime must be started with the operator's ladder, not the inherited default"
+        );
+        Ok(())
     }
 
     #[test]

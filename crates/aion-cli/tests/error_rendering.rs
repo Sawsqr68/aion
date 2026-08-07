@@ -95,6 +95,20 @@ fn outcome_error(error: WireError) -> generated::QueryResponse {
     }
 }
 
+/// The engine's own words for a query against a run that is no longer running:
+/// `EngineError::Query` (`"query error: {0}"`) wrapping
+/// `QueryError::NotRunning` (`"workflow {0} is not running"`). The server hands
+/// the wire exactly this via `query_wire`'s `source.to_string()`.
+fn query_not_running_detail() -> String {
+    format!("query error: workflow {WORKFLOW_ID} is not running")
+}
+
+/// The words `signal_terminal_error` builds, for a signal aimed at a run that
+/// has already finished.
+fn signal_terminal_detail() -> String {
+    format!("workflow {WORKFLOW_ID} has already reached terminal state Completed")
+}
+
 fn off_scope<T>() -> Result<Response<T>, Status> {
     Err(Status::unimplemented("not part of this test"))
 }
@@ -120,25 +134,59 @@ impl WorkflowService for MockWorkflowService {
                 Code::InvalidArgument,
                 WireError::unknown_query("no query named 'missing' is registered"),
             )),
-            "terminal" => Err(typed_status(
+            // 🔴 A query against a run that has already finished is NOT a
+            // transport failure and does NOT carry `WorkflowTerminal`. The
+            // server answers OK and rides `QueryNotRunning` on the
+            // `QueryResponse.outcome.error` oneof: `api/handlers/workflows.rs`
+            // routes `EngineError::Query(_)` that way, `error_engine.rs`'s
+            // `query_error_type` names it `QueryNotRunning`, and `query_wire`
+            // carries the engine error's own words. The server pins it itself
+            // in `query_handler_returns_not_running_outcome_for_terminal_workflow`.
+            //
+            // `WorkflowTerminal` is built at exactly two places —
+            // `signal_terminal_error` and `cancel_terminal_error` in
+            // `aion-server/src/api/handlers/error.rs` — reachable only from the
+            // signal and cancel handlers. Pairing it with a query is a fixture
+            // no server can produce, and a fixture that cannot occur cannot pin
+            // behaviour. It is exercised through `signal` below, where it is
+            // real.
+            "terminal" => Ok(Response::new(outcome_error(
+                WireError::not_running_with_type("QueryNotRunning", query_not_running_detail()),
+            ))),
+            // The real `ShuttingDown`, with the message that arm actually
+            // carries. Its hint must differ from `terminal`'s above: one says
+            // the run is over, the other says the server is going away and the
+            // run is untouched.
+            "shutdown" => Err(typed_status(
                 Code::FailedPrecondition,
                 WireError::not_running_with_type(
                     "ShuttingDown",
-                    "target run already reached Completed",
+                    "the engine is shutting down and is not accepting work",
                 ),
             )),
             other => Err(Status::unimplemented(format!("unexpected query {other}"))),
         }
     }
 
+    /// Signal failures keyed by signal name. This is one of the two handlers
+    /// that can produce `WorkflowTerminal` — the other is `cancel` — so it is
+    /// where the CLI's rendering of that type is exercised.
     async fn signal(
         &self,
-        _: Request<generated::SignalRequest>,
+        request: Request<generated::SignalRequest>,
     ) -> Result<Response<generated::SignalResponse>, Status> {
-        Err(typed_status(
-            Code::NotFound,
-            WireError::not_found_with_type("WorkflowNotFound", "workflow was not found"),
-        ))
+        match request.into_inner().signal_name.as_str() {
+            "approve" => Err(typed_status(
+                Code::NotFound,
+                WireError::not_found_with_type("WorkflowNotFound", "workflow was not found"),
+            )),
+            // `signal_terminal_error`'s own type and own words.
+            "terminal" => Err(typed_status(
+                Code::FailedPrecondition,
+                WireError::not_running_with_type("WorkflowTerminal", signal_terminal_detail()),
+            )),
+            other => Err(Status::unimplemented(format!("unexpected signal {other}"))),
+        }
     }
 
     async fn start_workflow(
@@ -289,24 +337,41 @@ async fn each_query_wire_code_renders_distinctly_end_to_end() -> TestResult {
     let cases = [
         (
             "fails",
-            "error[query_failed]: failed to query workflow: handler raised: cart is empty",
+            "error[query_failed]: failed to query workflow: handler raised: cart is empty"
+                .to_string(),
             "hint: the workflow's query handler ran and reported this failure",
         ),
         (
             "slow",
-            "error[query_timeout]: failed to query workflow: query window of 30ms elapsed",
+            "error[query_timeout]: failed to query workflow: query window of 30ms elapsed"
+                .to_string(),
             "hint: the query missed its deadline",
         ),
         (
             "missing",
             "error[unknown_query]: failed to query workflow: no query named 'missing' is \
-             registered",
+             registered"
+                .to_string(),
             "hint: the workflow does not register a query with this name",
         ),
         (
             "terminal",
-            "error[not_running]: failed to query workflow: target run already reached Completed",
+            format!(
+                "error[not_running]: failed to query workflow: {}",
+                query_not_running_detail()
+            ),
             "hint: the target run is no longer running",
+        ),
+        // Same wire CODE as `terminal`, different error TYPE, and the operator
+        // must not be told the same thing. This is the end-to-end half of the
+        // renderer's `ShuttingDown` guard; the unit half is in
+        // `aion-cli/src/render.rs`.
+        (
+            "shutdown",
+            "error[not_running]: failed to query workflow: the engine is shutting down and is \
+             not accepting work"
+                .to_string(),
+            "hint: the server is shutting down",
         ),
     ];
     for (query_name, first_line, hint_fragment) in cases {
@@ -315,7 +380,7 @@ async fn each_query_wire_code_renders_distinctly_end_to_end() -> TestResult {
         let stderr = stderr_of(&output);
         assert_eq!(
             stderr.lines().next(),
-            Some(first_line),
+            Some(first_line.as_str()),
             "query {query_name}: got {stderr:?}"
         );
         assert!(
@@ -326,15 +391,71 @@ async fn each_query_wire_code_renders_distinctly_end_to_end() -> TestResult {
     Ok(())
 }
 
+/// The typed `error_type` must survive the STATUS-DETAILS route — the server
+/// encodes a `ProtoWireError` into `tonic::Status` details, and everything the
+/// CLI can say about a failure beyond its class comes from there. `shutdown` is
+/// a genuine `ShuttingDown` (`aion-server/src/error.rs`) and rides that route.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn typed_error_type_from_status_details_reaches_stderr() -> TestResult {
-    let output = run_cli_against_mock(&["query", WORKFLOW_ID, "terminal"]).await?;
+    let output = run_cli_against_mock(&["query", WORKFLOW_ID, "shutdown"]).await?;
 
     assert_failure_contract(&output);
     let stderr = stderr_of(&output);
     assert!(
         stderr.contains("server error type: ShuttingDown"),
         "the wire error_type must be surfaced, got {stderr:?}"
+    );
+    Ok(())
+}
+
+/// The same discriminator must also survive the OTHER route — the OK response
+/// carrying `QueryResponse.outcome.error`. A query against a finished run takes
+/// that one, and it is decoded by different code from the status-details path
+/// above, so a green there says nothing about here.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn typed_error_type_from_query_outcome_reaches_stderr() -> TestResult {
+    let output = run_cli_against_mock(&["query", WORKFLOW_ID, "terminal"]).await?;
+
+    assert_failure_contract(&output);
+    let stderr = stderr_of(&output);
+    assert!(
+        stderr.contains("server error type: QueryNotRunning"),
+        "the wire error_type must be surfaced off the outcome oneof, got {stderr:?}"
+    );
+    Ok(())
+}
+
+/// `WorkflowTerminal` rendered where the server actually produces it. It shares
+/// the `not_running` class with `QueryNotRunning` and with `ShuttingDown`, and
+/// must not inherit the shutdown hint: this run is over, the server is fine.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn signal_against_a_terminal_run_renders_workflow_terminal() -> TestResult {
+    let output = run_cli_against_mock(&["signal", WORKFLOW_ID, "terminal"]).await?;
+
+    assert_failure_contract(&output);
+    let stderr = stderr_of(&output);
+    assert_eq!(
+        stderr.lines().next(),
+        Some(
+            format!(
+                "error[not_running]: failed to signal workflow: {}",
+                signal_terminal_detail()
+            )
+            .as_str()
+        ),
+        "got {stderr:?}"
+    );
+    assert!(
+        stderr.contains("server error type: WorkflowTerminal"),
+        "got {stderr:?}"
+    );
+    assert!(
+        stderr.contains("hint: the target run is no longer running"),
+        "got {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("shutting down"),
+        "a finished run must not be reported as a server shutdown, got {stderr:?}"
     );
     Ok(())
 }

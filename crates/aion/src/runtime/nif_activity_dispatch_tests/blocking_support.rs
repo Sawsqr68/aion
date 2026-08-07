@@ -55,6 +55,7 @@ fn blocking_dispatch_scenario() -> Result<Vec<u8>, String> {
             super::RetryRecorderSeam {
                 recorder,
                 run_id: run_id.clone(),
+                engine_tasks: runtime.engine_tasks(),
             },
             pid,
             super::correlation_id(0),

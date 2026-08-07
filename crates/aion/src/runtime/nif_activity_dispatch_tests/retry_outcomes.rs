@@ -155,3 +155,77 @@ async fn absent_policy_keeps_run_exactly_once_for_retryable_failures() -> TestRe
     assert_eq!(harness.history().await?.len(), 3);
     Ok(())
 }
+
+/// F2: the completion task is the FOURTH durable writer this process can hold
+/// open, and it survives both `Drop for Engine` and `Engine::shutdown` —
+/// `spawn_completion_task` discards its `JoinHandle`, so nothing registers or
+/// aborts it, and between attempts it sleeps an SDK-declared backoff with no
+/// ceiling. Without an epoch check it could wake long after the engine was
+/// released and append `ActivityStarted` into a history a successor has
+/// already adopted: a second writer for one workflow (invariant 3).
+///
+/// Once the epoch closes, the loop must stand down and record NOTHING.
+///
+/// Killing mutation: delete the `is_epoch_open` guard at the top of
+/// `record_retry_event`. The failure is then recorded, history grows, and both
+/// the history-length assertion and the terminal assertion fail.
+#[tokio::test]
+async fn a_closed_engine_task_epoch_stops_the_retry_loop_writing() -> TestResult {
+    let harness = RetryLoopHarness::seeded(FIXED_RETRY_CONFIG).await?;
+    let before = harness.history().await?.len();
+
+    // CONTROL: with the epoch OPEN this exact dispatcher records a retryable
+    // failure and grows the history. Without this, "nothing was recorded" is
+    // equally well explained by a fixture that never records anything.
+    let control_dispatcher = ScriptedRetryDispatcher::new(vec![
+        Err("retryable:stream reset".to_owned()),
+        Ok(r#""done""#.to_owned()),
+    ]);
+    let control = super::dispatch_with_retries(
+        &(Arc::clone(&control_dispatcher) as Arc<dyn ActivityDispatcher>),
+        &harness.seam,
+        &harness.request,
+    )
+    .await;
+    assert!(
+        matches!(control.terminal, super::RetryLoopTerminal::Completed(_)),
+        "control: an open epoch must let the loop finish normally"
+    );
+    let after_control = harness.history().await?.len();
+    assert!(
+        after_control > before,
+        "control: an open epoch must record the attempt trail ({before} -> {after_control})"
+    );
+
+    // Now close the epoch, exactly as `Engine::shutdown` and `Drop` both do.
+    harness.seam.engine_tasks.begin_close();
+    assert!(
+        !harness.seam.engine_tasks.is_epoch_open(),
+        "the epoch must actually be closed, or what follows measures nothing"
+    );
+
+    let dispatcher = ScriptedRetryDispatcher::new(vec![
+        Err("retryable:stream reset".to_owned()),
+        Ok(r#""done""#.to_owned()),
+    ]);
+    let outcome = super::dispatch_with_retries(
+        &(Arc::clone(&dispatcher) as Arc<dyn ActivityDispatcher>),
+        &harness.seam,
+        &harness.request,
+    )
+    .await;
+
+    assert!(
+        matches!(outcome.terminal, super::RetryLoopTerminal::SettledElsewhere),
+        "a closed epoch must stand the loop down rather than deliver an outcome for a run this \
+         process is no longer the writer for"
+    );
+    assert_eq!(
+        harness.history().await?.len(),
+        after_control,
+        "NOTHING may be appended after the epoch closes: an append here is the #119 \
+         second-writer breach — the survivor either takes a SequenceConflict or replays a \
+         command against an event the live run never issued"
+    );
+    Ok(())
+}

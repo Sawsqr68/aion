@@ -367,6 +367,40 @@ pub enum EngineError {
         run_id: String,
     },
 
+    /// A terminal event was about to be appended after the engine-task epoch
+    /// had already closed.
+    ///
+    /// Raised at the append boundary itself, which is the only instant at which
+    /// the hazard it guards is real. The engine that owned this run has been
+    /// shut down or released, so this process is no longer that workflow's
+    /// single writer (invariant 3). Appending here risks two writers.
+    ///
+    /// # This is not only the successor case
+    ///
+    /// The obvious reading — a successor engine is already recovering the same
+    /// history — is the *eventual* case, not the whole of it. `Engine::shutdown`
+    /// closes the epoch as its FIRST act and only stops admitting process-exit
+    /// callbacks several steps later, so this error is also raised for runs that
+    /// exit during **this** engine's own graceful teardown, while no successor
+    /// exists yet. Saying "a successor may already be recovering" would tell an
+    /// operator reading the message during a clean shutdown to go looking for a
+    /// second node that is not there.
+    ///
+    /// Deliberately **not** transient: no later attempt re-opens a closed
+    /// epoch. In both cases the run stays `Running` and a startup sweep — the
+    /// successor's, or this node's own on restart — re-installs a monitor,
+    /// which is the mechanism that actually repairs it.
+    #[error(
+        "run `{run_id}` of workflow `{workflow_id}` could not append its terminal event: the \
+         engine-task epoch closed first, so this engine is no longer the run's single writer"
+    )]
+    EngineTaskEpochClosed {
+        /// Workflow whose terminal event was refused.
+        workflow_id: String,
+        /// Run whose terminal event was refused.
+        run_id: String,
+    },
+
     /// The extraordinary cancellation path was asked for a run whose pinned
     /// package resolves right now, so the run is recoverable (#117(c)).
     ///

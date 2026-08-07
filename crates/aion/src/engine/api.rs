@@ -1,12 +1,8 @@
 //! `Engine` start, cancel, result, list, and shutdown support.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
-use aion_core::{
-    Event, Payload, RunId, SearchAttributeSchema, SearchAttributeValue, TimerCancelCause,
-    WorkflowError, WorkflowFilter, WorkflowId, WorkflowSummary,
-};
+use aion_core::{Event, RunId, SearchAttributeSchema, WorkflowId};
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::task::JoinHandle;
 
@@ -15,12 +11,7 @@ use crate::schedule::ScheduleEvaluator;
 use aion_store::EventStore;
 use aion_store::visibility::VisibilityStore;
 
-use crate::lifecycle::continue_as_new::{self, ContinueAsNewContext, ContinueAsNewRequest};
-use crate::lifecycle::reopen::{self, ReopenWorkflowContext};
-use crate::lifecycle::start::{self, StartWorkflowContext};
-use crate::lifecycle::terminate::{self, TerminateWorkflowContext};
-use crate::lifecycle::transition;
-use crate::registry::{TerminalOutcome, WorkflowHandle};
+use crate::registry::TerminalOutcome;
 use crate::{
     EngineError, Registry, RuntimeHandle, SupervisionTree, WorkflowCatalog,
     signal::SignalResumeHandoff,
@@ -31,22 +22,21 @@ use super::api_schedule::{
 };
 use super::delegated::DelegatedSeams;
 use super::shutdown_gate::ShutdownGate;
-use crate::time::timer_service::live_timers_in_active_segment;
 
 /// Live embedded workflow engine assembled by [`crate::EngineBuilder`].
 pub struct Engine {
-    store: Arc<dyn EventStore>,
-    visibility_store: Arc<dyn VisibilityStore>,
+    pub(super) store: Arc<dyn EventStore>,
+    pub(super) visibility_store: Arc<dyn VisibilityStore>,
     pub(super) schedule_recorder: Arc<AsyncMutex<Recorder>>,
     pub(super) schedule_evaluator: Arc<AsyncMutex<ScheduleEvaluator>>,
     pub(super) schedule_coordinator_workflow_id: WorkflowId,
-    runtime: Arc<RuntimeHandle>,
-    catalog: Arc<WorkflowCatalog>,
-    registry: Arc<Registry>,
-    supervision: Arc<SupervisionTree>,
+    pub(super) runtime: Arc<RuntimeHandle>,
+    pub(super) catalog: Arc<WorkflowCatalog>,
+    pub(super) registry: Arc<Registry>,
+    pub(super) supervision: Arc<SupervisionTree>,
     delegated: DelegatedSeams,
-    signal_handoff: Arc<SignalResumeHandoff>,
-    search_attribute_schema: Arc<SearchAttributeSchema>,
+    pub(super) signal_handoff: Arc<SignalResumeHandoff>,
+    pub(super) search_attribute_schema: Arc<SearchAttributeSchema>,
     pub(super) shutdown_gate: ShutdownGate,
     /// Serializes the deploy mutations (load / route / unload) end-to-end
     /// across BOTH the catalog commit and its store persistence write, so
@@ -60,7 +50,135 @@ pub struct Engine {
     /// outbox rows are held `Pending` while paused. Mutated by pause/resume/cancel
     /// and rebuilt from [`EventStore::list_paused`] at startup/adoption; read by
     /// the outbox dispatcher at claim time.
-    paused_runs: crate::lifecycle::PausedRuns,
+    pub(super) paused_runs: crate::lifecycle::PausedRuns,
+}
+
+impl Drop for Engine {
+    /// Close the engine-task epoch when the engine is released, whether or not
+    /// [`Engine::shutdown`] was ever called or ever succeeded.
+    ///
+    /// Without this, an engine dropped without a successful shutdown left
+    /// completion retries armed and appending terminal events. They could not
+    /// be stopped by `EngineTaskRuntime::drop` either: an attempt in flight
+    /// upgrades its weak reference and holds the `RuntimeHandle` strongly for
+    /// the length of the attempt, so the refcount never reaches zero and that
+    /// backstop is unreachable for precisely the span of the append it exists
+    /// to stop. This drop runs before the engine's own fields are released, so
+    /// it does not depend on that refcount at all.
+    ///
+    /// Uses the non-blocking `EngineTaskRuntime::begin_close` rather than the
+    /// full shutdown:
+    /// a `Drop` may run inside a host async context, where a blocking join
+    /// panics. It therefore **gates and aborts, it does not await** — an
+    /// attempt already past the append boundary is cancelled at its next await
+    /// point. The gate is the load-bearing half: the append boundary reads it
+    /// through `is_epoch_open` and refuses.
+    ///
+    /// # The visibility reconciliation task is aborted here for the same reason
+    ///
+    /// It runs on the HOST runtime, not the engine-task executor, so the epoch
+    /// gate does not reach it — and dropping its `JoinHandle` detaches rather
+    /// than cancels. It is an unbounded loop holding the event store and the
+    /// visibility store, and `reconcile_visibility` WRITES. Left detached, an
+    /// engine released without `shutdown` went on upserting visibility rows for
+    /// the life of the process, against a store a successor engine may already
+    /// own. `Engine::shutdown` aborts it as its first act; this does the same,
+    /// so the two paths agree.
+    ///
+    /// # The live timer wheel is disarmed here for the third time, same reason
+    ///
+    /// 🔴 THIS WAS MISSING, AND IT LEFT A DURABLE WRITER ARMED. Live-wheel
+    /// timer tasks are `tokio::spawn`ed on the HOST runtime
+    /// (`runtime/nif_timer_bridge.rs`), so — exactly like the reconciliation
+    /// loop — the engine-task epoch gate does not reach them. Their body is
+    /// `fire_wheel_timer`, which records a durable `TimerFired`. They hold a
+    /// `Weak<EngineNifState>`, and this drop deliberately does NOT clear the
+    /// seams (see below), so that upgrade succeeds and the fire proceeds.
+    ///
+    /// An engine released without `shutdown` therefore kept a durable-append
+    /// path armed for the life of the process. `Engine::shutdown` names the
+    /// consequence precisely: across a failover, the dead owner's orphaned
+    /// wheel task races the survivor's adoption-armed timer and can record the
+    /// one durable `TimerFired` first, leaving the survivor's resident sleeper
+    /// parked forever. That is the single-writer invariant, and nothing about
+    /// it cares whether the engine was shut down or dropped.
+    ///
+    /// Safe in a `Drop`: `shutdown_timer_wheel` sets a flag and then performs a
+    /// `DashMap` drain plus `abort()` — non-blocking, structurally identical to
+    /// the `visibility_reconciliation_task.abort()` above. The async-context
+    /// objection that justifies `begin_close` over the full shutdown does not
+    /// apply to it.
+    ///
+    /// 🔴 AND IT IS A GATE, NOT ONLY A DRAIN — which it had to become for this
+    /// `Drop` to be worth anything. A drain closes the set of timers armed at
+    /// one instant; this `Drop` deliberately leaves the beamr scheduler and the
+    /// engine seams alive, so a workflow process still runnable could reach
+    /// `sleep` a moment later and arm a fresh durable `TimerFired` writer
+    /// through a wheel this drop believed it had emptied. `arm_timer` now
+    /// refuses once the flag is set (`nif_timer_bridge.rs`, `shut_down`), so
+    /// the guarantee below is a property of the wheel from here on rather than
+    /// of one instant.
+    ///
+    /// # 🔴 WHAT THIS DOES NOT DO, STATED SO NOBODY READS MORE INTO IT
+    ///
+    /// It does not clear the engine NIF seams. Those hold `Arc`s back to the
+    /// `RuntimeHandle`, so until `clear_engine_seams` runs the handle, its
+    /// beamr scheduler and every store clone they reach outlive this drop.
+    /// `Engine::shutdown` clears them only after the scheduler has stopped and
+    /// the child-task and timer-wheel epochs have closed; none of that has
+    /// happened here, and a NIF could still read a slot this drop cleared.
+    /// Trading a leak for a use-after-clear is the wrong direction, so the leak
+    /// stands and is named: **an engine released without `shutdown` still holds
+    /// its runtime.** What this drop guarantees is narrower and is the part
+    /// that matters for durability — **no durable writer this process can still
+    /// reach keeps writing.** There are FOUR, and they are stopped in two
+    /// different ways:
+    ///
+    /// 1. anything armed on the **engine-task epoch** — `begin_close()` below;
+    /// 2. the **visibility reconciliation loop** — `abort()` below;
+    /// 3. the **live timer wheel** — `shutdown_timer_wheel()` below, which
+    ///    gates and drains, *and* refuses at the point of writing, because
+    ///    `abort` cannot stop a task already inside a poll. That refusal is in
+    ///    TWO places, not one, and the second is easy to miss: an ordinary timer
+    ///    is refused at the bridge's append boundary
+    ///    (`nif_timer_bridge.rs`, `record_workflow_event`), but a reserved
+    ///    `deadline:{run}` fire never reaches that boundary — `fire_timer_guarded`
+    ///    demuxes it to the deadline handler first — so it is refused inside
+    ///    [`crate::lifecycle::deadline::WorkflowDeadlineHandler`] instead, off
+    ///    the same latch;
+    /// 4. the **activity completion / retry task**
+    ///    ([`crate::runtime::nif_activity_retry_dispatch::spawn_completion_task`]),
+    ///    which this drop **cannot reach at all**: its `JoinHandle` is
+    ///    discarded, so it is detached on the host runtime and nothing here
+    ///    registers or aborts it. It is stopped instead at its append boundary,
+    ///    which reads `is_epoch_open()` under the recorder lock — so step 1's
+    ///    `begin_close()` is what silences it, one indirection away.
+    ///
+    /// 🔴 THAT LIST IS A CLAIM ABOUT DURABLE WRITERS AND IT IS ONLY AS GOOD AS
+    /// ITS ENUMERATION — three times proven. An earlier revision named two and
+    /// was wrong: the timer wheel was the third, and it was armed. The revision
+    /// after that named three and was also wrong: the completion task was the
+    /// fourth, it had no epoch check of any kind, and it sleeps an
+    /// SDK-declared backoff with no ceiling between attempts. And the revision
+    /// after THAT — the one that added the wheel's append-boundary refusal —
+    /// wrote entry 3 as though that boundary covered the whole wheel, when the
+    /// deadline path is demuxed away before it and had no refusal at all: an
+    /// engine released without `shutdown` could still record a durable
+    /// `WorkflowTimedOut` and tear a run down. **The enumeration was right and
+    /// the mechanism named under it was not**, which is the harder failure to
+    /// see, because the list looked complete. The way to check it is to
+    /// enumerate what this process can still append with — grep the crate for
+    /// every construction of a `Recorder` handle and every detached `spawn` —
+    /// and then, for each entry, follow the ACTUAL route from the wake to the
+    /// append and confirm the named gate sits on it. Not to re-read this
+    /// sentence and find it plausible.
+    fn drop(&mut self) {
+        if let Some(task) = &self.visibility_reconciliation_task {
+            task.abort();
+        }
+        self.runtime.nif_state().shutdown_timer_wheel();
+        self.runtime.engine_tasks().begin_close();
+    }
 }
 
 /// Components required to construct an [`Engine`].
@@ -206,99 +324,6 @@ impl Engine {
         Arc::clone(&self.signal_handoff)
     }
 
-    /// Start a loaded workflow type as a new BEAM process.
-    ///
-    /// `search_attributes` are validated against the engine's configured
-    /// [`SearchAttributeSchema`] and recorded atomically with the
-    /// `WorkflowStarted` event, so visibility metadata can never be lost to a
-    /// crash between start and a later attribute update.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`EngineError::ShuttingDown`] after shutdown begins, and
-    /// [`EngineError::Durability`] when a search attribute is unregistered or
-    /// mistyped (nothing is appended and no process is spawned). Otherwise
-    /// delegates to the start lifecycle transition and returns its typed errors.
-    pub async fn start_workflow(
-        &self,
-        workflow_type: &str,
-        input: Payload,
-        search_attributes: HashMap<String, SearchAttributeValue>,
-        namespace: String,
-    ) -> Result<WorkflowHandle, EngineError> {
-        self.start_workflow_with_id(
-            workflow_type,
-            input,
-            search_attributes,
-            namespace,
-            None,
-            None,
-        )
-        .await
-    }
-
-    /// Start a loaded workflow type, optionally with a caller-chosen
-    /// `workflow_id` and/or R-4 steered-start `routing_key`.
-    ///
-    /// The request-routing edge supplies `workflow_id` to *place* a new start on
-    /// a shard this node owns: the R-1 unsteered-start remint (any locally-owned
-    /// shard) or, for a steered start, an id the edge derived on the
-    /// `routing_key`'s shard before deciding to run locally. So a `start` whose
-    /// id would otherwise hash to a non-owned shard never fences. When
-    /// `workflow_id` is `None` this is identical to [`Self::start_workflow`]: the
-    /// lifecycle mints a fresh `WorkflowId`, so the default single-node path is
-    /// unchanged.
-    ///
-    /// `routing_key` is the caller-chosen steered-start key recorded on the start
-    /// options. Shard derivation for the cluster path is performed at the edge
-    /// (which holds the concrete cluster store); here it is threaded through for
-    /// API completeness and direct callers.
-    ///
-    /// # Errors
-    ///
-    /// Identical to [`Self::start_workflow`]. A supplied `workflow_id` is treated
-    /// as a fresh execution; the caller is responsible for choosing an unused id.
-    pub async fn start_workflow_with_id(
-        &self,
-        workflow_type: &str,
-        input: Payload,
-        search_attributes: HashMap<String, SearchAttributeValue>,
-        namespace: String,
-        workflow_id: Option<WorkflowId>,
-        routing_key: Option<String>,
-    ) -> Result<WorkflowHandle, EngineError> {
-        let operation = self.shutdown_gate.begin_start()?;
-        let result = start::start_workflow_with_options(
-            StartWorkflowContext {
-                store: self.store(),
-                visibility_store: self.visibility_store(),
-                catalog: Arc::clone(&self.catalog),
-                runtime: Arc::clone(&self.runtime),
-                supervision: Arc::clone(&self.supervision),
-                registry: Arc::clone(&self.registry),
-                signal_handoff: Some(self.signal_handoff()),
-                search_attribute_schema: Arc::clone(&self.search_attribute_schema),
-                monitor_tokio_handle: tokio::runtime::Handle::current(),
-            },
-            workflow_type,
-            input,
-            start::StartWorkflowOptions {
-                namespace: Some(namespace),
-                search_attributes,
-                workflow_id,
-                routing_key,
-                // THE start boundary: every transport (HTTP, gRPC, WebSocket,
-                // CLI, in-process client) reaches the engine through here, and
-                // this is the only start path whose input came from outside.
-                input_admission: start::InputAdmission::Declared,
-                ..start::StartWorkflowOptions::default()
-            },
-        )
-        .await;
-        drop(operation);
-        result
-    }
-
     /// Absorb a dead peer's distribution shards into this LIVE engine and resume
     /// their orphaned workflows — the SS-5 failover entry point.
     ///
@@ -428,406 +453,6 @@ impl Engine {
             .await
     }
 
-    /// Resume a suspended workflow run and flush deferred signals through its mailbox.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`EngineError::WorkflowNotFound`] when the `(workflow, run)` pair
-    /// is absent, or registry errors from the residency transition. Deferred
-    /// delivery failures are logged and dropped because signals are already durable.
-    pub fn resume_workflow(
-        &self,
-        id: &WorkflowId,
-        run: &RunId,
-    ) -> Result<WorkflowHandle, EngineError> {
-        let handle = transition::resume(self.registry(), id, run)?;
-        if let Err(error) = self.signal_handoff.deliver_deferred(self, id) {
-            tracing::warn!(
-                workflow_id = %id,
-                run_id = %run,
-                error = %error,
-                "failed to flush deferred signals after workflow resume"
-            );
-        }
-        Ok(handle)
-    }
-
-    /// Cancel a live workflow run by killing its runtime process.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`EngineError::ShuttingDown`] after shutdown begins, and
-    /// [`EngineError::WorkflowNotFound`] when the `(workflow, run)` pair
-    /// is not live. Other typed errors come from the cancel transition.
-    pub async fn cancel(
-        &self,
-        id: &WorkflowId,
-        run: &RunId,
-        reason: impl Into<String>,
-    ) -> Result<(), EngineError> {
-        let operation = self.shutdown_gate.begin_operation()?;
-        // Tear down the run's in-flight durable timers BEFORE the cancel
-        // transition. Cancellation that leaves a live timer behind orphans it:
-        // recovery later tries to fire it against a workflow that no longer
-        // exists. See `cancel_inflight_timers` for the ordering constraints.
-        self.cancel_inflight_timers(id).await;
-        let result = terminate::cancel(
-            TerminateWorkflowContext {
-                runtime: &self.runtime,
-                store: self.store(),
-                visibility_store: self.visibility_store(),
-                registry: &self.registry,
-                catalog: &self.catalog,
-            },
-            id,
-            run,
-            reason,
-        )
-        .await;
-        // Cancel of a Paused run must release the dispatch hold so its held rows
-        // are not leaked forever (#204, GATE-4). Removal is unconditional and
-        // idempotent: a non-paused run is simply absent from the set.
-        if result.is_ok() {
-            self.paused_runs.remove(id);
-        }
-        drop(operation);
-        result
-    }
-
-    /// Cancel the workflow's in-flight durable timers, routed through the
-    /// production [`crate::time::TimerService`] so each records a
-    /// `TimerCancelled` (and disarms the resident wheel) under the service's
-    /// terminal-update guard. Once `TimerCancelled` is in history the timer is
-    /// dead everywhere — a later wheel or recovery fire no-ops on the liveness
-    /// check — so a cancelled workflow no longer leaves orphaned timers that
-    /// brick startup recovery.
-    ///
-    /// Ordering matters and is the reason this lives in `Engine::cancel` rather
-    /// than inside `terminate::cancel`:
-    /// * It runs **before** `terminate::cancel`, while the workflow is still in
-    ///   the registry (before `terminate::cancel`'s final `registry.remove`), so
-    ///   the timer bridge's registry lookup succeeds. `UnknownWorkflow` is raised
-    ///   only when the workflow is absent from the registry entirely — a
-    ///   suspended (non-resident-but-registered) workflow is fine: its wheel
-    ///   disarm is skipped but `TimerCancelled` is still recorded.
-    /// * It runs **outside** `terminate::cancel`'s recorder lock —
-    ///   `TimerService::cancel` re-acquires that same per-handle lock to record,
-    ///   and the tokio mutex is not reentrant.
-    ///
-    /// Best-effort by design: every failure path here is backstopped by
-    /// `recover_due`'s orphaned-timer skip (see [`crate::time`]'s recovery
-    /// module), so it is logged but never fails the cancel. The only residual
-    /// orphan window — a timer armed in the instant between enumeration and the
-    /// process kill — is absorbed by that same recovery skip.
-    async fn cancel_inflight_timers(&self, id: &WorkflowId) {
-        let timer_service = match crate::runtime::nif_timer_bridge::installed_timer_service(
-            self.runtime.nif_state(),
-        ) {
-            Ok(service) => service,
-            Err(error) => {
-                tracing::warn!(
-                    %error,
-                    workflow_id = %id,
-                    "timer service unavailable during cancel; any in-flight timers will be skipped by recovery"
-                );
-                return;
-            }
-        };
-        let history = match self.store.read_history(id).await {
-            Ok(history) => history,
-            Err(error) => {
-                tracing::warn!(
-                    %error,
-                    workflow_id = %id,
-                    "could not read history for timer cleanup during cancel; any in-flight timers will be skipped by recovery"
-                );
-                return;
-            }
-        };
-        for timer_id in live_timers_in_active_segment(&history) {
-            // A reserved workflow-deadline timer is retired PERMANENTLY
-            // (`WorkflowIntent`): reopen must never resurrect it (a
-            // `CancelTeardown` deadline would be re-armed at its original
-            // `fire_at` by `rearmable_timers`). Every other in-flight timer is
-            // ordinary cancel-teardown bookkeeping that reopen re-arms.
-            let cause = if crate::time::is_deadline_timer(&timer_id) {
-                TimerCancelCause::WorkflowIntent
-            } else {
-                TimerCancelCause::CancelTeardown
-            };
-            if let Err(error) = timer_service
-                .cancel(id.clone(), timer_id.clone(), cause)
-                .await
-            {
-                tracing::warn!(
-                    %error,
-                    workflow_id = %id,
-                    %timer_id,
-                    "failed to cancel in-flight timer during workflow cancel; recovery will skip it if orphaned"
-                );
-            }
-        }
-    }
-
-    /// Continue a live workflow run as a new run under the same workflow id.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`EngineError::ShuttingDown`] after shutdown begins, and
-    /// [`EngineError::WorkflowNotFound`] when the `(workflow, run)` pair
-    /// is not live. Other typed errors come from the continue-as-new transition.
-    pub async fn continue_as_new(
-        &self,
-        id: &WorkflowId,
-        run: &RunId,
-        input: Payload,
-        workflow_type: Option<String>,
-    ) -> Result<WorkflowHandle, EngineError> {
-        let operation = self.shutdown_gate.begin_operation()?;
-        let result = continue_as_new::continue_as_new(
-            ContinueAsNewContext {
-                store: self.store(),
-                visibility_store: Arc::clone(&self.visibility_store),
-                catalog: Arc::clone(&self.catalog),
-                runtime: &self.runtime,
-                supervision: Arc::clone(&self.supervision),
-                registry: &self.registry,
-                search_attribute_schema: Arc::clone(&self.search_attribute_schema),
-            },
-            id,
-            run,
-            ContinueAsNewRequest {
-                input,
-                workflow_type,
-            },
-        )
-        .await;
-        drop(operation);
-        result
-    }
-
-    /// Reopen a terminal-`Failed` or terminal-`Cancelled` run and re-drive it.
-    ///
-    /// Appends a single `WorkflowReopened` that supersedes the run's terminal
-    /// event (returning it to Running), then respawns and re-drives the SAME run
-    /// through the existing recovery path so replay returns every recorded result
-    /// and only the reopened / in-flight step re-dispatches live, in the
-    /// workflow's own namespace. Takes only a workflow id and run; the reopened
-    /// steps and the namespace are derived from history.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`EngineError::ShuttingDown`] after shutdown begins,
-    /// [`EngineError::WorkflowNotFound`] when no history exists for the pair, and
-    /// [`EngineError::InvalidState`] when the run is not a reopenable terminal
-    /// (not terminal, terminal for Completed/`TimedOut`, or already Running).
-    pub async fn reopen_workflow(
-        &self,
-        id: &WorkflowId,
-        run: &RunId,
-    ) -> Result<WorkflowHandle, EngineError> {
-        let operation = self.shutdown_gate.begin_operation()?;
-        let result = reopen::reopen(
-            ReopenWorkflowContext {
-                store: self.store(),
-                visibility_store: Arc::clone(&self.visibility_store),
-                catalog: Arc::clone(&self.catalog),
-                runtime: &self.runtime,
-                supervision: Arc::clone(&self.supervision),
-                registry: &self.registry,
-                search_attribute_schema: Arc::clone(&self.search_attribute_schema),
-            },
-            id,
-            run,
-        )
-        .await;
-        drop(operation);
-        result
-    }
-
-    /// The shared dispatch-hold set for durable pause (#204).
-    ///
-    /// Handed to the outbox dispatcher at wiring time so a held (paused) run's
-    /// rows are never claimed, and rebuilt from [`EventStore::list_paused`] at
-    /// startup/adoption.
-    #[must_use]
-    pub fn paused_runs(&self) -> crate::lifecycle::PausedRuns {
-        self.paused_runs.clone()
-    }
-
-    /// Rebuild the dispatch-hold set from durable state (startup / shard
-    /// adoption). A run projecting `Paused` is excluded from `list_active`
-    /// respawn for free; this repopulates the hold so its pre-pause outbox rows
-    /// stay unclaimed after a restart.
-    ///
-    /// # Errors
-    ///
-    /// Returns store errors from the `list_paused` scan.
-    pub async fn rebuild_paused_runs(&self) -> Result<(), EngineError> {
-        let paused = self.store.list_paused().await?;
-        self.paused_runs.replace_all(paused);
-        Ok(())
-    }
-
-    fn pause_context(&self) -> crate::lifecycle::PauseWorkflowContext<'_> {
-        crate::lifecycle::PauseWorkflowContext {
-            store: self.store(),
-            visibility_store: Arc::clone(&self.visibility_store),
-            catalog: Arc::clone(&self.catalog),
-            runtime: &self.runtime,
-            supervision: Arc::clone(&self.supervision),
-            registry: &self.registry,
-            search_attribute_schema: Arc::clone(&self.search_attribute_schema),
-            paused_runs: self.paused_runs.clone(),
-        }
-    }
-
-    /// Pause a live `Running` run, durably holding NEW activity dispatch (#204).
-    ///
-    /// Appends `WorkflowPaused` through the resident handle's own recorder and
-    /// inserts the run into the dispatch-hold set; the resident process stays
-    /// alive and keeps recording (timer fires, signals, drained completions).
-    ///
-    /// # Errors
-    ///
-    /// Returns [`EngineError::ShuttingDown`] after shutdown begins,
-    /// [`EngineError::WorkflowNotFound`] when the pair has no history / no
-    /// resident handle, and [`EngineError::InvalidState`] — naming the actual
-    /// status — when the run is not `Running`.
-    pub async fn pause_workflow(
-        &self,
-        id: &WorkflowId,
-        run: &RunId,
-        reason: Option<String>,
-        operator: Option<String>,
-    ) -> Result<WorkflowHandle, EngineError> {
-        let operation = self.shutdown_gate.begin_operation()?;
-        let result =
-            crate::lifecycle::pause::pause(&self.pause_context(), id, run, reason, operator).await;
-        drop(operation);
-        result
-    }
-
-    /// Resume a `Paused` run, releasing the dispatch hold (#204).
-    ///
-    /// Named `resume_paused_workflow` to avoid colliding with the existing
-    /// residency-flip [`Engine::resume_workflow`]. Appends `WorkflowResumed`,
-    /// removes the run from the dispatch-hold set, and — when the run crashed
-    /// while paused and is no longer resident — respawns it via the reopen
-    /// recovery path, re-arming unfired timers. The ordinary sweep then claims
-    /// the released rows.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`EngineError::ShuttingDown`] after shutdown begins,
-    /// [`EngineError::WorkflowNotFound`] when the pair has no history, and
-    /// [`EngineError::InvalidState`] — naming the actual status — when the run is
-    /// not `Paused`.
-    pub async fn resume_paused_workflow(
-        &self,
-        id: &WorkflowId,
-        run: &RunId,
-        operator: Option<String>,
-    ) -> Result<WorkflowHandle, EngineError> {
-        let operation = self.shutdown_gate.begin_operation()?;
-        let result =
-            crate::lifecycle::pause::resume(&self.pause_context(), id, run, operator).await;
-        drop(operation);
-        result
-    }
-
-    /// Await a workflow run's terminal result.
-    ///
-    /// Already-terminal histories return immediately. Live workflows await their
-    /// completion notifier. Unknown workflow/run pairs return not found.
-    ///
-    /// # Errors
-    ///
-    /// Returns store, registry, or runtime channel errors as typed [`EngineError`]
-    /// variants, or [`EngineError::WorkflowNotFound`] when no live handle or
-    /// terminal history exists for the requested pair.
-    pub async fn result(
-        &self,
-        id: &WorkflowId,
-        run: &RunId,
-    ) -> Result<Result<Payload, WorkflowError>, EngineError> {
-        let history = self.store.read_history(id).await?;
-        if let Some(outcome) = terminal_outcome_from_history(&history) {
-            return Ok(outcome_to_result(outcome));
-        }
-
-        let handle = match self.registry.get(id, run)? {
-            Some(handle) => handle,
-            // Registration birth window: the run is durably started but its
-            // handle insert has not landed yet (see
-            // `Engine::handle_after_birth_window`).
-            None => self
-                .handle_after_birth_window(id, run, &history)
-                .await?
-                .ok_or_else(|| workflow_not_found(id, run))?,
-        };
-        let mut receiver = handle.completion().subscribe();
-        loop {
-            if let Some(outcome) = receiver.borrow().clone() {
-                return Ok(outcome_to_result(outcome));
-            }
-            if receiver.changed().await.is_err() {
-                if let Some(outcome) =
-                    terminal_outcome_from_history(&self.store.read_history(id).await?)
-                {
-                    return Ok(outcome_to_result(outcome));
-                }
-                return Err(EngineError::Runtime {
-                    reason: format!(
-                        "completion channel closed before workflow `{id}/{run}` finished"
-                    ),
-                });
-            }
-        }
-    }
-
-    /// List live and terminal workflow summaries matching `filter`.
-    ///
-    /// Store projections are authoritative; live registry entries are projected
-    /// from durable history before being merged and deduplicated.
-    ///
-    /// # Errors
-    ///
-    /// Returns typed store or registry errors when visibility data cannot be read.
-    pub async fn list_workflows(
-        &self,
-        filter: WorkflowFilter,
-    ) -> Result<Vec<WorkflowSummary>, EngineError> {
-        let mut summaries = self
-            .store
-            .query(&filter)
-            .await?
-            .into_iter()
-            .map(|summary| (summary.workflow_id.clone(), summary))
-            .collect::<HashMap<_, _>>();
-
-        for handle in self.registry.list()? {
-            let history = self.store.read_history(handle.workflow_id()).await?;
-            self.registry
-                .reconcile(handle.workflow_id(), handle.run_id(), &history)?;
-            if let Some(summary) = WorkflowSummary::from_history(&history) {
-                if filter.matches(&summary) {
-                    summaries.insert(summary.workflow_id.clone(), summary);
-                }
-            }
-        }
-
-        let mut summaries = summaries.into_values().collect::<Vec<_>>();
-        summaries.sort_by(|left, right| {
-            left.started_at.cmp(&right.started_at).then_with(|| {
-                left.workflow_id
-                    .to_string()
-                    .cmp(&right.workflow_id.to_string())
-            })
-        });
-        Ok(summaries)
-    }
-
     /// Gracefully stop accepting new starts and shut down the embedded runtime.
     ///
     /// # Errors
@@ -837,16 +462,128 @@ impl Engine {
         if let Some(task) = &self.visibility_reconciliation_task {
             task.abort();
         }
-        self.shutdown_gate.close_and_wait()?;
-        // Epoch close for engine-side child tasks (F4): the scheduler stops
-        // first (so no NIF can arm a new watcher mid-shutdown), then every
-        // watcher and spawn-recovery task is aborted AND awaited to
-        // quiescence — a task still mid-record after shutdown could
-        // double-write a parent history a successor engine over the same
-        // store also records into. Arming is additionally gated inside the
-        // task registry the moment shutdown begins.
-        self.runtime.shutdown()?;
-        self.runtime.nif_state().shutdown_child_tasks();
+        // 🔴 THE EPOCH CLOSES FIRST, BEFORE ANY WAIT.
+        //
+        // The first cut put the unconditional close in `RuntimeHandle::shutdown`
+        // — one level BELOW the call the shipped server actually makes — and
+        // left this function short-circuiting above it. Two ways that lost the
+        // property it was written to guarantee:
+        //
+        //   1. `close_and_wait` returns `Err` on registry poison, so `?` here
+        //      returned before the epoch was ever gated and completion retries
+        //      stayed armed.
+        //   2. `close_and_wait` is a condvar wait with NO timeout. A lifecycle
+        //      operation stuck on a degraded store — precisely the condition
+        //      that arms completion retries in the first place — blocks this
+        //      function indefinitely, and the operator reasonably concludes the
+        //      node is wedged and brings up a successor while this process is
+        //      still appending terminals.
+        //
+        // Gating costs nothing, cannot fail, and is idempotent. Doing it first
+        // means no path through this function leaves retries armed. Everything
+        // after is teardown that still needs to run.
+        //
+        // 🔴 WHAT THIS ORDERING COSTS, STATED WHERE THE ORDERING IS CHOSEN.
+        // Process-exit callbacks are still admitted for the whole span between
+        // this line and `process_exits.begin_shutdown()` below, and the
+        // completion path refuses every one of them because the epoch is
+        // already closed. A run exiting in that window records no terminal and
+        // stays `Running` in the store, with one `error!` line naming it. The
+        // span is UNBOUNDED — `close_and_wait` is a condvar wait with no
+        // timeout — and it is longest under exactly the degraded-store
+        // condition the completion retries exist for. That window is the price
+        // of the two properties above and is argued in full at the refusal site
+        // (`lifecycle::completion`, at `refuse_if_epoch_closed`); it is
+        // repeated here because a reader deciding to move this line would
+        // otherwise not know a cost had been accepted.
+        self.runtime.engine_tasks().begin_close();
+        // Every step below runs on every path, and the FIRST error is returned
+        // at the end. A `?` here would skip the timer-wheel shutdown and the
+        // seam clearing, whose consequences are spelled out at their own call
+        // sites — an orphaned wheel task racing a survivor's adoption timer, and
+        // a durable backend's writer lock held past shutdown. Neither is
+        // something to trade for reporting an earlier error sooner.
+        //
+        // 🔴 THE SEAM CLEARING IS THE HALF WITH NO BACKSTOP, AND THAT IS THE
+        // WHOLE REASON. An earlier revision said `Drop for Engine` "backstops
+        // neither", which stopped being true in this same file when `Drop`
+        // gained `shutdown_timer_wheel` (see it above) — so the wheel half IS
+        // backstopped, and a reader checking only that half would conclude the
+        // `?` costs nothing. It does: `clear_engine_seams` runs from
+        // `Engine::shutdown` and NOWHERE else, by design — it may only run once
+        // the scheduler has stopped and both epochs are closed, which `Drop`
+        // cannot establish. Skip it and the `RuntimeHandle` ↔ `EngineNifState`
+        // cycle is never broken, so every store clone reached through the seams
+        // outlives the process's interest in them and a durable backend's
+        // cross-process writer lock is held until exit.
+        //
+        // 🔴 THE THIRD COST, STATED BECAUSE EVERY OTHER ONE IN THIS FUNCTION IS.
+        // `ShutdownGate::close_and_wait` returns `Err` on exactly one condition
+        // — mutex poison — and continuing past it means the gate's DRAIN
+        // guarantee is skipped, not merely its error deferred: a lifecycle
+        // operation admitted before the poison may still be in flight when
+        // `runtime.shutdown()` stops the scheduler and `clear_engine_seams()`
+        // nulls the seam slots. That is not a memory hazard (the slots are
+        // `Option`-shaped and a NIF reading a cleared one gets a typed error),
+        // and no NEW operation can be admitted either, because `begin_start`
+        // and `begin_operation` share the same poisoned `state()`. What is lost
+        // is the promise that nothing was still running when teardown began.
+        // Accepted for the same reason as the rest: the alternative is skipping
+        // the seam clearing, which is unbacked-up and permanent.
+        let mut first_error: Option<EngineError> = None;
+        // Scoped so the closure's unique borrow of `first_error` visibly ends
+        // before the value is read. (`drop(closure)` would end it just as
+        // surely — this crate is edition 2024, and under NLL a borrow ends at
+        // its last use — so this is a readability choice, not a soundness one.
+        // An earlier revision of this comment argued the opposite and was
+        // describing pre-NLL lexical scoping.)
+        {
+            // 🔴 THE SECOND ERROR IS REPORTED, NOT DISCARDED. Only one
+            // `EngineError` can be returned, but accumulate-and-continue means
+            // more than one step can fail — and at HEAD that could not happen
+            // at all, because `?` meant a later step never ran. Keeping only
+            // the first and dropping the rest would trade a skipped teardown
+            // for a swallowed failure, which is the same defect wearing the
+            // other hat: an operator seeing `RegistryPoisoned` would have no
+            // signal that the runtime teardown ALSO failed. Each subsequent
+            // failure is emitted at `error` level with the position that made
+            // it subsequent, so the log carries what the return value cannot.
+            let mut failed_steps = 0_u32;
+            let mut keep = |step: &'static str, result: Result<(), EngineError>| {
+                if let Err(error) = result {
+                    failed_steps += 1;
+                    if first_error.is_none() {
+                        first_error = Some(error);
+                    } else {
+                        tracing::error!(
+                            step,
+                            failed_steps,
+                            error = %error,
+                            "a further engine-shutdown step failed after an earlier one; only \
+                             the first failure can be returned, so this one is reported here"
+                        );
+                    }
+                }
+            };
+            keep(
+                "shutdown_gate.close_and_wait",
+                self.shutdown_gate.close_and_wait(),
+            );
+            // Epoch close for engine background tasks (F4): every watcher,
+            // spawn-recovery task and process-exit completion retry is aborted AND
+            // awaited to quiescence — a task still mid-record after shutdown could
+            // double-write a history a successor engine over the same store also
+            // records into. Arming is additionally gated inside the task registry
+            // the moment shutdown begins.
+            //
+            // `runtime.shutdown()` performs that close itself, because the
+            // completion retry is a core lifecycle path and its epoch close must not
+            // depend on whether an optional bridge was installed. The bridge call
+            // that follows is idempotent and kept only so an installed bridge
+            // participates explicitly.
+            keep("runtime.shutdown", self.runtime.shutdown());
+        }
+        self.runtime.nif_state().shutdown_engine_tasks();
         // Abort armed live-wheel timer tasks (#119): they run on the tokio
         // runtime, not the beamr scheduler, so `runtime.shutdown()` does not
         // reach them. A timer this engine armed must NOT fire after the engine
@@ -864,7 +601,10 @@ impl Engine {
         // Safe now: the scheduler has stopped and the child-task and timer-wheel
         // epochs have closed, so no NIF or background task can still read a slot.
         self.runtime.nif_state().clear_engine_seams();
-        Ok(())
+        match first_error {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
     }
 }
 
@@ -891,25 +631,6 @@ pub(crate) fn terminal_outcome_from_history(events: &[Event]) -> Option<Terminal
     }
 }
 
-fn outcome_to_result(outcome: TerminalOutcome) -> Result<Payload, WorkflowError> {
-    match outcome {
-        TerminalOutcome::Completed(payload) => Ok(payload),
-        TerminalOutcome::Failed(error) => Err(error),
-        TerminalOutcome::Cancelled(reason) => Err(WorkflowError {
-            message: format!("workflow cancelled: {reason}"),
-            details: None,
-        }),
-        TerminalOutcome::TimedOut(timeout) => Err(WorkflowError {
-            message: format!("workflow timed out: {timeout}"),
-            details: None,
-        }),
-        TerminalOutcome::ContinuedAsNew { parent_run_id, .. } => Err(WorkflowError {
-            message: format!("workflow continued as new from run {parent_run_id}"),
-            details: None,
-        }),
-    }
-}
-
 pub(crate) fn workflow_not_found(id: &WorkflowId, run: &RunId) -> EngineError {
     EngineError::WorkflowNotFound {
         workflow_type: format!("{id}/{run}"),
@@ -918,7 +639,6 @@ pub(crate) fn workflow_not_found(id: &WorkflowId, run: &RunId) -> EngineError {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -931,11 +651,14 @@ mod tests {
     use aion_store::{EventStore, InMemoryStore, ReadableEventStore};
     use serde_json::json;
 
-    use super::{DelegatedSeams, Engine, EngineComponents, live_timers_in_active_segment};
+    use std::collections::HashMap;
+
+    use super::{DelegatedSeams, Engine, EngineComponents};
     use crate::durability::Recorder;
     use crate::lifecycle::terminate::{self, TerminateWorkflowContext};
     use crate::registry::{CompletionNotifier, HandleResidency, WorkflowHandleParts};
     use crate::time::TimerRecovery;
+    use crate::time::timer_service::live_timers_in_active_segment;
     use crate::{
         EngineError, Registry, RuntimeConfig, RuntimeHandle, SupervisionTree, WorkflowCatalog,
         WorkflowHandle,
@@ -1511,6 +1234,163 @@ mod tests {
 
         assert!(matches!(result, Err(EngineError::WorkflowNotFound { .. })));
         engine.shutdown()?;
+        Ok(())
+    }
+
+    /// F5: `Engine::shutdown`'s SECOND failing step must be reported.
+    ///
+    /// Its two fallible steps both go through `keep`, which returns the first
+    /// and emits every later one at `error` level. That `else` arm IS the fix
+    /// for the swallowed-second-error defect, and nothing asserted on it: the
+    /// sibling below arms only the drain, which fails the SECOND step, so
+    /// `first_error` is still `None` when `keep` sees it and the `else` is
+    /// never taken.
+    ///
+    /// Reaching it needs BOTH steps to fail, which is why `ShutdownGate` gained
+    /// its own injection seam. The gate's only real failure is mutex poison, so
+    /// the injected error is `RegistryPoisoned` — a fault wearing the label its
+    /// injection point can actually issue.
+    ///
+    /// Killing mutation: replace the `else` body inside `keep` with `{}`. No
+    /// `error!` is emitted and the capture assertion fails.
+    #[tokio::test]
+    async fn a_second_failing_engine_shutdown_step_is_reported_not_swallowed()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+        let engine = engine_with_loaded_workflow(store, "checkout", "checkout_deployed")?;
+
+        // Both steps fail: the gate first (so it is the returned error), the
+        // runtime drain second (so it lands in the `else`).
+        engine.shutdown_gate.force_close_failure();
+        engine.runtime().force_process_exit_drain_failure();
+
+        let (captured, subscriber) = crate::log_capture::LogCapture::new()?;
+        let returned = {
+            let _installed = tracing::subscriber::set_default(subscriber);
+            engine.shutdown()
+        };
+
+        let error = returned
+            .err()
+            .ok_or("both steps failed, so shutdown must not return Ok")?;
+        assert!(
+            matches!(error, EngineError::RegistryPoisoned),
+            "control: the FIRST failure is the one returned, and it is the gate's: {error:?}"
+        );
+
+        let reported: Vec<_> = captured
+            .at_level("ERROR")?
+            .into_iter()
+            .filter(|event| event.mentions("a further engine-shutdown step failed"))
+            .collect();
+        assert!(
+            !reported.is_empty(),
+            "the second failing step must be reported — a teardown failure with no trace at all \
+             is a swallowed Result, which this codebase forbids outright"
+        );
+        assert!(
+            reported
+                .iter()
+                .any(|event| event.field("step") == Some("runtime.shutdown")),
+            "the report must NAME the step, or the operator cannot tell which half failed: \
+             {reported:?}"
+        );
+        Ok(())
+    }
+
+    /// 🔴 A FAILING TEARDOWN STEP DOES NOT CANCEL THE STEPS AFTER IT.
+    ///
+    /// `shutdown` used to be a chain of `?`, so the first step that failed
+    /// returned and every later step — the runtime drain, and the three
+    /// `nif_state` teardowns that release the engine's installed seams — simply
+    /// never ran. The process then exited with a catalog still installed and an
+    /// engine reference still reachable from the NIF table: the exact leak the
+    /// function exists to prevent, produced by the error path of the function
+    /// itself.
+    ///
+    /// The reason this went unmeasured is that no drain failure in here can be
+    /// produced on demand, so no test ever took the error path at all.
+    ///
+    /// 🔴 WHY THAT SET IS UNREACHABLE IS STATED IN EXACTLY ONE PLACE, AND IT IS
+    /// NOT HERE. See [`crate::RuntimeHandle::shutdown`].
+    ///
+    /// This comment has now been wrong twice about it, in two different ways —
+    /// first "every one is timeout-shaped", then "the shared PRECONDITION: each
+    /// needs a worker thread or a beamr publisher in a state no test can
+    /// arrange". The second is false for `ProcessExitOutcomeMissingAfterEvent`,
+    /// which is a beamr contract breach surfaced through `registry.process_event`
+    /// and needs neither. It also reasons from a shared property, which is the
+    /// move `RuntimeHandle::shutdown` explicitly forbids — the set is OPEN, so
+    /// no property shared by today's members is safe to state about it.
+    ///
+    /// Two wrong answers in two revisions is what a rule known in two places
+    /// does, and the cure is subtraction rather than a third attempt: the
+    /// characterisation lives at the one site that owns the drain, and this one
+    /// points at it. All that is needed locally is that
+    /// `force_process_exit_drain_failure` is the named `#[cfg(test)]` seam that
+    /// makes the path reachable at all, and that it cannot reach a shipped
+    /// binary.
+    ///
+    /// **The decisive observable is (c), not (a).** That the error still reaches
+    /// the caller is true of the old chain too — it is what the old chain did
+    /// *instead of* finishing. Only `installed_workflow_catalog() == None` can
+    /// tell "the later steps ran" from "the function returned early", because
+    /// `clear_engine_seams` is ordered after the failing step. A test asserting
+    /// only the error would pass against the defect.
+    #[tokio::test]
+    async fn a_failing_teardown_step_does_not_skip_the_ones_after_it()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+        let engine = engine_with_loaded_workflow(store, "checkout", "checkout_deployed")?;
+
+        // Installed explicitly, because `engine_with_loaded_workflow` calls
+        // `Engine::new` directly and only `EngineBuilder::build` installs the NIF
+        // seams. Without this the assertion below would hold on an engine that
+        // never had a catalog to clear — a pass measuring nothing. The control
+        // that follows is what caught exactly that on the first cut of this test.
+        engine
+            .runtime()
+            .nif_state()
+            .set_workflow_catalog(Arc::clone(engine.workflow_catalog()));
+
+        // Control: the seam under (c) is genuinely installed before the call, so
+        // a `None` afterwards is the teardown's doing and not the absence of
+        // anything to tear down.
+        assert!(
+            engine
+                .runtime()
+                .nif_state()
+                .installed_workflow_catalog()
+                .is_some(),
+            "control: the catalog must be installed before shutdown, or asserting it is \
+             cleared afterwards measures nothing"
+        );
+
+        engine.runtime().force_process_exit_drain_failure();
+        let error = engine
+            .shutdown()
+            .err()
+            .ok_or("an injected drain failure must be reported, not swallowed")?;
+
+        assert!(
+            matches!(error, EngineError::ProcessExitRegistryPoisoned),
+            "(a) the failure must reach the caller as itself: {error:?}"
+        );
+        assert!(
+            !engine.runtime().engine_tasks().is_epoch_open(),
+            "(b) the epoch must be closed — it is closed FIRST, so a shutdown that failed \
+             later must still leave it shut"
+        );
+        assert!(
+            engine
+                .runtime()
+                .nif_state()
+                .installed_workflow_catalog()
+                .is_none(),
+            "(c) THE DECISIVE ONE: `clear_engine_seams` is ordered AFTER the step that \
+             failed, so a still-installed catalog means the failure returned early and \
+             the engine leaked its seams"
+        );
         Ok(())
     }
 
