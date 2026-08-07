@@ -172,7 +172,9 @@ export function AssistantSessionView({ namespace, workflowId }: AssistantSession
       return;
     }
     if (mode === 'awaiting') {
-      void signal.submit(ASSISTANT_CONTINUE_SIGNAL, assistantContinuePayload(message)).catch(() => {});
+      void signal
+        .submit(ASSISTANT_CONTINUE_SIGNAL, assistantContinuePayload(message))
+        .catch(() => {});
     }
   };
 

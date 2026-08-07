@@ -19,7 +19,10 @@ import { assistantContinuePayload, assistantEndPayload } from '../lib/contract';
  */
 
 /** The workflow document that OWNS this contract. */
-const ASSISTANT_AWL = join(import.meta.dir, '../../../../../../examples/assistant/awl/assistant.awl');
+const ASSISTANT_AWL = join(
+  import.meta.dir,
+  '../../../../../../examples/assistant/awl/assistant.awl'
+);
 
 /** Fields of an AWL record type, and whether each one may be omitted. */
 type Field = { name: string; optional: boolean };
@@ -66,7 +69,10 @@ function readRecordType(source: string, typeName: string): Field[] {
 
 const source = readFileSync(ASSISTANT_AWL, 'utf8');
 const continuation = readRecordType(source, 'Continuation');
-const required = continuation.filter((field) => !field.optional).map((field) => field.name).sort();
+const required = continuation
+  .filter((field) => !field.optional)
+  .map((field) => field.name)
+  .sort();
 
 describe('the assistant signal payloads match the workflow that receives them', () => {
   test('the workflow document is the source of the field list', () => {
