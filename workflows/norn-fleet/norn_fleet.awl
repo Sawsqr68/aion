@@ -1,0 +1,90 @@
+//! norn_fleet — fan out over a list of open issues and put each one in front
+//! of a norn-backed judge, in parallel, on the engine's own durability — and
+//! refuse to report anything when the judging pipeline itself cannot be shown
+//! to work.
+//!
+//! The dispatcher hands this workflow the whole issue list in one input: each
+//! item carries the issue's id, its title, and a fully-built PROMPT. Building
+//! the prompt is the dispatcher's job on purpose — the judge action is the
+//! plain agent seam (one String in, one String out), which is the one shape a
+//! norn worker started from the installed binary can serve honestly, with no
+//! crate and no rebuild. A structured judgement schema would demand a custom
+//! harness binary; that trade is recorded in this folder's README.
+//!
+//! Before any issue is judged, the control step asks a question whose answer
+//! the dispatcher already knows — quote a literal that exists at a known path
+//! — and refuses the whole run if the reply is wrong. A judge that cannot
+//! read the tree, or cannot follow an exact-reply instruction, produces
+//! confident well-formatted verdicts that are indistinguishable from real
+//! ones; the distinction is made here or not at all.
+//!
+//! Collection is STRICT on purpose: the verdicts pair with the issues BY
+//! POSITION, and positional pairing dies the moment an element can be absent.
+//! (The checker independently refuses element-optional lists in declared
+//! types — its reason is mechanical, schema derivation cannot express element
+//! optionality — but the pairing argument stands on its own.) A judgement
+//! that still fails after the declared retries have absorbed transient
+//! provider overload fails the whole run rather than coming back as a quiet
+//! gap dressed up as a result.
+//!
+//! WHAT THIS DOES NOT PROVE: a verdict is one model's unverified opinion.
+//! The control proves the pipeline can read the tree and follow an exact
+//! instruction; it proves nothing about any judgement's correctness. Every
+//! citation in a verdict must be read by hand before anything acts on it.
+workflow norn_fleet
+  timeout 2h
+  input issues: [Issue]
+  input control_prompt: String
+  input control_expect: String
+  outcome done:       type FleetReport, route success
+  outcome unmeasured: type Refused,     route failure
+
+/// One unit of fleet work. `prompt` is complete and self-contained: the judge
+/// sees nothing but this string, so everything the judgement needs — the claim,
+/// the paths, the standard to judge against — must already be inside it.
+type Issue { id: String, title: String, prompt: String }
+
+/// The fleet's answer. `verdicts` pairs with `issue_ids` by position, and
+/// `issue_ids` carries the pairing so an answer is never orphaned from its
+/// question. `attempted` is derived from the input list — a glance, not a
+/// cross-check. `control_reply` ships the control's own evidence with the
+/// answer: an assertion that the method worked is not a demonstration.
+type FleetReport { attempted: Int, issue_ids: [String], verdicts: [String], control_reply: String }
+
+/// A fleet that did not judge, said out loud rather than reported as a pass.
+/// Carries what the control expected and what actually came back.
+type Refused { control_expect: String, control_reply: String, reason: String }
+
+worker fleet
+  /// The judge. Served by `aion worker agent` with the norn harness: the
+  /// prompt goes to the session verbatim, the reply comes back verbatim.
+  /// The retry policy is the real overload defence — the tharsis postmortem
+  /// recorded provider-overload bursts punching through in under a minute,
+  /// so five retries on a 30s..5m backoff outlasts a multi-minute outage.
+  /// `timeout 15m` is an authored contract carried in the package hash; the
+  /// engine does not enforce it today (the workflow-level `timeout 2h`
+  /// above is the enforced bound).
+  action judge(prompt: String) -> String
+    agent, timeout 15m, retry 5 backoff 30s..5m
+
+/// Ask a question whose answer is already known, before asking any that
+/// matter. A broken pipeline and a working one both return well-formed
+/// strings; only a known answer can tell them apart.
+step control
+  judge(prompt: control_prompt) -> control_reply
+  outcome proven: when control_reply == control_expect, route open
+  outcome broken: otherwise,
+    route unmeasured(control_expect: control_expect, control_reply: control_reply,
+      reason: "the control judgement did not return the expected reply, so this pipeline cannot be shown to read the tree or follow instructions — no verdicts are reported")
+
+step open
+  distribute issue in issues
+
+step judge_one
+  judge(prompt: issue.prompt) -> verdict
+
+step close
+  collect verdict -> verdicts
+  issues |> map(.id) -> issue_ids
+  issues |> count -> attempted
+  route done(attempted: attempted, issue_ids: issue_ids, verdicts: verdicts, control_reply: control_reply)

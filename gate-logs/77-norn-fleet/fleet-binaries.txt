@@ -1,0 +1,4 @@
+aion: /Users/tom/.cargo/bin/aion — aion 0.11.0
+aion worker agent --norn-arg present: 0 (0 = pre-e7c748e62 binary, bare norn defaults)
+norn: /Users/tom/.cargo/bin/norn — norn 0.1.0
+server: pid 45425, HTTP 127.0.0.1:8080, liminal 127.0.0.1:50061 (Tom's main, installed 0.11.0)

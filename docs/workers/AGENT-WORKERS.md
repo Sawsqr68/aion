@@ -21,8 +21,14 @@ account of what is and is not guaranteed), and
 
 ## `aion worker agent` — an agent worker without a crate
 
-One command serves a document's agent actions. The surface below is aion
-0.11.0's:
+One command serves a document's agent actions. The surface below is the
+current tree's — and the version string cannot tell you whether a binary has
+it, because `--norn-arg` and `--norn-unset-env` landed in `e7c748e62` without
+a version bump: a binary built before that commit says 0.11.0 and refuses
+both flags, and one built after says 0.11.0 and accepts them. Check the
+binary itself: `aion worker agent --help | grep norn-arg`. On a pre-that
+binary, spawned norn processes run with bare norn defaults (default account,
+no session pinning, **no `--workspace-root` confinement**):
 
 ```
 aion worker agent examples/assistant/awl/assistant.awl \

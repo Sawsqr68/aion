@@ -1,0 +1,2 @@
+error: workflow run failed: workflow 8 returned error
+  details: {"tag":"AwlOutcomeFailure","outcome":"unmeasured","payload":"{\"control_expect\":\"WRONG-ON-PURPOSE\",\"control_reply\":\"CLAUDE.md\",\"reason\":\"the control judgement did not return the expected reply, so this pipeline cannot be shown to read the tree or follow instructions — no verdicts are reported\"}"}

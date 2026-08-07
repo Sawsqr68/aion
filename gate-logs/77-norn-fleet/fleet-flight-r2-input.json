@@ -1,0 +1,16 @@
+{
+"issues": [
+{
+"id": "issue-153",
+"title": "validate_document_name accepts a leading underscore the AWL lexer rejects",
+"prompt": "You are a code judge working in the aion repository (your working directory is the repo root). Issue claim: `validate_document_name` accepts a document name with a LEADING UNDERSCORE, but the AWL lexer rejects identifiers that start with an underscore \u2014 so a document can be accepted by name validation yet unlexable. Your job: (1) Find `validate_document_name` in the codebase (search crates/) and quote the exact rule it applies, with file path and line. (2) Find the AWL lexer's identifier rule in crates/aion-awl and quote it, with file path and line. (3) VERDICT: CONFIRMED or REFUTED \u2014 do the two rules actually disagree on a leading underscore? (4) If CONFIRMED, write a concrete fix proposal: which of the two rules should move, the exact change, and which tests should pin it. Reply in this format: VERDICT: <CONFIRMED|REFUTED>\nEVIDENCE: <the two quoted rules with file:line>\nCAUSE: <one paragraph>\nFIX: <one paragraph, concrete>. Keep the whole reply under 400 words. Do not modify any files."
+},
+{
+"id": "issue-151",
+"title": "failing aion run reports 'workflow 2 returned error' \u2014 an internal counter, not an operator-usable identity",
+"prompt": "You are a code judge working in the aion repository (your working directory is the repo root). Issue claim: when a run fails, `aion run` prints `workflow run failed: workflow 2 returned error`. The `workflow 2` there is an internal counter that identifies nothing an operator can act on \u2014 while the SAME error response already carries workflow_id and run_id in its details payload, unused. Your job: (1) Find where the `workflow <n> returned error` text originates (search crates/ for the format string; it may come from the runtime/beamr boundary or the server's error mapping) and give file:line. (2) Find where the CLI (crates/aion-cli) or client renders a failed run's error, and whether workflow_id/run_id from the response details are available at that point, with file:line. (3) VERDICT: CONFIRMED or REFUTED \u2014 is the operator-facing line really the internal counter, with the useful identifiers in hand and unused? (4) If CONFIRMED, write a concrete fix proposal: at which layer to substitute or append workflow_id/run_id, the exact change, and which tests should pin it. Reply in this format: VERDICT: <CONFIRMED|REFUTED>\nEVIDENCE: <file:line quotes>\nCAUSE: <one paragraph>\nFIX: <one paragraph, concrete>. Keep the whole reply under 400 words. Do not modify any files."
+}
+],
+"control_prompt": "Open the file CLAUDE.md at the root of your working directory. Its first line is a heading. Reply with exactly that heading's text after the '# ', and nothing else.",
+"control_expect": "CLAUDE.md"
+}

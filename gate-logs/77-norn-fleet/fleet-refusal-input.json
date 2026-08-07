@@ -1,0 +1,1 @@
+{"issues":[{"id":"never-judged","title":"refusal-arm proof","prompt":"Reply with exactly the word SHOULD-NOT-RUN and nothing else."}],"control_prompt":"Open the file CLAUDE.md at the root of your working directory. Its first line is a heading. Reply with exactly that heading's text after the '# ', and nothing else.","control_expect":"WRONG-ON-PURPOSE"}

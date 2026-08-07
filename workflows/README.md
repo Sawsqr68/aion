@@ -36,6 +36,7 @@ authority of a machine.
 | Workflow | What it answers |
 |---|---|
 | [`issue-recheck/`](issue-recheck/) | Is this reported-missing thing still missing? — with a control that refuses to answer on a broken search. |
+| [`norn-fleet/`](norn-fleet/) | What does a reader make of each of these issues? — norn-backed judges fanned out in parallel, behind a control that refuses to judge on a pipeline that cannot prove it reads the tree. |
 
 ## Running one
 

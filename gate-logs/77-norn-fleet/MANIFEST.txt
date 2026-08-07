@@ -1,0 +1,37 @@
+gate-logs/77-norn-fleet — evidence for the norn-fleet workflow (workflows/norn-fleet/)
+
+Two rounds. r1 ran against document content hash
+e9af66c793ba64230008f342368caf28c5fa5b9f0636ab0045b6e94317b97aa9 (the first
+draft: no control, no retry policy, no workflow timeout). The Opus pre-landing
+review REFUSED that draft (4 blocker / 7 major / 5 minor); the document was
+rewritten and every proof re-run. r2 ran against content hash
+49436c76d1be3ae420ae8befd023bac9fc280e85ff82bd5582be329cc863a2a1, which is the
+landed document — norn_fleet.awl.r2-snapshot in this directory is that exact
+text, and its sha256 is in SHA256SUMS.
+
+Binaries and endpoints for both rounds: fleet-binaries.txt. Worker started from
+the repository root each round; every run went through the production argv
+(`aion run workflows/norn-fleet/norn_fleet.awl --input ...`) against the live
+server on 127.0.0.1:8080 / liminal 127.0.0.1:50061.
+
+r1 (superseded document — kept as the first-flight record; the flight2 verdicts
+are the working fix proposals for issues #153/#151):
+  fleet-smoke-input.json / fleet-smoke-1.log / fleet-smoke-1.exit   N=2 ACK plumbing, green, order preserved
+  fleet-flight2-input.json / fleet-flight2.log / fleet-flight2.exit N=2 real issues #153+#151, both CONFIRMED; all four load-bearing citations re-read by hand at the seat
+  fleet-worker.log                                                   r1 worker (pid 27662), 4 dispatches
+
+r2 (the landed document — control + refusal + retry + workflow timeout):
+  fleet-refusal-input.json / fleet-refusal.log / fleet-refusal.exit  REFUSAL-ARM PROOF: control_expect deliberately wrong; judge replied the TRUE answer ("CLAUDE.md"), run routed unmeasured with both values in the payload, RC=1, and the worker log shows exactly ONE dispatch — the decoy issue was never judged
+  fleet-smoke-r2-input.json / fleet-smoke-r2.log / fleet-smoke-r2.exit  N=2 ACK with correct control: done, attempted=2, issue_ids paired with verdicts in input order, control_reply in the payload
+  fleet-flight-r2-input.json / fleet-flight-r2.log / fleet-flight-r2.exit  real issues #153+#151 with control: done, both CONFIRMED, ids paired
+  fleet-worker-r2.log                                                r2 worker (pid 38835): 1 refusal-run dispatch + control/smoke/flight dispatches
+  norn_fleet.awl.r2-snapshot                                         the landed document text (content hash 49436c76…)
+
+Order preservation is guaranteed by the lowering (distribute → workflow.map,
+exactly-once per item in input order — crates/aion-awl/src/emitter/forks.rs,
+gleam/aion_flow/src/aion/workflow/concurrency.gleam), not inferred from these
+runs; the runs are consistent with it.
+
+Judgements ran on bare norn defaults (no --norn-arg on the installed binary —
+probe recorded in fleet-binaries.txt): default account, fresh session per
+judgement, unconfined file tools. The prompts asked for no writes.

@@ -1,0 +1,1 @@
+{"workflow_type":"norn_fleet","workflow_id":"4a00291d-2b60-4eb6-ae49-c0333da4ef3a","run_id":"50871921-17e8-45f5-a437-dfedfbca789c","result":{"outcome":"done","payload":{"attempted":2,"issue_ids":["smoke-1","smoke-2"],"verdicts":["ACK-1","ACK-2"],"control_reply":"CLAUDE.md"}}}
