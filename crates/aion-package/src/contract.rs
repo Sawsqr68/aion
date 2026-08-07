@@ -247,6 +247,23 @@ pub enum ActionBodyContract {
 }
 
 impl ActionContract {
+    /// Whether serving this action is a WORKER's job.
+    ///
+    /// `true` when the action carries no declared body: the declaration is a
+    /// requirement on an out-of-band worker, and nothing runs until one
+    /// connects and advertises the action. `false` when the action carries a
+    /// declared body: the package itself says what the action does, the host
+    /// executes it, and no worker is needed or admitted for it.
+    ///
+    /// This is the one place the body-exemption rule lives. Every surface
+    /// that splits a queue's actions into worker-owed and server-run —
+    /// admission diffs, availability, scaffolding, codegen — must call this
+    /// rather than restate `body.is_none()`.
+    #[must_use]
+    pub fn worker_owed(&self) -> bool {
+        self.body.is_none()
+    }
+
     fn canonical_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         encode_text(&mut bytes, &self.name);

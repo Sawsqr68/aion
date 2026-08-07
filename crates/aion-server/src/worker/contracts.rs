@@ -221,7 +221,7 @@ fn refusal_site(admission: &QueueAdmission, task_queue: &str, node: Option<&str>
             .required
             .iter()
             .flat_map(|required| required.contract.contract.actions.iter())
-            .filter(|action| action.body.is_none())
+            .filter(|action| action.worker_owed())
             .any(|action| action.node.as_deref() == Some(*node))
     });
     RefusalSite::Queue {

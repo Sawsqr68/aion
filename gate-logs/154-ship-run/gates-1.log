@@ -1,0 +1,56 @@
+=== gate run start 2026-08-07T21:24:26+0000 load: { 8.16 14.85 16.37 }
+--- test -p aion-server --lib run_loop
+   Compiling haematite v0.7.0
+   Compiling aion-awl-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-package)
+   Compiling aion-store-libsql v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-libsql)
+   Compiling rustls-webpki v0.103.13
+   Compiling tokio-rustls v0.26.4
+   Compiling rustls-platform-verifier v0.7.0
+   Compiling hyper-rustls v0.27.9
+   Compiling liminal-rs v0.5.0
+   Compiling aion-store-haematite v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+   Compiling reqwest v0.13.4
+   Compiling liminal-sdk v0.5.0
+   Compiling liminal-server v0.5.0
+   Compiling aion-worker v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3m 12s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a347e1aad4065bbb)
+
+running 10 tests
+test awl::run_loop::run_loop_tests::with_a_refusal_on_record_the_operator_is_told_the_worker_is_being_refused ... ok
+test awl::run_loop::run_loop_tests::with_no_refusal_on_record_the_operator_is_told_to_start_a_worker ... ok
+test awl::run_loop::run_loop_tests::a_node_pinned_refusal_names_its_node ... ok
+test awl::run_loop::run_loop_tests::further_refusals_are_counted_rather_than_dropped ... ok
+test awl::run_loop::run_loop_tests::an_empty_queue_demands_nothing_like_admission_does ... ok
+test awl::run_loop::run_loop_tests::a_name_bodyless_in_any_reachable_version_is_demanded ... ok
+test awl::run_loop::run_loop_tests::a_bodyless_action_still_demands_a_worker ... ok
+test awl::run_loop::run_loop_tests::a_mixed_queue_is_held_to_its_worker_actions ... ok
+test awl::run_loop::run_loop_tests::a_queue_of_declared_bodies_is_available_with_zero_workers ... ok
+test worker::outbox_dispatcher::tests::run_loop_drains_pending_then_stops_on_shutdown ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 793 filtered out; finished in 0.03s
+
+test_rc=0
+--- clippy -p aion-server --all-targets
+    Checking tokio-rustls v0.26.4
+    Checking rustls-platform-verifier v0.7.0
+    Checking hyper-rustls v0.27.9
+    Checking reqwest v0.13.4
+    Checking liminal-sdk v0.5.0
+    Checking liminal-server v0.5.0
+    Checking aion-worker v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 21s
+clippy_p_rc=0
+--- clippy --workspace --all-targets
+    Checking liminal-sdk v0.5.0
+    Checking liminal-server v0.5.0
+    Checking aion-worker v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+    Checking aion-client v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-client)
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion/benchmarks/million-processes)
+    Checking aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Checking aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 07s
+clippy_ws_rc=0
+--- fmt --check
+fmt_rc=0
+=== gate run end 2026-08-07T21:30:13+0000

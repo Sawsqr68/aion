@@ -1,0 +1,14 @@
+//! probe_worker — control document: one bodyless action, so this queue
+//! genuinely demands a worker and availability must refuse it.
+workflow probe_worker
+  input x: String
+  outcome done: type Out, route success
+
+type Out { y: String }
+
+worker probeq
+  action ask(q: String) -> String
+
+step s1
+  ask(q: x) -> a
+  route done(y: a)

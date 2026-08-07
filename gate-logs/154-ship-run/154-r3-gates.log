@@ -1,0 +1,16 @@
+--- clippy -p aion-server --all-targets
+    Checking aion-awl-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-package)
+    Checking aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 51.36s
+clippy_p_rc=0
+--- clippy --workspace --all-targets
+    Checking aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Checking aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 9.69s
+clippy_ws_rc=0
+--- fmt
+fmt_rc=0
+--- build -p aion-cli
+   Compiling aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 20.15s
+build_rc=0

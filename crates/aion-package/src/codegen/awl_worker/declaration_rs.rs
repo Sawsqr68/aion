@@ -280,8 +280,8 @@ fn emit_service_guard(out: &mut String) {
          \x20   ///\n\
          \x20   /// An action whose declaration carries a `body` is executed by the SERVER\n\
          \x20   /// itself, so no worker serves it and none is demanded here — the same\n\
-         \x20   /// exclusion `aion_package::contract_diffs` applies when it filters\n\
-         \x20   /// `body.is_none()` before deciding what a connection owes.\n\
+         \x20   /// `ActionContract::worker_owed` exclusion `aion_package::contract_diffs`\n\
+         \x20   /// applies before deciding what a connection owes.\n\
          \x20   ///\n\
          \x20   /// This is what catches a document that GREW an action after the scaffold was\n\
          \x20   /// generated: the new action is unserved, and the worker says so at startup\n\
@@ -299,7 +299,7 @@ fn emit_service_guard(out: &mut String) {
          \x20           .contract\n\
          \x20           .actions\n\
          \x20           .iter()\n\
-         \x20           .filter(|action| action.body.is_none())\n\
+         \x20           .filter(|action| action.worker_owed())\n\
          \x20           .filter(|action| !served.contains(&action.name))\n\
          \x20           .map(|action| {\n\
          \x20               format!(\n\

@@ -1,0 +1,16 @@
+--- test -p aion-server --lib availability
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.79s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a347e1aad4065bbb)
+
+running 2 tests
+test worker::queue_service::policy::tests::the_availability_deadline_bounds_strict_only ... ok
+test api::http::router::tests::worker_availability_keeps_auth_off_operator_access ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 801 filtered out; finished in 0.09s
+
+avail_rc=0
+--- build -p aion-cli (patched binary)
+   Compiling aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+   Compiling aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 57s
+build_rc=0

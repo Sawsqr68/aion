@@ -15,10 +15,10 @@
 //!
 //! An action carrying a declarative `body` is executed by the SERVER itself,
 //! so no worker serves it and none may advertise it. The filter here is the
-//! same `body.is_none()` the admission gate applies before deciding what a
-//! connection owes; a generator that filtered differently would emit a worker
-//! the gate refuses (advertising too much) or one that parks a dispatch
-//! forever (advertising too little).
+//! same [`ActionContract::worker_owed`] the admission gate applies before
+//! deciding what a connection owes; a generator that filtered differently
+//! would emit a worker the gate refuses (advertising too much) or one that
+//! parks a dispatch forever (advertising too little).
 
 use crate::contract::{ActionContract, WorkerContract};
 
@@ -90,7 +90,7 @@ fn servable_actions(contract: &WorkerContract) -> Result<Vec<ServableAction>, Aw
     let servable = contract
         .actions
         .iter()
-        .filter(|action| action.body.is_none())
+        .filter(|action| action.worker_owed())
         .map(|action| servable_action(&contract.task_queue, action))
         .collect::<Result<Vec<_>, _>>()?;
     if servable.is_empty() {

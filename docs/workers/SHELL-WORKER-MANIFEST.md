@@ -31,8 +31,13 @@ with a scheme-less one, therefore never connects; and because the verb
 installs no tracing subscriber, the redial driver's failures go nowhere and
 the process just sits there. **Silence from `aion worker shell` is not
 success.** Confirm the worker actually arrived — `POST
-/awl/workers/availability {"namespace":"…","task_queue":"…","activity_types":[…]}`
-answers `connected_workers` — before concluding it is serving.
+/awl/workers/availability {"namespace":"…","task_queue":"…"}`
+answers `connected_workers` — before concluding it is serving. (The request
+takes exactly those two fields; an earlier revision of this document showed an
+`activity_types` list the server never read. Note also that `available: true`
+alone does not prove your worker arrived — a queue whose reachable actions all
+carry declared `run` bodies is available with zero workers — so read
+`connected_workers`, which is the field that answers this question.)
 
 Ground truth for everything below: `crates/aion-cli/src/worker_shell.rs`.
 

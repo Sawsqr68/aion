@@ -37,12 +37,17 @@ async function checkDeploysGreen(buffer: string, path: string): Promise<string> 
   return `${checked.steps ?? 0} steps deploy green`;
 }
 
-/** Starting against a task queue with no connected worker would hang, so refuse first. */
-async function requireConnectedWorker(namespace: string, taskQueue: string): Promise<void> {
+/**
+ * Starting against a queue whose actions cannot be served would park at
+ * dispatch, so refuse first. The server's answer is about SERVICE, not
+ * connection: a queue whose reachable actions all carry declared `run`
+ * bodies is served by the server itself and is available with zero workers.
+ */
+async function requireServedQueue(namespace: string, taskQueue: string): Promise<void> {
   const availability = await authoringFacade.workerAvailability(namespace, taskQueue);
   if (!availability.available) {
     throw new Error(
-      availability.scaffoldHint ?? `No worker is connected to ${availability.taskQueue}`
+      availability.scaffoldHint ?? `Nothing serves task queue ${availability.taskQueue}`
     );
   }
 }
@@ -113,7 +118,7 @@ export function ShipRunPanel({ path, buffer, documents }: ShipRunPanelProps) {
       const deployed = await authoringFacade.deploy(path, contentHash);
       applyServerSteps(deployed.steps);
       working('start');
-      await requireConnectedWorker(selectedNamespace, deployed.deployment.taskQueue);
+      await requireServedQueue(selectedNamespace, deployed.deployment.taskQueue);
       const started = await apiClient.startWorkflow(
         {
           workflowType: deployed.deployment.workflowType,

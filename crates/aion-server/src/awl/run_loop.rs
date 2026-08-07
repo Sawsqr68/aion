@@ -10,7 +10,7 @@ use super::handlers::{CheckRequest, check_source};
 use super::revisions::{self, DeploymentRecord, RevisionError};
 use crate::authoring::AuthoringApiError;
 use crate::worker::admission_audit::RememberedRefusal;
-use crate::{CallerIdentity, ServerState};
+use crate::{CallerIdentity, ServerError, ServerState};
 
 #[derive(Debug, Deserialize)]
 pub struct EmitRequest {
@@ -70,9 +70,36 @@ pub struct WorkerAvailabilityRequest {
 
 #[derive(Debug, Serialize)]
 pub struct WorkerAvailabilityResponse {
+    /// Whether every reachable action on THIS queue can be served right now:
+    /// server-run actions always (the server executes a declared body itself),
+    /// and every worker-owed action has at least one admitted worker
+    /// advertising it on a node its declaration can dispatch to.
+    ///
+    /// This is NOT "is a worker connected": a queue whose reachable actions
+    /// all carry bodies is fully served with zero workers — answering "no
+    /// worker" for such a queue refused starts that succeed, the #154 defect,
+    /// hit live by the operator at the tutorial's own ship-and-run ending.
+    /// Nor is a connection alone enough: a worker admitted on the queue but
+    /// not advertising a demanded action, or pinned to the wrong node for it,
+    /// does not serve it.
+    ///
+    /// The answer is scoped to the ONE queue asked about. A document that
+    /// declares several worker blocks has several queues, and each must be
+    /// asked about separately.
+    ///
+    /// The answer reads DECLARATION-level node pins only. A call-site `node`
+    /// override (a step calling an unpinned action with `node …`) is not in
+    /// the deployed contract this reads — admission shares the same limit —
+    /// so such a dispatch can still park on a queue answered available.
     pub available: bool,
     pub task_queue: String,
     pub connected_workers: usize,
+    /// Reachable actions a connected worker must serve, sorted. Empty means
+    /// no worker is owed — including the vacuous case of a queue with nothing
+    /// deployed, which admission likewise holds nobody to.
+    pub worker_actions: Vec<String>,
+    /// Reachable actions the server executes itself (declared bodies), sorted.
+    pub server_run_actions: Vec<String>,
     pub scaffold_hint: Option<String>,
 }
 
@@ -103,6 +130,16 @@ pub enum RunLoopError {
     Authoring(AuthoringApiError),
     #[error("worker registry inspection failed: {0}")]
     WorkerRegistry(String),
+    #[error("engine unavailable for queue contract inspection")]
+    EngineUnavailable {
+        #[source]
+        source: ServerError,
+    },
+    #[error("queue contract inspection failed")]
+    QueueContracts {
+        #[source]
+        source: aion::EngineError,
+    },
 }
 
 pub fn emit(
@@ -249,12 +286,38 @@ pub async fn deploy(
     })
 }
 
+/// Answer whether a queue's reachable actions can be served, before a start.
+///
+/// The question is service, not connection. Who serves an action is decided
+/// by its deployed declaration: a body-carrying action is executed by the
+/// server itself ([`crate::worker::DeclaredCommandDispatcher`]), a bodyless
+/// one by a connected worker. The worker-owed set comes from the same
+/// reachable contracts admission reads
+/// ([`aion::Engine::worker_contracts_for_admission`], split by
+/// [`aion_package::ActionContract::worker_owed`]), so this answer and the
+/// admission gate cannot disagree about what a queue demands. Supply is then
+/// measured per dispatch address: each worker-owed `(action, node)` pair is
+/// censused against the live fleet
+/// ([`crate::worker::WorkerRegistry::pool_census`]), which counts admitted
+/// workers ADVERTISING that action on a compatible node — a worker connected
+/// to the queue but not advertising the action, or pinned to the wrong node,
+/// serves nothing and vouches for nothing.
+///
+/// # Errors
+///
+/// Returns [`RunLoopError::WorkerRegistry`] when the connected-worker registry
+/// cannot be read, [`RunLoopError::EngineUnavailable`] when the state carries
+/// no engine handle, and [`RunLoopError::QueueContracts`] when the deployed
+/// contract catalog cannot be read. An unreadable catalog errors rather than
+/// guessing in either direction: admitting would re-open #154's false refusal
+/// inverted, refusing would fabricate the very verdict this function exists
+/// to correct.
 pub fn worker_availability(
     state: &ServerState,
     request: WorkerAvailabilityRequest,
 ) -> Result<WorkerAvailabilityResponse, RunLoopError> {
-    let workers = state
-        .worker_registry()
+    let registry = state.worker_registry();
+    let workers = registry
         .all_workers()
         .map_err(|error| RunLoopError::WorkerRegistry(error.to_string()))?;
     let task_queue = if request.task_queue.is_empty() {
@@ -268,39 +331,159 @@ pub fn worker_availability(
             worker.task_queue() == task_queue && worker.namespaces().contains(&request.namespace)
         })
         .count();
+    let admission = state
+        .engine()
+        .map_err(|source| RunLoopError::EngineUnavailable { source })?
+        .worker_contracts_for_admission(&task_queue)
+        .map_err(|source| RunLoopError::QueueContracts { source })?;
+    let demand = service_demand(&admission);
+    let mut unserved: Option<UnservedAddress> = None;
+    for (action, node) in &demand.worker_addresses {
+        let census = registry
+            .pool_census(&request.namespace, &task_queue, action, node.as_deref())
+            .map_err(|error| RunLoopError::WorkerRegistry(error.to_string()))?;
+        if !census.is_served() {
+            unserved = Some(UnservedAddress {
+                action: action.clone(),
+                node: node.clone(),
+                census,
+            });
+            break;
+        }
+    }
     Ok(WorkerAvailabilityResponse {
-        available: connected_workers > 0,
+        available: unserved.is_none(),
         task_queue: task_queue.clone(),
         connected_workers,
-        scaffold_hint: (connected_workers == 0).then(|| {
+        scaffold_hint: unserved.as_ref().map(|address| {
             unserved_hint(
                 &task_queue,
-                &state
-                    .worker_registry()
-                    .admission_audit()
-                    .refusals_on_queue(&task_queue),
+                address,
+                &registry.admission_audit().refusals_on_queue(&task_queue),
             )
         }),
+        worker_actions: demand.worker,
+        server_run_actions: demand.server_run,
     })
 }
 
-/// What to tell an operator whose queue has no connected worker.
+/// The first dispatch address the census found unserved, with the census that
+/// said so — carried to the hint so the diagnosis can tell WHICH failure this
+/// is instead of guessing from the connection count.
+struct UnservedAddress {
+    /// The unserved action's name.
+    action: String,
+    /// The node its declaring version pins it to, `None` when unpinned.
+    node: Option<String>,
+    /// The fleet census at that address, taken at decision time.
+    census: crate::worker::PoolCensus,
+}
+
+/// Which of a queue's reachable actions are owed a worker, and which the
+/// server runs itself.
 ///
-/// `connected_workers` is counted from the registry of ADMITTED workers, and a
-/// worker refused at admission never reaches that registry — so the count is 0
-/// both when nothing was ever started and when something is running and being
-/// turned away on every dial. Telling the second operator to "scaffold and run
-/// this worker" describes the wrong problem entirely, and during the #146
-/// self-run it was the only signal there was.
+/// An action lands under `worker` when ANY reachable version declares it
+/// without a body: that version's dispatch delegates to a worker, so the name
+/// is demanded even if another version carries a body for it. The two name
+/// sets may therefore overlap, and each is deduplicated and sorted on its
+/// own. `worker_addresses` keeps the node axis the name sets flatten away:
+/// supply is checked per dispatch address, because an action pinned to node
+/// `a` is not served by a worker on node `b`.
+struct QueueServiceDemand {
+    /// Every distinct dispatch address a worker is owed on: the action name
+    /// paired with the node its declaring version pins it to (`None` when
+    /// unpinned). One name can appear under several nodes when reachable
+    /// versions pin it differently — each such address must be served.
+    worker_addresses: Vec<(String, Option<String>)>,
+    /// Action names a connected worker must serve, deduplicated and sorted.
+    worker: Vec<String>,
+    /// Action names the server executes from their declared bodies,
+    /// deduplicated and sorted.
+    server_run: Vec<String>,
+}
+
+fn service_demand(admission: &aion::QueueAdmission) -> QueueServiceDemand {
+    let mut worker_addresses = std::collections::BTreeSet::new();
+    let mut worker = std::collections::BTreeSet::new();
+    let mut server_run = std::collections::BTreeSet::new();
+    for required in &admission.required {
+        for action in &required.contract.contract.actions {
+            if action.worker_owed() {
+                worker_addresses.insert((action.name.clone(), action.node.clone()));
+                worker.insert(action.name.clone());
+            } else {
+                server_run.insert(action.name.clone());
+            }
+        }
+    }
+    QueueServiceDemand {
+        worker_addresses: worker_addresses.into_iter().collect(),
+        worker: worker.into_iter().collect(),
+        server_run: server_run.into_iter().collect(),
+    }
+}
+
+/// What to tell an operator whose queue has an unserved worker-owed action.
 ///
-/// So the refusal record decides which world this is. It is not a second
-/// mechanism: it is the state R1's naming already keeps, read.
-fn unserved_hint(task_queue: &str, refusals: &[RememberedRefusal]) -> String {
+/// Four distinguishable worlds, each with a different remedy, and the hint
+/// must name the right one — telling an operator whose worker IS running to
+/// "scaffold and run this worker" describes the wrong problem entirely, and
+/// during the #146 self-run it was the only signal there was.
+///
+/// * A refusal is on record: a worker is dialling and being turned away. The
+///   refusal record decides this first — a refused worker never enters the
+///   registry, so every census below would read it as absent.
+/// * The census saw an empty pool: nothing is connected, and starting a
+///   worker really is the remedy.
+/// * Workers are in the pool but none advertises the action: the connected
+///   worker was built for a different action surface, and starting another
+///   copy of it cannot help.
+/// * Workers advertise the action but none on the declared node: the action
+///   is pinned, and the operator needs a worker THERE, not another one here.
+///
+/// The census travels from the availability decision itself, so the diagnosis
+/// and the verdict cannot be about two different fleets.
+fn unserved_hint(
+    task_queue: &str,
+    address: &UnservedAddress,
+    refusals: &[RememberedRefusal],
+) -> String {
     let Some(refusal) = refusals.first() else {
-        return format!(
-            "No connected worker serves task queue `{task_queue}`. Scaffold and \
-             run this worker from Workers & Actions, then retry start."
-        );
+        let action = &address.action;
+        let census = &address.census;
+        if census.workers_in_pool == 0 {
+            return format!(
+                "No connected worker serves task queue `{task_queue}`. Scaffold and \
+                 run this worker from Workers & Actions, then retry start."
+            );
+        }
+        if census.workers_serving_activity == 0 {
+            return format!(
+                "{count} worker connection(s) ARE on task queue `{task_queue}`, but none \
+                 advertises action `{action}`, so nothing serves it. Starting another copy \
+                 of the same worker will not help — rebuild or rewire the worker to serve \
+                 `{action}`, then retry start.",
+                count = census.workers_in_pool,
+            );
+        }
+        // Advertised but not compatible: the only remaining axis is the node
+        // pin. `node` is always `Some` here — an unpinned address counts every
+        // advertising worker as compatible — but the message must not depend
+        // on that reasoning staying true, so the unpinned face stays honest.
+        return match &address.node {
+            Some(node) => format!(
+                "Action `{action}` on task queue `{task_queue}` is pinned to node \
+                 `{node}`, and none of the {count} worker(s) advertising it is on that \
+                 node. Start a worker on node `{node}`, then retry start.",
+                count = census.workers_serving_activity,
+            ),
+            None => format!(
+                "Action `{action}` on task queue `{task_queue}` is advertised by \
+                 {count} worker(s), but none is compatible with its dispatch. Check the \
+                 worker's node against the document's declaration, then retry start.",
+                count = census.workers_serving_activity,
+            ),
+        };
     };
     let others = match refusals.len() - 1 {
         0 => String::new(),
@@ -344,7 +527,25 @@ pub fn wire_error(error: &RunLoopError) -> WireError {
         RunLoopError::Authoring(_) | RunLoopError::WorkerRegistry(_) => {
             WireError::backend(error.to_string()).with_error_type(error_type(error))
         }
+        RunLoopError::EngineUnavailable { .. } | RunLoopError::QueueContracts { .. } => {
+            // These variants carry their cause as a typed `#[source]`, and
+            // `Display` deliberately does not restate it — so the wire face
+            // walks the chain to keep the cause an operator acts on.
+            WireError::backend(error_chain(error)).with_error_type(error_type(error))
+        }
     }
+}
+
+/// Renders an error and every cause beneath it as one `: `-joined line.
+fn error_chain(error: &dyn std::error::Error) -> String {
+    let mut message = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        message.push_str(": ");
+        message.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    message
 }
 
 impl From<AuthoringApiError> for RunLoopError {
@@ -363,6 +564,8 @@ fn error_type(error: &RunLoopError) -> &'static str {
         RunLoopError::Revision(_) => "RevisionStore",
         RunLoopError::Authoring(_) => "AuthoringDeploy",
         RunLoopError::WorkerRegistry(_) => "WorkerRegistry",
+        RunLoopError::EngineUnavailable { .. } => "EngineUnavailable",
+        RunLoopError::QueueContracts { .. } => "QueueContracts",
     }
 }
 

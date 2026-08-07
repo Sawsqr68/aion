@@ -1,0 +1,1 @@
+{"available":false,"task_queue":"gate","connected_workers":0,"scaffold_hint":"No connected worker serves task queue `gate`. Scaffold and run this worker from Workers & Actions, then retry start."}

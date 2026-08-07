@@ -1,0 +1,605 @@
+--- test -p aion-server --lib run_loop
+   Compiling aion-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+   Compiling aion-awl v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl)
+   Compiling aion-toolchain v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-toolchain)
+   Compiling aion-worker v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+   Compiling aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+   Compiling aion-awl-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-package)
+   Compiling aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 46.10s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a347e1aad4065bbb)
+
+running 17 tests
+test awl::run_loop::run_loop_tests::a_node_pinned_refusal_names_its_node ... ok
+test awl::run_loop::run_loop_tests::an_empty_queue_demands_nothing_like_admission_does ... ok
+test awl::run_loop::run_loop_tests::a_bodyless_action_still_demands_a_worker ... ok
+test awl::run_loop::run_loop_tests::a_pinned_and_an_unpinned_version_are_two_addresses ... ok
+test awl::run_loop::run_loop_tests::a_queue_of_declared_bodies_demands_no_worker ... ok
+test awl::run_loop::run_loop_tests::a_name_bodyless_in_any_reachable_version_is_demanded ... ok
+test awl::run_loop::run_loop_tests::a_mixed_queue_is_held_to_its_worker_actions ... ok
+test awl::run_loop::run_loop_tests::with_a_refusal_on_record_the_operator_is_told_the_worker_is_being_refused ... ok
+test awl::run_loop::run_loop_tests::further_refusals_are_counted_rather_than_dropped ... ok
+test awl::run_loop::run_loop_tests::with_no_refusal_on_record_the_operator_is_told_to_start_a_worker ... ok
+test awl::run_loop::run_loop_tests::endpoint::an_undeployed_queue_is_vacuously_available ... ok
+test worker::outbox_dispatcher::tests::run_loop_drains_pending_then_stops_on_shutdown ... ok
+test awl::run_loop::run_loop_tests::endpoint::a_worker_advertising_the_action_serves_the_queue ... ok
+test awl::run_loop::run_loop_tests::endpoint::a_node_pinned_action_is_not_served_from_the_wrong_node ... ok
+test awl::run_loop::run_loop_tests::endpoint::a_bodyless_queue_with_no_worker_refuses_with_a_hint ... ok
+test awl::run_loop::run_loop_tests::endpoint::a_connected_worker_not_advertising_the_action_vouches_for_nothing ... ok
+test awl::run_loop::run_loop_tests::endpoint::a_declared_body_queue_is_available_with_zero_workers ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 793 filtered out; finished in 0.10s
+
+test_runloop_rc=0
+--- test -p aion-package
+   Compiling serde_core v1.0.228
+   Compiling serde v1.0.228
+   Compiling libc v0.2.186
+   Compiling getrandom v0.4.2
+   Compiling smallvec v1.15.1
+   Compiling serde_json v1.0.150
+   Compiling getrandom v0.3.4
+   Compiling zstd-safe v7.2.4
+   Compiling log v0.4.32
+   Compiling bumpalo v3.20.3
+   Compiling icu_normalizer v2.2.0
+   Compiling rustix v1.1.4
+   Compiling zopfli v0.8.3
+   Compiling flate2 v1.1.9
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling tracing-core v0.1.36
+   Compiling jobserver v0.1.34
+   Compiling cpufeatures v0.3.0
+   Compiling cc v1.2.63
+   Compiling parking_lot_core v0.9.12
+   Compiling sha2 v0.11.0
+   Compiling parking_lot v0.12.5
+   Compiling aes v0.9.1
+   Compiling sha1 v0.11.0
+   Compiling lzma-rust2 v0.16.4
+   Compiling errno v0.3.14
+   Compiling tracing v0.1.44
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling tempfile v3.27.0
+   Compiling uuid v1.23.4
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling serde_spanned v1.1.1
+   Compiling toml v1.1.2+spec-1.1.0
+   Compiling fluent-uri v0.4.1
+   Compiling chrono v0.4.45
+   Compiling ahash v0.8.12
+   Compiling email_address v0.2.9
+   Compiling referencing v0.46.6
+   Compiling ts-rs v12.0.1
+   Compiling jsonschema v0.46.6
+   Compiling aion-core v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+   Compiling zstd v0.13.3
+   Compiling zip v8.6.0
+   Compiling aion-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.35s
+     Running unittests src/lib.rs (target/debug/deps/aion_package-0338c8fc6009fa2d)
+
+running 309 tests
+test admission::tests::a_real_schema_declares_something ... ok
+test admission::tests::a_contract_declaring_nothing_has_nothing_unenforceable ... ok
+test admission::tests::an_additional_entry_resolves_to_its_own_input_schema ... ok
+test admission::tests::a_declared_signal_resolves_to_its_own_schema ... ok
+test admission::tests::declared_signal_names_are_sorted_for_a_stable_refusal_message ... ok
+test admission::tests::the_undeclared_forms_declare_nothing ... ok
+test beam::tests::beam_set_rejects_duplicate_logical_names ... ok
+test beam::tests::beam_set_order_is_independent_of_insertion_order ... ok
+test beam::tests::beam_set_rejects_engine_reserved_namespaces ... ok
+test beam::tests::lookup_returns_exact_bytes_by_logical_name ... ok
+test build_coverage::tests::insertion_order_is_observable_exactly_when_the_map_preserves_it ... ok
+test build_coverage::tests::serde_json_map_ordering_is_announced ... ok
+test builder::tests::awl_source_inclusion_does_not_change_manifest_version ... ok
+test builder::tests::caller_supplied_manifest_version_is_overwritten ... ok
+test builder::tests::finalised_manifest_version_equals_v4_contract_hash ... ok
+test builder::tests::identical_inputs_produce_identical_archive_bytes ... ok
+test builder::tests::missing_entry_module_returns_typed_error ... ok
+test builder::tests::awl_entries_are_written_under_their_own_prefixes ... ok
+test builder::tests::rejects_logical_names_with_deployed_name_separator ... ok
+test builder::tests::rejects_unsafe_awl_schema_paths ... ok
+test builder::tests::rejects_unsafe_source_names ... ok
+test builder::tests::source_inclusion_does_not_change_manifest_version ... ok
+test canonical::tests::as_value_exposes_the_wrapped_document ... ok
+test builder::tests::write_to_bytes_succeeds_without_source_entries ... ok
+test canonical::tests::canonical_bytes_are_independent_of_insertion_order ... ok
+test canonical::tests::canonical_bytes_are_key_sorted_at_every_depth ... ok
+test canonical::tests::canonical_encoding_matches_a_key_sorted_expectation ... ok
+test canonical::tests::serialize_value_canonicalises_a_field_of_a_derived_type ... ok
+test canonical::tests::scalars_arrays_and_nulls_round_trip_unchanged ... ok
+test canonical::tests::sorted_entries_is_key_order_whatever_the_insertion_order ... ok
+test codegen::activity_golden::tests::optionals_lists_nested_records_and_enums_are_derived ... ok
+test codegen::activity_golden::tests::all_required_scalars_pin_to_a_zero_value_literal ... ok
+test codegen::activity_golden::tests::unresolved_named_type_is_an_internal_error ... ok
+test codegen::activity_project::tests::declared_type_without_a_boundary_type_errors ... ok
+test codegen::activity_project::tests::in_vm_tier_emits_neither_worker_nor_golden ... ok
+test codegen::activity_project::tests::write_then_check_round_trips_and_detects_drift ... ok
+test codegen::activity_worker_python::tests::every_activity_advertises_real_input_and_output_schemas ... ok
+test codegen::activity_worker_python::tests::pascal_case_joins_snake_segments ... ok
+test codegen::activity_worker_python::tests::routes_each_activity_to_its_handler_in_order ... ok
+test codegen::activity_worker_python::tests::serve_call_passes_the_advertised_descriptors ... ok
+test codegen::activity_worker_python::tests::the_advertised_surface_satisfies_a_contract_over_the_same_declared_types ... ok
+test codegen::activity_worker_rust::tests::enums_and_keyword_fields_render_with_serde_attrs ... ok
+test codegen::activity_worker_rust::tests::keyword_field_names_are_escaped_or_mangled ... ok
+test codegen::activity_worker_rust::tests::type_mapping_covers_every_scalar_list_and_named ... ok
+test codegen::activity_worker_rust::tests::worker_emits_structs_registration_and_config_in_order ... ok
+test codegen::activity_wrappers::tests::wrappers_module_emits_one_constructor_per_declaration_in_order ... ok
+test codegen::awl_worker::tests::a_queue_of_only_bodied_actions_is_refused ... ok
+test codegen::awl_worker::tests::a_server_executed_action_is_absent_everywhere ... ok
+test codegen::awl_worker::tests::an_unpinned_queue_dials_one_connection_with_no_node ... ok
+test codegen::awl_worker::tests::every_registration_carries_a_descriptor_from_the_document ... ok
+test codegen::awl_worker::tests::every_stub_documents_the_declared_schemas ... ok
+test codegen::awl_worker::tests::every_stub_fails_loudly_and_names_its_action ... ok
+test codegen::awl_worker::tests::generation_is_deterministic ... ok
+test codegen::awl_worker::tests::keyword_action_names_are_escaped_or_refused ... ok
+test codegen::awl_worker::tests::one_connection_per_node_serves_exactly_the_reachable_actions ... ok
+test codegen::awl_worker::tests::only_the_handlers_file_is_author_owned ... ok
+test codegen::awl_worker::tests::the_declaration_embeds_the_document_and_takes_its_schemas ... ok
+test codegen::awl_worker::tests::the_emitted_connection_table_is_the_plan ... ok
+test codegen::awl_worker::tests::the_manifest_is_standalone_and_strict ... ok
+test codegen::awl_worker::tests::unusable_names_and_paths_are_refused ... ok
+test codegen::codec_module::tests::all_required_records_use_plain_object_lists_without_option_imports ... ok
+test codegen::codec_module::tests::emission_is_deterministic ... ok
+test codegen::codec_module::tests::empty_records_emit_bare_constructors ... ok
+test admission::tests::an_uncompilable_schema_is_a_package_defect_not_a_caller_error ... ok
+test admission::tests::surplus_fields_are_admitted ... ok
+test admission::tests::every_violation_is_reported ... ok
+test admission::tests::a_conforming_value_is_admitted ... ok
+test admission::tests::a_non_object_payload_is_refused_at_the_root ... ok
+test admission::tests::a_wrong_typed_field_is_refused_naming_its_location ... ok
+test admission::tests::a_missing_required_field_is_refused_naming_it ... ok
+test codegen::codec_module::tests::full_module_golden_with_enum_list_and_optional ... ok
+test codegen::codec_module::tests::nested_lists_encode_with_depth_named_lambdas ... ok
+test codegen::declaration::tests::empty_manifest_parses_to_no_declarations ... ok
+test codegen::declaration::tests::duplicate_activity_is_rejected ... ok
+test codegen::declaration::tests::malformed_json_is_rejected ... ok
+test admission::tests::an_uncompilable_declaration_is_reported_and_a_compilable_one_is_not ... ok
+test codegen::declaration::tests::names_that_cannot_derive_an_identifier_are_rejected ... ok
+test codegen::declaration::tests::parses_in_declaration_order ... ok
+test codegen::declaration::tests::unknown_tier_is_rejected ... ok
+test codegen::declaration::tests::well_formed_snake_case_names_are_accepted ... ok
+test codegen::error::tests::codegen_error_is_send_sync_and_static ... ok
+test codegen::error::tests::display_messages_name_module_type_and_field ... ok
+test codegen::error::tests::packaging_errors_convert_transparently ... ok
+test codegen::input_skeleton::tests::empty_enum_fails ... ok
+test codegen::input_skeleton::tests::nested_required_objects_recurse ... ok
+test codegen::input_skeleton::tests::required_arrays_are_empty ... ok
+test codegen::input_skeleton::tests::required_enum_uses_the_first_wire_value ... ok
+test codegen::input_skeleton::tests::required_scalars_get_type_shaped_placeholders ... ok
+test codegen::input_skeleton::tests::unsupported_construct_fails_with_pointer ... ok
+test codegen::interface::tests::missing_and_empty_types_module_fail_loudly ... ok
+test codegen::interface::tests::functions_constants_and_aliases_in_the_types_module_fail_loudly ... ok
+test codegen::interface::tests::duplicate_wire_strings_and_colliding_prefixes_fail_loudly ... ok
+test codegen::names::tests::pascal_to_snake_is_deterministic_and_shape_true ... ok
+test codegen::interface::tests::unknown_type_kind_and_invalid_json_fail_loudly ... ok
+test codegen::names::tests::reserved_words_are_recognised ... ok
+test codegen::names::tests::snake_identifiers_are_classified ... ok
+test codegen::interface::tests::recursive_types_fail_loudly ... ok
+test codegen::interface::tests::generic_opaque_unlabelled_mixed_and_cross_module_types_fail_loudly ... ok
+test codegen::schema_emit::tests::emitted_schemas_parse_as_json_and_are_deterministic ... ok
+test codegen::interface::tests::nested_option_tuples_and_mismatched_constructor_fail_loudly ... ok
+test codegen::schema_emit::tests::enum_schema_and_empty_record_render ... ok
+test codegen::schema_emit::tests::record_schema_renders_required_optional_list_enum_and_nested ... ok
+test codegen::interface::tests::records_enums_scalars_lists_and_options_map_into_the_model ... ok
+test codegen::test_scaffold::tests::scaffold_with_no_activities_mocks_nothing_but_still_asserts_replay ... ok
+test codegen::test_scaffold::tests::scaffold_mocks_each_activity_and_advances_per_timer ... ok
+test codegen::test_scaffold::tests::scaffold_with_no_timers_does_not_advance_the_clock ... ok
+test compatibility::tests::a_comment_in_a_declared_schema_does_not_have_to_be_reproduced ... ok
+test compatibility::tests::a_connection_on_an_unknown_node_owes_only_the_unpinned_actions ... ok
+test codegen::interface::tests::mapping_is_deterministic_across_runs ... ok
+test compatibility::tests::a_declared_body_is_not_required_of_a_worker ... ok
+test compatibility::tests::a_node_less_connection_owes_only_the_unpinned_actions ... ok
+test compatibility::tests::an_unpinned_action_is_demanded_of_every_node ... ok
+test compatibility::tests::a_node_partitioned_connection_is_not_demanded_another_nodes_actions ... ok
+test compatibility::tests::an_action_pinned_to_this_node_is_still_demanded ... ok
+test codegen::project::tests::check_on_disk_passes_clean_and_types_missing_and_drift ... ok
+test compatibility::tests::input_narrowing_and_output_widening_are_refused ... ok
+test compatibility::tests::input_widening_and_optional_output_addition_are_compatible ... ok
+test compatibility::tests::local_defs_and_inline_schemas_compare_semantically ... ok
+test compatibility::tests::mismatch_reports_the_exact_schema_field ... ok
+test contract::tests::a_declared_body_is_identity_bearing ... ok
+test contract::tests::advisory_identity_is_declaration_order_independent ... ok
+test contract::tests::advisory_and_body_cannot_be_confused_in_the_record ... ok
+test contract::tests::editing_a_declared_command_changes_identity ... ok
+test contract::tests::advisory_is_identity_bearing ... ok
+test contract::tests::the_v5_domain_supersedes_every_v4_identity ... ok
+test error::tests::display_messages_name_the_failed_condition ... ok
+test contract::tests::v4_identity_ignores_json_object_and_set_array_order ... ok
+test error::tests::package_error_is_send_and_sync ... ok
+test codegen::activity_worker_python::tests::emitted_module_is_syntactically_valid_python ... ok
+test extraction::tests::bounded_budget_charges_across_entries ... ok
+test codegen::schema_emit::tests::stray_unmarked_json_is_a_loud_error_with_the_migration_hint ... ok
+test extraction::tests::single_entry_past_budget_is_refused_reporting_the_limit ... ok
+test codegen::project::tests::package_name_reads_and_validates ... ok
+test extraction::tests::unbounded_budget_reads_everything ... ok
+test contract::tests::v4_identity_is_declaration_order_independent ... ok
+test codegen::schema_emit::tests::write_then_check_round_trips_and_check_catches_a_hand_edit ... ok
+test hash::tests::content_hash_changes_when_a_module_byte_changes ... ok
+test hash::tests::content_hash_changes_when_a_module_name_changes ... ok
+test hash::tests::content_hash_framing_prevents_name_bytes_boundary_ambiguity ... ok
+test hash::tests::content_hash_is_independent_of_insertion_order ... ok
+test hash::tests::content_hash_rejects_uppercase_text ... ok
+test hash::tests::content_hash_text_round_trips ... ok
+test codegen::schema_emit::tests::stale_marked_schema_is_removed_on_write_and_drift_under_check ... ok
+test hash::tests::explicit_timeout_identity_is_deterministic_and_value_sensitive ... ok
+test hash::tests::legacy_identity_remains_exactly_the_beams_only_hash ... ok
+test hash::tests::mixed_archive_with_injected_additional_timeout_reads_as_undeclared ... ok
+test hash::tests::non_v1_non_v3_timeout_identity_is_rejected ... ok
+test hash::tests::per_entry_identity_binds_every_additional_entry_timeout ... ok
+test hash::tests::v1_single_value_archive_loads_but_reads_undeclared ... ok
+test hash::tests::v3_identity_binds_the_primary_routing_identity ... ok
+test manifest::tests::absent_additional_workflow_list_loads_as_legacy_empty ... ok
+test manifest::tests::additional_workflow_entry_round_trips_with_internal_flag ... ok
+test manifest::tests::manifest_json_keys_are_stable ... ok
+test manifest::tests::canonical_digest_renders_as_lowercase_hex ... ok
+test manifest::tests::supported_format_version_passes ... ok
+test manifest::tests::manifest_round_trips_losslessly_through_json ... ok
+test manifest::tests::manifest_with_schemas_and_declared_activities_round_trips ... ok
+test manifest::tests::canonical_digest_detects_manifest_divergence ... ok
+test namespace::tests::deployed_name_sets_for_different_hashes_are_disjoint ... ok
+test manifest::tests::unsupported_format_version_returns_typed_error ... ok
+test namespace::tests::deployed_names_follow_beam_set_canonical_order ... ok
+test namespace::tests::forward_then_inverse_round_trips_many_pairs ... ok
+test namespace::tests::forward_transform_uses_mandated_separator_and_hash_text ... ok
+test namespace::tests::inverse_then_forward_recovers_deployed_name ... ok
+test namespace::tests::malformed_deployed_names_return_typed_errors ... ok
+test namespace::tests::parse_preserves_separator_neighbouring_chars ... ok
+test namespace::tests::same_logical_module_under_same_hash_is_idempotent ... ok
+test package::tests::an_unrecognised_awl_family_is_refused ... ok
+test package::tests::a_nested_document_entry_is_refused ... ok
+test package::tests::a_non_utf8_document_entry_is_refused ... ok
+test package::tests::beam_entry_with_deployed_name_separator_returns_malformed_entry ... ok
+test package::tests::invalid_source_entry_returns_malformed_entry ... ok
+test package::tests::builder_produced_package_loads_successfully ... ok
+test package::tests::an_archive_without_awl_entries_loads_with_no_provenance ... ok
+test package::tests::malformed_beam_entry_returns_exact_variant ... ok
+test package::tests::missing_manifest_returns_missing_manifest ... ok
+test package::tests::non_zip_input_returns_archive_read ... ok
+test package::tests::missing_entry_module_returns_exact_variant_when_hash_matches ... ok
+test package::tests::awl_provenance_survives_the_persistence_rewrite ... ok
+test package::tests::package_on_exact_inflate_budget_loads_and_one_byte_under_refuses ... ok
+test package::tests::schema_entries_without_a_document_are_refused ... ok
+test package::tests::re_routing_the_primary_entry_module_invalidates_the_stored_identity ... ok
+test package::tests::load_from_path_loads_successfully ... ok
+test package::tests::unparseable_manifest_returns_manifest_parse ... ok
+test package::tests::truncated_zip_input_returns_archive_read ... ok
+test package::tests::unknown_format_version_returns_exact_variant ... ok
+test package::tests::to_archive_bytes_preserves_legacy_identity ... ok
+test package::tests::to_archive_bytes_preserves_v4_contract_identity ... ok
+test project::assemble::tests::output_override_with_multiple_workflows_is_ambiguous ... ok
+test project::assemble::tests::missing_entry_module_returns_entry_module_not_found ... ok
+test project::assemble::tests::output_write_failure_names_the_output_path ... ok
+test project::assemble::tests::output_override_may_point_outside_root_via_dotdot ... ok
+test project::assemble::tests::output_override_applies_to_single_workflow_project ... ok
+test project::assemble::tests::exclusions_and_sources_are_reported_and_shipped ... ok
+test project::assemble::tests::multi_workflow_project_binds_each_primary_route_into_identity ... ok
+test project::assemble::tests::explicit_output_field_is_respected ... ok
+test project::config::tests::absolute_schema_path_outside_root_is_rejected_unread ... ok
+test project::assemble::tests::packaged_workflow_round_trips_manifest_and_hash ... ok
+test project::config::tests::dotdot_output_escaping_root_is_rejected ... ok
+test project::config::tests::absent_timeout_seconds_declares_no_timeout ... ok
+test project::config::tests::dotdot_paths_staying_inside_root_are_accepted_and_normalized ... ok
+test project::config::tests::duplicate_activities_return_config_invalid ... ok
+test project::config::tests::duplicate_entry_modules_return_config_invalid ... ok
+test project::config::tests::dotdot_output_schema_escaping_root_is_rejected ... ok
+test project::config::tests::empty_activity_strings_return_config_invalid ... ok
+test project::config::tests::empty_entry_function_returns_config_invalid ... ok
+test project::config::tests::missing_descriptor_returns_config_missing ... ok
+test project::config::tests::full_descriptor_round_trips_with_derived_and_explicit_outputs ... ok
+test project::config::tests::explicit_output_conflicts_are_rejected_with_both_workflows ... ok
+test project::config::tests::include_source_defaults_to_true_without_package_table ... ok
+test project::config::tests::generated_awl_sidecar_supplies_additional_workflow_entries ... ok
+test project::config::tests::invalid_schema_json_returns_schema_parse_with_path ... ok
+test project::config::tests::missing_schema_file_returns_actionable_schema_missing ... ok
+test project::config::tests::textually_distinct_outputs_naming_the_same_file_conflict ... ok
+test project::config::tests::workflow_types_must_be_unique_across_every_project_entry ... ok
+test project::confine::tests::absolute_paths_are_rejected_with_field_and_declared_path ... ok
+test project::confine::tests::dot_and_inside_root_dotdot_components_fold_away ... ok
+test project::config::tests::zero_timeout_returns_config_invalid ... ok
+test project::confine::tests::dotdot_climbing_above_root_is_rejected ... ok
+test project::confine::tests::relative_paths_resolve_under_root ... ok
+test project::config::tests::unsafe_entry_modules_return_config_invalid ... ok
+test project::config::tests::unknown_keys_in_any_table_return_config_parse_naming_them ... ok
+test project::assemble::tests::user_module_with_reserved_name_fails_typed ... ok
+test project::config::tests::zero_workflow_tables_return_config_invalid ... ok
+test project::config::tests::omitting_each_required_field_returns_config_parse_naming_it ... ok
+test project::assemble::tests::source_inclusion_changes_bytes_but_never_the_version ... ok
+test project::assemble::tests::repackaging_produces_identical_archive_bytes ... ok
+test package::tests::inflate_bomb_past_bounded_budget_is_refused_reporting_the_limit ... ok
+test project::discover::tests::cross_package_duplicate_module_carries_both_provenances ... ok
+test project::discover::tests::dev_dependency_modules_are_excluded_and_reported ... ok
+test project::discover::tests::discovers_production_closure_modules_with_exact_bytes ... ok
+test project::discover::tests::missing_build_directory_returns_project_not_built ... ok
+test project::discover::tests::gleam_toml_dependency_missing_from_lockfile_is_unresolved ... ok
+test project::discover::tests::missing_closure_package_ebin_returns_project_not_built ... ok
+test project::error::tests::display_messages_name_the_failed_condition ... ok
+test project::error::tests::package_error_converts_transparently ... ok
+test project::error::tests::packaging_error_is_send_sync_and_static ... ok
+test structure::arms::tests::block_body_arm_is_bounded_by_braces ... ok
+test structure::arms::tests::two_expression_arms_split_cleanly ... ok
+test structure::arms::tests::wildcard_arm_is_labelled ... ok
+test structure::control_flow::unit::map_functions_finds_bodies ... ok
+test structure::control_flow::unit::recognise_covers_the_vocabulary ... ok
+test structure::determinism::tests::clean_workflow_has_no_violations ... ok
+test structure::determinism::tests::direct_wall_clock_call_is_flagged ... ok
+test structure::determinism::tests::entropy_in_a_helper_passed_as_a_value_is_flagged ... ok
+test structure::determinism::tests::entropy_in_a_reachable_helper_is_flagged ... ok
+test structure::determinism::tests::forbidden_word_inside_a_string_literal_is_not_flagged ... ok
+test structure::determinism::tests::missing_entry_function_is_a_loud_error ... ok
+test structure::determinism::tests::multiple_distinct_calls_are_all_reported ... ok
+test structure::determinism::tests::unreachable_helper_violation_is_not_flagged ... ok
+test structure::determinism::tests::mutually_recursive_helpers_terminate ... ok
+test structure::facts::tests::missing_define_call_is_an_error ... ok
+test structure::facts::tests::aliased_workflow_import_is_honoured ... ok
+test structure::facts::tests::missing_workflow_import_is_an_error ... ok
+test structure::facts::tests::reads_typed_entry_and_counts_reachable_timers ... ok
+test structure::facts::tests::timer_in_a_helper_passed_as_a_value_is_counted ... ok
+test structure::ident::tests::reserved_words_are_recognised ... ok
+test structure::facts::tests::unreachable_timer_is_not_counted ... ok
+test structure::ident::tests::snake_identifiers_are_classified ... ok
+test structure::reader::tests::end_of_call_skips_balanced_args ... ok
+test structure::reader::tests::last_identifier_argument_ignores_nested_call_arguments ... ok
+test structure::reader::tests::last_identifier_argument_rejects_a_qualified_last_argument ... ok
+test project::discover::tests::missing_gleam_toml_returns_gleam_toml_missing ... ok
+test structure::reader::tests::last_identifier_argument_reads_the_define_entry ... ok
+test structure::reader::tests::leading_local_call_detects_helper ... ok
+test structure::reader::tests::leading_local_call_rejects_qualified ... ok
+test structure::reader::tests::match_brace_honours_nesting ... ok
+test structure::reader::tests::run_activity_name_strips_suffix ... ok
+test structure::scan::tests::arrow_does_not_swallow_a_lone_minus ... ok
+test structure::scan::tests::escapes_in_strings_are_unescaped ... ok
+test structure::scan::tests::braces_arrow_and_comma_are_emitted ... ok
+test structure::scan::tests::string_contents_do_not_match_but_are_recoverable ... ok
+test structure::scan::tests::line_comments_are_excluded ... ok
+test structure::scan::tests::qualified_calls_are_recognised ... ok
+test structure::tests::aliased_import_shim_style_is_followed ... ok
+test structure::tests::aliased_workflow_import_is_supported ... ok
+test project::discover::tests::missing_src_directory_returns_source_read ... ok
+test structure::tests::append_run_unknown_activity_is_refused ... ok
+test project::discover::tests::missing_lockfile_returns_gleam_metadata_read ... ok
+test structure::tests::branched_graph_is_refused_by_the_bounded_round_trip ... ok
+test structure::tests::data_case_with_two_primitive_arms_is_a_branch ... ok
+test structure::tests::define_with_non_bare_last_argument_is_a_no_op_walk ... ok
+test structure::tests::define_naming_the_entry_function_is_recursion_guarded ... ok
+test structure::tests::delta_targeting_absent_node_is_refused ... ok
+test structure::tests::entry_reaching_execute_directly_and_through_define_walks_it_twice ... ok
+test structure::tests::each_primitive_is_extracted_with_its_correlation_key ... ok
+test structure::tests::c23_oracle_matches_real_branches_and_rejects_a_flat_sequence ... ok
+test structure::tests::entry_without_workflow_import_is_a_loud_error ... ok
+test structure::tests::fan_out_member_undeclared_activity_is_rejected ... ok
+test structure::tests::fan_out_members_are_individual_run_nodes ... ok
+test structure::tests::missing_entry_function_is_a_loud_error ... ok
+test structure::tests::missing_entry_source_is_a_loud_error ... ok
+test structure::tests::non_utf8_entry_source_is_a_loud_error ... ok
+test structure::tests::primitive_case_mints_a_labelled_branch ... ok
+test structure::tests::extraction_is_deterministic ... ok
+test structure::tests::primitive_free_helper_is_pruned ... ok
+test structure::tests::regeneration_does_not_mutate_the_package_or_graph ... ok
+test structure::tests::order_saga_extracts_faithful_branched_control_flow ... ok
+test structure::tests::run_node_with_undeclared_activity_is_rejected ... ok
+test structure::tests::spawn_carries_child_name_and_ordinal ... ok
+test structure::tests::shim_style_entry_yields_the_same_graph_as_direct_style ... ok
+test structure::tests::unbounded_case_surfaces_as_an_opaque_node ... ok
+test version::tests::loaded_package_produces_matching_version_record ... ok
+test project::discover::tests::sdk_test_modules_are_filtered_only_from_aion_flow_and_reported ... ok
+test project::discover::tests::sources_are_collected_recursively_with_logical_names ... ok
+test project::discover::tests::transitive_requirement_missing_from_lockfile_is_unresolved ... ok
+test project::discover::tests::user_module_with_reserved_name_is_discovered_not_filtered ... ok
+test project::discover::tests::unparseable_gleam_metadata_returns_gleam_metadata_parse ... ok
+test structure::tests::append_run_regenerates_type_checking_gleam ... ok
+
+test result: ok. 309 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.30s
+
+     Running tests/awl_worker_build.rs (target/debug/deps/awl_worker_build-3b3786f8c0d88153)
+
+running 1 test
+test the_generated_worker_compiles_lints_and_proves_its_advertisement has been running for over 60 seconds
+test the_generated_worker_compiles_lints_and_proves_its_advertisement ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 66.11s
+
+     Running tests/builder.rs (target/debug/deps/builder-b3ebb226e65050d0)
+
+running 3 tests
+test source_inclusion_does_not_change_manifest_version ... ok
+test write_to_bytes_produces_fixed_zip_layout ... ok
+test identical_inputs_produce_byte_identical_archives ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/golden_gleam_exec.rs (target/debug/deps/golden_gleam_exec-a38deabe8aa5d601)
+
+running 2 tests
+test the_skip_is_visible_in_a_passing_run ... ok
+test generated_golden_passes_real_gleam_test_for_float_optional_enum_and_nested ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.41s
+
+     Running tests/package.rs (target/debug/deps/package-012ff92aa4bf4bd6)
+
+running 4 tests
+test builder_produced_package_loads_successfully ... ok
+test deployed_modules_match_namespace_transform_for_every_module ... ok
+test loaded_hash_matches_canonical_contract_bound_hash ... ok
+test corrupted_beam_contents_return_integrity_mismatch ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/package_project_hello_world.rs (target/debug/deps/package_project_hello_world-82d8b9c598f89831)
+
+running 1 test
+test packages_hello_world_byte_identically_to_direct_construction ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/project_determinism.rs (target/debug/deps/project_determinism-beeef58004bea451)
+
+running 1 test
+test library_archive_is_byte_identical_to_direct_builder_construction ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/roundtrip.rs (target/debug/deps/roundtrip-6d61c2870c29a028)
+
+running 5 tests
+test package_round_trips_without_source ... ok
+test package_round_trips_manifest_beams_source_and_deployed_names ... ok
+test altering_packed_beam_contents_is_rejected_as_integrity_mismatch ... ok
+test identical_inputs_produce_byte_identical_packages ... ok
+test source_inclusion_does_not_change_loaded_content_hash_or_manifest_version ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/rust_worker_build.rs (target/debug/deps/rust_worker_build-74ea1f7940b647b9)
+
+running 1 test
+test generated_rust_worker_compiles_against_real_aion_worker ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 39.19s
+
+     Running tests/schema_equivalence.rs (target/debug/deps/schema_equivalence-1272d11d8c92ba4b)
+
+running 1 test
+test emitted_order_saga_schemas_are_semantically_equivalent_to_the_authored_originals ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+
+   Doc-tests aion_package
+
+running 1 test
+test crates/aion-package/src/lib.rs - (line 9) - compile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 1.20s; merged doctests compilation took 0.55s
+test_pkg_rc=0
+--- test -p aion-cli worker_surface
+   Compiling aion-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+   Compiling aion-awl v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl)
+   Compiling aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+   Compiling aion-worker v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+   Compiling aion-toolchain v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-toolchain)
+   Compiling aion-awl-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-package)
+   Compiling aion-awl-lsp v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-lsp)
+   Compiling aion-client v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-client)
+   Compiling aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+   Compiling aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 03s
+     Running unittests src/main.rs (target/debug/deps/aion-ea3b8252f118cbae)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 214 filtered out; finished in 0.00s
+
+     Running tests/authoring_quality_e2e.rs (target/debug/deps/authoring_quality_e2e-52345f3c82b17c9d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+
+     Running tests/awl_emit_beam.rs (target/debug/deps/awl_emit_beam-d6d4498639c6e549)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/deploy_commands.rs (target/debug/deps/deploy_commands-647cd22e1706b19d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/dev_hot_reload_e2e.rs (target/debug/deps/dev_hot_reload_e2e-a9e901517bcc8916)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/error_rendering.rs (target/debug/deps/error_rendering-aecba38d70d9298a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/generate_e2e.rs (target/debug/deps/generate_e2e-da1a86be9b6156db)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/generate_types_first_e2e.rs (target/debug/deps/generate_types_first_e2e-79cea366744a2b8e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+
+     Running tests/lsub5b_osproc_failover_e2e.rs (target/debug/deps/lsub5b_osproc_failover_e2e-4ef5dbacc52baac5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/lsub5b_osproc_kill9_failover_e2e.rs (target/debug/deps/lsub5b_osproc_kill9_failover_e2e-b9568477f17d597e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/new_agent_e2e.rs (target/debug/deps/new_agent_e2e-d891e4fac9674665)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/new_hello_world_e2e.rs (target/debug/deps/new_hello_world_e2e-198b021ea22812e6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/new_scaffold_build.rs (target/debug/deps/new_scaffold_build-2bfa062d264cb37f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s
+
+     Running tests/one_motion_awl.rs (target/debug/deps/one_motion_awl-6ead50bebdd9fdac)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/one_motion_live_e2e.rs (target/debug/deps/one_motion_live_e2e-652814e4f471d7cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/package_command.rs (target/debug/deps/package_command-2c04dd95fa3e44e2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/parked_timer_osproc_kill9_failover_e2e.rs (target/debug/deps/parked_timer_osproc_kill9_failover_e2e-23c585a014907611)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/server_command.rs (target/debug/deps/server_command-cfe850be6f4bd13b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/stacked_dev_live_e2e.rs (target/debug/deps/stacked_dev_live_e2e-603f1204f6113210)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+test_ws_rc=0

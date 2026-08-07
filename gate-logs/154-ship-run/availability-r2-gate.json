@@ -1,0 +1,1 @@
+{"available":true,"task_queue":"gate","connected_workers":0,"worker_actions":[],"server_run_actions":["checks","clone","head","tests"],"scaffold_hint":null}

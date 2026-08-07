@@ -134,7 +134,7 @@ pub(crate) fn serviceable_action_names(worker: &WorkerContract) -> BTreeSet<Stri
     worker
         .actions
         .iter()
-        .filter(|action| action.body.is_none())
+        .filter(|action| action.worker_owed())
         .map(|action| action.name.clone())
         .collect()
 }
@@ -170,7 +170,7 @@ pub(crate) fn reconcile(
     let mut declared = worker
         .actions
         .iter()
-        .filter(|action| action.body.is_none())
+        .filter(|action| action.worker_owed())
         .map(|action| {
             (
                 action.name.clone(),
@@ -189,7 +189,7 @@ pub(crate) fn reconcile(
             let carries_body = worker
                 .actions
                 .iter()
-                .any(|candidate| &candidate.name == action && candidate.body.is_some());
+                .any(|candidate| &candidate.name == action && !candidate.worker_owed());
             if carries_body {
                 bail!(
                     "{subject} {serves} action `{action}`, but `{}` declares a body for it: \

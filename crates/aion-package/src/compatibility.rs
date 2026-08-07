@@ -71,7 +71,7 @@ pub fn contract_diffs(
     let mut expected = contract
         .actions
         .iter()
-        .filter(|action| action.body.is_none())
+        .filter(|action| action.worker_owed())
         .filter(|action| dispatch_can_reach(action.node.as_deref(), worker_node))
         .collect::<Vec<_>>();
     expected.sort_by(|left, right| left.name.cmp(&right.name));

@@ -1,0 +1,40 @@
+--- clippy -p aion-package -p aion-server -p aion-cli --all-targets
+    Checking aion-awl-lsp v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-lsp)
+    Checking aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Checking aion-client v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-client)
+    Checking aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 44.86s
+clippy_p_rc=0
+--- clippy --workspace --all-targets
+    Checking aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Checking aion-client v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-client)
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion/benchmarks/million-processes)
+    Checking aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 41.97s
+clippy_ws_rc=0
+--- fmt --check
+Diff in /Users/tom/Developer/ablative/stack/aion/crates/aion-server/src/awl/run_loop_tests.rs:183:
+ 
+     use aion_package::{ExtractionLimits, Package};
+ 
+[31m-    use super::super::{WorkerAvailabilityRequest, WorkerAvailabilityResponse, worker_availability};
+(B[m[32m+    use super::super::{
+(B[m[32m+        WorkerAvailabilityRequest, WorkerAvailabilityResponse, worker_availability,
+(B[m[32m+    };
+(B[m     use crate::config::{
+         AuthConfig, AuthoringConfig, DeployConfig, DevConfig, ListenConfig, MetricsConfig,
+         NamespaceConfig, NamespaceMode, OpsConsoleAssetSource, OpsConsoleConfig, OutboxConfig,
+Diff in /Users/tom/Developer/ablative/stack/aion/crates/aion-server/src/awl/run_loop_tests.rs:307:
+             .await?;
+         for (file_name, source) in sources {
+             let root = tempfile::tempdir()?;
+[31m-            let prepared = aion_awl_package::compile_and_assemble_awl(source, root.path(), file_name)?;
+(B[m[31m-            let package = Package::load_from_bytes(prepared.archive, ExtractionLimits::unbounded())?;
+(B[m[32m+            let prepared =
+(B[m[32m+                aion_awl_package::compile_and_assemble_awl(source, root.path(), file_name)?;
+(B[m[32m+            let package =
+(B[m[32m+                Package::load_from_bytes(prepared.archive, ExtractionLimits::unbounded())?;
+(B[m             engine.load_package(package).await?;
+         }
+         let resolver = NamespaceResolver::from_config(
+fmt_rc=1

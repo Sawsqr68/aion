@@ -1,0 +1,48 @@
+   Compiling aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 10.89s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a347e1aad4065bbb)
+
+running 17 tests
+test awl::run_loop::run_loop_tests::a_node_pinned_refusal_names_its_node ... ok
+test awl::run_loop::run_loop_tests::an_empty_queue_demands_nothing_like_admission_does ... ok
+test awl::run_loop::run_loop_tests::a_pinned_and_an_unpinned_version_are_two_addresses ... ok
+test awl::run_loop::run_loop_tests::a_bodyless_action_still_demands_a_worker ... ok
+test awl::run_loop::run_loop_tests::a_mixed_queue_is_held_to_its_worker_actions ... ok
+test awl::run_loop::run_loop_tests::a_queue_of_declared_bodies_demands_no_worker ... ok
+test awl::run_loop::run_loop_tests::a_name_bodyless_in_any_reachable_version_is_demanded ... ok
+test awl::run_loop::run_loop_tests::with_a_refusal_on_record_the_operator_is_told_the_worker_is_being_refused ... ok
+test awl::run_loop::run_loop_tests::further_refusals_are_counted_rather_than_dropped ... ok
+test awl::run_loop::run_loop_tests::with_no_refusal_on_record_the_operator_is_told_to_start_a_worker ... ok
+test awl::run_loop::run_loop_tests::endpoint::an_undeployed_queue_is_vacuously_available ... ok
+test worker::outbox_dispatcher::tests::run_loop_drains_pending_then_stops_on_shutdown ... ok
+test awl::run_loop::run_loop_tests::endpoint::a_node_pinned_action_is_not_served_from_the_wrong_node ... ok
+test awl::run_loop::run_loop_tests::endpoint::a_connected_worker_not_advertising_the_action_vouches_for_nothing ... ok
+test awl::run_loop::run_loop_tests::endpoint::a_declared_body_queue_is_available_with_zero_workers ... FAILED
+test awl::run_loop::run_loop_tests::endpoint::a_bodyless_queue_with_no_worker_refuses_with_a_hint ... FAILED
+test awl::run_loop::run_loop_tests::endpoint::a_worker_advertising_the_action_serves_the_queue ... ok
+
+failures:
+
+---- awl::run_loop::run_loop_tests::endpoint::a_declared_body_queue_is_available_with_zero_workers stdout ----
+
+thread 'awl::run_loop::run_loop_tests::endpoint::a_declared_body_queue_is_available_with_zero_workers' (50434166) panicked at crates/aion-server/src/awl/run_loop_tests.rs:371:9:
+assertion `left == right` failed: nothing on this queue is a worker's job
+  left: ["checks", "head"]
+ right: []
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- awl::run_loop::run_loop_tests::endpoint::a_bodyless_queue_with_no_worker_refuses_with_a_hint stdout ----
+
+thread 'awl::run_loop::run_loop_tests::endpoint::a_bodyless_queue_with_no_worker_refuses_with_a_hint' (50434164) panicked at crates/aion-server/src/awl/run_loop_tests.rs:393:9:
+assertion `left == right` failed
+  left: []
+ right: ["charge"]
+
+
+failures:
+    awl::run_loop::run_loop_tests::endpoint::a_bodyless_queue_with_no_worker_refuses_with_a_hint
+    awl::run_loop::run_loop_tests::endpoint::a_declared_body_queue_is_available_with_zero_workers
+
+test result: FAILED. 15 passed; 2 failed; 0 ignored; 0 measured; 793 filtered out; finished in 0.10s
+
+error: test failed, to rerun pass `-p aion-server --lib`

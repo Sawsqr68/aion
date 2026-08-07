@@ -8,6 +8,27 @@ whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 Landed on `main` since the 0.11.0 publish. Nothing here has been released to
 crates.io yet.
 
+- **`POST /awl/workers/availability` answers service, not connection.** The
+  endpoint (and with it the console's ship-and-run pre-flight) used to answer
+  `available: connected_workers > 0`, which refused to start documents whose
+  actions all carry declared `run` bodies — the server runs those itself and
+  no worker ever connects, so the tutorial's own closing ship-and-run step
+  refused a start that completes green. The answer is now derived from the
+  same reachable contracts worker admission reads: actions with declared
+  bodies never count against availability, and each worker-owed action is
+  censused against the live fleet per `(action, node)` dispatch address, so a
+  connected worker that does not advertise a demanded action — or sits on the
+  wrong node for its pin — no longer vouches for it. The response gains two
+  fields, `worker_actions` and `server_run_actions` (sorted), naming who
+  serves what; existing consumers read only the pre-existing fields and are
+  unaffected. The `scaffold_hint` now diagnoses which of four states refused
+  the queue — nothing connected, a worker being refused at admission, a
+  connected worker that does not advertise the demanded action (named), or
+  workers on the wrong node for a pinned action (both named) — instead of
+  answering every one with "no connected worker". The answer is per-queue: a
+  document with several `worker` blocks must be checked once per queue, and
+  it reads declaration-level node pins only — a call-site `node` override is
+  visible to neither this answer nor admission.
 - **One-command setup.** `scripts/setup.sh` takes a machine from nothing to a
   running server with the console, the assistant workflow deployed, and the
   assistant worker connected and serving it. It is safe to re-run: every step
