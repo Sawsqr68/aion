@@ -1,0 +1,98 @@
+   Compiling aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.68s
+     Running unittests src/lib.rs (target/debug/deps/aion-e9cbe1ce10fd20e2)
+
+running 5 tests
+test runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides ... FAILED
+test runtime::nif_continue_as_new::tests::a_closed_epoch_refuses_the_continue_as_new_terminal ... ok
+test runtime::nif_continue_as_new::tests::a_deadline_retirement_that_fails_after_the_terminal_reports_terminal_only ... FAILED
+test runtime::nif_continue_as_new::tests::an_already_terminal_run_reports_its_own_cause_not_the_epoch ... ok
+test runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest ... FAILED
+
+failures:
+
+---- runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides stdout ----
+
+thread 'runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides' (41758229) panicked at crates/aion/src/runtime/nif_continue_as_new_tests.rs:282:5:
+a HALF-completed transition must end the process too — the terminal is durable, so the run is over whatever happened next, and this is the exact case the old error-keyed predicate got backwards
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- runtime::nif_continue_as_new::tests::a_deadline_retirement_that_fails_after_the_terminal_reports_terminal_only stdout ----
+
+thread 'runtime::nif_continue_as_new::tests::a_deadline_retirement_that_fails_after_the_terminal_reports_terminal_only' (41758226) panicked at crates/aion/src/runtime/nif_continue_as_new_tests.rs:428:5:
+a half-completed transition must still end the workflow process: the run is terminal, and a live process on a terminal run writes into a closed history alongside the successor the sweep will start
+
+---- runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest stdout ----
+
+thread 'runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest' (41758228) panicked at crates/aion/src/runtime/nif_continue_as_new_tests.rs:824:5:
+TREATMENT A: a transition whose terminal LANDED must end the calling process even though the deadline retirement failed — this is the gate consuming Ok(TerminalOnly), the arm the type exists for. A process left alive here keeps writing timers, activities, children and signals into a history that already holds its terminal, concurrently with the successor the sweep will start. Diagnosis: terminal in history = true (false means the terminal append was refused and this measured the wrong arm); timer retired = false (true means the transition COMPLETED and this measured the Complete arm); unspent append failures = 0; history: [
+    WorkflowStarted {
+        envelope: EventEnvelope {
+            seq: 1,
+            recorded_at: 2026-08-07T10:29:28.195080Z,
+            workflow_id: WorkflowId(
+                fa0240e9-7ff0-4caa-adc4-c68d58c43bb4,
+            ),
+        },
+        workflow_type: "continuer",
+        input: Payload {
+            content_type: Json,
+            bytes: [
+                123,
+                125,
+            ],
+        },
+        run_id: RunId(
+            82ecbc59-56e2-49af-9c87-4881eb726974,
+        ),
+        parent_run_id: None,
+        package_version: PackageVersion(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ),
+    },
+    TimerStarted {
+        envelope: EventEnvelope {
+            seq: 2,
+            recorded_at: 2026-08-07T10:29:28.195113Z,
+            workflow_id: WorkflowId(
+                fa0240e9-7ff0-4caa-adc4-c68d58c43bb4,
+            ),
+        },
+        timer_id: TimerId(
+            Named(
+                "deadline:82ecbc59-56e2-49af-9c87-4881eb726974",
+            ),
+        ),
+        fire_at: 2026-08-07T10:29:28.195114Z,
+    },
+    WorkflowContinuedAsNew {
+        envelope: EventEnvelope {
+            seq: 3,
+            recorded_at: 2026-08-07T10:29:28.195456Z,
+            workflow_id: WorkflowId(
+                fa0240e9-7ff0-4caa-adc4-c68d58c43bb4,
+            ),
+        },
+        input: Payload {
+            content_type: Json,
+            bytes: [
+                123,
+                125,
+            ],
+        },
+        workflow_type: None,
+        parent_run_id: RunId(
+            82ecbc59-56e2-49af-9c87-4881eb726974,
+        ),
+    },
+]
+
+
+failures:
+    runtime::nif_continue_as_new::tests::a_deadline_retirement_that_fails_after_the_terminal_reports_terminal_only
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest
+    runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides
+
+test result: FAILED. 2 passed; 3 failed; 0 ignored; 0 measured; 666 filtered out; finished in 20.08s
+
+error: test failed, to rerun pass `-p aion-rs --lib`

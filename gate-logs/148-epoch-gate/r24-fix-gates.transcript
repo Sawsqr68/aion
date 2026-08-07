@@ -1,0 +1,7 @@
+fmt-check EXIT 0 (load 9.89)
+module EXIT 0 (load 10.23)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 666 filtered out; finished in 10.36s
+clippy-p EXIT 0  checking-lines 1 (load 11.02)
+clippy-ws EXIT 0 (load 9.02)
+1f13c64d7e73caada8a412411a3c25bec9f45d0e  crates/aion/src/runtime/nif_continue_as_new.rs
+DONE (load 9.02)

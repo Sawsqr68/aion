@@ -1,0 +1,6 @@
+    Checking aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Checking aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Checking aion-client v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-client)
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion/benchmarks/million-processes)
+    Checking aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 49.89s

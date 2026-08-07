@@ -1,0 +1,32 @@
+   Compiling aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 43.68s
+     Running unittests src/lib.rs (target/debug/deps/aion-e9cbe1ce10fd20e2)
+
+running 5 tests
+test runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides ... FAILED
+test runtime::nif_continue_as_new::tests::a_closed_epoch_refuses_the_continue_as_new_terminal ... ok
+test runtime::nif_continue_as_new::tests::a_deadline_retirement_that_fails_after_the_terminal_reports_terminal_only ... FAILED
+test runtime::nif_continue_as_new::tests::an_already_terminal_run_reports_its_own_cause_not_the_epoch ... ok
+test runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_the_epoch_refusal_and_spares_the_others ... ok
+
+failures:
+
+---- runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides stdout ----
+
+thread 'runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides' (38964656) panicked at crates/aion/src/runtime/nif_continue_as_new_tests.rs:282:5:
+a HALF-completed transition must end the process too — the terminal is durable, so the run is over whatever happened next, and this is the exact case the old error-keyed predicate got backwards
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- runtime::nif_continue_as_new::tests::a_deadline_retirement_that_fails_after_the_terminal_reports_terminal_only stdout ----
+
+thread 'runtime::nif_continue_as_new::tests::a_deadline_retirement_that_fails_after_the_terminal_reports_terminal_only' (38964653) panicked at crates/aion/src/runtime/nif_continue_as_new_tests.rs:424:5:
+a half-completed transition must still end the workflow process: the run is terminal, and a live process on a terminal run writes into a closed history alongside the successor the sweep will start
+
+
+failures:
+    runtime::nif_continue_as_new::tests::a_deadline_retirement_that_fails_after_the_terminal_reports_terminal_only
+    runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides
+
+test result: FAILED. 3 passed; 2 failed; 0 ignored; 0 measured; 666 filtered out; finished in 10.09s
+
+error: test failed, to rerun pass `-p aion-rs --lib`

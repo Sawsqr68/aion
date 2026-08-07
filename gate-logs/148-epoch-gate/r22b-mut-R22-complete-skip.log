@@ -1,0 +1,101 @@
+   Compiling aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.72s
+     Running unittests src/lib.rs (target/debug/deps/aion-e9cbe1ce10fd20e2)
+
+running 5 tests
+test runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides ... ok
+test runtime::nif_continue_as_new::tests::an_already_terminal_run_reports_its_own_cause_not_the_epoch ... ok
+test runtime::nif_continue_as_new::tests::a_closed_epoch_refuses_the_continue_as_new_terminal ... ok
+test runtime::nif_continue_as_new::tests::a_deadline_retirement_that_fails_after_the_terminal_reports_terminal_only ... ok
+test runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest ... FAILED
+
+failures:
+
+---- runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest stdout ----
+
+thread 'runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest' (42681416) panicked at crates/aion/src/runtime/nif_continue_as_new_tests.rs:870:5:
+TREATMENT B: a transition that COMPLETED — terminal durable, deadline retired — must end the calling process; this is the gate consuming Ok(Complete), the ordinary path every real continue-as-new takes. Diagnosis: terminal in history = true; timer retired = true (false/false means the fixture never made the call and this measured the harness); history: [
+    WorkflowStarted {
+        envelope: EventEnvelope {
+            seq: 1,
+            recorded_at: 2026-08-07T11:26:55.612494Z,
+            workflow_id: WorkflowId(
+                396788c0-41ec-461f-a7c5-46a5674a765a,
+            ),
+        },
+        workflow_type: "continuer",
+        input: Payload {
+            content_type: Json,
+            bytes: [
+                123,
+                125,
+            ],
+        },
+        run_id: RunId(
+            0928a2c5-605b-42bc-aac4-363639eca71f,
+        ),
+        parent_run_id: None,
+        package_version: PackageVersion(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ),
+    },
+    TimerStarted {
+        envelope: EventEnvelope {
+            seq: 2,
+            recorded_at: 2026-08-07T11:26:55.612525Z,
+            workflow_id: WorkflowId(
+                396788c0-41ec-461f-a7c5-46a5674a765a,
+            ),
+        },
+        timer_id: TimerId(
+            Named(
+                "deadline:0928a2c5-605b-42bc-aac4-363639eca71f",
+            ),
+        ),
+        fire_at: 2026-08-07T11:26:55.612526Z,
+    },
+    WorkflowContinuedAsNew {
+        envelope: EventEnvelope {
+            seq: 3,
+            recorded_at: 2026-08-07T11:26:55.612899Z,
+            workflow_id: WorkflowId(
+                396788c0-41ec-461f-a7c5-46a5674a765a,
+            ),
+        },
+        input: Payload {
+            content_type: Json,
+            bytes: [
+                123,
+                125,
+            ],
+        },
+        workflow_type: None,
+        parent_run_id: RunId(
+            0928a2c5-605b-42bc-aac4-363639eca71f,
+        ),
+    },
+    TimerCancelled {
+        envelope: EventEnvelope {
+            seq: 4,
+            recorded_at: 2026-08-07T11:26:55.612916Z,
+            workflow_id: WorkflowId(
+                396788c0-41ec-461f-a7c5-46a5674a765a,
+            ),
+        },
+        timer_id: TimerId(
+            Named(
+                "deadline:0928a2c5-605b-42bc-aac4-363639eca71f",
+            ),
+        ),
+        cause: WorkflowIntent,
+    },
+]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest
+
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 666 filtered out; finished in 20.12s
+
+error: test failed, to rerun pass `-p aion-rs --lib`

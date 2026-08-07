@@ -1,0 +1,477 @@
+//! Durable continue-as-new NIF implementation.
+
+use aion_core::{Payload, RunId};
+use beamr::native::ProcessContext;
+use beamr::term::Term;
+use chrono::Utc;
+
+use crate::durability::{DurabilityError, Recorder};
+use crate::runtime::engine_tasks::EngineTaskRuntime;
+use crate::runtime::nif_activity::{
+    context_error_term, decode_string_arg, error_result_term, json_payload, ok_result_term,
+    runtime_context,
+};
+use crate::runtime::nif_context::{NifContext, NifContextError};
+
+/// Record `WorkflowContinuedAsNew` through the current workflow recorder and
+/// terminate the current workflow process so the lifecycle monitor can start the
+/// replacement run from the terminal history event.
+pub(crate) fn continue_as_new_impl(
+    args: &[Term],
+    process_context: &mut ProcessContext,
+) -> Result<Term, Term> {
+    if args.len() > 255 {
+        return Err(Term::NIL);
+    }
+    if args.len() != 1 {
+        return Ok(error_result_term(
+            process_context,
+            &format!("continue_as_new: expected 1 arguments, got {}", args.len()),
+        )
+        .unwrap_or(Term::NIL));
+    }
+
+    let result = continue_as_new(args, process_context);
+    match result {
+        Ok(()) => Ok(ok_result_term(process_context, b"continued_as_new").unwrap_or(Term::NIL)),
+        Err(term) => Ok(term),
+    }
+}
+
+fn continue_as_new(args: &[Term], process_context: &mut ProcessContext) -> Result<(), Term> {
+    let state = crate::runtime::nif_state::engine_nif_state(process_context)
+        .map_err(|error| error_result_term(process_context, &error).unwrap_or(Term::NIL))?;
+    let runtime =
+        runtime_context(&state).map_err(|error| context_error_term(process_context, &error))?;
+    let pid = process_context.pid().ok_or_else(|| {
+        error_result_term(process_context, "continue_as_new: missing calling pid")
+            .unwrap_or(Term::NIL)
+    })?;
+    // continue_as_new records a terminal event; a query handler must stay
+    // read-only.
+    crate::runtime::nif_query_pump::ensure_not_servicing_query(&state, pid, "continue_as_new")
+        .map_err(|error| error_result_term(process_context, &error).unwrap_or(Term::NIL))?;
+    let context = NifContext::new(
+        pid,
+        runtime.registry.as_ref(),
+        runtime.tokio_handle.clone(),
+        runtime.runtime.signal_delivery(),
+    )
+    .map_err(|error| context_error_term(process_context, &error))?;
+    let input_text = decode_string_arg(args[0]).map_err(|error| {
+        error_result_term(process_context, &format!("continue_as_new input: {error}"))
+            .unwrap_or(Term::NIL)
+    })?;
+    let input = json_payload(process_context, &input_text, "continue_as_new", "input")?;
+    let parent_run_id = context.run_id().clone();
+    let input_for_record = input.clone();
+
+    let engine_tasks = runtime.runtime.engine_tasks();
+    let recorded = context.block_on_recorder(move |recorder| {
+        Box::pin(async move {
+            record_continuation(recorder, &engine_tasks, &parent_run_id, input_for_record).await
+        })
+    });
+
+    // 🔴 THIS PROCESS ENDS WHENEVER THE TERMINAL LANDED, AND FOR EXACTLY ONE
+    // REFUSAL BESIDES. The decision itself lives in
+    // [`outcome_must_end_the_process`], which states the rule and is tested as a
+    // function; what follows is only why the call is here at all.
+    //
+    // Before the epoch gate existed, the recorder call either succeeded or
+    // aborted the whole NIF, and the success path ALWAYS reached `cancel_pid`.
+    // The fifth writer died at that instruction. Adding a refusal that returns
+    // early silently removed it from the epoch path, which would leave this
+    // workflow process runnable on a scheduler `Engine::drop` deliberately
+    // keeps alive — and every NIF it goes on to call writes durably: timers,
+    // activity records, `spawn_child`'s whole chain, and `send_signal` into a
+    // THIRD workflow's history. Against a store a successor engine may already
+    // own. That is load-bearing invariant 3, and refusing one terminal while
+    // licensing every other write would have made this gate a net loss.
+    //
+    // It is also what makes the refusal's own promise true rather than a race.
+    // The message tells the operator the run stays live in history and a
+    // recovering engine resumes it. That is only true if nothing keeps writing
+    // to it here.
+    if outcome_must_end_the_process(&recorded) {
+        // 🔴 THE CAUSE TRAVELS WITH THE TERMINATION FAILURE. An earlier version
+        // reported only "termination failed: {error}" and dropped `recorded` on
+        // the floor, which is the worse half of the pair: the operator is told a
+        // kill failed but not what it was killing FOR, and the two cases need
+        // opposite responses. A failed kill after a landed terminal leaves a
+        // second writer on a closed history; a failed kill after an epoch
+        // refusal leaves a process on a closing engine with its run untouched.
+        // Nothing downstream can tell them apart, because this is the only frame
+        // that still holds both facts.
+        let cause = match &recorded {
+            Ok(ContinuationOutcome::Complete) => {
+                String::from("the run's terminal is durable and its successor is due")
+            }
+            Ok(ContinuationOutcome::TerminalOnly(error)) => format!(
+                "the run's terminal is durable but its deadline retirement failed ({error})"
+            ),
+            Err(error) => format!("the transition was refused ({error})"),
+        };
+
+        // 🔴 THE OPERATOR IS TOLD HERE, BECAUSE NOTHING DOWNSTREAM CAN TELL
+        // THEM. Both accounts below used to travel only in the `{error, _}` term
+        // built further down, and that term reaches NOBODY: the `cancel_pid` on
+        // the next line has already ended the process that would have received
+        // it, so the term is constructed into a dead mailbox and dropped. A
+        // branch whose stated justification is "the alternative is silence"
+        // shipped silence. Emitted BEFORE the cancel, not after, so a cancel
+        // that itself fails — which returns early — cannot swallow the account
+        // of what the cancel was for.
+        match &recorded {
+            // The ordinary path. The successor is started by the process-exit
+            // monitor; nothing here is exceptional and nothing is owed.
+            Ok(ContinuationOutcome::Complete) => {}
+            Ok(ContinuationOutcome::TerminalOnly(error)) => tracing::error!(
+                workflow_id = %context.workflow_id(),
+                run_id = %context.run_id(),
+                deadline_timer_id = %deadline_timer_id_for(context.run_id()),
+                error = %error,
+                "{}",
+                terminal_only_account(context.run_id(), error)
+            ),
+            Err(error) => tracing::warn!(
+                workflow_id = %context.workflow_id(),
+                run_id = %context.run_id(),
+                error = %error,
+                "continue_as_new refused; the calling workflow process is being ended because \
+                 this engine may no longer speak for the run"
+            ),
+        }
+
+        runtime.runtime.cancel_pid(context.pid()).map_err(|error| {
+            error_result_term(
+                process_context,
+                &format!(
+                    "continue_as_new termination failed: {error}. This process was to be ended \
+                     because {cause}; it is still runnable, and every durable NIF it goes on to \
+                     call writes into history this engine may no longer own"
+                ),
+            )
+            .unwrap_or(Term::NIL)
+        })?;
+    }
+
+    match recorded {
+        Ok(ContinuationOutcome::Complete) => Ok(()),
+        // The run HAS continued — this is not a failed transition, it is a
+        // report of debris the transition left behind, and the debris is
+        // durable. Still built as an `{error, _}` so the shape of the return
+        // distinguishes it from a clean transition, but the account that
+        // MATTERS was emitted through `tracing` above: this process has already
+        // been cancelled, so nothing receives this term.
+        Ok(ContinuationOutcome::TerminalOnly(error)) => Err(error_result_term(
+            process_context,
+            &terminal_only_account(context.run_id(), &error),
+        )
+        .unwrap_or(Term::NIL)),
+        Err(error) => Err(context_error_term(process_context, &error)),
+    }
+}
+
+/// The predecessor's deadline timer id, or an account of why it could not be
+/// rendered.
+///
+/// Rendered through [`crate::time::deadline_timer_id`] rather than by pasting
+/// `deadline:{run}` into a message. The id's format belongs to that function,
+/// and a message that spells it out itself is a second place that knows the
+/// format and can drift from it silently.
+fn deadline_timer_id_for(run_id: &RunId) -> String {
+    crate::time::deadline_timer_id(run_id).map_or_else(
+        |error| format!("<deadline timer id unrenderable: {error}>"),
+        |timer_id| timer_id.to_string(),
+    )
+}
+
+/// The operator's whole account of a transition whose terminal landed and whose
+/// deadline retirement then failed.
+///
+/// One function, two consumers — the `tracing::error!` that actually reaches an
+/// operator and the `{error, _}` term that describes the outcome — because a
+/// fact stated in two places is a fact that has already drifted or will.
+///
+/// # 🔴 WHAT THIS SAYS WAS WRONG BEFORE, AND THE ERROR WAS IN THE MECHANISM
+///
+/// An earlier version of this text asserted that the leftover row "cannot time
+/// anything out" because the handle-free deadline path retires a row only for a
+/// `TimedOut` run, that whole-history recovery "re-arms it on every engine
+/// start", and that an operator could clear it by recording `TimerCancelled`.
+/// The conclusion — harmless — was right. Every mechanism under it was wrong,
+/// and the remedy did nothing at all. Each replacement below was read at the
+/// site named:
+///
+/// - **It is inert by TWO mechanisms in sequence, not one.** Before the
+///   successor's `WorkflowStarted` lands, the row is still inside the
+///   predecessor's active segment and a fire does reach the deadline path; with
+///   the predecessor cancelled and deregistered that is
+///   `finalize_timed_out_without_handle` (`lifecycle/deadline.rs:424`), which
+///   returns immediately for a terminal that is not `TimedOut`. Once the
+///   successor's `WorkflowStarted` lands, the fire never gets that far:
+///   `fire_timer_guarded` (`time/timer_service.rs:250`) consults
+///   `timer_is_live` FIRST and returns before the deadline demux, and
+///   `live_timers_in_active_segment` (`:369`) scans forward from the LAST
+///   `WorkflowStarted`, so the predecessor's `TimerStarted` is behind the
+///   segment start and the id is not live.
+/// - **Whole-history recovery does not re-arm it.**
+///   `outstanding_future_timers` (`time/recovery.rs:168`) filters
+///   `fire_at > now`, so an overdue row is not in that set at all. What
+///   re-surfaces it is `recover_due` reading `store.expired_timers` — the
+///   durable timer TABLE, not history.
+/// - **No operator action removes it, and telling one to try was worse than
+///   saying nothing.** No store deletes timer rows: `InMemoryStore` only ever
+///   inserts into its timer map, and neither the libSQL nor the haematite
+///   backend has a delete for them. Recording `TimerCancelled` appends an event
+///   into the successor's active segment — where this id was never live — and
+///   leaves the row exactly where it was.
+fn terminal_only_account(run_id: &RunId, error: &DurabilityError) -> String {
+    format!(
+        "continue_as_new: run {run_id} DID continue — its WorkflowContinuedAsNew terminal is \
+         durable and the successor starts from it — but retiring the predecessor's \
+         declared-timeout deadline failed afterwards: {error}. The row {deadline} is therefore \
+         PERMANENT: no store implementation deletes timer rows, so every recovery sweep's \
+         expired_timers keeps returning it. It is also permanently INERT, by two mechanisms in \
+         sequence: until the successor's WorkflowStarted lands a fire reaches the handle-free \
+         deadline path and returns at once because this run is ContinuedAsNew rather than \
+         TimedOut; once it lands, the id is behind the active segment's start and the fire is \
+         dropped before any deadline demux. NO OPERATOR ACTION REMOVES THE ROW — recording \
+         TimerCancelled for it appends into the successor's segment and deletes nothing. The cost \
+         is one no-op fire per recovery sweep, for the life of this workflow's history.",
+        deadline = deadline_timer_id_for(run_id),
+    )
+}
+
+/// How far a continue-as-new transition got, for the cases where it got
+/// somewhere.
+///
+/// 🔴 THIS TYPE EXISTS BECAUSE THE TRANSITION IS **TWO** DURABLE APPENDS, NOT
+/// ONE. `record_workflow_continued_as_new` and the `record_timer_cancelled`
+/// inside `retire_run_deadline` are separate `append_with` calls against the
+/// store, and the second can fail on its own — a backend blip, a
+/// `SequenceConflict`, a store going away mid-shutdown.
+///
+/// When it does, the run is **already terminal** and no error variant says so.
+/// An earlier design keyed the process-termination decision on the error variant
+/// alone, which answered "was this a store error?" — true, and irrelevant. The
+/// question that decides whether a workflow process may keep running is **did
+/// the terminal land**, and only the code that performed the append can answer
+/// it. So it is carried out rather than inferred.
+enum ContinuationOutcome {
+    /// Terminal recorded and the predecessor's deadline retired.
+    Complete,
+    /// Terminal recorded; the deadline retirement that must follow it did not.
+    ///
+    /// The run is over either way — that is the whole point of carrying this
+    /// rather than reporting a bare error. The retained error is the operator's
+    /// only account of why the predecessor's deadline is still armed.
+    TerminalOnly(DurabilityError),
+}
+
+/// Whether the calling workflow process must be ENDED, given how the durable
+/// half went.
+///
+/// Lifted out of the NIF for the same reason [`record_continuation`] is: this is
+/// the load-bearing decision, and a test that needed a live beamr process to
+/// reach it would be too heavy to keep and too coarse to attribute. The NIF is
+/// the adapter; this is the decision.
+///
+/// **Every `Ok` ends the process, including the half-completed one.** Both
+/// variants mean `WorkflowContinuedAsNew` is in durable history, so the run is
+/// terminal and the process has no business continuing to execute it. Leaving it
+/// alive after a landed terminal is strictly worse than leaving it alive before
+/// one: it writes timers, activity records, children, and signals into a history
+/// that is already closed, concurrently with the successor that
+/// `sweep_continued_as_new_replacements` will start — two writers on one
+/// history, which is load-bearing invariant 3. It also strands the chain, since
+/// `start_continuation_replacement` is reached only from the process-exit
+/// monitor: no exit, no successor.
+///
+/// **Of the failures, exactly one.** `EngineTaskEpochClosed` means this engine
+/// has begun closing and may no longer speak for this run — a state no amount of
+/// workflow-code error handling can improve, and one that cannot clear while
+/// this process lives.
+///
+/// **The other failures leave the process alone, and that asymmetry is the
+/// point.** `HistoryShape` (this run already recorded a terminal *before* the
+/// call) and a store error raised *before* the terminal both leave history
+/// unmoved and the run genuinely live. Terminating for those would turn a
+/// recoverable authoring mistake or a transient backend into a dead run — the
+/// mirror of the defect this gate exists to prevent, pointed the other way.
+const fn outcome_must_end_the_process(
+    outcome: &Result<ContinuationOutcome, NifContextError>,
+) -> bool {
+    match outcome {
+        Ok(_) => true,
+        Err(error) => matches!(
+            error,
+            NifContextError::Durability(DurabilityError::EngineTaskEpochClosed { .. })
+        ),
+    }
+}
+
+/// The durable half of a continue-as-new transition: the terminal, then the
+/// predecessor's deadline retirement, both under one recorder lock.
+///
+/// Lifted out of the NIF closure so the gate below is reachable by a test that
+/// needs no beamr process — the NIF is the adapter, this is the behaviour.
+///
+/// # 🔴 THE EPOCH GATE, AND WHY IT HAD TO EXIST
+///
+/// `WorkflowContinuedAsNew` is a TERMINAL event, and it is the ONE terminal a
+/// live workflow process could still write after its `Engine` was dropped
+/// without `shutdown`. Every other terminal reachable from a workflow process
+/// is already gated: the process-exit `WorkflowCompleted`/`WorkflowFailed` at
+/// [`crate::lifecycle::completion`]'s append boundary, and `WorkflowTimedOut`
+/// off the timer bridge's stand-down latch. This one was not, and the
+/// asymmetry is the whole defect:
+///
+/// **the successor this terminal makes mandatory is ALREADY refused.**
+/// `start_continuation_replacement` checks the same epoch before spawning the
+/// replacement run, for the stated reason that spawning one hands a successor
+/// engine a run this dying process is still executing. So without this gate the
+/// two halves of one transition disagreed: the terminal landed, the successor
+/// did not, and the run was left terminal-`ContinuedAsNew` with no continuation,
+/// its declared deadline retired by the line below and its process killed by the
+/// caller. A severed chain, repaired only by
+/// `sweep_continued_as_new_replacements` at some later engine's startup.
+///
+/// # 🔴 WHAT GATING COSTS — STATED, BECAUSE IT IS NOT NOTHING
+///
+/// An earlier draft of this comment claimed gating "costs nothing that was not
+/// already lost". That was false, and the falsehood was load-bearing enough to
+/// be worth naming rather than quietly deleting.
+///
+/// **Refusing leaves the predecessor's deadline ARMED.** The `deadline:{run}`
+/// row is retired by the line at the bottom of this function, which the refusal
+/// never reaches — deliberately, because retiring it would itself be a durable
+/// write by an engine that has begun closing, which is the thing being
+/// prevented. So the row stays live at its original `fire_at` while wall-clock
+/// passes during the outage. On a successor engine's boot,
+/// `recover_active_workflows_on_startup` only SPAWNS recovered processes (replay
+/// proceeds asynchronously), and `recover_timers_on_startup` then fires every
+/// overdue timer synchronously. A deadline can therefore fire while this run is
+/// still replaying, appending `WorkflowTimedOut` — and nothing repairs a
+/// `TimedOut` run, whereas `ContinuedAsNew` has a sweep.
+///
+/// That trade is accepted deliberately, and here is the argument for it. What
+/// the old path bought was not safety but an **unearned exemption**: it escaped
+/// deadline expiry only because it retired the deadline as one half of a
+/// transition whose other half never happened. The exemption was purchased with
+/// a false terminal. Refusing puts this run under exactly the exposure every
+/// other in-flight run already carries — a run parked in an activity when its
+/// engine dies also times out if the outage outlasts its remaining budget,
+/// because that is what a wall-clock deadline MEANS. And a `WorkflowTimedOut`
+/// on a run past its author's declared deadline is the declared contract, not
+/// data loss.
+///
+/// **The benefit is narrower than "recoverable versus not".** Both outcomes
+/// depend on a later engine reading the same store; an embedded engine released
+/// mid-process strands a `Running` run exactly as permanently as a
+/// `ContinuedAsNew` one, so that condition cannot be charged to one side and
+/// waived for the other. What actually improves is which machinery does the
+/// repair: a `Running` run is picked up by the ordinary active-workflow recovery
+/// path, rather than requiring the specialised continued-as-new sweep to notice
+/// a chain that was severed. History is also left honest — no terminal claiming
+/// a transition that did not occur.
+///
+/// # 🔴 ONE CHECK, NOT ONE PER WRITE — AND THAT DIFFERS FROM THE DEADLINE GATE
+/// DELIBERATELY
+///
+/// [`crate::lifecycle::deadline`] re-reads its latch before each of its durable
+/// writes, because abandoning that sequence part-way is safe: its deadline is
+/// retired last, so a partial run of it leaves the deadline live and the work
+/// simply repeats. The opposite is true here. Once the terminal has landed, the
+/// deadline retirement below is no longer optional — leaving a predecessor's
+/// deadline armed against a run that has already continued is the exact hazard
+/// `retire_run_deadline` exists to prevent. So the check sits once, immediately
+/// before the first durable write, where refusing still changes the outcome,
+/// and nothing between the two writes may abandon.
+///
+/// The check is under the recorder lock but is still, strictly, check-then-act:
+/// `begin_close` is an atomic store that takes no recorder lock, so it can land
+/// between this read and the append. It narrows the window to one append rather
+/// than closing it. Closing it would need the epoch inside the append path
+/// itself.
+///
+/// # 🔴 WHY THE DEADLINE RETIREMENT'S FAILURE IS RETURNED AS `Ok`
+///
+/// It is not success, and calling it `Ok` is not a claim that it is. It is a
+/// statement about **what already happened durably**, which is the only thing
+/// the caller's next decision turns on.
+///
+/// The two writes below are two independent `append_with` calls. Once the first
+/// lands, the run is terminal — no later failure can retract it. Returning
+/// `Err` for a failure of the second would tell the caller "the transition did
+/// not happen" about a transition that half happened, and the caller uses that
+/// answer to decide whether to end a process that is now executing a terminal
+/// run. So the second write's failure travels in the `Ok` arm, carrying its own
+/// error, and the type makes it impossible to read the outcome without seeing
+/// which half of the pair is being reported.
+///
+/// # Errors
+///
+/// Returns [`DurabilityError::EngineTaskEpochClosed`] when this engine has begun
+/// closing, [`DurabilityError::HistoryShape`] when the run already recorded a
+/// terminal, or any error the recorder raises **before** the terminal is
+/// appended. A failure after that point is reported as
+/// [`ContinuationOutcome::TerminalOnly`], not as an error.
+async fn record_continuation(
+    recorder: &mut Recorder,
+    engine_tasks: &EngineTaskRuntime,
+    parent_run_id: &RunId,
+    input: Payload,
+) -> Result<ContinuationOutcome, DurabilityError> {
+    // Terminal check and terminal record are atomic under the recorder lock: a
+    // concurrent cancel/complete/fail transition records through the same
+    // recorder, and continuing a run that already has a terminal event would
+    // corrupt its history with a second terminal.
+    let history = recorder.read_history().await?;
+    if crate::lifecycle::completion::terminal_outcome_from_history(&history, parent_run_id)
+        .is_some()
+    {
+        return Err(DurabilityError::HistoryShape {
+            reason: format!(
+                "continue_as_new rejected: run {parent_run_id} already recorded a terminal event"
+            ),
+        });
+    }
+    if !engine_tasks.is_epoch_open() {
+        return Err(DurabilityError::EngineTaskEpochClosed {
+            reason: format!(
+                "continue_as_new refused for run {parent_run_id}: this engine has begun closing, \
+                 so the replacement run it would oblige is already refused at the completion \
+                 seam. Recording the terminal anyway would end this run with no continuation. \
+                 Nothing is written and the run stays live in history, so a recovering engine \
+                 picks it up on the ordinary active-workflow path. Its declared deadline stays \
+                 ARMED, though — it is retired only as part of a completed transition — so an \
+                 outage longer than the run's remaining timeout budget times the run out instead \
+                 of continuing it. No operator action while the restart is prompt; a long one \
+                 costs this run its deadline"
+            ),
+        });
+    }
+    recorder
+        .record_workflow_continued_as_new(Utc::now(), input, None, parent_run_id.clone())
+        .await?;
+    // D5: retire the predecessor's declared-timeout deadline as part of the
+    // continue-as-new transition, under the same recorder lock, via the shared
+    // `retire_run_deadline` primitive. The deadline id is read from history (no
+    // minting) and matched to exactly this predecessor run, so an uncancelled
+    // predecessor deadline is never re-armed against the continued run after
+    // failover.
+    //
+    // Its failure is NOT propagated with `?`: past this point the terminal is
+    // durable and the caller must be told so, whatever happens next. See the
+    // section above.
+    match crate::time::retire_run_deadline(recorder, &history, parent_run_id).await {
+        Ok(()) => Ok(ContinuationOutcome::Complete),
+        Err(error) => Ok(ContinuationOutcome::TerminalOnly(error)),
+    }
+}
+
+#[cfg(test)]
+#[path = "nif_continue_as_new_tests.rs"]
+mod tests;

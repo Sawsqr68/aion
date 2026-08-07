@@ -535,6 +535,24 @@ ephemeral session directory and will not survive the seat, while the record itse
 is committed. Pre-existing convention of the whole document; raised in the landing
 declaration.
 
+AMENDMENT (2026-08-08, post-landing; discharges the observation above): Waffles
+RULED at the landing declaration — reach governs citations; evidence moves to a
+durable same-repo home, cited by path plus digest, applied to this landing now.
+Done in the commit that carries this amendment: the lane's evidence lives at
+**`gate-logs/148-epoch-gate/`** (186 evidence files + SHA256SUMS, ~9 MB) —
+battery scripts and transcripts (both runs), every gate, suite, and mutation log
+for the R20–R24 fix passes (the b1*/m15*/r20*/r21*/r22*/r23*/r24* families in
+full), the review briefs, the byte-baselines the reviewers diffed against
+(r21/r23-nif.bak, r21-tests.bak, r24-nif-baseline.bak), the reviewed full diff
+(r24-full.diff), the mutation instruments (mutate*.py and the mutation shell
+scripts), and the four review verdicts
+(review-2{2,3,4,5}-verdict.md — each an EXTRACTION of the final verdict message
+from its session subagent transcript, labeled as such in a header comment; the
+full JSONLs are not committed). Digests: `gate-logs/148-epoch-gate/SHA256SUMS`
+covers every file. Every `scratchpad/…` citation in this document resolves there
+by basename. Extraction verified by positive control: the R25 file matches the
+verdict as delivered, word for word.
+
 ## R22 ORDER
 1. B1 test condition (+ Complete-skip control mutation) · 2. M2 three sites · 3. m3/m4/m5
 · 4. fmt + check · 5. re-pin baselines · 6. gates to files ON A MEASURED-QUIET BOX (load

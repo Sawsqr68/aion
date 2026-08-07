@@ -1,0 +1,83 @@
+PRECONDITION sample 1: load=4.38 ncpu=10 disk_free=50.05GiB
+PRECONDITION sample 2: load=4.07 ncpu=10 disk_free=50.05GiB
+PRECONDITION sample 3: load=4.04 ncpu=10 disk_free=50.05GiB
+BASELINES 8431b5729df2d773a47ba36ecf5aac3723b17a92 / 938c41e70eefb5746ee32036a3cd3eb69bc552a8 (pinned)
+== GATE fmt --check (load 4.04) ==
+fmt-check EXIT 0
+== GATE clippy -p (load 3.88) ==
+clippy-p EXIT 0
+== GATE clippy --workspace (load 3.88) ==
+clippy-ws EXIT 0
+== GATE suite run 1 (load 30.51) ==
+suite-1 EXIT 0  verdict-lines 60
+suite-1: NO FAILURES IN ANY BLOCK
+== GATE suite run 2 (load 10.25) ==
+suite-2 EXIT 101  verdict-lines 39
+test result: FAILED. 7 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+== MUTATION BASELINE (load 6.93) ==
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 666 filtered out; finished in 10.41s
+=== a-every-error-ends (load 6.46) ===
+APPLIED
+a-every-error-ends EXIT=101
+test result: FAILED. 3 passed; 2 failed; 0 ignored; 0 measured; 666 filtered out; finished in 0.04s
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest
+    runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides
+RESTORED
+a-every-error-ends RESTORED byte-identical
+=== b-wrong-variant (load 6.91) ===
+APPLIED
+b-wrong-variant EXIT=101
+test result: FAILED. 3 passed; 2 failed; 0 ignored; 0 measured; 666 filtered out; finished in 20.13s
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest
+    runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides
+RESTORED
+b-wrong-variant RESTORED byte-identical
+=== c-ok-narrowed-to-complete (load 5.92) ===
+APPLIED
+c-ok-narrowed-to-complete EXIT=101
+test result: FAILED. 2 passed; 3 failed; 0 ignored; 0 measured; 666 filtered out; finished in 20.10s
+    runtime::nif_continue_as_new::tests::a_deadline_retirement_that_fails_after_the_terminal_reports_terminal_only
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest
+    runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides
+RESTORED
+c-ok-narrowed-to-complete RESTORED byte-identical
+=== M5-reviewer-is-ok (load 16.26) ===
+APPLIED
+M5-reviewer-is-ok EXIT=101
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 666 filtered out; finished in 20.11s
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest
+RESTORED
+M5-reviewer-is-ok RESTORED byte-identical
+=== M6-never-fires (load 14.10) ===
+APPLIED
+M6-never-fires EXIT=101
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 666 filtered out; finished in 20.10s
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest
+RESTORED
+M6-never-fires RESTORED byte-identical
+=== M7-always-fires (load 12.56) ===
+APPLIED
+M7-always-fires EXIT=101
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 666 filtered out; finished in 0.04s
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest
+RESTORED
+M7-always-fires RESTORED byte-identical
+=== R22-terminalonly-skip (load 11.83) ===
+APPLIED
+R22-terminalonly-skip EXIT=101
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 666 filtered out; finished in 20.13s
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest
+RESTORED
+R22-terminalonly-skip RESTORED byte-identical
+=== R22-complete-skip (load 8.34) ===
+APPLIED
+R22-complete-skip EXIT=101
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 666 filtered out; finished in 20.12s
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest
+RESTORED
+R22-complete-skip RESTORED byte-identical
+=== FINAL SHA 8431b5729df2d773a47ba36ecf5aac3723b17a92 (baseline 8431b5729df2d773a47ba36ecf5aac3723b17a92) ===
+== FINAL GREEN RE-RUN OF THE REBUILT TREE (load 7.21) ==
+FINAL EXIT=0
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 666 filtered out; finished in 10.38s
+SESSION CLOSED GREEN (load at close 5.99)

@@ -1,0 +1,51 @@
+   Compiling aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.13s
+     Running unittests src/lib.rs (target/debug/deps/aion-e9cbe1ce10fd20e2)
+
+running 5 tests
+test runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides ... ok
+test runtime::nif_continue_as_new::tests::an_already_terminal_run_reports_its_own_cause_not_the_epoch ... ok
+test runtime::nif_continue_as_new::tests::a_deadline_retirement_that_fails_after_the_terminal_reports_terminal_only ... ok
+test runtime::nif_continue_as_new::tests::a_closed_epoch_refuses_the_continue_as_new_terminal ... ok
+test runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest ... FAILED
+
+failures:
+
+---- runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest stdout ----
+
+thread 'runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest' (41774769) panicked at crates/aion/src/runtime/nif_continue_as_new_tests.rs:760:5:
+CONTROL 2: a store failure raised BEFORE the terminal must leave the workflow process ALIVE, and must go on leaving it alive for as long as the treatment is given to die — terminating here would turn a transient backend blip into a dead run, the mirror of the defect the gate exists to prevent. Diagnosis: terminal in history = false (true means the fault was NOT taken by the terminal append and the gate fired correctly for a landed terminal — suspect the fault-arming window, or a stale test binary: a restore that preserves an old mtime leaves the previous mutation's binary looking fresh); unspent append failures = 0 (non-zero means the durable call never happened and the death is the harness's, not the gate's); history at death: [
+    WorkflowStarted {
+        envelope: EventEnvelope {
+            seq: 1,
+            recorded_at: 2026-08-07T10:30:49.686385Z,
+            workflow_id: WorkflowId(
+                18e0f833-51a8-4293-87a9-4de10fe26032,
+            ),
+        },
+        workflow_type: "continuer",
+        input: Payload {
+            content_type: Json,
+            bytes: [
+                123,
+                125,
+            ],
+        },
+        run_id: RunId(
+            d97140a8-7a62-4d4b-8f16-d978fd36e180,
+        ),
+        parent_run_id: None,
+        package_version: PackageVersion(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ),
+    },
+]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest
+
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 666 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p aion-rs --lib`

@@ -1,0 +1,11 @@
+   Compiling aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.94s
+     Running tests/continue_as_new.rs (target/debug/deps/continue_as_new-aad2dd0cb816d825)
+
+running 3 tests
+test continue_as_new_records_terminal_old_run_and_running_replacement ... ok
+test read_run_chain_returns_parent_links_in_chronological_order ... ok
+test recovery_active_listing_contains_only_current_continuation_run ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+

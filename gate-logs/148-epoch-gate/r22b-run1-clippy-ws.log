@@ -1,0 +1,17 @@
+    Checking aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Checking aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Checking aion-client v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-client)
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion/benchmarks/million-processes)
+error: this function has too many lines (172/100)
+   --> crates/aion/src/runtime/nif_continue_as_new_tests.rs:667:1
+    |
+667 | / fn the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest()
+668 | | -> Result<(), Box<dyn std::error::Error>> {
+    | |_________________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#too_many_lines
+    = note: `-D clippy::too-many-lines` implied by `-D clippy::pedantic`
+    = help: to override `-D clippy::pedantic` add `#[allow(clippy::too_many_lines)]`
+
+error: could not compile `aion-rs` (lib test) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

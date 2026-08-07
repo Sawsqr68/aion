@@ -1,0 +1,36 @@
+   Compiling aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 27.08s
+     Running unittests src/lib.rs (target/debug/deps/aion-e9cbe1ce10fd20e2)
+
+running 1 test
+R21 liveness trace spared: 0ms:1 5ms:1 10ms:1 16ms:1 21ms:1 26ms:1 31ms:1 37ms:1 43ms:1 48ms:1 54ms:1 59ms:1 64ms:1 70ms:1 76ms:1 82ms:1 87ms:1 93ms:1 99ms:1 105ms:1 110ms:1 115ms:1 120ms:1 126ms:1 132ms:1 137ms:1 143ms:1 148ms:1 154ms:1 159ms:1 166ms:1 171ms:1 177ms:1 182ms:1 189ms:1 195ms:1 200ms:1 205ms:1 211ms:1 216ms:1 222ms:1 227ms:1 233ms:1 239ms:1 244ms:1 249ms:1 255ms:1 261ms:1 266ms:1 271ms:1 277ms:1 282ms:1 287ms:1 294ms:1 299ms:1 306ms:1 340ms:1 347ms:1 354ms:1 362ms:1 369ms:1 379ms:1 391ms:1 398ms:1 404ms:1 410ms:1 416ms:1 421ms:1 427ms:1 432ms:1 438ms:1 443ms:1 449ms:1 454ms:1 460ms:1 466ms:1 471ms:1 477ms:1 482ms:1 488ms:1 494ms:1 500ms:1 505ms:1 511ms:1 517ms:1 523ms:1 529ms:1 535ms:1 540ms:1 546ms:1 552ms:1 558ms:1 564ms:1 570ms:1 576ms:1 582ms:1 588ms:1 594ms:1 600ms:1 607ms:1 
+R21 parked_live=true history=[
+    WorkflowStarted {
+        envelope: EventEnvelope {
+            seq: 1,
+            recorded_at: 2026-08-07T06:12:44.684719Z,
+            workflow_id: WorkflowId(
+                438d1e57-be62-4f5d-9cfb-0a78a5c64038,
+            ),
+        },
+        workflow_type: "continuer",
+        input: Payload {
+            content_type: Json,
+            bytes: [
+                123,
+                125,
+            ],
+        },
+        run_id: RunId(
+            e0a08f5d-c6ee-44a6-bd67-8dd318466c8c,
+        ),
+        parent_run_id: None,
+        package_version: PackageVersion(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ),
+    },
+]
+test runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_the_epoch_refusal_and_spares_the_others ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 670 filtered out; finished in 10.93s
+

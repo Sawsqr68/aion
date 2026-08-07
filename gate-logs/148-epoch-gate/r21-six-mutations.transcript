@@ -1,0 +1,102 @@
+BASELINE ef9a764b8fd637c5471eba2055c71279f512dca6 (pinned)
+BASELINE GREEN:
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 666 filtered out; finished in 10.17s
+=== a-every-error-ends ===
+APPLIED
+a-every-error-ends EXIT=101
+test result: FAILED. 3 passed; 2 failed; 0 ignored; 0 measured; 666 filtered out; finished in 0.07s
+--- failing tests ---
+                123,
+                125,
+                ba4c50ca-f464-4e24-9562-09576fb82623,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            ),
+            ],
+            bytes: [
+            content_type: Json,
+            e5b6cf92-29d0-43f9-8b3d-a975dad50732,
+            recorded_at: 2026-08-07T07:29:05.557885Z,
+            seq: 1,
+            workflow_id: WorkflowId(
+        ),
+        },
+        envelope: EventEnvelope {
+        input: Payload {
+        package_version: PackageVersion(
+        parent_run_id: None,
+        run_id: RunId(
+        workflow_type: "continuer",
+    },
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_the_epoch_refusal_and_spares_the_others
+    runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides
+    WorkflowStarted {
+RESTORED
+a-every-error-ends RESTORED byte-identical (bytes written, mtime fresh)
+=== b-wrong-variant ===
+APPLIED
+b-wrong-variant EXIT=101
+test result: FAILED. 3 passed; 2 failed; 0 ignored; 0 measured; 666 filtered out; finished in 20.07s
+--- failing tests ---
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_the_epoch_refusal_and_spares_the_others
+    runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides
+RESTORED
+b-wrong-variant RESTORED byte-identical (bytes written, mtime fresh)
+=== c-ok-narrowed-to-complete ===
+APPLIED
+c-ok-narrowed-to-complete EXIT=101
+test result: FAILED. 3 passed; 2 failed; 0 ignored; 0 measured; 666 filtered out; finished in 10.09s
+--- failing tests ---
+    runtime::nif_continue_as_new::tests::a_deadline_retirement_that_fails_after_the_terminal_reports_terminal_only
+    runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides
+RESTORED
+c-ok-narrowed-to-complete RESTORED byte-identical (bytes written, mtime fresh)
+=== M5-reviewer-is-ok ===
+APPLIED
+M5-reviewer-is-ok EXIT=101
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 666 filtered out; finished in 20.08s
+--- failing tests ---
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_the_epoch_refusal_and_spares_the_others
+RESTORED
+M5-reviewer-is-ok RESTORED byte-identical (bytes written, mtime fresh)
+=== M6-never-fires ===
+APPLIED
+M6-never-fires EXIT=101
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 666 filtered out; finished in 20.07s
+--- failing tests ---
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_the_epoch_refusal_and_spares_the_others
+RESTORED
+M6-never-fires RESTORED byte-identical (bytes written, mtime fresh)
+=== M7-always-fires ===
+APPLIED
+M7-always-fires EXIT=101
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 666 filtered out; finished in 0.04s
+--- failing tests ---
+                123,
+                125,
+                9c1d7fb5-4df3-441d-a231-4b3f36a7e803,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            ),
+            ],
+            b1fee88a-3e06-4004-a6bc-d6b05114708a,
+            bytes: [
+            content_type: Json,
+            recorded_at: 2026-08-07T07:34:54.984902Z,
+            seq: 1,
+            workflow_id: WorkflowId(
+        ),
+        },
+        envelope: EventEnvelope {
+        input: Payload {
+        package_version: PackageVersion(
+        parent_run_id: None,
+        run_id: RunId(
+        workflow_type: "continuer",
+    },
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_the_epoch_refusal_and_spares_the_others
+    WorkflowStarted {
+RESTORED
+M7-always-fires RESTORED byte-identical (bytes written, mtime fresh)
+=== FINAL SHA ef9a764b8fd637c5471eba2055c71279f512dca6 (baseline ef9a764b8fd637c5471eba2055c71279f512dca6) ===
+FINAL GREEN RE-RUN EXIT=0
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 666 filtered out; finished in 10.33s
+SESSION CLOSED GREEN

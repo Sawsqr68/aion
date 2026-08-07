@@ -1,0 +1,17 @@
+== fmt (write) then fmt --check (load 5.40) ==
+fmt-check EXIT 0
+== module test (load 5.69) ==
+module EXIT 0
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 666 filtered out; finished in 10.39s
+== clippy -p (load 5.04) ==
+clippy-p EXIT 0  checking-lines 1
+== clippy --workspace (load 7.43) ==
+clippy-ws EXIT 0
+== suite (load 9.60) ==
+suite EXIT 101  verdict-lines 39
+test result: FAILED. 7 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.74s
+== shas ==
+5c36b302c066b7b68620f7b4f7d3ab9c120c258c  crates/aion/src/runtime/nif_continue_as_new.rs
+c5adbd62bc4967060622ebf7b7f6e652a9d425a0  crates/aion/src/runtime/nif_continue_as_new_tests.rs
+10feca1918ba1a35425be4392be92ce50221d2d1  crates/aion/src/engine/api.rs
+DONE (load 8.55)

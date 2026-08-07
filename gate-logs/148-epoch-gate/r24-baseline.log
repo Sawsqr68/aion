@@ -1,0 +1,12 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.51s
+     Running unittests src/lib.rs (target/debug/deps/aion-e9cbe1ce10fd20e2)
+
+running 5 tests
+test runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides ... ok
+test runtime::nif_continue_as_new::tests::a_deadline_retirement_that_fails_after_the_terminal_reports_terminal_only ... ok
+test runtime::nif_continue_as_new::tests::a_closed_epoch_refuses_the_continue_as_new_terminal ... ok
+test runtime::nif_continue_as_new::tests::an_already_terminal_run_reports_its_own_cause_not_the_epoch ... ok
+test runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 666 filtered out; finished in 10.44s
+

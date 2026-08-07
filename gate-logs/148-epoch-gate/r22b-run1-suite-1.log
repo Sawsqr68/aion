@@ -1,0 +1,1608 @@
+   Compiling aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 57.30s
+     Running unittests src/lib.rs (target/debug/deps/aion-e9cbe1ce10fd20e2)
+
+running 671 tests
+test durability::command::tests::resolutions_round_trip_by_equality ... ok
+test durability::command::tests::command_keys_round_trip_for_cursor_matched_variants ... ok
+test child::spawn::tests::spawn_failure_after_record_keeps_the_durable_start ... ok
+test child::spawn::tests::spawn_records_started_before_requesting_the_child_start ... ok
+test durability::correlation::tests::derives_positional_child_ordinals_independent_of_sequence_numbers ... ok
+test child::spawn::tests::spawn_rejects_engine_echoing_a_different_child_identity ... ok
+test durability::correlation::tests::interleaved_async_arrivals_do_not_shift_child_ordinals ... ok
+test durability::cursor::tests::new_accepts_in_order_history_and_exposes_starting_sequence ... ok
+test durability::cursor::tests::new_rejects_decreasing_sequence_order ... ok
+test durability::correlation::tests::derives_signal_occurrence_indices_by_name ... ok
+test durability::cursor::tests::fast_forward_to_child_terminal_exhausts_when_no_terminal_recorded ... ok
+test durability::cursor::tests::reopen_supersedes_terminal_failure_and_exhausts ... ok
+test durability::cursor::tests::fast_forward_to_child_terminal_skips_consumed_commands ... ok
+test durability::cursor::tests::reports_mismatch_for_different_next_family ... ok
+test durability::cursor::tests::reopen_with_new_attempt_leaves_no_straggler_for_later_commands ... ok
+test durability::cursor::tests::resolve_activity_resolves_interleaved_parallel_activity_ranges ... ok
+test durability::cursor::tests::pause_resume_markers_are_invisible_to_the_cursor ... ok
+test durability::cursor::tests::reopen_of_a_different_activity_does_not_supersede_this_failure ... ok
+test durability::cursor::tests::reopen_then_new_attempt_resolves_to_the_new_outcome ... ok
+test durability::cursor::tests::resolve_activity_skips_interleaved_child_terminal ... ok
+test durability::cursor::tests::resolve_activity_skips_interleaved_signal_and_leaves_it_matchable ... ok
+test durability::cursor::tests::resolve_activity_still_mismatches_on_wrong_anchor_key ... ok
+test durability::cursor::tests::resolve_child_terminal_reports_mismatch_without_skipping_in_strict_replay ... ok
+test durability::cursor::tests::resolves_activity_match_then_reports_exhaustion ... ok
+test durability::cursor::tests::returns_terminal_activity_failure_as_recorded_outcome ... ok
+test durability::cursor::tests::skips_non_matchable_lifecycle_events_before_resolving ... ok
+test durability::cursor::tests::terminal_failure_without_reopen_still_matches_unchanged ... ok
+test durability::cursor::tests::walks_retry_failures_to_eventual_activity_success ... ok
+test durability::determinism::tests::now_starts_at_workflow_started_and_advances_with_recorded_events ... ok
+test durability::executor::executor_tests::live_executor_is_object_safe ... ok
+test durability::determinism::tests::identical_recorded_sequences_have_identical_now_values ... ok
+test activity::bridge::tests::dispatcher_is_accessible_after_install_on_engine_state ... ok
+test durability::error::tests::non_determinism_display_includes_context ... ok
+test durability::error::tests::durability_error_display_mentions_underlying_cause ... ok
+test durability::cursor::tests::fast_forward_and_resolution_smoke_over_large_history ... ok
+test durability::executor::executor_tests::recorded_history_returns_resolutions_without_live_calls ... ok
+test durability::recorder::fan_out_tests::fan_out_completion_records_failed_terminal ... ok
+test durability::recorder::fan_out_tests::fan_out_completion_records_first_terminal_for_unresolved_ordinal ... ok
+test durability::recorder::fan_out_tests::fan_out_completion_drops_for_cancelled_ordinal ... ok
+test durability::executor::executor_tests::resume_live_activity_rejects_retryable_failure_without_recording_terminal_outcome ... ok
+test durability::recorder::fan_out_tests::fan_out_completion_drops_duplicate_for_resolved_ordinal ... ok
+test durability::recorder::fan_out_tests::fan_out_completion_sequence_conflict_surfaces_without_advancing ... ok
+test durability::recorder::fan_out_tests::fan_out_dispatch_empty_items_is_a_no_op ... ok
+test durability::executor::executor_tests::resume_live_activity_records_result_and_replay_uses_cache ... ok
+test durability::recorder::fan_out_tests::fan_out_completion_records_for_scheduled_but_not_terminal_ordinal ... ok
+test durability::recorder::fan_out_tests::fan_out_dispatch_is_atomic_on_store_failure ... ok
+test durability::recorder::fan_out_tests::fan_out_dispatch_appends_2n_events_in_scheduled_started_order ... ok
+test durability::recorder::fan_out_tests::fan_out_dispatch_sequence_conflict_surfaces_without_advancing ... ok
+test durability::recorder::fan_out_tests::fan_out_dispatch_stages_n_outbox_rows_with_dispatch_keys ... ok
+test durability::recorder::tests::records_activity_events_in_sequence_order ... ok
+test durability::recorder::tests::records_workflow_continued_as_new_terminal_event ... ok
+test durability::recorder::tests::records_workflow_reopened_and_projects_running ... ok
+test durability::recorder::tests::recorder_advances_expected_sequence_between_appends ... ok
+test durability::recorder::tests::records_workflow_timed_out_terminal_and_projects_timed_out ... ok
+test durability::recorder::tests::sequence_overflow_returns_error_without_appending ... ok
+test durability::recorder::tests::resume_at_continues_from_existing_history_head ... ok
+test durability::recorder::tests::sequence_conflict_surfaces_without_advancing_or_retrying ... ok
+test durability::recorder::tests::continue_as_new_does_not_settle_outbox_rows ... ok
+test durability::recorder::tests::started_with_empty_attributes_appends_only_the_start_event ... ok
+test durability::recorder::tests::started_with_invalid_attributes_appends_nothing ... ok
+test durability::recorder::tests::invalid_search_attributes_return_error_without_appending ... ok
+test durability::recorder::tests::started_with_attributes_appends_both_events_in_one_atomic_batch ... ok
+test durability::recorder::tests::recorder_visibility_updates_after_search_attributes ... ok
+test durability::recorder::tests::records_validated_search_attributes_updated_event ... ok
+test durability::recorder::tests::workflow_terminals_settle_outbox_rows_and_settle_errors_are_nonfatal ... ok
+test durability::replay::tests::reopened_activity_resolves_live_not_terminal ... ok
+test durability::replay::tests::drive_reports_terminal_history_without_resume_live ... ok
+test durability::replay::tests::ignores_terminal_events_for_other_workflows ... ok
+test durability::recovery::tests::recover_lists_active_and_reads_each_history ... ok
+test durability::replay::tests::terminal_history_rejects_extra_non_terminal_command ... ok
+test durability::replay::tests::step_returns_recorded_resolutions_and_advances_now ... ok
+test durability::replay::tests::terminal_history_accepts_matching_complete_workflow_command ... ok
+test durability::replay_inspect::replay_inspect_tests::divergent_command_is_built_from_the_resolver_error ... ok
+test durability::replay_inspect::replay_inspect_tests::inspect_run_errors_when_run_segment_is_absent ... ok
+test durability::replay_inspect::replay_inspect_tests::inspect_run_projects_one_step_per_event_with_resolutions ... ok
+test durability::replay_inspect::replay_inspect_tests::inspect_run_now_equals_each_event_recorded_at ... ok
+test durability::replay_inspect::replay_inspect_tests::inspect_run_scopes_to_the_current_run_segment ... ok
+test durability::replay_inspect::replay_inspect_tests::inspect_run_surfaces_the_divergent_command ... ok
+test durability::replay_inspect::replay_inspect_tests::random_int_at_rejects_an_inverted_range ... ok
+test durability::replay_inspect::replay_inspect_tests::recorded_divergence_round_trips_through_the_real_failure_format ... ok
+test durability::replay_inspect::replay_inspect_tests::what_if_activity_completion_reproduces_the_recorded_path ... ok
+test durability::replay_inspect::replay_inspect_tests::what_if_activity_failure_diverges_from_the_recorded_completion ... ok
+test durability::replay_inspect::replay_inspect_tests::what_if_child_completion_resolves_through_the_real_replay ... ok
+test durability::replay_inspect::replay_inspect_tests::what_if_child_failure_resolves_through_the_real_replay ... ok
+test durability::recorder::tests::visibility_upsert_failure_after_append_logs_warning_and_succeeds ... ok
+test durability::replay_inspect::replay_inspect_tests::what_if_rejects_an_absent_fork_sequence ... ok
+test durability::replay_inspect::replay_inspect_tests::what_if_signal_delivery_resolves_through_the_real_replay ... ok
+test durability::replay_inspect::replay_inspect_tests::what_if_timer_firing_resolves_through_the_real_replay ... ok
+test durability::resolver::tests::dangling_retryable_failure_resumes_live_for_redispatch ... ok
+test durability::resolver::tests::genuinely_reordered_activity_anchors_fail_typed ... ok
+test durability::replay_inspect::replay_inspect_tests::what_if_rejects_a_mismatched_mock_family ... ok
+test durability::resolver::tests::interleaved_async_arrival_inside_activity_range_replays_clean ... ok
+test durability::resolver::tests::maps_terminal_failures_to_recorded_resolutions ... ok
+test durability::resolver::tests::resolves_all_recorded_families_through_single_entry_point ... ok
+test durability::resolver::tests::resolves_recorded_activity_then_resumes_live_at_history_end ... ok
+test durability::seq::tests::advances_only_after_success_is_marked ... ok
+test durability::seq::tests::starts_at_zero_by_default ... ok
+test durability::seq::tests::starts_from_explicit_head ... ok
+test durability::seq::tests::next_sequence_overflow_is_detectable_by_advance ... ok
+test durability::replay_inspect::replay_inspect_tests::inspect_run_random_projection_is_deterministic_and_run_distinct ... ok
+test durability::replay_inspect::replay_inspect_tests::inspect_run_random_projection_equals_the_production_formula ... ok
+test engine::api::tests::a_failing_teardown_step_does_not_skip_the_ones_after_it ... ok
+test engine::api::tests::a_second_failing_engine_shutdown_step_is_reported_not_swallowed ... ok
+test engine::admission::admission_tests::an_undeclared_queue_demands_nothing ... ok
+test engine::admission::admission_tests::a_superseded_version_with_no_live_run_binds_no_worker ... ok
+test engine::admission::admission_tests::a_rollback_moves_the_demanded_version_with_the_route ... ok
+test engine::api::tests::live_timers_dedups_repeated_start ... ok
+test engine::api::tests::live_timers_empty_history_is_empty ... ok
+test engine::api::tests::live_timers_excludes_fired_and_cancelled ... ok
+test engine::api::tests::live_timers_lists_started_and_unterminated ... ok
+test engine::api::tests::live_timers_scopes_to_active_run_segment ... ok
+test engine::admission::admission_tests::a_superseded_version_with_a_live_run_still_binds_every_worker ... ok
+test activity::dispatch::tests::failing_activity_surfaces_typed_error_with_trapped_exit ... ok
+test activity::dispatch::tests::successful_activity_result_is_delivered_to_workflow ... ok
+test activity::dispatch::tests::dispatch_spawns_linked_child_and_uses_dirty_registration ... ok
+test engine::api::tests::cancel_cancels_multiple_live_timers ... ok
+test engine::api::tests::cancel_records_timer_cancelled_before_workflow_cancelled ... ok
+test engine::api::tests::shutdown_is_idempotent ... ok
+test engine::api::tests::shutdown_rejects_schedule_creation ... ok
+test engine::api::tests::start_then_cancel_records_started_then_cancelled ... ok
+test engine::api::tests::cancelled_workflow_leaves_no_orphan_for_recovery ... ok
+test engine::builder::tests::arming_a_wheel_timer_after_the_engine_is_released_is_refused ... ok
+test engine::builder::tests::build_without_store_returns_missing_store ... ok
+test engine::builder::tests::build_without_visibility_store_returns_missing_visibility_store ... ok
+test engine::api::tests::continue_as_new_unknown_workflow_returns_not_found ... ok
+test engine::api::tests::list_workflows_merges_live_and_terminal_without_duplicates ... ok
+test engine::api::tests::result_returns_completed_payload ... ok
+test engine::builder::tests::duplicate_host_nif_mfa_returns_typed_error ... ok
+test engine::builder::tests::event_streaming_conflicts_with_explicit_event_publisher ... ok
+test engine::api::tests::result_returns_failed_workflow_error ... ok
+test engine::api::tests::result_unknown_workflow_returns_not_found ... ok
+test engine::api::tests::shutdown_rejects_subsequent_starts ... ok
+test engine::builder::tests::owned_shards_are_only_set_by_caller ... ok
+test engine::builder::tests::build_loads_already_loaded_package ... ok
+test engine::builder::tests::build_loads_package_from_path ... ok
+test engine::builder::tests::query_timeout_is_only_set_by_caller ... ok
+test engine::builder::tests::scheduler_threads_are_only_set_by_caller ... ok
+test engine::builder::tests::the_completion_retry_ladder_reaches_the_runtime_configuration ... ok
+test engine::builder::tests::visibility_reconciliation_interval_is_only_set_by_caller ... ok
+test engine::builder::tests::event_streaming_delivers_recorder_appends_through_engine_subscribe ... ok
+test engine::builder::tests::in_memory_visibility_allows_build_without_visibility_store ... ok
+test engine::builder::tests::dropping_an_engine_without_shutdown_closes_the_completion_retry_epoch ... ok
+test engine::builder::tests::periodic_visibility_reconciliation_repairs_gap_after_startup ... ok
+test engine::builder::tests::query_timeout_installs_the_concrete_query_seam ... ok
+test engine::builder::tests::without_event_streaming_subscriptions_stay_on_deferred_empty_stream ... ok
+test engine::builder::tests::startup_reconciliation_backfills_completed_visibility ... ok
+test engine::builder::tests::empty_store_builds_coordinator_history_without_registry_or_supervision ... ok
+test engine::fence::tests::deposed_at_acquire_recovers_nothing ... ok
+test engine::fence::tests::deposed_at_publish_leaves_scope_unchanged_and_recovers_nothing ... ok
+test engine::fence::tests::falsifiability_external_execution_is_exactly_once_under_fix ... ok
+test engine::fence::tests::partial_win_a_fenced_b ... ok
+test engine::fence::tests::publish_fence_precedes_extend_for_every_survivor ... ok
+test engine::fence::tests::residual_window_depose_excludes_shard ... ok
+test engine::delegated::tests::query_delegates_to_service_and_returns_payload ... ok
+test engine::gleam_test_support::a_rejected_module_is_a_defect ... ok
+test engine::builder::tests::without_query_timeout_the_query_seam_stays_deferred ... ok
+test engine::gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test engine::gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test engine::gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test engine::gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test engine::gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test engine::gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test engine::shutdown_gate::tests::operations_are_refused_once_shutdown_begins ... ok
+test engine::startup::tests::a_cancelled_run_forced_into_the_active_list_never_has_a_writer_minted ... ok
+test engine::startup::tests::a_cancelled_run_is_terminal_at_boot_and_never_has_a_writer_minted ... ok
+test engine::startup::tests::a_paused_run_forced_into_the_active_list_is_never_made_resident ... ok
+test engine::startup::tests::a_run_whose_pinned_version_cannot_load_is_retained_as_unrecoverable ... ok
+test engine::startup::tests::a_terminal_run_forced_into_the_active_list_is_never_made_resident ... ok
+test engine::shutdown_gate::tests::close_waits_for_admitted_operations_to_drain ... ok
+test engine::delegated::tests::query_terminal_run_is_not_running_and_unknown_is_not_found ... ok
+test engine::gleam_test_support::every_gleam_support_file_is_classified ... ok
+test engine::delegated::tests::signal_delegates_to_router_and_unknown_returns_not_found ... ok
+test engine::delegated::tests::subscribe_delegates_to_publisher_stream_with_filter ... ok
+test engine::delegated::tests::signal_inside_the_registration_birth_window_waits_for_the_handle ... ok
+test engine::startup::tests::adoption_repairs_orphaned_future_dated_terminal_deadline ... ok
+test engine::startup::tests::adoption_sweep_repairs_acquired_but_skips_owned_resident ... ok
+test engine::startup::tests::cold_boot_repairs_predecessor_deadline_before_starting_the_successor ... ok
+test engine::startup::tests::recovered_monitor_installation_failure_drains_retained_completion ... ok
+test engine::startup::tests::cold_boot_sweep_errors_on_a_live_handle_ordering_breach ... ok
+test engine_seam::tests::fake_can_inject_delivery_failure ... ok
+test engine_seam::tests::fake_captures_delivered_message_for_resident_workflow ... ok
+test engine::startup::tests::recovered_reconcile_failure_after_publication_runs_observed_abort ... ok
+test engine::startup::tests::startup_sweep_retires_non_timeout_terminal_deadlines_but_skips_timed_out ... ok
+test engine::startup::tests::sweep_start_failure_without_a_successor_still_fails ... ok
+test engine::startup::tests::sweep_start_race_lost_to_the_exit_monitor_is_benign ... ok
+test engine::delegated::tests::signal_for_a_started_run_with_no_handle_fails_typed_after_the_budget ... ok
+test engine::startup_sweeps::tests::adoption_sweep_repairs_the_candidate_without_a_concurrent_writer ... ok
+test engine::startup_sweeps::tests::adoption_sweep_yields_to_a_concurrent_reopen_without_aborting ... ok
+test lifecycle::cancel_never_alive::tests::a_run_that_was_never_alive_can_be_cancelled ... ok
+test lifecycle::completion::tests::a_changed_fault_is_stated_at_once_and_does_not_defer_the_escalation ... ok
+test lifecycle::completion::tests::a_failure_after_the_terminal_landed_reports_it_as_recorded ... ok
+test lifecycle::completion::tests::a_lost_ownership_refusal_is_reported_not_retried ... ok
+test lifecycle::completion::tests::a_recorded_monitor_stands_down_inside_the_reopen_window ... ok
+test lifecycle::completion::tests::a_reopened_run_is_not_appended_into_by_a_monitor_that_never_recorded ... ok
+test lifecycle::completion::tests::a_reopened_run_that_finishes_again_records_its_terminal ... ok
+test lifecycle::completion::tests::a_resumed_completion_appends_nothing_and_still_refreshes_visibility ... ok
+test lifecycle::completion::tests::a_retrying_completion_returns_with_the_retry_still_armed ... ok
+test lifecycle::completion::tests::a_sequence_conflict_is_reported_not_retried ... ok
+test lifecycle::completion::tests::a_transient_append_failure_still_lands_the_terminal ... ok
+test lifecycle::completion::tests::a_transient_history_read_failure_still_lands_the_terminal ... ok
+test lifecycle::completion::tests::abnormal_exit_records_failed_reconciles_and_notifies ... ok
+test lifecycle::completion::tests::an_attempt_refuses_to_append_once_the_epoch_is_closed ... ok
+test lifecycle::completion::tests::an_unchanging_fault_is_restated_on_attempt_count_doubling ... ok
+test lifecycle::cancel_never_alive::tests::a_run_whose_pinned_package_now_loads_is_refused ... ok
+test lifecycle::completion::tests::normal_exit_records_completed_reconciles_and_notifies ... ok
+test lifecycle::completion::tests::one_monitor_lease_can_never_hold_more_than_one_completion_retry ... ok
+test lifecycle::completion::tests::process_exit_does_not_retire_a_timed_out_deadline ... ok
+test lifecycle::completion::tests::process_exit_leaves_a_timed_out_runs_visibility_to_its_teardown ... ok
+test lifecycle::completion::tests::process_exit_resumes_interrupted_deadline_cancellation ... ok
+test lifecycle::cancel_never_alive::tests::a_run_with_no_recorded_verdict_is_refused_without_calling_it_missing ... ok
+test lifecycle::completion::tests::terminal_outcome_is_scoped_to_requested_run_segment ... ok
+test lifecycle::cancel_never_alive::tests::a_second_cancellation_of_the_same_run_is_refused ... ok
+test lifecycle::cancel_never_alive::tests::a_workflow_holding_a_handle_never_reaches_the_never_alive_branch ... ok
+test lifecycle::completion::tests::the_fault_key_is_the_typed_variant_not_the_rendered_error ... ok
+test lifecycle::completion::tests::the_continuation_start_refuses_once_the_epoch_is_closed ... ok
+test lifecycle::completion::tests::the_resume_arm_refuses_to_append_once_the_epoch_is_closed ... ok
+test lifecycle::cancel_never_alive::tests::a_workflow_that_never_existed_is_still_not_found ... ok
+test lifecycle::cancel_never_alive::tests::cancelling_a_run_the_history_does_not_carry_is_refused ... ok
+test lifecycle::completion::tests::at_the_ceiling_every_failing_attempt_states_itself ... ok
+test lifecycle::cancel_never_alive::tests::the_same_run_is_cancellable_when_the_package_is_absent ... ok
+test lifecycle::completion::tests::runtime_shutdown_closes_the_completion_retry_epoch ... ok
+test lifecycle::continue_as_new::tests::different_replacement_type_rejects_before_terminal_mutation ... ok
+test lifecycle::continue_as_new::tests::pending_activity_rejects_without_terminal_event ... ok
+test lifecycle::continue_as_new::tests::pending_child_rejects_without_terminal_event ... ok
+test lifecycle::continue_as_new::tests::recorded_terminal_rejects_continue_without_second_terminal_event ... ok
+test lifecycle::continue_as_new::tests::success_records_notifies_deregisters_and_starts_new_run ... ok
+test lifecycle::deadline::tests::cold_start_finalizes_timed_out_teardown_without_a_registered_handle ... ok
+test lifecycle::completion::tests::the_configured_backoff_ladder_governs_when_a_retry_lands ... ok
+test lifecycle::deadline::tests::deadline_fire_retires_the_deadline_behind_a_competing_terminal ... ok
+test lifecycle::deadline::tests::deadline_for_deregistered_run_is_a_noop ... ok
+test lifecycle::reopen::tests::a_reopened_run_that_reterminated_reopens_from_the_new_failure ... ok
+test lifecycle::reopen::tests::cancelled_run_reopens_with_an_empty_set ... ok
+test lifecycle::reopen::tests::completed_run_is_rejected_as_invalid_state ... ok
+test lifecycle::reopen::tests::concurrent_fan_out_reopens_every_failed_key ... ok
+test lifecycle::reopen::tests::failed_run_computes_the_terminally_failed_step ... ok
+test lifecycle::reopen::tests::failed_then_succeeded_step_is_not_reopened ... ok
+test lifecycle::reopen::tests::fired_timer_is_not_rearmed ... ok
+test lifecycle::reopen::tests::in_flight_activity_is_never_reopened ... ok
+test lifecycle::reopen::tests::outstanding_timer_rearms_without_touching_history ... ok
+test lifecycle::reopen::tests::rearm_keeps_the_original_fire_at_and_covers_multiple_timers ... ok
+test lifecycle::reopen::tests::running_run_is_rejected_as_invalid_state ... ok
+test lifecycle::reopen::tests::teardown_cancelled_timer_is_rearmed_with_a_restart_marker ... ok
+test lifecycle::reopen::tests::timed_out_run_is_rejected_as_invalid_state ... ok
+test lifecycle::reopen::tests::workflow_intent_cancellation_is_never_resurrected ... ok
+test lifecycle::deadline::tests::deadline_loses_to_an_already_recorded_terminal ... ok
+test lifecycle::deadline::tests::deadline_records_timed_out_and_tears_down ... ok
+test lifecycle::deadline::tests::retired_deadline_loses_before_any_workflow_terminal ... ok
+test lifecycle::deadline::tests::re_fire_after_recorded_timeout_resumes_teardown_without_a_second_terminal ... ok
+test lifecycle::deadline::tests::teardown_failure_preserves_retry_anchors_then_resumes ... ok
+test lifecycle::start::contract_tests::in_process_serving_admits_unscoped_activities_past_admission ... ok
+test lifecycle::deadline::tests::timeout_teardown_retires_the_runs_active_timers ... ok
+test lifecycle::start::contract_tests::in_process_serving_still_refuses_pre_v4_identity ... ok
+test lifecycle::start::contract_tests::pre_v4_exact_version_is_refused_before_history_or_registration ... ok
+test lifecycle::start::contract_tests::unscoped_activity_contract_is_refused_before_history_or_registration ... ok
+test lifecycle::start::start_tests::failed_start_with_unabortable_process_retains_ownership_not_orphan ... ok
+test lifecycle::start::start_tests::normal_start_monitor_failure_retracts_publication_and_observes_abort ... ok
+test lifecycle::start::start_tests::recorder_append_happens_before_spawn_failure ... ok
+test lifecycle::start::start_tests::start_with_attributes_records_started_then_attributes_before_spawn ... ok
+test lifecycle::start::start_tests::start_with_existing_workflow_id_resumes_history_sequence ... ok
+test lifecycle::start::start_tests::start_with_unregistered_attribute_fails_without_append_or_spawn ... ok
+test lifecycle::start::start_tests::unknown_workflow_type_returns_not_found_and_appends_nothing ... ok
+test lifecycle::start::start_tests::successful_start_appends_spawns_places_registers_and_returns_handle ... ok
+test lifecycle::transition::tests::reconcile_after_suspend_preserves_suspended_residency ... ok
+test lifecycle::transition::tests::resume_is_idempotent_for_already_resident_handle ... ok
+test lifecycle::transition::tests::resume_missing_handle_returns_workflow_not_found ... ok
+test lifecycle::transition::tests::resume_returns_suspended_handle_to_resident_without_status_change ... ok
+test lifecycle::transition::tests::suspend_keeps_running_handle_present_with_suspended_residency ... ok
+test lifecycle::transition::tests::suspend_missing_handle_returns_workflow_not_found ... ok
+test lifecycle::visibility::tests::search_attributes_collects_from_multiple_updates ... ok
+test lifecycle::visibility::tests::search_attributes_returns_empty_when_no_updates ... ok
+test lifecycle::visibility::tests::started_projection_extracts_fields_from_workflow_started ... ok
+test lifecycle::visibility::tests::started_projection_returns_load_error_for_empty_history ... ok
+test lifecycle::visibility::tests::started_projection_returns_load_error_when_no_started_event ... ok
+test lifecycle::visibility::tests::terminal_recorded_at_finds_terminal_after_interleaved_non_terminal_events ... ok
+test lifecycle::visibility::tests::terminal_recorded_at_returns_cancelled_timestamp ... ok
+test lifecycle::visibility::tests::terminal_recorded_at_returns_completed_timestamp ... ok
+test lifecycle::visibility::tests::terminal_recorded_at_returns_continued_as_new_timestamp ... ok
+test lifecycle::visibility::tests::terminal_recorded_at_returns_failed_timestamp ... ok
+test lifecycle::visibility::tests::terminal_recorded_at_returns_none_for_non_terminal_history ... ok
+test lifecycle::visibility::tests::terminal_recorded_at_returns_timed_out_timestamp ... ok
+test lifecycle::visibility::tests::visibility_record_from_history_projects_completed_workflow_with_attributes ... ok
+test lifecycle::visibility::tests::visibility_record_from_history_projects_running_workflow ... ok
+test loader::catalog::catalog_multi_entry_tests::secondary_entry_verification_failure_commits_no_routes ... ok
+test loader::catalog::catalog_multi_entry_tests::multi_entry_package_registers_and_routes_atomically ... ok
+test loader::catalog::catalog_multi_entry_tests::staged_group_is_not_resolvable_until_durable_publication ... ok
+test loader::catalog::catalog_multi_entry_tests::swapping_out_one_member_removes_and_restores_the_whole_archive_group ... ok
+test loader::catalog::catalog_tests::content_hash_fixture_changes_when_bytes_change ... ok
+test loader::catalog::catalog_tests::collision_from_different_hash_fails_before_registration ... ok
+test loader::catalog::catalog_tests::entry_verification_failure_rolls_back_every_registration ... ok
+test loader::catalog::catalog_tests::missing_entry_module_returns_load_error ... ok
+test loader::catalog::catalog_tests::identical_reload_is_idempotent_and_reload_re_routes ... ok
+test loader::catalog::catalog_tests::records_deployed_entry_function_and_routes_to_it ... ok
+test loader::catalog::catalog_tests::registers_every_package_derived_deployed_module ... ok
+test loader::catalog::catalog_tests::retains_two_versions_and_routes_to_the_last_loaded ... ok
+test loader::catalog::catalog_tests::route_version_re_points_and_rejects_unknown_hashes ... ok
+test loader::catalog::catalog_tests::runtime_failure_does_not_commit_catalog_state ... ok
+test loader::catalog::catalog_tests::same_hash_different_manifest_reload_is_refused_typed ... ok
+test loader::catalog::catalog_tests::start_pins_are_held_until_dropped ... ok
+test loader::catalog::catalog_tests::swap_out_refuses_routed_package_and_restore_round_trips ... ok
+test lifecycle::terminate::tests::cancel_kills_linked_children_records_notifies_and_deregisters ... ok
+test loader::catalog::catalog_tests::versions_listing_reports_route_flags_sorted ... ok
+test loader::catalog::catalog_timeout_tests::package_builder_authenticates_every_entry_timeout ... ok
+test loader::catalog::catalog_timeout_tests::per_entry_identity_authenticates_primary_and_additional ... ok
+test loader::catalog::catalog_timeout_tests::timeout_only_redeploy_loads_as_a_new_version ... ok
+test loader::declared_queues::declared_queues_tests::a_mixed_catalog_names_the_entry_it_could_not_decode ... ok
+test loader::declared_queues::declared_queues_tests::a_read_of_only_v4_entries_covers_every_entry ... ok
+test loader::declared_queues::declared_queues_tests::a_read_reports_exactly_what_it_was_given ... ok
+test loader::declared_queues::declared_queues_tests::an_undecodable_entry_is_named_at_warn ... ok
+test publish::publisher::tests::overflow_yields_lagged_error_then_resumes_with_subsequent_events ... ok
+test publish::publisher::tests::subscription_applies_workflow_and_family_filters ... ok
+test publish::store::tests::append_publishes_committed_events_in_seq_order ... ok
+test publish::store::tests::capacity_above_broadcast_maximum_is_rejected ... ok
+test publish::store::tests::failed_append_publishes_nothing ... ok
+test publish::store::tests::forwards_outbox_cancel_settle_to_inner ... ok
+test publish::store::tests::forwards_per_shard_failover_seam_to_inner ... ok
+test publish::store::tests::reads_delegate_to_inner_store ... ok
+test query::concrete::tests::happy_path_dispatches_run_exact_and_returns_handler_reply ... ok
+test query::concrete::tests::suspended_residency_is_not_running_and_never_delivers ... ok
+test query::concrete::tests::terminal_history_is_not_running_and_never_delivers ... ok
+test query::concrete::tests::unknown_query_propagates_typed_through_engine_error ... ok
+test query::service::tests::handler_failure_propagates_as_typed_handler_failed ... ok
+test query::service::tests::non_replying_workflow_times_out ... ok
+test query::service::tests::query_does_not_record_events ... ok
+test query::service::tests::query_process_dispatches_to_the_resolved_process_without_resolving ... ok
+test query::service::tests::query_returns_registered_handler_reply ... ok
+test query::service::tests::terminal_and_non_resident_workflows_are_not_running ... ok
+test query::service::tests::unknown_query_returns_typed_error_and_workflow_remains_live ... ok
+test query::service::tests::unknown_workflow_returns_typed_unknown_error ... ok
+test registry::handle::tests::completion_notifier_stores_outcome_without_active_receiver ... ok
+test registry::table::tests::a_handle_on_another_run_of_the_workflow_blocks_the_reservation ... ok
+test registry::table::tests::a_reservation_and_a_handle_are_mutually_exclusive ... ok
+test registry::table::tests::a_reservation_is_invisible_to_every_live_process_lookup ... ok
+test registry::table::tests::a_second_reservation_for_the_same_workflow_is_refused ... ok
+test registry::table::tests::dropping_a_reservation_releases_the_slot ... ok
+test registry::table::tests::insert_if_absent_wins_the_slot_and_rejects_the_racer ... ok
+test registry::table::tests::list_returns_snapshot_handles ... ok
+test registry::table::tests::live_pid_tracks_newest_run_across_continue_as_new ... ok
+test registry::table::tests::poisoned_lock_returns_typed_registry_error ... ok
+test registry::table::tests::reconcile_missing_handle_is_noop ... ok
+test registry::table::tests::reconcile_projection_wins_over_disagreeing_cache ... ok
+test registry::table::tests::reconcile_updates_cancelled_projection ... ok
+test registry::table::tests::reconcile_updates_completed_projection ... ok
+test registry::table::tests::registry_is_send_sync ... ok
+test registry::table::tests::remove_deletes_only_the_requested_run ... ok
+test registry::table::tests::stores_two_runs_for_the_same_workflow_without_shadowing ... ok
+test registry::unrecoverable::tests::a_recorded_run_can_be_asked_about_by_id ... ok
+test registry::unrecoverable::tests::an_unrecorded_run_is_not_degraded ... ok
+test registry::unrecoverable::tests::list_reports_every_degraded_run_and_only_those ... ok
+test registry::unrecoverable::tests::observing_the_run_resident_clears_the_degraded_fact ... ok
+test registry::unrecoverable::tests::the_newest_boots_verdict_replaces_the_previous_one ... ok
+test lifecycle::terminate::tests::cancel_unknown_workflow_returns_not_found ... ok
+test runtime::config::completion_retry_ladder_tests::a_ceiling_below_the_floor_cannot_be_named ... ok
+test runtime::config::completion_retry_ladder_tests::a_zero_initial_backoff_cannot_be_named ... ok
+test runtime::config::completion_retry_ladder_tests::the_default_ladder_is_one_the_constructor_would_accept ... ok
+test runtime::engine_nifs::tests::engine_and_test_double_export_identical_mfa_sets ... ok
+test runtime::engine_nifs::tests::registers_all_engine_nifs_as_unique_entries_with_correct_scheduling ... ok
+test runtime::engine_nifs::tests::returns_error_on_wrong_arity ... ok
+test runtime::engine_nifs::tests::unimplemented_stub_returns_standard_error_tuple ... ok
+test runtime::engine_tasks::tests::a_release_from_a_foreign_task_cannot_evict_a_live_completion_retry ... ok
+test runtime::engine_tasks::tests::a_reopened_runs_successor_lease_can_arm_its_own_completion_retry ... ok
+test runtime::engine_tasks::tests::abort_for_parent_leaves_other_parents_armed ... ok
+test runtime::engine_tasks::tests::abort_watch_disarms_a_single_key ... ok
+test runtime::engine_tasks::tests::arming_is_idempotent_per_key ... ok
+test lifecycle::terminate::tests::complete_cancels_an_armed_deadline ... ok
+test runtime::engine_tasks::tests::drop_backstop_aborts_without_blocking ... ok
+test runtime::engine_tasks::tests::dropping_the_registry_aborts_completion_retries_too ... ok
+test runtime::engine_tasks::tests::shutdown_gates_new_arms_and_awaits_aborted_tasks ... ok
+test runtime::engine_tasks::tests::shutdown_is_safe_from_inside_a_host_async_context ... ok
+test runtime::cleanup_executor::tests::shutdown_is_bounded_and_can_be_retried_after_worker_release ... ok
+test lifecycle::terminate::tests::complete_records_notifies_and_deregisters ... ok
+test lifecycle::terminate::tests::fail_records_notifies_and_deregisters ... ok
+test loader::catalog::catalog_tests::package_loaded_under_content_hash_namespace_spawns_entrypoint ... ok
+test loader::catalog::catalog_tests::unexported_entry_function_fails_the_runtime_load ... ok
+test runtime::handle::delivery::tests::interleavings::monitor_drain_overlaps_completion_before_enqueue_and_rolls_it_back ... ok
+test runtime::handle::delivery::tests::interleavings::late_delivery_after_monitor_cleanup_does_not_recreate_a_gate ... ok
+test runtime::handle::delivery::tests::interleavings::monitor_drain_overlaps_failure_before_enqueue_and_rolls_it_back ... ok
+test runtime::handle::delivery::tests::interleavings::monitor_drains_outcome_when_death_follows_successful_enqueue ... ok
+test runtime::handle::delivery::tests::interleavings::poisoned_monitor_drain_removes_state_and_returns_typed_error ... ok
+test runtime::handle::delivery::tests::outbox_completion_is_run_scoped_across_continue_as_new ... ok
+test runtime::handle::delivery::tests::interleavings::withheld_removal_does_not_block_reregistered_workflow_delivery ... ok
+test runtime::handle::delivery::tests::rollback::suspended_workflow_marker_retries_after_live_refusal ... ok
+test runtime::handle::spawn_bifs::tests::missing_fun_spawn_mfas_are_typed_and_leave_vacant_keys_unchanged ... ok
+test runtime::handle::tests::a_second_failing_shutdown_step_is_reported_even_though_only_one_is_returned ... ok
+test runtime::handle::delivery::tests::outbox_failure_is_run_scoped_across_continue_as_new ... ok
+test runtime::handle::delivery::tests::outbox_completion_lands_where_take_reads_it ... ok
+test engine::builder::tests::a_live_wheel_timer_fires_when_the_engine_is_not_released ... ok
+test runtime::handle::delivery::tests::rollback::failed_completion_wrapper_redelivery_restores_published_completion ... ok
+test runtime::handle::delivery::tests::rollback::failed_failure_wrapper_redelivery_restores_published_failure ... ok
+test runtime::handle::tests::runtime_handle_is_send_sync ... ok
+test runtime::handle::tests::shutdown_closes_the_epoch_even_when_a_drain_fails ... ok
+test runtime::handle::delivery::tests::rollback::failed_legacy_result_redelivery_restores_published_completion ... ok
+test engine::builder::tests::dropping_an_engine_without_shutdown_disarms_the_live_timer_wheel ... ok
+test runtime::handle::delivery::tests::rollback::first_live_marker_refusal_preserves_attempted_completion ... ok
+test runtime::handle::tests::signal_delivery_to_dead_process_returns_typed_error ... ok
+test runtime::handle::tests::distinct_nifs_are_registered_and_callable ... ok
+test runtime::handle::tests::duplicate_nif_mfa_returns_typed_error ... ok
+test runtime::handle::tests::payload_binary_remains_valid_through_spawn_and_is_released ... ok
+test runtime::handle::tests::registers_spawns_and_shuts_down ... ok
+test runtime::monitor::tests::abort_job_finalizer_runs_on_completion_and_when_already_complete ... ok
+test runtime::handle::tests::workflow_outcome_releases_payload_heaps ... ok
+test runtime::monitor::tests::abort_refuses_a_process_owned_by_a_committed_monitor ... ok
+test runtime::monitor::tests::attach_abort_finalizer_reports_no_job_so_the_caller_retracts_now ... ok
+test runtime::handle::tests::repeated_completed_payload_spawns_do_not_accumulate_retained_heaps ... ok
+test runtime::monitor::tests::duplicate_installation_after_retirement_is_typed_terminal ... ok
+test runtime::monitor::tests::completed_process_lifecycle_state_returns_to_baseline_under_churn ... ok
+test runtime::monitor::tests::delayed_exit_observation_survives_heavy_churn_and_runs_full_cleanup ... ok
+test runtime::monitor::tests::bounded_cleanup_queue_exhaustion_is_typed ... ok
+test runtime::monitor::tests::duplicate_installation_cannot_consume_outcome_or_abort_owned_process ... ok
+test runtime::nif::tests::collects_host_and_engine_nifs ... ok
+test runtime::nif_activity::tests::absent_fields_resolve_to_the_named_default ... ok
+test runtime::nif_activity::tests::absent_node_resolves_to_no_affinity ... ok
+test runtime::nif_activity::tests::absent_null_or_malformed_tier_resolves_to_no_selection ... ok
+test runtime::nif_activity::tests::activity_override_wins_over_start_time_queue ... ok
+test runtime::nif_activity::tests::activity_override_wins_over_workflow_default ... ok
+test runtime::nif_activity::tests::malformed_config_falls_through_to_start_time_queue ... ok
+test runtime::nif_activity::tests::malformed_config_resolves_to_no_node_affinity ... ok
+test runtime::nif_activity::tests::malformed_config_resolves_to_the_named_default ... ok
+test runtime::nif_activity::tests::named_default_is_the_last_resort_below_start_time_queue ... ok
+test runtime::nif_activity::tests::no_selection_resolves_to_the_named_default ... ok
+test runtime::nif_activity::tests::node_pin_resolves_to_the_selected_node ... ok
+test runtime::nif_activity::tests::null_node_resolves_to_no_affinity ... ok
+test runtime::nif_activity::tests::start_time_queue_applies_when_no_config_selection ... ok
+test runtime::nif_activity::tests::tier_selection_is_read_from_config ... ok
+test runtime::nif_activity::tests::workflow_default_applies_when_activity_selects_none ... ok
+test runtime::nif_activity::tests::workflow_default_wins_over_start_time_queue ... ok
+test runtime::monitor::tests::event_driven_exit_runs_delivery_cleanup_to_true_terminal_state ... ok
+test runtime::monitor::tests::unmonitored_abort_bound_exhaustion_is_typed ... ok
+test runtime::monitor::tests::exact_cleanup_predicate_rejects_a_live_native_entry ... ok
+test runtime::monitor::tests::monitor_installation_failure_drains_retained_completion_transaction ... ok
+test runtime::monitor::tests::monitor_rejects_pid_never_spawned_by_this_runtime ... ok
+test runtime::monitor::tests::shutdown_drains_in_flight_exits_before_bounded_drainer_join ... ok
+test runtime::monitor::tests::unavailable_cleanup_executor_is_typed_without_sticky_abort_identity ... ok
+test runtime::monitor::tests::unregistered_absent_process_aborts_without_waiting_for_outcome ... ok
+test runtime::nif_activity_dispatch::tests::retry_outcomes::a_closed_engine_task_epoch_stops_the_retry_loop_writing ... ok
+test runtime::nif_activity_dispatch::tests::retry_outcomes::absent_policy_keeps_run_exactly_once_for_retryable_failures ... ok
+test runtime::nif_activity_dispatch::tests::retry_outcomes::exhausted_retry_budget_fails_with_last_reason_and_attempt_count ... ok
+test runtime::nif_activity_dispatch::tests::retry_outcomes::non_retryable_failure_fails_immediately_without_a_retry_trail ... ok
+test runtime::nif_activity_dispatch::tests::retry_outcomes::retryable_failure_redispatches_with_incremented_recorded_attempt ... ok
+test runtime::nif_activity_delivery_tests::real_await_nif_poison_fails_process_and_monitor_drains_state ... ok
+test runtime::nif_activity_dispatch::tests::retry_parking::parked_dispatch_stands_down_without_recording_even_with_retry_budget ... ok
+test runtime::nif_activity_dispatch::tests::retry_parking::retry_loop_aborts_without_recording_once_the_activity_settled ... ok
+test runtime::nif_activity_dispatch::tests::retry_worker_loss::a_flapping_link_terminates_naming_the_transport_not_the_action ... ok
+test runtime::nif_activity_dispatch::tests::retry_worker_loss::a_settled_ordinal_stops_the_worker_loss_redispatch ... ok
+test runtime::nif_activity_dispatch::tests::retry_worker_loss::a_worker_loss_consumes_no_authored_budget_and_records_nothing ... ok
+test runtime::nif_activity_dispatch::tests::retry_worker_loss::a_worker_loss_redispatches_even_with_no_authored_retry_policy ... ok
+test runtime::nif_activity_dispatch::tests::retry_worker_loss::an_action_failure_still_consumes_its_authored_budget ... ok
+test runtime::nif_activity_retry::tests::absent_null_and_malformed_policies_decode_to_no_retries ... ok
+test runtime::nif_activity_retry::tests::backoff_delays_grow_and_cap ... ok
+test runtime::nif_activity_retry::tests::next_attempt_continues_the_recorded_trail ... ok
+test runtime::nif_activity_retry::tests::parked_classification_is_prefix_scoped_and_disjoint_from_retryable ... ok
+test runtime::nif_activity_retry::tests::reason_classification_follows_the_wire_prefix_only ... ok
+test runtime::nif_activity_retry::tests::sdk_shaped_policies_decode_exactly ... ok
+test runtime::nif_activity_retry::tests::settlement_tracks_terminal_outcomes_not_retryable_attempts ... ok
+test runtime::nif_activity_dispatch::tests::await_paths::awaited_terminal_records_the_noted_final_attempt ... ok
+test runtime::nif_child::tests::child_keys_are_run_scoped_ordinals_independent_of_recorder_head ... ok
+test runtime::nif_activity_delivery_tests::in_vm_spawn_failure_fallback_resolves_failed_never_suspend ... ok
+test runtime::nif_activity_delivery_tests::fast_completion_during_dispatch_nif_resolves_on_next_real_await ... ok
+test runtime::nif_activity_dispatch::tests::await_paths::poisoned_take_fails_typed_and_monitor_drains_retained_state ... ok
+test runtime::nif_activity_dispatch::tests::blocking_support::blocking_dispatcher_completes_on_single_threaded_runtime ... ok
+test runtime::nif_child::tests::awaiting_a_child_the_engine_has_no_trace_of_is_a_typed_error ... ok
+test runtime::nif_child::tests::child_terminal_recorded_before_deadline_resolves_the_child ... ok
+test runtime::nif_activity_dispatch::tests::retry_parking::parked_dispatch_delivers_nothing_to_the_workflow_process ... ok
+test runtime::nif_child::tests::deadline_recorded_before_child_terminal_takes_the_timeout_branch ... ok
+test runtime::nif_activity_dispatch::tests::await_paths::delivered_completion_settles_durably_ahead_of_snapshot_expiry ... ok
+test runtime::nif_child::tests::expired_scope_disarms_the_armed_watcher ... ok
+test runtime::nif_child::tests::expired_scope_releases_pin_without_touching_the_child ... ok
+test runtime::nif_activity_dispatch::tests::await_paths::stale_snapshot_expiry_suspends_then_converges_with_replay ... ok
+test runtime::nif_child::tests::live_await_pins_arms_watcher_and_suspends_idempotently ... ok
+test runtime::nif_child_watch::tests::cancelled_and_timed_out_map_to_failed_with_prefixes ... ok
+test runtime::nif_child::tests::mismatched_pin_is_a_typed_error ... ok
+test runtime::nif_child_watch::tests::continue_as_new_outcome_is_refused_as_a_recordable_terminal ... ok
+test runtime::nif_child_watch::tests::current_run_handle_selects_the_latest_run_not_an_arbitrary_one ... ok
+test runtime::nif_child_watch::tests::latest_run_id_reads_the_newest_started_run ... ok
+test runtime::nif_child::tests::recorded_failure_resolves_as_error_prefixed_data_and_clears_pin ... ok
+test runtime::nif_child::tests::query_sentinel_precedes_recorded_resolution_and_preserves_pin ... ok
+test runtime::nif_child_watch::tests::record_is_terminal_guarded_and_duplicate_suppressed ... ok
+test runtime::nif_child_spawn_retry::tests::epoch_close_drops_the_in_flight_start_attempt ... ok
+test runtime::nif_child::tests::stale_snapshot_live_timeout_converges_with_replay_child_branch ... ok
+test runtime::nif_child_spawn_retry::tests::existing_child_history_ends_the_retry_without_a_second_start ... ok
+test runtime::nif_child_spawn_retry::tests::permanent_start_failure_stays_internal_and_armed ... ok
+test runtime::nif_child_watch::tests::arming_is_idempotent_per_parent_and_child ... ok
+test runtime::nif_collect::tests::harness::only_an_explicit_in_vm_selection_is_refused_from_fan_out ... ok
+test runtime::nif_collect::tests::routing_fresh::fresh_fan_out_item_carries_the_selected_node ... ok
+test runtime::nif_collect::tests::routing_fresh::fresh_fan_out_item_carries_the_selected_task_queue ... ok
+test runtime::nif_collect::tests::routing_fresh::fresh_fan_out_items_fall_back_to_the_start_time_queue ... ok
+test runtime::nif_collect::tests::routing_fresh::fresh_fan_out_items_resolve_precedence_per_member ... ok
+test runtime::nif_child_watch::tests::cleanup_aborts_only_the_exited_parents_watchers ... ok
+test runtime::nif_child_watch::tests::marker_failure_after_durable_record_is_non_fatal ... ok
+test runtime::nif_child_watch::tests::missed_doorbell_degrades_to_store_polling_not_a_permanent_park ... ok
+test runtime::nif_child_watch::tests::registry_miss_backs_off_until_the_child_appears ... ok
+test runtime::nif_collect::tests::routing_recovery::recovery_from_pre_field_history_defaults_task_queue ... ok
+test runtime::nif_collect::tests::routing_recovery::recovery_from_pre_field_history_has_no_node ... ok
+test runtime::nif_collect::tests::routing_recovery::recovery_re_targets_the_recorded_node_not_none ... ok
+test runtime::nif_collect::tests::routing_recovery::recovery_re_targets_the_recorded_task_queue_not_default ... ok
+test runtime::nif_child_watch::tests::transient_record_failure_is_retried_until_the_terminal_lands ... ok
+test runtime::nif_child_watch::tests::watcher_follows_continue_as_new_chain_to_final_terminal ... ok
+test runtime::nif_collect::tests::routing_fresh::no_selection_records_on_the_workflow_start_time_queue ... ok
+test runtime::nif_collect::tests::routing_fresh::scheduled_events_record_each_members_resolved_node ... ok
+test runtime::nif_collect::tests::routing_fresh::scheduled_events_record_each_members_resolved_task_queue ... ok
+test runtime::nif_collect::tests::settlement::cancellation_set_covers_exactly_the_unresolved_ordinals ... ok
+test runtime::nif_collect::tests::settlement::empty_list_resolves_immediately_without_pinning ... ok
+test runtime::nif_context::tests::await_child_skips_consumed_commands_to_recorded_terminal ... ok
+test runtime::nif_context::tests::await_child_without_recorded_terminal_resumes_live ... ok
+test runtime::nif_collect::tests::expiry::all_stale_snapshot_expiry_suspends_then_converges_with_replay ... ok
+test runtime::nif_context::tests::block_on_recorder_reads_current_head_without_deadlock ... ok
+test runtime::nif_context::tests::context_reads_the_recorded_start_time_task_queue ... ok
+test runtime::nif_context::tests::context_without_start_time_attribute_projects_none ... ok
+test runtime::nif_context::tests::resolve_command_returns_recorded_activity_resolution ... ok
+test runtime::nif_context::tests::resolves_registered_pid_to_context ... ok
+test runtime::nif_context::tests::birth_window_registration_resolves_instead_of_failing ... ok
+test runtime::nif_continue_as_new::tests::a_closed_epoch_refuses_the_continue_as_new_terminal ... ok
+test runtime::nif_continue_as_new::tests::a_deadline_retirement_that_fails_after_the_terminal_reports_terminal_only ... ok
+test runtime::nif_continue_as_new::tests::an_already_terminal_run_reports_its_own_cause_not_the_epoch ... ok
+test runtime::nif_collect::tests::expiry::race_stale_snapshot_expiry_suspends_then_settles_the_recorded_winner ... ok
+test runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides ... ok
+test runtime::nif_determinism::tests::each_engine_state_resolves_its_own_context_source ... ok
+test runtime::nif_determinism::tests::now_returns_last_recorded_event_timestamp_millis ... ok
+test runtime::nif_determinism::tests::random_int_context_returns_error_for_invalid_range ... ok
+test runtime::nif_determinism::tests::random_int_is_stable_uniform_and_validates_ranges ... ok
+test runtime::nif_determinism::tests::random_is_stable_for_same_ids_and_sequence ... ok
+test runtime::nif_determinism::tests::replay_sequence_matches_recorded_history_and_seeded_positions ... ok
+test runtime::nif_query::nif_query_tests::cleanup_process_drains_queries_and_drops_reply_senders ... ok
+test runtime::nif_collect::tests::settlement::fail_fast_returns_lowest_ordinal_failure_and_cancels_unresolved ... ok
+test runtime::nif_query::nif_query_tests::dispatch_query_is_refused_during_replay ... ok
+test runtime::nif_query::nif_query_tests::dispatch_query_is_refused_while_servicing_a_query ... ok
+test runtime::nif_query::nif_query_tests::dispatch_query_round_trips_through_query_service ... ok
+test runtime::nif_query::nif_query_tests::dispatch_query_without_configured_timeout_fails_typed ... ok
+test runtime::nif_query::nif_query_tests::query_nifs_accept_a_pid_the_registry_has_not_inserted_yet ... ok
+test runtime::nif_query::nif_query_tests::query_nifs_do_not_change_event_history ... ok
+test runtime::nif_query::nif_query_tests::register_query_stores_names_only_and_is_idempotent ... ok
+test runtime::nif_collect::tests::routing_fresh::recovery_re_resolves_the_start_time_queue_not_default ... ok
+test runtime::nif_query::nif_query_tests::replies_clear_the_servicing_guard_even_for_unknown_ids ... ok
+test runtime::nif_query::nif_query_tests::reply_query_delivers_pending_response_and_errors_for_missing_id ... ok
+test runtime::nif_query_diagnostic::tests::diagnostic_bound_preserves_utf8_boundaries ... ok
+test runtime::nif_query_pump::tests::empty_queue_returns_none ... ok
+test runtime::nif_query_pump::tests::sentinel_pops_one_query_sets_servicing_and_preserves_await_pin ... ok
+test runtime::nif_query::nif_query_tests::reply_query_error_delivers_typed_handler_failed ... ok
+test runtime::nif_query_pump::tests::sentinel_skips_queries_whose_caller_stopped_waiting ... ok
+test runtime::nif_query_pump::tests::servicing_guard_refuses_then_clears ... ok
+test runtime::nif_signal::tests::derives_signal_occurrences_from_matching_signal_names ... ok
+test runtime::nif_collect::tests::settlement::pinned_base_is_reused_across_reentries_and_counter_advances_once ... ok
+test runtime::nif_collect::tests::settlement::race_batch_tie_breaks_to_lowest_ordinal_and_drains_loser_entries ... ok
+test runtime::nif_context::tests::unknown_pid_returns_unknown_process ... ok
+test runtime::nif_collect::tests::settlement::expired_scope_cancels_unresolved_and_replay_derives_the_same_abort ... ok
+test runtime::nif_timer::tests::author_timer_id_accepts_ordinary_name ... ok
+test runtime::nif_timer::tests::author_timer_id_refuses_reserved_deadline_prefix ... ok
+test runtime::nif_timer::tests::author_timer_id_refuses_reserved_schedule_prefix ... ok
+test runtime::nif_query::nif_query_tests::delivery_queues_pending_query_and_wakes_the_workflow_process ... ok
+test runtime::nif_signal::tests::live_expiry_is_decided_from_the_resolution_snapshot_only ... ok
+test runtime::nif_signal::tests::recovered_interleaved_sends_and_receives_replay_without_appends ... ok
+test runtime::nif_signal::tests::recovered_send_replays_recorded_sent_despite_later_same_name_arrival ... ok
+test runtime::nif_signal::tests::signal_recorded_after_deadline_takes_the_timeout_branch ... ok
+test runtime::nif_collect::tests::settlement::race_winner_is_first_recorded_terminal_not_lowest_ordinal ... ok
+test runtime::nif_signal::tests::signal_recorded_before_deadline_resolves_the_payload ... ok
+test runtime::nif_timer::tests::expired_scope_cancel_losing_to_a_recorded_fire_returns_fired ... ok
+test runtime::nif_timer::tests::expired_scope_cancel_winning_returns_cancelled ... ok
+test runtime::nif_timer_bridge::tests::a_refused_teardown_cancel_does_not_promise_a_reissue ... ok
+test runtime::nif_timer_bridge::tests::a_refused_cancel_is_not_reported_as_a_refused_fire ... ok
+test runtime::nif_timer_bridge::tests::a_torn_down_wheel_does_not_finalize_an_unregistered_timeout ... ok
+test runtime::nif_timer_bridge::tests::a_torn_down_wheel_does_not_time_a_run_out ... ok
+test runtime::nif_timer_bridge::tests::a_wheel_teardown_during_arming_leaves_no_armed_timer ... ok
+test runtime::nif_timer_bridge::tests::a_torn_down_wheel_refuses_to_append ... ok
+test runtime::nif_timer_bridge::tests::deadline_fire_retries_through_a_store_outage_spanning_both_reads ... ok
+test runtime::process_exit::round12_tests::blocking_callback_cannot_backpressure_drainer_and_shutdown_is_retryable ... ok
+test runtime::nif_timer_bridge::tests::stand_down_is_not_a_fault ... ok
+test runtime::process_exit::round12_tests::beam_spawn_children_release_outcomes_to_baseline ... ok
+test runtime::process_exit::round13_tests::committed_callback_admission_hands_off_before_dispatcher_shutdown ... ok
+test runtime::process_exit::round12_tests::panicking_callback_cannot_terminate_singleton_drainer ... ok
+test runtime::process_exit::round12_tests::lag_recovery_waits_for_spawn_reservation_before_snapshot ... ok
+test runtime::process_exit::round12_tests::lag_recovery_releases_beam_spawn_children_to_baseline ... ok
+test runtime::process_exit::round13_tests::shutdown_drains_parked_release_only_children_to_baseline ... ok
+test runtime::wake_confirm::tests::already_observed_orders_never_wake ... ok
+test runtime::process_exit::round14_tests::fun_spawn_variants_are_release_only_and_return_maps_to_baseline ... ok
+test runtime::wake_confirm::tests::shutdown_is_idempotent_and_gates_new_orders ... ok
+test schedule::evaluator::tests::allow_all_overlap_always_starts ... ok
+test schedule::evaluator::tests::buffer_one_overlap_queues_at_most_one ... ok
+test schedule::evaluator::tests::buffered_tick_does_not_start_after_schedule_becomes_inactive ... ok
+test schedule::evaluator::tests::cancel_previous_overlap_cancels_then_starts ... ok
+test schedule::evaluator::tests::paused_and_deleted_schedules_do_not_arm ... ok
+test schedule::evaluator::tests::recovery_applies_all_catch_up_and_records_triggers ... ok
+test schedule::evaluator::tests::recovery_applies_one_catch_up_and_records_trigger ... ok
+test schedule::evaluator::tests::recovery_applies_skip_catch_up_without_recording_trigger ... ok
+test schedule::evaluator::tests::recovery_reconstructs_state_and_rearms_only_active_schedules ... ok
+test schedule::evaluator::tests::skip_overlap_skips_and_rearms ... ok
+test schedule::evaluator::tests::timer_fire_starts_records_and_rearms_next_fire ... ok
+test schedule::policy::tests::allow_all_policy_starts_even_when_execution_is_running ... ok
+test schedule::policy::tests::buffer_one_policy_queues_at_most_one_pending_tick ... ok
+test schedule::policy::tests::cancel_previous_policy_cancels_then_starts_when_execution_is_running ... ok
+test schedule::policy::tests::catch_up_all_fires_every_missed_trigger ... ok
+test schedule::policy::tests::catch_up_one_fires_once_and_advances_to_future ... ok
+test schedule::policy::tests::catch_up_skip_only_advances_to_future ... ok
+test schedule::policy::tests::skip_policy_skips_when_execution_is_running ... ok
+test schedule::state::tests::created_state_is_unpaused_with_initial_next_trigger ... ok
+test schedule::state::tests::schedule_events_project_state_fields ... ok
+test schedule::trigger::tests::interval_returns_reference_plus_period ... ok
+test schedule::trigger::tests::interval_timestamp_overflow_returns_typed_range_error ... ok
+test schedule::trigger::tests::invalid_cron_expressions_return_typed_errors ... ok
+test schedule::trigger::tests::invalid_cron_trigger_returns_typed_parse_error ... ok
+test schedule::trigger::tests::midnight_cron_returns_next_midnight_strictly_after_reference ... ok
+test schedule::trigger::tests::oversized_interval_returns_typed_range_error ... ok
+test schedule::trigger::tests::parses_standard_five_field_cron_expressions ... ok
+test schedule::trigger::tests::successive_calls_are_strictly_increasing ... ok
+test schedule::trigger::tests::zero_interval_returns_typed_error ... ok
+test signal::resume::tests::deferred_signals_deliver_in_order_exactly_once ... ok
+test signal::resume::tests::failed_delivery_is_logged_dropped_and_subsequent_signals_continue ... ok
+test signal::router::tests::dead_resident_pid_records_signal_and_resolves_as_accepted ... ok
+test signal::router::tests::terminal_run_rejects_signal_without_appending ... ok
+test runtime::process_exit::round14_tests::overflow_recovery_releases_both_fun_spawn_variants_to_baseline ... ok
+test runtime::process_exit::round14_tests::shutdown_union_drains_parked_fun_spawn_children_to_baseline ... ok
+test runtime::wake_confirm::tests::concurrent_orders_stop_independently ... ok
+test runtime::process_exit::tests::runtime_claims_the_only_exit_event_subscription_with_typed_duplicate_failure ... ok
+test runtime::process_exit::tests::lagged_stream_resynchronizes_every_registered_outcome ... ok
+test supervision::tree::tests::activity_child_cannot_alias_workflow_process ... ok
+test supervision::tree::tests::activity_children_are_one_level_below_workflow_process ... ok
+test supervision::tree::tests::missing_workflow_activity_parent_is_typed_error ... ok
+test supervision::tree::tests::one_engine_root_has_one_supervisor_per_workflow_type ... ok
+test supervision::tree::tests::placing_existing_workflow_is_idempotent_and_preserves_children ... ok
+test supervision::tree::tests::poisoned_tree_lock_returns_typed_registry_error ... ok
+test supervision::tree::tests::workflow_pid_cannot_move_between_type_supervisors ... ok
+test supervision::tree::tests::workflows_sit_under_type_supervisors_not_new_supervisors ... ok
+test time::deadline::tests::anonymous_timer_is_not_a_deadline ... ok
+test time::deadline::tests::author_named_timer_is_not_a_deadline ... ok
+test time::deadline::tests::deadline_prefixed_but_malformed_suffix_has_no_run ... ok
+test time::deadline::tests::deadline_timer_id_round_trips_to_its_run ... ok
+test time::deadline::tests::outstanding_deadline_timer_is_none_for_a_run_without_a_deadline ... ok
+test time::deadline::tests::outstanding_deadline_timer_tracks_liveness_and_scopes_to_the_run ... ok
+test time::named::tests::cancel_timer_after_cancel_is_idempotent_noop ... ok
+test time::named::tests::cancel_timer_after_fire_is_noop ... ok
+test time::named::tests::cancel_timer_disarms_resident_wheel_and_records_cancelled ... ok
+test time::named::tests::cancel_timer_settles_anonymous_scope_deadline ... ok
+test time::named::tests::sleep_derives_anonymous_id_and_fire_at_from_recorded_inputs ... ok
+test time::named::tests::start_timer_arms_named_timer_without_rewriting_id ... ok
+test time::named::tests::start_timer_preserves_named_id_in_history_and_timer_row ... ok
+test time::recovery::tests::cancelled_predecessor_deadline_is_not_rearmed_after_continue_as_new ... ok
+test time::recovery::tests::cancelled_timer_is_never_fired_by_recovery ... ok
+test time::recovery::tests::orphaned_timer_for_unknown_workflow_is_skipped_not_fatal ... ok
+test time::recovery::tests::running_startup_sweep_twice_fires_due_timer_once_total ... ok
+test time::recovery::tests::startup_sweep_does_not_fire_future_timer ... ok
+test time::recovery::tests::startup_sweep_fires_past_timer_and_delivers ... ok
+test time::recovery::tests::tick_uses_injected_clock_and_fires_newly_due_timer_once ... ok
+test time::timer_service::tests::deadline_fire_routes_to_handler_and_records_no_timer_fired ... ok
+test time::timer_service::tests::deadline_fire_without_handler_is_typed_error ... ok
+test time::timer_service::tests::deadline_handler_failure_surfaces_as_typed_error ... ok
+test time::timer_service::tests::fire_records_timer_fired_then_delivers_mailbox_message ... ok
+test time::timer_service::tests::fire_records_without_delivery_when_workflow_becomes_nonresident ... ok
+test time::timer_service::tests::fire_resolves_residency_at_fire_time ... ok
+test time::timer_service::tests::firing_cancelled_timer_is_noop ... ok
+test time::timer_service::tests::firing_prior_run_timer_after_continue_as_new_is_noop ... ok
+test time::timer_service::tests::firing_same_timer_twice_records_and_delivers_once ... ok
+test time::timer_service::tests::firing_unstarted_timer_records_nothing ... ok
+test time::timer_service::tests::prior_run_segment_timer_is_not_live ... ok
+test time::timer_service::tests::re_armed_named_timer_fires_again ... ok
+test time::timer_service::tests::refused_terminal_fire_records_nothing_and_delivers_no_wake ... ok
+test time::timer_service::tests::restarted_named_timer_after_cancel_is_live ... ok
+test time::timer_service::tests::restarted_named_timer_after_fire_is_live ... ok
+test time::timer_service::tests::schedule_arms_wheel_for_resident_workflow ... ok
+test time::timer_service::tests::schedule_for_nonresident_records_without_arming ... ok
+test time::timer_service::tests::schedule_records_timer_row_without_timer_started_event ... ok
+test time::timer_service::tests::shared_coordinator_serializes_cancel_and_fire_across_services ... ok
+test time::timer_service::tests::started_then_cancelled_timer_is_dead ... ok
+test time::timer_service::tests::started_then_fired_timer_is_dead ... ok
+test time::timer_service::tests::started_timer_is_live ... ok
+test supervision::policy::tests::abnormal_activity_exit_is_trapped_by_workflow ... ok
+test supervision::policy::tests::activity_process_policy_keeps_children_non_trapping ... ok
+test supervision::policy::tests::cancelling_workflow_terminates_linked_activity_children ... ok
+test supervision::policy::tests::policy_spawns_workflow_through_runtime_trapping_api ... ok
+test supervision::policy::tests::workflow_spawn_policy_requests_trap_exit ... ok
+test runtime::wake_confirm::tests::ladder_persists_until_the_target_is_observed ... ok
+test runtime::process_exit::round13_tests::full_callback_queue_retains_bounded_automatic_retries ... ok
+test lifecycle::deadline::tests::deadline_and_cancel_race_records_exactly_one_terminal ... ok
+test runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_each_outcome_that_must_end_it_and_spares_the_rest ... ok
+
+test result: ok. 671 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.52s
+
+     Running tests/activity_retry_e2e.rs (target/debug/deps/activity_retry_e2e-ddb325e850c45e04)
+
+running 11 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+test in_process_dispatch_miss_is_typed_recorded_and_fails_the_run ... ok
+test exhausted_retries_fail_the_run_and_reopen_continues_the_trail ... ok
+test retryable_flakes_cost_retries_not_the_run ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s
+
+     Running tests/adoption_parked_timer_e2e.rs (target/debug/deps/adoption_parked_timer_e2e-0e2885d18a6234aa)
+
+running 9 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): sleep_query
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): sleep_query
+test parked_timer_workflow_resumes_on_shard_adoption ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.00s
+
+     Running tests/adoption_parked_timer_xnode_e2e.rs (target/debug/deps/adoption_parked_timer_xnode_e2e-61f93217771f29ed)
+
+running 9 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): sleep_query
+test parked_timer_workflow_resumes_on_xnode_shard_adoption ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.21s
+
+     Running tests/advisory_class_e2e.rs (target/debug/deps/advisory_class_e2e-b4b82570a6919cf1)
+
+running 3 tests
+test advisory_exhaustion_replays_from_history_without_divergence ... ok
+test non_advisory_exhaustion_still_fails_the_run ... ok
+test advisory_exhaustion_warns_and_the_run_completes ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.32s
+
+     Running tests/aion_active_active_showcase.rs (target/debug/deps/aion_active_active_showcase-62989b9ab88ca46a)
+
+running 9 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): hello_world
+test multi_shard_active_active_failover_demo ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.02s
+
+     Running tests/aion_cluster_failover_showcase.rs (target/debug/deps/aion_cluster_failover_showcase-d2e83f5f1c6978c6)
+
+running 10 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): hello_world
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): hello_world
+test inflight_workflow_completes_on_survivor_after_owner_death ... ok
+test aion_workflow_survives_owner_node_death_on_haematite_cluster ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.86s
+
+     Running tests/aion_on_haematite_showcase.rs (target/debug/deps/aion_on_haematite_showcase-302270c4ee581bb1)
+
+running 9 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): hello_world
+test aion_workflow_survives_restart_recovered_from_haematite ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.79s
+
+     Running tests/awl_bc4_differential.rs (target/debug/deps/awl_bc4_differential-cd1703ce611fe38f)
+
+running 29 tests
+test adversarial::adversarial_fixtures_classify_as_expected ... ok
+test covered::every_covered_fixture_declares_a_distinct_workflow_name ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): release_pipeline
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): awl_hello, float_threshold_guard
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): publish_with_cleanup
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): awl_hello, float_threshold_guard
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): awl_hello, float_threshold_guard
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): child_spawn_combo, grade_essay, process_order
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): compensate_to_outcome, compensate_to_step
+COMPILED 7 module(s) under real `gleam build` in 1 attempt(s): child_spawn_combo, empty_fork_collection, max_arity_record, nested_handlers, runtime_sized_fork, timeout_inside_retry, unicode_payloads
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): awl_hello
+test abi::int_code_end_terminator_is_rejected ... ok
+test abi::abi_static_rows_over_spliced_entry ... ok
+test driver::classification_tests::a_one_sided_refusal_is_a_divergence ... ok
+test driver::classification_tests::aliasing_erases_identities_and_nothing_else ... ok
+test driver::classification_tests::identical_refusals_are_agreement_not_infrastructure_noise ... ok
+test driver::classification_tests::refusals_for_different_reasons_are_a_divergence ... ok
+test covered::the_exclusion_list_is_exactly_the_unobservable_park_population ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test serde_pin::event_serde_field_names_match_the_normalizer_literals ... ok
+test serde_pin::normalizer_leaves_adversarially_named_or_valued_fields_untouched ... ok
+test serde_pin::normalizer_replaces_every_identity_field ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): awl_hello
+test child_boundary::declarations_combined_fails_via_data_driven_route_failure ... ok
+test oracle_self_test::reference_package_under_direct_expectation_is_refused ... ok
+test compensation::a_routed_failure_outcome_never_compensates ... ok
+test abi::abi_entry_result_recording_through_the_trail ... ok
+test covered::flagship_awl_hello_matches ... ok
+COMPILED 104 module(s) under real `gleam build` in 1 attempt(s): action_param_hygiene, after_single, analyze_snapshot, announce_and_build, ask_the_agent, ask_the_agent_control, awl_hello, bounded_region_close, build_once, calls_and_side_effects, chained_polish, child_collection_fork, child_collection_fork_sequential, child_spawn_combo, collection_predicates, combinators, comma_tolerance, compensate_to_outcome, compensate_to_step, confirm_gate, counter_hygiene, dev_brief, dev_flow, diamond_report, drafting, empty_fork_collection, fall_through_chain, fallible_all_short_circuit, fallible_any_short_circuit, fallible_collection_predicates, fan_children, fan_children_tolerant, fan_scores, fetch_upstream, fixed_ping, float_threshold_guard, flow_vocab_b1, fork_action_fanout, fork_collection_join, fork_in_loop_live_ins, fork_named_branches, fork_named_homogeneous, fork_sequential_route, gated_review, general_concat, grade_essay, greet_by_hand, guard_chain_carries_every_proof, guard_narrows_a_deep_optional_field, guard_narrows_an_optional_field, import_constraints, import_nested_defs, import_ticket, index_and_concat, inline_schema_round, inline_verbatim_constraints, layer_hygiene, literal_forms, max_arity_record, measure_widths, mixed_doors, nested_handlers, nested_region_locals, nested_subflows, notify_once, optional_shorthand, ordered_tolerant, ping_host, pipe_chain_stages, poll_job, predicates_and_operators, prepare_dataset, process_order, publish_assets, publish_with_cleanup, refresh_cache, region_decision, release_pipeline, release_pipeline_combined, render_scene, rollout, runtime_sized_fork, scoped_names, sequential_migrations, settle_draft, ship_release, short_circuit_optional, sibling_region_locals, sit_one, step_bodies_combined, substep_cleanup, summarize, summarize_document, temporary_hygiene, timed_report, timeout_inside_retry, transcribe_and_summarize, triage_message, triage_ticket, unicode_payloads, value_route, wait_and_sleep, wait_timeout_optional, workflow_id
+test child_boundary::child_spawning_fixtures_fail_at_the_child_boundary ... ok
+test compensation::compensation_arms_execute_on_both_backends ... ok
+test adversarial::adversarial_differential_is_byte_identical ... ok
+test covered::covered_set_is_byte_identical has been running for over 60 seconds
+test covered::covered_set_is_byte_identical ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 67.05s
+
+     Running tests/awl_retry_counting_e2e.rs (target/debug/deps/awl_retry_counting_e2e-69a0e5b2e79a9765)
+
+running 9 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): awl_retry_counting
+test retry_three_runs_the_action_four_times_on_both_backends ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.71s
+
+     Running tests/child_await_e2e.rs (target/debug/deps/child_await_e2e-c60f37b5753388d7)
+
+running 9 tests
+test unloaded_child_type_fails_before_recording ... ok
+test watcher_resolves_terminal_child_with_no_handle_from_the_store ... ok
+test pre_d14_parent_beam_runs_unchanged_while_sixteen_awaits_resolve ... ok
+test recovery_sweep_starts_recorded_but_never_spawned_child_exactly_once ... ok
+test can_replacement_sweep_starts_the_successor_run_at_startup ... ok
+test await_child_follows_continue_as_new_chain_and_survives_restart ... ok
+test query_answers_while_parent_is_parked_in_await_child ... ok
+test crash_mid_await_child_recovers_and_matches_uncrashed_control ... ok
+test queried_crash_recovery_matches_unqueried_uncrashed_control ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.89s
+
+     Running tests/child_await_query_e2e.rs (target/debug/deps/child_await_query_e2e-476cb6a8eaa90559)
+
+running 10 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): child_small, parent_query
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): child_small, parent_query
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): child_small, parent_query
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): child_small, parent_query
+test parent_awaits_child_and_completes ... ok
+test query_answered_while_parked_in_child_await ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.54s
+
+     Running tests/child_workflows_e2e.rs (target/debug/deps/child_workflows_e2e-b51da778151f858b)
+
+running 5 tests
+test child_workflow_runs_end_to_end_through_nif_path ... ok
+test restart_mid_child_resumes_awaiting_same_child ... ok
+test restart_after_child_completed_replays_recorded_child_without_respawn ... ok
+test continue_as_new_scopes_child_correlation_to_each_run ... ok
+test signal_between_spawns_preserves_child_identities_across_restart ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.57s
+
+     Running tests/concurrency_e2e.rs (target/debug/deps/concurrency_e2e-25d1faae3d189793)
+
+running 8 tests
+test race_loser_late_completion_records_nothing_and_monitor_drains_the_maps ... ok
+test collect_race_settles_first_failure_and_replays_byte_identically ... ok
+test collect_all_success_returns_input_order_and_replays_byte_identically ... ok
+test collect_race_settles_first_success_and_replays_byte_identically ... ok
+test collect_all_fail_fast_cancels_unresolved_and_replays_byte_identically ... ok
+test query_answers_while_parent_is_parked_in_collect_all ... ok
+test collect_under_with_timeout_expiry_cancels_all_and_replays_byte_identically ... ok
+test queried_collect_crash_recovery_matches_unqueried_uncrashed_control ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.90s
+
+     Running tests/continue_as_new.rs (target/debug/deps/continue_as_new-aad2dd0cb816d825)
+
+running 3 tests
+test continue_as_new_records_terminal_old_run_and_running_replacement ... ok
+test read_run_chain_returns_parent_links_in_chronological_order ... ok
+test recovery_active_listing_contains_only_current_continuation_run ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+     Running tests/declared_contract_boundary.rs (target/debug/deps/declared_contract_boundary-7517ca8c47c7fe54)
+
+running 7 tests
+test a_signal_is_admitted_when_the_pinned_identity_is_no_longer_retained ... ok
+test a_package_declaring_no_input_shape_admits_any_input ... ok
+test a_start_input_violating_the_declared_schema_is_refused_before_any_history ... ok
+test an_undeclared_signal_name_is_refused_without_recording ... ok
+test an_undecodable_payload_is_refused_without_recording ... ok
+test a_refused_signal_payload_leaves_the_history_byte_identical_and_the_run_parked ... ok
+test a_package_declaring_no_signals_admits_any_signal ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
+
+     Running tests/deploy_persistence_e2e.rs (target/debug/deps/deploy_persistence_e2e-8228c4e62098e795)
+
+running 17 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test failed_paused_persistence_never_publishes_a_startable_hash ... ok
+test runtime_deployed_package_survives_restart_and_recovers_runs ... ok
+test file_sourced_packages_are_not_persisted ... ok
+test contract_bound_timeout_deploy_survives_restart_under_the_same_store_key ... ok
+test startup_file_source_route_wins_over_reloaded_deploys ... ok
+test route_pointer_survives_restart ... ok
+test group_redeploy_durably_supersedes_an_old_explicit_child_route ... ok
+test active_sibling_pins_whole_archive_group_across_restart ... ok
+test unload_deletes_persisted_package ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.17s
+
+     Running tests/deploy_refuses_unenforceable_contract.rs (target/debug/deps/deploy_refuses_unenforceable_contract-d80d5a4875564359)
+
+running 6 tests
+test an_uncompilable_pattern_is_refused_by_the_same_door ... ok
+test every_declared_type_is_measured_not_only_the_entry_input ... ok
+test a_package_declaring_an_uncompilable_input_type_is_refused_at_the_door ... ok
+test recovery_still_loads_a_persisted_package_the_door_would_now_refuse ... ok
+test an_enforceable_contract_still_deploys_and_routes ... ok
+test the_runtime_deploy_seam_refuses_it_and_leaves_the_catalog_untouched ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/determinism_violation.rs (target/debug/deps/determinism_violation-d16552640ba34093)
+
+running 4 tests
+test wrong_family_reports_typed_non_determinism_error ... ok
+test matching_command_stream_does_not_false_positive ... ok
+test wrong_correlation_key_reports_typed_non_determinism_error ... ok
+test violation_failure_records_one_non_determinism_workflow_failed ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/direct_failure_parity_e2e.rs (target/debug/deps/direct_failure_parity_e2e-3f9c50f1e14730af)
+
+running 10 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test the_spawn_refusal_fixture_spawns_the_named_child ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): parity_spawn_refusal, parity_strict_abort, parity_visits
+test failure_details_converge_between_direct_and_gleam_paths ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.85s
+
+     Running tests/direct_multi_step_distribute_e2e.rs (target/debug/deps/direct_multi_step_distribute_e2e-e82a8ea544063531)
+
+running 10 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): b5_multi_step_distribute
+test direct_and_gleam_archives_expose_identical_workflow_entries ... ok
+test direct_multistep_distribute_is_parallel_ordered_and_tolerant ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+
+     Running tests/direct_single_activity_distribute_e2e.rs (target/debug/deps/direct_single_activity_distribute_e2e-8011c71616271d20)
+
+running 1 test
+test direct_single_activity_tolerant_distribute_completes_with_slot_semantics ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+
+     Running tests/engine_cancel.rs (target/debug/deps/engine_cancel-093de142a0aea360)
+
+running 2 tests
+test cancel_propagates_kill_to_linked_activity ... ok
+test cancel_records_event_deregisters_and_kills_workflow ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/engine_lifecycle.rs (target/debug/deps/engine_lifecycle-fc48fdb97666ea98)
+
+running 2 tests
+test fixture_beam_registers_and_entry_function_resolves ... ok
+test start_appends_registers_and_lists_workflow ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/engine_query.rs (target/debug/deps/engine_query-2100068410e291f8)
+
+running 12 tests
+test raising_handler_is_handler_failed_and_workflow_survives ... ok
+test handler_calling_recording_nif_is_handler_failed_with_zero_events ... ok
+test suspended_residency_query_is_not_running_without_resume_or_events ... ok
+test eight_concurrent_queries_are_all_answered_with_distinct_ids ... ok
+test query_answers_at_yield_point_without_touching_history ... ok
+test unknown_query_name_is_typed_and_workflow_still_answers ... ok
+test query_racing_completion_yields_payload_or_typed_error_without_events ... ok
+test unpumped_workflow_times_out_then_completes_despite_dropped_reply ... ok
+test recovered_workflow_answers_queries_and_matches_unqueried_control_history ... ok
+test query_at_activity_await_then_crash_replay_matches_unqueried_control ... ok
+test query_during_active_sleep_loop_is_answered_at_the_next_yield_point ... ok
+test queried_sleep_loop_crash_recovery_matches_unqueried_control ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.63s
+
+     Running tests/engine_reload.rs (target/debug/deps/engine_reload-3359808c9d91692b)
+
+running 16 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test same_hash_different_manifest_reload_is_refused ... ok
+test load_package_after_shutdown_is_refused ... ok
+test unload_refuses_pinned_versions_and_succeeds_when_free ... ok
+test deploy_names_the_versions_it_superseded_without_removing_them ... ok
+test idempotent_reload_registers_nothing_and_re_routes_rolled_back_versions ... ok
+test listing_shows_route_flags_and_route_workflow_version_re_points ... ok
+test load_into_running_engine_routes_new_starts_while_old_run_finishes_on_v1 ... ok
+test route_flip_under_concurrent_starts_is_atomic ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.82s
+
+     Running tests/engine_reload_recovery.rs (target/debug/deps/engine_reload_recovery-b37feaf4bb808ad3)
+
+running 12 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test continue_as_new_sweep_starts_the_routed_version_and_records_it ... ok
+test child_spawn_recovery_sweep_starts_the_recorded_version ... ok
+test missing_pinned_version_fails_only_that_workflow_and_engine_builds ... ok
+test old_version_run_replays_and_completes_on_v1_after_v2_loads ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.01s
+
+     Running tests/engine_reload_stress.rs (target/debug/deps/engine_reload_stress-bed69babe2e5ee84)
+
+running 10 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test parallel_starters_racing_sequential_loads_stay_version_consistent ... ok
+test every_flip_in_a_rapid_load_sequence_is_visible_to_subsequent_starts ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.50s
+
+     Running tests/engine_result.rs (target/debug/deps/engine_result-e0470768b14f4124)
+
+running 1 test
+test completing_workflow_records_and_returns_result ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/engine_signal.rs (target/debug/deps/engine_signal-f3c403f7506df033)
+
+running 5 tests
+test signal_to_killed_run_returns_terminal_without_appending ... ok
+test non_resident_signal_records_defers_and_resume_delivers ... ok
+test signal_records_history_and_delivers_mailbox_marker ... ok
+test terminal_and_unknown_signals_return_errors_without_appending_events ... ok
+test deferred_signal_router_returns_runtime_error ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
+
+     Running tests/example_query_reentry.rs (target/debug/deps/example_query_reentry-9442b791b54a20b9)
+
+running 10 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): batch_orchestrator, batch_orchestrator_item
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): batch_orchestrator, batch_orchestrator_item
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): batch_orchestrator, batch_orchestrator_item
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): batch_orchestrator, batch_orchestrator_item
+test control_never_queried_batch_completes ... ok
+test live_query_while_parked_in_sdk_child_await_then_resume ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.73s
+
+     Running tests/examples_e2e.rs (target/debug/deps/examples_e2e-be84dafed5cfd3d8)
+
+running 15 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): invm_demo
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): data_pipeline
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): approval_gate
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): subscription
+COMPILED 19 module(s) under real `gleam build` in 1 attempt(s): aion_stacked_dev_io, brief_dev, dispatch, gate, stacked_dev, stacked_dev@activities, stacked_dev@assemble, stacked_dev@cli, stacked_dev@codecs_brief, stacked_dev@codecs_brief_blocks, stacked_dev@codecs_core, stacked_dev@codecs_dispatch, stacked_dev@codecs_flow, stacked_dev@codecs_workflows, stacked_dev@enrich, stacked_dev@errors, stacked_dev@locals, stacked_dev@prompts, stacked_dev@types
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): approval_gate
+COMPILED 19 module(s) under real `gleam build` in 1 attempt(s): aion_stacked_dev_io, brief_dev, dispatch, gate, stacked_dev, stacked_dev@activities, stacked_dev@assemble, stacked_dev@cli, stacked_dev@codecs_brief, stacked_dev@codecs_brief_blocks, stacked_dev@codecs_core, stacked_dev@codecs_dispatch, stacked_dev@codecs_flow, stacked_dev@codecs_workflows, stacked_dev@enrich, stacked_dev@errors, stacked_dev@locals, stacked_dev@prompts, stacked_dev@types
+test invm_demo_example_runs_end_to_end_without_a_dispatcher ... ok
+test data_pipeline_example_runs_end_to_end ... ok
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): batch_orchestrator, batch_orchestrator_item
+test stacked_dev_gate_completes_through_the_entrypoint_shim ... ok
+test approval_gate_signal_drives_publication ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): data_pipeline
+test stacked_dev_gate_refuses_garbage_input_at_the_start_boundary ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): subscription
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): orchestrator
+test subscription_bills_after_deadline_with_signaled_plan_and_rotates ... ok
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): aion_order_saga_activities, aion_order_saga_activity_wrappers, aion_order_saga_codecs, aion_order_saga_io, order_saga
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): order_fulfillment, order_shipping, order_types
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): hello_world
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): retry_policy
+COMPILED 19 module(s) under real `gleam build` in 1 attempt(s): aion_stacked_dev_io, brief_dev, dispatch, gate, stacked_dev, stacked_dev@activities, stacked_dev@assemble, stacked_dev@cli, stacked_dev@codecs_brief, stacked_dev@codecs_brief_blocks, stacked_dev@codecs_core, stacked_dev@codecs_dispatch, stacked_dev@codecs_flow, stacked_dev@codecs_workflows, stacked_dev@enrich, stacked_dev@errors, stacked_dev@locals, stacked_dev@prompts, stacked_dev@types
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): invm_demo
+test every_example_archive_loads_into_the_engine ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.77s
+
+     Running tests/hello_world_e2e.rs (target/debug/deps/hello_world_e2e-48933aa3cfc4ef31)
+
+running 9 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): hello_world
+test hello_world_runs_end_to_end ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+
+     Running tests/invm_activity_e2e.rs (target/debug/deps/invm_activity_e2e-c145131893c14eeb)
+
+running 7 tests
+test runner_error_kind_crosses_the_child_boundary ... ok
+test runner_crash_records_terminal_failure_and_workflow_survives ... ok
+test cancel_mid_activity_tears_down_the_child_and_retains_nothing ... ok
+test node_death_reopens_and_redispatches_the_in_vm_thunk ... ok
+test malformed_wires_are_refused_before_anything_is_recorded ... ok
+test in_vm_activity_runs_once_and_replay_returns_the_recording ... ok
+test with_timeout_expiry_settles_a_hanging_in_vm_runner_durably ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.83s
+
+     Running tests/multi_step_distribute_e2e.rs (target/debug/deps/multi_step_distribute_e2e-bb560ab9e447dbd8)
+
+running 9 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): b5_multi_step_distribute
+test emitted_multistep_distribute_is_parallel_ordered_and_tolerant ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+
+     Running tests/nested_implicit_child_decode_e2e.rs (target/debug/deps/nested_implicit_child_decode_e2e-e2c1c8f6b1fab75f)
+
+running 9 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test nested_outer_int_child_decodes_exact_durable_bytes_and_parent_completes ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.77s
+
+     Running tests/nested_workflows_e2e.rs (target/debug/deps/nested_workflows_e2e-e154855aaf4b7ddf)
+
+running 14 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+test three_level_chain_completes_and_propagates_results_bottom_up ... ok
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+test cancelling_level_two_orphans_level_three_and_fails_level_one_await ... ok
+test queries_at_top_and_leaf_answered_while_leaf_activity_parked ... ok
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): chain_types, level_one, level_self, level_three, level_two
+test recovery_mid_leaf_activity_redispatches_without_respawning_children ... ok
+test self_spawning_recursion_stops_at_depth_three_and_recovers ... ok
+test recovery_at_depth_replays_all_three_histories_byte_identical ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.61s
+
+     Running tests/order_saga_e2e.rs (target/debug/deps/order_saga_e2e-c2e9e96f0468f2a1)
+
+running 12 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): order_fulfillment, order_shipping, order_types
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): order_fulfillment, order_shipping, order_types
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): order_fulfillment, order_shipping, order_types
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): order_fulfillment, order_shipping, order_types
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): order_fulfillment, order_shipping, order_types
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): order_fulfillment, order_shipping, order_types
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): order_fulfillment, order_shipping, order_types
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): order_fulfillment, order_shipping, order_types
+test order_cancels_and_refunds_when_rejected ... ok
+test v2_deploy_mid_flight_pins_v1_and_routes_new_orders_to_v2 ... ok
+test order_completes_after_payment_retry_engine_restart_and_approval ... ok
+test order_cancels_and_refunds_when_approval_times_out ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.70s
+
+     Running tests/outbox_e2e.rs (target/debug/deps/outbox_e2e-ccf1485aeeffc971)
+
+running 8 tests
+test outbox_failure_fails_fast_and_cancels_unresolved_siblings ... ok
+test outbox_race_settles_first_completion_and_cancels_losers ... ok
+test outbox_late_completion_for_cancelled_ordinal_is_dropped ... ok
+test outbox_map_completes_with_n_terminals_and_ordered_result ... ok
+test outbox_happy_path_completes_with_n_terminals_in_order ... ok
+test outbox_out_of_order_completions_still_settle_with_n_terminals ... ok
+test outbox_duplicate_completion_records_exactly_one_terminal ... ok
+test outbox_crash_recovery_rearms_stranded_done_row_and_finishes ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+
+     Running tests/pause_resume_e2e.rs (target/debug/deps/pause_resume_e2e-04bd03cc1b015d07)
+
+running 7 tests
+test pause_and_resume_of_unknown_workflow_is_not_found ... ok
+test pause_of_completed_names_completed ... ok
+test pause_of_paused_names_paused ... ok
+test resume_of_cancelled_names_cancelled ... ok
+test resume_of_running_names_running ... ok
+test cancelled_formerly_paused_run_reopens_running ... ok
+test paused_run_is_recovery_excluded_then_resumes_and_completes ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
+
+     Running tests/query_stress.rs (target/debug/deps/query_stress-024861784b05759a)
+
+running 1 test
+test failing_handler_is_always_handler_failed_under_stress ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s
+
+     Running tests/recovery_e2e.rs (target/debug/deps/recovery_e2e-381d03f840908c0b)
+
+running 9 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): hello_world
+test interrupted_workflow_recovers_and_completes ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+     Running tests/recovery_restart.rs (target/debug/deps/recovery_restart-abc6ca07effd7138)
+
+running 1 test
+test restart_recovers_active_workflow_without_duplicate_replay_events ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+     Running tests/reopen_e2e.rs (target/debug/deps/reopen_e2e-6ab6ddd693e80000)
+
+running 9 tests
+test reopen_still_rejects_a_genuinely_running_concurrent_reopen ... ok
+test reopen_cancelled_workflow_resumes_from_where_it_was_cancelled ... ok
+test double_reopen_of_a_running_run_is_rejected ... ok
+test reopen_clears_the_lingering_handle_of_a_run_that_failed_while_resident ... ok
+test reopen_failed_workflow_supersedes_terminal_and_re_drives_running ... ok
+test reopen_of_a_failed_run_preserves_namespace_affinity ... ok
+test reopened_failed_run_can_fail_and_be_reopened_again ... ok
+test reopen_rejects_non_reopenable_states ... ok
+test restart_after_reopen_recovers_the_run_as_running ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+     Running tests/reopen_timer_rearm_e2e.rs (target/debug/deps/reopen_timer_rearm_e2e-d06fb0ba668f6cbf)
+
+running 11 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): sleep_query
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): sleep_query
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): sleep_query
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): sleep_query
+test reopen_after_the_deadline_passed_fires_immediately ... ok
+test reopened_cancelled_sleeper_fires_its_deadline_and_completes ... ok
+test restart_after_rearm_replays_cleanly_and_completes ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.90s
+
+     Running tests/replay_behaviour.rs (target/debug/deps/replay_behaviour-b6bf6d8491e1d5c4)
+
+running 9 tests
+test partial_history_reports_resume_point_and_last_recorded_timestamp ... ok
+test fully_recorded_history_replays_to_terminal_with_zero_live_calls ... ok
+test recover_replays_only_active_workflows_to_resume_points ... ok
+test recover_isolates_divergent_workflow_failure_and_continues ... ok
+test recover_realistic_multi_event_workflow_to_resume_live ... ok
+test replay_determinism_round_trip_uses_recorded_now ... ok
+test activity_completed_is_served_from_history_cache_without_live_call ... ok
+test terminal_activity_failure_is_served_from_history_cache_without_live_call ... ok
+test record_then_replay_round_trip_reaches_terminal_without_resume_live ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/schedule_coordinator_gate_e2e.rs (target/debug/deps/schedule_coordinator_gate_e2e-0f987ed3155402e7)
+
+running 1 test
+test bootstrap_flag_gates_schedule_coordinator_seeding ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/schedule_lifecycle.rs (target/debug/deps/schedule_lifecycle-8b3b9af68e76ff48)
+
+running 2 tests
+test schedule_uses_common_helpers_for_engine_and_payload ... ok
+test schedule_lifecycle_fires_skips_overlap_and_recovers ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/sdk_internal_privacy.rs (target/debug/deps/sdk_internal_privacy-78cc0523c00500cc)
+
+running 9 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): workflow_run_positive
+test external_package_cannot_dispatch_without_await_but_public_run_compiles ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.09s
+
+     Running tests/sdk_sleep_query_e2e.rs (target/debug/deps/sdk_sleep_query_e2e-05f81ab2fe727cf7)
+
+running 11 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): sleep_query
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): sleep_query
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): sleep_query
+test minimal_sleep_workflow_completes ... ok
+test failing_query_handler_never_kills_the_run ... ok
+test query_to_sleeping_workflow_answers_and_run_completes ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.42s
+
+     Running tests/settled_fanout_e2e.rs (target/debug/deps/settled_fanout_e2e-5d6cac7c2e7a66fc)
+
+running 10 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+test settled_failure_never_cancels_outstanding_siblings ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): aion_settled_fixture
+test settled_fanout_inverts_completion_captures_failure_and_replays ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 20.16s
+
+     Running tests/ss1_owned_shards_builder.rs (target/debug/deps/ss1_owned_shards_builder-59f6998b5fa1a5ab)
+
+running 1 test
+test builder_owned_shards_scopes_recovery_to_disjoint_sets ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.77s
+
+     Running tests/ss2_shard_election_builder.rs (target/debug/deps/ss2_shard_election_builder-1479bc0304abe659)
+
+running 1 test
+test builder_elects_owned_shard_before_recovery_in_a_cluster_of_one ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+
+     Running tests/ss5_failover_demo.rs (target/debug/deps/ss5_failover_demo-1eb53e753a424911)
+
+running 9 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): hello_world
+test ss5_live_survivor_adopts_dead_node_shard_and_resumes_its_workflow ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.24s
+
+     Running tests/two_awl_workflows_e2e.rs (target/debug/deps/two_awl_workflows_e2e-e42a1334162f26cf)
+
+running 9 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): alpha_parallel, beta_parallel
+test same_shape_workflows_package_deploy_and_restart_together ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.60s
+
+     Running tests/unload_paused_run_pin.rs (target/debug/deps/unload_paused_run_pin-8a6b20fbf1c9f2b0)
+
+running 1 test
+test a_durably_paused_run_refuses_the_unload_of_its_version ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+
+     Running tests/visibility.rs (target/debug/deps/visibility-9d6ed61ca3eb2e27)
+
+running 1 test
+test workflow_search_attributes_are_queryable_through_visibility_store ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/workflow_timeout_e2e.rs (target/debug/deps/workflow_timeout_e2e-f33da39ae8112819)
+
+running 13 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): hello_world
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): sleep_query
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): sleep_query
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): sleep_query
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): sleep_query
+test no_declared_timeout_arms_nothing ... ok
+test continue_as_new_cancels_the_predecessor_deadline ... ok
+test declared_timeout_fires_to_timed_out ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): sleep_query
+test timed_out_terminal_is_delivered_on_the_live_event_stream ... ok
+test adopted_deadline_fires_after_shard_adoption ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.95s
+
+   Doc-tests aion
+
+running 2 tests
+test crates/aion/src/lib.rs - (line 9) - compile ... ok
+test crates/aion/src/runtime/config.rs - runtime::config::CompletionRetryConfig (line 70) ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test crates/aion/src/runtime/config.rs - runtime::config::CompletionRetryConfig (line 85) - compile fail ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s
+
+all doctests ran in 3.79s; merged doctests compilation took 2.88s

@@ -1,0 +1,26 @@
+   Compiling aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 05s
+     Running unittests src/lib.rs (target/debug/deps/aion-e9cbe1ce10fd20e2)
+
+running 5 tests
+test runtime::nif_continue_as_new::tests::the_process_ends_whenever_the_terminal_landed_and_for_one_refusal_besides ... ok
+test runtime::nif_continue_as_new::tests::an_already_terminal_run_reports_its_own_cause_not_the_epoch ... ok
+test runtime::nif_continue_as_new::tests::a_deadline_retirement_that_fails_after_the_terminal_reports_terminal_only ... ok
+test runtime::nif_continue_as_new::tests::a_closed_epoch_refuses_the_continue_as_new_terminal ... ok
+test runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_the_epoch_refusal_and_spares_the_others ... FAILED
+
+failures:
+
+---- runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_the_epoch_refusal_and_spares_the_others stdout ----
+
+thread 'runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_the_epoch_refusal_and_spares_the_others' (39231421) panicked at crates/aion/src/runtime/nif_continue_as_new_tests.rs:744:5:
+the epoch refusal must END the workflow process: it holds the run's only Recorder, and every durable NIF it goes on to call writes into a history this closing engine may no longer own
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    runtime::nif_continue_as_new::tests::the_nif_gate_ends_a_live_process_for_the_epoch_refusal_and_spares_the_others
+
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 666 filtered out; finished in 20.08s
+
+error: test failed, to rerun pass `-p aion-rs --lib`
