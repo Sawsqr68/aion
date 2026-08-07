@@ -1,5 +1,5 @@
-//! greet_flow workflow.
-workflow greet_flow
+//! repo_gate workflow.
+workflow repo_gate
   outcome done: type Placeholder, route success
 
 type Placeholder { value: String }

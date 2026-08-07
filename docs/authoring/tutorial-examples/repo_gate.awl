@@ -1,0 +1,39 @@
+//! repo_gate — clone a repository, run its checks and its tests, and keep the
+//! answer for as long as you keep the run.
+workflow repo_gate
+  input repo: String
+  input workdir: String
+  outcome passed: type Gate, route success
+  outcome failed: type Refused, route failure
+
+/// What a `run` body hands back. Name only the parts you use.
+type Report  { stdout: String, stderr: String }
+type Gate    { cloned: String, commit: String, checks: String, tests: String }
+type Refused { reason: String }
+
+worker gate
+  /// Depth 1: a gate wants the tip, not the history.
+  action clone(repo: String, into: String) -> Report
+    run "git clone --depth 1 $repo $into"
+  /// Which commit the gate actually judged. Say it, or nobody can repeat it.
+  action head(dir: String) -> Report
+    run "git -C $dir rev-parse --short HEAD"
+  /// cargo writes its progress to stderr, so that is where this evidence is.
+  action checks(dir: String) -> Report
+    run "cargo clippy --manifest-path ${dir}/Cargo.toml --all-targets"
+  /// The test binaries write their verdicts to stdout.
+  action tests(dir: String) -> Report
+    run "cargo test --manifest-path ${dir}/Cargo.toml"
+
+step fetch
+  clone(repo: repo, into: workdir) -> cloned
+  head(dir: workdir) -> at
+
+step verify after fetch
+  checks(dir: workdir) -> checked
+  tests(dir: workdir) -> tested
+  route passed(cloned: cloned.stderr, commit: at.stdout, checks: checked.stderr, tests: tested.stdout)
+  // A command that exits non-zero fails its action, and a failed action faults
+  // the step. This is where a red gate lands.
+  on failure
+    route failed(reason: "the gate did not pass")

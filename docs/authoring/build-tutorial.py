@@ -3,15 +3,19 @@
 
 Every AWL snippet is sliced out of a complete document under
 `tutorial-examples/`, and the build refuses outright if any of them stops
-passing `aion awl check`. The manifest is gated the same way: its wiring is
-checked against the document it claims to serve, including the rule that made
-this tutorial necessary — a worker must advertise its queue's FULL declared
-action set or it is refused at registration, silently, on both sides.
+passing `aion awl check`. The deck teaches ONE workflow from the first slide to
+the last, and that is gated too: every example document must declare the same
+`workflow` name, because the complaint this rewrite answers was a tutorial that
+named three different ones and had no mechanism that could notice.
 
-The point is that the deck cannot teach a shape the tools reject.
+The point is that the deck cannot teach a shape the tools reject, or a story
+that does not hold together.
 """
 
 import html
+import json
+import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -20,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent.parent
 EXAMPLES = HERE / "tutorial-examples"
 SHELL = HERE / "deck-shell.html"
 OUTPUT = HERE / "first-workflow.html"
@@ -27,18 +32,19 @@ OUTPUT = HERE / "first-workflow.html"
 SHELL_TITLE = "<title>AWL — the syntax, keyword by keyword</title>"
 DECK_TITLE = "<title>Your first Aion workflow — start to finish</title>"
 
-# Every `aion` verb the deck tells the reader to type. Gated: a deck that
-# teaches a command the binary does not have is the failure this list exists
-# to prevent.
-TAUGHT_VERBS: list[list[str]] = [
-    ["server", "--help"],
-    ["awl", "check", "--help"],
-    ["deploy", "--help"],
-    ["worker", "shell", "--help"],
-    ["run", "--help"],
-    ["list", "--help"],
-    ["describe", "--help"],
-]
+# The one name this deck teaches. A reader following it types this word into
+# the console, into every command, and reads it back off every result. It is
+# declared once here and gated against the example documents below, because
+# the complaint that produced this deck was exactly a name that changed three
+# times between slides.
+WORKFLOW_NAME = "repo_gate"
+
+# `aion` flags that take no value. Everything else beginning with `-` is
+# assumed to consume the token after it, so that `taught_verbs()` can find the
+# verb in a command that leads with global flags. An unknown boolean flag makes
+# the gate try to `--help` a file name, which fails loudly — the wrong way
+# round is the safe way round.
+VALUELESS_FLAGS = {"--pretty", "--help", "-h", "--version", "-V"}
 
 
 # --------------------------------------------------------------------------
@@ -119,10 +125,612 @@ class Slide:
     caption: str = ""
     stamp: str = ""
     big: bool = False
+    # Marks the slide whose table explains the language's words. Flagged rather
+    # than matched on its title, so renaming the slide cannot quietly detach it
+    # from the gate that keeps it complete.
+    keywords: bool = False
 
 
 def code(text: str) -> str:
     return f"<code>{html.escape(text)}</code>"
+
+
+# Example files the deck publishes as a paste-able heredoc rather than as an
+# Excerpt. The unused-file census must count both doors, or it reports a
+# published file as dead.
+HEREDOC_SOURCES = {"aion.toml"}
+
+
+def gate_command_payloads() -> int:
+    """Every `-d` payload the deck prints must survive being pasted.
+
+    The deck's commands are wrapped across lines to fit a slide, and a wrap can
+    change what the shell actually passes without making the line invalid: a
+    `\\` continuation ENDS a quoted string, so the next line's leading spaces
+    become an argument separator. That is how the availability probe came to
+    hand `curl` only the first 42 characters of its JSON — `EOF while parsing
+    a value at line 1 column 43` — while still looking perfectly correct on the
+    slide, and while `bash -n` still called it valid.
+
+    So this does not check syntax. It joins each command the way a shell would,
+    splits it the way a shell would, and asserts that what actually lands in
+    the `-d` slot parses as JSON. That is the property the reader depends on.
+    """
+    checked = 0
+    for slide in SLIDES:
+        if not slide.cmd:
+            continue
+        joined = "\n".join(slide.cmd)
+        # A backslash-newline is removed WITH the newline; nothing else is.
+        joined = joined.replace("\\\n", "")
+        if "<<EOF" in joined:  # a heredoc body is data, not an argument list
+            continue
+        try:
+            tokens = shlex.split(joined)
+        except ValueError as error:
+            raise SystemExit(
+                f"refusing to build — a command on slide {slide.title!r} "
+                f"cannot be split the way a shell would: {error}"
+            ) from error
+        # Keyed on the SHAPE of the argument, not on the flag carrying it. An
+        # allowlist of flags is a second place the truth lives: it omitted
+        # `--data-binary` and `--data-ascii`, so renaming a flag would drop a
+        # payload out of the check while the same "ok" still printed. Anything
+        # that opens like JSON is held to being JSON, whichever flag delivers
+        # it and whether or not a flag delivers it at all.
+        for index, token in enumerate(tokens):
+            if not token.startswith(("{", "[")):
+                continue
+            carrier = tokens[index - 1] if index else "(first argument)"
+            try:
+                json.loads(token)
+            except json.JSONDecodeError as error:
+                raise SystemExit(
+                    f"refusing to build — the {carrier} payload on slide "
+                    f"{slide.title!r} is not valid JSON once a shell has "
+                    f"parsed the command as printed: {error}\n"
+                    f"  what the shell would actually pass: {token!r}\n"
+                    "  a line continuation after a closing quote splits the "
+                    "argument — keep the payload on one unbroken line."
+                ) from error
+            checked += 1
+    if checked == 0:
+        raise SystemExit(
+            "refusing to build — no slide passes a JSON payload to a command, "
+            "so this gate measured nothing. Either the deck stopped printing "
+            "`--input`/`-d` commands (delete this gate) or the payloads stopped "
+            "being recognised (fix it) — a zero here is never a pass."
+        )
+    return checked
+
+
+def language_vocabulary() -> set[str]:
+    """Every reserved word AWL has, read off the lexer that defines them.
+
+    Not a list kept here. `Keyword::as_word` is where a word's spelling is
+    decided, so that is where this reads it from — a keyword added to the
+    language is one this deck must explain the moment an example uses it,
+    without anybody remembering to come back here.
+    """
+    source = (
+        ROOT / "crates" / "aion-awl" / "src" / "lexer" / "tokens.rs"
+    ).read_text(encoding="utf-8")
+    start = source.find("fn as_word(")
+    if start < 0:
+        raise SystemExit(
+            "refusing to build — aion-awl's lexer no longer has `as_word`, so "
+            "the language's vocabulary cannot be derived. Find where a "
+            "keyword's spelling is decided and read it from there."
+        )
+    body = source[start : source.find("\n    }", start)]
+    words = set(re.findall(r'=>\s*"([a-z_]+)"', body))
+    if len(words) < 40:
+        raise SystemExit(
+            f"refusing to build — only {len(words)} keyword spellings could be "
+            "read out of `as_word`, which is far fewer than the language has. "
+            "The shape of that function has changed; fix this reader rather "
+            "than trusting a short list."
+        )
+    return words
+
+
+def words_in_examples() -> set[str]:
+    """Every bare word the example documents contain, comments and strings out.
+
+    A `run` body is a command, not AWL — `git clone` must not make `clone` look
+    like a word the language needs explained. Same for comment prose.
+    """
+    seen: set[str] = set()
+    for path in sorted(EXAMPLES.glob("*.awl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("//", "/*")):
+                continue
+            stripped = re.sub(r'"[^"]*"', " ", stripped)
+            seen.update(re.findall(r"\b[a-z_][a-z0-9_]*\b", stripped))
+    return seen
+
+
+def gate_keyword_coverage() -> int:
+    """Refuse to build unless every keyword the examples USE is explained.
+
+    The keyword table is the reader's only answer to "what does this
+    line mean", and a table maintained by hand beside documents maintained by
+    hand is one truth in two places: it drifts the moment an example gains a
+    word. It had already drifted — the examples used `timeout` and `run` and
+    the table explained neither.
+
+    So the expectation is DERIVED from the examples rather than listed here:
+    every leading keyword in every gated `.awl` must appear in the table.
+    """
+    used: set[str] = set()
+    for path in sorted(EXAMPLES.glob("*.awl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith(("//", "/*")):
+                continue
+            word = stripped.split(" ", 1)[0].split("(", 1)[0]
+            if word.isidentifier() and not word[0].isupper():
+                used.add(word)
+    # The line above sees only the FIRST word of a line, and that is not the
+    # same thing as the words a document uses. `after` sits in the middle of
+    # `step verify after fetch`, so it was invisible: deleting its row from the
+    # table left the build green, which is a gate that cannot see its own
+    # subject. So the language's own vocabulary is read out of the lexer and
+    # intersected with every word the examples contain, wherever it sits.
+    #
+    # Both halves are kept, because neither covers the other: `run` is parsed
+    # contextually and is NOT a lexer keyword, so the vocabulary half misses it
+    # — and that was the previous drift. Two detectors, unioned.
+    used |= language_vocabulary() & words_in_examples()
+    # Words that are a document's own names rather than language keywords: a
+    # step name, an action call, a route target. They are introduced by the
+    # line above them, never by the table.
+    declared_names: set[str] = set()
+    for path in sorted(EXAMPLES.glob("*.awl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            parts = line.strip().split()
+            if len(parts) >= 2 and parts[0] in {"workflow", "worker", "step", "action", "type"}:
+                declared_names.add(parts[1].split("(", 1)[0])
+    used -= declared_names
+
+    explained = set()
+    for slide in SLIDES:
+        if not slide.keywords or not slide.table:
+            continue
+        for term, _ in slide.table:
+            explained.update(re.findall(r"<code>(\w+)</code>", term))
+    if not explained:
+        raise SystemExit(
+            "refusing to build — no slide is flagged `keywords=True` with a "
+            "table, so nothing explains the document the reader just wrote"
+        )
+    missing = sorted(used - explained)
+    if missing:
+        raise SystemExit(
+            "refusing to build — these keywords appear in the example documents "
+            f"but nothing explains them on the keyword slide: {missing}\n"
+            "  a reader looking there for what a line means would find nothing."
+        )
+    # And the other direction, which is the one that actually drifted. A row
+    # explaining a word no example uses is how the table came to promise
+    # fourteen words over thirteen: `timeout` left the examples, and its row
+    # stayed behind because nothing was watching this way round. Both sets are
+    # already in scope, so the check costs three lines — documenting it as a
+    # permanent gap, as an earlier revision did, was understating it.
+    stranded = sorted(explained - used)
+    if stranded:
+        raise SystemExit(
+            "refusing to build — the keyword slide explains words that appear in "
+            f"no example document: {stranded}\n"
+            "  a reader is being taught vocabulary the tutorial never shows them "
+            "use; delete the row, or use the word."
+        )
+    return len(used)
+
+
+def gate_one_workflow_name() -> str:
+    """Refuse to build unless every example document is the SAME workflow.
+
+    This is the gate the deck most needed and did not have. Its predecessor
+    told the reader to make a workflow called `order_flow`, showed a skeleton
+    for `greet_flow`, and then walked through `first_flow` — three names for
+    one tutorial, and no mechanism that could notice. A reader following it had
+    to work out on their own which of the three they were meant to be holding.
+
+    A name is not checkable by reading carefully. It is checkable by counting
+    the distinct ones, so that is what this does.
+    """
+    names: dict[str, str] = {}
+    for path in sorted(EXAMPLES.glob("*.awl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("workflow "):
+                names[path.name] = line.split()[1]
+                break
+        else:
+            raise SystemExit(
+                f"refusing to build — {path.name} declares no `workflow` line, "
+                "so it is not a document this deck can be teaching"
+            )
+    distinct = sorted(set(names.values()))
+    if distinct != [WORKFLOW_NAME]:
+        listing = "\n  ".join(f"{doc}: {name}" for doc, name in sorted(names.items()))
+        raise SystemExit(
+            f"refusing to build — this deck teaches ONE workflow, "
+            f"`{WORKFLOW_NAME}`, but the examples declare {distinct}:\n  "
+            + listing
+            + "\n  a reader cannot tell which of those they are building."
+        )
+    return WORKFLOW_NAME
+
+
+def gate_skeleton_is_the_servers_own(binary: str) -> None:
+    """The skeleton slide must show what the server actually writes.
+
+    The deck cannot ask the server for it — creating a document to photograph
+    it would leave that document in the reader's own workspace. So the template
+    is read out of the server's source and put through the same canonical
+    printer the server puts it through, and the result must equal the example
+    file byte for byte.
+
+    Without this the skeleton slide is a screenshot in prose: true when it was
+    written, silently false the day the template changes.
+    """
+    source = (
+        ROOT / "crates" / "aion-server" / "src" / "awl" / "documents.rs"
+    ).read_text(encoding="utf-8")
+    marker = "outcome done: type Placeholder"
+    line = next((ln for ln in source.splitlines() if marker in ln), None)
+    if line is None or line.count('"') < 2:
+        raise SystemExit(
+            "refusing to build — the new-document template is no longer a "
+            "single quoted literal in aion-server/src/awl/documents.rs, so "
+            "the skeleton slide cannot be derived from it. Find where the "
+            "server writes a new document and derive it from there."
+        )
+    literal = line[line.index('"') + 1 : line.rindex('"')]
+    derived = (
+        literal.replace("{name}", WORKFLOW_NAME)
+        .replace("{{", "{")
+        .replace("}}", "}")
+        .replace("\\n", "\n")
+    )
+    scratch = EXAMPLES / ".skeleton-check.awl"
+    try:
+        scratch.write_text(derived, encoding="utf-8")
+        printed = subprocess.run(
+            [binary, "awl", "fmt", str(scratch)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if printed.returncode != 0:
+            raise SystemExit(
+                "refusing to build — the server's own new-document template "
+                "does not survive `aion awl fmt`:\n"
+                + (printed.stdout + printed.stderr).strip()
+            )
+        expected = scratch.read_text(encoding="utf-8")
+    finally:
+        scratch.unlink(missing_ok=True)
+    shown = (EXAMPLES / f"{WORKFLOW_NAME}-1-skeleton.awl").read_text(encoding="utf-8")
+    if shown != expected:
+        raise SystemExit(
+            "refusing to build — the skeleton slide does not show what the "
+            "server writes for a new document.\n  the server would write:\n"
+            + "".join(f"    {ln}\n" for ln in expected.splitlines())
+            + "  the deck shows:\n"
+            + "".join(f"    {ln}\n" for ln in shown.splitlines())
+        )
+    print(f"  {'ok':>6}  the skeleton slide is the server's own template")
+
+
+def taught_verbs() -> dict[tuple[str, ...], set[str]]:
+    """Every `aion` invocation the deck tells the reader to type.
+
+    Returns the verb path mapped to the flags the deck spells beside it, so
+    the gate can check the WHOLE command rather than its first word. Checking
+    only that `aion deploy` resolves does not gate `aion deploy --endpoint …`:
+    a gate that runs a COMPONENT of the operator's command has not gated the
+    command, and the reader is the one who finds out.
+
+    Derived from the slides rather than listed beside them: a hand-kept list is
+    one truth in two places, and the copy that drifts is always the one nothing
+    executes.
+    """
+    found: dict[tuple[str, ...], set[str]] = {}
+    for slide in SLIDES:
+        if not slide.cmd:
+            continue
+        joined = "\n".join(slide.cmd).replace("\\\n", "")
+        if "<<EOF" in joined:
+            continue
+        for line in joined.splitlines():
+            try:
+                tokens = shlex.split(line)
+            except ValueError:
+                continue
+            # NOT `tokens[0]`. A slide may set an environment variable first —
+            # `AION_HOME=… aion server …` — and anchoring on the first token
+            # skipped that line silently, leaving `server` untaught and
+            # unchecked while the gate reported success.
+            at = next((i for i, token in enumerate(tokens) if token == "aion"), None)
+            if at is None:
+                continue
+            rest = iter(tokens[at + 1 :])
+            verb: list[str] = []
+            flags: set[str] = set()
+            ended = False
+            for token in rest:
+                if token.startswith("-"):
+                    flags.add(token.split("=", 1)[0])
+                    if token not in VALUELESS_FLAGS and "=" not in token:
+                        next(rest, None)
+                    continue
+                if ended or not token.isalpha():
+                    # A positional argument ends the verb path, but flags may
+                    # still follow it — `aion run file.awl --input …` — so keep
+                    # reading the line instead of breaking out of it.
+                    ended = True
+                    continue
+                verb.append(token)
+            if verb:
+                found.setdefault(tuple(verb), set()).update(flags)
+    if not found:
+        raise SystemExit(
+            "refusing to build — no slide prints an `aion` command, so this "
+            "deck teaches nothing that can be checked against the binary"
+        )
+    return found
+
+
+def config_heredoc() -> list[str]:
+    """Render `tutorial-examples/aion.toml` as the paste-able heredoc block.
+
+    The config exists in ONE place — that file — and this turns it into the
+    command the reader pastes. Hand-typing the same TOML into the slide would
+    put the same truth in two places, where only diligence keeps them equal.
+
+    Its `$HOME` is deliberate: the shell expands it as the heredoc is written,
+    so a full path lands on disk with no username typed by hand. A `~` would
+    NOT work — the config parser is not a shell and takes it literally,
+    creating a directory actually named `~` (measured 2026-08-07).
+    """
+    source = (EXAMPLES / "aion.toml").read_text(encoding="utf-8")
+    body = [ln for ln in source.splitlines() if not ln.lstrip().startswith("#")]
+    while body and not body[0].strip():
+        body.pop(0)
+    while body and not body[-1].strip():
+        body.pop()
+    if not any("$HOME" in ln for ln in body):
+        raise SystemExit(
+            "tutorial-examples/aion.toml no longer contains $HOME — the config "
+            "slide would teach a path the reader has to edit by hand"
+        )
+    return [
+        "mkdir -p ~/my-first-flow && cd ~/my-first-flow",
+        "",
+        "cat > aion.toml <<EOF",
+        *body,
+        "EOF",
+    ]
+
+
+def cli_crate_and_version() -> tuple[str, str, str]:
+    """The crate that publishes the `aion` binary, the version it is at, and
+    the Rust floor a reader needs to install it.
+
+    All three are READ from the manifests rather than typed into a slide, so a
+    rename, a version bump or a raised toolchain floor cannot leave the deck
+    telling the reader to install something that does not exist.
+
+    This matters more than the usual staleness argument. `aion` on crates.io
+    is somebody ELSE's crate — a datetime utility, 0.2.0, with no binaries —
+    so the obvious guess does not merely install the wrong thing, it fails
+    with `there is nothing to install` (measured 2026-08-07). The name that
+    works is this package's, and this is the one place it is written down.
+    """
+    manifest = tomllib.loads(
+        (ROOT / "crates" / "aion-cli" / "Cargo.toml").read_text(encoding="utf-8")
+    )
+    package = manifest["package"]["name"]
+    binaries = [entry["name"] for entry in manifest.get("bin", [])]
+    if "aion" not in binaries:
+        raise SystemExit(
+            f"refusing to build — `{package}` no longer produces a binary "
+            f"named `aion` (it produces {binaries or 'none'}), so every "
+            "command in this deck names a binary the reader will not have"
+        )
+    if package == "aion":
+        raise SystemExit(
+            "refusing to build — the CLI package is now named `aion`, which "
+            "on crates.io is a DIFFERENT crate (a datetime utility with no "
+            "binaries). The install slide would send the reader to it."
+        )
+    workspace = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))
+    version = workspace["workspace"]["package"]["version"]
+    if manifest["package"].get("version", {}) != {"workspace": True}:
+        raise SystemExit(
+            f"refusing to build — `{package}` no longer takes its version "
+            "from the workspace, so the version this slide prints is not "
+            "necessarily the version the reader would install"
+        )
+    # The floor the reader's toolchain must clear. Derived, because the CLI
+    # crate sets its own `rust-version` ABOVE the workspace floor — a deck that
+    # said only "if you have Rust" sends anyone between the two floors into a
+    # failed install with no explanation.
+    rust_min = manifest["package"].get("rust-version")
+    if isinstance(rust_min, dict):
+        rust_min = workspace["workspace"]["package"].get("rust-version")
+    if not isinstance(rust_min, str) or not rust_min:
+        raise SystemExit(
+            f"refusing to build — `{package}` declares no resolvable "
+            "`rust-version`, so the install slide cannot say which toolchain "
+            "the reader needs"
+        )
+    return package, version, rust_min
+
+
+CLI_CRATE, CLI_VERSION, CLI_RUST_MIN = cli_crate_and_version()
+
+
+def finished_line_count() -> int:
+    """How long the finished document actually is.
+
+    Counted, not remembered. The deck opens the final slide by naming this
+    number, and a hand-written one goes stale the first time a line moves —
+    which it already had, twice.
+    """
+    text = (EXAMPLES / f"{WORKFLOW_NAME}.awl").read_text(encoding="utf-8")
+    return len(text.rstrip("\n").splitlines())
+
+
+FINISHED_LINE_COUNT = finished_line_count()
+
+
+def command_count() -> int:
+    """How many shell commands the finished document actually runs.
+
+    One `run` body is one command the server executes. The slide that promises
+    the reader this number was typed by hand — the same shape as the keyword
+    lede that had already drifted, and as `FINISHED_LINE_COUNT` before it. It is
+    true today; the point is that nothing was making it stay true.
+    """
+    text = (EXAMPLES / f"{WORKFLOW_NAME}.awl").read_text(encoding="utf-8")
+    return sum(1 for line in text.splitlines() if line.strip().startswith("run "))
+
+
+def staged_document_count() -> int:
+    """How many complete `.awl` documents the reader builds up through.
+
+    Documents, NOT executions — and the distinction is the whole point. The
+    first version of this docstring said "how many times the reader runs the
+    document", and the prose beside it duly promised five runs. The reader runs
+    it three times: `repo_gate-1-skeleton.awl` is only ever shown, and
+    `repo_gate-2-contract.awl` only ever reaches `aion awl check` (the deck says
+    so itself two slides later — "0 steps is correct … Nothing has been
+    deployed"). Deriving a number does not make it the RIGHT number: this one
+    was derived correctly from a glob and then described as something the glob
+    cannot see. A derivation is only as honest as the sentence that spends it,
+    so the sentence must claim documents, which is what this counts.
+    """
+    return len(sorted(EXAMPLES.glob("*.awl")))
+
+
+# The closing slide promises "the same N motions scale up" and then lists them.
+# The number and the list were two literals in one sentence: nothing but care
+# held them equal, and care is not a mechanism. Counting the list is the
+# subtraction — there is now one place to edit, and the count follows it.
+MOTIONS = (
+    "write the document",
+    "check it",
+    "deploy it",
+    "run it",
+    "watch it",
+)
+
+
+COMMAND_COUNT = command_count()
+STAGE_COUNT = staged_document_count()
+
+# Small numbers read as words in prose, and that is a fact about English rather
+# than about this deck: it cannot drift when a document changes, which is the
+# whole reason the numbers beside it now are derived.
+NUMBER_WORDS = ("zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine")
+
+
+def spelled(count: int) -> str:
+    """`count` as an English word where English prefers one, else as digits."""
+    return NUMBER_WORDS[count] if count < len(NUMBER_WORDS) else str(count)
+
+
+# The keyword table the reader is handed, hoisted out of its slide so the
+# sentence above it can be DERIVED from it rather than typed beside it.
+KEYWORD_TABLE: list[tuple[str, str]] = [
+        (
+            "<b>WHAT IT IS</b>",
+            "<i>the document's identity and its data shapes</i>",
+        ),
+        ("<code>workflow</code>", "its name — how you start it later"),
+        ("<code>type</code>", "the shape of a piece of data"),
+        (
+            "<b>WHAT IT PROMISES</b>",
+            "<i>the contract a caller sees — what goes in, what comes "
+            "back</i>",
+        ),
+        ("<code>input</code>", "what you have to hand it to start"),
+        (
+            "<code>outcome</code>",
+            "how it is allowed to end, and what it hands back",
+        ),
+        (
+            "<code>success</code> <code>failure</code>",
+            "which kind of ending that is. Both are real endings the "
+            "workflow chose — neither is a crash.",
+        ),
+        (
+            "<b>WHO DOES THE WORK</b>",
+            "<i>the jobs themselves — never the workflow's own doing</i>",
+        ),
+        (
+            "<code>worker</code>",
+            "a name for the thing that does real work — the queue",
+        ),
+        (
+            "<code>action</code>",
+            "one job, with its parameters and the shape it returns",
+        ),
+        (
+            "<code>run</code>",
+            "the action's implementation, right here in the document — "
+            "the server executes this command itself",
+        ),
+        (
+            "<b>WHAT HAPPENS, IN WHAT ORDER</b>",
+            "<i>the plan the workflow actually executes</i>",
+        ),
+        ("<code>step</code>", "a stage of the workflow"),
+        ("<code>after</code>", "what must finish before this stage starts"),
+        ("<code>route</code>", "finish, this way, with this"),
+        (
+            "<code>on</code> <code>failure</code>",
+            "what to do when the stage faults — and it must route too",
+        ),
+]
+
+
+def keyword_table_shape(table: list[tuple[str, str]]) -> tuple[int, int]:
+    """How many distinct words the keyword table explains, in how many groups.
+
+    Both numbers are READ OFF the table rather than typed into the sentence
+    above it, because that sentence had already drifted: it promised the
+    reader fourteen words over a table that explains thirteen. `timeout`
+    left the examples, its row went with it, and the lede did not move.
+    The build's own keyword gate had been printing the corrected 13 the
+    whole time — one truth in two places, and only one of them maintained.
+
+    Distinct, not row-counted: `failure` is explained twice, once as an
+    outcome kind and once in `on failure`, and a reader counting words in
+    the table counts it once.
+
+    Note the direction this closes and the one it does not. The lede now
+    cannot disagree with the table. `gate_keyword_coverage` separately
+    forbids a word the examples USE from being missing here. Neither
+    forbids the reverse — a row explaining a word no example contains —
+    which would leave both numbers self-consistent and the deck teaching a
+    word the reader never sees.
+    """
+    words: set[str] = set()
+    groups = 0
+    for term, _ in table:
+        if term.startswith("<b>"):
+            groups += 1
+            continue
+        words.update(re.findall(r"<code>(\w+)</code>", term))
+    return len(words), groups
+
+
+KEYWORD_COUNT, KEYWORD_GROUP_COUNT = keyword_table_shape(KEYWORD_TABLE)
 
 
 # --------------------------------------------------------------------------
@@ -132,59 +740,93 @@ def code(text: str) -> str:
 SLIDES: list[Slide] = [
     Slide(
         eyebrow="Aion — from nothing",
-        title="Your first workflow, start to finish",
-        lede="Eight steps. No Rust, no Gleam, no compiler. "
-        "At the end you have a workflow that ran a real command on your "
-        "machine and kept the answer forever.",
+        title="A gate that judges a repository",
+        lede="One workflow, built up a block at a time. By the end it clones a "
+        "repository, runs its checks, runs its tests, and keeps the verdict "
+        "for as long as you keep the run.",
         big=True,
-        caption="Every command and every file in this deck was run end to end "
+        caption="It is called <code>repo_gate</code> from the first slide to "
+        "the last. Every command and every line of it was run end to end "
         "before it was written down.",
     ),
     Slide(
         eyebrow="What you end up with",
-        title="A run you can point at",
+        title="A verdict you can point at",
         points=[
-            "A workflow you wrote yourself, in a file you can read.",
-            "A worker that ran a real command — no code, just a wiring file.",
-            "A completed run, with its whole history on disk.",
-            "All of it visible in the console in your browser.",
+            "One document you wrote yourself, in a language you can read.",
+            f"{spelled(COMMAND_COUNT).capitalize()} real commands, run by the "
+            "server — no code, no worker process, nothing else to install.",
+            "A completed run whose whole history is on disk, naming the "
+            "commit it judged.",
+            "A non-zero exit when the gate is red, so it drops straight into "
+            "whatever already runs your builds.",
         ],
-        note="If you can do this, you can do the big version. "
-        "The big version is the same five pieces, more times.",
+        # Says only what is true of ALL of them. The first two are never run —
+        # the skeleton is shown, and the contract reaches `aion awl check` and
+        # stops — so any promise about running every one is false, which is the
+        # defect this sentence carried before. Checking clean IS uniform, and
+        # the build's own document gate proves it for every staged file on every
+        # render. No second number here: a count of how many get run would be a
+        # fresh literal with nothing holding it true.
+        note=f"You will build it up through {spelled(STAGE_COUNT)} complete "
+        "documents. Each one does a little more than the last, and each one "
+        "checks clean before you add the next block.",
     ),
     Slide(
         eyebrow="Before you start",
-        title="One binary. Check it is there.",
-        cmd=["aion --version"],
-        out="aion 0.11.0",
+        title="One binary. Get it, check it.",
+        lede=f"If you have Rust {CLI_RUST_MIN} or newer, this is the whole "
+        "install. If the version prints, you have everything this tutorial "
+        "needs.",
+        cmd=[f"cargo install {CLI_CRATE}", "", "aion --version"],
+        out=f"aion {CLI_VERSION}",
         points=[
-            "That one binary is the server, the worker, and the tools.",
+            "That one binary is the server, the client, and the tools.",
             "Nothing else to install.",
         ],
+        note=f"🔴 <b>The crate is <code>{CLI_CRATE}</code>; the command it "
+        "installs is <code>aion</code>.</b> Do not reach for "
+        "<code>cargo install aion</code> — on crates.io that name belongs to "
+        "an unrelated crate, a small datetime library with no program in it, "
+        "so the install stops with <i>there is nothing to install</i>. "
+        "Measured 2026-08-07. If you would rather build from a clone of the "
+        "repository, <code>cargo install --path crates/aion-cli</code> does "
+        "the same job.",
     ),
     # ---------------------------------------------------------------- step 1
     Slide(
-        eyebrow="Step 1 of 8",
+        eyebrow="Step 1 — the server",
         title="Pick a folder and write the config",
         lede="One file tells the server which ports to use and where to keep "
-        "its data.",
-        excerpt=Excerpt("aion.toml", strip_comments=True),
-        note="🔴 <b>Use a full path for <code>data_dir</code>.</b> A relative "
-        "path is resolved against whatever folder you happened to start the "
-        "server from — start it from somewhere else and it looks like every "
-        "run you ever did has vanished. Nothing is lost; you are just looking "
-        "at a different store.",
+        "its data. Paste this whole block — your shell fills in your own home "
+        "folder, so there is nothing to edit.",
+        cmd=config_heredoc(),
+        note="🔴 <b><code>data_dir</code> must be a full path, and "
+        "<code>$HOME</code> is how you get one without typing your username.</b> "
+        "A relative path is resolved against whatever folder you happened to "
+        "start the server from — start it from somewhere else and it looks "
+        "like every run you ever did has vanished. Nothing is lost; you are "
+        "just looking at a different store. And <code>~</code> does <i>not</i> "
+        "work here: the config file is not a shell, so a <code>~</code> is "
+        "taken literally and you get a folder actually named "
+        "<code>~</code>. Inside the <code>&lt;&lt;EOF</code> block above your "
+        "shell expands <code>$HOME</code> before the file is written, so what "
+        "lands on disk is already a full path.",
     ),
     Slide(
-        eyebrow="Step 1 of 8",
+        eyebrow="Step 1 — the server",
         title="Start it",
         cmd=[
             "cd ~/my-first-flow",
-            "aion server --config aion.toml",
+            "AION_HOME=~/my-first-flow/aion-home \\",
+            "  aion server --config aion.toml",
         ],
         points=[
             "Leave it running. Open a second terminal for everything else.",
             "The console is now at <code>http://127.0.0.1:8099</code>.",
+            "<code>AION_HOME</code> keeps this tutorial's workflows in their "
+            "own folder. Leave it off and they go to <code>~/.aion</code>, "
+            "alongside anything else you have ever made.",
         ],
         note="If it refuses to start saying an ancestor <i>is not "
         "owner-controlled</i>, your folder is somewhere the whole machine can "
@@ -193,12 +835,13 @@ SLIDES: list[Slide] = [
         "exact folder at fault.",
     ),
     Slide(
-        eyebrow="Step 1 of 8",
+        eyebrow="Step 1 — the server",
         title="Where things land",
         table=[
             (
-                "your workflows",
-                "<code>$AION_HOME/authoring/</code> — the server prints this "
+                "your workflow documents",
+                "<code>~/my-first-flow/aion-home/authoring/</code> — that is "
+                "<code>$AION_HOME/authoring/</code>, and the server prints it "
                 "as <code>authoring_root</code> on the line starting "
                 "<i>aion-server authoring root resolved</i>",
             ),
@@ -210,244 +853,519 @@ SLIDES: list[Slide] = [
         ],
         note="Both are printed at startup, every time. When something seems "
         "missing, read those two lines first — nine times in ten the answer "
-        "is that you are looking in the other folder.",
+        "is that you are looking in the other folder. Remember the first one: "
+        "every command from here on runs in it.",
     ),
     # ---------------------------------------------------------------- step 2
     Slide(
-        eyebrow="Step 2 of 8",
-        title="Make a new workflow",
+        eyebrow="Step 2 — the document",
+        title="Make the workflow",
         lede="Open the console, go to <b>Authoring</b>. At the top of the "
         "document list there is a box marked <b>New workflow</b>.",
         points=[
-            "Type a name. Press <b>+</b>.",
-            "The name must be lowercase letters, digits and underscores, "
-            "starting with a letter or underscore — <code>order_flow</code>, "
-            "not <code>Order Flow</code>.",
+            "Type <code>repo_gate</code>. Press <b>+</b>.",
+            "The name must <b>start with a lowercase letter</b>, and after "
+            "that may use lowercase letters, digits and underscores — "
+            "<code>repo_gate</code>, not <code>Repo Gate</code>. A leading "
+            "underscore is refused.",
         ],
-        note="The name rule is not shown until you break it. Now you know it "
-        "up front.",
+        note="🔹 <b>Use that exact name.</b> This deck calls the workflow "
+        "<code>repo_gate</code> from here to the last slide, and every command "
+        "it prints names that file. Call it something else and you will be "
+        "translating for the rest of the tutorial.",
     ),
     Slide(
-        eyebrow="Step 2 of 8",
+        eyebrow="Step 2 — the document",
         title="What you get",
         lede="Not a blank page — a document that already passes the checker.",
-        excerpt=Excerpt("00-skeleton.awl"),
-        caption="This is what the server writes for a workflow named "
-        "<code>greet_flow</code>. It is parsed and reprinted before you ever "
+        excerpt=Excerpt("repo_gate-1-skeleton.awl"),
+        caption="This is exactly what the server writes for a workflow named "
+        "<code>repo_gate</code>. It is parsed and reprinted before you ever "
         "see it, so it cannot hand you something the checker would reject.",
+        note="It is a placeholder in the literal sense: it declares one way to "
+        "finish and one shape to finish with, and does nothing. Everything "
+        "from here is you replacing it.",
     ),
     # ---------------------------------------------------------------- step 3
     Slide(
-        eyebrow="Step 3 of 8",
-        title="Now write the real thing",
-        lede="Replace the skeleton with this. It is the whole workflow.",
-        excerpt=Excerpt("first_flow.awl"),
-        caption="A complete document — this exact file was checked, deployed "
-        "and run.",
+        eyebrow="Step 3 — the contract",
+        title="Say what goes in and what comes back",
+        lede="Before any work, settle the promise. Replace the whole skeleton "
+        "with this.",
+        excerpt=Excerpt("repo_gate-2-contract.awl"),
+        caption="A complete document. It does nothing yet — and it checks.",
     ),
     Slide(
-        eyebrow="Step 3 of 8",
-        title="Line by line",
+        eyebrow="Step 3 — the contract",
+        title="What each of those lines is",
         table=[
-            ("<code>workflow</code>", "its name — how you start it later"),
-            ("<code>input</code>", "what you have to hand it to start"),
+            (
+                "<code>//!</code>",
+                "a note about the whole document. <code>///</code> notes the "
+                "thing on the next line. <code>//</code> is a plain comment.",
+            ),
+            (
+                "<code>workflow</code>",
+                "its name. This is what you start later, and it must match "
+                "nothing else — the name is the workflow's identity.",
+            ),
+            (
+                "<code>input</code>",
+                "something the caller must hand over to start a run. Two here: "
+                "which repository, and where to put it. Both are "
+                "<code>String</code>.",
+            ),
             (
                 "<code>outcome</code>",
-                "how it is allowed to end, and what it hands back",
+                "a way the workflow is allowed to end. It names the shape it "
+                "hands back (<code>type Gate</code>) and whether that ending "
+                "counts as <code>success</code> or <code>failure</code>.",
             ),
-            ("<code>type</code>", "the shape of a piece of data"),
+            (
+                "<code>type</code>",
+                "the shape of a piece of data — named fields, each typed. "
+                "<code>Gate</code> is what a caller receives.",
+            ),
+        ],
+        note="Nothing here does any work, and that is the point. A workflow "
+        "decides <i>what</i> should happen and in what order; it never does "
+        "the work itself. That separation is what lets Aion re-run the "
+        "deciding part safely after a crash without re-running the work.",
+    ),
+    Slide(
+        eyebrow="Step 3 — the contract",
+        title="Check it",
+        cmd=[
+            "cd ~/my-first-flow/aion-home/authoring",
+            "aion awl check repo_gate.awl",
+        ],
+        out="ok: repo_gate.awl (0 steps)",
+        points=[
+            "<b>0 steps</b> is correct — you have not written one yet.",
+            "Errors come out like a compiler's: file, line, column, reason.",
+            "Nothing has been deployed. This is free and instant, and it is "
+            "worth doing after every block you add.",
+        ],
+    ),
+    # ---------------------------------------------------------------- step 4
+    Slide(
+        eyebrow="Step 4 — the first real job",
+        title="🔴 Read this before you write a command",
+        lede="You are about to give the server a command to run. That is a "
+        "capability, and a capability that looks like a sandbox and is not "
+        "one is worse than no sandbox at all.",
+        points=[
+            "There is <b>no sandbox</b>. <code>run \"rm -rf /\"</code> is legal.",
+            "No allowlist, no denylist, no filesystem confinement, no network "
+            "restriction, no privilege drop, no CPU or memory or wall-clock "
+            "limit of any kind.",
+            "It runs as whoever runs the server, for as long as it likes.",
+            "🔴 <b>The language has a <code>timeout</code> word, and on a "
+            "declared command it does nothing.</b> The value is carried to the "
+            "engine and read by nobody, and cancelling a declared command is "
+            "not wired either. So <code>timeout 30m</code> on a "
+            "<code>cargo test</code> that hangs will not end it — nothing "
+            "will. That is why this tutorial does not write one. <b>Bound the "
+            "command inside the command</b>, with the program's own timeout "
+            "flag, if you need a ceiling.",
+        ],
+        note="What protects you is <b>review, not enforcement</b>: the command "
+        "is source code in a file you read before deploying, and it is sealed "
+        "into the package's hash so nobody can change it afterwards without "
+        "producing a different package. That is a real and strong control — "
+        "it is not containment. If you need containment, run the server as a "
+        "constrained user, in a container, or on a host with nothing else on "
+        "it. The whole story is in "
+        "<code>docs/workers/DECLARED-COMMANDS.md</code>.",
+    ),
+    Slide(
+        eyebrow="Step 4 — the first real job",
+        title="Add a worker and give it something to do",
+        lede="Two new blocks and one new type. Add them to what you already "
+        "have.",
+        excerpt=Excerpt("repo_gate-3-clone.awl", start="/// What a `run` body"),
+        caption="Your document is now this, on top of the contract you already "
+        "wrote.",
+    ),
+    Slide(
+        eyebrow="Step 4 — the first real job",
+        title="What each of those lines is",
+        table=[
             (
                 "<code>worker</code>",
-                "a name for the thing that does real work — the queue",
+                "a name for whoever does real work — in practice, a queue. "
+                "Actions are declared inside it.",
             ),
             (
                 "<code>action</code>",
-                "one job the worker can do, with its types and its time limit",
+                "one job, with its parameters, their types, and the shape it "
+                "returns. This one takes a repository and a folder.",
             ),
-            ("<code>step</code>", "a stage of the workflow"),
-            ("<code>route</code>", "finish, this way, with this"),
+            (
+                "<code>run</code>",
+                "the implementation, right here. The server executes this "
+                "command itself — there is no worker process to write or "
+                "start. <code>$repo</code> and <code>$into</code> are this "
+                "action's own parameters.",
+            ),
+            (
+                "<code>step</code>",
+                "a stage of the workflow: the plan, in order.",
+            ),
+            (
+                "<code>-&gt;</code> in a step",
+                "give the result a name. <code>cloned</code> now holds what "
+                "the command handed back.",
+            ),
+            (
+                "<code>route</code>",
+                "finish, this way, with this. Here it ends at "
+                "<code>passed</code>, filling in the one field "
+                "<code>Gate</code> declares.",
+            ),
         ],
+        note="Three rules for a <code>run</code> body and you can write your "
+        "own. <b>One:</b> it always produces <code>exit_code</code>, "
+        "<code>stdout</code> and <code>stderr</code>, so the action returns "
+        "those — or a named subset, which is what <code>Report</code> is. "
+        "Claim anything else and the checker refuses. <b>Two:</b> the body "
+        "goes on its own line under the action, after any config line, and "
+        "arguments interpolate as <code>$name</code> or "
+        "<code>${name}</code>. <b>Three:</b> it is <i>not</i> a shell — no "
+        "pipes, no redirects, no <code>&amp;&amp;</code>. A program and its "
+        "arguments. If you want a pipe, write a script and call that.",
     ),
     Slide(
-        eyebrow="Step 4 of 8",
-        title="Check it",
-        cmd=["aion awl check first_flow.awl"],
-        out="ok: first_flow.awl (1 step)",
-        points=[
-            "Errors come out like a compiler's: file, line, column, reason.",
-            "Nothing has been deployed yet. This is free and instant.",
-        ],
-    ),
-    # ---------------------------------------------------------------- worker
-    Slide(
-        eyebrow="Step 5 of 8",
-        title="The worker — what it actually is",
-        lede="The workflow decides <i>what</i> should happen and in what "
-        "order. It never does the work itself.",
-        points=[
-            "The worker is a separate process that does the real jobs.",
-            "That separation is the whole trick: the workflow can be replayed "
-            "safely because it only ever decides.",
-            "For this tutorial the worker is the <code>aion</code> binary you "
-            "already have. You write no code at all.",
-        ],
-    ),
-    Slide(
-        eyebrow="Step 5 of 8",
-        title="Wire the action to a command",
-        lede="One small file. It says which queue to serve and what each "
-        "action runs.",
-        excerpt=Excerpt("worker.toml", strip_comments=True),
-        caption="Wiring only — the types, the timeout and the retries all "
-        "stay in the <code>.awl</code>.",
-    ),
-    Slide(
-        eyebrow="Step 5 of 8",
-        title="The rule that will bite you",
-        lede="Keep one document per worker queue, and let that document "
-        "declare every action on it.",
-        points=[
-            "A worker is only let in if it offers the <b>full</b> set of "
-            "actions that <i>every</i> deployed document declares for its "
-            "queue.",
-            "So a second workflow reusing the same <code>worker</code> name "
-            "with a different action locks the queue for any single-document "
-            "worker.",
-            "A worker already running keeps working — it breaks the next time "
-            "you restart it, which is what makes it so confusing.",
-        ],
-        note="🔴 This fails <b>silently on both sides</b>: the worker prints "
-        "nothing and stays alive, and the server logs no warning and no "
-        "error. Measured on 0.11.0 — see "
-        "<code>SHARED-QUEUE-SILENT-REFUSAL-2026-08-06.md</code>. Until it is "
-        "fixed, the rule above is the way round it.",
-    ),
-    # ---------------------------------------------------------------- deploy
-    Slide(
-        eyebrow="Step 6 of 8",
-        title="Deploy",
-        cmd=[
-            "aion --endpoint http://127.0.0.1:50099 \\",
-            "     deploy first_flow.awl",
-        ],
-        out='{"workflow_type": "first_flow",\n'
-        ' "content_hash": "629b5141…",\n'
-        ' "freshly_loaded": true,\n'
-        ' "route_changed": true}',
-        points=[
-            "The hash is the version's real name. Deploy it again unchanged "
-            "and you get the same hash back.",
-            "<code>route_changed: true</code> means new runs will use this "
-            "one. Runs already going keep the version they started on.",
-        ],
-    ),
-    # ---------------------------------------------------------------- worker up
-    Slide(
-        eyebrow="Step 7 of 8",
-        title="Start the worker",
-        cmd=[
-            "aion --endpoint http://127.0.0.1:50099 worker shell \\",
-            "     --manifest worker.toml --awl first_flow.awl",
-        ],
-        points=[
-            "Leave it running too. A third terminal.",
-            "It needs the <code>.awl</code> as well as the manifest — the "
-            "types come from the document, and only from there.",
-        ],
-        note="🔴 The <code>http://</code> is not optional here. Leave the "
-        "scheme off and this worker never connects, and never says so.",
-    ),
-    Slide(
-        eyebrow="Step 7 of 8",
-        title="Silence is not success",
-        lede="A working shell worker prints nothing at all. So does a broken "
-        "one. Ask the server instead.",
-        cmd=[
-            "curl -s -X POST http://127.0.0.1:8099/awl/workers/availability \\",
-            "  -H 'Content-Type: application/json' \\",
-            '  -d \'{"namespace":"default","task_queue":"desk",\'\\',
-            '     \'"activity_types":["list_folder"]}\'',
-        ],
-        out='{"available": true, "task_queue": "desk", '
-        '"connected_workers": 1}',
-        note="<code>connected_workers</code> is the number that matters. If "
-        "it is <code>0</code> while your worker process is plainly alive, you "
-        "have hit the queue rule two slides back.",
-    ),
-    # ---------------------------------------------------------------- run
-    Slide(
-        eyebrow="Step 8 of 8",
+        eyebrow="Step 4 — the first real job",
         title="Run it",
+        lede="One verb: compile, deploy, start, wait for the answer. Point it "
+        "at any repository — a URL, or a path to one you already have.",
         cmd=[
             "aion --endpoint http://127.0.0.1:50099 --pretty \\",
-            "     run first_flow.awl --input '{\"folder\": \"/Users/you\"}'",
+            "     run repo_gate.awl \\",
+            '     --input "{\\"repo\\": \\"https://github.com/dtolnay/itoa\\", '
+            '\\"workdir\\": \\"$HOME/gate-work-3\\"}"',
         ],
-        points=[
-            "<code>run</code> is the one-motion verb: compile, deploy, start, "
-            "wait for the answer.",
-            "Day to day you would use <code>start</code> and let it go.",
-        ],
-    ),
-    Slide(
-        eyebrow="Step 8 of 8",
-        title="What comes back",
         out='{\n'
-        '  "workflow_type": "first_flow",\n'
-        '  "workflow_id": "e623051b-6901-4d91-87b4-3c6a2024c37c",\n'
-        '  "run_id": "700da026-ac14-4955-a93e-d24bcbfc6c8e",\n'
+        '  "workflow_type": "repo_gate",\n'
+        '  "workflow_id": "cdf7fd30-a5d5-4946-bec7-e0417e073c7d",\n'
+        '  "run_id": "f4c72e7c-9ac9-457d-91ae-99eeced0d874",\n'
         '  "result": {\n'
-        '    "outcome": "done",\n'
+        '    "outcome": "passed",\n'
         '    "payload": {\n'
-        '      "found": "aion-data\\naion.toml\\nfirst_flow.awl\\n'
-        'worker.toml"\n'
+        '      "cloned": "Cloning into \'/Users/tom/gate-work-3\'..."\n'
         "    }\n"
         "  }\n"
         "}",
-        caption="The real output of this tutorial's own run. A command ran on "
-        "the machine and its answer came back through the workflow.",
+        caption="The real output of this deck's own run of that document. A "
+        "repository was cloned onto the machine and the evidence came back "
+        "through the workflow.",
+        note="🔹 <b>Give every run its own <code>workdir</code>.</b> "
+        "<code>git</code> refuses to clone into a folder that already exists, "
+        "and that refusal is a real failure you will meet later on purpose. "
+        "The clone's chatter is on <i>standard error</i>, not standard output "
+        "— that is why the route reads <code>cloned.stderr</code>. Nothing is "
+        "wrong; that is simply where <code>git</code> writes it.",
     ),
+    # ---------------------------------------------------------------- step 5
+    Slide(
+        eyebrow="Step 5 — a second job",
+        title="Say which commit you judged",
+        lede="A verdict nobody can repeat is not a verdict. Add a second "
+        "action, call it in the same step, and grow the shape you hand back.",
+        excerpt=Excerpt(
+            "repo_gate-4-commit.awl",
+            start="/// Which commit",
+            end="route passed",
+        ),
+        caption="The new action, and the step that now calls both.",
+        note="Three things changed together, and they always will. The "
+        "<code>action</code> declares the job. The <code>step</code> calls it "
+        "and names its result <code>at</code>. And <code>type Gate</code> "
+        "gained a <code>commit</code> field, because a workflow may only hand "
+        "back a shape it has declared. Miss one and the checker names the one "
+        "you missed.",
+    ),
+    Slide(
+        eyebrow="Step 5 — a second job",
+        title="Two calls, one step",
+        points=[
+            "Calls inside a step happen in the order they are written. "
+            "<code>head</code> runs after <code>clone</code>, which is what "
+            "makes it safe to look inside the folder.",
+            "<code>workdir</code> is an input, so any call can use it. "
+            "<code>at.stdout</code> is a result, so only lines after it exist "
+            "can.",
+            "Run it again — a fresh <code>workdir</code> — and the payload "
+            "now carries <code>\"commit\": \"1577ed9\"</code> beside the "
+            "clone.",
+        ],
+        out='{\n'
+        '  "outcome": "passed",\n'
+        '  "payload": {\n'
+        '    "cloned": "Cloning into \'/Users/tom/gate-work-4\'...",\n'
+        '    "commit": "1577ed9"\n'
+        "  }\n"
+        "}",
+        caption="Real output, trimmed to the result. Every run of this "
+        "tutorial is in the deck exactly as it came back.",
+    ),
+    # ---------------------------------------------------------------- step 6
+    Slide(
+        eyebrow="Step 6 — the gate itself",
+        title="The checks and the tests",
+        lede="Two more actions. These are the ones that make it a gate.",
+        excerpt=Excerpt(
+            "repo_gate.awl",
+            start="/// cargo writes",
+            end='run "cargo test',
+            # Keep the indentation: these actions live INSIDE `worker gate`,
+            # and dedenting them to column zero would show a reader something
+            # the checker rejects.
+            dedent=False,
+        ),
+        caption="Real commands, run by the server, sealed into the document.",
+        note="The commands are literal, and they have to be: a caller can "
+        "never choose which program runs — <code>run \"$program arg\"</code> "
+        "is refused at check time. That is the whole reason a gate written "
+        "this way can be trusted. Notice also which stream each one is read "
+        "from below: <code>cargo</code> writes its progress to <i>standard "
+        "error</i>, while the test binaries write their verdicts to "
+        "<i>standard output</i>. Read the wrong one and your report is empty "
+        "with nothing to say why.",
+    ),
+    Slide(
+        eyebrow="Step 6 — the gate itself",
+        title="A second step, and what has to finish first",
+        excerpt=Excerpt("repo_gate.awl", start="step fetch"),
+        caption="The last two blocks of the finished document.",
+        table=[
+            (
+                "<code>after</code>",
+                "names what must finish first. <code>verify</code> waits for "
+                "<code>fetch</code>, so the folder is really there before "
+                "anything looks in it.",
+            ),
+            (
+                "the route moved",
+                "the ending belongs to the step that ends the work. It was in "
+                "<code>fetch</code>; now <code>verify</code> owns it.",
+            ),
+            (
+                "<code>on</code> <code>failure</code>",
+                "what to do when the step faults. It must itself end in a "
+                "<code>route</code> — quietly swallowing a failure is a check "
+                "error, not an option.",
+            ),
+        ],
+    ),
+    Slide(
+        eyebrow="Step 6 — the gate itself",
+        title="How a gate says no",
+        lede="There is no <i>if the tests failed</i> line, and there does not "
+        "need to be.",
+        points=[
+            "A command that exits non-zero <b>fails its action</b>. The "
+            "failure carries the command's own words.",
+            "A failed action <b>faults its step</b>.",
+            "A faulted step runs its <code>on failure</code> block — and that "
+            "block routes to <code>failed</code>, which you declared as "
+            "<code>route failure</code>.",
+        ],
+        note="So the exit status of <code>cargo test</code> is what decides "
+        "the outcome, without a single line of comparison. The corollary is "
+        "worth knowing: <code>fetch</code> has no <code>on failure</code>, so "
+        "a clone that fails does not become a red gate — it faults the run "
+        "outright. Both are shown two slides on.",
+    ),
+    # ---------------------------------------------------------------- whole
+    Slide(
+        eyebrow="Step 7 — the whole thing",
+        title="The finished document",
+        lede=f"{FINISHED_LINE_COUNT} lines. This is every block you have "
+        "added, in order.",
+        excerpt=Excerpt("repo_gate.awl"),
+        caption="A complete file — checked, deployed and run exactly as it "
+        "appears here.",
+    ),
+    Slide(
+        eyebrow="Step 7 — the whole thing",
+        title="Every word in it",
+        lede=f"{KEYWORD_COUNT} words, in {KEYWORD_GROUP_COUNT} groups. Each "
+        "group answers one question.",
+        keywords=True,
+        table=KEYWORD_TABLE,
+        note="Every word used by this document is in that table, and the build "
+        "refuses if that stops being true. It is not the whole language — "
+        "waits, signals, children, parallel work, guards and retries have "
+        "their own deck — it is everything you need to read what you just "
+        "wrote.",
+    ),
+    # ---------------------------------------------------------------- deploy
+    Slide(
+        eyebrow="Step 8 — run the gate",
+        title="Deploy it on its own",
+        lede="<code>run</code> deploys for you. Doing it separately is worth "
+        "seeing once, because of what comes back.",
+        cmd=[
+            "aion --endpoint http://127.0.0.1:50099 --pretty \\",
+            "     deploy repo_gate.awl",
+        ],
+        out='{\n'
+        '  "workflow_type": "repo_gate",\n'
+        '  "content_hash": "9926c2fe0c205d11ceae7799c132f98cc5a46610127b963'
+        'f7d5f2318b66fb5b0",\n'
+        '  "deployed_entry_module": "repo_gate$9926c2fe0c205d11ceae7799c132f'
+        '98cc5a46610127b963f7d5f2318b66fb5b0",\n'
+        '  "entry_function": "run",\n'
+        '  "freshly_loaded": true,\n'
+        '  "route_changed": true,\n'
+        '  "superseded_versions": [\n'
+        '    "0d5f38c454c4dbdf049e5ea720977a88711036d4645151628f3852bde2b30f'
+        '96",\n'
+        '    "24d3b951e83b516079d6688dbe3c234a6a36d1e8e16b5404a07e1397f1f63c'
+        '9f"\n'
+        "  ]\n"
+        "}",
+        points=[
+            "The hash is the version's <b>real name</b>. It is taken from the "
+            "content, commands and all — the same file deployed to a "
+            "different server gets the same hash.",
+            "<code>deployed_entry_module</code> is that hash bolted onto the "
+            "workflow's name. That is the module the server actually loaded, "
+            "and it is why two versions of <code>repo_gate</code> can be live "
+            "at once without colliding.",
+            "<code>freshly_loaded: true</code> because these exact bytes had "
+            "not been deployed before. Deploy the unchanged file again and it "
+            "is <code>false</code> — change one character and it is a "
+            "different version.",
+            "<code>superseded_versions</code> are the two earlier stages you "
+            "deployed while building this up. They are kept, not deleted: a "
+            "run already going keeps the version it started on, to the end, "
+            "even if that is a month from now.",
+        ],
+    ),
+    Slide(
+        eyebrow="Step 8 — run the gate",
+        title="A green gate",
+        cmd=[
+            "aion --endpoint http://127.0.0.1:50099 --pretty \\",
+            "     run repo_gate.awl \\",
+            '     --input "{\\"repo\\": \\"https://github.com/dtolnay/itoa\\", '
+            '\\"workdir\\": \\"$HOME/gate-work-5\\"}"',
+        ],
+        out='"outcome": "passed",\n'
+        '"payload": {\n'
+        '  "cloned": "Cloning into \'/Users/tom/gate-work-5\'...",\n'
+        '  "commit": "1577ed9",\n'
+        '  "checks": "    Updating crates.io index\\n     Locking 53 packages '
+        "to latest compatible versions\\n…\\n    Checking criterion v0.8.2\\n"
+        "    Finished `dev` profile [unoptimized + debuginfo] target(s) in "
+        '9.61s",\n'
+        '  "tests": "\\nrunning 0 tests\\n\\ntest result: ok. 0 passed; 0 '
+        "failed; …\\n\\n\\nrunning 11 tests\\ntest test_i16_0 ... ok\\n…\\n"
+        "test result: ok. 11 passed; 0 failed; …\\n\\n\\nrunning 2 tests\\n"
+        "test src/lib.rs - Buffer (line 67) ... ok\\ntest src/lib.rs - (line "
+        "20) ... ok\\n\\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 "
+        'measured; 0 filtered out; finished in 0.87s\\n"\n'
+        "}",
+        caption="Real output, with the long middles elided at the <b>…</b> "
+        "marks. Nothing was reworded.",
+        points=[
+            "<code>tests</code> holds <b>three</b> verdicts, because "
+            "<code>cargo test</code> runs three harnesses — the library's own "
+            "tests, the integration tests, and the documentation examples. A "
+            "gate that read only the first one would call a repository green "
+            "while its doc examples were broken.",
+        ],
+        note="It fetched 53 crates and compiled them with no environment but "
+        "<code>PATH</code> — a declared command inherits nothing else. That "
+        "is worth knowing before you write one that needs a variable set.",
+    ),
+    Slide(
+        eyebrow="Step 8 — run the gate",
+        title="A red gate",
+        lede="Point it at a repository whose tests fail, and this is the whole "
+        "of it.",
+        out='error: workflow run failed: workflow 8 returned error\n'
+        '  details: {"tag":"AwlOutcomeFailure","outcome":"failed",'
+        '"payload":"{\\"reason\\":\\"the gate did not pass\\"}"}\n'
+        "\n"
+        "$ echo $?\n"
+        "1",
+        points=[
+            "That is your <code>on failure</code> block, and your own "
+            "<code>reason</code>, coming back.",
+            "🔴 <b>Ignore the number in <code>workflow 8</code>.</b> It is an "
+            "internal counter, not the workflow id — you cannot look it up. "
+            "A known defect; the run's real id is in the console, and in the "
+            "output of a run that succeeds.",
+            "<b>The command exits 1.</b> So a gate written this way drops "
+            "straight into anything that already runs your builds — no "
+            "parsing, no glue.",
+            "The run is recorded as failed, with everything it did before it "
+            "failed still in its history.",
+        ],
+        note="Contrast a failure with no <code>on failure</code> to catch it "
+        "— cloning into a folder that already exists: <code>details: "
+        "{\"tag\":\"AwlActivityFailed\",\"message\":\"activity failed "
+        "(retryable): the declared command `git` exited 128: fatal: "
+        "destination path '/Users/tom/gate-work-5' already exists and is not "
+        "an empty directory.\"}</code>. No outcome — the run just faults, and "
+        "hands you the command's own words. Both were measured; neither was "
+        "reworded.",
+    ),
+    # ---------------------------------------------------------------- console
     Slide(
         eyebrow="Look at it",
         title="In the console",
         points=[
-            "<b>Workflows</b> lists the run: type, status, when it started "
+            "<b>Workflows</b> lists every run: type, status, when it started "
             "and ended.",
-            "Open it for the history — every event, in order, exactly as it "
+            "Open one for its history — every event, in order, exactly as it "
             "was recorded.",
-            "That history is the run. It is not a log <i>about</i> the run.",
+            "That history <i>is</i> the run. It is not a log <i>about</i> the "
+            "run.",
         ],
     ),
     Slide(
         eyebrow="What just happened",
         title="Why any of this is worth the trouble",
         lede="The workflow never did the work. It decided, and every decision "
-        "and every answer was written down before moving on.",
+        "and every answer was written down before it moved on.",
         points=[
             "Kill the server mid-run and start it again: it picks up from the "
             "recorded history rather than starting over.",
-            "The command that already ran is not run a second time — its "
+            "The clone that already happened is not done a second time — its "
             "recorded answer is handed back instead.",
             "That is the whole point of Aion. Everything else is detail.",
         ],
-        note="Worth doing next, on your own, once this run works: start "
-        "something slow, <code>kill -9</code> the server halfway, start it "
-        "again, and watch. That exercise is not part of this tutorial's "
-        "proven path — try it and see for yourself.",
+        note="Worth doing next, on your own, once the gate works: start it "
+        "against something slow, <code>kill -9</code> the server halfway, "
+        "start it again, and watch. That exercise is not part of this "
+        "tutorial's proven path — try it and see for yourself.",
     ),
     # ---------------------------------------------------------------- rescue
     Slide(
         eyebrow="When it goes wrong",
-        title="Three silences, and what they mean",
+        title="Four things, and what they mean",
         table=[
             (
-                "worker prints nothing",
-                "normal — it always does. Use the availability probe, never "
-                "the absence of output.",
+                "<code>destination path … already exists</code>",
+                "the <code>workdir</code> from a previous run. Give each run "
+                "its own, or remove the old one yourself — the gate will "
+                "never remove it for you.",
             ),
             (
-                "<code>connected_workers: 0</code><br>but the process is alive",
-                "the queue rule: two documents declare that queue with "
-                "different actions. Merge them into one document.",
+                "an empty <code>checks</code> or <code>tests</code>",
+                "you read the wrong stream. <code>cargo</code>'s progress is "
+                "on stderr; test verdicts are on stdout.",
+            ),
+            (
+                "<code>exited 127</code> or <i>no such file</i>",
+                "the command is not on the server's <code>PATH</code>. A "
+                "declared command inherits <code>PATH</code> and nothing "
+                "else — no <code>HOME</code>, none of your shell's variables.",
             ),
             (
                 "your runs seem to have vanished",
@@ -459,14 +1377,40 @@ SLIDES: list[Slide] = [
     ),
     Slide(
         eyebrow="Where next",
+        title="When a command is not enough",
+        lede="Everything above used <code>run</code> bodies, which the server "
+        "executes itself. That is the whole of it for commands.",
+        points=[
+            "When the job is real code rather than a command, you run a "
+            "<b>worker process</b> instead: the action declares only its "
+            "shape, and something separate connects and serves it.",
+            "<code>aion awl scaffold</code> writes that worker's crate for "
+            "you from this same document.",
+            "One rule to know before you start: a worker is only let in if it "
+            "offers every action that is actually <b>reachable</b> on its "
+            "queue — versions that no longer route and carry no live run are "
+            "not held against it, and neither are actions bound for a "
+            "different node.",
+            "If it is refused, <b>you are told, twice</b>. The server logs the "
+            "refusal at WARN naming the queue, the node, the worker build and "
+            "the reason; the worker's own connection fails with that same "
+            "diagnosis. Read either one — the answer is in it.",
+        ],
+        note="The worker story has its own documents: "
+        "<code>docs/workers/</code> for processes, "
+        "<code>docs/workers/DECLARED-COMMANDS.md</code> for the bodies you "
+        "used here.",
+    ),
+    Slide(
+        eyebrow="Where next",
         title="You have the shape of it now",
         points=[
             "The AWL deck covers the rest of the language — waits, signals, "
-            "children, parallel work, failure handling.",
-            "The same five pieces scale up: document, worker, deploy, run, "
-            "watch.",
-            "A worker that needs real code instead of a command is "
-            "<code>aion awl scaffold</code> — it writes the crate for you.",
+            "children, parallel work, guards, retries, failure handling.",
+            f"The same {spelled(len(MOTIONS))} motions scale up: "
+            f"{', '.join(MOTIONS)}.",
+            "A gate is only the first useful thing. Anything that is a "
+            "sequence of jobs with a verdict at the end is the same shape.",
         ],
         big=False,
     ),
@@ -483,8 +1427,9 @@ def _binary() -> str:
     if found is None:
         raise SystemExit(
             "refusing to build: `aion` is not on PATH, so nothing in this "
-            "deck can be checked. Install it with "
-            "`cargo install --path crates/aion-cli`."
+            f"deck can be checked. Install it with `cargo install "
+            f"{CLI_CRATE}`, or from this clone with `cargo install --path "
+            "crates/aion-cli`."
         )
     return found
 
@@ -509,73 +1454,51 @@ def gate_documents(binary: str, documents: list[Path]) -> None:
         )
 
 
-def declared_actions(document: Path) -> dict[str, set[str]]:
-    """Queue name -> declared action names, read off the document text.
-
-    Deliberately literal: the deck teaches what the file says, so the gate
-    reads what the file says.
-    """
-    queues: dict[str, set[str]] = {}
-    current: str | None = None
-    for raw in document.read_text(encoding="utf-8").split("\n"):
-        line = raw.strip()
-        if line.startswith("worker ") and not raw.startswith(" "):
-            current = line.split()[1]
-            queues.setdefault(current, set())
-        elif line.startswith(("step ", "workflow ", "type ")) and not raw.startswith(
-            " "
-        ):
-            current = None
-        elif current is not None and line.startswith("action "):
-            queues[current].add(line[len("action ") :].split("(")[0].strip())
-    return queues
-
-
-def gate_manifest(manifest: Path, document: Path) -> None:
-    """Refuse a manifest the runtime would refuse — including, silently.
-
-    Encodes the 2026-08-06 finding: a worker must advertise its queue's FULL
-    declared action set or registration is refused with no output on either
-    side. A deck that taught a partial manifest would be teaching a shape that
-    looks fine locally and never connects.
-    """
-    wiring = tomllib.loads(manifest.read_text(encoding="utf-8"))
-    queue = wiring["worker"]["task_queue"]
-    wired = {entry["name"] for entry in wiring["action"]}
-    queues = declared_actions(document)
-    if queue not in queues:
-        raise SystemExit(
-            f"refusing to write the deck — {manifest.name} serves queue "
-            f"`{queue}`, which {document.name} does not declare. It declares: "
-            + (", ".join(sorted(queues)) or "no queues")
-        )
-    declared = queues[queue]
-    if wired != declared:
-        raise SystemExit(
-            f"refusing to write the deck — {manifest.name} wires "
-            f"{sorted(wired)} on queue `{queue}` but {document.name} declares "
-            f"{sorted(declared)}. A worker advertising less than its queue's "
-            "full action set is refused at registration, silently on both "
-            "sides."
-        )
-    print(f"  {'ok':>6}  {manifest.name} wires all {len(declared)} of `{queue}`")
-
-
 def gate_verbs(binary: str) -> None:
-    """Refuse to teach a command this binary does not have."""
-    missing: list[str] = []
-    for verb in TAUGHT_VERBS:
+    """Refuse to teach a command this binary does not have — flags included.
+
+    The exit code of `<verb> --help` only says the VERB exists. Every flag the
+    deck spells is checked against that verb's own help text, falling back to
+    the root help because a global option (`--endpoint`) is documented there
+    rather than on each subcommand. Rename a flag and the deck stops building
+    instead of quietly becoming unfollowable.
+    """
+    taught = taught_verbs()
+    root = subprocess.run(
+        [binary, "--help"], capture_output=True, text=True, check=False
+    )
+    root_help = root.stdout + root.stderr
+    missing_verbs: list[str] = []
+    missing_flags: list[str] = []
+    checked_flags = 0
+    for verb, flags in taught.items():
         result = subprocess.run(
-            [binary, *verb], capture_output=True, text=True, check=False
+            [binary, *verb, "--help"], capture_output=True, text=True, check=False
         )
         if result.returncode != 0:
-            missing.append(" ".join(verb))
-    if missing:
+            missing_verbs.append(" ".join(verb))
+            continue
+        text = result.stdout + result.stderr + root_help
+        for flag in sorted(flags):
+            checked_flags += 1
+            if flag not in text:
+                missing_flags.append(f"aion {' '.join(verb)} {flag}")
+    if missing_verbs:
         raise SystemExit(
             "refusing to write the deck — this binary does not answer:\n  "
-            + "\n  ".join(missing)
+            + "\n  ".join(missing_verbs)
         )
-    print(f"  {'ok':>6}  all {len(TAUGHT_VERBS)} taught verbs resolve")
+    if missing_flags:
+        raise SystemExit(
+            "refusing to write the deck — this binary's help does not "
+            "mention flags the deck tells the reader to type:\n  "
+            + "\n  ".join(missing_flags)
+        )
+    printed = ", ".join(" ".join(verb) for verb in taught)
+    print(
+        f"  {'ok':>6}  all {len(taught)} taught verbs resolve and all "
+        f"{checked_flags} flag use(s) are documented: {printed}"
+    )
 
 
 # --------------------------------------------------------------------------
@@ -629,8 +1552,23 @@ def main() -> int:
         [binary, "--version"], capture_output=True, text=True, check=False
     ).stdout.strip()
     print(f"gating the tutorial with {version} ({binary})")
+    # Printing it is not checking it. A stale `aion` earlier on PATH would
+    # validate every gate below against a binary the reader will not have,
+    # while the install slide advertises CLI_VERSION — the gate would be
+    # measuring one thing and the deck claiming another.
+    if CLI_VERSION not in version:
+        raise SystemExit(
+            f"refusing to build — this deck says the reader installs "
+            f"{CLI_CRATE} {CLI_VERSION}, but the binary gating it reports "
+            f"{version!r} ({binary}). Build and use the tree's own binary, or "
+            "the gates below prove nothing about what the reader would run."
+        )
 
     referenced = {s.excerpt.document for s in SLIDES if s.excerpt is not None}
+    # `aion.toml` reaches the deck through `config_heredoc()`, not an Excerpt.
+    # Counting only excerpts would report a file that IS published as unused —
+    # a census that cannot see one of its own two doors tells you nothing.
+    referenced |= HEREDOC_SOURCES
     missing = [name for name in sorted(referenced) if not (EXAMPLES / name).is_file()]
     if missing:
         raise SystemExit(
@@ -642,8 +1580,14 @@ def main() -> int:
     if not documents:
         raise SystemExit(f"refusing to build — no documents found in {EXAMPLES}")
     gate_documents(binary, documents)
-    gate_manifest(EXAMPLES / "worker.toml", EXAMPLES / "first_flow.awl")
+    name = gate_one_workflow_name()
+    print(f"  {'ok':>6}  all {len(documents)} documents are one workflow: `{name}`")
+    gate_skeleton_is_the_servers_own(binary)
     gate_verbs(binary)
+    payloads = gate_command_payloads()
+    print(f"      ok  {payloads} pasted command payload(s) parse as JSON")
+    keywords = gate_keyword_coverage()
+    print(f"      ok  all {keywords} keyword(s) the examples use are explained")
 
     root = HERE.parent.parent
     path_of = {

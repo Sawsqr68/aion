@@ -1,37 +1,58 @@
-//! Dedicated runtime and lifecycle registry for engine-side child tasks:
-//! child-terminal watcher tasks and post-record spawn-recovery tasks.
+//! Dedicated runtime and lifecycle registry for engine-side background tasks:
+//! child-terminal watchers, post-record spawn recovery, and process-exit
+//! completion retries.
 //!
-//! These tasks must not outlive the engine epoch: a watcher still running
-//! after shutdown could double-write a parent history that a successor
-//! engine instance over the same store also records into. Tokio's `abort`
-//! alone does not guarantee that — an aborted task finishes its in-flight
-//! poll (which can be a recorder append) — so the epoch close must *await*
-//! every aborted task. Awaiting a task parked on the host's runtime from a
-//! synchronous `Engine::shutdown` would deadlock a current-thread host
-//! runtime (the blocked thread is the one that drives the tasks), so the
-//! tasks run on an engine-owned runtime with its own worker thread: shutdown
-//! can block on a channel while that worker drives every abort to
-//! completion, regardless of the host runtime flavor.
+//! These tasks must not outlive the engine epoch: one still running after
+//! shutdown could double-write a history that a successor engine instance over
+//! the same store also records into — a second writer, against the single-writer
+//! invariant, whose symptom is `SequenceConflict`. Tokio's `abort` alone does not
+//! guarantee that — an aborted task finishes its in-flight poll (which can be a
+//! recorder append) — so the epoch close must *await* every aborted task.
+//! Awaiting a task parked on the host's runtime from a synchronous
+//! `Engine::shutdown` would deadlock a current-thread host runtime (the blocked
+//! thread is the one that drives the tasks), so the tasks run on an engine-owned
+//! runtime with its own worker thread: shutdown can block on a channel while that
+//! worker drives every abort to completion, regardless of the host runtime
+//! flavor.
+//!
+//! # Why this is owned by the runtime handle rather than by a bridge
+//!
+//! It began as a child-workflow component, constructed by and reachable only
+//! through `ChildNifBridge` — which `EngineNifState` holds as an OPTIONAL,
+//! conditionally-installed bridge.
+//!
+//! The process-exit completion retry is a core lifecycle path: it runs for every
+//! workflow on every node, including nodes that never spawn a child workflow.
+//! Making the durability of a terminal event depend on whether an unrelated
+//! bridge happened to be installed would be a silent failure — on a node with no
+//! child bridge the retry would have nowhere to run and the guarantee would
+//! quietly not apply.
+//!
+//! ⇒ [`RuntimeHandle`](super::RuntimeHandle) owns it, as it owns every other
+//! engine-epoch-scoped object, and the child bridge borrows the same `Arc`.
+//! **One epoch-closed executor per node, not two** — two would be the same
+//! shutdown discipline maintained in two places, which is the shape that has
+//! already drifted every time this repository has allowed it.
 
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use aion_core::WorkflowId;
+use aion_core::{RunId, WorkflowId};
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
 use tokio::task::JoinHandle;
 
 use crate::EngineError;
 
-/// Engine-owned child-task executor and task-handle registry.
+/// Engine-owned background-task executor and task-handle registry.
 ///
-/// Arming is gated: once [`ChildTaskRuntime::shutdown`] begins, no new task
+/// Arming is gated: once [`EngineTaskRuntime::shutdown`] begins, no new task
 /// can be armed, every retained handle is aborted *and awaited*, and the
 /// owned runtime is released — only then is the epoch considered closed.
 /// Dropping the registry without an explicit shutdown is backstopped by
 /// [`Drop`], which aborts everything and releases the runtime without
 /// blocking (safe in any context).
-pub(crate) struct ChildTaskRuntime {
+pub(crate) struct EngineTaskRuntime {
     /// Owned executor; `None` once shut down.
     ///
     /// One dedicated worker thread: the tasks are pure async (store reads,
@@ -46,11 +67,19 @@ pub(crate) struct ChildTaskRuntime {
     watches: DashMap<(u64, WorkflowId), JoinHandle<()>>,
     /// Spawn-recovery tasks keyed by the recorded child workflow id.
     spawn_retries: DashMap<WorkflowId, JoinHandle<()>>,
+    /// Process-exit completion retries keyed by the run whose terminal has not
+    /// landed yet.
+    ///
+    /// Both key components are read off the `WorkflowHandle` the monitor was
+    /// installed with — server-derived in full, never off anything a caller
+    /// supplies — so one run can never hold more than one retry and no caller
+    /// can grow this map.
+    completion_retries: DashMap<(WorkflowId, RunId), JoinHandle<()>>,
     /// Arm gate: set at the start of shutdown, never cleared.
     shutting_down: AtomicBool,
 }
 
-impl ChildTaskRuntime {
+impl EngineTaskRuntime {
     /// Build the executor with its dedicated worker thread.
     ///
     /// # Errors
@@ -60,16 +89,17 @@ impl ChildTaskRuntime {
     pub(crate) fn new() -> Result<Self, EngineError> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
-            .thread_name("aion-child-tasks")
+            .thread_name("aion-engine-tasks")
             .enable_all()
             .build()
             .map_err(|error| EngineError::Runtime {
-                reason: format!("failed to start the child-task runtime: {error}"),
+                reason: format!("failed to start the engine-task runtime: {error}"),
             })?;
         Ok(Self {
             runtime: Mutex::new(Some(runtime)),
             watches: DashMap::new(),
             spawn_retries: DashMap::new(),
+            completion_retries: DashMap::new(),
             shutting_down: AtomicBool::new(false),
         })
     }
@@ -103,6 +133,24 @@ impl ChildTaskRuntime {
             &self.runtime,
             &self.spawn_retries,
             child_id,
+            task,
+        )
+    }
+
+    /// Arm a process-exit completion retry for one run.
+    ///
+    /// Idempotent per run: a second arm while one is in flight is refused
+    /// (returning `false`), so a run cannot accumulate racing writers of its own
+    /// terminal. Refused once shutdown began.
+    pub(crate) fn arm_completion_retry<F>(&self, run: (WorkflowId, RunId), task: F) -> bool
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        Self::arm(
+            &self.shutting_down,
+            &self.runtime,
+            &self.completion_retries,
+            run,
             task,
         )
     }
@@ -162,6 +210,11 @@ impl ChildTaskRuntime {
         self.spawn_retries.remove(child_id);
     }
 
+    /// Drop the registry entry for a finished completion retry.
+    pub(crate) fn remove_completion_retry(&self, run: &(WorkflowId, RunId)) {
+        self.completion_retries.remove(run);
+    }
+
     /// Abort and drop the watcher armed for one `(parent pid, child id)`.
     ///
     /// Used when a `with_timeout` scope expires for an `await_child`: the
@@ -198,6 +251,12 @@ impl ChildTaskRuntime {
         self.spawn_retries.len()
     }
 
+    /// Number of currently armed process-exit completion retries.
+    #[cfg(test)]
+    pub(crate) fn armed_completion_retry_count(&self) -> usize {
+        self.completion_retries.len()
+    }
+
     /// Close the epoch: gate new arms, abort every task, await each aborted
     /// handle to quiescence, then release the owned runtime.
     ///
@@ -212,6 +271,10 @@ impl ChildTaskRuntime {
             false
         });
         self.spawn_retries.retain(|_, handle| {
+            handle.abort();
+            false
+        });
+        self.completion_retries.retain(|_, handle| {
             handle.abort();
             false
         });
@@ -232,6 +295,25 @@ impl ChildTaskRuntime {
         // contract the epoch close requires.
         shutdown_runtime_and_join(runtime);
     }
+}
+
+/// Sleep the current backoff, then advance it up the configured ladder.
+///
+/// Shared by every engine background task that retries a durable write, so the
+/// cadence is one rule in one place rather than a constant re-chosen per call
+/// site. The ceiling is the builder-supplied `max_backoff`; nothing here invents
+/// a duration.
+pub(crate) async fn sleep_backoff(
+    current: &mut std::time::Duration,
+    policy: &crate::runtime::SignalDeliveryConfig,
+) {
+    tokio::time::sleep(*current).await;
+    let doubled = current.saturating_mul(2);
+    *current = if doubled > policy.max_backoff {
+        policy.max_backoff
+    } else {
+        doubled
+    };
 }
 
 /// Shut the owned runtime down and wait for its worker to finish in-flight
@@ -260,7 +342,7 @@ fn shutdown_runtime_and_join(runtime: tokio::runtime::Runtime) {
     }
 }
 
-impl Drop for ChildTaskRuntime {
+impl Drop for EngineTaskRuntime {
     fn drop(&mut self) {
         // Backstop for an engine dropped without an explicit shutdown: gate,
         // abort everything, and release the runtime without blocking (this
@@ -296,7 +378,7 @@ mod tests {
 
     use aion_core::WorkflowId;
 
-    use super::ChildTaskRuntime;
+    use super::EngineTaskRuntime;
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -324,7 +406,7 @@ mod tests {
 
     #[test]
     fn arming_is_idempotent_per_key() -> TestResult {
-        let tasks = ChildTaskRuntime::new()?;
+        let tasks = EngineTaskRuntime::new()?;
         let parent = 7;
         let child = WorkflowId::new_v4();
         let flag = Arc::new(AtomicBool::new(false));
@@ -346,7 +428,7 @@ mod tests {
 
     #[test]
     fn abort_watch_disarms_a_single_key() -> TestResult {
-        let tasks = ChildTaskRuntime::new()?;
+        let tasks = EngineTaskRuntime::new()?;
         let child = WorkflowId::new_v4();
         let other = WorkflowId::new_v4();
         let flag = Arc::new(AtomicBool::new(false));
@@ -366,7 +448,7 @@ mod tests {
 
     #[test]
     fn abort_for_parent_leaves_other_parents_armed() -> TestResult {
-        let tasks = ChildTaskRuntime::new()?;
+        let tasks = EngineTaskRuntime::new()?;
         let flag = Arc::new(AtomicBool::new(false));
         assert!(tasks.arm_watch(31, WorkflowId::new_v4(), park_forever(Arc::clone(&flag))));
         assert!(tasks.arm_watch(31, WorkflowId::new_v4(), park_forever(Arc::clone(&flag))));
@@ -381,7 +463,7 @@ mod tests {
 
     #[test]
     fn shutdown_gates_new_arms_and_awaits_aborted_tasks() -> TestResult {
-        let tasks = ChildTaskRuntime::new()?;
+        let tasks = EngineTaskRuntime::new()?;
         let watch_flag = Arc::new(AtomicBool::new(false));
         let retry_flag = Arc::new(AtomicBool::new(false));
         let child = WorkflowId::new_v4();
@@ -411,7 +493,7 @@ mod tests {
 
     #[tokio::test]
     async fn shutdown_is_safe_from_inside_a_host_async_context() -> TestResult {
-        let tasks = ChildTaskRuntime::new()?;
+        let tasks = EngineTaskRuntime::new()?;
         let flag = Arc::new(AtomicBool::new(false));
         assert!(tasks.arm_watch(11, WorkflowId::new_v4(), park_forever(Arc::clone(&flag))));
 
@@ -427,7 +509,7 @@ mod tests {
     async fn drop_backstop_aborts_without_blocking() -> TestResult {
         let flag = Arc::new(AtomicBool::new(false));
         {
-            let tasks = ChildTaskRuntime::new()?;
+            let tasks = EngineTaskRuntime::new()?;
             assert!(tasks.arm_watch(12, WorkflowId::new_v4(), park_forever(Arc::clone(&flag))));
             // Dropped without shutdown: the backstop must abort the task and
             // release the runtime without panicking in this async context.

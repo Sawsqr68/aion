@@ -1,0 +1,23 @@
+//! repo_gate — clone a repository, run its checks and its tests, and keep the
+//! answer for as long as you keep the run.
+workflow repo_gate
+  input repo: String
+  input workdir: String
+  outcome passed: type Gate, route success
+
+/// What a `run` body hands back. Name only the parts you use.
+type Report { stdout: String, stderr: String }
+type Gate   { cloned: String, commit: String }
+
+worker gate
+  /// Depth 1: a gate wants the tip, not the history.
+  action clone(repo: String, into: String) -> Report
+    run "git clone --depth 1 $repo $into"
+  /// Which commit the gate actually judged. Say it, or nobody can repeat it.
+  action head(dir: String) -> Report
+    run "git -C $dir rev-parse --short HEAD"
+
+step fetch
+  clone(repo: repo, into: workdir) -> cloned
+  head(dir: workdir) -> at
+  route passed(cloned: cloned.stderr, commit: at.stdout)

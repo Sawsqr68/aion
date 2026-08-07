@@ -1,0 +1,8 @@
+//! repo_gate — clone a repository, run its checks and its tests, and keep the
+//! answer for as long as you keep the run.
+workflow repo_gate
+  input repo: String
+  input workdir: String
+  outcome passed: type Gate, route success
+
+type Gate { cloned: String }

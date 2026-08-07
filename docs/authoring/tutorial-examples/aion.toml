@@ -1,6 +1,14 @@
-# Development server config for `aion server --config aion.toml`.
-# The ports here are deliberately not 8080/50051, so this tutorial cannot
-# collide with a server you already have running.
+# The body of the `cat > aion.toml <<EOF` block on the tutorial's config slide.
+# The deck READS this file to build that slide, so this is the single source of
+# what the tutorial teaches — there is no second copy to drift from.
+#
+# `$HOME` is deliberate and is expanded BY THE SHELL as the heredoc is written,
+# so what lands on disk is already a full path with no username typed by hand.
+# Do not "fix" it to a literal path: that is what makes the block paste-able on
+# any machine.
+#
+# The ports are deliberately not 8080/50051, so this tutorial cannot collide
+# with a server you already have running.
 
 [server]
 listen_address = "127.0.0.1:8099"
@@ -9,8 +17,9 @@ grpc_address = "127.0.0.1:50099"
 [store]
 backend = "haematite"
 # A FULL path, always. A relative one is resolved against whatever folder you
-# started the server from.
-data_dir = "/Users/you/my-first-flow/aion-data"
+# started the server from. A `~` does NOT work here — the config file is not a
+# shell, so it is taken literally and you get a folder actually named `~`.
+data_dir = "$HOME/my-first-flow/aion-data"
 
 [runtime]
 query_timeout_ms = 10000
