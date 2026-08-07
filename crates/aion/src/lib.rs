@@ -75,7 +75,8 @@ pub mod supervision;
 /// proofs.
 #[cfg(test)]
 pub(crate) mod log_capture;
-/// Fault-injecting stores shared by the crate's retry proofs.
+/// Fault-injecting stores shared by the crate's durable-refusal proofs — not
+/// all of their consumers are retry paths, and the module's own doc says why.
 #[cfg(test)]
 pub(crate) mod store_faults;
 /// Timer creation, recovery, and wake-up services.

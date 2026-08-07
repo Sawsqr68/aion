@@ -1,16 +1,24 @@
 //! A store that injects transient durable failures, shared by every test that
-//! must prove a retry path actually retries.
+//! must prove what a durable call does when the store refuses it.
 //!
 //! One copy, deliberately. It began private inside the child-watch tests; the
 //! process-exit completion retry needs exactly the same fault, and a second copy
 //! is how two callers of one rule start disagreeing about what "transient"
 //! means. Reaching for it from another module is the cheaper half of the trade.
 //!
-//! Both directions are injectable because the two retry paths fail in different
-//! places: the child watcher fails on its parent-side APPEND, while the
-//! process-exit monitor's first fallible call is a history READ. A fixture that
-//! could only fail writes would leave the read untested while looking like
-//! coverage.
+//! **Not every consumer is a retry path, and calling this a retry fixture was
+//! wrong.** Two of the three retry: the child watcher re-attempts its
+//! parent-side append, and the process-exit monitor re-attempts its history
+//! read. The third does not — the continue-as-new epoch gate
+//! ([`crate::runtime::nif_continue_as_new`]) uses an injected append failure to
+//! produce a refusal that is REFUSED ONCE and never retried, in order to prove
+//! the calling workflow process is SPARED. A fixture described as serving
+//! retries only would look inapplicable to exactly the case that needs it most.
+//!
+//! Both directions are injectable because these paths fail in different places:
+//! the child watcher fails on its parent-side APPEND, while the process-exit
+//! monitor's first fallible call is a history READ. A fixture that could only
+//! fail writes would leave the read untested while looking like coverage.
 //!
 //! The read fault also comes in three KINDS, because "the store refused" and
 //! "the store refused for a reason no retry can repair" must reach the code
@@ -23,6 +31,8 @@ use aion_store::{InMemoryStore, ReadableEventStore};
 
 pub(crate) struct FlakyStore {
     inner: InMemoryStore,
+    /// Appends to let through before the refusals below begin.
+    append_failures_to_skip: std::sync::atomic::AtomicU32,
     /// Appends still to be refused before the wrapped store is reached.
     remaining_append_failures: std::sync::atomic::AtomicU32,
     /// History reads to let through before the refusals below begin.
@@ -39,6 +49,7 @@ impl FlakyStore {
     pub(crate) fn new() -> Self {
         Self {
             inner: InMemoryStore::default(),
+            append_failures_to_skip: std::sync::atomic::AtomicU32::new(0),
             remaining_append_failures: std::sync::atomic::AtomicU32::new(0),
             read_failures_to_skip: std::sync::atomic::AtomicU32::new(0),
             remaining_read_failures: std::sync::atomic::AtomicU32::new(0),
@@ -49,6 +60,28 @@ impl FlakyStore {
 
     /// Refuse the next `count` appends, then behave normally.
     pub(crate) fn fail_next_appends(&self, count: u32) {
+        self.fail_appends_after(0, count);
+    }
+
+    /// Let `skip` appends through, then refuse the next `count`.
+    ///
+    /// The write-side twin of [`Self::fail_reads_after`], and it exists for the
+    /// same reason that one does. One durable TRANSITION can be several appends
+    /// — continue-as-new writes its `WorkflowContinuedAsNew` terminal and then
+    /// retires the predecessor's deadline as two separate `append_with` calls —
+    /// and those appends sit on OPPOSITE sides of the terminal. A budget that
+    /// can only refuse from the first append can therefore only ever produce
+    /// failures BEFORE a terminal lands, which makes "this failure happened
+    /// AFTER the terminal was durable" untestable while looking covered. That
+    /// gap is not hypothetical: it is precisely the case where a caller must
+    /// still end the workflow process, and keying that decision on the error
+    /// alone gets it wrong.
+    ///
+    /// [`Self::fail_next_appends`] is this with `skip = 0`; one budget, not two,
+    /// so the two cannot drift apart.
+    pub(crate) fn fail_appends_after(&self, skip: u32, count: u32) {
+        self.append_failures_to_skip
+            .store(skip, std::sync::atomic::Ordering::Release);
         self.remaining_append_failures
             .store(count, std::sync::atomic::Ordering::Release);
     }
@@ -121,6 +154,36 @@ impl FlakyStore {
         workflow_id: &WorkflowId,
     ) -> Result<Vec<Event>, aion_store::StoreError> {
         self.inner.read_history(workflow_id).await
+    }
+
+    /// How much of the append-failure budget is still unspent.
+    ///
+    /// An injected fault that is never reached looks exactly like a working
+    /// system. A test whose subject is "this call was REFUSED and its caller
+    /// survived" therefore has two claims to prove, not one, and the second —
+    /// that the call happened at all — has no other witness: a refusal writes
+    /// nothing to history, so an unmade call and a refused one leave identical
+    /// stores. Draining the budget to zero is the difference.
+    ///
+    /// 🔴 THE APPEND BUDGET, NOT THE READ BUDGET, AND THE DIFFERENCE IS
+    /// ATTRIBUTION. The read budget is spent by whoever reads first, and in a
+    /// live-process test that is not the call under test — a fixture polling a
+    /// pure NIF to discover when the test has finished arranging its world
+    /// drains it long before the durable call is made. The witness then reports
+    /// "the fault was consumed" about a completely different caller, and the
+    /// call under test proceeds against a healthy store.
+    ///
+    /// ⚠️ **That is a property of the SETUP, not of this type.** Nothing here
+    /// restricts who may append; any caller holding this store drains the same
+    /// budget, and a shared store's seeding writes drain it first of all. What
+    /// makes the witness attributable is that the *calling test* leaves no other
+    /// appender running inside the window it measures — the seeding appends are
+    /// counted and skipped with [`Self::fail_appends_after`], and the fixture's
+    /// own polling reads cannot touch this budget at all. Reuse it under those
+    /// conditions or not at all.
+    pub(crate) fn unspent_append_failures(&self) -> u32 {
+        self.remaining_append_failures
+            .load(std::sync::atomic::Ordering::Acquire)
     }
 
     /// Decrement one budget, reporting whether this call is refused.
@@ -222,7 +285,9 @@ impl aion_store::WritableEventStore for FlakyStore {
         events: &[Event],
         expected_seq: u64,
     ) -> Result<(), aion_store::StoreError> {
-        if Self::take_failure(&self.remaining_append_failures) {
+        if !Self::take_failure(&self.append_failures_to_skip)
+            && Self::take_failure(&self.remaining_append_failures)
+        {
             return Err(aion_store::StoreError::Backend(
                 "transient append failure injected by FlakyStore".to_owned(),
             ));

@@ -197,12 +197,22 @@ impl Drop for Engine {
     /// `cancel_pid` — that instruction is where this fifth writer died. A
     /// refusal that merely returned early would have removed it, leaving the
     /// process runnable and free to make every ungated write listed below. So
-    /// `runtime::nif_continue_as_new` terminates on the epoch refusal too, and
-    /// on that refusal ONLY: an already-terminal run or a store fault is an
-    /// ordinary error workflow code may handle, and killing a process for those
-    /// would turn an authoring mistake into a dead run. The predicate is
-    /// `refusal_must_end_the_process`, pinned by a test with both negative
-    /// controls.
+    /// `runtime::nif_continue_as_new` terminates on the epoch refusal too — and,
+    /// of the refusals, on that one ONLY. A pre-terminal store fault is an
+    /// ordinary error workflow code may handle, and killing a process for it
+    /// would turn a transient blip into a dead run; an already-terminal run is
+    /// spared for a different reason — its terminal was recorded by a seam
+    /// that owns its own teardown, and of those owners some end the pid (a
+    /// second `cancel_pid` from here would race them) while some only
+    /// deregister (a kill from here would usurp them). The predicate's doc
+    /// carries that split; the "Five ordinary terminal paths" paragraph in
+    /// `lifecycle/completion.rs` carries the one enumeration of the owners.
+    /// It ALSO terminates whenever the terminal actually landed, including
+    /// the half-completed case where the terminal is durable but the deadline
+    /// retirement that follows it failed — because the question that decides
+    /// this is "did the terminal land", not "was there an error". The
+    /// predicate is `outcome_must_end_the_process`, pinned by a test with both
+    /// negative controls.
     ///
     /// The cost, stated because it is not zero: the refusal returns before
     /// `retire_run_deadline`, so the predecessor's deadline row stays armed. A
@@ -213,10 +223,14 @@ impl Drop for Engine {
     ///
     /// # 🔴 WHAT IS STILL OPEN, AND WHY IT IS NOT CLOSED HERE
     ///
-    /// A workflow process that asked to continue and was refused is now stopped,
-    /// so the writes below are not reachable *from that path*. They remain fully
-    /// open on every other path — a process that never calls `continue_as_new`
-    /// is untouched by any of this and keeps writing.
+    /// A workflow process refused by the EPOCH gate is now stopped, so the
+    /// writes below are not reachable from that path. Say "the epoch gate" and
+    /// not "was refused": the other refusals deliberately leave the process
+    /// alive, so a reader who takes this sentence at its widest reading would
+    /// believe an exposure is closed that is open by design.
+    ///
+    /// They remain fully open on every other path — a process that never calls
+    /// `continue_as_new` is untouched by any of this and keeps writing.
     ///
     /// The fifth writer's NON-terminal durable writes are ungated and remain so:
     /// `TimerStarted` plus a durable timer row (`sleep`, `start_timer`,
@@ -246,9 +260,23 @@ impl Drop for Engine {
     /// `{error, _}` returned INSIDE running workflow code — a failed `sleep`, a
     /// failed `spawn_child` — on runs the shutdown was trying to leave intact.
     /// The terminal was worth that trade because its successor was already
-    /// refused, so refusing cost nothing that was not already lost. Refusing
-    /// ordinary progress is a different bargain and needs a latch that means
-    /// what it says. Do not add one of these gates without adding that latch.
+    /// refused at `start_continuation_replacement`: recording it could only
+    /// produce a run that is terminal with no continuation.
+    ///
+    /// ⚠️ **Refusing it is not free, and an earlier revision of this sentence
+    /// said it was.** It read "refusing cost nothing that was not already lost",
+    /// which is the exact claim `runtime::nif_continue_as_new`'s own
+    /// documentation exists to retract — and which the "cost, stated because it
+    /// is not zero" paragraph above already contradicts. The price is stated
+    /// there and holds here: the refusal returns before `retire_run_deadline`,
+    /// so the predecessor's deadline stays armed and a long enough outage
+    /// times the run out instead of continuing it. What makes the trade worth
+    /// taking is not that it is free but that the alternative bought its
+    /// exemption with a false terminal.
+    ///
+    /// Refusing ordinary progress is a different bargain and needs a latch that
+    /// means what it says. Do not add one of these gates without adding that
+    /// latch.
     ///
     /// 🔴 THAT LIST IS A CLAIM ABOUT DURABLE WRITERS AND IT IS ONLY AS GOOD AS
     /// ITS ENUMERATION — four times proven. An earlier revision named two and
