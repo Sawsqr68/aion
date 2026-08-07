@@ -1,0 +1,81 @@
+//! issue_recheck — re-test one "this thing is gone" issue claim, and refuse to
+//! answer at all when the search that would answer it cannot be trusted.
+//!
+//! A large share of our open issues are one shape: someone reported that a
+//! symbol, a knob, or a relation is missing, and the only honest way to keep
+//! that report alive is to go and look again. Looking again by hand is where
+//! the mistake lives — a search pointed at the wrong directory returns zero
+//! hits, which reads exactly like a symbol that is genuinely absent. The
+//! comfortable number and the true number are the same number.
+//!
+//! So this asks a question it already knows the answer to first, and reports
+//! nothing at all if that one comes back wrong.
+//!
+//! WHAT IT DOES NOT DO: this measures whether a literal string appears under a
+//! path. That is evidence about a claim of absence; it is not the claim itself.
+//! A feature can be present under another name, and a symbol can survive in a
+//! comment. Read the finding as what it says and no further.
+workflow issue_recheck
+  input issue: String
+  input scope: String
+  input claim: String
+  input control_symbol: String
+  outcome standing:   type Verdict, route success
+  outcome unmeasured: type Refused, route failure
+
+/// What the search hands back. Only stdout is read: a search's EXIT STATUS is
+/// not its answer, and reading it as one is precisely how a broken search comes
+/// back "clean".
+type Found { stdout: String }
+
+/// A re-test that actually happened. `control_hits` travels with it so the
+/// answer carries its own proof that the search could find anything at all —
+/// an assertion of a working method is not the same as a demonstration of one.
+type Verdict {
+  issue: String,
+  scope: String,
+  symbol: String,
+  hits: String,
+  control_hits: String,
+  finding: String,
+}
+
+/// A re-test that did not happen, said out loud rather than reported as a pass.
+type Refused { issue: String, scope: String, reason: String }
+
+worker recheck
+  /// How many files under `scope` contain `needle`, as a literal string.
+  ///
+  /// Always exits 0 on purpose. `grep` exits 1 when it matches nothing, and a
+  /// non-zero exit in a declared body is retryable by default — so an honest
+  /// "not found" would be retried as though it were a busy disk. Ending the
+  /// pipeline in `printf` swallows the status and leaves the COUNT as the one
+  /// thing this action reports.
+  action search(needle: String, scope: String) -> Found
+    run "sh -c 'grep -rlF -- \"$1\" \"$2\" 2>/dev/null | wc -l | xargs printf %s' -- $needle $scope"
+
+/// Ask a question whose answer is already known, before asking the one that
+/// matters.
+///
+/// A missing directory, a mistyped path, and a tree the process cannot read all
+/// return zero hits — the same answer a genuinely absent symbol returns. Nothing
+/// downstream can tell those apart, so the distinction is made here or not at
+/// all.
+step control
+  search(needle: control_symbol, scope: scope) -> anchor
+  outcome broken: when anchor.stdout == "0",
+    route unmeasured(issue: issue, scope: scope,
+      reason: "the control symbol was not found either, so this search cannot tell an absent symbol from a failed search — no finding is reported")
+  outcome measurable: otherwise, route probe
+
+/// Now the real question, on a search that has just proved it can find things.
+step probe
+  search(needle: claim, scope: scope) -> hits
+  outcome still_absent: when hits.stdout == "0",
+    route standing(issue: issue, scope: scope, symbol: claim, hits: hits.stdout,
+      control_hits: anchor.stdout,
+      finding: "the symbol does not appear anywhere under this scope, on a search proved able to find things")
+  outcome now_present: otherwise,
+    route standing(issue: issue, scope: scope, symbol: claim, hits: hits.stdout,
+      control_hits: anchor.stdout,
+      finding: "the symbol DOES appear under this scope — a claim that it is missing is dead as written")
