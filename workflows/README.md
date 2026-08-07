@@ -61,4 +61,10 @@ before it opens a connection, so a wrong input fails at your desk.
    outcome payload. An assertion that the method worked is not a demonstration
    that it did.
 4. **Prove every arm before you commit it.** Including the refusal arm — an
-   unreachable refusal is decoration.
+   unreachable refusal is decoration. The strong form is a *positive control on
+   the control*: drive the refusal by feeding a deliberately wrong expectation
+   while the method returns the **true** answer, so the refusal demonstrably
+   fires because the expectation failed and not because the method broke — and
+   between that run and one green run, both arms of the comparison have been
+   driven live. (First used landing `norn-fleet`; the refusal-run evidence is
+   in `gate-logs/77-norn-fleet/`.)
