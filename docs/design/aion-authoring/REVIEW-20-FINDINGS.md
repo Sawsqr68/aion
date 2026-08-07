@@ -290,13 +290,20 @@ recorded beside each result. Probe teardown law: kill by captured child pid, pro
 death, record it.
 
 ## QUEUED BEHIND THIS LANE (accepted 2026-08-07 08:49Z)
-- 🔴 beamr `loader/decode/etf.rs:120` — accumulator-rooting suspect, MY CLAIM (Artemis
-  flagged, untouched). Read against AR-1 ground pack
-  (docs/design/beamr/briefs/AR-1-GROUND-PACK.md @ 9587d2f); instrument FP rate 29% —
-  refute with the ordering argument written out, or fix with the in-tree
-  `with_rooted`/`rooted_push` pattern (root-as-you-go, or root-up-front +
-  `_prereserved`). The tell: the terminal allocator roots its args but by then they're
-  stale — check ORDERING, not presence. Not in AR-1's patch set; my verdict owed.
+- ✅ DISCHARGED 2026-08-08: beamr `loader/decode/etf.rs:120` — **REFUTED at my hand,
+  not an S3e crossing**, verdict routed to Artemis (her tree, her ground-pack row).
+  The ordering argument, written out as the tell demanded: the accumulator is
+  `Vec<(Literal, Literal)>` and `Literal` (chunks.rs:47-64) is a plain owned Rust
+  enum with no `Term` anywhere in it (`Atom` = `Atom(u32)`, an intern-table index,
+  atom/table.rs:11); the seam cannot reach a term heap by construction —
+  `decode_external_term(cursor, atom_table, budget)` (etf.rs:15-19) carries no
+  process context or allocator, so no loop iteration can trigger GC and nothing
+  accumulated can go stale; the "terminal" at :126 is the constructor
+  `Literal::Map(pairs)`, not `alloc_map` rooting stale args. The instrument's flag
+  was its disclosed 29%-FP textual-shape class (same disposal as the ground pack's
+  "not Terms" rows). Ruled at beamr HEAD cd05573; sibling loops :64-71/:169-174
+  share the refutation. There is no ordering to get wrong because no step can
+  allocate on a GC-managed heap.
 
 ## RESUME STATE 2026-08-07 19:10 (post-compaction: START HERE)
 - Disk floor CLEARED at my hand: removed `target/debug/incremental` (25.35 GiB, all

@@ -1,0 +1,13 @@
+2026-08-08 ~00:50 local: the battery's final leg (cargo test --workspace) was
+KILLED BY ME (kill -TERM -67811, the battery's own process group, verified dead:
+pgrep cargo/rustc both rc 1) after Athena reported a box-floor breach (her trough
+14.37 GiB vs floor 25) and my own reading hit 6.58 GiB free with the leg drawing.
+Disk did NOT recover post-kill (~6.5 GiB): the draw is persistent target/ growth
+(+17.1 GiB measured by Athena, aion/target 66.25->83.35). Nothing in stack/aion
+may be cleaned by me — Tom's call, raised with him by Athena.
+Coverage at abort: clippy --workspace --all-targets EXIT 0 (25 Checking lines,
+4m01s Finished — every workspace target type-checked under beamr 0.16.3), fmt
+--check EXIT 0, cargo test -p aion-rs EXIT 0, 60 verdict lines, 1130 passed /
+0 failed (bb-suite-aion.log). The workspace RUNTIME suite did not complete —
+stated wherever the bump is declared. Loads 8.7-18.3 (self-load), green timing
+evidence carries the load caveat.

@@ -1,0 +1,11 @@
+== entry gate: ncpu=10 load1=8.71 load5=8.57 disk=29G foreign-cargo=0 ==
+== beamr in lock ==
+name = "beamr"
+version = "0.16.3"
+== clippy --workspace (load 8.71 8.57) ==
+clippy-ws EXIT 0 checking-lines 25
+== fmt --check (load 15.01 12.76) ==
+fmt-check EXIT 0
+== suite -p aion-rs (load 15.01 12.76) ==
+suite-aion EXIT 0 verdict-lines 60
+== suite --workspace (load 14.50 18.30) ==
