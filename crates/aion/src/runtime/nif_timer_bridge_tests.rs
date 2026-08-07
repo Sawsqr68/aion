@@ -553,6 +553,126 @@ async fn a_refused_cancel_is_not_reported_as_a_refused_fire() -> TestResult {
     Ok(())
 }
 
+/// 🔴 A REFUSED TEARDOWN CANCEL MUST NOT PROMISE A REISSUE THAT CANNOT HAPPEN.
+///
+/// The sibling test above pins the wording for a [`TimerCancelCause::WorkflowIntent`]
+/// cancel, whose remedy really is "the run reissues it there" — workflow code
+/// re-executes on the owning engine and asks again. `Engine::cancel` also
+/// retires a run's in-flight timers, with [`TimerCancelCause::CancelTeardown`],
+/// and those reach this same append boundary (see the cancel loop in
+/// `engine/api_workflow_ops.rs`). That run is being CANCELLED — the terminal is
+/// recorded by the very next statement — so nothing re-executes it and nothing
+/// reissues anything. Raising the workflow-intent sentence there sends an
+/// operator to wait on a reissue that is not coming — which is the F-A defect
+/// exactly, one level further down, and it survived F-A because the cause was
+/// dropped with a `_`.
+///
+/// "Being cancelled" is as far as this goes, and the distinction is load-bearing
+/// rather than pedantic: the terminal has NOT landed when the refusal is raised,
+/// so anything the message says about the run being terminal is a prediction.
+/// The assertions below pin it as one.
+///
+/// The control is the [`aion_core::TimerCancelCause::WorkflowIntent`] path in
+/// the test above: same bridge, same
+/// boundary, same teardown — only `cause` differs, so a divergence here is
+/// attributable to the cause and nothing else.
+#[tokio::test]
+async fn a_refused_teardown_cancel_does_not_promise_a_reissue() -> TestResult {
+    use aion_core::TimerCancelCause;
+
+    use crate::engine_seam::EngineHandle;
+
+    let runtime = Arc::new(RuntimeHandle::new(RuntimeConfig::new(Some(1)))?);
+    let store = Arc::new(InMemoryStore::default());
+    let registry = Arc::new(Registry::default());
+    let workflow_id = seed_running_workflow(&registry, &store, 7576).await?;
+    install_timer_nif_bridge(
+        runtime.nif_state(),
+        Arc::clone(&registry),
+        Arc::clone(&store) as Arc<dyn EventStore>,
+        tokio::runtime::Handle::current(),
+        runtime.signal_delivery(),
+    );
+    let bridge = super::timer_bridge(runtime.nif_state())
+        .map_err(|error| format!("the timer bridge must be installed: {error}"))?;
+    let teardown_cancelled = |seq: u64| -> Result<Event, Box<dyn std::error::Error>> {
+        Ok(Event::TimerCancelled {
+            envelope: aion_core::EventEnvelope {
+                seq,
+                recorded_at: Utc::now(),
+                workflow_id: workflow_id.clone(),
+            },
+            timer_id: TimerId::named("teardown-cancel")?,
+            cause: TimerCancelCause::CancelTeardown,
+        })
+    };
+
+    // POSITIVE CONTROL: this exact call records before teardown, so the refusal
+    // below is the stand-down and not a cancel the bridge could never take.
+    let outcome = bridge.record_workflow_event(&workflow_id, teardown_cancelled(2)?)?;
+    assert!(
+        matches!(outcome, crate::engine_seam::RecordOutcome::Recorded),
+        "control: the bridge must be able to record a teardown cancellation at all, or the \
+         refusal below measures nothing"
+    );
+
+    bridge.shutdown_timer_wheel();
+
+    let refused = bridge.record_workflow_event(&workflow_id, teardown_cancelled(3)?);
+    let Err(error) = refused else {
+        return Err("a torn-down wheel must REFUSE a teardown cancellation append".into());
+    };
+    let message = error.to_string();
+    assert!(
+        message.contains("torn down"),
+        "the refusal must name the cause: {error}"
+    );
+    assert!(
+        !message.contains("fired"),
+        "a refused cancellation must not be reported as a refused fire: {error}"
+    );
+    // 🔴 THE LOAD-BEARING ABSENCE. This is the sentence that is true of the
+    // sibling case and false of this one.
+    assert!(
+        !message.contains("reissues it there"),
+        "a teardown cancel's run is terminal and never re-executes, so the refusal must not \
+         tell the operator to wait for the run to reissue it: {error}"
+    );
+    // Absence alone would pass on an empty string, so pair it with what must be
+    // SAID: the reason no reissue is coming, and that the fire is inert.
+    //
+    // 🔴 STATED AS A CONDITION, NOT AS A FACT. An earlier version of this
+    // message — and of this assertion — said the run "is terminal and will not
+    // re-execute". That is false at the moment the refusal is raised:
+    // `Engine::cancel` calls `cancel_inflight_timers` BEFORE `terminate::cancel`
+    // (mandatory ordering, stated in its own doc), so `WorkflowCancelled` has
+    // not been recorded yet and the run is still `Running`. The assertion
+    // passed anyway, because it measured the TEXT and the text was confident.
+    assert!(
+        message.contains("once that run's terminal lands"),
+        "the refusal must state the terminal as the condition it depends on rather than as a \
+         fact already in hand: {error}"
+    );
+    assert!(
+        message.contains("post-terminal"),
+        "the refusal must say what actually becomes of the uncancelled timer — the owning \
+         engine's fire is refused as post-terminal, recording nothing: {error}"
+    );
+    // 🔴 THE SECOND LOAD-BEARING ABSENCE. A message that names only the branch
+    // where everything works reads as unconditional even when it is hedged.
+    // `cancel_inflight_timers` swallows every failure into a `warn!`, and
+    // `Engine::cancel` can still fail at `terminate::cancel` — leaving the run
+    // live with this timer armed, where the fire is NOT post-terminal and DOES
+    // wake it. The operator has to be told that branch exists.
+    assert!(
+        message.contains("check the run's status"),
+        "the refusal must tell the operator what to do when the cancel that issued it also \
+         failed, because then the run is still live and this timer will fire: {error}"
+    );
+    runtime.shutdown()?;
+    Ok(())
+}
+
 /// 🔴 AN ORDERLY STAND-DOWN IS NOT A FAULT, AND MUST BE READABLE AS ONE.
 ///
 /// `fire_wheel_timer` reports a failed fire, and until the refusal carried its
@@ -745,6 +865,7 @@ async fn a_torn_down_wheel_does_not_time_a_run_out() -> TestResult {
         "the stood-down deadline must append nothing at all — not the terminal, not the \
          ordinary-timer retirements, not the deadline's own cancellation"
     );
+    runtime.shutdown()?;
     Ok(())
 }
 
@@ -828,6 +949,7 @@ async fn a_torn_down_wheel_does_not_finalize_an_unregistered_timeout() -> TestRe
         before,
         "the stood-down finalizer must append nothing at all"
     );
+    runtime.shutdown()?;
     Ok(())
 }
 

@@ -24,7 +24,7 @@ use crate::registry::Registry;
 use crate::runtime::nif_state::EngineNifState;
 use crate::runtime::nif_timer::NifTimerError;
 use crate::runtime::nif_timer_fire::{
-    TimerAppendError, active_run_has_terminal, event_kind, fire_wheel_timer,
+    RefusedAppend, TimerAppendError, active_run_has_terminal, event_kind, fire_wheel_timer,
     wheel_torn_down_before_arming,
 };
 use crate::time::{DeadlineHandler, TimerService};
@@ -51,10 +51,16 @@ pub(super) struct TimerNifBridge {
     /// escapes through it is precisely the #119 failover race this drain
     /// exists to prevent: a released engine recording a `TimerFired` for a run
     /// a successor has already adopted, which is a second writer for that run.
-    /// `Arc` so the append boundary can read it from inside the recorder lock:
-    /// [`Self::record_workflow_event`] hands a clone to the blocking future,
-    /// which is the only place the check can sit and still be decisive against
-    /// a task already past its `abort` point. See that function.
+    /// `Arc` so the append boundary can read it from inside the blocking future:
+    /// [`Self::record_workflow_event`] hands a clone there, which is the only
+    /// place a check can catch a task already past its `abort` point at all.
+    ///
+    /// 🔴 THAT IS REACH, NOT DECISIVENESS, and three comments in this crate
+    /// said "decisive" before one reviewer checked. Nothing that sets this flag
+    /// takes a lock any reader shares, so every read of it anywhere is
+    /// check-then-act. What is decisive is the arm/insert composition on
+    /// [`Self::shutdown_timer_wheel`] — two `SeqCst` reads around an insert —
+    /// and that guarantee belongs to the composition, not to any single gate.
     shut_down: Arc<AtomicBool>,
     /// Test-only interleaving seam, fired inside [`Self::arm_timer`] after the
     /// pre-arm gate and the spawn and immediately BEFORE the insert.
@@ -169,9 +175,23 @@ impl TimerNifBridge {
 
     /// Abort every armed live-wheel timer task this engine owns.
     ///
-    /// Called from engine shutdown (and shard relinquishment) so a timer this
-    /// engine armed cannot fire AFTER it has stopped owning the workflow. The
-    /// armed tasks run on the tokio runtime, not the beamr scheduler, so
+    /// Called from BOTH of this engine's teardown paths — `Engine::shutdown`
+    /// (`engine/api.rs`) and `impl Drop for Engine` — so a timer this engine
+    /// armed cannot fire AFTER it has stopped owning the workflow.
+    ///
+    /// 🔴 THE `Drop` CALLER IS THE ONE THAT MAKES THE GATE LOAD-BEARING, and an
+    /// earlier revision of this line named neither. It read "engine shutdown
+    /// (and shard relinquishment)": the parenthetical named a caller that has
+    /// never existed — `relinquish` appears nowhere in this crate outside doc
+    /// prose — while the caller that actually needs the gate went unmentioned.
+    /// `Engine::shutdown` stops the beamr scheduler, so after it no workflow
+    /// process can reach `arm_timer` at all and a pure drain would have done;
+    /// `Drop` deliberately leaves the scheduler and the seams alive, so there
+    /// the flag has to keep refusing long after the drain. A reader who
+    /// believed the old line would have taken the drain for the whole
+    /// mechanism.
+    ///
+    /// The armed tasks run on the tokio runtime, not the beamr scheduler, so
     /// `RuntimeHandle::shutdown` (which stops the scheduler and the
     /// wake-confirmation worker) does NOT reach them: without this, a still
     /// pending wheel task fires `TimerService::fire_timer` against the
@@ -496,9 +516,17 @@ impl EngineHandle for TimerNifBridge {
         // and a refused cancel are the same cause with opposite consequences for
         // the run, and collapsing them here is exactly what let one sentence be
         // raised for both — see `TimerAppendError::WheelTornDown`.
-        let (torn_down_timer, torn_down_is_cancel) = match &outcome {
-            TimerOutcome::Fired(timer_id) => (timer_id.clone(), false),
-            TimerOutcome::Cancelled(timer_id, _) => (timer_id.clone(), true),
+        //
+        // 🔴 THE CAUSE TRAVELS TOO, and dropping it with a `_` was this same
+        // defect one level down: a `CancelTeardown` cancel got the sentence
+        // written for a `WorkflowIntent` one, telling an operator to wait for
+        // the run to reissue a cancellation when the run is being cancelled and
+        // will never re-execute.
+        let (torn_down_timer, torn_down_refused) = match &outcome {
+            TimerOutcome::Fired(timer_id) => (timer_id.clone(), RefusedAppend::Fire),
+            TimerOutcome::Cancelled(timer_id, cause) => {
+                (timer_id.clone(), RefusedAppend::Cancel(*cause))
+            }
         };
         run_blocking(&self.tokio_handle, async move {
             let mut recorder = recorder.lock().await;
@@ -507,12 +535,20 @@ impl EngineHandle for TimerNifBridge {
             // armed tasks, but `JoinHandle::abort` does not stop a task that
             // has already entered a poll, so a fire that reached this point
             // before the abort landed would complete its append regardless.
-            // Read INSIDE the recorder lock — that is what makes the check
-            // decisive rather than another check-then-act. The refusal leaves
-            // the timer durable in history for whichever engine owns the run,
-            // which costs a FIRE nothing and costs a CANCEL a deferral, so the
-            // outcome travels with the refusal rather than being flattened out
-            // of it.
+            // Read INSIDE the recorder lock, and immediately before the append
+            // — but that is NARROWING, not closing, and an earlier version of
+            // this comment called it "decisive rather than another
+            // check-then-act", which was false. `shutdown_timer_wheel` sets the
+            // flag with an atomic store and a map drain and takes no recorder
+            // lock, so this lock excludes other recorder writers and excludes
+            // nothing about the flag. What actually covers the arm/insert race
+            // is the composition documented on `shutdown_timer_wheel` — the
+            // second read after the insert — not this gate wearing a lock.
+            //
+            // The refusal leaves the timer durable in history for whichever
+            // engine owns the run, which costs a FIRE nothing and costs a
+            // CANCEL a deferral, so the outcome travels with the refusal rather
+            // than being flattened out of it.
             //
             // Without this the wheel is the one durable writer in the crate
             // with no boundary refusal at all, which is precisely the shape
@@ -520,7 +556,7 @@ impl EngineHandle for TimerNifBridge {
             if shut_down.load(Ordering::SeqCst) {
                 return Err(TimerAppendError::WheelTornDown {
                     timer_id: torn_down_timer,
-                    cancelled: torn_down_is_cancel,
+                    refused: torn_down_refused,
                 });
             }
             // Late-append refusal under the SAME recorder lock that records the

@@ -130,9 +130,9 @@ impl Drop for Engine {
     /// Trading a leak for a use-after-clear is the wrong direction, so the leak
     /// stands and is named: **an engine released without `shutdown` still holds
     /// its runtime.** What this drop guarantees is narrower and is the part
-    /// that matters for durability — **no durable writer this process can still
-    /// reach keeps writing.** There are FOUR, and they are stopped in two
-    /// different ways:
+    /// that matters for durability — **no durable writer this drop can reach
+    /// keeps writing, and no writer it cannot reach can end a run.** The first
+    /// clause covers FOUR BACKGROUND writers, stopped in two different ways:
     ///
     /// 1. anything armed on the **engine-task epoch** — `begin_close()` below;
     /// 2. the **visibility reconciliation loop** — `abort()` below;
@@ -154,8 +154,104 @@ impl Drop for Engine {
     ///    which reads `is_epoch_open()` under the recorder lock — so step 1's
     ///    `begin_close()` is what silences it, one indirection away.
     ///
+    /// # 🔴 AND THERE IS A FIFTH, WHICH IS NOT A BACKGROUND WRITER AT ALL
+    ///
+    /// The four above are things the engine spawned; this drop stops them
+    /// because it can reach them. The fifth is the **workflow process itself**,
+    /// and this drop deliberately does not stop it — it leaves the beamr
+    /// scheduler running and the NIF seams installed, which is exactly what the
+    /// section above says it is trading for. A still-runnable workflow process
+    /// therefore keeps calling NIFs after the `Engine` is gone, and **13 of the
+    /// 24 registered engine NIFs perform durable writes** — `dispatch_activity`,
+    /// `dispatch_activity_in_vm`, `await_activity_result`, `sleep`,
+    /// `start_timer`, `cancel_timer`, `with_timeout`, `continue_as_new`,
+    /// `send_signal`, `spawn_child`, `collect_all`, `collect_race`,
+    /// `collect_map`. The other 11 read or reply and record nothing. The
+    /// registration table is `runtime::engine_nifs::engine_nif_entries`, whose
+    /// own test asserts the total, so both halves of that split are checkable
+    /// against a closed set rather than taken on trust — which is the point,
+    /// since the first draft of this paragraph carried a transposed count.
+    /// None of the 13 consults the engine-task epoch, and
+    /// nothing in the append path does either: `NifContext::block_on_recorder`
+    /// takes the recorder lock and nothing else, and `Recorder::append_one`
+    /// goes straight to `store.append`.
+    ///
+    /// An earlier revision of this doc said "there are FOUR" full stop, and was
+    /// wrong in the way that matters most: it did not omit an obscure writer, it
+    /// omitted **the one that executes user code**.
+    ///
+    /// What has been closed is the part that can END A RUN.
+    /// `WorkflowContinuedAsNew` is a TERMINAL, it was the ONE terminal this
+    /// fifth writer could still record, and it is now refused off the same epoch
+    /// (`runtime::nif_continue_as_new::record_continuation`). The reason it had
+    /// to be, in one line: **the successor run that terminal obliges was already
+    /// refused** at `completion::start_continuation_replacement`, so the two
+    /// halves of one transition disagreed and the run was left terminal with no
+    /// continuation. Every other terminal reachable from workflow code was
+    /// already gated — process exit at the completion append boundary,
+    /// `WorkflowTimedOut` off the timer bridge's stand-down latch.
+    ///
+    /// **And the refusal ENDS THE PROCESS, which is the half that makes it a
+    /// gain rather than a trade.** Before the gate, the recorder call either
+    /// succeeded or aborted the NIF, and the success path always reached
+    /// `cancel_pid` — that instruction is where this fifth writer died. A
+    /// refusal that merely returned early would have removed it, leaving the
+    /// process runnable and free to make every ungated write listed below. So
+    /// `runtime::nif_continue_as_new` terminates on the epoch refusal too, and
+    /// on that refusal ONLY: an already-terminal run or a store fault is an
+    /// ordinary error workflow code may handle, and killing a process for those
+    /// would turn an authoring mistake into a dead run. The predicate is
+    /// `refusal_must_end_the_process`, pinned by a test with both negative
+    /// controls.
+    ///
+    /// The cost, stated because it is not zero: the refusal returns before
+    /// `retire_run_deadline`, so the predecessor's deadline row stays armed. A
+    /// restart gap longer than the run's remaining budget times the run out
+    /// instead of continuing it. That is the same exposure every other in-flight
+    /// run already carries across an outage; the old path escaped it only by
+    /// recording a terminal for a transition that never completed.
+    ///
+    /// # 🔴 WHAT IS STILL OPEN, AND WHY IT IS NOT CLOSED HERE
+    ///
+    /// A workflow process that asked to continue and was refused is now stopped,
+    /// so the writes below are not reachable *from that path*. They remain fully
+    /// open on every other path — a process that never calls `continue_as_new`
+    /// is untouched by any of this and keeps writing.
+    ///
+    /// The fifth writer's NON-terminal durable writes are ungated and remain so:
+    /// `TimerStarted` plus a durable timer row (`sleep`, `start_timer`,
+    /// `with_timeout` — `TimerService::schedule` writes the row and only then
+    /// arms, so the wheel's refusal lands after both), activity schedule/start
+    /// and completion records, `spawn_child`'s whole child-start chain, and
+    /// `send_signal`, which writes into a THIRD workflow's history.
+    ///
+    /// Two things bound that, and neither is what a reader might assume:
+    /// - `WriteToken` fences NOTHING. It is a zero-sized marker with a public
+    ///   `recorder()` constructor and no engine, epoch, lease or node identity;
+    ///   two engines over one store both mint valid ones. Its own doc says so —
+    ///   it exists to stop an `Arc<dyn EventStore>` alone being write authority.
+    /// - `SequenceConflict` catches only the LOSER of a head race, and a
+    ///   released engine is structurally positioned to be the winner: its
+    ///   Recorder is the one already at the current head, because it is the one
+    ///   that has been appending. If it writes first, its write succeeds and the
+    ///   SUCCESSOR takes the conflict.
+    ///
+    /// So the remaining exposure is real and is stated rather than denied. It is
+    /// not closed here because **no flag in this crate distinguishes "released"
+    /// from "shutting down"** — `begin_close` sets one bit and both `Engine::drop`
+    /// and `Engine::shutdown` set it. A gate on that bit at a workflow-process
+    /// write path would therefore also fire during an ORDINARY graceful
+    /// shutdown, for the whole unbounded span between `begin_close()` and
+    /// `runtime.shutdown()` further down this file, and there the failure is an
+    /// `{error, _}` returned INSIDE running workflow code — a failed `sleep`, a
+    /// failed `spawn_child` — on runs the shutdown was trying to leave intact.
+    /// The terminal was worth that trade because its successor was already
+    /// refused, so refusing cost nothing that was not already lost. Refusing
+    /// ordinary progress is a different bargain and needs a latch that means
+    /// what it says. Do not add one of these gates without adding that latch.
+    ///
     /// 🔴 THAT LIST IS A CLAIM ABOUT DURABLE WRITERS AND IT IS ONLY AS GOOD AS
-    /// ITS ENUMERATION — three times proven. An earlier revision named two and
+    /// ITS ENUMERATION — four times proven. An earlier revision named two and
     /// was wrong: the timer wheel was the third, and it was armed. The revision
     /// after that named three and was also wrong: the completion task was the
     /// fourth, it had no epoch check of any kind, and it sleeps an
@@ -166,12 +262,25 @@ impl Drop for Engine {
     /// engine released without `shutdown` could still record a durable
     /// `WorkflowTimedOut` and tear a run down. **The enumeration was right and
     /// the mechanism named under it was not**, which is the harder failure to
-    /// see, because the list looked complete. The way to check it is to
-    /// enumerate what this process can still append with — grep the crate for
-    /// every construction of a `Recorder` handle and every detached `spawn` —
-    /// and then, for each entry, follow the ACTUAL route from the wake to the
-    /// append and confirm the named gate sits on it. Not to re-read this
-    /// sentence and find it plausible.
+    /// see, because the list looked complete.
+    ///
+    /// And the FOURTH time is the section above: every revision so far had
+    /// enumerated only what this drop *reaches*, and then written a guarantee
+    /// over every writer that *exists*. The workflow process is not on any list
+    /// of things a `Recorder` grep or a `spawn` grep produces, because nobody
+    /// spawned it here and it holds no handle this file can see — it is reached
+    /// through an installed NIF seam by code the operator wrote. **A search
+    /// shaped like the mechanism you already know will not find the writer you
+    /// do not.** That is why the method below now starts from the NIF
+    /// registration table, which is a closed set that something asserts the size
+    /// of, rather than from a grep whose completeness nothing checks.
+    ///
+    /// The way to check this list is: take
+    /// `runtime::engine_nifs::engine_nif_entries` and account for every entry;
+    /// grep the crate for every construction of a `Recorder` handle and every
+    /// detached `spawn`; and then, for each writer either search yields, follow
+    /// the ACTUAL route from the wake to the append and confirm the named gate
+    /// sits on it. Not to re-read this sentence and find it plausible.
     fn drop(&mut self) {
         if let Some(task) = &self.visibility_reconciliation_task {
             task.abort();

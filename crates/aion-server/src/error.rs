@@ -496,6 +496,14 @@ fn durability_trace_fields<'a>(
         | aion::durability::DurabilityError::SearchAttribute(_) => {
             simple_engine_fields("Durability", source)
         }
+        // Its own label rather than the generic `Durability`, and the SAME
+        // label the engine-level variant gets below, so an operator searching
+        // traces for "did this engine begin closing" finds every seam that
+        // refused for that reason under one name instead of one name and a
+        // generic one.
+        aion::durability::DurabilityError::EngineTaskEpochClosed { .. } => {
+            simple_engine_fields("EngineTaskEpochClosed", source)
+        }
     }
 }
 

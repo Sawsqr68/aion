@@ -11,7 +11,7 @@
 use std::sync::Weak;
 use std::time::Duration;
 
-use aion_core::{Event, TimerId, WorkflowId};
+use aion_core::{Event, TimerCancelCause, TimerId, WorkflowId};
 use aion_store::StoreError;
 use chrono::{DateTime, Utc};
 
@@ -93,6 +93,68 @@ pub(super) fn wheel_torn_down_before_cancelling(timer_id: &TimerId) -> EngineSea
     }
 }
 
+/// The refusal the append boundary reports for a refused TEARDOWN cancel.
+///
+/// 🔴 "THE RUN REISSUES IT THERE" IS FALSE ON THIS PATH, and stating it here was
+/// the same defect as F-A one level down. [`wheel_torn_down_before_cancelling`]
+/// is true of a [`TimerCancelCause::WorkflowIntent`] cancel, where workflow code
+/// re-executes on the owning engine and issues the cancellation again. A
+/// [`TimerCancelCause::CancelTeardown`] cancel comes from `Engine::cancel`
+/// retiring a run's in-flight timers: that run is being CANCELLED, it will never
+/// re-execute, and nothing will ever reissue anything. Telling an operator to
+/// wait for a reissue that cannot happen sends them looking for a stuck run.
+///
+/// The remedy, and the ONE CONDITION IT DEPENDS ON — which an earlier draft
+/// asserted as already true and is not, at the moment this error is raised.
+///
+/// `Engine::cancel` calls `cancel_inflight_timers` BEFORE `terminate::cancel`,
+/// and its own doc says that ordering is mandatory (a cancel that leaves a live
+/// timer behind orphans it). So when this refusal fires, `WorkflowCancelled` has
+/// **not** been recorded yet: the run is still `Running`. Saying "the run is
+/// terminal" here states the intended end of a sequence as though it were the
+/// current state.
+///
+/// When the sequence completes — the overwhelmingly common case — the remedy is
+/// real: the timer stays live, the owning engine's wheel fires it, and
+/// `fire_timer_guarded` puts that fire through the recorder seam, which refuses
+/// a post-terminal append as `RecordOutcome::RefusedTerminal`, recording nothing
+/// and waking nothing. Inert rather than dangerous, and no operator action.
+///
+/// When it does not complete, the remedy is not available and the operator needs
+/// to know the shape of it. `cancel_inflight_timers` swallows every failure into
+/// a `tracing::warn!`, and `Engine::cancel` propagates a `terminate::cancel`
+/// failure to its caller — so a run can be left `Running` with this timer still
+/// armed, and the owning engine's fire is then NOT post-terminal. It records
+/// `TimerFired` and wakes a run the operator was told was cancelled.
+pub(super) fn wheel_torn_down_before_teardown_cancel(timer_id: &TimerId) -> EngineSeamError {
+    EngineSeamError::TimerWheel {
+        reason: format!(
+            "teardown cancellation of timer `{timer_id}` was not recorded: this engine's timer \
+             wheel has been torn down, so the run belongs to whichever engine owns it now. The \
+             timer stays live in durable history. The cancel transition that issued this runs \
+             immediately after it, and once that run's terminal lands the timer is inert — the \
+             owning engine's fire is refused as post-terminal, recording nothing. No operator \
+             action in that case. If the cancel itself then failed, the run is still live with \
+             this timer armed and it will fire: check the run's status before assuming it is gone"
+        ),
+    }
+}
+
+/// Which append a torn-down wheel refused — and for a cancel, on whose behalf.
+///
+/// The whole point of the type is that the wording cannot be chosen without it.
+/// A `bool` was enough to tell a fire from a cancel and NOT enough to tell the
+/// two cancels apart, so the workflow-intent sentence was raised for a teardown
+/// cancel it is false of. Carrying the cause itself means a new
+/// [`TimerCancelCause`] variant makes `into_seam_error` fail to compile until
+/// somebody decides what it should say.
+pub(super) enum RefusedAppend {
+    /// A `TimerFired` append was refused.
+    Fire,
+    /// A `TimerCancelled` append was refused, with the cause it carried.
+    Cancel(TimerCancelCause),
+}
+
 /// What can stop the bridge's durable append, kept TYPED rather than boxed.
 ///
 /// 🔴 A BOXED ERROR HERE FLATTENS TWO UNRELATED FAILURES INTO ONE. The blocking
@@ -106,15 +168,18 @@ pub(super) fn wheel_torn_down_before_cancelling(timer_id: &TimerId) -> EngineSea
 pub(super) enum TimerAppendError {
     /// This engine's wheel was torn down before this timer event's append.
     ///
-    /// Carries the OUTCOME as well as the id, because the two outcomes need
-    /// different words — see [`wheel_torn_down_after_firing`] and
-    /// [`wheel_torn_down_before_cancelling`]. Dropping the discriminant here is
-    /// what let one sentence be raised for both.
+    /// Carries the OUTCOME as well as the id, because the outcomes need
+    /// different words. Dropping a discriminant here is what let one sentence be
+    /// raised for several cases — twice, at two different depths: first `bool`
+    /// was absent entirely and a cancel was reported as a fire, then `bool` was
+    /// present and both KINDS of cancel got the workflow-intent sentence. The
+    /// type now carries everything the wording distinguishes on, so a new cause
+    /// cannot be added without this match forcing a decision about its words.
     WheelTornDown {
         /// The timer whose append was refused.
         timer_id: TimerId,
-        /// Whether the refused append was a cancellation rather than a fire.
-        cancelled: bool,
+        /// Which append was refused, and for a cancel, on whose behalf.
+        refused: RefusedAppend,
     },
     /// The store or the recorder refused the append on its own terms.
     Append(Box<dyn std::error::Error + Send + Sync>),
@@ -126,12 +191,16 @@ impl TimerAppendError {
         match self {
             Self::WheelTornDown {
                 timer_id,
-                cancelled: true,
+                refused: RefusedAppend::Fire,
+            } => wheel_torn_down_after_firing(&timer_id),
+            Self::WheelTornDown {
+                timer_id,
+                refused: RefusedAppend::Cancel(TimerCancelCause::WorkflowIntent),
             } => wheel_torn_down_before_cancelling(&timer_id),
             Self::WheelTornDown {
                 timer_id,
-                cancelled: false,
-            } => wheel_torn_down_after_firing(&timer_id),
+                refused: RefusedAppend::Cancel(TimerCancelCause::CancelTeardown),
+            } => wheel_torn_down_before_teardown_cancel(&timer_id),
             Self::Append(error) => EngineSeamError::Recorder {
                 reason: error.to_string(),
             },

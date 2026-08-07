@@ -40,6 +40,21 @@ pub enum DurabilityError {
     /// A search attribute update did not satisfy the registered schema.
     #[error("search attribute validation error: {0}")]
     SearchAttribute(#[from] SearchAttributeError),
+
+    /// A durable write was refused because this engine's task epoch has closed.
+    ///
+    /// 🔴 DELIBERATELY NOT [`crate::EngineError::EngineTaskEpochClosed`]. That
+    /// variant carries a documented single-construction-site invariant —
+    /// `aion-client`'s `map_engine_error` gives it no arm on the stated ground
+    /// that it is unreachable through any transport-exposed operation — and a
+    /// second construction site would silently take that transport's catch-all.
+    /// This is a different layer with a different audience: it surfaces as
+    /// `{error, _}` inside running workflow code, never over the wire.
+    #[error("engine task epoch closed: {reason}")]
+    EngineTaskEpochClosed {
+        /// What was refused, and what it means for the run.
+        reason: String,
+    },
 }
 
 #[cfg(test)]

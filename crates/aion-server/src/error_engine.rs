@@ -46,6 +46,42 @@ pub(super) fn durability_wire(durability: &DurabilityError, source: &EngineError
         | DurabilityError::SearchAttribute(_) => {
             WireError::backend_with_type("Durability", source.to_string())
         }
+        // Same wire name as [`aion::EngineError::EngineTaskEpochClosed`] (see
+        // `error.rs`'s engine mapping), because a caller is being told about one
+        // condition — this engine has begun closing — and which internal seam
+        // raised it is not theirs to act on. The two Rust variants stay separate
+        // for a reason that lives on the Rust side, not on the wire: the engine
+        // variant carries a documented single-construction-site invariant.
+        //
+        // 🔴 WHY THIS DISCRIMINANT IS DROPPED WHEN A SIBLING CHANGE INSISTS ON
+        // KEEPING ONE. `runtime/nif_timer_fire.rs` introduces `RefusedAppend`
+        // expressly so a refusal's cause CANNOT be dropped — its own comment
+        // says collapsing one "let one sentence be raised for several cases".
+        // Landing both in one changeset looks like arguing both sides, so the
+        // rule that separates them is stated here rather than left to be
+        // inferred.
+        //
+        // **A discriminant travels when it changes what the recipient should
+        // DO.** `RefusedAppend` decides which SENTENCE an operator reads, and
+        // the three cases it separates carry three different remedies: wait for
+        // workflow code to reissue, check the run's status, or nothing at all.
+        // Collapse them and the operator is sent to the wrong one. Here the two
+        // variants share a single condition and a single remedy — this engine
+        // is closing; the run is untouched; a successor picks it up — so the
+        // seam of origin changes nothing a caller can act on, and splitting the
+        // label would only fragment the trace an operator searches. Keeping a
+        // distinction that cannot alter a decision is not caution; it is a
+        // second name for one fact, which is the drift this codebase treats as
+        // a defect in its own right.
+        //
+        // Reached only if a durable write refused by the epoch is ever surfaced
+        // through a transport operation. Today the one construction site is the
+        // continue-as-new NIF, whose error returns into workflow code rather
+        // than into a response — but this mapping is total over the type, so it
+        // decides rather than assuming that stays true.
+        DurabilityError::EngineTaskEpochClosed { .. } => {
+            WireError::backend_with_type("EngineTaskEpochClosed", source.to_string())
+        }
     }
 }
 

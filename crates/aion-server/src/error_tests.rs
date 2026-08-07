@@ -200,6 +200,85 @@ fn engine_task_epoch_closed_maps_to_typed_backend_on_both_halves() {
     );
 }
 
+/// The OTHER `EngineTaskEpochClosed` — the durability-level one — reaching the
+/// same two server surfaces, and landing on the same name.
+///
+/// 🔴 THIS TEST EXISTS BECAUSE THE MISTAKE ABOVE REPEATED ITSELF. The sibling
+/// test's own opening line says its two halves were "added together and neither
+/// had a test". The continue-as-new epoch gate then added two MORE halves of the
+/// same mapping — `DurabilityError::EngineTaskEpochClosed` through
+/// `durability_wire` and through `durability_trace_fields` — and again shipped
+/// no test with them. A mutation swapping either to `not_running_with_type`, or
+/// to the generic `"Durability"` label, passed the whole tree.
+///
+/// **The label is the load-bearing assertion, and it is deliberately the SAME
+/// literal the engine-level variant gets.** Two Rust variants, one wire name, on
+/// purpose: a caller is being told one thing — this engine has begun closing —
+/// and which internal seam raised it is not theirs to act on. An operator
+/// searching traces for "did this engine begin closing" has to find both seams
+/// under one name, not one name and a generic bucket. Asserting the literal on
+/// BOTH halves is what makes a trace line joinable to a client branch at all.
+///
+/// The class is `Backend` for the same reason it is above: the run stays
+/// `Running`, so `NotRunning` would be a false statement about the target
+/// dressed up as a classification.
+#[test]
+fn durability_epoch_closed_maps_to_the_same_name_on_both_halves() {
+    use aion::durability::DurabilityError;
+
+    let error = ServerError::EngineCall {
+        source: EngineError::Durability(DurabilityError::EngineTaskEpochClosed {
+            reason: String::from(
+                "continue_as_new refused for run 019000ff-0000-7000-8000-000000000002",
+            ),
+        }),
+    };
+
+    let wire = error.to_wire_error();
+    assert_eq!(
+        wire.code,
+        WireErrorCode::Backend,
+        "a durability-level epoch refusal leaves the run Running, so it must not be classified \
+         as NotRunning"
+    );
+    assert_eq!(
+        wire.error_type.as_deref(),
+        Some("EngineTaskEpochClosed"),
+        "the wire half must carry the SAME discriminator as the engine-level variant — a caller \
+         branching on the condition cannot branch on two names for it"
+    );
+    assert_eq!(
+        error.trace_fields().error_type,
+        "EngineTaskEpochClosed",
+        "the trace half must carry it too, and must not fall back to the generic `Durability` \
+         label — an operator searching for one engine's shutdown would miss this seam entirely"
+    );
+
+    // CONTROL: a sibling `DurabilityError` must NOT pick up this name, or the
+    // assertions above would pass for a mapping that labelled everything the
+    // same and measured nothing.
+    let other = ServerError::EngineCall {
+        source: EngineError::Durability(DurabilityError::HistoryShape {
+            reason: String::from("history shape"),
+        }),
+    };
+    assert_eq!(
+        other.trace_fields().error_type,
+        "Durability",
+        "control: an ordinary durability fault keeps the generic label, so the epoch's own label \
+         above is attributable to the epoch and not to the family"
+    );
+
+    // The refusal's own words survive to the operator. Without this a correct
+    // class and a correct label still hand over nothing actionable.
+    assert!(
+        wire.message
+            .contains("019000ff-0000-7000-8000-000000000002"),
+        "the wire message dropped the run the refusal is about: {}",
+        wire.message
+    );
+}
+
 /// The trace discriminator for `HandlerFailed` matches the wire
 /// `error_type` so operators can correlate logs with client branches.
 #[test]

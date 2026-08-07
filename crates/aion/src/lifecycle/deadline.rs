@@ -92,8 +92,40 @@ impl WorkflowDeadlineHandler {
     /// the field. A fresh flag here would compile, pass every test that sets it
     /// directly, and gate nothing in production, because nothing would ever set
     /// it.
+    ///
+    /// 🔴 CRATE-PRIVATE BECAUSE IT HAS NO BUSINESS BEING PUBLIC — AND FOR NO
+    /// LARGER REASON THAN THAT.
+    ///
+    /// An earlier version of this comment justified the narrowing with a threat:
+    /// that a downstream consumer of `aion-rs` could build a handler around
+    /// `Arc::new(AtomicBool::new(false))` and get a deadline writer that never
+    /// stands down. **That threat was not real, and the boundary it implied does
+    /// not exist.** Both halves are wrong, and recording why is worth more than
+    /// the tidier sentence it replaces:
+    ///
+    /// - The attack was unreachable. `register_deadline_handler`
+    ///   (`runtime/nif_timer_bridge.rs`) is ALREADY `pub(crate)`, so no external
+    ///   caller could register such a handler in the first place; the timer
+    ///   service would never route a fire to it. The registration seam's claim
+    ///   was already true, not aspirational.
+    /// - The larger hole the sentence implied was closed is wide open, and this
+    ///   constructor is nowhere near it. `Recorder::new` is `pub`, `durability`
+    ///   is a `pub mod` re-exporting it, and `record_workflow_timed_out`,
+    ///   `record_workflow_continued_as_new`, and `record_workflow_failed` are all
+    ///   `pub`. Any downstream consumer can write any terminal into any history
+    ///   without going near a deadline handler. Narrowing this signature buys
+    ///   nothing against that, and pretending otherwise would leave the next
+    ///   reader believing in a wall that is not there.
+    ///
+    /// What the narrowing IS good for: this constructor takes five collaborators
+    /// that must be the engine's own, one of which — `stand_down` — is only
+    /// correct when it is the timer bridge's shared latch rather than a fresh
+    /// flag. Nothing in the signature can enforce that, so the type keeps the
+    /// only guarantee it can: the sole supported way to build one is the seam
+    /// that supplies the right latch. `pub(crate)` states that in the language
+    /// instead of in a comment. Do not widen it back.
     #[must_use]
-    pub fn new(
+    pub(crate) fn new(
         runtime: Weak<RuntimeHandle>,
         store: Arc<dyn EventStore>,
         visibility_store: Arc<dyn VisibilityStore>,

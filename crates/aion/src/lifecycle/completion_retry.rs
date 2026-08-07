@@ -823,6 +823,9 @@ pub(super) fn failure_discriminant(error: &EngineError) -> &'static str {
             crate::durability::DurabilityError::NonDeterminism(_) => "durability/non-determinism",
             crate::durability::DurabilityError::HistoryShape { .. } => "durability/history-shape",
             crate::durability::DurabilityError::SearchAttribute(_) => "durability/search-attribute",
+            crate::durability::DurabilityError::EngineTaskEpochClosed { .. } => {
+                "durability/engine-task-epoch-closed"
+            }
         },
         // Retryable, so it CAN be seen twice and needs its own name — without
         // it a terminal-writer wait would share one bucket with the terminal
@@ -859,9 +862,21 @@ fn completion_failure_is_transient(error: &EngineError) -> bool {
         EngineError::Store(store) => store_error_is_transient(store),
         EngineError::Durability(durability) => match durability {
             crate::durability::DurabilityError::Store(store) => store_error_is_transient(store),
+            // None of these clears by waiting, so retrying any of them burns
+            // attempts against a condition the attempts cannot touch.
+            //
+            // `EngineTaskEpochClosed` is the one worth its own sentence,
+            // because it is permanent BY CONSTRUCTION rather than by
+            // judgement: `EngineTaskRuntime::begin_close` sets a one-way latch
+            // and `is_epoch_open` is its negation, so no number of attempts
+            // reopens it. Classifying it transient would spin the retry ladder
+            // against a condition that cannot clear until a different engine
+            // exists — the mirror of the `TerminalWriterHeld` mistake recorded
+            // below, in the opposite direction.
             crate::durability::DurabilityError::NonDeterminism(_)
             | crate::durability::DurabilityError::HistoryShape { .. }
-            | crate::durability::DurabilityError::SearchAttribute(_) => false,
+            | crate::durability::DurabilityError::SearchAttribute(_)
+            | crate::durability::DurabilityError::EngineTaskEpochClosed { .. } => false,
         },
         // Documented transient BY THE VARIANT ITSELF: "a reservation lives only
         // across one terminal transition", so the very next attempt finds it
