@@ -6,6 +6,7 @@
     {"name": "tests-rs", "cmd": "cargo test -p aion-rs", "kind": "cargo-test"},
     {"name": "tests-awl", "cmd": "cargo test -p aion-awl", "kind": "cargo-test"},
     {"name": "tests-pkg", "cmd": "cargo test -p aion-awl-package -p aion-package", "kind": "cargo-test"},
-    {"name": "tests-core", "cmd": "cargo test -p aion-core", "kind": "cargo-test"}
+    {"name": "tests-core", "cmd": "cargo test -p aion-core", "kind": "cargo-test"},
+    {"name": "estate-guard", "cmd": "sh /Users/tom/Developer/ablative/tools/gates/hooks/check_must_be_claimed.sh /Users/tom/Developer/ablative", "kind": "check", "note": "ESTATE ASSERTION, NOT THIS REPOSITORY'S. A red here names a SUBJECT repository and the seat who ruled its obligation, and that subject is usually not this repo -- this battery is only the clock. Take it to the named seat; do not delete this leg because it inconvenienced your landing. It asserts two things per listed row: that the repository carries refs/guards/shared-tree (the promise) and that the class-A guard is installed there as ruled (the mechanism). The population comes from docs/tracking/must-be-claimed.tsv, never from this repo. The trailing root runs the REVERSE arm (claimed but unlisted) -- without it, claim-without-listing then unclaim is a complete bypass of the witness, and it costs ~38s."}
   ]
 }
