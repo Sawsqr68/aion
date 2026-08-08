@@ -1518,10 +1518,57 @@ fn replicate_events(
     }
 }
 
-/// The current stored head (event count) for `workflow_id`.
+/// The current stored head for `workflow_id`: the highest committed Aion seq.
+///
+/// Read from the stream's next-seq METADATA (one point read), never by loading
+/// and scanning the events. Aion seqs are 1-based and contiguous with one
+/// haematite event per Aion event, appended at `expected_seq == head`, so the
+/// stored next-seq IS the head. Beyond dropping the O(whole-stream) scan per
+/// append, this reads only the counter: the guard no longer calls `read_from`,
+/// whose two-read emptiness derivation a concurrent first append can race into
+/// reporting the stream's history as compacted (#127), and it does not decode
+/// payloads, so an undecodable stored value cannot fail the append guard.
 fn stream_head(store: &haematite::EventStore, workflow_id: &WorkflowId) -> Result<u64, StoreError> {
-    let events = read_events(store, workflow_id)?;
-    Ok(events.iter().map(Event::seq).max().unwrap_or(0))
+    let stream_key = keyspace::event_stream_key(workflow_id);
+    stream_next_seq_head(store, &stream_key)
+}
+
+/// Read a stream's next-seq metadata as its head.
+///
+/// The stored value is already in haematite's public API space; there is
+/// deliberately no `+ 1` or `- 1` here, and none may ever appear — that would
+/// be engine-space arithmetic (haematite's `EVENT-SEQUENCE-SEMANTICS`; the
+/// engine-key off-by-one lives inside haematite's own key decode, not in this
+/// metadata).
+fn stream_next_seq_head(
+    store: &haematite::EventStore,
+    stream_key: &[u8],
+) -> Result<u64, StoreError> {
+    let next_seq = store
+        .read_stream_next_seq(stream_key)
+        .map_err(|error| api_error(&error))?;
+    head_from_next_seq(next_seq, stream_key)
+}
+
+/// Translate next-seq metadata into a head, refusing the impossible value.
+///
+/// `None` (metadata unset) means no append has ever committed: head `0`.
+/// `Some(n >= 1)` is the committed event count: head `n` — and the counter
+/// survives TTL expiry of the events themselves, where an events-scan
+/// derivation would understate the head. `Some(0)` is a state no committed
+/// append can write (a writer stages its events and this counter in one atomic
+/// mutation, and an empty batch never reaches the counter), so it is
+/// corruption evidence and is refused loudly rather than collapsed into the
+/// healthy never-appended answer.
+fn head_from_next_seq(next_seq: Option<u64>, stream_key: &[u8]) -> Result<u64, StoreError> {
+    match next_seq {
+        Some(0) => Err(StoreError::Backend(format!(
+            "stream {stream_key:?}: next-seq metadata records zero committed events, \
+             which no committed append can write"
+        ))),
+        Some(head) => Ok(head),
+        None => Ok(0),
+    }
 }
 
 // --- observability (`O`) keyspace helpers (run inside `spawn_blocking`) ------
@@ -1547,11 +1594,7 @@ fn observability_head_blocking(
     key: &ActivityStreamKey,
 ) -> Result<u64, StoreError> {
     let stream_key = observability_key(key);
-    let engine_next = store
-        .database()
-        .read_stream_next_seq(&stream_key)
-        .map_err(|error| database_error(&error))?;
-    Ok(engine_next.unwrap_or(0))
+    stream_next_seq_head(store, &stream_key)
 }
 
 /// Append one observability event to its `O`-stream at `expected_seq`.
@@ -1589,10 +1632,15 @@ fn observability_read_blocking(
     let stream_key = observability_key(key);
     let raw = match store.read_from(&stream_key, from_seq) {
         Ok(raw) => raw,
-        // An empty stream at from_seq==0 that reports compacted is impossible for
-        // the append-only `O` keyspace (no compaction), but treat any empty read
-        // as an empty tail rather than an error.
-        Err(haematite::ApiError::HistoryCompacted(_)) => return Ok(Vec::new()),
+        // #166: `HistoryCompacted` is NOT swallowed here. This arm used to
+        // return `Ok(Vec::new())` on the premise that a compaction report was
+        // impossible for the append-only `O` keyspace — a premise falsified by
+        // haematite #74 (a racy two-read derivation could report an intact
+        // stream as compacted) and repaired upstream in 0.8.1. Post-fix, this
+        // error is real evidence: events were written and none are live now
+        // ("written, then gone", cause undetermined). Reporting an empty
+        // transcript for that state silently destroys the operator's signal;
+        // it must surface as the error it is via `api_error` below.
         Err(error) => return Err(api_error(&error)),
     };
     let mut records = Vec::with_capacity(raw.len());
@@ -3493,8 +3541,8 @@ mod tests {
     use aion_core::{ContentType, Payload, WorkflowId};
     use aion_store::{
         ClaimScope, DeployedBinaryIdentity, DesiredState, MintOutcome, NamespaceOrigin,
-        NamespaceRecord, NamespaceState, NamespaceStore, NewWorkerDeployment, OutboxRow,
-        OutboxStatus, OutboxStore, ReadableEventStore, StoreError, WorkerArtifactRef,
+        NamespaceRecord, NamespaceState, NamespaceStore, NewWorkerDeployment, ObservabilityStore,
+        OutboxRow, OutboxStatus, OutboxStore, ReadableEventStore, StoreError, WorkerArtifactRef,
         WorkerDeployment, WorkerDeploymentStore, WritableEventStore, WriteToken,
     };
     use chrono::{Duration, Utc};
@@ -4630,6 +4678,201 @@ mod tests {
             .await?
             .expect("record must persist across a redundant deprecate");
         assert_eq!(still.state, NamespaceState::Deprecated);
+        Ok(())
+    }
+
+    /// #167: a `WorkflowStarted` event at `seq`, for exercising the append
+    /// guard. The adapter validates only sequence contiguity, never variant
+    /// semantics, so repeating the variant is fine here.
+    fn started_event(workflow_id: &WorkflowId, seq: u64) -> aion_core::Event {
+        aion_core::Event::WorkflowStarted {
+            envelope: aion_core::EventEnvelope {
+                seq,
+                recorded_at: Utc::now(),
+                workflow_id: workflow_id.clone(),
+            },
+            workflow_type: String::from("checkout"),
+            input: Payload::new(ContentType::Json, b"{}".to_vec()),
+            run_id: aion_core::RunId::new_v4(),
+            parent_run_id: None,
+            package_version: aion_core::PackageVersion::new("a".repeat(64)),
+        }
+    }
+
+    /// #167: the pure next-seq → head translation, all three arms. The
+    /// `Some(0)` refusal is the red arm: collapsing it into `Ok(0)` would
+    /// launder a corruption witness into the healthy never-appended answer.
+    #[test]
+    fn head_from_next_seq_translates_all_three_arms() -> Result<(), StoreError> {
+        assert_eq!(super::head_from_next_seq(None, b"wf")?, 0);
+        assert_eq!(super::head_from_next_seq(Some(1), b"wf")?, 1);
+        assert_eq!(super::head_from_next_seq(Some(41), b"wf")?, 41);
+        match super::head_from_next_seq(Some(0), b"wf") {
+            Err(StoreError::Backend(message)) => {
+                assert!(
+                    message.contains("zero committed events"),
+                    "the refusal must name the impossible state, got: {message}"
+                );
+                Ok(())
+            }
+            other => Err(StoreError::Backend(format!(
+                "Some(0) must be refused as corruption, got {other:?}"
+            ))),
+        }
+    }
+
+    /// #167: on a QUIESCED store (the two derivations legitimately diverge
+    /// mid-append, so no concurrency here) the metadata head must equal the
+    /// highest committed Aion seq at zero, one, and two events — including the
+    /// never-appended stream, where unset metadata reads head `0`.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn stream_head_matches_committed_seq_when_quiesced()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let store = store("stream-head-quiesced")?;
+        let workflow_id = WorkflowId::new_v4();
+
+        assert_eq!(super::stream_head(&store.inner, &workflow_id)?, 0);
+
+        store
+            .append(
+                WriteToken::recorder(),
+                &workflow_id,
+                &[started_event(&workflow_id, 1)],
+                0,
+            )
+            .await?;
+        assert_eq!(super::stream_head(&store.inner, &workflow_id)?, 1);
+
+        store
+            .append(
+                WriteToken::recorder(),
+                &workflow_id,
+                &[started_event(&workflow_id, 2)],
+                1,
+            )
+            .await?;
+        assert_eq!(super::stream_head(&store.inner, &workflow_id)?, 2);
+        Ok(())
+    }
+
+    /// #167's revert-killer. On a quiesced store the metadata head and the old
+    /// events-scan head COINCIDE, so a quiesced differential cannot tell them
+    /// apart — this pin manufactures the state where they answer differently.
+    /// An undecodable payload (appended through haematite's own public
+    /// `append_batch`, which stores opaque bytes) breaks any derivation that
+    /// loads and decodes events, while the counter read answers the true head.
+    /// The control assertion proves the decode path really does fail here, so
+    /// the distinguishing property is measured rather than argued.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn stream_head_does_not_depend_on_payload_decodability()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let store = store("stream-head-undecodable")?;
+        let workflow_id = WorkflowId::new_v4();
+        let stream_key = keyspace::event_stream_key(&workflow_id);
+
+        store
+            .inner
+            .append_batch(&stream_key, &[b"not an aion event".as_slice()], 0)?;
+
+        // Control: the decode-dependent read path fails on these bytes …
+        assert!(
+            store.read_history(&workflow_id).await.is_err(),
+            "control failed: the undecodable payload must break the decoding \
+             read path, or this test distinguishes nothing"
+        );
+        // … while the metadata head answers the true committed count.
+        assert_eq!(super::stream_head(&store.inner, &workflow_id)?, 1);
+        Ok(())
+    }
+
+    /// #166's revert-killer, on the chain Sable verified at the 0.8.1 bytes:
+    /// TTL is the public route to "written, then gone". An event appended
+    /// through haematite's own `append_batch_with_ttl` with a tiny TTL lapses
+    /// (the event VALUE is TTL-encoded; the sequence counter is written raw
+    /// and never expires; range reads filter expiry at read time), after which
+    /// a from-zero read sees counter `Some(1)` over an empty range — a GENUINE
+    /// `HistoryCompacted` through the public API. The deleted swallow arm used
+    /// to convert exactly this state into a silent empty transcript, so
+    /// reintroducing it turns this test's `Err` into `Ok(vec![])` and reddens
+    /// the pin. Expiry is one-directional, so the state stays reachable
+    /// deterministically once lapsed.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn expired_observability_history_surfaces_as_error_not_empty_transcript()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use aion_core::ActivityId;
+        use aion_store::ActivityStreamKey;
+
+        let store = store("obs-expired-history")?;
+        let key = ActivityStreamKey::new(
+            WorkflowId::new_v4(),
+            ActivityId::from_sequence_position(1),
+            1,
+        );
+        let stream_key = keyspace::observability_stream_key(
+            &key.workflow_id,
+            key.activity_id.sequence_position(),
+            key.attempt,
+        );
+
+        store.inner.append_batch_with_ttl(
+            &stream_key,
+            &[b"{}".as_slice()],
+            0,
+            Some(std::time::Duration::from_millis(1)),
+        )?;
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Control: the head still answers 1 after expiry — the counter
+        // survives where the events do not. This asymmetry is what makes the
+        // written-then-gone state reachable, so the pin measures its own
+        // premise instead of assuming it.
+        assert_eq!(store.activity_head(&key).await?, 1);
+
+        // The pin: the read surfaces the error. An empty transcript here
+        // silently destroys the operator's signal (#166).
+        assert!(
+            store.read_activity_events_from(&key, 0).await.is_err(),
+            "an appended-then-expired observability stream must surface as an \
+             error, not an empty transcript"
+        );
+        Ok(())
+    }
+
+    /// #167: a stale append refuses with the METADATA head as `found`, and the
+    /// store stays intact — the guard rejects before any write.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn stale_append_reports_metadata_head_as_found() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let store = store("stream-head-stale-append")?;
+        let workflow_id = WorkflowId::new_v4();
+
+        store
+            .append(
+                WriteToken::recorder(),
+                &workflow_id,
+                &[started_event(&workflow_id, 1)],
+                0,
+            )
+            .await?;
+
+        let stale = store
+            .append(
+                WriteToken::recorder(),
+                &workflow_id,
+                &[started_event(&workflow_id, 1)],
+                0,
+            )
+            .await;
+        match stale {
+            Err(StoreError::SequenceConflict { expected, found }) => {
+                assert_eq!(expected, 0);
+                assert_eq!(found, 1, "found must carry the metadata head");
+            }
+            other => {
+                return Err(format!("stale append must SequenceConflict, got {other:?}").into());
+            }
+        }
+        assert_eq!(store.read_history(&workflow_id).await?.len(), 1);
         Ok(())
     }
 }

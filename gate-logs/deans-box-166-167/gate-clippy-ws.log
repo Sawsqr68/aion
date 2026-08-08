@@ -1,0 +1,7 @@
+    Checking aion-store-haematite v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-store-haematite)
+    Checking aion-client v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-client)
+    Checking million-processes v0.1.0 (/Users/deanwhiting/Developer/stack/aion/benchmarks/million-processes)
+    Checking aion-server v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-server)
+    Checking aion-rs v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion)
+    Checking aion-cli v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 18.67s

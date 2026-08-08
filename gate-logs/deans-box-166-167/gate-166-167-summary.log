@@ -1,0 +1,6 @@
+=== tree: 72968784f1843e50e6b4b5d0249304ecd1251f57 branch: gate-166-167-pin ===
+=== started: 2026-08-08T16:03:43Z ===
+clippy-workspace exit=0
+clippy-p exit=0
+test-haematite exit=0
+=== finished: 2026-08-08T16:04:32Z ===

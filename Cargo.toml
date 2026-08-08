@@ -92,7 +92,7 @@ hostname = "0.4"
 # child failure); 0.14.0 added `loader/encode` (the `.beam` container writer
 # behind the `encode` feature) consumed by aion-awl's BC-3 bytecode emitter.
 beamr = { version = "0.16.3", features = ["json", "encode"] }
-haematite = "0.7.0"
+haematite = "0.8.1"
 # 0.2.4 carries the park-flip (idle connections park on fd readiness — retires
 # the embedded front door's per-connection busy-spin measured 2026-07-13) and
 # G7's push-reply contract restoration (receive = pure wait quantum).
