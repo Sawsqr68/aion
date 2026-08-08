@@ -1,0 +1,84 @@
+//! norn_dev — one bounded dev brief, delegated to a norn-backed builder, on
+//! the engine's own durability, with the gates run mechanically before
+//! anything is reported.
+//!
+//! This is the single-lane sibling of `norn_fleet`: same agent seam (one
+//! String in, one String out — the shape `aion worker agent` serves from the
+//! installed binary, no crate, no rebuild), same control-first discipline.
+//! The dispatcher writes the whole brief into one prompt: the task, the
+//! fence, the standards, the evidence the builder must produce. The builder's
+//! reply is its report.
+//!
+//! The gates are NOT the builder's to claim. The `gates` action is a `run`
+//! body executed by the server itself: the gate script's real exit code and
+//! output come back as data, and the green/red fork below is computed from
+//! that exit code — a build report that says "all green" cannot route this
+//! workflow to `done` on its own say-so.
+//!
+//! WHAT THIS DOES NOT PROVE: a green gate script proves what the script
+//! measures, nothing more. The reviewer's read of the diff stays a human (or
+//! reviewing agent's) job, after this workflow returns — this is the
+//! delegation loop's mechanical half, not its judgement.
+workflow norn_dev
+  timeout 4h
+  input control_prompt: String
+  input control_expect: String
+  input brief: String
+  input gate_script: String
+  outcome done:       type DevReport, route success
+  outcome gates_red:  type GatesRed,  route failure
+  outcome unmeasured: type Refused,   route failure
+
+/// What actually ran: the sealed command's exit status and both streams,
+/// filled by the server for every `run`-bodied action.
+type RunOutcome { exit_code: Int, stdout: String, stderr: String }
+
+/// A delegation that built AND gated green. `report` is the builder's own
+/// account; `gate_exit`/`gate_stderr` are the machine's, shipped together so
+/// the account can be checked against the measurement that admitted it.
+type DevReport { report: String, gate_exit: Int, gate_stderr: String, control_reply: String }
+
+/// The build came back but the gates are red. Everything needed to read the
+/// failure travels with the refusal-to-report: the builder's account and the
+/// gate script's full streams.
+type GatesRed { report: String, gate_exit: Int, stdout: String, stderr: String }
+
+/// A lane that did not build, said out loud rather than reported as a pass.
+type Refused { control_expect: String, control_reply: String, reason: String }
+
+worker dev
+  /// The builder. Served by `aion worker agent` with the norn harness: the
+  /// brief goes to the session verbatim, the report comes back verbatim.
+  /// Retries absorb provider-overload bursts (the tharsis postmortem's
+  /// multi-minute outages), not build failures — a failed build is a reply,
+  /// not an error.
+  action delegate(prompt: String) -> String
+    agent, timeout 90m, retry 3 backoff 30s..5m
+
+  /// The gates, run by the server. The command is sealed into the package
+  /// identity at deploy; the script path arrives as one whole argument and
+  /// never passes through a shell expansion.
+  action gates(script: String) -> RunOutcome
+    run "zsh $script"
+
+/// Ask a question whose answer is already known, before spending 90 minutes
+/// on one that matters. A broken pipeline and a working one both return
+/// well-formed strings; only a known answer tells them apart.
+step control
+  delegate(prompt: control_prompt) -> control_reply
+  outcome proven: when control_reply == control_expect, route build
+  outcome broken: otherwise,
+    route unmeasured(control_expect: control_expect, control_reply: control_reply,
+      reason: "the control delegation did not return the expected reply, so this pipeline cannot be shown to read the tree or follow instructions — no build was attempted")
+
+step build
+  delegate(prompt: brief) -> report
+
+step gate
+  gates(script: gate_script) -> gate_result
+  outcome green: when gate_result.exit_code == 0,
+    route done(report: report, gate_exit: gate_result.exit_code, gate_stderr: gate_result.stderr,
+      control_reply: control_reply)
+  outcome red: otherwise,
+    route gates_red(report: report, gate_exit: gate_result.exit_code, stdout: gate_result.stdout,
+      stderr: gate_result.stderr)
