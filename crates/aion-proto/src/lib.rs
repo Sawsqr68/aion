@@ -69,7 +69,7 @@ pub use schedule::{
 pub use worker::{
     ProtoActivityDescriptor, ProtoActivityError, ProtoActivityErrorKind, ProtoActivityResult,
     ProtoActivityTask, ProtoDrainRequest, ProtoHeartbeat, ProtoRegisterAck, ProtoRegisterWorker,
-    ProtoResultAck, proto_activity_result,
+    ProtoResultAck, ProtoWorkerInstanceIdentity, proto_activity_result,
 };
 pub use workflow::{
     ProtoCancelRequest, ProtoCancelResponse, ProtoCountWorkflowsRequest,

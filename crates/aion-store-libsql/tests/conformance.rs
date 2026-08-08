@@ -7,9 +7,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use aion_store::{
     Event, EventStore, PackageRecord, PackageRouteRecord, PackageStore, ReadableEventStore,
-    RunSummary, StoreError, TimerEntry, TimerId, WorkflowFilter, WorkflowId, WorkflowSummary,
-    WritableEventStore, WriteToken,
-    conformance::{run_event_store_suite, run_outbox_settlement_suite},
+    RunSummary, StoreError, TimerEntry, TimerId, WorkerDeploymentStore, WorkflowFilter, WorkflowId,
+    WorkflowSummary, WritableEventStore, WriteToken,
+    conformance::{
+        run_event_store_suite, run_outbox_settlement_suite, run_worker_deployment_suite,
+    },
 };
 use aion_store_libsql::LibSqlStore;
 use async_trait::async_trait;
@@ -35,6 +37,29 @@ async fn libsql_store_satisfies_outbox_settlement_conformance_suite() -> Result<
     run_outbox_settlement_suite(|| async {
         LibSqlStore::open(unique_temp_path("outbox-settlement")).await
     })
+    .await
+}
+
+#[tokio::test]
+async fn libsql_store_satisfies_worker_deployment_conformance_suite() -> Result<(), StoreError> {
+    let path = unique_temp_path("worker-deployment");
+    let first = Arc::new(LibSqlStore::open(path.clone()).await?);
+    let trait_store: Arc<dyn WorkerDeploymentStore> = first.clone();
+    let raw_store = first.clone();
+    drop(first);
+    run_worker_deployment_suite(
+        trait_store,
+        Some(Box::new(move || {
+            let path = path.clone();
+            Box::pin(async move {
+                Ok(Arc::new(LibSqlStore::open(path).await?) as Arc<dyn WorkerDeploymentStore>)
+            })
+        })),
+        Box::new(move |name, bytes| {
+            let raw_store = raw_store.clone();
+            Box::pin(async move { raw_store.write_raw_worker_deployment(&name, bytes).await })
+        }),
+    )
     .await
 }
 

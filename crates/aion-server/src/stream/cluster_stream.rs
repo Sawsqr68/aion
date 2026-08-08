@@ -20,7 +20,9 @@
 //! reads supervisor/registry/store state, never a namespace engine), sidestepping
 //! the `guard.scope(...).engine()?` requirement the workflow path has.
 
-use aion_core::{ClusterSnapshot, ClusterStreamError, ClusterWorker, WorkerTransport};
+use aion_core::{
+    ClusterDeployment, ClusterSnapshot, ClusterStreamError, ClusterWorker, WorkerTransport,
+};
 use aion_proto::{StreamedClusterEvent, StreamedClusterSnapshot, WireError};
 use axum::extract::ws::{CloseFrame, Message, WebSocket, close_code};
 use futures::{SinkExt, StreamExt};
@@ -66,7 +68,7 @@ pub async fn serve_cluster_socket(
 
     // T1 (> T0): read the calm-state snapshot. `as_of_seq` is the publisher's
     // current seq; the client applies only deltas with `cluster_seq > as_of_seq`.
-    let snapshot = build_snapshot(state, caller)?;
+    let snapshot = build_snapshot(state, caller).await?;
     let priming = StreamedClusterSnapshot::new(snapshot);
     let priming = serde_json::to_string(&priming).map_err(|source| ServerError::Wire {
         wire: WireError::backend(format!(
@@ -141,10 +143,15 @@ pub async fn serve_cluster_socket(
 /// so an empty peers/shards snapshot is the truthful calm state, not a stub. The
 /// dashboard derives liveness from the live `Peer*`/`Shard*` deltas the
 /// supervisor emits once wired.
-pub(crate) fn build_snapshot(
+pub(crate) async fn build_snapshot(
     state: &ServerState,
-    _caller: &CallerIdentity,
+    caller: &CallerIdentity,
 ) -> Result<ClusterSnapshot, ServerError> {
+    if !caller.deploy_granted() {
+        return Err(ServerError::namespace_denied(
+            "cluster topology snapshot requires the deployment-wide deploy grant",
+        ));
+    }
     let node = state.cluster_self_node().map_or_else(
         || STANDALONE_NODE_LABEL.to_owned(),
         std::borrow::ToOwned::to_owned,
@@ -157,11 +164,36 @@ pub(crate) fn build_snapshot(
         .all_workers()?
         .into_iter()
         .map(|handle| ClusterWorker {
+            deployment: handle
+                .instance()
+                .map(|instance| instance.deployment.clone()),
             worker_id: handle.id().value().to_string(),
             namespaces: handle.namespaces().iter().cloned().collect(),
             task_queue: handle.task_queue().to_owned(),
             transport: transport_of(handle.delivery()),
             node: handle.node().map(str::to_owned),
+            deployment_association: handle.instance().map(|instance| instance.association),
+        })
+        .collect();
+    let listing = state
+        .worker_deployment_store()
+        .list_worker_deployments()
+        .await?;
+    for row in listing.undecodable {
+        tracing::warn!(
+            name = %row.name,
+            error = %row.error,
+            "worker deployment row could not be decoded while building cluster snapshot"
+        );
+    }
+    let deployments = listing
+        .deployments
+        .into_iter()
+        .map(|record| ClusterDeployment {
+            name: record.name,
+            desired_state: record.desired,
+            binary_version: record.binary.version,
+            binary_content_hash: record.binary.content_hash,
         })
         .collect();
     Ok(ClusterSnapshot {
@@ -170,6 +202,7 @@ pub(crate) fn build_snapshot(
         peers: Vec::new(),
         shards: Vec::new(),
         workers,
+        deployments,
     })
 }
 

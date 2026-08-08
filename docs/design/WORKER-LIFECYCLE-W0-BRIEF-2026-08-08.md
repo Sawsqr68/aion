@@ -199,3 +199,55 @@ conformance call sites, suite output to files. No `#[allow]`/`#[ignore]`/
 500 LOC; `mod.rs` re-export-only. Evidence pack per the house pattern.
 Opus review before landing; mutation probes run and recorded per the
 standing instruction.
+
+## Addendum — review-leg instructions (Waffles the Terrible, 2026-08-08, recorded at discharge)
+
+Two instructions issued at brief review (channel, 09:23Z/09:24Z 2026-08-08)
+bound the verification leg beyond the gates above; both are discharged in the
+landing this addendum rides with:
+
+1. **R3 rationale in the code.** The connect-inward-forever rationale — why an
+   unknown deployment name is recorded rather than refused at registration —
+   must exist as a doc comment at the association site itself, not only in
+   this brief. Discharged: `WorkerRegistry::resolve_instance_identity`
+   (`crates/aion-server/src/worker/registry.rs`) carries the rationale
+   (workers connect inward; a worker may outlive its record; the association
+   is observational, never an admission gate).
+
+2. **Planted known-positive as an artifact.** At least one green AC must be
+   demonstrated capable of failing: plant its defect, watch its pin redden,
+   restore, watch it green — with the red and green runs kept as artifacts in
+   the evidence pack (the estate's false-zero countermeasure). Discharged
+   against AC1's restart-survival scenario on the libSQL backend: the reopen
+   closure was planted to open a fresh empty database, the shared suite
+   failed with "a second store instance over the same storage must see the
+   complete record", pristine bytes were restored (SHA-256 verified), and the
+   suite re-ran green. Artifacts: `w0-planted-positive-restart-red.log` /
+   `w0-planted-positive-restart-green.log` in the evidence pack.
+
+## Amendment — 2026-08-08, at first review (Opus R1)
+
+Two requirements are narrowed by dated amendment here, naming what moved and
+where it went. Neither is a quiet deletion; both are review findings (M7, M1).
+
+1. **R3's Liminal half is DEFERRED to a named liminal-repo lane.** The
+   published `liminal-rs` wire (`WorkerRegistration`, 0.5.0 through current
+   `main`) carries no optional instance-identity field, so aion has no
+   truthful field to map. The lane deliberately refused to overload tag-6
+   build identity or smuggle identity through activity descriptors. AC3 is
+   therefore **partial in this brief's own terms**: the gRPC transport and
+   the shared registry core are covered; the Liminal transport hardcodes
+   no-association until the liminal repository lands the field + codec
+   (with presence/absence tests), publishes, and the three liminal
+   dependencies here are bumped and mapped through the same durable lookup.
+   The completion lane is tracked as the liminal half of AC3 under task #27.
+
+2. **AC2's second half ("a deploy recorded under one binary and read under
+   another surfaces the difference") is DEFERRED to W-2.** W-0 has no
+   consumer surface for the comparison — the spawn/restart machinery that
+   makes a binary mismatch an operator-visible fact is W-2's scope under
+   ruling rider 1 (restart across an upgrade must be visible, never a
+   silent swap). The tautological pin that sat on this claim is deleted
+   rather than left green over nothing. AC2's first half (capture
+   correctness against an independently computed SHA-256, and the record
+   round-trip including `last_spawn_binary`) stands and remains pinned.

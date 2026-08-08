@@ -1,14 +1,111 @@
 import { expect, test } from 'bun:test';
 import { createAionClusterStreamManager } from './cluster-stream';
+import { parseClusterFrame } from './cluster-stream-protocol';
 import type { AionSocketError } from './websocket';
 import { FakeScheduler, type FakeSocket, FakeSocketFactory } from './websocket-test-support';
 
 function snapshot(node: string, asOfSeq: number) {
   return {
     kind: 'cluster_snapshot',
-    snapshot: { node, as_of_seq: asOfSeq, peers: [], shards: [], workers: [] },
+    snapshot: { node, as_of_seq: asOfSeq, peers: [], shards: [], workers: [], deployments: [] },
   };
 }
+
+test('deployment baselines, worker associations, and lifecycle events pass strict decoding', () => {
+  const baseline = parseClusterFrame({
+    kind: 'cluster_snapshot',
+    snapshot: {
+      node: 'node-a',
+      as_of_seq: 4,
+      peers: [],
+      shards: [],
+      workers: [
+        {
+          worker_id: '1',
+          namespaces: ['orders'],
+          task_queue: 'shell',
+          transport: { transport: 'Grpc' },
+          node: null,
+          deployment: 'shells',
+          deployment_association: 'known',
+        },
+      ],
+      deployments: [
+        {
+          name: 'shells',
+          desired_state: 'running',
+          binary_version: '0.11.0',
+          binary_content_hash: 'abcd',
+        },
+      ],
+    },
+  });
+  expect(baseline.kind).toBe('snapshot');
+
+  const put = parseClusterFrame({
+    kind: 'cluster_event',
+    event: {
+      type: 'WorkerDeploymentPut',
+      meta: { cluster_seq: 5, observed_at: '2026-08-08T10:00:00Z' },
+      name: 'shells',
+      outcome: 'created',
+      desired_state: 'running',
+      binary_version: '0.11.0',
+      binary_content_hash: 'abcd',
+    },
+  });
+  expect(put.kind).toBe('event');
+
+  const desired = parseClusterFrame({
+    kind: 'cluster_event',
+    event: {
+      type: 'WorkerDeploymentDesiredStateChanged',
+      meta: { cluster_seq: 6, observed_at: '2026-08-08T10:01:00Z' },
+      name: 'shells',
+      desired_state: 'stopped',
+    },
+  });
+  expect(desired.kind).toBe('event');
+
+  const deleted = parseClusterFrame({
+    kind: 'cluster_event',
+    event: {
+      type: 'WorkerDeploymentDeleted',
+      meta: { cluster_seq: 7, observed_at: '2026-08-08T10:02:00Z' },
+      name: 'shells',
+    },
+  });
+  expect(deleted.kind).toBe('event');
+});
+
+test.each([
+  'known',
+  'absent',
+  'unchecked',
+] as const)('accepts the %s deployment association', (state) => {
+  const frame = {
+    kind: 'cluster_snapshot',
+    snapshot: {
+      node: 'node-a',
+      as_of_seq: 1,
+      peers: [],
+      shards: [],
+      workers: [
+        {
+          worker_id: '1',
+          namespaces: [],
+          task_queue: 'q',
+          transport: { transport: 'Grpc' },
+          node: null,
+          deployment: 'd',
+          deployment_association: state,
+        },
+      ],
+      deployments: [],
+    },
+  };
+  expect(parseClusterFrame(frame).kind).toBe('snapshot');
+});
 
 function peerAdded(clusterSeq: number, peerName = 'peer-b') {
   return {

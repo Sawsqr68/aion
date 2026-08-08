@@ -1,0 +1,10 @@
+   Compiling aion-store-libsql v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-libsql)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.03s
+     Running tests/conformance.rs (target/debug/deps/conformance-b82c124939fe73b2)
+
+running 1 test
+test libsql_store_satisfies_worker_deployment_conformance_suite ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.02s
+
+exit=0

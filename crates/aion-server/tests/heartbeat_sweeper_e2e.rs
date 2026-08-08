@@ -207,6 +207,7 @@ impl Harness {
                         node: String::new(),
                         activities: Vec::new(),
                         identity: "heartbeat-test-worker".to_owned(),
+                        instance: None,
                     },
                 )),
             })
@@ -661,6 +662,7 @@ async fn no_catalog_registration_still_refuses_malformed_descriptor() -> Result<
                         output_schema_json: "{}".to_owned(),
                     }],
                     identity: "malformed-descriptor-worker".to_owned(),
+                    instance: None,
                 },
             )),
         })

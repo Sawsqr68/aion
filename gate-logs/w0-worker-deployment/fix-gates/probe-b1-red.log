@@ -1,0 +1,16 @@
+   Compiling aion-server v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 53.75s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a08d0341e03de0ba)
+
+running 1 test
+Error: StoreBackend { source: Serialization("store serialization error: expected ident at line 1 column 2") }
+test api::http::worker_deployments::tests::poisoned_row_does_not_break_cluster_snapshot ... FAILED
+
+failures:
+
+failures:
+    api::http::worker_deployments::tests::poisoned_row_does_not_break_cluster_snapshot
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 832 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p aion-server --lib`

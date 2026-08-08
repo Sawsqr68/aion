@@ -1,0 +1,28 @@
+   Compiling aion-store v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+   Compiling aion-rs v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+   Compiling aion-store-haematite v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+   Compiling aion-store-libsql v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-libsql)
+   Compiling aion-server v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 44.18s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a08d0341e03de0ba)
+
+running 1 test
+
+thread 'api::http::worker_deployments::tests::registry_without_deployment_store_reports_unchecked_and_preserves_null_pairing' (69907463) panicked at crates/aion-server/src/api/http/worker_deployments_tests.rs:382:5:
+assertion failed: snapshot.workers.iter().any(|worker|
+        {
+            worker.deployment.as_deref() == Some("unverified") &&
+                worker.deployment_association ==
+                    Some(DeploymentAssociation::Unchecked)
+        })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test api::http::worker_deployments::tests::registry_without_deployment_store_reports_unchecked_and_preserves_null_pairing ... FAILED
+
+failures:
+
+failures:
+    api::http::worker_deployments::tests::registry_without_deployment_store_reports_unchecked_and_preserves_null_pairing
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 832 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p aion-server --lib`

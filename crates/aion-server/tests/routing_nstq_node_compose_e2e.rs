@@ -147,6 +147,7 @@ impl Cluster {
                         node: node.to_owned(),
                         activities: Vec::new(),
                         identity: label.to_owned(),
+                        instance: None,
                     },
                 )),
             })

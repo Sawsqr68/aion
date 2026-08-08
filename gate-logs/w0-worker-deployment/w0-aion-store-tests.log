@@ -1,0 +1,93 @@
+   Compiling aion-store v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.71s
+     Running unittests src/lib.rs (target/debug/deps/aion_store-9bbb05d56595417e)
+
+running 69 tests
+test memory::namespace_tests::register_creates_if_absent_and_persists ... ok
+test memory::namespace_tests::get_returns_none_for_absent_name ... ok
+test memory::namespace_tests::deprecate_sets_state_and_is_idempotent ... ok
+test memory::namespace_tests::second_register_already_existed_bumps_last_seen_only ... ok
+test memory::namespace_tests::put_namespace_is_idempotent_on_existing_name ... ok
+test memory::namespace_tests::list_orders_by_created_at_then_name ... ok
+test memory::namespace_tests::set_placement_updates_only_placement_and_reports_not_found ... ok
+test memory::tests::append_preserves_sequence_order ... ok
+test memory::tests::append_rejects_non_contiguous_event_sequences ... ok
+test memory::tests::concurrent_appends_on_same_expected_sequence_conflict_once ... ok
+test memory::tests::expired_timers_include_boundary_and_exclude_future ... ok
+test memory::tests::list_active_returns_only_running_workflows ... ok
+test memory::tests::list_paused_and_list_active_partition_by_projected_status ... ok
+test memory::tests::query_uses_core_filter_semantics ... ok
+test memory::tests::list_workflow_ids_returns_running_and_terminal_histories ... ok
+test memory::tests::read_history_returns_empty_for_unknown_workflow ... ok
+test memory::tests::read_run_chain_projects_run_id_from_started_event ... ok
+test memory::tests::rescheduling_same_timer_replaces_prior_fire_at ... ok
+test namespace::tests::encode_decode_preserves_reserved_kind_discriminator ... ok
+test namespace::tests::bump_last_seen_advances_only_last_seen ... ok
+test memory::tests::stale_expected_sequence_writes_nothing ... ok
+test namespace::tests::decode_rejects_malformed_bytes ... ok
+test namespace::tests::enum_derives_are_copy_clone_eq ... ok
+test namespace::tests::encode_decode_round_trips ... ok
+test namespace::tests::new_minted_sets_created_equal_to_last_seen_and_origin ... ok
+test namespace::tests::max_in_flight_activities_round_trips_present_and_absent ... ok
+test namespace::tests::prefer_and_pinned_encode_as_single_key_maps ... ok
+test namespace::tests::old_unplaced_record_without_quota_field_decodes ... ok
+test namespace::tests::unknown_placement_tag_is_rejected ... ok
+test namespace::tests::unplaced_encodes_as_bare_string_tag ... ok
+test namespace::tests::placement_variants_round_trip_through_record ... ok
+test observability::tests::append_assigns_contiguous_store_seq_from_zero ... ok
+test observability::tests::attempts_are_disjoint_streams ... ok
+test observability::tests::list_activity_streams_orders_by_activity_then_attempt ... ok
+test observability::tests::list_activity_streams_is_empty_for_unknown_workflow ... ok
+test observability::tests::stale_expected_seq_conflicts_and_writes_nothing ... ok
+test outbox::tests::dispatch_key_is_workflow_id_colon_ordinal ... ok
+test outbox::tests::node_less_scope_admits_only_unpinned_rows ... ok
+test observability::tests::read_from_resumes_by_store_seq ... ok
+test outbox::tests::outbox_store_is_object_safe ... ok
+test outbox::tests::scope_admits_matching_namespace_task_queue_and_unpinned_or_matching_node ... ok
+test outbox::tests::scope_rejects_other_namespace_task_queue_or_pinned_to_other_node ... ok
+test outbox::tests::status_tokens_round_trip ... ok
+test store::tests::event_store_traits_are_object_safe ... ok
+test outbox::tests::unknown_status_token_is_rejected ... ok
+test testing::fenced_history::tests::an_armed_fence_claims_no_shard_at_all ... ok
+test testing::fenced_history::tests::appends_are_fenced_as_well_as_reads ... ok
+test testing::fenced_history::tests::reads_are_honest_until_armed_and_refuse_after ... ok
+test testing::stale_active_list::tests::a_forced_paused_id_is_reported_active_and_still_projects_paused ... ok
+test testing::stale_active_list::tests::a_forced_terminal_id_is_reported_active_while_its_history_still_says_terminal ... ok
+test testing::stale_active_list::tests::forcing_an_already_active_id_does_not_duplicate_it ... ok
+test testing::stale_active_list::tests::multiple_forced_ids_are_appended_in_the_order_they_were_forced ... ok
+test testing::stale_active_list::tests::forcing_nothing_leaves_the_answer_identical_to_the_inner_store ... ok
+test visibility::tests::closed_after_filter_matches_closed_workflow_at_boundary ... ok
+test visibility::tests::closed_after_filter_does_not_match_running_workflows ... ok
+test visibility::tests::closed_before_filter_does_not_match_running_workflows ... ok
+test visibility::tests::closed_before_filter_matches_closed_workflow_at_boundary ... ok
+test visibility::tests::combined_filters_require_all_predicates_to_match ... ok
+test visibility::tests::default_filter_matches_all_workflows ... ok
+test visibility::tests::mismatched_typed_search_attribute_predicates_do_not_match ... ok
+test visibility::tests::search_attribute_predicates_match_supported_typed_operations ... ok
+test visibility::tests::started_after_filter_matches_boundary_and_rejects_earlier ... ok
+test visibility::tests::started_before_filter_matches_boundary_and_rejects_later ... ok
+test visibility::tests::status_filter_matches_exact_status_and_rejects_mismatch ... ok
+test visibility::tests::visibility_store_is_object_safe ... ok
+test visibility::tests::workflow_type_filter_matches_exact_type_and_rejects_mismatch ... ok
+test worker_deployment::tests::empty_name_is_refused ... ok
+test worker_deployment::tests::codec_round_trips_every_field_and_spawn_slot ... ok
+test worker_deployment::tests::unknown_artifact_tag_is_a_typed_refusal ... ok
+
+test result: ok. 69 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/inmemory_conformance.rs (target/debug/deps/inmemory_conformance-8394bf90ff78e9dd)
+
+running 2 tests
+test inmemory_store_satisfies_worker_deployment_conformance_suite ... ok
+test inmemory_store_satisfies_event_store_conformance_suite ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests aion_store
+
+running 1 test
+test crates/aion-store/src/lib.rs - (line 9) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.62s; merged doctests compilation took 0.24s

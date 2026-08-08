@@ -1,0 +1,29 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling aion-store v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+   Compiling aion-rs v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+   Compiling aion-store-haematite v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+   Compiling aion-store-libsql v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-libsql)
+   Compiling aion-server v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3m 00s
+     Running tests/worker_deployment_spawn_fence.rs (target/debug/deps/worker_deployment_spawn_fence-fecee136e1c67fa2)
+
+running 1 test
+test scanner_detects_process_code_and_ignores_comment_and_string_decoys ... FAILED
+
+failures:
+
+---- scanner_detects_process_code_and_ignores_comment_and_string_decoys stdout ----
+
+thread 'scanner_detects_process_code_and_ignores_comment_and_string_decoys' (70720388) panicked at crates/aion-server/tests/worker_deployment_spawn_fence.rs:145:5:
+assertion failed: contains_token_sequence(&code, "Command::new")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    scanner_detects_process_code_and_ignores_comment_and_string_decoys
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p aion-server --test worker_deployment_spawn_fence`

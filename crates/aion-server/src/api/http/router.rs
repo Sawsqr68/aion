@@ -31,6 +31,10 @@ use super::schedules::{
 use super::transcripts::{fetch_transcript, list_transcript_streams};
 use super::unrecoverable::list_unrecoverable_runs;
 use super::whoami::whoami;
+use super::worker_deployments::{
+    delete_worker_deployment, get_worker_deployment, list_worker_deployments,
+    put_worker_deployment, set_worker_deployment_desired_state,
+};
 use super::workers::{drain_worker, stop_worker};
 use super::workflows::{
     cancel_workflow, count_workflows, describe_workflow, get_workflows, list_namespace_records,
@@ -86,7 +90,7 @@ pub fn http_router(state: ServerState) -> Result<Router, ServerError> {
 /// the layer is not installed and no cross-origin request is permitted. When
 /// origins are configured the layer is scoped to exactly those origins (never
 /// `Any`, so it is safe to pair with credentialed requests), permits the
-/// methods the ops console uses (GET, POST, PUT, and OPTIONS preflight), and allows
+/// methods the ops console uses (GET, POST, PUT, DELETE, and OPTIONS preflight), and allows
 /// exactly the request headers the API consumes.
 ///
 /// # Errors
@@ -109,7 +113,13 @@ fn cors_layer(allowed_origins: &[String]) -> Result<Option<CorsLayer>, ServerErr
     }
     let layer = CorsLayer::new()
         .allow_origin(origins)
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
         .allow_headers([
             header::CONTENT_TYPE,
             header::AUTHORIZATION,
@@ -139,11 +149,10 @@ async fn dev_disabled() -> StatusCode {
     StatusCode::NOT_FOUND
 }
 
-/// Disabled deployed-AWL surface: a plain 404 with no body. The deployed
-/// studio view reads the same deployed catalog `GET /deploy/versions` serves,
-/// so it follows the deploy surface's own switch rather than opening a second
-/// door onto deployed state when the operator has closed the first.
-async fn deployed_awl_disabled() -> StatusCode {
+/// Disabled deployment surfaces: a plain 404 with no body for both the
+/// deployed-AWL reader and worker-deployment management families. Both follow
+/// the deploy surface's switch and stay dark when the operator closes it.
+async fn deploy_surface_disabled() -> StatusCode {
     StatusCode::NOT_FOUND
 }
 
@@ -164,8 +173,29 @@ fn deployed_awl_router(deploy_enabled: bool) -> Router<ServerState> {
             )
     } else {
         Router::new()
-            .route("/awl/deployed", any(deployed_awl_disabled))
-            .route("/awl/deployed/{*rest}", any(deployed_awl_disabled))
+            .route("/awl/deployed", any(deploy_surface_disabled))
+            .route("/awl/deployed/{*rest}", any(deploy_surface_disabled))
+    }
+}
+
+fn worker_deployment_router(deploy_enabled: bool) -> Router<ServerState> {
+    if deploy_enabled {
+        Router::new()
+            .route("/worker-deployments", get(list_worker_deployments))
+            .route(
+                "/worker-deployments/{name}",
+                get(get_worker_deployment)
+                    .put(put_worker_deployment)
+                    .delete(delete_worker_deployment),
+            )
+            .route(
+                "/worker-deployments/{name}/desired-state",
+                post(set_worker_deployment_desired_state),
+            )
+    } else {
+        Router::new()
+            .route("/worker-deployments", any(deploy_surface_disabled))
+            .route("/worker-deployments/{*rest}", any(deploy_surface_disabled))
     }
 }
 
@@ -241,6 +271,9 @@ pub fn workflow_router(state: ServerState) -> Router {
         .merge(authoring)
         .merge(awl)
         .merge(dev)
+        .merge(worker_deployment_router(
+            state.runtime_config().deploy.enabled,
+        ))
         .route("/whoami", get(whoami))
         .route("/build", get(build_identity))
         .route("/namespaces", get(list_namespaces).post(post_namespace))

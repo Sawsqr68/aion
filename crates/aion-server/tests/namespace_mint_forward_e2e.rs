@@ -83,12 +83,11 @@ async fn owner(policy: AutoCreate) -> Result<Owner, TestError> {
         },
         engine,
     );
-    let namespaces: Arc<dyn NamespaceStore> = Arc::clone(&backing) as Arc<dyn NamespaceStore>;
     Ok(Owner {
         state: ServerState::from_parts_with_namespace_store(
             resolver,
             test_runtime(policy),
-            namespaces,
+            backing.clone(),
         ),
         namespaces: backing,
         received: Arc::new(Mutex::new(Received::default())),

@@ -1,0 +1,27 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling aion-store v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.39s
+     Running unittests src/lib.rs (target/debug/deps/aion_store-9bbb05d56595417e)
+
+running 1 test
+test worker_deployment::tests::codec_round_trips_every_field_and_spawn_slot ... FAILED
+
+failures:
+
+---- worker_deployment::tests::codec_round_trips_every_field_and_spawn_slot stdout ----
+
+thread 'worker_deployment::tests::codec_round_trips_every_field_and_spawn_slot' (66518733) panicked at crates/aion-store/src/worker_deployment.rs:403:9:
+assertion `left == right` failed
+  left: WorkerDeployment { name: "shells", artifact: Builtin { verb: ["worker", "shell"] }, binary: DeployedBinaryIdentity { version: "1.2.3", commit: "abc", dirty: "false", content_hash: "0123" }, last_spawn_binary: None, namespaces: {"orders"}, task_queue: "shell", node: Some("node-a"), desired: Stopped, status_history: [StatusEntry { at: 2026-08-08T01:02:03Z, status: "created", detail: None }, StatusEntry { at: 2026-08-08T01:02:03Z, status: "desired-state-changed", detail: Some("stopped") }], created_at: 2026-08-08T01:02:03Z, updated_at: 2026-08-08T01:02:03Z }
+ right: WorkerDeployment { name: "shells", artifact: Builtin { verb: ["worker", "shell"] }, binary: DeployedBinaryIdentity { version: "1.2.3", commit: "abc", dirty: "false", content_hash: "0123" }, last_spawn_binary: Some(DeployedBinaryIdentity { version: "0.9.0", commit: "old", dirty: "true", content_hash: "feed" }), namespaces: {"orders"}, task_queue: "shell", node: Some("node-a"), desired: Stopped, status_history: [StatusEntry { at: 2026-08-08T01:02:03Z, status: "created", detail: None }, StatusEntry { at: 2026-08-08T01:02:03Z, status: "desired-state-changed", detail: Some("stopped") }], created_at: 2026-08-08T01:02:03Z, updated_at: 2026-08-08T01:02:03Z }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    worker_deployment::tests::codec_round_trips_every_field_and_spawn_slot
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 68 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p aion-store --lib`

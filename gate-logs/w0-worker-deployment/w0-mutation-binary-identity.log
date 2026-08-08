@@ -1,0 +1,46 @@
+warning: unused import: `Sha256`
+  --> crates/aion-server/src/api/http/worker_deployments.rs:16:20
+   |
+16 | use sha2::{Digest, Sha256};
+   |                    ^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `Digest`
+  --> crates/aion-server/src/api/http/worker_deployments.rs:16:12
+   |
+16 | use sha2::{Digest, Sha256};
+   |            ^^^^^^
+
+warning: unused variable: `bytes`
+   --> crates/aion-server/src/api/http/worker_deployments.rs:195:9
+    |
+195 |     let bytes =
+    |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_bytes`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `aion-server` (lib test) generated 3 warnings (run `cargo fix --lib -p aion-server --tests` to apply 2 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.96s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a347e1aad4065bbb)
+
+running 1 test
+test api::http::worker_deployments::tests::capture_uses_build_identity_and_running_executable_sha256 ... FAILED
+
+failures:
+
+---- api::http::worker_deployments::tests::capture_uses_build_identity_and_running_executable_sha256 stdout ----
+
+thread 'api::http::worker_deployments::tests::capture_uses_build_identity_and_running_executable_sha256' (66587751) panicked at crates/aion-server/src/api/http/worker_deployments_tests.rs:37:5:
+assertion `left == right` failed
+  left: "unknown"
+ right: "cc1b90f88cdf5890ea1d1607e7a366a39e670819d9cde78178a950da5d5cf410"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    api::http::worker_deployments::tests::capture_uses_build_identity_and_running_executable_sha256
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 828 filtered out; finished in 2.80s
+
+error: test failed, to rerun pass `-p aion-server --lib`

@@ -784,6 +784,7 @@ mod tests {
             node: String::new(),
             activities: Vec::new(),
             identity: String::new(),
+            instance: None,
         };
 
         assert!(
@@ -1056,6 +1057,7 @@ mod tests {
             node: String::new(),
             activities: Vec::new(),
             identity: String::new(),
+            instance: None,
         };
 
         let scoped = guard

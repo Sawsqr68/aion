@@ -5,7 +5,7 @@ use std::{path::PathBuf, sync::Arc};
 use aion::{
     ActivityDispatcher, EngineBuilder, RuntimeHandle, SignalRouter, signal::ConcreteSignalRouter,
 };
-use aion_store::{EventStore, NamespaceStore, OutboxStore};
+use aion_store::{EventStore, NamespaceStore, OutboxStore, WorkerDeploymentStore};
 #[cfg(feature = "libsql-backend")]
 use aion_store_libsql::LibSqlStore;
 
@@ -58,6 +58,8 @@ struct ServerStateInner {
     /// (Phase 1 S5) and `GET /namespaces` (S7) can reach a real store on every
     /// boot. Mirrors the `cluster_store` retention pattern.
     namespace_store: Arc<dyn NamespaceStore>,
+    /// Durable worker-deployment records captured from the same leaf backend.
+    worker_deployment_store: Arc<dyn WorkerDeploymentStore>,
     /// Advisory outbox wake (LSUB-2): the in-process `Notify` shared by the
     /// engine's stage seam (the `InstrumentedEventStore`'s `append_with_outbox`)
     /// and the [`OutboxDispatcher`](crate::worker::OutboxDispatcher) run loop, so
@@ -171,15 +173,16 @@ impl ServerState {
     /// Returns [`ServerError::EngineCall`] if the engine cannot be constructed.
     pub async fn build_with_store<S>(store: S, runtime: RuntimeConfig) -> Result<Self, ServerError>
     where
-        S: EventStore + NamespaceStore,
+        S: EventStore + NamespaceStore + WorkerDeploymentStore,
     {
         // Capture the concrete leaf as BOTH the event store and the namespace
         // registry before it is wrapped in the (NamespaceStore-unaware) decorator
         // chain — the same leaf, two trait objects.
         let leaf = Arc::new(store);
         let namespace_store: Arc<dyn NamespaceStore> = leaf.clone();
+        let worker_deployment_store: Arc<dyn WorkerDeploymentStore> = leaf.clone();
         Self::build_with_connected_store(
-            ConnectedStore::local(leaf, None, namespace_store),
+            ConnectedStore::local(leaf, None, namespace_store, worker_deployment_store),
             runtime,
         )
         .await
@@ -189,6 +192,7 @@ impl ServerState {
         connected: ConnectedStore,
         runtime: RuntimeConfig,
     ) -> Result<Self, ServerError> {
+        let cluster_self_node = connected.cluster_self_node();
         let outbox_store = connected.outbox_store;
         let bootstrap_coordinator = connected.bootstrap_coordinator;
         #[cfg(feature = "haematite-backend")]
@@ -197,12 +201,6 @@ impl ServerState {
         let cluster_store = connected.cluster_store;
         #[cfg(feature = "haematite-backend")]
         let watched_peers = connected.watched_peers;
-        // Capture this node's self-identity for the WS3 cluster snapshot before
-        // `self_node_id` is moved into the routing-state builder below.
-        #[cfg(feature = "haematite-backend")]
-        let cluster_self_node = connected.self_node_id.clone();
-        #[cfg(not(feature = "haematite-backend"))]
-        let cluster_self_node: Option<String> = None;
         // Build the R-2 directory + R-3 forwarder over the (live, failover-aware)
         // cluster store and static peer config. Both present only for a
         // distributed boot; `None` otherwise leaves the routing edge a no-op.
@@ -240,6 +238,7 @@ impl ServerState {
             &runtime,
             &cluster_publisher,
             &connected.namespace_store,
+            &connected.worker_deployment_store,
             mint_routing,
         );
         // #139: THE one resolution of the declared-body workspace root. The
@@ -268,15 +267,16 @@ impl ServerState {
             inner: Arc::new(ServerStateInner {
                 namespace_guard: NamespaceGuard::new(resolver),
                 runtime,
+                metrics: exported_metrics,
                 worker_registry: seams.worker_registry,
                 pending_activities: seams.pending_activities,
                 heartbeat_tracker: seams.heartbeat_tracker,
                 drain_state: seams.drain_state,
-                metrics: exported_metrics,
                 health: Some(HealthState::new(instrumented_store, true)),
                 activity_mock_registry,
                 outbox_store,
                 namespace_store: connected.namespace_store,
+                worker_deployment_store: connected.worker_deployment_store,
                 outbox_wake,
                 cluster_publisher,
                 transcript_publisher,
@@ -315,18 +315,41 @@ impl ServerState {
         )
     }
 
-    /// Build shared state from explicit parts with a caller-supplied durable
-    /// namespace registry.
+    /// Build shared state from explicit parts with one caller-supplied durable
+    /// namespace and worker-deployment leaf.
     ///
-    /// Identical to [`Self::from_parts`] except the namespace registry is the
-    /// supplied store rather than a fresh in-memory one, so a caller can seed the
-    /// durable set the control-plane read/create paths (`GET`/`POST
-    /// /namespaces`) observe.
+    /// Identical to [`Self::from_parts`] except both control-plane dimensions are
+    /// derived from `store`: namespace registry reads/writes and durable worker
+    /// deployments use the same supplied leaf rather than fresh in-memory state.
     #[must_use]
-    pub fn from_parts_with_namespace_store(
+    pub fn from_parts_with_namespace_store<S>(
+        namespace_resolver: NamespaceResolver,
+        runtime: RuntimeConfig,
+        store: Arc<S>,
+    ) -> Self
+    where
+        S: NamespaceStore + WorkerDeploymentStore,
+    {
+        let namespace_store: Arc<dyn NamespaceStore> = store.clone();
+        let worker_deployment_store: Arc<dyn WorkerDeploymentStore> = store;
+        Self::from_parts_with_control_stores(
+            namespace_resolver,
+            runtime,
+            namespace_store,
+            worker_deployment_store,
+        )
+    }
+
+    /// Build shared state with caller-supplied namespace and worker-deployment stores.
+    ///
+    /// This is the explicit embedder/test seam for retaining both control-plane
+    /// contracts from one durable leaf without constructing the full engine boot.
+    #[must_use]
+    pub fn from_parts_with_control_stores(
         namespace_resolver: NamespaceResolver,
         runtime: RuntimeConfig,
         namespace_store: Arc<dyn NamespaceStore>,
+        worker_deployment_store: Arc<dyn WorkerDeploymentStore>,
     ) -> Self {
         let heartbeat_tracker = HeartbeatTracker::new(runtime.worker.heartbeat_window);
         // Bound here, beside the tracker, for the same reason: `runtime` moves
@@ -341,11 +364,16 @@ impl ServerState {
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
         let bounds = transcript_bounds(&runtime);
+        let cluster_publisher = crate::cluster_publisher::ClusterEventPublisher::new(
+            Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
+        );
         Self {
             inner: Arc::new(ServerStateInner {
                 namespace_guard: NamespaceGuard::new(namespace_resolver),
                 runtime,
-                worker_registry: ConnectedWorkerRegistry::default(),
+                worker_registry: ConnectedWorkerRegistry::default()
+                    .with_worker_deployment_store(worker_deployment_store.clone())
+                    .with_cluster_publisher(cluster_publisher.clone()),
                 pending_activities,
                 heartbeat_tracker,
                 drain_state: DrainState::default(),
@@ -354,10 +382,9 @@ impl ServerState {
                 activity_mock_registry: None,
                 outbox_store: None,
                 namespace_store,
+                worker_deployment_store,
                 outbox_wake: Arc::new(tokio::sync::Notify::new()),
-                cluster_publisher: crate::cluster_publisher::ClusterEventPublisher::new(
-                    Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
-                ),
+                cluster_publisher,
                 // NOI-5b: a from-parts / embedder state has no durable store, so
                 // the transcript sequencer runs over an in-memory `O`-keyspace
                 // impl — the transcript channel is served on every boot.
@@ -390,8 +417,8 @@ impl ServerState {
         }
     }
 
-    /// Build shared state from explicit parts with BOTH a caller-supplied
-    /// durable namespace registry AND a caller-supplied JWKS cache.
+    /// Build shared state from explicit parts with one caller-supplied durable
+    /// namespace/worker-deployment leaf and a caller-supplied JWKS cache.
     ///
     /// The combined seam of [`Self::from_parts_with_namespace_store`] (seed the
     /// durable registry the control-plane read/create paths observe) and
@@ -400,12 +427,17 @@ impl ServerState {
     /// against a seeded registry without a full [`Self::build`] boot.
     #[cfg(feature = "auth")]
     #[must_use]
-    pub fn from_parts_with_namespace_store_and_jwks(
+    pub fn from_parts_with_namespace_store_and_jwks<S>(
         namespace_resolver: NamespaceResolver,
         runtime: RuntimeConfig,
-        namespace_store: Arc<dyn NamespaceStore>,
+        store: Arc<S>,
         jwks_cache: JwksCache,
-    ) -> Self {
+    ) -> Self
+    where
+        S: NamespaceStore + WorkerDeploymentStore,
+    {
+        let namespace_store: Arc<dyn NamespaceStore> = store.clone();
+        let worker_deployment_store: Arc<dyn WorkerDeploymentStore> = store;
         let heartbeat_tracker = HeartbeatTracker::new(runtime.worker.heartbeat_window);
         // Bound here, beside the tracker, for the same reason: `runtime` moves
         // into the state below, and the transport-loss budget must be read from
@@ -419,11 +451,16 @@ impl ServerState {
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
         let bounds = transcript_bounds(&runtime);
+        let cluster_publisher = crate::cluster_publisher::ClusterEventPublisher::new(
+            Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
+        );
         Self {
             inner: Arc::new(ServerStateInner {
                 namespace_guard: NamespaceGuard::new(namespace_resolver),
                 runtime,
-                worker_registry: ConnectedWorkerRegistry::default(),
+                worker_registry: ConnectedWorkerRegistry::default()
+                    .with_worker_deployment_store(worker_deployment_store.clone())
+                    .with_cluster_publisher(cluster_publisher.clone()),
                 pending_activities,
                 heartbeat_tracker,
                 drain_state: DrainState::default(),
@@ -432,10 +469,9 @@ impl ServerState {
                 activity_mock_registry: None,
                 outbox_store: None,
                 namespace_store,
+                worker_deployment_store,
                 outbox_wake: Arc::new(tokio::sync::Notify::new()),
-                cluster_publisher: crate::cluster_publisher::ClusterEventPublisher::new(
-                    Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
-                ),
+                cluster_publisher,
                 // NOI-5b: a from-parts / embedder state has no durable store, so
                 // the transcript sequencer runs over an in-memory `O`-keyspace
                 // impl — the transcript channel is served on every boot.
@@ -509,6 +545,7 @@ impl ServerState {
                 // in-memory store — present so `namespace_store()` is always
                 // reachable, never mutating any durable backend.
                 namespace_store: Arc::new(aion_store::InMemoryStore::default()),
+                worker_deployment_store: Arc::new(aion_store::InMemoryStore::default()),
                 outbox_wake: Arc::new(tokio::sync::Notify::new()),
                 cluster_publisher: crate::cluster_publisher::ClusterEventPublisher::new(
                     Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
@@ -581,6 +618,7 @@ impl ServerState {
                 // in-memory store — present so `namespace_store()` is always
                 // reachable, never mutating any durable backend.
                 namespace_store: Arc::new(aion_store::InMemoryStore::default()),
+                worker_deployment_store: Arc::new(aion_store::InMemoryStore::default()),
                 outbox_wake: Arc::new(tokio::sync::Notify::new()),
                 cluster_publisher: crate::cluster_publisher::ClusterEventPublisher::new(
                     Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
@@ -857,6 +895,12 @@ impl ServerState {
     #[must_use]
     pub fn namespace_store(&self) -> &Arc<dyn NamespaceStore> {
         &self.inner.namespace_store
+    }
+
+    /// Borrow the durable worker-deployment store shared by the control plane.
+    #[must_use]
+    pub fn worker_deployment_store(&self) -> &Arc<dyn WorkerDeploymentStore> {
+        &self.inner.worker_deployment_store
     }
 
     /// Build the shared minted-on-use hook over the durable namespace store and
@@ -1260,11 +1304,13 @@ fn build_worker_seams(
     runtime: &RuntimeConfig,
     cluster_publisher: &crate::cluster_publisher::ClusterEventPublisher,
     namespace_store: &Arc<dyn NamespaceStore>,
+    worker_deployment_store: &Arc<dyn WorkerDeploymentStore>,
     mint_routing: Option<crate::namespace::NamespaceRouting>,
 ) -> WorkerSeams {
     let worker_registry = ConnectedWorkerRegistry::default()
         .with_cluster_publisher(cluster_publisher.clone())
-        .with_namespace_minting(namespace_store.clone(), runtime.auto_create);
+        .with_namespace_minting(namespace_store.clone(), runtime.auto_create)
+        .with_worker_deployment_store(worker_deployment_store.clone());
     // The worker-registration mint is the OTHER `mint_or_gate` choke-point, so
     // it gets the same routing the start seams get: a worker registering for a
     // namespace whose registry shard this node does not own must not be refused
@@ -1577,6 +1623,8 @@ struct ConnectedStore {
     /// quorum-replicated implementation, libSQL and in-memory the local-only
     /// one.
     namespace_store: Arc<dyn NamespaceStore>,
+    /// Same concrete leaf captured as the deployment-store contract.
+    worker_deployment_store: Arc<dyn WorkerDeploymentStore>,
     /// NOI-5b: the SAME concrete leaf store captured as an
     /// [`ObservabilityStore`](aion_store::ObservabilityStore) when the backend
     /// implements the durable `O` keyspace (haematite). `None` for backends with
@@ -1620,11 +1668,13 @@ impl ConnectedStore {
         event_store: Arc<dyn EventStore>,
         outbox_store: Option<Arc<dyn OutboxStore>>,
         namespace_store: Arc<dyn NamespaceStore>,
+        worker_deployment_store: Arc<dyn WorkerDeploymentStore>,
     ) -> Self {
         Self {
             event_store,
             outbox_store,
             namespace_store,
+            worker_deployment_store,
             // A `local` connected store is the memory / libSQL / embedder path,
             // none of which implement the durable `O` keyspace: the transcript
             // sequencer falls back to an in-memory impl (NOI-5b).
@@ -1641,6 +1691,19 @@ impl ConnectedStore {
             #[cfg(feature = "haematite-backend")]
             self_node_id: None,
         }
+    }
+
+    /// Capture this node's self-identity for the cluster snapshot before the
+    /// distributed boot moves it into routing state.
+    #[cfg(feature = "haematite-backend")]
+    fn cluster_self_node(&self) -> Option<String> {
+        self.self_node_id.clone()
+    }
+
+    /// Non-distributed connected stores have no cluster self-identity.
+    #[cfg(not(feature = "haematite-backend"))]
+    const fn cluster_self_node(&self) -> Option<String> {
+        None
     }
 }
 
@@ -1660,7 +1723,13 @@ async fn connect_store(config: StoreConfig) -> Result<ConnectedStore, ServerErro
             // namespace registry (in-memory backends have no outbox table).
             let leaf = Arc::new(aion_store::InMemoryStore::default());
             let namespace_store: Arc<dyn NamespaceStore> = leaf.clone();
-            Ok(ConnectedStore::local(leaf, None, namespace_store))
+            let worker_deployment_store: Arc<dyn WorkerDeploymentStore> = leaf.clone();
+            Ok(ConnectedStore::local(
+                leaf,
+                None,
+                namespace_store,
+                worker_deployment_store,
+            ))
         }
         StoreBackend::LibSql => {
             #[cfg(feature = "libsql-backend")]
@@ -1714,11 +1783,13 @@ async fn connect_libsql_store(config: StoreConfig) -> Result<ConnectedStore, Ser
     let leaf = Arc::new(store);
     let event_store: Arc<dyn EventStore> = leaf.clone();
     let namespace_store: Arc<dyn NamespaceStore> = leaf.clone();
+    let worker_deployment_store: Arc<dyn WorkerDeploymentStore> = leaf.clone();
     let outbox_store: Arc<dyn OutboxStore> = leaf;
     Ok(ConnectedStore::local(
         event_store,
         Some(outbox_store),
         namespace_store,
+        worker_deployment_store,
     ))
 }
 
@@ -1825,6 +1896,7 @@ async fn connect_haematite_store(config: StoreConfig) -> Result<ConnectedStore, 
     // quorum-replicated implementation), captured before the leaf is moved into
     // the cluster-store retention below.
     let namespace_store: Arc<dyn NamespaceStore> = leaf.clone();
+    let worker_deployment_store: Arc<dyn WorkerDeploymentStore> = leaf.clone();
     // NOI-5b: the SAME concrete leaf captured as the durable `O`-keyspace
     // observability store, so the transcript sequencer persists to haematite and
     // survives restart/failover. Captured here (before the decorator chain wraps
@@ -1843,6 +1915,7 @@ async fn connect_haematite_store(config: StoreConfig) -> Result<ConnectedStore, 
         event_store,
         outbox_store: Some(outbox_store),
         namespace_store,
+        worker_deployment_store,
         observability_store: Some(observability_store),
         bootstrap_coordinator,
         cluster_responder: responder,

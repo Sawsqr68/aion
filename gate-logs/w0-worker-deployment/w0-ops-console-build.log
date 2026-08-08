@@ -1,0 +1,44 @@
+$ vite build
+vite v7.3.5 building client environment for production...
+(node:25481) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+transforming...
+[plugin vite:resolve] Module "fs/promises" has been externalized for browser compatibility, imported by "/Users/tom/Developer/ablative/stack/aion/node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin vite:resolve] Module "module" has been externalized for browser compatibility, imported by "/Users/tom/Developer/ablative/stack/aion/node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin vite:resolve] Module "fs/promises" has been externalized for browser compatibility, imported by "/Users/tom/Developer/ablative/stack/aion/node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin vite:resolve] Module "module" has been externalized for browser compatibility, imported by "/Users/tom/Developer/ablative/stack/aion/node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js (2343:30): Use of eval in "../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js (2366:32): Use of eval in "../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js (2343:30): Use of eval in "../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js (2366:32): Use of eval in "../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+✓ 2969 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/assets/__vite-browser-external-9wXp6ZBx.js                     0.03 kB
+dist/index.html                                                     0.64 kB │ gzip:   0.37 kB
+dist/assets/jetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2    7.50 kB
+dist/assets/jetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2         9.00 kB
+dist/assets/jetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2     12.11 kB
+dist/assets/jetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2    15.20 kB
+dist/assets/dm-sans-latin-ext-wght-normal-BOFOeGcA.woff2           18.23 kB
+dist/assets/awl-DfQ96jGA.wasm                                      34.44 kB │ gzip:   9.01 kB
+dist/assets/dm-sans-latin-wght-normal-Xz1IZZA0.woff2               36.93 kB
+dist/assets/jetbrains-mono-latin-wght-normal-B9CIFXIH.woff2        40.40 kB
+dist/assets/highlight.worker-BQzOZfgU.js                           75.72 kB
+dist/assets/web-tree-sitter-amZjDXNy.wasm                         200.45 kB │ gzip:  80.39 kB
+dist/assets/index-B5DZHykP.css                                      7.32 kB │ gzip:   1.60 kB
+dist/assets/index-Cefl6w1P.css                                     80.31 kB │ gzip:  18.54 kB
+dist/assets/rocket-xcHiyBe0.js                                      0.46 kB │ gzip:   0.31 kB
+dist/assets/startWorkflowDraft-O2gsQK22.js                          2.60 kB │ gzip:   1.10 kB
+dist/assets/index-COfzBZbZ.js                                       6.00 kB │ gzip:   2.31 kB
+dist/assets/index-DoI6FYDn.js                                       9.56 kB │ gzip:   3.53 kB
+dist/assets/index-BcSIbP74.js                                      10.33 kB │ gzip:   3.27 kB
+dist/assets/index-CXQ7gOEU.js                                      27.32 kB │ gzip:   8.55 kB
+dist/assets/index-CGgafsAm.js                                     552.27 kB │ gzip: 178.33 kB
+dist/assets/index-DDP1uoVI.js                                     875.88 kB │ gzip: 273.32 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 3.63s

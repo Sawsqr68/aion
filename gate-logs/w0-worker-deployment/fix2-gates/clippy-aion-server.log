@@ -1,0 +1,6 @@
+    Checking aion-store v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+    Checking aion-rs v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Checking aion-store-haematite v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+    Checking aion-store-libsql v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-libsql)
+    Checking aion-server v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 15s

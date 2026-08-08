@@ -1,7 +1,7 @@
 //! tonic `WorkerProtocol` service — bidirectional stream handler.
 
 use aion_proto::{
-    ProtoActivityDescriptor, ProtoActivityResult, ProtoRegisterWorker,
+    ProtoActivityDescriptor, ProtoActivityResult, ProtoRegisterWorker, ProtoWorkerInstanceIdentity,
     generated::{
         self,
         worker_protocol_server::{WorkerProtocol, WorkerProtocolServer},
@@ -592,6 +592,10 @@ fn decode_register(r: generated::RegisterWorker) -> ProtoRegisterWorker {
             })
             .collect(),
         identity: r.identity,
+        instance: r.instance.map(|instance| ProtoWorkerInstanceIdentity {
+            deployment: instance.deployment,
+            instance_id: instance.instance_id,
+        }),
     }
 }
 
@@ -768,9 +772,41 @@ mod tests {
     use crate::worker::registry::ConnectedWorkerRegistry;
     use crate::worker::{HeartbeatTracker, PendingActivities};
 
-    use super::teardown_worker_stream;
+    use super::{decode_register, teardown_worker_stream};
 
     type TestError = Box<dyn std::error::Error>;
+
+    #[test]
+    fn decode_register_maps_tag_seven_instance_without_changing_absent_registration() {
+        let generated = super::generated::RegisterWorker {
+            namespaces: vec!["orders".to_owned()],
+            activity_types: vec!["shell".to_owned()],
+            task_queue: "shell".to_owned(),
+            node: "node-a".to_owned(),
+            activities: Vec::new(),
+            identity: "build-a".to_owned(),
+            instance: Some(super::generated::WorkerInstanceIdentity {
+                deployment: "shells".to_owned(),
+                instance_id: "instance-1".to_owned(),
+            }),
+        };
+        let mapped = decode_register(generated.clone());
+        let instance = mapped.instance.as_ref();
+        assert_eq!(
+            instance.map(|value| value.deployment.as_str()),
+            Some("shells")
+        );
+        assert_eq!(
+            instance.map(|value| value.instance_id.as_str()),
+            Some("instance-1")
+        );
+
+        let mut absent = generated;
+        absent.instance = None;
+        let mapped_absent = decode_register(absent);
+        assert!(mapped_absent.instance.is_none());
+        assert_eq!(mapped_absent.identity, "build-a");
+    }
 
     /// One tracked in-flight dispatch with a live pending waiter, ready for a
     /// stream teardown: the registered worker, the shared tracker/pending/drain

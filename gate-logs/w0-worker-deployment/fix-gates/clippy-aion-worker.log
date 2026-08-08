@@ -1,0 +1,7 @@
+   Compiling aion-proto-generated v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+    Checking aion-core v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+    Checking aion-package v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+    Checking aion-integrations v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+    Checking aion-proto v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+    Checking aion-worker v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 11.68s

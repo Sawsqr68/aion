@@ -295,6 +295,7 @@ impl WorkerSession {
                             })
                             .collect(),
                         identity: "outbox-test-worker".to_owned(),
+                        instance: None,
                     },
                 )),
             })

@@ -1,0 +1,4 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Checking aion-server v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 13.82s

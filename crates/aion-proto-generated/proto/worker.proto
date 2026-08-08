@@ -100,6 +100,14 @@ message ActivityDescriptor {
   string output_schema_json = 3;
 }
 
+// Stable identity of one worker process within an operator deployment.
+message WorkerInstanceIdentity {
+  // Durable worker-deployment record name.
+  string deployment = 1;
+  // Operator/launcher-assigned instance identifier.
+  string instance_id = 2;
+}
+
 message RegisterWorker {
   // Set of correctness/isolation boundaries this worker is authorized for. The
   // server indexes the worker under each, matching a workflow's activities only
@@ -120,6 +128,8 @@ message RegisterWorker {
   repeated ActivityDescriptor activities = 5;
   // Stable worker-build identity used to correlate compatibility decisions.
   string identity = 6;
+  // Deployment association for this worker instance. Distinct from build identity.
+  optional WorkerInstanceIdentity instance = 7;
 }
 
 // Activity invocation pushed by the server to a registered worker.

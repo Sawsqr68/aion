@@ -3,10 +3,12 @@
 use std::{path::PathBuf, sync::Arc};
 
 use aion_store::{
-    ClaimScope, Event, MintOutcome, NamespaceOrigin, NamespacePlacement, NamespaceRecord,
-    NamespaceStore, OutboxRow, OutboxStore, PackageRecord, PackageRouteRecord, PackageStore,
-    ReadableEventStore, RedriveMode, RedriveOutcome, RunSummary, StoreError, TimerEntry, TimerId,
-    WorkflowFilter, WorkflowId, WorkflowSummary, WritableEventStore, WriteToken,
+    ClaimScope, DesiredState, Event, MintOutcome, NamespaceOrigin, NamespacePlacement,
+    NamespaceRecord, NamespaceStore, OutboxRow, OutboxStore, PackageRecord, PackageRouteRecord,
+    PackageStore, ReadableEventStore, RedriveMode, RedriveOutcome, RunSummary, StoreError,
+    TimerEntry, TimerId, WorkerDeployment, WorkerDeploymentDeleteOutcome, WorkerDeploymentListing,
+    WorkerDeploymentPutResult, WorkerDeploymentStore, WorkflowFilter, WorkflowId, WorkflowSummary,
+    WritableEventStore, WriteToken,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -194,6 +196,23 @@ impl LibSqlStore {
     ) -> Result<Option<OutboxRowState>, StoreError> {
         crate::outbox::outbox_row_state(self.reader().await?.read(), dispatch_key).await
     }
+
+    /// Write worker-deployment backend bytes directly for persistence
+    /// conformance testing.
+    ///
+    /// This bypasses the entity codec so the shared suite can create a poisoned
+    /// row and verify listing, replacement, and deletion behavior.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] for libSQL write failures.
+    pub async fn write_raw_worker_deployment(
+        &self,
+        name: &str,
+        bytes: Vec<u8>,
+    ) -> Result<(), StoreError> {
+        crate::worker_deployment::write_raw(&*self.writer().await, name, bytes).await
+    }
 }
 
 #[async_trait]
@@ -268,6 +287,42 @@ impl NamespaceStore for LibSqlStore {
 
     async fn deprecate_namespace(&self, name: &str) -> Result<(), StoreError> {
         crate::namespace::deprecate_namespace(&*self.writer().await, name).await
+    }
+}
+
+#[async_trait]
+impl WorkerDeploymentStore for LibSqlStore {
+    async fn put_worker_deployment(
+        &self,
+        record: WorkerDeployment,
+    ) -> Result<WorkerDeploymentPutResult, StoreError> {
+        crate::worker_deployment::put(&*self.writer().await, record).await
+    }
+
+    async fn get_worker_deployment(
+        &self,
+        name: &str,
+    ) -> Result<Option<WorkerDeployment>, StoreError> {
+        crate::worker_deployment::get(self.reader().await?.read(), name).await
+    }
+
+    async fn list_worker_deployments(&self) -> Result<WorkerDeploymentListing, StoreError> {
+        crate::worker_deployment::list(self.reader().await?.read()).await
+    }
+
+    async fn set_desired_state(
+        &self,
+        name: &str,
+        desired: DesiredState,
+    ) -> Result<Option<WorkerDeployment>, StoreError> {
+        crate::worker_deployment::set_desired_state(&*self.writer().await, name, desired).await
+    }
+
+    async fn delete_worker_deployment(
+        &self,
+        name: &str,
+    ) -> Result<WorkerDeploymentDeleteOutcome, StoreError> {
+        crate::worker_deployment::delete(&*self.writer().await, name).await
     }
 }
 

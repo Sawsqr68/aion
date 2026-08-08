@@ -52,6 +52,17 @@ pub struct ProtoActivityDescriptor {
     pub output_schema_json: String,
 }
 
+/// Stable identity of one worker instance within an operator deployment.
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, prost::Message)]
+pub struct ProtoWorkerInstanceIdentity {
+    /// Deployment record name.
+    #[prost(string, tag = "1")]
+    pub deployment: String,
+    /// Operator/launcher-assigned instance identifier.
+    #[prost(string, tag = "2")]
+    pub instance_id: String,
+}
+
 /// Worker registration advertisement.
 ///
 /// A registration scopes the worker to a SET of `namespaces` correctness
@@ -87,6 +98,9 @@ pub struct ProtoRegisterWorker {
     /// Stable worker-build identity.
     #[prost(string, tag = "6")]
     pub identity: String,
+    /// Optional deployment/instance association, distinct from build identity.
+    #[prost(message, optional, tag = "7")]
+    pub instance: Option<ProtoWorkerInstanceIdentity>,
 }
 
 /// Activity invocation pushed to a worker.
@@ -324,6 +338,10 @@ mod tests {
             node: String::from("host-7"),
             activities: Vec::new(),
             identity: String::new(),
+            instance: Some(super::ProtoWorkerInstanceIdentity {
+                deployment: String::from("shells"),
+                instance_id: String::from("instance-7"),
+            }),
         };
 
         assert_json_and_proto_round_trip(&registration)
@@ -341,6 +359,7 @@ mod tests {
             node: String::new(),
             activities: Vec::new(),
             identity: String::new(),
+            instance: None,
         };
         let decoded =
             ProtoRegisterWorker::decode(prost_round_trip_bytes(&registration)?.as_slice())?;
@@ -363,6 +382,7 @@ mod tests {
             node: String::from("n1"),
             activities: Vec::new(),
             identity: String::new(),
+            instance: None,
         };
         let mut bytes = Vec::new();
         registration.encode(&mut bytes)?;
@@ -379,12 +399,46 @@ mod tests {
             node: String::new(),
             activities: Vec::new(),
             identity: String::new(),
+            instance: None,
         };
         let mut bytes = Vec::new();
         no_node.encode(&mut bytes)?;
         let decoded = ProtoRegisterWorker::decode(bytes.as_slice())?;
         assert_eq!(decoded.task_queue, "");
         assert_eq!(decoded.node, "");
+        Ok(())
+    }
+
+    #[test]
+    fn worker_instance_identity_uses_wire_tag_seven() -> Result<(), Box<dyn std::error::Error>> {
+        let registration = ProtoRegisterWorker {
+            namespaces: Vec::new(),
+            activity_types: Vec::new(),
+            task_queue: String::new(),
+            node: String::new(),
+            activities: Vec::new(),
+            identity: String::new(),
+            instance: Some(super::ProtoWorkerInstanceIdentity {
+                deployment: "d".to_owned(),
+                instance_id: "i".to_owned(),
+            }),
+        };
+        let mut bytes = Vec::new();
+        registration.encode(&mut bytes)?;
+        assert_eq!(bytes, vec![0x3a, 0x06, 0x0a, 0x01, b'd', 0x12, 0x01, b'i']);
+
+        let absent = ProtoRegisterWorker {
+            namespaces: Vec::new(),
+            activity_types: Vec::new(),
+            task_queue: String::new(),
+            node: String::new(),
+            activities: Vec::new(),
+            identity: String::new(),
+            instance: None,
+        };
+        let mut absent_bytes = Vec::new();
+        absent.encode(&mut absent_bytes)?;
+        assert!(absent_bytes.is_empty());
         Ok(())
     }
 

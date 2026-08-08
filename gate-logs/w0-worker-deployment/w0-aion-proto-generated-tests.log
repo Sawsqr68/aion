@@ -1,0 +1,29 @@
+   Compiling futures-task v0.3.32
+   Compiling pulldown-cmark v0.13.4
+   Compiling futures-channel v0.3.32
+   Compiling petgraph v0.8.3
+   Compiling futures-util v0.3.32
+   Compiling hyper v1.10.1
+   Compiling pulldown-cmark-to-cmark v22.0.0
+   Compiling prost-build v0.14.3
+   Compiling hyper-util v0.1.20
+   Compiling tower v0.5.3
+   Compiling tonic-prost-build v0.14.5
+   Compiling aion-proto-generated v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+   Compiling axum v0.8.9
+   Compiling hyper-timeout v0.5.2
+   Compiling tonic v0.14.6
+   Compiling tonic-prost v0.14.5
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 15.60s
+     Running unittests src/lib.rs (target/debug/deps/aion_proto_generated-1caf9af5f5a1fbe8)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests aion_proto_generated
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

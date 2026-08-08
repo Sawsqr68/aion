@@ -1,0 +1,261 @@
+   Compiling aion-server v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 52.82s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a08d0341e03de0ba)
+
+running 1 test
+test api::http::worker_deployments::tests::poisoned_row_does_not_break_cluster_snapshot ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 832 filtered out; finished in 0.01s
+
+     Running tests/authoring_e2e.rs (target/debug/deps/authoring_e2e-673eddb68dd51d77)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/authoring_out_of_box_e2e.rs (target/debug/deps/authoring_out_of_box_e2e-25fb4b184d876214)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/awl_deploy_direct_e2e.rs (target/debug/deps/awl_deploy_direct_e2e-15e1735f71dd5436)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests/bridge_liminal_dispatch_e2e.rs (target/debug/deps/bridge_liminal_dispatch_e2e-44e493a9eb915f32)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/dead_man_switch_e2e.rs (target/debug/deps/dead_man_switch_e2e-4f2d26c0298a092f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/dead_man_switch_refusal_logs.rs (target/debug/deps/dead_man_switch_refusal_logs-9dbe732a1cea480b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/deploy_api_e2e.rs (target/debug/deps/deploy_api_e2e-685f4ca3849f732c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.00s
+
+     Running tests/deploy_audit_log.rs (target/debug/deps/deploy_audit_log-98a2d3b94d5f52c0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/deploy_restart_e2e.rs (target/debug/deps/deploy_restart_e2e-8d53af393c6ca4ee)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/dev_ui_e2e.rs (target/debug/deps/dev_ui_e2e-647da8280dbd6b9a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/graceful_shutdown_park_e2e.rs (target/debug/deps/graceful_shutdown_park_e2e-a93c2564df81f0c5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/grpc_admission_refusal_logs.rs (target/debug/deps/grpc_admission_refusal_logs-86ce0ea81f8b9608)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/haematite_backend.rs (target/debug/deps/haematite_backend-35519756226f63fc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/heartbeat_sweeper_e2e.rs (target/debug/deps/heartbeat_sweeper_e2e-f236125becc43026)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/lsub1_xnode_dispatch_e2e.rs (target/debug/deps/lsub1_xnode_dispatch_e2e-325d97e205b848a7)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/lsub3_failover_e2e.rs (target/debug/deps/lsub3_failover_e2e-33f7d3d975ae59a7)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/lsub5_xnode_failover_e2e.rs (target/debug/deps/lsub5_xnode_failover_e2e-6fe25c476f5bdd34)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/namespace_mint_forward_e2e.rs (target/debug/deps/namespace_mint_forward_e2e-74ba0e9e827b958b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/namespace_mint_routing_e2e.rs (target/debug/deps/namespace_mint_routing_e2e-749d094e8197e878)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-8db9aff1c9967587)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/noi5b_noi6_live_agent_e2e.rs (target/debug/deps/noi5b_noi6_live_agent_e2e-1f9f20791c86fa49)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/noi6_intervention_routing_e2e.rs (target/debug/deps/noi6_intervention_routing_e2e-2b1ea8888e4ad3b2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/ops_console_packaging.rs (target/debug/deps/ops_console_packaging-17f6261bf55fffd8)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/outbox_delivery_contract_e2e.rs (target/debug/deps/outbox_delivery_contract_e2e-5c74f7c988dca23b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/outbox_transport_e2e.rs (target/debug/deps/outbox_transport_e2e-66e9e5317f017293)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/query_workflow.rs (target/debug/deps/query_workflow-57ff004e3aaf22fe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/routing_forward_e2e.rs (target/debug/deps/routing_forward_e2e-9f5b1a581de3e5d6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/routing_nstq_node_compose_e2e.rs (target/debug/deps/routing_nstq_node_compose_e2e-d23ab258e26280a6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/run_server_outbox_e2e.rs (target/debug/deps/run_server_outbox_e2e-bb523d297f2d0c1e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/shutdown_process_exit_e2e.rs (target/debug/deps/shutdown_process_exit_e2e-ae05665e15498c2e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/ss3_directory_failover_e2e.rs (target/debug/deps/ss3_directory_failover_e2e-eecc8308e76c2f07)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/ss5b_auto_failover.rs (target/debug/deps/ss5b_auto_failover-c8cf16f108980e66)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/transcript_retention_e2e.rs (target/debug/deps/transcript_retention_e2e-70e3db73f0c39994)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/transcript_stream_e2e.rs (target/debug/deps/transcript_stream_e2e-dd63cf3041b93562)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/unserved_queue_honesty.rs (target/debug/deps/unserved_queue_honesty-7f34471aa9b0798f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/unserved_queue_policies.rs (target/debug/deps/unserved_queue_policies-57ab86392626bf7a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests/websocket_resume.rs (target/debug/deps/websocket_resume-eb656f9c026cab60)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/worker_contract_registration.rs (target/debug/deps/worker_contract_registration-5449523f480bd821)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/worker_deployment_spawn_fence.rs (target/debug/deps/worker_deployment_spawn_fence-3e8686fc772c24a5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/worker_dispatch_delivery.rs (target/debug/deps/worker_dispatch_delivery-1e36eaaec58ecb2b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests/worker_lifecycle_admin.rs (target/debug/deps/worker_lifecycle_admin-b5b005b63352566d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/worker_sdk_e2e.rs (target/debug/deps/worker_sdk_e2e-ae0bf72c4e094992)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+

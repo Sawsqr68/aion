@@ -98,6 +98,49 @@ pub enum WorkerDeathReason {
     Deregistered,
 }
 
+/// Operator-requested lifecycle state for a durable worker deployment.
+#[derive(Serialize, Deserialize, ts_rs::TS, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum DesiredState {
+    /// The deployment should run.
+    Running,
+    /// The deployment should remain stopped.
+    Stopped,
+}
+
+impl DesiredState {
+    /// Stable human-readable state token.
+    #[must_use]
+    pub const fn token(self) -> &'static str {
+        match self {
+            Self::Running => "running",
+            Self::Stopped => "stopped",
+        }
+    }
+}
+
+/// Create-or-replace result exposed on the cluster and HTTP wires.
+#[derive(Serialize, Deserialize, ts_rs::TS, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum PutOutcome {
+    /// No record previously existed for the key.
+    Created,
+    /// A record already existed for the key and was replaced.
+    Replaced,
+}
+
+/// Deployment-record lookup state captured when a worker registers.
+#[derive(Serialize, Deserialize, ts_rs::TS, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum DeploymentAssociation {
+    /// The named deployment record existed.
+    Known,
+    /// The deployment store was checked and the named record was absent.
+    Absent,
+    /// No deployment store was attached, so existence was not checked.
+    Unchecked,
+}
+
 /// A cluster/topology/ownership delta pushed over the ops console real-time channel.
 ///
 /// Tagged union on `type` to match the existing [`crate::Event`] wire shape. Every variant carries
@@ -203,6 +246,11 @@ pub enum ClusterEvent {
         transport: WorkerTransport,
         /// Locality/node label, when the worker reported one.
         node: Option<String>,
+        /// Deployment named by the worker's instance identity, when supplied.
+        deployment: Option<String>,
+        /// Lookup state for the named deployment. `None` means the worker
+        /// supplied no instance identity.
+        deployment_association: Option<DeploymentAssociation>,
     },
     /// A worker left the connected set.
     WorkerDisconnected {
@@ -312,6 +360,37 @@ pub enum ClusterEvent {
         /// `max_in_flight_activities` override, or the platform default when unset.
         ceiling: u32,
     },
+    /// A worker deployment was durably created or replaced by an operator.
+    WorkerDeploymentPut {
+        /// Cluster-event metadata.
+        meta: ClusterEventMeta,
+        /// Durable deployment name.
+        name: String,
+        /// Typed create-or-replace outcome.
+        outcome: PutOutcome,
+        /// Typed desired state.
+        desired_state: DesiredState,
+        /// Version captured from the deployed server binary.
+        binary_version: String,
+        /// SHA-256 captured from the deployed server executable bytes.
+        binary_content_hash: String,
+    },
+    /// An operator durably changed a deployment's desired state.
+    WorkerDeploymentDesiredStateChanged {
+        /// Cluster-event metadata.
+        meta: ClusterEventMeta,
+        /// Durable deployment name.
+        name: String,
+        /// Typed desired state.
+        desired_state: DesiredState,
+    },
+    /// An operator durably deleted a deployment record.
+    WorkerDeploymentDeleted {
+        /// Cluster-event metadata.
+        meta: ClusterEventMeta,
+        /// Deleted deployment name.
+        name: String,
+    },
 }
 
 /// Stable wire projection of a namespace's durable placement directive
@@ -373,6 +452,24 @@ pub struct ClusterWorker {
     pub transport: WorkerTransport,
     /// Locality/node label, when reported.
     pub node: Option<String>,
+    /// Deployment named by the worker's instance identity, when supplied.
+    pub deployment: Option<String>,
+    /// Lookup state for that deployment. `None` for workers without instance
+    /// identity.
+    pub deployment_association: Option<DeploymentAssociation>,
+}
+
+/// A durable worker-deployment entry in the priming cluster snapshot.
+#[derive(Serialize, Deserialize, ts_rs::TS, Clone, Debug, PartialEq, Eq)]
+pub struct ClusterDeployment {
+    /// Durable deployment name.
+    pub name: String,
+    /// Typed desired state.
+    pub desired_state: DesiredState,
+    /// Version captured at deploy time.
+    pub binary_version: String,
+    /// SHA-256 captured at deploy time.
+    pub binary_content_hash: String,
 }
 
 /// A calm-state baseline of the whole cluster, sent as the priming reply before the live delta
@@ -395,6 +492,8 @@ pub struct ClusterSnapshot {
     pub shards: Vec<ClusterShard>,
     /// Connected workers, already gated to the caller's namespaces.
     pub workers: Vec<ClusterWorker>,
+    /// Durable worker deployments visible under the deploy grant.
+    pub deployments: Vec<ClusterDeployment>,
 }
 
 /// A command the ops console can issue against the cluster channel (ADR-020 command seam).

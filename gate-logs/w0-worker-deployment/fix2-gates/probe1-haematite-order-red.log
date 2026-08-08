@@ -1,0 +1,25 @@
+   Compiling aion-store v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+   Compiling aion-store-haematite v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 18.14s
+     Running unittests src/lib.rs (target/debug/deps/aion_store_haematite-26c75442fb949521)
+
+running 1 test
+test store::tests::multishard_worker_deployment_listing_sorts_decodable_and_poisoned_names ... FAILED
+
+failures:
+
+---- store::tests::multishard_worker_deployment_listing_sorts_decodable_and_poisoned_names stdout ----
+
+thread 'store::tests::multishard_worker_deployment_listing_sorts_decodable_and_poisoned_names' (70622500) panicked at crates/aion-store-haematite/src/store.rs:3589:9:
+assertion `left == right` failed
+  left: ["decoded-00003", "decoded-00002"]
+ right: ["decoded-00002", "decoded-00003"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    store::tests::multishard_worker_deployment_listing_sorts_decodable_and_poisoned_names
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 50 filtered out; finished in 0.22s
+
+error: test failed, to rerun pass `-p aion-store-haematite --lib`

@@ -146,6 +146,20 @@ pub(crate) fn namespace_from_key(key: &[u8]) -> Option<String> {
     String::from_utf8(suffix.to_vec()).ok()
 }
 
+/// Prefix for durable worker-deployment records.
+pub(crate) const WORKER_DEPLOYMENT_PREFIX: &[u8] = b"w:";
+
+/// Worker-deployment key for an operator-chosen deployment name.
+pub(crate) fn worker_deployment_key(name: &str) -> Vec<u8> {
+    composite(WORKER_DEPLOYMENT_PREFIX, &[name.as_bytes()])
+}
+
+/// Decode a worker-deployment key back into its operator-chosen name.
+pub(crate) fn worker_deployment_from_key(key: &[u8]) -> Option<String> {
+    let suffix = key.strip_prefix(WORKER_DEPLOYMENT_PREFIX)?;
+    String::from_utf8(suffix.to_vec()).ok()
+}
+
 /// Prefix for the shard-owner directory region (SS-3).
 ///
 /// A directory record names the node that currently OWNS (or has adopted) a
@@ -326,6 +340,7 @@ mod tests {
         assert_ne!(&key[..2], PACKAGE_PREFIX);
         assert_ne!(&key[..2], ROUTE_PREFIX);
         assert_ne!(&key[..2], OUTBOX_PREFIX);
+        assert_ne!(&key[..2], WORKER_DEPLOYMENT_PREFIX);
         assert_ne!(&key[..2], SHARD_OWNER_PREFIX);
         // Not the `E`-tagged event-stream keyspace either.
         assert_ne!(key[0], b'E');
@@ -368,6 +383,7 @@ mod tests {
         assert_ne!(&key[..2], OUTBOX_PREFIX);
         assert_ne!(&key[..2], NAMESPACE_PREFIX);
         assert_ne!(&key[..2], SHARD_OWNER_PREFIX);
+        assert_ne!(&key[..2], WORKER_DEPLOYMENT_PREFIX);
         assert_ne!(key[0], OUTBOX_PREFIX[0]);
         // Fixed-width layout: O(1) + uuid(16) + activity_seq(8) + attempt(4).
         assert_eq!(key.len(), 29);
@@ -375,6 +391,19 @@ mod tests {
         // 17-byte `E`-stream key (the only key shape the replay decoder decodes).
         assert_ne!(key.len(), 17);
         assert_eq!(workflow_id_from_event_stream_key(&key), None);
+    }
+
+    #[test]
+    fn worker_deployment_keyspace_is_tagged_and_disjoint() {
+        let key = worker_deployment_key("shells");
+        assert_eq!(&key[..2], WORKER_DEPLOYMENT_PREFIX);
+        assert_ne!(&key[..2], TIMER_PREFIX);
+        assert_ne!(&key[..2], PACKAGE_PREFIX);
+        assert_ne!(&key[..2], ROUTE_PREFIX);
+        assert_ne!(&key[..2], OUTBOX_PREFIX);
+        assert_ne!(&key[..2], NAMESPACE_PREFIX);
+        assert_ne!(&key[..2], SHARD_OWNER_PREFIX);
+        assert_ne!(key[0], b'E');
     }
 
     #[test]

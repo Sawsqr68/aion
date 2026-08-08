@@ -1,0 +1,20 @@
+   Compiling aion-store v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+   Compiling aion-store-libsql v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-libsql)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 15.93s
+     Running tests/conformance.rs (target/debug/deps/conformance-a491453b28e6821d)
+
+running 1 test
+test libsql_store_satisfies_worker_deployment_conformance_suite ... FAILED
+
+failures:
+
+---- libsql_store_satisfies_worker_deployment_conformance_suite stdout ----
+Error: Backend("a second store instance over the same storage must see the complete record")
+
+
+failures:
+    libsql_store_satisfies_worker_deployment_conformance_suite
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p aion-store-libsql --test conformance`

@@ -26,15 +26,16 @@ use ts_rs::{Config, TS};
 
 use crate::{
     ActivityError, ActivityErrorKind, ActivityEvent, ActivityEventKind, ActivityId,
-    ApprovalDecision, CatchUpPolicy, ClusterCommand, ClusterEvent, ClusterEventMeta, ClusterPeer,
-    ClusterShard, ClusterSnapshot, ClusterStreamError, ClusterWorker, ContentType,
-    DescribeWorkflowResponse, Event, EventEnvelope, InjectPriority, InterventionCapabilities,
-    InterventionCommand, InterventionKind, InterventionOutcome, InterventionPrimitive, MessageRole,
+    ApprovalDecision, CatchUpPolicy, ClusterCommand, ClusterDeployment, ClusterEvent,
+    ClusterEventMeta, ClusterPeer, ClusterShard, ClusterSnapshot, ClusterStreamError,
+    ClusterWorker, ContentType, DeploymentAssociation, DescribeWorkflowResponse, DesiredState,
+    Event, EventEnvelope, InjectPriority, InterventionCapabilities, InterventionCommand,
+    InterventionKind, InterventionOutcome, InterventionPrimitive, MessageRole,
     NamespacePlacementWire, OverlapPolicy, PackageVersion, Payload, PayloadElision, ProgressDetail,
-    RunId, ScheduleConfig, ScheduleId, SearchAttributeType, SearchAttributeValue, StopKind,
-    TimerCancelCause, TimerId, TimerIdKind, TriggerSpec, UnservedActivity, WithTimeoutOutcome,
-    WorkerDeathReason, WorkerTransport, WorkflowError, WorkflowFilter, WorkflowId, WorkflowStatus,
-    WorkflowSummary,
+    PutOutcome, RunId, ScheduleConfig, ScheduleId, SearchAttributeType, SearchAttributeValue,
+    StopKind, TimerCancelCause, TimerId, TimerIdKind, TriggerSpec, UnservedActivity,
+    WithTimeoutOutcome, WorkerDeathReason, WorkerTransport, WorkflowError, WorkflowFilter,
+    WorkflowId, WorkflowStatus, WorkflowSummary,
 };
 
 const OPS_CONSOLE_GENERATED_DIR: &str = "../../apps/aion-ops-console/src/types/generated";
@@ -191,11 +192,15 @@ fn ops_console_wire_types() -> Result<String, ts_rs::ExportError> {
     push_type::<ClusterEventMeta>(&mut pipeline)?;
     push_type::<WorkerTransport>(&mut pipeline)?;
     push_type::<WorkerDeathReason>(&mut pipeline)?;
+    push_type::<DeploymentAssociation>(&mut pipeline)?;
+    push_type::<DesiredState>(&mut pipeline)?;
+    push_type::<PutOutcome>(&mut pipeline)?;
     push_type::<NamespacePlacementWire>(&mut pipeline)?;
     push_type::<ClusterEvent>(&mut pipeline)?;
     push_type::<ClusterPeer>(&mut pipeline)?;
     push_type::<ClusterShard>(&mut pipeline)?;
     push_type::<ClusterWorker>(&mut pipeline)?;
+    push_type::<ClusterDeployment>(&mut pipeline)?;
     push_type::<ClusterSnapshot>(&mut pipeline)?;
     push_type::<ClusterCommand>(&mut pipeline)?;
     push_type::<ClusterStreamError>(&mut pipeline)?;
@@ -255,7 +260,11 @@ where
     T: TS + 'static,
 {
     let declaration = T::export_to_string(&pipeline.config)?;
-    pipeline.output.push_str(strip_ts_rs_prelude(&declaration));
+    for line in strip_ts_rs_prelude(&declaration).lines() {
+        pipeline.output.push_str(line.trim_end());
+        pipeline.output.push('\n');
+    }
+    // Separate declarations after canonicalizing ts-rs's trailing spaces.
     pipeline.output.push('\n');
     pipeline.exported.insert(T::ident(&pipeline.config));
     for dependency in T::dependencies(&pipeline.config) {

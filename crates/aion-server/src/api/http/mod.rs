@@ -41,6 +41,7 @@ mod transcripts;
 mod unrecoverable;
 mod visibility;
 mod whoami;
+mod worker_deployments;
 mod workers;
 mod workflows;
 

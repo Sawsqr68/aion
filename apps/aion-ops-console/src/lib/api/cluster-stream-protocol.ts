@@ -63,7 +63,8 @@ const CLUSTER_EVENT_VALIDATORS = {
     hasStringFields(event, ['worker_id', 'task_queue']) &&
     isStringArray(event.namespaces) &&
     isWorkerTransport(event.transport) &&
-    isNullableString(event.node),
+    isNullableString(event.node) &&
+    isDeploymentAssociation(event.deployment, event.deployment_association),
   WorkerDisconnected: (event) =>
     hasStringFields(event, ['worker_id']) &&
     isStringArray(event.namespaces) &&
@@ -77,6 +78,13 @@ const CLUSTER_EVENT_VALIDATORS = {
     hasStringFields(event, ['namespace']) &&
     isSafeUnsignedInteger(event.in_flight) &&
     isSafeUnsignedInteger(event.ceiling),
+  WorkerDeploymentPut: (event) =>
+    hasStringFields(event, ['name', 'binary_version', 'binary_content_hash']) &&
+    isPutOutcome(event.outcome) &&
+    isDesiredState(event.desired_state),
+  WorkerDeploymentDesiredStateChanged: (event) =>
+    hasStringFields(event, ['name']) && isDesiredState(event.desired_state),
+  WorkerDeploymentDeleted: (event) => hasStringFields(event, ['name']),
 } satisfies { [Type in ClusterEvent['type']]: ClusterEventValidator };
 
 type ClusterEventType = keyof typeof CLUSTER_EVENT_VALIDATORS;
@@ -113,7 +121,9 @@ function isSnapshotFrame(frame: unknown): frame is SnapshotFrame {
     Array.isArray(snapshot.shards) &&
     snapshot.shards.every(isClusterShard) &&
     Array.isArray(snapshot.workers) &&
-    snapshot.workers.every(isClusterWorker)
+    snapshot.workers.every(isClusterWorker) &&
+    Array.isArray(snapshot.deployments) &&
+    snapshot.deployments.every(isClusterDeployment)
   );
 }
 
@@ -167,7 +177,16 @@ function isClusterWorker(value: unknown): boolean {
     hasStringFields(value, ['worker_id', 'task_queue']) &&
     isStringArray(value.namespaces) &&
     isWorkerTransport(value.transport) &&
-    isNullableString(value.node)
+    isNullableString(value.node) &&
+    isDeploymentAssociation(value.deployment, value.deployment_association)
+  );
+}
+
+function isClusterDeployment(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasStringFields(value, ['name', 'binary_version', 'binary_content_hash']) &&
+    isDesiredState(value.desired_state)
   );
 }
 
@@ -192,6 +211,22 @@ function hasStringFields(record: JsonRecord, fields: readonly string[]): boolean
 
 function isNullableString(value: unknown): boolean {
   return value === null || typeof value === 'string';
+}
+
+function isDeploymentAssociation(deployment: unknown, association: unknown): boolean {
+  return (
+    (deployment === null && association === null) ||
+    (typeof deployment === 'string' &&
+      (association === 'known' || association === 'absent' || association === 'unchecked'))
+  );
+}
+
+function isDesiredState(value: unknown): boolean {
+  return value === 'running' || value === 'stopped';
+}
+
+function isPutOutcome(value: unknown): boolean {
+  return value === 'created' || value === 'replaced';
 }
 
 function isStringArray(value: unknown): boolean {

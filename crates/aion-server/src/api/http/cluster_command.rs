@@ -64,6 +64,7 @@ pub(crate) async fn cluster_command(
     match command {
         ClusterCommand::RequestClusterSnapshot {} => {
             let snapshot = crate::stream::cluster_stream::build_snapshot(&state, &caller)
+                .await
                 .map_err(|error| HttpWireError(error.to_wire_error()))?;
             Ok(Json(snapshot).into_response())
         }

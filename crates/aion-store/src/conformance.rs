@@ -1,6 +1,7 @@
 //! Reusable behavioural conformance suite for [`EventStore`] implementations.
 
 use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -15,6 +16,7 @@ use crate::{EventStore, RunSummary, StoreError, TimerEntry};
 mod outbox_settlement;
 mod package;
 mod range_read;
+mod worker_deployment;
 
 /// Runs the shared behavioural suite for an [`EventStore`] implementation.
 ///
@@ -102,6 +104,43 @@ where
     )
     .await?;
     Ok(())
+}
+
+/// Lazy second-instance constructor used by the worker-deployment restart pin.
+pub type WorkerDeploymentReopen = Box<
+    dyn Fn() -> Pin<
+            Box<
+                dyn Future<Output = Result<Arc<dyn crate::WorkerDeploymentStore>, StoreError>>
+                    + Send,
+            >,
+        > + Send
+        + Sync,
+>;
+
+/// Backend-byte writer used by the worker-deployment poisoned-row pin.
+pub type WorkerDeploymentRawWrite = Box<
+    dyn Fn(String, Vec<u8>) -> Pin<Box<dyn Future<Output = Result<(), StoreError>> + Send>>
+        + Send
+        + Sync,
+>;
+
+/// Runs the shared worker-deployment contract scenarios.
+///
+/// `reopened` must be a distinct store instance over the same durable storage as
+/// `store`. The in-memory backend passes `None` because it has no reopenable
+/// storage and is explicitly exempt from the restart scenario. `write_raw`
+/// writes bytes directly at a valid worker-deployment key so every backend is
+/// subjected to the same poisoned-row behavior.
+///
+/// # Errors
+///
+/// Returns the first persistence, codec, or contract assertion error.
+pub async fn run_worker_deployment_suite(
+    store: Arc<dyn crate::WorkerDeploymentStore>,
+    reopen: Option<WorkerDeploymentReopen>,
+    write_raw: WorkerDeploymentRawWrite,
+) -> Result<(), StoreError> {
+    worker_deployment::run(store, reopen, write_raw).await
 }
 
 async fn list_workflow_ids_includes_running_and_terminal_histories(

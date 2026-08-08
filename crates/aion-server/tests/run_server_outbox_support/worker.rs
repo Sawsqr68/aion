@@ -60,6 +60,7 @@ impl WorkerSession {
                             })
                             .collect(),
                         identity: "run-server-outbox-test-worker".to_owned(),
+                        instance: None,
                     },
                 )),
             })

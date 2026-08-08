@@ -27,11 +27,11 @@ export type PayloadElision = { __elided: true, size_bytes: number, };
 
 export type Payload = { content_type: ContentType, bytes: Array<number> | PayloadElision, };
 
-export type TriggerSpec = { "Cron": { 
+export type TriggerSpec = { "Cron": {
 /**
  * Cron expression to evaluate in later scheduling layers.
  */
-expression: string, } } | { "Interval": { 
+expression: string, } } | { "Interval": {
 /**
  * Duration between firings.
  */
@@ -41,37 +41,37 @@ export type OverlapPolicy = "Skip" | "BufferOne" | "CancelPrevious" | "AllowAll"
 
 export type CatchUpPolicy = "All" | "One" | "Skip";
 
-export type ScheduleConfig = { 
+export type ScheduleConfig = {
 /**
  * Trigger used to compute eligible fire times.
  */
-trigger: TriggerSpec, 
+trigger: TriggerSpec,
 /**
  * Policy for overlapping firings.
  */
-overlap_policy: OverlapPolicy, 
+overlap_policy: OverlapPolicy,
 /**
  * Policy for missed firings.
  */
-catch_up_policy: CatchUpPolicy, 
+catch_up_policy: CatchUpPolicy,
 /**
  * Workflow type started when the schedule fires.
  */
-workflow_type: string, 
+workflow_type: string,
 /**
  * Opaque workflow input supplied to triggered executions.
  */
-input: Payload, 
+input: Payload,
 /**
  * Typed search attributes recorded on every triggered execution.
  */
 search_attributes: { [key in string]: SearchAttributeValue }, };
 
-export type WorkflowError = { 
+export type WorkflowError = {
 /**
  * Human-readable error message.
  */
-message: string, 
+message: string,
 /**
  * Optional structured details carried as an opaque payload.
  */
@@ -79,15 +79,15 @@ details: Payload | null, };
 
 export type ActivityErrorKind = "Retryable" | "Terminal";
 
-export type ActivityError = { 
+export type ActivityError = {
 /**
  * Explicit retryability classification for this activity failure.
  */
-kind: ActivityErrorKind, 
+kind: ActivityErrorKind,
 /**
  * Human-readable error message.
  */
-message: string, 
+message: string,
 /**
  * Optional structured details carried as an opaque payload.
  */
@@ -95,53 +95,53 @@ details: Payload | null, };
 
 export type WorkflowStatus = "Running" | "Completed" | "Failed" | "Cancelled" | "TimedOut" | "ContinuedAsNew" | "Paused";
 
-export type WorkflowFilter = { 
+export type WorkflowFilter = {
 /**
  * Match workflows with this workflow type exactly.
  */
-workflow_type: string | null, 
+workflow_type: string | null,
 /**
  * Match workflows whose status projection equals this status.
  */
-status: WorkflowStatus | null, 
+status: WorkflowStatus | null,
 /**
  * Match workflows started at or after this timestamp.
  */
-started_after: string | null, 
+started_after: string | null,
 /**
  * Match workflows started at or before this timestamp.
  */
-started_before: string | null, 
+started_before: string | null,
 /**
  * Match workflows started as children of this parent workflow.
  */
 parent: WorkflowId | null, };
 
-export type WorkflowSummary = { 
+export type WorkflowSummary = {
 /**
  * Workflow execution identifier.
  */
-workflow_id: WorkflowId, 
+workflow_id: WorkflowId,
 /**
  * Workflow type recorded when the execution started.
  */
-workflow_type: string, 
+workflow_type: string,
 /**
  * Status projected from authoritative workflow history.
  */
-status: WorkflowStatus, 
+status: WorkflowStatus,
 /**
  * Timestamp recorded on the workflow start event.
  */
-started_at: string, 
+started_at: string,
 /**
  * Timestamp recorded on the terminal lifecycle event, if any.
  */
-ended_at: string | null, 
+ended_at: string | null,
 /**
  * Parent workflow identifier for child-workflow executions, if the store has one.
  */
-parent: WorkflowId | null, 
+parent: WorkflowId | null,
 /**
  * The step (activity type) that failed, populated ONLY for a workflow whose
  * current-lease terminal is [`Event::WorkflowFailed`] and whose failure has a
@@ -150,7 +150,7 @@ parent: WorkflowId | null,
  * healthy/running/completed/cancelled workflow, so list renderers show no
  * empty failure column for non-failed rows.
  */
-failed_step?: string | null, 
+failed_step?: string | null,
 /**
  * The terminal `WorkflowFailed` error message, populated ONLY for a workflow
  * whose current-lease terminal is [`Event::WorkflowFailed`]. `None` otherwise.
@@ -161,18 +161,18 @@ export type SearchAttributeType = "String" | "Int" | "Float" | "Bool" | "Datetim
 
 export type SearchAttributeValue = { "type": "String", "data": string } | { "type": "Int", "data": number } | { "type": "Float", "data": number } | { "type": "Bool", "data": boolean } | { "type": "Datetime", "data": string } | { "type": "KeywordList", "data": Array<string> };
 
-export type EventEnvelope = { 
+export type EventEnvelope = {
 /**
  * Monotonic sequence number within the owning workflow history.
  */
-seq: number, 
+seq: number,
 /**
  * Recorded UTC timestamp for this event.
  *
  * This timestamp is the determinism source for `workflow.now`; replay must use the recorded
  * value rather than consulting wall-clock time.
  */
-recorded_at: string, 
+recorded_at: string,
 /**
  * Workflow history that owns this event.
  */
@@ -180,160 +180,160 @@ workflow_id: WorkflowId, };
 
 export type WithTimeoutOutcome = "OperationCompleted" | "TimedOut";
 
-export type Event = { "type": "WorkflowStarted", "data": { 
+export type Event = { "type": "WorkflowStarted", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Workflow type selected by the caller.
  */
-workflow_type: string, 
+workflow_type: string,
 /**
  * Opaque workflow input payload.
  */
-input: Payload, 
+input: Payload,
 /**
  * Concrete run identifier started by this event.
  */
-run_id: RunId, 
+run_id: RunId,
 /**
  * Parent run that continued as this run, when this start is part of a
  * continue-as-new chain.
  */
-parent_run_id: RunId | null, 
+parent_run_id: RunId | null,
 /**
  * Package version this run was resolved against at record time.
  *
  * Recovery and replay resolve workflow code from this recorded
  * version; they never re-resolve a "latest" version.
  */
-package_version: PackageVersion, } } | { "type": "WorkflowCompleted", "data": { 
+package_version: PackageVersion, } } | { "type": "WorkflowCompleted", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Opaque workflow result payload.
  */
-result: Payload, } } | { "type": "WorkflowFailed", "data": { 
+result: Payload, } } | { "type": "WorkflowFailed", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Terminal workflow failure.
  */
-error: WorkflowError, } } | { "type": "WorkflowCancelled", "data": { 
+error: WorkflowError, } } | { "type": "WorkflowCancelled", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Human-readable cancellation reason.
  */
-reason: string, } } | { "type": "WorkflowTimedOut", "data": { 
+reason: string, } } | { "type": "WorkflowTimedOut", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Descriptor identifying the timeout that elapsed.
  *
  * Intentionally stringly-typed: the closed set of timeout kinds is defined by cluster AT
  * (timers and signals), not by the core event model.
  */
-timeout: string, } } | { "type": "WorkflowContinuedAsNew", "data": { 
+timeout: string, } } | { "type": "WorkflowContinuedAsNew", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Opaque workflow input payload carried into the new run.
  */
-input: Payload, 
+input: Payload,
 /**
  * Workflow type override for the new run, when migration changes the workflow type.
  *
  * When absent, the new run uses the current workflow type.
  */
-workflow_type: string | null, 
+workflow_type: string | null,
 /**
  * Run identifier for the current run that is being continued.
  */
-parent_run_id: RunId, } } | { "type": "WorkflowReopened", "data": { 
+parent_run_id: RunId, } } | { "type": "WorkflowReopened", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Run being reopened — the run that recorded the superseded terminal
  * event and that the reopened execution continues.
  */
-run_id: RunId, 
+run_id: RunId,
 /**
  * Activities to re-dispatch on replay: those that ended in a terminal
  * failure in this run with no later successful attempt. The history
  * cursor treats each as a reset point so the recorded failure is
  * superseded and the activity resolves to live re-dispatch.
  */
-reopened: Array<ActivityId>, } } | { "type": "WorkflowPaused", "data": { 
+reopened: Array<ActivityId>, } } | { "type": "WorkflowPaused", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Run being paused — the live, non-terminal run the operator held.
  */
-run_id: RunId, 
+run_id: RunId,
 /**
  * Optional operator-supplied pause reason.
  */
-reason: string | null, 
+reason: string | null,
 /**
  * Optional identity of the operator who issued the pause.
  */
-operator: string | null, } } | { "type": "WorkflowResumed", "data": { 
+operator: string | null, } } | { "type": "WorkflowResumed", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Run being resumed.
  */
-run_id: RunId, 
+run_id: RunId,
 /**
  * Optional identity of the operator who issued the resume.
  */
-operator: string | null, } } | { "type": "SearchAttributesUpdated", "data": { 
+operator: string | null, } } | { "type": "SearchAttributesUpdated", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Workflow whose search attributes changed.
  */
-workflow_id: WorkflowId, 
+workflow_id: WorkflowId,
 /**
  * Updated search attributes keyed by attribute name.
  */
-attributes: { [key in string]: SearchAttributeValue }, } } | { "type": "ActivityScheduled", "data": { 
+attributes: { [key in string]: SearchAttributeValue }, } } | { "type": "ActivityScheduled", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Deterministic activity identifier derived from the scheduling sequence position.
  */
-activity_id: ActivityId, 
+activity_id: ActivityId,
 /**
  * Activity type selected by workflow code.
  */
-activity_type: string, 
+activity_type: string,
 /**
  * Opaque activity input payload.
  */
-input: Payload, 
+input: Payload,
 /**
  * Pool/flavour selector this activity dispatches to within the workflow's namespace
  * (NSTQ-3). This is the durable source-of-truth for re-targeting the **same** task queue
@@ -346,7 +346,7 @@ input: Payload,
  * deterministically re-derives `task_queue = "default"` — never panics, never differs
  * run-to-run. The encoding of the existing fields is untouched.
  */
-task_queue: string, 
+task_queue: string,
 /**
  * OPTIONAL node affinity this activity dispatches to (NODE-3). `None` = no affinity (the
  * genuine current value; SDK-level node selection is NODE-4). This is the durable
@@ -358,15 +358,15 @@ task_queue: string,
  * decodes a missing `node` deterministically to `None` — never a sentinel, never panics,
  * never differs run-to-run. The encoding of the existing fields is untouched.
  */
-node: string | null, } } | { "type": "ActivityStarted", "data": { 
+node: string | null, } } | { "type": "ActivityStarted", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Activity that was dispatched.
  */
-activity_id: ActivityId, 
+activity_id: ActivityId,
 /**
  * One-based activity attempt number this start belongs to (NOI-0).
  *
@@ -382,19 +382,19 @@ activity_id: ActivityId,
  * legacy/unknown sentinel, never a genuine attempt. The encoding of the existing fields is
  * untouched.
  */
-attempt: number, } } | { "type": "ActivityCompleted", "data": { 
+attempt: number, } } | { "type": "ActivityCompleted", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Activity that produced the result.
  */
-activity_id: ActivityId, 
+activity_id: ActivityId,
 /**
  * Opaque activity result payload.
  */
-result: Payload, 
+result: Payload,
 /**
  * One-based activity attempt number that produced this completion (NOI-0).
  *
@@ -407,52 +407,52 @@ result: Payload,
  * [`LEGACY_ACTIVITY_ATTEMPT`] (`0`) via `#[serde(default = ...)]` — never panics, never
  * differs run-to-run. The encoding of the existing fields is untouched.
  */
-attempt: number, } } | { "type": "ActivityFailed", "data": { 
+attempt: number, } } | { "type": "ActivityFailed", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Activity whose attempt failed.
  */
-activity_id: ActivityId, 
+activity_id: ActivityId,
 /**
  * Classified activity failure.
  */
-error: ActivityError, 
+error: ActivityError,
 /**
  * One-based activity attempt number that produced this failure.
  */
-attempt: number, } } | { "type": "ActivityAdvisoryExhausted", "data": { 
+attempt: number, } } | { "type": "ActivityAdvisoryExhausted", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Advisory activity whose attempt budget was spent.
  */
-activity_id: ActivityId, 
+activity_id: ActivityId,
 /**
  * Activity type of the exhausted advisory activity.
  */
-activity_type: string, 
+activity_type: string,
 /**
  * The last attempt's failure reason, verbatim — the same string the
  * accompanying terminal [`Event::ActivityFailed`] carries.
  */
-reason: string, 
+reason: string,
 /**
  * One-based number of the attempt that spent the budget.
  */
-attempt: number, } } | { "type": "ActivityCancelled", "data": { 
+attempt: number, } } | { "type": "ActivityCancelled", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Activity that was cancelled.
  */
-activity_id: ActivityId, 
+activity_id: ActivityId,
 /**
  * One-based activity attempt number that was cancelled (NOI-0).
  *
@@ -465,35 +465,35 @@ activity_id: ActivityId,
  * [`LEGACY_ACTIVITY_ATTEMPT`] (`0`) via `#[serde(default = ...)]` — never panics, never
  * differs run-to-run. The encoding of the existing fields is untouched.
  */
-attempt: number, } } | { "type": "TimerStarted", "data": { 
+attempt: number, } } | { "type": "TimerStarted", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Timer selected by workflow code or assigned by the engine.
  */
-timer_id: TimerId, 
+timer_id: TimerId,
 /**
  * UTC timestamp at which the timer becomes eligible to fire.
  */
-fire_at: string, } } | { "type": "TimerFired", "data": { 
+fire_at: string, } } | { "type": "TimerFired", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Timer that fired.
  */
-timer_id: TimerId, } } | { "type": "TimerCancelled", "data": { 
+timer_id: TimerId, } } | { "type": "TimerCancelled", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Timer that was cancelled.
  */
-timer_id: TimerId, 
+timer_id: TimerId,
 /**
  * Who retired the timer. Decides reopen behavior: a
  * [`TimerCancelCause::CancelTeardown`] cancellation is re-armed when the
@@ -506,67 +506,67 @@ timer_id: TimerId,
  * pre-field behavior (never resurrected), never panics, never differs
  * run-to-run. The encoding of the existing fields is untouched.
  */
-cause: TimerCancelCause, } } | { "type": "WithTimeoutCompleted", "data": { 
+cause: TimerCancelCause, } } | { "type": "WithTimeoutCompleted", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Timer that bounded the operation.
  */
-timer_id: TimerId, 
+timer_id: TimerId,
 /**
  * Recorded timeout outcome.
  */
-outcome: WithTimeoutOutcome, 
+outcome: WithTimeoutOutcome,
 /**
  * JSON-encoded BEAM term payload for completed operation results.
  */
-result: Payload | null, } } | { "type": "SignalReceived", "data": { 
+result: Payload | null, } } | { "type": "SignalReceived", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Signal name selected by the sender.
  */
-name: string, 
+name: string,
 /**
  * Opaque signal payload.
  */
-payload: Payload, } } | { "type": "SignalSent", "data": { 
+payload: Payload, } } | { "type": "SignalSent", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Target workflow identifier selected by workflow code.
  */
-target_workflow_id: WorkflowId, 
+target_workflow_id: WorkflowId,
 /**
  * Signal name selected by workflow code.
  */
-name: string, 
+name: string,
 /**
  * Opaque signal payload.
  */
-payload: Payload, } } | { "type": "ChildWorkflowStarted", "data": { 
+payload: Payload, } } | { "type": "ChildWorkflowStarted", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Child workflow identifier.
  */
-child_workflow_id: WorkflowId, 
+child_workflow_id: WorkflowId,
 /**
  * Child workflow type selected by the parent.
  */
-workflow_type: string, 
+workflow_type: string,
 /**
  * Opaque child workflow input payload.
  */
-input: Payload, 
+input: Payload,
 /**
  * Package version resolved for the child at record time.
  *
@@ -574,153 +574,153 @@ input: Payload,
  * recorded version, so the crash path resolves identically to the
  * crash-free path.
  */
-package_version: PackageVersion, } } | { "type": "ChildWorkflowCompleted", "data": { 
+package_version: PackageVersion, } } | { "type": "ChildWorkflowCompleted", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Child workflow that produced the result.
  */
-child_workflow_id: WorkflowId, 
+child_workflow_id: WorkflowId,
 /**
  * Opaque child workflow result payload.
  */
-result: Payload, } } | { "type": "ChildWorkflowFailed", "data": { 
+result: Payload, } } | { "type": "ChildWorkflowFailed", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Child workflow that failed.
  */
-child_workflow_id: WorkflowId, 
+child_workflow_id: WorkflowId,
 /**
  * Terminal child workflow failure.
  */
-error: WorkflowError, } } | { "type": "ChildWorkflowCancelled", "data": { 
+error: WorkflowError, } } | { "type": "ChildWorkflowCancelled", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Child workflow that was cancelled.
  */
-child_workflow_id: WorkflowId, } } | { "type": "ScheduleCreated", "data": { 
+child_workflow_id: WorkflowId, } } | { "type": "ScheduleCreated", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Schedule resource that was created.
  */
-schedule_id: ScheduleId, 
+schedule_id: ScheduleId,
 /**
  * Persisted schedule configuration.
  */
-config: ScheduleConfig, } } | { "type": "ScheduleUpdated", "data": { 
+config: ScheduleConfig, } } | { "type": "ScheduleUpdated", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Schedule resource that was updated.
  */
-schedule_id: ScheduleId, 
+schedule_id: ScheduleId,
 /**
  * Updated schedule configuration.
  */
-config: ScheduleConfig, } } | { "type": "SchedulePaused", "data": { 
+config: ScheduleConfig, } } | { "type": "SchedulePaused", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Schedule resource that was paused.
  */
-schedule_id: ScheduleId, } } | { "type": "ScheduleResumed", "data": { 
+schedule_id: ScheduleId, } } | { "type": "ScheduleResumed", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Schedule resource that was resumed.
  */
-schedule_id: ScheduleId, } } | { "type": "ScheduleDeleted", "data": { 
+schedule_id: ScheduleId, } } | { "type": "ScheduleDeleted", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Schedule resource that was deleted.
  */
-schedule_id: ScheduleId, } } | { "type": "ScheduleTriggered", "data": { 
+schedule_id: ScheduleId, } } | { "type": "ScheduleTriggered", "data": {
 /**
  * Recording metadata for this event.
  */
-envelope: EventEnvelope, 
+envelope: EventEnvelope,
 /**
  * Schedule resource that fired.
  */
-schedule_id: ScheduleId, 
+schedule_id: ScheduleId,
 /**
  * Workflow execution started by the schedule tick.
  */
-workflow_id: WorkflowId, 
+workflow_id: WorkflowId,
 /**
  * Run started by the schedule tick.
  */
 run_id: RunId, } };
 
-export type UnservedActivity = { 
+export type UnservedActivity = {
 /**
  * Activity ordinal recorded in history.
  */
-activity_id: ActivityId, 
+activity_id: ActivityId,
 /**
  * Activity type the dispatch needs served.
  */
-activity_type: string, 
+activity_type: string,
 /**
  * Task queue the dispatch was recorded against.
  */
-task_queue: string, 
+task_queue: string,
 /**
  * Node affinity recorded on the dispatch, if any.
  */
-node: string | null, 
+node: string | null,
 /**
  * One-based delivery attempt recorded on the `ActivityStarted`.
  */
-attempt: number, 
+attempt: number,
 /**
  * When the engine recorded the dispatch — NOT when a worker took it, which
  * is precisely the thing that never happened.
  */
-dispatched_at: string, 
+dispatched_at: string,
 /**
  * Canonical queue-service reason (`NO_QUEUE_DECLARATION`,
  * `NO_LIVE_POLLERS`, `POLLERS_INCOMPATIBLE`), in the same vocabulary the
  * dispatch refusals and the server logs use.
  */
-reason: string, 
+reason: string,
 /**
  * One sentence naming what an operator has to fix.
  */
-detail: string, 
+detail: string,
 /**
  * Workers connected for the `(namespace, task_queue)` pool, whatever they
  * serve.
  */
-workers_in_pool: number, 
+workers_in_pool: number,
 /**
  * Of those, workers advertising this activity type.
  */
-workers_serving_activity: number, 
+workers_serving_activity: number,
 /**
  * Of those, workers that also satisfy the dispatch's node pin.
  */
-compatible_workers: number, 
+compatible_workers: number,
 /**
  * Whether THIS server process is currently holding the dispatch in its
  * selection wait.
@@ -732,16 +732,16 @@ compatible_workers: number,
  */
 dispatch_parked: boolean, };
 
-export type DescribeWorkflowResponse = { 
+export type DescribeWorkflowResponse = {
 /**
  * Workflow summary projected from authoritative history, when the workflow
  * exists.
  */
-summary: WorkflowSummary | null, 
+summary: WorkflowSummary | null,
 /**
  * The run's event history as plain serialized events.
  */
-history: Array<Event>, 
+history: Array<Event>,
 /**
  * Every activity this run's history records as dispatched and unterminated
  * that the fleet cannot currently serve.
@@ -754,7 +754,7 @@ history: Array<Event>,
  */
 unserved: Array<UnservedActivity>, };
 
-export type ClusterEventMeta = { 
+export type ClusterEventMeta = {
 /**
  * Monotonic sequence number assigned by the cluster publisher (a single deployment-global
  * `AtomicU64`). The client uses this for gap detection and `after_seq` reconnect dedup, the
@@ -762,7 +762,7 @@ export type ClusterEventMeta = {
  *
  * Exported to TypeScript as `number`; see the module docs for the accepted `2^53` ceiling.
  */
-cluster_seq: number, 
+cluster_seq: number,
 /**
  * UTC wall-clock instant at which the originating subsystem observed the state change.
  */
@@ -772,198 +772,213 @@ export type WorkerTransport = { "transport": "Grpc" } | { "transport": "Liminal"
 
 export type WorkerDeathReason = { "reason": "Disconnect" } | { "reason": "Timeout" } | { "reason": "Deregistered" };
 
-export type NamespacePlacementWire = { 
+export type DeploymentAssociation = "known" | "absent" | "unchecked";
+
+export type DesiredState = "running" | "stopped";
+
+export type PutOutcome = "created" | "replaced";
+
+export type NamespacePlacementWire = {
 /**
  * Stable `snake_case` placement-kind tag: `unplaced` / `prefer` / `pinned`.
  */
-kind: string, 
+kind: string,
 /**
  * The placement's node-label set, deterministically ordered. Empty for
  * `unplaced`; the preferred/required labels for `prefer`/`pinned`.
  */
 nodes: Array<string>, };
 
-export type ClusterEvent = { "type": "PeerAdded", 
+export type ClusterEvent = { "type": "PeerAdded",
 /**
  * Cluster-event metadata.
  */
-meta: ClusterEventMeta, 
+meta: ClusterEventMeta,
 /**
  * The newly-watched peer's node name.
  */
-peer_name: string, 
+peer_name: string,
 /**
  * The peer's forwarding address, when known.
  */
-forward_addr: string | null, } | { "type": "PeerConnected", 
+forward_addr: string | null, } | { "type": "PeerConnected",
 /**
  * Cluster-event metadata.
  */
-meta: ClusterEventMeta, 
+meta: ClusterEventMeta,
 /**
  * The recovered peer's node name.
  */
-peer_name: string, 
+peer_name: string,
 /**
  * The peer's forwarding address, when known.
  */
-forward_addr: string | null, } | { "type": "PeerDisconnected", 
+forward_addr: string | null, } | { "type": "PeerDisconnected",
 /**
  * Cluster-event metadata.
  */
-meta: ClusterEventMeta, 
+meta: ClusterEventMeta,
 /**
  * The down peer's node name.
  */
-peer_name: string, 
+peer_name: string,
 /**
  * Consecutive ticks this peer has been observed down.
  */
-consecutive_down: number, 
+consecutive_down: number,
 /**
  * Whether the debounce threshold has been crossed (adoption-eligible).
  */
-confirmed: boolean, } | { "type": "ShardAdopted", 
+confirmed: boolean, } | { "type": "ShardAdopted",
 /**
  * Cluster-event metadata.
  */
-meta: ClusterEventMeta, 
+meta: ClusterEventMeta,
 /**
  * Shard indices adopted in this transition.
  */
-shards: Array<number>, 
+shards: Array<number>,
 /**
  * The peer the shards were adopted from.
  */
-from_peer: string, 
+from_peer: string,
 /**
  * This node's name (the new owner).
  */
-adopted_by: string, } | { "type": "ShardAdoptionFailed", 
+adopted_by: string, } | { "type": "ShardAdoptionFailed",
 /**
  * Cluster-event metadata.
  */
-meta: ClusterEventMeta, 
+meta: ClusterEventMeta,
 /**
  * Shard indices the failed attempt targeted.
  */
-shards: Array<number>, 
+shards: Array<number>,
 /**
  * The peer the shards would have been adopted from.
  */
-from_peer: string, 
+from_peer: string,
 /**
  * Human-readable adoption error.
  */
-error: string, } | { "type": "ShardAdoptionSkipped", 
+error: string, } | { "type": "ShardAdoptionSkipped",
 /**
  * Cluster-event metadata.
  */
-meta: ClusterEventMeta, 
+meta: ClusterEventMeta,
 /**
  * Shard indices that were skipped.
  */
-shards: Array<number>, 
+shards: Array<number>,
 /**
  * The peer the shards would have been adopted from.
  */
-from_peer: string, 
+from_peer: string,
 /**
  * The live node currently holding the shards.
  */
-held_by: string, } | { "type": "WorkerConnected", 
+held_by: string, } | { "type": "WorkerConnected",
 /**
  * Cluster-event metadata.
  */
-meta: ClusterEventMeta, 
+meta: ClusterEventMeta,
 /**
  * Stable worker identifier.
  */
-worker_id: string, 
+worker_id: string,
 /**
  * Namespaces this worker serves.
  */
-namespaces: Array<string>, 
+namespaces: Array<string>,
 /**
  * Task-queue pool this worker serves within its namespaces.
  */
-task_queue: string, 
+task_queue: string,
 /**
  * Delivery transport for this worker.
  */
-transport: WorkerTransport, 
+transport: WorkerTransport,
 /**
  * Locality/node label, when the worker reported one.
  */
-node: string | null, } | { "type": "WorkerDisconnected", 
+node: string | null,
+/**
+ * Deployment named by the worker's instance identity, when supplied.
+ */
+deployment: string | null,
+/**
+ * Lookup state for the named deployment. `None` means the worker
+ * supplied no instance identity.
+ */
+deployment_association: DeploymentAssociation | null, } | { "type": "WorkerDisconnected",
 /**
  * Cluster-event metadata.
  */
-meta: ClusterEventMeta, 
+meta: ClusterEventMeta,
 /**
  * Stable worker identifier.
  */
-worker_id: string, 
+worker_id: string,
 /**
  * Namespaces this worker served.
  */
-namespaces: Array<string>, 
+namespaces: Array<string>,
 /**
  * Why the worker left (see [`WorkerDeathReason`] wiring note).
  */
-reason: WorkerDeathReason, } | { "type": "SupervisorStarted", 
+reason: WorkerDeathReason, } | { "type": "SupervisorStarted",
 /**
  * Cluster-event metadata.
  */
-meta: ClusterEventMeta, 
+meta: ClusterEventMeta,
 /**
  * This node's name.
  */
-node: string, } | { "type": "SupervisorStopped", 
+node: string, } | { "type": "SupervisorStopped",
 /**
  * Cluster-event metadata.
  */
-meta: ClusterEventMeta, 
+meta: ClusterEventMeta,
 /**
  * This node's name.
  */
-node: string, } | { "type": "NamespaceCreated", 
+node: string, } | { "type": "NamespaceCreated",
 /**
  * Cluster-event metadata.
  */
-meta: ClusterEventMeta, 
+meta: ClusterEventMeta,
 /**
  * The minted namespace's name (registry primary key).
  */
-name: string, 
+name: string,
 /**
  * The durable record's creation instant (its `created_at`).
  */
-created_at: string, 
+created_at: string,
 /**
  * How the namespace came to exist, as the stable `snake_case` label.
  */
-origin: string, } | { "type": "NamespacePlacementChanged", 
+origin: string, } | { "type": "NamespacePlacementChanged",
 /**
  * Cluster-event metadata.
  */
-meta: ClusterEventMeta, 
+meta: ClusterEventMeta,
 /**
  * The namespace whose placement changed (registry primary key).
  */
-name: string, 
+name: string,
 /**
  * The new placement directive, as the stable wire projection.
  */
-placement: NamespacePlacementWire, } | { "type": "NamespaceQuotaState", 
+placement: NamespacePlacementWire, } | { "type": "NamespaceQuotaState",
 /**
  * Cluster-event metadata.
  */
-meta: ClusterEventMeta, 
+meta: ClusterEventMeta,
 /**
  * The namespace this quota snapshot describes (registry primary key).
  */
-namespace: string, 
+namespace: string,
 /**
  * Durable count of currently-**Claimed** outbox rows for the namespace —
  * the in-flight activities the ceiling caps.
@@ -971,40 +986,84 @@ namespace: string,
  * Exported to TypeScript as `number`; see the module docs for the accepted
  * `2^53` ceiling (an in-flight count never approaches it).
  */
-in_flight: number, 
+in_flight: number,
 /**
  * The tenant's cluster-wide concurrency ceiling: its explicit
  * `max_in_flight_activities` override, or the platform default when unset.
  */
-ceiling: number, };
+ceiling: number, } | { "type": "WorkerDeploymentPut",
+/**
+ * Cluster-event metadata.
+ */
+meta: ClusterEventMeta,
+/**
+ * Durable deployment name.
+ */
+name: string,
+/**
+ * Typed create-or-replace outcome.
+ */
+outcome: PutOutcome,
+/**
+ * Typed desired state.
+ */
+desired_state: DesiredState,
+/**
+ * Version captured from the deployed server binary.
+ */
+binary_version: string,
+/**
+ * SHA-256 captured from the deployed server executable bytes.
+ */
+binary_content_hash: string, } | { "type": "WorkerDeploymentDesiredStateChanged",
+/**
+ * Cluster-event metadata.
+ */
+meta: ClusterEventMeta,
+/**
+ * Durable deployment name.
+ */
+name: string,
+/**
+ * Typed desired state.
+ */
+desired_state: DesiredState, } | { "type": "WorkerDeploymentDeleted",
+/**
+ * Cluster-event metadata.
+ */
+meta: ClusterEventMeta,
+/**
+ * Deleted deployment name.
+ */
+name: string, };
 
-export type ClusterPeer = { 
+export type ClusterPeer = {
 /**
  * The peer's node name.
  */
-peer_name: string, 
+peer_name: string,
 /**
  * The peer's forwarding address, when known.
  */
-forward_addr: string | null, 
+forward_addr: string | null,
 /**
  * Whether the peer is currently observed connected.
  */
-connected: boolean, 
+connected: boolean,
 /**
  * Consecutive ticks observed down (0 when connected).
  */
 consecutive_down: number, };
 
-export type ClusterShard = { 
+export type ClusterShard = {
 /**
  * Shard index.
  */
-shard: number, 
+shard: number,
 /**
  * The node that currently owns the shard.
  */
-owner: string, 
+owner: string,
 /**
  * The epoch fence value at which the owner holds the shard.
  *
@@ -1012,101 +1071,132 @@ owner: string,
  */
 epoch: number, };
 
-export type ClusterWorker = { 
+export type ClusterWorker = {
 /**
  * Stable worker identifier.
  */
-worker_id: string, 
+worker_id: string,
 /**
  * Namespaces this worker serves (already intersected with the caller's grants by the gate).
  */
-namespaces: Array<string>, 
+namespaces: Array<string>,
 /**
  * Task-queue pool this worker serves.
  */
-task_queue: string, 
+task_queue: string,
 /**
  * Delivery transport for this worker.
  */
-transport: WorkerTransport, 
+transport: WorkerTransport,
 /**
  * Locality/node label, when reported.
  */
-node: string | null, };
+node: string | null,
+/**
+ * Deployment named by the worker's instance identity, when supplied.
+ */
+deployment: string | null,
+/**
+ * Lookup state for that deployment. `None` for workers without instance
+ * identity.
+ */
+deployment_association: DeploymentAssociation | null, };
 
-export type ClusterSnapshot = { 
+export type ClusterDeployment = {
+/**
+ * Durable deployment name.
+ */
+name: string,
+/**
+ * Typed desired state.
+ */
+desired_state: DesiredState,
+/**
+ * Version captured at deploy time.
+ */
+binary_version: string,
+/**
+ * SHA-256 captured at deploy time.
+ */
+binary_content_hash: string, };
+
+export type ClusterSnapshot = {
 /**
  * The reading node's own name (self-identity; baselines the `Peer*` deltas which describe
  * *other* nodes).
  */
-node: string, 
+node: string,
 /**
  * The `cluster_seq` this snapshot is consistent as-of; the client applies only deltas with a
  * strictly greater `cluster_seq`.
  *
  * Exported to TypeScript as `number`; see the module docs for the accepted `2^53` ceiling.
  */
-as_of_seq: number, 
+as_of_seq: number,
 /**
  * Watched peers and their current liveness.
  */
-peers: Array<ClusterPeer>, 
+peers: Array<ClusterPeer>,
 /**
  * Shards owned by (or visible to) the reading node.
  */
-shards: Array<ClusterShard>, 
+shards: Array<ClusterShard>,
 /**
  * Connected workers, already gated to the caller's namespaces.
  */
-workers: Array<ClusterWorker>, };
+workers: Array<ClusterWorker>,
+/**
+ * Durable worker deployments visible under the deploy grant.
+ */
+deployments: Array<ClusterDeployment>, };
 
-export type ClusterCommand = { "command": "RequestClusterSnapshot", } | { "command": "CancelWorkflow", 
+export type ClusterCommand = { "command": "RequestClusterSnapshot", } | { "command": "CancelWorkflow",
 /**
  * Owning namespace.
  */
-namespace: string, 
+namespace: string,
 /**
  * Target workflow.
  */
-workflow_id: string, } | { "command": "ReopenWorkflow", 
+workflow_id: string, } | { "command": "ReopenWorkflow",
 /**
  * Owning namespace.
  */
-namespace: string, 
+namespace: string,
 /**
  * Target workflow.
  */
-workflow_id: string, } | { "command": "RedriveOutboxRow", 
+workflow_id: string, } | { "command": "RedriveOutboxRow",
 /**
  * Owning namespace.
  */
-namespace: string, 
+namespace: string,
 /**
  * Target workflow.
  */
-workflow_id: string, 
+workflow_id: string,
 /**
  * Outbox row ordinal.
  */
-ordinal: number, } | { "command": "DrainNode", 
+ordinal: number, } | { "command": "DrainNode",
 /**
  * Target node name.
  */
-node: string, } | { "command": "PlannedHandoff", 
+node: string, } | { "command": "PlannedHandoff",
 /**
  * Shard to move.
  */
-shard: number, 
+shard: number,
 /**
  * Destination node.
  */
-target_node: string, } | { "command": "ChaosKillNode", 
+target_node: string, } | { "command": "ChaosKillNode",
 /**
  * Target node name.
  */
 node: string, };
 
-export type ClusterStreamError = { "kind": "ClusterLagged", 
+export type ClusterStreamError = { "kind": "ClusterLagged",
 /**
  * Number of cluster events dropped because the subscriber fell behind.
  *
@@ -1116,131 +1206,131 @@ skipped: number, };
 
 export type MessageRole = { "role": "User" } | { "role": "Assistant" } | { "role": "System" } | { "role": "Tool" };
 
-export type ProgressDetail = { "detail": "UsageEstimate", 
+export type ProgressDetail = { "detail": "UsageEstimate",
 /**
  * Estimated input (prompt) tokens consumed so far, when the harness reports it.
  */
-input_tokens: number | null, 
+input_tokens: number | null,
 /**
  * Estimated output (completion) tokens produced so far, when the harness reports it.
  */
-output_tokens: number | null, } | { "detail": "Note", 
+output_tokens: number | null, } | { "detail": "Note",
 /**
  * The progress note text.
  */
 text: string, };
 
-export type StopKind = { "stop": "EndTurn" } | { "stop": "ToolUse" } | { "stop": "LimitReached" } | { "stop": "Cancelled" } | { "stop": "Error", 
+export type StopKind = { "stop": "EndTurn" } | { "stop": "ToolUse" } | { "stop": "LimitReached" } | { "stop": "Cancelled" } | { "stop": "Error",
 /**
  * Human-readable error description.
  */
-message: string, } | { "stop": "Other", 
+message: string, } | { "stop": "Other",
 /**
  * The harness's raw stop-reason label.
  */
 reason: string, };
 
-export type ActivityEventKind = { "kind": "Message", 
+export type ActivityEventKind = { "kind": "Message",
 /**
  * Who the message is attributed to.
  */
-role: MessageRole, 
+role: MessageRole,
 /**
  * The message text.
  */
-text: string, } | { "kind": "ToolCall", 
+text: string, } | { "kind": "ToolCall",
 /**
  * The tool/function name.
  */
-tool: string, 
+tool: string,
 /**
  * Correlation id linking this call to its eventual [`Self::ToolResult`].
  */
-call_id: string, 
+call_id: string,
 /**
  * The structured tool input.
  */
-input: unknown, } | { "kind": "ToolResult", 
+input: unknown, } | { "kind": "ToolResult",
 /**
  * Correlation id matching the originating [`Self::ToolCall`].
  */
-call_id: string, 
+call_id: string,
 /**
  * The structured tool output.
  */
-output: unknown, 
+output: unknown,
 /**
  * Whether the tool reported an error result.
  */
-is_error: boolean, } | { "kind": "Progress", 
+is_error: boolean, } | { "kind": "Progress",
 /**
  * The progress detail.
  */
-detail: ProgressDetail, } | { "kind": "Stop", 
+detail: ProgressDetail, } | { "kind": "Stop",
 /**
  * Why the run stopped.
  */
-reason: StopKind, } | { "kind": "Raw", 
+reason: StopKind, } | { "kind": "Raw",
 /**
  * A label identifying where the raw value came from (adapter-defined).
  */
-source: string, 
+source: string,
 /**
  * The raw value, passed through verbatim.
  */
-value: unknown, } | { "kind": "Delta", 
+value: unknown, } | { "kind": "Delta",
 /**
  * The id of the message this fragment belongs to.
  */
-message_id: string, 
+message_id: string,
 /**
  * The incremental text fragment.
  */
 text_fragment: string, };
 
-export type ActivityEvent = { 
+export type ActivityEvent = {
 /**
  * The workflow this activity belongs to.
  */
-workflow_id: WorkflowId, 
+workflow_id: WorkflowId,
 /**
  * The activity within the workflow.
  */
-activity_id: ActivityId, 
+activity_id: ActivityId,
 /**
  * The attempt number of the activity this event was produced during.
  */
-attempt: number, 
+attempt: number,
 /**
  * Sub-identity of the agent that produced this event — REQUIRED for multi-agent
  * attribution (a single activity attempt may run several agents).
  */
-agent_id: string, 
+agent_id: string,
 /**
  * The role/label of the producing agent (e.g. an orchestrator vs a sub-agent).
  */
-agent_role: string, 
+agent_role: string,
 /**
  * Producer-clock instant the event was emitted (best-effort ordering hint).
  */
-emitted_at: string, 
+emitted_at: string,
 /**
  * Worker-local best-effort monotonic sequence.
  *
  * Exported to TypeScript as `number`; see the module docs for the accepted `2^53` ceiling.
  */
-worker_seq: number, 
+worker_seq: number,
 /**
  * Server-stamped monotonic sequence assigned at durable-commit time; `None` until the event
  * is persisted (ephemeral events are never persisted and always carry `None`).
  *
  * Exported to TypeScript as `number`; see the module docs for the accepted `2^53` ceiling.
  */
-store_seq: number | null, 
+store_seq: number | null,
 /**
  * When `true`, this event is WS-forward-only and is **never persisted** (token deltas).
  */
-ephemeral: boolean, 
+ephemeral: boolean,
 /**
  * The classified payload of this event.
  */
@@ -1252,84 +1342,84 @@ export type ApprovalDecision = { "decision": "Approve" } | { "decision": "Deny" 
 
 export type InterventionPrimitive = { "primitive": "InjectMessage" } | { "primitive": "Cancel" } | { "primitive": "PauseResume" } | { "primitive": "UpdateBudget" } | { "primitive": "RespondToApproval" };
 
-export type InterventionKind = { "kind": "InjectMessage", 
+export type InterventionKind = { "kind": "InjectMessage",
 /**
  * The message text to inject.
  */
-text: string, 
+text: string,
 /**
  * Whether to act now (`Interrupt`) or queue the turn (`Normal`).
  */
-priority: InjectPriority, } | { "kind": "Cancel", 
+priority: InjectPriority, } | { "kind": "Cancel",
 /**
  * Human-readable reason for the cancellation.
  */
-reason: string, } | { "kind": "PauseResume", 
+reason: string, } | { "kind": "PauseResume",
 /**
  * `true` to suspend, `false` to resume.
  */
-paused: boolean, } | { "kind": "UpdateBudget", 
+paused: boolean, } | { "kind": "UpdateBudget",
 /**
  * New maximum token budget, when the operator sets one.
  */
-max_tokens: number | null, 
+max_tokens: number | null,
 /**
  * New maximum turn budget, when the operator sets one.
  */
-max_turns: number | null, } | { "kind": "RespondToApproval", 
+max_turns: number | null, } | { "kind": "RespondToApproval",
 /**
  * Correlation id of the pending approval being answered.
  */
-call_id: string, 
+call_id: string,
 /**
  * The approve/deny decision.
  */
-decision: ApprovalDecision, 
+decision: ApprovalDecision,
 /**
  * An optional note recorded alongside the decision.
  */
 note: string | null, };
 
-export type InterventionCommand = { 
+export type InterventionCommand = {
 /**
  * The workflow the target activity belongs to.
  */
-workflow_id: WorkflowId, 
+workflow_id: WorkflowId,
 /**
  * The target activity within the workflow.
  */
-activity_id: ActivityId, 
+activity_id: ActivityId,
 /**
  * The target attempt. Commands to a stale (superseded) attempt are no-ops.
  */
-attempt: number, 
+attempt: number,
 /**
  * The auth subject that issued the command, when auth is enabled.
  *
  * A neutral subject label (the same identity the auth layer records), carried so the
  * transcript can attribute the intervention. `None` when auth is off.
  */
-issued_by: string | null, 
+issued_by: string | null,
 /**
  * When the command was issued (operator-clock instant).
  */
-issued_at: string, 
+issued_at: string,
 /**
  * The neutral control primitive to apply.
  */
 kind: InterventionKind, };
 
-export type InterventionCapabilities = { 
+export type InterventionCapabilities = {
 /**
  * The primitives this harness supports. Empty = observability-only.
  */
 supported: Array<InterventionPrimitive>, };
 
-export type InterventionOutcome = { "outcome": "Applied" } | { "outcome": "CapabilityNotSupported", 
+export type InterventionOutcome = { "outcome": "Applied" } | { "outcome": "CapabilityNotSupported",
 /**
  * The primitive the target does not support.
  */
-primitive: InterventionPrimitive, } | { "outcome": "StaleTarget", 
+primitive: InterventionPrimitive, } | { "outcome": "StaleTarget",
 /**
  * Human-readable detail describing why the target is stale.
  */

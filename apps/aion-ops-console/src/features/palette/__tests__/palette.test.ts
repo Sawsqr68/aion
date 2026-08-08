@@ -57,8 +57,11 @@ const SNAPSHOT: ClusterSnapshot = {
       task_queue: 'default',
       transport: { transport: 'Grpc' },
       node: 'node-a',
+      deployment: null,
+      deployment_association: null,
     },
   ],
+  deployments: [],
 };
 
 function mockClient(overrides: Partial<PaletteEntityClient> = {}): PaletteEntityClient {

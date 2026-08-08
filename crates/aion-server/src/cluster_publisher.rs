@@ -162,7 +162,10 @@ pub fn cluster_event_meta(event: &ClusterEvent) -> &ClusterEventMeta {
         | ClusterEvent::SupervisorStopped { meta, .. }
         | ClusterEvent::NamespaceCreated { meta, .. }
         | ClusterEvent::NamespacePlacementChanged { meta, .. }
-        | ClusterEvent::NamespaceQuotaState { meta, .. } => meta,
+        | ClusterEvent::NamespaceQuotaState { meta, .. }
+        | ClusterEvent::WorkerDeploymentPut { meta, .. }
+        | ClusterEvent::WorkerDeploymentDesiredStateChanged { meta, .. }
+        | ClusterEvent::WorkerDeploymentDeleted { meta, .. } => meta,
     }
 }
 

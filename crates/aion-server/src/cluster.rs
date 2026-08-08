@@ -567,6 +567,8 @@ fn with_meta_worker_lifecycle(
             task_queue,
             transport,
             node,
+            deployment,
+            deployment_association,
             ..
         } => ClusterEvent::WorkerConnected {
             meta,
@@ -575,6 +577,8 @@ fn with_meta_worker_lifecycle(
             task_queue,
             transport,
             node,
+            deployment,
+            deployment_association,
         },
         ClusterEvent::WorkerDisconnected {
             worker_id,
@@ -628,6 +632,11 @@ fn with_meta_worker_lifecycle(
             in_flight,
             ceiling,
         },
+        deployment_event @ (ClusterEvent::WorkerDeploymentPut { .. }
+        | ClusterEvent::WorkerDeploymentDesiredStateChanged { .. }
+        | ClusterEvent::WorkerDeploymentDeleted { .. }) => {
+            with_meta_worker_deployment(deployment_event, meta)
+        }
         ClusterEvent::PeerAdded { .. }
         | ClusterEvent::PeerConnected { .. }
         | ClusterEvent::PeerDisconnected { .. }
@@ -635,6 +644,56 @@ fn with_meta_worker_lifecycle(
         | ClusterEvent::ShardAdoptionFailed { .. }
         | ClusterEvent::ShardAdoptionSkipped { .. } => {
             unreachable!("peer/shard variants are re-stamped by with_meta, never delegated here")
+        }
+    }
+}
+
+fn with_meta_worker_deployment(
+    event: ClusterEvent,
+    meta: aion_core::ClusterEventMeta,
+) -> ClusterEvent {
+    match event {
+        ClusterEvent::WorkerDeploymentPut {
+            name,
+            outcome,
+            desired_state,
+            binary_version,
+            binary_content_hash,
+            ..
+        } => ClusterEvent::WorkerDeploymentPut {
+            meta,
+            name,
+            outcome,
+            desired_state,
+            binary_version,
+            binary_content_hash,
+        },
+        ClusterEvent::WorkerDeploymentDesiredStateChanged {
+            name,
+            desired_state,
+            ..
+        } => ClusterEvent::WorkerDeploymentDesiredStateChanged {
+            meta,
+            name,
+            desired_state,
+        },
+        ClusterEvent::WorkerDeploymentDeleted { name, .. } => {
+            ClusterEvent::WorkerDeploymentDeleted { meta, name }
+        }
+        ClusterEvent::WorkerConnected { .. }
+        | ClusterEvent::WorkerDisconnected { .. }
+        | ClusterEvent::SupervisorStarted { .. }
+        | ClusterEvent::SupervisorStopped { .. }
+        | ClusterEvent::NamespaceCreated { .. }
+        | ClusterEvent::NamespacePlacementChanged { .. }
+        | ClusterEvent::NamespaceQuotaState { .. }
+        | ClusterEvent::PeerAdded { .. }
+        | ClusterEvent::PeerConnected { .. }
+        | ClusterEvent::PeerDisconnected { .. }
+        | ClusterEvent::ShardAdopted { .. }
+        | ClusterEvent::ShardAdoptionFailed { .. }
+        | ClusterEvent::ShardAdoptionSkipped { .. } => {
+            unreachable!("only worker-deployment variants are delegated here")
         }
     }
 }

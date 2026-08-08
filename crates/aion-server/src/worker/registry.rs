@@ -4,9 +4,12 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use aion_core::{ClusterEvent, InterventionCapabilities, WorkerDeathReason, WorkerTransport};
+use aion_core::{
+    ClusterEvent, DeploymentAssociation, InterventionCapabilities, WorkerDeathReason,
+    WorkerTransport,
+};
 use aion_proto::{ProtoActivityTask, ProtoRegisterWorker};
-use aion_store::{NamespaceOrigin, NamespacePlacement, NamespaceStore};
+use aion_store::{NamespaceOrigin, NamespacePlacement, NamespaceStore, WorkerDeploymentStore};
 use tokio::sync::{Notify, mpsc};
 
 use crate::cluster_publisher::ClusterEventPublisher;
@@ -153,6 +156,22 @@ impl WorkerId {
     }
 }
 
+/// Worker-supplied identity for one instance of a durable deployment.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WorkerInstanceIdentity {
+    /// Durable deployment name supplied on the wire.
+    pub deployment: String,
+    /// Operator/launcher-assigned instance identifier.
+    pub instance_id: String,
+    /// Deployment-store lookup result captured when registration was accepted.
+    pub association: DeploymentAssociation,
+}
+
+struct RegistrationOptions {
+    instance: Option<WorkerInstanceIdentity>,
+    intervention_capabilities: InterventionCapabilities,
+}
+
 /// Cloneable handle for a registered worker stream.
 ///
 /// A worker serves a SET of namespaces under a single `task_queue`, so it is
@@ -167,6 +186,7 @@ pub struct WorkerHandle {
     task_queue: String,
     node: Option<String>,
     activity_types: BTreeSet<String>,
+    instance: Option<WorkerInstanceIdentity>,
     delivery: WorkerDelivery,
     /// The neutral mid-run intervention primitives this worker's harness advertises
     /// support for (NOI-6). The server gates every intervention command on THIS set
@@ -207,6 +227,12 @@ impl WorkerHandle {
     #[must_use]
     pub fn activity_types(&self) -> &BTreeSet<String> {
         &self.activity_types
+    }
+
+    /// Optional durable deployment/instance association supplied at registration.
+    #[must_use]
+    pub const fn instance(&self) -> Option<&WorkerInstanceIdentity> {
+        self.instance.as_ref()
     }
 
     /// The transport this worker is delivered to through.
@@ -285,7 +311,7 @@ impl Default for RegistryState {
 }
 
 /// Cloneable registry of currently connected worker streams.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ConnectedWorkerRegistry {
     inner: Arc<Mutex<RegistryState>>,
     metrics: Option<Metrics>,
@@ -297,6 +323,8 @@ pub struct ConnectedWorkerRegistry {
     /// registration is byte-identical to before the registry existed; `Some`
     /// durably records (open) or gates (closed) each authorized namespace.
     minter: Option<NamespaceMinter>,
+    /// Durable deployment store used only to classify instance associations.
+    deployment_store: Option<Arc<dyn WorkerDeploymentStore>>,
     worker_arrived: Arc<Notify>,
     /// The refusal side of this registry's ledger, shared by every transport.
     ///
@@ -308,6 +336,18 @@ pub struct ConnectedWorkerRegistry {
     audit: Arc<AdmissionAudit>,
 }
 
+impl std::fmt::Debug for ConnectedWorkerRegistry {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ConnectedWorkerRegistry")
+            .field(
+                "deployment_store_attached",
+                &self.deployment_store.is_some(),
+            )
+            .finish_non_exhaustive()
+    }
+}
+
 impl Default for ConnectedWorkerRegistry {
     fn default() -> Self {
         Self {
@@ -315,6 +355,7 @@ impl Default for ConnectedWorkerRegistry {
             metrics: None,
             cluster_publisher: None,
             minter: None,
+            deployment_store: None,
             worker_arrived: Arc::new(Notify::new()),
             audit: Arc::new(AdmissionAudit::new()),
         }
@@ -330,6 +371,7 @@ impl ConnectedWorkerRegistry {
             metrics: Some(metrics),
             cluster_publisher: None,
             minter: None,
+            deployment_store: None,
             worker_arrived: Arc::new(Notify::new()),
             audit: Arc::new(AdmissionAudit::new()),
         }
@@ -348,6 +390,13 @@ impl ConnectedWorkerRegistry {
     #[must_use]
     pub fn with_cluster_publisher(mut self, publisher: ClusterEventPublisher) -> Self {
         self.cluster_publisher = Some(publisher);
+        self
+    }
+
+    /// Attach the durable worker-deployment store used for association lookup.
+    #[must_use]
+    pub fn with_worker_deployment_store(mut self, store: Arc<dyn WorkerDeploymentStore>) -> Self {
+        self.deployment_store = Some(store);
         self
     }
 
@@ -438,13 +487,62 @@ impl ConnectedWorkerRegistry {
         // installed, so default/test registries stay byte-identical.
         self.enforce_pinned_placement(&namespaces, node.as_deref())
             .await?;
-        self.register_namespaces(
+        let instance = self
+            .resolve_instance_identity(registration.instance.as_ref())
+            .await?;
+        self.register_delivery(
             namespaces,
             registration.task_queue.clone(),
             node,
+            instance,
             registration.activity_types.iter(),
-            sender,
+            WorkerDelivery::Grpc(sender),
         )
+    }
+
+    /// Resolve a wire instance identity without refusing unknown deployments.
+    ///
+    /// Workers connect inward, forever: the server never holds an exhaustive
+    /// roster of launchers, and a worker may outlive the deployment record
+    /// that spawned it (record deleted, store swapped, or the worker predates
+    /// the record entirely). Refusing an unknown deployment name here would
+    /// orphan real, servable workers on exactly the recovery paths where they
+    /// matter most. The association is therefore observational — the record's
+    /// existence is captured as a Known/Absent/Unchecked state for supervision
+    /// to read (Unchecked means no store was attached) —
+    /// and never an admission gate. Admission is decided solely by the
+    /// contract checks that precede this call.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError`] when durable deployment lookup fails.
+    pub async fn resolve_instance_identity(
+        &self,
+        instance: Option<&aion_proto::ProtoWorkerInstanceIdentity>,
+    ) -> Result<Option<WorkerInstanceIdentity>, ServerError> {
+        let Some(instance) = instance else {
+            return Ok(None);
+        };
+        let association = match &self.deployment_store {
+            Some(store) => {
+                if store
+                    .get_worker_deployment(&instance.deployment)
+                    .await
+                    .map_err(ServerError::from)?
+                    .is_some()
+                {
+                    DeploymentAssociation::Known
+                } else {
+                    DeploymentAssociation::Absent
+                }
+            }
+            None => DeploymentAssociation::Unchecked,
+        };
+        Ok(Some(WorkerInstanceIdentity {
+            deployment: instance.deployment.clone(),
+            instance_id: instance.instance_id.clone(),
+            association,
+        }))
     }
 
     /// Apply the minted-on-use policy to an already-authorized namespace set.
@@ -583,6 +681,7 @@ impl ConnectedWorkerRegistry {
             namespaces,
             task_queue,
             node,
+            None,
             activity_types,
             WorkerDelivery::Grpc(sender),
         )
@@ -605,16 +704,20 @@ impl ConnectedWorkerRegistry {
         namespaces: impl IntoIterator<Item = String>,
         task_queue: impl Into<String>,
         node: Option<String>,
+        instance: Option<WorkerInstanceIdentity>,
         activity_types: impl IntoIterator<Item = &'a String>,
         delivery: WorkerDelivery,
     ) -> Result<WorkerRegistration, ServerError> {
-        self.register_delivery_with_capabilities(
+        self.register_delivery_inner(
             namespaces,
             task_queue,
             node,
             activity_types,
             delivery,
-            InterventionCapabilities::none(),
+            RegistrationOptions {
+                instance,
+                intervention_capabilities: InterventionCapabilities::none(),
+            },
         )
     }
 
@@ -640,6 +743,28 @@ impl ConnectedWorkerRegistry {
         delivery: WorkerDelivery,
         intervention_capabilities: InterventionCapabilities,
     ) -> Result<WorkerRegistration, ServerError> {
+        self.register_delivery_inner(
+            namespaces,
+            task_queue,
+            node,
+            activity_types,
+            delivery,
+            RegistrationOptions {
+                instance: None,
+                intervention_capabilities,
+            },
+        )
+    }
+
+    fn register_delivery_inner<'a>(
+        &self,
+        namespaces: impl IntoIterator<Item = String>,
+        task_queue: impl Into<String>,
+        node: Option<String>,
+        activity_types: impl IntoIterator<Item = &'a String>,
+        delivery: WorkerDelivery,
+        options: RegistrationOptions,
+    ) -> Result<WorkerRegistration, ServerError> {
         let namespaces = namespaces.into_iter().collect::<BTreeSet<_>>();
         let task_queue = task_queue.into();
         let activity_types = activity_types.into_iter().cloned().collect::<BTreeSet<_>>();
@@ -650,14 +775,16 @@ impl ConnectedWorkerRegistry {
         // Capture the node affinity for the WS3 WorkerConnected delta before the
         // handle moves it.
         let node_for_event = node.clone();
+        let instance_for_event = options.instance.clone();
         let handle = WorkerHandle {
             id: worker_id,
             namespaces: namespaces.clone(),
             task_queue: task_queue.clone(),
             node,
             activity_types: activity_types.clone(),
+            instance: options.instance,
             delivery,
-            intervention_capabilities,
+            intervention_capabilities: options.intervention_capabilities,
         };
 
         for namespace in &namespaces {
@@ -698,13 +825,19 @@ impl ConnectedWorkerRegistry {
         if let Some(publisher) = &self.cluster_publisher {
             let namespaces_vec: Vec<String> = namespaces.iter().cloned().collect();
             let task_queue_owned = task_queue.clone();
-            drop(publisher.emit(|meta| ClusterEvent::WorkerConnected {
-                meta,
-                worker_id: worker_id.value().to_string(),
-                namespaces: namespaces_vec,
-                task_queue: task_queue_owned,
-                transport,
-                node: node_for_event,
+            drop(publisher.emit(|meta| {
+                ClusterEvent::WorkerConnected {
+                    meta,
+                    worker_id: worker_id.value().to_string(),
+                    namespaces: namespaces_vec,
+                    task_queue: task_queue_owned,
+                    transport,
+                    node: node_for_event,
+                    deployment: instance_for_event
+                        .as_ref()
+                        .map(|identity| identity.deployment.clone()),
+                    deployment_association: instance_for_event.map(|identity| identity.association),
+                }
             }));
         }
 
@@ -1351,6 +1484,7 @@ mod tests {
             node: node.to_owned(),
             activities: Vec::new(),
             identity: String::new(),
+            instance: None,
         }
     }
 

@@ -1,0 +1,9 @@
+   Compiling aion-store-haematite v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.48s
+     Running unittests src/lib.rs (target/debug/deps/aion_store_haematite-26c75442fb949521)
+
+running 1 test
+test store::tests::multishard_worker_deployment_listing_sorts_decodable_and_poisoned_names ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 50 filtered out; finished in 0.20s
+

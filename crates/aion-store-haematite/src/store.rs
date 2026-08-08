@@ -47,11 +47,13 @@ use aion_core::{
     WorkflowSummary, status_from_events,
 };
 use aion_store::{
-    ActivityRecord, ActivityStreamKey, ActivityStreamSummary, ClaimScope, MintOutcome,
-    NamespaceOrigin, NamespacePlacement, NamespaceRecord, NamespaceStore, ObservabilityStore,
-    OutboxRow, OutboxStatus, OutboxStore, PackageRecord, PackageRouteRecord, PackageStore,
-    ReadableEventStore, RedriveMode, RedriveOutcome, RedriveRefusal, RunSummary, StoreError,
-    TimerEntry, WritableEventStore, WriteToken,
+    ActivityRecord, ActivityStreamKey, ActivityStreamSummary, ClaimScope, DesiredState,
+    MintOutcome, NamespaceOrigin, NamespacePlacement, NamespaceRecord, NamespaceStore,
+    ObservabilityStore, OutboxRow, OutboxStatus, OutboxStore, PackageRecord, PackageRouteRecord,
+    PackageStore, PutOutcome, ReadableEventStore, RedriveMode, RedriveOutcome, RedriveRefusal,
+    RunSummary, StoreError, TimerEntry, UndecodableWorkerDeployment, WorkerDeployment,
+    WorkerDeploymentDeleteOutcome, WorkerDeploymentListing, WorkerDeploymentPutResult,
+    WorkerDeploymentStore, WritableEventStore, WriteToken,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -3047,6 +3049,323 @@ impl PackageStore for HaematiteStore {
     }
 }
 
+impl HaematiteStore {
+    /// Write worker-deployment backend bytes directly for persistence
+    /// conformance testing.
+    ///
+    /// This bypasses the entity codec so the shared suite can create a poisoned
+    /// row and verify listing, replacement, and deletion behavior. Distributed
+    /// stores still use the same fenced replicated-write path as typed puts.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError`] for an invalid key, task join failure, fencing, or
+    /// Haematite persistence failure.
+    pub async fn write_raw_worker_deployment(
+        &self,
+        name: &str,
+        bytes: Vec<u8>,
+    ) -> Result<(), StoreError> {
+        if name.trim().is_empty() {
+            return Err(StoreError::Serialization(
+                "worker deployment name must not be empty".to_owned(),
+            ));
+        }
+        let store = self.clone();
+        let key = keyspace::worker_deployment_key(name);
+        tokio::task::spawn_blocking(move || store.write_raw_worker_deployment_record(key, bytes))
+            .await
+            .map_err(|error| join_error(&error))?
+    }
+
+    fn write_raw_worker_deployment_record(
+        &self,
+        key: Vec<u8>,
+        value: Vec<u8>,
+    ) -> Result<(), StoreError> {
+        let database = self.inner.database();
+        loop {
+            let current = database.get(&key).map_err(|error| database_error(&error))?;
+            let Some(routing) = self.distribution.clone() else {
+                database
+                    .put(key, value)
+                    .map_err(|error| database_error(&error))?;
+                database.commit().map_err(|error| database_error(&error))?;
+                return Ok(());
+            };
+            let expected = current.as_ref().map(|bytes| Hash::of(bytes));
+            let result = run_off_runtime(|| {
+                database.replicate_write(
+                    key.clone(),
+                    expected,
+                    value.clone(),
+                    None,
+                    &routing.membership,
+                    routing.timeout,
+                )
+            });
+            match result {
+                Ok(_) => return Ok(()),
+                Err(DatabaseError::CasConflict { .. }) => {}
+                Err(DatabaseError::Fenced { .. }) => {
+                    return Err(StoreError::NotOwner {
+                        shard: database.shard_for(&key),
+                    });
+                }
+                Err(error) => return Err(database_error(&error)),
+            }
+        }
+    }
+
+    fn put_worker_deployment_record(
+        &self,
+        record: &WorkerDeployment,
+    ) -> Result<WorkerDeploymentPutResult, StoreError> {
+        let database = self.inner.database();
+        let key = keyspace::worker_deployment_key(&record.name);
+        loop {
+            let current = database.get(&key).map_err(|error| database_error(&error))?;
+            let outcome = if current.is_some() {
+                PutOutcome::Replaced
+            } else {
+                PutOutcome::Created
+            };
+            let next = match current.as_deref() {
+                Some(bytes) => match WorkerDeployment::decode(bytes) {
+                    Ok(previous) => record.clone().preserving_previous(&previous, Utc::now()),
+                    Err(error) => {
+                        tracing::warn!(
+                            deployment_key = %record.name,
+                            %error,
+                            "replacing undecodable prior worker-deployment bytes"
+                        );
+                        record.clone()
+                    }
+                },
+                None => record.clone(),
+            };
+            let value = next.encode()?;
+            let Some(routing) = self.distribution.clone() else {
+                database
+                    .put(key, value)
+                    .map_err(|error| database_error(&error))?;
+                database.commit().map_err(|error| database_error(&error))?;
+                return Ok(WorkerDeploymentPutResult {
+                    outcome,
+                    deployment: next,
+                });
+            };
+            let expected = current.as_ref().map(|bytes| Hash::of(bytes));
+            let result = run_off_runtime(|| {
+                database.replicate_write(
+                    key.clone(),
+                    expected,
+                    value,
+                    None,
+                    &routing.membership,
+                    routing.timeout,
+                )
+            });
+            match result {
+                Ok(_) => {
+                    return Ok(WorkerDeploymentPutResult {
+                        outcome,
+                        deployment: next,
+                    });
+                }
+                Err(DatabaseError::CasConflict { .. }) => {}
+                Err(DatabaseError::Fenced { .. }) => {
+                    return Err(StoreError::NotOwner {
+                        shard: database.shard_for(&key),
+                    });
+                }
+                Err(error) => return Err(database_error(&error)),
+            }
+        }
+    }
+
+    fn set_worker_deployment_desired_state_record(
+        &self,
+        name: &str,
+        desired: DesiredState,
+    ) -> Result<Option<WorkerDeployment>, StoreError> {
+        let database = self.inner.database();
+        let key = keyspace::worker_deployment_key(name);
+        loop {
+            let Some(current) = database.get(&key).map_err(|error| database_error(&error))? else {
+                return Ok(None);
+            };
+            let mut record = WorkerDeployment::decode(&current)?;
+            record.change_desired_state(desired, Utc::now());
+            let value = record.encode()?;
+            let Some(routing) = self.distribution.clone() else {
+                database
+                    .put(key, value)
+                    .map_err(|error| database_error(&error))?;
+                database.commit().map_err(|error| database_error(&error))?;
+                return Ok(Some(record));
+            };
+            let result = run_off_runtime(|| {
+                database.replicate_write(
+                    key.clone(),
+                    Some(Hash::of(&current)),
+                    value,
+                    None,
+                    &routing.membership,
+                    routing.timeout,
+                )
+            });
+            match result {
+                Ok(_) => return Ok(Some(record)),
+                Err(DatabaseError::CasConflict { .. }) => {}
+                Err(DatabaseError::Fenced { .. }) => {
+                    return Err(StoreError::NotOwner {
+                        shard: database.shard_for(&key),
+                    });
+                }
+                Err(error) => return Err(database_error(&error)),
+            }
+        }
+    }
+
+    fn delete_worker_deployment_record(
+        &self,
+        name: &str,
+    ) -> Result<WorkerDeploymentDeleteOutcome, StoreError> {
+        let database = self.inner.database();
+        let key = keyspace::worker_deployment_key(name);
+        loop {
+            let Some(current) = database.get(&key).map_err(|error| database_error(&error))? else {
+                return Ok(WorkerDeploymentDeleteOutcome {
+                    existed: false,
+                    deployment: None,
+                });
+            };
+            let deployment = WorkerDeployment::decode(&current).ok();
+            let Some(routing) = self.distribution.clone() else {
+                database
+                    .delete(key)
+                    .map_err(|error| database_error(&error))?;
+                database.commit().map_err(|error| database_error(&error))?;
+                return Ok(WorkerDeploymentDeleteOutcome {
+                    existed: true,
+                    deployment,
+                });
+            };
+            let result = run_off_runtime(|| {
+                database.replicate_delete(
+                    key.clone(),
+                    Some(Hash::of(&current)),
+                    &routing.membership,
+                    routing.timeout,
+                )
+            });
+            match result {
+                Ok(_) => {
+                    return Ok(WorkerDeploymentDeleteOutcome {
+                        existed: true,
+                        deployment,
+                    });
+                }
+                Err(DatabaseError::CasConflict { .. }) => {}
+                Err(DatabaseError::Fenced { .. }) => {
+                    return Err(StoreError::NotOwner {
+                        shard: database.shard_for(&key),
+                    });
+                }
+                Err(error) => return Err(database_error(&error)),
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl WorkerDeploymentStore for HaematiteStore {
+    async fn put_worker_deployment(
+        &self,
+        record: WorkerDeployment,
+    ) -> Result<WorkerDeploymentPutResult, StoreError> {
+        // Deliberately copy the namespace trap: replication blocks and invokes
+        // `run_off_runtime`, so the complete operation must leave the executor.
+        let store = self.clone();
+        tokio::task::spawn_blocking(move || store.put_worker_deployment_record(&record))
+            .await
+            .map_err(|error| join_error(&error))?
+    }
+
+    async fn get_worker_deployment(
+        &self,
+        name: &str,
+    ) -> Result<Option<WorkerDeployment>, StoreError> {
+        let key = keyspace::worker_deployment_key(name);
+        self.blocking(move |store| {
+            match store
+                .database()
+                .get(&key)
+                .map_err(|error| database_error(&error))?
+            {
+                Some(bytes) => WorkerDeployment::decode(&bytes).map(Some),
+                None => Ok(None),
+            }
+        })
+        .await
+    }
+
+    async fn list_worker_deployments(&self) -> Result<WorkerDeploymentListing, StoreError> {
+        self.blocking(|store| {
+            let rows = scan_prefix(store, keyspace::WORKER_DEPLOYMENT_PREFIX, |key, value| {
+                let name = keyspace::worker_deployment_from_key(key).ok_or_else(|| {
+                    StoreError::Backend("malformed worker-deployment key".to_owned())
+                })?;
+                Ok((name, WorkerDeployment::decode(value)))
+            })?;
+            let mut listing = WorkerDeploymentListing::default();
+            for (name, result) in rows {
+                match result {
+                    Ok(record) => listing.deployments.push(record),
+                    Err(error) => listing.undecodable.push(UndecodableWorkerDeployment {
+                        name,
+                        error: error.to_string(),
+                    }),
+                }
+            }
+            listing
+                .deployments
+                .sort_by(|left, right| left.name.cmp(&right.name));
+            listing
+                .undecodable
+                .sort_by(|left, right| left.name.cmp(&right.name));
+            Ok(listing)
+        })
+        .await
+    }
+
+    async fn set_desired_state(
+        &self,
+        name: &str,
+        desired: DesiredState,
+    ) -> Result<Option<WorkerDeployment>, StoreError> {
+        let store = self.clone();
+        let name = name.to_owned();
+        tokio::task::spawn_blocking(move || {
+            store.set_worker_deployment_desired_state_record(&name, desired)
+        })
+        .await
+        .map_err(|error| join_error(&error))?
+    }
+
+    async fn delete_worker_deployment(
+        &self,
+        name: &str,
+    ) -> Result<WorkerDeploymentDeleteOutcome, StoreError> {
+        let store = self.clone();
+        let name = name.to_owned();
+        tokio::task::spawn_blocking(move || store.delete_worker_deployment_record(&name))
+            .await
+            .map_err(|error| join_error(&error))?
+    }
+}
+
 #[async_trait]
 impl NamespaceStore for HaematiteStore {
     async fn register_namespace(
@@ -3166,15 +3485,17 @@ fn parse_workflow_id(text: &str) -> Result<WorkflowId, StoreError> {
 mod tests {
     #![allow(clippy::expect_used)]
 
+    use std::collections::BTreeSet;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use aion_core::{ContentType, Payload, WorkflowId};
     use aion_store::{
-        ClaimScope, MintOutcome, NamespaceOrigin, NamespaceRecord, NamespaceState, NamespaceStore,
-        OutboxRow, OutboxStatus, OutboxStore, ReadableEventStore, StoreError, WritableEventStore,
-        WriteToken,
+        ClaimScope, DeployedBinaryIdentity, DesiredState, MintOutcome, NamespaceOrigin,
+        NamespaceRecord, NamespaceState, NamespaceStore, NewWorkerDeployment, OutboxRow,
+        OutboxStatus, OutboxStore, ReadableEventStore, StoreError, WorkerArtifactRef,
+        WorkerDeployment, WorkerDeploymentStore, WritableEventStore, WriteToken,
     };
     use chrono::{Duration, Utc};
 
@@ -3195,6 +3516,85 @@ mod tests {
 
     fn store(name: &str) -> Result<HaematiteStore, StoreError> {
         HaematiteStore::create(unique_dir(name))
+    }
+
+    fn worker_deployment(name: &str) -> Result<WorkerDeployment, StoreError> {
+        WorkerDeployment::new(
+            NewWorkerDeployment {
+                name: name.to_owned(),
+                artifact: WorkerArtifactRef::Builtin { verb: Vec::new() },
+                binary: DeployedBinaryIdentity {
+                    version: "test".to_owned(),
+                    commit: "test".to_owned(),
+                    dirty: "false".to_owned(),
+                    content_hash: "test".to_owned(),
+                },
+                namespaces: BTreeSet::new(),
+                task_queue: "test".to_owned(),
+                node: None,
+                desired: DesiredState::Running,
+            },
+            Utc::now(),
+        )
+        .map_err(|error| StoreError::Serialization(error.to_string()))
+    }
+
+    fn worker_deployment_shard_inversion(
+        store: &HaematiteStore,
+        prefix: &str,
+    ) -> Result<[String; 2], StoreError> {
+        let database = store.inner.database();
+        let mut prior_names: Vec<(String, usize)> = Vec::new();
+        for suffix in 0_u16..=u16::MAX {
+            let name = format!("{prefix}-{suffix:05}");
+            let shard = database.shard_for(&keyspace::worker_deployment_key(&name));
+            if let Some((lower_name, _)) = prior_names
+                .iter()
+                .find(|(_, lower_name_shard)| *lower_name_shard > shard)
+            {
+                return Ok([lower_name.clone(), name]);
+            }
+            prior_names.push((name, shard));
+        }
+        Err(StoreError::Backend(format!(
+            "could not find a worker-deployment shard inversion for {prefix}"
+        )))
+    }
+
+    #[tokio::test]
+    async fn multishard_worker_deployment_listing_sorts_decodable_and_poisoned_names()
+    -> Result<(), StoreError> {
+        let store = HaematiteStore::create_with_shard_count(unique_dir("deployment-order"), 4)?;
+        let decoded_names = worker_deployment_shard_inversion(&store, "decoded")?;
+        let poisoned_names = worker_deployment_shard_inversion(&store, "poisoned")?;
+
+        // Each pair is inserted in the unsorted order that the shard-by-shard scan
+        // would return, so removing either mandatory post-scan sort reddens this pin.
+        for name in decoded_names.iter().rev() {
+            store
+                .put_worker_deployment(worker_deployment(name)?)
+                .await?;
+        }
+        for name in poisoned_names.iter().rev() {
+            store
+                .write_raw_worker_deployment(name, b"poisoned".to_vec())
+                .await?;
+        }
+
+        let listing = store.list_worker_deployments().await?;
+        let actual_decoded = listing
+            .deployments
+            .into_iter()
+            .map(|deployment| deployment.name)
+            .collect::<Vec<_>>();
+        let actual_poisoned = listing
+            .undecodable
+            .into_iter()
+            .map(|deployment| deployment.name)
+            .collect::<Vec<_>>();
+        assert_eq!(actual_decoded, decoded_names);
+        assert_eq!(actual_poisoned, poisoned_names);
+        Ok(())
     }
 
     fn pending_row(

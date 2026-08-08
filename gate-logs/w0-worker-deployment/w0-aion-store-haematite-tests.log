@@ -1,0 +1,136 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling aion-store v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+   Compiling aion-store-haematite v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 37.15s
+     Running unittests src/lib.rs (target/debug/deps/aion_store_haematite-4a5205896471a084)
+
+running 50 tests
+test error::tests::election_lost_maps_to_not_owner ... ok
+test error::tests::cas_conflict_is_idempotent_for_self_but_aborts_for_other ... ok
+test keyspace::tests::observability_keys_order_by_workflow_then_activity_then_attempt ... ok
+test keyspace::tests::event_stream_key_is_tagged_and_disjoint_from_kv_regions ... ok
+test error::tests::election_timeout_and_quorum_stay_backend ... ok
+test keyspace::tests::decode_observability_stream_key_rejects_foreign_and_truncated_keys ... ok
+test keyspace::tests::observability_key_is_o_tagged_and_disjoint_from_every_region ... ok
+test keyspace::tests::namespace_key_is_tagged_and_disjoint_from_other_regions ... ok
+test keyspace::tests::namespace_from_key_rejects_foreign_keys ... ok
+test keyspace::tests::observability_workflow_prefix_is_a_strict_prefix_of_the_full_key ... ok
+test keyspace::tests::namespace_key_round_trips ... ok
+test keyspace::tests::observability_stream_key_encode_decode_round_trips ... ok
+test keyspace::tests::prefix_upper_bound_increments_last_byte ... ok
+test keyspace::tests::prefix_upper_bound_unbounded_when_all_ff ... ok
+test keyspace::tests::route_key_round_trips ... ok
+test keyspace::tests::worker_deployment_keyspace_is_tagged_and_disjoint ... ok
+test keyspace::tests::workflow_id_from_event_stream_key_round_trips ... ok
+test keyspace::tests::workflow_id_from_event_stream_key_rejects_non_stream_keys ... ok
+test keyspace::tests::shard_owner_key_lands_on_its_shard_for_every_shard ... ok
+test namespace_shard::tests::distinct_namespaces_resolve_distinct_stable_shards ... ok
+test namespace_shard::tests::namespace_shard_is_within_the_shard_count ... ok
+test namespace_shard::tests::default_namespace_lands_on_shard_one_at_three_shards ... ok
+test namespace_shard::tests::single_shard_store_routes_every_namespace_to_shard_zero ... ok
+test store::tests::get_namespace_returns_none_for_absent ... ok
+test store::tests::mint_for_shard_lands_on_the_routing_key_shard ... ok
+test store::tests::append_outbox_batch_ignores_duplicate_dispatch_key ... ok
+test store::tests::only_typed_fence_classifies_as_not_owner ... ok
+test store::tests::deprecate_namespace_sets_state_and_is_idempotent ... ok
+test store::tests::outbox_serde_round_trips_node_and_absent_field_decodes_none ... ok
+test store::tests::append_with_outbox_persists_events_and_rows ... ok
+test store::tests::count_claimed_by_namespace_matches_per_namespace_scalar_counts ... ok
+test store::tests::durable_state_survives_close_and_reopen ... ok
+test store::tests::list_namespaces_is_ascending_by_created_at_then_name ... ok
+test store::tests::node_less_scoped_claim_excludes_pinned_rows ... ok
+test store::tests::count_claimed_outbox_rows_counts_only_claimed_not_pending_backlog ... ok
+test store::tests::count_inflight_outbox_rows_counts_pending_and_claimed_per_namespace ... ok
+test store::tests::remint_for_owned_shard_respects_scope ... ok
+test store::tests::count_inflight_outbox_rows_excludes_terminal_only_namespace ... ok
+test store::tests::pending_outbox_routes_enumerates_distinct_claimable_routes ... ok
+test store::tests::single_node_fence_seam_is_a_noop ... ok
+test store::tests::put_namespace_carries_supplied_record ... ok
+test store::tests::register_namespace_creates_then_get_returns_it ... ok
+test store::tests::scoped_claim_matches_namespace_task_queue_and_node_predicate ... ok
+test store::tests::second_register_is_already_existed_and_bumps_last_seen ... ok
+test store::tests::staged_row_round_trips_node_affinity ... ok
+test store::tests::unscoped_claim_still_claims_any_row ... ok
+test store::tests::set_placement_updates_existing_and_is_not_found_when_absent ... ok
+test store::tests::rearm_preserves_attempt_and_inserts_fresh_rows ... ok
+test store::tests::outbox_claim_complete_retry_fail_round_trip ... ok
+test store::tests::settle_cancelled_is_idempotent_and_terminal ... ok
+
+test result: ok. 50 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.84s
+
+     Running tests/colocation.rs (target/debug/deps/colocation-7bd93b29dc4e2e8e)
+
+running 2 tests
+test per_workflow_records_land_on_the_workflow_shard ... ok
+test two_workflows_on_different_shards_stay_isolated ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+
+     Running tests/conformance.rs (target/debug/deps/conformance-5a32d7418c509681)
+
+running 3 tests
+test haematite_store_satisfies_worker_deployment_conformance_suite ... ok
+test haematite_store_satisfies_event_store_conformance_suite ... ok
+test haematite_store_satisfies_outbox_settlement_conformance_suite ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.23s
+
+     Running tests/distributed_failover.rs (target/debug/deps/distributed_failover-634464a74b2236dc)
+
+running 6 tests
+test lagging_node_without_writes_reads_empty_history ... ok
+test durable_timer_survives_shard_adoption ... ok
+test workflow_history_replicates_to_followers ... ok
+test workflow_history_survives_owner_failover ... ok
+test adopted_shard_owner_is_published_to_and_read_by_a_different_survivor ... ok
+test deposed_survivor_publish_is_fenced_to_not_owner ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.26s
+
+     Running tests/multishard.rs (target/debug/deps/multishard-869b0da6ed4759a7)
+
+running 4 tests
+test enumerations_fan_out_across_shards ... ok
+test list_packages_fans_out_across_shards ... ok
+test expired_timers_fan_out_across_shards ... ok
+test outbox_claims_fan_out_across_shards ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.25s
+
+     Running tests/namespace_quorum_cas.rs (target/debug/deps/namespace_quorum_cas-f7f0606e871066b4)
+
+running 2 tests
+test duplicate_register_across_nodes_converges_to_one_record ... ok
+test register_against_deposed_owner_is_fenced_to_not_owner ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.68s
+
+     Running tests/observability.rs (target/debug/deps/observability-1815ca9316df6b2e)
+
+running 5 tests
+test stale_expected_seq_conflicts_and_writes_nothing ... ok
+test observability_records_survive_reopen_and_are_invisible_to_replay ... ok
+test attempts_are_disjoint_streams ... ok
+test append_read_head_round_trip ... ok
+test list_activity_streams_enumerates_only_the_workflows_streams_and_survives_reopen ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+
+     Running tests/scoping.rs (target/debug/deps/scoping-1bc8c9470e5de4e7)
+
+running 3 tests
+test default_claim_spans_all_shards ... ok
+test active_active_each_row_claimed_by_exactly_one_owner ... ok
+test enumeration_scopes_to_owned_shards ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.93s
+
+   Doc-tests aion_store_haematite
+
+running 1 test
+test crates/aion-store-haematite/src/lib.rs - (line 22) - compile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 1.76s; merged doctests compilation took 1.38s

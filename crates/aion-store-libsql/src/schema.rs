@@ -106,6 +106,19 @@ pub const CREATE_NAMESPACES_CREATED_AT_INDEX: &str = "
 CREATE INDEX IF NOT EXISTS idx_namespaces_created_at
 ON namespaces (created_at, name)";
 
+/// Durable worker-deployment records keyed by operator-chosen name.
+pub const CREATE_WORKER_DEPLOYMENTS_TABLE: &str = "
+CREATE TABLE IF NOT EXISTS worker_deployments (
+    name TEXT PRIMARY KEY,
+    updated_at TEXT NOT NULL,
+    record BLOB NOT NULL
+)";
+
+/// Index supporting operator inspection ordered by the most recent mutation.
+pub const CREATE_WORKER_DEPLOYMENTS_UPDATED_AT_INDEX: &str = "
+CREATE INDEX IF NOT EXISTS idx_worker_deployments_updated_at
+ON worker_deployments (updated_at, name)";
+
 /// Durable fan-out dispatch outbox.
 ///
 /// `dispatch_key` (`"{workflow_id}:{ordinal}"`) is `UNIQUE`: it is the database-level idempotency
@@ -146,7 +159,7 @@ CREATE INDEX IF NOT EXISTS idx_outbox_claimed_at
 ON outbox (status, claimed_at)
 WHERE status = 'claimed' AND claimed_at IS NOT NULL";
 
-const DDL_STATEMENTS: [&str; 15] = [
+const DDL_STATEMENTS: [&str; 17] = [
     CREATE_EVENTS_TABLE,
     CREATE_EVENTS_PROJECTION_INDEX,
     CREATE_TIMERS_TABLE,
@@ -162,6 +175,8 @@ const DDL_STATEMENTS: [&str; 15] = [
     CREATE_OUTBOX_PENDING_INDEX,
     CREATE_NAMESPACES_TABLE,
     CREATE_NAMESPACES_CREATED_AT_INDEX,
+    CREATE_WORKER_DEPLOYMENTS_TABLE,
+    CREATE_WORKER_DEPLOYMENTS_UPDATED_AT_INDEX,
 ];
 
 /// Ensure the libSQL schema exists on a fresh or previously-created database.
@@ -342,6 +357,9 @@ mod tests {
         assert_schema_object(read, "table", "namespaces").await?;
         assert_schema_object(read, "index", "sqlite_autoindex_namespaces_1").await?;
         assert_schema_object(read, "index", "idx_namespaces_created_at").await?;
+        assert_schema_object(read, "table", "worker_deployments").await?;
+        assert_schema_object(read, "index", "sqlite_autoindex_worker_deployments_1").await?;
+        assert_schema_object(read, "index", "idx_worker_deployments_updated_at").await?;
 
         Ok(())
     }

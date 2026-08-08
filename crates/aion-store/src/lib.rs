@@ -50,6 +50,8 @@ pub mod testing;
 pub mod timer;
 /// Workflow visibility records, predicates, and list filters.
 pub mod visibility;
+/// Durable worker-deployment records and persistence contract.
+pub mod worker_deployment;
 
 pub use aion_core::{
     ContentType, Event, EventEnvelope, Payload, RunId, TimerId, WorkflowError, WorkflowFilter,
@@ -75,4 +77,10 @@ pub use timer::TimerEntry;
 pub use visibility::{
     ListWorkflowsFilter, SearchAttributePredicate, VisibilityRecord, VisibilityStore,
     WorkflowSummary as VisibilityWorkflowSummary,
+};
+pub use worker_deployment::{
+    DeployedBinaryIdentity, DesiredState, NewWorkerDeployment, PutOutcome, StatusEntry,
+    UndecodableWorkerDeployment, WorkerArtifactRef, WorkerDeployment,
+    WorkerDeploymentDeleteOutcome, WorkerDeploymentListing, WorkerDeploymentPutResult,
+    WorkerDeploymentStore, WorkerDeploymentValidationError,
 };

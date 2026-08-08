@@ -1,0 +1,105 @@
+   Compiling aion-core v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.13s
+     Running unittests src/lib.rs (target/debug/deps/aion_core-f87ab5d07c5ef795)
+
+running 89 tests
+test error::tests::activity_error_reports_retryable_classification ... ok
+test error::tests::activity_error_reports_terminal_classification ... ok
+test error::tests::workflow_error_from_activity_error_preserves_message_and_details ... ok
+test error::tests::errors_round_trip_through_json ... ok
+test event::tests::activity_scheduled_records_and_reads_back_its_node ... ok
+test activity_event::tests::ephemeral_delta_round_trips_without_store_seq ... ok
+test activity_event::tests::envelope_round_trips_through_json ... ok
+test event::tests::activity_scheduled_records_and_reads_back_its_task_queue ... ok
+test event::tests::activity_scheduled_decodes_old_history_without_task_queue_as_default ... ok
+test event::tests::activity_scheduled_decodes_old_history_without_node_as_none ... ok
+test event::tests::event_accessors_return_envelope_fields ... ok
+test event::tests::activity_lifecycle_decodes_old_history_without_attempt_as_legacy_sentinel ... ok
+test event::tests::child_events_round_trip_through_json ... ok
+test activity_event::tests::every_event_kind_round_trips ... ok
+test event::tests::activity_lifecycle_records_and_reads_back_its_attempt ... ok
+test event::tests::old_history_without_pause_resume_decodes_unchanged ... ok
+test event::tests::start_time_task_queue_is_none_without_the_attribute ... ok
+test event::tests::pause_resume_events_round_trip_through_json ... ok
+test event::tests::events_round_trip_through_json ... ok
+test event::tests::start_time_task_queue_projects_from_recorded_attribute ... ok
+test filter::tests::combined_filter_requires_every_field_to_match ... ok
+test event::tests::timer_cancelled_decodes_old_history_without_cause_as_workflow_intent ... ok
+test filter::tests::default_filter_matches_all_summaries ... ok
+test filter::tests::failure_projection_attributes_failed_step_and_reason ... ok
+test filter::tests::failure_projection_has_reason_but_no_step_when_no_activity_failed ... ok
+test filter::tests::failure_projection_is_none_for_non_failed ... ok
+test filter::tests::parent_filter_matches_parent_workflow_id ... ok
+test filter::tests::failure_projection_is_reset_by_reopen ... ok
+test filter::tests::started_after_filter_matches_start_time_inclusively ... ok
+test filter::tests::schedule_events_do_not_set_summary_end_time ... ok
+test filter::tests::failure_projection_ignores_a_failed_step_that_later_succeeded ... ok
+test event::tests::extended_events_round_trip_through_json ... ok
+test filter::tests::status_filter_matches_projected_status ... ok
+test filter::tests::started_before_filter_matches_start_time_inclusively ... ok
+test filter::tests::summary_from_history_without_start_returns_none ... ok
+test filter::tests::summary_end_time_uses_last_terminal_event ... ok
+test filter::tests::summary_from_history_projects_required_fields ... ok
+test filter::tests::summary_projects_continued_as_new ... ok
+test filter::tests::workflow_type_filter_matches_exact_type ... ok
+test filter::tests::summary_projects_current_run_after_continue_as_new ... ok
+test intervention::tests::capabilities_gate_on_advertised_primitives ... ok
+test ids::tests::named_timer_rejects_empty_name ... ok
+test ids::tests::display_formats_are_stable ... ok
+test ids::tests::sequence_identifiers_expose_positions ... ok
+test ids::tests::uuid_identifiers_are_hash_map_keys ... ok
+test ids::tests::identifiers_round_trip_through_json ... ok
+test intervention::tests::empty_capability_set_is_first_class ... ok
+test intervention::tests::command_without_auth_subject_round_trips ... ok
+test intervention::tests::every_outcome_round_trips ... ok
+test intervention::tests::every_intervention_variant_round_trips ... ok
+test payload::tests::json_values_round_trip_losslessly ... ok
+test schedule::tests::catch_up_policies_round_trip_through_json ... ok
+test schedule::tests::overlap_policies_round_trip_through_json ... ok
+test schedule::tests::schedule_id_is_a_hash_map_key ... ok
+test schedule::tests::schedule_id_display_and_from_str_use_uuid_format ... ok
+test schedule::tests::schedule_config_round_trips_through_json ... ok
+test schedule::tests::schedule_config_defaults_missing_policy_fields ... ok
+test schedule::tests::schedule_id_round_trips_through_json ... ok
+test schedule::tests::trigger_specs_round_trip_through_json ... ok
+test search::tests::registering_same_name_with_different_type_errors ... ok
+test search::tests::schema_registers_and_validates_matching_types ... ok
+test search::tests::search_attribute_types_round_trip_through_json ... ok
+test search::tests::validating_mismatched_type_errors ... ok
+test search::tests::search_attribute_values_round_trip_through_json ... ok
+test search::tests::validating_unregistered_attribute_errors ... ok
+test search::tests::values_report_matching_attribute_types ... ok
+test status::tests::complete_after_resume_projects_completed ... ok
+test status::tests::continued_as_new_projects_status ... ok
+test status::tests::current_lease_terminal_is_none_for_running_and_reopened ... ok
+test status::tests::cancelled_terminal_event_projects_to_cancelled ... ok
+test status::tests::completed_terminal_event_projects_to_completed ... ok
+test status::tests::complete_while_paused_still_projects_completed ... ok
+test status::tests::current_lease_terminal_returns_terminal_after_reopen_and_retermination ... ok
+test status::tests::empty_history_projects_to_running ... ok
+test status::tests::failed_terminal_event_projects_to_failed ... ok
+test status::tests::last_terminal_lifecycle_event_determines_status ... ok
+test status::tests::non_terminal_history_projects_to_running ... ok
+test status::tests::pause_projects_paused_and_is_non_terminal ... ok
+test status::tests::projection_is_deterministic ... ok
+test status::tests::reopen_after_failure_projects_running ... ok
+test status::tests::reopen_then_new_terminal_projects_that_terminal ... ok
+test status::tests::resume_after_pause_projects_running ... ok
+test status::tests::replacement_start_projects_continue_as_new_chain_running ... ok
+test status::tests::run_segment_scopes_to_the_named_run ... ok
+test status::tests::started_then_continued_as_new_projects_status ... ok
+test status::tests::schedule_events_do_not_change_workflow_status ... ok
+test status::tests::timed_out_terminal_event_projects_to_timed_out ... ok
+test status::tests::workflow_status_terminality_classifies_running_and_terminal_statuses ... ok
+test generated_types::export_ops_console_wire_types ... ok
+
+test result: ok. 89 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests aion_core
+
+running 1 test
+test crates/aion-core/src/lib.rs - (line 9) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+all doctests ran in 1.34s; merged doctests compilation took 0.83s

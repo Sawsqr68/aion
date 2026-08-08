@@ -1,0 +1,21 @@
+    Checking aion-store v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+    Checking aion-store-haematite v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+    Checking aion-rs v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Checking aion-store-libsql v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-libsql)
+    Checking aion-proto v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+    Checking aion-server v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Checking aion-client v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-client)
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion/benchmarks/million-processes)
+    Checking aion-cli v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+error: this function has too many lines (117/100)
+  --> crates/aion-server/tests/worker_deployment_spawn_fence.rs:19:1
+   |
+19 | fn worker_deployment_modules_do_not_spawn_processes() -> Result<(), String> {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#too_many_lines
+   = note: `-D clippy::too-many-lines` implied by `-D clippy::pedantic`
+   = help: to override `-D clippy::pedantic` add `#[allow(clippy::too_many_lines)]`
+
+error: could not compile `aion-server` (test "worker_deployment_spawn_fence") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

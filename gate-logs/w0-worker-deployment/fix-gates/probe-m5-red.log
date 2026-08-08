@@ -1,0 +1,16 @@
+   Compiling aion-store v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.73s
+     Running tests/inmemory_conformance.rs (target/debug/deps/inmemory_conformance-312132a09bf3f2e0)
+
+running 1 test
+Error: Backend("replacement must append exactly one history entry")
+test inmemory_store_satisfies_worker_deployment_conformance_suite ... FAILED
+
+failures:
+
+failures:
+    inmemory_store_satisfies_worker_deployment_conformance_suite
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p aion-store --test inmemory_conformance`

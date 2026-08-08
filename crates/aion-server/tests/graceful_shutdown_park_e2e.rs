@@ -236,6 +236,7 @@ impl WorkerSession {
                             output_schema_json: "{}".to_owned(),
                         }],
                         identity: "shutdown-test-worker".to_owned(),
+                        instance: None,
                     },
                 )),
             })

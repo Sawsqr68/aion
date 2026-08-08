@@ -1,0 +1,8 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.11s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a08d0341e03de0ba)
+
+running 1 test
+test api::http::worker_deployments::tests::poisoned_row_does_not_break_cluster_snapshot ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 832 filtered out; finished in 0.03s
+

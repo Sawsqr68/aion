@@ -37,6 +37,7 @@ pub mod schema;
 pub mod store;
 mod timer;
 mod visibility;
+mod worker_deployment;
 
 pub use config::{LibSqlConfig, LibSqlMode};
 pub use outbox::OutboxRowState;

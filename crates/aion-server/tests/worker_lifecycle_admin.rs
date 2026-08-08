@@ -135,6 +135,7 @@ fn shutdown_drain_fences_and_deregisters_liminal_worker() -> Result<(), Box<dyn 
         [String::from("default")],
         String::from("default"),
         None,
+        None,
         activity_types.iter(),
         delivery,
     )?;

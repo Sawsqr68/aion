@@ -183,6 +183,7 @@ pub async fn register_as(
                     node,
                     activities,
                     identity: identity.to_owned(),
+                    instance: None,
                 },
             )),
         })

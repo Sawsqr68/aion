@@ -15,6 +15,11 @@ use crate::namespace::{
 };
 use crate::package::{PackageRecord, PackageRouteRecord, PackageStore};
 use crate::visibility::{ListWorkflowsFilter, VisibilityRecord, VisibilityStore};
+use crate::worker_deployment::{
+    DesiredState, PutOutcome, UndecodableWorkerDeployment, WorkerDeployment,
+    WorkerDeploymentDeleteOutcome, WorkerDeploymentListing, WorkerDeploymentPutResult,
+    WorkerDeploymentStore,
+};
 use crate::{
     ReadableEventStore, RunSummary, StoreError, TimerEntry, WritableEventStore, WriteToken,
 };
@@ -24,6 +29,7 @@ use crate::{
 pub struct InMemoryStore {
     state: Mutex<InMemoryState>,
     namespaces: Mutex<BTreeMap<String, NamespaceRecord>>,
+    worker_deployments: Mutex<BTreeMap<String, Vec<u8>>>,
 }
 
 #[async_trait]
@@ -104,6 +110,35 @@ impl InMemoryStore {
         self.namespaces
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn lock_worker_deployments(&self) -> MutexGuard<'_, BTreeMap<String, Vec<u8>>> {
+        self.worker_deployments
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Write backend bytes directly for persistence conformance testing.
+    ///
+    /// This deliberately bypasses the entity codec so the shared suite can pin
+    /// poisoned-row listing, replacement, and deletion behavior on every backend.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Serialization`] when `name` is empty or whitespace.
+    pub fn write_raw_worker_deployment(
+        &self,
+        name: &str,
+        bytes: Vec<u8>,
+    ) -> Result<(), StoreError> {
+        if name.trim().is_empty() {
+            return Err(StoreError::Serialization(
+                "worker deployment name must not be empty".to_owned(),
+            ));
+        }
+        self.lock_worker_deployments()
+            .insert(name.to_owned(), bytes);
+        Ok(())
     }
 }
 
@@ -270,6 +305,93 @@ impl NamespaceStore for InMemoryStore {
         // A missing row is an idempotent no-op: deprecation never strands
         // durable history and an absent registry entry is not an error.
         Ok(())
+    }
+}
+
+#[async_trait]
+impl WorkerDeploymentStore for InMemoryStore {
+    async fn put_worker_deployment(
+        &self,
+        mut record: WorkerDeployment,
+    ) -> Result<WorkerDeploymentPutResult, StoreError> {
+        let mut deployments = self.lock_worker_deployments();
+        let outcome = if let Some(previous) = deployments.get(&record.name) {
+            match WorkerDeployment::decode(previous) {
+                Ok(previous) => {
+                    record = record.preserving_previous(&previous, Utc::now());
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        deployment_key = %record.name,
+                        %error,
+                        "replacing undecodable prior worker-deployment bytes"
+                    );
+                }
+            }
+            PutOutcome::Replaced
+        } else {
+            PutOutcome::Created
+        };
+        deployments.insert(record.name.clone(), record.encode()?);
+        Ok(WorkerDeploymentPutResult {
+            outcome,
+            deployment: record,
+        })
+    }
+
+    async fn get_worker_deployment(
+        &self,
+        name: &str,
+    ) -> Result<Option<WorkerDeployment>, StoreError> {
+        self.lock_worker_deployments()
+            .get(name)
+            .map(|bytes| WorkerDeployment::decode(bytes))
+            .transpose()
+    }
+
+    async fn list_worker_deployments(&self) -> Result<WorkerDeploymentListing, StoreError> {
+        let mut listing = WorkerDeploymentListing::default();
+        for (name, bytes) in self.lock_worker_deployments().iter() {
+            match WorkerDeployment::decode(bytes) {
+                Ok(record) => listing.deployments.push(record),
+                Err(error) => listing.undecodable.push(UndecodableWorkerDeployment {
+                    name: name.clone(),
+                    error: error.to_string(),
+                }),
+            }
+        }
+        Ok(listing)
+    }
+
+    async fn set_desired_state(
+        &self,
+        name: &str,
+        desired: DesiredState,
+    ) -> Result<Option<WorkerDeployment>, StoreError> {
+        let mut deployments = self.lock_worker_deployments();
+        let Some(bytes) = deployments.get(name) else {
+            return Ok(None);
+        };
+        let mut record = WorkerDeployment::decode(bytes)?;
+        record.change_desired_state(desired, Utc::now());
+        deployments.insert(name.to_owned(), record.encode()?);
+        Ok(Some(record))
+    }
+
+    async fn delete_worker_deployment(
+        &self,
+        name: &str,
+    ) -> Result<WorkerDeploymentDeleteOutcome, StoreError> {
+        let Some(bytes) = self.lock_worker_deployments().remove(name) else {
+            return Ok(WorkerDeploymentDeleteOutcome {
+                existed: false,
+                deployment: None,
+            });
+        };
+        Ok(WorkerDeploymentDeleteOutcome {
+            existed: true,
+            deployment: WorkerDeployment::decode(&bytes).ok(),
+        })
     }
 }
 

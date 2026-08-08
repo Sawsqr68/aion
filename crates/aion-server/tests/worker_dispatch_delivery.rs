@@ -154,6 +154,7 @@ impl Harness {
                         node: String::new(),
                         activities: Vec::new(),
                         identity: "dispatch-test-worker".to_owned(),
+                        instance: None,
                     },
                 )),
             })
@@ -501,6 +502,7 @@ async fn denied_registration_fails_rpc_without_frames() -> Result<(), TestError>
                     node: String::new(),
                     activities: Vec::new(),
                     identity: "unauthorized-test-worker".to_owned(),
+                    instance: None,
                 },
             )),
         })

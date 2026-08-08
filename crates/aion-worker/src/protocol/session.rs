@@ -465,6 +465,7 @@ impl WorkerSession for GrpcWorkerSession {
             node: self.config.node.clone(),
             activities,
             identity: self.config.identity.clone(),
+            instance: None,
         };
         self.open_registered_stream(register).await
     }

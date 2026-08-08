@@ -1,0 +1,20 @@
+   Compiling aion-server v0.12.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.33s
+     Running tests/worker_deployment_spawn_fence.rs (target/debug/deps/worker_deployment_spawn_fence-fecee136e1c67fa2)
+
+running 2 tests
+test scanner_detects_process_code_and_ignores_comment_and_string_decoys ... ok
+test worker_deployment_modules_do_not_spawn_processes ... FAILED
+
+failures:
+
+---- worker_deployment_modules_do_not_spawn_processes stdout ----
+Error: "cluster worker-deployment event stamping contains forbidden process API `std::process`"
+
+
+failures:
+    worker_deployment_modules_do_not_spawn_processes
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p aion-server --test worker_deployment_spawn_fence`

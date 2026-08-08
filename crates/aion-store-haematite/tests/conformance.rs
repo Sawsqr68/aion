@@ -10,9 +10,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use aion_store::{
     Event, EventStore, PackageRecord, PackageRouteRecord, PackageStore, ReadableEventStore,
-    RunSummary, StoreError, TimerEntry, TimerId, WorkflowFilter, WorkflowId, WorkflowSummary,
-    WritableEventStore, WriteToken,
-    conformance::{run_event_store_suite, run_outbox_settlement_suite},
+    RunSummary, StoreError, TimerEntry, TimerId, WorkerDeploymentStore, WorkflowFilter, WorkflowId,
+    WorkflowSummary, WritableEventStore, WriteToken,
+    conformance::{
+        run_event_store_suite, run_outbox_settlement_suite, run_worker_deployment_suite,
+    },
 };
 use aion_store_haematite::HaematiteStore;
 use async_trait::async_trait;
@@ -38,6 +40,29 @@ async fn haematite_store_satisfies_outbox_settlement_conformance_suite() -> Resu
     run_outbox_settlement_suite(|| async {
         HaematiteStore::create(unique_temp_dir("outbox-settlement"))
     })
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn haematite_store_satisfies_worker_deployment_conformance_suite() -> Result<(), StoreError> {
+    let data_dir = unique_temp_dir("worker-deployment");
+    let first = Arc::new(HaematiteStore::create(data_dir.clone())?);
+    let trait_store: Arc<dyn WorkerDeploymentStore> = first.clone();
+    let raw_store = first.clone();
+    drop(first);
+    run_worker_deployment_suite(
+        trait_store,
+        Some(Box::new(move || {
+            let data_dir = data_dir.clone();
+            Box::pin(async move {
+                Ok(Arc::new(HaematiteStore::open(data_dir)?) as Arc<dyn WorkerDeploymentStore>)
+            })
+        })),
+        Box::new(move |name, bytes| {
+            let raw_store = raw_store.clone();
+            Box::pin(async move { raw_store.write_raw_worker_deployment(&name, bytes).await })
+        }),
+    )
     .await
 }
 

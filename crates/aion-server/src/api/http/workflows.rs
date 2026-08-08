@@ -516,7 +516,7 @@ mod tests {
     use aion_core::{WorkflowStatus, WorkflowSummary};
     use aion_proto::{WireError, WireErrorCode};
     use aion_store::{
-        WriteToken,
+        NamespaceStore, WriteToken,
         visibility::{VisibilityRecord, VisibilityStore},
     };
     use axum::{Router, http::StatusCode};
@@ -991,8 +991,7 @@ mod tests {
                 .build()
                 .await?,
         );
-        let namespace_store: Arc<dyn aion_store::NamespaceStore> =
-            Arc::new(aion_store::InMemoryStore::default());
+        let namespace_store = Arc::new(aion_store::InMemoryStore::default());
         for name in seed {
             namespace_store
                 .register_namespace(name, aion_store::NamespaceOrigin::Explicit)
@@ -1027,7 +1026,8 @@ mod tests {
             config,
             Arc::clone(&namespace_store),
         );
-        Ok((workflow_router(state), namespace_store))
+        let exposed_store: Arc<dyn aion_store::NamespaceStore> = namespace_store;
+        Ok((workflow_router(state), exposed_store))
     }
 
     /// Request to `GET /namespaces` as an enumerated caller granted exactly the
@@ -1255,8 +1255,7 @@ mod tests {
                 .build()
                 .await?,
         );
-        let namespace_store: Arc<dyn aion_store::NamespaceStore> =
-            Arc::new(aion_store::InMemoryStore::default());
+        let namespace_store = Arc::new(aion_store::InMemoryStore::default());
         for name in seed {
             namespace_store
                 .register_namespace(name, aion_store::NamespaceOrigin::Explicit)

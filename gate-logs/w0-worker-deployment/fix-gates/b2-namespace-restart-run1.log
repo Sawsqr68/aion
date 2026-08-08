@@ -1,0 +1,11 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.73s
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-8db9aff1c9967587)
+
+running 4 tests
+test schedule_namespace_enforcement_survives_restart ... ok
+test workflow_task_queue_selection_survives_restart ... ok
+test workflow_namespace_enforcement_survives_restart ... ok
+test child_workflow_namespace_enforcement_survives_restart ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s
+

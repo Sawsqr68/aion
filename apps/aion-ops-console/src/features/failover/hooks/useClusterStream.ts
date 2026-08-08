@@ -32,6 +32,8 @@ export type ClusterTopology = {
   shards: ClusterShard[];
   /** Connected workers (gated server-side to the caller's grant). */
   workers: ClusterSnapshot['workers'];
+  /** Durable worker deployments from the snapshot plus live lifecycle deltas. */
+  deployments: ClusterSnapshot['deployments'];
   /** Connected-worker count per node label (derived from worker deltas). */
   workersByNode: ReadonlyMap<string, number>;
 };
@@ -55,27 +57,30 @@ const EMPTY_TOPOLOGY: ClusterTopology = {
   peers: [],
   shards: [],
   workers: [],
+  deployments: [],
   workersByNode: new Map(),
 };
 
 /** Internal mutable reducer state (kept in a ref; React state mirrors it). */
-type ReducerState = {
+export type ClusterReducerState = {
   selfNode: string | null;
   peers: Map<string, ClusterPeerState>;
   shards: Map<number, ClusterShard>;
   workers: Map<string, ClusterSnapshot['workers'][number]>;
+  deployments: Map<string, ClusterSnapshot['deployments'][number]>;
   asOfSeq: number;
   lastSeq: number;
   lastObservedAt: string | null;
   primed: boolean;
 };
 
-function freshReducerState(): ReducerState {
+export function createClusterReducerState(): ClusterReducerState {
   return {
     selfNode: null,
     peers: new Map(),
     shards: new Map(),
     workers: new Map(),
+    deployments: new Map(),
     asOfSeq: 0,
     lastSeq: 0,
     lastObservedAt: null,
@@ -83,7 +88,7 @@ function freshReducerState(): ReducerState {
   };
 }
 
-function applySnapshot(state: ReducerState, snapshot: ClusterSnapshot): void {
+export function applyClusterSnapshot(state: ClusterReducerState, snapshot: ClusterSnapshot): void {
   state.selfNode = snapshot.node;
   state.asOfSeq = snapshot.as_of_seq;
   // The publisher cursor is process-local. A mandatory fresh snapshot replaces
@@ -94,6 +99,9 @@ function applySnapshot(state: ReducerState, snapshot: ClusterSnapshot): void {
   state.peers = new Map(snapshot.peers.map((peer) => [peer.peer_name, peer]));
   state.shards = new Map(snapshot.shards.map((shard) => [shard.shard, shard]));
   state.workers = new Map(snapshot.workers.map((worker) => [worker.worker_id, worker]));
+  state.deployments = new Map(
+    snapshot.deployments.map((deployment) => [deployment.name, deployment])
+  );
 
   // The snapshot frame carries no server instant yet, so stamp the prime with the
   // client receipt time — otherwise the provenance "last change" clock reads blank
@@ -103,7 +111,7 @@ function applySnapshot(state: ReducerState, snapshot: ClusterSnapshot): void {
 }
 
 /** Apply a single delta. Returns false when the delta is stale (already covered). */
-function applyEvent(state: ReducerState, event: ClusterEvent): boolean {
+export function applyClusterEvent(state: ClusterReducerState, event: ClusterEvent): boolean {
   const seq = event.meta.cluster_seq;
 
   // `lastSeq` already subsumes `asOfSeq` (applySnapshot sets lastSeq >= asOfSeq),
@@ -155,7 +163,32 @@ function applyEvent(state: ReducerState, event: ClusterEvent): boolean {
         task_queue: event.task_queue,
         transport: event.transport,
         node: event.node,
+        deployment: event.deployment,
+        deployment_association: event.deployment_association,
       });
+      break;
+    }
+    case 'WorkerDeploymentPut': {
+      state.deployments.set(event.name, {
+        name: event.name,
+        desired_state: event.desired_state,
+        binary_version: event.binary_version,
+        binary_content_hash: event.binary_content_hash,
+      });
+      break;
+    }
+    case 'WorkerDeploymentDesiredStateChanged': {
+      const deployment = state.deployments.get(event.name);
+      if (deployment !== undefined) {
+        state.deployments.set(event.name, {
+          ...deployment,
+          desired_state: event.desired_state,
+        });
+      }
+      break;
+    }
+    case 'WorkerDeploymentDeleted': {
+      state.deployments.delete(event.name);
       break;
     }
     case 'WorkerDisconnected': {
@@ -177,7 +210,7 @@ function applyEvent(state: ReducerState, event: ClusterEvent): boolean {
   return true;
 }
 
-function projectTopology(state: ReducerState): ClusterTopology {
+export function projectClusterTopology(state: ClusterReducerState): ClusterTopology {
   const workers = [...state.workers.values()];
   const workersByNode = new Map<string, number>();
   for (const worker of workers) {
@@ -191,6 +224,7 @@ function projectTopology(state: ReducerState): ClusterTopology {
     peers: [...state.peers.values()],
     shards: [...state.shards.values()].sort((a, b) => a.shard - b.shard),
     workers,
+    deployments: [...state.deployments.values()].sort((a, b) => a.name.localeCompare(b.name)),
     workersByNode,
   };
 }
@@ -209,7 +243,7 @@ export function useClusterStream({
   manager = configuredClusterStream,
   enabled = true,
 }: UseClusterStreamOptions = {}): ClusterStreamResult {
-  const reducer = useRef<ReducerState>(freshReducerState());
+  const reducer = useRef<ClusterReducerState>(createClusterReducerState());
   const [topology, setTopology] = useState<ClusterTopology>(EMPTY_TOPOLOGY);
   const [primed, setPrimed] = useState(false);
   const [lastSeq, setLastSeq] = useState(0);
@@ -225,11 +259,11 @@ export function useClusterStream({
     }
 
     // Fresh reducer per (re)subscribe: a snapshot always re-bases the model.
-    reducer.current = freshReducerState();
+    reducer.current = createClusterReducerState();
 
     const publish = (): void => {
       const state = reducer.current;
-      setTopology(projectTopology(state));
+      setTopology(projectClusterTopology(state));
       setPrimed(state.primed);
       setLastSeq(state.lastSeq);
       setLastObservedAt(state.lastObservedAt);
@@ -237,11 +271,11 @@ export function useClusterStream({
 
     const listener: ClusterStreamListener = {
       onSnapshot: (snapshot) => {
-        applySnapshot(reducer.current, snapshot);
+        applyClusterSnapshot(reducer.current, snapshot);
         publish();
       },
       onEvent: (event) => {
-        if (applyEvent(reducer.current, event)) {
+        if (applyClusterEvent(reducer.current, event)) {
           publish();
         }
       },
