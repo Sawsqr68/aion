@@ -1,0 +1,16 @@
+=== tree: 4ed85113805c8af50d0a517ab669ba540e89fb6b branch: gate-166-167-pin ===
+=== n=1000 started: 2026-08-08T16:10:08Z ===
+   Compiling aion-store-haematite v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-store-haematite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.82s
+  Executable tests/conformance.rs (target/debug/deps/conformance-c2a0bbde309c461e)
+progress: 100/1000 pass=100 fail=0 16:13:45Z
+progress: 200/1000 pass=200 fail=0 16:17:20Z
+progress: 300/1000 pass=300 fail=0 16:20:54Z
+progress: 400/1000 pass=400 fail=0 16:24:28Z
+progress: 500/1000 pass=500 fail=0 16:27:59Z
+progress: 600/1000 pass=600 fail=0 16:31:34Z
+progress: 700/1000 pass=700 fail=0 16:35:09Z
+progress: 800/1000 pass=800 fail=0 16:38:45Z
+progress: 900/1000 pass=900 fail=0 16:42:22Z
+progress: 1000/1000 pass=1000 fail=0 16:45:59Z
+=== finished: 2026-08-08T16:45:59Z pass=1000 fail=0 ===
