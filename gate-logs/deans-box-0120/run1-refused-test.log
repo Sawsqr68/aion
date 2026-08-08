@@ -1,0 +1,4 @@
+error: failed to select a version for the requirement `aion-package = "^0.11.0"`
+candidate versions found which didn't match: 0.12.0
+location searched: /Users/deanwhiting/Developer/stack/aion/crates/aion-package
+required by package `aion-awl v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-awl)`

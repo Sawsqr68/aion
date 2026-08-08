@@ -1,0 +1,2 @@
+Previous HEAD position was 5e6be2a5 release: cut 0.12.0 — version bump + changelog section dated
+HEAD is now at 573de387 release: complete the 0.12.0 cut - internal dep requirements move with the workspace version

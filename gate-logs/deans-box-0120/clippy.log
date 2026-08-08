@@ -1,0 +1,29 @@
+    Checking aion-core v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-core)
+   Compiling beamr v0.16.3
+   Compiling aion-proto-generated v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-proto-generated)
+   Compiling aion-server v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-server)
+    Checking aion-darwin-acl v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-darwin-acl)
+    Checking xtask v0.0.0 (/Users/deanwhiting/Developer/stack/aion/xtask)
+    Checking aion-package v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-package)
+    Checking aion-store v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-store)
+    Checking aion-integrations v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-integrations)
+    Checking aion-integration-norn v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-integration-norn)
+    Checking aion-integration-acp v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-integration-acp)
+    Checking aion-integration-cli v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-integration-cli)
+    Checking aion-store-libsql v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-store-libsql)
+    Checking aion-proto v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-proto)
+    Checking aion-toolchain v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-toolchain)
+    Checking haematite v0.7.0
+    Checking aion-awl v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-awl)
+    Checking aion-rs v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion)
+    Checking aion-store-haematite v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-store-haematite)
+    Checking liminal-rs v0.5.0
+    Checking aion-awl-package v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-awl-package)
+    Checking aion-awl-lsp v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-awl-lsp)
+    Checking liminal-sdk v0.5.0
+    Checking liminal-server v0.5.0
+    Checking aion-worker v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-worker)
+    Checking aion-client v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-client)
+    Checking million-processes v0.1.0 (/Users/deanwhiting/Developer/stack/aion/benchmarks/million-processes)
+    Checking aion-cli v0.12.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 31.06s
