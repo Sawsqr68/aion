@@ -1,0 +1,42 @@
+=== MUTATION C: text/json arms swapped
+   Compiling aion-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.40s
+     Running unittests src/lib.rs (target/debug/deps/aion_package-0338c8fc6009fa2d)
+
+running 17 tests
+test codegen::awl_worker::tests::a_queue_of_only_bodied_actions_is_refused ... ok
+test codegen::awl_worker::tests::an_unpinned_queue_dials_one_connection_with_no_node ... ok
+test codegen::awl_worker::tests::one_connection_per_node_serves_exactly_the_reachable_actions ... ok
+test codegen::awl_worker::tests::shell_manifest_refuses_any_node_pinned_queue ... ok
+test codegen::awl_worker::tests::shell_readme_carries_the_production_invocation ... ok
+test codegen::awl_worker::tests::keyword_action_names_are_escaped_or_refused ... ok
+test codegen::awl_worker::tests::only_the_handlers_file_is_author_owned ... ok
+test codegen::awl_worker::tests::the_declaration_embeds_the_document_and_takes_its_schemas ... ok
+test codegen::awl_worker::tests::a_server_executed_action_is_absent_everywhere ... ok
+test codegen::awl_worker::tests::every_registration_carries_a_descriptor_from_the_document ... ok
+test codegen::awl_worker::tests::generation_is_deterministic ... ok
+test codegen::awl_worker::tests::shell_manifest_wires_the_whole_queue_with_declared_result_encodings ... FAILED
+test codegen::awl_worker::tests::unusable_names_and_paths_are_refused ... ok
+test codegen::awl_worker::tests::every_stub_fails_loudly_and_names_its_action ... ok
+test codegen::awl_worker::tests::every_stub_documents_the_declared_schemas ... ok
+test codegen::awl_worker::tests::the_emitted_connection_table_is_the_plan ... ok
+test codegen::awl_worker::tests::the_manifest_is_standalone_and_strict ... ok
+
+failures:
+
+---- codegen::awl_worker::tests::shell_manifest_wires_the_whole_queue_with_declared_result_encodings stdout ----
+
+thread 'codegen::awl_worker::tests::shell_manifest_wires_the_whole_queue_with_declared_result_encodings' (52502796) panicked at crates/aion-package/src/codegen/awl_worker/tests.rs:505:5:
+assertion `left == right` failed
+  left: Some("json")
+ right: Some("text")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    codegen::awl_worker::tests::shell_manifest_wires_the_whole_queue_with_declared_result_encodings
+
+test result: FAILED. 16 passed; 1 failed; 0 ignored; 0 measured; 295 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p aion-package --lib`
+EXIT=101

@@ -39,11 +39,23 @@ pub(crate) async fn edit(
 }
 
 pub(crate) async fn scaffold(
+    State(state): State<ServerState>,
     HttpCaller(caller): HttpCaller,
     Json(request): Json<awl::scaffold::ScaffoldRequest>,
 ) -> Result<Json<awl::scaffold::ScaffoldResponse>, Response> {
     require_authenticated(&caller)?;
-    Ok(Json(awl::scaffold::scaffold(&request)))
+    let root = workspace(&state).map_err(IntoResponse::into_response)?;
+    let scaffolded = tokio::task::spawn_blocking(move || awl::scaffold::scaffold(&request, &root))
+        .await
+        .map_err(|error| {
+            DocumentHttpError(awl::documents::DocumentError::Io(std::io::Error::other(
+                format!("AWL scaffold task failed: {error}"),
+            )))
+            .into_response()
+        })?;
+    scaffolded
+        .map(Json)
+        .map_err(|error| DocumentHttpError(error).into_response())
 }
 
 pub(crate) async fn format(

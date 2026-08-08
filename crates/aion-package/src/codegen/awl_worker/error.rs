@@ -19,6 +19,19 @@ pub enum AwlScaffoldError {
         /// The queue (worker block) that declares only bodied actions.
         task_queue: String,
     },
+    /// The queue has node-pinned worker work whose topology the shell runtime
+    /// cannot express.
+    #[error(
+        "the document's `worker {task_queue}` block has node-pinned worker-owed actions, but \
+         `aion worker shell` cannot express node topology: it has no node flag, registers with \
+         the machine hostname as its node, and its startup check demands the whole worker-owed \
+         action set regardless of pins. Use `aion awl scaffold`'s Rust crate, which opens one \
+         connection per node, for this queue."
+    )]
+    NodePinnedQueue {
+        /// The queue containing at least one worker-owed node pin.
+        task_queue: String,
+    },
     /// An action name that cannot name a Rust function.
     #[error(
         "action `{action}` of worker `{task_queue}` is not a Rust identifier, so the generated \

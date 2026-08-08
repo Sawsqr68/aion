@@ -1,0 +1,574 @@
+=== 2026-08-08T00:21:01+0000 r2 gates, load: 26.82 18.81 19.41
+=== test -p aion-package codegen::awl_worker
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.41s
+     Running unittests src/lib.rs (target/debug/deps/aion_package-0338c8fc6009fa2d)
+
+running 17 tests
+test codegen::awl_worker::tests::a_queue_of_only_bodied_actions_is_refused ... ok
+test codegen::awl_worker::tests::an_unpinned_queue_dials_one_connection_with_no_node ... ok
+test codegen::awl_worker::tests::shell_manifest_refuses_any_node_pinned_queue ... ok
+test codegen::awl_worker::tests::one_connection_per_node_serves_exactly_the_reachable_actions ... ok
+test codegen::awl_worker::tests::shell_manifest_wires_the_whole_queue_with_declared_result_encodings ... ok
+test codegen::awl_worker::tests::shell_readme_carries_the_production_invocation ... ok
+test codegen::awl_worker::tests::the_declaration_embeds_the_document_and_takes_its_schemas ... ok
+test codegen::awl_worker::tests::a_server_executed_action_is_absent_everywhere ... ok
+test codegen::awl_worker::tests::keyword_action_names_are_escaped_or_refused ... ok
+test codegen::awl_worker::tests::every_registration_carries_a_descriptor_from_the_document ... ok
+test codegen::awl_worker::tests::the_emitted_connection_table_is_the_plan ... ok
+test codegen::awl_worker::tests::only_the_handlers_file_is_author_owned ... ok
+test codegen::awl_worker::tests::unusable_names_and_paths_are_refused ... ok
+test codegen::awl_worker::tests::generation_is_deterministic ... ok
+test codegen::awl_worker::tests::every_stub_documents_the_declared_schemas ... ok
+test codegen::awl_worker::tests::the_manifest_is_standalone_and_strict ... ok
+test codegen::awl_worker::tests::every_stub_fails_loudly_and_names_its_action ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 295 filtered out; finished in 0.02s
+
+     Running tests/awl_worker_build.rs (target/debug/deps/awl_worker_build-3b3786f8c0d88153)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/builder.rs (target/debug/deps/builder-b3ebb226e65050d0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/golden_gleam_exec.rs (target/debug/deps/golden_gleam_exec-a38deabe8aa5d601)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/package.rs (target/debug/deps/package-012ff92aa4bf4bd6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/package_project_hello_world.rs (target/debug/deps/package_project_hello_world-82d8b9c598f89831)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/project_determinism.rs (target/debug/deps/project_determinism-beeef58004bea451)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/roundtrip.rs (target/debug/deps/roundtrip-6d61c2870c29a028)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/rust_worker_build.rs (target/debug/deps/rust_worker_build-74ea1f7940b647b9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/schema_equivalence.rs (target/debug/deps/schema_equivalence-1272d11d8c92ba4b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+EXIT=0
+=== test -p aion-server scaffold
+   Compiling aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.51s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a347e1aad4065bbb)
+
+running 11 tests
+test awl::scaffold_tests::unparseable_source_is_an_invalid_document ... ok
+test awl::scaffold_tests::linked_schema_import_is_an_invalid_document_refusal ... ok
+test awl::scaffold_tests::unsupported_runtime_is_refused ... ok
+test awl::scaffold_tests::shell_refuses_any_node_pinned_queue_with_actionable_code ... ok
+test awl::scaffold_tests::shell_refuses_mixed_pinned_and_unpinned_queue_instead_of_wiring_partially ... ok
+test awl::scaffold_tests::all_bodied_rust_document_is_refused_as_having_nothing_to_serve ... ok
+test awl::scaffold_tests::unknown_worker_refusal_lists_declared_queues ... ok
+test awl::scaffold_tests::bodyless_rust_document_uses_canonical_codegen_and_includes_document ... ok
+test awl::scaffold_tests::mixed_rust_document_excludes_server_bodied_action ... ok
+test awl::scaffold_tests::schema_imports_are_compiled_from_the_confined_staging_seam ... ok
+test awl::scaffold_tests::mixed_shell_document_wires_only_bodyless_action ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 808 filtered out; finished in 0.03s
+
+     Running tests/authoring_e2e.rs (target/debug/deps/authoring_e2e-257f6946d3b6776b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/authoring_out_of_box_e2e.rs (target/debug/deps/authoring_out_of_box_e2e-91bb6ba0b163076d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/awl_deploy_direct_e2e.rs (target/debug/deps/awl_deploy_direct_e2e-a85ec842667791cc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests/bridge_liminal_dispatch_e2e.rs (target/debug/deps/bridge_liminal_dispatch_e2e-dea98770fcea559f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/dead_man_switch_e2e.rs (target/debug/deps/dead_man_switch_e2e-0a4b0b36d6fdb032)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/dead_man_switch_refusal_logs.rs (target/debug/deps/dead_man_switch_refusal_logs-648177eda0ca424b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/deploy_api_e2e.rs (target/debug/deps/deploy_api_e2e-477a16040dd2d1fd)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.00s
+
+     Running tests/deploy_audit_log.rs (target/debug/deps/deploy_audit_log-9e1996d17f7ef9dc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/deploy_restart_e2e.rs (target/debug/deps/deploy_restart_e2e-10acf38da1fa7da8)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/dev_ui_e2e.rs (target/debug/deps/dev_ui_e2e-00410fcc793ab4c6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/graceful_shutdown_park_e2e.rs (target/debug/deps/graceful_shutdown_park_e2e-d3bab718c4c65f28)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/grpc_admission_refusal_logs.rs (target/debug/deps/grpc_admission_refusal_logs-9d0e45037099c5c6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/haematite_backend.rs (target/debug/deps/haematite_backend-52545a9e3b2edfc0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/heartbeat_sweeper_e2e.rs (target/debug/deps/heartbeat_sweeper_e2e-35f0a02d722771fa)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/lsub1_xnode_dispatch_e2e.rs (target/debug/deps/lsub1_xnode_dispatch_e2e-9de8e371aff681fb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/lsub3_failover_e2e.rs (target/debug/deps/lsub3_failover_e2e-f9e01bae71fb3521)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/lsub5_xnode_failover_e2e.rs (target/debug/deps/lsub5_xnode_failover_e2e-a7e6330235091bed)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/namespace_mint_forward_e2e.rs (target/debug/deps/namespace_mint_forward_e2e-f8a8b902e1fcac06)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/namespace_mint_routing_e2e.rs (target/debug/deps/namespace_mint_routing_e2e-2cf5068ceebec06d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/namespace_restart.rs (target/debug/deps/namespace_restart-92fd130beae0872c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/noi5b_noi6_live_agent_e2e.rs (target/debug/deps/noi5b_noi6_live_agent_e2e-2af96fa76170c64f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/noi6_intervention_routing_e2e.rs (target/debug/deps/noi6_intervention_routing_e2e-6fc79d0869618be7)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/ops_console_packaging.rs (target/debug/deps/ops_console_packaging-307af88cdb193f40)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/outbox_delivery_contract_e2e.rs (target/debug/deps/outbox_delivery_contract_e2e-f2b0aa8bb4423e6f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/outbox_transport_e2e.rs (target/debug/deps/outbox_transport_e2e-38878dc4d3f91b66)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/query_workflow.rs (target/debug/deps/query_workflow-dac2f4d187aca578)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/routing_forward_e2e.rs (target/debug/deps/routing_forward_e2e-d5cc4041ce93c131)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/routing_nstq_node_compose_e2e.rs (target/debug/deps/routing_nstq_node_compose_e2e-29466df3813478e4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/run_server_outbox_e2e.rs (target/debug/deps/run_server_outbox_e2e-8f13158d767235dd)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/shutdown_process_exit_e2e.rs (target/debug/deps/shutdown_process_exit_e2e-691f7a0f3e72bd63)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/ss3_directory_failover_e2e.rs (target/debug/deps/ss3_directory_failover_e2e-f87099a880c4d840)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/ss5b_auto_failover.rs (target/debug/deps/ss5b_auto_failover-4c91c1c891ab1a53)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/transcript_retention_e2e.rs (target/debug/deps/transcript_retention_e2e-576d5ab54db83f99)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/transcript_stream_e2e.rs (target/debug/deps/transcript_stream_e2e-7da587f178a05152)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/unserved_queue_honesty.rs (target/debug/deps/unserved_queue_honesty-2670e2d366fe5a6a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/unserved_queue_policies.rs (target/debug/deps/unserved_queue_policies-39adf316af5883ea)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests/websocket_resume.rs (target/debug/deps/websocket_resume-5a549c5807b730ed)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/worker_contract_registration.rs (target/debug/deps/worker_contract_registration-72ab40017cfa5308)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/worker_dispatch_delivery.rs (target/debug/deps/worker_dispatch_delivery-43e8174c1e6f5a8d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+     Running tests/worker_lifecycle_admin.rs (target/debug/deps/worker_lifecycle_admin-7dd4aaede8170323)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/worker_sdk_e2e.rs (target/debug/deps/worker_sdk_e2e-e89dc4295a2835b4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+EXIT=0
+=== test -p aion-cli worker_shell
+   Compiling bytes v1.11.1
+   Compiling serde_json v1.0.150
+   Compiling parking_lot v0.12.5
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling cmake v0.1.58
+   Compiling hashbrown v0.14.5
+   Compiling prost-derive v0.14.3
+   Compiling toml_parser v1.1.2+spec-1.1.0
+   Compiling serde_spanned v1.1.1
+   Compiling toml_writer v1.1.1+spec-1.1.0
+   Compiling zstd-safe v7.2.4
+   Compiling rustix v1.1.4
+   Compiling getrandom v0.4.2
+   Compiling aws-lc-sys v0.41.0
+   Compiling sync_wrapper v1.0.2
+   Compiling tokio v1.52.3
+   Compiling http v1.4.1
+   Compiling zstd v0.13.3
+   Compiling dashmap v6.2.1
+   Compiling toml v1.1.2+spec-1.1.0
+   Compiling blake3 v1.8.5
+   Compiling beamr v0.16.3
+   Compiling zip v8.6.0
+   Compiling darling_core v0.23.0
+   Compiling http-body v1.0.1
+   Compiling prost v0.14.3
+   Compiling http-body-util v0.1.3
+   Compiling aion-core v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+   Compiling referencing v0.46.6
+   Compiling tempfile v3.27.0
+   Compiling axum-core v0.5.6
+   Compiling jsonschema v0.46.6
+   Compiling prost-types v0.14.3
+   Compiling schemars v1.2.1
+   Compiling cpufeatures v0.2.17
+   Compiling sha2 v0.10.9
+   Compiling tungstenite v0.30.0
+   Compiling convert_case v0.10.0
+   Compiling derive_more-impl v2.1.1
+   Compiling prost-build v0.14.3
+   Compiling darling_macro v0.23.0
+   Compiling rust-embed-utils v8.11.0
+   Compiling strum v0.28.0
+   Compiling rust-embed-impl v8.11.0
+   Compiling darling v0.23.0
+   Compiling tonic-prost-build v0.14.5
+   Compiling fluent-uri v0.1.4
+   Compiling tracing-subscriber v0.3.23
+   Compiling rust-embed v8.11.0
+   Compiling lsp-types v0.97.0
+   Compiling serde_with_macros v3.21.0
+   Compiling aion-proto-generated v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+   Compiling tokio-util v0.7.18
+   Compiling h2 v0.4.14
+   Compiling aion-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+   Compiling tower v0.5.3
+   Compiling tokio-stream v0.1.18
+   Compiling aion-store v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+   Compiling aion-integrations v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+   Compiling serde_with v3.21.0
+   Compiling derive_more v2.1.1
+   Compiling prometheus v0.14.0
+   Compiling lsp-server v0.8.0
+   Compiling hyper v1.10.1
+   Compiling aion-toolchain v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-toolchain)
+   Compiling tower-http v0.6.11
+   Compiling notify-types v2.1.0
+   Compiling toml_datetime v0.7.5+spec-1.1.0
+   Compiling hyper-util v0.1.20
+   Compiling agent-client-protocol-schema v1.5.0
+   Compiling fsevent-sys v4.1.0
+   Compiling toml_edit v0.23.10+spec-1.0.0
+   Compiling notify v8.2.0
+   Compiling aion-integration-norn v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-norn)
+   Compiling hyper-timeout v0.5.2
+   Compiling aion-awl v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl)
+   Compiling aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+   Compiling aion-integration-acp v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-acp)
+   Compiling haematite v0.7.0
+   Compiling aion-awl-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-package)
+   Compiling aion-awl-lsp v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-lsp)
+   Compiling aws-lc-rs v1.17.0
+   Compiling rustls v0.23.40
+   Compiling rustls-webpki v0.103.13
+   Compiling liminal-rs v0.5.0
+   Compiling aion-store-haematite v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+   Compiling tungstenite v0.29.0
+   Compiling tokio-rustls v0.26.4
+   Compiling tokio-tungstenite v0.29.0
+   Compiling axum v0.8.9
+   Compiling tonic v0.14.6
+   Compiling tonic-prost v0.14.5
+   Compiling aion-proto v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+   Compiling liminal-sdk v0.5.0
+   Compiling liminal-server v0.5.0
+   Compiling aion-client v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-client)
+   Compiling aion-worker v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+   Compiling aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+   Compiling aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 46s
+     Running unittests src/main.rs (target/debug/deps/aion-ea3b8252f118cbae)
+
+running 10 tests
+test worker_shell::tests::composite_field_projection_is_typed_refusal ... ok
+test worker_shell::tests::strict_manifest_rejects_unknown_keys_and_bad_placeholders ... ok
+test worker_shell::tests::a_partially_wired_queue_is_refused ... ok
+test worker_shell::tests::an_action_with_a_declared_body_is_refused ... ok
+test worker_shell::tests::a_queue_the_document_does_not_declare_is_refused ... ok
+test worker_shell::tests::an_undeclared_action_is_refused_by_name ... ok
+test worker_shell::tests::the_worker_advertises_the_documents_action_surface ... ok
+test worker_shell::tests::emitted_manifest_passes_the_real_whole_queue_startup_check ... ok
+test worker_shell::tests::process_boundary_round_trips_text_and_json ... ok
+test worker_shell::tests::cancellation_reaps_the_entire_spawned_process_group ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 205 filtered out; finished in 0.10s
+
+     Running tests/authoring_quality_e2e.rs (target/debug/deps/authoring_quality_e2e-52345f3c82b17c9d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.01s
+
+     Running tests/awl_emit_beam.rs (target/debug/deps/awl_emit_beam-d6d4498639c6e549)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.01s
+
+     Running tests/deploy_commands.rs (target/debug/deps/deploy_commands-647cd22e1706b19d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/dev_hot_reload_e2e.rs (target/debug/deps/dev_hot_reload_e2e-a9e901517bcc8916)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/error_rendering.rs (target/debug/deps/error_rendering-aecba38d70d9298a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/generate_e2e.rs (target/debug/deps/generate_e2e-da1a86be9b6156db)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.00s
+
+     Running tests/generate_types_first_e2e.rs (target/debug/deps/generate_types_first_e2e-79cea366744a2b8e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.00s
+
+     Running tests/lsub5b_osproc_failover_e2e.rs (target/debug/deps/lsub5b_osproc_failover_e2e-4ef5dbacc52baac5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/lsub5b_osproc_kill9_failover_e2e.rs (target/debug/deps/lsub5b_osproc_kill9_failover_e2e-b9568477f17d597e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/new_agent_e2e.rs (target/debug/deps/new_agent_e2e-d891e4fac9674665)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/new_hello_world_e2e.rs (target/debug/deps/new_hello_world_e2e-198b021ea22812e6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/new_scaffold_build.rs (target/debug/deps/new_scaffold_build-2bfa062d264cb37f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.00s
+
+     Running tests/one_motion_awl.rs (target/debug/deps/one_motion_awl-6ead50bebdd9fdac)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/one_motion_live_e2e.rs (target/debug/deps/one_motion_live_e2e-652814e4f471d7cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/package_command.rs (target/debug/deps/package_command-2c04dd95fa3e44e2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/parked_timer_osproc_kill9_failover_e2e.rs (target/debug/deps/parked_timer_osproc_kill9_failover_e2e-23c585a014907611)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/server_command.rs (target/debug/deps/server_command-cfe850be6f4bd13b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/stacked_dev_live_e2e.rs (target/debug/deps/stacked_dev_live_e2e-603f1204f6113210)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+EXIT=0

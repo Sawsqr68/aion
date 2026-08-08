@@ -66,8 +66,8 @@ pub use codegen::{
     AwlWorkerScaffold, BoundaryType, CodecReport, CodegenError, CodegenMode, Connection,
     ConnectionPlan, DocumentRoot, FileOwnership, ScaffoldedFile, SchemaEmitReport, ServableAction,
     TestScaffoldReport, Tier, WorkerScaffold, boundary_types_from_interface, build_input_skeleton,
-    emit_schemas, generate_activities, generate_codecs, generate_test_scaffold, parse_declarations,
-    scaffold_awl_worker,
+    emit_schemas, emit_shell_manifest, generate_activities, generate_codecs,
+    generate_test_scaffold, parse_declarations, scaffold_awl_worker,
 };
 pub use compatibility::{ContractDiff, contract_diffs};
 pub use contract::{

@@ -1,0 +1,123 @@
+=== MUTATION B: shell unpinned filter made unconditional
+   Compiling aion-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+   Compiling aion-awl v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl)
+   Compiling aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+   Compiling aion-worker v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+   Compiling aion-toolchain v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-toolchain)
+   Compiling aion-awl-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-package)
+   Compiling aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 52.41s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a347e1aad4065bbb)
+
+running 9 tests
+test awl::scaffold_tests::unparseable_source_is_an_invalid_document ... ok
+test awl::scaffold_tests::unsupported_runtime_is_refused ... ok
+test awl::scaffold_tests::all_bodied_rust_document_is_refused_as_having_nothing_to_serve ... ok
+test awl::scaffold_tests::mixed_rust_document_excludes_server_bodied_action ... ok
+test awl::scaffold_tests::mixed_shell_document_wires_only_bodyless_action ... ok
+test awl::scaffold_tests::shell_wires_unpinned_action_and_documents_pinned_action ... FAILED
+test awl::scaffold_tests::shell_refuses_queue_whose_only_worker_owed_action_is_pinned ... FAILED
+test awl::scaffold_tests::unknown_worker_refusal_lists_declared_queues ... ok
+test awl::scaffold_tests::bodyless_rust_document_uses_canonical_codegen_and_includes_document ... ok
+
+failures:
+
+---- awl::scaffold_tests::shell_wires_unpinned_action_and_documents_pinned_action stdout ----
+
+thread 'awl::scaffold_tests::shell_wires_unpinned_action_and_documents_pinned_action' (52030264) panicked at crates/aion-server/src/awl/scaffold_tests.rs:207:5:
+assertion `left == right` failed
+  left: ["pinned_action", "portable_action"]
+ right: ["portable_action"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- awl::scaffold_tests::shell_refuses_queue_whose_only_worker_owed_action_is_pinned stdout ----
+
+thread 'awl::scaffold_tests::shell_refuses_queue_whose_only_worker_owed_action_is_pinned' (52030263) panicked at crates/aion-server/src/awl/scaffold_tests.rs:192:5:
+assertion failed: !response.ok
+
+
+failures:
+    awl::scaffold_tests::shell_refuses_queue_whose_only_worker_owed_action_is_pinned
+    awl::scaffold_tests::shell_wires_unpinned_action_and_documents_pinned_action
+
+test result: FAILED. 7 passed; 2 failed; 0 ignored; 0 measured; 808 filtered out; finished in 0.19s
+
+error: test failed, to rerun pass `-p aion-server --lib`
+EXIT=101
+   Compiling aion-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.11s
+     Running unittests src/lib.rs (target/debug/deps/aion_package-0338c8fc6009fa2d)
+
+running 14 tests
+test codegen::awl_worker::tests::a_queue_of_only_bodied_actions_is_refused ... ok
+test codegen::awl_worker::tests::an_unpinned_queue_dials_one_connection_with_no_node ... ok
+test codegen::awl_worker::tests::keyword_action_names_are_escaped_or_refused ... ok
+test codegen::awl_worker::tests::generation_is_deterministic ... ok
+test codegen::awl_worker::tests::one_connection_per_node_serves_exactly_the_reachable_actions ... ok
+test codegen::awl_worker::tests::only_the_handlers_file_is_author_owned ... ok
+test codegen::awl_worker::tests::every_stub_fails_loudly_and_names_its_action ... ok
+test codegen::awl_worker::tests::a_server_executed_action_is_absent_everywhere ... ok
+test codegen::awl_worker::tests::every_stub_documents_the_declared_schemas ... ok
+test codegen::awl_worker::tests::every_registration_carries_a_descriptor_from_the_document ... ok
+test codegen::awl_worker::tests::the_declaration_embeds_the_document_and_takes_its_schemas ... ok
+test codegen::awl_worker::tests::the_emitted_connection_table_is_the_plan ... ok
+test codegen::awl_worker::tests::the_manifest_is_standalone_and_strict ... ok
+test codegen::awl_worker::tests::unusable_names_and_paths_are_refused ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 295 filtered out; finished in 0.12s
+
+     Running tests/awl_worker_build.rs (target/debug/deps/awl_worker_build-3b3786f8c0d88153)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/builder.rs (target/debug/deps/builder-b3ebb226e65050d0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/golden_gleam_exec.rs (target/debug/deps/golden_gleam_exec-a38deabe8aa5d601)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.01s
+
+     Running tests/package.rs (target/debug/deps/package-012ff92aa4bf4bd6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/package_project_hello_world.rs (target/debug/deps/package_project_hello_world-82d8b9c598f89831)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/project_determinism.rs (target/debug/deps/project_determinism-beeef58004bea451)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/roundtrip.rs (target/debug/deps/roundtrip-6d61c2870c29a028)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/rust_worker_build.rs (target/debug/deps/rust_worker_build-74ea1f7940b647b9)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+     Running tests/schema_equivalence.rs (target/debug/deps/schema_equivalence-1272d11d8c92ba4b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+EXIT=0

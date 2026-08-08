@@ -1,0 +1,8 @@
+=== cargo clippy --workspace --all-targets -- -D warnings ===
+    Checking aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Checking aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 20.65s
+
+WORKSPACE_CLIPPY_EXIT=0
+
+CARGO_FMT_EXIT=0

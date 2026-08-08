@@ -1,0 +1,54 @@
+=== MUTATION A: document insertion removed from files_with_document
+   Compiling aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+warning: variable does not need to be mutable
+   --> crates/aion-server/src/awl/scaffold.rs:169:9
+    |
+169 |     let mut mapped = files
+    |         ----^^^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `aion-server` (lib) generated 1 warning (run `cargo fix --lib -p aion-server` to apply 1 suggestion)
+warning: `aion-server` (lib test) generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 14s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a347e1aad4065bbb)
+
+running 9 tests
+test awl::scaffold_tests::unparseable_source_is_an_invalid_document ... ok
+test awl::scaffold_tests::unsupported_runtime_is_refused ... ok
+test awl::scaffold_tests::all_bodied_rust_document_is_refused_as_having_nothing_to_serve ... ok
+test awl::scaffold_tests::shell_refuses_queue_whose_only_worker_owed_action_is_pinned ... ok
+test awl::scaffold_tests::unknown_worker_refusal_lists_declared_queues ... ok
+test awl::scaffold_tests::mixed_rust_document_excludes_server_bodied_action ... ok
+test awl::scaffold_tests::mixed_shell_document_wires_only_bodyless_action ... ok
+test awl::scaffold_tests::shell_wires_unpinned_action_and_documents_pinned_action ... FAILED
+test awl::scaffold_tests::bodyless_rust_document_uses_canonical_codegen_and_includes_document ... FAILED
+
+failures:
+
+---- awl::scaffold_tests::shell_wires_unpinned_action_and_documents_pinned_action stdout ----
+
+thread 'awl::scaffold_tests::shell_wires_unpinned_action_and_documents_pinned_action' (51998926) panicked at crates/aion-server/src/awl/scaffold_tests.rs:214:5:
+assertion `left == right` failed
+  left: None
+ right: Some("//! A queue mixes pinned and unpinned worker-owed actions.\nworkflow hybrid_flow\n  input value: String\n  outcome done: type String, route success\n\nworker hybrid\n  action pinned_action(value: String) -> String\n    node gpu\n  action portable_action(value: String) -> String\n\nstep run\n  pinned_action(value: value) -> pinned_result\n  portable_action(value: pinned_result) -> portable_result\n  route done(portable_result)\n")
+
+---- awl::scaffold_tests::bodyless_rust_document_uses_canonical_codegen_and_includes_document stdout ----
+
+thread 'awl::scaffold_tests::bodyless_rust_document_uses_canonical_codegen_and_includes_document' (51998922) panicked at crates/aion-server/src/awl/scaffold_tests.rs:155:5:
+assertion `left == right` failed
+  left: None
+ right: Some("//! One action is owed by an out-of-band worker.\nworkflow worker_flow\n  input value: String\n  outcome done: type String, route success\n\nworker jobs\n  action transform(value: String) -> String\n\nstep run\n  transform(value: value) -> result\n  route done(result)\n")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    awl::scaffold_tests::bodyless_rust_document_uses_canonical_codegen_and_includes_document
+    awl::scaffold_tests::shell_wires_unpinned_action_and_documents_pinned_action
+
+test result: FAILED. 7 passed; 2 failed; 0 ignored; 0 measured; 808 filtered out; finished in 0.05s
+
+error: test failed, to rerun pass `-p aion-server --lib`
+EXIT=101

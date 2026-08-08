@@ -1,0 +1,87 @@
+=== MUTATION D: pin-refusal guard disabled
+   Compiling aion-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.20s
+     Running unittests src/lib.rs (target/debug/deps/aion_package-0338c8fc6009fa2d)
+
+running 17 tests
+test codegen::awl_worker::tests::a_queue_of_only_bodied_actions_is_refused ... ok
+test codegen::awl_worker::tests::one_connection_per_node_serves_exactly_the_reachable_actions ... ok
+test codegen::awl_worker::tests::an_unpinned_queue_dials_one_connection_with_no_node ... ok
+test codegen::awl_worker::tests::shell_readme_carries_the_production_invocation ... ok
+test codegen::awl_worker::tests::shell_manifest_wires_the_whole_queue_with_declared_result_encodings ... ok
+test codegen::awl_worker::tests::shell_manifest_refuses_any_node_pinned_queue ... FAILED
+test codegen::awl_worker::tests::keyword_action_names_are_escaped_or_refused ... ok
+test codegen::awl_worker::tests::only_the_handlers_file_is_author_owned ... ok
+test codegen::awl_worker::tests::a_server_executed_action_is_absent_everywhere ... ok
+test codegen::awl_worker::tests::every_registration_carries_a_descriptor_from_the_document ... ok
+test codegen::awl_worker::tests::every_stub_fails_loudly_and_names_its_action ... ok
+test codegen::awl_worker::tests::every_stub_documents_the_declared_schemas ... ok
+test codegen::awl_worker::tests::generation_is_deterministic ... ok
+test codegen::awl_worker::tests::unusable_names_and_paths_are_refused ... ok
+test codegen::awl_worker::tests::the_declaration_embeds_the_document_and_takes_its_schemas ... ok
+test codegen::awl_worker::tests::the_emitted_connection_table_is_the_plan ... ok
+test codegen::awl_worker::tests::the_manifest_is_standalone_and_strict ... ok
+
+failures:
+
+---- codegen::awl_worker::tests::shell_manifest_refuses_any_node_pinned_queue stdout ----
+
+thread 'codegen::awl_worker::tests::shell_manifest_refuses_any_node_pinned_queue' (52506111) panicked at crates/aion-package/src/codegen/awl_worker/tests.rs:514:5:
+assertion `left == right` failed
+  left: None
+ right: Some(NodePinnedQueue { task_queue: "fleet" })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    codegen::awl_worker::tests::shell_manifest_refuses_any_node_pinned_queue
+
+test result: FAILED. 16 passed; 1 failed; 0 ignored; 0 measured; 295 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p aion-package --lib`
+EXIT=101
+   Compiling aion-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+   Compiling aion-awl v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl)
+   Compiling aion-worker v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+   Compiling aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+   Compiling aion-toolchain v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-toolchain)
+   Compiling aion-awl-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-package)
+   Compiling aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 28.57s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a347e1aad4065bbb)
+
+running 11 tests
+test awl::scaffold_tests::unparseable_source_is_an_invalid_document ... ok
+test awl::scaffold_tests::linked_schema_import_is_an_invalid_document_refusal ... ok
+test awl::scaffold_tests::unsupported_runtime_is_refused ... ok
+test awl::scaffold_tests::all_bodied_rust_document_is_refused_as_having_nothing_to_serve ... ok
+test awl::scaffold_tests::unknown_worker_refusal_lists_declared_queues ... ok
+test awl::scaffold_tests::schema_imports_are_compiled_from_the_confined_staging_seam ... ok
+test awl::scaffold_tests::shell_refuses_mixed_pinned_and_unpinned_queue_instead_of_wiring_partially ... FAILED
+test awl::scaffold_tests::shell_refuses_any_node_pinned_queue_with_actionable_code ... FAILED
+test awl::scaffold_tests::bodyless_rust_document_uses_canonical_codegen_and_includes_document ... ok
+test awl::scaffold_tests::mixed_rust_document_excludes_server_bodied_action ... ok
+test awl::scaffold_tests::mixed_shell_document_wires_only_bodyless_action ... ok
+
+failures:
+
+---- awl::scaffold_tests::shell_refuses_mixed_pinned_and_unpinned_queue_instead_of_wiring_partially stdout ----
+
+thread 'awl::scaffold_tests::shell_refuses_mixed_pinned_and_unpinned_queue_instead_of_wiring_partially' (52520522) panicked at crates/aion-server/src/awl/scaffold_tests.rs:225:5:
+assertion failed: !response.ok
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- awl::scaffold_tests::shell_refuses_any_node_pinned_queue_with_actionable_code stdout ----
+
+thread 'awl::scaffold_tests::shell_refuses_any_node_pinned_queue_with_actionable_code' (52520521) panicked at crates/aion-server/src/awl/scaffold_tests.rs:210:5:
+assertion failed: !response.ok
+
+
+failures:
+    awl::scaffold_tests::shell_refuses_any_node_pinned_queue_with_actionable_code
+    awl::scaffold_tests::shell_refuses_mixed_pinned_and_unpinned_queue_instead_of_wiring_partially
+
+test result: FAILED. 9 passed; 2 failed; 0 ignored; 0 measured; 808 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p aion-server --lib`
+EXIT=101

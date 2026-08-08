@@ -1,0 +1,34 @@
+   Compiling aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+warning: unused variable: `staged_root`
+   --> crates/aion-server/src/awl/handlers.rs:183:24
+    |
+183 |         let (_staging, staged_root) =
+    |                        ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_staged_root`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `aion-server` (lib) generated 1 warning (run `cargo fix --lib -p aion-server` to apply 1 suggestion)
+warning: `aion-server` (lib test) generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 00s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a347e1aad4065bbb)
+
+running 1 test
+test awl::handlers::tests::http_check_confines_document_paths_and_schema_imports ... FAILED
+
+failures:
+
+---- awl::handlers::tests::http_check_confines_document_paths_and_schema_imports stdout ----
+
+thread 'awl::handlers::tests::http_check_confines_document_paths_and_schema_imports' (56809877) panicked at crates/aion-server/src/awl/handlers.rs:380:9:
+assertion failed: !missing.ok
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    awl::handlers::tests::http_check_confines_document_paths_and_schema_imports
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 823 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `-p aion-server --lib`
+
+EXIT=101

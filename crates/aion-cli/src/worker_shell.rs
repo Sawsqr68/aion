@@ -315,6 +315,7 @@ mod tests {
     use std::time::Instant;
 
     use aion_core::ActivityId;
+    use aion_package::emit_shell_manifest;
     use serde_json::json;
 
     use super::*;
@@ -491,6 +492,55 @@ step do_greet
             error.contains("shout") && error.contains("whole queue or none"),
             "refusal must name the unserved action and the rule, got: {error}"
         );
+        Ok(())
+    }
+
+    /// The production emitter must satisfy the shell runtime's real strict
+    /// deserializer and whole-queue startup reconciliation without a second
+    /// interpretation of which actions are worker-owed.
+    #[test]
+    fn emitted_manifest_passes_the_real_whole_queue_startup_check() -> TestResult {
+        let two_actions = r"//! Two bodyless actions the emitted shell manifest must wire together.
+workflow complete_shell_flow
+  input name: String
+  outcome greeted: type Greeting, route success
+
+type Greeting { message: String }
+
+worker greeter
+  action greet(name: String) -> Greeting
+  action shout(name: String) -> Greeting
+
+step greet_first
+  greet(name: name) -> greeting
+
+step shout_second after greet_first
+  shout(name: greeting.message) -> shouted
+  route greeted(message: shouted.message)
+";
+        let document = write_document("emitted-complete", two_actions)?;
+        let document_root = document
+            .parent()
+            .ok_or("generated fixture document has no parent")?;
+        let compiled = aion_awl::compile(two_actions, document_root)?;
+        let contract = compiled
+            .contract
+            .workers
+            .iter()
+            .find(|worker| worker.task_queue == "greeter")
+            .ok_or("compiled fixture omitted worker greeter")?;
+        let files = emit_shell_manifest(contract, "complete_shell_flow.awl")?;
+        let source = files
+            .iter()
+            .find(|file| file.relative == "worker.toml")
+            .map(|file| file.contents.as_str())
+            .ok_or("shell emitter omitted worker.toml")?;
+        let manifest = parse_manifest(source)?;
+        let descriptors = declared_descriptors(&document, &manifest)?;
+
+        assert_eq!(descriptors.len(), 2);
+        assert!(descriptors.contains_key("greet"));
+        assert!(descriptors.contains_key("shout"));
         Ok(())
     }
 

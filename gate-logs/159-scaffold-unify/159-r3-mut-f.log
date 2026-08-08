@@ -1,0 +1,21 @@
+   Compiling aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 31.31s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a347e1aad4065bbb)
+
+running 1 test
+test awl::scaffold_tests::missing_import_in_a_present_workspace_is_the_documents_diagnostic ... FAILED
+
+failures:
+
+---- awl::scaffold_tests::missing_import_in_a_present_workspace_is_the_documents_diagnostic stdout ----
+Error: Io(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+
+
+failures:
+    awl::scaffold_tests::missing_import_in_a_present_workspace_is_the_documents_diagnostic
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 822 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p aion-server --lib`
+
+EXIT=101

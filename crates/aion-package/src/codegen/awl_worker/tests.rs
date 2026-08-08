@@ -12,6 +12,7 @@ use super::scaffold::{
     AionDependency, AwlWorkerScaffold, DocumentRoot, FileOwnership, ScaffoldedFile, WorkerScaffold,
     scaffold_awl_worker,
 };
+use super::shell_manifest::emit_shell_manifest;
 use crate::canonical::CanonicalJson;
 use crate::contract::{ActionBodyContract, ActionContract, WorkerContract};
 
@@ -473,4 +474,65 @@ fn unusable_names_and_paths_are_refused() {
         request("fleet-worker", "../doc.awl", ""),
         Some(AwlScaffoldError::DocumentPathEmpty { role: "directory" })
     );
+}
+
+/// Shell result encoding is derived from the declared output schema, and every
+/// worker-owed action is wired exactly once so the runtime's whole-queue startup
+/// check sees the complete set.
+#[test]
+fn shell_manifest_wires_the_whole_queue_with_declared_result_encodings() -> TestResult {
+    let mut contract = flat();
+    contract.actions[0].output_schema = json!({"type": "string"});
+    let files = emit_shell_manifest(&contract, "flat_flow.awl")?;
+    let manifest = files
+        .iter()
+        .find(|file| file.relative == "worker.toml")
+        .ok_or("shell scaffold omitted worker.toml")?;
+    let parsed: toml::Value = toml::from_str(&manifest.contents)?;
+    let actions = parsed
+        .get("action")
+        .and_then(toml::Value::as_array)
+        .ok_or("worker.toml omitted its action array")?;
+    assert_eq!(actions.len(), 2);
+
+    let encoding = |name: &str| {
+        actions
+            .iter()
+            .find(|action| action.get("name").and_then(toml::Value::as_str) == Some(name))
+            .and_then(|action| action.get("result"))
+            .and_then(toml::Value::as_str)
+    };
+    assert_eq!(encoding("first"), Some("text"));
+    assert_eq!(encoding("second"), Some("json"));
+    Ok(())
+}
+
+/// A shell worker has no node flag and its startup reconciliation is
+/// whole-queue, so one node pin makes the queue a Rust-scaffold topology.
+#[test]
+fn shell_manifest_refuses_any_node_pinned_queue() {
+    assert_eq!(
+        emit_shell_manifest(&fleet(), "fleet_probe.awl").err(),
+        Some(AwlScaffoldError::NodePinnedQueue {
+            task_queue: "fleet".to_owned()
+        })
+    );
+}
+
+/// The shell README carries the production invocation and the ownership rule:
+/// wiring is local, while schemas and serving completeness come from the AWL
+/// document.
+#[test]
+fn shell_readme_carries_the_production_invocation() -> TestResult {
+    let files = emit_shell_manifest(&flat(), "flat_flow.awl")?;
+    let readme = files
+        .iter()
+        .find(|file| file.relative == "README.md")
+        .ok_or("shell scaffold omitted README.md")?;
+    assert!(readme.contents.contains(
+        "aion worker shell --manifest worker.toml --awl flat_flow.awl --endpoint <server>"
+    ));
+    assert!(readme.contents.contains("all-or-nothing per queue"));
+    assert!(readme.contents.contains("complete worker-owed action set"));
+    Ok(())
 }

@@ -170,60 +170,24 @@ pub async fn check_source_in_workspace(
     let Some(requested_path) = request.path.as_deref() else {
         return Ok(check_source(request));
     };
-    let document_path = super::documents::document_path(requested_path)?;
     let workspace_root = workspace_root.to_owned();
     let source = request.source.clone();
     let requested_path = requested_path.to_owned();
     tokio::task::spawn_blocking(move || {
-        let Ok(document) = parse(&source) else {
+        let Ok(_) = parse(&source) else {
             return Ok(check_source(&CheckRequest {
                 source,
                 path: Some(requested_path),
             }));
         };
-        let workspace =
-            ConfinedDir::open(&workspace_root).map_err(super::documents::DocumentError::Io)?;
-        let staging = tempfile::Builder::new().prefix("aion-schema-").tempdir()?;
-        let document_parent = document_path.parent().unwrap_or_else(|| Path::new(""));
-        let analysis_root = staging.path().join(document_parent);
-        std::fs::create_dir_all(&analysis_root)?;
-        for declaration in &document.types {
-            let TypeBody::SchemaImport { path, .. } = &declaration.body else {
-                continue;
-            };
-            let import = Path::new(path);
-            if path.is_empty()
-                || import
-                    .components()
-                    .any(|component| !matches!(component, Component::Normal(_)))
-            {
-                continue;
-            }
-            let workspace_path = document_parent.join(import);
-            let bytes = workspace.read(&workspace_path).map_err(|error| {
-                if matches!(
-                    error.kind(),
-                    io::ErrorKind::InvalidInput | io::ErrorKind::NotADirectory
-                ) {
-                    super::documents::DocumentError::InvalidPath(format!(
-                        "schema import `{path}` contains a link: {error}"
-                    ))
-                } else {
-                    super::documents::DocumentError::Io(error)
-                }
-            })?;
-            let staged = analysis_root.join(import);
-            if let Some(parent) = staged.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            std::fs::write(staged, bytes)?;
-        }
+        let (_staging, staged_root) =
+            stage_schema_imports(&workspace_root, &requested_path, &source)?;
         Ok(check_source_at(
             &CheckRequest {
                 source,
                 path: Some(requested_path),
             },
-            Some(&analysis_root),
+            Some(&staged_root),
         ))
     })
     .await
@@ -260,20 +224,21 @@ pub(crate) fn stage_schema_imports(
         {
             continue;
         }
-        let bytes = workspace
-            .read(&document_parent.join(import))
-            .map_err(|error| {
+        let bytes = match workspace.read(&document_parent.join(import)) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+            Err(error)
                 if matches!(
                     error.kind(),
                     io::ErrorKind::InvalidInput | io::ErrorKind::NotADirectory
-                ) {
-                    super::documents::DocumentError::InvalidPath(format!(
-                        "schema import `{path}` contains a link: {error}"
-                    ))
-                } else {
-                    super::documents::DocumentError::Io(error)
-                }
-            })?;
+                ) || error.raw_os_error() == Some(rustix::io::Errno::LOOP.raw_os_error()) =>
+            {
+                return Err(super::documents::DocumentError::InvalidPath(format!(
+                    "schema import `{path}` contains a link: {error}"
+                )));
+            }
+            Err(error) => return Err(super::documents::DocumentError::Io(error)),
+        };
         let staged = analysis_root.join(import);
         if let Some(parent) = staged.parent() {
             std::fs::create_dir_all(parent)?;
@@ -383,7 +348,8 @@ mod tests {
         let source = std::fs::read_to_string(fixture_dir.join("mixed_doors.awl"))?;
         let schema = std::fs::read(fixture_dir.join("intake.schema.json"))?;
         std::fs::create_dir(workspace.path().join("nested"))?;
-        std::fs::write(workspace.path().join("nested/intake.schema.json"), schema)?;
+        std::fs::write(workspace.path().join("nested/intake.schema.json"), &schema)?;
+        std::fs::write(workspace.path().join("intake.schema.json"), &schema)?;
 
         let valid = check_source_in_workspace(
             workspace.path(),
@@ -394,6 +360,26 @@ mod tests {
         )
         .await?;
         assert!(valid.ok, "confined import failed: {:?}", valid.diagnostics);
+
+        let missing_name = "missing-intake.schema.json";
+        std::fs::write(workspace.path().join(missing_name), &schema)?;
+        let missing = check_source_in_workspace(
+            workspace.path(),
+            &CheckRequest {
+                source: source.replace("intake.schema.json", missing_name),
+                path: Some("nested/mixed_doors.awl".to_owned()),
+            },
+        )
+        .await?;
+        let missing_reason = missing
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.message.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!missing.ok);
+        assert!(missing_reason.contains(missing_name));
+        assert!(!missing_reason.contains("AWL workspace I/O failed"));
 
         let outside = workspace.path().parent().ok_or("workspace had no parent")?;
         let absolute_source = source.replace(
@@ -449,7 +435,14 @@ mod tests {
             },
         )
         .await;
-        assert!(linked.is_err(), "schema symlink was followed");
+        let Err(error) = linked else {
+            return Err("schema symlink was followed".into());
+        };
+        assert!(matches!(
+            error,
+            super::super::documents::DocumentError::InvalidPath(reason)
+                if reason.contains("contains a link")
+        ));
         Ok(())
     }
 

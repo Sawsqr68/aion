@@ -16,6 +16,7 @@ mod main_rs;
 mod manifest;
 mod plan;
 mod scaffold;
+mod shell_manifest;
 mod text;
 
 #[cfg(test)]
@@ -28,3 +29,4 @@ pub use scaffold::{
     AionDependency, AwlWorkerScaffold, DocumentRoot, FileOwnership, ScaffoldedFile, WorkerScaffold,
     scaffold_awl_worker,
 };
+pub use shell_manifest::emit_shell_manifest;

@@ -1,0 +1,31 @@
+   Compiling aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 44.36s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-a347e1aad4065bbb)
+
+running 3 tests
+test awl::scaffold_tests::linked_schema_import_is_an_invalid_document_refusal ... FAILED
+test awl::scaffold_tests::schema_imports_are_compiled_from_the_confined_staging_seam ... ok
+test awl::handlers::tests::http_check_confines_document_paths_and_schema_imports ... FAILED
+
+failures:
+
+---- awl::scaffold_tests::linked_schema_import_is_an_invalid_document_refusal stdout ----
+Error: Io(Os { code: 62, kind: FilesystemLoop, message: "Too many levels of symbolic links" })
+
+---- awl::handlers::tests::http_check_confines_document_paths_and_schema_imports stdout ----
+
+thread 'awl::handlers::tests::http_check_confines_document_paths_and_schema_imports' (56120805) panicked at crates/aion-server/src/awl/handlers.rs:439:9:
+assertion failed: matches!(error, super::super::documents::DocumentError::InvalidPath(reason) if
+    reason.contains("contains a link"))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    awl::handlers::tests::http_check_confines_document_paths_and_schema_imports
+    awl::scaffold_tests::linked_schema_import_is_an_invalid_document_refusal
+
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 821 filtered out; finished in 0.03s
+
+error: test failed, to rerun pass `-p aion-server --lib`
+
+EXIT=101

@@ -36,7 +36,8 @@ pub use activity_project::{
 };
 pub use awl_worker::{
     AionDependency, AwlScaffoldError, AwlWorkerScaffold, Connection, ConnectionPlan, DocumentRoot,
-    FileOwnership, ScaffoldedFile, ServableAction, WorkerScaffold, scaffold_awl_worker,
+    FileOwnership, ScaffoldedFile, ServableAction, WorkerScaffold, emit_shell_manifest,
+    scaffold_awl_worker,
 };
 pub use declaration::{ActivityDeclaration, Tier, parse_declarations};
 pub use error::CodegenError;
