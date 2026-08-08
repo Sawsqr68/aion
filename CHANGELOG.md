@@ -3,10 +3,7 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
-## Unreleased
-
-Landed on `main` since the 0.11.0 publish. Nothing here has been released to
-crates.io yet.
+## 0.12.0 — 2026-08-08
 
 - **`aion new` scaffolds AWL by default.** A new `awl` template is the
   default: a bare `aion new <name>` emits a checked, runnable
