@@ -74,7 +74,7 @@ version = "0.12.0"
 dependencies = [
  "aion-package",
  "aion-worker",
- "beamr",
+ "beamr 0.17.0",
  "flate2",
  "gleam-types",
  "serde_json",
@@ -102,7 +102,7 @@ version = "0.12.0"
 dependencies = [
  "aion-awl",
  "aion-package",
- "beamr",
+ "beamr 0.17.0",
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
@@ -314,7 +314,7 @@ dependencies = [
  "aion-store-haematite",
  "aion-store-libsql",
  "async-trait",
- "beamr",
+ "beamr 0.17.0",
  "chrono",
  "dashmap",
  "fs4",
@@ -775,6 +775,39 @@ name = "beamr"
 version = "0.16.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2055871ac77915291626ecbc45e1e3a7cb6851d22f4152d16f54253e383b3a1"
+dependencies = [
+ "base64 0.22.1",
+ "cranelift-codegen",
+ "cranelift-frontend",
+ "cranelift-jit",
+ "cranelift-module",
+ "cranelift-native",
+ "crossbeam-channel",
+ "crossbeam-deque",
+ "crossbeam-queue",
+ "dashmap",
+ "flate2",
+ "getrandom 0.4.2",
+ "gleam-types",
+ "io-uring",
+ "libc",
+ "md5",
+ "mio",
+ "num_cpus",
+ "rand 0.10.2",
+ "rustix 1.1.4",
+ "serde_json",
+ "tokio",
+ "unicode-segmentation",
+ "web-time",
+ "zstd",
+]
+
+[[package]]
+name = "beamr"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bda4cda26194fc612d1f1c9ff2d554aae7950389278c326c8325cd24e0df4c52"
 dependencies = [
  "base64 0.22.1",
  "cranelift-codegen",
@@ -2190,7 +2223,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a92612160dc25dec762fa07d53518c8eb632b033c25fae74670524a33646d1c"
 dependencies = [
- "beamr",
+ "beamr 0.16.3",
  "blake3",
  "crc32fast",
  "dashmap",
@@ -2209,7 +2242,7 @@ version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2bf4d64222be38309d0f51c7907a8934d475c9d491da9c2e4fa1732321e9415"
 dependencies = [
- "beamr",
+ "beamr 0.16.3",
  "blake3",
  "crc32fast",
  "dashmap",
@@ -3159,7 +3192,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "741903fb9f82b03bda99a3ac8f110e41bfd10453108f5ccf1c0c75e3bcc55299"
 dependencies = [
  "async-trait",
- "beamr",
+ "beamr 0.16.3",
  "chrono",
  "haematite 0.7.0",
  "jsonschema",
@@ -3194,7 +3227,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c782a3e8e60428ded30dba80dd8a4b7e75292eddf2620e846e92cc2553e92dcf"
 dependencies = [
  "anyhow",
- "beamr",
+ "beamr 0.16.3",
  "blake3",
  "clap",
  "haematite 0.7.0",

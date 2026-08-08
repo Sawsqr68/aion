@@ -1,0 +1,7 @@
+=== resolved beamr: ├── beamr v0.17.0 | rustc: rustc 1.97.1 (8bab26f4f 2026-07-14) | cargo: cargo 1.97.1 (c980f4866 2026-06-30) ===
+=== tree: 4ed85113805c8af50d0a517ab669ba540e89fb6b + scp-verified Cargo.toml/Cargo.lock (beamr 0.17.0 bump) ===
+=== ulimit -n: 8192 (run 1 failed at 256: os error 24 in aion-server lib tests — env, not the bump) ===
+=== started: 2026-08-08T18:55:40Z ===
+clippy-workspace exit=0
+test-workspace exit=0
+=== finished: 2026-08-08T19:06:55Z ===
