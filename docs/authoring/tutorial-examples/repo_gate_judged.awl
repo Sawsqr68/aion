@@ -1,0 +1,56 @@
+//! repo_gate — clone a repository, run its checks and tests, then put that
+//! evidence in front of a judge before reporting a pass.
+//!
+//! WHAT THIS DOES NOT PROVE: the judgement is one agent's unverified opinion.
+//! Requiring one exact reply prevents commentary from being mistaken for
+//! approval; it does not make the opinion correct. Read the evidence yourself
+//! before anything consequential acts on this verdict.
+workflow repo_gate
+  input repo: String
+  input workdir: String
+  outcome passed: type Gate,    route success
+  outcome failed: type Refused, route failure
+
+/// What a `run` body hands back. Name only the parts you use.
+type Report  { stdout: String, stderr: String }
+type Gate    { cloned: String, commit: String, checks: String, tests: String, judgement: String }
+type Refused { reason: String, judge_reply: String }
+
+worker gate
+  /// Depth 1: a gate wants the tip, not the history.
+  action clone(repo: String, into: String) -> Report
+    run "git clone --depth 1 $repo $into"
+  /// Which commit the gate actually judged. Say it, or nobody can repeat it.
+  action head(dir: String) -> Report
+    run "git -C $dir rev-parse --short HEAD"
+  /// cargo writes its progress to stderr, so that is where this evidence is.
+  action checks(dir: String) -> Report
+    run "cargo clippy --manifest-path ${dir}/Cargo.toml --all-targets"
+  /// The test binaries write their verdicts to stdout.
+  action tests(dir: String) -> Report
+    run "cargo test --manifest-path ${dir}/Cargo.toml"
+  /// The same queue carries server-run commands and this worker-served seam.
+  /// The retry absorbs transient harness or provider failures; the authored
+  /// timeout travels with the package contract but is not enforced today.
+  action judge(prompt: String) -> String
+    agent, timeout 10m, retry 3 backoff 10s..1m
+
+step fetch
+  clone(repo: repo, into: workdir) -> cloned
+  head(dir: workdir) -> at
+
+step verify after fetch
+  checks(dir: workdir) -> checked
+  tests(dir: workdir) -> tested
+  "Judge this repository gate evidence. Reply with exactly GATE_APPROVED if it supports approval; reply with anything else to refuse. Clone: " + cloned.stderr + " Commit: " + at.stdout + " Checks: " + checked.stderr + " Tests: " + tested.stdout -> judge_prompt
+  judge(prompt: judge_prompt) -> judge_reply
+  on failure
+    route failed(reason: "the gate did not pass", judge_reply: "")
+  outcome approved: when judge_reply == "GATE_APPROVED",
+    route passed(cloned: cloned.stderr, commit: at.stdout, checks: checked.stderr,
+      tests: tested.stdout, judgement: judge_reply)
+  // An agent can still say the marker wrongly. This route only ensures that
+  // anything else is a refusal, carrying the actual reply rather than hiding it.
+  outcome refused: otherwise,
+    route failed(reason: "the judge did not return the exact approval marker",
+      judge_reply: judge_reply)

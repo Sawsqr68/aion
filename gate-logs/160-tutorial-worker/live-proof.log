@@ -1,0 +1,92 @@
+LIVE_PROOF_WORLD=/Users/tom/.aion-160-live.JUDI4J
+AION_BINARY=/Users/tom/.cargo/bin/aion
+aion 0.11.0
+
+=== isolated config (comments removed) ===
+
+[server]
+listen_address = "127.0.0.1:8097"
+grpc_address = "127.0.0.1:50097"
+
+[store]
+backend = "haematite"
+data_dir = "/Users/tom/.aion-160-live.JUDI4J/aion-home/data"
+
+[runtime]
+query_timeout_ms = 10000
+
+[outbox]
+enabled = true
+transport = "liminal"
+liminal_listen_address = "127.0.0.1:50167"
+
+[websocket]
+event_broadcast_capacity = 1024
+cluster_broadcast_capacity = 64
+
+[deploy]
+enabled = true
+max_archive_bytes = 16777216
+max_inflated_bytes = 67108864
+
+=== server start ===
+cwd=/Users/tom/.aion-160-live.JUDI4J argv=AION_HOME=/Users/tom/.aion-160-live.JUDI4J/aion-home aion server --config /Users/tom/.aion-160-live.JUDI4J/aion.toml
+SERVER_PID=15892
+SERVER_READY=true
+--- server banner/log through readiness ---
+aion server: agent harness composed at the binary root: norn: a `norn --protocol jsonrpc` child process (aion-integration-norn). The worker drives it through the neutral AgentHarness trait.
+aion server: agent harness composed at the binary root: acp: any agent speaking the Agent Client Protocol over its stdio (aion-integration-acp). The worker drives it through the neutral AgentHarness trait.
+aion server: 2 harnesses are composed in, so `aion worker agent` requires --harness <norn, acp> to select one.
+{"timestamp":"2026-08-08T05:16:44.083934Z","level":"INFO","fields":{"message":"aion-server configuration resolved","config_source":"explicit file `/Users/tom/.aion-160-live.JUDI4J/aion.toml`","aion_home":"/Users/tom/.aion-160-live.JUDI4J/aion-home"},"target":"aion_server::config::resolution"}
+{"timestamp":"2026-08-08T05:16:44.094755Z","level":"INFO","fields":{"message":"aion-server data root resolved","data_root":"/Users/tom/.aion-160-live.JUDI4J/aion-home/data"},"target":"aion_server::config::resolution"}
+{"timestamp":"2026-08-08T05:16:44.099767Z","level":"INFO","fields":{"message":"aion-server authoring root resolved","authoring_root":"/Users/tom/.aion-160-live.JUDI4J/aion-home/authoring"},"target":"aion_server::config::resolution"}
+{"timestamp":"2026-08-08T05:16:47.185031Z","level":"INFO","fields":{"message":"aion-server startup banner","version":"0.11.0","build":"0.11.0+unknown built 2026-08-03T02:40:10+00:00","commit":"unknown","grpc_address":"127.0.0.1:50097","http_address":"127.0.0.1:8097","default_namespace":"default","namespace_mode":"SharedEngine","store_backend":"haematite","auth_enabled":false,"deploy_enabled":true,"metrics_enabled":true,"workflow_package_count":0,"workflow_packages":"[]","owned_shards":"[]","owns_all_shards":true},"target":"aion_server::run"}
+{"timestamp":"2026-08-08T05:16:47.301168Z","level":"INFO","fields":{"message":"liminal worker liveness probe started","cadence_ms":"7500","silence_window_ms":"30000"},"target":"aion_server::worker::liminal_liveness"}
+{"timestamp":"2026-08-08T05:16:47.301199Z","level":"INFO","fields":{"message":"liminal server listener bound","listen_address":"127.0.0.1:50167"},"target":"liminal_server::server::listener"}
+{"timestamp":"2026-08-08T05:16:47.305147Z","level":"INFO","fields":{"message":"liminal outbox worker listener commissioned (remote workers connect in and self-register)","listen_address":"127.0.0.1:50167"},"target":"aion_server::run"}
+{"timestamp":"2026-08-08T05:16:47.305182Z","level":"INFO","fields":{"message":"outbox dispatcher commissioned (active-active per-shard ownership enforced by claim scope when clustered; single-node owns all shards)","clustered":false},"target":"aion_server::run"}
+{"timestamp":"2026-08-08T05:16:47.305307Z","level":"INFO","fields":{"message":"outbox dispatcher started","poll_interval_ms":"20","batch_size":16,"max_attempts":5},"target":"aion_server::worker::outbox_dispatcher"}
+{"timestamp":"2026-08-08T05:16:47.305331Z","level":"INFO","fields":{"message":"quota-state broadcaster commissioned (throttled per-namespace in-flight/ceiling push)","cadence_ms":"1000"},"target":"aion_server::worker::quota_broadcast"}
+{"timestamp":"2026-08-08T05:16:47.305356Z","level":"INFO","fields":{"message":"worker heartbeat sweeper started","sweep_interval_ms":"7500","heartbeat_window_ms":"30000"},"target":"aion_server::worker::heartbeat"}
+
+=== deploy ===
+aion --endpoint http://127.0.0.1:50097 --pretty deploy /Users/tom/Developer/ablative/stack/aion/docs/authoring/tutorial-examples/repo_gate_judged.awl
+{
+  "workflow_type": "repo_gate",
+  "content_hash": "9c132a2cf8521bcee63bb64f5c039197e5b439f091e2c66f6441033f2b19f867",
+  "deployed_entry_module": "repo_gate$9c132a2cf8521bcee63bb64f5c039197e5b439f091e2c66f6441033f2b19f867",
+  "entry_function": "run",
+  "freshly_loaded": true,
+  "route_changed": true,
+  "superseded_versions": []
+}
+
+=== availability before worker ===
+{"available":false,"task_queue":"gate","connected_workers":0,"scaffold_hint":"No connected worker serves task queue `gate`. Scaffold and run this worker from Workers & Actions, then retry start."}
+
+=== worker start (slide argv; isolated address override) ===
+cwd=/Users/tom/Developer/ablative/stack/aion/docs/authoring/tutorial-examples
+aion worker agent repo_gate_judged.awl \
+  --harness norn \
+  --liminal-address 127.0.0.1:50167 \
+  --identity repo-gate-judge --concurrency 4 \
+  --reconnect-initial-backoff 1 \
+  --reconnect-max-backoff 30 \
+  --reconnect-max-attempts 100
+WORKER_PID=16072
+WORKER_CONNECTED=true
+--- worker log through admission ---
+{"timestamp":"2026-08-08T05:16:50.205862Z","level":"INFO","fields":{"message":"agent worker dialing liminal candidates","candidates":"127.0.0.1:50167","task_queue":"gate","identity":"repo-gate-judge","namespace":"default","harness":"norn"},"target":"aion::worker_agent::serve"}
+{"timestamp":"2026-08-08T05:16:50.214011Z","level":"INFO","fields":{"message":"agent worker registered; serving through the composed agent harness","task_queue":"gate","actions":"judge"},"target":"aion::worker_agent::serve"}
+
+=== availability after worker ===
+{"available":true,"task_queue":"gate","connected_workers":1,"scaffold_hint":null}
+
+=== run outcome ===
+aion --endpoint http://127.0.0.1:50097 --pretty run /Users/tom/Developer/ablative/stack/aion/docs/authoring/tutorial-examples/repo_gate_judged.awl --input {"repo":"https://github.com/dtolnay/itoa","workdir":"/Users/tom/.aion-160-live.JUDI4J/gate-work-judged"}
+
+=== teardown ===
+WORKER_DEAD=true pid=16072
+SERVER_DEAD=true pid=15892
+TEMP_WORLD_REMOVED=true path=/Users/tom/.aion-160-live.JUDI4J
+EXIT=143

@@ -102,15 +102,30 @@ impl Drop for ChildGuard {
 
 /// Re-point the generated config at reserved loopback ports, mirroring the
 /// hello-world gate. The store stays the generated relative `aion.db`.
-fn repoint_config_ports(project: &Path, http_port: u16, grpc_port: u16) -> Result<(), TestError> {
+/// The worker-channel address is rewritten too: the template's fixed
+/// `127.0.0.1:50061` collides with any live worker on the machine (and with a
+/// concurrent test run), and this server binds it at boot.
+fn repoint_config_ports(
+    project: &Path,
+    http_port: u16,
+    grpc_port: u16,
+    outbox_port: u16,
+) -> Result<(), TestError> {
     let config_path = project.join("aion.toml");
     let config = std::fs::read_to_string(&config_path)?;
-    if !config.contains("127.0.0.1:8080") || !config.contains("127.0.0.1:50051") {
-        return Err(format!("generated aion.toml must carry the dev addresses:\n{config}").into());
+    if !config.contains("127.0.0.1:8080")
+        || !config.contains("127.0.0.1:50051")
+        || !config.contains("127.0.0.1:50061")
+    {
+        return Err(format!(
+            "generated aion.toml must carry the dev addresses and the worker channel:\n{config}"
+        )
+        .into());
     }
     let config = config
         .replace("127.0.0.1:8080", &format!("127.0.0.1:{http_port}"))
-        .replace("127.0.0.1:50051", &format!("127.0.0.1:{grpc_port}"));
+        .replace("127.0.0.1:50051", &format!("127.0.0.1:{grpc_port}"))
+        .replace("127.0.0.1:50061", &format!("127.0.0.1:{outbox_port}"));
     std::fs::write(config_path, config)?;
     Ok(())
 }
@@ -258,7 +273,8 @@ fn scaffolded_agent_deploys_but_start_is_refused_unscoped() -> Result<(), TestEr
 
     let http_port = reserve_port()?;
     let grpc_port = reserve_port()?;
-    repoint_config_ports(&project, http_port, grpc_port)?;
+    let outbox_port = reserve_port()?;
+    repoint_config_ports(&project, http_port, grpc_port, outbox_port)?;
     let mut server = ChildGuard {
         child: boot_server(&project, http_port)?,
     };

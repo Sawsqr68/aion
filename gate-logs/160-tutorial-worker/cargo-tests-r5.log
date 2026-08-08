@@ -1,0 +1,38 @@
+=== r5 post-CLEAR nit-2 gate: comment-only template edit, targeted e2e re-run ===
+2026-08-08T16:34:47+1000
+16:34  up 3 days, 22:19, 4 users, load averages: 10.77 13.58 24.89
+   Compiling aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.71s
+     Running tests/new_agent_e2e.rs (target/debug/deps/new_agent_e2e-d891e4fac9674665)
+
+running 9 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): agent_demo, agent_demo_codecs, agent_demo_io
+test scaffolded_agent_deploys_but_start_is_refused_unscoped ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.94s
+
+     Running tests/new_hello_world_e2e.rs (target/debug/deps/new_hello_world_e2e-198b021ea22812e6)
+
+running 9 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): hello_demo, hello_demo_codecs, hello_demo_io
+test scaffolded_hello_world_completes_against_the_generated_config ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.46s
+
+TEST_R5_EXIT=0

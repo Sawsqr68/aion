@@ -1,0 +1,43 @@
+=== r3b targeted re-run of the r3 red (load-flake hypothesis) ===
+16:24  up 3 days, 22:09, 4 users, load averages: 30.34 32.62 38.44
+--- attempt 1 ---
+error: no library targets found in package `aion-cli`
+ATTEMPT_1_EXIT=101
+--- attempt 2 ---
+error: no library targets found in package `aion-cli`
+ATTEMPT_2_EXIT=101
+--- attempt 3 ---
+error: no library targets found in package `aion-cli`
+ATTEMPT_3_EXIT=101
+=== r3c corrected targeted re-run (--bin aion) ===
+16:25  up 3 days, 22:09, 4 users, load averages: 29.68 32.44 38.28
+--- attempt 1 ---
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.47s
+     Running unittests src/main.rs (target/debug/deps/aion-ea3b8252f118cbae)
+
+running 1 test
+test worker_shell::tests::cancellation_reaps_the_entire_spawned_process_group ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 214 filtered out; finished in 0.15s
+
+ATTEMPT_1_EXIT=0
+--- attempt 2 ---
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.99s
+     Running unittests src/main.rs (target/debug/deps/aion-ea3b8252f118cbae)
+
+running 1 test
+test worker_shell::tests::cancellation_reaps_the_entire_spawned_process_group ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 214 filtered out; finished in 0.09s
+
+ATTEMPT_2_EXIT=0
+--- attempt 3 ---
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.74s
+     Running unittests src/main.rs (target/debug/deps/aion-ea3b8252f118cbae)
+
+running 1 test
+test worker_shell::tests::cancellation_reaps_the_entire_spawned_process_group ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 214 filtered out; finished in 0.06s
+
+ATTEMPT_3_EXIT=0

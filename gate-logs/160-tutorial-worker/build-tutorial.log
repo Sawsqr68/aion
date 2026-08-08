@@ -1,0 +1,14 @@
+gating the tutorial with aion 0.11.0 (/Users/tom/.cargo/bin/aion)
+      ok  repo_gate-1-skeleton.awl
+      ok  repo_gate-2-contract.awl
+      ok  repo_gate-3-clone.awl
+      ok  repo_gate-4-commit.awl
+      ok  repo_gate.awl
+      ok  repo_gate_judged.awl
+      ok  all 6 documents are one workflow: `repo_gate`
+      ok  the skeleton slide is the server's own template
+      ok  all 5 taught verbs resolve and all 13 flag use(s) are documented: server, awl check, run, deploy, worker agent
+      ok  5 pasted command payload(s) parse as JSON
+      ok  all 19 keyword(s) the examples use are explained
+wrote docs/authoring/first-workflow.html — 35 slides, 8 excerpts from 7 of 7 example files, 6 documents checked
+EXIT=0

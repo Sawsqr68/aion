@@ -7,8 +7,9 @@
 # Do not "fix" it to a literal path: that is what makes the block paste-able on
 # any machine.
 #
-# The ports are deliberately not 8080/50051, so this tutorial cannot collide
-# with a server you already have running.
+# The ports are deliberately not 8080/50051, and the worker channel is not the
+# common live 50061, so this tutorial cannot collide with servers or workers you
+# already have running.
 
 [server]
 listen_address = "127.0.0.1:8099"
@@ -23,6 +24,14 @@ data_dir = "$HOME/my-first-flow/aion-data"
 
 [runtime]
 query_timeout_ms = 10000
+
+[outbox]
+# The liminal worker channel the tutorial's worker dials. Without it that
+# listener is never bound, and the worker's dial is refused with nothing on
+# the server side saying why.
+enabled = true
+transport = "liminal"
+liminal_listen_address = "127.0.0.1:50169"
 
 [websocket]
 event_broadcast_capacity = 1024

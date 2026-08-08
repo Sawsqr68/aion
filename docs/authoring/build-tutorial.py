@@ -686,12 +686,31 @@ KEYWORD_TABLE: list[tuple[str, str]] = [
             "the server executes this command itself",
         ),
         (
+            "<code>agent</code>",
+            "an action served by an agent worker: one String prompt in, one "
+            "String reply out",
+        ),
+        (
+            "<code>timeout</code>",
+            "an authored action deadline carried in the contract; not enforced "
+            "by the 0.11.0 engine",
+        ),
+        (
+            "<code>retry</code> <code>backoff</code>",
+            "how many transient failures to absorb, and how long to wait "
+            "between attempts",
+        ),
+        (
             "<b>WHAT HAPPENS, IN WHAT ORDER</b>",
             "<i>the plan the workflow actually executes</i>",
         ),
         ("<code>step</code>", "a stage of the workflow"),
         ("<code>after</code>", "what must finish before this stage starts"),
         ("<code>route</code>", "finish, this way, with this"),
+        (
+            "<code>when</code> <code>otherwise</code>",
+            "choose between exact evidence and every other reply",
+        ),
         (
             "<code>on</code> <code>failure</code>",
             "what to do when the stage faults — and it must route too",
@@ -753,13 +772,13 @@ SLIDES: list[Slide] = [
         eyebrow="What you end up with",
         title="A verdict you can point at",
         points=[
-            "One document you wrote yourself, in a language you can read.",
+            "A command gate you wrote yourself, in a language you can read.",
             f"{spelled(COMMAND_COUNT).capitalize()} real commands, run by the "
-            "server — no code, no worker process, nothing else to install.",
-            "A completed run whose whole history is on disk, naming the "
-            "commit it judged.",
-            "A non-zero exit when the gate is red, so it drops straight into "
-            "whatever already runs your builds.",
+            "server — no worker process needed for that first verdict.",
+            "Then one agent action on the same queue, served through a real "
+            "worker channel and judged on the gate's recorded evidence.",
+            "Completed runs whose whole histories are on disk, naming the "
+            "commit and carrying the reply that judged it.",
         ],
         # Says only what is true of ALL of them. The first two are never run —
         # the skeleton is shown, and the contract reaches `aion awl check` and
@@ -775,14 +794,14 @@ SLIDES: list[Slide] = [
     Slide(
         eyebrow="Before you start",
         title="One binary. Get it, check it.",
-        lede=f"If you have Rust {CLI_RUST_MIN} or newer, this is the whole "
-        "install. If the version prints, you have everything this tutorial "
-        "needs.",
+        lede=f"If you have Rust {CLI_RUST_MIN} or newer, this installs the "
+        "server, client and authoring tools used throughout the tutorial.",
         cmd=[f"cargo install {CLI_CRATE}", "", "aion --version"],
         out=f"aion {CLI_VERSION}",
         points=[
-            "That one binary is the server, the client, and the tools.",
-            "Nothing else to install.",
+            "That one binary is the server, the client, and the authoring tools.",
+            "The final agent-worker chapter also uses the norn CLI; that "
+            "dependency is called out again where the worker starts.",
         ],
         note=f"🔴 <b>The crate is <code>{CLI_CRATE}</code>; the command it "
         "installs is <code>aion</code>.</b> Do not reach for "
@@ -1190,16 +1209,17 @@ SLIDES: list[Slide] = [
     ),
     Slide(
         eyebrow="Step 7 — the whole thing",
-        title="Every word in it",
+        title="Every word in both documents",
         lede=f"{KEYWORD_COUNT} words, in {KEYWORD_GROUP_COUNT} groups. Each "
         "group answers one question.",
         keywords=True,
         table=KEYWORD_TABLE,
-        note="Every word used by this document is in that table, and the build "
-        "refuses if that stops being true. It is not the whole language — "
-        "waits, signals, children, parallel work, guards and retries have "
-        "their own deck — it is everything you need to read what you just "
-        "wrote.",
+        note="Every language word used by the command gate and the judged gate "
+        "is in that table, and the build refuses if that stops being true. The "
+        "agent and policy words are the only ones you have not used yet; the "
+        "performed worker chapter below puts them to work. It is not the whole "
+        "language — waits, signals, children and parallel work have their own "
+        "deck.",
     ),
     # ---------------------------------------------------------------- deploy
     Slide(
@@ -1375,31 +1395,143 @@ SLIDES: list[Slide] = [
             ),
         ],
     ),
+    # ---------------------------------------------------------- judged worker
     Slide(
-        eyebrow="Where next",
-        title="When a command is not enough",
-        lede="Everything above used <code>run</code> bodies, which the server "
-        "executes itself. That is the whole of it for commands.",
-        points=[
-            "When the job is real code rather than a command, you run a "
-            "<b>worker process</b> instead: the action declares only its "
-            "shape, and something separate connects and serves it.",
-            "<code>aion awl scaffold</code> writes that worker's crate for "
-            "you from this same document.",
-            "One rule to know before you start: a worker is only let in if it "
-            "offers every action that is actually <b>reachable</b> on its "
-            "queue — versions that no longer route and carry no live run are "
-            "not held against it, and neither are actions bound for a "
-            "different node.",
-            "If it is refused, <b>you are told, twice</b>. The server logs the "
-            "refusal at WARN naming the queue, the node, the worker build and "
-            "the reason; the worker's own connection fails with that same "
-            "diagnosis. Read either one — the answer is in it.",
+        eyebrow="Where next — perform it",
+        title="Declare the judge on the same queue",
+        lede="Keep the four command bodies. Add one plain agent seam inside the "
+        "same <code>worker gate</code> block.",
+        excerpt=Excerpt(
+            "repo_gate_judged.awl",
+            start="worker gate",
+            end="agent, timeout",
+            dedent=False,
+        ),
+        caption="One queue, two ways to serve it: the server owns the four "
+        "<code>run</code> bodies; a worker owns <code>judge</code>.",
+        note="The rest of the document builds the prompt from the clone, commit, "
+        "check and test outputs. Only the exact reply "
+        "<code>GATE_APPROVED</code> takes the success route. Every other reply "
+        "takes a failure outcome that carries the reply unchanged. That stops "
+        "free-form commentary being mistaken for approval; it does not make an "
+        "agent's opinion true.",
+    ),
+    Slide(
+        eyebrow="Where next — deploy",
+        title="Deploy the judged contract",
+        cmd=[
+            "aion --endpoint http://127.0.0.1:50099 --pretty \\",
+            "     deploy repo_gate_judged.awl",
         ],
-        note="The worker story has its own documents: "
-        "<code>docs/workers/</code> for processes, "
-        "<code>docs/workers/DECLARED-COMMANDS.md</code> for the bodies you "
-        "used here.",
+        points=[
+            "Deploy records all five action shapes under queue "
+            "<code>gate</code>.",
+            "The four bodies are immediately servable by the server. "
+            "<code>judge</code> is not: no process has offered it yet.",
+        ],
+    ),
+    Slide(
+        eyebrow="Where next — pre-flight",
+        title="Ask before you start a run",
+        cmd=[
+            "curl -sS http://127.0.0.1:8099/awl/workers/availability \\",
+            "  -H 'content-type: application/json' \\",
+            "  -d '{\"namespace\":\"default\",\"task_queue\":\"gate\"}'",
+        ],
+        out='{"available":false,"task_queue":"gate","connected_workers":0,'
+        '"scaffold_hint":"No connected worker serves task queue `gate`. '
+        'Scaffold and run this worker from Workers & Actions, then retry '
+        'start."}',
+        caption="Real output, one line, exactly as <code>curl</code> prints it.",
+        points=[
+            "<code>available: false</code> is an honest refusal before work can "
+            "park: the one worker-owed action you just declared is "
+            "<code>judge</code>.",
+            "0.11.0 reports that absence at queue level: no connected worker "
+            "serves <code>gate</code>, and it tells you to start one before "
+            "retrying. Newer servers may add a per-action census; this chapter "
+            "does not depend on it.",
+        ],
+    ),
+    Slide(
+        eyebrow="Where next — connect",
+        title="Start the worker in a second terminal",
+        cmd=[
+            "aion worker agent repo_gate_judged.awl \\",
+            "  --harness norn \\",
+            "  --liminal-address 127.0.0.1:50169 \\",
+            "  --identity repo-gate-judge --concurrency 4 \\",
+            "  --reconnect-initial-backoff 1 \\",
+            "  --reconnect-max-backoff 30 \\",
+            "  --reconnect-max-attempts 100",
+        ],
+        points=[
+            "The address is the tutorial config's <code>[outbox]</code> listener "
+            "— not its HTTP port and not its gRPC port.",
+            "Identity, concurrency and all three reconnect values are required "
+            "operator policy on 0.11.0; the worker refuses to invent them.",
+            "The installed 0.11.0 binary carries the norn and ACP adapters, but "
+            "does not expose its plain-CLI harness. This teachable path therefore "
+            "uses norn and requires the <code>norn</code> CLI on "
+            "<code>PATH</code>.",
+            "The one-block document derives queue <code>gate</code>; no "
+            "<code>--task-queue</code> flag is needed.",
+        ],
+        note="If registration is refused, <b>you are told twice</b>: the server "
+        "logs the refusal at WARN with the queue and reason, and this worker "
+        "fails with the same diagnosis. Read either side; do not leave a "
+        "rejected worker running and hope the queue becomes servable.",
+    ),
+    Slide(
+        eyebrow="Where next — pre-flight again",
+        title="Now the same question says yes",
+        cmd=[
+            "curl -sS http://127.0.0.1:8099/awl/workers/availability \\",
+            "  -H 'content-type: application/json' \\",
+            "  -d '{\"namespace\":\"default\",\"task_queue\":\"gate\"}'",
+        ],
+        out='{"available":true,"task_queue":"gate","connected_workers":1,'
+        '"scaffold_hint":null}',
+        caption="Real output, one line, exactly as <code>curl</code> prints it.",
+        points=[
+            "Nothing in the document changed. The channel did: a worker now "
+            "offers the one action the server cannot execute itself.",
+            "The four command bodies remain server-run. The worker advertised "
+            "only <code>judge</code>; its admission log names that action, while "
+            "this 0.11.0 endpoint answers the queue-level question.",
+        ],
+    ),
+    Slide(
+        eyebrow="Where next — run it",
+        title="The evidence reaches the judge",
+        cmd=[
+            "aion --endpoint http://127.0.0.1:50099 --pretty \\",
+            "     run repo_gate_judged.awl \\",
+            '     --input "{\\"repo\\": \\"https://github.com/dtolnay/itoa\\", '
+            '\\"workdir\\": \\"$HOME/gate-work-judged\\"}"',
+        ],
+        out='"result": {\n'
+        '  "outcome": "passed",\n'
+        '  "payload": {\n'
+        '    "cloned": "Cloning into …",\n'
+        '    "commit": "1577ed9",\n'
+        '    "checks": "    Updating crates.io index … Finished `dev` profile …",\n'
+        '    "tests": "… test result: ok. 11 passed; 0 failed; …",\n'
+        '    "judgement": "GATE_APPROVED"\n'
+        "  }\n"
+        "}",
+        caption="Real output, with the long middles elided at the <b>…</b> "
+        "marks. Nothing was reworded.",
+        points=[
+            "Clone, head, checks and tests still run from the sealed command "
+            "bodies. Their outputs are concatenated into the prompt in-flow.",
+            "The worker returns one string. The workflow, not the worker, owns "
+            "the exact-token routing and records the reply in its outcome.",
+        ],
+        note="A different reply ends at <code>failed</code> and carries "
+        "<code>judge_reply</code> verbatim. A verdict is evidence about what one "
+        "agent said after seeing the gate output — not proof that the repository "
+        "is correct.",
     ),
     Slide(
         eyebrow="Where next",
@@ -1412,6 +1544,11 @@ SLIDES: list[Slide] = [
             "A gate is only the first useful thing. Anything that is a "
             "sequence of jobs with a verdict at the end is the same shape.",
         ],
+        note="The worker story has its own documents: "
+        "<code>docs/workers/</code> for worker processes and admission (a "
+        "worker is let in only if it offers every reachable worker-owed "
+        "action on its queue), <code>docs/workers/DECLARED-COMMANDS.md</code> "
+        "for the <code>run</code> bodies you used here.",
         big=False,
     ),
 ]

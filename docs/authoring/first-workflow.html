@@ -340,25 +340,25 @@
     <p class="eyebrow">What you end up with</p>
     <h2>A verdict you can point at</h2>
     <ul class="points">
-      <li>One document you wrote yourself, in a language you can read.</li>
-      <li>Four real commands, run by the server — no code, no worker process, nothing else to install.</li>
-      <li>A completed run whose whole history is on disk, naming the commit it judged.</li>
-      <li>A non-zero exit when the gate is red, so it drops straight into whatever already runs your builds.</li>
+      <li>A command gate you wrote yourself, in a language you can read.</li>
+      <li>Four real commands, run by the server — no worker process needed for that first verdict.</li>
+      <li>Then one agent action on the same queue, served through a real worker channel and judged on the gate's recorded evidence.</li>
+      <li>Completed runs whose whole histories are on disk, naming the commit and carrying the reply that judged it.</li>
     </ul>
-    <p class="note">You will build it up through five complete documents. Each one does a little more than the last, and each one checks clean before you add the next block.</p>
+    <p class="note">You will build it up through six complete documents. Each one does a little more than the last, and each one checks clean before you add the next block.</p>
   </section>
 
   <section class="slide">
     <p class="eyebrow">Before you start</p>
     <h2>One binary. Get it, check it.</h2>
-    <p class="lede">If you have Rust 1.88.0 or newer, this is the whole install. If the version prints, you have everything this tutorial needs.</p>
+    <p class="lede">If you have Rust 1.88.0 or newer, this installs the server, client and authoring tools used throughout the tutorial.</p>
     <pre class="cmd"><code>cargo install aion-cli
 
 aion --version</code></pre>
     <pre class="out"><code>aion 0.11.0</code></pre>
     <ul class="points">
-      <li>That one binary is the server, the client, and the tools.</li>
-      <li>Nothing else to install.</li>
+      <li>That one binary is the server, the client, and the authoring tools.</li>
+      <li>The final agent-worker chapter also uses the norn CLI; that dependency is called out again where the worker starts.</li>
     </ul>
     <p class="note">🔴 <b>The crate is <code>aion-cli</code>; the command it installs is <code>aion</code>.</b> Do not reach for <code>cargo install aion</code> — on crates.io that name belongs to an unrelated crate, a small datetime library with no program in it, so the install stops with <i>there is nothing to install</i>. Measured 2026-08-07. If you would rather build from a clone of the repository, <code>cargo install --path crates/aion-cli</code> does the same job.</p>
   </section>
@@ -380,6 +380,11 @@ data_dir = &quot;$HOME/my-first-flow/aion-data&quot;
 
 [runtime]
 query_timeout_ms = 10000
+
+[outbox]
+enabled = true
+transport = &quot;liminal&quot;
+liminal_listen_address = &quot;127.0.0.1:50169&quot;
 
 [websocket]
 event_broadcast_capacity = 1024
@@ -688,8 +693,8 @@ step verify after fetch
 
   <section class="slide">
     <p class="eyebrow">Step 7 — the whole thing</p>
-    <h2>Every word in it</h2>
-    <p class="lede">13 words, in 4 groups. Each group answers one question.</p>
+    <h2>Every word in both documents</h2>
+    <p class="lede">19 words, in 4 groups. Each group answers one question.</p>
     <div class="scroller"><table class="kw">
       <tr><td><b>WHAT IT IS</b></td><td><i>the document's identity and its data shapes</i></td></tr>
       <tr><td><code>workflow</code></td><td>its name — how you start it later</td></tr>
@@ -702,13 +707,17 @@ step verify after fetch
       <tr><td><code>worker</code></td><td>a name for the thing that does real work — the queue</td></tr>
       <tr><td><code>action</code></td><td>one job, with its parameters and the shape it returns</td></tr>
       <tr><td><code>run</code></td><td>the action's implementation, right here in the document — the server executes this command itself</td></tr>
+      <tr><td><code>agent</code></td><td>an action served by an agent worker: one String prompt in, one String reply out</td></tr>
+      <tr><td><code>timeout</code></td><td>an authored action deadline carried in the contract; not enforced by the 0.11.0 engine</td></tr>
+      <tr><td><code>retry</code> <code>backoff</code></td><td>how many transient failures to absorb, and how long to wait between attempts</td></tr>
       <tr><td><b>WHAT HAPPENS, IN WHAT ORDER</b></td><td><i>the plan the workflow actually executes</i></td></tr>
       <tr><td><code>step</code></td><td>a stage of the workflow</td></tr>
       <tr><td><code>after</code></td><td>what must finish before this stage starts</td></tr>
       <tr><td><code>route</code></td><td>finish, this way, with this</td></tr>
+      <tr><td><code>when</code> <code>otherwise</code></td><td>choose between exact evidence and every other reply</td></tr>
       <tr><td><code>on</code> <code>failure</code></td><td>what to do when the stage faults — and it must route too</td></tr>
     </table></div>
-    <p class="note">Every word used by this document is in that table, and the build refuses if that stops being true. It is not the whole language — waits, signals, children, parallel work, guards and retries have their own deck — it is everything you need to read what you just wrote.</p>
+    <p class="note">Every language word used by the command gate and the judged gate is in that table, and the build refuses if that stops being true. The agent and policy words are the only ones you have not used yet; the performed worker chapter below puts them to work. It is not the whole language — waits, signals, children and parallel work have their own deck.</p>
   </section>
 
   <section class="slide">
@@ -809,16 +818,112 @@ $ echo $?
   </section>
 
   <section class="slide">
-    <p class="eyebrow">Where next</p>
-    <h2>When a command is not enough</h2>
-    <p class="lede">Everything above used <code>run</code> bodies, which the server executes itself. That is the whole of it for commands.</p>
+    <p class="eyebrow">Where next — perform it</p>
+    <h2>Declare the judge on the same queue</h2>
+    <p class="lede">Keep the four command bodies. Add one plain agent seam inside the same <code>worker gate</code> block.</p>
+    <pre><code>worker gate
+  /// Depth 1: a gate wants the tip, not the history.
+  action clone(repo: String, into: String) -&gt; Report
+    run &quot;git clone --depth 1 $repo $into&quot;
+  /// Which commit the gate actually judged. Say it, or nobody can repeat it.
+  action head(dir: String) -&gt; Report
+    run &quot;git -C $dir rev-parse --short HEAD&quot;
+  /// cargo writes its progress to stderr, so that is where this evidence is.
+  action checks(dir: String) -&gt; Report
+    run &quot;cargo clippy --manifest-path ${dir}/Cargo.toml --all-targets&quot;
+  /// The test binaries write their verdicts to stdout.
+  action tests(dir: String) -&gt; Report
+    run &quot;cargo test --manifest-path ${dir}/Cargo.toml&quot;
+  /// The same queue carries server-run commands and this worker-served seam.
+  /// The retry absorbs transient harness or provider failures; the authored
+  /// timeout travels with the package contract but is not enforced today.
+  action judge(prompt: String) -&gt; String
+    agent, timeout 10m, retry 3 backoff 10s..1m</code></pre>
+    <p class="src">from <b>docs/authoring/tutorial-examples/repo_gate_judged.awl</b> — a complete file, checked</p>
+    <p class="note">The rest of the document builds the prompt from the clone, commit, check and test outputs. Only the exact reply <code>GATE_APPROVED</code> takes the success route. Every other reply takes a failure outcome that carries the reply unchanged. That stops free-form commentary being mistaken for approval; it does not make an agent's opinion true.</p>
+    <p class="caption">One queue, two ways to serve it: the server owns the four <code>run</code> bodies; a worker owns <code>judge</code>.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Where next — deploy</p>
+    <h2>Deploy the judged contract</h2>
+    <pre class="cmd"><code>aion --endpoint http://127.0.0.1:50099 --pretty \
+     deploy repo_gate_judged.awl</code></pre>
     <ul class="points">
-      <li>When the job is real code rather than a command, you run a <b>worker process</b> instead: the action declares only its shape, and something separate connects and serves it.</li>
-      <li><code>aion awl scaffold</code> writes that worker's crate for you from this same document.</li>
-      <li>One rule to know before you start: a worker is only let in if it offers every action that is actually <b>reachable</b> on its queue — versions that no longer route and carry no live run are not held against it, and neither are actions bound for a different node.</li>
-      <li>If it is refused, <b>you are told, twice</b>. The server logs the refusal at WARN naming the queue, the node, the worker build and the reason; the worker's own connection fails with that same diagnosis. Read either one — the answer is in it.</li>
+      <li>Deploy records all five action shapes under queue <code>gate</code>.</li>
+      <li>The four bodies are immediately servable by the server. <code>judge</code> is not: no process has offered it yet.</li>
     </ul>
-    <p class="note">The worker story has its own documents: <code>docs/workers/</code> for processes, <code>docs/workers/DECLARED-COMMANDS.md</code> for the bodies you used here.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Where next — pre-flight</p>
+    <h2>Ask before you start a run</h2>
+    <pre class="cmd"><code>curl -sS http://127.0.0.1:8099/awl/workers/availability \
+  -H &#x27;content-type: application/json&#x27; \
+  -d &#x27;{&quot;namespace&quot;:&quot;default&quot;,&quot;task_queue&quot;:&quot;gate&quot;}&#x27;</code></pre>
+    <pre class="out"><code>{&quot;available&quot;:false,&quot;task_queue&quot;:&quot;gate&quot;,&quot;connected_workers&quot;:0,&quot;scaffold_hint&quot;:&quot;No connected worker serves task queue `gate`. Scaffold and run this worker from Workers &amp; Actions, then retry start.&quot;}</code></pre>
+    <ul class="points">
+      <li><code>available: false</code> is an honest refusal before work can park: the one worker-owed action you just declared is <code>judge</code>.</li>
+      <li>0.11.0 reports that absence at queue level: no connected worker serves <code>gate</code>, and it tells you to start one before retrying. Newer servers may add a per-action census; this chapter does not depend on it.</li>
+    </ul>
+    <p class="caption">Real output, one line, exactly as <code>curl</code> prints it.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Where next — connect</p>
+    <h2>Start the worker in a second terminal</h2>
+    <pre class="cmd"><code>aion worker agent repo_gate_judged.awl \
+  --harness norn \
+  --liminal-address 127.0.0.1:50169 \
+  --identity repo-gate-judge --concurrency 4 \
+  --reconnect-initial-backoff 1 \
+  --reconnect-max-backoff 30 \
+  --reconnect-max-attempts 100</code></pre>
+    <ul class="points">
+      <li>The address is the tutorial config's <code>[outbox]</code> listener — not its HTTP port and not its gRPC port.</li>
+      <li>Identity, concurrency and all three reconnect values are required operator policy on 0.11.0; the worker refuses to invent them.</li>
+      <li>The installed 0.11.0 binary carries the norn and ACP adapters, but does not expose its plain-CLI harness. This teachable path therefore uses norn and requires the <code>norn</code> CLI on <code>PATH</code>.</li>
+      <li>The one-block document derives queue <code>gate</code>; no <code>--task-queue</code> flag is needed.</li>
+    </ul>
+    <p class="note">If registration is refused, <b>you are told twice</b>: the server logs the refusal at WARN with the queue and reason, and this worker fails with the same diagnosis. Read either side; do not leave a rejected worker running and hope the queue becomes servable.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Where next — pre-flight again</p>
+    <h2>Now the same question says yes</h2>
+    <pre class="cmd"><code>curl -sS http://127.0.0.1:8099/awl/workers/availability \
+  -H &#x27;content-type: application/json&#x27; \
+  -d &#x27;{&quot;namespace&quot;:&quot;default&quot;,&quot;task_queue&quot;:&quot;gate&quot;}&#x27;</code></pre>
+    <pre class="out"><code>{&quot;available&quot;:true,&quot;task_queue&quot;:&quot;gate&quot;,&quot;connected_workers&quot;:1,&quot;scaffold_hint&quot;:null}</code></pre>
+    <ul class="points">
+      <li>Nothing in the document changed. The channel did: a worker now offers the one action the server cannot execute itself.</li>
+      <li>The four command bodies remain server-run. The worker advertised only <code>judge</code>; its admission log names that action, while this 0.11.0 endpoint answers the queue-level question.</li>
+    </ul>
+    <p class="caption">Real output, one line, exactly as <code>curl</code> prints it.</p>
+  </section>
+
+  <section class="slide">
+    <p class="eyebrow">Where next — run it</p>
+    <h2>The evidence reaches the judge</h2>
+    <pre class="cmd"><code>aion --endpoint http://127.0.0.1:50099 --pretty \
+     run repo_gate_judged.awl \
+     --input &quot;{\&quot;repo\&quot;: \&quot;https://github.com/dtolnay/itoa\&quot;, \&quot;workdir\&quot;: \&quot;$HOME/gate-work-judged\&quot;}&quot;</code></pre>
+    <pre class="out"><code>&quot;result&quot;: {
+  &quot;outcome&quot;: &quot;passed&quot;,
+  &quot;payload&quot;: {
+    &quot;cloned&quot;: &quot;Cloning into …&quot;,
+    &quot;commit&quot;: &quot;1577ed9&quot;,
+    &quot;checks&quot;: &quot;    Updating crates.io index … Finished `dev` profile …&quot;,
+    &quot;tests&quot;: &quot;… test result: ok. 11 passed; 0 failed; …&quot;,
+    &quot;judgement&quot;: &quot;GATE_APPROVED&quot;
+  }
+}</code></pre>
+    <ul class="points">
+      <li>Clone, head, checks and tests still run from the sealed command bodies. Their outputs are concatenated into the prompt in-flow.</li>
+      <li>The worker returns one string. The workflow, not the worker, owns the exact-token routing and records the reply in its outcome.</li>
+    </ul>
+    <p class="note">A different reply ends at <code>failed</code> and carries <code>judge_reply</code> verbatim. A verdict is evidence about what one agent said after seeing the gate output — not proof that the repository is correct.</p>
+    <p class="caption">Real output, with the long middles elided at the <b>…</b> marks. Nothing was reworded.</p>
   </section>
 
   <section class="slide">
@@ -829,6 +934,7 @@ $ echo $?
       <li>The same five motions scale up: write the document, check it, deploy it, run it, watch it.</li>
       <li>A gate is only the first useful thing. Anything that is a sequence of jobs with a verdict at the end is the same shape.</li>
     </ul>
+    <p class="note">The worker story has its own documents: <code>docs/workers/</code> for worker processes and admission (a worker is let in only if it offers every reachable worker-owed action on its queue), <code>docs/workers/DECLARED-COMMANDS.md</code> for the <code>run</code> bodies you used here.</p>
   </section>
 </div>
 

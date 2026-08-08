@@ -1,0 +1,45 @@
+RUN-LEG RE-DRIVE 2026-08-08T15:57:30+1000 — capturing the REAL run outcome the deck quotes
+WORLD=/Users/tom/.aion-160-rerun.Xws32B ports 8096/50096/50166 (isolated; never the live 8080/8099/50051/50061/50099)
+aion 0.11.0
+SERVER_PID=18496
+SERVER_READY_PROBE_DONE (see server.log grep below)
+1
+=== deploy ===
+{
+  "workflow_type": "repo_gate",
+  "content_hash": "9c132a2cf8521bcee63bb64f5c039197e5b439f091e2c66f6441033f2b19f867",
+  "deployed_entry_module": "repo_gate$9c132a2cf8521bcee63bb64f5c039197e5b439f091e2c66f6441033f2b19f867",
+  "entry_function": "run",
+  "freshly_loaded": true,
+  "route_changed": true,
+  "superseded_versions": []
+}
+DEPLOY_EXIT=0
+WORKER_PID=19698
+=== worker admission ===
+{"timestamp":"2026-08-08T05:57:34.588158Z","level":"INFO","fields":{"message":"agent worker registered; serving through the composed agent harness","task_queue":"gate","actions":"judge"},"target":"aion::worker_agent::serve"}
+=== availability with worker ===
+{"available":true,"task_queue":"gate","connected_workers":1,"scaffold_hint":null}
+=== run (real outcome; no invented timeout — bounded by workflow authoring) ===
+aion --endpoint http://127.0.0.1:50096 --pretty run repo_gate_judged.awl --input {repo: itoa, workdir: /Users/tom/.aion-160-rerun.Xws32B/gate-work-judged}
+{
+  "workflow_type": "repo_gate",
+  "workflow_id": "7503c868-b94c-4496-b4ec-a9ab76a956c9",
+  "run_id": "0969e6b4-70d7-4146-84bb-4cc16bd93861",
+  "result": {
+    "outcome": "passed",
+    "payload": {
+      "cloned": "Cloning into '/Users/tom/.aion-160-rerun.Xws32B/gate-work-judged'...",
+      "commit": "1577ed9",
+      "checks": "    Updating crates.io index\n     Locking 53 packages to latest compatible versions\n   Compiling proc-macro2 v1.0.107\n   Compiling unicode-ident v1.0.24\n   Compiling quote v1.0.47\n   Compiling serde_core v1.0.229\n   Compiling zerocopy v0.8.56\n   Compiling find-msvc-tools v0.1.10\n   Compiling zmij v1.0.23\n   Compiling serde v1.0.229\n   Compiling shlex v2.0.1\n    Checking cfg-if v1.0.4\n   Compiling libc v0.2.189\n   Compiling autocfg v1.5.1\n   Compiling cc v1.4.2\n   Compiling serde_json v1.0.151\n   Compiling num-traits v0.2.19\n    Checking anstyle v1.0.14\n    Checking regex-syntax v0.8.11\n    Checking ciborium-io v0.2.2\n    Checking either v1.17.0\n    Checking clap_lex v1.1.0\n    Checking memchr v2.8.3\n    Checking itoa v1.0.18\n    Checking itertools v0.13.0\n    Checking clap_builder v4.6.6\n    Checking cast v0.3.0\n    Checking same-file v1.0.6\n    Checking walkdir v2.5.0\n   Compiling alloca v0.4.0\n    Checking oorandom v11.1.5\n    Checking anes v0.1.6\n    Checking itoa v1.0.18 (/Users/tom/.aion-160-rerun.Xws32B/gate-work-judged)\n    Checking regex-automata v0.4.18\n   Compiling syn v2.0.119\n   Compiling syn v3.0.3\n    Checking page_size v0.6.0\n    Checking criterion-plot v0.8.2\n    Checking clap v4.6.6\n    Checking regex v1.13.1\n   Compiling serde_derive v1.0.229\n   Compiling zerocopy-derive v0.8.56\n    Checking tinytemplate v1.2.1\n    Checking half v2.7.1\n    Checking ciborium-ll v0.2.2\n    Checking ciborium v0.2.2\n    Checking criterion v0.8.2\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 35.62s",
+      "tests": "\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 11 tests\ntest test_i128_min ... ok\ntest test_i128_max ... ok\ntest test_i64_min ... ok\ntest test_i16_min ... ok\ntest test_i16_0 ... ok\ntest test_max_str_len ... ok\ntest test_u128_0 ... ok\ntest test_u128_max ... ok\ntest test_u64_half ... ok\ntest test_u64_0 ... ok\ntest test_u64_max ... ok\n\ntest result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 2 tests\ntest src/lib.rs - (line 20) ... ok\ntest src/lib.rs - Buffer (line 67) ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.12s\n",
+      "judgement": "GATE_APPROVED"
+    }
+  }
+}
+RUN_EXIT=0
+RUN_LEG_COMPLETE 2026-08-08T15:58:59+1000
+=== teardown ===
+SERVER_DEAD=true pid=18496
+WORKER_DEAD=true pid=19698
+TEMP_WORLD_REMOVED=true path=/Users/tom/.aion-160-rerun.Xws32B

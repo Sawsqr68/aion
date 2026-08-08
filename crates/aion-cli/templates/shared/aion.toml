@@ -25,6 +25,18 @@ data_dir = "aion-data"              # haematite database directory, created on s
 # REQUIRED, no default: reply deadline for workflow queries, in milliseconds.
 query_timeout_ms = 10000
 
+[outbox]
+# The liminal worker channel `aion worker agent` dials. Without it that
+# listener is never bound and a liminal worker's dial is refused, forever,
+# with nothing on the server side saying why.
+# Requires a durable store: with `backend = "memory"` above, set
+# `enabled = false` or the server refuses to boot.
+# A build without the `liminal-transport` feature must set `transport = "grpc"`
+# here; leaving `liminal` is a boot-time configuration error.
+enabled = true
+transport = "liminal"
+liminal_listen_address = "127.0.0.1:50061"
+
 [websocket]
 # REQUIRED, no default: capacity of the global live-event broadcast channel.
 event_broadcast_capacity = 1024
