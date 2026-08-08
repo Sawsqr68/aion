@@ -18,6 +18,8 @@ pub type ManifestFile = (&'static str, &'static str);
 /// Scaffold templates selectable with `aion new --template`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub enum Template {
+    /// AWL-first typed workflow with no activities or external worker.
+    Awl,
     /// Minimal typed workflow with no activities: start → complete.
     HelloWorld,
     /// Approval signal raced against a durable timeout, with a stage query
@@ -70,6 +72,15 @@ const SHARED_FILES_WITHOUT_GLEAM_TOML: &[ManifestFile] = &[
         "aion.toml",
         include_str!("../../templates/shared/aion.toml"),
     ),
+];
+const SHARED_AWL_FILES: &[ManifestFile] = SHARED_FILES_WITHOUT_GLEAM_TOML;
+
+const AWL_FILES: &[ManifestFile] = &[
+    (
+        "{{name}}.awl",
+        include_str!("../../templates/awl/project.awl"),
+    ),
+    ("README.md", include_str!("../../templates/awl/README.md")),
 ];
 
 const HELLO_WORLD_FILES: &[ManifestFile] = &[
@@ -383,6 +394,7 @@ impl Template {
     #[must_use]
     pub fn id(self) -> &'static str {
         match self {
+            Self::Awl => "awl",
             Self::HelloWorld => "hello-world",
             Self::ApprovalFlow => "approval-flow",
             Self::Saga => "saga",
@@ -395,6 +407,7 @@ impl Template {
     #[must_use]
     pub fn files(self) -> Vec<ManifestFile> {
         let (shared, own): (&[ManifestFile], &[ManifestFile]) = match self {
+            Self::Awl => (SHARED_AWL_FILES, AWL_FILES),
             Self::HelloWorld => (SHARED_FILES, HELLO_WORLD_FILES),
             Self::ApprovalFlow => (SHARED_FILES, APPROVAL_FLOW_FILES),
             Self::Saga => (SHARED_FILES, SAGA_FILES),
@@ -412,7 +425,7 @@ impl Template {
     #[must_use]
     pub fn activities(self) -> &'static [&'static str] {
         match self {
-            Self::HelloWorld | Self::ApprovalFlow => &[],
+            Self::Awl | Self::HelloWorld | Self::ApprovalFlow => &[],
             Self::Saga => &["charge_payment", "refund_payment"],
             Self::Agent => AGENT_ACTIVITIES,
             Self::DevPipeline => &[
@@ -434,7 +447,7 @@ impl Template {
     #[must_use]
     pub fn worker_files(self) -> &'static [ManifestFile] {
         match self {
-            Self::HelloWorld | Self::ApprovalFlow => &[],
+            Self::Awl | Self::HelloWorld | Self::ApprovalFlow => &[],
             Self::Saga => SAGA_WORKER_FILES,
             Self::Agent => AGENT_WORKER_FILES,
             Self::DevPipeline => DEV_PIPELINE_WORKER_FILES,
@@ -451,7 +464,7 @@ impl Template {
     #[must_use]
     pub fn worker_requirement_reason(self) -> Option<&'static str> {
         match self {
-            Self::HelloWorld | Self::ApprovalFlow | Self::Saga => None,
+            Self::Awl | Self::HelloWorld | Self::ApprovalFlow | Self::Saga => None,
             Self::DevPipeline => Some(
                 "all eight of its activities (provision, warm build, dev agent, checks, gate, \
                  review request, land) are served by the standalone worker crate in a live \
@@ -468,6 +481,7 @@ impl Template {
     #[cfg(test)]
     pub fn all() -> &'static [Self] {
         &[
+            Self::Awl,
             Self::HelloWorld,
             Self::ApprovalFlow,
             Self::Saga,
@@ -478,267 +492,5 @@ impl Template {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::collections::HashSet;
-
-    use super::Template;
-
-    /// Files every scaffolded project must contain, placeholder form.
-    const REQUIRED_PATHS: &[&str] = &[
-        "gleam.toml",
-        ".gitignore",
-        "aion.toml",
-        "workflow.toml",
-        "schemas/input.json",
-        "schemas/output.json",
-        "src/{{name}}.gleam",
-        "README.md",
-    ];
-
-    #[test]
-    fn every_template_manifest_is_complete() {
-        for template in Template::all() {
-            let files = template.files();
-            let paths: Vec<&str> = files.iter().map(|(path, _)| *path).collect();
-            for required in REQUIRED_PATHS {
-                assert!(
-                    paths.contains(required),
-                    "template {} is missing {required}",
-                    template.id()
-                );
-            }
-            let unique: HashSet<&str> = paths.iter().copied().collect();
-            assert_eq!(
-                unique.len(),
-                paths.len(),
-                "template {} declares duplicate paths",
-                template.id()
-            );
-            for (path, contents) in &files {
-                assert!(
-                    !contents.trim().is_empty(),
-                    "template {} embeds empty contents for {path}",
-                    template.id()
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn workflow_descriptors_declare_the_template_activities() {
-        for template in Template::all() {
-            let files = template.files();
-            let workflow_toml = files
-                .iter()
-                .find(|(path, _)| *path == "workflow.toml")
-                .map(|(_, contents)| *contents)
-                .unwrap_or_default();
-            for activity in template.activities() {
-                assert!(
-                    workflow_toml.contains(&format!("\"{activity}\"")),
-                    "template {} workflow.toml does not declare activity {activity}",
-                    template.id()
-                );
-            }
-            assert!(
-                workflow_toml.contains("entry_module = \"{{name}}\""),
-                "template {} workflow.toml must name the project module as entry",
-                template.id()
-            );
-        }
-    }
-
-    #[test]
-    fn aion_toml_carries_every_required_server_key() {
-        for template in Template::all() {
-            let files = template.files();
-            let aion_toml = files
-                .iter()
-                .find(|(path, _)| *path == "aion.toml")
-                .map(|(_, contents)| *contents)
-                .unwrap_or_default();
-            for key in [
-                "listen_address",
-                "grpc_address",
-                // The scaffold ships the durable ablative default backend.
-                "backend = \"haematite\"",
-                "data_dir = \"aion-data\"",
-                "query_timeout_ms",
-                "event_broadcast_capacity",
-                // Required since WS3: the cluster topology broadcast capacity, so
-                // the scaffolded config boots without further edits.
-                "cluster_broadcast_capacity",
-                "enabled = true",
-                "max_archive_bytes",
-                "max_inflated_bytes",
-            ] {
-                assert!(
-                    aion_toml.contains(key),
-                    "template {} aion.toml is missing {key}",
-                    template.id()
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn dev_pipeline_declares_three_workflow_entries_and_its_gates() {
-        let files = Template::DevPipeline.files();
-        let workflow_toml = files
-            .iter()
-            .find(|(path, _)| *path == "workflow.toml")
-            .map(|(_, contents)| *contents)
-            .unwrap_or_default();
-        for entry in [
-            "entry_module = \"{{name}}\"",
-            "entry_module = \"{{name}}_dev\"",
-            "entry_module = \"{{name}}_gate\"",
-        ] {
-            assert!(
-                workflow_toml.contains(entry),
-                "dev-pipeline workflow.toml must declare {entry}"
-            );
-        }
-        for timeout in [
-            "timeout_seconds = 604800",
-            "timeout_seconds = 86400",
-            "timeout_seconds = 21600",
-        ] {
-            assert!(
-                workflow_toml.contains(timeout),
-                "dev-pipeline workflow.toml must keep the documented {timeout}"
-            );
-        }
-        assert!(Template::DevPipeline.worker_requirement_reason().is_some());
-    }
-
-    #[test]
-    fn worker_free_templates_do_not_require_a_worker() {
-        for template in [Template::HelloWorld, Template::ApprovalFlow, Template::Saga] {
-            assert!(
-                template.worker_requirement_reason().is_none(),
-                "template {} must not require a worker",
-                template.id()
-            );
-        }
-    }
-
-    #[test]
-    fn agent_template_requires_a_worker() {
-        // The agent loop's three steps are worker-served and the driver is
-        // worker-side, so the template demands `--worker rust`.
-        assert!(Template::Agent.worker_requirement_reason().is_some());
-    }
-
-    #[test]
-    fn agent_template_declares_its_three_steps_and_a_review_deadline_input() {
-        let files = Template::Agent.files();
-        let workflow_toml = files
-            .iter()
-            .find(|(path, _)| *path == "workflow.toml")
-            .map(|(_, contents)| *contents)
-            .unwrap_or_default();
-        for activity in ["scout", "act", "verify"] {
-            assert!(
-                workflow_toml.contains(&format!("\"{activity}\"")),
-                "agent workflow.toml must declare the {activity} step"
-            );
-        }
-
-        // The human-review pause is a durable `workflow.receive` raced against
-        // a caller-chosen deadline — never a poll, never a default.
-        let project = files
-            .iter()
-            .find(|(path, _)| *path == "src/{{name}}.gleam")
-            .map(|(_, contents)| *contents)
-            .unwrap_or_default();
-        let condensed: String = project.split_whitespace().collect();
-        assert!(
-            condensed.contains("workflow.with_timeout(fn(){workflow.receive("),
-            "agent review must be workflow.receive raced by with_timeout, not a poll"
-        );
-        assert!(
-            condensed.contains("duration.milliseconds(input.review_timeout_ms)"),
-            "agent review deadline must come from the start input, never a default"
-        );
-
-        // The review deadline is a required start-input field, not defaulted.
-        let input_schema = files
-            .iter()
-            .find(|(path, _)| *path == "schemas/input.json")
-            .map(|(_, contents)| *contents)
-            .unwrap_or_default();
-        assert!(
-            input_schema.contains("\"review_timeout_ms\""),
-            "agent input schema must require the review deadline"
-        );
-    }
-
-    #[test]
-    fn types_first_templates_ship_marked_generated_artifacts() {
-        // hello_world, dev_pipeline, and agent are on the types-first path:
-        // they ship an AUTHORED types module plus pre-generated artifacts
-        // carrying the generated markers, so `aion generate` recognises and
-        // reproduces them (a stray unmarked schema would be a loud error).
-        for template in [Template::HelloWorld, Template::DevPipeline, Template::Agent] {
-            for (path, contents) in template.files() {
-                if path.starts_with("schemas/") {
-                    assert!(
-                        contents.contains("Generated by aion generate from src/"),
-                        "template {} schema {path} must carry the generated marker",
-                        template.id()
-                    );
-                }
-                if path == "src/{{name}}_codecs.gleam" {
-                    assert!(
-                        contents.starts_with("//// Generated by aion generate"),
-                        "template {} codecs module must carry the generated header",
-                        template.id()
-                    );
-                }
-                if path == "src/{{name}}_io.gleam" {
-                    assert!(
-                        !contents.contains("do not edit"),
-                        "template {} types module must be authored, not generated",
-                        template.id()
-                    );
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn worker_manifests_exist_exactly_for_templates_with_activities() {
-        for template in Template::all() {
-            let has_worker = !template.worker_files().is_empty();
-            let has_activities = !template.activities().is_empty();
-            assert_eq!(
-                has_worker,
-                has_activities,
-                "template {} worker manifest must match its activity surface",
-                template.id()
-            );
-            let worker_files = template.worker_files();
-            if !worker_files.is_empty() {
-                let paths: Vec<&str> = worker_files.iter().map(|(path, _)| *path).collect();
-                assert!(paths.contains(&"worker/Cargo.toml"));
-                assert!(paths.contains(&"worker/src/main.rs"));
-                let main = worker_files
-                    .iter()
-                    .find(|(path, _)| *path == "worker/src/main.rs")
-                    .map(|(_, contents)| *contents)
-                    .unwrap_or_default();
-                // Whitespace-insensitive: registrations may be wrapped
-                // across lines by rustfmt.
-                let condensed: String = main.split_whitespace().collect();
-                for activity in template.activities() {
-                    assert!(
-                        condensed.contains(&format!("register_activity(\"{activity}\"")),
-                        "template {} worker must register {activity}",
-                        template.id()
-                    );
-                }
-            }
-        }
-    }
-}
+#[path = "template_tests.rs"]
+mod tests;

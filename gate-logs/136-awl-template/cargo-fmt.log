@@ -1,0 +1,41 @@
+Sat  8 Aug 2026 06:50:34 UTC
+16:50  up 3 days, 22:34, 4 users, load averages: 10.43 10.82 15.68
+COMMAND=cargo fmt --all
+CARGO_FMT_LOAD_CHECK=10.43 snapshot=16:50  up 3 days, 22:34, 4 users, load averages: 10.43 10.82 15.68
+CARGO_FMT_LOAD_CHECK=12.33 snapshot=16:51  up 3 days, 22:35, 4 users, load averages: 12.33 11.31 15.70
+CARGO_FMT_LOAD_CHECK=11.74 snapshot=16:51  up 3 days, 22:35, 4 users, load averages: 11.74 11.32 15.55
+CARGO_FMT_LOAD_CHECK=10.54 snapshot=16:52  up 3 days, 22:36, 4 users, load averages: 10.54 11.04 15.30
+CARGO_FMT_LOAD_CHECK=8.54 snapshot=16:52  up 3 days, 22:36, 4 users, load averages: 8.54 10.51 14.96
+CARGO_FMT_EXIT=0
+
+COMMAND=cargo fmt --all --check
+CARGO_FMT_CHECK_LOAD_CHECK=8.54 snapshot=16:52  up 3 days, 22:37, 4 users, load averages: 8.54 10.51 14.96
+CARGO_FMT_CHECK_EXIT=0
+
+=== FINAL FORMAT AFTER E2E HELPER FIX ===
+Sat  8 Aug 2026 07:12:50 UTC
+17:12  up 3 days, 22:57, 4 users, load averages: 14.75 13.32 16.08
+COMMAND=cargo fmt --all
+CARGO_FMT_FINAL_LOAD_CHECK=14.75 snapshot=17:12  up 3 days, 22:57, 4 users, load averages: 14.75 13.32 16.08
+CARGO_FMT_FINAL_LOAD_CHECK=16.09 snapshot=17:13  up 3 days, 22:57, 4 users, load averages: 16.09 13.79 16.15
+CARGO_FMT_FINAL_LOAD_CHECK=12.37 snapshot=17:13  up 3 days, 22:58, 4 users, load averages: 12.37 13.12 15.83
+CARGO_FMT_FINAL_LOAD_CHECK=10.78 snapshot=17:14  up 3 days, 22:58, 4 users, load averages: 10.78 12.66 15.57
+CARGO_FMT_FINAL_LOAD_CHECK=10.69 snapshot=17:14  up 3 days, 22:59, 4 users, load averages: 10.69 12.39 15.36
+CARGO_FMT_FINAL_LOAD_CHECK=8.81 snapshot=17:15  up 3 days, 22:59, 4 users, load averages: 8.81 11.75 15.03
+CARGO_FMT_FINAL_EXIT=0
+
+COMMAND=cargo fmt --all --check
+CARGO_FMT_CHECK_FINAL_LOAD_CHECK=15.23 snapshot=17:15  up 3 days, 22:59, 4 users, load averages: 15.23 13.04 15.46
+CARGO_FMT_CHECK_FINAL_LOAD_CHECK=18.26 snapshot=17:15  up 3 days, 23 hrs, 4 users, load averages: 18.26 14.07 15.76
+CARGO_FMT_CHECK_FINAL_LOAD_CHECK=16.93 snapshot=17:16  up 3 days, 23 hrs, 4 users, load averages: 16.93 14.15 15.72
+CARGO_FMT_CHECK_FINAL_LOAD_CHECK=19.50 snapshot=17:16  up 3 days, 23:01, 4 users, load averages: 19.50 14.99 15.97
+CARGO_FMT_CHECK_FINAL_LOAD_CHECK=22.99 snapshot=17:17  up 3 days, 23:01, 4 users, load averages: 22.99 16.19 16.37
+CARGO_FMT_CHECK_FINAL_LOAD_CHECK=26.53 snapshot=17:17  up 3 days, 23:02, 4 users, load averages: 26.53 17.77 16.94
+CARGO_FMT_CHECK_FINAL_LOAD_CHECK=23.32 snapshot=17:18  up 3 days, 23:02, 4 users, load averages: 23.32 17.93 17.03
+CARGO_FMT_CHECK_FINAL_LOAD_CHECK=23.12 snapshot=17:18  up 3 days, 23:03, 4 users, load averages: 23.12 18.52 17.28
+CARGO_FMT_CHECK_FINAL_LOAD_CHECK=18.31 snapshot=17:19  up 3 days, 23:03, 4 users, load averages: 18.31 17.80 17.06
+CARGO_FMT_CHECK_FINAL_LOAD_CHECK=13.73 snapshot=17:19  up 3 days, 23:04, 4 users, load averages: 13.73 16.74 16.70
+CARGO_FMT_CHECK_FINAL_LOAD_CHECK=13.17 snapshot=17:20  up 3 days, 23:04, 4 users, load averages: 13.17 16.35 16.56
+CARGO_FMT_CHECK_FINAL_LOAD_CHECK=11.83 snapshot=17:20  up 3 days, 23:05, 4 users, load averages: 11.83 15.74 16.34
+CARGO_FMT_CHECK_FINAL_LOAD_CHECK=9.01 snapshot=17:21  up 3 days, 23:05, 4 users, load averages: 9.01 14.69 15.94
+CARGO_FMT_CHECK_FINAL_EXIT=0

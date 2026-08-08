@@ -8,6 +8,18 @@ whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 Landed on `main` since the 0.11.0 publish. Nothing here has been released to
 crates.io yet.
 
+- **`aion new` scaffolds AWL by default.** A new `awl` template is the
+  default: a bare `aion new <name>` emits a checked, runnable
+  `<name>.awl` (typed input/output, three steps, one `when`/`otherwise`
+  decision — no worker required), the shared dev `aion.toml`, a
+  `.gitignore`, and a README with the exact check/fmt/deploy/run steps.
+  Project names for the `awl` template additionally cannot be AWL reserved
+  words (refused before anything is written). The five Gleam templates are
+  unchanged and keep their ids (`hello-world`, `approval-flow`, `saga`,
+  `dev-pipeline`, `agent`); select them with `--template`. The shared
+  scaffold `.gitignore` now also ignores the default haematite store
+  directory (`aion-data/`).
+
 - **`POST /awl/workers/availability` answers service, not connection.** The
   endpoint (and with it the console's ship-and-run pre-flight) used to answer
   `available: connected_workers > 0`, which refused to start documents whose

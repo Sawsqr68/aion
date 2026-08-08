@@ -59,8 +59,9 @@ Deploying and running an `.awl` document needs no Gleam build, no
   into this binary on the queue an `.awl` document declares — an agent worker
   without writing a crate. `--check` prints the exact action surface, resolved
   harness, and intervention controls, then exits without connecting.
-- `aion new <name> [--template <t>] [--worker rust]` scaffolds a buildable
-  Gleam workflow project.
+- `aion new <name> [--template <t>] [--worker rust]` scaffolds a workflow
+  project — a checked, runnable AWL document by default, or one of five
+  buildable Gleam templates.
 - `aion dev --gleam-path <path>` watches a Gleam workflow project and
   hot-loads each save into a running server.
 - `aion generate [PATH] [--check]` derives codecs, schemas, and worker

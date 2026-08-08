@@ -1,0 +1,321 @@
+use serde_json::Value;
+
+use super::{
+    NewArgs, Template, WorkerLanguage, ensure_target_is_empty, render, scaffold, validate_awl_name,
+    validate_name,
+};
+
+type TestError = Box<dyn std::error::Error>;
+
+/// Unwraps the error side of a fallible call without `expect_err`.
+fn require_error<T>(result: anyhow::Result<T>) -> Result<anyhow::Error, TestError> {
+    match result {
+        Ok(_) => Err("expected the call to fail".into()),
+        Err(error) => Ok(error),
+    }
+}
+
+#[test]
+fn bare_new_parses_to_the_awl_template() -> Result<(), TestError> {
+    use clap::Parser;
+    let cli = crate::Cli::try_parse_from(["aion", "new", "my_flow"])?;
+    let crate::Command::Client(crate::ClientCommand::New(args)) = cli.command else {
+        return Err("expected the new command".into());
+    };
+    assert_eq!(
+        args.template,
+        Template::Awl,
+        "a bare `aion new` must scaffold the awl template"
+    );
+    assert!(args.worker.is_none(), "--worker must stay optional");
+    Ok(())
+}
+
+#[test]
+fn name_validation_accepts_snake_case() -> Result<(), TestError> {
+    for name in ["a", "my_flow", "order_saga_2", "x9"] {
+        validate_name(name)?;
+    }
+    Ok(())
+}
+
+#[test]
+fn name_validation_rejects_invalid_names_with_the_rule() -> Result<(), TestError> {
+    for name in [
+        "",
+        "My_Flow",
+        "9lives",
+        "_hidden",
+        "kebab-case",
+        "with space",
+        "emoji✨",
+        "gleam",
+    ] {
+        let error = require_error(validate_name(name))?;
+        assert!(
+            error.to_string().contains("invalid project name"),
+            "error for {name:?} must state the rejection: {error}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn awl_name_validation_rejects_reserved_words_with_the_rule() -> Result<(), TestError> {
+    for name in ["workflow", "step", "type"] {
+        let error = require_error(validate_awl_name(name))?;
+        assert!(error.to_string().contains("AWL reserved word"), "{error}");
+    }
+    Ok(())
+}
+
+#[test]
+fn refuses_non_empty_target_directory() -> Result<(), TestError> {
+    let parent = tempfile::tempdir()?;
+    let target = parent.path().join("busy");
+    std::fs::create_dir(&target)?;
+    std::fs::write(target.join("existing.txt"), "occupied")?;
+
+    let args = NewArgs::for_tests("busy", Template::HelloWorld, None);
+    let error = require_error(scaffold(parent.path(), &args))?;
+    assert!(
+        error.to_string().contains("not empty"),
+        "refusal must name the cause: {error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn accepts_an_existing_empty_directory() -> Result<(), TestError> {
+    let parent = tempfile::tempdir()?;
+    std::fs::create_dir(parent.path().join("vacant"))?;
+    ensure_target_is_empty(&parent.path().join("vacant"))?;
+    Ok(())
+}
+
+#[test]
+fn refuses_worker_for_templates_without_activities() -> Result<(), TestError> {
+    let parent = tempfile::tempdir()?;
+    for template in [Template::Awl, Template::HelloWorld, Template::ApprovalFlow] {
+        let args = NewArgs::for_tests("flow", template, Some(WorkerLanguage::Rust));
+        let error = require_error(scaffold(parent.path(), &args))?;
+        assert!(
+            error.to_string().contains("no activities"),
+            "refusal must explain itself: {error}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn render_substitutes_name_and_rejects_leftover_placeholders() -> Result<(), TestError> {
+    assert_eq!(render("name = \"{{name}}\"", "demo")?, "name = \"demo\"");
+    assert_eq!(
+        render("aion-worker = \"{{aion_worker_version}}\"", "demo")?,
+        format!("aion-worker = \"{}\"", env!("CARGO_PKG_VERSION"))
+    );
+    let error = require_error(render("oops {{nmae}}", "demo"))?;
+    assert!(
+        error
+            .to_string()
+            .contains("unresolved template placeholder")
+    );
+    Ok(())
+}
+
+#[test]
+fn every_template_renders_without_leftover_placeholders() -> Result<(), TestError> {
+    for template in Template::all() {
+        let mut files = template.files();
+        files.extend_from_slice(template.worker_files());
+        for (path, contents) in files {
+            render(path, "demo_flow")?;
+            render(contents, "demo_flow")?;
+        }
+    }
+    Ok(())
+}
+
+/// Extracts every `aion <subcommand>` instruction from rendered README
+/// text: the token following a literal `aion ` occurrence.
+fn readme_instruction_tokens(readme: &str) -> Vec<String> {
+    readme
+        .match_indices("aion ")
+        .filter_map(|(index, marker)| {
+            let token: String = readme[index + marker.len()..]
+                .chars()
+                .take_while(|character| character.is_ascii_alphanumeric() || *character == '-')
+                .collect();
+            if token.is_empty() { None } else { Some(token) }
+        })
+        .collect()
+}
+
+#[test]
+fn readme_instructions_match_real_subcommands() -> Result<(), TestError> {
+    use clap::CommandFactory;
+
+    let command = crate::Cli::command();
+    let known: Vec<String> = command
+        .get_subcommands()
+        .map(|subcommand| subcommand.get_name().to_owned())
+        .collect();
+
+    for template in Template::all() {
+        let readme = template
+            .files()
+            .iter()
+            .find(|(path, _)| *path == "README.md")
+            .map(|(_, contents)| *contents)
+            .ok_or("every template must carry a README")?;
+        let rendered = render(readme, "demo_flow")?;
+        let tokens = readme_instruction_tokens(&rendered);
+        assert!(
+            !tokens.is_empty(),
+            "template {} README must contain aion instructions",
+            template.id()
+        );
+        for token in tokens {
+            assert!(
+                known.contains(&token),
+                "template {} README references `aion {token}`, which is not a real subcommand",
+                template.id()
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn refuses_dev_pipeline_without_a_worker_and_writes_nothing() -> Result<(), TestError> {
+    let parent = tempfile::tempdir()?;
+    let args = NewArgs::for_tests("pipe_flow", Template::DevPipeline, None);
+    let error = require_error(scaffold(parent.path(), &args))?;
+    assert!(
+        error.to_string().contains("requires a worker"),
+        "refusal must explain the requirement: {error}"
+    );
+    assert!(
+        error.to_string().contains("--worker rust"),
+        "refusal must name the fix: {error}"
+    );
+    assert!(
+        !parent.path().join("pipe_flow").exists(),
+        "a refused scaffold must write nothing"
+    );
+    Ok(())
+}
+
+#[test]
+fn scaffold_dev_pipeline_ships_the_types_module_and_generated_artifacts() -> Result<(), TestError> {
+    let parent = tempfile::tempdir()?;
+    let args = NewArgs::for_tests(
+        "demo_pipe",
+        Template::DevPipeline,
+        Some(WorkerLanguage::Rust),
+    );
+    let output: Value = scaffold(parent.path(), &args)?;
+    let project = parent.path().join("demo_pipe");
+
+    assert_eq!(output["template"], "dev-pipeline");
+    assert_eq!(output["worker"], "rust");
+    let files = output["files"].as_array().ok_or("files must be an array")?;
+    // The authored types module (source of truth) and the pre-generated
+    // codecs module + emitted schemas ship with the template, so the
+    // scaffold builds immediately and `aion generate` reproduces them.
+    for expected in [
+        "src/demo_pipe_io.gleam",
+        "src/demo_pipe_codecs.gleam",
+        "schemas/input.json",
+        "schemas/gate_output_verdict_outcome.json",
+    ] {
+        assert!(
+            files.iter().any(|file| file == expected),
+            "the scaffold report must list {expected}: {output}"
+        );
+    }
+    for relative in files {
+        let relative = relative.as_str().ok_or("file entries must be strings")?;
+        assert!(
+            project.join(relative).is_file(),
+            "{relative} must exist on disk"
+        );
+    }
+
+    // The types module is authored (no do-not-edit header); the codecs
+    // module and schemas are generated artifacts carrying their markers.
+    let io = std::fs::read_to_string(project.join("src/demo_pipe_io.gleam"))?;
+    assert!(!io.contains("do not edit"), "the types module is authored");
+    let codecs_module = std::fs::read_to_string(project.join("src/demo_pipe_codecs.gleam"))?;
+    assert!(codecs_module.starts_with("//// Generated by aion generate"));
+    let schema = std::fs::read_to_string(project.join("schemas/input.json"))?;
+    assert!(schema.contains("Generated by aion generate from src/demo_pipe_io.gleam"));
+
+    // The sources import the generated codecs module for wire functions
+    // and the authored types module for types.
+    let codecs = std::fs::read_to_string(project.join("src/demo_pipe/codecs_workflows.gleam"))?;
+    assert!(codecs.contains("import demo_pipe_codecs as generated"));
+    let convert = std::fs::read_to_string(project.join("src/demo_pipe/io_convert.gleam"))?;
+    assert!(convert.contains("import demo_pipe_io as generated"));
+    let cargo = std::fs::read_to_string(project.join("worker/Cargo.toml"))?;
+    assert!(cargo.contains(&format!("aion-worker = \"{}\"", env!("CARGO_PKG_VERSION"))));
+    Ok(())
+}
+
+/// The legacy `agent` template mints with the unmissable refusal warning
+/// — start admission will refuse its unscoped activities — while the
+/// non-legacy templates mint with no warning at all.
+#[test]
+fn agent_scaffold_warns_it_will_be_refused_at_start() -> Result<(), TestError> {
+    let parent = tempfile::tempdir()?;
+    let args = NewArgs::for_tests("agent_demo", Template::Agent, Some(WorkerLanguage::Rust));
+    let output: Value = scaffold(parent.path(), &args)?;
+    let warning = output["warning"]
+        .as_str()
+        .ok_or("the agent scaffold report must carry the refusal warning")?;
+    for marker in [
+        "NO_QUEUE_DECLARATION",
+        "act, scout, verify",
+        "AWL agent scaffold",
+    ] {
+        assert!(
+            warning.contains(marker),
+            "the warning must carry {marker}: {warning}"
+        );
+    }
+
+    let args = NewArgs::for_tests("plain_flow", Template::HelloWorld, None);
+    let output: Value = scaffold(parent.path(), &args)?;
+    assert!(
+        output.get("warning").is_none(),
+        "non-legacy templates must not warn: {output}"
+    );
+    Ok(())
+}
+
+#[test]
+fn scaffold_writes_every_manifest_file() -> Result<(), TestError> {
+    let parent = tempfile::tempdir()?;
+    let args = NewArgs::for_tests("demo_saga", Template::Saga, Some(WorkerLanguage::Rust));
+    let output: Value = scaffold(parent.path(), &args)?;
+    let project = parent.path().join("demo_saga");
+
+    assert_eq!(output["project"], "demo_saga");
+    assert_eq!(output["template"], "saga");
+    assert_eq!(output["worker"], "rust");
+    let files = output["files"].as_array().ok_or("files must be an array")?;
+    for relative in files {
+        let relative = relative.as_str().ok_or("file entries must be strings")?;
+        assert!(
+            project.join(relative).is_file(),
+            "{relative} must exist on disk"
+        );
+    }
+
+    let gleam = std::fs::read_to_string(project.join("src/demo_saga.gleam"))?;
+    assert!(gleam.contains("pub fn handle(input: OrderInput)"));
+    assert!(gleam.contains("Generated plumbing"));
+    let cargo = std::fs::read_to_string(project.join("worker/Cargo.toml"))?;
+    assert!(cargo.contains(&format!("aion-worker = \"{}\"", env!("CARGO_PKG_VERSION"))));
+    Ok(())
+}

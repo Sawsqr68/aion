@@ -204,13 +204,13 @@ The subcommands are `server`, `dev`, `awl`, `worker`, `new`, `generate`,
 `start`, `signal`, `query`, `cancel`, `reopen`, `pause`, `resume`, `list`,
 `describe`, and `inspect`.
 
-> Prefer a generated starting point? `aion new <name>` scaffolds a complete,
-> buildable **Gleam** project — workflow, schemas, `workflow.toml`, a dev
-> `aion.toml`, and a README with these same steps. Templates are
-> `hello-world` (default), `approval-flow`, `saga`, `dev-pipeline`, and
-> `agent`; `--worker rust` adds a worker crate, and `dev-pipeline` and `agent`
-> require it. There is no `.awl` template — for AWL, write the file, which is
-> what Part 1 does.
+> Prefer a generated starting point? `aion new <name>` scaffolds a complete
+> authoring project. The `awl` template is the default and emits a checked,
+> runnable `<name>.awl`, a dev `aion.toml`, and a README. Templates are `awl`
+> (default), `hello-world`, `approval-flow`, `saga`, `dev-pipeline`, and
+> `agent`; the five Gleam templates retain their build manifests, schemas, and
+> workflow descriptors. `--worker rust` adds a worker crate where supported,
+> and `dev-pipeline` and `agent` require it.
 
 > There is no separate server binary and no installable worker binary.
 > `cargo install aion-server` and `cargo install aion-worker` are not how

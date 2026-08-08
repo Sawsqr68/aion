@@ -1,0 +1,68 @@
+Sat  8 Aug 2026 07:10:29 UTC
+17:10  up 3 days, 22:54, 4 users, load averages: 7.06 10.53 15.68
+COMMAND=cargo test -p aion-cli --test new_awl_e2e
+NEW_AWL_E2E_LOAD_CHECK=7.06 snapshot=17:10  up 3 days, 22:54, 4 users, load averages: 7.06 10.53 15.68
+warning: function `patch_aion_flow_to_workspace` is never used
+  --> crates/aion-cli/tests/common/mod.rs:58:8
+   |
+58 | pub fn patch_aion_flow_to_workspace(project: &Path) -> Result<(), TestError> {
+   |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `gleam_build` is never used
+  --> crates/aion-cli/tests/common/mod.rs:91:8
+   |
+91 | pub fn gleam_build(project: &Path) -> Result<(), TestError> {
+   |        ^^^^^^^^^^^
+
+warning: function `package_project` is never used
+  --> crates/aion-cli/tests/common/mod.rs:98:8
+   |
+98 | pub fn package_project(project: &Path, name: &str) -> Result<PathBuf, TestError> {
+   |        ^^^^^^^^^^^^^^^
+
+warning: `aion-cli` (test "new_awl_e2e") generated 3 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.71s
+     Running tests/new_awl_e2e.rs (target/debug/deps/new_awl_e2e-50e95be544de94a0)
+
+running 9 tests
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test default_awl_scaffold_deploys_and_runs_to_completion ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.05s
+
+NEW_AWL_E2E_EXIT=0
+
+=== FINAL RERUN AFTER LOCAL HELPER EXTRACTION ===
+Sat  8 Aug 2026 07:24:31 UTC
+17:24  up 3 days, 23:08, 4 users, load averages: 32.13 23.39 19.23
+COMMAND=cargo test -p aion-cli --test new_awl_e2e
+NEW_AWL_E2E_FINAL_LOAD_CHECK=32.13 snapshot=17:24  up 3 days, 23:08, 4 users, load averages: 32.13 23.39 19.23
+NEW_AWL_E2E_FINAL_LOAD_CHECK=32.54 snapshot=17:25  up 3 days, 23:09, 4 users, load averages: 32.54 24.58 19.82
+NEW_AWL_E2E_FINAL_LOAD_CHECK=25.70 snapshot=17:25  up 3 days, 23:09, 4 users, load averages: 25.70 23.64 19.64
+NEW_AWL_E2E_FINAL_LOAD_CHECK=18.17 snapshot=17:26  up 3 days, 23:10, 4 users, load averages: 18.17 22.00 19.18
+NEW_AWL_E2E_FINAL_LOAD_CHECK=15.45 snapshot=17:26  up 3 days, 23:10, 4 users, load averages: 15.45 20.96 18.90
+NEW_AWL_E2E_FINAL_LOAD_CHECK=11.22 snapshot=17:27  up 3 days, 23:11, 4 users, load averages: 11.22 19.42 18.42
+NEW_AWL_E2E_FINAL_LOAD_CHECK=13.98 snapshot=17:27  up 3 days, 23:11, 4 users, load averages: 13.98 19.23 18.37
+NEW_AWL_E2E_FINAL_LOAD_CHECK=11.57 snapshot=17:28  up 3 days, 23:12, 4 users, load averages: 11.57 18.12 18.00
+NEW_AWL_E2E_FINAL_LOAD_CHECK=10.93 snapshot=17:28  up 3 days, 23:12, 4 users, load averages: 10.93 17.32 17.71
+NEW_AWL_E2E_FINAL_LOAD_CHECK=11.14 snapshot=17:29  up 3 days, 23:13, 4 users, load averages: 11.14 16.74 17.48
+NEW_AWL_E2E_FINAL_LOAD_CHECK=8.94 snapshot=17:29  up 3 days, 23:13, 4 users, load averages: 8.94 15.73 17.09
+   Compiling aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.37s
+     Running tests/new_awl_e2e.rs (target/debug/deps/new_awl_e2e-50e95be544de94a0)
+
+running 1 test
+test default_awl_scaffold_deploys_and_runs_to_completion ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.24s
+
+NEW_AWL_E2E_FINAL_EXIT=0

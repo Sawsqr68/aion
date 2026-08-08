@@ -1,0 +1,9 @@
+Sat  8 Aug 2026 07:24:12 UTC
+17:24  up 3 days, 23:08, 4 users, load averages: 34.87 23.45 19.18
+COMMAND=aion --version
+aion 0.11.0
+SUBSTITUTION={{name}} -> installed_demo
+COMMAND=sed 's/{{name}}/installed_demo/g' crates/aion-cli/templates/awl/project.awl > /tmp/aion-136-installed-demo.XXXXXX.awl
+COMMAND=aion awl check /tmp/aion-136-installed-demo.XXXXXX.awl
+ok: /tmp/aion-136-installed-demo.XXXXXX.awl (3 steps)
+INSTALLED_AION_AWL_CHECK_EXIT=0

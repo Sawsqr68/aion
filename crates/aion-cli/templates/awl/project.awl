@@ -1,0 +1,19 @@
+//! Build a greeting, then choose its tone.
+workflow {{name}}
+  input name: String
+  input enthusiastic: Bool
+  outcome greeted: type Greeting, route success
+
+type Greeting { message: String }
+
+step compose
+  "Hello, " + name -> greeting
+
+step punctuate after compose
+  greeting + "!" -> excited_greeting
+
+step finish after punctuate
+  outcome excited: when enthusiastic,
+    route greeted(message: excited_greeting)
+  outcome calm: otherwise,
+    route greeted(message: greeting + ".")

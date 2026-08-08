@@ -1,0 +1,7 @@
+    Checking aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.09s
+CLIPPY_P_R2_EXIT=0
+    Checking aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.80s
+CLIPPY_WS_R2_EXIT=0
+FMT_R2_EXIT=0

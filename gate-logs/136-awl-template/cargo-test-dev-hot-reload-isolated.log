@@ -1,0 +1,32 @@
+Sat  8 Aug 2026 07:07:07 UTC
+17:07  up 3 days, 22:51, 4 users, load averages: 8.39 13.86 18.00
+COMMAND=cargo test -p aion-cli --test dev_hot_reload_e2e
+ISOLATED_DEV_HOT_RELOAD_LOAD_CHECK=8.39 snapshot=17:07  up 3 days, 22:51, 4 users, load averages: 8.39 13.86 18.00
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.69s
+     Running tests/dev_hot_reload_e2e.rs (target/debug/deps/dev_hot_reload_e2e-a9e901517bcc8916)
+
+running 9 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test dev_hot_loads_a_new_content_hash_version_on_edit_without_restart has been running for over 60 seconds
+test dev_hot_loads_a_new_content_hash_version_on_edit_without_restart ... FAILED
+
+failures:
+
+---- dev_hot_loads_a_new_content_hash_version_on_edit_without_restart stdout ----
+Error: "no new loaded version appeared within the reload deadline"
+
+
+failures:
+    dev_hot_loads_a_new_content_hash_version_on_edit_without_restart
+
+test result: FAILED. 8 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 184.61s
+
+error: test failed, to rerun pass `-p aion-cli --test dev_hot_reload_e2e`
+ISOLATED_DEV_HOT_RELOAD_EXIT=101

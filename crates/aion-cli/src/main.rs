@@ -183,19 +183,23 @@ enum WorkerCommand {
 enum ClientCommand {
     /// Scaffold a new Aion workflow project from a template.
     ///
-    /// Creates `<name>/` in the current directory: a buildable Gleam
-    /// workflow with a typed entry function, `workflow.toml`, JSON Schemas,
-    /// a ready development server config (`aion.toml`), a `.gitignore`, and
-    /// a README with the exact next steps. Runs entirely locally and
-    /// refuses to write into a non-empty directory.
+    /// Creates `<name>/` in the current directory. The default `awl`
+    /// template emits a checked, runnable AWL document (`<name>.awl`), a
+    /// ready development server config (`aion.toml`), a `.gitignore`, and a
+    /// README with the exact next steps — no build manifest and no worker
+    /// required. The five Gleam templates instead emit a buildable Gleam
+    /// workflow with a typed entry function, `workflow.toml`, and JSON
+    /// Schemas. Runs entirely locally and refuses to write into a non-empty
+    /// directory.
     ///
-    /// Templates: `hello-world` (default; minimal start → complete),
-    /// `approval-flow` (signal vs durable timeout race plus a status
-    /// query), `saga` (worker-served activities, workflow-driven retries, and
-    /// refund compensation), `agent` (a durable agent loop — scout → act →
-    /// verify → signal-gated human review, parameterised by prompts;
-    /// `--worker rust` required), and `dev-pipeline` (the durable dev
-    /// pipeline; `--worker rust` required). `--worker rust` additionally
+    /// Templates: `awl` (default; typed input and output, three steps, one
+    /// `when`/`otherwise` decision), `hello-world` (minimal Gleam start →
+    /// complete), `approval-flow` (signal vs durable timeout race plus a
+    /// status query), `saga` (worker-served activities, workflow-driven
+    /// retries, and refund compensation), `agent` (a durable agent loop —
+    /// scout → act → verify → signal-gated human review, parameterised by
+    /// prompts; `--worker rust` required), and `dev-pipeline` (the durable
+    /// dev pipeline; `--worker rust` required). `--worker rust` additionally
     /// scaffolds a `worker/` crate serving the template's activities.
     New(new::NewArgs),
     /// Generate every derived artifact from a package's authored Gleam types.
@@ -1138,7 +1142,9 @@ mod tests {
             anyhow::bail!("expected new command");
         };
 
-        // The template defaults to hello-world and --worker is optional.
+        // The template defaults to awl and --worker is optional. The parsed
+        // default itself is pinned in `new::scaffold`'s tests, where the
+        // argument fields are visible.
         let cli = Cli::try_parse_from(["aion", "new", "my_flow"])?;
         let Command::Client(ClientCommand::New(_)) = cli.command else {
             anyhow::bail!("expected new command");
@@ -1159,6 +1165,11 @@ mod tests {
         let help = new.render_long_help().to_string();
 
         assert!(help.contains("--template"));
+        assert!(help.contains("awl"));
+        assert!(
+            help.contains("[default: awl]"),
+            "help must render the awl default: {help}"
+        );
         assert!(help.contains("hello-world"));
         assert!(help.contains("approval-flow"));
         assert!(help.contains("saga"));

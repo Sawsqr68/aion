@@ -68,7 +68,7 @@ ADRs the DX surface encodes — an agent extending this code **must** uphold the
 |---|---|
 | CLI entry (`Command`/`ClientCommand` enums + dispatch) | `crates/aion-cli/src/main.rs` |
 | `aion dev` watch loop | `crates/aion-cli/src/dev/{mod,args,session,pipeline,watch}.rs` |
-| `aion new` scaffolder + templates | `crates/aion-cli/src/new/{scaffold,template,agent}.rs`, `crates/aion-cli/templates/agent/**` |
+| `aion new` scaffolder + templates | `crates/aion-cli/src/new/{scaffold,template,agent}.rs`, `crates/aion-cli/templates/awl/**`, `crates/aion-cli/templates/agent/**` |
 | `aion check --deterministic` driver | `crates/aion-cli/src/check_deterministic.rs` |
 | `aion input` driver | `crates/aion-cli/src/input.rs` |
 | `aion generate` (codegen + test scaffold wiring) | `crates/aion-cli/src/generate.rs` |
@@ -105,8 +105,8 @@ Scaffolds a complete, immediately-buildable durable **agent loop** project.
 aion new <name> --template agent --worker rust
 ```
 
-- `<name>` — **required** positional. Lowercase `snake_case`; becomes the directory, the Gleam entry module (`src/<name>.gleam`), and the workflow type.
-- `--template <value>` — `value_enum`, default `hello-world`. Values: `hello-world`, `approval-flow`, `saga`, `dev-pipeline`, `agent`.
+- `<name>` — **required** positional. Lowercase `snake_case`; becomes the directory and either the AWL workflow name (`<name>.awl`) or Gleam entry module (`src/<name>.gleam`). AWL template names also cannot be AWL reserved words.
+- `--template <value>` — `value_enum`, default `awl`. Values: `awl`, `hello-world`, `approval-flow`, `saga`, `dev-pipeline`, `agent`.
 - `--worker <lang>` — `value_enum` (`rust`). **Required for `agent`** (and `dev-pipeline`): the agent steps are worker-served activities, so a `worker/` crate is scaffolded. Omitting it for `agent` is a loud refusal (`template.rs::worker_requirement_reason`).
 
 **Emits** (`crates/aion-cli/templates/agent/`): `src/<name>_io.gleam` (the **authored boundary types**, the types-first source of truth), `src/<name>_codecs.gleam` (**pre-generated** JSON codecs), `schemas/{input,output,step_input,step_output,decision,review_signal,agent_status}.json` (**pre-generated**, marker-carrying), `src/<name>.gleam` (the workflow, from `project.gleam`), `workflow.toml`, `README.md`, and a `worker/` crate (`Cargo.toml` + `src/main.rs` with trivial echo handlers — replace these with your agent driver). Prints a JSON `NewOutput { project, path, template, worker, files, next_steps }`.

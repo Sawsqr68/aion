@@ -1,0 +1,189 @@
+Sat  8 Aug 2026 07:22:27 UTC
+17:22  up 3 days, 23:06, 4 users, load averages: 6.64 12.97 15.21
+COMMAND=cargo clippy --workspace --all-targets -- -D warnings
+CLIPPY_WORKSPACE_LOAD_CHECK=6.64 snapshot=17:22  up 3 days, 23:06, 4 users, load averages: 6.64 12.97 15.21
+   Compiling libc v0.2.186
+    Checking scopeguard v1.2.0
+   Compiling serde_json v1.0.150
+    Checking bytes v1.11.1
+    Checking hashbrown v0.14.5
+   Compiling either v1.16.0
+   Compiling regex-syntax v0.8.10
+    Checking lock_api v0.4.14
+    Checking sync_wrapper v1.0.2
+    Checking getrandom v0.2.17
+   Compiling uncased v0.9.10
+   Compiling glob v0.3.3
+   Compiling rustversion v1.0.22
+   Compiling itertools v0.14.0
+    Checking parking_lot v0.12.5
+   Compiling rustix v0.38.44
+   Compiling clang-sys v1.8.1
+    Checking tokio v1.52.3
+    Checking http v1.4.1
+    Checking dashmap v6.2.1
+   Compiling jobserver v0.1.34
+   Compiling errno v0.3.14
+   Compiling getrandom v0.4.2
+    Checking http v0.2.12
+   Compiling rustix v1.1.4
+   Compiling cc v1.2.63
+    Checking http-body v1.0.1
+    Checking tungstenite v0.30.0
+    Checking http-body-util v0.1.3
+    Checking axum-core v0.5.6
+    Checking http-body v0.4.6
+   Compiling prost-derive v0.14.3
+   Compiling cmake v0.1.58
+   Compiling regex-automata v0.4.14
+   Compiling tempfile v3.27.0
+   Compiling minimal-lexical v0.2.1
+    Checking aion-core v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+    Checking referencing v0.46.6
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling blake3 v1.8.5
+   Compiling aws-lc-sys v0.41.0
+    Checking tracing-subscriber v0.3.23
+    Checking schemars v1.2.1
+   Compiling prost v0.14.3
+    Checking jsonschema v0.46.6
+   Compiling regex v1.12.3
+   Compiling prost-types v0.14.3
+   Compiling nom v7.1.3
+    Checking rand_core v0.6.4
+   Compiling libloading v0.8.9
+   Compiling indexmap v1.9.3
+    Checking tokio-util v0.7.18
+    Checking tokio-stream v0.1.18
+   Compiling prost-build v0.14.3
+   Compiling home v0.5.12
+   Compiling bindgen v0.66.1
+    Checking h2 v0.4.14
+    Checking tower v0.5.3
+   Compiling which v4.4.2
+   Compiling tonic-prost-build v0.14.5
+   Compiling cexpr v0.6.0
+    Checking h2 v0.3.27
+    Checking rand_chacha v0.3.1
+   Compiling ring v0.17.14
+    Checking socket2 v0.5.10
+   Compiling aion-proto-generated v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+   Compiling shlex v1.3.0
+   Compiling lazycell v1.3.0
+   Compiling rustc-hash v1.1.0
+   Compiling peeking_take_while v0.1.2
+    Checking hashbrown v0.12.3
+   Compiling lazy_static v1.5.0
+    Checking rand v0.8.6
+   Compiling axum-core v0.3.4
+   Compiling itertools v0.12.1
+    Checking aion-store v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+    Checking aion-integrations v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+    Checking hyper v1.10.1
+    Checking security-framework-sys v2.17.0
+    Checking hyper v0.14.32
+   Compiling siphasher v1.0.3
+   Compiling phf_shared v0.11.3
+   Compiling prost-derive v0.12.6
+    Checking tower v0.4.13
+    Checking hyper-util v0.1.20
+   Compiling axum v0.6.20
+    Checking block-padding v0.3.3
+    Checking inout v0.1.4
+   Compiling phf_generator v0.11.3
+    Checking prost v0.12.6
+    Checking hyper-timeout v0.5.2
+    Checking tokio-io-timeout v1.2.1
+   Compiling async-stream-impl v0.3.6
+    Checking sync_wrapper v0.1.2
+   Compiling rustls v0.22.4
+    Checking base64 v0.21.7
+    Checking matchit v0.7.3
+   Compiling phf_codegen v0.11.3
+    Checking cipher v0.4.4
+    Checking async-stream v0.3.6
+    Checking hashlink v0.8.4
+    Checking core-foundation v0.9.4
+   Compiling zerocopy-derive v0.7.35
+    Checking fallible-iterator v0.2.0
+    Checking fallible-streaming-iterator v0.1.9
+    Checking byteorder v1.5.0
+    Checking security-framework v2.11.1
+   Compiling libsql-sqlite3-parser v0.13.0
+    Checking http-range-header v0.3.1
+    Checking hyper-timeout v0.4.1
+    Checking tower-http v0.4.4
+    Checking phf v0.11.3
+    Checking aes v0.8.4
+    Checking zerocopy v0.7.35
+    Checking cbc v0.1.2
+    Checking rustls-native-certs v0.7.3
+    Checking fallible-iterator v0.3.0
+    Checking libsql-hrana v0.9.30
+    Checking bincode v1.3.3
+   Compiling cpufeatures v0.2.17
+   Compiling sha2 v0.10.9
+    Checking tower-http v0.6.11
+    Checking rustls-webpki v0.102.8
+   Compiling rust-embed-utils v8.11.0
+   Compiling rust-embed-impl v8.11.0
+    Checking prometheus v0.14.0
+    Checking core-foundation v0.10.1
+   Compiling libsql-ffi v0.9.30
+   Compiling exacl v0.13.0
+    Checking security-framework v3.7.0
+    Checking rust-embed v8.11.0
+    Checking users v0.11.0
+    Checking lsp-types v0.97.0
+    Checking serde_with v3.21.0
+    Checking lsp-server v0.8.0
+    Checking aion-integration-norn v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-norn)
+    Checking tonic v0.11.0
+    Checking tokio-rustls v0.25.0
+    Checking hyper-rustls v0.25.0
+    Checking aion-integration-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-cli)
+    Checking tonic-web v0.11.0
+    Checking agent-client-protocol-schema v1.5.0
+    Checking xtask v0.0.0 (/Users/tom/Developer/ablative/stack/aion/xtask)
+    Checking aion-darwin-acl v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-darwin-acl)
+   Compiling zstd-safe v7.2.4
+    Checking zstd v0.13.3
+    Checking zip v8.6.0
+   Compiling beamr v0.16.3
+    Checking aion-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+    Checking libsql-rusqlite v0.9.30
+    Checking libsql-sys v0.9.30
+    Checking aion-integration-acp v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-acp)
+    Checking libsql_replication v0.9.30
+    Checking aion-toolchain v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-toolchain)
+    Checking libsql v0.9.30
+    Checking haematite v0.7.0
+    Checking aion-awl v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl)
+    Checking aion-rs v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Checking aion-store-libsql v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-libsql)
+    Checking aion-store-haematite v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+    Checking liminal-rs v0.5.0
+    Checking aion-awl-package v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-package)
+    Checking aion-awl-lsp v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-lsp)
+   Compiling aws-lc-rs v1.17.0
+   Compiling rustls v0.23.40
+    Checking rustls-webpki v0.103.13
+    Checking tokio-rustls v0.26.4
+    Checking tungstenite v0.29.0
+    Checking rustls-platform-verifier v0.7.0
+    Checking hyper-rustls v0.27.9
+    Checking reqwest v0.13.4
+    Checking tokio-tungstenite v0.29.0
+    Checking liminal-sdk v0.5.0
+    Checking liminal-server v0.5.0
+    Checking axum v0.8.9
+    Checking million-processes v0.1.0 (/Users/tom/Developer/ablative/stack/aion/benchmarks/million-processes)
+    Checking tonic v0.14.6
+    Checking tonic-prost v0.14.5
+    Checking aion-proto v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+    Checking aion-worker v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+    Checking aion-client v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-client)
+    Checking aion-server v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Checking aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 35s
+CLIPPY_WORKSPACE_EXIT=0

@@ -171,7 +171,8 @@ fn assert_round_trip(
 /// artifacts), appends the coverage types, and patches `aion_flow` to the
 /// workspace SDK.
 fn stage_coverage_project(parent: &Path) -> Result<std::path::PathBuf, TestError> {
-    let (project, _) = common::scaffold_project(parent, "codegen_gate", &[])?;
+    let (project, _) =
+        common::scaffold_project(parent, "codegen_gate", &["--template", "hello-world"])?;
     common::patch_aion_flow_to_workspace(&project)?;
     let io_path = project.join("src/codegen_gate_io.gleam");
     let mut io_module = std::fs::read_to_string(&io_path)?;

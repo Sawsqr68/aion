@@ -161,8 +161,13 @@ fn dev_hot_loads_a_new_content_hash_version_on_edit_without_restart() -> Result<
     let project = temp.path().join(workflow_type);
 
     // Scaffold a buildable hello-world workflow project. `new` takes a
-    // snake_case name and creates `<name>/` in the working directory.
-    run_aion(&["new", workflow_type], temp.path())?;
+    // snake_case name and creates `<name>/` in the working directory. The
+    // template is named because this test drives the Gleam dev loop; the
+    // bare default scaffolds the AWL template.
+    run_aion(
+        &["new", workflow_type, "--template", "hello-world"],
+        temp.path(),
+    )?;
 
     // Boot a server with the deploy surface enabled (the dev loop hot-loads
     // over the operator deploy RPC).

@@ -1,0 +1,486 @@
+=== r2 at final tree (dispatcher hand): 3 e2e template pins + fmt reflow ===
+2026-08-08T17:41:27+1000
+17:41  up 3 days, 23:25, 4 users, load averages: 62.09 26.39 19.42
+   Compiling aion-cli v0.11.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.85s
+     Running unittests src/main.rs (target/debug/deps/aion-ea3b8252f118cbae)
+
+running 217 tests
+test awl::tests::diagnostic_renders_the_compiler_style_line ... ok
+test awl::tests::emit_beam_refuses_without_output ... ok
+test awl::tests::check_source_renders_a_parse_error_as_a_diagnostic ... ok
+test awl::tests::check_source_renders_typecheck_errors_as_diagnostics ... ok
+test awl::tests::emit_source_is_gated_on_a_clean_typecheck ... ok
+test awl::tests::emit_source_renders_a_parse_error_as_a_diagnostic ... ok
+test awl::tests::format_source_is_idempotent_on_the_flow_vocabulary ... ok
+test awl::tests::format_source_is_the_canonical_printer ... ok
+test awl::tests::format_source_reports_a_parse_error_without_output ... ok
+test awl::tests::check_source_counts_steps_on_a_clean_document ... ok
+test awl::tests::check_source_accepts_the_flow_vocabulary ... ok
+test awl::tests::emit_source_generates_gleam_for_a_clean_document ... ok
+test awl::tests::schema_source_is_gated_on_a_clean_typecheck ... ok
+test awl::tests::emit_gleam_synthesized_children_reproduce_the_committed_goldens ... ok
+test awl::tests::emit_source_folds_the_flow_vocabulary ... ok
+test awl::tests::emit_gleam_target_reproduces_the_committed_golden ... ok
+test awl::tests::schema_source_derives_a_declared_type ... ok
+test awl::tests::schema_source_without_type_emits_the_start_contract ... ok
+test awl::tests::emit_output_writes_packaging_sidecar_for_implicit_children ... ok
+test awl_scaffold::tests::a_link_across_unrelated_trees_is_absolute ... ok
+test awl_scaffold::tests::a_document_that_does_not_compile_writes_nothing ... ok
+test awl_scaffold::tests::a_link_within_one_tree_is_relative ... ok
+test awl_scaffold::tests::a_bogus_sdk_path_is_refused ... ok
+test awl::tests::emit_beam_writes_a_module_and_a_beam_shaped_sidecar ... ok
+test awl_scaffold::tests::an_unknown_worker_name_is_refused ... ok
+test deploy::tests::token_resolution_prefers_the_flag ... ok
+test check_deterministic::tests::without_the_flag_the_command_explains_itself ... ok
+test dev::args::tests::debounce_parses_positive_milliseconds ... ok
+test check_deterministic::tests::negative_fixture_clean_workflow_passes ... ok
+test check_deterministic::tests::positive_fixture_tainted_workflow_fails_non_zero ... ok
+test dev::args::tests::debounce_rejects_zero_and_non_numeric ... ok
+test awl_scaffold::tests::a_multi_node_document_yields_one_connection_per_node ... ok
+test dev::pipeline::tests::reload_outcome_reads_the_deploy_response_document ... ok
+test awl_scaffold::tests::the_generated_crate_reaches_the_document_it_was_generated_from ... ok
+test awl_scaffold::tests::the_server_executed_action_reaches_no_generated_file ... ok
+test dev::watch::tests::gleam_sources_are_recognised_case_insensitively ... ok
+test dev::watch::tests::relevant_only_for_source_content_changes ... ok
+test dev::watch::tests::watcher_errors_force_a_rebuild ... ok
+test dev::pipeline::tests::reload_outcome_rejects_a_response_missing_a_field ... ok
+test generate::tests::comment_lines_are_never_treated_as_imports ... ok
+test generate::tests::aliased_and_unqualified_imports_yield_bare_name ... ok
+test generate::tests::imports_are_parsed_to_bare_module_names ... ok
+test generate::tests::indented_real_import_is_found ... ok
+test dev::watch::tests::source_root_prefers_src_then_falls_back_to_root ... ok
+test generate::tests::marked_json_is_extracted_from_noisy_stdout ... ok
+test awl_scaffold::tests::a_second_run_rewrites_the_generated_files_and_keeps_the_handlers ... ok
+test generate::tests::missing_marker_is_an_error ... ok
+test awl_scaffold::tests::every_registration_carries_a_descriptor ... ok
+test generate::tests::cyclic_imports_do_not_loop ... ok
+test generate::tests::sync_multiple_workflow_tables_bails_naming_the_count ... ok
+test generate::tests::sync_clean_match_check_is_checked ... ok
+test generate::tests::extraction_lock_is_exclusive_then_reacquirable ... ok
+test generate::tests::crash_leftovers_are_recovered ... ok
+test generate::tests::sync_clean_match_write_is_unchanged_and_preserves_bytes ... ok
+test generate::tests::module_names_use_forward_slashes_under_src ... ok
+test generate::tests::sync_no_workflow_table_bails ... ok
+test generate::tests::trailing_comment_after_import_is_ignored_but_module_kept ... ok
+test generate::tests::sync_missing_activities_key_is_created_on_write ... ok
+test generate::tests::sync_stale_list_check_bails_with_path_and_reason ... ok
+test generate::tests::sync_stale_list_write_rewrites_in_declared_order ... ok
+test generate::tests::transitive_importers_of_the_target_are_found ... ok
+test harness::tests::a_harness_is_selected_and_attributed_by_the_same_name ... ok
+test harness::tests::a_relative_acp_cwd_is_refused ... ok
+test harness::tests::a_malformed_norn_unset_env_entry_is_refused ... ok
+test harness::tests::an_unknown_permission_policy_is_refused_naming_both_values ... ok
+test harness::tests::a_malformed_child_environment_entry_is_refused ... ok
+test harness::tests::a_flag_for_another_harness_is_refused_by_name ... ok
+test harness::tests::a_supplied_acp_configuration_parses_verbatim ... ok
+test harness::tests::an_uncompiled_harness_name_is_refused_naming_what_is_compiled_in ... ok
+test generate::tests::modules_reaching_sets_aside_targets_and_their_importers ... ok
+test harness::tests::each_repeatable_norn_flag_is_refused_alone_on_a_foreign_harness ... ok
+test harness::tests::an_ambient_variable_for_another_harness_is_not_refused ... ok
+test harness::tests::selection_derives_one_harness_and_refuses_an_ambiguous_choice ... ok
+test harness::tests::every_missing_acp_setting_is_reported_at_once ... ok
+test harness::tests::the_environment_supplies_acp_settings_and_blank_counts_as_missing ... ok
+test harness::tests::the_environment_selects_a_harness_and_the_flag_wins ... ok
+test harness::tests::each_permission_spelling_resolves_to_the_adapters_policy ... ok
+test harness::tests::the_norn_binary_is_optional_and_overridable ... ok
+test harness::tests::the_norn_harness_advertises_its_two_primitives ... ok
+test harness::tests::the_norn_argv_pass_through_reaches_the_child_expanded_and_in_order ... ok
+test inspect::tests::parse_mock_reads_every_explicit_kind ... ok
+test inspect::tests::parse_mock_rejects_a_missing_or_unknown_kind ... ok
+test inspect::tests::parse_mock_requires_explicit_failure_message ... ok
+test inspect::tests::parse_mock_requires_the_result_or_payload_field ... ok
+test harness::tests::the_acp_harness_advertises_exactly_cancel ... ok
+test harness::tests::each_harness_advertises_its_adapters_published_capabilities ... ok
+test harness::tests::every_compiled_harness_composes ... ok
+test inspect::tests::resolve_run_id_errors_without_a_start ... ok
+test inspect::tests::resolve_run_id_falls_back_to_latest_started ... ok
+test inspect::tests::resolve_run_id_prefers_explicit_request ... ok
+test input::tests::emits_type_derived_skeleton_for_the_named_workflow ... ok
+test inspect::tests::what_if_to_json_emits_from_seq_exactly_once ... ok
+test inspect::tests::what_if_to_json_terminal_and_diverged_carry_from_seq_once ... ok
+test input::tests::unknown_workflow_type_fails_naming_the_available_types ... ok
+test new::scaffold::tests::accepts_an_existing_empty_directory ... ok
+test new::scaffold::tests::awl_name_validation_rejects_reserved_words_with_the_rule ... ok
+test new::scaffold::tests::name_validation_accepts_snake_case ... ok
+test new::scaffold::tests::name_validation_rejects_invalid_names_with_the_rule ... ok
+test inspect::tests::inspection_json_renders_random_as_a_draw_ordinal_projection_not_per_step ... ok
+test new::scaffold::tests::render_substitutes_name_and_rejects_leftover_placeholders ... ok
+test new::scaffold::tests::refuses_worker_for_templates_without_activities ... ok
+test new::scaffold::tests::refuses_dev_pipeline_without_a_worker_and_writes_nothing ... ok
+test new::template::tests::agent_template_requires_a_worker ... ok
+test new::scaffold::tests::refuses_non_empty_target_directory ... ok
+test new::template::tests::aion_toml_carries_every_required_server_key ... ok
+test new::template::tests::dev_pipeline_declares_three_workflow_entries_and_its_gates ... ok
+test new::template::tests::agent_template_declares_its_three_steps_and_a_review_deadline_input ... ok
+test new::template::tests::embedded_awl_is_clean_and_canonical_after_name_substitution ... ok
+test new::scaffold::tests::readme_instructions_match_real_subcommands ... ok
+test new::template::tests::worker_free_templates_do_not_require_a_worker ... ok
+test awl::tests::emit_beam_bytes_equal_the_archive_entry_module ... ok
+test new::template::tests::types_first_templates_ship_marked_generated_artifacts ... ok
+test new::template::tests::every_template_manifest_is_complete ... ok
+test new::template::tests::workflow_descriptors_declare_the_template_activities ... ok
+test one_motion::tests::await_timeout_accepts_every_awl_duration_unit ... ok
+test new::template::tests::worker_manifests_exist_exactly_for_templates_with_activities ... ok
+test new::scaffold::tests::every_template_renders_without_leftover_placeholders ... ok
+test one_motion::tests::await_timeout_refuses_anything_but_one_whole_duration_literal ... ok
+test output::tests::describe_output_decodes_json_payloads_recursively ... ok
+test output::tests::invalid_payload_shape_is_left_unchanged ... ok
+test new::scaffold::tests::scaffold_writes_every_manifest_file ... ok
+test output::tests::describe_output_only_decodes_payloads_inside_history ... ok
+test output::tests::empty_payload_uses_clear_empty_indicator ... ok
+test output::tests::malformed_json_payload_falls_back_to_hex ... ok
+test output::tests::non_json_payload_falls_back_to_hex_with_content_type ... ok
+test output::tests::raw_describe_output_preserves_payload_byte_arrays ... ok
+test package::tests::a_scoped_contract_is_silent ... ok
+test package::tests::an_unscoped_contract_names_every_activity_in_sorted_order ... ok
+test payload::tests::every_accepted_status_parses_and_is_named_in_the_refusal ... ok
+test payload::tests::json_payload_round_trips_to_json_value ... ok
+test payload::tests::parse_run_id_rejects_invalid_uuid ... ok
+test payload::tests::parse_status_accepts_documented_and_serde_spellings ... ok
+test payload::tests::parse_workflow_id_rejects_invalid_uuid ... ok
+test render::tests::a_shutting_down_not_running_is_not_given_the_generic_hint ... ok
+test render::tests::each_query_wire_code_renders_a_distinct_class_detail_and_hint ... ok
+test render::tests::empty_server_detail_is_stated_not_hidden ... ok
+test render::tests::invalid_input_and_backend_render_without_a_hint ... ok
+test output::tests::invalid_utf8_json_payload_falls_back_to_hex ... ok
+test render::tests::namespace_denied_and_not_found_render_their_classes ... ok
+test render::tests::nested_context_layers_all_appear_before_the_detail ... ok
+test new::scaffold::tests::agent_scaffold_warns_it_will_be_refused_at_start ... ok
+test render::tests::non_client_errors_render_the_full_anyhow_chain ... ok
+test render::tests::structured_error_type_gets_its_own_line ... ok
+test render::tests::unavailable_renders_transport_chain_and_endpoint_hint ... ok
+test tests::awl_check_and_fmt_parse_the_file_path ... ok
+test one_motion::tests::mismatching_input_is_refused_before_an_archive_can_be_deployed ... ok
+test tests::a_server_run_without_endpoint_is_not_refused_and_clients_keep_the_default ... ok
+test tests::awl_emit_requires_a_file ... ok
+test tests::awl_commands_require_a_file_and_fmt_has_no_check_mode ... ok
+test tests::check_help_documents_the_determinism_gate ... ok
+test tests::check_parses_path_and_requires_the_deterministic_flag ... ok
+test tests::awl_emit_parses_the_file_path_and_optional_output ... ok
+test tests::deploy_help_documents_the_operator_surface ... ok
+test tests::describe_help_documents_raw_payload_flag ... ok
+test tests::describe_accepts_raw_payload_flag ... ok
+test tests::dev_help_documents_the_instant_loop_and_pinning ... ok
+test new::scaffold::tests::scaffold_dev_pipeline_ships_the_types_module_and_generated_artifacts ... ok
+test tests::inspect_help_documents_oplog_read_and_what_if ... ok
+test tests::input_parses_workflow_type_and_path ... ok
+test tests::dev_requires_gleam_path_and_rejects_zero_debounce ... ok
+test tests::inspect_parses_workflow_run_from_and_mock ... ok
+test tests::describe_accepts_optional_run_id ... ok
+test tests::dev_parses_path_gleam_path_and_optional_debounce ... ok
+test tests::deploy_subcommands_parse_with_global_token ... ok
+test tests::new_help_documents_templates_and_refusal ... ok
+test tests::normalize_endpoint_defaults_to_http_scheme ... ok
+test tests::normalize_endpoint_preserves_explicit_scheme ... ok
+test tests::package_help_documents_local_only_behaviour ... ok
+test tests::package_accepts_path_out_and_build ... ok
+test tests::reopen_help_documents_the_subcommand ... ok
+test tests::package_defaults_to_current_directory_without_build_or_out ... ok
+test tests::new_parses_name_template_and_worker ... ok
+test tests::reopen_parses_workflow_id_and_optional_run_id ... ok
+test tests::server_help_documents_the_server_surface ... ok
+test tests::start_missing_input_file_error_names_the_path ... ok
+test tests::start_malformed_input_file_json_error_names_the_flag_and_path ... ok
+test tests::server_subcommand_converts_all_overrides ... ok
+test tests::start_malformed_inline_input_json_error_names_the_flag ... ok
+test tests::server_workflow_package_flag_is_repeatable ... ok
+test tests::start_without_input_file_keeps_inline_input ... ok
+test tests::server_subcommand_maps_authoring_gleam_path ... ok
+test tests::start_rejects_input_and_input_file_together ... ok
+test tests::signal_cancel_and_query_accept_optional_run_id ... ok
+test tests::the_server_refuses_a_client_endpoint_instead_of_binding_the_default ... ok
+test tests::start_reads_input_payload_from_file ... ok
+test worker_agent::tests::a_blank_environment_value_counts_as_missing ... ok
+test tests::top_level_help_lists_the_server_subcommand ... ok
+test worker_agent::tests::a_missing_harness_setting_joins_the_connection_report ... ok
+test tests::worker_agent_help_documents_the_model_it_serves ... ok
+test tests::workflow_operations_allow_omitted_run_id ... ok
+test worker_agent::tests::a_body_carrying_action_is_excluded_from_the_surface ... ok
+test worker_agent::tests::a_partially_served_queue_is_refused_by_name ... ok
+test tests::worker_agent_parses_the_document_and_repeatable_liminal_addresses ... ok
+test worker_agent::tests::a_document_that_does_not_compile_is_refused_with_its_diagnostics ... ok
+test worker_agent::tests::an_unusable_setting_value_is_refused_by_name ... ok
+test worker_agent::tests::a_queue_the_document_does_not_declare_is_refused ... ok
+test worker_agent::tests::missing_settings_are_reported_by_name_and_all_at_once ... ok
+test worker_agent::tests::check_prints_the_surface_without_connecting ... ok
+test worker_agent::tests::a_single_worker_block_derives_the_queue_without_a_flag ... ok
+test worker_agent::tests::a_queue_of_only_bodied_actions_is_refused_by_name ... ok
+test worker_agent::tests::the_environment_supplies_settings_and_the_flag_wins ... ok
+test worker_agent::tests::the_acp_check_report_advertises_exactly_cancel ... ok
+test worker_agent::tests::the_advertised_surface_is_the_documents_and_is_not_empty ... ok
+test worker_shell::tests::composite_field_projection_is_typed_refusal ... ok
+test worker_shell::tests::a_partially_wired_queue_is_refused ... ok
+test worker_agent::tests::the_composed_config_advertises_exactly_the_documents_surface ... ok
+test worker_shell::tests::an_action_with_a_declared_body_is_refused ... ok
+test worker_shell::tests::a_queue_the_document_does_not_declare_is_refused ... ok
+test worker_shell::tests::an_undeclared_action_is_refused_by_name ... ok
+test worker_shell::tests::strict_manifest_rejects_unknown_keys_and_bad_placeholders ... ok
+test one_motion::tests::document_timeout_reaches_the_one_motion_archive_manifest ... ok
+test worker_shell::tests::the_worker_advertises_the_documents_action_surface ... ok
+test worker_agent::tests::a_multi_worker_document_refuses_and_names_every_choice ... ok
+test worker_shell::tests::emitted_manifest_passes_the_real_whole_queue_startup_check ... ok
+test one_motion::tests::known_good_corpus_fixture_compiles_and_assembles_without_a_server ... ok
+test worker_shell::tests::process_boundary_round_trips_text_and_json ... ok
+test worker_shell::tests::cancellation_reaps_the_entire_spawned_process_group ... ok
+
+test result: ok. 217 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+     Running tests/authoring_quality_e2e.rs (target/debug/deps/authoring_quality_e2e-52345f3c82b17c9d)
+
+running 11 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test determinism_gate_passes_clean_and_fails_on_injected_wall_clock ... ok
+COMPILED 5 module(s) under real `gleam build` in 1 attempt(s): aion_order_saga_activities, aion_order_saga_activity_wrappers, aion_order_saga_codecs, aion_order_saga_io, order_saga
+test generated_test_scaffold_compiles_under_gleam_build ... ok
+test input_skeleton_round_trips_through_the_workflow_input_codec ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 20.69s
+
+     Running tests/awl_emit_beam.rs (target/debug/deps/awl_emit_beam-d6d4498639c6e549)
+
+running 3 tests
+test emit_beam_binary_refuses_stdout ... ok
+test emit_beam_resolves_schema_imports_from_the_document_directory ... ok
+test emit_beam_binary_output_equals_the_archive_entry_module ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/deploy_commands.rs (target/debug/deps/deploy_commands-647cd22e1706b19d)
+
+running 9 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test deploy_subcommands_drive_a_live_server ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.49s
+
+     Running tests/dev_hot_reload_e2e.rs (target/debug/deps/dev_hot_reload_e2e-a9e901517bcc8916)
+
+running 9 tests
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test dev_hot_loads_a_new_content_hash_version_on_edit_without_restart ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.08s
+
+     Running tests/error_rendering.rs (target/debug/deps/error_rendering-aecba38d70d9298a)
+
+running 7 tests
+test signal_against_a_terminal_run_renders_workflow_terminal ... ok
+test typed_error_type_from_query_outcome_reaches_stderr ... ok
+test typed_error_type_from_status_details_reaches_stderr ... ok
+test signal_not_found_renders_class_detail_error_type_and_hint ... ok
+test not_owner_renders_a_routing_hint_not_a_connectivity_one ... ok
+test connect_failure_renders_unavailable_with_detail_and_hint ... ok
+test each_query_wire_code_renders_distinctly_end_to_end ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/generate_e2e.rs (target/debug/deps/generate_e2e-da1a86be9b6156db)
+
+running 10 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test generate_check_gates_workflow_toml_drift ... ok
+test generate_round_trips_check_gates_and_invents_no_defaults ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.41s
+
+     Running tests/generate_types_first_e2e.rs (target/debug/deps/generate_types_first_e2e-79cea366744a2b8e)
+
+running 11 tests
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test type_outside_subset_fails_loudly ... ok
+test stray_authored_schema_fails_with_the_migration_hint ... ok
+COMPILED 4 module(s) under real `gleam build` in 1 attempt(s): codegen_gate, codegen_gate_codecs, codegen_gate_io, codegen_round_trip
+test generate_compiles_round_trips_and_checks ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.62s
+
+     Running tests/lsub5b_osproc_failover_e2e.rs (target/debug/deps/lsub5b_osproc_failover_e2e-4ef5dbacc52baac5)
+
+running 4 tests
+COSTLY_PROOF_SKIPPED (PROVES NOTHING): a real liminal worker connecting to a real aion-server listener over OS processes — not established by this run. Set AION_RUN_COSTLY_TESTS=1 to run it. [crates/aion-cli/tests/lsub5b_osproc_failover_e2e.rs:126]
+test osproc_liminal_listener_accepts_real_worker_connection ... ok
+test osproc::harness_diagnostics::an_unreadable_or_empty_log_says_so_instead_of_quoting_nothing ... ok
+test osproc::harness_diagnostics::a_failure_preserves_the_work_dir_beyond_the_tempdir ... ok
+test osproc::harness_diagnostics::a_boot_death_reports_the_exit_status_the_bind_phase_and_the_log ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/lsub5b_osproc_kill9_failover_e2e.rs (target/debug/deps/lsub5b_osproc_kill9_failover_e2e-b9568477f17d597e)
+
+running 4 tests
+COSTLY_PROOF_SKIPPED (PROVES NOTHING): a kill -9 of a node in a 3-node cluster failing over and completing the work EXACTLY ONCE — not established by this run. Set AION_RUN_COSTLY_TESTS=1 to run it. [crates/aion-cli/tests/lsub5b_osproc_kill9_failover_e2e.rs:168]
+test osproc_kill9_liminal_failover_completes_exactly_once ... ok
+test osproc::harness_diagnostics::an_unreadable_or_empty_log_says_so_instead_of_quoting_nothing ... ok
+test osproc::harness_diagnostics::a_failure_preserves_the_work_dir_beyond_the_tempdir ... ok
+test osproc::harness_diagnostics::a_boot_death_reports_the_exit_status_the_bind_phase_and_the_log ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/new_agent_e2e.rs (target/debug/deps/new_agent_e2e-d891e4fac9674665)
+
+running 9 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): agent_demo, agent_demo_codecs, agent_demo_io
+test scaffolded_agent_deploys_but_start_is_refused_unscoped ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.58s
+
+     Running tests/new_awl_e2e.rs (target/debug/deps/new_awl_e2e-50e95be544de94a0)
+
+running 1 test
+test default_awl_scaffold_deploys_and_runs_to_completion ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.09s
+
+     Running tests/new_hello_world_e2e.rs (target/debug/deps/new_hello_world_e2e-198b021ea22812e6)
+
+running 9 tests
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): hello_demo, hello_demo_codecs, hello_demo_io
+test scaffolded_hello_world_completes_against_the_generated_config ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.10s
+
+     Running tests/new_scaffold_build.rs (target/debug/deps/new_scaffold_build-2bfa062d264cb37f)
+
+running 20 tests
+COSTLY_PROOF_SKIPPED (PROVES NOTHING): the dev-pipeline template scaffolding, building, packaging and passing its own tests (needs hex.pm) — not established by this run. Set AION_RUN_COSTLY_TESTS=1 to run it. [crates/aion-cli/tests/new_scaffold_build.rs:246]
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test dev_pipeline_template_builds_packages_and_passes_its_tests ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test new_refuses_worker_for_templates_without_activities ... ok
+test new_refuses_dev_pipeline_without_a_worker ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+test new_rejects_invalid_names_with_the_rule ... ok
+test new_refuses_non_empty_directory ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): approval_build_gate
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): hello_build_gate, hello_build_gate_codecs, hello_build_gate_io
+test approval_flow_template_builds_and_packages ... ok
+test hello_world_template_builds_and_packages ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): saga_build_gate
+test saga_template_builds_and_packages ... ok
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): hello_gen_gate, hello_gen_gate_codecs, hello_gen_gate_io
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): agent_gen_gate, agent_gen_gate_codecs, agent_gen_gate_io
+test hello_world_scaffold_generate_round_trips_byte_identically ... ok
+test agent_scaffold_generate_round_trips_byte_identically ... ok
+test saga_worker_crate_passes_cargo_check ... ok
+test dev_pipeline_worker_crate_is_formatted_and_passes_cargo_check ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 39.57s
+
+     Running tests/one_motion_awl.rs (target/debug/deps/one_motion_awl-6ead50bebdd9fdac)
+
+running 2 tests
+test invalid_awl_deploy_exits_nonzero_with_the_compiler_span_diagnostic ... ok
+test mismatching_run_input_prints_schema_without_attempting_deploy ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/one_motion_live_e2e.rs (target/debug/deps/one_motion_live_e2e-652814e4f471d7cf)
+
+running 5 tests
+test the_run_timeout_flag_has_no_default ... ok
+test one_motion_run_reports_a_failure_outcome_with_its_details_and_exits_nonzero ... ok
+test one_motion_run_compiles_deploys_starts_awaits_and_reports_the_result ... ok
+test an_operator_timeout_stops_the_wait_and_leaves_the_run_running ... ok
+test a_declared_document_timeout_terminates_the_one_motion_await ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.47s
+
+     Running tests/package_command.rs (target/debug/deps/package_command-2c04dd95fa3e44e2)
+
+running 4 tests
+test package_build_failure_is_surfaced_before_packaging ... ok
+test package_without_descriptor_fails_with_error_chain_and_no_dial ... ok
+test package_hello_world_succeeds_offline_with_result_document ... ok
+test package_out_override_with_dotdot_is_exempt_from_confinement ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/parked_timer_osproc_kill9_failover_e2e.rs (target/debug/deps/parked_timer_osproc_kill9_failover_e2e-23c585a014907611)
+
+running 9 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... COSTLY_PROOF_SKIPPED (PROVES NOTHING): a workflow parked on a timer surviving a hard kill, resuming, and completing EXACTLY ONCE — not established by this run. Set AION_RUN_COSTLY_TESTS=1 to run it. [crates/aion-cli/tests/parked_timer_osproc_kill9_failover_e2e.rs:564]
+ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test osproc_kill9_parked_timer_resumes_and_completes_exactly_once ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/server_command.rs (target/debug/deps/server_command-cfe850be6f4bd13b)
+
+running 1 test
+test server_subcommand_boots_serves_and_drains_cleanly ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+
+     Running tests/stacked_dev_live_e2e.rs (target/debug/deps/stacked_dev_live_e2e-603f1204f6113210)
+
+running 1 test
+COSTLY_PROOF_SKIPPED (PROVES NOTHING): a stacked-dev change landing through a REAL worker process and returning a review signal — not established by this run. Set AION_RUN_COSTLY_TESTS=1 to run it. [crates/aion-cli/tests/stacked_dev_live_e2e.rs:484]
+test stacked_dev_lands_through_the_real_worker_and_review_signal ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+TEST_R2_EXIT=0

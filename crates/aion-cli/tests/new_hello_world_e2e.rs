@@ -177,7 +177,11 @@ fn scaffolded_hello_world_completes_against_the_generated_config() -> Result<(),
         return Ok(());
     }
     let temp_dir = tempfile::tempdir()?;
-    let (project, _report) = common::scaffold_project(temp_dir.path(), "hello_demo", &[])?;
+    let (project, _report) = common::scaffold_project(
+        temp_dir.path(),
+        "hello_demo",
+        &["--template", "hello-world"],
+    )?;
     common::patch_aion_flow_to_workspace(&project)?;
     common::gleam_build(&project)?;
     common::package_project(&project, "hello_demo")?;
