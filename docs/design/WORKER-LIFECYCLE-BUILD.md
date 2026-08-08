@@ -1,6 +1,9 @@
 # Worker Lifecycle Through the Server — Build Design
 
-**Status: design pass for the operator's ruling — not yet build-approved.**
+**Status: build-approved 2026-08-08 — the phase plan and artifact posture were
+ruled in `WORKER-LIFECYCLE-DECISION-BRIEF-2026-08-08.md` (see its Ruling block
+for the approvals, amendments, and riders). That ruling is the paper of record
+for what changed; this document's units are read through it.**
 Authored 2026-07-19 from a full-repo ground survey (evidence anchors
 throughout are file:line at aion main `ca7825e6`). Prior art:
 `WORKER-AUTHORING-STORY.md` (ruled direction: lifecycle through the server,

@@ -191,3 +191,42 @@ until then anyway); it does not couple to the lifecycle build.
 
 Silence-default: none — this brief waits for Waffles' review before any build
 unit is dispatched, per the standing rule that #27 is design-first.
+
+---
+
+## Ruling — Waffles the Terrible, 2026-08-08 08:34Z (recorded at this seat)
+
+All five decisions **APPROVED**. Waffles re-verified the four load-bearing tree
+facts at his own hand before ruling: the containment core (`process_group(0)`
+at `process.rs:159`, the killpg TERM → grace → KILL → signal-0 ladder, the reap
+test — which lives in **aion-cli's** `worker_shell.rs`, not aion-worker; the
+location is immaterial, the test is real), zero `process_group` occurrences in
+all three harness adapters, the drain/stop routes at `router.rs:272-273`, and
+the `=1.5.0` pin speaking V1. Riders of record, by the brief's numbering:
+
+1. **Artifact posture — approved, one rider:** a `builtin` deployment record
+   must capture the identity of the binary it names — version and content hash
+   at deploy time **and at each spawn** — so a restart across an upgrade is a
+   visible, measurable fact and never a silent swap. The estate already carries
+   the "serving processes run images nobody can reproduce" defect; this record
+   must not breed another instance. If Tom meant downloadable worker bundles,
+   the `.aion` kind covers that additively — no rework either way.
+2. **Phase plan — approved with the three tree-fact amendments, one rider on
+   amendment (i):** the unread `timeout` gets its own red-first proof. The
+   existing test pins *cancellation* as a trigger; timeout is a *different
+   trigger* into the same core. A test that fires the timeout and confirms the
+   group empty — red before wired, green after.
+3. **Reconciler placement — approved.** "Supervision that depends on the thing
+   it supervises inverts R8's spirit" is the argument of record.
+4. **ACP v2 — approved** as its own size-S lane after the #139 cut. One
+   instruction: Tom asked the question directly, so he gets the answer directly
+   — a Tom-facing line (adapter is v1, upgrade small and mechanical, scheduled
+   behind the freeze), never a pointer into a design doc.
+5. **Sequencing — approved.** W-0 first; stop finished inside W-4. Rider on
+   that finish: **stop's acceptance gate is OS-level** — the process group
+   confirmed empty by signal-0, never registry state standing in for it. The
+   gate must be one the failure mode (registry says stopped, process lives)
+   structurally cannot pass.
+
+**Effect:** WORKER-LIFECYCLE-BUILD's "not yet build-approved" status lifts.
+W-0 is dispatchable at this seat from the commit that records this ruling.
