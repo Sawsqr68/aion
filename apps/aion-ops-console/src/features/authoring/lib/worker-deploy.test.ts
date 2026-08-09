@@ -9,6 +9,7 @@ import {
   type WorkerDeployFormFields,
   WorkerDeployRefusedError,
   workerQueueFromSource,
+  workflowTypeFromSource,
 } from './worker-deploy';
 
 const WORKER_DOC =
@@ -38,6 +39,17 @@ describe('worker document detection', () => {
   // Catches: reading `worker` as a prefix — `workers x` is not a declaration.
   test('the declaration is the whole first token, not a prefix', () => {
     expect(isWorkerDocument('workers briefs\n')).toBe(false);
+  });
+
+  // Catches: the run panel seeded with a queue name, a worker name, or a
+  // phantom type from a document that declares no workflow at all.
+  test('a workflow document names its workflow type; nothing else does', () => {
+    expect(workflowTypeFromSource(WORKFLOW_DOC)).toBe('dev_brief');
+    expect(workflowTypeFromSource(WORKER_DOC)).toBeNull();
+    expect(workflowTypeFromSource('')).toBeNull();
+    expect(workflowTypeFromSource('//! prose only\n')).toBeNull();
+    expect(workflowTypeFromSource('workflow\n')).toBeNull();
+    expect(workflowTypeFromSource('workflows dev_brief\n')).toBeNull();
   });
 });
 

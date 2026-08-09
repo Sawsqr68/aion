@@ -3,6 +3,20 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## 0.13.2 — 2026-08-10
+
+- **Deploy and Run, from the editor.** The authoring editor's header gains two
+  separate buttons. **Deploy** saves the buffer you are looking at and ships
+  exactly that revision — the outcome (or the server's refusal, verbatim) stays
+  on screen in its own line until the next deploy, and the button explains
+  itself when the document isn't ready. **Run** opens a panel beside the editor
+  hosting the schema-driven start form, seeded with the document's workflow
+  type, with a line reporting whether anything currently serves the task queue.
+  Deploying never starts a run; running never deploys; you never leave the
+  console.
+- The run panel keeps its own per-document form draft, so it never clobbers a
+  half-filled form on the Actions page — and vice versa.
+
 ## 0.13.1 — 2026-08-10
 
 - **The console tells you what's new.** A "What's new" button in the console

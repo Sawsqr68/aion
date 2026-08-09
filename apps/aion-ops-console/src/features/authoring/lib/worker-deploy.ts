@@ -34,6 +34,19 @@ export function workerQueueFromSource(source: string): string | null {
   return declaration[1] ?? null;
 }
 
+/**
+ * The workflow type a WORKFLOW document declares (`workflow <name>`), or null
+ * when it is not one. The same first-declaration reading as the worker pair
+ * above — one truth for "what does this document open with". The run panel
+ * uses it to seed the workflow-type field when nothing was deployed this
+ * session; the deployed record's `workflow_type` is this same name.
+ */
+export function workflowTypeFromSource(source: string): string | null {
+  const declaration = firstDeclaration(source);
+  if (declaration === null || declaration[0] !== 'workflow') return null;
+  return declaration[1] ?? null;
+}
+
 function firstDeclaration(source: string): string[] | null {
   for (const line of source.split('\n')) {
     const trimmed = line.trim();

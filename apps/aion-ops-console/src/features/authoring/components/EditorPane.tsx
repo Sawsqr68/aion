@@ -1,40 +1,35 @@
-import {
-  AlignLeft,
-  Check,
-  Columns2,
-  FileText,
-  HardHat,
-  LayoutDashboard,
-  LoaderCircle,
-  Rocket,
-  Save,
-  Workflow,
-} from 'lucide-react';
+import { LoaderCircle } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
 import { StatusDot } from '@/components/kit';
-import { Badge } from '@/components/ui';
-import { Button } from '@/components/ui/button';
+import { useCapabilities } from '@/features/capabilities';
+import { useNamespace } from '@/features/namespace';
 import { ACTION_IDS } from '@/lib/keybindings/actions';
 import { useAction } from '@/lib/keybindings/context';
 import { cn } from '@/lib/utils';
 
 import { createCodeMirrorEditor } from '../editor-seam/codemirror';
 import type { AuthoringEditor, HighlightSpan } from '../editor-seam/types';
+import { nextDeployOutcome, saveThenDeploy } from '../lib/deploy-action';
+import { deployEligibility } from '../lib/deploy-eligibility';
 import { mapDiagnostics, minimalTextDelta, statusForCheck } from '../lib/diagnostics';
 import {
   type AwlDocument,
   authoringFacade,
   type CheckResult,
+  type DeploymentRecord,
   type EditResult,
   type GestureOperation,
 } from '../lib/facade';
 import { applyGestureThroughSeam } from '../lib/gestures';
 import { byteOffsetToUtf16, stepAtPosition } from '../lib/projection';
 import type { SemanticIndex } from '../lib/projection-types';
+import { runSeedWorkflowType } from '../lib/run-seed';
 import { isWorkerDocument } from '../lib/worker-deploy';
+import { DeployOutcomeLine } from './DeployOutcomeLine';
 import { DeployWorkerPanel } from './DeployWorkerPanel';
+import { EditorHeader, type EditorWorking } from './EditorHeader';
 import { type AuthoringViewMode, ProjectionPane } from './ProjectionPane';
 import { ShipRunPanel } from './ShipRunPanel';
 import { StudioPane } from './StudioPane';
@@ -66,7 +61,16 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
   const [selectedStep, setSelectedStep] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('text');
   const [message, setMessage] = useState<string | null>(null);
-  const [working, setWorking] = useState<'format' | 'save' | null>(null);
+  const [working, setWorking] = useState<EditorWorking>(null);
+  // This session's last landed deploy of this document: seeds the run panel's
+  // workflow type and names the queue its availability line asks about.
+  const [lastDeployment, setLastDeployment] = useState<DeploymentRecord | null>(null);
+  // The deploy outcome has its OWN state, apart from the transient `message`:
+  // every state change routes through the pure transition, including the
+  // checker's completions — which are defined there to change nothing.
+  const [deployOutcome, dispatchDeployOutcome] = useReducer(nextDeployOutcome, null);
+  const { deployGranted } = useCapabilities();
+  const { selectedNamespace } = useNamespace();
 
   useEffect(() => {
     const host = hostRef.current;
@@ -137,6 +141,9 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
           }
           editorRef.current?.setDecorations(mapDiagnostics(source, result.diagnostics));
           setMessage(null);
+          // Explicitly through the outcome transition — a completed check
+          // must NOT clear a deploy refusal the operator is editing to fix.
+          dispatchDeployOutcome({ event: 'check-completed' });
         })
         .catch((error: unknown) => {
           if (active) setMessage(error instanceof Error ? error.message : 'Check failed');
@@ -159,6 +166,34 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
       setMessage('Saved');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Save failed');
+    } finally {
+      setWorking(null);
+    }
+  }
+
+  // Deploy is save-then-deploy of the operator's VISIBLE buffer — the server
+  // verifies the content hash against the saved document, so shipping without
+  // saving first could only ever refuse or ship stale bytes. It never starts
+  // a run (Deploy and Run are separate acts, by operator ruling).
+  async function deploy() {
+    if (working !== null) return;
+    setWorking('deploy');
+    dispatchDeployOutcome({ event: 'deploy-started' });
+    try {
+      const result = await saveThenDeploy(authoringFacade, path, sourceRef.current, (saved) => {
+        savedSourceRef.current = saved;
+        // Compare against the LIVE buffer: keystrokes typed while the save
+        // was in flight keep the Modified badge they earned.
+        setDirty(sourceRef.current !== saved);
+      });
+      setLastDeployment(result.deployment);
+      dispatchDeployOutcome({ event: 'deploy-landed', deployment: result.deployment });
+    } catch (error) {
+      // The server's refusal reaches the outcome line verbatim.
+      dispatchDeployOutcome({
+        event: 'deploy-refused',
+        text: error instanceof Error ? error.message : 'Deploy failed',
+      });
     } finally {
       setWorking(null);
     }
@@ -214,11 +249,20 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
   return (
     <section className="flex min-w-0 flex-1 flex-col" aria-label={`Editing ${path}`}>
       <EditorHeader
+        deploy={deployEligibility({ check, deployGranted, workerDocument })}
         dirty={dirty}
+        onDeploy={() => void deploy()}
         onFormat={() => void format()}
         onSave={() => void save()}
         onSelectViewMode={setViewMode}
         path={path}
+        run={{
+          deployGranted,
+          initialWorkflowType: runSeedWorkflowType(lastDeployment, source),
+          lastDeployment,
+          namespace: selectedNamespace,
+          path,
+        }}
         viewMode={viewMode}
         workerDocument={workerDocument}
         working={working}
@@ -264,100 +308,9 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
             <ShipRunPanel buffer={source} documents={documents} path={path} />
           ))}
       </div>
+      <DeployOutcomeLine outcome={deployOutcome} />
       <EditorStatusBar check={check} message={message} />
     </section>
-  );
-}
-
-type WorkingAction = 'format' | 'save' | null;
-
-/** Document identity, the view-mode switch, and the two document actions. */
-function EditorHeader({
-  dirty,
-  onFormat,
-  onSave,
-  onSelectViewMode,
-  path,
-  viewMode,
-  workerDocument,
-  working,
-}: {
-  dirty: boolean;
-  onFormat: () => void;
-  onSave: () => void;
-  onSelectViewMode: (mode: ViewMode) => void;
-  path: string;
-  viewMode: ViewMode;
-  workerDocument: boolean;
-  working: WorkingAction;
-}) {
-  const documentName = path.split('/').at(-1) ?? path;
-  return (
-    <header className="flex flex-wrap items-center justify-between gap-3 border-border border-b bg-surface-base px-4 py-3">
-      <div className="flex min-w-0 items-center gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h2 className="truncate font-semibold text-foreground text-sm">{documentName}</h2>
-            <Badge className="shrink-0" variant={dirty ? 'secondary' : 'outline'}>
-              {dirty ? 'Modified' : 'Saved'}
-            </Badge>
-          </div>
-          <p className="mt-0.5 truncate font-mono text-muted-foreground text-[0.6875rem]">{path}</p>
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <fieldset
-          className="flex rounded-lg border border-border bg-surface-elevated p-0.5"
-          aria-label="Authoring view"
-        >
-          <ViewButton
-            icon={<FileText className="size-3.5" />}
-            label="Text"
-            mode="text"
-            selected={viewMode}
-            onSelect={onSelectViewMode}
-          />
-          <ViewButton
-            icon={<Workflow className="size-3.5" />}
-            label="Canvas"
-            mode="canvas"
-            selected={viewMode}
-            onSelect={onSelectViewMode}
-          />
-          <ViewButton
-            icon={<Columns2 className="size-3.5" />}
-            label="Split"
-            mode="split"
-            selected={viewMode}
-            onSelect={onSelectViewMode}
-          />
-          <ViewButton
-            icon={<LayoutDashboard className="size-3.5" />}
-            label="Studio"
-            mode="studio"
-            selected={viewMode}
-            onSelect={onSelectViewMode}
-          />
-          <ViewButton
-            icon={
-              workerDocument ? <HardHat className="size-3.5" /> : <Rocket className="size-3.5" />
-            }
-            label={workerDocument ? 'Deploy worker' : 'Ship & Run'}
-            mode="run"
-            selected={viewMode}
-            onSelect={onSelectViewMode}
-          />
-        </fieldset>
-        <Button disabled={working !== null} onClick={onFormat} size="sm" variant="outline">
-          <ActionIcon action="format" dirty={dirty} working={working} />
-          {working === 'format' ? 'Formatting…' : 'Format'}
-        </Button>
-        <Button disabled={!dirty || working !== null} onClick={onSave} size="sm">
-          <ActionIcon action="save" dirty={dirty} working={working} />
-          {working === 'save' ? 'Saving…' : 'Save'}
-        </Button>
-      </div>
-    </header>
   );
 }
 
@@ -395,55 +348,6 @@ function EditorStatusBar({
       </AnimatePresence>
     </div>
   );
-}
-
-function ViewButton({
-  icon,
-  label,
-  mode,
-  selected,
-  onSelect,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  mode: ViewMode;
-  selected: ViewMode;
-  onSelect: (mode: ViewMode) => void;
-}) {
-  return (
-    <button
-      aria-label={`${label} view`}
-      aria-pressed={selected === mode}
-      className={cn(
-        'flex items-center gap-1.5 rounded-md px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-accent-primary',
-        selected === mode
-          ? 'bg-accent text-foreground'
-          : 'text-muted-foreground hover:text-foreground'
-      )}
-      onClick={() => onSelect(mode)}
-      type="button"
-    >
-      {icon}
-      <span className="hidden lg:inline">{label}</span>
-    </button>
-  );
-}
-
-function ActionIcon({
-  action,
-  dirty,
-  working,
-}: {
-  action: Exclude<WorkingAction, null>;
-  dirty: boolean;
-  working: WorkingAction;
-}) {
-  if (working === action) {
-    return <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />;
-  }
-  if (action === 'format') return <AlignLeft aria-hidden="true" className="size-3.5" />;
-  if (dirty) return <Save aria-hidden="true" className="size-3.5" />;
-  return <Check aria-hidden="true" className="size-3.5" />;
 }
 
 function CheckStatusIcon({

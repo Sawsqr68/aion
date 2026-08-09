@@ -17,7 +17,7 @@ import {
   type JsonObject,
   missingRequiredPaths,
 } from '../lib/schemaForm';
-import { startWorkflowDraftStore } from '../lib/startWorkflowDraft';
+import { startWorkflowDraftStoreFor } from '../lib/startWorkflowDraft';
 import { StartInputEditor, type StartInputMode, serializeInput } from './StartInputEditor';
 
 export type StartWorkflowFormProps = {
@@ -35,6 +35,18 @@ export type StartWorkflowFormProps = {
   deployGranted?: boolean;
   /** Injected deployed-read client for tests. */
   schemaClient?: StartSchemaClient | undefined;
+  /**
+   * Which draft store holds this form's field state. Absent is the Actions
+   * page's shared draft (key unchanged — zero change for existing callers);
+   * an embedded instance (the authoring run panel) names its own scope so
+   * the two surfaces cannot clobber each other's half-filled forms.
+   *
+   * MUST be constant for the life of a mounted form; callers change it only
+   * across remounts. `useDraft` seeds its local state from the store once at
+   * mount, so a scope swapped mid-mount would WRITE through to the new store
+   * while still SHOWING the old store's draft.
+   */
+  draftScope?: string | undefined;
 };
 
 const FIELD_CLASS =
@@ -57,11 +69,14 @@ export function StartWorkflowForm({
   initialWorkflowType,
   deployGranted = false,
   schemaClient,
+  draftScope,
 }: StartWorkflowFormProps) {
   const ids = useFieldIds();
   // Field state lives in a sessionStorage-backed draft store (src/lib/state):
-  // navigating away and back restores a half-filled form.
-  const { draft, updateDraft, clearDraft } = useDraft(startWorkflowDraftStore);
+  // navigating away and back restores a half-filled form. The scope picks
+  // WHICH store, so embedded instances keep their own draft.
+  const draftStore = useMemo(() => startWorkflowDraftStoreFor(draftScope), [draftScope]);
+  const { draft, updateDraft, clearDraft } = useDraft(draftStore);
   const [inputError, setInputError] = useState<string | null>(null);
   // Snapshot of the namespace a submit targeted: the draft clears on a
   // confirmed start, but the success panel must keep reporting the namespace
