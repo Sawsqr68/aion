@@ -134,7 +134,7 @@ The `amount` field is an integer amount in cents. The workflow dispatches forwar
 aion package examples/order-saga
 ```
 
-This reads the example's [`workflow.toml`](workflow.toml) and the BEAM files produced by `gleam build` (pass `--build` to compile and package in one step; see [`docs/packaging.md`](../../docs/packaging.md) for the full reference), and builds a manifest with:
+This reads the example's [`workflow.toml`](workflow.toml) and the BEAM files produced by `gleam build` (pass `--build` to compile and package in one step; see [`docs/authoring/packaging.md`](../../docs/authoring/packaging.md) for the full reference), and builds a manifest with:
 
 - entry module: `order_saga`
 - entry function: `run`

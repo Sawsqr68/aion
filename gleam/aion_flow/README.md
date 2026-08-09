@@ -60,7 +60,7 @@ pub fn run(raw_input: Dynamic) -> Result(String, String) {
 }
 ```
 
-`Ok` encodes with the definition's output codec and typed failure with its error codec, so an awaiting parent decodes both with the same codecs it already holds. An undecodable input records the fixed JSON envelope `{"aion_error":"input_decode","reason":...,"path":[...]}` as the failure payload. Keep the typed body (`execute`) separate so the harness can test it directly. The repository's [workflow authoring guide](https://github.com/ablative-io/aion/blob/main/docs/guides/workflows.md) covers the contract and the determinism rules in full.
+`Ok` encodes with the definition's output codec and typed failure with its error codec, so an awaiting parent decodes both with the same codecs it already holds. An undecodable input records the fixed JSON envelope `{"aion_error":"input_decode","reason":...,"path":[...]}` as the failure payload. Keep the typed body (`execute`) separate so the harness can test it directly. The repository's [workflow authoring guide](https://github.com/ablative-io/aion/blob/main/docs/authoring/workflows.md) covers the contract and the determinism rules in full.
 
 ## Declare and call activities
 

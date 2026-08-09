@@ -58,7 +58,7 @@ cargo run --manifest-path worker/Cargo.toml
 ```
 
 Otherwise write one against a worker SDK — see the
-[activities and workers guide](https://github.com/ablative-io/aion/blob/main/docs/guides/activities-and-workers.md).
+[activities and workers guide](https://github.com/ablative-io/aion/blob/main/docs/workers/activities-and-workers.md).
 The workflow dispatches `scout`, `act`, and `verify` on the `default` task
 queue.
 
@@ -109,5 +109,5 @@ step outputs, more review metadata:
 - Replace the `scout`/`act`/`verify` handler bodies in `worker/src/main.rs`
   with your own agent driver — an LLM call, a tool loop, a `norn` agent —
   keeping the `StepInput` -> `StepOutput` contract.
-- [Workflow authoring guide](https://github.com/ablative-io/aion/blob/main/docs/guides/workflows.md)
+- [Workflow authoring guide](https://github.com/ablative-io/aion/blob/main/docs/authoring/workflows.md)
   — child workflows, timers, determinism rules.

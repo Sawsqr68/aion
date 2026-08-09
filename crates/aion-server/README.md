@@ -15,7 +15,7 @@ aion server --config aion.toml
 
 Configuration (required keys, defaults, `AION_*` environment overrides) is
 documented in the repository's
-[operations guide](https://github.com/ablative-io/aion/blob/main/docs/guides/operations.md).
+[operations guide](https://github.com/ablative-io/aion/blob/main/docs/operations/operations.md).
 
 ## Install (embedders)
 

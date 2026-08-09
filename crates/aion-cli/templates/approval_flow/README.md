@@ -63,5 +63,5 @@ aion describe <workflow-id> --pretty
 - Add worker-served activities to act on the decision:
   `aion new <name> --template saga` shows activities, workflow-driven
   retries, and saga compensation.
-- [Workflow authoring guide](https://github.com/ablative-io/aion/blob/main/docs/guides/workflows.md)
+- [Workflow authoring guide](https://github.com/ablative-io/aion/blob/main/docs/authoring/workflows.md)
   — timers, queries, signals, child workflows, determinism rules.

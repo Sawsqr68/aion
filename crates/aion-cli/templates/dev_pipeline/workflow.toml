@@ -1,5 +1,5 @@
 # Workflow packaging descriptor consumed by `aion package`.
-# Reference: https://github.com/ablative-io/aion/blob/main/docs/packaging.md
+# Reference: https://github.com/ablative-io/aion/blob/main/docs/authoring/packaging.md
 #
 # Three entries — the dev-pipeline family: the `{{name}}` parent plus
 # the `{{name}}_dev` and `{{name}}_gate` children, each

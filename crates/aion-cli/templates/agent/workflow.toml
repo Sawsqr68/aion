@@ -1,5 +1,5 @@
 # Workflow packaging descriptor consumed by `aion package`.
-# Reference: https://github.com/ablative-io/aion/blob/main/docs/packaging.md
+# Reference: https://github.com/ablative-io/aion/blob/main/docs/authoring/packaging.md
 
 [[workflow]]
 entry_module = "{{name}}"

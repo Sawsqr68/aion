@@ -72,7 +72,7 @@ Install the CLI once from the checkout (the crate is aion-cli; the binary is `ai
 cargo install --path crates/aion-cli --locked
 ```
 
-Package the example with `aion package examples/subscription` (after `gleam build`, or pass `--build`; see [`docs/packaging.md`](../../docs/packaging.md)), which reads the example's [`workflow.toml`](workflow.toml) and writes `examples/subscription/subscription.aion`. Once the archive is loaded by the server and a worker exposing the `bill_subscriber` activity is registered, start the `subscription` workflow with the JSON input above using the same CLI flow as the other examples.
+Package the example with `aion package examples/subscription` (after `gleam build`, or pass `--build`; see [`docs/authoring/packaging.md`](../../docs/authoring/packaging.md)), which reads the example's [`workflow.toml`](workflow.toml) and writes `examples/subscription/subscription.aion`. Once the archive is loaded by the server and a worker exposing the `bill_subscriber` activity is registered, start the `subscription` workflow with the JSON input above using the same CLI flow as the other examples.
 
 Send an upgrade signal during a billing period:
 

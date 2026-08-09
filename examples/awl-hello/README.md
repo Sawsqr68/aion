@@ -65,7 +65,7 @@ require it). The authoritative queue string lives twice and MUST agree:
    awl_hello.awl` canonicalises it in place.
 
 2. **Start a server** with its `[deploy]` surface enabled (see
-   [`docs/guides/operations.md`](../../docs/guides/operations.md)).
+   [`docs/operations/operations.md`](../../docs/operations/operations.md)).
 
 3. **Start the worker**, which serves `greet` and `shout` on the `awl_hello`
    queue:

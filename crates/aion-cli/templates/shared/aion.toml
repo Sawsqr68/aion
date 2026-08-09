@@ -1,5 +1,5 @@
 # Development server configuration for `aion server --config aion.toml`.
-# Reference: https://github.com/ablative-io/aion/blob/main/docs/guides/operations.md
+# Reference: https://github.com/ablative-io/aion/blob/main/docs/operations/operations.md
 #
 # Every key can also be set by environment variable as `AION_<SECTION>_<KEY>`
 # (for example `AION_RUNTIME_QUERY_TIMEOUT_MS=10000`).

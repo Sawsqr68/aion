@@ -85,6 +85,6 @@ Trait bounds to know before fighting the compiler:
 
 Every `WorkerConfig` field shown is required — there are no hidden defaults. Handlers fail with an explicit classification — `ActivityFailure::retryable(message)` or `ActivityFailure::terminal(message)` (attach structured detail with `.with_detail(payload)`). The worker never retries on its own; the classification rides back to the workflow, which drives retries. `ActivityContext` exposes `heartbeat(detail)`, `attempt()`, and cooperative cancellation via `is_cancelled()`.
 
-The full worker story (failure contract, retry semantics, protocol) lives in the repository's [activities and workers guide](https://github.com/ablative-io/aion/blob/main/docs/guides/activities-and-workers.md).
+The full worker story (failure contract, retry semantics, protocol) lives in the repository's [activities and workers guide](https://github.com/ablative-io/aion/blob/main/docs/workers/activities-and-workers.md).
 
 See the main Aion repository at <https://github.com/ablative-io/aion>.

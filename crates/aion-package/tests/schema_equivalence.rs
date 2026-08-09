@@ -150,7 +150,7 @@ const AUTHORED: &[(&str, &str)] = &[
 ];
 
 /// Annotation and type-inexpressible validation keywords excluded from the
-/// semantic comparison, by design (documented in docs/guides/codegen.md).
+/// semantic comparison, by design (documented in docs/authoring/codegen.md).
 const EXCLUDED_KEYS: &[&str] = &["$schema", "$comment", "minLength", "minimum", "minItems"];
 
 fn repo_root() -> PathBuf {
