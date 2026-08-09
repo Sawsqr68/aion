@@ -30,7 +30,7 @@
 
 use aion_core::{
     ActivityEvent, ActivityEventKind, ActivityId, InterventionCapabilities, InterventionCommand,
-    InterventionKind, InterventionOutcome, MessageRole, WorkflowId,
+    InterventionKind, InterventionOutcome, MessageRole, RunId, WorkflowId,
 };
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -39,12 +39,25 @@ use std::sync::{Arc, Mutex};
 use super::registry::{ConnectedWorkerRegistry, WorkerHandle, WorkerId};
 use crate::error::ServerError;
 
-/// The `(workflow, activity, attempt)` key one running agent session is addressed
-/// by — the same identity the worker back-index and the whole design key on.
+/// The `(workflow, run, activity, attempt)` key one running agent session is
+/// addressed by — the same identity the worker back-index and the whole design
+/// key on.
+///
+/// # The run axis is routing, not decoration
+///
+/// A continue-as-new chain reuses one [`WorkflowId`] across generations while
+/// activity ordinals restart at `0` and attempts at `1` in each new run, so a
+/// `(workflow, activity, attempt)` key genuinely collides across generations.
+/// Resolving an owner through a colliding key would deliver an operator's steer,
+/// pause, or cancel to a DIFFERENT generation than the one they were looking at
+/// — a control-plane fault, not a display glitch. The worker's own `SessionKey`
+/// carries the same four axes so both ends agree on what "this attempt" means.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct AttemptKey {
     /// The workflow the target activity belongs to.
     pub workflow_id: WorkflowId,
+    /// The concrete run of that workflow the target attempt belongs to.
+    pub run_id: RunId,
     /// The target activity within the workflow.
     pub activity_id: ActivityId,
     /// The target attempt. A command to any other attempt is a stale-target no-op.
@@ -52,11 +65,17 @@ pub struct AttemptKey {
 }
 
 impl AttemptKey {
-    /// Build an attempt key from its three components.
+    /// Build an attempt key from its four components.
     #[must_use]
-    pub const fn new(workflow_id: WorkflowId, activity_id: ActivityId, attempt: u32) -> Self {
+    pub const fn new(
+        workflow_id: WorkflowId,
+        run_id: RunId,
+        activity_id: ActivityId,
+        attempt: u32,
+    ) -> Self {
         Self {
             workflow_id,
+            run_id,
             activity_id,
             attempt,
         }
@@ -67,6 +86,7 @@ impl AttemptKey {
     pub fn of_command(command: &InterventionCommand) -> Self {
         Self::new(
             command.workflow_id.clone(),
+            command.run_id.clone(),
             command.activity_id.clone(),
             command.attempt,
         )
@@ -296,6 +316,7 @@ impl InterventionRouter {
         };
         let event = ActivityEvent {
             workflow_id: key.workflow_id.clone(),
+            run_id: key.run_id.clone(),
             activity_id: key.activity_id.clone(),
             attempt: key.attempt,
             agent_id: uuid::Uuid::nil(),
@@ -313,6 +334,7 @@ impl InterventionRouter {
             tracing::warn!(
                 %error,
                 workflow_id = %key.workflow_id,
+                run_id = %key.run_id,
                 activity_id = %key.activity_id,
                 attempt = key.attempt,
                 "applied InjectMessage could not be retained in the transcript"
@@ -370,8 +392,8 @@ impl InterventionRouter {
 /// The stale-target no-op ack for a target with no live owner.
 fn stale(key: &AttemptKey) -> InterventionOutcome {
     InterventionOutcome::stale_target(format!(
-        "no live owner for attempt {} of activity {} in workflow {}",
-        key.attempt, key.activity_id, key.workflow_id
+        "no live owner for attempt {} of activity {} in run {} of workflow {}",
+        key.attempt, key.activity_id, key.run_id, key.workflow_id
     ))
 }
 

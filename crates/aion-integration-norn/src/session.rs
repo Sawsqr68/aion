@@ -289,7 +289,7 @@ mod tests {
     use super::*;
     use aion_core::{
         ActivityEventKind, ActivityId, InjectPriority, InterventionCapabilities, InterventionKind,
-        InterventionPrimitive, WorkflowId,
+        InterventionPrimitive, RunId, WorkflowId,
     };
     use aion_integrations::jsonrpc::{JsonRpcNotification, JsonRpcResponse};
     use chrono::Utc;
@@ -309,6 +309,7 @@ mod tests {
     fn identity() -> EventIdentity {
         EventIdentity {
             workflow_id: WorkflowId::new(Uuid::nil()),
+            run_id: RunId::new(Uuid::from_u128(0x11)),
             activity_id: ActivityId::from_sequence_position(2),
             attempt: 1,
         }
@@ -381,6 +382,7 @@ mod tests {
     fn inject_command() -> InterventionCommand {
         InterventionCommand {
             workflow_id: WorkflowId::new(Uuid::nil()),
+            run_id: RunId::new_v4(),
             activity_id: ActivityId::from_sequence_position(2),
             attempt: 1,
             issued_by: Some("operator".to_owned()),

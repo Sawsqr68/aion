@@ -43,7 +43,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use aion_core::{
-    ActivityEvent, ActivityId, Event, TimerId, WorkflowFilter, WorkflowId, WorkflowStatus,
+    ActivityEvent, ActivityId, Event, RunId, TimerId, WorkflowFilter, WorkflowId, WorkflowStatus,
     WorkflowSummary, status_from_events,
 };
 use aion_store::{
@@ -1577,6 +1577,7 @@ fn head_from_next_seq(next_seq: Option<u64>, stream_key: &[u8]) -> Result<u64, S
 fn observability_key(key: &ActivityStreamKey) -> Vec<u8> {
     keyspace::observability_stream_key(
         &key.workflow_id,
+        &key.run_id,
         key.activity_id.sequence_position(),
         key.attempt,
     )
@@ -1661,9 +1662,14 @@ fn observability_read_blocking(
     Ok(records)
 }
 
-/// Enumerate the retained `O`-streams of one workflow via haematite's
+/// Enumerate the retained `O`-streams of ONE RUN of one workflow via haematite's
 /// intentionally unindexed stream scan (O(total streams) — an operator read,
 /// never on the hot publish path).
+///
+/// The run is inside the scan PREFIX, not applied as a filter afterwards: a
+/// sibling continue-as-new generation of the same workflow is excluded by the
+/// key range itself, so no later edit can reintroduce cross-run bleed by
+/// dropping a predicate.
 ///
 /// Deliberately NOT `EventStore::scan`: that walks only shards already
 /// MATERIALISED this process lifetime, so on a freshly reopened database it
@@ -1674,8 +1680,9 @@ fn observability_read_blocking(
 fn observability_list_blocking(
     store: &haematite::EventStore,
     workflow_id: &WorkflowId,
+    run_id: &RunId,
 ) -> Result<Vec<ActivityStreamSummary>, StoreError> {
-    let prefix = keyspace::observability_workflow_prefix(workflow_id);
+    let prefix = keyspace::observability_run_prefix(workflow_id, run_id);
     let database = store.database();
     let all_shards: Vec<usize> = (0..database.shard_count()).collect();
     let streams = database
@@ -1686,9 +1693,9 @@ fn observability_list_blocking(
         if !stream_key.starts_with(&prefix) {
             continue;
         }
-        // A foreign region can never match the 17-byte tagged prefix, but stay
-        // defensive: skip anything that does not decode as a full 29-byte
-        // `O`-region stream key.
+        // A foreign region can never match the tagged workflow+run prefix, but
+        // stay defensive: skip anything that does not decode as a full-width
+        // `O`-region stream key (which the pre-run-axis shape does not).
         let Some((activity_seq, attempt)) = keyspace::decode_observability_stream_key(&stream_key)
         else {
             continue;
@@ -1704,6 +1711,7 @@ fn observability_list_blocking(
         summaries.push(ActivityStreamSummary {
             key: ActivityStreamKey::new(
                 workflow_id.clone(),
+                run_id.clone(),
                 ActivityId::from_sequence_position(activity_seq),
                 attempt,
             ),
@@ -1776,9 +1784,11 @@ impl ObservabilityStore for HaematiteStore {
     async fn list_activity_streams(
         &self,
         workflow_id: &WorkflowId,
+        run_id: &RunId,
     ) -> Result<Vec<ActivityStreamSummary>, StoreError> {
         let workflow_id = workflow_id.clone();
-        self.blocking(move |store| observability_list_blocking(store, &workflow_id))
+        let run_id = run_id.clone();
+        self.blocking(move |store| observability_list_blocking(store, &workflow_id, &run_id))
             .await
     }
 }
@@ -4799,17 +4809,19 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn expired_observability_history_surfaces_as_error_not_empty_transcript()
     -> Result<(), Box<dyn std::error::Error>> {
-        use aion_core::ActivityId;
+        use aion_core::{ActivityId, RunId};
         use aion_store::ActivityStreamKey;
 
         let store = store("obs-expired-history")?;
         let key = ActivityStreamKey::new(
             WorkflowId::new_v4(),
+            RunId::new_v4(),
             ActivityId::from_sequence_position(1),
             1,
         );
         let stream_key = keyspace::observability_stream_key(
             &key.workflow_id,
+            &key.run_id,
             key.activity_id.sequence_position(),
             key.attempt,
         );

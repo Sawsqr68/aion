@@ -10,7 +10,8 @@ use std::sync::Mutex;
 
 use aion_core::{
     ActivityEvent, ActivityEventKind, ActivityId, ContentType, InterventionCapabilities,
-    InterventionCommand, InterventionKind, InterventionPrimitive, MessageRole, Payload, WorkflowId,
+    InterventionCommand, InterventionKind, InterventionPrimitive, MessageRole, Payload, RunId,
+    WorkflowId,
 };
 use aion_integrations::contract::{AgentHarness, AgentSession};
 use aion_integrations::error::HarnessError;
@@ -93,6 +94,7 @@ impl AgentSession for FakeSession {
 fn message_event(text: &str) -> ActivityEvent {
     ActivityEvent {
         workflow_id: WorkflowId::new(uuid::Uuid::nil()),
+        run_id: RunId::new_v4(),
         activity_id: ActivityId::from_sequence_position(2),
         attempt: 1,
         agent_id: uuid::Uuid::nil(),
@@ -111,6 +113,7 @@ fn message_event(text: &str) -> ActivityEvent {
 fn spec() -> AgentRunSpec {
     AgentRunSpec::new(
         WorkflowId::new(uuid::Uuid::nil()),
+        RunId::new_v4(),
         ActivityId::from_sequence_position(2),
         1,
         "agent-activity",
@@ -121,6 +124,7 @@ fn spec() -> AgentRunSpec {
 fn inject_command() -> InterventionCommand {
     InterventionCommand {
         workflow_id: WorkflowId::new(uuid::Uuid::nil()),
+        run_id: RunId::new_v4(),
         activity_id: ActivityId::from_sequence_position(2),
         attempt: 1,
         issued_by: Some("operator".to_owned()),

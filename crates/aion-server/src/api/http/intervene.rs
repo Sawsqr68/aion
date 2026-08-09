@@ -19,7 +19,7 @@
 
 use aion_core::{
     ActivityId, InterventionCapabilities, InterventionCommand, InterventionKind,
-    InterventionOutcome, WorkflowId,
+    InterventionOutcome, RunId, WorkflowId,
 };
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
@@ -42,6 +42,11 @@ pub(crate) struct InterveneRequest {
     pub namespace: String,
     /// The target workflow.
     pub workflow_id: WorkflowId,
+    /// The target run of that workflow. REQUIRED: a continue-as-new chain reuses
+    /// one workflow id while ordinals and attempts restart per generation, so a
+    /// run-blind target would resolve whichever generation happened to own the
+    /// colliding coordinate — delivering an operator's steer to the wrong agent.
+    pub run_id: RunId,
     /// The target activity within the workflow.
     pub activity_id: ActivityId,
     /// The target attempt. A command to a stale/finished attempt is a no-op.
@@ -94,6 +99,7 @@ async fn run_intervention(
     };
     let command = InterventionCommand {
         workflow_id: request.workflow_id,
+        run_id: request.run_id,
         activity_id: request.activity_id,
         attempt: request.attempt,
         issued_by,
@@ -125,9 +131,13 @@ pub(crate) struct AttemptsRequest {
 /// offers no controls for that attempt (an observability-only harness).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct AttemptCapabilities {
+    /// The run the live attempt belongs to. Carried so the console targets a
+    /// concrete generation rather than whichever one currently owns a colliding
+    /// `(activity, attempt)` coordinate.
+    pub run_id: RunId,
     /// The activity within the workflow.
     pub activity_id: ActivityId,
-    /// The attempt number — the third stream/target axis.
+    /// The attempt number — the fourth stream/target axis.
     pub attempt: u32,
     /// The owning worker's advertised capability set (the console gates on this).
     pub capabilities: InterventionCapabilities,
@@ -183,6 +193,7 @@ fn attempt_capabilities(
     (key, capabilities): (AttemptKey, InterventionCapabilities),
 ) -> AttemptCapabilities {
     AttemptCapabilities {
+        run_id: key.run_id,
         activity_id: key.activity_id,
         attempt: key.attempt,
         capabilities,
@@ -196,16 +207,18 @@ mod tests {
     };
     use aion_core::{
         ActivityId, InjectPriority, InterventionCapabilities, InterventionKind,
-        InterventionOutcome, InterventionPrimitive, WorkflowId,
+        InterventionOutcome, InterventionPrimitive, RunId, WorkflowId,
     };
 
     /// The request body carries the target identity + neutral primitive and
     /// round-trips through serde; `issued_by`/`issued_at` are NOT client fields.
     #[test]
     fn request_body_round_trips() -> Result<(), Box<dyn std::error::Error>> {
+        let run_id = RunId::new(uuid::Uuid::from_u128(0x11));
         let request = InterveneRequest {
             namespace: "tenant-a".to_owned(),
             workflow_id: WorkflowId::new(uuid::Uuid::nil()),
+            run_id: run_id.clone(),
             activity_id: ActivityId::from_sequence_position(3),
             attempt: 1,
             kind: InterventionKind::InjectMessage {
@@ -216,6 +229,7 @@ mod tests {
         let json = serde_json::to_string(&request)?;
         let decoded: InterveneRequest = serde_json::from_str(&json)?;
         assert_eq!(decoded.namespace, "tenant-a");
+        assert_eq!(decoded.run_id, run_id);
         assert_eq!(decoded.attempt, 1);
         assert!(matches!(
             decoded.kind,
@@ -268,6 +282,7 @@ mod tests {
         let response = AttemptsResponse {
             attempts: vec![
                 AttemptCapabilities {
+                    run_id: RunId::new(uuid::Uuid::from_u128(0x11)),
                     activity_id: ActivityId::from_sequence_position(3),
                     attempt: 1,
                     capabilities: InterventionCapabilities::from_primitives([
@@ -276,6 +291,7 @@ mod tests {
                     ]),
                 },
                 AttemptCapabilities {
+                    run_id: RunId::new(uuid::Uuid::from_u128(0x22)),
                     activity_id: ActivityId::from_sequence_position(4),
                     attempt: 2,
                     // An observability-only attempt: the empty set is first-class.
@@ -287,6 +303,16 @@ mod tests {
         let decoded: AttemptsResponse = serde_json::from_str(&json)?;
         assert_eq!(decoded.attempts.len(), 2);
         assert_eq!(decoded.attempts[0].attempt, 1);
+        // Each row names the generation it belongs to, so the console targets a
+        // concrete run rather than a colliding `(activity, attempt)` pair.
+        assert_eq!(
+            decoded.attempts[0].run_id,
+            RunId::new(uuid::Uuid::from_u128(0x11))
+        );
+        assert_eq!(
+            decoded.attempts[1].run_id,
+            RunId::new(uuid::Uuid::from_u128(0x22))
+        );
         assert!(
             decoded.attempts[0]
                 .capabilities

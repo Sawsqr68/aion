@@ -1,8 +1,9 @@
 //! Durable transcript read API (lane #229): the REST twin of the events pair.
 //!
 //! `POST /workflows/transcript` fetches the retained transcript of one
-//! `(workflow, activity, attempt)` stream from the durable `O` keyspace, and
-//! `POST /workflows/transcripts` enumerates a workflow's retained streams.
+//! `(workflow, run, activity, attempt)` stream from the durable `O` keyspace,
+//! and `POST /workflows/transcripts` enumerates one RUN's retained streams.
+//!
 //! Together they mirror the workflow-history pair: `/workflows/describe` is the
 //! socket-free history read, the `/events/stream` subscription is the live
 //! tail — and for transcripts this pair is the socket-free read while the
@@ -17,8 +18,16 @@
 //! `not_found`, never a transcript. An authorized workflow with nothing
 //! retained answers `200` with an empty list — the honest answer for an old
 //! run recorded before retention existed, never an error.
+//!
+//! # The run axis is required on both requests
+//!
+//! A continue-as-new chain reuses one workflow id while activity ordinals and
+//! attempt numbers restart in every generation, so a request naming only
+//! `(workflow, activity, attempt)` does not identify a stream. `run_id` is
+//! required rather than optional-with-a-latest-run-default, because a default
+//! would answer a question the caller did not ask, and would do it silently.
 
-use aion_core::{ActivityEvent, ActivityId, WorkflowId};
+use aion_core::{ActivityEvent, ActivityId, RunId, WorkflowId};
 use aion_proto::WireError;
 use aion_store::{ActivityRecord, ActivityStreamKey};
 use axum::{Json, extract::State};
@@ -40,9 +49,12 @@ pub(crate) struct TranscriptFetchRequest {
     pub namespace: String,
     /// The target workflow.
     pub workflow_id: WorkflowId,
+    /// The target run of that workflow — the second stream axis. REQUIRED: two
+    /// generations of one continue-as-new chain share every other coordinate.
+    pub run_id: RunId,
     /// The target activity within the workflow.
     pub activity_id: ActivityId,
-    /// The target attempt — the third stream axis.
+    /// The target attempt — the fourth stream axis.
     pub attempt: u32,
     /// Read records with `store_seq >= from_seq`; omitted reads the whole
     /// retained transcript from `store_seq == 0`.
@@ -78,14 +90,21 @@ pub(crate) struct TranscriptStreamsRequest {
     pub namespace: String,
     /// The workflow whose retained transcript streams to enumerate.
     pub workflow_id: WorkflowId,
+    /// The run of that workflow whose retained streams to enumerate. REQUIRED:
+    /// enumerating a whole continue-as-new chain would return several
+    /// generations' streams under pairwise-colliding coordinates.
+    pub run_id: RunId,
 }
 
-/// One retained transcript stream of the workflow.
+/// One retained transcript stream of the workflow run.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct TranscriptStreamEntry {
+    /// The run the stream belongs to. Echoed on every row so a row lifted out of
+    /// the response still names its generation.
+    pub run_id: RunId,
     /// The activity within the workflow.
     pub activity_id: ActivityId,
-    /// The attempt number — the third stream axis.
+    /// The attempt number — the fourth stream axis.
     pub attempt: u32,
     /// Next `store_seq` to be written == count of retained records.
     pub head: u64,
@@ -120,7 +139,12 @@ pub(crate) async fn fetch_transcript(
             "transcript from_seq and last are mutually exclusive",
         )));
     }
-    let key = ActivityStreamKey::new(request.workflow_id, request.activity_id, request.attempt);
+    let key = ActivityStreamKey::new(
+        request.workflow_id,
+        request.run_id,
+        request.activity_id,
+        request.attempt,
+    );
     let from_seq = request.from_seq.map_or(0, |seq| seq);
     let read_from = request.last.map_or(from_seq, |_last| 0);
     let ranged = state
@@ -190,13 +214,14 @@ pub(crate) async fn list_transcript_streams(
         .map_err(|error| HttpWireError(error.to_wire_error()))?;
     let summaries = state
         .transcript_publisher()
-        .list_streams(&request.workflow_id)
+        .list_streams(&request.workflow_id, &request.run_id)
         .await
         .map_err(|error| HttpWireError(crate::ServerError::from(error).to_wire_error()))?;
     Ok(Json(TranscriptStreamsResponse {
         streams: summaries
             .into_iter()
             .map(|summary| TranscriptStreamEntry {
+                run_id: summary.key.run_id,
                 activity_id: summary.key.activity_id,
                 attempt: summary.key.attempt,
                 head: summary.head,
@@ -219,9 +244,11 @@ mod tests {
     /// round-trips through serde; `from_seq` is optional and defaults absent.
     #[test]
     fn fetch_request_round_trips_and_from_seq_defaults() -> TestResult {
+        let run_id = RunId::new(Uuid::from_u128(0x11));
         let request = TranscriptFetchRequest {
             namespace: "tenant-a".to_owned(),
             workflow_id: WorkflowId::new(Uuid::nil()),
+            run_id: run_id.clone(),
             activity_id: ActivityId::from_sequence_position(3),
             attempt: 1,
             from_seq: Some(7),
@@ -231,6 +258,7 @@ mod tests {
         let json = serde_json::to_string(&request)?;
         let decoded: TranscriptFetchRequest = serde_json::from_str(&json)?;
         assert_eq!(decoded.namespace, "tenant-a");
+        assert_eq!(decoded.run_id, run_id);
         assert_eq!(decoded.attempt, 1);
         assert_eq!(decoded.from_seq, Some(7));
         assert_eq!(decoded.limit, Some(25));
@@ -243,6 +271,7 @@ mod tests {
         let minimal: TranscriptFetchRequest = serde_json::from_value(serde_json::json!({
             "namespace": "tenant-a",
             "workflow_id": WorkflowId::new(Uuid::nil()),
+            "run_id": run_id,
             "activity_id": 3,
             "attempt": 0,
         }))?;
@@ -252,6 +281,38 @@ mod tests {
         Ok(())
     }
 
+    /// The run axis is REQUIRED, not defaulted: a body that omits `run_id` fails
+    /// to decode rather than resolving some generation of its own choosing. A
+    /// request naming only `(workflow, activity, attempt)` does not identify a
+    /// stream on a continue-as-new chain, so answering it at all would be a
+    /// guess presented as an answer.
+    #[test]
+    fn a_fetch_request_without_a_run_is_refused() {
+        let decoded = serde_json::from_value::<TranscriptFetchRequest>(serde_json::json!({
+            "namespace": "tenant-a",
+            "workflow_id": WorkflowId::new(Uuid::nil()),
+            "activity_id": 3,
+            "attempt": 0,
+        }));
+        assert!(
+            decoded.is_err(),
+            "a run-less transcript fetch must be refused, never defaulted"
+        );
+    }
+
+    /// The same law on the enumeration request.
+    #[test]
+    fn a_streams_request_without_a_run_is_refused() {
+        let decoded = serde_json::from_value::<TranscriptStreamsRequest>(serde_json::json!({
+            "namespace": "tenant-a",
+            "workflow_id": WorkflowId::new(Uuid::nil()),
+        }));
+        assert!(
+            decoded.is_err(),
+            "a run-less stream enumeration must be refused, never defaulted"
+        );
+    }
+
     /// The fetch response carries the retained events (with their stamped
     /// `store_seq`) and round-trips, including the empty honest answer.
     #[test]
@@ -259,6 +320,7 @@ mod tests {
         let response = TranscriptFetchResponse {
             events: vec![ActivityEvent {
                 workflow_id: WorkflowId::new(Uuid::nil()),
+                run_id: RunId::new(Uuid::from_u128(0x11)),
                 activity_id: ActivityId::from_sequence_position(3),
                 attempt: 0,
                 agent_id: Uuid::nil(),
@@ -292,16 +354,20 @@ mod tests {
     /// for a workflow with no retained transcript.
     #[test]
     fn streams_request_and_response_round_trip() -> TestResult {
+        let run_id = RunId::new(Uuid::from_u128(0x11));
         let request = TranscriptStreamsRequest {
             namespace: "tenant-a".to_owned(),
             workflow_id: WorkflowId::new(Uuid::nil()),
+            run_id: run_id.clone(),
         };
         let json = serde_json::to_string(&request)?;
         let decoded: TranscriptStreamsRequest = serde_json::from_str(&json)?;
         assert_eq!(decoded.namespace, "tenant-a");
+        assert_eq!(decoded.run_id, run_id);
 
         let response = TranscriptStreamsResponse {
             streams: vec![TranscriptStreamEntry {
+                run_id: run_id.clone(),
                 activity_id: ActivityId::from_sequence_position(3),
                 attempt: 0,
                 head: 5,
@@ -311,6 +377,9 @@ mod tests {
         let decoded: TranscriptStreamsResponse = serde_json::from_str(&json)?;
         assert_eq!(decoded.streams.len(), 1);
         assert_eq!(decoded.streams[0].head, 5);
+        // Each row names its own run, so a row lifted out of the response is
+        // still addressable on its own.
+        assert_eq!(decoded.streams[0].run_id, run_id);
         let value: serde_json::Value = serde_json::from_str(&json)?;
         assert_eq!(value["streams"][0]["activity_id"], serde_json::json!(3));
 

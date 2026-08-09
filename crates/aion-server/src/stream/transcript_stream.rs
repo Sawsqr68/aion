@@ -1,5 +1,5 @@
 //! NOI-5b transcript subscription: namespace-gated durable-tail + live-splice
-//! forward loop for one `(workflow, activity, attempt)` agent transcript.
+//! forward loop for one `(workflow, run, activity, attempt)` agent transcript.
 //!
 //! This is the agent-observability counterpart to [`super::cluster_stream`]'s
 //! forward loop, and a NEW ARM on the existing single subscription frame of
@@ -26,10 +26,10 @@
 //! Ephemeral token deltas (`store_seq: None`) are forwarded live and never
 //! replayed.
 
-use aion_core::ActivityId;
+use aion_core::{ActivityId, RunId};
 use aion_proto::{
-    PerWorkflowSubscription, ProtoWorkflowId, StreamedActivityEvent, TranscriptSubscription,
-    WireError,
+    PerWorkflowSubscription, ProtoRunId, ProtoWorkflowId, StreamedActivityEvent,
+    TranscriptSubscription, WireError,
 };
 use aion_store::ActivityStreamKey;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, close_code};
@@ -126,7 +126,7 @@ pub async fn serve_transcript_socket(
 }
 
 /// Decode the transcript identifiers and namespace-gate the caller, returning the
-/// authorized `(workflow, activity, attempt)` stream key.
+/// authorized `(workflow, run, activity, attempt)` stream key.
 ///
 /// Reuses the per-workflow subscription scope so authorization is byte-identical
 /// to the workflow event stream: the caller must hold the namespace grant AND the
@@ -137,10 +137,12 @@ async fn authorize_transcript(
     subscription: &TranscriptSubscription,
 ) -> Result<ActivityStreamKey, ServerError> {
     let workflow_id = decode_workflow_id(subscription.workflow_id.as_ref())?;
+    let run_id = decode_run_id(subscription.run_id.as_ref())?;
     let activity_id = decode_activity_id(subscription)?;
     gate_transcript_workflow(state, caller, &subscription.namespace, &workflow_id).await?;
     Ok(ActivityStreamKey::new(
         workflow_id,
+        run_id,
         activity_id,
         subscription.attempt,
     ))
@@ -183,6 +185,21 @@ fn decode_workflow_id(
         .cloned()
         .ok_or_else(|| ServerError::Wire {
             wire: WireError::invalid_input("transcript subscription workflow_id is missing"),
+        })?
+        .try_into()
+        .map_err(|wire| ServerError::Wire { wire })
+}
+
+/// Decode the REQUIRED run axis of a transcript subscription.
+///
+/// An absent `run_id` is `invalid_input`, never a defaulted "latest run": the
+/// transcript keyspace is run-scoped, and silently resolving a generation the
+/// caller did not name is the ambiguity the axis exists to remove.
+fn decode_run_id(run_id: Option<&ProtoRunId>) -> Result<RunId, ServerError> {
+    run_id
+        .cloned()
+        .ok_or_else(|| ServerError::Wire {
+            wire: WireError::invalid_input("transcript subscription run_id is missing"),
         })?
         .try_into()
         .map_err(|wire| ServerError::Wire { wire })

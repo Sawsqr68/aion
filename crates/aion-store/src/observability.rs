@@ -1,7 +1,7 @@
 //! The durable observability (`O`) keyspace contract — NOI-5's durability spine.
 //!
 //! This module defines the persistence contract for the agent-observability
-//! transcript: an **append-only, per-`(workflow, activity, attempt)`** stream of
+//! transcript: an **append-only, per-`(workflow, run, activity, attempt)`** stream of
 //! [`aion_core::ActivityEvent`] records that survives kill-9 and failover, is
 //! replayable by `store_seq`, and is **never** part of the workflow replay log.
 //!
@@ -29,20 +29,34 @@
 
 use async_trait::async_trait;
 
-use aion_core::{ActivityEvent, ActivityId, WorkflowId};
+use aion_core::{ActivityEvent, ActivityId, RunId, WorkflowId};
 
 use crate::StoreError;
 
-/// The durable key of one observability stream: a `(workflow, activity, attempt)`
-/// triple. Every [`ActivityRecord`] for one running agent attempt shares this key
-/// and is ordered by `store_seq` within it.
+/// The durable key of one observability stream: a `(workflow, run, activity,
+/// attempt)` quad. Every [`ActivityRecord`] for one running agent attempt shares
+/// this key and is ordered by `store_seq` within it.
+///
+/// # Why the run axis exists
+///
+/// A continue-as-new chain reuses one [`WorkflowId`] across generations, and
+/// BOTH of the remaining axes restart inside each new run: activity ordinals
+/// count from `0` again and attempts from `1`. A `(workflow, activity, attempt)`
+/// key is therefore not unique across a chain — generation two's first event
+/// would be appended onto generation one's stream head, silently fusing two
+/// transcripts into one. The run is the axis that separates them, so it is a
+/// required component of the key with no `None` arm.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ActivityStreamKey {
     /// The workflow the activity belongs to.
     pub workflow_id: WorkflowId,
+    /// The concrete run of that workflow — the second key axis. Two generations
+    /// of one continue-as-new chain are DISTINCT streams even when their
+    /// `(activity, attempt)` coordinates coincide, which they routinely do.
+    pub run_id: RunId,
     /// The activity within the workflow.
     pub activity_id: ActivityId,
-    /// The attempt number — the third key axis (NOI-0). Two attempts of one
+    /// The attempt number — the fourth key axis (NOI-0). Two attempts of one
     /// activity are DISTINCT streams; a within-attempt failover shares one stream
     /// (so a dying + adopting worker's events dedupe), while a retry is a new
     /// attempt and therefore a new stream.
@@ -50,11 +64,17 @@ pub struct ActivityStreamKey {
 }
 
 impl ActivityStreamKey {
-    /// Build a stream key from its three components.
+    /// Build a stream key from its four components.
     #[must_use]
-    pub const fn new(workflow_id: WorkflowId, activity_id: ActivityId, attempt: u32) -> Self {
+    pub const fn new(
+        workflow_id: WorkflowId,
+        run_id: RunId,
+        activity_id: ActivityId,
+        attempt: u32,
+    ) -> Self {
         Self {
             workflow_id,
+            run_id,
             activity_id,
             attempt,
         }
@@ -65,6 +85,7 @@ impl ActivityStreamKey {
     pub fn of(event: &ActivityEvent) -> Self {
         Self {
             workflow_id: event.workflow_id.clone(),
+            run_id: event.run_id.clone(),
             activity_id: event.activity_id.clone(),
             attempt: event.attempt,
         }
@@ -86,11 +107,12 @@ pub struct ActivityRecord {
     pub event: ActivityEvent,
 }
 
-/// One retained transcript stream of a workflow: its key and its head
+/// One retained transcript stream of a workflow run: its key and its head
 /// (the number of durably retained records / the next `store_seq`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ActivityStreamSummary {
-    /// The stream's `(workflow, activity, attempt)` key.
+    /// The stream's `(workflow, run, activity, attempt)` key — self-describing,
+    /// so a summary read out of one enumeration names the run it came from.
     pub key: ActivityStreamKey,
     /// Next `store_seq` to be written == count of retained records.
     pub head: u64,
@@ -100,11 +122,11 @@ pub struct ActivityStreamSummary {
 ///
 /// Implemented by the haematite backend for production and by
 /// [`InMemoryObservabilityStore`] for tests + conformance. The server is the
-/// single writer; every method keys on the `(workflow, activity, attempt)`
-/// triple, never on the workflow alone.
+/// single writer; every method keys on the `(workflow, run, activity, attempt)`
+/// quad, never on the workflow alone and never on a run-ambiguous triple.
 #[async_trait]
 pub trait ObservabilityStore: Send + Sync + 'static {
-    /// Append `event` to its `(workflow, activity, attempt)` stream at
+    /// Append `event` to its `(workflow, run, activity, attempt)` stream at
     /// `expected_seq` (the current head the caller believes it holds).
     ///
     /// On success returns the newly assigned `store_seq` (which equals
@@ -146,15 +168,21 @@ pub trait ObservabilityStore: Send + Sync + 'static {
         from_seq: u64,
     ) -> Result<Vec<ActivityRecord>, StoreError>;
 
-    /// Enumerate every retained transcript stream of `workflow_id`, ordered by
-    /// `(activity_id, attempt)` ascending. A workflow with no retained
+    /// Enumerate every retained transcript stream of ONE RUN of `workflow_id`,
+    /// ordered by `(activity_id, attempt)` ascending. A run with no retained
     /// transcript reads empty (old runs simply have none).
+    ///
+    /// The run is a required argument, not an optional filter: a workflow-wide
+    /// enumeration over a continue-as-new chain would return several
+    /// generations' streams under coordinates that collide pairwise, which is
+    /// exactly the ambiguity this keyspace exists to remove.
     ///
     /// # Errors
     /// A backend or serialization error.
     async fn list_activity_streams(
         &self,
         workflow_id: &WorkflowId,
+        run_id: &RunId,
     ) -> Result<Vec<ActivityStreamSummary>, StoreError>;
 }
 
@@ -172,12 +200,16 @@ pub struct InMemoryObservabilityStore {
         std::sync::Mutex<std::collections::HashMap<ActivityStreamKeyBytes, Vec<ActivityRecord>>>,
 }
 
-/// A hashable, owned encoding of [`ActivityStreamKey`] for the in-memory map.
-type ActivityStreamKeyBytes = (uuid::Uuid, u64, u32);
+/// A hashable, owned encoding of [`ActivityStreamKey`] for the in-memory map:
+/// `(workflow uuid, run uuid, activity ordinal, attempt)`, in the SAME axis
+/// order the durable `O`-region key encodes, so the two implementations agree on
+/// which events share a stream and on the order an enumeration returns them in.
+type ActivityStreamKeyBytes = (uuid::Uuid, uuid::Uuid, u64, u32);
 
 fn key_bytes(key: &ActivityStreamKey) -> ActivityStreamKeyBytes {
     (
         key.workflow_id.as_uuid(),
+        key.run_id.as_uuid(),
         key.activity_id.sequence_position(),
         key.attempt,
     )
@@ -252,19 +284,21 @@ impl ObservabilityStore for InMemoryObservabilityStore {
     async fn list_activity_streams(
         &self,
         workflow_id: &WorkflowId,
+        run_id: &RunId,
     ) -> Result<Vec<ActivityStreamSummary>, StoreError> {
         let streams = self.streams.lock().map_err(|error| {
             StoreError::Backend(format!("observability mutex poisoned: {error}"))
         })?;
         let mut summaries: Vec<ActivityStreamSummary> = streams
             .iter()
-            .filter(|((workflow, _activity, _attempt), _records)| {
-                *workflow == workflow_id.as_uuid()
+            .filter(|((workflow, run, _activity, _attempt), _records)| {
+                *workflow == workflow_id.as_uuid() && *run == run_id.as_uuid()
             })
             .map(
-                |(&(workflow, activity_seq, attempt), records)| ActivityStreamSummary {
+                |(&(workflow, run, activity_seq, attempt), records)| ActivityStreamSummary {
                     key: ActivityStreamKey::new(
                         WorkflowId::new(workflow),
+                        RunId::new(run),
                         ActivityId::from_sequence_position(activity_seq),
                         attempt,
                     ),
@@ -289,9 +323,24 @@ mod tests {
     use chrono::Utc;
     use uuid::Uuid;
 
+    fn workflow() -> WorkflowId {
+        WorkflowId::new(Uuid::from_u128(1))
+    }
+
+    /// The first generation of the continue-as-new chain under test.
+    fn generation_one() -> RunId {
+        RunId::new(Uuid::from_u128(0x11))
+    }
+
+    /// The second generation: SAME workflow, different run.
+    fn generation_two() -> RunId {
+        RunId::new(Uuid::from_u128(0x22))
+    }
+
     fn event(attempt: u32, worker_seq: u64, text: &str) -> ActivityEvent {
         ActivityEvent {
-            workflow_id: WorkflowId::new(Uuid::from_u128(1)),
+            workflow_id: workflow(),
+            run_id: generation_one(),
             activity_id: ActivityId::from_sequence_position(3),
             attempt,
             agent_id: Uuid::from_u128(9),
@@ -307,14 +356,19 @@ mod tests {
         }
     }
 
+    fn key(attempt: u32) -> ActivityStreamKey {
+        ActivityStreamKey::new(
+            workflow(),
+            generation_one(),
+            ActivityId::from_sequence_position(3),
+            attempt,
+        )
+    }
+
     #[tokio::test]
     async fn append_assigns_contiguous_store_seq_from_zero() -> Result<(), StoreError> {
         let store = InMemoryObservabilityStore::default();
-        let key = ActivityStreamKey::new(
-            WorkflowId::new(Uuid::from_u128(1)),
-            ActivityId::from_sequence_position(3),
-            0,
-        );
+        let key = key(0);
         assert_eq!(store.activity_head(&key).await?, 0);
         assert_eq!(store.append_activity_event(0, &event(0, 1, "a")).await?, 0);
         assert_eq!(store.append_activity_event(1, &event(0, 2, "b")).await?, 1);
@@ -356,44 +410,97 @@ mod tests {
         store
             .append_activity_event(0, &event(1, 1, "attempt-1"))
             .await?;
-        let key0 = ActivityStreamKey::new(
-            WorkflowId::new(Uuid::from_u128(1)),
-            ActivityId::from_sequence_position(3),
-            0,
-        );
-        let key1 = ActivityStreamKey::new(
-            WorkflowId::new(Uuid::from_u128(1)),
-            ActivityId::from_sequence_position(3),
-            1,
-        );
-        assert_eq!(store.activity_head(&key0).await?, 1);
-        assert_eq!(store.activity_head(&key1).await?, 1);
+        assert_eq!(store.activity_head(&key(0)).await?, 1);
+        assert_eq!(store.activity_head(&key(1)).await?, 1);
         Ok(())
     }
 
-    /// Two activities x two attempts of wf-1 plus one stream of wf-2: listing
-    /// wf-1 yields exactly its three streams, ordered by `(activity, attempt)`
-    /// ascending, each with the correct head.
+    /// THE RUN-SCOPING INVARIANT at the store contract.
+    ///
+    /// Two generations of one continue-as-new chain emit from the SAME
+    /// `(workflow, activity ordinal 0, attempt 1)` coordinates — which is what
+    /// actually happens, because ordinals restart at `0` and attempts at `1` in
+    /// each new run. Both appends must therefore succeed at `expected_seq == 0`
+    /// (each is its own stream head), the two events must land under DIFFERENT
+    /// keys, and a read scoped to generation two must return EXACTLY ONE event:
+    /// its own. Under the pre-run-axis key the second append would have
+    /// conflicted against generation one's head and then fused onto its stream.
+    #[tokio::test]
+    async fn two_generations_of_one_chain_never_share_a_stream() -> Result<(), StoreError> {
+        let store = InMemoryObservabilityStore::default();
+        let ordinal_zero = ActivityId::from_sequence_position(0);
+        let mut first = event(1, 1, "generation one");
+        first.activity_id = ordinal_zero.clone();
+        let mut second = first.clone();
+        second.run_id = generation_two();
+        second.kind = ActivityEventKind::Message {
+            role: MessageRole::Assistant,
+            text: "generation two".to_owned(),
+        };
+
+        // Both are the FIRST event of their own stream: both append at seq 0.
+        assert_eq!(store.append_activity_event(0, &first).await?, 0);
+        assert_eq!(store.append_activity_event(0, &second).await?, 0);
+
+        let first_key = ActivityStreamKey::of(&first);
+        let second_key = ActivityStreamKey::of(&second);
+        assert_ne!(
+            first_key, second_key,
+            "one chain's two generations must not share a stream key"
+        );
+        // The keys differ ONLY in the run axis — the collision this guards.
+        assert_eq!(first_key.workflow_id, second_key.workflow_id);
+        assert_eq!(first_key.activity_id, second_key.activity_id);
+        assert_eq!(first_key.attempt, second_key.attempt);
+
+        let second_generation = store.read_activity_events_from(&second_key, 0).await?;
+        assert_eq!(
+            second_generation.len(),
+            1,
+            "a read scoped to generation two must return exactly its own event"
+        );
+        assert_eq!(second_generation[0].event.run_id, generation_two());
+        // And generation one is likewise untouched by generation two's append.
+        let first_generation = store.read_activity_events_from(&first_key, 0).await?;
+        assert_eq!(first_generation.len(), 1);
+        assert_eq!(first_generation[0].event.run_id, generation_one());
+        Ok(())
+    }
+
+    /// Two activities x two attempts of run one plus one stream of run two:
+    /// listing run one yields exactly its three streams, ordered by
+    /// `(activity, attempt)` ascending, each with the correct head. The run-two
+    /// stream shares a workflow with them and must NOT appear.
     #[tokio::test]
     async fn list_activity_streams_orders_by_activity_then_attempt() -> Result<(), StoreError> {
         let store = InMemoryObservabilityStore::default();
-        let event_for = |activity_seq: u64, attempt: u32, workflow: u128| {
+        let event_for = |activity_seq: u64, attempt: u32, run: RunId| {
             let mut event = event(attempt, 1, "x");
-            event.workflow_id = WorkflowId::new(Uuid::from_u128(workflow));
+            event.run_id = run;
             event.activity_id = ActivityId::from_sequence_position(activity_seq);
             event
         };
-        // wf-1: activity 3 attempt 0 (two records), activity 3 attempt 1 (one),
-        // activity 5 attempt 0 (one). Inserted deliberately out of order.
-        store.append_activity_event(0, &event_for(5, 0, 1)).await?;
-        store.append_activity_event(0, &event_for(3, 1, 1)).await?;
-        store.append_activity_event(0, &event_for(3, 0, 1)).await?;
-        store.append_activity_event(1, &event_for(3, 0, 1)).await?;
-        // wf-2: one stream that must not leak into wf-1's enumeration.
-        store.append_activity_event(0, &event_for(3, 0, 2)).await?;
+        // run one: activity 3 attempt 0 (two records), activity 3 attempt 1
+        // (one), activity 5 attempt 0 (one). Inserted deliberately out of order.
+        store
+            .append_activity_event(0, &event_for(5, 0, generation_one()))
+            .await?;
+        store
+            .append_activity_event(0, &event_for(3, 1, generation_one()))
+            .await?;
+        store
+            .append_activity_event(0, &event_for(3, 0, generation_one()))
+            .await?;
+        store
+            .append_activity_event(1, &event_for(3, 0, generation_one()))
+            .await?;
+        // run two of the SAME workflow: one stream that must not leak in.
+        store
+            .append_activity_event(0, &event_for(3, 0, generation_two()))
+            .await?;
 
         let summaries = store
-            .list_activity_streams(&WorkflowId::new(Uuid::from_u128(1)))
+            .list_activity_streams(&workflow(), &generation_one())
             .await?;
         let listed: Vec<(u64, u32, u64)> = summaries
             .iter()
@@ -406,6 +513,12 @@ mod tests {
             })
             .collect();
         assert_eq!(listed, vec![(3, 0, 2), (3, 1, 1), (5, 0, 1)]);
+        assert!(
+            summaries
+                .iter()
+                .all(|summary| summary.key.run_id == generation_one()),
+            "every summary names the run it was enumerated for"
+        );
         Ok(())
     }
 
@@ -414,9 +527,15 @@ mod tests {
         let store = InMemoryObservabilityStore::default();
         store.append_activity_event(0, &event(0, 1, "a")).await?;
         let summaries = store
-            .list_activity_streams(&WorkflowId::new(Uuid::from_u128(99)))
+            .list_activity_streams(&WorkflowId::new(Uuid::from_u128(99)), &generation_one())
             .await?;
         assert!(summaries.is_empty(), "an unwritten workflow lists empty");
+        // A known workflow with an unwritten RUN is likewise empty, not the
+        // sibling generation's streams.
+        let other_run = store
+            .list_activity_streams(&workflow(), &generation_two())
+            .await?;
+        assert!(other_run.is_empty(), "an unwritten run lists empty");
         Ok(())
     }
 

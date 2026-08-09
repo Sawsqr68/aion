@@ -119,6 +119,7 @@ impl AgentHarness for CliHarness {
         let stdout = take_stdout(&mut child)?;
         let identity = EventIdentity {
             workflow_id: spec.workflow_id,
+            run_id: spec.run_id,
             activity_id: spec.activity_id,
             attempt: spec.attempt,
         };

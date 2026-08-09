@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use aion_core::{
     ActivityEvent, ActivityId, ContentType, InjectPriority, InterventionCapabilities,
     InterventionCommand, InterventionKind, InterventionOutcome, InterventionPrimitive, Payload,
-    WorkflowId,
+    RunId, WorkflowId,
 };
 use aion_integrations::contract::{AgentHarness, AgentSession};
 use aion_integrations::error::HarnessError;
@@ -83,9 +83,17 @@ impl AgentSession for FakeSession {
     }
 }
 
+/// The run every fixture below shares, so a command and the session key it must
+/// resolve agree on the run axis. A test that wants the cross-generation case
+/// mints its own second run explicitly.
+fn run() -> RunId {
+    RunId::new(Uuid::from_u128(0x11))
+}
+
 fn key(attempt: u32) -> SessionKey {
     SessionKey::new(
         WorkflowId::new(Uuid::nil()),
+        run(),
         ActivityId::from_sequence_position(3),
         attempt,
     )
@@ -94,6 +102,7 @@ fn key(attempt: u32) -> SessionKey {
 fn command(attempt: u32, kind: InterventionKind) -> InterventionCommand {
     InterventionCommand {
         workflow_id: WorkflowId::new(Uuid::nil()),
+        run_id: run(),
         activity_id: ActivityId::from_sequence_position(3),
         attempt,
         issued_by: Some("operator".to_owned()),
@@ -168,6 +177,7 @@ fn live_session(
 fn spec() -> AgentRunSpec {
     AgentRunSpec::new(
         WorkflowId::new(Uuid::nil()),
+        RunId::new_v4(),
         ActivityId::from_sequence_position(3),
         1,
         "agent-activity",

@@ -567,6 +567,7 @@ where
     heartbeat_bookkeeper.register(key.clone())?;
     let (context, cancellation_handle) = ActivityContext::for_task(
         task.workflow_id.clone(),
+        task.run_id.clone(),
         task.activity_id.clone(),
         task.attempt,
         task.idempotency_key.clone(),

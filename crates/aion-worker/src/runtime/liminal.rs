@@ -123,10 +123,26 @@ const fn first_attempt() -> u32 {
     1
 }
 
-fn validate_dispatch_envelope(request: &DispatchRequest) -> Result<(), WorkerError> {
-    let reason = if request.run_id.is_none() {
-        Some("run_id is missing")
-    } else if request.attempt == 0 {
+/// Validate one dispatch envelope and RETURN its run id.
+///
+/// The run is returned rather than merely checked because everything downstream
+/// needs it as a plain `RunId`: the agent run spec, the session key a routed
+/// intervention resolves through, and every transcript event the attempt emits
+/// are all keyed on `(workflow, run, activity, attempt)`. Handing back the
+/// validated value is what keeps those call sites from re-deriving it from the
+/// wire `Option` — which would either re-do this check or, worse, invent a
+/// substitute for a `None` that this function has already refused.
+fn validate_dispatch_envelope(request: &DispatchRequest) -> Result<RunId, WorkerError> {
+    // The run is validated by EXTRACTING it, first and in one place: the check
+    // that a run-less envelope is invalid and the production of the value every
+    // caller needs are the same expression, so they cannot drift apart into a
+    // guard that passes and a caller that then substitutes something for `None`.
+    let Some(run_id) = request.run_id.clone() else {
+        return Err(WorkerError::decode(InvalidDispatchEnvelope {
+            reason: "run_id is missing",
+        }));
+    };
+    let reason = if request.attempt == 0 {
         Some("attempt is zero")
     } else if request.completion_token.is_empty() {
         Some("completion_token is missing")
@@ -137,7 +153,7 @@ fn validate_dispatch_envelope(request: &DispatchRequest) -> Result<(), WorkerErr
     };
     match reason {
         Some(reason) => Err(WorkerError::decode(InvalidDispatchEnvelope { reason })),
-        None => Ok(()),
+        None => Ok(run_id),
     }
 }
 
@@ -743,7 +759,7 @@ impl LiminalActivityWorker {
         }
         let request: DispatchRequest =
             serde_json::from_slice(frame.payload()).map_err(WorkerError::decode)?;
-        validate_dispatch_envelope(&request)?;
+        let run_id = validate_dispatch_envelope(&request)?;
         // Receipt is logged BEFORE execution so a dispatch that reaches the wrong
         // connection (or wedges mid-handler) is visible in the worker log — the
         // server side only sees silence either way (a lost-worker expiry), so this
@@ -771,10 +787,10 @@ impl LiminalActivityWorker {
         //
         // So BOTH kinds are spawned and the serve loop only ever routes.
         if self.is_agent_activity(&request.activity_type) {
-            self.spawn_agent_dispatch(correlation_id, request);
+            self.spawn_agent_dispatch(correlation_id, request, run_id);
             return Ok(());
         }
-        self.queue_plain_dispatch(correlation_id, request);
+        self.queue_plain_dispatch(correlation_id, request, run_id);
         Ok(())
     }
 
@@ -795,7 +811,7 @@ impl LiminalActivityWorker {
     /// Queueing never blocks the serve loop, so a busy worker still receives and
     /// answers pings while its queued dispatch waits its turn. That is the whole
     /// point: the server learns "busy", not "dead".
-    fn queue_plain_dispatch(&self, correlation_id: u64, request: DispatchRequest) {
+    fn queue_plain_dispatch(&self, correlation_id: u64, request: DispatchRequest, run_id: RunId) {
         // The reply rides this connection's `PushWriter`, exactly as the agent
         // path's does — `PushClient` itself is not clonable and does not need
         // to be — so the context is captured per dispatch rather than owned by
@@ -803,6 +819,7 @@ impl LiminalActivityWorker {
         let queued = QueuedPlainDispatch {
             correlation_id,
             request,
+            run_id,
             context: self.plain_dispatch_context(),
         };
         if let Err(error) = self.plain_dispatch_tx.send(queued) {
@@ -879,7 +896,7 @@ impl LiminalActivityWorker {
     /// [`ControlRegistry`], and a [`PushWriter`] reply/drain leg of the connection), so
     /// it outlives the borrow of `&self`. The session self-registers + streams its
     /// transcript inside [`run_agent_dispatch`].
-    fn spawn_agent_dispatch(&self, correlation_id: u64, request: DispatchRequest) {
+    fn spawn_agent_dispatch(&self, correlation_id: u64, request: DispatchRequest, run_id: RunId) {
         let Some(harness) = self.agent_harness.clone() else {
             return;
         };
@@ -911,8 +928,11 @@ impl LiminalActivityWorker {
                 capabilities,
                 writer,
                 drain,
-                correlation_id,
-                request,
+                AgentDispatch {
+                    correlation_id,
+                    request,
+                    run_id,
+                },
             ));
         });
     }
@@ -941,6 +961,11 @@ impl LiminalActivityWorker {
 struct QueuedPlainDispatch {
     correlation_id: u64,
     request: DispatchRequest,
+    /// The run the dispatch envelope was validated to carry. Held as a plain
+    /// `RunId` (not the wire `Option`) because the executed activity's context
+    /// hands it to any transcript event the handler emits, and there is no
+    /// honest substitute if it were absent.
+    run_id: RunId,
     context: PlainDispatchContext,
 }
 
@@ -1002,9 +1027,10 @@ async fn execute_queued_plain_dispatch(queued: QueuedPlainDispatch) {
     let QueuedPlainDispatch {
         correlation_id,
         request,
+        run_id,
         context,
     } = queued;
-    let response = match context.execute(&request).await {
+    let response = match context.execute(&request, &run_id).await {
         Ok(response) => response,
         Err(error) => {
             tracing::warn!(
@@ -1062,7 +1088,11 @@ impl PlainDispatchContext {
     /// handler that emits events streams them mid-run. A missing handler or a
     /// failure becomes a failure OUTCOME (a reason string), never a dropped
     /// reply, so the server always sees a correlated answer it can re-enter.
-    async fn execute(&self, request: &DispatchRequest) -> Result<DispatchResponse, WorkerError> {
+    async fn execute(
+        &self,
+        request: &DispatchRequest,
+        run_id: &RunId,
+    ) -> Result<DispatchResponse, WorkerError> {
         // Agent activities are spawned in `handle_pushed_frame` and never reach here;
         // this path is the plain typed-registry execution, now carrying the LIVE
         // transcript event drain so a handler that emits events streams them mid-run.
@@ -1092,6 +1122,7 @@ impl PlainDispatchContext {
         ));
         let (context, cancellation) = ActivityContext::for_workflow_with_events(
             Some(request.workflow_id.clone()),
+            Some(run_id.clone()),
             activity_id,
             attempt,
             Some(request.idempotency_key.clone()),
@@ -1146,14 +1177,26 @@ async fn run_agent_dispatch(
     capabilities: InterventionCapabilities,
     writer: PushWriter,
     drain: DrainBinding,
-    correlation_id: u64,
-    request: DispatchRequest,
+    dispatch: AgentDispatch,
 ) {
+    let AgentDispatch {
+        correlation_id,
+        request,
+        run_id,
+    } = dispatch;
     // The wire's one-based delivery attempt keys the session exactly as the
-    // server binds the attempt's owner (`request_for_row` / the bridge stamp).
+    // server binds the attempt's owner (`request_for_row` / the bridge stamp),
+    // and the run keys it exactly as the server's `AttemptKey` does — the two
+    // sides must agree on all four axes, or a routed command resolves the wrong
+    // generation's live session.
     let attempt = request.attempt;
     let activity_id = ActivityId::from_sequence_position(request.ordinal);
-    let session_key = SessionKey::new(request.workflow_id.clone(), activity_id.clone(), attempt);
+    let session_key = SessionKey::new(
+        request.workflow_id.clone(),
+        run_id.clone(),
+        activity_id.clone(),
+        attempt,
+    );
     // Register the live session's control leg BEFORE the run starts; the guard
     // deregisters on drop (any exit path), so a finished attempt is never routed to.
     let (control_tx, control_rx) = mpsc::unbounded_channel();
@@ -1167,6 +1210,7 @@ async fn run_agent_dispatch(
     let _liveness = spawn_liveness_pump(writer.clone(), &request, None);
     let spec = AgentRunSpec::new(
         request.workflow_id.clone(),
+        run_id,
         activity_id,
         attempt,
         // The dispatched activity-type name is neutral run identity the harness may
@@ -1199,6 +1243,23 @@ async fn run_agent_dispatch(
         }
         Err(error) => tracing::warn!(%error, "agent dispatch: failed to encode DispatchResponse"),
     }
+}
+
+/// One agent dispatch as the serve loop hands it off: the correlated frame id,
+/// the wire request, and the run its envelope was validated to carry.
+///
+/// The three travel together on every path, exactly as they do for the plain
+/// arm's [`QueuedPlainDispatch`], so they are carried as one value rather than
+/// as three parallel parameters.
+struct AgentDispatch {
+    /// The pushed frame's correlation id, which the terminal reply answers.
+    correlation_id: u64,
+    /// The wire dispatch request.
+    request: DispatchRequest,
+    /// The run the envelope was validated to carry. Held as a plain `RunId`
+    /// (not the wire `Option`) because the session key and every transcript
+    /// event this attempt emits are keyed on it.
+    run_id: RunId,
 }
 
 /// Starts the automatic liveness pump for one liveness-TRACKED dispatch, or
@@ -1551,6 +1612,7 @@ mod tests {
 
         let command = InterventionCommand {
             workflow_id: WorkflowId::new(Uuid::nil()),
+            run_id: RunId::new_v4(),
             activity_id: ActivityId::from_sequence_position(3),
             attempt: 1,
             issued_by: Some("operator".to_owned()),

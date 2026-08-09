@@ -31,7 +31,7 @@ use chrono::Utc;
 use serde_json::Value;
 use uuid::Uuid;
 
-/// The `(workflow, activity, attempt)` identity stamped onto every demuxed event.
+/// The `(workflow, run, activity, attempt)` identity stamped onto every demuxed event.
 ///
 /// The plain-stdout agent carries no agent sub-identity, so [`ActivityEvent::agent_id`] is always
 /// the nil UUID and [`ActivityEvent::agent_role`] is a fixed neutral label — an honest reflection
@@ -40,6 +40,10 @@ use uuid::Uuid;
 pub struct EventIdentity {
     /// The workflow this run belongs to.
     pub workflow_id: aion_core::WorkflowId,
+    /// The concrete run of that workflow this attempt belongs to — stamped from the run spec,
+    /// never synthesised here. It is the axis that keeps two generations of a continue-as-new
+    /// chain from writing one fused transcript.
+    pub run_id: aion_core::RunId,
     /// The activity within the workflow.
     pub activity_id: aion_core::ActivityId,
     /// The attempt number of the run.
@@ -62,6 +66,7 @@ pub fn line_to_event(identity: &EventIdentity, worker_seq: u64, line: &str) -> A
     let kind = classify_line(line);
     ActivityEvent {
         workflow_id: identity.workflow_id.clone(),
+        run_id: identity.run_id.clone(),
         activity_id: identity.activity_id.clone(),
         attempt: identity.attempt,
         agent_id: Uuid::nil(),
@@ -176,6 +181,7 @@ mod tests {
     fn identity() -> EventIdentity {
         EventIdentity {
             workflow_id: WorkflowId::new(Uuid::nil()),
+            run_id: aion_core::RunId::new(Uuid::from_u128(0x11)),
             activity_id: ActivityId::from_sequence_position(5),
             attempt: 2,
         }

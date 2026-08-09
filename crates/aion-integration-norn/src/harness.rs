@@ -405,6 +405,7 @@ impl AgentHarness for NornHarness {
 
         let identity = EventIdentity {
             workflow_id: spec.workflow_id,
+            run_id: spec.run_id,
             activity_id: spec.activity_id,
             attempt: spec.attempt,
         };
@@ -426,7 +427,7 @@ mod tests {
 
     use std::error::Error;
 
-    use aion_core::{ActivityId, ContentType, Payload, WorkflowId};
+    use aion_core::{ActivityId, ContentType, Payload, RunId, WorkflowId};
 
     use super::{
         AgentRunSpec, NornHarness, expand_arg, prompt_from_spec, registration_capabilities,
@@ -441,6 +442,7 @@ mod tests {
     fn spec_with_input(input: Payload) -> AgentRunSpec {
         AgentRunSpec::new(
             WorkflowId::new_v4(),
+            RunId::new_v4(),
             ActivityId::from_sequence_position(1),
             1,
             "dev",

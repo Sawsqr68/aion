@@ -26,7 +26,7 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use aion_core::{ActivityEvent, ActivityEventKind, ActivityId, MessageRole, WorkflowId};
+use aion_core::{ActivityEvent, ActivityEventKind, ActivityId, MessageRole, RunId, WorkflowId};
 use aion_server::api::http::workflow_router;
 use aion_server::config::{
     AuthConfig, AuthoringConfig, DeployConfig, ListenConfig, MetricsConfig, NamespaceConfig,
@@ -55,6 +55,14 @@ fn workflow_id() -> WorkflowId {
     WorkflowId::new(Uuid::from_u128(0x5B))
 }
 
+/// The run every fixture in this file shares. The transcript keyspace and
+/// the attempt-owner index are both keyed on `(workflow, run, activity,
+/// attempt)`, so one shared run is what makes a written event and the key
+/// that reads it back name the same stream.
+fn run_id() -> RunId {
+    RunId::new(Uuid::from_u128(0x11))
+}
+
 const ACTIVITY_SEQ: u64 = 3;
 const ATTEMPT: u32 = 0;
 
@@ -64,6 +72,7 @@ const ATTEMPT: u32 = 0;
 fn message_event(worker_seq: u64, text: &str) -> ActivityEvent {
     ActivityEvent {
         workflow_id: workflow_id(),
+        run_id: run_id(),
         activity_id: ActivityId::from_sequence_position(ACTIVITY_SEQ),
         attempt: ATTEMPT,
         agent_id: Uuid::from_u128(9),
@@ -83,6 +92,7 @@ fn message_event(worker_seq: u64, text: &str) -> ActivityEvent {
 fn delta_event(worker_seq: u64, fragment: &str) -> ActivityEvent {
     ActivityEvent {
         workflow_id: workflow_id(),
+        run_id: run_id(),
         activity_id: ActivityId::from_sequence_position(ACTIVITY_SEQ),
         attempt: ATTEMPT,
         agent_id: Uuid::from_u128(9),
@@ -212,6 +222,7 @@ async fn subscribe_transcript(
     let mut transcript = json!({
         "namespace": namespace,
         "workflow_id": workflow_id().to_string(),
+        "run_id": run_id().to_string(),
         "activity_id": ACTIVITY_SEQ,
         "attempt": ATTEMPT,
     });

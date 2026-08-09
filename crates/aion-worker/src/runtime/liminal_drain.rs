@@ -522,6 +522,7 @@ mod tests {
     fn event(worker_seq: u64) -> ActivityEvent {
         ActivityEvent {
             workflow_id: WorkflowId::new(Uuid::nil()),
+            run_id: aion_core::RunId::new(Uuid::from_u128(0x11)),
             activity_id: ActivityId::from_sequence_position(1),
             attempt: 1,
             agent_id: Uuid::nil(),

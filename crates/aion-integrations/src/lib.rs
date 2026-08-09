@@ -52,4 +52,4 @@ pub use aion_core::{
     MessageRole, Payload, ProgressDetail, StopKind,
 };
 // The id types an `AgentRunSpec` needs, so the spec can be constructed without a second dependency.
-pub use aion_core::{ActivityId, WorkflowId};
+pub use aion_core::{ActivityId, RunId, WorkflowId};

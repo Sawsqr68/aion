@@ -1017,15 +1017,26 @@ impl WorkerActivityDispatcher {
             u64::try_from(self.heartbeat_tracker.heartbeat_window().as_millis())
                 .unwrap_or(u64::MAX);
         let attempt = task.attempt;
+        // The run is resolved BEFORE the dispatch is built, because everything
+        // downstream is keyed on it: the worker refuses a run-less dispatch
+        // envelope outright, the attempt-owner binding below needs it to name a
+        // generation, and the attempt's transcript is written under it. Refusing
+        // here reports the fault against the dispatch that has it, rather than
+        // shipping a frame whose only possible outcome is the worker's rejection.
+        let run_id = task
+            .run_id
+            .map(RunId::try_from)
+            .transpose()
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| {
+                "activity task run id is missing; refusing to dispatch an unidentified run"
+                    .to_owned()
+            })?;
         let request = super::liminal_transport::DispatchRequest {
             activity_type: activity_type.to_owned(),
             workflow_id: workflow_id.clone(),
             ordinal: activity_id.sequence_position(),
-            run_id: task
-                .run_id
-                .map(RunId::try_from)
-                .transpose()
-                .map_err(|error| error.to_string())?,
+            run_id: Some(run_id.clone()),
             attempt,
             completion_token: task.completion_token,
             idempotency_key: task.idempotency_key,
@@ -1061,6 +1072,7 @@ impl WorkerActivityDispatcher {
                 owners.clone(),
                 super::intervention::AttemptKey::new(
                     workflow_id.clone(),
+                    run_id.clone(),
                     activity_id.clone(),
                     attempt,
                 ),

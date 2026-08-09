@@ -139,9 +139,19 @@ Build order:
 
 Riders from the audit, scoped small: transcript stream discovery is
 unannotated (no activity_type/current marker); retention cap makes long
-tails live-only (describe_run must say so rather than show silence);
-transcript key carries no RunId (continue-as-new collision unproven —
-verify before the MCP resource URIs freeze).
+tails live-only (describe_run must say so rather than show silence).
+
+**CLOSED (lane `runid-schema`)** — the transcript key carried no RunId. The
+collision was subsequently PROVEN, not merely suspected: activity ordinals
+restart at 0 and attempts at 1 in each generation of a continue-as-new
+chain, so two generations wrote byte-identical `(workflow, activity,
+attempt)` keys and the publisher's re-read-head-and-retry loop appended
+generation two onto generation one's stream. The run is now the second axis
+of `ActivityEvent`, `ActivityStreamKey`, the durable `O`-region key (which
+grew 16 bytes, drop-don't-migrate — no compat decode arm), `AgentRunSpec`,
+the worker `ActivityContext`, both transcript read surfaces (REST + WS,
+`run_id` required on every request), and the intervention `AttemptKey` /
+worker `SessionKey`. MCP resource URIs must therefore carry the run.
 
 ## 8. Sequencing
 

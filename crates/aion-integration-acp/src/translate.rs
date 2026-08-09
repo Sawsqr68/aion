@@ -77,7 +77,7 @@ use agent_client_protocol_schema::v1::{
 };
 use aion_core::{
     ActivityEvent, ActivityEventKind, ActivityId, InterventionCapabilities, InterventionKind,
-    InterventionPrimitive, StopKind, WorkflowId,
+    InterventionPrimitive, RunId, StopKind, WorkflowId,
 };
 use aion_integrations::HarnessError;
 use aion_integrations::jsonrpc::JsonRpcResponse;
@@ -99,12 +99,16 @@ pub const UPDATE_SOURCE_PREFIX: &str = "session/update";
 /// Identity carried on every event a session produces, stamped from the run spec.
 ///
 /// ACP carries no per-event producer identity (see [`protocol::AGENT_ROLE`]), so the
-/// `(workflow, activity, attempt)` key is the whole of an event's identity; the ordering fields are
-/// filled by the session's pump as a best-effort local sequence.
+/// `(workflow, run, activity, attempt)` key is the whole of an event's identity; the ordering
+/// fields are filled by the session's pump as a best-effort local sequence.
 #[derive(Clone, Debug)]
 pub struct EventIdentity {
     /// The workflow this run belongs to.
     pub workflow_id: WorkflowId,
+    /// The concrete run of that workflow this attempt belongs to — stamped from the run spec,
+    /// never synthesised here. It is the axis that keeps two generations of a continue-as-new
+    /// chain from writing one fused transcript.
+    pub run_id: RunId,
     /// The activity within the workflow.
     pub activity_id: ActivityId,
     /// The attempt number of the run.
@@ -118,6 +122,7 @@ impl EventIdentity {
         let (kind, ephemeral) = kind;
         ActivityEvent {
             workflow_id: self.workflow_id.clone(),
+            run_id: self.run_id.clone(),
             activity_id: self.activity_id.clone(),
             attempt: self.attempt,
             // ACP has no sub-agent attribution: one session is one agent, and no frame carries a
@@ -562,7 +567,7 @@ mod tests {
         ToolCallUpdate, ToolCallUpdateFields, ToolKind, UsageUpdate,
     };
     use aion_core::{
-        ActivityEventKind, ActivityId, InterventionPrimitive, MessageRole, ProgressDetail,
+        ActivityEventKind, ActivityId, InterventionPrimitive, MessageRole, ProgressDetail, RunId,
         StopKind, WorkflowId,
     };
     use aion_integrations::HarnessError;
@@ -1037,6 +1042,7 @@ mod tests {
     fn stamping_fills_the_run_identity_and_the_acp_attribution() {
         let identity = EventIdentity {
             workflow_id: WorkflowId::new(Uuid::nil()),
+            run_id: RunId::new(Uuid::from_u128(0x11)),
             activity_id: ActivityId::from_sequence_position(4),
             attempt: 3,
         };

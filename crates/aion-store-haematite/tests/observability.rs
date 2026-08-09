@@ -10,7 +10,9 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use aion_core::{ActivityEvent, ActivityEventKind, ActivityId, Event, MessageRole, WorkflowId};
+use aion_core::{
+    ActivityEvent, ActivityEventKind, ActivityId, Event, MessageRole, RunId, WorkflowId,
+};
 use aion_store::{ActivityStreamKey, ObservabilityStore, ReadableEventStore, StoreError};
 use aion_store_haematite::HaematiteStore;
 use chrono::Utc;
@@ -33,9 +35,20 @@ fn workflow() -> WorkflowId {
     WorkflowId::new(Uuid::from_u128(0xABCD))
 }
 
+/// The first generation of the continue-as-new chain under test.
+fn generation_one() -> RunId {
+    RunId::new(Uuid::from_u128(0x11))
+}
+
+/// The second generation: SAME workflow id, new run.
+fn generation_two() -> RunId {
+    RunId::new(Uuid::from_u128(0x22))
+}
+
 fn event(attempt: u32, worker_seq: u64, text: &str) -> ActivityEvent {
     ActivityEvent {
         workflow_id: workflow(),
+        run_id: generation_one(),
         activity_id: ActivityId::from_sequence_position(3),
         attempt,
         agent_id: Uuid::from_u128(9),
@@ -52,7 +65,12 @@ fn event(attempt: u32, worker_seq: u64, text: &str) -> ActivityEvent {
 }
 
 fn key(attempt: u32) -> ActivityStreamKey {
-    ActivityStreamKey::new(workflow(), ActivityId::from_sequence_position(3), attempt)
+    ActivityStreamKey::new(
+        workflow(),
+        generation_one(),
+        ActivityId::from_sequence_position(3),
+        attempt,
+    )
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -117,11 +135,16 @@ async fn attempts_are_disjoint_streams() -> Result<(), StoreError> {
     Ok(())
 }
 
-/// Enumeration is scoped to ONE workflow's retained streams, ordered by
+/// Enumeration is scoped to ONE RUN's retained streams, ordered by
 /// `(activity, attempt)`, and survives a database reopen — the "open it an hour
 /// later" acceptance at the store layer.
+///
+/// Two things must be excluded, and the fixture supplies both: another
+/// workflow's stream, and a SIBLING GENERATION of this same workflow whose
+/// `(activity, attempt)` coordinate collides with one of the listed streams.
+/// The second is the case a workflow-scoped enumeration could not distinguish.
 #[tokio::test(flavor = "multi_thread")]
-async fn list_activity_streams_enumerates_only_the_workflows_streams_and_survives_reopen()
+async fn list_activity_streams_enumerates_only_the_runs_streams_and_survives_reopen()
 -> Result<(), StoreError> {
     let workflow_b = WorkflowId::new(Uuid::from_u128(0xBEEF));
     let event_for =
@@ -130,6 +153,11 @@ async fn list_activity_streams_enumerates_only_the_workflows_streams_and_survive
             activity_id: ActivityId::from_sequence_position(activity_seq),
             ..event(attempt, worker_seq, "listed")
         };
+    let sibling_generation = |activity_seq: u64, attempt: u32, worker_seq: u64| ActivityEvent {
+        run_id: generation_two(),
+        activity_id: ActivityId::from_sequence_position(activity_seq),
+        ..event(attempt, worker_seq, "sibling")
+    };
     let dir = unique_temp_dir("obs-list");
     {
         let store = HaematiteStore::create(&dir)?;
@@ -147,8 +175,16 @@ async fn list_activity_streams_enumerates_only_the_workflows_streams_and_survive
         store
             .append_activity_event(0, &event_for(&workflow_b, 3, 0, 1))
             .await?;
+        // A SIBLING GENERATION of wf-A under coordinates that collide with one
+        // of its streams: same workflow, same activity, same attempt, new run.
+        // It must not leak into wf-A's generation-one enumeration.
+        store
+            .append_activity_event(0, &sibling_generation(3, 0, 9))
+            .await?;
 
-        let summaries = store.list_activity_streams(&workflow()).await?;
+        let summaries = store
+            .list_activity_streams(&workflow(), &generation_one())
+            .await?;
         let listed: Vec<(u64, u32, u64)> = summaries
             .iter()
             .map(|summary| {
@@ -162,7 +198,7 @@ async fn list_activity_streams_enumerates_only_the_workflows_streams_and_survive
         assert_eq!(
             listed,
             vec![(3, 0, 2), (5, 2, 1)],
-            "exactly wf-A's streams, ordered, with correct heads"
+            "exactly wf-A generation one's streams, ordered, with correct heads"
         );
         store
             .event_store()
@@ -172,7 +208,9 @@ async fn list_activity_streams_enumerates_only_the_workflows_streams_and_survive
     }
     // Reopen the SAME on-disk database: the enumeration is identical.
     let reopened = HaematiteStore::open(&dir)?;
-    let summaries = reopened.list_activity_streams(&workflow()).await?;
+    let summaries = reopened
+        .list_activity_streams(&workflow(), &generation_one())
+        .await?;
     let listed: Vec<(u64, u32, u64)> = summaries
         .iter()
         .map(|summary| {
@@ -191,10 +229,97 @@ async fn list_activity_streams_enumerates_only_the_workflows_streams_and_survive
     // A workflow with nothing retained reads empty, not an error.
     assert!(
         reopened
-            .list_activity_streams(&WorkflowId::new(Uuid::from_u128(0xF00D)))
+            .list_activity_streams(&WorkflowId::new(Uuid::from_u128(0xF00D)), &generation_one())
             .await?
             .is_empty()
     );
+    // Generation two of wf-A enumerates exactly its OWN one stream, and it is
+    // the colliding `(activity 3, attempt 0)` coordinate — proof the two
+    // generations are separately addressable rather than fused.
+    let sibling = reopened
+        .list_activity_streams(&workflow(), &generation_two())
+        .await?;
+    let sibling_listed: Vec<(u64, u32, u64)> = sibling
+        .iter()
+        .map(|summary| {
+            (
+                summary.key.activity_id.sequence_position(),
+                summary.key.attempt,
+                summary.head,
+            )
+        })
+        .collect();
+    assert_eq!(sibling_listed, vec![(3, 0, 1)]);
+    Ok(())
+}
+
+/// THE RUN-SCOPING INVARIANT against the real backend, and against the exact
+/// coordinates a continue-as-new chain actually produces.
+///
+/// Generation two of a chain starts its activity ordinals at `0` again and its
+/// attempts at `1` again, under the SAME workflow id. Both generations here
+/// therefore emit from `(workflow, ordinal 0, attempt 1)`. The invariant:
+///
+/// - both appends succeed at `expected_seq == 0` (each is its own stream head);
+/// - the two records land under DIFFERENT durable keys;
+/// - a read scoped to generation two returns EXACTLY ONE event — its own;
+/// - and this holds across a database reopen, because the run is in the KEY.
+///
+/// Under the pre-run-axis 29-byte key, generation two's append would have
+/// collided against generation one's head and — after the publisher's
+/// re-read-head-and-retry — been appended onto generation one's stream, fusing
+/// the two transcripts. That is the defect this pins closed.
+#[tokio::test(flavor = "multi_thread")]
+async fn two_generations_of_one_chain_never_share_a_durable_stream() -> Result<(), StoreError> {
+    let dir = unique_temp_dir("obs-run-scoping");
+    let ordinal_zero = ActivityId::from_sequence_position(0);
+    let first = ActivityEvent {
+        activity_id: ordinal_zero.clone(),
+        ..event(1, 1, "generation one")
+    };
+    let second = ActivityEvent {
+        run_id: generation_two(),
+        ..first.clone()
+    };
+    let first_key = ActivityStreamKey::of(&first);
+    let second_key = ActivityStreamKey::of(&second);
+    // The two keys differ ONLY in the run axis — the collision under test.
+    assert_ne!(first_key, second_key);
+    assert_eq!(first_key.workflow_id, second_key.workflow_id);
+    assert_eq!(first_key.activity_id, second_key.activity_id);
+    assert_eq!(first_key.attempt, second_key.attempt);
+
+    {
+        let store = HaematiteStore::create(&dir)?;
+        // Both are the FIRST event of their own stream: both append at seq 0.
+        assert_eq!(store.append_activity_event(0, &first).await?, 0);
+        assert_eq!(
+            store.append_activity_event(0, &second).await?,
+            0,
+            "generation two's first event must not conflict against generation one's head"
+        );
+        store
+            .event_store()
+            .database()
+            .commit()
+            .map_err(|error| StoreError::Backend(format!("commit failed: {error}")))?;
+    }
+
+    let reopened = HaematiteStore::open(&dir)?;
+    let second_generation = reopened.read_activity_events_from(&second_key, 0).await?;
+    assert_eq!(
+        second_generation.len(),
+        1,
+        "a read scoped to generation two must return exactly its own event"
+    );
+    assert_eq!(second_generation[0].event.run_id, generation_two());
+    let first_generation = reopened.read_activity_events_from(&first_key, 0).await?;
+    assert_eq!(first_generation.len(), 1);
+    assert_eq!(first_generation[0].event.run_id, generation_one());
+    // Each stream's head counts ITS OWN records: the retention cap is therefore
+    // measured per (run, activity, attempt), not per fused chain.
+    assert_eq!(reopened.activity_head(&first_key).await?, 1);
+    assert_eq!(reopened.activity_head(&second_key).await?, 1);
     Ok(())
 }
 

@@ -219,6 +219,7 @@ mod tests {
     fn envelope(kind: ActivityEventKind) -> ActivityEvent {
         ActivityEvent {
             workflow_id: WorkflowId::new(Uuid::from_u128(1)),
+            run_id: aion_core::RunId::new(Uuid::from_u128(0x11)),
             activity_id: ActivityId::from_sequence_position(3),
             attempt: 0,
             agent_id: Uuid::from_u128(9),

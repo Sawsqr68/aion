@@ -35,7 +35,7 @@ use std::time::Duration;
 use aion_integration_norn::NornHarness;
 use aion_integrations::{
     ActivityEventKind, ActivityId, AgentHarness, AgentRunSpec, AgentSession, ContentType,
-    InjectPriority, InterventionCommand, InterventionKind, InterventionPrimitive, Payload,
+    InjectPriority, InterventionCommand, InterventionKind, InterventionPrimitive, Payload, RunId,
     WorkflowId,
 };
 use chrono::Utc;
@@ -158,6 +158,7 @@ async fn norn_harness_drives_a_real_run_end_to_end() -> TestResult {
 
     let spec = AgentRunSpec::new(
         WorkflowId::new_v4(),
+        RunId::new_v4(),
         ActivityId::from_sequence_position(1),
         1,
         "norn-e2e",
@@ -188,6 +189,7 @@ async fn norn_harness_drives_a_real_run_end_to_end() -> TestResult {
     //     neutral command reached the real child and round-tripped.
     let command = InterventionCommand {
         workflow_id: WorkflowId::new_v4(),
+        run_id: RunId::new_v4(),
         activity_id: ActivityId::from_sequence_position(1),
         attempt: 1,
         issued_by: Some("operator".to_owned()),

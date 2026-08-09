@@ -1,7 +1,8 @@
 //! Event-streaming wire types.
 
 use crate::convert::{
-    ProtoWorkflowId, ProtoWorkflowStatus, WireEnvelope, decode_core_value, encode_core_value,
+    ProtoRunId, ProtoWorkflowId, ProtoWorkflowStatus, WireEnvelope, decode_core_value,
+    encode_core_value,
 };
 use crate::error::WireError;
 
@@ -122,12 +123,12 @@ impl StreamedClusterSnapshot {
 }
 
 /// Subscribe to the agent-observability transcript for one
-/// `(workflow, activity, attempt)` (NOI-5b).
+/// `(workflow, run, activity, attempt)` (NOI-5b).
 ///
 /// Namespace-scoped: the transcript belongs to the workflow the activity runs
 /// under, so this carries the same `namespace` + `workflow_id` the per-workflow
-/// event subscription does, plus the `activity_id`/`attempt` axes that pin the
-/// exact `O`-keyspace stream. The optional `after_seq` resume cursor is the
+/// event subscription does, plus the `run_id`/`activity_id`/`attempt` axes that
+/// pin the exact `O`-keyspace stream. The optional `after_seq` resume cursor is the
 /// highest `store_seq` the client has already applied; the server replays the
 /// durable `O` tail with `store_seq > after_seq` then splices onto the live
 /// broadcast with no gap and no duplicate (the same splice contract the workflow
@@ -141,6 +142,17 @@ pub struct TranscriptSubscription {
     /// Workflow whose activity transcript is requested.
     #[prost(message, optional, tag = "2")]
     pub workflow_id: Option<ProtoWorkflowId>,
+    /// Concrete run of that workflow whose activity transcript is requested —
+    /// the second stream axis, and REQUIRED.
+    ///
+    /// `Option` here is a prost message-field encoding artefact, exactly as it
+    /// is for `workflow_id`: the server rejects an absent value as
+    /// `invalid_input` rather than defaulting it. There is no "latest run"
+    /// fallback, because a transcript subscription that silently resolved to a
+    /// different generation than the caller meant is the ambiguity this axis
+    /// exists to remove.
+    #[prost(message, optional, tag = "6")]
+    pub run_id: Option<ProtoRunId>,
     /// Activity within the workflow whose transcript is requested.
     #[prost(message, optional, tag = "3")]
     pub activity_id: Option<crate::convert::ProtoActivityId>,
@@ -325,7 +337,9 @@ mod tests {
         FilteredSubscription, FirehoseSubscription, PerWorkflowSubscription, StreamedEvent,
         SubscriptionRequest, TranscriptSubscription, encode_streamed_event, subscription_request,
     };
-    use crate::convert::{ProtoActivityId, ProtoWorkflowId, ProtoWorkflowStatus, WireEnvelope};
+    use crate::convert::{
+        ProtoActivityId, ProtoRunId, ProtoWorkflowId, ProtoWorkflowStatus, WireEnvelope,
+    };
     use crate::error::WireError;
 
     fn workflow_id() -> aion_core::WorkflowId {
@@ -397,6 +411,9 @@ mod tests {
                     TranscriptSubscription {
                         namespace: String::from("tenant-a"),
                         workflow_id: Some(ProtoWorkflowId::from(workflow_id())),
+                        run_id: Some(ProtoRunId::from(aion_core::RunId::new(
+                            uuid::Uuid::from_u128(0x11),
+                        ))),
                         activity_id: Some(ProtoActivityId {
                             sequence_position: 3,
                         }),
@@ -410,6 +427,9 @@ mod tests {
                     TranscriptSubscription {
                         namespace: String::from("tenant-a"),
                         workflow_id: Some(ProtoWorkflowId::from(workflow_id())),
+                        run_id: Some(ProtoRunId::from(aion_core::RunId::new(
+                            uuid::Uuid::from_u128(0x22),
+                        ))),
                         activity_id: Some(ProtoActivityId {
                             sequence_position: 3,
                         }),

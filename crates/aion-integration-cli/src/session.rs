@@ -225,7 +225,9 @@ mod tests {
     //! end-to-end without spawning anything.
 
     use super::*;
-    use aion_core::{ActivityEventKind, ActivityId, InterventionKind, MessageRole, WorkflowId};
+    use aion_core::{
+        ActivityEventKind, ActivityId, InterventionKind, MessageRole, RunId, WorkflowId,
+    };
     use chrono::Utc;
     use futures::StreamExt;
     use uuid::Uuid;
@@ -233,6 +235,7 @@ mod tests {
     fn identity() -> EventIdentity {
         EventIdentity {
             workflow_id: WorkflowId::new(Uuid::nil()),
+            run_id: RunId::new(Uuid::from_u128(0x11)),
             activity_id: ActivityId::from_sequence_position(2),
             attempt: 1,
         }
@@ -293,6 +296,7 @@ mod tests {
         ] {
             let cmd = InterventionCommand {
                 workflow_id: WorkflowId::new(Uuid::nil()),
+                run_id: RunId::new_v4(),
                 activity_id: ActivityId::from_sequence_position(2),
                 attempt: 1,
                 issued_by: None,

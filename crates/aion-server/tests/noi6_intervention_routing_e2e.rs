@@ -36,7 +36,7 @@ use std::time::{Duration, Instant};
 use aion_core::{
     ActivityEvent, ActivityId, ContentType, InjectPriority, InterventionCapabilities,
     InterventionCommand, InterventionKind, InterventionOutcome, InterventionPrimitive, Payload,
-    WorkflowId,
+    RunId, WorkflowId,
 };
 use aion_integrations::contract::{AgentHarness, AgentSession};
 use aion_integrations::error::HarnessError;
@@ -143,6 +143,7 @@ fn spawn_live_session(
     let guard = control.register(key.clone(), control_tx, capabilities);
     let spec = AgentRunSpec::new(
         key.workflow_id.clone(),
+        key.run_id.clone(),
         key.activity_id.clone(),
         key.attempt,
         "agent-activity",
@@ -335,18 +336,27 @@ impl WorkerThread {
     }
 }
 
+/// The run every fixture in this file shares. The worker's `SessionKey` and the
+/// server's `AttemptKey` are both keyed on `(workflow, run, activity, attempt)`,
+/// so a routed command only resolves when both name the same run — which is the
+/// whole point of the axis.
+fn run_id() -> RunId {
+    RunId::new(Uuid::from_u128(0x11))
+}
+
 fn keys() -> (SessionKey, AttemptKey) {
     let workflow_id = WorkflowId::new(Uuid::nil());
     let activity_id = ActivityId::from_sequence_position(3);
     (
-        SessionKey::new(workflow_id.clone(), activity_id.clone(), 1),
-        AttemptKey::new(workflow_id, activity_id, 1),
+        SessionKey::new(workflow_id.clone(), run_id(), activity_id.clone(), 1),
+        AttemptKey::new(workflow_id, run_id(), activity_id, 1),
     )
 }
 
 fn command(activity: &ActivityId, attempt: u32, kind: InterventionKind) -> InterventionCommand {
     InterventionCommand {
         workflow_id: WorkflowId::new(Uuid::nil()),
+        run_id: run_id(),
         activity_id: activity.clone(),
         attempt,
         issued_by: Some("operator".to_owned()),

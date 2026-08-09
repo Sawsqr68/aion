@@ -19,7 +19,7 @@ use std::time::Duration;
 use aion_integration_cli::CliHarness;
 use aion_integrations::{
     ActivityEventKind, ActivityId, AgentHarness, AgentRunSpec, AgentSession, ContentType,
-    InterventionCommand, InterventionKind, Payload, WorkflowId,
+    InterventionCommand, InterventionKind, Payload, RunId, WorkflowId,
 };
 use chrono::Utc;
 use futures::StreamExt;
@@ -48,6 +48,7 @@ fn fake_cli_harness() -> CliHarness {
 fn spec() -> AgentRunSpec {
     AgentRunSpec::new(
         WorkflowId::new_v4(),
+        RunId::new_v4(),
         ActivityId::from_sequence_position(1),
         1,
         "cli-activity",
@@ -72,6 +73,7 @@ async fn cli_harness_streams_a_live_transcript_with_no_controls() {
     // Any command is rejected: there is no control channel at all.
     let cmd = InterventionCommand {
         workflow_id: WorkflowId::new_v4(),
+        run_id: RunId::new_v4(),
         activity_id: ActivityId::from_sequence_position(1),
         attempt: 1,
         issued_by: None,

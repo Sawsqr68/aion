@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use aion_core::{ActivityEvent, ActivityId, Payload, WorkflowId};
+use aion_core::{ActivityEvent, ActivityId, Payload, RunId, WorkflowId};
 use tokio::sync::{Notify, mpsc};
 
 use crate::error::WorkerError;
@@ -12,6 +12,16 @@ use crate::error::WorkerError;
 #[derive(Clone, Debug)]
 pub struct ActivityContext {
     workflow_id: Option<WorkflowId>,
+    /// The concrete run this activity was dispatched by, when the context is
+    /// attached to a live server task.
+    ///
+    /// `None` only for a hand-built unit-test context, exactly as `workflow_id`
+    /// is: a live dispatch always carries a run id (the transport refuses a
+    /// dispatch envelope without one), and [`ActivityContext::run_id`] is the
+    /// only source a handler has for the run axis its transcript events must
+    /// carry. It is deliberately not defaulted — there is no honest value to
+    /// invent for a context that was never dispatched.
+    run_id: Option<RunId>,
     activity_id: ActivityId,
     attempt: u32,
     idempotency_key: Option<String>,
@@ -67,6 +77,20 @@ impl ActivityContext {
     #[must_use]
     pub const fn attempt(&self) -> u32 {
         self.attempt
+    }
+
+    /// Returns the concrete run this activity was dispatched by.
+    ///
+    /// A handler that emits transcript events through [`Self::emit_event`] must
+    /// stamp this onto every [`ActivityEvent`] it builds: the transcript
+    /// keyspace is keyed on `(workflow, run, activity, attempt)`, and without
+    /// the run two generations of one continue-as-new chain write to the same
+    /// stream. Live worker tasks always return `Some`; manually constructed
+    /// unit-test contexts return `None` because they are not attached to a
+    /// server task.
+    #[must_use]
+    pub const fn run_id(&self) -> Option<&RunId> {
+        self.run_id.as_ref()
     }
 
     /// Returns the stable external-effect key delivered with this task.
@@ -155,17 +179,19 @@ impl ActivityContext {
         attempt: u32,
         heartbeat_sender: Option<mpsc::UnboundedSender<HeartbeatRequest>>,
     ) -> (Self, ActivityCancellationHandle) {
-        Self::for_workflow(None, activity_id, attempt, heartbeat_sender)
+        Self::for_workflow(None, None, activity_id, attempt, heartbeat_sender)
     }
 
     pub(crate) fn for_workflow(
         workflow_id: Option<WorkflowId>,
+        run_id: Option<RunId>,
         activity_id: ActivityId,
         attempt: u32,
         heartbeat_sender: Option<mpsc::UnboundedSender<HeartbeatRequest>>,
     ) -> (Self, ActivityCancellationHandle) {
         Self::for_workflow_with_events(
             workflow_id,
+            run_id,
             activity_id,
             attempt,
             None,
@@ -176,6 +202,7 @@ impl ActivityContext {
 
     pub(crate) fn for_task(
         workflow_id: WorkflowId,
+        run_id: Option<RunId>,
         activity_id: ActivityId,
         attempt: u32,
         idempotency_key: String,
@@ -183,6 +210,7 @@ impl ActivityContext {
     ) -> (Self, ActivityCancellationHandle) {
         Self::for_workflow_with_events(
             Some(workflow_id),
+            run_id,
             activity_id,
             attempt,
             Some(idempotency_key),
@@ -197,6 +225,7 @@ impl ActivityContext {
     /// to `None` so every current call site is unchanged.
     pub(crate) fn for_workflow_with_events(
         workflow_id: Option<WorkflowId>,
+        run_id: Option<RunId>,
         activity_id: ActivityId,
         attempt: u32,
         idempotency_key: Option<String>,
@@ -209,6 +238,7 @@ impl ActivityContext {
         });
         let context = Self {
             workflow_id,
+            run_id,
             activity_id,
             attempt,
             idempotency_key,
@@ -263,14 +293,18 @@ mod tests {
     /// every isolated unit test) is unaffected.
     #[tokio::test]
     async fn emit_event_is_a_no_op_without_an_installed_seam() {
-        use aion_core::{ActivityEvent, ActivityEventKind, MessageRole, WorkflowId};
+        use aion_core::{ActivityEvent, ActivityEventKind, MessageRole, RunId, WorkflowId};
         use chrono::Utc;
         use uuid::Uuid;
 
         let (context, _cancellation) =
             ActivityContext::new(ActivityId::from_sequence_position(1), 0);
+        // A hand-built context is not attached to a server task, so it has no
+        // run — the honest absence, never a synthesised id.
+        assert!(context.run_id().is_none());
         let event = ActivityEvent {
             workflow_id: WorkflowId::new(Uuid::from_u128(1)),
+            run_id: RunId::new(Uuid::from_u128(0x11)),
             activity_id: ActivityId::from_sequence_position(1),
             attempt: 0,
             agent_id: Uuid::from_u128(2),
@@ -291,21 +325,26 @@ mod tests {
     /// the runtime drain end — the additive worker->server ingestion seam.
     #[tokio::test]
     async fn emit_event_forwards_to_installed_seam() -> Result<(), Box<dyn std::error::Error>> {
-        use aion_core::{ActivityEvent, ActivityEventKind, MessageRole, WorkflowId};
+        use aion_core::{ActivityEvent, ActivityEventKind, MessageRole, RunId, WorkflowId};
         use chrono::Utc;
         use uuid::Uuid;
 
+        let run_id = RunId::new(Uuid::from_u128(0x11));
         let (sender, mut drain) = super::mpsc::unbounded_channel();
         let (context, _cancellation) = ActivityContext::for_workflow_with_events(
             Some(WorkflowId::new(Uuid::from_u128(1))),
+            Some(run_id.clone()),
             ActivityId::from_sequence_position(1),
             0,
             None,
             None,
             Some(sender),
         );
+        // A dispatched context exposes the run its events must be stamped with.
+        assert_eq!(context.run_id(), Some(&run_id));
         let event = ActivityEvent {
             workflow_id: WorkflowId::new(Uuid::from_u128(1)),
+            run_id: run_id.clone(),
             activity_id: ActivityId::from_sequence_position(1),
             attempt: 0,
             agent_id: Uuid::from_u128(2),
@@ -328,8 +367,10 @@ mod tests {
 
     #[test]
     fn live_task_context_exposes_the_server_idempotency_key() {
+        let run_id = aion_core::RunId::new_v4();
         let (context, cancellation) = ActivityContext::for_task(
             aion_core::WorkflowId::new_v4(),
+            Some(run_id.clone()),
             ActivityId::from_sequence_position(7),
             3,
             String::from("effect-key"),
@@ -338,6 +379,7 @@ mod tests {
 
         assert_eq!(context.idempotency_key(), Some("effect-key"));
         assert_eq!(context.attempt(), 3);
+        assert_eq!(context.run_id(), Some(&run_id));
         drop(cancellation);
     }
 

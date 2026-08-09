@@ -515,6 +515,7 @@ mod tests {
         let task = proto_task("double", &TestInput { value: 21 })?;
         let (context, cancellation) = crate::ActivityContext::for_workflow(
             Some(WorkflowId::new_v4()),
+            Some(aion_core::RunId::new_v4()),
             ActivityId::from_sequence_position(99),
             1,
             None,

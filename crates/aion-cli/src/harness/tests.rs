@@ -548,7 +548,7 @@ fn a_malformed_norn_unset_env_entry_is_refused() -> TestResult {
 #[cfg(all(feature = "norn", feature = "liminal-transport"))]
 #[test]
 fn the_norn_argv_pass_through_reaches_the_child_expanded_and_in_order() -> TestResult {
-    use aion_core::{ActivityId, ContentType, Payload, WorkflowId};
+    use aion_core::{ActivityId, ContentType, Payload, RunId, WorkflowId};
     use aion_integrations::AgentRunSpec;
 
     // Exactly what the operator types, one `--norn-arg` per element.
@@ -586,6 +586,7 @@ fn the_norn_argv_pass_through_reaches_the_child_expanded_and_in_order() -> TestR
     let workflow_id = WorkflowId::new_v4();
     let spec = AgentRunSpec::new(
         workflow_id.clone(),
+        RunId::new_v4(),
         ActivityId::from_sequence_position(1),
         1,
         "assistant",
