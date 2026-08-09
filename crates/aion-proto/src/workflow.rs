@@ -465,7 +465,7 @@ mod tests {
         assert_proto_round_trip(&error_response)?;
         // The two shapes stay distinguishable across a proto round trip: a
         // decoder can tell "no arguments supplied" from any supplied document.
-        assert!(request != no_arguments_request);
+        assert_ne!(request, no_arguments_request);
         Ok(())
     }
 

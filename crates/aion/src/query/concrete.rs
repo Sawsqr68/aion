@@ -100,12 +100,16 @@ mod tests {
 
     const QUERY_TIMEOUT: Duration = Duration::from_millis(50);
 
+    /// One recorded mailbox delivery: target pid, query name, and the
+    /// caller's arguments payload exactly as the seam handed them over.
+    type Delivery = (u64, String, Payload);
+
     /// Replying fake over the mailbox seam, recording every delivery's
     /// process, query name, and arguments payload.
     #[derive(Default)]
     struct ReplyingMailbox {
         replies: Mutex<HashMap<String, Payload>>,
-        delivered: Mutex<Vec<(u64, String, Payload)>>,
+        delivered: Mutex<Vec<Delivery>>,
     }
 
     impl ReplyingMailbox {
@@ -120,13 +124,11 @@ mod tests {
             fake
         }
 
-        fn delivered(&self) -> Result<Vec<(u64, String, Payload)>, EngineSeamError> {
+        fn delivered(&self) -> Result<Vec<Delivery>, EngineSeamError> {
             Ok(self.lock_delivered()?.clone())
         }
 
-        fn lock_delivered(
-            &self,
-        ) -> Result<MutexGuard<'_, Vec<(u64, String, Payload)>>, EngineSeamError> {
+        fn lock_delivered(&self) -> Result<MutexGuard<'_, Vec<Delivery>>, EngineSeamError> {
             self.delivered
                 .lock()
                 .map_err(|_| EngineSeamError::Delivery {

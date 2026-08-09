@@ -17,7 +17,7 @@ import gleam/string
 /// a codec.
 ///
 /// A caller that supplies no arguments sends the JSON `null` document, so a
-/// query that takes no input registers [`codec.nil_codec`] as its arguments
+/// query that takes no input registers [`codec.null_codec`] as its arguments
 /// codec and ignores the `Nil` its handler receives.
 /// Arguments that `arguments_codec` cannot decode never reach `reply`: the
 /// failure is replied as a typed query-handler failure naming the decode

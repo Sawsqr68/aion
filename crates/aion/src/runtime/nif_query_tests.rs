@@ -466,6 +466,7 @@ fn cleanup_process_drains_queries_and_drops_reply_senders() -> TestResult {
         .push_back(PendingQuery {
             query_id: "q-3".to_owned(),
             name: "state".to_owned(),
+            arguments: "null".to_owned(),
         });
     state.servicing_queries.insert(42, "q-3".to_owned());
 
@@ -551,7 +552,37 @@ fn delivery_queues_pending_query_and_wakes_the_workflow_process() -> TestResult 
         return Err(format!("expected exactly one queued query, found {}", queued.len()).into());
     };
     assert_eq!(pending.name, "state");
+    // The caller's arguments ride the queued record byte-exact, ready for the
+    // pump's sentinel.
+    assert_eq!(pending.arguments, "{}");
     assert!(pending_reply_is_live(&state, &pending.query_id)?);
+
+    // Malformed arguments: refused at the delivery boundary with the typed
+    // caller-side error, and NOTHING is queued — the workflow is never woken
+    // to discover a request it could not have answered.
+    let (bad_reply_to, bad_reply_from) = tokio::sync::oneshot::channel();
+    mailbox.deliver_workflow_message(
+        WorkflowProcessHandle::new(pid),
+        WorkflowMailboxMessage::Query {
+            name: "state".to_owned(),
+            payload: payload_from_string("{not json"),
+            reply_to: bad_reply_to,
+        },
+    )?;
+    match tokio_runtime.block_on(bad_reply_from)? {
+        Err(QueryError::InvalidArguments { reason }) => {
+            assert!(
+                reason.contains("well-formed JSON"),
+                "the refusal must name what was wrong: {reason}"
+            );
+        }
+        other => return Err(format!("expected typed InvalidArguments, got {other:?}").into()),
+    }
+    assert_eq!(
+        state.pending_queries.get(&pid).map(|queue| queue.len()),
+        Some(1),
+        "a refused argument payload must not queue a second query"
+    );
 
     // Unknown name: typed reply to the caller, workflow untouched, queue
     // length unchanged.

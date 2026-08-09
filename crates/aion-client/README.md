@@ -83,7 +83,7 @@ handle
 
 ## query
 
-Query results can be decoded into any `serde::Deserialize` type. The current AW query request has no argument payload field, so pass `&()` for typed query arguments.
+Query results can be decoded into any `serde::Deserialize` type, and query arguments are carried to the workflow's registered handler. Pass the typed arguments the handler expects; `&()` serializes to the JSON `null` document, which is the canonical "no arguments" request a no-argument query answers.
 
 ```rust
 use serde::Deserialize;

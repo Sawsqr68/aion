@@ -153,20 +153,32 @@ The timer API also includes `workflow.start_timer`, `workflow.cancel_timer`, `wo
 
 ## Queries
 
-Queries are read-only and record no workflow events. A handler returns a typed value through a codec; by convention it must not dispatch activities or mutate workflow state.
+Queries are read-only and record no workflow events. A handler takes the caller's typed arguments and returns a typed value, each through its own codec; by convention it must not dispatch activities or mutate workflow state.
 
 ```gleam
+import aion/codec
 import aion/error
 import aion/query
 
 pub fn register_state_query(
-  current_status: fn() -> String,
+  current_status: fn(Nil) -> String,
 ) -> Result(Nil, error.QueryError) {
-  query.handler("state", string_codec(), current_status)
+  // `codec.null_codec()` is the arguments codec for a query that takes none:
+  // a caller supplying no arguments sends the JSON `null` document.
+  query.handler("state", codec.null_codec(), string_codec(), current_status)
+}
+
+pub fn register_status_for_query(
+  status_for: fn(String) -> String,
+) -> Result(Nil, error.QueryError) {
+  // A query that DOES take arguments decodes them with its own codec; a
+  // request the codec cannot decode is replied as a typed handler failure and
+  // never reaches the handler body.
+  query.handler("status_for", string_codec(), string_codec(), status_for)
 }
 ```
 
-`query.dispatch(name, value_codec)` is provided for callers inside the engine boundary and for the Gleam test harness.
+`query.dispatch(name, arguments_codec, arguments, value_codec)` is provided for callers inside the engine boundary and for the Gleam test harness.
 
 ## Minimal example
 

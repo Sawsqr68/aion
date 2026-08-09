@@ -428,7 +428,7 @@ fn set_status(phase: String, round: Int) -> Result(Nil, io.AgentDevError) {
   case
     query.handler(
       status_query_name,
-      codec.nil_codec(),
+      codec.null_codec(),
       codecs.agent_dev_status_codec(),
       fn(_) { status },
     )

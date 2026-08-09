@@ -1,7 +1,7 @@
 //! `answer` lowering for the reference (Gleam-source) backend.
 //!
-//! One `query.handler(<name>, <answer codec>, fn() { <value> })`, its
-//! `Result(Nil, QueryError)` discriminated in place and threaded through
+//! One `query.handler(<name>, awlc.nil_codec(), <answer codec>, fn(_) { … })`,
+//! its `Result(Nil, QueryError)` discriminated in place and threaded through
 //! `result.try` like every other fallible statement. That threading IS the
 //! failure contract — a registration the engine refuses faults the step and
 //! reaches the step's `on failure` block, rather than leaving a declared query
@@ -49,8 +49,13 @@ pub(super) fn lower_answer(
     let value = render_value(emitter, answer, &answer_ty, scope, &mut prelude)?;
     flush_prelude(emitter, prelude);
     emitter.flags.uses_query_module = true;
+    // An AWL `answer` declares no arguments, so the handler's arguments codec
+    // is the SDK's unit codec and the caller's document is ignored. Passing a
+    // codec rather than omitting the parameter is what keeps a declared query
+    // answerable at all: the handler contract carries arguments in every case.
     emitter.line(&format!(
-        "use _ <- result.try(case query.handler({}, {codec}(), fn() {{ {value} }}) {{ \
+        "use _ <- result.try(case query.handler({}, awlc.nil_codec(), {codec}(), \
+         fn(_) {{ {value} }}) {{ \
          Ok(_) -> Ok(Nil) Error(_) -> Error(awl_error.AwlFailed) }})",
         string_lit(&answer.query)
     ));

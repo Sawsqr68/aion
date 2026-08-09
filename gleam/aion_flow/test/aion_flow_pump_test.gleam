@@ -497,7 +497,7 @@ pub fn query_handler_registration_answers_through_pump_test() {
   fresh_env()
   let int_codec = codec.json_codec(json.int, decode.int)
 
-  query.handler("typed-state", codec.nil_codec(), int_codec, fn(_) { 42 })
+  query.handler("typed-state", codec.null_codec(), int_codec, fn(_) { 42 })
   |> should.equal(Ok(Nil))
 
   enqueue(Error(

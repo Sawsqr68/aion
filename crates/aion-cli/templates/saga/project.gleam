@@ -240,7 +240,7 @@ fn set_status(
   case
     query.handler(
       status_query_name,
-      codec.nil_codec(),
+      codec.null_codec(),
       order_status_codec(),
       fn(_) { status },
     )

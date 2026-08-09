@@ -959,9 +959,12 @@ fn normalize_endpoint(endpoint: &str) -> String {
 mod tests {
     use std::path::{Path, PathBuf};
 
+    use aion_core::Payload;
     use aion_server::config::CliOverrides;
     use clap::{CommandFactory, Parser};
     use serde_json::{Value, json};
+
+    use crate::payload::json_payload;
 
     use super::{
         Cli, ClientCommand, Command, DEFAULT_ENDPOINT, RemoteCommand, awl, normalize_endpoint,
@@ -1456,6 +1459,37 @@ mod tests {
 
         assert!(help.contains("--raw"));
         assert!(help.contains("Show raw payload byte arrays instead of decoded payloads"));
+        Ok(())
+    }
+
+    #[test]
+    fn query_arguments_default_to_the_null_document_and_accept_a_json_flag() -> anyhow::Result<()> {
+        let omitted = Cli::try_parse_from(vec!["aion", "query", WORKFLOW_ID, "state"])?;
+        let supplied = Cli::try_parse_from(vec![
+            "aion",
+            "query",
+            WORKFLOW_ID,
+            "state",
+            "--arguments",
+            "{\"n\":7}",
+        ])?;
+
+        for (cli, expected) in [(omitted, "null"), (supplied, "{\"n\":7}")] {
+            let Command::Client(ClientCommand::Remote(RemoteCommand::Query { arguments, .. })) =
+                cli.command
+            else {
+                anyhow::bail!("expected the query command");
+            };
+            assert_eq!(arguments, expected);
+            // Whatever the flag carried reaches the client as a JSON payload;
+            // the omitted case is the canonical "no arguments" document, not
+            // an empty byte string.
+            let expected_value: Value = serde_json::from_str(expected)?;
+            assert_eq!(
+                json_payload(&arguments)?,
+                Payload::from_json(&expected_value)?
+            );
+        }
         Ok(())
     }
 

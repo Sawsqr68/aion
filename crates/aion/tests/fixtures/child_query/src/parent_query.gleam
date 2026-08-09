@@ -31,7 +31,7 @@ fn spawn_and_await(
   input: child_small.ChildInput,
 ) -> Result(String, ParentError) {
   case
-    query.handler("phase", codec.nil_codec(), phase_codec(), fn(_) {
+    query.handler("phase", codec.null_codec(), phase_codec(), fn(_) {
       "awaiting-child"
     })
   {

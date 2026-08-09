@@ -243,7 +243,7 @@ fn set_status(status: DispatchStatus) -> Result(Nil, DispatchError) {
   case
     query.handler(
       status_query_name,
-      codec.nil_codec(),
+      codec.null_codec(),
       codecs_dispatch.dispatch_status_codec(),
       fn(_) { status },
     )

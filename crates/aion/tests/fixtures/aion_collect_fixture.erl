@@ -89,7 +89,7 @@ as_json_string(Text) ->
 %% --- handlers ----------------------------------------------------------------
 
 state_handler() ->
-    fun(QueryId) ->
+    fun(QueryId, _Arguments) ->
         %% A reply that fails (late reply after caller timeout) is
         %% non-fatal by contract; ignore the FFI result.
         _ = aion_flow_ffi:reply_query(
@@ -121,12 +121,13 @@ pumped(Await) ->
 service_query(Json) ->
     QueryId = scan_query_id(Json),
     Name = scan_name(Json),
+    Arguments = scan_arguments(Json),
     case erlang:get({aion_query_handler, Name}) of
         undefined ->
             reply_error(QueryId, <<"no fixture handler for ", Name/binary>>);
         Handler ->
             try
-                _ = Handler(QueryId),
+                _ = Handler(QueryId, Arguments),
                 ok
             catch
                 error:Reason when is_binary(Reason) ->
@@ -155,6 +156,15 @@ scan_query_id(<<>>) -> erlang:error(<<"sentinel missing query_id">>).
 scan_name(<<"\"name\":\"", Rest/binary>>) -> value_until_quote(Rest, <<>>);
 scan_name(<<_Byte, Tail/binary>>) -> scan_name(Tail);
 scan_name(<<>>) -> erlang:error(<<"sentinel missing name">>).
+
+%% The arguments field carries the caller's JSON document inside a JSON
+%% string. This fixture only ever receives the `null` document (it answers a
+%% no-argument query), so a plain copy to the closing quote is exact here;
+%% `aion_fixture_query` carries the unescaping variant for the tests that do
+%% pass arguments.
+scan_arguments(<<"\"arguments\":\"", Rest/binary>>) -> value_until_quote(Rest, <<>>);
+scan_arguments(<<_Byte, Tail/binary>>) -> scan_arguments(Tail);
+scan_arguments(<<>>) -> erlang:error(<<"sentinel missing arguments">>).
 
 value_until_quote(<<$", _Rest/binary>>, Acc) -> Acc;
 value_until_quote(<<Byte, Rest/binary>>, Acc) -> value_until_quote(Rest, <<Acc/binary, Byte>>);

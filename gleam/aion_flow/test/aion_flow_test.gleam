@@ -519,7 +519,7 @@ pub fn query_handler_returns_typed_decoded_value_test() {
 
   query.handler(
     "checkout-state",
-    codec.nil_codec(),
+    codec.null_codec(),
     charge_receipt_codec(),
     fn(_) { state },
   )
@@ -527,7 +527,7 @@ pub fn query_handler_returns_typed_decoded_value_test() {
 
   query.dispatch(
     "checkout-state",
-    codec.nil_codec(),
+    codec.null_codec(),
     Nil,
     charge_receipt_codec(),
   )
@@ -559,7 +559,7 @@ pub fn query_answer_is_derived_from_its_arguments_test() {
 pub fn query_unknown_name_returns_typed_error_test() {
   query.dispatch(
     "missing-query",
-    codec.nil_codec(),
+    codec.null_codec(),
     Nil,
     charge_receipt_codec(),
   )
@@ -572,7 +572,7 @@ pub fn query_handler_failure_returns_typed_error_test() {
   // engine's `handler_failed:` taxonomy (the `query_failed` wire code).
   let assert Ok(_) = ffi.register_query("orphan-query", "{}")
 
-  query.dispatch("orphan-query", codec.nil_codec(), Nil, charge_receipt_codec())
+  query.dispatch("orphan-query", codec.null_codec(), Nil, charge_receipt_codec())
   |> should.equal(
     Error(error.QueryHandlerFailed(
       message: "no handler registered for query orphan-query",
@@ -583,7 +583,7 @@ pub fn query_handler_failure_returns_typed_error_test() {
 pub fn query_decode_failure_is_typed_data_test() {
   query.handler(
     "malformed-query-reply",
-    codec.nil_codec(),
+    codec.null_codec(),
     charge_receipt_codec(),
     fn(_) { ChargeReceipt(id: "receipt-query", approved: True) },
   )
@@ -592,7 +592,7 @@ pub fn query_decode_failure_is_typed_data_test() {
   case
     query.dispatch(
       "malformed-query-reply",
-      codec.nil_codec(),
+      codec.null_codec(),
       Nil,
       charge_request_codec(),
     )

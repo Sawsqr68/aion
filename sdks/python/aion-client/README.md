@@ -72,7 +72,7 @@ await handle.signal("record", {"value": "signal-observed"})
 
 ## query
 
-The SDK decodes JSON results to Python values, or to a supplied `target_type` when appropriate. The current AW query request has no argument payload field, so omit query arguments for now.
+The SDK decodes JSON results to Python values, or to a supplied `target_type` when appropriate. AW's `QueryRequest` now carries an `arguments` payload, but this SDK does not forward it yet — arguments passed here are validated and then dropped, so omit them until this SDK is wired to the new field.
 
 ```python
 state = await handle.query("state", target_type=dict, timeout=5.0)

@@ -1380,7 +1380,16 @@ mod tests {
                 }),
                 "query_failed",
             ),
-            // The query family's own control, and the seventh of seven arms —
+            // The caller's own arguments were malformed: the request is the
+            // thing to fix, so this is `invalid_argument` — not the handler's
+            // failure and not the engine's.
+            (
+                aion::EngineError::Query(aion::QueryError::InvalidArguments {
+                    reason: "arguments payload is not a well-formed JSON document".to_owned(),
+                }),
+                "invalid_input",
+            ),
+            // The query family's own control, and the eighth of eight arms —
             // an earlier revision of this table listed six and left this one
             // unmeasured, so a change re-classifying an engine-seam failure as
             // a caller-facing one survived green. A seam that could not deliver

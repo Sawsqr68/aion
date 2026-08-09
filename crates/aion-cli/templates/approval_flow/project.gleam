@@ -95,7 +95,7 @@ pub fn handle(input: ApprovalInput) -> Result(ApprovalOutput, WorkflowError) {
 /// history, so a recovered run answers them after replay with no extra code.
 fn set_status(stage: String) -> Result(Nil, WorkflowError) {
   case
-    query.handler(status_query_name, codec.nil_codec(), status_codec(), fn(_) {
+    query.handler(status_query_name, codec.null_codec(), status_codec(), fn(_) {
       stage
     })
   {

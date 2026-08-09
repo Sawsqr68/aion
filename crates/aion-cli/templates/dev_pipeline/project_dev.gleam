@@ -191,7 +191,7 @@ fn set_status(phase: String, round: Int) -> Result(Nil, DevFlowError) {
   case
     query.handler(
       status_query_name,
-      codec.nil_codec(),
+      codec.null_codec(),
       codecs_workflows.dev_flow_status_codec(),
       fn(_) { status },
     )

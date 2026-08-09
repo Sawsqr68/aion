@@ -49,8 +49,10 @@ pub fn json_codec(
 /// The decoder matches the compact serialization every Aion carrier produces
 /// (`null`, no surrounding whitespace) and refuses anything else, so a caller
 /// that sends real arguments to a no-argument query is told so instead of
-/// having them silently discarded.
-pub fn nil_codec() -> Codec(Nil) {
+/// having them silently discarded. That strictness is why this is a separate
+/// name from `aion/awl/codec.nil_codec`, which encodes `{}` and accepts any
+/// document: two codecs over different documents must not share a name.
+pub fn null_codec() -> Codec(Nil) {
   Codec(encode: fn(_) { "null" }, decode: fn(input) {
     case input {
       "null" -> Ok(Nil)

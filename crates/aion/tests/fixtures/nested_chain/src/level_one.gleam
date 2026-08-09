@@ -29,7 +29,7 @@ pub fn process(input: ChainInput) -> Result(String, String) {
   case
     query.handler(
       status_query_name,
-      codec.nil_codec(),
+      codec.null_codec(),
       chain_types.text_codec(),
       fn(_) { "awaiting-level-two:" <> input.job_id },
     )

@@ -60,7 +60,7 @@ await handle.signal({
 
 ## query
 
-The query result is decoded into the generic result type. The current AW query request has no argument payload field, so omit `input` until the server wire type adds it.
+The query result is decoded into the generic result type. AW's `QueryRequest` now carries an `arguments` payload, but this SDK does not forward it yet — an `input` passed here is validated and then dropped, so omit it until this SDK is wired to the new field.
 
 ```ts
 type EchoState = { lastSignal?: string };

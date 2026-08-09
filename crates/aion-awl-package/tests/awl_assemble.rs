@@ -30,7 +30,13 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// 46 modules to `2b1cc2af…`, so the bulk is TOOLCHAIN drift the committed
 /// closure had accumulated; re-applying the #83 source edit then moved it to
 /// this value, which is what proves the edit reached the shipped bytes.
-const BUNDLE_CHECKSUM: &str = "a04dc8ab17ca3e4293de5942bdc8c99e2c9ad5e5f4780af821339942c1ccfa74";
+/// Repinned 2026-08-09: query arguments changed `aion@query:handler` from
+/// arity 3 to 4 and added `aion@codec:null_codec/0`, so the shipped closure
+/// was regenerated. The runtime-surface guard is what makes this repin
+/// load-bearing rather than bookkeeping: an unregenerated closure would still
+/// export `handler/3` while the lowering minted `handler/4`, which is the
+/// `undef`-at-runtime skew that guard exists to catch.
+const BUNDLE_CHECKSUM: &str = "59b481f035dd4e883b52dde86d9f4623ba7efa394074ec7888337aef807eeb43";
 const BUNDLE_MODULE_COUNT: usize = 46;
 const BUNDLE_SDK_VERSION: &str = "0.7.0";
 
@@ -117,8 +123,15 @@ fn assembling_twice_yields_byte_identical_archives() -> TestResult {
 /// with the CLOSURE, not with any workflow source edit.
 /// `assembling_twice_yields_byte_identical_archives` still passes, so the new
 /// bytes remain deterministic.
+/// Repinned on 2026-08-09: query arguments regenerated the embedded SDK
+/// closure (`aion@query:handler` 3 -> 4, plus `aion@codec:null_codec/0`), and
+/// the closure is an INPUT to every assembled archive, so the archive bytes
+/// changed with the CLOSURE, not with any workflow source edit. The bundle
+/// checksum moved in the same commit for the same reason, and
+/// `assembling_twice_yields_byte_identical_archives` still passes, so the new
+/// bytes remain deterministic.
 const FIXED_INPUT_ARCHIVE_SHA256: &str =
-    "dc3fc5fdb996fe650126445ddeb0a8e4e12ea4f6435611e87242ce92695aa2a6";
+    "55124bb09b1da582f05e56ee527b10889dbcc58124e8bb87f44d2146db32c113";
 
 /// Proof 1b — cross-process determinism: a fully fixed input assembles to
 /// pinned archive bytes.

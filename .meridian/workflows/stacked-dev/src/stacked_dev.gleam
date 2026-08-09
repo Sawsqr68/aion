@@ -609,7 +609,7 @@ fn set_status(phase: String, round: Int) -> Result(Nil, StackedDevError) {
   case
     query.handler(
       status_query_name,
-      codec.nil_codec(),
+      codec.null_codec(),
       codecs_workflows.stacked_dev_status_codec(),
       fn(_) { status },
     )

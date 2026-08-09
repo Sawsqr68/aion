@@ -183,7 +183,7 @@ impl RuntimeFn {
             Self::SignalNew => ("aion@signal", "new", 2),
             Self::SignalSend => ("aion@signal", "send", 3),
             Self::ChildAwait => ("aion@child", "await", 1),
-            Self::QueryHandler => ("aion@query", "handler", 3),
+            Self::QueryHandler => ("aion@query", "handler", 4),
             Self::JObject => ("gleam@json", "object", 1),
             Self::JString => ("gleam@json", "string", 1),
             Self::JArray => ("gleam@json", "array", 2),
