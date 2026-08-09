@@ -18,6 +18,7 @@ use super::awl_deployed::{get_deployed_document, list_deployed};
 use super::build::build_identity;
 use super::cluster_command::cluster_command;
 use super::deploy::{list_versions, route_version, unload_version, upload_package};
+use super::describe_live::describe_live;
 use super::dev_ui::{dev_register_mock, dev_replay_run, dev_trigger_run};
 use super::events::subscribe_events_socket;
 use super::history::{fetch_event, fetch_history};
@@ -291,6 +292,7 @@ pub fn workflow_router(state: ServerState) -> Router {
         .route("/workflows/reopen", post(reopen_workflow))
         .route("/workflows/list", post(post_list_workflows))
         .route("/workflows/describe", post(describe_workflow))
+        .route("/workflows/describe-live", post(describe_live))
         .route("/workflows/history", post(fetch_history))
         .route("/workflows/event", post(fetch_event))
         .route("/workflows/intervene", post(intervene))

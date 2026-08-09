@@ -164,7 +164,13 @@ pub(crate) async fn fetch_transcript(
     }))
 }
 
-fn transcript_head(records: &[ActivityRecord]) -> Result<u64, HttpWireError> {
+/// The stream head implied by a read: one past the last record's `store_seq`,
+/// or `0` for a stream with nothing retained.
+///
+/// Shared with the live describe join so both surfaces compute the head the
+/// same way — a head that differed between two reads of one stream would be a
+/// disagreement an operator could not resolve.
+pub(crate) fn transcript_head(records: &[ActivityRecord]) -> Result<u64, HttpWireError> {
     records.last().map_or(Ok(0), |record| {
         record.store_seq.checked_add(1).ok_or_else(|| {
             HttpWireError(WireError::backend(

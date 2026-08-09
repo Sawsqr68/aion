@@ -1425,3 +1425,195 @@ primitive: InterventionPrimitive, } | { "outcome": "StaleTarget",
  */
 detail: string, };
 
+export type StepState = { "state": "Scheduled" } | { "state": "Dispatched",
+/**
+ * One-based delivery attempt recorded on the `ActivityStarted`.
+ */
+attempt: number,
+/**
+ * When the ENGINE dispatched — NOT when a worker took it.
+ */
+dispatched_at: string, } | { "state": "Reopened",
+/**
+ * `recorded_at` of the `WorkflowReopened` that re-opened the ordinal.
+ */
+reopened_at: string, };
+
+export type OpenStep = {
+/**
+ * Activity ordinal recorded in history.
+ */
+activity_id: ActivityId,
+/**
+ * Activity type the step runs.
+ */
+activity_type: string,
+/**
+ * Task queue stamped on the recorded `ActivityScheduled` — the address the
+ * dispatch really went to, never a re-resolution that could disagree.
+ */
+task_queue: string,
+/**
+ * Node affinity stamped on the recorded `ActivityScheduled`, if any.
+ */
+node: string | null,
+/**
+ * `recorded_at` of the `ActivityScheduled` that opened the ordinal.
+ */
+scheduled_at: string,
+/**
+ * How far the step has got in the recorded lifecycle.
+ */
+state: StepState, };
+
+export type AttemptLiveness = { "liveness": "Live",
+/**
+ * The owning worker's advertised intervention capabilities.
+ */
+capabilities: InterventionCapabilities, } | { "liveness": "NoLiveOwner" };
+
+export type HeartbeatNote = { "note": "Reported",
+/**
+ * The worker's opaque progress payload, exactly as it was sent.
+ */
+payload: Payload,
+/**
+ * When this server process received the reporting heartbeat.
+ */
+reported_at: string, } | { "note": "NoneSent" } | { "note": "Unavailable",
+/**
+ * When this server process began holding progress notes.
+ */
+notes_held_since: string,
+/**
+ * True when the attempt was dispatched BEFORE this process began
+ * holding notes — a restart demonstrably explains the absence.
+ */
+restarted_since_attempt_began: boolean, };
+
+export type TranscriptTail = { "transcript": "NotRequested" } | { "transcript": "Window",
+/**
+ * The retained events, in `store_seq` order, each carrying its
+ * `store_seq`. Empty when the stream has nothing retained.
+ */
+events: Array<ActivityEvent>,
+/**
+ * Next durable `store_seq` for the stream at read time.
+ */
+head_seq: number,
+/**
+ * Retained records BEFORE this window, omitted by the requested bound.
+ * Read the full stream with `POST /workflows/transcript`.
+ */
+omitted_before: number,
+/**
+ * The retention cap has closed this stream: the cap marker is the last
+ * durable record and every later event is live-only, never persisted.
+ *
+ * A reader seeing the last retained event on a truncated stream is
+ * seeing the end of the RETENTION, not the end of the agent's output.
+ */
+retention_truncated: boolean, };
+
+export type LiveAttempt = {
+/**
+ * One-based delivery attempt this view describes.
+ */
+attempt: number,
+/**
+ * When the engine dispatched this attempt.
+ */
+dispatched_at: string,
+/**
+ * Whether a connected worker owns the attempt right now.
+ */
+liveness: AttemptLiveness,
+/**
+ * The most recent worker progress note, or a typed reason there is none.
+ */
+note: HeartbeatNote,
+/**
+ * The bounded tail of the attempt's retained transcript.
+ */
+transcript: TranscriptTail, };
+
+export type CurrentStep = {
+/**
+ * The step itself, as history records it.
+ */
+step: OpenStep,
+/**
+ * The live view of the dispatched attempt.
+ *
+ * `None` when the step is [`StepState::Scheduled`] or
+ * [`StepState::Reopened`]: there is no attempt yet, so there is nothing
+ * that could be live, could have sent a note, or could have a transcript.
+ * That is a structural absence, not a missing measurement.
+ */
+attempt: LiveAttempt | null, };
+
+export type TranscriptStreamHead = {
+/**
+ * The activity within the workflow.
+ */
+activity_id: ActivityId,
+/**
+ * The attempt — the third stream axis. Two attempts of one activity are
+ * DISTINCT streams.
+ */
+attempt: number,
+/**
+ * The activity type this stream belongs to, resolved from the run's own
+ * history. `None` when the run's history records no scheduling for the
+ * ordinal (a stream retained from a segment this history no longer holds).
+ */
+activity_type: string | null,
+/**
+ * Next `store_seq` to be written == count of retained records.
+ */
+head_seq: number,
+/**
+ * Whether this stream is the current step's dispatched attempt.
+ */
+current: boolean,
+/**
+ * The retention cap has closed this stream (see
+ * [`TranscriptTail::Window::retention_truncated`]).
+ */
+retention_truncated: boolean, };
+
+export type DescribeLiveResponse = {
+/**
+ * Workflow summary projected from authoritative history (carrying the
+ * projected status), when the workflow exists.
+ */
+summary: WorkflowSummary | null,
+/**
+ * The single step a reader is told the run is on: the open step whose last
+ * history event is the most recent. `None` when the run is not inside an
+ * activity at all (completed, failed, or blocked on a timer or signal).
+ */
+current_step: CurrentStep | null,
+/**
+ * EVERY open step, in the order the ordinals were opened.
+ *
+ * A fan-out has several steps open at once, and [`Self::current_step`]
+ * reports one of them. This list is how a reader sees the siblings rather
+ * than having to know they might exist.
+ */
+open_steps: Array<OpenStep>,
+/**
+ * Every retained transcript stream of the workflow, annotated with the
+ * activity type it belongs to and whether it is the current attempt's.
+ */
+transcript_streams: Array<TranscriptStreamHead>,
+/**
+ * Every activity this run's history records as dispatched and unterminated
+ * that the live fleet cannot currently serve.
+ *
+ * EMPTY is the healthy answer and the only healthy one — see
+ * [`UnservedActivity`], whose semantics this field shares exactly (it is
+ * the same projection `POST /workflows/describe` returns).
+ */
+unserved: Array<UnservedActivity>, };
+

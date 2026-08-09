@@ -2,6 +2,8 @@
 
 /// Whether a contract refusal is new information, and therefore worth saying.
 pub mod admission_audit;
+/// Reading one attempt's volatile worker progress note, with typed absence.
+pub mod attempt_progress;
 /// Per-tenant keyed backpressure at the outbox claim (Control-Plane Phase 2,
 /// P2-Q2).
 pub mod backpressure;
@@ -68,6 +70,7 @@ pub mod transport_loss;
 pub mod workspace_root;
 
 pub use admission_audit::AdmissionAudit;
+pub use attempt_progress::{AttemptProgress, attempt_progress};
 pub use backpressure::{Backpressure, OwnedShardFraction};
 pub use bridge::{OutboxDeliveryCallback, PendingActivities, WorkerActivityDispatcher};
 pub use declared_body::{

@@ -795,6 +795,7 @@ impl WorkerActivityDispatcher {
         activity_type: &str,
         workflow_id: &WorkflowId,
         activity_id: &ActivityId,
+        attempt: u32,
         completion_token: CompletionToken,
     ) -> Result<(), String> {
         self.heartbeat_tracker
@@ -803,6 +804,11 @@ impl WorkerActivityDispatcher {
                 InFlightActivity {
                     workflow_id: workflow_id.clone(),
                     activity_id: activity_id.clone(),
+                    // The engine-provided attempt this delivery carries — the
+                    // same one stamped on the wire task and bound into the
+                    // NOI-6 attempt→owner index, so the tracker, the wire, and
+                    // the owner index all name one attempt.
+                    attempt,
                     completion_token,
                 },
                 Instant::now(),
@@ -1397,6 +1403,7 @@ impl WorkerActivityDispatcher {
             &name,
             &workflow_id,
             &activity_id,
+            attempt,
             completion_token.clone(),
         ) {
             self.cleanup_activity(worker_id, &workflow_id, &activity_id, &completion_token);

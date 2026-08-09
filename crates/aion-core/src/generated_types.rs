@@ -26,16 +26,17 @@ use ts_rs::{Config, TS};
 
 use crate::{
     ActivityError, ActivityErrorKind, ActivityEvent, ActivityEventKind, ActivityId,
-    ApprovalDecision, CatchUpPolicy, ClusterCommand, ClusterDeployment, ClusterEvent,
-    ClusterEventMeta, ClusterPeer, ClusterShard, ClusterSnapshot, ClusterStreamError,
-    ClusterWorker, ContentType, DeploymentAssociation, DescribeWorkflowResponse, DesiredState,
-    Event, EventEnvelope, InjectPriority, InterventionCapabilities, InterventionCommand,
-    InterventionKind, InterventionOutcome, InterventionPrimitive, MessageRole,
-    NamespacePlacementWire, OverlapPolicy, PackageVersion, Payload, PayloadElision, ProgressDetail,
-    PutOutcome, RunId, ScheduleConfig, ScheduleId, SearchAttributeType, SearchAttributeValue,
-    StopKind, TimerCancelCause, TimerId, TimerIdKind, TriggerSpec, UnservedActivity,
-    WithTimeoutOutcome, WorkerDeathReason, WorkerTransport, WorkflowError, WorkflowFilter,
-    WorkflowId, WorkflowStatus, WorkflowSummary,
+    ApprovalDecision, AttemptLiveness, CatchUpPolicy, ClusterCommand, ClusterDeployment,
+    ClusterEvent, ClusterEventMeta, ClusterPeer, ClusterShard, ClusterSnapshot, ClusterStreamError,
+    ClusterWorker, ContentType, CurrentStep, DeploymentAssociation, DescribeLiveResponse,
+    DescribeWorkflowResponse, DesiredState, Event, EventEnvelope, HeartbeatNote, InjectPriority,
+    InterventionCapabilities, InterventionCommand, InterventionKind, InterventionOutcome,
+    InterventionPrimitive, LiveAttempt, MessageRole, NamespacePlacementWire, OpenStep,
+    OverlapPolicy, PackageVersion, Payload, PayloadElision, ProgressDetail, PutOutcome, RunId,
+    ScheduleConfig, ScheduleId, SearchAttributeType, SearchAttributeValue, StepState, StopKind,
+    TimerCancelCause, TimerId, TimerIdKind, TranscriptStreamHead, TranscriptTail, TriggerSpec,
+    UnservedActivity, WithTimeoutOutcome, WorkerDeathReason, WorkerTransport, WorkflowError,
+    WorkflowFilter, WorkflowId, WorkflowStatus, WorkflowSummary,
 };
 
 const OPS_CONSOLE_GENERATED_DIR: &str = "../../apps/aion-ops-console/src/types/generated";
@@ -220,6 +221,20 @@ fn ops_console_wire_types() -> Result<String, ts_rs::ExportError> {
     push_type::<InterventionCommand>(&mut pipeline)?;
     push_type::<InterventionCapabilities>(&mut pipeline)?;
     push_type::<InterventionOutcome>(&mut pipeline)?;
+
+    // The live describe join (`POST /workflows/describe-live`). Pushed after the
+    // observability + intervention types because it composes them: an attempt's
+    // liveness carries `InterventionCapabilities` and its transcript tail
+    // carries `ActivityEvent`.
+    push_type::<StepState>(&mut pipeline)?;
+    push_type::<OpenStep>(&mut pipeline)?;
+    push_type::<AttemptLiveness>(&mut pipeline)?;
+    push_type::<HeartbeatNote>(&mut pipeline)?;
+    push_type::<TranscriptTail>(&mut pipeline)?;
+    push_type::<LiveAttempt>(&mut pipeline)?;
+    push_type::<CurrentStep>(&mut pipeline)?;
+    push_type::<TranscriptStreamHead>(&mut pipeline)?;
+    push_type::<DescribeLiveResponse>(&mut pipeline)?;
 
     assert_every_dependency_is_exported(&pipeline);
     Ok(pipeline.output)

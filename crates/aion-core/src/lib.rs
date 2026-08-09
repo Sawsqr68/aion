@@ -20,8 +20,12 @@
 pub mod activity_event;
 /// Cluster topology and ownership events for the ops console real-time channel (WS3).
 pub mod cluster_event;
+/// Which step a run is on, folded from its own history.
+pub mod current_step;
 /// Describe-workflow response projection (summary + event history).
 pub mod describe;
+/// The live describe projection: current step, attempt liveness, notes, transcript.
+pub mod describe_live;
 /// Error types shared by workflow engines, callers, and activities.
 pub mod error;
 /// Durable workflow history events and envelopes.
@@ -49,7 +53,12 @@ pub use cluster_event::{
     ClusterSnapshot, ClusterStreamError, ClusterWorker, DeploymentAssociation, DesiredState,
     NamespacePlacementWire, PutOutcome, WorkerDeathReason, WorkerTransport,
 };
+pub use current_step::{current_step, open_steps};
 pub use describe::{DescribeWorkflowResponse, UnservedActivity};
+pub use describe_live::{
+    AttemptLiveness, CurrentStep, DescribeLiveResponse, HeartbeatNote, LiveAttempt, OpenStep,
+    StepState, TranscriptStreamHead, TranscriptTail,
+};
 pub use error::{ActivityError, ActivityErrorKind, WorkflowError};
 pub use event::{
     DEFAULT_TASK_QUEUE, Event, EventEnvelope, START_TIME_TASK_QUEUE_ATTRIBUTE, TimerCancelCause,

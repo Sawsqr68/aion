@@ -14,6 +14,8 @@
 //! - `visibility` — visibility query-string parsing and namespace scoping.
 //! - `payload` — HTTP body/payload encode-decode shapes and conversions.
 //! - `build` — `GET /build`, the server's own revision.
+//! - `describe_live` — the mid-step join: current step + attempt liveness +
+//!   progress note + transcript tail, in one read.
 //! - `queues` — the fleet-wide unserved-queue read.
 //! - `unrecoverable` — the fleet-wide degraded-residency read.
 //! - `clean_dtos` — clean JSON request/response DTOs for the workflow POST endpoints.
@@ -27,6 +29,7 @@ mod build;
 mod clean_dtos;
 mod cluster_command;
 mod deploy;
+mod describe_live;
 mod dev_ui;
 mod error;
 mod events;

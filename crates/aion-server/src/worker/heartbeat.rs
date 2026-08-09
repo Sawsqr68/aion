@@ -1,5 +1,6 @@
 //! Heartbeat window tracking and lost-worker failure surfacing.
 
+use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
@@ -24,6 +25,18 @@ pub struct InFlightActivity {
     pub workflow_id: WorkflowId,
     /// Correlating activity id.
     pub activity_id: ActivityId,
+    /// One-based delivery attempt this dispatch carries — the third axis of the
+    /// `(workflow, activity, attempt)` identity the transcript, the intervention
+    /// index, and history all key on.
+    ///
+    /// It is NOT part of the tracker's key: a completion is addressed by the
+    /// worker, workflow, and activity together, and widening the key would
+    /// break that addressing. It is carried so a reader asking about a SPECIFIC
+    /// attempt — the live describe join asking whose progress note this is —
+    /// can tell a tracked entry for the attempt it asked about from a lingering
+    /// entry for a superseded one, instead of attributing one attempt's note to
+    /// another.
+    pub attempt: u32,
     /// Generation authorized to receive a result or synthesized loss.
     pub completion_token: CompletionToken,
 }
@@ -37,6 +50,9 @@ pub struct TaskLiveness {
     pub workflow_id: WorkflowId,
     /// Correlating activity id.
     pub activity_id: ActivityId,
+    /// One-based delivery attempt this tracked dispatch carries (see
+    /// [`InFlightActivity::attempt`]).
+    pub attempt: u32,
     /// Generation authorized to receive a result or synthesized loss.
     pub completion_token: CompletionToken,
     /// Operator-configured heartbeat window used for expiry checks.
@@ -45,6 +61,15 @@ pub struct TaskLiveness {
     pub last_heartbeat_at: Instant,
     /// Optional worker progress from the most recent heartbeat.
     pub last_progress: Option<Payload>,
+    /// Wall-clock instant this process received the heartbeat that carried
+    /// [`Self::last_progress`]. `None` while no progress has been reported.
+    ///
+    /// A wall clock rather than the tracked [`Instant`] because this one is
+    /// REPORTED to operators, and a monotonic instant means nothing outside the
+    /// process that minted it. Server-side observability stamping only — the
+    /// determinism boundary governs workflow-visible time, and nothing here is
+    /// workflow-visible.
+    pub last_progress_at: Option<DateTime<Utc>>,
 }
 
 /// Result of accepting a heartbeat for an in-flight task.
@@ -213,11 +238,18 @@ pub struct ExcludedWorker {
 }
 
 /// Per-task liveness tracker for remote-worker streams.
+///
+/// It is also the server's ONLY store of worker progress notes, and that store
+/// is VOLATILE: notes live here and nowhere else, so a restart loses every note
+/// ever reported. [`Self::notes_held_since`] is the evidence a reader needs to
+/// tell "this worker has said nothing" from "this process was not running when
+/// the attempt began" — see `crate::worker::attempt_progress`.
 #[derive(Clone, Debug)]
 pub struct HeartbeatTracker {
     heartbeat_window: Duration,
     inner: Arc<Mutex<HeartbeatState>>,
     empty: Arc<Notify>,
+    notes_held_since: DateTime<Utc>,
 }
 
 impl HeartbeatTracker {
@@ -228,7 +260,22 @@ impl HeartbeatTracker {
             heartbeat_window,
             inner: Arc::new(Mutex::new(HeartbeatState::default())),
             empty: Arc::new(Notify::new()),
+            // The instant this volatile note store began holding notes. Read
+            // here rather than injected because it is exactly the tracker's own
+            // construction instant — there is no other value it could be, and a
+            // caller passing a different one would be reporting a fiction.
+            notes_held_since: Utc::now(),
         }
+    }
+
+    /// When this tracker began holding progress notes.
+    ///
+    /// An attempt dispatched before this instant left its notes in a process
+    /// that no longer exists, so their absence here says nothing about what the
+    /// worker reported.
+    #[must_use]
+    pub const fn notes_held_since(&self) -> DateTime<Utc> {
+        self.notes_held_since
     }
 
     /// Start the connection-level lease for a newly registered worker, and open
@@ -436,10 +483,12 @@ impl HeartbeatTracker {
             worker_id,
             workflow_id: task.workflow_id,
             activity_id: task.activity_id,
+            attempt: task.attempt,
             completion_token: task.completion_token,
             heartbeat_window: self.heartbeat_window,
             last_heartbeat_at: now,
             last_progress: None,
+            last_progress_at: None,
         };
         let mut state = self.state()?;
         state.tasks.insert(key, liveness);
@@ -575,6 +624,7 @@ impl HeartbeatTracker {
         liveness.last_heartbeat_at = now;
         if decoded.progress.is_some() {
             liveness.last_progress = decoded.progress;
+            liveness.last_progress_at = Some(Utc::now());
         }
         Ok(HeartbeatUpdate {
             liveness: liveness.clone(),
@@ -860,11 +910,43 @@ impl HeartbeatTracker {
                 tasks.push(InFlightActivity {
                     workflow_id: liveness.workflow_id,
                     activity_id: liveness.activity_id,
+                    attempt: liveness.attempt,
                     completion_token: liveness.completion_token,
                 });
             }
         }
         Ok(tasks)
+    }
+
+    /// Every tracked in-flight entry for `(workflow, activity, attempt)`.
+    ///
+    /// Read from the SAME map the heartbeat path writes, so what a reader is
+    /// told and what the dispatch path knows cannot drift. Usually zero or one
+    /// entry; a within-attempt failover can briefly have a dying owner and its
+    /// adopter both tracked, which is why this returns them all and leaves the
+    /// choice to the caller (`crate::worker::attempt_progress`) rather than
+    /// silently picking one here.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if tracker state cannot be trusted.
+    pub(in crate::worker) fn attempt_entries(
+        &self,
+        workflow_id: &WorkflowId,
+        activity_id: &ActivityId,
+        attempt: u32,
+    ) -> Result<Vec<TaskLiveness>, ServerError> {
+        Ok(self
+            .state()?
+            .tasks
+            .values()
+            .filter(|liveness| {
+                &liveness.workflow_id == workflow_id
+                    && &liveness.activity_id == activity_id
+                    && liveness.attempt == attempt
+            })
+            .cloned()
+            .collect())
     }
 
     fn state(&self) -> Result<MutexGuard<'_, HeartbeatState>, ServerError> {
@@ -1590,6 +1672,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id.clone(),
+                attempt: 1,
                 completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
@@ -1633,6 +1716,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id.clone(),
+                attempt: 1,
                 completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
@@ -1689,6 +1773,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id(21),
+                attempt: 1,
                 completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
@@ -1698,6 +1783,7 @@ mod tests {
             InFlightActivity {
                 workflow_id,
                 activity_id: activity_id(22),
+                attempt: 1,
                 completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
@@ -1741,6 +1827,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id(60),
+                attempt: 1,
                 completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
@@ -1750,6 +1837,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id(61),
+                attempt: 1,
                 completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
@@ -1820,6 +1908,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id(70),
+                attempt: 1,
                 completion_token: crate::worker::CompletionToken::for_test(),
             },
             Instant::now(),
@@ -1872,6 +1961,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id.clone(),
+                attempt: 1,
                 completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
@@ -1941,6 +2031,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id.clone(),
+                attempt: 1,
                 completion_token: crate::worker::CompletionToken::for_test(),
             },
             now,
@@ -1990,6 +2081,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: id.clone(),
+                attempt: 1,
                 completion_token: crate::worker::CompletionToken::for_test(),
             },
             Instant::now(),
@@ -2025,6 +2117,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: id.clone(),
+                attempt: 1,
                 completion_token: crate::worker::CompletionToken::for_test(),
             },
             start,
