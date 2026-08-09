@@ -1,8 +1,17 @@
-import { expect, test } from 'bun:test';
+import { beforeAll, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { awlGuide, matching } from '../lib/awl-guide';
+import { loadAwlHighlighter } from '../lib/awl-static-highlight';
 import { GuideOverlay } from './GuideOverlay';
+
+// The highlighter is a process-wide singleton the cards read synchronously
+// once loaded. Loading it up front makes every render in this file the
+// steady-state one — highlighted — instead of depending on which test file
+// happened to load it first.
+beforeAll(async () => {
+  await loadAwlHighlighter();
+});
 
 /**
  * Closed, the overlay is nothing but its launcher; open, the panel is there.
@@ -65,7 +74,10 @@ test('an unmatched search says no word matches', () => {
 
 /**
  * Selecting a word shows the full card: summary, every checked example, and
- * the citation — the same `WordCard` the Language panel renders.
+ * the citation — the same `WordCard` the Language panel renders. Each example
+ * is now a disclosure, so the two documents are told apart by fragments only
+ * one of them contains — `health` folds into `results`, `report?` into
+ * `reports` — around the highlighted `collect` keyword.
  */
 test('selecting a word shows its summary, examples, and citation', () => {
   const open = renderToStaticMarkup(<GuideOverlay defaultOpen defaultWord="collect" />);
@@ -75,10 +87,29 @@ test('selecting a word shows its summary, examples, and citation', () => {
   const entry = awlGuide.entries.find((candidate) => candidate.word === 'collect');
   expect(entry).toBeDefined();
   expect(entry?.examples.length).toBeGreaterThan(1);
-  expect(open).toContain('collect health -&gt; results');
-  expect(open).toContain('collect report? -&gt; reports');
+  expect(open).toContain('awl-syntax-keyword">collect<');
+  expect(open).toContain('collect</span> health ');
+  expect(open).toContain('&gt;</span> results');
+  expect(open).toContain('collect</span> report');
+  expect(open).toContain('&gt;</span> reports');
   expect(open).toContain('AWL reference §8 — Parallel and sequential work');
   expect(open).toContain('aria-pressed="true"');
+});
+
+/**
+ * The examples in the detail card start collapsed — one `<details>` per
+ * document, none pre-opened — and the code behind each disclosure carries the
+ * editor's own syntax classes, while an author's plain binding carries none.
+ */
+test('the selected word’s examples start collapsed and are highlighted', () => {
+  const open = renderToStaticMarkup(<GuideOverlay defaultOpen defaultWord="collect" />);
+  const entry = awlGuide.entries.find((candidate) => candidate.word === 'collect');
+  expect(entry).toBeDefined();
+  expect(open.split('<details').length - 1).toBe(entry?.examples.length ?? Number.NaN);
+  expect(open).not.toContain('<details open');
+  expect(open).toContain('awl-syntax-keyword">workflow<');
+  expect(open).toContain('awl-syntax-operator">|&gt;<');
+  expect(open).not.toContain('>health</span>');
 });
 
 /**

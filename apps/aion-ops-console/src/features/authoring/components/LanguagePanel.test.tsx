@@ -1,8 +1,17 @@
-import { expect, test } from 'bun:test';
+import { beforeAll, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { awlGuide } from '../lib/awl-guide';
+import { loadAwlHighlighter } from '../lib/awl-static-highlight';
 import { LanguagePanel } from './LanguagePanel';
+
+// The highlighter is a process-wide singleton the cards read synchronously
+// once loaded. Loading it up front makes every render in this file the
+// steady-state one — highlighted — instead of depending on which test file
+// happened to load it first.
+beforeAll(async () => {
+  await loadAwlHighlighter();
+});
 
 test('the panel shows every word of the language with its meaning', () => {
   const html = renderToStaticMarkup(<LanguagePanel />);
@@ -42,6 +51,8 @@ test('the per-word citation carries no repository path', () => {
  * Every word teaches by example: complete documents, rendered monospace so
  * their two-space AWL indentation survives, that an author can paste into a
  * file and check unchanged. A word with several forms shows every one.
+ * The documents render highlighted, so the assertions match a token class
+ * around a known word rather than a flat run of text.
  */
 test('every word renders its complete example documents', () => {
   const html = renderToStaticMarkup(<LanguagePanel />);
@@ -55,12 +66,28 @@ test('every word renders its complete example documents', () => {
   expect(sample).toBeDefined();
   if (sample !== undefined) {
     expect(sample.examples.length).toBeGreaterThan(1);
-    expect(html).toContain('sleep 30s');
-    expect(html).toContain('workflow cool_down');
-    expect(html).toContain('workflow await_export');
+    expect(html).toContain('awl-syntax-keyword">sleep<');
+    expect(html).toContain('awl-syntax-number">30s<');
+    expect(html).toContain('awl-syntax-function">cool_down<');
+    expect(html).toContain('awl-syntax-function">await_export<');
   }
   expect(html).toContain('Example 1');
   expect(html).toContain('Example 2');
+});
+
+/**
+ * Every example on the panel is a per-document disclosure, and every one of
+ * them starts collapsed: a page of definitions, not a wall of monospace. The
+ * count is derived from the asset, so a new example arrives collapsed without
+ * a second edit here.
+ */
+test('every example document starts collapsed', () => {
+  const html = renderToStaticMarkup(<LanguagePanel />);
+  const totalExamples = awlGuide.entries.reduce((total, entry) => total + entry.examples.length, 0);
+  expect(totalExamples).toBeGreaterThan(50); // non-vacuity: the corpus is loaded
+  expect(html.split('<details').length - 1).toBe(totalExamples);
+  expect(html.split('<summary').length - 1).toBe(totalExamples);
+  expect(html).not.toContain('<details open');
 });
 
 test('the panel names the documents an author needs, including the one about sandboxing', () => {

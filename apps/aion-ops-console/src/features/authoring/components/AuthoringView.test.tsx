@@ -76,3 +76,16 @@ test('the language tab carries no guide overlay', () => {
   expect(html).not.toContain('data-slot="guide-overlay-launcher"');
   expect(html).not.toContain('data-slot="guide-overlay"');
 });
+
+/**
+ * On the composed view the glossary reads as definitions, not a wall of
+ * monospace: every example document is a disclosure and none arrives
+ * pre-opened. This holds whether or not the highlighter has loaded — the
+ * collapse is markup, not colouring.
+ */
+test('the language tab’s example documents arrive collapsed', () => {
+  const html = wrap(<AuthoringView />, '/authoring?source=language');
+  expect(html).toContain('data-slot="word-card-example"');
+  expect(html).toContain('<details');
+  expect(html).not.toContain('<details open');
+});
