@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use aion_awl::RunCapture;
-use aion_core::ActivityId;
+use aion_core::{ActivityId, RunId, WorkflowId};
 use aion_worker::ActivityContext;
 use serde_json::{Value, json};
 
@@ -223,7 +223,12 @@ fn the_built_worker_serves_exactly_the_documents_actions() -> TestResult {
 async fn every_capture_shapes_a_real_commands_result() -> TestResult {
     let path = write_document("execute", DOCUMENT)?;
     let compiled = serve::compile(&path)?;
-    let (context, _cancellation) = ActivityContext::new(ActivityId::from_sequence_position(1), 1);
+    let (context, _cancellation) = ActivityContext::new(
+        WorkflowId::new_v4(),
+        RunId::new_v4(),
+        ActivityId::from_sequence_position(1),
+        1,
+    );
 
     let text = serve::served_action(&compiled.actions[0])?;
     let value = serve::execute(&text, &json!({"name": "Ada"}), &context).await?;
@@ -249,7 +254,12 @@ async fn every_capture_shapes_a_real_commands_result() -> TestResult {
 async fn a_parameter_value_cannot_become_a_command() -> TestResult {
     let path = write_document("injection", DOCUMENT)?;
     let compiled = serve::compile(&path)?;
-    let (context, _cancellation) = ActivityContext::new(ActivityId::from_sequence_position(2), 1);
+    let (context, _cancellation) = ActivityContext::new(
+        WorkflowId::new_v4(),
+        RunId::new_v4(),
+        ActivityId::from_sequence_position(2),
+        1,
+    );
     let text = serve::served_action(&compiled.actions[0])?;
     let value = serve::execute(&text, &json!({"name": "; rm -rf /"}), &context).await?;
     assert_eq!(value, json!("; rm -rf /"));
@@ -260,7 +270,12 @@ async fn a_parameter_value_cannot_become_a_command() -> TestResult {
 async fn a_non_object_dispatch_input_is_refused_terminally() -> TestResult {
     let path = write_document("input", DOCUMENT)?;
     let compiled = serve::compile(&path)?;
-    let (context, _cancellation) = ActivityContext::new(ActivityId::from_sequence_position(3), 1);
+    let (context, _cancellation) = ActivityContext::new(
+        WorkflowId::new_v4(),
+        RunId::new_v4(),
+        ActivityId::from_sequence_position(3),
+        1,
+    );
     let text = serve::served_action(&compiled.actions[0])?;
     let Err(failure) = serve::execute(&text, &Value::String("Ada".to_owned()), &context).await
     else {
@@ -286,7 +301,12 @@ async fn invalid_json_output_is_terminal() -> TestResult {
         "//! A command that lies about printing JSON.\nworker greeter\n  action record(name: String) -> Recorded\n    run json \"printf %s $name\"\n\ntype Recorded { name: String }\n",
     )?;
     let compiled = serve::compile(&path)?;
-    let (context, _cancellation) = ActivityContext::new(ActivityId::from_sequence_position(4), 1);
+    let (context, _cancellation) = ActivityContext::new(
+        WorkflowId::new_v4(),
+        RunId::new_v4(),
+        ActivityId::from_sequence_position(4),
+        1,
+    );
     let structured = serve::served_action(&compiled.actions[0])?;
     let Err(failure) = serve::execute(&structured, &json!({"name": "Ada"}), &context).await else {
         return Err("output that is not JSON cannot become a decoded result".into());

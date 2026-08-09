@@ -1,4 +1,21 @@
-//! Source fence for the W-0 "nothing spawns" contract.
+//! Source fence for process-spawn CONFINEMENT.
+//!
+//! # Amendment (W-1..W-4, the lifecycle spine)
+//!
+//! This began as the W-0 "nothing spawns anywhere" fence, and W-0's exit
+//! criterion ("nothing spawns yet") has now been discharged deliberately: the
+//! managed-worker supervisor spawns real OS processes. The order is amended
+//! rather than deleted, and what it guards is narrowed to the claim that is
+//! still true and still load-bearing: **the durable record, wire, registry,
+//! state, and HTTP layers spawn nothing; process spawning lives in exactly one
+//! module.** One spawn site is what makes process-group containment provable
+//! (RUNTIME-OPERATIONS R8); a second copy is how a grandchild comes to outlive
+//! the thing that spawned it.
+//!
+//! The confinement claim has two halves and both are tested: the regions below
+//! must NOT contain the process API, and the supervisor MUST — a fence whose
+//! positive half is missing passes just as happily over a tree where nothing
+//! spawns at all.
 //!
 //! This deliberately small lexical scan strips nested block comments, line
 //! comments, normal string literals, and Rust raw string literals, then removes
@@ -167,6 +184,28 @@ fn worker_deployment_modules_do_not_spawn_processes() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// The positive half of the confinement claim, and the scanner's live control.
+///
+/// The supervisor's instance loop is the ONE place a managed worker process is
+/// created. Asserting it here does two jobs at once: it fails loudly if the
+/// spawn is ever moved or duplicated elsewhere, and it proves the scanner can
+/// see a real spawn in the real tree — so a green result above means "these
+/// regions are clean", not "the scanner found nothing anywhere".
+#[test]
+fn process_spawning_lives_in_the_supervisor_instance_loop() -> Result<(), String> {
+    let source = include_str!("../src/worker/supervisor/instance.rs");
+    let compact = compact_source(&strip_comments_and_strings(source));
+    if contains_token_sequence(&compact, "Command::new") {
+        Ok(())
+    } else {
+        Err(String::from(
+            "the supervisor instance loop no longer spawns a process — either the spawn moved \
+             (and this fence's region list must move with it) or the scanner has stopped \
+             detecting spawns, in which case every clean verdict above is meaningless",
+        ))
+    }
 }
 
 #[test]

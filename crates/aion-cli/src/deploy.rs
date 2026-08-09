@@ -32,7 +32,7 @@ impl DeployTarget {
         }
     }
 
-    async fn client(&self) -> Result<DeployServiceClient<Channel>> {
+    pub(crate) async fn client(&self) -> Result<DeployServiceClient<Channel>> {
         let channel = tonic::transport::Endpoint::try_from(self.endpoint.clone())
             .context("invalid --endpoint")?
             .connect()
@@ -44,7 +44,7 @@ impl DeployTarget {
     /// Wraps a message with the deploy credential metadata: the bearer token
     /// when one is sourced, plus the development subject/deploy headers
     /// (ignored by the JWT path, authoritative in dev modes).
-    fn request<T>(&self, message: T) -> Result<tonic::Request<T>> {
+    pub(crate) fn request<T>(&self, message: T) -> Result<tonic::Request<T>> {
         let mut request = tonic::Request::new(message);
         let metadata = request.metadata_mut();
         metadata.insert(
@@ -198,7 +198,7 @@ pub(crate) async fn unload(
 /// them apart.
 ///
 /// Matches [`aion_client`]'s own seam, which already guards this way.
-fn deploy_status_error(status: &tonic::Status) -> anyhow::Error {
+pub(crate) fn deploy_status_error(status: &tonic::Status) -> anyhow::Error {
     let details = status.details();
     if details.is_empty() {
         return anyhow::anyhow!("grpc {:?}: {}", status.code(), status.message());

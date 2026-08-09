@@ -162,6 +162,12 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     // is `None` for every single-node boot, so no supervisor is ever spawned.
     #[cfg(feature = "haematite-backend")]
     let cluster_config = config.store.cluster.clone();
+    // Capture the managed-worker supervision policy before `build` consumes
+    // `config`. Resolution already happened during config validation, so this
+    // cannot surprise an operator at boot; it is re-read here because the
+    // policy is COMMISSIONED onto the supervisor built into state below, and a
+    // server without the section supervises nothing.
+    let supervision_policy = config.worker_supervision.resolve()?;
     let state = ServerState::build(config).await?;
     reject_tls_until_supported(&state)?;
 
@@ -262,6 +268,7 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     // separate config knob. It drains on the same shutdown watch as the
     // transports; dropping the JoinHandle only detaches the task.
     drop(state.spawn_heartbeat_sweeper(shutdown_rx.clone()));
+    commission_worker_supervision(&state, supervision_policy).await;
     let mut grpc = tokio::spawn(serve_grpc(state.clone(), grpc_address, shutdown_rx.clone()));
     let mut http = tokio::spawn(serve_http(state.clone(), http_address, shutdown_rx));
 
@@ -291,6 +298,55 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     };
 
     Ok(outcome.exit_code())
+}
+
+/// Install the operator's supervision policy and converge the fleet.
+///
+/// Uncommissioned is a first-class but never SILENT state: a server with no
+/// `[worker_supervision]` section supervises nothing, and every deployment that
+/// wanted to be running is named in the warning, so the gap between "the
+/// operator deployed a worker" and "nothing is running it" is never quiet.
+async fn commission_worker_supervision(
+    state: &ServerState,
+    policy: Option<crate::worker::SupervisionPolicy>,
+) {
+    let supervisor = state.worker_supervisor();
+    let Some(policy) = policy else {
+        match supervisor.report().await {
+            Ok(report) => {
+                let wanted: Vec<&str> = report
+                    .workers
+                    .iter()
+                    .filter(|worker| worker.desired == aion_store::DesiredState::Running)
+                    .map(|worker| worker.name.as_str())
+                    .collect();
+                if wanted.is_empty() {
+                    info!("managed-worker supervision is not configured; no deployment wants it");
+                } else {
+                    warn!(
+                        deployments = wanted.join(", "),
+                        remedy = crate::worker::supervisor::UNCOMMISSIONED_REMEDY,
+                        "worker deployments want to be running but supervision is not configured"
+                    );
+                }
+            }
+            Err(error) => error!(
+                %error,
+                "managed-worker supervision is not configured and the deployment records \
+                 could not be read to say what that costs"
+            ),
+        }
+        return;
+    };
+    if !supervisor.commission(policy, crate::worker::ManagedExecutable::CurrentServer) {
+        error!("managed-worker supervision was already commissioned before boot completed");
+        return;
+    }
+    match supervisor.reconcile().await {
+        Ok(0) => info!("managed-worker supervision commissioned; no deployment wants to run"),
+        Ok(supervised) => info!(supervised, "managed-worker supervision commissioned"),
+        Err(error) => error!(%error, "managed-worker fleet could not be converged at boot"),
+    }
 }
 
 fn transport_result(

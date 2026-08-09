@@ -24,8 +24,19 @@ use crate::{
     shutdown::DrainState,
     worker::{
         ConnectedWorkerRegistry, HeartbeatTracker, PendingActivities, WorkerActivityDispatcher,
+        supervisor::WorkerSupervisor,
     },
 };
+
+/// Build an uncommissioned supervisor over one durable deployment store.
+///
+/// Every state constructor routes through this, so no construction path can
+/// accidentally hand the supervisor a DIFFERENT store from the one the
+/// management API writes through — desired state written in one place and read
+/// in another is exactly the drift this single call site removes.
+fn new_supervisor(store: &Arc<dyn WorkerDeploymentStore>) -> Arc<WorkerSupervisor> {
+    Arc::new(WorkerSupervisor::new(Arc::clone(store)))
+}
 
 /// Cloneable shared state passed to all server transports.
 #[derive(Clone)]
@@ -60,6 +71,11 @@ struct ServerStateInner {
     namespace_store: Arc<dyn NamespaceStore>,
     /// Durable worker-deployment records captured from the same leaf backend.
     worker_deployment_store: Arc<dyn WorkerDeploymentStore>,
+    /// Managed-worker supervision (W-1..W-4). Always present and always
+    /// UNCOMMISSIONED at construction: it supervises nothing until
+    /// [`crate::run`] installs the operator's `[worker_supervision]` policy, so
+    /// state construction can never start a process by itself.
+    worker_supervisor: Arc<WorkerSupervisor>,
     /// Advisory outbox wake (LSUB-2): the in-process `Notify` shared by the
     /// engine's stage seam (the `InstrumentedEventStore`'s `append_with_outbox`)
     /// and the [`OutboxDispatcher`](crate::worker::OutboxDispatcher) run loop, so
@@ -272,6 +288,7 @@ impl ServerState {
                 activity_mock_registry,
                 outbox_store,
                 namespace_store: connected.namespace_store,
+                worker_supervisor: new_supervisor(&connected.worker_deployment_store),
                 worker_deployment_store: connected.worker_deployment_store,
                 outbox_wake,
                 cluster_publisher,
@@ -378,6 +395,7 @@ impl ServerState {
                 activity_mock_registry: None,
                 outbox_store: None,
                 namespace_store,
+                worker_supervisor: new_supervisor(&worker_deployment_store),
                 worker_deployment_store,
                 outbox_wake: Arc::new(tokio::sync::Notify::new()),
                 cluster_publisher,
@@ -465,6 +483,7 @@ impl ServerState {
                 activity_mock_registry: None,
                 outbox_store: None,
                 namespace_store,
+                worker_supervisor: new_supervisor(&worker_deployment_store),
                 worker_deployment_store,
                 outbox_wake: Arc::new(tokio::sync::Notify::new()),
                 cluster_publisher,
@@ -511,6 +530,11 @@ impl ServerState {
         runtime: RuntimeConfig,
         jwks_cache: JwksCache,
     ) -> Self {
+        // No durable store was supplied, so the deployment records and the
+        // supervisor built over them share ONE in-memory leaf: two leaves
+        // would let the supervisor read a record the API never wrote.
+        let fallback_deployment_store: Arc<dyn WorkerDeploymentStore> =
+            Arc::new(aion_store::InMemoryStore::default());
         let heartbeat_tracker = HeartbeatTracker::new(runtime.worker.heartbeat_window);
         // Bound here, beside the tracker, for the same reason: `runtime` moves
         // into the state below, and the transport-loss budget must be read from
@@ -541,7 +565,8 @@ impl ServerState {
                 // in-memory store — present so `namespace_store()` is always
                 // reachable, never mutating any durable backend.
                 namespace_store: Arc::new(aion_store::InMemoryStore::default()),
-                worker_deployment_store: Arc::new(aion_store::InMemoryStore::default()),
+                worker_supervisor: new_supervisor(&fallback_deployment_store),
+                worker_deployment_store: fallback_deployment_store,
                 outbox_wake: Arc::new(tokio::sync::Notify::new()),
                 cluster_publisher: crate::cluster_publisher::ClusterEventPublisher::new(
                     Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
@@ -584,6 +609,11 @@ impl ServerState {
         runtime: RuntimeConfig,
         worker_registry: ConnectedWorkerRegistry,
     ) -> Self {
+        // No durable store was supplied, so the deployment records and the
+        // supervisor built over them share ONE in-memory leaf: two leaves
+        // would let the supervisor read a record the API never wrote.
+        let fallback_deployment_store: Arc<dyn WorkerDeploymentStore> =
+            Arc::new(aion_store::InMemoryStore::default());
         let heartbeat_tracker = HeartbeatTracker::new(runtime.worker.heartbeat_window);
         // Bound here, beside the tracker, for the same reason: `runtime` moves
         // into the state below, and the transport-loss budget must be read from
@@ -614,7 +644,8 @@ impl ServerState {
                 // in-memory store — present so `namespace_store()` is always
                 // reachable, never mutating any durable backend.
                 namespace_store: Arc::new(aion_store::InMemoryStore::default()),
-                worker_deployment_store: Arc::new(aion_store::InMemoryStore::default()),
+                worker_supervisor: new_supervisor(&fallback_deployment_store),
+                worker_deployment_store: fallback_deployment_store,
                 outbox_wake: Arc::new(tokio::sync::Notify::new()),
                 cluster_publisher: crate::cluster_publisher::ClusterEventPublisher::new(
                     Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
@@ -897,6 +928,17 @@ impl ServerState {
     #[must_use]
     pub fn worker_deployment_store(&self) -> &Arc<dyn WorkerDeploymentStore> {
         &self.inner.worker_deployment_store
+    }
+
+    /// Borrow the managed-worker supervisor.
+    ///
+    /// Built over the SAME durable deployment store as
+    /// [`Self::worker_deployment_store`], so desired state written through the
+    /// API is the desired state the supervisor converges on. Uncommissioned
+    /// until [`crate::run`] installs an operator policy.
+    #[must_use]
+    pub fn worker_supervisor(&self) -> &Arc<WorkerSupervisor> {
+        &self.inner.worker_supervisor
     }
 
     /// Build the shared minted-on-use hook over the durable namespace store and

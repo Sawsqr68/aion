@@ -1,9 +1,15 @@
 //! Cancellable process-group containment for worker-owned commands.
 //!
-//! A command enters a fresh process group before user code runs. Cancellation
-//! sends `SIGTERM` to the whole group, waits a bounded grace period, escalates
-//! to `SIGKILL`, reaps the direct child, and returns `Cancelled` only after an
-//! `ESRCH` probe confirms that the group is empty.
+//! A command enters a fresh process group before user code runs
+//! ([`ContainedChild`], the one containment core). Cancellation sends
+//! `SIGTERM` to the whole group, waits a bounded grace period, escalates to
+//! `SIGKILL`, reaps the direct child, and returns `Cancelled` only after the
+//! group is confirmed gone.
+//!
+//! Every reap here goes through [`ContainedChild::wait`] rather than the raw
+//! child, because the core tracks reaping to decide whether signalling the
+//! group is still legitimate. Reaping behind its back is precisely how a
+//! signal comes to be aimed at a recycled process-group id.
 //!
 //! # Output arrives line by line, not at exit
 //!
@@ -15,21 +21,12 @@
 //! to what a read-to-end capture would have produced.
 
 use std::future::Future;
-use std::io;
 use std::process::{Output, Stdio};
-use std::time::Duration;
 
-use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
-use tokio::process::{Child, ChildStderr, ChildStdout, Command};
+use tokio::process::{ChildStderr, ChildStdout, Command};
 
-/// Grace allowed after each group signal before cancellation fails loudly.
-///
-/// `SIGTERM` receives this interval before escalation. `SIGKILL` receives the
-/// same interval for OS-level disappearance and direct-child reaping.
-pub const PROCESS_GROUP_TERMINATION_GRACE: Duration = Duration::from_secs(2);
-
-const GROUP_PROBE_INTERVAL: Duration = Duration::from_millis(10);
+use super::contained::{ContainedChild, PROCESS_GROUP_TERMINATION_GRACE, ProcessGroupError};
 
 /// Which of a contained command's two output streams a line arrived on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -58,15 +55,9 @@ impl CommandStream {
 /// line terminator (`\n`, or `\r\n`) already removed and invalid UTF-8 replaced
 /// exactly as the completion capture replaces it. A blank line is delivered as
 /// an empty string rather than dropped: the observer sees the command's output
-/// faithfully, and deciding what is worth keeping belongs to the observer.
-///
-/// The call happens on the task reading that stream, so an implementation must
-/// not block — it hands the line onward (a channel, a counter, a log) and
-/// returns. It also must not fail the command: an observer that cannot record a
-/// line reports that in its own terms; the command's result is unaffected either
-/// way.
+/// with the same shape the capture keeps.
 pub trait CommandOutputObserver: Send + Sync {
-    /// Record one complete output line from `stream`.
+    /// One complete line arrived on `stream`.
     fn on_line(&self, stream: CommandStream, line: &str);
 }
 
@@ -79,92 +70,6 @@ pub enum CancellableCommandOutput {
     Cancelled,
 }
 
-/// A failure to start, observe, or completely stop a contained command.
-#[derive(Debug, Error)]
-pub enum ProcessGroupError {
-    /// Process-group containment is unavailable on this target.
-    #[error("process-group containment is unsupported on this operating system")]
-    Unsupported,
-    /// The command could not be spawned.
-    #[error("contained command could not be spawned: {source}")]
-    Spawn {
-        /// Underlying spawn failure.
-        #[source]
-        source: io::Error,
-    },
-    /// The spawned child did not expose a process id.
-    #[error("contained command spawned without a process id")]
-    MissingProcessId,
-    /// The platform process id did not fit the Unix `pid_t` representation.
-    #[error("contained command process id {pid} is outside the supported range")]
-    ProcessIdOutOfRange {
-        /// Process id returned by Tokio.
-        pid: u32,
-    },
-    /// A configured output pipe was unexpectedly unavailable.
-    #[error("contained command did not expose its piped {stream}")]
-    MissingPipe {
-        /// Name of the missing stream.
-        stream: &'static str,
-    },
-    /// Reading a captured output stream failed.
-    #[error("failed to read contained command {stream}: {source}")]
-    Read {
-        /// Name of the failed stream.
-        stream: &'static str,
-        /// Underlying read failure.
-        #[source]
-        source: io::Error,
-    },
-    /// Waiting for or reaping the direct child failed.
-    #[error("failed to reap contained command: {source}")]
-    Reap {
-        /// Underlying wait failure.
-        #[source]
-        source: io::Error,
-    },
-    /// Sending a signal to the process group failed.
-    #[cfg(unix)]
-    #[error("failed to send {signal} to process group {process_group}: {source}")]
-    Signal {
-        /// Process group that should have received the signal.
-        process_group: i32,
-        /// Signal being sent.
-        signal: &'static str,
-        /// Underlying Unix error.
-        #[source]
-        source: nix::errno::Errno,
-    },
-    /// Probing process-group existence failed.
-    #[cfg(unix)]
-    #[error("failed to probe process group {process_group}: {source}")]
-    Probe {
-        /// Process group being probed.
-        process_group: i32,
-        /// Underlying Unix error.
-        #[source]
-        source: nix::errno::Errno,
-    },
-    /// The group remained observable after `SIGKILL` and the verification bound.
-    #[error(
-        "process group {process_group} remained alive {grace:?} after SIGKILL; cancellation is not complete"
-    )]
-    GroupStillAlive {
-        /// Process group that failed to disappear.
-        process_group: i32,
-        /// Verification interval after `SIGKILL`.
-        grace: Duration,
-    },
-    /// Command observation failed and the mandatory cleanup also failed.
-    #[error("{original}; mandatory process-group cleanup also failed: {cleanup}")]
-    CleanupAfterFailure {
-        /// Original command observation failure.
-        original: Box<ProcessGroupError>,
-        /// Cleanup failure proving cancellation could not be confirmed.
-        cleanup: Box<ProcessGroupError>,
-    },
-}
-
 /// Run a command in a fresh process group and make cancellation tree-wide.
 ///
 /// The command's stdout and stderr are captured in full and, as they arrive,
@@ -172,8 +77,8 @@ pub enum ProcessGroupError {
 /// command is printing WHILE it runs, not only once it has exited. On
 /// cancellation, this function does not return
 /// [`CancellableCommandOutput::Cancelled`] until the direct child is reaped and
-/// a signal-zero group probe reports `ESRCH`; the lines observed up to that
-/// point stand.
+/// the process group is confirmed gone; the lines observed up to that point
+/// stand.
 ///
 /// # Errors
 ///
@@ -181,27 +86,6 @@ pub enum ProcessGroupError {
 /// when signalling fails, or when the group cannot be confirmed empty after
 /// bounded `SIGTERM`/`SIGKILL` handling.
 pub async fn run_cancellable_command<C, O>(
-    command: Command,
-    cancellation: C,
-    observer: &O,
-) -> Result<CancellableCommandOutput, ProcessGroupError>
-where
-    C: Future<Output = ()>,
-    O: CommandOutputObserver + ?Sized,
-{
-    #[cfg(unix)]
-    {
-        run_unix(command, cancellation, observer).await
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = (command, cancellation, observer);
-        Err(ProcessGroupError::Unsupported)
-    }
-}
-
-#[cfg(unix)]
-async fn run_unix<C, O>(
     mut command: Command,
     cancellation: C,
     observer: &O,
@@ -210,27 +94,14 @@ where
     C: Future<Output = ()>,
     O: CommandOutputObserver + ?Sized,
 {
-    use std::os::unix::process::CommandExt;
-
-    command.as_std_mut().process_group(0);
-    command
-        .kill_on_drop(true)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = command
-        .spawn()
-        .map_err(|source| ProcessGroupError::Spawn { source })?;
-    let raw_pid = child.id().ok_or(ProcessGroupError::MissingProcessId)?;
-    let process_group = i32::try_from(raw_pid)
-        .map_err(|_| ProcessGroupError::ProcessIdOutOfRange { pid: raw_pid })?;
-    let process_group = nix::unistd::Pid::from_raw(process_group);
-    let mut guard = ProcessGroupGuard::new(process_group);
-    let stdout = child.stdout.take();
-    let stderr = child.stderr.take();
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut contained = ContainedChild::spawn(command)?;
+    let stdout = contained.take_stdout();
+    let stderr = contained.take_stderr();
     tokio::pin!(cancellation);
 
     let state = {
-        let completion = collect_output(&mut child, stdout, stderr, observer);
+        let completion = collect_output(&mut contained, stdout, stderr, observer);
         tokio::pin!(completion);
         tokio::select! {
             biased;
@@ -241,37 +112,44 @@ where
 
     match state {
         RunState::Completed(Ok(output)) => {
-            guard.disarm();
+            // Both pipes reached EOF, so no descendant still holds a write end:
+            // the group is established empty without a probe.
+            contained.disarm();
             Ok(CancellableCommandOutput::Completed(output))
         }
-        RunState::Completed(Err(original)) => {
-            match terminate_process_group(&mut child, process_group).await {
-                Ok(()) => {
-                    guard.disarm();
-                    Err(original)
-                }
-                Err(cleanup) => Err(ProcessGroupError::CleanupAfterFailure {
-                    original: Box::new(original),
-                    cleanup: Box::new(cleanup),
-                }),
-            }
-        }
+        RunState::Completed(Err(original)) => match stop_and_confirm(&mut contained).await {
+            Ok(()) => Err(original),
+            Err(cleanup) => Err(ProcessGroupError::CleanupAfterFailure {
+                original: Box::new(original),
+                cleanup: Box::new(cleanup),
+            }),
+        },
         RunState::Cancelled => {
-            terminate_process_group(&mut child, process_group).await?;
-            guard.disarm();
+            stop_and_confirm(&mut contained).await?;
             Ok(CancellableCommandOutput::Cancelled)
         }
     }
 }
 
-#[cfg(unix)]
+/// Kill the group, then PROVE it gone before anyone is told it is.
+///
+/// The two halves are separate operations in the core precisely so that this
+/// composition is explicit: `Cancelled` is a claim about the whole tree, and it
+/// is not made until the probe supports it.
+async fn stop_and_confirm(contained: &mut ContainedChild) -> Result<(), ProcessGroupError> {
+    contained.terminate(PROCESS_GROUP_TERMINATION_GRACE).await?;
+    contained
+        .confirm_group_gone(PROCESS_GROUP_TERMINATION_GRACE)
+        .await
+}
+
 enum RunState {
     Completed(Result<Output, ProcessGroupError>),
     Cancelled,
 }
 
 async fn collect_output<O>(
-    child: &mut Child,
+    contained: &mut ContainedChild,
     stdout: Option<ChildStdout>,
     stderr: Option<ChildStderr>,
     observer: &O,
@@ -279,12 +157,6 @@ async fn collect_output<O>(
 where
     O: CommandOutputObserver + ?Sized,
 {
-    let wait = async {
-        child
-            .wait()
-            .await
-            .map_err(|source| ProcessGroupError::Reap { source })
-    };
     let capture = async {
         let stdout = stdout.ok_or(ProcessGroupError::MissingPipe {
             stream: CommandStream::Stdout.name(),
@@ -297,7 +169,7 @@ where
             read_stream(stderr, CommandStream::Stderr, observer)
         )
     };
-    let (status, (stdout, stderr)) = tokio::try_join!(wait, capture)?;
+    let (status, (stdout, stderr)) = tokio::try_join!(contained.wait(), capture)?;
     Ok(Output {
         status,
         stdout,
@@ -355,116 +227,6 @@ where
 fn strip_line_ending(line: &[u8]) -> &[u8] {
     let line = line.strip_suffix(b"\n").unwrap_or(line);
     line.strip_suffix(b"\r").unwrap_or(line)
-}
-
-#[cfg(unix)]
-async fn terminate_process_group(
-    child: &mut Child,
-    process_group: nix::unistd::Pid,
-) -> Result<(), ProcessGroupError> {
-    use nix::sys::signal::Signal;
-
-    signal_group(process_group, Signal::SIGTERM, "SIGTERM")?;
-    let deadline = tokio::time::Instant::now() + PROCESS_GROUP_TERMINATION_GRACE;
-    if wait_for_group_to_disappear(child, process_group, deadline).await? {
-        return Ok(());
-    }
-
-    signal_group(process_group, Signal::SIGKILL, "SIGKILL")?;
-    let deadline = tokio::time::Instant::now() + PROCESS_GROUP_TERMINATION_GRACE;
-    if wait_for_group_to_disappear(child, process_group, deadline).await? {
-        return Ok(());
-    }
-    Err(ProcessGroupError::GroupStillAlive {
-        process_group: process_group.as_raw(),
-        grace: PROCESS_GROUP_TERMINATION_GRACE,
-    })
-}
-
-#[cfg(unix)]
-async fn wait_for_group_to_disappear(
-    child: &mut Child,
-    process_group: nix::unistd::Pid,
-    deadline: tokio::time::Instant,
-) -> Result<bool, ProcessGroupError> {
-    loop {
-        child
-            .try_wait()
-            .map_err(|source| ProcessGroupError::Reap { source })?;
-        if group_is_gone(process_group)? {
-            return Ok(true);
-        }
-        let now = tokio::time::Instant::now();
-        if now >= deadline {
-            return Ok(false);
-        }
-        tokio::time::sleep(GROUP_PROBE_INTERVAL.min(deadline - now)).await;
-    }
-}
-
-#[cfg(unix)]
-fn signal_group(
-    process_group: nix::unistd::Pid,
-    signal: nix::sys::signal::Signal,
-    signal_name: &'static str,
-) -> Result<(), ProcessGroupError> {
-    match nix::sys::signal::killpg(process_group, signal) {
-        Ok(()) | Err(nix::errno::Errno::ESRCH) => Ok(()),
-        Err(source) => Err(ProcessGroupError::Signal {
-            process_group: process_group.as_raw(),
-            signal: signal_name,
-            source,
-        }),
-    }
-}
-
-#[cfg(unix)]
-fn group_is_gone(process_group: nix::unistd::Pid) -> Result<bool, ProcessGroupError> {
-    match nix::sys::signal::killpg(process_group, None::<nix::sys::signal::Signal>) {
-        Ok(()) => Ok(false),
-        Err(nix::errno::Errno::ESRCH) => Ok(true),
-        Err(source) => Err(ProcessGroupError::Probe {
-            process_group: process_group.as_raw(),
-            source,
-        }),
-    }
-}
-
-#[cfg(unix)]
-struct ProcessGroupGuard {
-    process_group: nix::unistd::Pid,
-    armed: bool,
-}
-
-#[cfg(unix)]
-impl ProcessGroupGuard {
-    const fn new(process_group: nix::unistd::Pid) -> Self {
-        Self {
-            process_group,
-            armed: true,
-        }
-    }
-
-    const fn disarm(&mut self) {
-        self.armed = false;
-    }
-}
-
-#[cfg(unix)]
-impl Drop for ProcessGroupGuard {
-    fn drop(&mut self) {
-        if !self.armed {
-            return;
-        }
-        match nix::sys::signal::killpg(self.process_group, nix::sys::signal::Signal::SIGKILL) {
-            Ok(()) | Err(nix::errno::Errno::ESRCH) => {}
-            Err(source) => tracing::error!(
-                process_group = self.process_group.as_raw(),
-                %source,
-                "failed to kill contained process group while dropping its owner"
-            ),
-        }
-    }
 }
 
 #[cfg(test)]

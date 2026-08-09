@@ -24,6 +24,7 @@ mod load;
 mod resolution;
 mod runtime;
 mod sections;
+mod worker_supervision;
 
 pub(crate) use defaults::{
     AUTHORING_GLEAM_PATH_EMPTY, AUTHORING_PROJECT_ROOT_REQUIRED,
@@ -59,3 +60,4 @@ pub use sections::{
     OutboxTransport, ResolvedMcpConfig, RuntimeSection, ServerSection, StoreBackend, StoreConfig,
     TlsConfig, WebSocketConfig, WorkerConfig,
 };
+pub use worker_supervision::WorkerSupervisionConfig;
