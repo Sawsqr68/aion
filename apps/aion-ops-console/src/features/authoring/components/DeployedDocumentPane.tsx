@@ -166,10 +166,28 @@ export function DeployedDocumentPane({ document }: { document: DeployedDocument 
           <StatusDot className="size-1.5" status={statusStyle.status} />
           {status.label}
         </span>
-        <span className="truncate text-muted-foreground">{schemaSummary(document)}</span>
+        <span className="truncate text-muted-foreground">
+          {schemaSummary(document)}
+          <span aria-hidden="true"> · </span>
+          {contractSummary(document)}
+        </span>
       </div>
     </section>
   );
+}
+
+/**
+ * What the version's IDENTITY-COMMITTED contract says about starting and
+ * signalling this entry. Absence is stated as absence: a `null` signal set
+ * (an additional entry, a pre-contract archive, or an older server) is "no
+ * committed signal set", which is a different fact from "signals: none".
+ */
+function contractSummary(document: DeployedDocument): string {
+  const start =
+    document.inputSchema === null ? 'no committed start schema' : 'start schema committed';
+  if (document.signals === null) return `${start} · no committed signal set`;
+  if (document.signals.length === 0) return `${start} · signals: none committed`;
+  return `${start} · signals: ${document.signals.map((signal) => signal.name).join(', ')}`;
 }
 
 /**

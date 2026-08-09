@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 
 import { workflowDetailHref } from '@/app/routePaths';
@@ -8,9 +8,17 @@ import type { ApiClient } from '@/lib/api';
 import { useDraft } from '@/lib/state';
 import type { Namespace } from '@/types';
 
+import { type StartSchemaClient, useStartInputSchema } from '../hooks/useStartInputSchema';
 import { useStartWorkflow } from '../hooks/useStartWorkflow';
 import { parseJsonInput } from '../lib/jsonInput';
+import {
+  applySchemaDefaults,
+  deriveSchemaForm,
+  type JsonObject,
+  missingRequiredPaths,
+} from '../lib/schemaForm';
 import { startWorkflowDraftStore } from '../lib/startWorkflowDraft';
+import { StartInputEditor, type StartInputMode, serializeInput } from './StartInputEditor';
 
 export type StartWorkflowFormProps = {
   namespace: Namespace | null;
@@ -18,12 +26,19 @@ export type StartWorkflowFormProps = {
   apiClient?: Pick<ApiClient, 'startWorkflow'> | undefined;
   /** Preload the workflow-type field (palette deep-link). Editable as usual. */
   initialWorkflowType?: string | undefined;
+  /**
+   * Whether the resolved caller may read the deployed surface (runtime
+   * capability, from `/whoami`). The schema-driven form needs it because
+   * `GET /awl/deployed/...` sits behind the deploy grant; without it the
+   * raw JSON editor is the whole input surface, exactly as before.
+   */
+  deployGranted?: boolean;
+  /** Injected deployed-read client for tests. */
+  schemaClient?: StartSchemaClient | undefined;
 };
 
 const FIELD_CLASS =
   'h-9 rounded-md border border-input bg-transparent px-3 text-sm outline-none focus:border-muted-foreground';
-const AREA_CLASS =
-  'min-h-28 rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm outline-none focus:border-muted-foreground';
 
 /**
  * Start a workflow run. Namespace-scoped command authority (ADR-022): no deploy
@@ -40,6 +55,8 @@ export function StartWorkflowForm({
   namespace,
   apiClient,
   initialWorkflowType,
+  deployGranted = false,
+  schemaClient,
 }: StartWorkflowFormProps) {
   const ids = useFieldIds();
   // Field state lives in a sessionStorage-backed draft store (src/lib/state):
@@ -70,6 +87,38 @@ export function StartWorkflowForm({
   const trimmedType = draft.workflowType.trim();
   const canSubmit = effectiveNamespace !== null && trimmedType.length > 0 && !start.isPending;
 
+  // The route-active deployed version's start-input schema, when this caller
+  // can read the deployed surface. `null` keeps the raw JSON editor as the
+  // entire input surface — exactly the pre-schema behavior.
+  const { schema, isLoading: schemaLoading } = useStartInputSchema({
+    workflowType: trimmedType,
+    deployGranted,
+    client: schemaClient,
+  });
+  const schemaModel = useMemo(() => (schema === null ? null : deriveSchemaForm(schema)), [schema]);
+  const [inputMode, setInputMode] = useState<StartInputMode>('form');
+
+  // When a schema arrives, seed its declared defaults into the shared input —
+  // ONCE PER MODEL (the ref gate), for keys the operator's input does not
+  // already carry. Re-seeding on later edits would fight an operator who
+  // removed a defaulted key on purpose. The draft is the one serialized truth,
+  // so the seeding is equally visible in both views.
+  const seededModelRef = useRef<typeof schemaModel>(null);
+  useEffect(() => {
+    if (schemaModel === null || seededModelRef.current === schemaModel) return;
+    const parsed = parseJsonInput(draft.inputText);
+    // Unparseable input is not consumed: the gate ref is NOT advanced, so the
+    // seeding retries once the input parses again instead of being skipped
+    // forever because it happened to be broken at the moment the schema
+    // landed.
+    if (!parsed.ok) return;
+    seededModelRef.current = schemaModel;
+    const seeded = applySchemaDefaults(schemaModel, parsed.value as JsonObject);
+    if (seeded !== parsed.value) {
+      updateDraft({ inputText: serializeInput(seeded) });
+    }
+  }, [schemaModel, draft.inputText, updateDraft]);
+
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setInputError(null);
@@ -78,6 +127,16 @@ export function StartWorkflowForm({
     if (!parsed.ok) {
       setInputError(parsed.error);
       return;
+    }
+
+    if (schemaModel !== null) {
+      const missing = missingRequiredPaths(schemaModel, parsed.value as JsonObject);
+      if (missing.length > 0) {
+        setInputError(
+          `Missing required input field${missing.length === 1 ? '' : 's'}: ${missing.join(', ')}`
+        );
+        return;
+      }
     }
 
     const trimmedRoutingKey = draft.routingKey.trim();
@@ -126,19 +185,15 @@ export function StartWorkflowForm({
             onChange={(event) => updateDraft({ workflowType: event.currentTarget.value })}
           />
         </label>
-        <label className="flex flex-col gap-2 font-medium text-sm" htmlFor={ids.input}>
-          Input (JSON)
-          <textarea
-            className={AREA_CLASS}
-            id={ids.input}
-            placeholder='{} or {"to": "ops@aion"}'
-            value={draft.inputText}
-            onChange={(event) => updateDraft({ inputText: event.currentTarget.value })}
-          />
-          <span className="font-normal text-muted-foreground text-xs">
-            Blank sends an empty object. The engine requires a payload.
-          </span>
-        </label>
+        <StartInputEditor
+          inputId={ids.input}
+          inputText={draft.inputText}
+          loading={schemaLoading}
+          mode={inputMode}
+          model={schemaModel}
+          onInputTextChange={(inputText) => updateDraft({ inputText })}
+          onModeChange={setInputMode}
+        />
         <label className="flex flex-col gap-2 font-medium text-sm" htmlFor={ids.routingKey}>
           Routing key (optional)
           <input

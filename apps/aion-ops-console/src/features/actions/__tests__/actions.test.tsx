@@ -266,4 +266,16 @@ describe('ActionsView', () => {
     expect(ungranted).not.toContain('Deploy package');
     expect(ungranted).not.toContain('Package archive');
   });
+
+  // M5. Catches: the managed-workers panel moved OUTSIDE the deployGranted
+  // gate. The whole surface (its GET included) is deploy-granted server-side,
+  // so an ungranted caller must not be shown a section whose every request
+  // the server will refuse.
+  test('the managed-workers section sits inside the deploy-granted gate', () => {
+    const granted = wrap(<ActionsView namespace={NAMESPACE} deployGranted={true} />);
+    expect(granted).toContain('Managed workers');
+
+    const ungranted = wrap(<ActionsView namespace={NAMESPACE} />);
+    expect(ungranted).not.toContain('Managed workers');
+  });
 });
