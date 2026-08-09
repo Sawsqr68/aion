@@ -151,10 +151,14 @@ pub fn testing_recorded_observations() -> Result(String, String)
 /// Store a query handler fun in the workflow process dictionary under the
 /// engine-contract key `{aion_query_handler, Name}`. The Erlang helper owns
 /// the raw process-dictionary types; Gleam code never touches them.
+///
+/// The handler is applied as `handler(query_id, arguments)`, where
+/// `arguments` is the caller's argument document as JSON text — `"null"`
+/// when the caller supplied none.
 @external(erlang, "aion_flow_query_pump", "register")
 pub fn register_query_handler(
   name: String,
-  handler: fn(String) -> Result(String, String),
+  handler: fn(String, String) -> Result(String, String),
 ) -> Nil
 
 /// Service one query sentinel payload (the JSON binary after the

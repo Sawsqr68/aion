@@ -1,6 +1,6 @@
 //! Payload and argument parsing helpers for the CLI.
 
-use aion_core::{ContentType, Payload, RunId, WorkflowId, WorkflowStatus};
+use aion_core::{Payload, RunId, WorkflowId, WorkflowStatus};
 use anyhow::{Context, Result};
 use serde_json::Value;
 use uuid::Uuid;
@@ -8,10 +8,6 @@ use uuid::Uuid;
 pub(crate) fn json_payload(raw: &str) -> Result<Payload> {
     let value: Value = serde_json::from_str(raw)?;
     Payload::from_json(&value).context("failed to serialize JSON payload")
-}
-
-pub(crate) fn empty_query_payload() -> Payload {
-    Payload::new(ContentType::Json, Vec::new())
 }
 
 pub(crate) fn payload_to_json(payload: &Payload) -> Result<Value> {

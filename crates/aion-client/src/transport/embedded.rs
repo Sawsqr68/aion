@@ -122,9 +122,17 @@ impl WorkflowTransport for EmbeddedWorkflowTransport {
     ) -> Result<aion_proto::ProtoQueryResponse, ClientError> {
         let workflow_id = decode_required_workflow_id(request.workflow_id)?;
         let run_id = decode_required_run_id(request.run_id)?;
+        // Absent arguments mean the caller supplied none; the handler still
+        // receives one well-formed document.
+        let arguments = request.arguments.map_or_else(
+            || Ok(aion_core::Payload::json_null()),
+            |arguments| {
+                aion_core::Payload::try_from(arguments).map_err(ClientError::from_wire_error)
+            },
+        )?;
         let payload = self
             .engine
-            .query(&workflow_id, &run_id, request.query_name)
+            .query(&workflow_id, &run_id, request.query_name, arguments)
             .await
             .map_err(|error| map_engine_error(&error))?;
         Ok(aion_proto::ProtoQueryResponse {
@@ -657,6 +665,11 @@ fn query_error_class(error: &aion::QueryError, source: &aion::EngineError) -> Cl
         // workflow author's to fix, and distinct from the engine failing to
         // deliver the query at all.
         aion::QueryError::HandlerFailed { .. } => ClientError::query_failed(source.to_string()),
+        // The caller sent arguments the engine cannot carry to a handler: the
+        // caller's request to fix, never the workflow's or the server's.
+        aion::QueryError::InvalidArguments { .. } => {
+            ClientError::invalid_argument(source.to_string())
+        }
         aion::QueryError::Engine(_) => ClientError::server(source.to_string()),
     }
 }
@@ -1367,7 +1380,16 @@ mod tests {
                 }),
                 "query_failed",
             ),
-            // The query family's own control, and the seventh of seven arms —
+            // The caller's own arguments were malformed: the request is the
+            // thing to fix, so this is `invalid_argument` — not the handler's
+            // failure and not the engine's.
+            (
+                aion::EngineError::Query(aion::QueryError::InvalidArguments {
+                    reason: "arguments payload is not a well-formed JSON document".to_owned(),
+                }),
+                "invalid_input",
+            ),
+            // The query family's own control, and the eighth of eight arms —
             // an earlier revision of this table listed six and left this one
             // unmeasured, so a change re-classifying an engine-seam failure as
             // a caller-facing one survived green. A seam that could not deliver

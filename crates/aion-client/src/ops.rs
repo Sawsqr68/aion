@@ -213,9 +213,11 @@ impl Client {
 
     /// Queries the latest run, or `run_id` when supplied, with a local deadline.
     ///
-    /// The current AW protobuf does not yet carry query argument payloads, so a
-    /// non-empty `args` payload returns [`ClientError::InvalidArgument`] instead
-    /// of being silently dropped.
+    /// `args` is the argument document handed to the workflow's registered
+    /// query handler. A query that takes no arguments passes
+    /// [`Payload::json_null`] — the canonical "nothing supplied" document
+    /// every carrier agrees on. The server refuses arguments that are not a
+    /// well-formed JSON document with [`ClientError::InvalidArgument`].
     ///
     /// # Errors
     ///
@@ -228,7 +230,6 @@ impl Client {
         args: Payload,
         deadline: Duration,
     ) -> Result<Payload, ClientError> {
-        validate_query_args(&args)?;
         let response = tokio::time::timeout(
             deadline,
             self.transport.query(ProtoQueryRequest {
@@ -236,6 +237,7 @@ impl Client {
                 workflow_id: Some(ProtoWorkflowId::from(workflow_id.clone())),
                 run_id: run_id.cloned().map(ProtoRunId::from),
                 query_name: name.into(),
+                arguments: Some(aion_proto::ProtoPayload::from(args)),
             }),
         )
         .await
@@ -600,26 +602,16 @@ fn validate_start_options(opts: &StartOptions) -> Result<(), ClientError> {
     Ok(())
 }
 
-fn validate_query_args(args: &Payload) -> Result<(), ClientError> {
-    if !args.bytes().is_empty() {
-        return Err(ClientError::invalid_argument(
-            "query arguments are not carried by the current wire contract; \
-             pass an empty payload",
-        ));
-    }
-    Ok(())
-}
-
+/// Serialize typed query arguments into the payload the wire carries.
+///
+/// A value that serializes to JSON `null` needs no special case: `null` *is*
+/// the canonical "no arguments" document (see [`Payload::json_null`]), so the
+/// serialized bytes are already exactly what a no-argument query sends.
 fn query_args_payload<T>(args: &T) -> Result<Payload, ClientError>
 where
     T: Serialize + ?Sized,
 {
-    let payload = to_payload(args)?;
-    if payload.bytes() == b"null" {
-        Ok(Payload::new(payload.content_type().clone(), Vec::new()))
-    } else {
-        Ok(payload)
-    }
+    to_payload(args)
 }
 
 fn validate_list_page(page: &ListPage) -> Result<(), ClientError> {
@@ -874,10 +866,6 @@ mod tests {
         )
     }
 
-    fn empty_payload() -> Payload {
-        Payload::new(ContentType::Json, Vec::new())
-    }
-
     fn summary() -> aion_core::WorkflowSummary {
         aion_core::WorkflowSummary {
             workflow_id: workflow_id(),
@@ -1031,23 +1019,88 @@ mod tests {
                 &id,
                 Some(&run_id()),
                 "state",
-                empty_payload(),
+                Payload::json_null(),
                 Duration::from_secs(1),
             )
             .await;
-        let unsupported_args = client
-            .query(&id, None, "state", payload("args"), Duration::from_secs(1))
-            .await;
 
         assert_eq!(result, Err(ClientError::query_timeout("slow")));
-        assert!(
-            matches!(unsupported_args, Err(ClientError::InvalidArgument { .. })),
-            "got {unsupported_args:?}"
-        );
         let recorded = stub.last_query.lock().await.clone();
         assert!(recorded.is_some());
         let request = recorded.ok_or_else(|| ClientError::server("missing query"))?;
         assert!(request.run_id.is_some());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn query_forwards_its_arguments_onto_the_wire() -> Result<(), ClientError> {
+        let stub = Arc::new(StubTransport::default());
+        *stub.query_response.lock().await = Some(Ok(ProtoQueryResponse {
+            outcome: Some(proto_query_response::Outcome::Result(
+                aion_proto::ProtoPayload::from(payload("answer")),
+            )),
+        }));
+        let client = client_with(Arc::clone(&stub));
+
+        let returned = client
+            .query(
+                &workflow_id(),
+                Some(&run_id()),
+                "state",
+                payload("args"),
+                Duration::from_secs(1),
+            )
+            .await?;
+
+        assert_eq!(returned, payload("answer"));
+        let request = stub
+            .last_query
+            .lock()
+            .await
+            .clone()
+            .ok_or_else(|| ClientError::server("missing query"))?;
+        // The caller's arguments reach the wire byte-exact: this client is a
+        // carrier, not a place that reshapes or drops the request.
+        assert_eq!(
+            request.arguments,
+            Some(aion_proto::ProtoPayload::from(payload("args")))
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn a_no_argument_query_sends_the_canonical_null_document() -> Result<(), ClientError> {
+        let stub = Arc::new(StubTransport::default());
+        *stub.query_response.lock().await = Some(Ok(ProtoQueryResponse {
+            outcome: Some(proto_query_response::Outcome::Result(
+                aion_proto::ProtoPayload::from(payload("answer")),
+            )),
+        }));
+        let client = client_with(Arc::clone(&stub));
+
+        // `&()` is how a caller says "this query takes nothing"; it must reach
+        // the wire as the same `null` document every other carrier sends, not
+        // as empty bytes no decoder can read.
+        let _: serde_json::Value = client
+            .query_typed(
+                &workflow_id(),
+                Some(&run_id()),
+                "state",
+                &(),
+                Duration::from_secs(1),
+            )
+            .await?;
+
+        let request = stub
+            .last_query
+            .lock()
+            .await
+            .clone()
+            .ok_or_else(|| ClientError::server("missing query"))?;
+        assert_eq!(
+            request.arguments,
+            Some(aion_proto::ProtoPayload::from(Payload::json_null()))
+        );
         Ok(())
     }
 
@@ -1066,7 +1119,7 @@ mod tests {
                 &workflow_id(),
                 Some(&run_id()),
                 "state",
-                empty_payload(),
+                Payload::json_null(),
                 Duration::from_secs(1),
             )
             .await;
@@ -1092,7 +1145,7 @@ mod tests {
                 &workflow_id(),
                 Some(&run_id()),
                 "state",
-                empty_payload(),
+                Payload::json_null(),
                 Duration::from_secs(1),
             )
             .await;
@@ -1126,27 +1179,46 @@ mod tests {
         Ok(())
     }
 
+    /// The anti-silent-drop property, stated positively.
+    ///
+    /// This test used to assert that non-empty typed arguments were REFUSED,
+    /// because the wire could not carry them and dropping them silently was
+    /// the failure to avoid. The wire carries them now, so the same property
+    /// is proven the other way: the exact serialized document reaches the
+    /// request. A regression that dropped arguments again would leave
+    /// `arguments` absent and fail here — the refusal test could not have
+    /// caught that, since it never inspected a forwarded request.
     #[tokio::test]
-    async fn query_typed_rejects_non_empty_args_without_silent_drop() {
+    async fn query_typed_forwards_non_empty_args_without_silent_drop() -> Result<(), ClientError> {
         let stub = Arc::new(StubTransport::default());
         let client = client_with(Arc::clone(&stub));
         let id = workflow_id();
 
-        let result = client
-            .query_typed::<_, serde_json::Value>(
+        let _: serde_json::Value = client
+            .query_typed(
                 &id,
                 Some(&run_id()),
                 "state",
                 &serde_json::json!({ "filter": "open" }),
                 Duration::from_secs(1),
             )
-            .await;
+            .await?;
 
-        assert!(
-            matches!(result, Err(ClientError::InvalidArgument { .. })),
-            "got {result:?}"
+        let request = stub
+            .last_query
+            .lock()
+            .await
+            .clone()
+            .ok_or_else(|| ClientError::server("missing query"))?;
+        let arguments = request
+            .arguments
+            .ok_or_else(|| ClientError::server("query arguments were dropped"))?;
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&arguments.bytes)
+                .map_err(|error| ClientError::server(error.to_string()))?,
+            serde_json::json!({ "filter": "open" })
         );
-        assert!(stub.last_query.lock().await.is_none());
+        Ok(())
     }
 
     #[tokio::test]

@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use aion_core::{ContentType, Payload};
+use aion_core::Payload;
 use async_trait::async_trait;
 
 use crate::engine::delegated;
@@ -40,7 +40,12 @@ impl ConcreteQueryService {
 
 #[async_trait]
 impl delegated::QueryService for ConcreteQueryService {
-    async fn query(&self, target: &WorkflowHandle, name: String) -> Result<Payload, EngineError> {
+    async fn query(
+        &self,
+        target: &WorkflowHandle,
+        name: String,
+        arguments: Payload,
+    ) -> Result<Payload, EngineError> {
         if target.residency() == HandleResidency::Suspended {
             // A suspended workflow has no live heap to answer from, and
             // resuming solely to answer is forbidden.
@@ -61,13 +66,7 @@ impl delegated::QueryService for ConcreteQueryService {
         }
         let service = QueryService::new(Arc::clone(&self.mailbox_engine), self.query_timeout);
         service
-            .query_process(
-                WorkflowProcessHandle::new(target.pid()),
-                name,
-                // The wire carries no query arguments yet (CLIENT-CONTRACT:
-                // args are future work); handlers receive no payload.
-                Payload::new(ContentType::Json, b"{}".to_vec()),
-            )
+            .query_process(WorkflowProcessHandle::new(target.pid()), name, arguments)
             .await
             .map_err(EngineError::Query)
     }
@@ -101,11 +100,16 @@ mod tests {
 
     const QUERY_TIMEOUT: Duration = Duration::from_millis(50);
 
-    /// Replying fake over the mailbox seam, counting deliveries per process.
+    /// One recorded mailbox delivery: target pid, query name, and the
+    /// caller's arguments payload exactly as the seam handed them over.
+    type Delivery = (u64, String, Payload);
+
+    /// Replying fake over the mailbox seam, recording every delivery's
+    /// process, query name, and arguments payload.
     #[derive(Default)]
     struct ReplyingMailbox {
         replies: Mutex<HashMap<String, Payload>>,
-        delivered: Mutex<Vec<(u64, String)>>,
+        delivered: Mutex<Vec<Delivery>>,
     }
 
     impl ReplyingMailbox {
@@ -120,11 +124,11 @@ mod tests {
             fake
         }
 
-        fn delivered(&self) -> Result<Vec<(u64, String)>, EngineSeamError> {
+        fn delivered(&self) -> Result<Vec<Delivery>, EngineSeamError> {
             Ok(self.lock_delivered()?.clone())
         }
 
-        fn lock_delivered(&self) -> Result<MutexGuard<'_, Vec<(u64, String)>>, EngineSeamError> {
+        fn lock_delivered(&self) -> Result<MutexGuard<'_, Vec<Delivery>>, EngineSeamError> {
             self.delivered
                 .lock()
                 .map_err(|_| EngineSeamError::Delivery {
@@ -148,12 +152,18 @@ mod tests {
             process: WorkflowProcessHandle,
             message: WorkflowMailboxMessage,
         ) -> Result<(), EngineSeamError> {
-            let WorkflowMailboxMessage::Query { name, reply_to, .. } = message else {
+            let WorkflowMailboxMessage::Query {
+                name,
+                payload,
+                reply_to,
+            } = message
+            else {
                 return Err(EngineSeamError::Delivery {
                     reason: "fake mailbox only accepts query messages".to_owned(),
                 });
             };
-            self.lock_delivered()?.push((process.pid(), name.clone()));
+            self.lock_delivered()?
+                .push((process.pid(), name.clone(), payload));
             let reply = self
                 .replies
                 .lock()
@@ -294,10 +304,18 @@ mod tests {
         let mailbox = Arc::new(ReplyingMailbox::with_reply("state", reply.clone()));
         let service = ConcreteQueryService::new(Arc::clone(&mailbox) as _, QUERY_TIMEOUT);
 
-        let returned = service.query(&handle, "state".to_owned()).await?;
+        let arguments = payload("caller-arguments")?;
+        let returned = service
+            .query(&handle, "state".to_owned(), arguments.clone())
+            .await?;
 
         assert_eq!(returned, reply);
-        assert_eq!(mailbox.delivered()?, vec![(31, "state".to_owned())]);
+        // The caller's arguments reach the mailbox unmodified: this service
+        // is a pass-through, never a place that substitutes a payload.
+        assert_eq!(
+            mailbox.delivered()?,
+            vec![(31, "state".to_owned(), arguments)]
+        );
         Ok(())
     }
 
@@ -308,7 +326,9 @@ mod tests {
         let mailbox = Arc::new(ReplyingMailbox::with_reply("state", payload("never-used")?));
         let service = ConcreteQueryService::new(Arc::clone(&mailbox) as _, QUERY_TIMEOUT);
 
-        let result = service.query(&handle, "state".to_owned()).await;
+        let result = service
+            .query(&handle, "state".to_owned(), payload("arguments")?)
+            .await;
 
         assert_not_running(result, &handle)?;
         assert!(
@@ -332,7 +352,9 @@ mod tests {
         let mailbox = Arc::new(ReplyingMailbox::with_reply("state", payload("never-used")?));
         let service = ConcreteQueryService::new(Arc::clone(&mailbox) as _, QUERY_TIMEOUT);
 
-        let result = service.query(&handle, "state".to_owned()).await;
+        let result = service
+            .query(&handle, "state".to_owned(), payload("arguments")?)
+            .await;
 
         assert_not_running(result, &handle)?;
         assert!(mailbox.delivered()?.is_empty());
@@ -346,7 +368,9 @@ mod tests {
         let mailbox = Arc::new(ReplyingMailbox::default());
         let service = ConcreteQueryService::new(Arc::clone(&mailbox) as _, QUERY_TIMEOUT);
 
-        let result = service.query(&handle, "missing".to_owned()).await;
+        let result = service
+            .query(&handle, "missing".to_owned(), payload("arguments")?)
+            .await;
 
         match result {
             Err(EngineError::Query(QueryError::UnknownQuery(name))) => {

@@ -12,7 +12,7 @@ use super::error::{
     cancel_terminal_error, log_server_error, map_start_error, map_workflow_operation_error,
     signal_terminal_error,
 };
-use super::payload::{required_payload, required_workflow_id};
+use super::payload::{optional_payload, required_payload, required_workflow_id};
 use super::runs::{resolve_run_id, terminal_status};
 use crate::{
     CallerIdentity, NamespaceGuard, NamespaceMinter, NamespaceOperation, ServerError,
@@ -224,6 +224,9 @@ pub async fn query(
     let engine = scoped.engine().map_err(|error| error.to_wire_error())?;
     let run_id = resolve_run_id(engine.as_ref(), &workflow_id, request.run_id.clone()).await?;
     let query_name = request.query_name.clone();
+    // An absent arguments field means the caller supplied none; the handler
+    // still receives one well-formed document, the canonical JSON `null`.
+    let arguments = optional_payload(request.arguments.clone())?;
     let span = info_span!(
         "engine_operation",
         operation = "query",
@@ -232,9 +235,13 @@ pub async fn query(
         query_name = %query_name,
     );
 
-    let outcome = async { engine.query(&workflow_id, &run_id, query_name).await }
-        .instrument(span)
-        .await;
+    let outcome = async {
+        engine
+            .query(&workflow_id, &run_id, query_name, arguments)
+            .await
+    }
+    .instrument(span)
+    .await;
 
     match outcome {
         Ok(result) => Ok(ProtoQueryResponse {

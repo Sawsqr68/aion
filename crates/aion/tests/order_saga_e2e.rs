@@ -293,7 +293,10 @@ where
     let deadline = Instant::now() + POLL_DEADLINE;
     let mut last: Option<Value> = None;
     loop {
-        match engine.query(workflow_id, run_id, STATUS_QUERY).await {
+        match engine
+            .query(workflow_id, run_id, STATUS_QUERY, Payload::json_null())
+            .await
+        {
             Ok(payload) => {
                 let value: Value = serde_json::from_slice(payload.bytes())?;
                 if accept(&value) {
@@ -655,7 +658,7 @@ async fn order_completes_after_payment_retry_engine_restart_and_approval() -> Te
 
     // A terminal workflow answers queries with the typed NotRunning error.
     match second_engine
-        .query(&workflow_id, &run_id, STATUS_QUERY)
+        .query(&workflow_id, &run_id, STATUS_QUERY, Payload::json_null())
         .await
     {
         Err(EngineError::Query(QueryError::NotRunning(_))) => {}

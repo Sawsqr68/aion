@@ -94,7 +94,11 @@ pub fn handle(input: ApprovalInput) -> Result(ApprovalOutput, WorkflowError) {
 /// change. Queries are answered at yield points and never touch workflow
 /// history, so a recovered run answers them after replay with no extra code.
 fn set_status(stage: String) -> Result(Nil, WorkflowError) {
-  case query.handler(status_query_name, status_codec(), fn() { stage }) {
+  case
+    query.handler(status_query_name, codec.null_codec(), status_codec(), fn(_) {
+      stage
+    })
+  {
     Ok(Nil) -> Ok(Nil)
     Error(query_error) -> Error(QueryFailed(query_error_message(query_error)))
   }

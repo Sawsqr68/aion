@@ -304,9 +304,12 @@ fn set_status(
       payment_id: payment_id,
     )
   case
-    query.handler(status_query_name, order_types.order_status_codec(), fn() {
-      status
-    })
+    query.handler(
+      status_query_name,
+      codec.null_codec(),
+      order_types.order_status_codec(),
+      fn(_) { status },
+    )
   {
     Ok(Nil) -> Ok(Nil)
     Error(query_error) ->

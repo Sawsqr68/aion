@@ -25,9 +25,12 @@ pub const release_signal_name = "leaf_release"
 /// Typed workflow logic, also the parent's `child.spawn` type anchor.
 pub fn process(input: ChainInput) -> Result(String, String) {
   case
-    query.handler(status_query_name, chain_types.text_codec(), fn() {
-      "processing:" <> input.job_id
-    })
+    query.handler(
+      status_query_name,
+      codec.null_codec(),
+      chain_types.text_codec(),
+      fn(_) { "processing:" <> input.job_id },
+    )
   {
     Ok(Nil) -> run_leaf(input)
     Error(_) -> Error("level_three: query registration failed")

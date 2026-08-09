@@ -26,6 +26,7 @@
 //// Every loop cap, backoff, and deadline is a REQUIRED input field — no
 //// arbitrary defaults baked in (open question Q5).
 
+import aion/codec
 import aion/duration
 import aion/error
 import aion/query
@@ -405,8 +406,9 @@ fn set_status(phase: String, round: Int) -> Result(Nil, PipelineError) {
   case
     query.handler(
       status_query_name,
+      codec.null_codec(),
       codecs_workflows.pipeline_status_codec(),
-      fn() { status },
+      fn(_) { status },
     )
   {
     Ok(Nil) -> Ok(Nil)

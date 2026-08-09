@@ -197,9 +197,12 @@ fn result_for(
 fn set_status(stage: String, task_id: String) -> Result(Nil, AgentError) {
   let status = io.AgentStatus(stage: stage, task_id: task_id)
   case
-    query.handler(status_query_name, codecs.agent_status_codec(), fn() {
-      status
-    })
+    query.handler(
+      status_query_name,
+      codec.null_codec(),
+      codecs.agent_status_codec(),
+      fn(_) { status },
+    )
   {
     Ok(Nil) -> Ok(Nil)
     Error(query_error) -> Error(QueryFailed(query_error_message(query_error)))

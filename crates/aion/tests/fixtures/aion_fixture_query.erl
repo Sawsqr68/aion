@@ -6,24 +6,28 @@
 %% The engine answers workflow queries at yield points: when a query is
 %% pending, each suspending await returns the sentinel
 %% `{error, <<"aion_query:", Json/binary>>}` with
-%% `Json = {"query_id":"<uuid>","name":"<query name>"}` instead of
-%% resolving. This module hand-rolls the pump loop (instead of depending on
-%% the aion_flow SDK's `aion_flow_query_pump`) so the tests prove the raw
-%% sentinel protocol: re-enter the same await after servicing each query,
-%% fetch the handler fun from the process dictionary under the engine
-%% contract key `{aion_query_handler, Name}`, and reply through the
-%% `aion_flow_ffi` NIFs.
+%% `Json = {"query_id":"<uuid>","name":"<name>","arguments":"<json>"}`
+%% instead of resolving. This module hand-rolls the pump loop (instead of
+%% depending on the aion_flow SDK's `aion_flow_query_pump`) so the tests
+%% prove the raw sentinel protocol: re-enter the same await after servicing
+%% each query, fetch the handler fun from the process dictionary under the
+%% engine contract key `{aion_query_handler, Name}`, and reply through the
+%% `aion_flow_ffi` NIFs. Handlers are applied as `Handler(QueryId,
+%% Arguments)`, matching the SDK's engine contract.
 
-%% Registers three handlers, then parks on a "release" signal behind the
+%% Registers four handlers, then parks on a "release" signal behind the
 %% pump. Handlers:
 %%   <<"state">>   - replies a payload embedding the query id (so tests can
 %%                   assert distinct ids for concurrent queries),
+%%   <<"echo">>    - replies a payload embedding the caller's arguments, so a
+%%                   test can prove the arguments reached the handler,
 %%   <<"boom">>    - raises, proving a handler raise becomes HandlerFailed
 %%                   without crashing the workflow process,
 %%   <<"records">> - calls the recording `send_signal` NIF, proving the
 %%                   servicing guard refuses recording during a query.
 queryable(_Input) ->
     ok = register_handler(<<"state">>, state_handler()),
+    ok = register_handler(<<"echo">>, echo_handler()),
     ok = register_handler(<<"boom">>, boom_handler()),
     ok = register_handler(<<"records">>, records_handler()),
     {ok, _Release} = receive_released(<<"release">>),
@@ -86,7 +90,7 @@ activity_gated(_Input) ->
 %% --- handlers ------------------------------------------------------------
 
 state_handler() ->
-    fun(QueryId) ->
+    fun(QueryId, _Arguments) ->
         %% A reply that fails (late reply after caller timeout) is
         %% non-fatal by contract; ignore the FFI result.
         _ = aion_flow_ffi:reply_query(
@@ -96,11 +100,22 @@ state_handler() ->
         ok
     end.
 
+%% Derives its whole answer from the caller's arguments: a handler that
+%% received a default (or nothing) cannot produce this reply.
+echo_handler() ->
+    fun(QueryId, Arguments) ->
+        _ = aion_flow_ffi:reply_query(
+            QueryId,
+            <<"{\"echoed\":", Arguments/binary, "}">>
+        ),
+        ok
+    end.
+
 boom_handler() ->
-    fun(_QueryId) -> erlang:error(<<"fixture boom">>) end.
+    fun(_QueryId, _Arguments) -> erlang:error(<<"fixture boom">>) end.
 
 records_handler() ->
-    fun(QueryId) ->
+    fun(QueryId, _Arguments) ->
         %% send_signal records SignalSent; the per-pid servicing guard must
         %% refuse it while a query handler runs. The query id is uuid-shaped
         %% so it would parse as a workflow id if the guard ever let it
@@ -138,12 +153,13 @@ pumped(Await) ->
 service_query(Json) ->
     QueryId = scan_query_id(Json),
     Name = scan_name(Json),
+    Arguments = scan_arguments(Json),
     case erlang:get({aion_query_handler, Name}) of
         undefined ->
             reply_error(QueryId, <<"no fixture handler for ", Name/binary>>);
         Handler ->
             try
-                _ = Handler(QueryId),
+                _ = Handler(QueryId, Arguments),
                 ok
             catch
                 error:Reason when is_binary(Reason) ->
@@ -173,6 +189,28 @@ scan_name(<<"\"name\":\"", Rest/binary>>) -> value_until_quote(Rest, <<>>);
 scan_name(<<_Byte, Tail/binary>>) -> scan_name(Tail);
 scan_name(<<>>) -> erlang:error(<<"sentinel missing name">>).
 
+%% The arguments field carries the caller's JSON document inside a JSON
+%% string, so its own quotes and backslashes arrive escaped. Fixture
+%% arguments are plain JSON documents (objects, numbers, strings without
+%% control characters), so `\"` and `\\` are the complete escape set here;
+%% anything else is a fixture/engine mismatch and fails loudly rather than
+%% silently corrupting the arguments a test asserts on.
+scan_arguments(<<"\"arguments\":\"", Rest/binary>>) -> unescaped_until_quote(Rest, <<>>);
+scan_arguments(<<_Byte, Tail/binary>>) -> scan_arguments(Tail);
+scan_arguments(<<>>) -> erlang:error(<<"sentinel missing arguments">>).
+
 value_until_quote(<<$", _Rest/binary>>, Acc) -> Acc;
 value_until_quote(<<Byte, Rest/binary>>, Acc) -> value_until_quote(Rest, <<Acc/binary, Byte>>);
 value_until_quote(<<>>, _Acc) -> erlang:error(<<"sentinel value unterminated">>).
+
+unescaped_until_quote(<<$", _Rest/binary>>, Acc) -> Acc;
+unescaped_until_quote(<<$\\, $", Rest/binary>>, Acc) ->
+    unescaped_until_quote(Rest, <<Acc/binary, $">>);
+unescaped_until_quote(<<$\\, $\\, Rest/binary>>, Acc) ->
+    unescaped_until_quote(Rest, <<Acc/binary, $\\>>);
+unescaped_until_quote(<<$\\, Other, _Rest/binary>>, _Acc) ->
+    erlang:error(<<"sentinel arguments carry an unsupported escape: ", Other>>);
+unescaped_until_quote(<<Byte, Rest/binary>>, Acc) ->
+    unescaped_until_quote(Rest, <<Acc/binary, Byte>>);
+unescaped_until_quote(<<>>, _Acc) ->
+    erlang:error(<<"sentinel arguments unterminated">>).

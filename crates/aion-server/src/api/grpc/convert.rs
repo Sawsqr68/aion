@@ -114,6 +114,7 @@ pub(super) fn decode_query_request(value: generated::QueryRequest) -> ProtoQuery
         workflow_id: value.workflow_id.map(decode_workflow_id),
         run_id: value.run_id.map(decode_run_id),
         query_name: value.query_name,
+        arguments: value.arguments.map(decode_payload),
     }
 }
 

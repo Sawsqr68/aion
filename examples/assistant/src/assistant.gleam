@@ -217,9 +217,12 @@ fn run_assistant(prompt: String) -> Result(String, io.AssistantError) {
 fn set_status(phase: String, round: Int) -> Result(Nil, io.AssistantError) {
   let status = io.AssistantStatus(phase: phase, round: round)
   case
-    query.handler(status_query_name, codecs.assistant_status_codec(), fn() {
-      status
-    })
+    query.handler(
+      status_query_name,
+      codec.null_codec(),
+      codecs.assistant_status_codec(),
+      fn(_) { status },
+    )
   {
     Ok(Nil) -> Ok(Nil)
     Error(query_error) ->

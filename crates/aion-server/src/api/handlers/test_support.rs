@@ -200,6 +200,9 @@ pub(super) fn query_request() -> ProtoQueryRequest {
         workflow_id: Some(workflow_id().into()),
         run_id: Some(run_id().into()),
         query_name: "state".to_owned(),
+        // No arguments supplied: the handler substitutes the canonical
+        // `null` document, exactly as an HTTP caller omitting the field.
+        arguments: None,
     }
 }
 

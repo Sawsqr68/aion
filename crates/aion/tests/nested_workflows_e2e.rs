@@ -285,7 +285,10 @@ async fn query_when_registered(
 ) -> Result<Value, Box<dyn std::error::Error>> {
     let deadline = Instant::now() + POLL_DEADLINE;
     loop {
-        match engine.query(workflow_id, run_id, name).await {
+        match engine
+            .query(workflow_id, run_id, name, Payload::json_null())
+            .await
+        {
             Err(EngineError::Query(QueryError::UnknownQuery(_))) if Instant::now() < deadline => {
                 tokio::time::sleep(POLL_INTERVAL).await;
             }

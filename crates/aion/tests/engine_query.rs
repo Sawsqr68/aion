@@ -110,7 +110,9 @@ async fn query_when_registered(
 ) -> Result<Payload, EngineError> {
     let deadline = std::time::Instant::now() + REGISTRATION_DEADLINE;
     loop {
-        let outcome = engine.query(workflow_id, run_id, name).await;
+        let outcome = engine
+            .query(workflow_id, run_id, name, Payload::json_null())
+            .await;
         match outcome {
             Err(EngineError::Query(QueryError::UnknownQuery(_)))
                 if std::time::Instant::now() < deadline =>
@@ -320,6 +322,103 @@ async fn query_answers_at_yield_point_without_touching_history() -> TestResult {
     Ok(())
 }
 
+// --- query arguments: reader end to end ------------------------------------
+
+#[tokio::test]
+async fn query_arguments_reach_the_handler_and_shape_the_answer() -> TestResult {
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+    let engine = engine_over(&store, "queryable", QUERY_TIMEOUT).await?;
+    let (workflow_id, run_id) = start(&engine).await?;
+    // Wait for registration before asserting anything about arguments.
+    state_reply(&query_when_registered(&engine, &workflow_id, &run_id, "state").await?)?;
+    let before = store.read_history(&workflow_id).await?;
+
+    // The `echo` handler derives its whole reply from the arguments, so this
+    // answer is unreachable unless the caller's document arrived intact.
+    let arguments = Payload::from_json(&json!({ "n": 7, "label": "mid-step" }))?;
+    let reply = engine
+        .query(&workflow_id, &run_id, "echo", arguments)
+        .await?;
+
+    assert_eq!(
+        result_json(&reply)?,
+        json!({ "echoed": { "n": 7, "label": "mid-step" } })
+    );
+    // Answering from arguments is still a read: nothing was recorded.
+    assert_eq!(
+        store.read_history(&workflow_id).await?,
+        before,
+        "an argument-carrying query must append zero events"
+    );
+
+    // A second query with different arguments gets a different answer from
+    // the same live workflow — the reply tracks the request, not a default.
+    let other = engine
+        .query(
+            &workflow_id,
+            &run_id,
+            "echo",
+            Payload::from_json(&json!([1, 2, 3]))?,
+        )
+        .await?;
+    assert_eq!(result_json(&other)?, json!({ "echoed": [1, 2, 3] }));
+
+    // And a caller that supplies nothing keeps today's behaviour: the
+    // canonical `null` document reaches the handler.
+    let empty = engine
+        .query(&workflow_id, &run_id, "echo", Payload::json_null())
+        .await?;
+    assert_eq!(result_json(&empty)?, json!({ "echoed": null }));
+
+    release_and_await_42(&engine, &store, &workflow_id, &run_id).await?;
+    engine.shutdown()?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn malformed_query_arguments_are_refused_without_disturbing_the_workflow() -> TestResult {
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+    let engine = engine_over(&store, "queryable", QUERY_TIMEOUT).await?;
+    let (workflow_id, run_id) = start(&engine).await?;
+    state_reply(&query_when_registered(&engine, &workflow_id, &run_id, "state").await?)?;
+    let before = store.read_history(&workflow_id).await?;
+
+    // Bytes tagged JSON that are not a JSON document can never reach a
+    // handler's decoder; the caller learns that, not the workflow.
+    let error = engine
+        .query(
+            &workflow_id,
+            &run_id,
+            "echo",
+            Payload::new(aion_core::ContentType::Json, b"{not json".to_vec()),
+        )
+        .await
+        .err()
+        .ok_or("malformed query arguments unexpectedly produced a reply")?;
+
+    match error {
+        EngineError::Query(QueryError::InvalidArguments { reason }) => {
+            assert!(
+                reason.contains("well-formed JSON"),
+                "the refusal must name what was wrong with the arguments: {reason}"
+            );
+        }
+        other => return Err(format!("expected typed InvalidArguments, got {other:?}").into()),
+    }
+    assert_eq!(store.read_history(&workflow_id).await?, before);
+
+    // The workflow was never disturbed: it still answers and completes.
+    let (answer, _) = state_reply(
+        &engine
+            .query(&workflow_id, &run_id, "state", Payload::json_null())
+            .await?,
+    )?;
+    assert_eq!(answer, 1);
+    release_and_await_42(&engine, &store, &workflow_id, &run_id).await?;
+    engine.shutdown()?;
+    Ok(())
+}
+
 // --- test plan item 6: query after replay + determinism control ------------
 
 #[tokio::test]
@@ -390,7 +489,7 @@ async fn suspended_residency_query_is_not_running_without_resume_or_events() -> 
     let before = store.read_history(&workflow_id).await?;
 
     let error = engine
-        .query(&workflow_id, &run_id, "state")
+        .query(&workflow_id, &run_id, "state", Payload::json_null())
         .await
         .err()
         .ok_or("query against a suspended workflow unexpectedly succeeded")?;
@@ -424,7 +523,7 @@ async fn unknown_query_name_is_typed_and_workflow_still_answers() -> TestResult 
     let before = store.read_history(&workflow_id).await?;
 
     let error = engine
-        .query(&workflow_id, &run_id, "missing")
+        .query(&workflow_id, &run_id, "missing", Payload::json_null())
         .await
         .err()
         .ok_or("unknown query name unexpectedly succeeded")?;
@@ -435,7 +534,11 @@ async fn unknown_query_name_is_typed_and_workflow_still_answers() -> TestResult 
     }
     assert_eq!(store.read_history(&workflow_id).await?, before);
     // The workflow was never disturbed: a follow-up valid query answers.
-    let (answer, _) = state_reply(&engine.query(&workflow_id, &run_id, "state").await?)?;
+    let (answer, _) = state_reply(
+        &engine
+            .query(&workflow_id, &run_id, "state", Payload::json_null())
+            .await?,
+    )?;
     assert_eq!(answer, 1);
 
     release_and_await_42(&engine, &store, &workflow_id, &run_id).await?;
@@ -454,7 +557,7 @@ async fn raising_handler_is_handler_failed_and_workflow_survives() -> TestResult
     let before = store.read_history(&workflow_id).await?;
 
     let error = engine
-        .query(&workflow_id, &run_id, "boom")
+        .query(&workflow_id, &run_id, "boom", Payload::json_null())
         .await
         .err()
         .ok_or("raising handler unexpectedly produced a payload")?;
@@ -476,7 +579,11 @@ async fn raising_handler_is_handler_failed_and_workflow_survives() -> TestResult
 
     // The workflow process survived the raise: it still answers and a
     // subsequent signal completes it normally.
-    let (answer, _) = state_reply(&engine.query(&workflow_id, &run_id, "state").await?)?;
+    let (answer, _) = state_reply(
+        &engine
+            .query(&workflow_id, &run_id, "state", Payload::json_null())
+            .await?,
+    )?;
     assert_eq!(answer, 1);
     release_and_await_42(&engine, &store, &workflow_id, &run_id).await?;
     let terminal = store.read_history(&workflow_id).await?;
@@ -549,9 +656,10 @@ async fn eight_concurrent_queries_are_all_answered_with_distinct_ids() -> TestRe
     let (workflow_id, run_id) = start(&engine).await?;
     state_reply(&query_when_registered(&engine, &workflow_id, &run_id, "state").await?)?;
 
-    let outcomes =
-        futures::future::join_all((0..8).map(|_| engine.query(&workflow_id, &run_id, "state")))
-            .await;
+    let outcomes = futures::future::join_all(
+        (0..8).map(|_| engine.query(&workflow_id, &run_id, "state", Payload::json_null())),
+    )
+    .await;
 
     let mut query_ids = HashSet::new();
     for outcome in outcomes {
@@ -563,7 +671,11 @@ async fn eight_concurrent_queries_are_all_answered_with_distinct_ids() -> TestRe
     assert_eq!(query_ids.len(), 8, "every query must get its own reply");
     // Queues drained and the pump healthy: one more query answers, and the
     // whole burst appended nothing.
-    let (answer, _) = state_reply(&engine.query(&workflow_id, &run_id, "state").await?)?;
+    let (answer, _) = state_reply(
+        &engine
+            .query(&workflow_id, &run_id, "state", Payload::json_null())
+            .await?,
+    )?;
     assert_eq!(answer, 1);
     assert_eq!(
         event_kinds(&store.read_history(&workflow_id).await?),
@@ -596,7 +708,9 @@ async fn query_racing_completion_yields_payload_or_typed_error_without_events() 
             engine.signal(&workflow_id, &run_id, "release", signal_payload("release")?),
             async {
                 tokio::time::sleep(query_delay).await;
-                engine.query(&workflow_id, &run_id, "state").await
+                engine
+                    .query(&workflow_id, &run_id, "state", Payload::json_null())
+                    .await
             },
         );
 
@@ -632,7 +746,10 @@ async fn query_racing_completion_yields_payload_or_typed_error_without_events() 
             "iteration {iteration}"
         );
         // No serviceable leftovers: a post-terminal query is typed NotRunning.
-        match engine.query(&workflow_id, &run_id, "state").await {
+        match engine
+            .query(&workflow_id, &run_id, "state", Payload::json_null())
+            .await
+        {
             Err(EngineError::Query(QueryError::NotRunning(id))) => {
                 assert_eq!(id, workflow_id, "iteration {iteration}");
             }
@@ -684,7 +801,7 @@ async fn handler_calling_recording_nif_is_handler_failed_with_zero_events() -> T
     // The "records" handler calls the recording send_signal NIF while
     // servicing; the per-pid guard must refuse it typed.
     let error = engine
-        .query(&workflow_id, &run_id, "records")
+        .query(&workflow_id, &run_id, "records", Payload::json_null())
         .await
         .err()
         .ok_or("recording from a query handler was not refused")?;
@@ -706,7 +823,11 @@ async fn handler_calling_recording_nif_is_handler_failed_with_zero_events() -> T
 
     // The guard lifted with the failure reply: the workflow still answers
     // and completes normally.
-    let (answer, _) = state_reply(&engine.query(&workflow_id, &run_id, "state").await?)?;
+    let (answer, _) = state_reply(
+        &engine
+            .query(&workflow_id, &run_id, "state", Payload::json_null())
+            .await?,
+    )?;
     assert_eq!(answer, 1);
     release_and_await_42(&engine, &store, &workflow_id, &run_id).await?;
     let terminal = store.read_history(&workflow_id).await?;
@@ -851,7 +972,11 @@ async fn query_at_activity_await_then_crash_replay_matches_unqueried_control() -
         state_reply(&query_when_registered(&engine, &workflow_id, &run_id, "state").await?)?;
     assert_eq!(answer, 1);
     assert!(!query_id.is_empty());
-    let (answer, _) = state_reply(&engine.query(&workflow_id, &run_id, "state").await?)?;
+    let (answer, _) = state_reply(
+        &engine
+            .query(&workflow_id, &run_id, "state", Payload::json_null())
+            .await?,
+    )?;
     assert_eq!(answer, 1);
     assert_eq!(
         store.read_history(&workflow_id).await?,

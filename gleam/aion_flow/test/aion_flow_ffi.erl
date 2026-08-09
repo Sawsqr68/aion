@@ -201,7 +201,11 @@ report_query_diagnostic(Category, Message) ->
     record_query_diagnostic(<<Category/binary, ":", Message/binary>>),
     {ok, <<"reported">>}.
 
-dispatch_query(Name, _Config) ->
+%% Mirrors the production dispatch_query NIF's argument handling: the config
+%% carries the caller's argument document in its `payload` field as JSON text
+%% inside a JSON string, and an absent field means the canonical "no
+%% arguments" document `null`.
+dispatch_query(Name, Config) ->
     case erlang:get({aion_query_registered, self(), Name}) of
         undefined ->
             {error, <<"unknown:", Name/binary>>};
@@ -210,9 +214,41 @@ dispatch_query(Name, _Config) ->
                 undefined ->
                     {error,
                         <<"handler_failed:no handler registered for query ", Name/binary>>};
-                Handler -> Handler(next_query_id())
+                Handler -> Handler(next_query_id(), config_arguments(Config))
             end
     end.
+
+config_arguments(Config) ->
+    case scan_config_payload(Config) of
+        {ok, Arguments} -> Arguments;
+        missing -> <<"null">>
+    end.
+
+scan_config_payload(<<"\"payload\":\"", Rest/binary>>) ->
+    {ok, unescape_json_string(Rest, <<>>)};
+scan_config_payload(<<_Byte, Tail/binary>>) -> scan_config_payload(Tail);
+scan_config_payload(<<>>) -> missing.
+
+unescape_json_string(<<$", _Rest/binary>>, Acc) -> Acc;
+unescape_json_string(<<$\\, $", Rest/binary>>, Acc) ->
+    unescape_json_string(Rest, <<Acc/binary, $">>);
+unescape_json_string(<<$\\, $\\, Rest/binary>>, Acc) ->
+    unescape_json_string(Rest, <<Acc/binary, $\\>>);
+unescape_json_string(<<$\\, $/, Rest/binary>>, Acc) ->
+    unescape_json_string(Rest, <<Acc/binary, $/>>);
+unescape_json_string(<<$\\, $b, Rest/binary>>, Acc) ->
+    unescape_json_string(Rest, <<Acc/binary, $\b>>);
+unescape_json_string(<<$\\, $f, Rest/binary>>, Acc) ->
+    unescape_json_string(Rest, <<Acc/binary, $\f>>);
+unescape_json_string(<<$\\, $n, Rest/binary>>, Acc) ->
+    unescape_json_string(Rest, <<Acc/binary, $\n>>);
+unescape_json_string(<<$\\, $r, Rest/binary>>, Acc) ->
+    unescape_json_string(Rest, <<Acc/binary, $\r>>);
+unescape_json_string(<<$\\, $t, Rest/binary>>, Acc) ->
+    unescape_json_string(Rest, <<Acc/binary, $\t>>);
+unescape_json_string(<<Byte, Rest/binary>>, Acc) ->
+    unescape_json_string(Rest, <<Acc/binary, Byte>>);
+unescape_json_string(<<>>, Acc) -> Acc.
 
 testing_recorded_observations() ->
     {ok, integer_to_binary(length(observations()))}.
@@ -461,7 +497,9 @@ child_result(<<"raw-error-prefix-failure">>, _Input) ->
 child_result(<<"queried-child">>, _Input) ->
     %% First await yields a query sentinel; the re-entered await resolves.
     {sentinel_then,
-        {error, <<"aion_query:{\"query_id\":\"q-child\",\"name\":\"child-state\"}">>},
+        {error,
+            <<"aion_query:{\"query_id\":\"q-child\",\"name\":\"child-state\","
+                "\"arguments\":\"null\"}">>},
         {ok, <<"ok:\"queried-child-receipt\"">>}};
 child_result(_Name, _Input) ->
     {error, <<"unknown child workflow">>}.

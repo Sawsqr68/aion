@@ -39,6 +39,29 @@ pub fn json_codec(
   )
 }
 
+/// The codec for the canonical "nothing supplied" document: JSON `null`.
+///
+/// Query arguments are the surface that needs it — a query taking no
+/// arguments registers this as its arguments codec, and a caller supplying
+/// none sends exactly this document. Keeping one spelling of it here is what
+/// stops each workflow from inventing its own idea of "empty".
+///
+/// The decoder matches the compact serialization every Aion carrier produces
+/// (`null`, no surrounding whitespace) and refuses anything else, so a caller
+/// that sends real arguments to a no-argument query is told so instead of
+/// having them silently discarded. That strictness is why this is a separate
+/// name from `aion/awl/codec.nil_codec`, which encodes `{}` and accepts any
+/// document: two codecs over different documents must not share a name.
+pub fn null_codec() -> Codec(Nil) {
+  Codec(encode: fn(_) { "null" }, decode: fn(input) {
+    case input {
+      "null" -> Ok(Nil)
+      other ->
+        Error(DecodeError("Expected the null document, found " <> other, []))
+    }
+  })
+}
+
 fn json_decode_error(error: json.DecodeError) -> DecodeError {
   case error {
     json.UnexpectedEndOfInput -> DecodeError("Unexpected end of input", [])

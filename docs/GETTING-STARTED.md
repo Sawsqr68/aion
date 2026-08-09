@@ -596,7 +596,11 @@ fn set_status(stage: String) -> Result(Nil, FlowError) {
   // Re-register the `status` query handler with a fresh closure at each
   // state change; queries are answered at yield points and never touch
   // workflow history.
-  case query.handler("status", status_codec(), fn() { stage }) {
+  // `codec.null_codec()` is the arguments codec for a query that takes none:
+  // a caller supplying no arguments sends the JSON `null` document.
+  case
+    query.handler("status", codec.null_codec(), status_codec(), fn(_) { stage })
+  {
     Ok(Nil) -> Ok(Nil)
     Error(_) -> Error(FlowFailed("failed to register the status query"))
   }

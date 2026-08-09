@@ -722,6 +722,7 @@ mod tests {
             workflow_id: None,
             run_id: None,
             query_name: String::from("state"),
+            arguments: None,
         };
         let cancel = ProtoCancelRequest {
             namespace: String::from("tenant-a"),

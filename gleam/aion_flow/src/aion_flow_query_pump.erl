@@ -3,13 +3,16 @@
 %% The engine answers workflow queries at yield points: when a query is
 %% pending, each suspending await returns the sentinel
 %% `{error, <<"aion_query:", Json/binary>>}` with
-%% `Json = {"query_id":"<uuid>","name":"<query name>"}` instead of resolving.
+%% `Json = {"query_id":"<uuid>","name":"<query name>","arguments":"<json>"}`
+%% instead of resolving. `arguments` is the caller's argument document carried
+%% as a JSON *string* (so its bytes are escaped and can never forge another
+%% key), and is `"null"` when the caller supplied none.
 %% The SDK pump loop (`aion/internal/pump`) hands the JSON payload to
 %% `service/1`, which decodes it, fetches the handler fun the SDK stored in
 %% the process dictionary under `{aion_query_handler, Name}` (the engine
 %% contract key; GC-rooted, unlike Rust-held terms), and applies
-%% `Handler(QueryId)` inside try/catch. On a raise, or when no handler is
-%% registered, the failure is replied through
+%% `Handler(QueryId, Arguments)` inside try/catch. On a raise, or when no
+%% handler is registered, the failure is replied through
 %% `aion_flow_ffi:reply_query_error/2` so the caller observes a typed
 %% handler failure.
 %%
@@ -42,8 +45,8 @@
 %% The fun guards are arity-blind `is_function/1`, not `is_function/2`: the
 %% beamr VM (as of 0.4.9) cannot execute the `is_function2` test instruction
 %% (its loader drops the arity operand), and this module's contract is to
-%% use only constructs beamr executes. Handler arity is already fixed to 1
-%% by the typed Gleam binding in `aion/internal/ffi`.
+%% use only constructs beamr executes. Handler arity is already fixed to 2
+%% (query id, arguments) by the typed Gleam binding in `aion/internal/ffi`.
 register(Name, Handler) when is_binary(Name), is_function(Handler) ->
     erlang:put({aion_query_handler, Name}, Handler),
     nil.
@@ -54,9 +57,9 @@ register(Name, Handler) when is_binary(Name), is_function(Handler) ->
 service(Payload) when is_binary(Payload) ->
     case scan_query_id(Payload) of
         {ok, QueryId} ->
-            case scan_name(Payload) of
-                {ok, Name} ->
-                    run_handler(QueryId, Name);
+            case scan_sentinel_fields(Payload) of
+                {ok, Name, Arguments} ->
+                    run_handler(QueryId, Name, Arguments);
                 {error, Reason} ->
                     report_malformed(Payload, Reason),
                     reply_error(
@@ -72,7 +75,7 @@ service(Payload) when is_binary(Payload) ->
             nil
     end.
 
-run_handler(QueryId, Name) ->
+run_handler(QueryId, Name, Arguments) ->
     case erlang:get({aion_query_handler, Name}) of
         undefined ->
             reply_error(
@@ -80,7 +83,7 @@ run_handler(QueryId, Name) ->
                 <<"no handler registered in the process dictionary for query ", Name/binary>>
             );
         Handler when is_function(Handler) ->
-            try Handler(QueryId) of
+            try Handler(QueryId, Arguments) of
                 {ok, _Confirmation} -> nil;
                 {error, Reason} ->
                     report_reply_failure(<<"reply_query">>, QueryId, Reason),
@@ -95,7 +98,7 @@ run_handler(QueryId, Name) ->
                         QueryId,
                         Class,
                         Reason,
-                        <<"aion_flow_query_pump:run_handler/2">>
+                        <<"aion_flow_query_pump:run_handler/3">>
                     ),
                     reply_error(QueryId, describe_exception(Class, Reason))
             end;
@@ -228,10 +231,24 @@ describe_reason(_Reason) ->
 %% --- sentinel JSON field extraction -------------------------------------
 %%
 %% The engine emits the sentinel JSON with serde_json: compact encoding,
-%% exactly the string fields `query_id` and `name`, with `"` and `\` inside
-%% values always escaped. A raw `"query_id":"` / `"name":"` byte sequence
-%% therefore never occurs inside a value, so scanning for the literal key
-%% pattern is exact. Key order is irrelevant to the scan.
+%% exactly the string fields `query_id`, `name`, and `arguments`, with `"`
+%% and `\` inside values always escaped. A raw `"query_id":"` / `"name":"` /
+%% `"arguments":"` byte sequence therefore never occurs inside a value, so
+%% scanning for the literal key pattern is exact. That is precisely why the
+%% engine carries the caller's argument document as an escaped JSON *string*
+%% rather than a nested value: caller-controlled bytes must not be able to
+%% forge a key the scan would find. Key order is irrelevant to the scan.
+
+scan_sentinel_fields(Payload) ->
+    case scan_name(Payload) of
+        {ok, Name} ->
+            case scan_arguments(Payload) of
+                {ok, Arguments} -> {ok, Name, Arguments};
+                {error, Reason} -> {error, Reason}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 scan_query_id(<<"\"query_id\":\"", Rest/binary>>) ->
     case unescape(Rest, <<>>) of
@@ -248,6 +265,18 @@ scan_name(<<"\"name\":\"", Rest/binary>>) ->
     end;
 scan_name(<<_Byte, Tail/binary>>) -> scan_name(Tail);
 scan_name(<<>>) -> {error, missing_name}.
+
+%% The arguments field is mandatory: the engine always emits one (`"null"`
+%% when the caller supplied nothing). A sentinel without it is a protocol
+%% break, reported as such rather than silently handled as "no arguments" —
+%% a handler must never mistake a broken carrier for an empty request.
+scan_arguments(<<"\"arguments\":\"", Rest/binary>>) ->
+    case unescape(Rest, <<>>) of
+        {ok, Arguments} -> {ok, Arguments};
+        error -> {error, malformed_arguments}
+    end;
+scan_arguments(<<_Byte, Tail/binary>>) -> scan_arguments(Tail);
+scan_arguments(<<>>) -> {error, missing_arguments}.
 
 %% Decode a JSON string value up to its closing quote, resolving the escape
 %% sequences serde_json emits (`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`,

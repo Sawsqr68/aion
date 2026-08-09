@@ -426,9 +426,12 @@ fn run_land(
 fn set_status(phase: String, round: Int) -> Result(Nil, io.AgentDevError) {
   let status = io.AgentDevStatus(phase: phase, round: round)
   case
-    query.handler(status_query_name, codecs.agent_dev_status_codec(), fn() {
-      status
-    })
+    query.handler(
+      status_query_name,
+      codec.null_codec(),
+      codecs.agent_dev_status_codec(),
+      fn(_) { status },
+    )
   {
     Ok(Nil) -> Ok(Nil)
     Error(query_error) ->

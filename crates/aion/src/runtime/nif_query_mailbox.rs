@@ -5,10 +5,16 @@
 //! enqueues an `aion_query` wake marker. The workflow's next suspending-await
 //! invocation drains the queue through the query pump and replies over the
 //! parked sender — nothing on this path touches the recorder or resolver.
+//!
+//! The caller's query arguments ride the pending-query record as the JSON
+//! text the workflow handler receives. This module is the boundary that
+//! validates that text (see [`arguments_text`]): an arguments payload that is
+//! not well-formed UTF-8 JSON is refused as [`QueryError::InvalidArguments`]
+//! without disturbing the workflow at all.
 
 use std::sync::{Arc, Weak};
 
-use aion_core::{WorkflowId, WorkflowStatus};
+use aion_core::{Payload, WorkflowId, WorkflowStatus};
 use uuid::Uuid;
 
 use crate::Pid;
@@ -58,6 +64,7 @@ impl QueryMailboxEngine {
         state: &EngineNifState,
         pid: u64,
         name: String,
+        arguments: String,
         reply_to: crate::engine_seam::QueryReplySender,
     ) -> Result<(), QueryError> {
         let runtime = self
@@ -78,6 +85,7 @@ impl QueryMailboxEngine {
             .push_back(PendingQuery {
                 query_id: query_id.clone(),
                 name,
+                arguments,
             });
         if let Err(error) = runtime.deliver_query_request(pid) {
             // Roll back both entries before classifying the failure.
@@ -139,9 +147,7 @@ impl EngineHandle for QueryMailboxEngine {
         let WorkflowMailboxMessage::Query {
             name,
             reply_to,
-            // The wire carries no query arguments yet; the payload is always
-            // the empty JSON object and is not forwarded to the handler.
-            payload: _,
+            payload,
         } = message
         else {
             return Err(delivery_error(
@@ -155,13 +161,27 @@ impl EngineHandle for QueryMailboxEngine {
                 ))))
                 .map_err(|_| delivery_error("query caller dropped reply receiver"));
         };
+        // Arguments become a JSON string value inside the pump sentinel, so
+        // they must be well-formed UTF-8 JSON before anything is queued. A
+        // malformed payload is the caller's fault and is refused here rather
+        // than waking the workflow to fail inside a handler.
+        let arguments = match arguments_text(&payload) {
+            Ok(arguments) => arguments,
+            Err(reason) => {
+                return reply_to
+                    .send(Err(QueryError::InvalidArguments { reason }))
+                    .map_err(|_| delivery_error("query caller dropped reply receiver"));
+            }
+        };
         match is_query_registered(&state, process.pid(), &name) {
-            Ok(true) => match self.enqueue_query(&state, process.pid(), name, reply_to) {
-                Ok(()) => Ok(()),
-                // The reply sender was consumed by the rollback inside
-                // `enqueue_query`; surface the failure to the seam caller.
-                Err(error) => Err(delivery_error(format!("query enqueue failed: {error}"))),
-            },
+            Ok(true) => {
+                match self.enqueue_query(&state, process.pid(), name, arguments, reply_to) {
+                    Ok(()) => Ok(()),
+                    // The reply sender was consumed by the rollback inside
+                    // `enqueue_query`; surface the failure to the seam caller.
+                    Err(error) => Err(delivery_error(format!("query enqueue failed: {error}"))),
+                }
+            }
             // An unregistered name never disturbs the workflow process. On a
             // pid that is no longer live the missing registration is the
             // completion race (exit-time cleanup dropped it), not an author
@@ -261,4 +281,21 @@ fn delivery_error(reason: impl Into<String>) -> EngineSeamError {
     EngineSeamError::Delivery {
         reason: reason.into(),
     }
+}
+
+/// Render a caller's query arguments payload as the JSON text a handler reads.
+///
+/// The pump sentinel embeds this text as a JSON string value, and the SDK
+/// hands it to the registered handler's arguments codec. Both steps require a
+/// well-formed UTF-8 JSON document, so both properties are checked here — the
+/// last point at which the failure is still attributable to the caller. The
+/// caller's exact bytes are forwarded on success: re-serializing would rewrite
+/// key order and number formatting the author's codec may depend on.
+fn arguments_text(payload: &Payload) -> Result<String, String> {
+    let text = std::str::from_utf8(payload.bytes())
+        .map_err(|error| format!("arguments payload is not valid UTF-8: {error}"))?;
+    serde_json::from_str::<serde_json::Value>(text).map_err(|error| {
+        format!("arguments payload is not a well-formed JSON document: {error}")
+    })?;
+    Ok(text.to_owned())
 }

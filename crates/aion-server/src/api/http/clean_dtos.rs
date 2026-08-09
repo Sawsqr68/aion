@@ -81,7 +81,10 @@ impl TryFrom<SignalWorkflowRequest> for ProtoSignalRequest {
     }
 }
 
-/// Clean query request: ids are plain UUID strings.
+/// Clean query request: ids are plain UUID strings, arguments are plain JSON.
+///
+/// `arguments` is optional; omitting it means the query takes none, and the
+/// handler receives the canonical JSON `null` document.
 #[derive(Debug, Deserialize)]
 pub(crate) struct QueryWorkflowRequest {
     namespace: String,
@@ -89,6 +92,8 @@ pub(crate) struct QueryWorkflowRequest {
     #[serde(default)]
     run_id: Option<String>,
     query_name: String,
+    #[serde(default)]
+    arguments: Option<Value>,
 }
 
 impl TryFrom<QueryWorkflowRequest> for ProtoQueryRequest {
@@ -100,6 +105,7 @@ impl TryFrom<QueryWorkflowRequest> for ProtoQueryRequest {
             workflow_id: Some(proto_workflow_id(&request.workflow_id)?),
             run_id: optional_proto_run_id(request.run_id.as_deref())?,
             query_name: request.query_name,
+            arguments: request.arguments.map(http_input_payload).transpose()?,
         })
     }
 }
@@ -416,6 +422,54 @@ mod tests {
             serde_json::from_slice::<serde_json::Value>(&payload.bytes)?,
             json!({ "value": 1 })
         );
+        Ok(())
+    }
+
+    #[test]
+    fn clean_query_request_carries_plain_json_arguments() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let request: QueryWorkflowRequest = serde_json::from_value(json!({
+            "namespace": "tenant-a",
+            "workflow_id": "00000000-0000-0000-0000-000000000001",
+            "query_name": "state",
+            "arguments": { "n": 7 },
+        }))?;
+        let proto = ProtoQueryRequest::try_from(request)?;
+
+        assert_eq!(proto.query_name, "state");
+        let arguments = proto.arguments.ok_or("arguments missing")?;
+        assert_eq!(arguments.content_type, "application/json");
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&arguments.bytes)?,
+            json!({ "n": 7 })
+        );
+        Ok(())
+    }
+
+    /// An omitted `arguments` field is a distinct wire shape from a supplied
+    /// one, and stays absent through the conversion — the handler, not the
+    /// DTO, is the single place that substitutes the canonical `null`
+    /// document, so "the caller sent nothing" is never confused with "the
+    /// caller sent null".
+    #[test]
+    fn clean_query_request_leaves_omitted_arguments_absent()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let omitted: QueryWorkflowRequest = serde_json::from_value(json!({
+            "namespace": "tenant-a",
+            "workflow_id": "00000000-0000-0000-0000-000000000001",
+            "query_name": "state",
+        }))?;
+        let supplied: QueryWorkflowRequest = serde_json::from_value(json!({
+            "namespace": "tenant-a",
+            "workflow_id": "00000000-0000-0000-0000-000000000001",
+            "query_name": "state",
+            "arguments": null,
+        }))?;
+
+        assert!(ProtoQueryRequest::try_from(omitted)?.arguments.is_none());
+        // A literal JSON `null` deserializes to the same absent shape, so both
+        // spellings of "nothing" agree rather than diverging.
+        assert!(ProtoQueryRequest::try_from(supplied)?.arguments.is_none());
         Ok(())
     }
 

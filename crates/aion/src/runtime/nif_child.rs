@@ -797,6 +797,7 @@ mod tests {
             crate::runtime::nif_state::PendingQuery {
                 query_id: query_id.to_owned(),
                 name: "state".to_owned(),
+                arguments: "null".to_owned(),
             },
         );
         Ok(receiver)

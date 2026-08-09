@@ -27,9 +27,12 @@ pub const status_query_name = "level_one_status"
 /// Typed workflow logic.
 pub fn process(input: ChainInput) -> Result(String, String) {
   case
-    query.handler(status_query_name, chain_types.text_codec(), fn() {
-      "awaiting-level-two:" <> input.job_id
-    })
+    query.handler(
+      status_query_name,
+      codec.null_codec(),
+      chain_types.text_codec(),
+      fn(_) { "awaiting-level-two:" <> input.job_id },
+    )
   {
     Ok(Nil) -> spawn_level_two(input)
     Error(_) -> Error("level_one: query registration failed")

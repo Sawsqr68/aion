@@ -210,7 +210,7 @@ fn the_reference_backend_emits_one_handler_per_answer() -> TestResult {
     Ok(())
 }
 
-/// The number of `aion@query:handler/3` calls the direct-BEAM backend lowers,
+/// The number of `aion@query:handler/4` calls the direct-BEAM backend lowers,
 /// measured over every function body of a module.
 fn handler_calls(source: &str) -> Result<usize, Box<dyn Error>> {
     let module = lower(&parsed(source)?, None).map_err(|error| error.to_string())?;
@@ -258,7 +258,7 @@ fn tail_handler_calls(tail: &aion_awl::mir::Tail) -> usize {
     }
 }
 
-/// The direct-BEAM backend lowers one `aion@query:handler/3` call per `answer`,
+/// The direct-BEAM backend lowers one `aion@query:handler/4` call per `answer`,
 /// and the control lowers ZERO — measured the same way, over the same walk, so
 /// the positive cannot pass vacuously.
 #[test]
@@ -288,6 +288,81 @@ fn both_backends_register_the_same_number_of_answers() -> TestResult {
     assert_ne!(
         reference, control,
         "the two documents must differ, or neither measurement discriminates"
+    );
+    Ok(())
+}
+
+/// Both backends register against the handler's ARGUMENTS-BEARING shape.
+///
+/// An AWL `answer` declares no arguments, but the SDK handler takes an
+/// arguments codec and calls its reply with the decoded value — so a backend
+/// still emitting the old three-argument form would compile to a call that
+/// does not exist. Counting registrations cannot see that; the shape must be
+/// asserted directly, on each backend's own artifact, with the no-query
+/// control proving the property is not universally true of any module.
+#[test]
+fn both_backends_register_against_the_arguments_bearing_handler() -> TestResult {
+    let with = emit(&parsed(WITH_QUERY)?)?;
+    // Reference backend: inspect the registration LINES themselves rather than
+    // counting substrings module-wide, so an unrelated `fn(_)` elsewhere in the
+    // emission can neither satisfy nor break the assertion.
+    let registrations: Vec<&str> = with
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("use _ <- result.try(case query.handler("))
+        .collect();
+    assert_eq!(
+        registrations.len(),
+        5,
+        "expected one line per answer:\n{with}"
+    );
+    for line in &registrations {
+        assert!(
+            line.contains("awlc.nil_codec(), "),
+            "a registration omitted the unit arguments codec: {line}"
+        );
+        assert!(
+            line.contains("fn(_) {"),
+            "a reply does not bind the decoded arguments: {line}"
+        );
+    }
+
+    // Direct-BEAM backend: the runtime row it calls is arity 4, and the reply
+    // functions it lifts are callable at arity 1 (two parameters, the last of
+    // which `MakeClosure` supplies as the captured answer value).
+    let handler_rows: Vec<(&str, String, u32)> = RuntimeFn::import_surface()
+        .into_iter()
+        .filter(|(module, function, _)| *module == "aion@query" && function == "handler")
+        .collect();
+    assert_eq!(
+        handler_rows,
+        vec![("aion@query", "handler".to_owned(), 4)],
+        "the runtime import row the lowering mints must match the SDK's arity"
+    );
+    let module = lower(&parsed(WITH_QUERY)?, None).map_err(|error| error.to_string())?;
+    let replies: Vec<usize> = module
+        .functions
+        .iter()
+        .filter_map(|function| match function {
+            MirFn::Flow(flow) if flow.name.starts_with("awl_answer_reply_") => {
+                Some(flow.params.len())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(replies, vec![2; 5], "reply arity drifted: {replies:?}");
+
+    // The control: the same walk over a document with no query finds nothing,
+    // so neither assertion above is a property of every AWL module.
+    let control = emit(&parsed(WITHOUT_QUERY)?)?;
+    assert_eq!(control.matches("query.handler(\"").count(), 0);
+    let control_module = lower(&parsed(WITHOUT_QUERY)?, None).map_err(|error| error.to_string())?;
+    assert!(
+        !control_module.functions.iter().any(|function| matches!(
+            function,
+            MirFn::Flow(flow) if flow.name.starts_with("awl_answer_reply_")
+        )),
+        "a document with no query must lift no reply function"
     );
     Ok(())
 }

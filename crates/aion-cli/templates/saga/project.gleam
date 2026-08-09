@@ -238,7 +238,12 @@ fn set_status(
       payment_attempts: payment_attempts,
     )
   case
-    query.handler(status_query_name, order_status_codec(), fn() { status })
+    query.handler(
+      status_query_name,
+      codec.null_codec(),
+      order_status_codec(),
+      fn(_) { status },
+    )
   {
     Ok(Nil) -> Ok(Nil)
     Error(query_error) ->

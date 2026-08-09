@@ -277,7 +277,9 @@ async fn query_when_registered(
 ) -> Result<Payload, EngineError> {
     let deadline = std::time::Instant::now() + REGISTRATION_DEADLINE;
     loop {
-        let outcome = engine.query(workflow_id, run_id, name).await;
+        let outcome = engine
+            .query(workflow_id, run_id, name, Payload::json_null())
+            .await;
         match outcome {
             Err(EngineError::Query(QueryError::UnknownQuery(_)))
                 if std::time::Instant::now() < deadline =>

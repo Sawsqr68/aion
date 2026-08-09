@@ -143,11 +143,21 @@ fn named_query_request(
     workflow_id: &WorkflowId,
     query_name: &str,
 ) -> ProtoQueryRequest {
+    arg_bearing_query_request(namespace, workflow_id, query_name, None)
+}
+
+fn arg_bearing_query_request(
+    namespace: &str,
+    workflow_id: &WorkflowId,
+    query_name: &str,
+    arguments: Option<aion_proto::convert::ProtoPayload>,
+) -> ProtoQueryRequest {
     ProtoQueryRequest {
         namespace: namespace.to_owned(),
         workflow_id: Some(workflow_id.clone().into()),
         run_id: None,
         query_name: query_name.to_owned(),
+        arguments,
     }
 }
 
@@ -288,6 +298,103 @@ async fn query_happy_path_returns_handler_payload_through_namespace_guard() -> R
     let (answer, query_id) = state_reply(&payload)?;
     assert_eq!(answer, 1);
     assert!(!query_id.is_empty(), "handler must observe a query id");
+
+    release_and_complete(&server, &alice, TENANT_A, &workflow_id, &run_id).await?;
+    server.shutdown()?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn query_arguments_cross_the_server_handler_and_shape_the_answer() -> Result<(), TestError> {
+    let server = Server::over("queryable", QUERY_TIMEOUT).await?;
+    let alice = caller_for("alice", TENANT_A);
+    let (workflow_id, run_id) = start_parked(&server, &alice, TENANT_A).await?;
+    // Wait for registration before asserting anything about arguments.
+    query_when_registered(&server, &alice, TENANT_A, &workflow_id, "state")
+        .await?
+        .map_err(|error| format!("registration probe failed: {error}"))?;
+
+    // The `echo` handler derives its whole reply from the arguments, so this
+    // answer is unreachable unless the request's payload survived the wire
+    // request, the namespace guard, and the engine seam.
+    let arguments = Payload::from_json(&json!({ "n": 7, "label": "mid-step" }))?;
+    let response = handlers::query(
+        &server.guard,
+        &alice,
+        arg_bearing_query_request(
+            TENANT_A,
+            &workflow_id,
+            "echo",
+            Some(arguments.clone().into()),
+        ),
+    )
+    .await?;
+    let payload = decode_outcome(response)?
+        .map_err(|error| format!("expected a result outcome, got {error}"))?;
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(payload.bytes())?,
+        json!({ "echoed": { "n": 7, "label": "mid-step" } })
+    );
+
+    // A request that omits the field keeps today's behaviour: the handler
+    // receives the canonical `null` document, not empty bytes.
+    let omitted = handlers::query(
+        &server.guard,
+        &alice,
+        named_query_request(TENANT_A, &workflow_id, "echo"),
+    )
+    .await?;
+    let payload = decode_outcome(omitted)?
+        .map_err(|error| format!("expected a result outcome, got {error}"))?;
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(payload.bytes())?,
+        json!({ "echoed": null })
+    );
+
+    release_and_complete(&server, &alice, TENANT_A, &workflow_id, &run_id).await?;
+    server.shutdown()?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn malformed_query_arguments_ride_the_outcome_error_oneof_as_invalid_input()
+-> Result<(), TestError> {
+    let server = Server::over("queryable", QUERY_TIMEOUT).await?;
+    let alice = caller_for("alice", TENANT_A);
+    let (workflow_id, run_id) = start_parked(&server, &alice, TENANT_A).await?;
+    query_when_registered(&server, &alice, TENANT_A, &workflow_id, "state")
+        .await?
+        .map_err(|error| format!("registration probe failed: {error}"))?;
+
+    // Bytes tagged JSON that are not a JSON document: the caller's defect,
+    // reported against the caller rather than as a handler failure.
+    let response = handlers::query(
+        &server.guard,
+        &alice,
+        arg_bearing_query_request(
+            TENANT_A,
+            &workflow_id,
+            "echo",
+            Some(Payload::new(aion_core::ContentType::Json, b"{not json".to_vec()).into()),
+        ),
+    )
+    .await?;
+
+    let error = decode_outcome(response)?
+        .err()
+        .ok_or("malformed arguments unexpectedly produced a result outcome")?;
+    assert_eq!(error.code, WireErrorCode::InvalidInput);
+    assert_eq!(
+        error.error_type.as_deref(),
+        Some("QueryInvalidArguments"),
+        "the refusal must name the concrete typed variant: {error}"
+    );
+
+    // The workflow was never disturbed: it still answers and completes.
+    let outcome = query_when_registered(&server, &alice, TENANT_A, &workflow_id, "state").await?;
+    let payload = outcome.map_err(|error| format!("expected a result outcome, got {error}"))?;
+    let (answer, _) = state_reply(&payload)?;
+    assert_eq!(answer, 1);
 
     release_and_complete(&server, &alice, TENANT_A, &workflow_id, &run_id).await?;
     server.shutdown()?;

@@ -195,7 +195,9 @@ fn await_children(
 }
 
 fn register_progress(progress: BatchProgress) -> Result(Nil, WorkflowError) {
-  query.handler("batch_progress", batch_progress_codec(), fn() {
+  query.handler("batch_progress", codec.null_codec(), batch_progress_codec(), fn(
+    _,
+  ) {
     progress
   })
   |> result_map_query_error

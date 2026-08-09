@@ -94,6 +94,7 @@ pub(super) fn query_error_type(source: &aion::QueryError) -> &'static str {
         aion::QueryError::Unknown(_) => "QueryUnknownWorkflow",
         aion::QueryError::ReplyDropped => "QueryReplyDropped",
         aion::QueryError::HandlerFailed { .. } => "QueryFailed",
+        aion::QueryError::InvalidArguments { .. } => "QueryInvalidArguments",
         aion::QueryError::Engine(_) => "QueryEngine",
     }
 }
@@ -111,6 +112,12 @@ pub(super) fn query_wire(query: &aion::QueryError, source: &EngineError) -> Wire
         }
         aion::QueryError::HandlerFailed { .. } => {
             WireError::query_failed(source.to_string()).with_error_type(query_error_type(query))
+        }
+        // The caller's own arguments were malformed: a request defect, not a
+        // handler failure and not an engine fault. `invalid_input` is the
+        // code that tells the caller to fix what it sent.
+        aion::QueryError::InvalidArguments { .. } => {
+            WireError::invalid_input(source.to_string()).with_error_type(query_error_type(query))
         }
         aion::QueryError::Engine(_) => {
             WireError::backend_with_type(query_error_type(query), source.to_string())

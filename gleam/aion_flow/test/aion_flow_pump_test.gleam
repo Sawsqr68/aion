@@ -61,8 +61,14 @@ fn query_diagnostics() -> String {
   diagnostics
 }
 
-fn reply_with(payload: String) -> fn(String) -> Result(String, String) {
-  fn(query_id) { ffi.reply_query(query_id, payload) }
+fn reply_with(payload: String) -> fn(String, String) -> Result(String, String) {
+  fn(query_id, _arguments) { ffi.reply_query(query_id, payload) }
+}
+
+/// Echo the caller's raw argument document back as the reply, so a test can
+/// prove the arguments reached the handler rather than a default.
+fn reply_with_arguments() -> fn(String, String) -> Result(String, String) {
+  fn(query_id, arguments) { ffi.reply_query(query_id, arguments) }
 }
 
 pub fn pump_passes_resolved_await_through_untouched_test() {
@@ -90,7 +96,9 @@ pub fn pump_passes_non_sentinel_error_through_untouched_test() {
 pub fn pump_services_sentinel_then_reenters_await_test() {
   fresh_env()
   ffi.register_query_handler("pump-state", reply_with("{\"answer\":42}"))
-  enqueue(Error("aion_query:{\"query_id\":\"q-1\",\"name\":\"pump-state\"}"))
+  enqueue(Error(
+    "aion_query:{\"query_id\":\"q-1\",\"name\":\"pump-state\",\"arguments\":\"null\"}",
+  ))
   enqueue(Ok("await-resolved"))
 
   pump.run(scripted_await)
@@ -104,8 +112,12 @@ pub fn pump_services_queued_sentinels_in_order_test() {
   fresh_env()
   ffi.register_query_handler("first", reply_with("{}"))
   ffi.register_query_handler("second", reply_with("{}"))
-  enqueue(Error("aion_query:{\"query_id\":\"q-a\",\"name\":\"first\"}"))
-  enqueue(Error("aion_query:{\"query_id\":\"q-b\",\"name\":\"second\"}"))
+  enqueue(Error(
+    "aion_query:{\"query_id\":\"q-a\",\"name\":\"first\",\"arguments\":\"null\"}",
+  ))
+  enqueue(Error(
+    "aion_query:{\"query_id\":\"q-b\",\"name\":\"second\",\"arguments\":\"null\"}",
+  ))
   enqueue(Ok("await-resolved"))
 
   pump.run(scripted_await)
@@ -117,10 +129,12 @@ pub fn pump_services_queued_sentinels_in_order_test() {
 
 pub fn handler_raise_replies_error_and_workflow_survives_test() {
   fresh_env()
-  ffi.register_query_handler("pump-boom", fn(_query_id) {
+  ffi.register_query_handler("pump-boom", fn(_query_id, _arguments) {
     panic as "handler exploded"
   })
-  enqueue(Error("aion_query:{\"query_id\":\"q-raise\",\"name\":\"pump-boom\"}"))
+  enqueue(Error(
+    "aion_query:{\"query_id\":\"q-raise\",\"name\":\"pump-boom\",\"arguments\":\"null\"}",
+  ))
   enqueue(Ok("survived"))
 
   pump.run(scripted_await)
@@ -147,13 +161,15 @@ pub fn handler_raise_replies_error_and_workflow_survives_test() {
   )
   |> should.be_true()
   diagnostics
-  |> string.contains(";aion_flow_query_pump:run_handler/2")
+  |> string.contains(";aion_flow_query_pump:run_handler/3")
   |> should.be_true()
 }
 
 pub fn missing_handler_replies_error_and_workflow_survives_test() {
   fresh_env()
-  enqueue(Error("aion_query:{\"query_id\":\"q-ghost\",\"name\":\"ghost\"}"))
+  enqueue(Error(
+    "aion_query:{\"query_id\":\"q-ghost\",\"name\":\"ghost\",\"arguments\":\"null\"}",
+  ))
   enqueue(Ok("survived"))
 
   pump.run(scripted_await)
@@ -172,7 +188,7 @@ pub fn failed_reply_after_caller_timeout_is_non_fatal_test() {
   fresh_env()
   ffi.register_query_handler("pump-late", reply_with("{}"))
   enqueue(Error(
-    "aion_query:{\"query_id\":\"dropped-1\",\"name\":\"pump-late\"}",
+    "aion_query:{\"query_id\":\"dropped-1\",\"name\":\"pump-late\",\"arguments\":\"null\"}",
   ))
   enqueue(Ok("survived"))
 
@@ -192,7 +208,9 @@ pub fn failed_error_reply_after_caller_timeout_is_non_fatal_test() {
   fresh_env()
   // No handler for "ghost": the pump's reply_query_error attempt itself
   // fails (dropped caller) and must still not crash the workflow.
-  enqueue(Error("aion_query:{\"query_id\":\"dropped-2\",\"name\":\"ghost\"}"))
+  enqueue(Error(
+    "aion_query:{\"query_id\":\"dropped-2\",\"name\":\"ghost\",\"arguments\":\"null\"}",
+  ))
   enqueue(Ok("survived"))
 
   pump.run(scripted_await)
@@ -211,7 +229,8 @@ pub fn reply_exception_is_diagnosed_and_falls_back_to_error_reply_test() {
   fresh_env()
   ffi.register_query_handler("pump-reply-exception", reply_with("{}"))
   enqueue(Error(
-    "aion_query:{\"query_id\":\"exception-1\",\"name\":\"pump-reply-exception\"}",
+    "aion_query:{\"query_id\":\"exception-1\",\"name\":\"pump-reply-exception\","
+    <> "\"arguments\":\"null\"}",
   ))
   enqueue(Ok("survived"))
 
@@ -223,11 +242,13 @@ pub fn reply_exception_is_diagnosed_and_falls_back_to_error_reply_test() {
   |> should.be_true()
   let diagnostics = query_diagnostics()
   diagnostics
-  |> string.contains("operation=reply_query_exception query_id=exception-1 class=error")
+  |> string.contains(
+    "operation=reply_query_exception query_id=exception-1 class=error",
+  )
   |> should.be_true()
   diagnostics
   |> string.contains(
-    "reason=simulated reply exception stacktrace=aion_flow_query_pump:run_handler/2",
+    "reason=simulated reply exception stacktrace=aion_flow_query_pump:run_handler/3",
   )
   |> should.be_true()
 }
@@ -235,7 +256,8 @@ pub fn reply_exception_is_diagnosed_and_falls_back_to_error_reply_test() {
 pub fn error_reply_exception_is_diagnosed_and_non_fatal_test() {
   fresh_env()
   enqueue(Error(
-    "aion_query:{\"query_id\":\"error-exception-1\",\"name\":\"ghost\"}",
+    "aion_query:{\"query_id\":\"error-exception-1\",\"name\":\"ghost\","
+    <> "\"arguments\":\"null\"}",
   ))
   enqueue(Ok("survived"))
 
@@ -261,7 +283,8 @@ pub fn sentinel_name_with_escaped_characters_resolves_handler_test() {
   fresh_env()
   ffi.register_query_handler("say \"hi\"\tnow", reply_with("{}"))
   enqueue(Error(
-    "aion_query:{\"query_id\":\"q-esc\",\"name\":\"say \\\"hi\\\"\\u0009now\"}",
+    "aion_query:{\"query_id\":\"q-esc\",\"name\":\"say \\\"hi\\\"\\u0009now\","
+    <> "\"arguments\":\"null\"}",
   ))
   enqueue(Ok("await-resolved"))
 
@@ -303,7 +326,7 @@ pub fn malformed_sentinel_without_query_id_is_skipped_test() {
 
 pub fn sentinel_missing_name_replies_malformed_error_test() {
   fresh_env()
-  enqueue(Error("aion_query:{\"query_id\":\"q-noname\"}"))
+  enqueue(Error("aion_query:{\"query_id\":\"q-noname\",\"arguments\":\"null\"}"))
   enqueue(Ok("survived"))
 
   pump.run(scripted_await)
@@ -315,6 +338,63 @@ pub fn sentinel_missing_name_replies_malformed_error_test() {
   |> should.be_true()
   replies
   |> string.contains("malformed query sentinel")
+  |> should.be_true()
+}
+
+pub fn sentinel_missing_arguments_replies_malformed_error_test() {
+  // The engine always emits an arguments field, so a sentinel without one is
+  // a broken carrier. The pump must say so rather than run the handler with
+  // an invented empty request — a handler must never mistake a protocol
+  // break for a caller who asked for nothing.
+  fresh_env()
+  ffi.register_query_handler("pump-noargs", reply_with("{}"))
+  enqueue(Error(
+    "aion_query:{\"query_id\":\"q-noargs\",\"name\":\"pump-noargs\"}",
+  ))
+  enqueue(Ok("survived"))
+
+  pump.run(scripted_await)
+  |> should.equal(Ok("survived"))
+
+  let replies = query_replies()
+  replies
+  |> string.contains("error:q-noargs:")
+  |> should.be_true()
+  replies
+  |> string.contains("malformed query sentinel: missing_arguments")
+  |> should.be_true()
+  // The handler never ran: no successful reply was recorded.
+  replies
+  |> string.contains("ok:q-noargs")
+  |> should.be_false()
+}
+
+pub fn sentinel_arguments_reach_the_handler_unescaped_test() {
+  // Arguments cross the sentinel as an escaped JSON string, so a document
+  // containing quotes and backslashes must arrive byte-identical — and must
+  // not be able to forge the sentinel's own keys.
+  fresh_env()
+  ffi.register_query_handler("pump-echo", reply_with_arguments())
+  enqueue(Error(
+    "aion_query:{\"query_id\":\"q-args\",\"name\":\"pump-echo\",\"arguments\":"
+    <> "\"{\\\"note\\\":\\\"\\\\\\\"query_id\\\\\\\":\\\\\\\"forged\\\\\\\"\\\",\\\"n\\\":3}\"}",
+  ))
+  enqueue(Ok("await-resolved"))
+
+  pump.run(scripted_await)
+  |> should.equal(Ok("await-resolved"))
+
+  let replies = query_replies()
+  // The reply is keyed to the real query id, not the one embedded in the
+  // caller-controlled arguments.
+  replies
+  |> string.contains("ok:q-args:")
+  |> should.be_true()
+  replies
+  |> string.contains("forged")
+  |> should.be_true()
+  replies
+  |> string.contains("\\\"n\\\":3")
   |> should.be_true()
 }
 
@@ -369,7 +449,8 @@ pub fn collect_all_services_pending_query_before_resolving_test() {
   ffi.register_query_handler("collect-state", reply_with("{\"pending\":2}"))
   let assert Ok(_) =
     enqueue_collect(Error(
-      "aion_query:{\"query_id\":\"q-all\",\"name\":\"collect-state\"}",
+      "aion_query:{\"query_id\":\"q-all\",\"name\":\"collect-state\","
+      <> "\"arguments\":\"null\"}",
     ))
 
   concurrency.all([echo_activity("alpha"), echo_activity("beta")])
@@ -385,7 +466,8 @@ pub fn collect_race_services_pending_query_before_resolving_test() {
   ffi.register_query_handler("race-state", reply_with("{\"pending\":1}"))
   let assert Ok(_) =
     enqueue_collect(Error(
-      "aion_query:{\"query_id\":\"q-race\",\"name\":\"race-state\"}",
+      "aion_query:{\"query_id\":\"q-race\",\"name\":\"race-state\","
+      <> "\"arguments\":\"null\"}",
     ))
 
   concurrency.race([echo_activity("alpha"), echo_activity("beta")])
@@ -415,11 +497,12 @@ pub fn query_handler_registration_answers_through_pump_test() {
   fresh_env()
   let int_codec = codec.json_codec(json.int, decode.int)
 
-  query.handler("typed-state", int_codec, fn() { 42 })
+  query.handler("typed-state", codec.null_codec(), int_codec, fn(_) { 42 })
   |> should.equal(Ok(Nil))
 
   enqueue(Error(
-    "aion_query:{\"query_id\":\"q-typed\",\"name\":\"typed-state\"}",
+    "aion_query:{\"query_id\":\"q-typed\",\"name\":\"typed-state\","
+    <> "\"arguments\":\"null\"}",
   ))
   enqueue(Ok("await-resolved"))
 
@@ -428,4 +511,73 @@ pub fn query_handler_registration_answers_through_pump_test() {
 
   query_replies()
   |> should.equal("[\"ok:q-typed:42\"]")
+}
+
+pub fn typed_handler_answers_from_its_decoded_arguments_test() {
+  // The answer is derived from the arguments, so a handler that ignored them
+  // (or received a default) cannot produce it.
+  fresh_env()
+  let int_codec = codec.json_codec(json.int, decode.int)
+
+  query.handler("typed-double", int_codec, int_codec, fn(n) { n * 2 })
+  |> should.equal(Ok(Nil))
+
+  enqueue(Error(
+    "aion_query:{\"query_id\":\"q-double\",\"name\":\"typed-double\","
+    <> "\"arguments\":\"21\"}",
+  ))
+  enqueue(Ok("await-resolved"))
+
+  pump.run(scripted_await)
+  |> should.equal(Ok("await-resolved"))
+
+  query_replies()
+  |> should.equal("[\"ok:q-double:42\"]")
+}
+
+pub fn typed_handler_refuses_arguments_its_codec_cannot_decode_test() {
+  // Undecodable arguments must never reach the handler body: the caller
+  // learns its request was malformed instead of receiving an answer computed
+  // from an invented default.
+  fresh_env()
+  let int_codec = codec.json_codec(json.int, decode.int)
+
+  query.handler("typed-strict", int_codec, int_codec, fn(n) { n * 2 })
+  |> should.equal(Ok(Nil))
+
+  enqueue(Error(
+    "aion_query:{\"query_id\":\"q-strict\",\"name\":\"typed-strict\","
+    <> "\"arguments\":\"\\\"not-an-int\\\"\"}",
+  ))
+  enqueue(Ok("await-resolved"))
+
+  pump.run(scripted_await)
+  |> should.equal(Ok("await-resolved"))
+
+  let replies = query_replies()
+  replies
+  |> string.contains("error:q-strict:")
+  |> should.be_true()
+  replies
+  |> string.contains("query typed-strict could not decode its arguments")
+  |> should.be_true()
+  replies
+  |> string.contains("ok:q-strict")
+  |> should.be_false()
+}
+
+pub fn dispatch_carries_typed_arguments_to_the_registered_handler_test() {
+  // The in-engine dispatch helper is the caller-side twin of `handler`: what
+  // it encodes is exactly what the handler decodes.
+  fresh_env()
+  let int_codec = codec.json_codec(json.int, decode.int)
+  let string_codec = codec.json_codec(json.string, decode.string)
+
+  query.handler("dispatch-echo", string_codec, int_codec, fn(text) {
+    string.length(text)
+  })
+  |> should.equal(Ok(Nil))
+
+  query.dispatch("dispatch-echo", string_codec, "say \"hi\"", int_codec)
+  |> should.equal(Ok(8))
 }

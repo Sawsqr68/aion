@@ -247,7 +247,9 @@ pub(crate) fn dispatch_query_impl(
         );
     };
     let parsed = parse_dispatch_config(config)?;
-    let payload = payload_from_string(parsed.payload.as_deref().unwrap_or("{}"));
+    // `null` is the canonical "no arguments" document across every query
+    // carrier; a config without a payload means exactly that.
+    let payload = payload_from_string(parsed.payload.as_deref().unwrap_or("null"));
     let engine = dispatch_engine(state, &bridge, &parsed.target_workflow_id, name)?;
     let service = QueryService::new(engine, query_timeout);
     let result =
@@ -551,6 +553,7 @@ fn query_error_reason(error: &QueryError) -> String {
         QueryError::Unknown(workflow_id) => format!("unknown_workflow:{workflow_id}"),
         QueryError::ReplyDropped => "reply_dropped".to_owned(),
         QueryError::HandlerFailed { message } => format!("handler_failed:{message}"),
+        QueryError::InvalidArguments { reason } => format!("invalid_arguments:{reason}"),
         QueryError::Engine(error) => format!("engine:{error}"),
     }
 }

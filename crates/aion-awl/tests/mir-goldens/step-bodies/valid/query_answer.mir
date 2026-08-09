@@ -357,107 +357,115 @@ exports: run/1, definition/0, execute/1
 == fn awl$dead_body/1 origin=dead_body ==
   sig: (Dynamic) -> Result(Dynamic, AwlError)
   T-DEAD
-== fn awl_answer_reply_0/1 origin=query_answer(review_status/reply#0) ==
-  sig: (gated_review.Status) -> gated_review.Status
-  return v0
+== fn awl_answer_reply_0/2 origin=query_answer(review_status/reply#0) ==
+  sig: (Nil, gated_review.Status) -> gated_review.Status
+  return v1
 == fn awl_answer_1/1 origin=query_answer(review_status/register#1) ==
-  sig: (fn() -> gated_review.Status) -> Result(Nil, AwlError)
-  v1 = call_local status_codec() live_after=[v0]
-  v2 = call_rt aion@query:handler/3(lit#17, v1, v0)
-  if is_tagged v2 ok/2:
-    v3 = record(ok, [nil])
-    return v3
-  else:
-    v4 = record(error, ['awl_failed'])
-    return v4
-== fn awl_answer_reply_2/1 origin=query_answer(passes_left/reply#2) ==
-  sig: (Int) -> Int
-  return v0
-== fn awl_answer_3/1 origin=query_answer(passes_left/register#3) ==
-  sig: (fn() -> Int) -> Result(Nil, AwlError)
-  v1 = call_rt aion@awl@codec:int_codec/0() live_after=[v0]
-  v2 = call_rt aion@query:handler/3(lit#18, v1, v0)
-  if is_tagged v2 ok/2:
-    v3 = record(ok, [nil])
-    return v3
-  else:
-    v4 = record(error, ['awl_failed'])
-    return v4
-== fn awl_answer_reply_4/1 origin=query_answer(heartbeat/reply#4) ==
-  sig: (Nil) -> Nil
-  return v0
-== fn awl_answer_5/1 origin=query_answer(heartbeat/register#5) ==
-  sig: (fn() -> Nil) -> Result(Nil, AwlError)
+  sig: (fn(Nil) -> gated_review.Status) -> Result(Nil, AwlError)
   v1 = call_rt aion@awl@codec:nil_codec/0() live_after=[v0]
-  v2 = call_rt aion@query:handler/3(lit#19, v1, v0)
-  if is_tagged v2 ok/2:
-    v3 = record(ok, [nil])
-    return v3
-  else:
-    v4 = record(error, ['awl_failed'])
+  v2 = call_local status_codec() live_after=[v0, v1]
+  v3 = call_rt aion@query:handler/4(lit#17, v1, v2, v0)
+  if is_tagged v3 ok/2:
+    v4 = record(ok, [nil])
     return v4
-== fn awl_answer_reply_6/1 origin=query_answer(notes/reply#6) ==
-  sig: (List(String)) -> List(String)
-  return v0
+  else:
+    v5 = record(error, ['awl_failed'])
+    return v5
+== fn awl_answer_reply_2/2 origin=query_answer(passes_left/reply#2) ==
+  sig: (Nil, Int) -> Int
+  return v1
+== fn awl_answer_3/1 origin=query_answer(passes_left/register#3) ==
+  sig: (fn(Nil) -> Int) -> Result(Nil, AwlError)
+  v1 = call_rt aion@awl@codec:nil_codec/0() live_after=[v0]
+  v2 = call_rt aion@awl@codec:int_codec/0() live_after=[v0, v1]
+  v3 = call_rt aion@query:handler/4(lit#18, v1, v2, v0)
+  if is_tagged v3 ok/2:
+    v4 = record(ok, [nil])
+    return v4
+  else:
+    v5 = record(error, ['awl_failed'])
+    return v5
+== fn awl_answer_reply_4/2 origin=query_answer(heartbeat/reply#4) ==
+  sig: (Nil, Nil) -> Nil
+  return v1
+== fn awl_answer_5/1 origin=query_answer(heartbeat/register#5) ==
+  sig: (fn(Nil) -> Nil) -> Result(Nil, AwlError)
+  v1 = call_rt aion@awl@codec:nil_codec/0() live_after=[v0]
+  v2 = call_rt aion@awl@codec:nil_codec/0() live_after=[v0, v1]
+  v3 = call_rt aion@query:handler/4(lit#19, v1, v2, v0)
+  if is_tagged v3 ok/2:
+    v4 = record(ok, [nil])
+    return v4
+  else:
+    v5 = record(error, ['awl_failed'])
+    return v5
+== fn awl_answer_reply_6/2 origin=query_answer(notes/reply#6) ==
+  sig: (Nil, List(String)) -> List(String)
+  return v1
 == fn awl_answer_7/1 origin=query_answer(notes/register#7) ==
-  sig: (fn() -> List(String)) -> Result(Nil, AwlError)
-  v1 = call_local list_string_codec() live_after=[v0]
-  v2 = call_rt aion@query:handler/3(lit#20, v1, v0)
-  if is_tagged v2 ok/2:
-    v3 = record(ok, [nil])
-    return v3
-  else:
-    v4 = record(error, ['awl_failed'])
+  sig: (fn(Nil) -> List(String)) -> Result(Nil, AwlError)
+  v1 = call_rt aion@awl@codec:nil_codec/0() live_after=[v0]
+  v2 = call_local list_string_codec() live_after=[v0, v1]
+  v3 = call_rt aion@query:handler/4(lit#20, v1, v2, v0)
+  if is_tagged v3 ok/2:
+    v4 = record(ok, [nil])
     return v4
-== fn awl_answer_reply_8/1 origin=query_answer(last_note/reply#8) ==
-  sig: (Option(String)) -> Option(String)
-  return v0
+  else:
+    v5 = record(error, ['awl_failed'])
+    return v5
+== fn awl_answer_reply_8/2 origin=query_answer(last_note/reply#8) ==
+  sig: (Nil, Option(String)) -> Option(String)
+  return v1
 == fn awl_answer_9/1 origin=query_answer(last_note/register#9) ==
-  sig: (fn() -> Option(String)) -> Result(Nil, AwlError)
-  v1 = call_local option_string_codec() live_after=[v0]
-  v2 = call_rt aion@query:handler/3(lit#21, v1, v0)
-  if is_tagged v2 ok/2:
-    v3 = record(ok, [nil])
-    return v3
-  else:
-    v4 = record(error, ['awl_failed'])
+  sig: (fn(Nil) -> Option(String)) -> Result(Nil, AwlError)
+  v1 = call_rt aion@awl@codec:nil_codec/0() live_after=[v0]
+  v2 = call_local option_string_codec() live_after=[v0, v1]
+  v3 = call_rt aion@query:handler/4(lit#21, v1, v2, v0)
+  if is_tagged v3 ok/2:
+    v4 = record(ok, [nil])
     return v4
-== fn awl_answer_reply_10/1 origin=query_answer(review_status/reply#10) ==
-  sig: (gated_review.Status) -> gated_review.Status
-  return v0
+  else:
+    v5 = record(error, ['awl_failed'])
+    return v5
+== fn awl_answer_reply_10/2 origin=query_answer(review_status/reply#10) ==
+  sig: (Nil, gated_review.Status) -> gated_review.Status
+  return v1
 == fn awl_answer_11/1 origin=query_answer(review_status/register#11) ==
-  sig: (fn() -> gated_review.Status) -> Result(Nil, AwlError)
-  v1 = call_local status_codec() live_after=[v0]
-  v2 = call_rt aion@query:handler/3(lit#23, v1, v0)
-  if is_tagged v2 ok/2:
-    v3 = record(ok, [nil])
-    return v3
-  else:
-    v4 = record(error, ['awl_failed'])
+  sig: (fn(Nil) -> gated_review.Status) -> Result(Nil, AwlError)
+  v1 = call_rt aion@awl@codec:nil_codec/0() live_after=[v0]
+  v2 = call_local status_codec() live_after=[v0, v1]
+  v3 = call_rt aion@query:handler/4(lit#23, v1, v2, v0)
+  if is_tagged v3 ok/2:
+    v4 = record(ok, [nil])
     return v4
-== fn awl_answer_reply_12/1 origin=query_answer(review_status/reply#12) ==
-  sig: (gated_review.Status) -> gated_review.Status
-  return v0
+  else:
+    v5 = record(error, ['awl_failed'])
+    return v5
+== fn awl_answer_reply_12/2 origin=query_answer(review_status/reply#12) ==
+  sig: (Nil, gated_review.Status) -> gated_review.Status
+  return v1
 == fn awl_answer_13/1 origin=query_answer(review_status/register#13) ==
-  sig: (fn() -> gated_review.Status) -> Result(Nil, AwlError)
-  v1 = call_local status_codec() live_after=[v0]
-  v2 = call_rt aion@query:handler/3(lit#26, v1, v0)
-  if is_tagged v2 ok/2:
-    v3 = record(ok, [nil])
-    return v3
-  else:
-    v4 = record(error, ['awl_failed'])
+  sig: (fn(Nil) -> gated_review.Status) -> Result(Nil, AwlError)
+  v1 = call_rt aion@awl@codec:nil_codec/0() live_after=[v0]
+  v2 = call_local status_codec() live_after=[v0, v1]
+  v3 = call_rt aion@query:handler/4(lit#26, v1, v2, v0)
+  if is_tagged v3 ok/2:
+    v4 = record(ok, [nil])
     return v4
-== fn awl_answer_reply_14/1 origin=query_answer(review_status/reply#14) ==
-  sig: (gated_review.Status) -> gated_review.Status
-  return v0
+  else:
+    v5 = record(error, ['awl_failed'])
+    return v5
+== fn awl_answer_reply_14/2 origin=query_answer(review_status/reply#14) ==
+  sig: (Nil, gated_review.Status) -> gated_review.Status
+  return v1
 == fn awl_answer_15/1 origin=query_answer(review_status/register#15) ==
-  sig: (fn() -> gated_review.Status) -> Result(Nil, AwlError)
-  v1 = call_local status_codec() live_after=[v0]
-  v2 = call_rt aion@query:handler/3(lit#30, v1, v0)
-  if is_tagged v2 ok/2:
-    v3 = record(ok, [nil])
-    return v3
-  else:
-    v4 = record(error, ['awl_failed'])
+  sig: (fn(Nil) -> gated_review.Status) -> Result(Nil, AwlError)
+  v1 = call_rt aion@awl@codec:nil_codec/0() live_after=[v0]
+  v2 = call_local status_codec() live_after=[v0, v1]
+  v3 = call_rt aion@query:handler/4(lit#30, v1, v2, v0)
+  if is_tagged v3 ok/2:
+    v4 = record(ok, [nil])
     return v4
+  else:
+    v5 = record(error, ['awl_failed'])
+    return v5

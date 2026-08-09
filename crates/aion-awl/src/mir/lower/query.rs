@@ -14,15 +14,18 @@
 //! compensation pools depend on. Each is named by its OWN position in that
 //! pool, so a pair reads as consecutive ordinals rather than a shared one:
 //!
-//!   * `awl_answer_reply_<n>(value) -> value` — the body of `fn() { value }`.
-//!     Its one parameter is the capture, appended by `MakeClosure` at creation
-//!     (S9), so its callable arity is zero, which is the arity
-//!     `aion@query:handler/3` invokes it at.
+//!   * `awl_answer_reply_<n>(arguments, value) -> value` — the body of
+//!     `fn(_) { value }`. Its LAST parameter is the capture, appended by
+//!     `MakeClosure` at creation (S9); the leading one is the caller's decoded
+//!     query arguments, so its callable arity is one, which is the arity
+//!     `aion@query:handler/4` invokes a reply at. An AWL `answer` declares no
+//!     arguments, so the parameter is bound and ignored.
 //!   * `awl_answer_<n>(reply) -> Result(Nil, AwlError)` — calls
-//!     `aion@query:handler/3` with the query name, the answer type's codec,
-//!     and the thunk, then discriminates its `Result` in place. The registrar
-//!     exists because a `case` is a TAIL in this IR and a statement site has
-//!     no tail to spend; lifting it needs no new instruction selection.
+//!     `aion@query:handler/4` with the query name, the unit arguments codec,
+//!     the answer type's codec, and the thunk, then discriminates its `Result`
+//!     in place. The registrar exists because a `case` is a TAIL in this IR
+//!     and a statement site has no tail to spend; lifting it needs no new
+//!     instruction selection.
 //!
 //! The error arm collapses to `AwlFailed`, matching the reference backend
 //! exactly. `register_query` (`aion/src/runtime/nif_query.rs`) fails only when
@@ -33,7 +36,7 @@
 use crate::ast::{AnswerStmt, RoutePayload};
 use crate::emitter::{GType, snake, type_ref_to_g};
 
-use super::super::func::{FlowFn, FnOrigin, MirFn};
+use super::super::func::{CodecRef, FlowFn, FnOrigin, MirFn};
 use super::super::ids::Span;
 use super::super::ops::{Block, LiveAfter, Stmt, Tail, Test, Value};
 use super::super::runtime::RuntimeFn;
@@ -105,13 +108,17 @@ pub(super) fn lower_answer_stmt(
     Ok(())
 }
 
-/// `fn() { value }`: one capture in, that capture out.
+/// `fn(_) { value }`: the caller's arguments in and ignored, one capture in,
+/// that capture out. The arguments parameter comes first because
+/// `MakeClosure` appends captures after a lifted function's callable
+/// parameters.
 fn build_reply_fn(
     ctx: &mut Ctx<'_>,
     answer: &AnswerStmt,
     answer_ty: &GType,
     ordinal: usize,
 ) -> FlowFn {
+    let arguments = ctx.fresh_var();
     let captured = ctx.fresh_var();
     let ty = ctx.tydesc(answer_ty);
     FlowFn {
@@ -121,8 +128,8 @@ fn build_reply_fn(
             reply: true,
         },
         name: format!("awl_answer_reply_{ordinal}"),
-        params: vec![captured],
-        param_tys: vec![ty.clone()],
+        params: vec![arguments, captured],
+        param_tys: vec![TyDesc::Nil, ty.clone()],
         ret_ty: ty,
         body: Block {
             stmts: Vec::new(),
@@ -133,8 +140,8 @@ fn build_reply_fn(
     }
 }
 
-/// `fn(reply) { case query.handler(name, codec, reply) { Ok(_) -> Ok(Nil)
-/// Error(_) -> Error(AwlFailed) } }`.
+/// `fn(reply) { case query.handler(name, nil_codec(), codec, reply) {
+/// Ok(_) -> Ok(Nil) Error(_) -> Error(AwlFailed) } }`.
 fn build_registrar_fn(
     ctx: &mut Ctx<'_>,
     plan: &FnPlan,
@@ -146,20 +153,30 @@ fn build_registrar_fn(
     let reply = ctx.fresh_var();
     let mut stmts = Vec::new();
     let name_lit = ctx.binary(&answer.query);
+    // An AWL `answer` takes no arguments, so the handler's arguments codec is
+    // the SDK unit codec; the reply thunk binds and ignores what it decodes.
+    let arguments_codec = codec_value(ctx, &CodecRef::SdkNil, &mut stmts, answer.span);
     let codec_ref = codec_ref_for(ctx, plan, answer_ty)?;
     let codec = codec_value(ctx, &codec_ref, &mut stmts, answer.span);
     let registered = ctx.fresh_var();
     stmts.push(Stmt::CallRt {
         dst: Some(registered),
         callee: RuntimeFn::QueryHandler,
-        args: vec![Value::Lit(name_lit), Value::Var(codec), Value::Var(reply)],
+        args: vec![
+            Value::Lit(name_lit),
+            Value::Var(arguments_codec),
+            Value::Var(codec),
+            Value::Var(reply),
+        ],
         live_after: LiveAfter::default(),
         span,
     });
     let ok = ctx.atom("ok");
     let registered_block = ok_nil_block(ctx, span);
     let refused_block = failed_block(ctx, span);
-    let reply_ty = TyDesc::Fn(Vec::new(), Box::new(ctx.tydesc(answer_ty)));
+    // The reply is called with the decoded arguments, so its callable type is
+    // arity one — matching the leading parameter `build_reply_fn` adds.
+    let reply_ty = TyDesc::Fn(vec![TyDesc::Nil], Box::new(ctx.tydesc(answer_ty)));
     Ok(FlowFn {
         origin: FnOrigin::QueryAnswer {
             query: answer.query.clone(),

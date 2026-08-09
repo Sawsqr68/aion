@@ -517,15 +517,52 @@ pub fn workflow_receive_composes_with_timeout_test() {
 pub fn query_handler_returns_typed_decoded_value_test() {
   let state = ChargeReceipt(id: "receipt-query", approved: True)
 
-  query.handler("checkout-state", charge_receipt_codec(), fn() { state })
+  query.handler(
+    "checkout-state",
+    codec.null_codec(),
+    charge_receipt_codec(),
+    fn(_) { state },
+  )
   |> should.equal(Ok(Nil))
 
-  query.dispatch("checkout-state", charge_receipt_codec())
+  query.dispatch(
+    "checkout-state",
+    codec.null_codec(),
+    Nil,
+    charge_receipt_codec(),
+  )
   |> should.equal(Ok(state))
 }
 
+pub fn query_answer_is_derived_from_its_arguments_test() {
+  // The answer cannot be produced without the arguments, so a handler that
+  // received a default (or nothing) fails this test.
+  query.handler(
+    "checkout-state-for",
+    charge_request_codec(),
+    charge_receipt_codec(),
+    fn(asked: ChargeRequest) {
+      ChargeReceipt(id: asked.order_id, approved: asked.cents > 0)
+    },
+  )
+  |> should.equal(Ok(Nil))
+
+  query.dispatch(
+    "checkout-state-for",
+    charge_request_codec(),
+    ChargeRequest(order_id: "order-from-arguments", cents: 2500),
+    charge_receipt_codec(),
+  )
+  |> should.equal(Ok(ChargeReceipt(id: "order-from-arguments", approved: True)))
+}
+
 pub fn query_unknown_name_returns_typed_error_test() {
-  query.dispatch("missing-query", charge_receipt_codec())
+  query.dispatch(
+    "missing-query",
+    codec.null_codec(),
+    Nil,
+    charge_receipt_codec(),
+  )
   |> should.equal(Error(error.UnknownQuery("missing-query")))
 }
 
@@ -535,7 +572,7 @@ pub fn query_handler_failure_returns_typed_error_test() {
   // engine's `handler_failed:` taxonomy (the `query_failed` wire code).
   let assert Ok(_) = ffi.register_query("orphan-query", "{}")
 
-  query.dispatch("orphan-query", charge_receipt_codec())
+  query.dispatch("orphan-query", codec.null_codec(), Nil, charge_receipt_codec())
   |> should.equal(
     Error(error.QueryHandlerFailed(
       message: "no handler registered for query orphan-query",
@@ -544,12 +581,22 @@ pub fn query_handler_failure_returns_typed_error_test() {
 }
 
 pub fn query_decode_failure_is_typed_data_test() {
-  query.handler("malformed-query-reply", charge_receipt_codec(), fn() {
-    ChargeReceipt(id: "receipt-query", approved: True)
-  })
+  query.handler(
+    "malformed-query-reply",
+    codec.null_codec(),
+    charge_receipt_codec(),
+    fn(_) { ChargeReceipt(id: "receipt-query", approved: True) },
+  )
   |> should.equal(Ok(Nil))
 
-  case query.dispatch("malformed-query-reply", charge_request_codec()) {
+  case
+    query.dispatch(
+      "malformed-query-reply",
+      codec.null_codec(),
+      Nil,
+      charge_request_codec(),
+    )
+  {
     Ok(_) -> should.fail()
     Error(error.QueryDecodeFailed(decode_error)) ->
       decode_error
@@ -567,10 +614,25 @@ pub fn query_dispatch_records_no_observation_test() {
   let state = ChargeReceipt(id: "receipt-no-event", approved: True)
   let before = testing.recorded_observations(env)
 
-  query.handler("no-event-state", charge_receipt_codec(), fn() { state })
+  let request_codec = charge_request_codec()
+  let request = ChargeRequest(order_id: "receipt-no-event", cents: 100)
+
+  query.handler(
+    "no-event-state",
+    request_codec,
+    charge_receipt_codec(),
+    fn(asked: ChargeRequest) {
+      ChargeReceipt(id: asked.order_id, approved: state.approved)
+    },
+  )
   |> should.equal(Ok(Nil))
 
-  query.dispatch("no-event-state", charge_receipt_codec())
+  query.dispatch(
+    "no-event-state",
+    request_codec,
+    request,
+    charge_receipt_codec(),
+  )
   |> should.equal(Ok(state))
 
   testing.recorded_observations(env)

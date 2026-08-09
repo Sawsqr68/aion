@@ -112,6 +112,7 @@ pub(crate) fn encode_query_request(
         workflow_id: value.workflow_id.map(encode_workflow_id),
         run_id: value.run_id.map(encode_run_id),
         query_name: value.query_name,
+        arguments: value.arguments.map(encode_payload),
     }
 }
 

@@ -109,6 +109,16 @@ fn every_query_error_arm_maps_to_its_pinned_wire_code() {
             WireErrorCode::QueryFailed,
             Some("QueryFailed"),
         ),
+        // The caller's own arguments were malformed: a request defect, so it
+        // maps to `invalid_input` — distinct from the handler having run and
+        // failed (`query_failed`) and from an engine fault (`backend`).
+        (
+            QueryError::InvalidArguments {
+                reason: String::from("arguments payload is not a well-formed JSON document"),
+            },
+            WireErrorCode::InvalidInput,
+            Some("QueryInvalidArguments"),
+        ),
         (
             QueryError::Engine(EngineSeamError::Delivery {
                 reason: String::from("mailbox closed"),
@@ -131,7 +141,8 @@ fn every_query_error_arm_maps_to_its_pinned_wire_code() {
             QueryError::Unknown(_) => 3,
             QueryError::ReplyDropped => 4,
             QueryError::HandlerFailed { .. } => 5,
-            QueryError::Engine(_) => 6,
+            QueryError::InvalidArguments { .. } => 6,
+            QueryError::Engine(_) => 7,
         })
         .collect::<std::collections::BTreeSet<usize>>()
         .len();
@@ -140,7 +151,7 @@ fn every_query_error_arm_maps_to_its_pinned_wire_code() {
         variant_count,
         "every QueryError variant must appear exactly once in the pin list",
     );
-    assert_eq!(variant_count, 7, "pin list must cover all 7 variants");
+    assert_eq!(variant_count, 8, "pin list must cover all 8 variants");
 
     for (query, expected_code, expected_type) in arms {
         let wire = query_wire(query.clone());
