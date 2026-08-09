@@ -17,7 +17,6 @@ export type {
   DeploymentRecord,
   GuidedDeployResult,
   GuidedStepResult,
-  RunStatus,
   WorkerAvailability,
 } from './guided-facade';
 

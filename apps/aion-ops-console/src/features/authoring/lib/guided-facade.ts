@@ -16,11 +16,6 @@ export type WorkerAvailability = {
   connectedWorkers: number;
   scaffoldHint: string | null;
 };
-export type RunStatus = {
-  deployment: DeploymentRecord;
-  deployedSource: string;
-  drifted: boolean;
-};
 
 type Request = (path: string, init?: RequestInit, documentEndpoint?: boolean) => Promise<unknown>;
 
@@ -54,26 +49,6 @@ export function createGuidedFacade(request: Request) {
         taskQueue: expectString(value.task_queue),
         connectedWorkers: expectNumber(value.connected_workers),
         scaffoldHint: value.scaffold_hint === null ? null : expectString(value.scaffold_hint),
-      };
-    },
-    async bindRun(
-      deploymentId: string,
-      workflowId: string,
-      runId: string
-    ): Promise<DeploymentRecord> {
-      return parseDeployment(
-        await request(
-          `/awl/runs/${encodeURIComponent(deploymentId)}/binding`,
-          jsonInit('POST', { workflow_id: workflowId, run_id: runId })
-        )
-      );
-    },
-    async runStatus(deploymentId: string): Promise<RunStatus> {
-      const value = expectRecord(await request(`/awl/runs/${encodeURIComponent(deploymentId)}`));
-      return {
-        deployment: parseDeployment(value.deployment),
-        deployedSource: expectString(value.deployed_source),
-        drifted: expectBoolean(value.drifted),
       };
     },
   };

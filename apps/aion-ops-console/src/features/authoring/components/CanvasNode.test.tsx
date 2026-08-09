@@ -26,7 +26,7 @@ const shipStep: ProjectionStep = {
 };
 
 async function refuseGesture(_operation: GestureOperation): Promise<EditResult> {
-  throw new Error('Run mode is read-only');
+  throw new Error('This canvas is read-only');
 }
 
 /** Build the node data the canvas would hand this step in the given mode. */
@@ -81,23 +81,9 @@ describe('canvas node mutating affordances follow the canvas mode', () => {
   });
 
   /**
-   * Run mode watches a live workflow: the gesture underneath is refused, so the
-   * button must never be offered in the first place.
+   * A deployed artifact came out of an archive: the gesture underneath is
+   * refused, so the button must never be offered in the first place.
    */
-  test('run mode renders the step and NO mutating affordance', () => {
-    const data = nodeDataFor('run');
-    expect(data.onBeginProseEdit).toBeUndefined();
-    expect(data.onSaveProse).toBeUndefined();
-
-    const html = renderNode('run');
-    expect(html).toContain('aria-label="Step ship"');
-    expect(html).not.toContain('Edit prose');
-    expect(html).not.toContain('Save prose');
-    expect(html).not.toContain('<textarea');
-    expect(html).not.toContain('<form');
-  });
-
-  /** A deployed artifact came out of an archive; the same rule holds. */
   test('deployed mode renders the step and NO mutating affordance', () => {
     const data = nodeDataFor('deployed');
     expect(data.onBeginProseEdit).toBeUndefined();

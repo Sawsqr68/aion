@@ -13,8 +13,11 @@ const deployment = {
   run_id: null,
 };
 
-describe('guided run boundary', () => {
-  test('wires save, deploy, worker gate, run binding, and deployed-source status', async () => {
+describe('guided deploy boundary', () => {
+  // Catches: the save→deploy hash threading drifting from the server routes,
+  // or the availability read losing its request shape. These are the legs the
+  // header Deploy action and the run panel stand on.
+  test('wires save, deploy, and the worker-availability read', async () => {
     const requests: string[] = [];
     const facade = createAuthoringFacade(async (input, init) => {
       const path = String(input);
@@ -33,34 +36,21 @@ describe('guided run boundary', () => {
           ],
         });
       }
-      if (path.includes('/workers/availability')) {
-        return Response.json({
-          available: true,
-          task_queue: 'jobs',
-          connected_workers: 1,
-          scaffold_hint: null,
-        });
-      }
-      if (path.endsWith('/binding')) {
-        return Response.json({ ...deployment, workflow_id: 'workflow-1', run_id: 'run-1' });
-      }
       return Response.json({
-        deployment: { ...deployment, workflow_id: 'workflow-1', run_id: 'run-1' },
-        deployed_source: 'deployed',
-        drifted: false,
+        available: true,
+        task_queue: 'jobs',
+        connected_workers: 1,
+        scaffold_hint: null,
       });
     });
 
     const hash = await facade.saveDocument('demo.awl', 'deployed');
-    const shipped = await facade.deploy('demo.awl', hash);
-    const worker = await facade.workerAvailability('default', shipped.deployment.taskQueue);
-    const bound = await facade.bindRun(shipped.deployment.deploymentId, 'workflow-1', 'run-1');
-    const status = await facade.runStatus(bound.deploymentId);
+    const deployed = await facade.deploy('demo.awl', hash);
+    const worker = await facade.workerAvailability('default', deployed.deployment.taskQueue);
 
     expect(worker.available).toBe(true);
-    expect(status.deployedSource).toBe('deployed');
-    expect(status.deployment.contentHash).toBe('a'.repeat(64));
-    expect(shipped.steps.map((step) => step.step)).toEqual([
+    expect(deployed.deployment.contentHash).toBe('a'.repeat(64));
+    expect(deployed.steps.map((step) => step.step)).toEqual([
       'check',
       'compile',
       'package',
@@ -70,8 +60,6 @@ describe('guided run boundary', () => {
       'PUT /awl/documents/demo.awl',
       'POST /awl/deploy',
       'POST /awl/workers/availability',
-      'POST /awl/runs/deploy-1/binding',
-      'GET /awl/runs/deploy-1',
     ]);
   });
 

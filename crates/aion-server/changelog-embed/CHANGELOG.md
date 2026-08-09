@@ -3,6 +3,13 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## 0.13.3 — 2026-08-10
+
+- **Ship & Run is retired.** The all-in-one check-deploy-start button is gone;
+  the editor header's separate Deploy and Run actions are the one honest way
+  to do each. The run view survives only for worker documents, where it hosts
+  their managed-worker deploy surface.
+
 ## 0.13.2 — 2026-08-10
 
 - **Deploy and Run, from the editor.** The authoring editor's header gains two

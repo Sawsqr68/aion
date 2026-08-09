@@ -7,7 +7,6 @@ import {
   HardHat,
   LayoutDashboard,
   LoaderCircle,
-  Rocket,
   Save,
   Workflow,
 } from 'lucide-react';
@@ -111,15 +110,18 @@ export function EditorHeader({
             selected={viewMode}
             onSelect={onSelectViewMode}
           />
-          <ViewButton
-            icon={
-              workerDocument ? <HardHat className="size-3.5" /> : <Rocket className="size-3.5" />
-            }
-            label={workerDocument ? 'Deploy worker' : 'Ship & Run'}
-            mode="run"
-            selected={viewMode}
-            onSelect={onSelectViewMode}
-          />
+          {/* The run view survives only for worker documents (their managed-
+              worker deploy surface); a workflow document runs through the
+              header's Deploy and Run actions instead. */}
+          {workerDocument && (
+            <ViewButton
+              icon={<HardHat className="size-3.5" />}
+              label="Deploy worker"
+              mode="run"
+              selected={viewMode}
+              onSelect={onSelectViewMode}
+            />
+          )}
         </fieldset>
         <Button disabled={working !== null} onClick={onFormat} size="sm" variant="outline">
           <ActionIcon action="format" dirty={dirty} working={working} />

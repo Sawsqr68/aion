@@ -40,14 +40,14 @@ export type AuthoringCanvasProps = {
    * What the canvas is showing.
    *
    * `edit` is the authoring canvas: gestures, dragging, and layout persistence.
-   * `run` follows a live run. `deployed` renders a DEPLOYED artifact — it owns
-   * no layout record and offers no gesture, because there is nothing here to
-   * change: the bytes came out of an archive.
+   * `deployed` renders a DEPLOYED artifact — it owns no layout record and
+   * offers no gesture, because there is nothing here to change: the bytes
+   * came out of an archive.
    */
   mode?: CanvasMode;
 };
 
-export type CanvasMode = 'edit' | 'run' | 'deployed';
+export type CanvasMode = 'edit' | 'deployed';
 
 export function AuthoringCanvas(props: AuthoringCanvasProps) {
   const {
@@ -362,9 +362,8 @@ function stepNode(
  * The prose-edit affordance a canvas node is built with. ONLY the edit canvas
  * gets one: the node renders its button from the presence of `onBeginProseEdit`,
  * so withholding these callbacks is what makes the read-only claim true rather
- * than merely styled. `run` follows a live run and `deployed` renders an
- * archive — neither has anything the operator may change here, and the gesture
- * underneath both is refused anyway.
+ * than merely styled. `deployed` renders an archive — nothing there is the
+ * operator's to change, and the gesture underneath it is refused anyway.
  */
 export function proseEditAffordance(
   mode: CanvasMode,
@@ -395,7 +394,6 @@ function edgeColor(kind: 'route' | 'fall_through' | 'after') {
 }
 
 function captionFor(mode: CanvasMode) {
-  if (mode === 'run') return 'Live run · nodes follow workflow events';
   if (mode === 'deployed') return 'Deployed artifact · read-only';
   return 'Tab through controls · connect handles to draw an otherwise route';
 }

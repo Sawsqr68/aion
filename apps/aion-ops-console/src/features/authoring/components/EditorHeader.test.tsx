@@ -48,6 +48,8 @@ describe('EditorHeader', () => {
     expect(markup).not.toContain('disabled=""');
     expect(markup).not.toContain('aria-disabled');
     expect(markup).not.toContain('data-slot="deploy-reason"');
+    // Ship & Run is retired: a workflow document has no run view tab at all.
+    expect(markup).not.toContain('aria-label="Deploy worker view"');
   });
 
   // Catches: workflow-deploy offered on a worker document — it ships through

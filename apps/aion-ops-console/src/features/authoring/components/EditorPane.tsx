@@ -31,7 +31,6 @@ import { DeployOutcomeLine } from './DeployOutcomeLine';
 import { DeployWorkerPanel } from './DeployWorkerPanel';
 import { EditorHeader, type EditorWorking } from './EditorHeader';
 import { type AuthoringViewMode, ProjectionPane } from './ProjectionPane';
-import { ShipRunPanel } from './ShipRunPanel';
 import { StudioPane } from './StudioPane';
 
 export type EditorPaneProps = {
@@ -242,9 +241,14 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
     }
   }, []);
 
-  // A worker document (`worker <queue>`) has no flow to ship-and-run; its
-  // "run" surface is deploying it as a supervised managed worker instead.
+  // A worker document (`worker <queue>`) deploys as a supervised managed
+  // worker through its own `run` view; a workflow document runs through the
+  // header's Deploy and Run actions instead and has no run view at all.
   const workerDocument = isWorkerDocument(source);
+  // The run view mode survives ONLY for worker documents. A buffer edit can
+  // turn a worker document into a workflow one while that tab is selected;
+  // the view then falls back to text rather than rendering nothing.
+  const effectiveViewMode: ViewMode = viewMode === 'run' && !workerDocument ? 'text' : viewMode;
 
   return (
     <section className="flex min-w-0 flex-1 flex-col" aria-label={`Editing ${path}`}>
@@ -263,7 +267,7 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
           namespace: selectedNamespace,
           path,
         }}
-        viewMode={viewMode}
+        viewMode={effectiveViewMode}
         workerDocument={workerDocument}
         working={working}
       />
@@ -271,10 +275,12 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
         <div
           className={cn(
             'min-h-[32rem] min-w-0 overflow-hidden',
-            viewMode === 'canvas' || viewMode === 'studio' || viewMode === 'run'
+            effectiveViewMode === 'canvas' ||
+              effectiveViewMode === 'studio' ||
+              effectiveViewMode === 'run'
               ? 'hidden'
               : 'flex-1',
-            viewMode === 'split' && 'border-border border-r'
+            effectiveViewMode === 'split' && 'border-border border-r'
           )}
           ref={hostRef}
         />
@@ -287,9 +293,9 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
           path={path}
           selectedStep={selectedStep}
           semantic={semantic}
-          viewMode={viewMode}
+          viewMode={effectiveViewMode}
         />
-        {viewMode === 'studio' && semantic !== null && (
+        {effectiveViewMode === 'studio' && semantic !== null && (
           <StudioPane
             documents={documents}
             onGesture={applyGesture}
@@ -301,12 +307,9 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
             source={source}
           />
         )}
-        {viewMode === 'run' &&
-          (workerDocument ? (
-            <DeployWorkerPanel buffer={source} path={path} />
-          ) : (
-            <ShipRunPanel buffer={source} documents={documents} path={path} />
-          ))}
+        {effectiveViewMode === 'run' && workerDocument && (
+          <DeployWorkerPanel buffer={source} path={path} />
+        )}
       </div>
       <DeployOutcomeLine outcome={deployOutcome} />
       <EditorStatusBar check={check} message={message} />

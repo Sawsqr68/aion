@@ -48,16 +48,20 @@ test('the pane is labelled as the deployed artifact and identifies it by type an
 
 /**
  * 🔴 NO MUTATION AFFORDANCE IS REACHABLE. Every control the workspace editor
- * offers for changing a document is named here and asserted ABSENT — Save,
- * Format, the gesture-bearing Studio view, and the Ship & Run panel that
- * deploys. The view switcher above is the survival half: the pane does render
- * its read surfaces, so this is not passing because nothing rendered.
+ * offers for changing or shipping a document is named here and asserted
+ * ABSENT — Save, Format, the gesture-bearing Studio view, and the header's
+ * Deploy button and Run launcher. The view switcher above is the survival
+ * half: the pane does render its read surfaces, so this is not passing
+ * because nothing rendered.
  */
-test('the deployed pane exposes no save, format, studio, or ship control', () => {
+test('the deployed pane exposes no save, format, studio, deploy, or run control', () => {
   const html = renderToStaticMarkup(<DeployedDocumentPane document={deployed()} />);
-  for (const control of ['Save', 'Format', 'Studio', 'Ship & Run']) {
+  for (const control of ['Save', 'Format', 'Studio']) {
     expect(html).not.toContain(control);
   }
+  // Matched as markup, not bare words — the pane's own copy says "Deployed".
+  expect(html).not.toContain('>Deploy</button>');
+  expect(html).not.toContain('data-slot="run-panel-launcher"');
   expect(html).not.toContain('Modified');
   // Survival: the read-only view surfaces are all present.
   expect(html).toContain('Text view');
