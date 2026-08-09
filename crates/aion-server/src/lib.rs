@@ -54,6 +54,9 @@ pub mod error;
 pub(crate) mod filesystem;
 /// Engine-internal workflow filtering for enumeration surfaces.
 mod internal_workflow;
+/// The Model Context Protocol surface (2026-07-28 stateless revision): the
+/// tool catalog, the tool implementations, and the `/mcp` mount.
+pub mod mcp;
 /// Namespace resolution and authorization guard types.
 pub mod namespace;
 /// Health, metrics, and tracing support.
@@ -82,6 +85,7 @@ pub use config::ServerConfig;
 pub use deploy::DeployGuard;
 pub use dev_ui::{ActivityMockRegistry, DevMockingDispatcher, MockedActivity};
 pub use error::{ServerError, StreamFailure};
+pub use mcp::{AionToolService, McpRuntime};
 pub use namespace::{
     CallerIdentity, NAMESPACE_ATTRIBUTE, NamespaceGuard, NamespaceMinter, NamespaceOperation,
     NamespaceResolver, ScheduleNamespaceSource, ScheduleTarget, ScopedEngine,

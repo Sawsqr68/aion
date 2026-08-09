@@ -19,7 +19,7 @@
 //! - `clean_dtos` — clean JSON request/response DTOs for the workflow POST endpoints.
 //! - `error` — wire-error-to-HTTP response mapping.
 
-mod auth;
+pub(crate) mod auth;
 mod authoring;
 mod awl;
 mod awl_deployed;

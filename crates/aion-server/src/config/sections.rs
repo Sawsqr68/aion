@@ -18,8 +18,11 @@ use super::{
     config_error,
     defaults::{
         CLUSTER_BROADCAST_CAPACITY_REQUIRED, DEFAULT_GRPC_ADDRESS, DEFAULT_HTTP_ADDRESS,
-        DEFAULT_MAX_IN_FLIGHT_ACTIVITIES, DEFAULT_OBSERVABILITY_MAX_EVENT_BYTES,
+        DEFAULT_MAX_IN_FLIGHT_ACTIVITIES, DEFAULT_MCP_AWAIT_POLL_INTERVAL_MS,
+        DEFAULT_MCP_DISCOVER_TTL_MS, DEFAULT_MCP_TASK_POLL_INTERVAL_MS, DEFAULT_MCP_TASK_TTL_MS,
+        DEFAULT_MCP_TOOLS_LIST_TTL_MS, DEFAULT_OBSERVABILITY_MAX_EVENT_BYTES,
         DEFAULT_OBSERVABILITY_MAX_STREAM_EVENTS, EVENT_BROADCAST_CAPACITY_REQUIRED,
+        MCP_AWAIT_POLL_INTERVAL_REQUIRED, MCP_TASK_POLL_INTERVAL_REQUIRED,
         OBSERVABILITY_MAX_EVENT_BYTES_REQUIRED, OBSERVABILITY_MAX_STREAM_EVENTS_REQUIRED,
     },
 };
@@ -389,6 +392,149 @@ impl WebSocketConfig {
         }
         Ok(())
     }
+}
+
+/// Model Context Protocol surface settings from `[mcp]`.
+///
+/// The surface is DARK by default: with `enabled = false` (or the section
+/// absent) the `/mcp` route is not mounted and the path is a plain 404. An MCP
+/// endpoint hands a model the ability to start and cancel durable executions,
+/// so commissioning it is an explicit operator decision, never a side effect of
+/// upgrading.
+///
+/// `allowed_origins` is EMPTY by default and empty means "no browser origin".
+/// A programmatic client sends no `Origin` header and is unaffected; a page in
+/// a browser always sends one, so the empty list refuses every browser-borne
+/// request. That is the DNS-rebinding defence the transport requires, and it is
+/// a real policy rather than an unset value.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct McpConfig {
+    /// Whether the `/mcp` endpoint is mounted. Defaults to false.
+    pub enabled: bool,
+    /// Browser origins permitted to reach the MCP endpoint. Empty permits none.
+    pub allowed_origins: Vec<String>,
+    /// `ttlMs` on the `server/discover` result.
+    ///
+    /// Defaults to [`DEFAULT_MCP_DISCOVER_TTL_MS`] when omitted and
+    /// `enabled = true`, so switching the surface on does not force sizing two
+    /// cache lifetimes first.
+    ///
+    /// [`DEFAULT_MCP_DISCOVER_TTL_MS`]: super::DEFAULT_MCP_DISCOVER_TTL_MS
+    pub discover_ttl_ms: Option<u64>,
+    /// `ttlMs` on the `tools/list` result. Defaults to
+    /// [`DEFAULT_MCP_TOOLS_LIST_TTL_MS`].
+    ///
+    /// [`DEFAULT_MCP_TOOLS_LIST_TTL_MS`]: super::DEFAULT_MCP_TOOLS_LIST_TTL_MS
+    pub tools_list_ttl_ms: Option<u64>,
+    /// How long a created task lives before the server may fail and delete it.
+    ///
+    /// Zero means UNLIMITED and is written that way on the wire (`ttlMs: null`).
+    /// An unlimited task is a real operator choice for a workflow that
+    /// legitimately runs for months; it is not the default, because a task
+    /// nobody polls holds an executor for as long as it lives. Defaults to
+    /// [`DEFAULT_MCP_TASK_TTL_MS`].
+    ///
+    /// [`DEFAULT_MCP_TASK_TTL_MS`]: super::DEFAULT_MCP_TASK_TTL_MS
+    pub task_ttl_ms: Option<u64>,
+    /// The `pollIntervalMs` advertised on a created task. Defaults to
+    /// [`DEFAULT_MCP_TASK_POLL_INTERVAL_MS`].
+    ///
+    /// [`DEFAULT_MCP_TASK_POLL_INTERVAL_MS`]: super::DEFAULT_MCP_TASK_POLL_INTERVAL_MS
+    pub task_poll_interval_ms: Option<u64>,
+    /// How often an awaited `start_run` re-reads the run's projected status.
+    /// Defaults to [`DEFAULT_MCP_AWAIT_POLL_INTERVAL_MS`].
+    ///
+    /// [`DEFAULT_MCP_AWAIT_POLL_INTERVAL_MS`]: super::DEFAULT_MCP_AWAIT_POLL_INTERVAL_MS
+    pub await_poll_interval_ms: Option<u64>,
+}
+
+impl McpConfig {
+    /// Refuse a zero poll interval at startup.
+    ///
+    /// Only meaningful when the surface is enabled: a dark surface's knobs are
+    /// never read, so refusing a boot over one would be refusing over a value
+    /// nothing uses.
+    ///
+    /// # Errors
+    ///
+    /// [`ServerError::Config`] when an explicitly-set interval is zero. A zero
+    /// poll interval is a busy loop, not a fast one, and the operator is told
+    /// so rather than being handed one.
+    pub(super) fn validate(&self) -> Result<(), ServerError> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if self.task_poll_interval_ms == Some(0) {
+            return config_error(MCP_TASK_POLL_INTERVAL_REQUIRED);
+        }
+        if self.await_poll_interval_ms == Some(0) {
+            return config_error(MCP_AWAIT_POLL_INTERVAL_REQUIRED);
+        }
+        Ok(())
+    }
+
+    /// Resolve every omitted knob to its default.
+    ///
+    /// A zero poll interval resolves to the DEFAULT rather than to zero.
+    /// [`Self::validate`] has already refused it on any loaded configuration,
+    /// so this arm is reachable only from a hand-constructed config that
+    /// skipped validation — and for that case a documented default is the safe
+    /// direction, where a literal zero would be a busy loop.
+    #[must_use]
+    pub fn resolved(&self) -> ResolvedMcpConfig {
+        ResolvedMcpConfig {
+            enabled: self.enabled,
+            allowed_origins: self.allowed_origins.clone(),
+            discover_ttl_ms: self.discover_ttl_ms.unwrap_or(DEFAULT_MCP_DISCOVER_TTL_MS),
+            tools_list_ttl_ms: self
+                .tools_list_ttl_ms
+                .unwrap_or(DEFAULT_MCP_TOOLS_LIST_TTL_MS),
+            task_ttl_ms: match self.task_ttl_ms.unwrap_or(DEFAULT_MCP_TASK_TTL_MS) {
+                0 => None,
+                value => Some(value),
+            },
+            task_poll_interval_ms: self
+                .task_poll_interval_ms
+                .filter(|value| *value > 0)
+                .unwrap_or(DEFAULT_MCP_TASK_POLL_INTERVAL_MS),
+            await_poll_interval_ms: self
+                .await_poll_interval_ms
+                .filter(|value| *value > 0)
+                .unwrap_or(DEFAULT_MCP_AWAIT_POLL_INTERVAL_MS),
+        }
+    }
+}
+
+impl Default for ResolvedMcpConfig {
+    /// The dark surface: not mounted, no origin permitted, every lifetime at
+    /// its documented default. This is what an embedder that never configures
+    /// MCP gets, and it serves nothing.
+    fn default() -> Self {
+        McpConfig::default().resolved()
+    }
+}
+
+/// The `[mcp]` section with every omitted knob resolved.
+///
+/// Held in [`RuntimeConfig`](super::RuntimeConfig) so the mount reads settled
+/// values rather than re-deriving defaults at each composition point.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedMcpConfig {
+    /// Whether the `/mcp` endpoint is mounted.
+    pub enabled: bool,
+    /// Browser origins permitted to reach the endpoint.
+    pub allowed_origins: Vec<String>,
+    /// `ttlMs` on `server/discover`.
+    pub discover_ttl_ms: u64,
+    /// `ttlMs` on `tools/list`.
+    pub tools_list_ttl_ms: u64,
+    /// Task lifetime; `None` is unlimited.
+    pub task_ttl_ms: Option<u64>,
+    /// Advertised client poll interval for a task.
+    pub task_poll_interval_ms: u64,
+    /// Server-side poll interval for an awaited start.
+    pub await_poll_interval_ms: u64,
 }
 
 /// Agent-observability transcript retention bounds from `[observability]`.

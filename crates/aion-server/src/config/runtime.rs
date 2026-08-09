@@ -12,8 +12,8 @@ use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use super::{
     AuthConfig, AuthoringConfig, AutoCreate, DeployConfig, DevConfig, ListenConfig, MetricsConfig,
-    NamespaceConfig, ObservabilityConfig, OpsConsoleConfig, OutboxConfig, TlsConfig,
-    WebSocketConfig, WorkerConfig,
+    NamespaceConfig, ObservabilityConfig, OpsConsoleConfig, OutboxConfig, ResolvedMcpConfig,
+    TlsConfig, WebSocketConfig, WorkerConfig,
 };
 
 /// Command-line configuration overrides applied after file and environment values.
@@ -71,6 +71,8 @@ pub struct RuntimeConfig {
     pub outbox: OutboxConfig,
     /// Agent-observability transcript retention bounds (`[observability]`).
     pub observability: ObservabilityConfig,
+    /// Model Context Protocol surface settings (`[mcp]`), fully resolved.
+    pub mcp: ResolvedMcpConfig,
     /// Engine scheduler thread count.
     pub scheduler_threads: usize,
     /// Engine reply deadline for workflow queries. REQUIRED — carried as an

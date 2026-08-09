@@ -53,6 +53,11 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 aion-core = { version = "0.12.0", path = "../aion-core" }
+aion-mcp = { version = "0.12.0", path = "../aion-mcp" }
+# Validates the MCP tool schemas the catalog tests pin; `default-features =
+# false` keeps the network/file schema resolvers out, exactly as the admission
+# path does.
+jsonschema = { workspace = true }
 dashmap = { workspace = true }
 uuid.workspace = true
 sha2.workspace = true

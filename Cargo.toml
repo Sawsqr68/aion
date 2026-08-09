@@ -13,6 +13,7 @@ members = [
     "crates/aion",
     "crates/aion-proto",
     "crates/aion-proto-generated",
+    "crates/aion-mcp",
     "crates/aion-server",
     "crates/aion-darwin-acl",
     "crates/aion-worker",
