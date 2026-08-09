@@ -1,4 +1,4 @@
-import type { ActivityEvent, ActivityId, Namespace, WorkflowId } from '@/types';
+import type { ActivityEvent, ActivityId, Namespace, RunId, WorkflowId } from '@/types';
 
 import { ApiError } from './api-error';
 import { apiErrorFromResponse, readJson } from './client-normalize';
@@ -13,8 +13,10 @@ import type { TranscriptTarget } from './transcript-stream';
 /**
  * Durable transcript READ client (lane #230): the console consumption of the
  * lane-#229 REST pair. `POST /workflows/transcript` fetches one retained
- * `(workflow, activity, attempt)` stream in `store_seq` order;
- * `POST /workflows/transcripts` enumerates a workflow's retained streams.
+ * `(workflow, run, activity, attempt)` stream in `store_seq` order;
+ * `POST /workflows/transcripts` enumerates ONE RUN's retained streams. The run
+ * axis is required on both: ordinals and attempts restart in every generation
+ * of a continue-as-new chain, so the other axes do not name a stream.
  *
  * The documented contract: REST fetch FIRST, then attach the transcript WS with
  * `after_seq` = the last fetched `store_seq`, so the socket serves only the live
@@ -54,8 +56,13 @@ export type TranscriptWindow = {
   headSeq: number;
 };
 
-/** One retained stream head from the enumeration endpoint. */
+/**
+ * One retained stream head from the enumeration endpoint. Each row echoes its
+ * own `runId`, so a row lifted out of the response is still addressable on its
+ * own rather than depending on the request it came from.
+ */
 export type RetainedStreamHead = {
+  runId: RunId;
   activityId: ActivityId;
   attempt: number;
   /** Next `store_seq` to be written == count of retained records. */
@@ -86,6 +93,9 @@ export class TranscriptReadClient {
     const body = {
       namespace: params.namespace,
       workflow_id: params.workflowId,
+      // The generation axis: the server refuses a run-less fetch (422) rather
+      // than defaulting to some run of its own choosing.
+      run_id: params.runId,
       activity_id: params.activityId,
       attempt: params.attempt,
       ...(params.fromSeq === undefined ? {} : { from_seq: params.fromSeq }),
@@ -113,11 +123,23 @@ export class TranscriptReadClient {
     };
   }
 
-  /** Enumerate a workflow's retained transcript streams (may be empty). */
-  async listStreams(namespace: Namespace, workflowId: WorkflowId): Promise<RetainedStreamHead[]> {
+  /**
+   * Enumerate ONE RUN's retained transcript streams (may be empty).
+   *
+   * The run is a required argument, not an optional filter: enumerating a whole
+   * continue-as-new chain would return several generations' streams under
+   * pairwise-colliding `(activity, attempt)` coordinates, which is the exact
+   * ambiguity the run axis exists to remove. The server refuses a run-less body.
+   */
+  async listStreams(
+    namespace: Namespace,
+    workflowId: WorkflowId,
+    runId: RunId
+  ): Promise<RetainedStreamHead[]> {
     const responseBody = await this.post(TRANSCRIPT_READ.streams, {
       namespace,
       workflow_id: workflowId,
+      run_id: runId,
     });
     const streams = isRecord(responseBody) ? responseBody.streams : undefined;
     if (!Array.isArray(streams)) {
@@ -148,13 +170,17 @@ function readStreamHead(row: unknown): RetainedStreamHead {
   if (!isRecord(row)) {
     throw new ApiError(200, 'workflows/transcripts stream row is not an object');
   }
+  const runId = row.run_id;
   const activityId = row.activity_id;
   const attempt = row.attempt;
   const head = row.head;
+  if (typeof runId !== 'string' || runId === '') {
+    throw new ApiError(200, 'workflows/transcripts stream row missing run_id');
+  }
   if (typeof activityId !== 'number' || typeof attempt !== 'number' || typeof head !== 'number') {
     throw new ApiError(200, 'workflows/transcripts stream row missing activity_id/attempt/head');
   }
-  return { activityId, attempt, head };
+  return { runId: runId as RunId, activityId, attempt, head };
 }
 
 function isSequence(value: unknown): value is number {

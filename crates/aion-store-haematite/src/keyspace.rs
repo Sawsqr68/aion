@@ -248,6 +248,22 @@ pub(crate) const OBSERVABILITY_RUN_PREFIX_LEN: usize = 1 + 16 + 16;
 /// keyspace, and [`decode_observability_stream_key`] rejects its key on length.
 /// Reading one back would mean answering a run-scoped question with data that
 /// cannot say which run it came from — the exact ambiguity being removed.
+///
+/// # Those records are also UNRECLAIMED, and that is not fixable here
+///
+/// Unreachable is not the whole cost: a database written by a build that
+/// predates the run axis keeps its 29-byte `O` records on disk forever. Nothing
+/// reaps them — `observability_list_blocking` skips whatever fails to decode,
+/// and there is no purge verb or migration. This is stated rather than fixed
+/// because it CANNOT be fixed from this crate: haematite exposes no
+/// stream-deletion primitive at all (`append_with_ttl` is its only expiry
+/// surface — there is no `delete`/`truncate` for a sequence stream), so a reaper
+/// would have to begin as a haematite change, and the records share one database
+/// file with the `E` event streams so they cannot be discarded selectively
+/// either. The leak is bounded and non-growing: no writer emits that shape any
+/// more, and nothing depends on the bytes. Reclaiming them means discarding the
+/// store directory — which discards workflow history too, so it is an operator's
+/// explicit choice, never a maintenance step.
 pub(crate) fn observability_stream_key(
     workflow_id: &WorkflowId,
     run_id: &RunId,

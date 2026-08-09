@@ -11,17 +11,17 @@ use crate::error::WorkerError;
 /// Handler-facing context for one activity execution.
 #[derive(Clone, Debug)]
 pub struct ActivityContext {
-    workflow_id: Option<WorkflowId>,
-    /// The concrete run this activity was dispatched by, when the context is
-    /// attached to a live server task.
+    /// The workflow this activity belongs to.
+    workflow_id: WorkflowId,
+    /// The concrete run this activity was dispatched by — the generation axis.
     ///
-    /// `None` only for a hand-built unit-test context, exactly as `workflow_id`
-    /// is: a live dispatch always carries a run id (the transport refuses a
-    /// dispatch envelope without one), and [`ActivityContext::run_id`] is the
-    /// only source a handler has for the run axis its transcript events must
-    /// carry. It is deliberately not defaulted — there is no honest value to
-    /// invent for a context that was never dispatched.
-    run_id: Option<RunId>,
+    /// REQUIRED, never optional: [`ActivityContext::run_id`] is the only source
+    /// a handler has for the run axis its transcript events must carry, and
+    /// [`aion_core::ActivityEvent::run_id`] is itself a required field. An
+    /// optional accessor would leave a handler with no honest way to build a
+    /// required field, so the run is supplied at construction or the context is
+    /// never built — the refusal lives at the dispatch boundary, not here.
+    run_id: RunId,
     activity_id: ActivityId,
     attempt: u32,
     idempotency_key: Option<String>,
@@ -62,15 +62,30 @@ struct CancellationState {
 
 impl ActivityContext {
     /// Creates a context and the internal handle that can signal cancellation.
+    ///
+    /// The full dispatch identity is required: an activity execution always
+    /// belongs to one `(workflow, run, activity, attempt)`, and a handler reads
+    /// the workflow and run back to stamp the transcript events it emits.
     #[must_use]
-    pub fn new(activity_id: ActivityId, attempt: u32) -> (Self, ActivityCancellationHandle) {
-        Self::with_heartbeat_sender(activity_id, attempt, None)
+    pub fn new(
+        workflow_id: WorkflowId,
+        run_id: RunId,
+        activity_id: ActivityId,
+        attempt: u32,
+    ) -> (Self, ActivityCancellationHandle) {
+        Self::for_workflow(workflow_id, run_id, activity_id, attempt, None)
     }
 
     /// Returns this activity's identifier.
     #[must_use]
     pub const fn activity_id(&self) -> &ActivityId {
         &self.activity_id
+    }
+
+    /// Returns the workflow this activity belongs to.
+    #[must_use]
+    pub const fn workflow_id(&self) -> &WorkflowId {
+        &self.workflow_id
     }
 
     /// Returns this activity's attempt number.
@@ -81,16 +96,15 @@ impl ActivityContext {
 
     /// Returns the concrete run this activity was dispatched by.
     ///
-    /// A handler that emits transcript events through [`Self::emit_event`] must
-    /// stamp this onto every [`ActivityEvent`] it builds: the transcript
+    /// A handler that emits transcript events through [`Self::emit_event`]
+    /// stamps this onto every [`ActivityEvent`] it builds: the transcript
     /// keyspace is keyed on `(workflow, run, activity, attempt)`, and without
     /// the run two generations of one continue-as-new chain write to the same
-    /// stream. Live worker tasks always return `Some`; manually constructed
-    /// unit-test contexts return `None` because they are not attached to a
-    /// server task.
+    /// stream. Always present — the run is part of the dispatch identity, so
+    /// the handler is never handed an absence it cannot resolve.
     #[must_use]
-    pub const fn run_id(&self) -> Option<&RunId> {
-        self.run_id.as_ref()
+    pub const fn run_id(&self) -> &RunId {
+        &self.run_id
     }
 
     /// Returns the stable external-effect key delivered with this task.
@@ -114,18 +128,12 @@ impl ActivityContext {
     ///
     /// # Errors
     ///
-    /// Returns [`WorkerError`] when an installed heartbeat seam has been closed
-    /// or when the context lacks the workflow id required by the live session.
+    /// Returns [`WorkerError`] when an installed heartbeat seam has been closed.
     pub fn heartbeat(&self, detail: Option<Payload>) -> Result<(), WorkerError> {
         if let Some(sender) = &self.heartbeat_sender {
-            let workflow_id = self.workflow_id.clone().ok_or_else(|| {
-                WorkerError::registration(HeartbeatMissingWorkflow {
-                    activity_id: self.activity_id.clone(),
-                })
-            })?;
             sender
                 .send(HeartbeatRequest {
-                    workflow_id,
+                    workflow_id: self.workflow_id.clone(),
                     activity_id: self.activity_id.clone(),
                     detail,
                 })
@@ -174,17 +182,9 @@ impl ActivityContext {
         }
     }
 
-    pub(crate) fn with_heartbeat_sender(
-        activity_id: ActivityId,
-        attempt: u32,
-        heartbeat_sender: Option<mpsc::UnboundedSender<HeartbeatRequest>>,
-    ) -> (Self, ActivityCancellationHandle) {
-        Self::for_workflow(None, None, activity_id, attempt, heartbeat_sender)
-    }
-
     pub(crate) fn for_workflow(
-        workflow_id: Option<WorkflowId>,
-        run_id: Option<RunId>,
+        workflow_id: WorkflowId,
+        run_id: RunId,
         activity_id: ActivityId,
         attempt: u32,
         heartbeat_sender: Option<mpsc::UnboundedSender<HeartbeatRequest>>,
@@ -202,14 +202,14 @@ impl ActivityContext {
 
     pub(crate) fn for_task(
         workflow_id: WorkflowId,
-        run_id: Option<RunId>,
+        run_id: RunId,
         activity_id: ActivityId,
         attempt: u32,
         idempotency_key: String,
         heartbeat_sender: Option<mpsc::UnboundedSender<HeartbeatRequest>>,
     ) -> (Self, ActivityCancellationHandle) {
         Self::for_workflow_with_events(
-            Some(workflow_id),
+            workflow_id,
             run_id,
             activity_id,
             attempt,
@@ -224,8 +224,8 @@ impl ActivityContext {
     /// observability enabled; the pre-existing constructors default the event seam
     /// to `None` so every current call site is unchanged.
     pub(crate) fn for_workflow_with_events(
-        workflow_id: Option<WorkflowId>,
-        run_id: Option<RunId>,
+        workflow_id: WorkflowId,
+        run_id: RunId,
         activity_id: ActivityId,
         attempt: u32,
         idempotency_key: Option<String>,
@@ -273,12 +273,6 @@ struct EventSeamClosed {
     source: mpsc::error::SendError<ActivityEvent>,
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error("activity {activity_id} heartbeat is missing workflow id")]
-struct HeartbeatMissingWorkflow {
-    activity_id: ActivityId,
-}
-
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
@@ -297,14 +291,21 @@ mod tests {
         use chrono::Utc;
         use uuid::Uuid;
 
-        let (context, _cancellation) =
-            ActivityContext::new(ActivityId::from_sequence_position(1), 0);
-        // A hand-built context is not attached to a server task, so it has no
-        // run — the honest absence, never a synthesised id.
-        assert!(context.run_id().is_none());
+        let workflow_id = WorkflowId::new(Uuid::from_u128(1));
+        let run_id = RunId::new(Uuid::from_u128(0x11));
+        let (context, _cancellation) = ActivityContext::new(
+            workflow_id.clone(),
+            run_id.clone(),
+            ActivityId::from_sequence_position(1),
+            0,
+        );
+        // The dispatch identity is always readable — a handler stamping a
+        // transcript event never has to invent the run axis.
+        assert_eq!(context.run_id(), &run_id);
+        assert_eq!(context.workflow_id(), &workflow_id);
         let event = ActivityEvent {
-            workflow_id: WorkflowId::new(Uuid::from_u128(1)),
-            run_id: RunId::new(Uuid::from_u128(0x11)),
+            workflow_id,
+            run_id,
             activity_id: ActivityId::from_sequence_position(1),
             attempt: 0,
             agent_id: Uuid::from_u128(2),
@@ -332,8 +333,8 @@ mod tests {
         let run_id = RunId::new(Uuid::from_u128(0x11));
         let (sender, mut drain) = super::mpsc::unbounded_channel();
         let (context, _cancellation) = ActivityContext::for_workflow_with_events(
-            Some(WorkflowId::new(Uuid::from_u128(1))),
-            Some(run_id.clone()),
+            WorkflowId::new(Uuid::from_u128(1)),
+            run_id.clone(),
             ActivityId::from_sequence_position(1),
             0,
             None,
@@ -341,7 +342,7 @@ mod tests {
             Some(sender),
         );
         // A dispatched context exposes the run its events must be stamped with.
-        assert_eq!(context.run_id(), Some(&run_id));
+        assert_eq!(context.run_id(), &run_id);
         let event = ActivityEvent {
             workflow_id: WorkflowId::new(Uuid::from_u128(1)),
             run_id: run_id.clone(),
@@ -370,7 +371,7 @@ mod tests {
         let run_id = aion_core::RunId::new_v4();
         let (context, cancellation) = ActivityContext::for_task(
             aion_core::WorkflowId::new_v4(),
-            Some(run_id.clone()),
+            run_id.clone(),
             ActivityId::from_sequence_position(7),
             3,
             String::from("effect-key"),
@@ -379,14 +380,19 @@ mod tests {
 
         assert_eq!(context.idempotency_key(), Some("effect-key"));
         assert_eq!(context.attempt(), 3);
-        assert_eq!(context.run_id(), Some(&run_id));
+        assert_eq!(context.run_id(), &run_id);
         drop(cancellation);
     }
 
     #[tokio::test]
     async fn context_exposes_identity_attempt_and_cancellation_signal() {
         let activity_id = ActivityId::from_sequence_position(42);
-        let (context, cancellation) = ActivityContext::new(activity_id.clone(), 3);
+        let (context, cancellation) = ActivityContext::new(
+            aion_core::WorkflowId::new_v4(),
+            aion_core::RunId::new_v4(),
+            activity_id.clone(),
+            3,
+        );
 
         assert_eq!(context.activity_id(), &activity_id);
         assert_eq!(context.attempt(), 3);

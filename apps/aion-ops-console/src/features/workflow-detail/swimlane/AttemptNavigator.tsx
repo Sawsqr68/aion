@@ -22,6 +22,7 @@ import {
   type AttemptStatus,
   attemptRowKey,
   deriveAttemptNavigator,
+  deriveGenerations,
 } from '../lib/attemptNavigator';
 import type { TimelineEntry } from '../types';
 
@@ -59,21 +60,37 @@ export function AttemptNavigator({ workflowId, namespace, timeline }: AttemptNav
   const { attempts: liveAttempts, refresh } = useActivityAttempts({ workflowId, namespace });
   // Which rows have a RETAINED durable transcript (lane #229 enumeration). Rows
   // stay timeline-derived; this is a badge source only, never a row source.
-  const retained = useRetainedStreams({ workflowId, namespace });
+  // Enumerate EVERY generation the loaded window names, not just the newest:
+  // the rows span the whole window, so badging only one generation would leave
+  // the others' retained transcripts unbadged and read as "nothing retained".
+  const runIds = useMemo(
+    () => deriveGenerations(timeline).map((generation) => generation.runId),
+    [timeline]
+  );
+  const retained = useRetainedStreams({ workflowId, runIds, namespace });
   const retainedKeys = useMemo(
     () =>
-      new Set(retained.streams.map((stream) => attemptRowKey(stream.activityId, stream.attempt))),
+      new Set(
+        retained.streams.map((stream) =>
+          attemptRowKey(stream.runId, stream.activityId, stream.attempt)
+        )
+      ),
     [retained.streams]
   );
 
   const selectedRow = resolveSelectedRow(rows, pickedKey);
   const target: TranscriptTarget | null = useMemo(() => {
-    if (selectedRow === null || namespace === null) {
+    // A row whose generation the loaded window cannot name is NOT addressable:
+    // the transcript keyspace is `(workflow, run, activity, attempt)` and the
+    // server refuses a run-less read. Falling back to another generation's run
+    // would show one attempt's transcript under another's label.
+    if (selectedRow === null || selectedRow.runId === null || namespace === null) {
       return null;
     }
     return {
       namespace,
       workflowId,
+      runId: selectedRow.runId,
       activityId: Number(selectedRow.activityId),
       attempt: selectedRow.attempt,
     };
@@ -88,7 +105,8 @@ export function AttemptNavigator({ workflowId, namespace, timeline }: AttemptNav
     }
     return (
       liveAttempts.find(
-        (attempt) => attemptRowKey(attempt.activityId, attempt.attempt) === selectedRow.key
+        (attempt) =>
+          attemptRowKey(attempt.runId, attempt.activityId, attempt.attempt) === selectedRow.key
       ) ?? null
     );
   }, [liveAttempts, selectedRow]);
@@ -123,7 +141,14 @@ export function AttemptNavigator({ workflowId, namespace, timeline }: AttemptNav
         rows={rows}
         selectedKey={selectedRow?.key ?? null}
       />
-      <TranscriptPanel target={target} />
+      {selectedRow !== null && selectedRow.runId === null ? (
+        <EmptyState
+          description="No WorkflowStarted for this attempt is inside the loaded history window, so its generation cannot be named — and a transcript stream is addressed by (workflow, run, activity, attempt). Load earlier history to reach it."
+          title="Generation unknown for this attempt"
+        />
+      ) : (
+        <TranscriptPanel target={target} />
+      )}
       {intervention === null ? null : <InterventionComposer controller={intervention} />}
     </section>
   );
@@ -181,6 +206,15 @@ export function AttemptRowList({ rows, selectedKey, onSelect, retainedKeys }: At
             {row.isLegacy
               ? `activity ${row.activityId} · legacy attempt`
               : `activity ${row.activityId} · attempt ${row.attempt}`}
+            {row.runId === null ? (
+              <span
+                className="text-[10px] text-warning"
+                data-testid={`unresolved-run:${row.key}`}
+                title="No WorkflowStarted for this attempt is inside the loaded history window, so its generation cannot be named — load earlier history to address its transcript."
+              >
+                · run unknown
+              </span>
+            ) : null}
             {retainedKeys.has(row.key) ? (
               <span
                 className="text-[10px] text-muted-foreground"

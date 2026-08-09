@@ -7,10 +7,12 @@ import { TranscriptReadClient } from './transcript-read';
 
 const namespace = 'default';
 const workflowId = '00000000-0000-0000-0000-000000000001';
+const runId = '00000000-0000-0000-0000-0000000000a1';
 
 const target = {
   namespace,
   workflowId,
+  runId,
   activityId: 3,
   attempt: 1,
 };
@@ -18,6 +20,7 @@ const target = {
 function retainedEvent(storeSeq: number): ActivityEvent {
   return {
     workflow_id: workflowId,
+    run_id: runId,
     activity_id: 3,
     attempt: 1,
     agent_id: '00000000-0000-0000-0000-0000000000aa',
@@ -73,6 +76,7 @@ test('fetchTranscript posts the stream identity with scoped headers and returns 
   await expect(calls[0]?.json()).resolves.toEqual({
     namespace,
     workflow_id: workflowId,
+    run_id: runId,
     activity_id: 3,
     attempt: 1,
   });
@@ -87,6 +91,7 @@ test('fetchTranscript carries from_seq when resuming', async () => {
   await expect(calls[0]?.json()).resolves.toEqual({
     namespace,
     workflow_id: workflowId,
+    run_id: runId,
     activity_id: 3,
     attempt: 1,
     from_seq: 3,
@@ -105,6 +110,7 @@ test('fetchTranscript carries limit and tail fields and decodes a truncated curs
   await expect(calls[0]?.json()).resolves.toEqual({
     namespace,
     workflow_id: workflowId,
+    run_id: runId,
     activity_id: 3,
     attempt: 1,
     limit: 5,
@@ -122,20 +128,41 @@ test('fetchTranscript surfaces a malformed envelope as an ApiError', async () =>
 
 test('listStreams normalizes retained stream heads', async () => {
   const calls: Request[] = [];
-  const client = capturingClient({ streams: [{ activity_id: 3, attempt: 0, head: 5 }] }, calls);
+  const client = capturingClient(
+    { streams: [{ run_id: runId, activity_id: 3, attempt: 0, head: 5 }] },
+    calls
+  );
 
-  const streams = await client.listStreams(namespace, workflowId);
+  const streams = await client.listStreams(namespace, workflowId, runId);
 
-  expect(streams).toEqual([{ activityId: 3, attempt: 0, head: 5 }]);
+  expect(streams).toEqual([{ runId, activityId: 3, attempt: 0, head: 5 }]);
   expect(calls[0]?.url).toBe('https://aion.example/workflows/transcripts');
-  await expect(calls[0]?.json()).resolves.toEqual({ namespace, workflow_id: workflowId });
+  // The enumeration is RUN-scoped on the wire: the server refuses a body that
+  // names only the workflow, because a chain's generations collide pairwise.
+  await expect(calls[0]?.json()).resolves.toEqual({
+    namespace,
+    workflow_id: workflowId,
+    run_id: runId,
+  });
 });
 
 test('listStreams throws on a malformed stream row (truth-first, never skipped)', async () => {
   const calls: Request[] = [];
-  const client = capturingClient({ streams: [{ activity_id: 'three', attempt: 0 }] }, calls);
+  const client = capturingClient(
+    { streams: [{ run_id: runId, activity_id: 'three', attempt: 0 }] },
+    calls
+  );
 
-  await expect(client.listStreams(namespace, workflowId)).rejects.toThrow(ApiError);
+  await expect(client.listStreams(namespace, workflowId, runId)).rejects.toThrow(ApiError);
+});
+
+test('listStreams throws on a stream row with no run (the row is not addressable)', async () => {
+  const calls: Request[] = [];
+  const client = capturingClient({ streams: [{ activity_id: 3, attempt: 0, head: 5 }] }, calls);
+
+  // A row that does not name its generation cannot be turned into a transcript
+  // target, so accepting it would badge a row the console could never open.
+  await expect(client.listStreams(namespace, workflowId, runId)).rejects.toThrow('run_id');
 });
 
 test('a non-OK transcript read throws the server wire error', async () => {

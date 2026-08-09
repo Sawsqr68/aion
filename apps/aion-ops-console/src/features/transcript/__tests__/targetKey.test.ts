@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { TranscriptTarget } from '@/lib/api/transcript-stream';
-import type { ActivityId, Namespace, WorkflowId } from '@/types';
+import type { ActivityId, Namespace, RunId, WorkflowId } from '@/types';
 import { parseTargetKey, targetKey } from '../hooks/useTranscript';
 
 /**
@@ -18,6 +18,7 @@ describe('transcript target key round-trip', () => {
     const target: TranscriptTarget = {
       namespace: 'default' as Namespace,
       workflowId: 'wf-0192' as WorkflowId,
+      runId: '00000000-0000-0000-0000-0000000000a1' as RunId,
       activityId: 7 as ActivityId,
       attempt: 2,
     };
@@ -29,9 +30,31 @@ describe('transcript target key round-trip', () => {
     const target: TranscriptTarget = {
       namespace: 'team alpha' as Namespace,
       workflowId: 'order saga 9' as WorkflowId,
+      runId: '00000000-0000-0000-0000-0000000000a2' as RunId,
       activityId: 3 as ActivityId,
       attempt: 1,
     };
     expect(parseTargetKey(targetKey(target))).toEqual(target);
+  });
+
+  test('two generations of one chain produce DIFFERENT keys', () => {
+    // The whole point of the run axis: everything but the run is identical, so a
+    // run-less key would fuse the two sessions onto one socket and one buffer.
+    const base = {
+      namespace: 'default' as Namespace,
+      workflowId: 'wf-0192' as WorkflowId,
+      activityId: 0 as ActivityId,
+      attempt: 1,
+    };
+    const first: TranscriptTarget = {
+      ...base,
+      runId: '00000000-0000-0000-0000-0000000000a1' as RunId,
+    };
+    const second: TranscriptTarget = {
+      ...base,
+      runId: '00000000-0000-0000-0000-0000000000a2' as RunId,
+    };
+    expect(targetKey(first)).not.toBe(targetKey(second));
+    expect(parseTargetKey(targetKey(second))).toEqual(second);
   });
 });

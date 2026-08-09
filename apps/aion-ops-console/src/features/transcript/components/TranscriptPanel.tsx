@@ -10,8 +10,8 @@ import { TranscriptList } from './TranscriptList';
 /**
  * Live agent-transcript panel (NOI-7).
  *
- * Subscribes to the transcript WebSocket for one `(workflow, activity, attempt)`
- * target and renders the live {@link TranscriptEntry} stream in real time. REAL
+ * Subscribes to the transcript WebSocket for one
+ * `(workflow, run, activity, attempt)` target and renders the live {@link TranscriptEntry} stream in real time. REAL
  * DATA ONLY, socket-first, NO polling. The durable `O`-keyspace tail arrives first
  * and live deltas splice on with no gap/dup (the hook resumes by `store_seq`).
  * A degraded socket is shown as visible state, never swallowed.

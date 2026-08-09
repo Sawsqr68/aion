@@ -84,7 +84,16 @@ export function AssistantSessionView({ namespace, workflowId }: AssistantSession
     if (attempt === null || namespace === null) {
       return null;
     }
-    return { namespace, workflowId, activityId: attempt.activityId, attempt: attempt.attempt };
+    // The run comes from the live-attempt enumeration: the generation the owning
+    // worker is actually running, never inferred from the workflow id (which one
+    // continue-as-new chain shares across generations).
+    return {
+      namespace,
+      workflowId,
+      runId: attempt.runId,
+      activityId: attempt.activityId,
+      attempt: attempt.attempt,
+    };
   }, [attempt, namespace, workflowId]);
 
   // Keep the finished round's transcript on screen while the workflow awaits
@@ -149,6 +158,7 @@ export function AssistantSessionView({ namespace, workflowId }: AssistantSession
     void intervene
       .submit({
         workflowId,
+        runId: attempt.runId,
         activityId: attempt.activityId,
         attempt: attempt.attempt,
         kind: { kind: 'Cancel', reason: 'operator cancelled from assistant panel' },
@@ -164,6 +174,7 @@ export function AssistantSessionView({ namespace, workflowId }: AssistantSession
       void intervene
         .submit({
           workflowId,
+          runId: attempt.runId,
           activityId: attempt.activityId,
           attempt: attempt.attempt,
           kind: { kind: 'InjectMessage', text: message, priority: { priority: 'Interrupt' } },

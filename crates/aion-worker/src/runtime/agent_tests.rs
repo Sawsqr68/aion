@@ -91,10 +91,21 @@ impl AgentSession for FakeSession {
     }
 }
 
+/// The ONE run every fixture in this module shares.
+///
+/// A dispatch is a single generation: the spec the harness is started with, the
+/// events it emits, and any command steered into it all name the same run. Three
+/// independently minted runs would let a stamper that dropped or crossed the run
+/// axis pass these tests unnoticed — the fixture could not see the very defect
+/// the run axis exists to catch.
+fn run() -> RunId {
+    RunId::new(uuid::Uuid::from_u128(0x11))
+}
+
 fn message_event(text: &str) -> ActivityEvent {
     ActivityEvent {
         workflow_id: WorkflowId::new(uuid::Uuid::nil()),
-        run_id: RunId::new_v4(),
+        run_id: run(),
         activity_id: ActivityId::from_sequence_position(2),
         attempt: 1,
         agent_id: uuid::Uuid::nil(),
@@ -113,7 +124,7 @@ fn message_event(text: &str) -> ActivityEvent {
 fn spec() -> AgentRunSpec {
     AgentRunSpec::new(
         WorkflowId::new(uuid::Uuid::nil()),
-        RunId::new_v4(),
+        run(),
         ActivityId::from_sequence_position(2),
         1,
         "agent-activity",
@@ -124,7 +135,7 @@ fn spec() -> AgentRunSpec {
 fn inject_command() -> InterventionCommand {
     InterventionCommand {
         workflow_id: WorkflowId::new(uuid::Uuid::nil()),
-        run_id: RunId::new_v4(),
+        run_id: run(),
         activity_id: ActivityId::from_sequence_position(2),
         attempt: 1,
         issued_by: Some("operator".to_owned()),

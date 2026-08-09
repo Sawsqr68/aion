@@ -7,6 +7,7 @@ import { createAionTranscriptStreamManager, type TranscriptTarget } from './tran
 const target: TranscriptTarget = {
   namespace: 'default',
   workflowId: '00000000-0000-0000-0000-000000000001',
+  runId: '00000000-0000-0000-0000-0000000000a1',
   activityId: 3,
   attempt: 1,
 };
@@ -14,6 +15,7 @@ const target: TranscriptTarget = {
 function activityEvent(storeSeq: number | null, ephemeral: boolean): ActivityEvent {
   return {
     workflow_id: target.workflowId,
+    run_id: target.runId,
     activity_id: target.activityId,
     attempt: target.attempt,
     agent_id: '00000000-0000-0000-0000-0000000000aa',
@@ -51,6 +53,7 @@ test('subscribe sends a transcript frame WITHOUT after_seq for a fresh subscribe
       transcript: {
         namespace: target.namespace,
         workflow_id: target.workflowId,
+        run_id: target.runId,
         activity_id: target.activityId,
         attempt: target.attempt,
       },

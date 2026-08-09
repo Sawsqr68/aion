@@ -1,4 +1,4 @@
-import type { ActivityEvent, ActivityId, Namespace, WorkflowId } from '@/types';
+import type { ActivityEvent, ActivityId, Namespace, RunId, WorkflowId } from '@/types';
 
 import {
   browserWebSocketConstructor,
@@ -62,15 +62,26 @@ const TRANSCRIPT_REQUEST = {
   transcript: 'transcript',
   namespace: 'namespace',
   workflowId: 'workflow_id',
+  runId: 'run_id',
   activityId: 'activity_id',
   attempt: 'attempt',
   afterSeq: 'after_seq',
 } as const;
 
-/** The `(namespace, workflow, activity, attempt)` target of one transcript socket. */
+/**
+ * The `(namespace, workflow, run, activity, attempt)` target of one transcript
+ * socket.
+ *
+ * `runId` is REQUIRED — the server answers a run-less transcript subscription
+ * with `invalid_input`. Activity ordinals and attempt numbers restart in every
+ * generation of a continue-as-new chain, so the remaining axes do not name a
+ * stream: a run-less subscribe would tail whichever generation happened to own
+ * the coordinate.
+ */
 export type TranscriptTarget = {
   namespace: Namespace;
   workflowId: WorkflowId;
+  runId: RunId;
   activityId: ActivityId;
   attempt: number;
 };
@@ -253,6 +264,7 @@ export class AionTranscriptStreamManager {
     const transcript: JsonRecord = {
       [TRANSCRIPT_REQUEST.namespace]: this.target.namespace,
       [TRANSCRIPT_REQUEST.workflowId]: this.target.workflowId,
+      [TRANSCRIPT_REQUEST.runId]: this.target.runId,
       [TRANSCRIPT_REQUEST.activityId]: this.target.activityId,
       [TRANSCRIPT_REQUEST.attempt]: this.target.attempt,
     };

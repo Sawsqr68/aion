@@ -265,11 +265,16 @@ mod tests {
     use super::{FailureMode, ShellAction, trim_trailing_newline};
     use crate::activity::Classification;
     use crate::context::ActivityContext;
-    use aion_core::ActivityId;
+    use aion_core::{ActivityId, RunId, WorkflowId};
     use std::collections::BTreeMap;
 
     fn context() -> (ActivityContext, crate::context::ActivityCancellationHandle) {
-        ActivityContext::new(ActivityId::from_sequence_position(1), 1)
+        ActivityContext::new(
+            WorkflowId::new_v4(),
+            RunId::new_v4(),
+            ActivityId::from_sequence_position(1),
+            1,
+        )
     }
 
     fn arguments(pairs: &[(&str, serde_json::Value)]) -> BTreeMap<String, serde_json::Value> {

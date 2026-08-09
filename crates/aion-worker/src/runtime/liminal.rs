@@ -1104,7 +1104,10 @@ impl PlainDispatchContext {
         let task = ActivityTask {
             workflow_id: request.workflow_id.clone(),
             activity_id: activity_id.clone(),
-            run_id: request.run_id.clone(),
+            // The VALIDATED run, not the raw optional wire field: the envelope
+            // gate already refused a run-less dispatch, so the task and the
+            // context below name one and the same generation.
+            run_id: run_id.clone(),
             activity_type: request.activity_type.clone(),
             attempt,
             completion_token: request.completion_token.clone(),
@@ -1121,8 +1124,8 @@ impl PlainDispatchContext {
             self.drain_backoff,
         ));
         let (context, cancellation) = ActivityContext::for_workflow_with_events(
-            Some(request.workflow_id.clone()),
-            Some(run_id.clone()),
+            request.workflow_id.clone(),
+            run_id.clone(),
             activity_id,
             attempt,
             Some(request.idempotency_key.clone()),

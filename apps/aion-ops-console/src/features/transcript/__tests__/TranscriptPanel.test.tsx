@@ -11,6 +11,7 @@ import type { TranscriptEntry } from '../hooks/useTranscript';
 function event(kind: ActivityEvent['kind'], storeSeq: number | null): ActivityEvent {
   return {
     workflow_id: '00000000-0000-0000-0000-000000000001',
+    run_id: '00000000-0000-0000-0000-0000000000a1',
     activity_id: 3,
     attempt: 1,
     agent_id: '00000000-0000-0000-0000-0000000000aa',
@@ -205,9 +206,24 @@ describe('TranscriptEventRow', () => {
 describe('sortAttempts', () => {
   test('sorts ascending by activity then attempt', () => {
     const rows: AttemptCapabilities[] = [
-      { activityId: 4, attempt: 2, capabilities: { supported: [] } },
-      { activityId: 3, attempt: 2, capabilities: { supported: [] } },
-      { activityId: 3, attempt: 1, capabilities: { supported: [] } },
+      {
+        runId: '00000000-0000-0000-0000-0000000000a1',
+        activityId: 4,
+        attempt: 2,
+        capabilities: { supported: [] },
+      },
+      {
+        runId: '00000000-0000-0000-0000-0000000000a1',
+        activityId: 3,
+        attempt: 2,
+        capabilities: { supported: [] },
+      },
+      {
+        runId: '00000000-0000-0000-0000-0000000000a1',
+        activityId: 3,
+        attempt: 1,
+        capabilities: { supported: [] },
+      },
     ];
     expect(sortAttempts(rows).map((row) => `${row.activityId}:${row.attempt}`)).toEqual([
       '3:1',

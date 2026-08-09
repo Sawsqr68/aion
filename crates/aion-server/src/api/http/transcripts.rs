@@ -114,7 +114,7 @@ pub(crate) struct TranscriptStreamEntry {
 /// `(activity, attempt)`. Empty for a workflow with no retained transcript.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct TranscriptStreamsResponse {
-    /// The workflow's retained transcript streams.
+    /// The RUN's retained transcript streams.
     pub streams: Vec<TranscriptStreamEntry>,
 }
 
@@ -200,10 +200,10 @@ fn transcript_head(records: &[ActivityRecord]) -> Result<u64, HttpWireError> {
 
 /// `POST /workflows/transcripts`.
 ///
-/// Namespace-gates the caller (the same per-workflow gate), then enumerates
-/// the workflow's retained transcript streams from the durable `O` keyspace.
-/// A workflow with no retained transcript answers `200 { "streams": [] }` —
-/// old runs simply have none.
+/// Namespace-gates the caller (the same per-workflow gate), then enumerates the
+/// addressed RUN's retained transcript streams from the durable `O` keyspace —
+/// one generation, never the whole continue-as-new chain. A run with no retained
+/// transcript answers `200 { "streams": [] }` — old runs simply have none.
 pub(crate) async fn list_transcript_streams(
     State(state): State<ServerState>,
     HttpCaller(caller): HttpCaller,

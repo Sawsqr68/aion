@@ -13,9 +13,11 @@ import {
 } from '../components/InterventionControls';
 
 const workflowId = '00000000-0000-0000-0000-000000000001';
+const RUN_ID = '00000000-0000-0000-0000-0000000000a1';
 
 function attempt(primitives: InterventionPrimitive['primitive'][]): AttemptCapabilities {
   return {
+    runId: RUN_ID,
     activityId: 3,
     attempt: 1,
     capabilities: { supported: primitives.map((primitive) => ({ primitive })) },
@@ -208,7 +210,7 @@ describe('injectKindFor — composer priority maps onto the wire InjectPriority 
 });
 
 describe('useInterventionController — per-target draft key', () => {
-  test('the draft key is scoped to (workflow, activity, attempt) so drafts never leak', () => {
+  test('the draft key is scoped to (workflow, run, activity, attempt) so drafts never leak', () => {
     const observed: { draftKey: string | null } = { draftKey: null };
     function Probe() {
       const controller = useInterventionController({
@@ -220,6 +222,9 @@ describe('useInterventionController — per-target draft key', () => {
       return null;
     }
     renderToStaticMarkup(<Probe />);
-    expect(observed.draftKey).toBe(`intervene:${workflowId}:3:1`);
+    // The run is IN the key: two generations of one continue-as-new chain share
+    // `(workflow, activity, attempt)`, so a run-less key would hand generation
+    // two the half-typed message the operator was composing for generation one.
+    expect(observed.draftKey).toBe(`intervene:${workflowId}:${RUN_ID}:3:1`);
   });
 });

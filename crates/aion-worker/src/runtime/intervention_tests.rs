@@ -163,8 +163,9 @@ fn live_session(
     let (event_tx, _event_rx) = mpsc::unbounded_channel();
     let (control_tx, control_rx) = mpsc::unbounded_channel();
     let guard = registry.register(key(attempt), control_tx, capabilities);
+    let spec = spec(attempt);
     let driver = tokio::spawn(async move {
-        let _ = spawn_agent(&harness, spec(), event_tx, Some(control_rx)).await;
+        let _ = spawn_agent(&harness, spec, event_tx, Some(control_rx)).await;
     });
     LiveSession {
         applied,
@@ -174,12 +175,17 @@ fn live_session(
     }
 }
 
-fn spec() -> AgentRunSpec {
+/// The spec the driver is started with names the SAME `(workflow, run, activity,
+/// attempt)` as the [`key`] the session is registered under — one dispatch, one
+/// identity. A spec minting its own run would make a session whose registered key
+/// and whose running agent claimed different generations: a contradiction the
+/// routing assertions could not see.
+fn spec(attempt: u32) -> AgentRunSpec {
     AgentRunSpec::new(
         WorkflowId::new(Uuid::nil()),
-        RunId::new_v4(),
+        run(),
         ActivityId::from_sequence_position(3),
-        1,
+        attempt,
         "agent-activity",
         Payload::new(ContentType::Json, b"\"in\"".to_vec()),
     )
@@ -227,6 +233,43 @@ async fn a_command_for_an_unknown_attempt_is_a_stale_target_no_op() {
 
     let outcome = registry.deliver(inject(2)).await;
     assert!(matches!(outcome, InterventionOutcome::StaleTarget { .. }));
+
+    session.shutdown().await;
+}
+
+/// The run axis of the worker's own back-index: a command naming ANOTHER
+/// generation of the same continue-as-new chain — identical workflow, activity
+/// and attempt — resolves nothing and is a stale-target no-op, never delivered to
+/// the live session.
+///
+/// The positive control in the same test proves the refusal is attributable to the
+/// run axis ALONE: the byte-identical command carrying the registered run IS
+/// delivered. Without it, a registry that refused everything would pass.
+#[tokio::test]
+async fn a_command_for_another_generation_is_a_stale_target_no_op() {
+    let registry = ControlRegistry::new();
+    let session = live_session(&registry, 1, caps_inject());
+
+    // Same workflow, same activity, same attempt — a DIFFERENT generation.
+    let mut other_generation = inject(1);
+    other_generation.run_id = RunId::new(Uuid::from_u128(0x22));
+    assert_ne!(
+        other_generation.run_id,
+        run(),
+        "the runs must actually differ"
+    );
+
+    let outcome = registry.deliver(other_generation).await;
+    assert!(matches!(outcome, InterventionOutcome::StaleTarget { .. }));
+    assert!(
+        session.applied.lock().unwrap().is_empty(),
+        "a command for another generation must never reach the live session"
+    );
+
+    // Positive control: the SAME command on the registered run is delivered.
+    let control = registry.deliver(inject(1)).await;
+    assert_eq!(control, InterventionOutcome::Applied);
+    assert_eq!(session.applied.lock().unwrap().len(), 1);
 
     session.shutdown().await;
 }

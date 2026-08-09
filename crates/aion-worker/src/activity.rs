@@ -512,14 +512,21 @@ mod tests {
                     })
                 })
             })?;
-        let task = proto_task("double", &TestInput { value: 21 })?;
-        let (context, cancellation) = crate::ActivityContext::for_workflow(
-            Some(WorkflowId::new_v4()),
-            Some(aion_core::RunId::new_v4()),
-            ActivityId::from_sequence_position(99),
-            1,
-            None,
-        );
+        // One dispatch, one identity: the wire task and the handler context name
+        // the SAME workflow, run and activity. Independently minted ids would
+        // make the fixture blind to a stamper that dropped or crossed them.
+        let workflow_id = WorkflowId::new_v4();
+        let run_id = aion_core::RunId::new_v4();
+        let activity_id = ActivityId::from_sequence_position(99);
+        let task = proto_task(
+            "double",
+            &TestInput { value: 21 },
+            &workflow_id,
+            &run_id,
+            &activity_id,
+        )?;
+        let (context, cancellation) =
+            crate::ActivityContext::for_workflow(workflow_id, run_id, activity_id, 1, None);
         drop(cancellation);
 
         let outcome = registry.dispatch(task.try_into()?, context).await?;
@@ -568,11 +575,14 @@ mod tests {
     fn proto_task(
         activity_type: &str,
         input: &TestInput,
+        workflow_id: &WorkflowId,
+        run_id: &aion_core::RunId,
+        activity_id: &ActivityId,
     ) -> Result<ProtoActivityTask, WorkerError> {
         Ok(ProtoActivityTask {
-            workflow_id: Some(ProtoWorkflowId::from(WorkflowId::new_v4())),
-            activity_id: Some(ProtoActivityId::from(ActivityId::from_sequence_position(1))),
-            run_id: Some(aion_proto::ProtoRunId::from(aion_core::RunId::new_v4())),
+            workflow_id: Some(ProtoWorkflowId::from(workflow_id.clone())),
+            activity_id: Some(ProtoActivityId::from(activity_id.clone())),
+            run_id: Some(aion_proto::ProtoRunId::from(run_id.clone())),
             activity_type: activity_type.to_owned(),
             input: Some(ProtoPayload::from(encode_payload(&input)?)),
             attempt: 1,

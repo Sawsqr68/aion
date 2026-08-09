@@ -1,4 +1,4 @@
-import type { InterventionCapabilities, InterventionOutcome, Namespace } from '@/types';
+import type { InterventionCapabilities, InterventionOutcome, Namespace, RunId } from '@/types';
 
 import { ApiError } from './api-error';
 import type { AttemptCapabilities, Capabilities, WhoAmIResponse } from './client-types';
@@ -45,22 +45,32 @@ export function normalizeAttempts(response: AttemptsResponseBody): AttemptCapabi
   return attempts;
 }
 
+/**
+ * Read one attempt row. `run_id` is required: a row without it names a
+ * coordinate rather than an attempt, and every downstream use (the transcript
+ * target, the intervention body) would have to guess the generation. A row
+ * missing any axis is dropped rather than half-read — an un-addressable row
+ * must never reach a control.
+ */
 function readAttemptRow(row: unknown): AttemptCapabilities | null {
   if (typeof row !== 'object' || row === null) {
     return null;
   }
   const record = row as Record<string, unknown>;
+  const runId = record.run_id;
   const activityId = record.activity_id;
   const attempt = record.attempt;
   const capabilities = record.capabilities;
   if (
+    typeof runId !== 'string' ||
+    runId === '' ||
     typeof activityId !== 'number' ||
     typeof attempt !== 'number' ||
     !isCapabilities(capabilities)
   ) {
     return null;
   }
-  return { activityId, attempt, capabilities };
+  return { runId: runId as RunId, activityId, attempt, capabilities };
 }
 
 function isCapabilities(value: unknown): value is InterventionCapabilities {

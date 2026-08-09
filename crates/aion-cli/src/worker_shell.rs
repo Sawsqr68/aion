@@ -571,8 +571,12 @@ step shout_second after greet_first
         let descriptors = declared_descriptors(&document, &manifest)?;
         let worker = build_worker(manifest.clone(), descriptors, "http://127.0.0.1:50051")?;
         assert_eq!(worker.activity_types(), &["greet"]);
-        let (context, _cancellation) =
-            ActivityContext::new(ActivityId::from_sequence_position(1), 1);
+        let (context, _cancellation) = ActivityContext::new(
+            aion_core::WorkflowId::new_v4(),
+            aion_core::RunId::new_v4(),
+            ActivityId::from_sequence_position(1),
+            1,
+        );
         let text = execute(&manifest.action[0], &json!({"name": "Ada"}), &context).await?;
         assert_eq!(text, json!("Ada"));
 
@@ -606,8 +610,12 @@ step shout_second after greet_first
             env: BTreeMap::new(),
             result: ResultEncoding::Text,
         };
-        let (context, cancellation) =
-            ActivityContext::new(ActivityId::from_sequence_position(2), 1);
+        let (context, cancellation) = ActivityContext::new(
+            aion_core::WorkflowId::new_v4(),
+            aion_core::RunId::new_v4(),
+            ActivityId::from_sequence_position(2),
+            1,
+        );
         let execution = tokio::spawn(async move { execute(&action, &Value::Null, &context).await });
 
         wait_for_pid_file(&parent_file).await?;

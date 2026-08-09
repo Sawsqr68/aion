@@ -263,8 +263,12 @@ impl DeclaredCommandDispatcher {
             // rather than hiding it behind a generic dispatch failure.
             format!("terminal:declared command failed to parse at dispatch: {error}")
         })?;
-        let (context, cancellation) =
-            aion_worker::ActivityContext::new(request.activity_id.clone(), request.attempt);
+        let (context, cancellation) = aion_worker::ActivityContext::new(
+            request.workflow_id.clone(),
+            request.run_id.clone(),
+            request.activity_id.clone(),
+            request.attempt,
+        );
 
         tracing::info!(
             operation = "declared_command_dispatch",

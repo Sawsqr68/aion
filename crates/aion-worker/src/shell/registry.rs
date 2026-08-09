@@ -88,10 +88,16 @@ mod tests {
         activity_type: &str,
         call: &DeclaredArguments,
     ) -> Result<DispatchOutcome, Box<dyn std::error::Error>> {
+        // The task and the context name the SAME dispatch — one workflow, one
+        // run, one activity, one attempt. Two independently minted identities
+        // would be a contradiction the assertions could not see.
+        let workflow_id = WorkflowId::new_v4();
+        let run_id = aion_core::RunId::new_v4();
+        let activity_id = ActivityId::from_sequence_position(1);
         let task = crate::protocol::ActivityTask {
-            workflow_id: WorkflowId::new_v4(),
-            activity_id: ActivityId::from_sequence_position(1),
-            run_id: None,
+            workflow_id: workflow_id.clone(),
+            activity_id: activity_id.clone(),
+            run_id: run_id.clone(),
             activity_type: activity_type.to_owned(),
             attempt: 1,
             completion_token: "declared-command-test".to_owned(),
@@ -100,7 +106,7 @@ mod tests {
             labels: std::collections::BTreeMap::new(),
         };
         let (context, cancellation) =
-            crate::ActivityContext::new(ActivityId::from_sequence_position(1), 1);
+            crate::ActivityContext::new(workflow_id, run_id, activity_id, 1);
         drop(cancellation);
         Ok(registry.dispatch(task, context).await?)
     }

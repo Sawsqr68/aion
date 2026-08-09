@@ -153,6 +153,25 @@ the worker `ActivityContext`, both transcript read surfaces (REST + WS,
 `run_id` required on every request), and the intervention `AttemptKey` /
 worker `SessionKey`. MCP resource URIs must therefore carry the run.
 
+**Operational consequence of drop-don't-migrate, stated plainly.** A
+haematite store written by a build that predates this cut holds `O`-region
+records under the old 29-byte key. After the cut those records are
+**unreachable and unreclaimed**: `decode_observability_stream_key` rejects
+them on length, `observability_list_blocking` skips them, and no reaper,
+purge verb or migration exists. This is not an omission that a follow-up
+lane closes cheaply — haematite 0.8.1 exposes NO stream-deletion primitive
+at all (`append_with_ttl` is the only expiry surface; there is no
+`delete`/`truncate` for a sequence stream), so a purge is impossible from
+this side of the crate boundary and would have to begin as a haematite
+change. Until then the bytes sit in the same database file as the `E`
+event streams, so they cannot be discarded selectively either. The cost is
+bounded and non-growing — nothing writes that shape any more — and the
+records were never replay authority, so nothing DEPENDS on them; what is
+lost is the ability to read a pre-cut transcript back, which is the ruled
+trade. An operator who wants the space back discards the store directory,
+which also discards workflow history and is therefore an explicit choice,
+never a maintenance step.
+
 ## 8. Sequencing
 
 1. **#139 assistant cut first** — lifts the estate-wide worker-rebuild

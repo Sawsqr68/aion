@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AionSocketError, ConnectionStatus } from '@/lib/api';
 import type { AionTranscriptStreamManager, TranscriptTarget } from '@/lib/api/transcript-stream';
 import { createConfiguredTranscriptReader, createConfiguredTranscriptStream } from '@/lib/config';
-import type { ActivityEvent, Namespace, WorkflowId } from '@/types';
+import type { ActivityEvent, Namespace, RunId, WorkflowId } from '@/types';
 
 import { backfillEntries, type TranscriptEntry } from '../lib/entries';
 import { TRANSCRIPT_LIVE_TAIL_SIZE } from '../lib/transcriptFoldBuffer';
@@ -46,9 +46,13 @@ export function targetKey(target: TranscriptTarget | null): string {
   if (target === null) {
     return '';
   }
+  // The run is part of the identity, not decoration: two generations of one
+  // continue-as-new chain share every other axis, so a run-less key would make
+  // the hook treat them as the same session and reuse one socket for both.
   return [
     target.namespace,
     target.workflowId,
+    target.runId,
     String(target.activityId),
     String(target.attempt),
   ].join('\0');
@@ -215,10 +219,11 @@ export function useTranscript(options: UseTranscriptOptions): UseTranscriptResul
 }
 
 export function parseTargetKey(key: string): TranscriptTarget {
-  const [namespace, workflowId, activityId, attempt] = key.split('\0');
+  const [namespace, workflowId, runId, activityId, attempt] = key.split('\0');
   return {
     namespace: (namespace ?? '') as Namespace,
     workflowId: (workflowId ?? '') as WorkflowId,
+    runId: (runId ?? '') as RunId,
     activityId: Number(activityId),
     attempt: Number(attempt),
   };

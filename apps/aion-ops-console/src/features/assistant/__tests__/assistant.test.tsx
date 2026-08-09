@@ -57,8 +57,18 @@ describe('deriveAssistantMode', () => {
 
 test('the chat targets the NEWEST live attempt (rounds are sequential)', () => {
   const attempts: AttemptCapabilities[] = [
-    { activityId: 1, attempt: 1, capabilities: { supported: [] } },
-    { activityId: 3, attempt: 2, capabilities: { supported: [] } },
+    {
+      runId: '00000000-0000-0000-0000-0000000000a1',
+      activityId: 1,
+      attempt: 1,
+      capabilities: { supported: [] },
+    },
+    {
+      runId: '00000000-0000-0000-0000-0000000000a1',
+      activityId: 3,
+      attempt: 2,
+      capabilities: { supported: [] },
+    },
   ];
   expect(selectAssistantAttempt(attempts)?.activityId).toBe(3);
   expect(selectAssistantAttempt([])).toBeNull();

@@ -6,7 +6,7 @@ import type {
   TranscriptStreamListener,
   TranscriptTarget,
 } from '@/lib/api/transcript-stream';
-import type { ActivityEvent, Namespace, WorkflowId } from '@/types';
+import type { ActivityEvent, Namespace, RunId, WorkflowId } from '@/types';
 
 import {
   startTranscriptSession,
@@ -26,6 +26,7 @@ import type { TranscriptEntry } from '../lib/entries';
 const TARGET: TranscriptTarget = {
   namespace: 'default' as Namespace,
   workflowId: '00000000-0000-0000-0000-000000000001' as WorkflowId,
+  runId: '00000000-0000-0000-0000-0000000000a1' as RunId,
   activityId: 3,
   attempt: 1,
 };
@@ -33,6 +34,10 @@ const TARGET: TranscriptTarget = {
 function persistedMessage(storeSeq: number, text: string): ActivityEvent {
   return {
     workflow_id: TARGET.workflowId,
+    // The event names the SAME generation the target does: an event claiming
+    // another run than the stream it is fetched into would be a contradiction
+    // these assertions could not see.
+    run_id: TARGET.runId,
     activity_id: TARGET.activityId,
     attempt: TARGET.attempt,
     agent_id: '00000000-0000-0000-0000-0000000000aa',
