@@ -3,6 +3,9 @@
 This is the practical authoring path. The authored artifact is one or more
 `.awl` files. Read `AWL-REFERENCE.md` for the language contract,
 `WORKERS.md` before declaring actions, and `COMMANDS.md` before deployment.
+For one word of the language at the desk, `aion awl guide WORD` prints its
+meaning, a complete checked example, and the reference section that explains
+it.
 
 ## 1. Start with the contract
 
@@ -72,7 +75,7 @@ arguments:
 inspect(repo: request.repo) -> report
 ```
 
-Read `WORKERS.md` before promising an implementation. Four things can serve a
+Read `WORKERS.md` before promising an implementation. Five things can serve a
 declared action, and choosing between them is an authoring decision:
 
 1. **The document itself**, with a declarative `run "…"` body — the server
@@ -93,7 +96,14 @@ declared action, and choosing between them is an authoring decision:
    is no sandbox.** Never propose one for work the operator has not agreed can
    run with the server's full privileges.
 
-2. **An agent harness**, with the `agent` marker — the action's one `String`
+2. **A worker document** — a second `.awl` file whose opening declaration is
+   `worker <queue>`, carrying a command body on every action, served by
+   `aion worker awl WORKER_FILE.awl`. The commands run on the WORKER's host,
+   not the server's, and the `run text` / `run json` capture selectors are
+   available there (see `AWL-REFERENCE.md` §16 and
+   `docs/workers/AWL-WORKER-DOCUMENTS.md`).
+
+3. **An agent harness**, with the `agent` marker — the action's one `String`
    input is a prompt and its `String` output is the reply:
 
    ```awl
@@ -105,15 +115,15 @@ declared action, and choosing between them is an authoring decision:
    `aion worker agent FILE.awl` serves it without anyone writing a crate.
    `agent` and a `run` body are mutually exclusive.
 
-3. **`aion worker shell`**, for host commands wired by a strict manifest.
+4. **`aion worker shell`**, for host commands wired by a strict manifest.
 
-4. **A real worker process** — `aion awl scaffold FILE.awl --out ./workers`
+5. **A real worker process** — `aion awl scaffold FILE.awl --out ./workers`
    generates a compiling Rust crate per `worker` block, with every advertised
    schema taken from the compiled contract rather than re-derived.
 
 An action with no body and no marker is a requirement on an out-of-band worker.
-There is no AWL worker file with arbitrary bodies; `run` commands are the only
-bodies the language admits.
+`run` commands are the only bodies the language admits — a worker document
+gives every one of its actions a command body, never arbitrary code.
 
 The one other declaration-level marker is `advisory`: an advisory action never
 faults its calling step and is not a completion dependency, so it cannot bind a

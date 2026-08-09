@@ -39,6 +39,24 @@ This rewrites the file in place with the canonical printer. There is no
 `--check` mode. A parse error leaves the file untouched. Inspect the diff and
 run `aion awl check FILE.awl` again.
 
+### The language guide
+
+```sh
+aion awl guide
+aion awl guide wait
+aion awl guide --reference
+aion awl guide --json
+```
+
+With a word, `guide` prints its meaning, a complete example document that
+passes `aion awl check`, and the reference section that explains it. With no
+argument it prints every word of the language grouped by reference section,
+above the paths of the documents an author needs. `--reference` prints the
+full `AWL-REFERENCE.md` embedded in the binary, so no repository checkout is
+required; `--json` emits the glossary table. Every sentence comes from the
+same table the AWL language server hovers and the ops console's guide overlay
+renders, so those surfaces cannot disagree.
+
 ### Derive schema
 
 ```sh
@@ -116,9 +134,13 @@ or orphans runs pinned to it. Do not describe archived source as part of
 package identity. A declared `run` command IS identity-bound, but through the
 worker contract, not through the archived document.
 
-The ops console deploy surface uses the same direct compiler seam. Prefer the
-console when working with an operator there. Never start, stop, or restart a
-server to make deployment available.
+The ops console's authoring studio uses the same direct compiler seam. Its
+**Ship & Run** panel takes the open document through check, compile, package,
+deploy, and start with a JSON object input, then watches the run; its deployed
+pane lists deployed versions and shows the authored AWL source the archive
+carries alongside the version's committed start input schema and signal
+contracts. Prefer the console when working with an operator there. Never
+start, stop, or restart a server to make deployment available.
 
 ## Compile, deploy, run, and await in one motion
 
@@ -167,6 +189,7 @@ can get past its first call:
 
 ```sh
 aion --endpoint HOST:PORT worker shell --manifest worker.toml --awl FILE.awl
+aion --endpoint HOST:PORT worker awl WORKER_FILE.awl
 aion worker agent FILE.awl --harness norn --liminal-address HOST:PORT \
   --identity NAME --concurrency N \
   --reconnect-initial-backoff S --reconnect-max-backoff S \
@@ -176,6 +199,13 @@ aion worker agent FILE.awl --harness norn --liminal-address HOST:PORT \
 `aion worker shell` requires BOTH `--manifest` and `--awl`: the manifest
 carries host-command wiring only, so the document is the sole source of the
 schemas the worker advertises.
+
+`aion worker awl` serves a WORKER DOCUMENT — a `.awl` file whose opening
+declaration is `worker <queue>`, carrying a command body on every action. The
+commands run on the worker's host, not the server's. A workflow document is
+refused by name, and `--check` prints the exact surface the worker would
+advertise, with the command each action runs, without connecting. See
+`WORKERS.md` and `docs/workers/AWL-WORKER-DOCUMENTS.md`.
 
 `aion worker agent` serves an agent harness compiled into the binary on the
 queue the document declares — an agent worker without writing a crate. Facts

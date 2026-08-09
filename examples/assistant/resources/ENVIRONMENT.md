@@ -11,8 +11,11 @@ Your file tools are confined to the session workspace. Shell commands start in
 that workspace and may read paths outside it, subject to host permissions.
 Keep every file you author inside the workspace. If the workspace is a clone of
 the aion repository, preserve unrelated changes and use the repository itself
-as the authority. If it is scratch space, the embedded resources are available
-at `.assistant/resources/`.
+as the authority. If it is scratch space, nothing is materialized for you:
+clone the repository when you need it, and use `aion awl guide` for the
+language surface — the binary itself carries the glossary and the full
+reference (`aion awl guide --reference`), so no checkout is required for
+language questions.
 
 Before editing:
 
@@ -38,8 +41,11 @@ start a server as a workaround.
 Use these sources in order:
 
 1. The `.awl` file being edited and `aion awl check FILE.awl`.
-2. `examples/assistant/resources/AWL-REFERENCE.md` in an aion checkout, or the
-   materialized `.assistant/resources/AWL-REFERENCE.md` in every session.
+2. `examples/assistant/resources/AWL-REFERENCE.md` in an aion checkout, or
+   `aion awl guide --reference`, which prints the same document embedded in
+   the binary. `aion awl guide WORD` explains one word of the language with a
+   complete example that passes `aion awl check`; with no argument it prints
+   every word grouped by reference section.
 3. Checked examples such as `examples/awl-hello/awl_hello.awl`,
    `examples/dev-brief/awl/dev_brief.awl`, and
    `examples/remediation-packet/awl/remediation_packet.awl`.
@@ -64,9 +70,19 @@ what can be authored now. Never copy syntax only from a roadmap or draft.
 
 ## Server boundary
 
-Checking, formatting, schema derivation, worker scaffolding, and emitting are
-local. `aion deploy`, `aion run`, and observation commands contact the
-configured endpoint. Do not assume the default endpoint is the operator's
+Checking, formatting, schema derivation, worker scaffolding, emitting, and the
+language guide are local. `aion deploy`, `aion run`, and observation commands
+contact the configured endpoint.
+
+A server may also expose an MCP endpoint: `POST /mcp`, on the SAME HTTP
+listener as the console and the workflow API, mounted only when the server's
+config sets `enabled = true` under `[mcp]` — the default is off, and with it
+off the path is a plain 404. It inherits the server's existing authentication
+and namespace authorization (there is no MCP-specific auth), and it implements
+the 2026-07-28 stateless revision: `POST /mcp` only, with `GET` and `DELETE`
+answered 405. `docs/operations/operations.md` carries the authoritative
+section. Never claim an MCP endpoint is live without the operator's config or
+an actual checked response. Do not assume the default endpoint is the operator's
 target, do not start or restart a server, and do not claim a deploy or run
 succeeded unless the actual command or ops console reported it. When server
 access is not explicitly available, finish at a checked `.awl` file and state

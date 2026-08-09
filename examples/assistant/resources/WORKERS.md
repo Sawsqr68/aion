@@ -31,9 +31,9 @@ All layers use the same task-queue dispatch model.
 
 The executable CLI carries **three** `worker` subcommands, `shell`, `agent`
 and `awl` — verify with `aion worker --help` rather than assuming either way.
-Worker lifecycle management and Python script hosting, as described in
-direction papers, remain roadmap unless the current source and `--help` show
-otherwise.
+Python script hosting, as described in direction papers, remains roadmap.
+Worker lifecycle management is no longer roadmap: a suitably configured server
+supervises worker processes itself (see "Managed workers" below).
 
 ## Layer 1a: the agent worker
 
@@ -296,6 +296,43 @@ shapes from the checked AWL declaration exactly.
 Do not teach the retired Gleam `aion_flow` workflow package as authoring truth.
 A Gleam worker is an external action implementation; the orchestration remains
 the `.awl` document.
+
+## Managed workers: server-supervised lifecycle
+
+A server can run and supervise worker processes itself. This is server
+configuration and an operator surface, not AWL vocabulary — nothing in a
+`.awl` document creates a managed worker, and the lifecycle verbs live on the
+server's HTTP API, not on this CLI's `worker` subcommands.
+
+- A **worker deployment** is an operator-authored record naming what to run:
+  `PUT /worker-deployments/{name}` carries an artifact reference, a task
+  queue, and a desired state. The current artifact form is `Builtin` — the
+  server's OWN binary plus an operator-written argv tail (for example an
+  `aion worker shell` or `aion worker awl` invocation, flags included).
+  Nothing is inferred or appended: the record is
+  the whole launch contract. `GET /worker-deployments`,
+  `GET`/`PUT`/`DELETE /worker-deployments/{name}`, and
+  `POST /worker-deployments/{name}/desired-state` are the CRUD surface.
+- **Lifecycle over HTTP.** `GET /workers/managed` reports the fleet and is
+  always mounted. `POST /workers/managed/{name}/start`, `…/stop`, and
+  `…/restart` are mounted only when `[deploy].enabled` is set — a server that
+  is not a deploy target exposes no lifecycle mutation, and the same switch
+  gates the `/worker-deployments/*` family.
+- **Supervision must be commissioned.** The `[worker_supervision]` config
+  section has no defaults and no partial form: write all six keys
+  (`restart_backoff_initial_ms`, `restart_backoff_max_ms`,
+  `restart_backoff_multiplier`, `restart_window_ms`,
+  `max_restarts_per_window`, `stop_grace_ms`) or omit the section entirely.
+  Omitted, the server supervises no worker processes and says so, with the
+  remedy, on every status read; a partial section is refused at load naming
+  every missing key.
+
+Starting, stopping, or restarting a managed worker changes a real operator's
+fleet — never issue one without explicit operator authority. The operator
+documentation is `docs/operations/operations.md`; the implementation is
+`crates/aion-server/src/worker/supervisor/` with the HTTP handlers in
+`crates/aion-server/src/api/http/managed_workers.rs` and
+`crates/aion-server/src/api/http/worker_deployments.rs`.
 
 ## Diagnosis checklist
 

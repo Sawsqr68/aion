@@ -8,9 +8,12 @@ binary's source win on everything the check sees — but `check` runs parse and
 typecheck only, and a further band of refusals arrives only when the document
 is compiled (§15).
 
-That precedence rule is live, not theoretical. The published `aion` crate
-(0.11.0) carries the full surface described here; if an older installed binary
-rejects a construct, upgrade before concluding the construct does not exist.
+That precedence rule is live, not theoretical. This document describes the
+checker on the repository's main branch. The most recent release cut (0.12.0)
+predates the worker-document family (§16) and the embedded language guide
+(`aion awl guide`), so an installed binary at 0.12.0 or earlier refuses those
+surfaces while accepting the rest. Upgrade or build from the repository before
+concluding a construct does not exist.
 
 ## 1. Document structure
 
