@@ -2,9 +2,13 @@ export function nullableString(value: unknown, field: string): string | null {
   return value === null ? null : expectString(value, field);
 }
 
-export function expectRecord(value: unknown): Record<string, unknown> {
+export function expectRecord(value: unknown, field?: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new Error('Invalid authoring response: expected object');
+    throw new Error(
+      field === undefined
+        ? 'Invalid authoring response: expected object'
+        : `Invalid authoring response: ${field}`
+    );
   }
   return value as Record<string, unknown>;
 }

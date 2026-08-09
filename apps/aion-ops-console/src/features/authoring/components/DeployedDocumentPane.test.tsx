@@ -20,6 +20,11 @@ function deployed(overrides: Partial<DeployedDocument> = {}): DeployedDocument {
       diagnostics: [],
       semantic: null,
     },
+    // Pre-contract shape: the server sends `input_schema: null, signals: null`
+    // for these archives — never `signals: []`, which is a different fact (a
+    // contract that commits an empty signal set).
+    inputSchema: null,
+    signals: null,
     ...overrides,
   };
 }
@@ -99,4 +104,37 @@ test('a projection with errors is reported, not smoothed over', () => {
   expect(html).toContain('1 errors');
   expect(html).toContain('projection unavailable');
   expect(html).not.toContain('deploys green');
+});
+
+/**
+ * The contract strip distinguishes the three signal answers the server can
+ * give. Catches: `null` (no committed signal set — additional entry,
+ * pre-contract, older server) rendered as if it were the empty list, or the
+ * committed-empty list rendered as absence — the exact absent-vs-empty
+ * collapse blocker B1 grew from.
+ */
+test('the contract strip states committed schema and signals, absence as absence', () => {
+  const preContract = renderToStaticMarkup(<DeployedDocumentPane document={deployed()} />);
+  expect(preContract).toContain('no committed start schema');
+  expect(preContract).toContain('no committed signal set');
+
+  const committedEmpty = renderToStaticMarkup(
+    <DeployedDocumentPane document={deployed({ inputSchema: { type: 'object' }, signals: [] })} />
+  );
+  expect(committedEmpty).toContain('start schema committed');
+  expect(committedEmpty).toContain('signals: none committed');
+  expect(committedEmpty).not.toContain('no committed signal set');
+
+  const committed = renderToStaticMarkup(
+    <DeployedDocumentPane
+      document={deployed({
+        inputSchema: { type: 'object' },
+        signals: [
+          { name: 'approve', inputSchema: { type: 'object' } },
+          { name: 'escalate', inputSchema: { type: 'object' } },
+        ],
+      })}
+    />
+  );
+  expect(committed).toContain('signals: approve, escalate');
 });

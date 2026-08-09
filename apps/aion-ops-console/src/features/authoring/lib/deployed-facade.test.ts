@@ -137,6 +137,115 @@ test('the deployed document round-trips verbatim and every request is a bodyless
   }
 });
 
+/**
+ * The start-input contract fields, in the exact shapes
+ * `crates/aion-server/src/awl/deployed/types.rs` serializes:
+ *
+ * - primary entry: `input_schema: <object>`, `signals: <array>` (POSSIBLY
+ *   EMPTY — the contract genuinely commits none);
+ * - additional entry: `input_schema: <object>`, `signals: null` (an
+ *   `AdditionalWorkflowContract` carries no signal set);
+ * - pre-contract archive: `input_schema: null`, `signals: null`;
+ * - older server: both fields absent.
+ *
+ * Absence is semantic: `signals: null` must parse as null (no committed
+ * signal set), NEVER as the empty list, and never crash the document read —
+ * the crash was blocker B1, hidden by a fixture that sent `signals: []`
+ * where the server sends `null` (right and plausible-wrong coinciding).
+ */
+describe('the deployed document start-input contract', () => {
+  const base = {
+    workflow_type: 'dev_brief',
+    content_hash: 'b'.repeat(64),
+    document_name: 'dev_brief.awl',
+    source: DOCUMENT_SOURCE,
+    schemas: [],
+    projection: PROJECTION,
+  };
+  const load = (facade: ReturnType<typeof stub>['facade']) =>
+    facade.loadDeployedDocument('dev_brief', 'b'.repeat(64));
+
+  // Catches: a parser that drops or reshapes the schema/signals the server
+  // DID send — the start form would silently lose its contract.
+  test('a primary entry carries its schema and signal set verbatim', async () => {
+    const inputSchema = {
+      type: 'object',
+      properties: { to: { type: 'string' } },
+      required: ['to'],
+    };
+    const { facade } = stub(200, {
+      ...base,
+      input_schema: inputSchema,
+      signals: [{ name: 'approve', input_schema: { type: 'object', properties: {} } }],
+    });
+    const document = await load(facade);
+    expect(document.inputSchema).toEqual(inputSchema);
+    expect(document.signals).toEqual([
+      { name: 'approve', inputSchema: { type: 'object', properties: {} } },
+    ]);
+  });
+
+  // Catches: absent-vs-empty collapsed. `signals: []` is a real answer — the
+  // contract commits an empty signal set — and must stay a (present) empty
+  // list, not become null.
+  test('a primary entry with an empty committed signal set parses as the empty list', async () => {
+    const { facade } = stub(200, { ...base, input_schema: { type: 'object' }, signals: [] });
+    const document = await load(facade);
+    expect(document.signals).toEqual([]);
+    expect(document.signals).not.toBeNull();
+  });
+
+  // B1 executed proof, case 1: an ADDITIONAL entry — schema object, signals
+  // null. Catches: expectArray rejecting the whole document (the blocker),
+  // and null being faked into [].
+  test('an additional entry (schema present, signals null) parses with signals null', async () => {
+    const { facade } = stub(200, {
+      ...base,
+      input_schema: { type: 'object', properties: {} },
+      signals: null,
+    });
+    const document = await load(facade);
+    expect(document.inputSchema).toEqual({ type: 'object', properties: {} });
+    expect(document.signals).toBeNull();
+  });
+
+  // B1 executed proof, case 2: a PRE-CONTRACT archive — both null.
+  test('a pre-contract archive (both fields null) parses as no schema, signals null', async () => {
+    const { facade } = stub(200, { ...base, input_schema: null, signals: null });
+    const document = await load(facade);
+    expect(document.inputSchema).toBeNull();
+    expect(document.signals).toBeNull();
+  });
+
+  // Catches: a parser that REQUIRES the new fields — an older server would
+  // break the deployed view entirely. Absent maps to the same semantic null
+  // as a pre-contract archive: nothing was committed.
+  test('an older server that omits both fields parses as null schema and null signals', async () => {
+    const { facade } = stub(200, base);
+    const document = await load(facade);
+    expect(document.inputSchema).toBeNull();
+    expect(document.signals).toBeNull();
+  });
+
+  // Catches: a present-but-malformed schema folded into "no schema" — that
+  // would silently strip a contract the server DID send.
+  test('a present non-object input_schema is reported, never read as absence', async () => {
+    const { facade } = stub(200, { ...base, input_schema: 'not-a-schema' });
+    await expect(load(facade)).rejects.toThrow('input_schema');
+  });
+
+  // Catches: a committed signal without its (non-optional) schema coerced
+  // into something renderable instead of being reported.
+  test('a signal missing its payload schema is reported', async () => {
+    const { facade } = stub(200, {
+      ...base,
+      input_schema: { type: 'object' },
+      signals: [{ name: 'approve' }],
+    });
+    await expect(load(facade)).rejects.toThrow('signals.input_schema');
+  });
+});
+
 /** Path segments are encoded, so no workflow type can reshape the URL. */
 test('the document URL encodes both segments', async () => {
   const calls: Call[] = [];

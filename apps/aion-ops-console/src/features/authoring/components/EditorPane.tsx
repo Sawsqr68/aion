@@ -3,6 +3,7 @@ import {
   Check,
   Columns2,
   FileText,
+  HardHat,
   LayoutDashboard,
   LoaderCircle,
   Rocket,
@@ -32,6 +33,8 @@ import {
 import { applyGestureThroughSeam } from '../lib/gestures';
 import { byteOffsetToUtf16, stepAtPosition } from '../lib/projection';
 import type { SemanticIndex } from '../lib/projection-types';
+import { isWorkerDocument } from '../lib/worker-deploy';
+import { DeployWorkerPanel } from './DeployWorkerPanel';
 import { type AuthoringViewMode, ProjectionPane } from './ProjectionPane';
 import { ShipRunPanel } from './ShipRunPanel';
 import { StudioPane } from './StudioPane';
@@ -204,6 +207,10 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
     }
   }, []);
 
+  // A worker document (`worker <queue>`) has no flow to ship-and-run; its
+  // "run" surface is deploying it as a supervised managed worker instead.
+  const workerDocument = isWorkerDocument(source);
+
   return (
     <section className="flex min-w-0 flex-1 flex-col" aria-label={`Editing ${path}`}>
       <EditorHeader
@@ -213,6 +220,7 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
         onSelectViewMode={setViewMode}
         path={path}
         viewMode={viewMode}
+        workerDocument={workerDocument}
         working={working}
       />
       <div className="flex min-h-[32rem] min-w-0 flex-1 overflow-hidden">
@@ -249,7 +257,12 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
             source={source}
           />
         )}
-        {viewMode === 'run' && <ShipRunPanel buffer={source} documents={documents} path={path} />}
+        {viewMode === 'run' &&
+          (workerDocument ? (
+            <DeployWorkerPanel buffer={source} path={path} />
+          ) : (
+            <ShipRunPanel buffer={source} documents={documents} path={path} />
+          ))}
       </div>
       <EditorStatusBar check={check} message={message} />
     </section>
@@ -266,6 +279,7 @@ function EditorHeader({
   onSelectViewMode,
   path,
   viewMode,
+  workerDocument,
   working,
 }: {
   dirty: boolean;
@@ -274,6 +288,7 @@ function EditorHeader({
   onSelectViewMode: (mode: ViewMode) => void;
   path: string;
   viewMode: ViewMode;
+  workerDocument: boolean;
   working: WorkingAction;
 }) {
   const documentName = path.split('/').at(-1) ?? path;
@@ -324,8 +339,10 @@ function EditorHeader({
             onSelect={onSelectViewMode}
           />
           <ViewButton
-            icon={<Rocket className="size-3.5" />}
-            label="Ship & Run"
+            icon={
+              workerDocument ? <HardHat className="size-3.5" /> : <Rocket className="size-3.5" />
+            }
+            label={workerDocument ? 'Deploy worker' : 'Ship & Run'}
             mode="run"
             selected={viewMode}
             onSelect={onSelectViewMode}
