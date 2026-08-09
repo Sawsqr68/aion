@@ -36,7 +36,7 @@ use std::time::{Duration, Instant};
 use aion_core::{
     ActivityEvent, ActivityEventKind, ActivityId, ContentType, InjectPriority,
     InterventionCapabilities, InterventionCommand, InterventionKind, InterventionOutcome,
-    InterventionPrimitive, MessageRole, Payload, WorkflowId,
+    InterventionPrimitive, MessageRole, Payload, RunId, WorkflowId,
 };
 use aion_integrations::contract::{AgentHarness, AgentSession};
 use aion_integrations::error::HarnessError;
@@ -78,6 +78,14 @@ fn test_error(message: impl std::fmt::Display) -> TestError {
 
 fn workflow_id() -> WorkflowId {
     WorkflowId::new(Uuid::nil())
+}
+
+/// The run every fixture in this file shares. The transcript keyspace and
+/// the attempt-owner index are both keyed on `(workflow, run, activity,
+/// attempt)`, so one shared run is what makes a written event and the key
+/// that reads it back name the same stream.
+fn run_id() -> RunId {
+    RunId::new(Uuid::from_u128(0x11))
 }
 
 // --- The live fake agent session: streams events, then blocks the terminal result
@@ -138,6 +146,7 @@ impl AgentSession for FakeSession {
 fn message_event(worker_seq: u64, text: &str) -> ActivityEvent {
     ActivityEvent {
         workflow_id: workflow_id(),
+        run_id: run_id(),
         activity_id: ActivityId::from_sequence_position(ORDINAL),
         attempt: 1,
         agent_id: Uuid::from_u128(9),
@@ -325,6 +334,7 @@ fn agent_registry() -> Result<Arc<ActivityRegistry>, TestError> {
 fn inject(attempt: u32) -> InterventionCommand {
     InterventionCommand {
         workflow_id: workflow_id(),
+        run_id: run_id(),
         activity_id: ActivityId::from_sequence_position(ORDINAL),
         attempt,
         issued_by: Some("operator".to_owned()),
@@ -339,6 +349,7 @@ fn inject(attempt: u32) -> InterventionCommand {
 fn stream_key() -> ActivityStreamKey {
     ActivityStreamKey::new(
         workflow_id(),
+        run_id(),
         ActivityId::from_sequence_position(ORDINAL),
         1,
     )
@@ -408,6 +419,7 @@ async fn live_agent_streams_transcript_and_takes_intervention() -> Result<(), Te
     // tested separately), so the router resolves this attempt to the live worker.
     let attempt_key = AttemptKey::new(
         workflow_id(),
+        run_id(),
         ActivityId::from_sequence_position(ORDINAL),
         1,
     );
@@ -632,7 +644,10 @@ fn push_dispatch(
         activity_type: ACTIVITY_TYPE.to_owned(),
         workflow_id: workflow_id(),
         ordinal: ORDINAL,
-        run_id: Some(aion_core::RunId::new_v4()),
+        // The dispatch names the SAME run the fixture's stream key and events
+        // do: a dispatch claiming one generation while the transcript claims
+        // another would be a contradiction the assertions could not see.
+        run_id: Some(run_id()),
         completion_token: "test-generation".to_owned(),
         idempotency_key: "test-effect-key".to_owned(),
         input: b"\"in\"".to_vec(),
@@ -711,6 +726,7 @@ async fn serve_with_redial_installs_the_composed_harness() -> Result<(), TestErr
     let worker_id = server.wait_for_registered_worker()?;
     let attempt_key = AttemptKey::new(
         workflow_id(),
+        run_id(),
         ActivityId::from_sequence_position(ORDINAL),
         1,
     );

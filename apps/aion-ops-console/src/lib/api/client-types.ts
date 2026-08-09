@@ -3,6 +3,7 @@ import type {
   InterventionCapabilities,
   InterventionKind,
   Namespace,
+  RunId,
   WorkflowId,
 } from '@/types';
 
@@ -20,16 +21,31 @@ export type StartWorkflowParams = {
   taskQueue?: string | undefined;
 };
 
-/** One addressable activity attempt and the controls its worker supports. */
+/**
+ * One addressable activity attempt and the controls its worker supports.
+ *
+ * `runId` is the generation axis and is REQUIRED: a continue-as-new chain reuses
+ * one workflow id while ordinals and attempts restart per generation, so
+ * `(activityId, attempt)` alone names a coordinate, not an attempt.
+ */
 export type AttemptCapabilities = {
+  runId: RunId;
   activityId: ActivityId;
   attempt: number;
   capabilities: InterventionCapabilities;
 };
 
-/** Target attempt plus the neutral intervention primitive. */
+/**
+ * Target attempt plus the neutral intervention primitive.
+ *
+ * `runId` is REQUIRED — the server refuses a run-less body. Routing a steer by
+ * `(workflow, activity, attempt)` alone would deliver it to whichever generation
+ * happened to own the colliding coordinate, which is a control-plane fault, not
+ * a display bug.
+ */
 export type InterveneParams = {
   workflowId: WorkflowId;
+  runId: RunId;
   activityId: ActivityId;
   attempt: number;
   kind: InterventionKind;

@@ -26,7 +26,7 @@
 //! `shard_count == 1`, every key lives in one shard and a prefix range scan is
 //! globally complete (haematite's `range` is shard-local, routed from `from`).
 
-use aion_core::WorkflowId;
+use aion_core::{RunId, WorkflowId};
 use uuid::Uuid;
 
 /// Field separator inside composite KV keys (ASCII unit separator).
@@ -211,50 +211,109 @@ pub(crate) fn shard_owner_key(shard: usize, shard_for: impl Fn(&[u8]) -> usize) 
 /// replay and, being a different schema besides, undecodable as an `Event`.
 pub(crate) const OBSERVABILITY_TAG: u8 = b'O';
 
-/// The observability stream key for `(workflow_id, activity_seq, attempt)`.
+/// Total encoded width of one `O`-region observability stream key.
 ///
-/// Layout (fixed 29 bytes): `O(1) || workflow_uuid(16) || activity_seq_be(8) ||
-/// attempt_be(4)`. This is handed to
+/// `O(1) || workflow_uuid(16) || run_uuid(16) || activity_seq_be(8) ||
+/// attempt_be(4)`. Named because three places must agree on it: the encoder, the
+/// decoder's length gate, and the disjointness test.
+pub(crate) const OBSERVABILITY_KEY_LEN: usize = 1 + 16 + 16 + 8 + 4;
+
+/// Width of the `O || workflow_uuid || run_uuid` scan prefix.
+pub(crate) const OBSERVABILITY_RUN_PREFIX_LEN: usize = 1 + 16 + 16;
+
+/// The observability stream key for `(workflow_id, run_id, activity_seq, attempt)`.
+///
+/// Layout (fixed [`OBSERVABILITY_KEY_LEN`] bytes): `O(1) || workflow_uuid(16) ||
+/// run_uuid(16) || activity_seq_be(8) || attempt_be(4)`. This is handed to
 /// [`haematite::EventStore::append_batch`]/`read_from`, which append their own
 /// `0x00 || seq` suffix — so within one attempt's stream the records order by
 /// their server-allocated `store_seq`. The fixed-width big-endian components make
 /// the key order lexicographically identical to the tuple order and keep the key
 /// unambiguously parseable, and the leading `O` tag keeps it disjoint from the
 /// `E`-stream and the `_:`-prefixed KV regions (see [`OBSERVABILITY_TAG`]).
+///
+/// # The run axis sits SECOND, deliberately
+///
+/// It is placed immediately after the workflow so `O || workflow || run` is a
+/// contiguous prefix, which is what makes a single-run enumeration one range
+/// scan rather than a workflow-wide scan with a post-filter. It also makes the
+/// lexicographic key order `(workflow, run, activity, attempt)`, matching the
+/// order the in-memory reference store sorts its summaries in.
+///
+/// # There is no decode arm for the pre-run 29-byte key
+///
+/// Transcript records are observability, never replay authority, so the estate's
+/// no-backwards-compatibility rule applies without qualification: a record
+/// written under the old run-ambiguous key is simply unreachable through this
+/// keyspace, and [`decode_observability_stream_key`] rejects its key on length.
+/// Reading one back would mean answering a run-scoped question with data that
+/// cannot say which run it came from — the exact ambiguity being removed.
+///
+/// # Those records are also UNRECLAIMED, and that is not fixable here
+///
+/// Unreachable is not the whole cost: a database written by a build that
+/// predates the run axis keeps its 29-byte `O` records on disk forever. Nothing
+/// reaps them — `observability_list_blocking` skips whatever fails to decode,
+/// and there is no purge verb or migration. This is stated rather than fixed
+/// because it CANNOT be fixed from this crate: haematite exposes no
+/// stream-deletion primitive at all (`append_with_ttl` is its only expiry
+/// surface — there is no `delete`/`truncate` for a sequence stream), so a reaper
+/// would have to begin as a haematite change, and the records share one database
+/// file with the `E` event streams so they cannot be discarded selectively
+/// either. The leak is bounded and non-growing: no writer emits that shape any
+/// more, and nothing depends on the bytes. Reclaiming them means discarding the
+/// store directory — which discards workflow history too, so it is an operator's
+/// explicit choice, never a maintenance step.
 pub(crate) fn observability_stream_key(
     workflow_id: &WorkflowId,
+    run_id: &RunId,
     activity_seq: u64,
     attempt: u32,
 ) -> Vec<u8> {
-    let mut key = Vec::with_capacity(1 + 16 + 8 + 4);
+    let mut key = Vec::with_capacity(OBSERVABILITY_KEY_LEN);
     key.push(OBSERVABILITY_TAG);
     key.extend_from_slice(workflow_id.as_uuid().as_bytes());
+    key.extend_from_slice(run_id.as_uuid().as_bytes());
     key.extend_from_slice(&activity_seq.to_be_bytes());
     key.extend_from_slice(&attempt.to_be_bytes());
     key
 }
 
-/// The 17-byte `O || workflow_uuid` prefix every observability stream key of
-/// one workflow shares (see [`observability_stream_key`] for the full layout).
+/// The [`OBSERVABILITY_RUN_PREFIX_LEN`]-byte `O || workflow_uuid || run_uuid`
+/// prefix every observability stream key of ONE RUN shares (see
+/// [`observability_stream_key`] for the full layout).
 ///
 /// Handed to a stream-metadata scan predicate (`starts_with`) to enumerate one
-/// workflow's retained transcript streams; the fixed-width layout means the
-/// prefix can never partially match a foreign region's key.
-pub(crate) fn observability_workflow_prefix(workflow_id: &WorkflowId) -> Vec<u8> {
-    let mut prefix = Vec::with_capacity(1 + 16);
+/// run's retained transcript streams; the fixed-width layout means the prefix
+/// can never partially match a foreign region's key, and including the run means
+/// a sibling generation of the same continue-as-new chain is excluded by the
+/// scan itself rather than by a filter someone could forget.
+pub(crate) fn observability_run_prefix(workflow_id: &WorkflowId, run_id: &RunId) -> Vec<u8> {
+    let mut prefix = Vec::with_capacity(OBSERVABILITY_RUN_PREFIX_LEN);
     prefix.push(OBSERVABILITY_TAG);
     prefix.extend_from_slice(workflow_id.as_uuid().as_bytes());
+    prefix.extend_from_slice(run_id.as_uuid().as_bytes());
     prefix
 }
 
-/// Decode a full 29-byte `O`-region stream key into `(activity_seq, attempt)`.
-/// Returns `None` for any other region/length (scan safety).
+/// Decode a full [`OBSERVABILITY_KEY_LEN`]-byte `O`-region stream key into
+/// `(activity_seq, attempt)`. Returns `None` for any other region/length (scan
+/// safety) — including the pre-run-axis 29-byte key, which is not decodable
+/// here by design.
 pub(crate) fn decode_observability_stream_key(key: &[u8]) -> Option<(u64, u32)> {
-    if key.len() != 29 || key[0] != OBSERVABILITY_TAG {
+    if key.len() != OBSERVABILITY_KEY_LEN || key[0] != OBSERVABILITY_TAG {
         return None;
     }
-    let activity_seq = u64::from_be_bytes(key.get(17..25)?.try_into().ok()?);
-    let attempt = u32::from_be_bytes(key.get(25..29)?.try_into().ok()?);
+    let activity_seq = u64::from_be_bytes(
+        key.get(OBSERVABILITY_RUN_PREFIX_LEN..OBSERVABILITY_RUN_PREFIX_LEN + 8)?
+            .try_into()
+            .ok()?,
+    );
+    let attempt = u32::from_be_bytes(
+        key.get(OBSERVABILITY_RUN_PREFIX_LEN + 8..OBSERVABILITY_KEY_LEN)?
+            .try_into()
+            .ok()?,
+    );
     Some((activity_seq, attempt))
 }
 
@@ -291,8 +350,14 @@ pub(crate) fn prefix_upper_bound(prefix: &[u8]) -> Option<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aion_core::WorkflowId;
+    use aion_core::{RunId, WorkflowId};
     use uuid::Uuid;
+
+    /// A run identifier whose big-endian UUID bytes order with `value`, so a key
+    /// ordering assertion states the tuple order it means.
+    fn run(value: u128) -> RunId {
+        RunId::new(Uuid::from_u128(value))
+    }
 
     #[test]
     fn workflow_id_from_event_stream_key_round_trips() {
@@ -368,7 +433,7 @@ mod tests {
     #[test]
     fn observability_key_is_o_tagged_and_disjoint_from_every_region() {
         let workflow_id = WorkflowId::new(Uuid::from_u128(11));
-        let key = observability_stream_key(&workflow_id, 3, 2);
+        let key = observability_stream_key(&workflow_id, &run(1), 3, 2);
         // Uppercase `O` (0x4F) tag.
         assert_eq!(key[0], OBSERVABILITY_TAG);
         assert_eq!(key[0], 0x4F);
@@ -385,8 +450,10 @@ mod tests {
         assert_ne!(&key[..2], SHARD_OWNER_PREFIX);
         assert_ne!(&key[..2], WORKER_DEPLOYMENT_PREFIX);
         assert_ne!(key[0], OUTBOX_PREFIX[0]);
-        // Fixed-width layout: O(1) + uuid(16) + activity_seq(8) + attempt(4).
-        assert_eq!(key.len(), 29);
+        // Fixed-width layout: O(1) + workflow(16) + run(16) + activity_seq(8)
+        // + attempt(4). The run axis is what widened this from 29 to 45.
+        assert_eq!(key.len(), OBSERVABILITY_KEY_LEN);
+        assert_eq!(key.len(), 45);
         // The uuid + fixed-width suffix means it can NEVER be mistaken for a
         // 17-byte `E`-stream key (the only key shape the replay decoder decodes).
         assert_ne!(key.len(), 17);
@@ -407,22 +474,29 @@ mod tests {
     }
 
     #[test]
-    fn observability_workflow_prefix_is_a_strict_prefix_of_the_full_key() {
+    fn observability_run_prefix_is_a_strict_prefix_of_the_full_key() {
         let workflow_id = WorkflowId::new(Uuid::from_u128(21));
-        let prefix = observability_workflow_prefix(&workflow_id);
-        let full = observability_stream_key(&workflow_id, 7, 2);
-        assert_eq!(prefix.len(), 17);
+        let prefix = observability_run_prefix(&workflow_id, &run(1));
+        let full = observability_stream_key(&workflow_id, &run(1), 7, 2);
+        assert_eq!(prefix.len(), OBSERVABILITY_RUN_PREFIX_LEN);
         assert!(full.starts_with(&prefix));
         assert!(full.len() > prefix.len(), "the prefix is strict");
         // A different workflow's key does not share the prefix.
-        let other = observability_stream_key(&WorkflowId::new(Uuid::from_u128(22)), 7, 2);
+        let other = observability_stream_key(&WorkflowId::new(Uuid::from_u128(22)), &run(1), 7, 2);
         assert!(!other.starts_with(&prefix));
+        // Nor does a SIBLING GENERATION of the same workflow: the run is inside
+        // the prefix, so one run's scan cannot reach another's records at all.
+        let sibling = observability_stream_key(&workflow_id, &run(2), 7, 2);
+        assert!(
+            !sibling.starts_with(&prefix),
+            "a sibling continue-as-new generation must fall outside the scan"
+        );
     }
 
     #[test]
     fn observability_stream_key_encode_decode_round_trips() {
         let workflow_id = WorkflowId::new(Uuid::from_u128(23));
-        let key = observability_stream_key(&workflow_id, u64::MAX - 3, u32::MAX - 1);
+        let key = observability_stream_key(&workflow_id, &run(9), u64::MAX - 3, u32::MAX - 1);
         assert_eq!(
             decode_observability_stream_key(&key),
             Some((u64::MAX - 3, u32::MAX - 1))
@@ -435,26 +509,49 @@ mod tests {
         let event_key = event_stream_key(&WorkflowId::new(Uuid::from_u128(24)));
         assert_eq!(decode_observability_stream_key(&event_key), None);
         // A truncated `O`-region key (wrong length) decodes to nothing.
-        let mut truncated = observability_stream_key(&WorkflowId::new(Uuid::from_u128(24)), 1, 1);
+        let mut truncated =
+            observability_stream_key(&WorkflowId::new(Uuid::from_u128(24)), &run(1), 1, 1);
         truncated.pop();
         assert_eq!(decode_observability_stream_key(&truncated), None);
-        // A 29-byte key with the wrong tag byte is rejected.
-        let mut wrong_tag = observability_stream_key(&WorkflowId::new(Uuid::from_u128(24)), 1, 1);
+        // A full-length key with the wrong tag byte is rejected.
+        let mut wrong_tag =
+            observability_stream_key(&WorkflowId::new(Uuid::from_u128(24)), &run(1), 1, 1);
         wrong_tag[0] = b'X';
         assert_eq!(decode_observability_stream_key(&wrong_tag), None);
     }
 
+    /// The pre-run-axis 29-byte key shape is NOT decodable, by design: no compat
+    /// arm exists, so a record written under the run-ambiguous key is simply
+    /// unreachable rather than silently answering a run-scoped read.
     #[test]
-    fn observability_keys_order_by_workflow_then_activity_then_attempt() {
+    fn the_pre_run_axis_key_shape_is_not_decodable() {
+        let workflow_id = WorkflowId::new(Uuid::from_u128(31));
+        let mut legacy = Vec::with_capacity(29);
+        legacy.push(OBSERVABILITY_TAG);
+        legacy.extend_from_slice(workflow_id.as_uuid().as_bytes());
+        legacy.extend_from_slice(&7u64.to_be_bytes());
+        legacy.extend_from_slice(&2u32.to_be_bytes());
+        assert_eq!(legacy.len(), 29);
+        assert_eq!(decode_observability_stream_key(&legacy), None);
+    }
+
+    #[test]
+    fn observability_keys_order_by_workflow_then_run_then_activity_then_attempt() {
         let workflow = WorkflowId::new(Uuid::from_u128(5));
-        // Same workflow+activity, ascending attempt ⇒ ascending key.
-        let a0 = observability_stream_key(&workflow, 7, 0);
-        let a1 = observability_stream_key(&workflow, 7, 1);
+        // Same workflow+run+activity, ascending attempt ⇒ ascending key.
+        let a0 = observability_stream_key(&workflow, &run(1), 7, 0);
+        let a1 = observability_stream_key(&workflow, &run(1), 7, 1);
         assert!(a0 < a1, "ascending attempt must sort ascending");
         // Ascending activity_seq ⇒ ascending key (big-endian width preserved).
-        let act_low = observability_stream_key(&workflow, 7, 5);
-        let act_high = observability_stream_key(&workflow, 8, 0);
+        let act_low = observability_stream_key(&workflow, &run(1), 7, 5);
+        let act_high = observability_stream_key(&workflow, &run(1), 8, 0);
         assert!(act_low < act_high, "ascending activity must sort ascending");
+        // The run outranks BOTH: a later run's lowest activity still sorts above
+        // an earlier run's highest, so each run's streams form one contiguous
+        // range and a range scan over the run prefix is complete.
+        let run_one_high = observability_stream_key(&workflow, &run(1), u64::MAX, u32::MAX);
+        let run_two_low = observability_stream_key(&workflow, &run(2), 0, 0);
+        assert!(run_one_high < run_two_low, "the run axis outranks the rest");
     }
 
     #[test]

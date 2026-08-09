@@ -616,6 +616,7 @@ impl AgentHarness for AcpHarness {
 
         let identity = EventIdentity {
             workflow_id: spec.workflow_id,
+            run_id: spec.run_id,
             activity_id: spec.activity_id,
             attempt: spec.attempt,
         };
@@ -641,7 +642,7 @@ mod tests {
     use std::error::Error;
     use std::time::Duration;
 
-    use aion_core::{ActivityId, ContentType, Payload, WorkflowId};
+    use aion_core::{ActivityId, ContentType, Payload, RunId, WorkflowId};
     use aion_integrations::HarnessError;
 
     use super::{AcpHarness, AgentRunSpec, prompt_from_spec, registration_capabilities};
@@ -713,6 +714,7 @@ mod tests {
     fn spec_with_input(input: Payload) -> AgentRunSpec {
         AgentRunSpec::new(
             WorkflowId::new_v4(),
+            RunId::new_v4(),
             ActivityId::from_sequence_position(1),
             1,
             "agent",

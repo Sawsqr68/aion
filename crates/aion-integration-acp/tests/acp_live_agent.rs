@@ -65,7 +65,7 @@ use std::time::Duration;
 use aion_integration_acp::{AcpHarness, PermissionPolicy};
 use aion_integrations::{
     ActivityEventKind, ActivityId, AgentHarness, AgentRunSpec, AgentSession, ContentType, Payload,
-    WorkflowId,
+    RunId, WorkflowId,
 };
 use futures::StreamExt;
 
@@ -152,6 +152,7 @@ async fn a_real_acp_agent_completes_a_turn() -> TestResult {
     let harness = AcpHarness::new(agent.clone(), args, cwd, PermissionPolicy::Deny, grace);
     let spec = AgentRunSpec::new(
         WorkflowId::new_v4(),
+        RunId::new_v4(),
         ActivityId::from_sequence_position(1),
         1,
         "acp-live",

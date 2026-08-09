@@ -7,6 +7,7 @@ import { TranscriptFoldBuffer } from '../lib/transcriptFoldBuffer';
 function delta(messageId: string, fragment: string): ActivityEvent {
   return {
     workflow_id: '00000000-0000-0000-0000-000000000001',
+    run_id: '00000000-0000-0000-0000-0000000000a1',
     activity_id: 3,
     attempt: 1,
     agent_id: '00000000-0000-0000-0000-0000000000aa',

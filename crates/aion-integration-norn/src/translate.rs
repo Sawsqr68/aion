@@ -33,13 +33,17 @@ use crate::protocol;
 
 /// Identity carried on every event a session produces, stamped from the run spec + handshake.
 ///
-/// The `(workflow, activity, attempt)` key and the per-notification `agent_id`/`agent_role` (read
-/// from the notification params) together fill an [`ActivityEvent`]'s identity fields; the
+/// The `(workflow, run, activity, attempt)` key and the per-notification `agent_id`/`agent_role`
+/// (read from the notification params) together fill an [`ActivityEvent`]'s identity fields; the
 /// producer-side ordering fields are filled by the session (a best-effort local sequence).
 #[derive(Clone, Debug)]
 pub struct EventIdentity {
     /// The workflow this run belongs to.
     pub workflow_id: aion_core::WorkflowId,
+    /// The concrete run of that workflow this attempt belongs to — stamped from the run spec,
+    /// never synthesised here. It is the axis that keeps two generations of a continue-as-new
+    /// chain from writing one fused transcript.
+    pub run_id: aion_core::RunId,
     /// The activity within the workflow.
     pub activity_id: aion_core::ActivityId,
     /// The attempt number of the run.
@@ -292,6 +296,7 @@ pub fn notification_to_event(
     let (kind, ephemeral) = classify_event(method, params);
     ActivityEvent {
         workflow_id: identity.workflow_id.clone(),
+        run_id: identity.run_id.clone(),
         activity_id: identity.activity_id.clone(),
         attempt: identity.attempt,
         agent_id,
@@ -484,6 +489,7 @@ mod tests {
     fn identity() -> EventIdentity {
         EventIdentity {
             workflow_id: WorkflowId::new(Uuid::nil()),
+            run_id: aion_core::RunId::new(Uuid::from_u128(0x11)),
             activity_id: ActivityId::from_sequence_position(7),
             attempt: 3,
         }

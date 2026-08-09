@@ -30,18 +30,28 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use aion_core::{
-    ActivityId, InterventionCapabilities, InterventionCommand, InterventionOutcome, WorkflowId,
+    ActivityId, InterventionCapabilities, InterventionCommand, InterventionOutcome, RunId,
+    WorkflowId,
 };
 use tokio::sync::{mpsc, oneshot};
 
 use super::agent::ControlMessage;
 
-/// The `(workflow, activity, attempt)` key one running agent session is addressed
-/// by — the exact identity the design keys the whole intervention path on.
+/// The `(workflow, run, activity, attempt)` key one running agent session is
+/// addressed by — the exact identity the design keys the whole intervention path
+/// on, and the mirror of the server-side `AttemptKey`.
+///
+/// The run is part of the key for the same reason it is part of the transcript
+/// stream key: a continue-as-new chain reuses one workflow id while ordinals and
+/// attempts restart per generation, so a run-blind key would let a command aimed
+/// at generation two reach generation one's live session. Delivering a steer to
+/// the wrong generation is a control-plane fault, not a cosmetic one.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct SessionKey {
     /// The workflow the target activity belongs to.
     pub workflow_id: WorkflowId,
+    /// The concrete run of that workflow the target attempt belongs to.
+    pub run_id: RunId,
     /// The target activity within the workflow.
     pub activity_id: ActivityId,
     /// The target attempt. A command to any other attempt is a stale-target no-op.
@@ -49,11 +59,17 @@ pub struct SessionKey {
 }
 
 impl SessionKey {
-    /// Build a session key from its three components.
+    /// Build a session key from its four components.
     #[must_use]
-    pub const fn new(workflow_id: WorkflowId, activity_id: ActivityId, attempt: u32) -> Self {
+    pub const fn new(
+        workflow_id: WorkflowId,
+        run_id: RunId,
+        activity_id: ActivityId,
+        attempt: u32,
+    ) -> Self {
         Self {
             workflow_id,
+            run_id,
             activity_id,
             attempt,
         }
@@ -64,6 +80,7 @@ impl SessionKey {
     pub fn of_command(command: &InterventionCommand) -> Self {
         Self::new(
             command.workflow_id.clone(),
+            command.run_id.clone(),
             command.activity_id.clone(),
             command.attempt,
         )

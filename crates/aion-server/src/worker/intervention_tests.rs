@@ -61,9 +61,16 @@ impl InterventionTransport for ConnectionLostTransport {
     }
 }
 
+/// The run every fixture below shares, so a command and the attempt key it must
+/// resolve agree on the run axis. The cross-generation test mints its own.
+fn run() -> aion_core::RunId {
+    aion_core::RunId::new(Uuid::from_u128(0x11))
+}
+
 fn command(attempt: u32, kind: InterventionKind) -> InterventionCommand {
     InterventionCommand {
         workflow_id: WorkflowId::new(Uuid::nil()),
+        run_id: run(),
         activity_id: ActivityId::from_sequence_position(3),
         attempt,
         issued_by: Some("operator".to_owned()),
@@ -85,6 +92,7 @@ fn inject(attempt: u32) -> InterventionCommand {
 fn key(attempt: u32) -> AttemptKey {
     AttemptKey::new(
         WorkflowId::new(Uuid::nil()),
+        run(),
         ActivityId::from_sequence_position(3),
         attempt,
     )
@@ -135,6 +143,55 @@ async fn routes_an_advertised_command_to_the_owning_worker() {
         1,
         "an advertised command is pushed to the worker"
     );
+}
+
+/// THE RUN-SCOPING INVARIANT on the control plane.
+///
+/// Generation one of a continue-as-new chain owns `(activity 3, attempt 1)`.
+/// Generation two of the SAME workflow reaches the identical coordinates —
+/// which is what actually happens, because ordinals and attempts restart in each
+/// new run. A command aimed at generation two must NOT resolve generation one's
+/// owner: it is a stale target (that generation has no live owner here), and the
+/// transport must never be touched. Under a run-blind key the command would have
+/// been applied to the wrong agent, and the operator would have had no way to
+/// tell.
+#[tokio::test]
+async fn a_command_for_another_generation_never_resolves_this_ones_owner() {
+    let registry = ConnectedWorkerRegistry::default();
+    let (worker_id, _guard) = register_worker(&registry, caps_inject_cancel());
+    let owners = AttemptOwnerIndex::new();
+    // Only generation one's attempt is live on this worker.
+    owners.bind(key(1), worker_id);
+    let transport = Arc::new(RecordingTransport::default());
+    let router = InterventionRouter::new(registry, owners, Arc::clone(&transport) as Arc<_>);
+
+    let mut other_generation = inject(1);
+    other_generation.run_id = aion_core::RunId::new(Uuid::from_u128(0x22));
+    // Everything except the run matches the live attempt exactly.
+    assert_eq!(other_generation.workflow_id, key(1).workflow_id);
+    assert_eq!(other_generation.activity_id, key(1).activity_id);
+    assert_eq!(other_generation.attempt, key(1).attempt);
+    assert_ne!(other_generation.run_id, key(1).run_id);
+
+    let outcome = router
+        .route(other_generation)
+        .await
+        .expect("route returns an ack");
+    assert!(
+        matches!(outcome, InterventionOutcome::StaleTarget { .. }),
+        "a command for another generation must be a stale target, not applied: {outcome:?}"
+    );
+    assert_eq!(
+        transport.pushed.load(Ordering::SeqCst),
+        0,
+        "a command for another generation must NEVER be pushed to this generation's worker"
+    );
+
+    // Positive control: the SAME command with the live generation's run applies,
+    // so the refusal above is attributable to the run axis and nothing else.
+    let outcome = router.route(inject(1)).await.expect("route succeeds");
+    assert_eq!(outcome, InterventionOutcome::Applied);
+    assert_eq!(transport.pushed.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]
@@ -244,7 +301,12 @@ async fn intervenable_attempts_enumerates_only_live_owned_attempts_of_the_workfl
     owners.bind(key(1), worker_id);
     owners.bind(key(2), worker_id);
     owners.bind(
-        AttemptKey::new(other_workflow, ActivityId::from_sequence_position(3), 1),
+        AttemptKey::new(
+            other_workflow,
+            run(),
+            ActivityId::from_sequence_position(3),
+            1,
+        ),
         worker_id,
     );
     let router = InterventionRouter::new(registry, owners, Arc::new(RecordingTransport::default()));
@@ -278,6 +340,7 @@ fn transcript_publisher() -> crate::activity_publisher::ActivityEventPublisher {
 fn stream_key(attempt: u32) -> aion_store::ActivityStreamKey {
     aion_store::ActivityStreamKey::new(
         WorkflowId::new(Uuid::nil()),
+        run(),
         ActivityId::from_sequence_position(3),
         attempt,
     )

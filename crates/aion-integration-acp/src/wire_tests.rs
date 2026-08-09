@@ -29,7 +29,7 @@ use std::time::Duration;
 
 use aion_core::{
     ActivityEvent, ActivityEventKind, ActivityId, InterventionCommand, InterventionKind,
-    InterventionPrimitive, MessageRole, ProgressDetail, StopKind, WorkflowId,
+    InterventionPrimitive, MessageRole, ProgressDetail, RunId, StopKind, WorkflowId,
 };
 use aion_integrations::contract::AgentSession;
 use aion_integrations::jsonrpc::{
@@ -86,6 +86,7 @@ fn fail(context: &str, error: &impl std::fmt::Display) -> String {
 fn identity() -> EventIdentity {
     EventIdentity {
         workflow_id: WorkflowId::new(Uuid::nil()),
+        run_id: aion_core::RunId::new(Uuid::from_u128(0x11)),
         activity_id: ActivityId::from_sequence_position(1),
         attempt: 1,
     }
@@ -358,6 +359,7 @@ async fn close_turn(
 fn cancel_command() -> InterventionCommand {
     InterventionCommand {
         workflow_id: WorkflowId::new(Uuid::nil()),
+        run_id: RunId::new_v4(),
         activity_id: ActivityId::from_sequence_position(1),
         attempt: 1,
         issued_by: Some("operator".to_owned()),

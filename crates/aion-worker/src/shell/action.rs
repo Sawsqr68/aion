@@ -272,11 +272,16 @@ mod tests {
     use super::{FailureMode, ShellAction, trim_trailing_newline};
     use crate::activity::Classification;
     use crate::context::ActivityContext;
-    use aion_core::ActivityId;
+    use aion_core::{ActivityId, RunId, WorkflowId};
     use std::collections::BTreeMap;
 
     fn context() -> (ActivityContext, crate::context::ActivityCancellationHandle) {
-        ActivityContext::new(ActivityId::from_sequence_position(1), 1)
+        ActivityContext::new(
+            WorkflowId::new_v4(),
+            RunId::new_v4(),
+            ActivityId::from_sequence_position(1),
+            1,
+        )
     }
 
     fn arguments(pairs: &[(&str, serde_json::Value)]) -> BTreeMap<String, serde_json::Value> {
@@ -546,11 +551,12 @@ mod tests {
     /// also holds the pre-existing cancellation contract under streaming.
     #[tokio::test]
     async fn a_declared_command_streams_both_streams_before_it_exits() -> TestResult {
-        use aion_core::WorkflowId;
+        use aion_core::{RunId, WorkflowId};
 
         let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
         let (context, cancellation) = ActivityContext::with_transcript(
             WorkflowId::new_v4(),
+            RunId::new_v4(),
             ActivityId::from_sequence_position(9),
             3,
             sender,

@@ -139,9 +139,38 @@ Build order:
 
 Riders from the audit, scoped small: transcript stream discovery is
 unannotated (no activity_type/current marker); retention cap makes long
-tails live-only (describe_run must say so rather than show silence);
-transcript key carries no RunId (continue-as-new collision unproven —
-verify before the MCP resource URIs freeze).
+tails live-only (describe_run must say so rather than show silence).
+
+**CLOSED (lane `runid-schema`)** — the transcript key carried no RunId. The
+collision was subsequently PROVEN, not merely suspected: activity ordinals
+restart at 0 and attempts at 1 in each generation of a continue-as-new
+chain, so two generations wrote byte-identical `(workflow, activity,
+attempt)` keys and the publisher's re-read-head-and-retry loop appended
+generation two onto generation one's stream. The run is now the second axis
+of `ActivityEvent`, `ActivityStreamKey`, the durable `O`-region key (which
+grew 16 bytes, drop-don't-migrate — no compat decode arm), `AgentRunSpec`,
+the worker `ActivityContext`, both transcript read surfaces (REST + WS,
+`run_id` required on every request), and the intervention `AttemptKey` /
+worker `SessionKey`. MCP resource URIs must therefore carry the run.
+
+**Operational consequence of drop-don't-migrate, stated plainly.** A
+haematite store written by a build that predates this cut holds `O`-region
+records under the old 29-byte key. After the cut those records are
+**unreachable and unreclaimed**: `decode_observability_stream_key` rejects
+them on length, `observability_list_blocking` skips them, and no reaper,
+purge verb or migration exists. This is not an omission that a follow-up
+lane closes cheaply — haematite 0.8.1 exposes NO stream-deletion primitive
+at all (`append_with_ttl` is the only expiry surface; there is no
+`delete`/`truncate` for a sequence stream), so a purge is impossible from
+this side of the crate boundary and would have to begin as a haematite
+change. Until then the bytes sit in the same database file as the `E`
+event streams, so they cannot be discarded selectively either. The cost is
+bounded and non-growing — nothing writes that shape any more — and the
+records were never replay authority, so nothing DEPENDS on them; what is
+lost is the ability to read a pre-cut transcript back, which is the ruled
+trade. An operator who wants the space back discards the store directory,
+which also discards workflow history and is therefore an explicit choice,
+never a maintenance step.
 
 ## 8. Sequencing
 

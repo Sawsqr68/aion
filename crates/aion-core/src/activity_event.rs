@@ -1,6 +1,6 @@
 //! The `ActivityEvent` envelope for the agent-observability real-time channel.
 //!
-//! This module defines the *typed contract* for a live, durable, per-`(workflow, activity,
+//! This module defines the *typed contract* for a live, durable, per-`(workflow, run, activity,
 //! attempt)` transcript of what an agent harness is doing inside an activity: its messages,
 //! tool calls, tool results, progress, stop reasons, and (ephemeral) token deltas. It is the
 //! sibling of [`crate::cluster_event`] — a **non-replay real-time DTO** that crosses the
@@ -40,7 +40,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::ids::{ActivityId, WorkflowId};
+use crate::ids::{ActivityId, RunId, WorkflowId};
 
 /// The role a conversational message is attributed to.
 ///
@@ -178,11 +178,22 @@ pub enum ActivityEventKind {
     },
 }
 
-/// A live transcript event for one `(workflow, activity, attempt)` produced by an agent harness.
+/// A live transcript event for one `(workflow, run, activity, attempt)` produced by an agent
+/// harness.
 ///
 /// Streamed to the ops console in real time and persisted to a durable observability keyspace
 /// (except [`Self::ephemeral`] events). It is **never** mixed into workflow replay history — the
 /// activity's single terminal result is the replay-authoritative output, not this transcript.
+///
+/// # The run axis is REQUIRED, not optional
+///
+/// A continue-as-new chain reuses one [`WorkflowId`] across generations while activity ordinals
+/// restart at `0` and attempts restart at `1` in each new run. Without [`Self::run_id`] two
+/// generations of one chain produce byte-identical stream identities, and their transcripts fuse:
+/// generation two's first event lands on generation one's stream head. `run_id` is therefore a
+/// plain required field — an `Option` would let the ambiguity back in through the `None` arm, and
+/// there is no honest value to default it to. The same law already holds one layer over, where
+/// the activity idempotency key is run-scoped over the identical triple.
 ///
 /// # Ordering
 ///
@@ -194,6 +205,11 @@ pub enum ActivityEventKind {
 pub struct ActivityEvent {
     /// The workflow this activity belongs to.
     pub workflow_id: WorkflowId,
+    /// The concrete run of that workflow this event was produced in — the second stream axis.
+    ///
+    /// Required. Two generations of one continue-as-new chain share a `workflow_id` and restart
+    /// their ordinals and attempts, so this is the only field that keeps their transcripts apart.
+    pub run_id: RunId,
     /// The activity within the workflow.
     pub activity_id: ActivityId,
     /// The attempt number of the activity this event was produced during.
@@ -228,7 +244,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        ActivityEvent, ActivityEventKind, MessageRole, ProgressDetail, StopKind, WorkflowId,
+        ActivityEvent, ActivityEventKind, MessageRole, ProgressDetail, RunId, StopKind, WorkflowId,
     };
     use crate::ids::ActivityId;
 
@@ -247,6 +263,7 @@ mod tests {
     fn envelope(kind: ActivityEventKind, ephemeral: bool, store_seq: Option<u64>) -> ActivityEvent {
         ActivityEvent {
             workflow_id: WorkflowId::new(Uuid::nil()),
+            run_id: RunId::new(Uuid::from_u128(5)),
             activity_id: ActivityId::from_sequence_position(7),
             attempt: 2,
             agent_id: Uuid::nil(),
@@ -325,6 +342,33 @@ mod tests {
             let decoded = round_trip(&event)?;
             assert_eq!(event, decoded);
         }
+        Ok(())
+    }
+
+    /// The run axis is carried on the wire and DISTINGUISHES two events that are
+    /// otherwise byte-identical — the continue-as-new case, where one workflow id
+    /// spans generations whose ordinals and attempts both restart.
+    #[test]
+    fn the_run_axis_survives_the_wire_and_separates_two_generations()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let generation_one = envelope(
+            ActivityEventKind::Message {
+                role: MessageRole::Assistant,
+                text: "same text".to_owned(),
+            },
+            false,
+            None,
+        );
+        let mut generation_two = generation_one.clone();
+        generation_two.run_id = RunId::new(Uuid::from_u128(6));
+
+        let decoded = round_trip(&generation_one)?;
+        assert_eq!(decoded.run_id, generation_one.run_id);
+        // Everything except the run matches, and the events are still distinct.
+        assert_eq!(generation_one.workflow_id, generation_two.workflow_id);
+        assert_eq!(generation_one.activity_id, generation_two.activity_id);
+        assert_eq!(generation_one.attempt, generation_two.attempt);
+        assert_ne!(generation_one, generation_two);
         Ok(())
     }
 

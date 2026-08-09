@@ -1049,19 +1049,33 @@ impl OutboxRowDispatch for RegistryLiminalDispatch {
             }
         };
 
+        // The run is resolved BEFORE the owner binding, because the binding is
+        // keyed on it: a run-blind key would let an intervention aimed at one
+        // continue-as-new generation resolve another's worker. The refusal is
+        // the pre-existing one — a row without a run cannot be dispatched at all
+        // — simply moved ahead of the bind it now feeds.
+        let activity_id = ActivityId::from_sequence_position(row.ordinal);
+        let run_id = row.run_id.as_ref().ok_or_else(|| {
+            dispatch_error(
+                &channel_for_row(row),
+                "activity run id is missing; refusing unfenced external effect".to_owned(),
+            )
+        })?;
+
         // NOI-6: bind this attempt's owner BEFORE the push, so an intervention that
         // races the dispatch resolves the worker. The guard releases on every exit
         // path (reply, error, panic) so the index never keeps a finished attempt.
         // The key mirrors the worker's execute-path stamp exactly: activity_id from
-        // the ordinal, attempt = the wire's one-based delivery attempt (the same
-        // `request_for_row` stamp the worker echoes into its session key). See
-        // `LiminalActivityWorker::execute` / `run_agent_dispatch`.
+        // the ordinal, run_id from the row, attempt = the wire's one-based delivery
+        // attempt (the same `request_for_row` stamp the worker echoes into its
+        // session key). See `LiminalActivityWorker::execute` / `run_agent_dispatch`.
         let _owner_guard = self.attempt_owners.as_ref().map(|owners| {
             AttemptOwnerGuard::bind(
                 owners.clone(),
                 super::intervention::AttemptKey::new(
                     row.workflow_id.clone(),
-                    ActivityId::from_sequence_position(row.ordinal),
+                    run_id.clone(),
+                    activity_id.clone(),
                     row.attempt.saturating_add(1),
                 ),
                 worker.id(),
@@ -1071,13 +1085,6 @@ impl OutboxRowDispatch for RegistryLiminalDispatch {
         // Push the dispatch to the worker and block for its correlated reply. The
         // push is a blocking, thread-based liminal call; run it off the async
         // runtime so a long-running activity cannot starve a runtime worker.
-        let activity_id = ActivityId::from_sequence_position(row.ordinal);
-        let run_id = row.run_id.as_ref().ok_or_else(|| {
-            dispatch_error(
-                &channel_for_row(row),
-                "activity run id is missing; refusing unfenced external effect".to_owned(),
-            )
-        })?;
         let completion_token = self
             .completion
             .completion_fences
@@ -1903,6 +1910,7 @@ mod tests {
         let owners = AttemptOwnerIndex::new();
         let key = AttemptKey::new(
             WorkflowId::new(Uuid::nil()),
+            aion_core::RunId::new(Uuid::from_u128(0x11)),
             ActivityId::from_sequence_position(3),
             1,
         );

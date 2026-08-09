@@ -35,7 +35,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{ActivityId, WorkflowId};
+use crate::ids::{ActivityId, RunId, WorkflowId};
 
 /// Priority of an injected out-of-band message.
 #[derive(Serialize, Deserialize, ts_rs::TS, Clone, Copy, Debug, PartialEq, Eq)]
@@ -120,6 +120,13 @@ pub enum InterventionKind {
 pub struct InterventionCommand {
     /// The workflow the target activity belongs to.
     pub workflow_id: WorkflowId,
+    /// The concrete run of that workflow the target attempt belongs to.
+    ///
+    /// Required, and load-bearing for routing: a continue-as-new chain reuses one
+    /// `workflow_id` while ordinals and attempts restart in each generation, so without the run
+    /// axis a command aimed at generation two would resolve generation one's owner. Delivering a
+    /// steer to the wrong generation is a control-plane fault, not a display bug.
+    pub run_id: RunId,
     /// The target activity within the workflow.
     pub activity_id: ActivityId,
     /// The target attempt. Commands to a stale (superseded) attempt are no-ops.
@@ -283,7 +290,7 @@ mod tests {
 
     use super::{
         ApprovalDecision, InjectPriority, InterventionCapabilities, InterventionCommand,
-        InterventionKind, InterventionOutcome, InterventionPrimitive, WorkflowId,
+        InterventionKind, InterventionOutcome, InterventionPrimitive, RunId, WorkflowId,
     };
     use crate::ids::ActivityId;
 
@@ -302,6 +309,7 @@ mod tests {
     fn command(kind: InterventionKind) -> InterventionCommand {
         InterventionCommand {
             workflow_id: WorkflowId::new(uuid::Uuid::nil()),
+            run_id: RunId::new(uuid::Uuid::from_u128(5)),
             activity_id: ActivityId::from_sequence_position(3),
             attempt: 1,
             issued_by: Some("operator@example.com".to_owned()),

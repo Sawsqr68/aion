@@ -73,7 +73,8 @@ export type InterventionController = {
   attempt: AttemptCapabilities;
   /**
    * Per-target composer draft key: drafts persist across navigation but never leak
-   * between attempts (each `(workflow, activity, attempt)` keeps its own message).
+   * between attempts (each `(workflow, run, activity, attempt)` keeps its own
+   * message — two generations of a chain must not share a draft).
    */
   draftKey: string;
   /** Issue a command; the ack/error surfaces as controller state, never swallowed. */
@@ -114,6 +115,9 @@ export function useInterventionController(
   const run = (kind: InterventionKind): void => {
     void submit({
       workflowId,
+      // The run comes from the live-attempt enumeration, which names the
+      // generation the owning worker is actually running — never a guess.
+      runId: attempt.runId,
       activityId: attempt.activityId,
       attempt: attempt.attempt,
       kind,
@@ -125,7 +129,7 @@ export function useInterventionController(
 
   return {
     attempt,
-    draftKey: `intervene:${workflowId}:${attempt.activityId}:${attempt.attempt}`,
+    draftKey: `intervene:${workflowId}:${attempt.runId}:${attempt.activityId}:${attempt.attempt}`,
     run,
     submitState,
     lastOutcome,

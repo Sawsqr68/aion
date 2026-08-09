@@ -64,7 +64,7 @@ pub(crate) async fn publish_declared_transcript(
 mod tests {
     use std::sync::Arc;
 
-    use aion_core::{ActivityEvent, ActivityEventKind, ActivityId, MessageRole, WorkflowId};
+    use aion_core::{ActivityEvent, ActivityEventKind, ActivityId, MessageRole, RunId, WorkflowId};
     use aion_store::{ActivityStreamKey, InMemoryObservabilityStore};
     use uuid::Uuid;
 
@@ -79,6 +79,7 @@ mod tests {
     fn line_event(worker_seq: u64, text: &str) -> ActivityEvent {
         ActivityEvent {
             workflow_id: WorkflowId::new(Uuid::from_u128(7)),
+            run_id: RunId::new(Uuid::from_u128(0x70)),
             activity_id: ActivityId::from_sequence_position(2),
             attempt: 1,
             agent_id: Uuid::nil(),

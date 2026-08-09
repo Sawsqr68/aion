@@ -4,6 +4,7 @@ import { ApiClient, ApiError } from '@/lib/api';
 
 const namespace = 'default';
 const workflowId = '00000000-0000-0000-0000-000000000001';
+const runId = '00000000-0000-0000-0000-0000000000a1';
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -29,6 +30,7 @@ test('listAttempts posts the workflow+namespace and normalizes attempts with cap
     {
       attempts: [
         {
+          run_id: runId,
           activity_id: 3,
           attempt: 1,
           capabilities: {
@@ -36,7 +38,7 @@ test('listAttempts posts the workflow+namespace and normalizes attempts with cap
           },
         },
         // An observability-only attempt: the empty set is first-class.
-        { activity_id: 4, attempt: 2, capabilities: { supported: [] } },
+        { run_id: runId, activity_id: 4, attempt: 2, capabilities: { supported: [] } },
       ],
     },
     calls
@@ -51,15 +53,21 @@ test('listAttempts posts the workflow+namespace and normalizes attempts with cap
     { primitive: 'Cancel' },
   ]);
   expect(attempts[1]?.capabilities.supported).toEqual([]);
+  // Every row names its generation: without it the console could not address the
+  // attempt's transcript or route a steer to it.
+  expect(attempts.map((row) => row.runId)).toEqual([runId, runId]);
 });
 
 test('listAttempts drops a row missing addressable target fields, never a phantom control', async () => {
   const client = clientReturning(
     {
       attempts: [
-        { activity_id: 3, attempt: 1, capabilities: { supported: [] } },
+        { run_id: runId, activity_id: 3, attempt: 1, capabilities: { supported: [] } },
         // Malformed: no activity_id — must be dropped, not surfaced.
-        { attempt: 9, capabilities: { supported: [] } },
+        { run_id: runId, attempt: 9, capabilities: { supported: [] } },
+        // Malformed: no run — the row names a coordinate, not an attempt, so it
+        // is dropped too. A run-less row would drive a 422 on the first steer.
+        { activity_id: 5, attempt: 1, capabilities: { supported: [] } },
       ],
     },
     []
@@ -80,6 +88,7 @@ test('intervene surfaces each neutral outcome VERBATIM (applied/gated/stale)', a
     const result = await client.intervene(
       {
         workflowId,
+        runId,
         activityId: 3,
         attempt: 1,
         kind: { kind: 'Cancel', reason: 'stop' },
@@ -97,6 +106,7 @@ test('intervene posts only the target + primitive (issued_by/at are server-stamp
   await client.intervene(
     {
       workflowId,
+      runId,
       activityId: 3,
       attempt: 2,
       kind: { kind: 'InjectMessage', text: 'steer', priority: { priority: 'Interrupt' } },
@@ -107,6 +117,9 @@ test('intervene posts only the target + primitive (issued_by/at are server-stamp
   expect(body).toEqual({
     namespace,
     workflow_id: workflowId,
+    // The run is on the wire: the server refuses a run-less body with a 422, so
+    // omitting it here would be a live control-plane break, not a test detail.
+    run_id: runId,
     activity_id: 3,
     attempt: 2,
     kind: { kind: 'InjectMessage', text: 'steer', priority: { priority: 'Interrupt' } },
@@ -119,7 +132,7 @@ test('a malformed intervene response is a typed error, never a silent success', 
   const client = clientReturning({ not_outcome: true }, []);
   await expect(
     client.intervene(
-      { workflowId, activityId: 3, attempt: 1, kind: { kind: 'Cancel', reason: 'x' } },
+      { workflowId, runId, activityId: 3, attempt: 1, kind: { kind: 'Cancel', reason: 'x' } },
       { namespace }
     )
   ).rejects.toBeInstanceOf(ApiError);
@@ -133,7 +146,7 @@ test('a non-2xx intervene response propagates a typed ApiError', async () => {
   });
   await expect(
     client.intervene(
-      { workflowId, activityId: 3, attempt: 1, kind: { kind: 'Cancel', reason: 'x' } },
+      { workflowId, runId, activityId: 3, attempt: 1, kind: { kind: 'Cancel', reason: 'x' } },
       { namespace }
     )
   ).rejects.toBeInstanceOf(ApiError);

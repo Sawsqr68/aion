@@ -24,7 +24,7 @@ use std::time::Duration;
 
 use aion_core::{
     ActivityId, ApprovalDecision, InjectPriority, InterventionCommand, InterventionKind,
-    InterventionOutcome, InterventionPrimitive, Payload, WorkflowId,
+    InterventionOutcome, InterventionPrimitive, Payload, RunId, WorkflowId,
 };
 use aion_integration_cli::MockAgentHarness;
 use aion_integrations::{AgentRunSpec, ContentType};
@@ -35,6 +35,7 @@ use tokio::sync::{mpsc, oneshot};
 fn spec() -> AgentRunSpec {
     AgentRunSpec::new(
         WorkflowId::new(uuid::Uuid::nil()),
+        RunId::new_v4(),
         ActivityId::from_sequence_position(3),
         1,
         "mock-activity",
@@ -45,6 +46,7 @@ fn spec() -> AgentRunSpec {
 fn command(kind: InterventionKind) -> InterventionCommand {
     InterventionCommand {
         workflow_id: WorkflowId::new(uuid::Uuid::nil()),
+        run_id: RunId::new_v4(),
         activity_id: ActivityId::from_sequence_position(3),
         attempt: 1,
         issued_by: Some("operator".to_owned()),

@@ -195,14 +195,24 @@ fn decode_cluster_subscription(value: &Value) -> Result<ClusterSubscription, Ser
 
 /// Decode the NOI-5b transcript subscription. Namespace-scoped like the
 /// per-workflow arm: it carries `namespace` + `workflow_id`, plus the
-/// `activity_id`/`attempt` axes that pin the `O`-keyspace stream, and an optional
-/// `after_seq` resume cursor (presence-only; range/validity is irrelevant since
-/// `store_seq` is a durable read that returns an empty tail past the head).
+/// `run_id`/`activity_id`/`attempt` axes that pin the `O`-keyspace stream, and
+/// an optional `after_seq` resume cursor (presence-only; range/validity is
+/// irrelevant since `store_seq` is a durable read that returns an empty tail
+/// past the head).
+///
+/// `run_id` is required for the same reason `workflow_id` is: without it the
+/// remaining axes do not name a stream, because a continue-as-new chain restarts
+/// its activity ordinals and attempt numbers in every generation.
 fn decode_transcript_subscription(value: &Value) -> Result<TranscriptSubscription, ServerError> {
     let object = subscription_object(value, "transcript")?;
     let workflow_id = decode_workflow_id_value(object.get("workflow_id").ok_or_else(|| {
         WireError::invalid_input("transcript subscription requires workflow_id")
     })?)?;
+    let run_id = decode_run_id_value(
+        object
+            .get("run_id")
+            .ok_or_else(|| WireError::invalid_input("transcript subscription requires run_id"))?,
+    )?;
     let activity_id = decode_activity_id_value(object.get("activity_id").ok_or_else(|| {
         WireError::invalid_input("transcript subscription requires activity_id")
     })?)?;
@@ -210,9 +220,23 @@ fn decode_transcript_subscription(value: &Value) -> Result<TranscriptSubscriptio
     Ok(TranscriptSubscription {
         namespace: required_string(object, "namespace", "transcript subscription")?.to_owned(),
         workflow_id: Some(workflow_id),
+        run_id: Some(run_id),
         activity_id: Some(activity_id),
         attempt,
         after_seq: decode_after_seq(object)?,
+    })
+}
+
+/// Decode the transcript `run_id`: either a bare UUID string or the structured
+/// `{ "uuid": "…" }` proto shape, matching how `workflow_id` is accepted.
+fn decode_run_id_value(value: &Value) -> Result<aion_proto::ProtoRunId, ServerError> {
+    if let Some(uuid) = value.as_str() {
+        return Ok(aion_proto::ProtoRunId {
+            uuid: uuid.to_owned(),
+        });
+    }
+    serde_json::from_value::<aion_proto::ProtoRunId>(value.clone()).map_err(|source| {
+        WireError::invalid_input(format!("invalid transcript subscription run_id: {source}")).into()
     })
 }
 
@@ -458,16 +482,19 @@ mod tests {
         Ok(())
     }
 
-    /// NOI-5b: the transcript arm decodes its namespace + workflow/activity/
+    /// NOI-5b: the transcript arm decodes its namespace + workflow/run/activity/
     /// attempt axes and the optional `after_seq` cursor. A bare unsigned
-    /// `activity_id` and an absent `attempt` (defaulting to 0) are both accepted.
+    /// `activity_id` and an absent `attempt` (defaulting to 0) are both accepted;
+    /// the run is accepted in the same bare-UUID form `workflow_id` is.
     #[test]
     fn transcript_subscription_decodes_axes_and_cursor() -> Result<(), Box<dyn std::error::Error>> {
         let workflow_id = uuid::Uuid::from_u128(7).to_string();
+        let run_id = uuid::Uuid::from_u128(0x11).to_string();
         let request = decode(&json!({
             "transcript": {
                 "namespace": "tenant-a",
                 "workflow_id": workflow_id,
+                "run_id": run_id,
                 "activity_id": 3,
                 "attempt": 2,
                 "after_seq": 5,
@@ -478,6 +505,7 @@ mod tests {
             return Err("expected a transcript subscription".into());
         };
         assert_eq!(transcript.namespace, "tenant-a");
+        assert_eq!(transcript.run_id.map(|id| id.uuid), Some(run_id));
         assert_eq!(
             transcript.activity_id.map(|id| id.sequence_position),
             Some(3)
@@ -487,6 +515,28 @@ mod tests {
         Ok(())
     }
 
+    /// The run axis is REQUIRED: a transcript subscription that omits it is
+    /// `invalid_input`, never a subscription silently resolved against some
+    /// generation of the server's choosing. On a continue-as-new chain the
+    /// remaining axes do not name a stream at all.
+    #[test]
+    fn transcript_subscription_requires_run_id() {
+        let error = decode(&json!({
+            "transcript": {
+                "namespace": "tenant-a",
+                "workflow_id": uuid::Uuid::from_u128(7).to_string(),
+                "activity_id": 3,
+                "attempt": 2,
+            }
+        }))
+        .err()
+        .map(|error| error.to_wire_error());
+        assert_eq!(
+            error.map(|error| error.code),
+            Some(WireErrorCode::InvalidInput)
+        );
+    }
+
     #[test]
     fn transcript_subscription_defaults_attempt_and_cursor()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -494,6 +544,7 @@ mod tests {
             "transcript": {
                 "namespace": "tenant-a",
                 "workflow_id": uuid::Uuid::from_u128(7).to_string(),
+                "run_id": uuid::Uuid::from_u128(0x11).to_string(),
                 "activity_id": 3,
             }
         }))?;
@@ -515,6 +566,7 @@ mod tests {
             "transcript": {
                 "namespace": "tenant-a",
                 "workflow_id": uuid::Uuid::from_u128(7).to_string(),
+                "run_id": uuid::Uuid::from_u128(0x11).to_string(),
             }
         }))
         .err()

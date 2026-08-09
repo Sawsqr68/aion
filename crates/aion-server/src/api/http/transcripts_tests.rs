@@ -118,6 +118,9 @@ fn transcript_request(
     };
     request.insert("namespace".to_owned(), json!(NAMESPACE));
     request.insert("workflow_id".to_owned(), json!(workflow_id()));
+    // The run is a required axis of the stream identity, so every request built
+    // here names the same run the seeded events were written under.
+    request.insert("run_id".to_owned(), json!(run_id()));
     request.insert("activity_id".to_owned(), json!(3));
     request.insert("attempt".to_owned(), json!(1));
     Ok(request)
@@ -154,9 +157,16 @@ async fn router_with_transcript(count: u64) -> Result<Router, Box<dyn std::error
     Ok(workflow_router(state))
 }
 
+/// The run every transcript fixture below shares, so a request and the events
+/// it must read agree on the run axis.
+fn run_id() -> aion_core::RunId {
+    aion_core::RunId::new(uuid::Uuid::from_u128(0x11))
+}
+
 fn activity_event(worker_seq: u64) -> ActivityEvent {
     ActivityEvent {
         workflow_id: workflow_id(),
+        run_id: run_id(),
         activity_id: ActivityId::from_sequence_position(3),
         attempt: 1,
         agent_id: uuid::Uuid::from_u128(42),

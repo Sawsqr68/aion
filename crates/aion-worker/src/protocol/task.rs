@@ -14,9 +14,17 @@ pub struct ActivityTask {
     pub workflow_id: WorkflowId,
     /// Activity id correlating reports and heartbeats with this task.
     pub activity_id: ActivityId,
-    /// Concrete workflow run that staged this task. Live decoding rejects a
-    /// missing value; the `Option` remains only for manually built test tasks.
-    pub run_id: Option<RunId>,
+    /// Concrete workflow run that staged this task — the generation axis.
+    ///
+    /// REQUIRED, not optional: a continue-as-new chain reuses one workflow id
+    /// while activity ordinals and attempt numbers restart in every generation,
+    /// so `(workflow, activity, attempt)` alone does not name a dispatch. The
+    /// run is what every transcript event this task emits is keyed by, and
+    /// [`crate::ActivityContext`] hands it to the handler as a plain value —
+    /// a handler must never have to invent one. Decoding refuses a wire task
+    /// without it ([`MalformedActivityTask::MissingRunId`]), so a hand-built
+    /// test task names its generation exactly as a live dispatch does.
+    pub run_id: RunId,
     /// Registered activity type name requested by the engine.
     pub activity_type: String,
     /// One-based delivery attempt stamped by the dispatching engine seam and
@@ -93,7 +101,7 @@ impl TryFrom<ProtoActivityTask> for ActivityTask {
         Ok(Self {
             workflow_id,
             activity_id,
-            run_id: Some(run_id),
+            run_id,
             activity_type: value.activity_type,
             attempt: value.attempt,
             completion_token: value.completion_token,
@@ -167,7 +175,7 @@ mod tests {
 
         assert_eq!(task.workflow_id, workflow_id);
         assert_eq!(task.activity_id, activity_id);
-        assert_eq!(task.run_id, Some(run_id));
+        assert_eq!(task.run_id, run_id);
         assert_eq!(task.activity_type, "charge-card");
         assert_eq!(task.attempt, 3, "attempt must be read from the wire");
         assert_eq!(task.input.content_type(), &ContentType::Json);

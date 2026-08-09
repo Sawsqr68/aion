@@ -5,7 +5,7 @@
 
 use std::num::NonZeroUsize;
 
-use aion_core::{ActivityEventKind, ActivityId, MessageRole, WorkflowId};
+use aion_core::{ActivityEventKind, ActivityId, MessageRole, RunId, WorkflowId};
 use aion_store::InMemoryObservabilityStore;
 use chrono::Utc;
 use futures::StreamExt;
@@ -22,9 +22,20 @@ fn publisher(cap: usize) -> Result<ActivityEventPublisher, Box<dyn std::error::E
     Ok(ActivityEventPublisher::new(store, capacity(cap)?))
 }
 
+/// The first generation of the continue-as-new chain the fixtures live in.
+fn generation_one() -> RunId {
+    RunId::new(Uuid::from_u128(0x11))
+}
+
+/// The second generation: SAME workflow id, new run.
+fn generation_two() -> RunId {
+    RunId::new(Uuid::from_u128(0x22))
+}
+
 fn event(attempt: u32, worker_seq: u64, ephemeral: bool, text: &str) -> ActivityEvent {
     ActivityEvent {
         workflow_id: WorkflowId::new(Uuid::from_u128(1)),
+        run_id: generation_one(),
         activity_id: ActivityId::from_sequence_position(3),
         attempt,
         agent_id: Uuid::from_u128(9),
@@ -50,6 +61,7 @@ fn event(attempt: u32, worker_seq: u64, ephemeral: bool, text: &str) -> Activity
 fn key(attempt: u32) -> ActivityStreamKey {
     ActivityStreamKey::new(
         WorkflowId::new(Uuid::from_u128(1)),
+        generation_one(),
         ActivityId::from_sequence_position(3),
         attempt,
     )
@@ -430,6 +442,144 @@ async fn oversized_event_is_truncated_before_persist() -> Result<(), Box<dyn std
     assert!(
         !text.contains(&huge),
         "the original oversized text is not retained in full"
+    );
+    Ok(())
+}
+
+/// THE RUN-SCOPING INVARIANT at the sequencer, on the coordinates a
+/// continue-as-new chain actually produces: ordinal `0`, attempt `1`, in two
+/// generations of one workflow.
+///
+/// Both events must be sequenced as the FIRST record of their own stream
+/// (`store_seq == 0` each), and a read scoped to generation two must return
+/// exactly one event. Under the pre-run-axis key the second publish would have
+/// seen generation one's head, retried, and landed at `store_seq == 1` on
+/// generation one's stream — one fused transcript, silently.
+#[tokio::test]
+async fn two_generations_of_one_chain_are_sequenced_independently()
+-> Result<(), Box<dyn std::error::Error>> {
+    let publisher = publisher(16)?;
+    let ordinal_zero = ActivityId::from_sequence_position(0);
+    let first = ActivityEvent {
+        activity_id: ordinal_zero.clone(),
+        attempt: 1,
+        ..event(1, 1, false, "generation one")
+    };
+    let second = ActivityEvent {
+        run_id: generation_two(),
+        ..first.clone()
+    };
+
+    assert_eq!(publisher.publish(&first).await?, Some(0));
+    assert_eq!(
+        publisher.publish(&second).await?,
+        Some(0),
+        "generation two's first event is its own stream head, not generation one's second record"
+    );
+
+    let first_key = ActivityStreamKey::of(&first);
+    let second_key = ActivityStreamKey::of(&second);
+    assert_ne!(first_key, second_key);
+    // The keys agree on every axis except the run — the collision under test.
+    assert_eq!(first_key.workflow_id, second_key.workflow_id);
+    assert_eq!(first_key.activity_id, second_key.activity_id);
+    assert_eq!(first_key.attempt, second_key.attempt);
+
+    let second_generation = publisher.replay_from(&second_key, 0).await?;
+    assert_eq!(
+        second_generation.len(),
+        1,
+        "a read scoped to generation two must return exactly its own event"
+    );
+    assert_eq!(second_generation[0].event.run_id, generation_two());
+    let first_generation = publisher.replay_from(&first_key, 0).await?;
+    assert_eq!(first_generation.len(), 1);
+    assert_eq!(first_generation[0].event.run_id, generation_one());
+    Ok(())
+}
+
+/// The live-tail filter does not leak across generations: a subscriber attached
+/// to generation two's stream sees generation two's event and NOT generation
+/// one's, even though the two share every other axis and ride one broadcast.
+#[tokio::test]
+async fn live_tail_does_not_leak_across_generations() -> Result<(), Box<dyn std::error::Error>> {
+    let publisher = publisher(16)?;
+    let ordinal_zero = ActivityId::from_sequence_position(0);
+    let first = ActivityEvent {
+        activity_id: ordinal_zero.clone(),
+        attempt: 1,
+        ..event(1, 1, false, "generation one")
+    };
+    let second = ActivityEvent {
+        run_id: generation_two(),
+        ..ActivityEvent {
+            worker_seq: 2,
+            ..first.clone()
+        }
+    };
+
+    let mut tail = publisher.subscribe(ActivityStreamKey::of(&second), None);
+    // Generation one publishes FIRST and must be suppressed for this subscriber;
+    // generation two publishes second and must arrive.
+    publisher.publish(&first).await?;
+    publisher.publish(&second).await?;
+
+    let delivered = tail.next().await.ok_or("the live tail closed early")??;
+    assert_eq!(
+        delivered.run_id,
+        generation_two(),
+        "the sibling generation's event must not reach a run-scoped subscriber"
+    );
+    assert_eq!(delivered.worker_seq, 2);
+    Ok(())
+}
+
+/// The retention cap counts per `(run, activity, attempt)` stream, not per fused
+/// chain: a second generation reaching the same coordinates gets its OWN budget,
+/// so generation two is not silently capped by what generation one wrote.
+#[tokio::test]
+async fn the_retention_cap_is_measured_per_run_not_per_chain()
+-> Result<(), Box<dyn std::error::Error>> {
+    let publisher = bounded_publisher(
+        64,
+        TranscriptBounds {
+            max_event_bytes: 256 * 1024,
+            max_stream_events: 2,
+        },
+    )?;
+    let ordinal_zero = ActivityId::from_sequence_position(0);
+    let generation = |run_id: RunId, worker_seq: u64| ActivityEvent {
+        run_id,
+        activity_id: ordinal_zero.clone(),
+        attempt: 1,
+        ..event(1, worker_seq, false, "x")
+    };
+
+    // Generation one fills its budget: seq 0, seq 1, then the cap marker at 2.
+    assert_eq!(
+        publisher.publish(&generation(generation_one(), 1)).await?,
+        Some(0)
+    );
+    assert_eq!(
+        publisher.publish(&generation(generation_one(), 2)).await?,
+        Some(1)
+    );
+    assert_eq!(
+        publisher.publish(&generation(generation_one(), 3)).await?,
+        None,
+        "the third event crosses the cap and is live-only"
+    );
+
+    // Generation two starts at zero against its OWN cap, unaffected by the
+    // exhausted sibling stream.
+    assert_eq!(
+        publisher.publish(&generation(generation_two(), 1)).await?,
+        Some(0),
+        "a new generation must not inherit its predecessor's exhausted retention budget"
+    );
+    assert_eq!(
+        publisher.publish(&generation(generation_two(), 2)).await?,
+        Some(1)
     );
     Ok(())
 }

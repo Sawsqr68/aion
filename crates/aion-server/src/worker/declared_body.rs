@@ -287,6 +287,7 @@ impl DeclaredCommandDispatcher {
         let (events, drain) = tokio::sync::mpsc::unbounded_channel();
         let (context, cancellation) = aion_worker::ActivityContext::with_transcript(
             request.workflow_id.clone(),
+            request.run_id.clone(),
             request.activity_id.clone(),
             request.attempt,
             events,
@@ -629,6 +630,7 @@ mod tests {
         let dispatch = request("noisy", "{}");
         let key = ActivityStreamKey::new(
             dispatch.workflow_id.clone(),
+            dispatch.run_id.clone(),
             dispatch.activity_id.clone(),
             dispatch.attempt,
         );

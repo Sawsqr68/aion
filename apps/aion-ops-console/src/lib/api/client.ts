@@ -397,6 +397,10 @@ export class ApiClient {
       {
         [AW_REST_CONTRACT.requestKeys.namespace]: options.namespace,
         [AW_REST_CONTRACT.requestKeys.workflowId]: params.workflowId,
+        // The generation axis. The server refuses a run-less body (422): the
+        // target of a steer must be a concrete run, never whichever generation
+        // currently owns the colliding `(activity, attempt)` coordinate.
+        [AW_REST_CONTRACT.requestKeys.runId]: params.runId,
         activity_id: params.activityId,
         attempt: params.attempt,
         kind: params.kind,

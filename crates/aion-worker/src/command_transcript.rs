@@ -7,8 +7,9 @@
 //! transcript events on. Wiring the first into the second is what makes a
 //! command step readable WHILE it runs, through exactly the machinery an agent
 //! step already uses — the same [`ActivityEvent`] envelope, the same
-//! `(workflow, activity, attempt)` stream, the same durable append and cursor
-//! reads on the server side. Nothing downstream had to learn what a command is.
+//! `(workflow, run, activity, attempt)` stream, the same durable append and
+//! cursor reads on the server side. Nothing downstream had to learn what a
+//! command is.
 //!
 //! # What one line becomes
 //!
@@ -34,7 +35,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use aion_core::{ActivityEvent, ActivityEventKind, MessageRole, WorkflowId};
+use aion_core::{ActivityEvent, ActivityEventKind, MessageRole};
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -66,9 +67,6 @@ const fn producer_label(stream: CommandStream) -> &'static str {
 #[derive(Debug)]
 pub struct CommandTranscript<'context> {
     context: &'context ActivityContext,
-    /// Resolved once at construction: the workflow half of the stream key, or
-    /// `None` on a context with no workflow identity to attribute lines to.
-    workflow_id: Option<WorkflowId>,
     /// Worker-local monotonic sequence, shared across both streams so the
     /// numbering follows the order lines were actually observed.
     next_seq: AtomicU64,
@@ -84,16 +82,19 @@ impl<'context> CommandTranscript<'context> {
     pub fn new(context: &'context ActivityContext) -> Self {
         Self {
             context,
-            workflow_id: context.workflow_id().cloned(),
             next_seq: AtomicU64::new(0),
             seam_failure_reported: AtomicBool::new(false),
         }
     }
 
-    /// The transcript event one observed line becomes.
-    fn event(&self, workflow_id: WorkflowId, stream: CommandStream, line: &str) -> ActivityEvent {
+    /// The transcript event one observed line becomes. The full stream key —
+    /// `(workflow, run, activity, attempt)` — is read off the context, which
+    /// carries it by construction; a line is never attributed to an invented or
+    /// partial identity.
+    fn event(&self, stream: CommandStream, line: &str) -> ActivityEvent {
         ActivityEvent {
-            workflow_id,
+            workflow_id: self.context.workflow_id().clone(),
+            run_id: self.context.run_id().clone(),
             activity_id: self.context.activity_id().clone(),
             attempt: self.context.attempt(),
             agent_id: Uuid::nil(),
@@ -118,12 +119,7 @@ impl<'context> CommandTranscript<'context> {
 
 impl CommandOutputObserver for CommandTranscript<'_> {
     fn on_line(&self, stream: CommandStream, line: &str) {
-        let Some(workflow_id) = self.workflow_id.clone() else {
-            // No workflow identity: there is no stream to file this line under.
-            // The command's own result still carries the full output.
-            return;
-        };
-        let event = self.event(workflow_id, stream, line);
+        let event = self.event(stream, line);
         if let Err(error) = self.context.emit_event(event) {
             // The seam closed mid-command (its drain was dropped). The command
             // keeps running and its result is unaffected; the loss is named once
@@ -144,7 +140,7 @@ impl CommandOutputObserver for CommandTranscript<'_> {
 
 #[cfg(test)]
 mod tests {
-    use aion_core::{ActivityEventKind, ActivityId, MessageRole, WorkflowId};
+    use aion_core::{ActivityEventKind, ActivityId, MessageRole, RunId, WorkflowId};
     use tokio::sync::mpsc;
     use uuid::Uuid;
 
@@ -161,6 +157,10 @@ mod tests {
         WorkflowId::new(Uuid::from_u128(0x5eed))
     }
 
+    fn run_id() -> RunId {
+        RunId::new(Uuid::from_u128(0x5eed_0001))
+    }
+
     /// The whole event contract for one observed line, asserted field by field:
     /// the stream key comes from the context, the line is a `Tool` message, the
     /// producing stream is named, and the sequence is the producer's own.
@@ -169,6 +169,7 @@ mod tests {
         let (sender, mut events) = mpsc::unbounded_channel();
         let (context, cancellation) = ActivityContext::with_transcript(
             workflow_id(),
+            run_id(),
             ActivityId::from_sequence_position(4),
             2,
             sender,
@@ -180,6 +181,7 @@ mod tests {
 
         let event = events.recv().await.ok_or("the line must be emitted")?;
         assert_eq!(event.workflow_id, workflow_id());
+        assert_eq!(event.run_id, run_id());
         assert_eq!(event.activity_id, ActivityId::from_sequence_position(4));
         assert_eq!(event.attempt, 2);
         assert_eq!(event.agent_role, STDOUT_PRODUCER);
@@ -206,6 +208,7 @@ mod tests {
         let (sender, mut events) = mpsc::unbounded_channel();
         let (context, cancellation) = ActivityContext::with_transcript(
             workflow_id(),
+            run_id(),
             ActivityId::from_sequence_position(1),
             0,
             sender,
@@ -236,19 +239,21 @@ mod tests {
         Ok(())
     }
 
-    /// A context with no transcript seam and no workflow identity — the isolated
-    /// unit-test shape — publishes nothing and does not fail the command.
+    /// A context with no transcript seam installed — the isolated unit-test
+    /// shape — publishes nothing and does not fail the command. Identity is
+    /// always present (it is required at construction); absence of the SEAM is
+    /// the only no-op condition left.
     #[tokio::test]
     async fn a_context_without_a_seam_publishes_nothing() {
-        let (context, cancellation) =
-            ActivityContext::new(ActivityId::from_sequence_position(1), 0);
+        let (context, cancellation) = ActivityContext::new(
+            workflow_id(),
+            run_id(),
+            ActivityId::from_sequence_position(1),
+            0,
+        );
         drop(cancellation);
         let transcript = CommandTranscript::new(&context);
         transcript.on_line(CommandStream::Stdout, "ignored");
-        assert!(
-            context.workflow_id().is_none(),
-            "the no-op shape is exactly a context with no workflow identity"
-        );
     }
 
     /// A seam whose receiving end has been dropped mid-command does not fail the
@@ -259,6 +264,7 @@ mod tests {
         let (sender, events) = mpsc::unbounded_channel();
         let (context, cancellation) = ActivityContext::with_transcript(
             workflow_id(),
+            run_id(),
             ActivityId::from_sequence_position(1),
             0,
             sender,

@@ -25,8 +25,9 @@ pub(crate) struct RuntimeChannels {
 pub(crate) struct DispatchFinished {
     /// Execution key identifying the finished activity.
     pub(crate) key: ActivityExecutionKey,
-    /// Concrete workflow run echoed from the received task, when known.
-    pub(crate) run_id: Option<RunId>,
+    /// Concrete workflow run echoed from the received task. Always known: the
+    /// task it came from carries a required run.
+    pub(crate) run_id: RunId,
     /// Opaque execution generation echoed from the received task.
     pub(crate) completion_token: String,
     /// Outcome computed by the dispatcher, or the dispatch failure.
@@ -119,9 +120,14 @@ pub(crate) async fn report_finished<S>(
     }
     match finished.outcome {
         Ok(outcome) => {
+            // The outcome-report wire type carries an OPTIONAL run (an engine
+            // that predates run-fenced reporting sends none); a finished
+            // dispatch always knows its generation, so the option is filled
+            // once here, at the wire seam, and never re-questioned.
+            let reported_run = Some(finished.run_id);
             tracker.record(pending_report(
                 &finished.key,
-                finished.run_id.clone(),
+                reported_run.clone(),
                 finished.completion_token.clone(),
                 &outcome,
             ));
@@ -129,7 +135,7 @@ pub(crate) async fn report_finished<S>(
                 session,
                 finished.key.workflow_id,
                 finished.key.activity_id,
-                finished.run_id,
+                reported_run,
                 finished.completion_token,
                 outcome,
             )

@@ -12,7 +12,7 @@
 //!
 //! This read-head -> append(expected_seq) -> on-conflict-retry loop
 //! ([`Self::publish`]) is the ONLY thing that keeps `store_seq` monotonic when two
-//! writers race for one `(workflow, activity, attempt)` stream (a dying worker +
+//! writers race for one `(workflow, run, activity, attempt)` stream (a dying worker +
 //! an adopting worker after failover, or two concurrent publish calls). It is
 //! correctness-critical code, not an implementation detail, and is covered by the
 //! two mandatory NOI-5 negative controls: concurrent-writer monotonicity and
@@ -252,17 +252,23 @@ impl ActivityEventPublisher {
         self.store.read_activity_events_from(key, from_seq).await
     }
 
-    /// Enumerate the retained transcript streams of `workflow_id` from the
-    /// durable `O` keyspace (empty for a workflow with none — old runs simply
-    /// have no retained transcript).
+    /// Enumerate the retained transcript streams of ONE RUN of `workflow_id`
+    /// from the durable `O` keyspace (empty for a run with none — old runs
+    /// simply have no retained transcript).
+    ///
+    /// The run is required, never an optional filter: a workflow-wide
+    /// enumeration over a continue-as-new chain would list several generations'
+    /// streams under coordinates that collide pairwise, and the caller could
+    /// not tell them apart.
     ///
     /// # Errors
     /// A [`StoreError`] from the durable enumeration.
     pub async fn list_streams(
         &self,
         workflow_id: &aion_core::WorkflowId,
+        run_id: &aion_core::RunId,
     ) -> Result<Vec<aion_store::ActivityStreamSummary>, StoreError> {
-        self.store.list_activity_streams(workflow_id).await
+        self.store.list_activity_streams(workflow_id, run_id).await
     }
 
     /// Subscribe to the live transcript tail for `key`, suppressing every event
@@ -270,7 +276,11 @@ impl ActivityEventPublisher {
     /// resume cursor.
     ///
     /// The broadcast is deployment-wide (one channel), so this filters to `key`'s
-    /// `(workflow, activity, attempt)` stream. `after_seq` dedups the splice seam
+    /// `(workflow, run, activity, attempt)` stream — an event from a sibling
+    /// continue-as-new generation of the same workflow fails the key comparison
+    /// and is suppressed, exactly like a different attempt's.
+    ///
+    /// `after_seq` dedups the splice seam
     /// exactly like the cluster channel: attach this receiver BEFORE reading the
     /// priming [`Self::replay_from`] tail, so an event that races the priming read
     /// is retained by the receiver and applied after it (deduped on `store_seq`).
@@ -296,8 +306,10 @@ impl ActivityEventPublisher {
                     match receiver.recv().await {
                         Ok(event) => {
                             if ActivityStreamKey::of(&event) != key {
-                                // A different attempt's event on the shared
-                                // broadcast: not for this subscriber.
+                                // A different stream's event on the shared
+                                // broadcast — another attempt, or another
+                                // generation of this same workflow: not for
+                                // this subscriber.
                                 continue;
                             }
                             match (event.store_seq, after_seq) {

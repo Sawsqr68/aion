@@ -596,6 +596,8 @@ mod tests {
                         |error| format!("accepted root {root:?} failed to parse: {error}"),
                     )?;
                     let (context, _cancellation) = aion_worker::ActivityContext::new(
+                        aion_core::WorkflowId::new_v4(),
+                        aion_core::RunId::new_v4(),
                         aion_core::ActivityId::from_sequence_position(1),
                         1,
                     );

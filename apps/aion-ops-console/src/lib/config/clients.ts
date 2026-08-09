@@ -116,7 +116,9 @@ export const configuredClusterStream = createConfiguredClusterStream();
 
 /**
  * Build a transcript-stream manager (NOI-7) bound to the configured WS base URL
- * and credentials, targeting one `(namespace, workflow, activity, attempt)`.
+ * and credentials, targeting one `(namespace, workflow, run, activity, attempt)`.
+ * The run axis is required by the server: ordinals and attempts restart in every
+ * generation of a continue-as-new chain, so the other axes do not name a stream.
  *
  * This opens a DEDICATED `/events/stream` socket carrying the transcript
  * subscription arm (the socket is one-subscription-per-socket, so a transcript is

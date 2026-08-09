@@ -37,6 +37,13 @@ fn activity_id() -> ActivityId {
     ActivityId::from_sequence_position(ACTIVITY)
 }
 
+/// The one run every fixture in this file lives in: the history's
+/// `WorkflowStarted`, the published transcript events, and the attempt-owner
+/// bind all carry it, exactly as one live generation would.
+fn run_id() -> aion_core::RunId {
+    aion_core::RunId::new(uuid::Uuid::from_u128(10))
+}
+
 fn envelope(seq: u64, recorded_at: DateTime<Utc>) -> EventEnvelope {
     EventEnvelope {
         seq,
@@ -54,7 +61,7 @@ fn started(at: DateTime<Utc>) -> Result<Event, aion_core::PayloadError> {
         envelope: envelope(1, at),
         workflow_type: "fixture".to_owned(),
         input: payload()?,
-        run_id: aion_core::RunId::new(uuid::Uuid::from_u128(10)),
+        run_id: run_id(),
         parent_run_id: None,
         package_version: aion_core::PackageVersion::new("a".repeat(64)),
     })
@@ -123,6 +130,7 @@ async fn publish_transcript(
             .transcript_publisher()
             .publish(&ActivityEvent {
                 workflow_id: workflow_id(),
+                run_id: run_id(),
                 activity_id: activity_id(),
                 attempt: ATTEMPT,
                 agent_id: uuid::Uuid::from_u128(42),
@@ -165,7 +173,7 @@ fn own_the_attempt(
         .worker_id()
         .ok_or("registration did not assign a worker id")?;
     state.attempt_owners().bind(
-        AttemptKey::new(workflow_id(), activity_id(), ATTEMPT),
+        AttemptKey::new(workflow_id(), run_id(), activity_id(), ATTEMPT),
         worker_id,
     );
     state.heartbeat_tracker().track_task(
@@ -534,6 +542,7 @@ async fn transcript_streams_name_their_activity_and_mark_the_current_one() -> Te
         .transcript_publisher()
         .publish(&ActivityEvent {
             workflow_id: workflow_id(),
+            run_id: run_id(),
             activity_id: ActivityId::from_sequence_position(1),
             attempt: ATTEMPT,
             agent_id: uuid::Uuid::from_u128(42),

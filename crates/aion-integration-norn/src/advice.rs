@@ -256,7 +256,7 @@ mod tests {
     use aion_integrations::{
         ActivityEvent, ActivityId, AgentRunSpec, ContentType, DynAgentHarness, DynAgentSession,
         HarnessError, InterventionCapabilities, InterventionCommand, InterventionKind, Payload,
-        WorkflowId,
+        RunId, WorkflowId,
     };
     use async_trait::async_trait;
     use futures::stream::{self, BoxStream};
@@ -433,6 +433,7 @@ mod tests {
     fn spec() -> AgentRunSpec {
         AgentRunSpec::new(
             WorkflowId::new_v4(),
+            RunId::new_v4(),
             ActivityId::from_sequence_position(1),
             1,
             "assistant",
@@ -443,6 +444,7 @@ mod tests {
     fn cancel_command() -> InterventionCommand {
         InterventionCommand {
             workflow_id: WorkflowId::new_v4(),
+            run_id: RunId::new_v4(),
             activity_id: ActivityId::from_sequence_position(1),
             attempt: 1,
             issued_by: None,

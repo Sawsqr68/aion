@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use aion_core::{
     ActivityEvent, ActivityId, ContentType, InjectPriority, InterventionCapabilities,
     InterventionCommand, InterventionKind, InterventionOutcome, InterventionPrimitive, Payload,
-    WorkflowId,
+    RunId, WorkflowId,
 };
 use aion_integrations::contract::{AgentHarness, AgentSession};
 use aion_integrations::error::HarnessError;
@@ -83,9 +83,17 @@ impl AgentSession for FakeSession {
     }
 }
 
+/// The run every fixture below shares, so a command and the session key it must
+/// resolve agree on the run axis. A test that wants the cross-generation case
+/// mints its own second run explicitly.
+fn run() -> RunId {
+    RunId::new(Uuid::from_u128(0x11))
+}
+
 fn key(attempt: u32) -> SessionKey {
     SessionKey::new(
         WorkflowId::new(Uuid::nil()),
+        run(),
         ActivityId::from_sequence_position(3),
         attempt,
     )
@@ -94,6 +102,7 @@ fn key(attempt: u32) -> SessionKey {
 fn command(attempt: u32, kind: InterventionKind) -> InterventionCommand {
     InterventionCommand {
         workflow_id: WorkflowId::new(Uuid::nil()),
+        run_id: run(),
         activity_id: ActivityId::from_sequence_position(3),
         attempt,
         issued_by: Some("operator".to_owned()),
@@ -154,8 +163,9 @@ fn live_session(
     let (event_tx, _event_rx) = mpsc::unbounded_channel();
     let (control_tx, control_rx) = mpsc::unbounded_channel();
     let guard = registry.register(key(attempt), control_tx, capabilities);
+    let spec = spec(attempt);
     let driver = tokio::spawn(async move {
-        let _ = spawn_agent(&harness, spec(), event_tx, Some(control_rx)).await;
+        let _ = spawn_agent(&harness, spec, event_tx, Some(control_rx)).await;
     });
     LiveSession {
         applied,
@@ -165,11 +175,17 @@ fn live_session(
     }
 }
 
-fn spec() -> AgentRunSpec {
+/// The spec the driver is started with names the SAME `(workflow, run, activity,
+/// attempt)` as the [`key`] the session is registered under — one dispatch, one
+/// identity. A spec minting its own run would make a session whose registered key
+/// and whose running agent claimed different generations: a contradiction the
+/// routing assertions could not see.
+fn spec(attempt: u32) -> AgentRunSpec {
     AgentRunSpec::new(
         WorkflowId::new(Uuid::nil()),
+        run(),
         ActivityId::from_sequence_position(3),
-        1,
+        attempt,
         "agent-activity",
         Payload::new(ContentType::Json, b"\"in\"".to_vec()),
     )
@@ -217,6 +233,43 @@ async fn a_command_for_an_unknown_attempt_is_a_stale_target_no_op() {
 
     let outcome = registry.deliver(inject(2)).await;
     assert!(matches!(outcome, InterventionOutcome::StaleTarget { .. }));
+
+    session.shutdown().await;
+}
+
+/// The run axis of the worker's own back-index: a command naming ANOTHER
+/// generation of the same continue-as-new chain — identical workflow, activity
+/// and attempt — resolves nothing and is a stale-target no-op, never delivered to
+/// the live session.
+///
+/// The positive control in the same test proves the refusal is attributable to the
+/// run axis ALONE: the byte-identical command carrying the registered run IS
+/// delivered. Without it, a registry that refused everything would pass.
+#[tokio::test]
+async fn a_command_for_another_generation_is_a_stale_target_no_op() {
+    let registry = ControlRegistry::new();
+    let session = live_session(&registry, 1, caps_inject());
+
+    // Same workflow, same activity, same attempt — a DIFFERENT generation.
+    let mut other_generation = inject(1);
+    other_generation.run_id = RunId::new(Uuid::from_u128(0x22));
+    assert_ne!(
+        other_generation.run_id,
+        run(),
+        "the runs must actually differ"
+    );
+
+    let outcome = registry.deliver(other_generation).await;
+    assert!(matches!(outcome, InterventionOutcome::StaleTarget { .. }));
+    assert!(
+        session.applied.lock().unwrap().is_empty(),
+        "a command for another generation must never reach the live session"
+    );
+
+    // Positive control: the SAME command on the registered run is delivered.
+    let control = registry.deliver(inject(1)).await;
+    assert_eq!(control, InterventionOutcome::Applied);
+    assert_eq!(session.applied.lock().unwrap().len(), 1);
 
     session.shutdown().await;
 }

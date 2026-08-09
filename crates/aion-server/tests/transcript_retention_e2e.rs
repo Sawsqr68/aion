@@ -14,7 +14,7 @@
 
 use std::time::Duration;
 
-use aion_core::{ActivityEvent, ActivityEventKind, ActivityId, MessageRole, WorkflowId};
+use aion_core::{ActivityEvent, ActivityEventKind, ActivityId, MessageRole, RunId, WorkflowId};
 use aion_server::api::http::workflow_router;
 use aion_server::config::{
     AuthConfig, AuthoringConfig, DeployConfig, ListenConfig, MetricsConfig, NamespaceConfig,
@@ -43,6 +43,14 @@ fn workflow_id() -> WorkflowId {
     WorkflowId::new(Uuid::from_u128(0x229))
 }
 
+/// The run every fixture in this file shares. The transcript keyspace and
+/// the attempt-owner index are both keyed on `(workflow, run, activity,
+/// attempt)`, so one shared run is what makes a written event and the key
+/// that reads it back name the same stream.
+fn run_id() -> RunId {
+    RunId::new(Uuid::from_u128(0x11))
+}
+
 /// A second workflow, also tenant-a, that never records a transcript.
 fn quiet_workflow_id() -> WorkflowId {
     WorkflowId::new(Uuid::from_u128(0x230))
@@ -51,6 +59,7 @@ fn quiet_workflow_id() -> WorkflowId {
 fn message_event(worker_seq: u64, text: &str) -> ActivityEvent {
     ActivityEvent {
         workflow_id: workflow_id(),
+        run_id: run_id(),
         activity_id: ActivityId::from_sequence_position(ACTIVITY_SEQ),
         attempt: ATTEMPT,
         agent_id: Uuid::from_u128(9),
@@ -80,6 +89,7 @@ fn delta_event(worker_seq: u64, fragment: &str) -> ActivityEvent {
 fn stream_key() -> ActivityStreamKey {
     ActivityStreamKey::new(
         workflow_id(),
+        run_id(),
         ActivityId::from_sequence_position(ACTIVITY_SEQ),
         ATTEMPT,
     )
@@ -191,6 +201,7 @@ fn fetch_body(namespace: &str, workflow: &WorkflowId, from_seq: Option<u64>) -> 
     let mut request_body = json!({
         "namespace": namespace,
         "workflow_id": workflow,
+        "run_id": run_id(),
         "activity_id": ACTIVITY_SEQ,
         "attempt": ATTEMPT,
     });
@@ -201,7 +212,7 @@ fn fetch_body(namespace: &str, workflow: &WorkflowId, from_seq: Option<u64>) -> 
 }
 
 fn streams_body(namespace: &str, workflow: &WorkflowId) -> serde_json::Value {
-    json!({ "namespace": namespace, "workflow_id": workflow })
+    json!({ "namespace": namespace, "workflow_id": workflow, "run_id": run_id() })
 }
 
 /// Extract the `(store_seq, text)` view of a fetched events array.
@@ -285,7 +296,12 @@ async fn retained_transcript_is_fetchable_in_order_after_all_subscribers_drop()
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         streams["streams"],
-        json!([{ "activity_id": ACTIVITY_SEQ, "attempt": ATTEMPT, "head": 5 }])
+        json!([{
+            "run_id": run_id(),
+            "activity_id": ACTIVITY_SEQ,
+            "attempt": ATTEMPT,
+            "head": 5,
+        }])
     );
     Ok(())
 }

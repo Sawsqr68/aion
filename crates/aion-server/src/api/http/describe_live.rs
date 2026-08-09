@@ -25,7 +25,7 @@
 
 use aion_core::{
     ActivityId, AttemptLiveness, CurrentStep, DescribeLiveResponse, Event, HeartbeatNote,
-    LiveAttempt, OpenStep, StepState, TranscriptStreamHead, TranscriptTail, WorkflowId,
+    LiveAttempt, OpenStep, RunId, StepState, TranscriptStreamHead, TranscriptTail, WorkflowId,
 };
 use aion_proto::ProtoDescribeWorkflowRequest;
 use aion_store::{ActivityRecord, ActivityStreamKey};
@@ -100,20 +100,38 @@ pub(crate) async fn describe_live(
     let open_steps = aion_core::open_steps(&outcome.history);
     let current = aion_core::current_step(&outcome.history);
     let current_attempt = current.as_ref().and_then(dispatched_attempt);
+    let current_run = current_generation_run(&outcome.history);
     let current_step = match current {
         Some(step) => Some(CurrentStep {
-            attempt: live_attempt(&state, &outcome.workflow_id, &step, tail).await?,
+            // A dispatched step always sits inside a started generation (the
+            // recorder opens every run's history with `WorkflowStarted`), so a
+            // history with no run has no live attempt to describe — the `None`
+            // is the truth, not a fallback.
+            attempt: match current_run.as_ref() {
+                Some(run_id) => {
+                    live_attempt(&state, &outcome.workflow_id, run_id, &step, tail).await?
+                }
+                None => None,
+            },
             step,
         }),
         None => None,
     };
-    let transcript_streams = transcript_streams(
-        &state,
-        &outcome.workflow_id,
-        &outcome.history,
-        current_attempt,
-    )
-    .await?;
+    let transcript_streams = match current_run.as_ref() {
+        Some(run_id) => {
+            transcript_streams(
+                &state,
+                &outcome.workflow_id,
+                run_id,
+                &outcome.history,
+                current_attempt,
+            )
+            .await?
+        }
+        // No generation has started, so the run-scoped `O` keyspace holds no
+        // stream this view could enumerate.
+        None => Vec::new(),
+    };
 
     Ok(Json(DescribeLiveResponse {
         summary,
@@ -133,11 +151,22 @@ fn dispatched_attempt(step: &OpenStep) -> Option<(ActivityId, u32)> {
     }
 }
 
+/// The run of the history's CURRENT generation: the run started by the last
+/// [`Event::WorkflowStarted`] recorded. `None` when the history holds no start
+/// at all — nothing has run, so there is no run axis to address transcripts by.
+fn current_generation_run(history: &[Event]) -> Option<RunId> {
+    history.iter().rev().find_map(|event| match event {
+        Event::WorkflowStarted { run_id, .. } => Some(run_id.clone()),
+        _ => None,
+    })
+}
+
 /// The live view of a dispatched step's attempt: who owns it, what it last said,
 /// and its transcript tail. `None` for a step with no attempt at all.
 async fn live_attempt(
     state: &ServerState,
     workflow_id: &WorkflowId,
+    run_id: &RunId,
     step: &OpenStep,
     tail: Option<u32>,
 ) -> Result<Option<LiveAttempt>, HttpWireError> {
@@ -148,7 +177,12 @@ async fn live_attempt(
     else {
         return Ok(None);
     };
-    let key = ActivityStreamKey::new(workflow_id.clone(), step.activity_id.clone(), attempt);
+    let key = ActivityStreamKey::new(
+        workflow_id.clone(),
+        run_id.clone(),
+        step.activity_id.clone(),
+        attempt,
+    );
     Ok(Some(LiveAttempt {
         attempt,
         dispatched_at,
@@ -262,12 +296,13 @@ async fn transcript(
 async fn transcript_streams(
     state: &ServerState,
     workflow_id: &WorkflowId,
+    run_id: &RunId,
     history: &[Event],
     current: Option<(ActivityId, u32)>,
 ) -> Result<Vec<TranscriptStreamHead>, HttpWireError> {
     let summaries = state
         .transcript_publisher()
-        .list_streams(workflow_id)
+        .list_streams(workflow_id, run_id)
         .await
         .map_err(|error| HttpWireError(ServerError::from(error).to_wire_error()))?;
     let cap = retention_cap(state);

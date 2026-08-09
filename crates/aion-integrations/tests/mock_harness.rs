@@ -14,7 +14,7 @@ use std::sync::Mutex;
 use aion_integrations::{
     ActivityEvent, ActivityEventKind, ActivityId, AgentHarness, AgentRunSpec, AgentSession,
     ContentType, HarnessError, InterventionCapabilities, InterventionCommand, InterventionKind,
-    InterventionPrimitive, MessageRole, Payload, StopKind, WorkflowId,
+    InterventionPrimitive, MessageRole, Payload, RunId, StopKind, WorkflowId,
 };
 use async_trait::async_trait;
 use chrono::Utc;
@@ -104,6 +104,7 @@ impl AgentSession for MockSession {
 fn message_event(text: &str) -> ActivityEvent {
     ActivityEvent {
         workflow_id: WorkflowId::new(Uuid::nil()),
+        run_id: RunId::new(Uuid::from_u128(1)),
         activity_id: ActivityId::from_sequence_position(0),
         attempt: 0,
         agent_id: Uuid::nil(),
@@ -131,6 +132,7 @@ fn stop_event() -> ActivityEvent {
 fn run_spec() -> AgentRunSpec {
     AgentRunSpec::new(
         WorkflowId::new_v4(),
+        RunId::new_v4(),
         ActivityId::from_sequence_position(9),
         3,
         "mock-activity",
@@ -178,6 +180,7 @@ async fn rich_harness_streams_events_accepts_supported_command_and_returns_resul
 
     let command = InterventionCommand {
         workflow_id: WorkflowId::new_v4(),
+        run_id: RunId::new_v4(),
         activity_id: ActivityId::from_sequence_position(9),
         attempt: 3,
         issued_by: Some("operator".to_owned()),
@@ -209,6 +212,7 @@ async fn observability_only_harness_is_first_class() -> Result<(), HarnessError>
 
     let command = InterventionCommand {
         workflow_id: WorkflowId::new_v4(),
+        run_id: RunId::new_v4(),
         activity_id: ActivityId::from_sequence_position(9),
         attempt: 3,
         issued_by: None,
@@ -249,6 +253,7 @@ async fn unadvertised_command_is_rejected_even_when_some_are_supported() -> Resu
 
     let command = InterventionCommand {
         workflow_id: WorkflowId::new_v4(),
+        run_id: RunId::new_v4(),
         activity_id: ActivityId::from_sequence_position(9),
         attempt: 3,
         issued_by: None,

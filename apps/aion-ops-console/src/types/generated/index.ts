@@ -1294,6 +1294,13 @@ export type ActivityEvent = {
  */
 workflow_id: WorkflowId,
 /**
+ * The concrete run of that workflow this event was produced in — the second stream axis.
+ *
+ * Required. Two generations of one continue-as-new chain share a `workflow_id` and restart
+ * their ordinals and attempts, so this is the only field that keeps their transcripts apart.
+ */
+run_id: RunId,
+/**
  * The activity within the workflow.
  */
 activity_id: ActivityId,
@@ -1385,6 +1392,15 @@ export type InterventionCommand = {
  * The workflow the target activity belongs to.
  */
 workflow_id: WorkflowId,
+/**
+ * The concrete run of that workflow the target attempt belongs to.
+ *
+ * Required, and load-bearing for routing: a continue-as-new chain reuses one
+ * `workflow_id` while ordinals and attempts restart in each generation, so without the run
+ * axis a command aimed at generation two would resolve generation one's owner. Delivering a
+ * steer to the wrong generation is a control-plane fault, not a display bug.
+ */
+run_id: RunId,
 /**
  * The target activity within the workflow.
  */

@@ -152,6 +152,7 @@ impl AgentHarness for MockAgentHarness {
 fn fixed_transcript(spec: &AgentRunSpec) -> Vec<ActivityEvent> {
     let base = ActivityEvent {
         workflow_id: spec.workflow_id.clone(),
+        run_id: spec.run_id.clone(),
         activity_id: spec.activity_id.clone(),
         attempt: spec.attempt,
         agent_id: Uuid::nil(),
@@ -218,12 +219,13 @@ impl AgentSession for MockAgentSession {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use aion_core::{ActivityId, ApprovalDecision, InjectPriority, WorkflowId};
+    use aion_core::{ActivityId, ApprovalDecision, InjectPriority, RunId, WorkflowId};
     use futures::StreamExt;
 
     fn spec() -> AgentRunSpec {
         AgentRunSpec::new(
             WorkflowId::new(Uuid::nil()),
+            RunId::new_v4(),
             ActivityId::from_sequence_position(4),
             2,
             "mock-activity",
@@ -234,6 +236,7 @@ mod tests {
     fn command(kind: InterventionKind) -> InterventionCommand {
         InterventionCommand {
             workflow_id: WorkflowId::new(Uuid::nil()),
+            run_id: RunId::new_v4(),
             activity_id: ActivityId::from_sequence_position(4),
             attempt: 2,
             issued_by: Some("operator".to_owned()),
