@@ -169,7 +169,7 @@ fn the_surface_is_deterministic() -> TestResult {
 fn the_embedded_document_is_the_shipped_one() -> TestResult {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../assistant/awl/assistant.awl"
+        "/../../../crates/aion-server/assistant-embed/assistant.awl"
     );
     let on_disk = std::fs::read_to_string(path)?;
     assert_eq!(

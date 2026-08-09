@@ -8,6 +8,7 @@ use axum::{
 };
 use tower_http::cors::CorsLayer;
 
+use super::assistant::{assistant_descriptor, assistant_document};
 use super::authoring::compile_source;
 use super::awl::{
     bind_run, check, create_document, deploy_authoring, edit, emit, format, get_document,
@@ -276,6 +277,11 @@ pub fn workflow_router(state: ServerState) -> Router {
         ))
         .route("/whoami", get(whoami))
         .route("/build", get(build_identity))
+        // The built-in assistant, always mounted: it ships in the binary like
+        // the ops console, so there is no configuration under which this server
+        // has one and does not say so.
+        .route("/assistant", get(assistant_descriptor))
+        .route("/assistant/document", get(assistant_document))
         .route("/namespaces", get(list_namespaces).post(post_namespace))
         .route("/namespaces/records", get(list_namespace_records))
         .route(

@@ -27,6 +27,9 @@ pub mod auth;
 /// Server-side Gleam authoring surface (compile, type-check, package, hot-load).
 pub mod authoring;
 
+/// The built-in assistant: the embedded AWL document, its boot install, and
+/// the description the server serves of it.
+pub mod assistant;
 /// In-process AWL checking, formatting, semantics, and workspace documents.
 pub(crate) mod awl;
 /// What code this server is: the revision stamped into the binary at build

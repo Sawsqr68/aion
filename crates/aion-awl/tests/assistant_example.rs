@@ -1,4 +1,4 @@
-//! The shipped `examples/assistant/awl/assistant.awl` session is gated like
+//! The shipped `crates/aion-server/assistant-embed/assistant.awl` session is gated like
 //! the artifact it is: it must check clean, print canonically, and — the part
 //! that matters — its nested wait loop must be PROVABLY unable to fall through
 //! into another agent round.
@@ -45,8 +45,11 @@ use aion_awl::{
 
 type TestResult = Result<(), Box<dyn Error>>;
 
+/// The document, at the one place it lives: inside the server crate, because
+/// the `aion` binary embeds it (#139 leg C). It is a shipped product asset, not
+/// an example, and there is no second copy to check instead.
 fn example() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/assistant/awl/assistant.awl")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../aion-server/assistant-embed/assistant.awl")
 }
 
 #[test]

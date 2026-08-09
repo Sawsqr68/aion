@@ -207,6 +207,13 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
         owns_all_shards = owned_shards.is_empty(),
         "aion-server startup banner"
     );
+    // #139 leg C: the assistant ships IN aion. The embedded document is
+    // installed here — after the engine has reloaded every persisted package,
+    // so the install can see what is already resident, and before the
+    // transports accept traffic, so the first caller finds it. It claims only a
+    // catalog holding no version of the assistant type; anything else is the
+    // operator's cut to make, and the outcome says so in the log either way.
+    crate::assistant::install_embedded_assistant_for_server(&state).await;
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     // LSUB-4-1: a distributed haematite boot carries a `[store.cluster]` section.
     // The single outbox dispatcher task is spawned in BOTH modes; the difference

@@ -14,11 +14,13 @@
 //! - `visibility` — visibility query-string parsing and namespace scoping.
 //! - `payload` — HTTP body/payload encode-decode shapes and conversions.
 //! - `build` — `GET /build`, the server's own revision.
+//! - `assistant` — `GET /assistant`, the built-in assistant this binary carries.
 //! - `queues` — the fleet-wide unserved-queue read.
 //! - `unrecoverable` — the fleet-wide degraded-residency read.
 //! - `clean_dtos` — clean JSON request/response DTOs for the workflow POST endpoints.
 //! - `error` — wire-error-to-HTTP response mapping.
 
+mod assistant;
 mod auth;
 mod authoring;
 mod awl;

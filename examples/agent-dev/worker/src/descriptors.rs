@@ -76,7 +76,13 @@ use aion_package::ActivityDescriptor;
 /// Embedded rather than read from disk: a worker that resolved its own
 /// contract from a path could be started against a different document than the
 /// one that was deployed, and would advertise a surface nobody asked for.
-pub const ASSISTANT_DOCUMENT: &str = include_str!("../../../assistant/awl/assistant.awl");
+///
+/// The document lives inside the server crate because the `aion` binary embeds
+/// it too (#139 leg C): one file, read by the server that installs it and by
+/// this worker that serves its agent action. A copy beside this crate would be
+/// a second truth, and the two would drift.
+pub const ASSISTANT_DOCUMENT: &str =
+    include_str!("../../../../crates/aion-server/assistant-embed/assistant.awl");
 
 /// Failure to derive the advertised surface from the embedded document.
 #[derive(Debug, thiserror::Error)]
