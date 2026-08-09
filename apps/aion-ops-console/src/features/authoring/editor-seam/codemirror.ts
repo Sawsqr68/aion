@@ -24,6 +24,7 @@ import {
   type ViewUpdate,
 } from '@codemirror/view';
 
+import { syntaxClassFor } from '../lib/highlight-classes';
 import type {
   AuthoringEditor,
   CursorChange,
@@ -347,7 +348,7 @@ function highlightDecorations(view: EditorView, spans: readonly HighlightSpan[])
     const from = Math.min(span.startIndex, docLength);
     const to = Math.min(span.endIndex, docLength);
     return from < to
-      ? [Decoration.mark({ class: `awl-syntax-${captureClass(span.capture)}` }).range(from, to)]
+      ? [Decoration.mark({ class: syntaxClassFor(span.capture) }).range(from, to)]
       : [];
   });
   return Decoration.set(ranges, true);
@@ -391,8 +392,4 @@ function readMetrics(view: EditorView): LayoutMetrics {
     scrollTop: view.scrollDOM.scrollTop,
     scrollLeft: view.scrollDOM.scrollLeft,
   };
-}
-
-function captureClass(capture: string): string {
-  return capture.replaceAll('.', '-').replaceAll(/[^a-zA-Z0-9_-]/g, '');
 }
