@@ -40,6 +40,32 @@ Alongside it, and worth reading in the same sitting:
 | [`COMMANDS.md`](../../examples/assistant/resources/COMMANDS.md) | Every CLI command in the AWL loop, with its honest failure modes. |
 | [`DECLARED-COMMANDS.md`](../workers/DECLARED-COMMANDS.md) | **Read before writing a `run "…"` body. There is no sandbox.** |
 
+## Reaching the guide from wherever you are
+
+You should not have to leave what you are doing to find out what a word
+means. Every authoring surface answers, and every one of them answers with the
+*same sentence*, because they all render one table — `aion_awl::guide`, which
+carries one sentence per word of the language and the reference section that
+explains it in full.
+
+| Where you are | How you ask |
+|---|---|
+| The terminal | `aion awl guide` for every word, `aion awl guide <word>` for one. `aion awl --help` names each document above by its real path. |
+| Your editor | Hover any reserved word. The tooltip carries the sentence and the reference citation, and it answers even while the document is mid-edit and does not parse. Completion carries the same text on every offered word. |
+| The ops console | The authoring view's **Language** panel lists every word, grouped by reference section, and searchable. It reads a checked-in copy of the same table, so it works with no server reachable. |
+
+That the four renderings agree is not maintained by care. `aion-awl`'s
+glossary is an exhaustive match over the keyword inventory, so a word added to
+the language fails the build until someone writes what it means;
+`crates/aion-awl/tests/guide_reference_gate.rs` refuses any citation the
+reference cannot answer; and `crates/aion-cli/tests/console_guide_asset.rs`
+refuses any difference between the console's copy and what
+`aion awl guide --json` renders today. Regenerate that copy with:
+
+```sh
+aion awl guide --json > apps/aion-ops-console/src/features/authoring/assets/awl-guide.json
+```
+
 ## The verbs
 
 ### Local — these never contact a server
@@ -51,6 +77,7 @@ Alongside it, and worth reading in the same sitting:
 | `aion awl schema <FILE.awl> [--type <T>] [--queries]` | Derives JSON Schema (draft 2020-12). No flag: the workflow's start contract. `--type`: one declared type. `--queries`: the read-only surface — every declared `query` with the schema of the answer an operator receives. |
 | `aion awl scaffold <FILE.awl> --out <DIR> [--worker <name>] [--aion-crates <DIR>]` | Generates a compiling Rust worker crate per `worker` block, at `<out>/<queue>-worker`. Every advertised wire descriptor comes from the compiled contract, not from the handlers' Rust types. `src/handlers.rs` is yours from the moment it exists — re-running never rewrites it. |
 | `aion awl emit <FILE.awl> [--output <P>] [--target gleam\|beam]` | Emits an executable artifact. `gleam` (default) writes Gleam source to `--output` or stdout; `beam` compiles direct BEAM bytecode through the same seam the deploy path uses, **requires** `--output`, and writes a `<output>.json` sidecar. Optional in the normal loop. |
+| `aion awl guide` | Prints every word of the language with one sentence of meaning and its reference citation, grouped by section. `aion awl guide <word>` prints one; `--json` emits the table the ops console renders. An unknown word exits non-zero rather than printing an empty answer. |
 | `aion awl lsp` | The AWL language server over stdio, for editor integration. |
 
 ### Against a running server

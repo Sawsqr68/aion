@@ -11,6 +11,7 @@ mod checker;
 mod compile;
 mod emitter;
 mod fold;
+pub mod guide;
 mod jsontext;
 mod lexer;
 // The AWL-BC bytecode MIR backend (BC-2). Exposed as `#[doc(hidden)] pub` — a

@@ -133,6 +133,29 @@ pub(crate) enum AwlCommand {
         #[arg(long, conflicts_with = "type")]
         queries: bool,
     },
+    /// Print what a word of AWL means, and where it is explained in full.
+    ///
+    /// With no argument, prints every word of the language grouped by the
+    /// section of `examples/assistant/resources/AWL-REFERENCE.md` that
+    /// explains it, above the paths of the documents an author needs:
+    /// `docs/authoring/AWL.md` for the tour,
+    /// `examples/assistant/resources/AWL-AUTHORING.md` for the path from an
+    /// objective to a checked document,
+    /// `examples/assistant/resources/WORKERS.md` for what actually serves an
+    /// action, `examples/assistant/resources/COMMANDS.md` for the CLI loop,
+    /// and `docs/workers/DECLARED-COMMANDS.md` before any `run "…"` body.
+    ///
+    /// Every sentence printed comes from the same table the language server
+    /// hovers and the ops console renders, so the three surfaces cannot
+    /// disagree about what a word does. `--json` emits that table.
+    Guide {
+        /// The word to explain; omitted, every word of the language is
+        /// printed.
+        word: Option<String>,
+        /// Emit the glossary as JSON instead of as text.
+        #[arg(long)]
+        json: bool,
+    },
     /// Run the AWL language server over stdio for editor integration.
     Lsp,
 }
@@ -170,6 +193,7 @@ pub(crate) fn run(command: &AwlCommand) -> ExitCode {
             r#type,
             queries,
         } => schema_command(file, r#type.as_deref(), *queries),
+        AwlCommand::Guide { word, json } => crate::awl_guide::run(word.as_deref(), *json),
         AwlCommand::Lsp => match aion_awl_lsp::run_stdio() {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {

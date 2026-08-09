@@ -6,6 +6,7 @@
 mod analysis;
 mod bindings;
 mod completion;
+mod glossary;
 mod navigation;
 mod server;
 

@@ -21,6 +21,7 @@ use crate::payload::{
 };
 
 mod awl;
+mod awl_guide;
 mod awl_scaffold;
 mod check_deterministic;
 mod deploy;
@@ -101,7 +102,7 @@ enum Command {
     /// `--debounce-ms` coalesces an editor's multi-event save into one rebuild.
     Dev(dev::DevArgs),
     /// Author AWL workflow documents (rev-2 surface): check, format, emit
-    /// Gleam, and derive JSON Schema from `.awl` files.
+    /// Gleam, derive JSON Schema, and read the language's own guide.
     ///
     /// Runs entirely locally and never connects to a server. `check` parses
     /// and typechecks a document, printing compiler-style
@@ -110,7 +111,19 @@ enum Command {
     /// printer is the formatter — there is no check mode); `emit` lowers a
     /// checked document to a Gleam workflow module (the stopgap execution
     /// target); `schema` derives draft 2020-12 JSON Schema from the same
-    /// checked document.
+    /// checked document; `guide` prints what any word of the language means.
+    ///
+    /// The documents behind this surface, all in the repository:
+    /// `docs/authoring/AWL.md` introduces the language and the loop;
+    /// `examples/assistant/resources/AWL-REFERENCE.md` is the complete
+    /// reference every `guide` entry cites by section;
+    /// `examples/assistant/resources/AWL-AUTHORING.md` walks from an
+    /// objective to a checked document;
+    /// `examples/assistant/resources/WORKERS.md` says what actually serves a
+    /// declared action; `examples/assistant/resources/COMMANDS.md` covers
+    /// every command in this loop with its failure modes; and
+    /// `docs/workers/DECLARED-COMMANDS.md` must be read before writing a
+    /// `run "…"` body, because there is no sandbox.
     Awl {
         #[command(subcommand)]
         command: awl::AwlCommand,

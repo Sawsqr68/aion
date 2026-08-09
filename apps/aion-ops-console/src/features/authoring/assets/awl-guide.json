@@ -1,0 +1,640 @@
+{
+  "guide": "docs/authoring/AWL.md",
+  "reference": "examples/assistant/resources/AWL-REFERENCE.md",
+  "authoring": "examples/assistant/resources/AWL-AUTHORING.md",
+  "workers": "examples/assistant/resources/WORKERS.md",
+  "commands": "examples/assistant/resources/COMMANDS.md",
+  "declared_commands": "docs/workers/DECLARED-COMMANDS.md",
+  "entries": [
+    {
+      "word": "workflow",
+      "kind": "keyword",
+      "summary": "Opens the document: one `.awl` file declares exactly one workflow, named here.",
+      "section": {
+        "number": 1,
+        "title": "Document structure"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §1 — Document structure"
+    },
+    {
+      "word": "input",
+      "kind": "keyword",
+      "summary": "Declares one field of the workflow's start contract; it is repeatable.",
+      "section": {
+        "number": 3,
+        "title": "Workflow header"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §3 — Workflow header"
+    },
+    {
+      "word": "signal",
+      "kind": "keyword",
+      "summary": "Declares a durable signal this workflow receives; a step body takes delivery with `wait`.",
+      "section": {
+        "number": 3,
+        "title": "Workflow header"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §3 — Workflow header"
+    },
+    {
+      "word": "outcome",
+      "kind": "keyword",
+      "summary": "Declares a terminal payload in the workflow header, and a guarded arm inside a step body.",
+      "section": {
+        "number": 7,
+        "title": "Selection, outcomes, and routes"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §7 — Selection, outcomes, and routes"
+    },
+    {
+      "word": "type",
+      "kind": "keyword",
+      "summary": "Declares a record, an enum, or a schema door, and names the type an `outcome` carries.",
+      "section": {
+        "number": 2,
+        "title": "Values and types"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §2 — Values and types"
+    },
+    {
+      "word": "schema",
+      "kind": "keyword",
+      "summary": "Opens a schema door: `schema(\"path\")` imports one, `schema { … }` inlines one, and `schema of Type` derives one in constant position.",
+      "section": {
+        "number": 2,
+        "title": "Values and types"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §2 — Values and types"
+    },
+    {
+      "word": "worker",
+      "kind": "keyword",
+      "summary": "Declares a typed worker contract whose name is the task queue; it is a requirement, never an implementation.",
+      "section": {
+        "number": 4,
+        "title": "Workers, actions, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+    },
+    {
+      "word": "action",
+      "kind": "keyword",
+      "summary": "Declares one wire contract on a worker: named parameters, one return type, and at most one config line.",
+      "section": {
+        "number": 4,
+        "title": "Workers, actions, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+    },
+    {
+      "word": "child",
+      "kind": "keyword",
+      "summary": "Declares a separate durable workflow this one may call and await.",
+      "section": {
+        "number": 5,
+        "title": "Children and subflows"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §5 — Children and subflows"
+    },
+    {
+      "word": "step",
+      "kind": "keyword",
+      "summary": "Declares one node of the step graph; the statements inside it run in written order.",
+      "section": {
+        "number": 6,
+        "title": "Steps, dependencies, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+    },
+    {
+      "word": "after",
+      "kind": "keyword",
+      "summary": "Names the steps a step waits for, so the dependency is written rather than inferred from position.",
+      "section": {
+        "number": 6,
+        "title": "Steps, dependencies, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+    },
+    {
+      "word": "fork",
+      "kind": "keyword",
+      "summary": "Runs work concurrently inside one step: `fork item in items` one branch per item, or a bare `fork` for named branches.",
+      "section": {
+        "number": 8,
+        "title": "Parallel and sequential work"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §8 — Parallel and sequential work"
+    },
+    {
+      "word": "join",
+      "kind": "keyword",
+      "summary": "Closes a `fork`, binding a collection fork's results in input order.",
+      "section": {
+        "number": 8,
+        "title": "Parallel and sequential work"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §8 — Parallel and sequential work"
+    },
+    {
+      "word": "loop",
+      "kind": "keyword",
+      "summary": "Runs a bounded value-threading loop whose body runs at least once and must rebind the threaded value.",
+      "section": {
+        "number": 9,
+        "title": "Bounded iteration"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §9 — Bounded iteration"
+    },
+    {
+      "word": "counting",
+      "kind": "keyword",
+      "summary": "Binds the number of completed iterations of a `loop`.",
+      "section": {
+        "number": 9,
+        "title": "Bounded iteration"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §9 — Bounded iteration"
+    },
+    {
+      "word": "until",
+      "kind": "keyword",
+      "summary": "States the condition that ends a `loop`, tested after the body has run.",
+      "section": {
+        "number": 9,
+        "title": "Bounded iteration"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §9 — Bounded iteration"
+    },
+    {
+      "word": "max",
+      "kind": "keyword",
+      "summary": "Bounds iteration: the mandatory ceiling on a `loop`, or `max N visits` on a step inside a flow loop.",
+      "section": {
+        "number": 9,
+        "title": "Bounded iteration"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §9 — Bounded iteration"
+    },
+    {
+      "word": "sequential",
+      "kind": "keyword",
+      "summary": "Runs a collection `fork` one item at a time in input order instead of in parallel.",
+      "section": {
+        "number": 8,
+        "title": "Parallel and sequential work"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §8 — Parallel and sequential work"
+    },
+    {
+      "word": "spawn",
+      "kind": "keyword",
+      "summary": "Starts a child workflow without waiting for it, so it can bind no result.",
+      "section": {
+        "number": 5,
+        "title": "Children and subflows"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §5 — Children and subflows"
+    },
+    {
+      "word": "wait",
+      "kind": "keyword",
+      "summary": "Waits for a declared signal and binds it; a `timeout` makes that binding optional, because expiry is absence.",
+      "section": {
+        "number": 10,
+        "title": "Waits, timeouts, signals, and sleep"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §10 — Waits, timeouts, signals, and sleep"
+    },
+    {
+      "word": "sleep",
+      "kind": "keyword",
+      "summary": "Sleeps for a duration on a durable timer.",
+      "section": {
+        "number": 10,
+        "title": "Waits, timeouts, signals, and sleep"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §10 — Waits, timeouts, signals, and sleep"
+    },
+    {
+      "word": "timeout",
+      "kind": "keyword",
+      "summary": "Bounds the workflow run in the header, one activity on an action or call, or one `wait` — three distinct places.",
+      "section": {
+        "number": 4,
+        "title": "Workers, actions, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+    },
+    {
+      "word": "retry",
+      "kind": "keyword",
+      "summary": "Sets an action's retry policy, as `retry N every DURATION` or `retry N backoff MIN..MAX`.",
+      "section": {
+        "number": 4,
+        "title": "Workers, actions, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+    },
+    {
+      "word": "advisory",
+      "kind": "keyword",
+      "summary": "Marks an action whose failure never faults its calling step; it can bind no result and be no pipe stage.",
+      "section": {
+        "number": 4,
+        "title": "Workers, actions, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+    },
+    {
+      "word": "agent",
+      "kind": "keyword",
+      "summary": "Marks an action as an agent seam: its one `String` parameter carries a prompt and its `String` result the reply.",
+      "section": {
+        "number": 4,
+        "title": "Workers, actions, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+    },
+    {
+      "word": "every",
+      "kind": "keyword",
+      "summary": "Sets the fixed interval between retries in `retry N every DURATION`.",
+      "section": {
+        "number": 4,
+        "title": "Workers, actions, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+    },
+    {
+      "word": "backoff",
+      "kind": "keyword",
+      "summary": "Sets the growing retry interval in `retry N backoff MIN..MAX`.",
+      "section": {
+        "number": 4,
+        "title": "Workers, actions, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+    },
+    {
+      "word": "node",
+      "kind": "keyword",
+      "summary": "Pins dispatch to a named worker node, on the action declaration or overridden at a call site.",
+      "section": {
+        "number": 4,
+        "title": "Workers, actions, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+    },
+    {
+      "word": "on",
+      "kind": "keyword",
+      "summary": "Opens `on failure`, the block a step runs when it faults, which must itself end in a route.",
+      "section": {
+        "number": 11,
+        "title": "Failure handling"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §11 — Failure handling"
+    },
+    {
+      "word": "failure",
+      "kind": "keyword",
+      "summary": "Maps a declared outcome to the engine's failed status, and after `on` names a step's compensation block.",
+      "section": {
+        "number": 3,
+        "title": "Workflow header"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §3 — Workflow header"
+    },
+    {
+      "word": "when",
+      "kind": "keyword",
+      "summary": "Guards an outcome arm; the first true guard wins, and its proofs narrow optionals through that arm.",
+      "section": {
+        "number": 7,
+        "title": "Selection, outcomes, and routes"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §7 — Selection, outcomes, and routes"
+    },
+    {
+      "word": "otherwise",
+      "kind": "keyword",
+      "summary": "The complement arm of a guarded outcome set, which must come last.",
+      "section": {
+        "number": 7,
+        "title": "Selection, outcomes, and routes"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §7 — Selection, outcomes, and routes"
+    },
+    {
+      "word": "route",
+      "kind": "keyword",
+      "summary": "Sends flow to another step or to a declared outcome, supplying that outcome's payload.",
+      "section": {
+        "number": 7,
+        "title": "Selection, outcomes, and routes"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §7 — Selection, outcomes, and routes"
+    },
+    {
+      "word": "success",
+      "kind": "keyword",
+      "summary": "Maps a declared outcome to the engine's completed status.",
+      "section": {
+        "number": 3,
+        "title": "Workflow header"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §3 — Workflow header"
+    },
+    {
+      "word": "filter",
+      "kind": "keyword",
+      "summary": "Keeps the elements of a collection its predicate accepts.",
+      "section": {
+        "number": 6,
+        "title": "Steps, dependencies, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+    },
+    {
+      "word": "map",
+      "kind": "keyword",
+      "summary": "Rewrites each element of a collection through a deterministic value expression.",
+      "section": {
+        "number": 6,
+        "title": "Steps, dependencies, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+    },
+    {
+      "word": "sort",
+      "kind": "keyword",
+      "summary": "Orders a collection by a key, which the compile refuses unless it is `Int`, `Float`, or `String`.",
+      "section": {
+        "number": 6,
+        "title": "Steps, dependencies, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+    },
+    {
+      "word": "count",
+      "kind": "keyword",
+      "summary": "Counts a collection's elements.",
+      "section": {
+        "number": 6,
+        "title": "Steps, dependencies, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+    },
+    {
+      "word": "any",
+      "kind": "keyword",
+      "summary": "True when at least one element of a collection satisfies its predicate.",
+      "section": {
+        "number": 6,
+        "title": "Steps, dependencies, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+    },
+    {
+      "word": "all",
+      "kind": "keyword",
+      "summary": "True when every element of a collection satisfies its predicate.",
+      "section": {
+        "number": 6,
+        "title": "Steps, dependencies, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+    },
+    {
+      "word": "is",
+      "kind": "keyword",
+      "summary": "Opens a predicate: `is empty`, `is present`, or `is absent`.",
+      "section": {
+        "number": 6,
+        "title": "Steps, dependencies, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+    },
+    {
+      "word": "empty",
+      "kind": "keyword",
+      "summary": "The predicate for a collection with nothing in it.",
+      "section": {
+        "number": 6,
+        "title": "Steps, dependencies, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+    },
+    {
+      "word": "present",
+      "kind": "keyword",
+      "summary": "Proves an optional access path present, narrowing it from `T?` to `T` wherever that proof holds.",
+      "section": {
+        "number": 6,
+        "title": "Steps, dependencies, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+    },
+    {
+      "word": "absent",
+      "kind": "keyword",
+      "summary": "Proves an optional access path absent, which is what an `or` chain narrows on its false edge.",
+      "section": {
+        "number": 6,
+        "title": "Steps, dependencies, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+    },
+    {
+      "word": "not",
+      "kind": "keyword",
+      "summary": "Negates a boolean expression.",
+      "section": {
+        "number": 6,
+        "title": "Steps, dependencies, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+    },
+    {
+      "word": "and",
+      "kind": "keyword",
+      "summary": "Boolean conjunction, where each conjunct's presence proof holds for the operands after it.",
+      "section": {
+        "number": 6,
+        "title": "Steps, dependencies, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+    },
+    {
+      "word": "or",
+      "kind": "keyword",
+      "summary": "Boolean disjunction, where each disjunct's absence proof holds on its false edge.",
+      "section": {
+        "number": 6,
+        "title": "Steps, dependencies, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+    },
+    {
+      "word": "true",
+      "kind": "keyword",
+      "summary": "The `Bool` literal for truth.",
+      "section": {
+        "number": 2,
+        "title": "Values and types"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §2 — Values and types"
+    },
+    {
+      "word": "false",
+      "kind": "keyword",
+      "summary": "The `Bool` literal for falsity.",
+      "section": {
+        "number": 2,
+        "title": "Values and types"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §2 — Values and types"
+    },
+    {
+      "word": "const",
+      "kind": "keyword",
+      "summary": "Declares a compile-time constant, which may never depend on a runtime binding.",
+      "section": {
+        "number": 2,
+        "title": "Values and types"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §2 — Values and types"
+    },
+    {
+      "word": "json",
+      "kind": "keyword",
+      "summary": "Opens a literal JSON body, as in `json { \"type\": \"string\" }`.",
+      "section": {
+        "number": 2,
+        "title": "Values and types"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §2 — Values and types"
+    },
+    {
+      "word": "of",
+      "kind": "keyword",
+      "summary": "Names the subject of `schema of Type`, the constant-position schema derivation.",
+      "section": {
+        "number": 2,
+        "title": "Values and types"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §2 — Values and types"
+    },
+    {
+      "word": "subflow",
+      "kind": "keyword",
+      "summary": "Declares an inline reusable graph with typed parameters and exactly one outcome, compiled into this workflow.",
+      "section": {
+        "number": 5,
+        "title": "Children and subflows"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §5 — Children and subflows"
+    },
+    {
+      "word": "distribute",
+      "kind": "keyword",
+      "summary": "Opens a multi-step region that runs one item track per element in parallel.",
+      "section": {
+        "number": 8,
+        "title": "Parallel and sequential work"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §8 — Parallel and sequential work"
+    },
+    {
+      "word": "sequence",
+      "kind": "keyword",
+      "summary": "Opens a multi-step region that runs one item track at a time in collection order.",
+      "section": {
+        "number": 8,
+        "title": "Parallel and sequential work"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §8 — Parallel and sequential work"
+    },
+    {
+      "word": "collect",
+      "kind": "keyword",
+      "summary": "Closes the nearest region as the first statement of its close step, binding results in input order.",
+      "section": {
+        "number": 8,
+        "title": "Parallel and sequential work"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §8 — Parallel and sequential work"
+    },
+    {
+      "word": "visits",
+      "kind": "keyword",
+      "summary": "Completes a step's `max N visits` bound, and reads as the visit count inside that step's guards.",
+      "section": {
+        "number": 9,
+        "title": "Bounded iteration"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §9 — Bounded iteration"
+    },
+    {
+      "word": "send",
+      "kind": "word",
+      "summary": "Declares an outbound signal in the header, and in a step body sends it to another running workflow.",
+      "section": {
+        "number": 12,
+        "title": "Sending signals to other workflows"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §12 — Sending signals to other workflows"
+    },
+    {
+      "word": "to",
+      "kind": "word",
+      "summary": "Addresses the target of a `send`: a workflow id, which is a `String`.",
+      "section": {
+        "number": 12,
+        "title": "Sending signals to other workflows"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §12 — Sending signals to other workflows"
+    },
+    {
+      "word": "query",
+      "kind": "word",
+      "summary": "Declares what an operator may ask a running instance, and the type of the answer they receive.",
+      "section": {
+        "number": 13,
+        "title": "The read-only query surface"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §13 — The read-only query surface"
+    },
+    {
+      "word": "answer",
+      "kind": "word",
+      "summary": "Registers the value a declared query returns, computed from the bindings in scope where it stands.",
+      "section": {
+        "number": 13,
+        "title": "The read-only query surface"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §13 — The read-only query surface"
+    },
+    {
+      "word": "run",
+      "kind": "word",
+      "summary": "Gives an action a declared command body, which the server runs itself with no sandbox of any kind.",
+      "section": {
+        "number": 4,
+        "title": "Workers, actions, and calls"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+    },
+    {
+      "word": "in",
+      "kind": "word",
+      "summary": "Names the per-item binding of a fork or a region opener, as in `fork item in items`.",
+      "section": {
+        "number": 8,
+        "title": "Parallel and sequential work"
+      },
+      "citation": "examples/assistant/resources/AWL-REFERENCE.md §8 — Parallel and sequential work"
+    }
+  ]
+}

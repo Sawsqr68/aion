@@ -445,6 +445,11 @@ fn build(context: Context, harvest: &Harvest) -> Vec<CompletionItem> {
             label: word.to_owned(),
             kind: Some(CompletionItemKind::KEYWORD),
             detail: Some(if positional { "word" } else { "keyword" }.to_owned()),
+            // The offered word carries the language's own sentence about it.
+            // A positional word is honest here in a way it is not in hover:
+            // it is being offered precisely because the cursor sits in the
+            // one position where the parser gives it that meaning.
+            documentation: crate::glossary::documentation_for(word),
             sort_text: Some(format!("1{word}")),
             ..CompletionItem::default()
         });

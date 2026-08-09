@@ -4,10 +4,11 @@ import { useSearchParams } from 'react-router';
 import { cn } from '@/lib/utils';
 
 import { DeployedPanel } from './DeployedPanel';
+import { LanguagePanel } from './LanguagePanel';
 import { WorkspacePanel } from './WorkspacePanel';
 
 /** Which side of the studio is on screen. */
-export type AuthoringSource = 'workspace' | 'deployed';
+export type AuthoringSource = 'workspace' | 'deployed' | 'language';
 
 /**
  * The AWL studio: the operator's editable workspace, and the read-only view of
@@ -22,8 +23,9 @@ export type AuthoringSource = 'workspace' | 'deployed';
  */
 export function AuthoringView() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const requested = searchParams.get('source');
   const source: AuthoringSource =
-    searchParams.get('source') === 'deployed' ? 'deployed' : 'workspace';
+    requested === 'deployed' || requested === 'language' ? requested : 'workspace';
   const setSource = useCallback(
     (next: AuthoringSource) => {
       setSearchParams((previous) => {
@@ -41,11 +43,7 @@ export function AuthoringView() {
       <header className="flex items-center justify-between gap-4 border-border border-b bg-surface-base px-4 py-3">
         <div>
           <h1 className="font-semibold text-foreground text-lg">Authoring</h1>
-          <p className="text-muted-foreground text-sm">
-            {source === 'workspace'
-              ? 'AWL documents and deployment checks'
-              : 'AWL source carried by the packages deployed on this server'}
-          </p>
+          <p className="text-muted-foreground text-sm">{DESCRIPTION[source]}</p>
         </div>
         <fieldset
           aria-label="Authoring source"
@@ -53,12 +51,22 @@ export function AuthoringView() {
         >
           <SourceButton current={source} label="Workspace" onSelect={setSource} value="workspace" />
           <SourceButton current={source} label="Deployed" onSelect={setSource} value="deployed" />
+          <SourceButton current={source} label="Language" onSelect={setSource} value="language" />
         </fieldset>
       </header>
-      {source === 'workspace' ? <WorkspacePanel /> : <DeployedPanel />}
+      {source === 'workspace' && <WorkspacePanel />}
+      {source === 'deployed' && <DeployedPanel />}
+      {source === 'language' && <LanguagePanel />}
     </div>
   );
 }
+
+/** What each side of the studio is showing, said plainly under the title. */
+const DESCRIPTION: Record<AuthoringSource, string> = {
+  workspace: 'AWL documents and deployment checks',
+  deployed: 'AWL source carried by the packages deployed on this server',
+  language: 'Every word of AWL, and where each one is explained in full',
+};
 
 function SourceButton({
   current,
