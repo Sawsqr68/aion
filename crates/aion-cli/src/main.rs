@@ -19,6 +19,7 @@ use crate::payload::{
     json_payload, parse_run_id, parse_status, parse_workflow_id, payload_to_json,
 };
 
+mod assistant;
 mod awl;
 mod awl_scaffold;
 mod check_deterministic;
@@ -118,6 +119,18 @@ enum Command {
     Worker {
         #[command(subcommand)]
         command: WorkerCommand,
+    },
+    /// Operate the assistant that ships inside this binary.
+    ///
+    /// The assistant document is compiled into `aion` itself and installed by
+    /// `aion server` on a home that holds no version of it, so a fresh install
+    /// has an assistant with no deploy step. `document` and `describe` read the
+    /// binary; `start`, `say`, `end`, and `status` drive a session on the
+    /// server named by `--endpoint`. Serving the agent action a session
+    /// dispatches is still a worker's job (`aion worker agent`).
+    Assistant {
+        #[command(subcommand)]
+        command: assistant::AssistantCommand,
     },
     /// Operate a running Aion server or package workflows locally.
     #[command(flatten)]
@@ -523,6 +536,30 @@ async fn main() -> ExitCode {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     eprintln!("{}", render::render_error(&error));
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Command::Assistant { ref command } => {
+            // The connection is a FACTORY, not a built client: the verb dials
+            // only for the subcommands that need a server, and only after it has
+            // validated what the operator typed. `document` and `describe` never
+            // dial, so they answer on a machine with no server running.
+            let result = assistant::run(command, || build_client(&cli))
+                .await
+                .and_then(|value| {
+                    // `document` prints the document itself and has no JSON
+                    // report; anything else prints its report.
+                    if value.is_null() {
+                        Ok(())
+                    } else {
+                        print_json(&value, cli.pretty)
+                    }
+                });
+            match result {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    report_client_error(&error);
                     ExitCode::FAILURE
                 }
             }
@@ -1519,6 +1556,7 @@ mod tests {
                 | Command::Dev(_)
                 | Command::Awl { .. }
                 | Command::Worker { .. }
+                | Command::Assistant { .. }
                 | Command::Client(
                     ClientCommand::Remote(
                         RemoteCommand::Start { .. }
@@ -1576,6 +1614,7 @@ mod tests {
                 | Command::Dev(_)
                 | Command::Awl { .. }
                 | Command::Worker { .. }
+                | Command::Assistant { .. }
                 | Command::Client(
                     ClientCommand::Remote(
                         RemoteCommand::Start { .. }

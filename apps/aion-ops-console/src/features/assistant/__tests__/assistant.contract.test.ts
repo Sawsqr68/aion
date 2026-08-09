@@ -18,10 +18,16 @@ import { assistantContinuePayload, assistantEndPayload } from '../lib/contract';
  * `Continuation` field fails here until both payload builders follow.
  */
 
-/** The workflow document that OWNS this contract. */
+/**
+ * The workflow document that OWNS this contract.
+ *
+ * It lives inside the server crate because the binary EMBEDS it (#139 leg C):
+ * `aion` ships the assistant, so the document is a compiled-in product asset
+ * rather than an example. This is the only copy in the repository.
+ */
 const ASSISTANT_AWL = join(
   import.meta.dir,
-  '../../../../../../examples/assistant/awl/assistant.awl'
+  '../../../../../../crates/aion-server/assistant-embed/assistant.awl'
 );
 
 /** Fields of an AWL record type, and whether each one may be omitted. */

@@ -16,11 +16,13 @@
 //! - `build` — `GET /build`, the server's own revision.
 //! - `describe_live` — the mid-step join: current step + attempt liveness +
 //!   progress note + transcript tail, in one read.
+//! - `assistant` — `GET /assistant`, the built-in assistant this binary carries.
 //! - `queues` — the fleet-wide unserved-queue read.
 //! - `unrecoverable` — the fleet-wide degraded-residency read.
 //! - `clean_dtos` — clean JSON request/response DTOs for the workflow POST endpoints.
 //! - `error` — wire-error-to-HTTP response mapping.
 
+mod assistant;
 mod auth;
 mod authoring;
 mod awl;

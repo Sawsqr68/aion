@@ -542,7 +542,7 @@ mod tests {
         for (name, source) in [
             (
                 "assistant.awl",
-                include_str!("../../../../examples/assistant/awl/assistant.awl"),
+                crate::assistant::EMBEDDED_ASSISTANT_DOCUMENT,
             ),
             (
                 "assistant_spike.awl",

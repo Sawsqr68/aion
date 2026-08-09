@@ -294,7 +294,7 @@ worker provisioner
 That is the teaching form of a real, shipped body. The production one — a full
 session-workspace provisioner, with its placement pinned by a test that
 compiles the actual documents (`the_shipped_provision_commands_pass_the_placement_guard`)
-— is in `examples/assistant/awl/assistant.awl`. Copy its shape, not this one's
+— is in `crates/aion-server/assistant-embed/assistant.awl`. Copy its shape, not this one's
 brevity, when you write your own.
 
 **Where the root is.** `<AION_HOME>/clones` — derived once from the aion home,

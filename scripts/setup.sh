@@ -54,9 +54,9 @@ note "git, cargo, norn: all present"
 # Locate the repository: normally this script lives in <repo>/scripts/, but
 # run standalone (curl'd or copied) it clones the repository itself.
 REPO_ROOT="$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)"
-if [ ! -f "$REPO_ROOT/examples/assistant/awl/assistant.awl" ]; then
+if [ ! -f "$REPO_ROOT/crates/aion-server/assistant-embed/assistant.awl" ]; then
     REPO_ROOT="${AION_CHECKOUT_DIR:-$PWD/aion}"
-    if [ ! -f "$REPO_ROOT/examples/assistant/awl/assistant.awl" ]; then
+    if [ ! -f "$REPO_ROOT/crates/aion-server/assistant-embed/assistant.awl" ]; then
         say "Cloning the aion repository into $REPO_ROOT"
         # Depth-1 on purpose: the repository's HISTORY carries ~2 GiB of
         # build artifacts committed by an old gate pipeline (removed from
@@ -68,7 +68,7 @@ fi
 
 WORKER_DIR="$REPO_ROOT/examples/agent-dev/worker"
 WORKER_BIN="$WORKER_DIR/target/release/agent-dev-worker"
-ASSISTANT_AWL="$REPO_ROOT/examples/assistant/awl/assistant.awl"
+ASSISTANT_AWL="$REPO_ROOT/crates/aion-server/assistant-embed/assistant.awl"
 
 # Extract one field from the server's JSON startup banner. The banner is the
 # authority on what the server actually bound; nothing here assumes a port.

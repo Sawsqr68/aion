@@ -21,6 +21,14 @@ account of what is and is not guaranteed), and
 
 ## `aion worker agent` — an agent worker without a crate
 
+**Without a repository checkout**, get the assistant document out of the binary
+first — `aion` embeds it (#139 leg C), and the file it writes is byte-identical
+to the tracked one every path below names:
+
+```
+aion assistant document --output assistant.awl
+```
+
 One command serves a document's agent actions. The surface below is the
 current tree's — and the version string cannot tell you whether a binary has
 it, because `--norn-arg` and `--norn-unset-env` landed in `e7c748e62` without
@@ -31,7 +39,7 @@ binary, spawned norn processes run with bare norn defaults (default account,
 no session pinning, **no `--workspace-root` confinement**):
 
 ```
-aion worker agent examples/assistant/awl/assistant.awl \
+aion worker agent crates/aion-server/assistant-embed/assistant.awl \
     --harness norn \
     --liminal-address 127.0.0.1:50061 \
     --identity assistant-agent-worker \
@@ -143,7 +151,7 @@ example worker's session-pinned invocation (below) reproducible without a
 crate:
 
 ```
-aion worker agent examples/assistant/awl/assistant.awl \
+aion worker agent crates/aion-server/assistant-embed/assistant.awl \
     --harness norn --liminal-address 127.0.0.1:50061 \
     --identity assistant-agent-worker --concurrency 4 \
     --reconnect-initial-backoff 1 --reconnect-max-backoff 30 \
@@ -195,7 +203,7 @@ starts.
 
 ### What it serves, and what the server runs instead
 
-The assistant workflow (`examples/assistant/awl/assistant.awl`) declares two
+The assistant workflow (`crates/aion-server/assistant-embed/assistant.awl`) declares two
 actions on queue `default`, and they are served by two different things:
 
 - **`assistant_provision` — SERVER-RUN.** It carries a `run "…"` body, so the
@@ -355,7 +363,7 @@ skips it, so re-running is safe:
    `unresolvable: <reason>` fails the script here, because declared
    provisioning cannot dispatch without one — see
    [DECLARED-COMMANDS.md](DECLARED-COMMANDS.md#workspace_root--how-a-body-learns-where-to-work).
-7. **Deploys `examples/assistant/awl/assistant.awl`** against the banner's
+7. **Deploys `crates/aion-server/assistant-embed/assistant.awl`** against the banner's
    `grpc_address`.
 8. **Builds the worker** (release), skipping the build when the binary is
    newer than every `.rs` under `src/`.

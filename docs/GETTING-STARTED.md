@@ -107,7 +107,13 @@ It announces each step as it goes.
 6. **Reads the server's workspace root** out of its own JSON startup banner
    and threads that one resolved value to the worker, so both sides cannot
    disagree about where session workspaces live.
-7. **Deploys the assistant workflow** (`examples/assistant/awl/assistant.awl`).
+7. **Deploys the assistant workflow** (`crates/aion-server/assistant-embed/assistant.awl`).
+   The server also carries that document compiled into itself and installs it at
+   boot on a home that holds no version of it (#139 leg C), so an install with no
+   repository checkout still has an assistant; the explicit deploy here is the
+   script's own, so a checkout that has EDITED the document deploys what it edited.
+   Without a checkout, `aion assistant document --output assistant.awl` writes the
+   same bytes out of the binary.
 8. **Builds and starts the assistant worker**, then waits up to 30 seconds for
    it to register with the server — and fails loudly if it exits first.
 
