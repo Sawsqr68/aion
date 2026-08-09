@@ -62,6 +62,13 @@ fn every_lowered_fixture_emits_and_validates() -> Result<(), Box<dyn std::error:
                 fixture.display()
             )
         })?;
+        // The oracle is about flows. A worker document declares none, and
+        // its refusal is asserted positively in `mir::tests`
+        // (`a_worker_document_is_refused_by_the_lowering`), so it is skipped
+        // here on the FAMILY the document declares rather than on its path.
+        if document.family != crate::ast::DocumentFamily::Workflow {
+            continue;
+        }
         match lower(&document, fixture.parent()) {
             Ok(module) => {
                 verify(&module)?;

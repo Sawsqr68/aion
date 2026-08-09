@@ -30,17 +30,19 @@ mod schema;
 pub mod semantic;
 mod spanned;
 mod unlowered;
+mod worker_document;
 
 pub use ast::{
     ActionBody, ActionDecl, AfterRef, AnswerStmt, Arg, BinaryOp, Binding, Call, CallStmt,
     ChildDecl, CollectStmt, CombinatorCall, CombinatorKind, CommandError, CommandReference,
     Comment, ConfigLine, ConfigValue, ConstDecl, DeliveryVerb, DistributeStmt, DocLine, Document,
-    DurationLiteral, EnumVariant, Expr, FieldDecl, ForkHeader, ForkStmt, Guard, InputDecl,
-    JoinLine, Lead, LoopStmt, LoopTail, MaxVisits, OnFailure, OutcomeClause, OutcomeDecl,
-    ParamDecl, PipeEnd, PipeStage, PipeStmt, PredicateKind, Quantifier, QueryDecl, RetrySpec,
-    RouteDirection, RoutePayload, RouteStmt, RouteTarget, ScannedCommand, SendDecl, SendStmt,
-    SignalDecl, SleepStmt, SpawnStmt, Statement, Step, SubflowDecl, SubflowOutcome, TypeBody,
-    TypeDecl, TypeRef, WaitStmt, WorkerDecl, WorkflowTimeoutDecl, scan_command,
+    DocumentFamily, DurationLiteral, EnumVariant, Expr, FieldDecl, ForkHeader, ForkStmt, Guard,
+    InputDecl, JSON_CAPTURE_WORD, JoinLine, Lead, LoopStmt, LoopTail, MaxVisits, OnFailure,
+    OutcomeClause, OutcomeDecl, ParamDecl, PipeEnd, PipeStage, PipeStmt, PredicateKind, Quantifier,
+    QueryDecl, RetrySpec, RouteDirection, RoutePayload, RouteStmt, RouteTarget, RunCapture,
+    ScannedCommand, SendDecl, SendStmt, SignalDecl, SleepStmt, SpawnStmt, Statement, Step,
+    SubflowDecl, SubflowOutcome, TEXT_CAPTURE_WORD, TypeBody, TypeDecl, TypeRef, WaitStmt,
+    WorkerDecl, WorkflowTimeoutDecl, scan_command,
 };
 pub use checker::{CheckError, check, check_in};
 pub use compile::{
@@ -63,3 +65,4 @@ pub use schema::{
     schema_for_type_ref_in, schema_for_workflow, schema_for_workflow_in,
 };
 pub use spanned::Spanned;
+pub use worker_document::{CompiledWorkerAction, CompiledWorkerDocument, compile_worker_document};

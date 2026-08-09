@@ -1,0 +1,6 @@
+//! A worker document delegates to nothing: it has no flow to delegate from.
+worker greeter
+  action greet(name: String) -> String
+    run text "printf %s $name"
+
+child summarize(text: String) -> String

@@ -1,0 +1,12 @@
+//! Serve the `greeter` queue: three commands, three ways to take a result.
+worker greeter
+  action greet(name: String) -> Greeting
+    run json "greeter-tool --json --name $name"
+  action shout(text: String) -> String
+    run text "tr a-z A-Z"
+  action archive(path: String) -> Archived
+    run "tar -cf $path.tar $path"
+
+type Greeting { message: String }
+
+type Archived { exit_code: Int, stderr: String }

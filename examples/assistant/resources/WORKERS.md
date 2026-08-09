@@ -4,30 +4,36 @@ An AWL workflow orchestrates durable work; workers perform world-touching
 actions. Do not blur those responsibilities. A `worker` block declares a task
 queue and the typed actions something must serve on it.
 
-One precise exception: an action MAY carry a declarative `run "…"` body, and
-then the document is that action's implementation — the server executes the
-command itself and no worker serves it. That is a real capability with real
-consequences; read `docs/workers/DECLARED-COMMANDS.md` before writing one. Everything
-else in a `worker` block is a typed requirement, not an implementation, and
-there is no AWL-authored worker with arbitrary bodies.
+Two precise exceptions. First, an action in a WORKFLOW document MAY carry a
+declarative `run "…"` body, and then that document is the action's
+implementation — the server executes the command itself and no worker serves
+it. Second, a `.awl` file may open with `worker <queue>` instead of `workflow
+<name>`, and then the whole file is an implementation: a **worker document**,
+every action carrying the command that runs it, served by `aion worker awl`.
+Both are real capabilities with real consequences; read
+`docs/workers/DECLARED-COMMANDS.md` before writing either, and
+`docs/workers/AWL-WORKER-DOCUMENTS.md` for the worker-document family.
+Everything else in a `worker` block is a typed requirement, not an
+implementation.
 
 ## What can serve an action
 
 | Layer | Purpose | Current truth |
 |---|---|---|
 | 0 — declared body | The document implements the action itself with `run "…"` | Shipped. The SERVER runs the command; no worker serves that action at all. Read `docs/workers/DECLARED-COMMANDS.md` first — there is no sandbox. |
+| 0a — worker document | A second `.awl` file, opening `worker <queue>`, carrying a body for every action | Shipped as `aion worker awl FILE.awl`. The command runs on the WORKER's host, not the server's. Three body forms: `run "…"` (outcome record), `run text "…"` (stdout as a string), `run json "…"` (stdout decoded into the declared type). |
 | 1 — command runner | Map actions to host commands, returning text or JSON | Shipped as `aion worker shell --manifest worker.toml --awl FILE.awl` |
 | 1a — agent harness | Hand an action's prompt to an agent harness | Shipped as `aion worker agent FILE.awl` |
-| 2 — script worker | One-file Python-style action host | Not built; do not promise a Python worker command or an AWL worker file with bodies beyond `run` |
+| 2 — script worker | One-file Python-style action host | Not built; do not promise a Python worker command |
 | 3 — service worker | Substantial long-lived logic and integrations | Shipped through the Rust/Gleam worker surfaces and repository worker examples; `aion awl scaffold` generates a Rust one from the document. Python/TypeScript are not current built-in CLI surfaces |
 
 All layers use the same task-queue dispatch model.
 
-The executable CLI carries **two** `worker` subcommands, `shell` and `agent` —
-verify with `aion worker --help` rather than assuming either way. Worker
-lifecycle management, Python script hosting, and AWL worker files with
-arbitrary bodies, as described in direction papers, remain roadmap unless the
-current source and `--help` show otherwise.
+The executable CLI carries **three** `worker` subcommands, `shell`, `agent`
+and `awl` — verify with `aion worker --help` rather than assuming either way.
+Worker lifecycle management and Python script hosting, as described in
+direction papers, remain roadmap unless the current source and `--help` show
+otherwise.
 
 ## Layer 1a: the agent worker
 
@@ -206,15 +212,59 @@ Never present a declared command as sandboxed, contained, or safe by
 construction. Never propose one for work an operator has not agreed can run
 with the server's full privileges.
 
+## Layer 0a: the worker document
+
+A `.awl` file may open with `worker <queue>` instead of `workflow <name>`, and
+then the whole file is the implementation of that one queue:
+
+```awl
+//! Serve the `greeter` queue.
+worker greeter
+  action greet(name: String) -> Greeting
+    run json "greeter-tool --json --name $name"
+  action shout(text: String) -> String
+    run text "tr a-z A-Z"
+
+type Greeting { message: String }
+```
+
+`aion worker awl greeter.awl` serves it. The command runs on the WORKER's
+host, not the server's — that is the difference from layer 0, and it is the
+reason a worker document exists.
+
+Facts to hold on to:
+
+- **Every action must carry a body.** A bodyless action is a requirement, and
+  requirements are declared in a workflow document; the checker refuses one
+  here and says so.
+- **Delivery keys are refused here.** `timeout`, `retry`, `node`, `advisory`
+  and `agent` configure how the CALLER dispatches an action, so they belong to
+  the action's declaration in the workflow document. Do not restate them.
+- **A worker document runs no flow.** A `step`, `child`, `subflow`, `const`,
+  or a second `worker` block is refused by name.
+- **Three body forms**, and the capture decides only what a SUCCESSFUL command
+  returns: `run "…"` the outcome record (subset return type), `run text "…"`
+  trimmed stdout as a `String`, `run json "…"` stdout decoded into the
+  declared type (`Nil` refused). The capture selectors are worker-document
+  vocabulary: a workflow document, whose bodies the server runs, may declare
+  only the bare form.
+- **Admission is what keeps the two files honest.** The advertised surface is
+  derived through the same seam the deploy path uses, and a worker document
+  that has drifted from the workflow calling it is refused at registration,
+  by field. `aion worker awl <file> --check` prints that surface without
+  connecting.
+- **THERE IS NO SANDBOX**, exactly as for layer 0. The environment IS cleared
+  except `PATH` (unlike the manifest worker, which inherits everything).
+
+Read `docs/workers/AWL-WORKER-DOCUMENTS.md` before writing one.
+
 ## Layer 2: not available
 
-There is no shipped `aion worker python` script host in the current CLI, and no
-AWL worker file kind carrying arbitrary action bodies — `run` commands
-(layer 0) are the only bodies the language admits. If the requested logic needs
-a one-file script layer, report the gap. Do not fabricate decorators, commands,
-deployment behavior, or an AWL command vocabulary from design docs. A
-host-native shell manifest or a declared command may be sufficient only when
-strict argv/env projection plus text/JSON stdout genuinely covers the task.
+There is no shipped `aion worker python` script host in the current CLI. If the
+requested logic needs a one-file script layer, report the gap. Do not fabricate
+decorators, commands, or deployment behavior from design docs. A worker
+document, a host-native shell manifest, or a declared command may be sufficient
+only when a command line plus text/JSON stdout genuinely covers the task.
 
 ## Layer 3: service workers
 
@@ -265,9 +315,14 @@ claim a worker exists because its interface is declared.
 ## Verification sources
 
 - Taxonomy/status: `docs/design/WORKER-AUTHORING-STORY.md`, checked against the
-  executable `WorkerCommand` in `crates/aion-cli/src/main.rs` (today: `Shell`
-  and `Agent`).
+  executable `WorkerCommand` in `crates/aion-cli/src/main.rs` (today: `Shell`,
+  `Agent`, and `Awl`).
 - Shell manifest and process behavior: `crates/aion-cli/src/worker_shell.rs`.
+- Worker documents: `docs/workers/AWL-WORKER-DOCUMENTS.md`, with the family
+  rules in `crates/aion-awl/src/checker/family.rs`, the compile seam in
+  `crates/aion-awl/src/worker_document.rs`, the verb in
+  `crates/aion-cli/src/worker_awl/`, and the accepted/refused corpus under
+  `crates/aion-awl/tests/fixtures/rev2/worker-documents/`.
 - Agent worker flags, harness resolution, and the `--check` surface:
   `crates/aion-cli/src/worker_agent/` and `crates/aion-cli/src/harness/`.
 - Declared command bodies: `docs/workers/DECLARED-COMMANDS.md` (the boundaries, in

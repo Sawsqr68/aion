@@ -1,0 +1,13 @@
+//! A workflow document's declared bodies are run by the server.
+workflow greet_flow
+  input name: String
+  outcome greeted: type Greeting, route success
+
+type Greeting { message: String }
+
+worker greet_flow
+  action greet(name: String) -> Greeting
+    run json "greeter-tool --json --name $name"
+
+step do_greet
+  name |> greet |> route greeted

@@ -4,20 +4,59 @@ use super::expr::{DurationLiteral, Expr};
 use super::steps::Step;
 use super::trivia::{Comment, DocLine, Lead};
 
-/// Parsed representation of a complete rev-2 workflow document.
+/// Which family a `.awl` document belongs to.
+///
+/// The two families are told apart by the file's own opening declaration —
+/// `workflow <name>` or `worker <queue>` — and nothing else. One file is one
+/// family: a document either describes a flow (its inputs, outcomes and
+/// steps) or serves a queue (its actions and their bodies), and the checker
+/// refuses the other family's declarations by name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DocumentFamily {
+    /// `workflow <name>` — a flow: typed start contract, outcomes, steps, and
+    /// the worker blocks it REQUIRES.
+    Workflow,
+    /// `worker <queue>` — an implementation: the actions one task queue
+    /// serves, each carrying the body that runs it.
+    Worker,
+}
+
+impl DocumentFamily {
+    /// The opening keyword that declares this family.
+    #[must_use]
+    pub const fn keyword(self) -> &'static str {
+        match self {
+            Self::Workflow => "workflow",
+            Self::Worker => "worker",
+        }
+    }
+}
+
+/// Parsed representation of a complete rev-2 document, of either family.
+///
+/// One struct for both families on purpose: a worker document's types,
+/// actions, bodies and trivia are the same constructs a workflow document's
+/// `worker` blocks carry, so parsing, checking and printing share one
+/// implementation and cannot drift. [`Document::family`] records which
+/// opening declaration the file carried, and the family-conditional rules
+/// live in one checker pass rather than in a second parser.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Document {
     /// Span covering the whole source document.
     pub span: Span,
+    /// Which family the file's opening declaration put it in.
+    pub family: DocumentFamily,
     /// The `//!` narration lines at the top of the document (one or more).
     pub narration: Vec<DocLine>,
     /// Own-line comments between the narration and the `workflow` line.
     pub lead: Vec<Lead>,
-    /// Workflow name declared after the `workflow` keyword.
+    /// The name declared after the opening keyword: the workflow name in a
+    /// [`DocumentFamily::Workflow`] document, the task queue in a
+    /// [`DocumentFamily::Worker`] one.
     pub name: String,
-    /// Source span of the workflow name.
+    /// Source span of that name.
     pub name_span: Span,
-    /// Same-line comment on the `workflow` line.
+    /// Same-line comment on the opening declaration's line.
     pub trailing: Option<Comment>,
     /// Optional document-level workflow timeout.
     pub timeout: Option<WorkflowTimeoutDecl>,
@@ -361,6 +400,50 @@ pub struct ActionDecl {
     pub body: Option<ActionBody>,
 }
 
+/// What a `run` body's result is, and therefore what the action's declared
+/// return type has to be.
+///
+/// The three forms are not three vocabularies: they are the one question a
+/// command's caller always has to answer — what of the process do I want —
+/// written down instead of assumed. [`RunCapture::Outcome`] is the form the
+/// language has always had; the other two exist because a worker document is
+/// an implementation of a typed action, and an action returning `Person`
+/// cannot be served by a body that can only ever hand back an exit code and
+/// two streams.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunCapture {
+    /// Bare `run "…"` — the result is the command's outcome record
+    /// (`exit_code`, `stdout`, `stderr`), and a non-zero exit is a value, not
+    /// a failure. The only form a WORKFLOW document may declare, because the
+    /// server's declared-command dispatcher produces exactly this record.
+    Outcome,
+    /// `run text "…"` — trimmed stdout becomes a JSON string. A non-zero exit
+    /// is a retryable failure carrying stderr.
+    Text,
+    /// `run json "…"` — trimmed stdout is parsed as JSON and becomes the
+    /// result. A non-zero exit is a retryable failure carrying stderr;
+    /// stdout that is not valid JSON is a terminal one.
+    Json,
+}
+
+impl RunCapture {
+    /// The word that selects this capture after `run`, or `None` for the
+    /// bare outcome form which has no word.
+    #[must_use]
+    pub const fn word(self) -> Option<&'static str> {
+        match self {
+            Self::Outcome => None,
+            Self::Text => Some(TEXT_CAPTURE_WORD),
+            Self::Json => Some(JSON_CAPTURE_WORD),
+        }
+    }
+}
+
+/// The word selecting [`RunCapture::Text`] after `run`.
+pub const TEXT_CAPTURE_WORD: &str = "text";
+/// The word selecting [`RunCapture::Json`] after `run`.
+pub const JSON_CAPTURE_WORD: &str = "json";
+
 /// The declarative implementation of an action, written under its
 /// declaration.
 ///
@@ -368,9 +451,10 @@ pub struct ActionDecl {
 /// kind is a shell command line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ActionBody {
-    /// `run "<command>"` — one shell command line. The command may
-    /// reference the action's declared parameters with `$name` / `${name}`;
-    /// `$$` is a literal dollar sign. See [`super::segment_command`].
+    /// `run [text|json] "<command>"` — one shell command line. The command
+    /// may reference the action's declared parameters with `$name` /
+    /// `${name}`; `$$` is a literal dollar sign. See
+    /// [`super::segment_command`].
     Run {
         /// Span from the `run` keyword through the command literal.
         span: Span,
@@ -378,6 +462,11 @@ pub enum ActionBody {
         lead: Vec<Lead>,
         /// Same-line trailing comment.
         trailing: Option<Comment>,
+        /// What the body's result is taken from.
+        capture: RunCapture,
+        /// Source span of the capture word, `None` for the bare outcome
+        /// form. Carried so a refusal can anchor on the word itself.
+        capture_span: Option<Span>,
         /// The command text exactly as authored, after string-escape
         /// processing and before `$` interpolation is interpreted.
         command: String,

@@ -59,6 +59,7 @@ Alongside it, and worth reading in the same sitting:
 |---|---|
 | `aion deploy <FILE.awl>` | Reads, checks, direct-compiles, assembles, and deploys. Requires the server's `[deploy]` surface and the caller's deploy grant. |
 | `aion run <FILE.awl> --input '<json>' [--timeout <dur>]` | Compile, deploy, start, and await in one motion. |
+| `aion worker awl <FILE.awl>` | Serves the queue a **worker document** declares — a `.awl` file opening with `worker <queue>` instead of `workflow <name>`, whose actions each carry the command that runs them. See [`AWL-WORKER-DOCUMENTS.md`](../workers/AWL-WORKER-DOCUMENTS.md). |
 | `aion worker shell --manifest worker.toml --awl <FILE.awl>` | Serves manifest-wired host commands on the declared queue. |
 | `aion worker agent <FILE.awl> --harness <name> --liminal-address <addr>` | Serves a compiled-in agent harness on the queue the document declares. |
 
@@ -111,15 +112,20 @@ worker review
 ```
 
 A clean `aion awl check` proves the document is internally consistent. It does
-**not** prove a worker exists. Three things can serve an action — see
+**not** prove a worker exists. Four things can serve an action — see
 [`WORKERS.md`](../../examples/assistant/resources/WORKERS.md):
 
 1. **A declared body** (`run "…"`) — the server runs the command itself and no
    worker serves that action. Read
    [`DECLARED-COMMANDS.md`](../workers/DECLARED-COMMANDS.md) first: **there is no
    sandbox.**
-2. **`aion worker shell`** — host commands wired by a strict manifest.
-3. **A real worker process** — `aion awl scaffold` generates a Rust one, or
+2. **A worker document** — a second `.awl` file that opens with `worker
+   <queue>` and carries a body for every action, served by `aion worker awl`.
+   The typed counterpart of the manifest below, and the only serving path
+   whose wiring the language checks. See
+   [`AWL-WORKER-DOCUMENTS.md`](../workers/AWL-WORKER-DOCUMENTS.md).
+3. **`aion worker shell`** — host commands wired by a strict manifest.
+4. **A real worker process** — `aion awl scaffold` generates a Rust one, or
    use any worker SDK. `aion worker agent` serves an agent harness without a
    crate at all.
 

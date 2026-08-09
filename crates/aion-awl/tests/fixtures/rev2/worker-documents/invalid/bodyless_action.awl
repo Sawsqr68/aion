@@ -1,0 +1,5 @@
+//! A worker document is an implementation, so every action needs a body.
+worker greeter
+  action greet(name: String) -> String
+    run text "printf %s $name"
+  action lookup(name: String) -> String

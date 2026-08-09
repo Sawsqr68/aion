@@ -100,6 +100,23 @@ pub(crate) fn prepare<'a>(
 }
 
 fn emit_inner(document: &Document, root: Option<&Path>) -> Result<EmittedArtifact, EmitError> {
+    // Emission is defined for the WORKFLOW family only: a worker document
+    // declares no flow, so there is no entry function to emit and nothing
+    // the emitted module could be asked to run. Refused by name, with the
+    // path that does apply to it, rather than emitting an empty module that
+    // would deploy and then answer no start.
+    if document.family == crate::ast::DocumentFamily::Worker {
+        return Err(EmitError::new(
+            document.name_span,
+            format!(
+                "`{queue}` is a worker document: it implements the actions of task queue \
+                 `{queue}` and declares no workflow, so there is no workflow module to \
+                 emit. Emit the `workflow` document that calls this queue; serve this one \
+                 with `aion worker awl`.",
+                queue = document.name
+            ),
+        ));
+    }
     // Emission is defined only for documents that check cleanly: fold-time
     // const substitution is name-based and relies on the checker's
     // invariants (no shadowed consts, no input/signal collisions), so an

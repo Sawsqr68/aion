@@ -26,10 +26,18 @@ fn is_title_case(name: &str) -> bool {
 pub(super) fn run(ctx: &mut Ctx<'_>) {
     let doc = ctx.doc;
     if !is_snake_case(&doc.name) {
+        // The opening declaration names a workflow or a task queue depending
+        // on the family, and the diagnostic says which — a message about a
+        // "workflow name" over a `worker` header would describe a document
+        // the author is not writing.
+        let subject = match doc.family {
+            crate::ast::DocumentFamily::Workflow => "workflow name",
+            crate::ast::DocumentFamily::Worker => "worker task queue",
+        };
         ctx.error(
             doc.name_span,
             format!(
-                "workflow name `{}` must be snake_case ([a-z][a-z0-9_]*)",
+                "{subject} `{}` must be snake_case ([a-z][a-z0-9_]*)",
                 doc.name
             ),
         );

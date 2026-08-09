@@ -15,6 +15,15 @@ worker probe\n\
 step one\n\
 \x20 token |> make |> route done\n";
 
+/// A canonical WORKER document: the other family, whose opening declaration
+/// is `worker <queue>` and whose actions each carry the body that runs them.
+const WORKER_DOC: &str = "//! Greeter: the queue this document serves.\n\
+worker greeter\n\
+\x20 action greet(name: String) -> String\n\
+\x20   run text \"printf %s $name\"\n\
+\x20 action shout(text: String) -> String\n\
+\x20   run text \"tr a-z A-Z\"\n";
+
 /// A canonical document using the B1 flow vocabulary: a multi-line raw
 /// string, a `json { … }` literal, `schema of`, const folding, and an
 /// expression-headed statement.
@@ -72,8 +81,16 @@ fn diagnostic_renders_the_compiler_style_line() {
 
 #[test]
 fn check_source_counts_steps_on_a_clean_document() {
-    let steps = check_source(Path::new("probe.awl"), VALID_DOC);
-    assert_eq!(steps, Ok(1));
+    let summary = check_source(Path::new("probe.awl"), VALID_DOC);
+    assert_eq!(summary, Ok("1 step".to_owned()));
+}
+
+/// A worker document has no steps to count, so its summary counts the
+/// actions it serves and names the queue it serves them on.
+#[test]
+fn check_source_counts_actions_on_a_clean_worker_document() {
+    let summary = check_source(Path::new("greeter.awl"), WORKER_DOC);
+    assert_eq!(summary, Ok("worker `greeter`, 2 actions".to_owned()));
 }
 
 #[test]
@@ -118,8 +135,8 @@ fn format_source_is_the_canonical_printer() -> anyhow::Result<()> {
 /// `json { … }`, `schema of`, consts, expression-headed statements).
 #[test]
 fn check_source_accepts_the_flow_vocabulary() {
-    let steps = check_source(Path::new("vocab.awl"), VOCAB_DOC);
-    assert_eq!(steps, Ok(1));
+    let summary = check_source(Path::new("vocab.awl"), VOCAB_DOC);
+    assert_eq!(summary, Ok("1 step".to_owned()));
 }
 
 /// `aion awl fmt` is idempotent on the B1 flow vocabulary: the document

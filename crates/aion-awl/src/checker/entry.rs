@@ -3,12 +3,12 @@
 
 use std::path::Path;
 
-use crate::ast::Document;
+use crate::ast::{Document, DocumentFamily};
 use crate::semantic::SemanticAnalysis;
 
 use super::context::{Ctx, Flow};
 use super::error::CheckError;
-use super::{consts, decls, durations, graph, queries, subflows, walk};
+use super::{consts, decls, durations, family, graph, queries, subflows, walk};
 
 /// Typecheck a parsed document with no document directory: schema imports
 /// (`type X = schema("file")`) cannot resolve and are reported as errors.
@@ -32,6 +32,40 @@ pub(crate) fn analyze(document: &Document, root: Option<&Path>) -> SemanticAnaly
 
 fn run(document: &Document, root: Option<&Path>) -> (Vec<CheckError>, crate::semantic::Builder) {
     let mut ctx = Ctx::new(document, root);
+    match document.family {
+        DocumentFamily::Workflow => workflow_passes(&mut ctx, document),
+        DocumentFamily::Worker => worker_passes(&mut ctx),
+    }
+    let mut errors = std::mem::take(&mut ctx.errors);
+    // The contract this document DERIVES has to be enforceable, not merely
+    // well-typed. A derived schema no validator can compile does not fail at
+    // the server — admission logs a warning and lets the payload through
+    // unchecked — so the only place an author can meet it is here. Run it
+    // last, and only over an otherwise-clean document: derivation reports one
+    // failure at a time, and it would otherwise crowd out the specific type
+    // errors that are far more likely to be the real cause.
+    if errors.is_empty() {
+        errors.extend(match document.family {
+            DocumentFamily::Workflow => contract_derivation_errors(document, root),
+            DocumentFamily::Worker => {
+                unusable(crate::schema::derived_contract_schemas(document, root))
+            }
+        });
+    }
+    errors.sort_by(|a, b| {
+        a.span
+            .start
+            .cmp(&b.span.start)
+            .then_with(|| a.message.cmp(&b.message))
+    });
+    errors.dedup();
+    (errors, ctx.semantic)
+}
+
+/// Every pass a `workflow` document gets: the header rules, the declaration
+/// tables, and the graph/flow walk over the workflow's own steps and each
+/// subflow's.
+fn workflow_passes<'a>(ctx: &mut Ctx<'a>, document: &'a Document) {
     if let Some(timeout) = &document.timeout
         && (timeout.negative || timeout.duration.magnitude == 0)
     {
@@ -45,38 +79,49 @@ fn run(document: &Document, root: Option<&Path>) -> (Vec<CheckError>, crate::sem
     {
         ctx.error(timeout.span, "workflow `timeout` is too large");
     }
-    durations::run(&mut ctx);
-    decls::run(&mut ctx);
-    consts::run(&mut ctx);
-    queries::check_declared_answers(&mut ctx);
-    subflows::run(&mut ctx);
+    durations::run(ctx);
+    decls::run(ctx);
+    consts::run(ctx);
+    queries::check_declared_answers(ctx);
+    subflows::run(ctx);
+    family::run(ctx);
     // Every flow — the workflow's own steps, then each subflow's — gets the
     // full graph pass and flow walk over its own inputs and outcomes.
-    let workflow_flow = Flow::workflow(&ctx);
-    check_flow(&mut ctx, &workflow_flow);
+    let workflow_flow = Flow::workflow(ctx);
+    check_flow(ctx, &workflow_flow);
     for subflow in &document.subflows {
-        let flow = Flow::subflow(&ctx, subflow);
-        check_flow(&mut ctx, &flow);
+        let flow = Flow::subflow(ctx, subflow);
+        check_flow(ctx, &flow);
     }
-    let mut errors = ctx.errors;
-    // The contract this document DERIVES has to be enforceable, not merely
-    // well-typed. A derived schema no validator can compile does not fail at
-    // the server — admission logs a warning and lets the payload through
-    // unchecked — so the only place an author can meet it is here. Run it
-    // last, and only over an otherwise-clean document: derivation reports one
-    // failure at a time, and it would otherwise crowd out the specific type
-    // errors that are far more likely to be the real cause.
-    if errors.is_empty() {
-        errors.extend(contract_derivation_errors(document, root));
-    }
-    errors.sort_by(|a, b| {
-        a.span
-            .start
-            .cmp(&b.span.start)
-            .then_with(|| a.message.cmp(&b.message))
-    });
-    errors.dedup();
-    (errors, ctx.semantic)
+}
+
+/// Every pass a `worker` document gets.
+///
+/// The declaration pass is shared verbatim — a worker document's types,
+/// actions, parameters and bodies are the same constructs, checked by the
+/// same rules — and the family pass adds what is true only here. There is no
+/// graph pass and no flow walk: a worker document declares no flow, and
+/// running those passes over an empty step list would report a missing
+/// workflow that the file never claimed to be.
+fn worker_passes(ctx: &mut Ctx<'_>) {
+    durations::run(ctx);
+    decls::run(ctx);
+    consts::run(ctx);
+    family::run(ctx);
+}
+
+/// The unusable-schema refusals among derived schemas, as check errors.
+fn unusable(derived: Vec<Result<serde_json::Value, crate::SchemaError>>) -> Vec<CheckError> {
+    derived
+        .into_iter()
+        .filter_map(|result| match result {
+            Err(error @ crate::SchemaError::UnusableSchema { .. }) => Some(CheckError {
+                span: error.span(),
+                message: error.to_string(),
+            }),
+            Ok(_) | Err(_) => None,
+        })
+        .collect()
 }
 
 /// Derives every schema this document publishes as its contract and reports
@@ -105,16 +150,7 @@ fn contract_derivation_errors(document: &Document, root: Option<&Path>) -> Vec<C
     // `check` meant a document could check clean and then be refused at
     // `emit`, which is the wrong door to meet a type error at.
     derived.extend(crate::schema::derived_contract_schemas(document, root));
-    derived
-        .into_iter()
-        .filter_map(|result| match result {
-            Err(error @ crate::SchemaError::UnusableSchema { .. }) => Some(CheckError {
-                span: error.span(),
-                message: error.to_string(),
-            }),
-            Ok(_) | Err(_) => None,
-        })
-        .collect()
+    unusable(derived)
 }
 
 /// Run the graph pass and (when the `after` edges are acyclic) the flow

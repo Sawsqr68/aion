@@ -3,8 +3,8 @@
 //! children. `parse ∘ print = id`; `print ∘ parse ∘ print = print`.
 
 use crate::ast::{
-    ActionBody, ActionDecl, ChildDecl, Comment, ConfigLine, DocLine, Document, FieldDecl, Lead,
-    OutcomeDecl, ParamDecl, RouteDirection, TypeBody, TypeDecl, WorkerDecl,
+    ActionBody, ActionDecl, ChildDecl, Comment, ConfigLine, DocLine, Document, DocumentFamily,
+    FieldDecl, Lead, OutcomeDecl, ParamDecl, RouteDirection, TypeBody, TypeDecl, WorkerDecl,
 };
 
 use super::exprs::{duration_text, retry_text, string_literal, type_ref_text, width};
@@ -71,6 +71,10 @@ fn print_document(printer: &mut Printer, document: &Document) {
         printer.line(0, &format!("//!{}", line.text), None);
     }
     printer.leads(0, &document.lead);
+    if document.family == DocumentFamily::Worker {
+        print_worker_document(printer, document);
+        return;
+    }
     printer.line(
         0,
         &format!("workflow {}", document.name),
@@ -127,6 +131,38 @@ fn print_document(printer: &mut Printer, document: &Document) {
     }
     print_type_decls(printer, &document.types);
     for worker in &document.workers {
+        print_worker(printer, worker);
+    }
+    for child in &document.children {
+        print_child(printer, child);
+    }
+    for subflow in &document.subflows {
+        print_subflow(printer, subflow);
+    }
+    for step in &document.steps {
+        print_step(printer, 0, step);
+    }
+    printer.leads(0, &document.epilogue);
+}
+
+/// Print a worker document: the narration and lead are already out, so what
+/// remains is the opening `worker` block — which IS `workers[0]` — followed
+/// by the same declaration order a workflow document uses.
+///
+/// The trailing declarations a worker document must not carry (`child`,
+/// `subflow`, `step`, further `worker` blocks) still print, because `fmt`
+/// formats a file the checker will refuse and a formatter that dropped
+/// declarations would destroy the author's work instead of reporting it.
+fn print_worker_document(printer: &mut Printer, document: &Document) {
+    let mut workers = document.workers.iter();
+    if let Some(header) = workers.next() {
+        print_worker(printer, header);
+    }
+    for decl in &document.consts {
+        print_const_decl(printer, decl);
+    }
+    print_type_decls(printer, &document.types);
+    for worker in workers {
         print_worker(printer, worker);
     }
     for child in &document.children {
@@ -419,13 +455,17 @@ fn print_action_body(printer: &mut Printer, indent: usize, body: &ActionBody) {
         ActionBody::Run {
             lead,
             trailing,
+            capture,
             command,
             ..
         } => {
             printer.leads(indent, lead);
+            let selector = capture
+                .word()
+                .map_or_else(String::new, |word| format!("{word} "));
             printer.line(
                 indent,
-                &format!("run {}", string_literal(command)),
+                &format!("run {selector}{}", string_literal(command)),
                 trailing.as_ref(),
             );
         }

@@ -37,7 +37,9 @@ pub(crate) enum AwlCommand {
     ///
     /// Prints one `<file>:<line>:<column>: error: <message>` diagnostic per
     /// error to stderr and exits non-zero when any is found; prints a
-    /// one-line `ok: <file> (N steps)` summary to stdout when clean.
+    /// one-line summary to stdout when clean: `ok: <file> (N steps)` for a
+    /// workflow document, `ok: <file> (worker `queue`, N actions)` for a
+    /// worker document, whose family has no steps to count.
     Check {
         /// Path to the `.awl` document.
         file: PathBuf,
@@ -185,9 +187,8 @@ fn check_command(file: &Path) -> ExitCode {
         return ExitCode::FAILURE;
     };
     match check_source(file, &source) {
-        Ok(steps) => {
-            let noun = if steps == 1 { "step" } else { "steps" };
-            println!("ok: {} ({steps} {noun})", file.display());
+        Ok(summary) => {
+            println!("ok: {} ({summary})", file.display());
             ExitCode::SUCCESS
         }
         Err(diagnostics) => report(&diagnostics),
@@ -359,7 +360,9 @@ pub(crate) fn compile_diagnostics(file: &Path, error: &CompileError) -> Vec<Stri
                 &format!("does not yet lower {shape}"),
             )]
         }
-        CompileError::Lower { message, span } => vec![diagnostic(file, *span, message)],
+        CompileError::Family { message, span } | CompileError::Lower { message, span } => {
+            vec![diagnostic(file, *span, message)]
+        }
         CompileError::Planning { message } | CompileError::Backend { message } => {
             vec![format!("{}: error: {message}", file.display())]
         }
@@ -382,12 +385,37 @@ fn schema_command(file: &Path, type_name: Option<&str>, queries: bool) -> ExitCo
 /// Parses and typechecks `source`, returning the workflow step count on a
 /// clean pass or the rendered diagnostic lines otherwise. A parse error
 /// yields the same diagnostic shape as a typecheck error.
-fn check_source(file: &Path, source: &str) -> Result<usize, Vec<String>> {
+/// The one-line summary a clean check prints, counting whichever thing the
+/// document's FAMILY is made of.
+///
+/// A worker document has no steps, so "0 steps" would be a true sentence that
+/// reads as an empty file. It serves actions, and that is what its summary
+/// counts.
+fn check_summary(document: &aion_awl::Document) -> String {
+    match document.family {
+        aion_awl::DocumentFamily::Workflow => {
+            let steps = document.steps.len();
+            let noun = if steps == 1 { "step" } else { "steps" };
+            format!("{steps} {noun}")
+        }
+        aion_awl::DocumentFamily::Worker => {
+            let actions: usize = document
+                .workers
+                .iter()
+                .map(|worker| worker.actions.len())
+                .sum();
+            let noun = if actions == 1 { "action" } else { "actions" };
+            format!("worker `{}`, {actions} {noun}", document.name)
+        }
+    }
+}
+
+fn check_source(file: &Path, source: &str) -> Result<String, Vec<String>> {
     let document = aion_awl::parse(source)
         .map_err(|error| vec![diagnostic(file, error.span, &error.message)])?;
     let errors = aion_awl::check_in(&document, document_root(file));
     if errors.is_empty() {
-        Ok(document.steps.len())
+        Ok(check_summary(&document))
     } else {
         Err(errors
             .iter()

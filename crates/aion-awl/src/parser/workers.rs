@@ -85,6 +85,21 @@ fn parse_action(
                  routes children, not a queue",
             ));
         }
+        // A worker block holds actions and nothing else. The words below are
+        // a WORKFLOW header's, and the mistake they make is the same in both
+        // families — a worker document has no start contract at all, and a
+        // workflow document declares one above its worker blocks — so the
+        // diagnostic names the construct rather than guessing the intent.
+        if let Some(word) = workflow_header_word(&token.kind) {
+            return Err(ParseError::new(
+                token.span,
+                format!(
+                    "`{word}` declares part of a workflow's own surface and cannot stand \
+                     inside a worker block; a `worker` block declares `action`s only. \
+                     Move it into a `workflow` document's header."
+                ),
+            ));
+        }
         return Err(ParseError::new(
             token.span,
             format!(
@@ -133,6 +148,25 @@ pub(super) fn parse_child(
         params,
         returns,
     })
+}
+
+/// The workflow-header word `kind` opens, when it opens one.
+///
+/// `send` and `query` are read positionally everywhere else in the grammar
+/// (`parser/send.rs`, `parser/query.rs`) and are matched the same way here:
+/// the corpus carries `action send(to: String, …)`, so the word is only a
+/// header opener when it stands where an `action` keyword must.
+fn workflow_header_word(kind: &TokenKind) -> Option<&str> {
+    match kind {
+        TokenKind::Keyword(Keyword::Input) => Some("input"),
+        TokenKind::Keyword(Keyword::Signal) => Some("signal"),
+        TokenKind::Keyword(Keyword::Outcome) => Some("outcome"),
+        TokenKind::Keyword(Keyword::Timeout) => Some("timeout"),
+        TokenKind::Identifier(word) if word == crate::SEND_WORD || word == crate::QUERY_WORD => {
+            Some(word)
+        }
+        _ => None,
+    }
 }
 
 pub(super) fn parse_params(stream: &mut Stream, what: &str) -> Result<Vec<ParamDecl>, ParseError> {
