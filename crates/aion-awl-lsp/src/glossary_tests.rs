@@ -70,8 +70,22 @@ fn a_keyword_answers_in_a_document_that_does_not_parse() {
         "the tooltip must carry the language's own sentence: {text}"
     );
     assert!(
-        text.contains("AWL-REFERENCE.md §8 — Parallel and sequential work"),
+        text.contains("AWL reference §8 — Parallel and sequential work"),
         "the tooltip must cite the reference section: {text}"
+    );
+    assert!(
+        !text.contains("AWL-REFERENCE.md"),
+        "the tooltip must not cite a repository path an installed binary cannot resolve: {text}"
+    );
+    assert!(
+        text.contains("distribute host in hosts"),
+        "the tooltip must carry the word's complete example document: {text}"
+    );
+    let fences = text.matches("```awl\n").count();
+    assert!(
+        fences >= 3,
+        "a word with several forms must show one fenced block per example \
+         (the word fence plus at least two examples): {text}"
     );
 }
 
@@ -123,21 +137,44 @@ fn a_declared_name_still_wins_over_the_glossary() {
         "the declaration answer must be the one shown: {text}"
     );
     assert!(
-        !text.contains("AWL-REFERENCE.md"),
+        !text.contains("AWL reference §"),
         "a declared name is no word of the language and must carry no citation: {text}"
     );
 }
 
 /// The keyword hover and the completion documentation are the same claim in
-/// two places. Rendering both from one entry is what makes them agree; this
-/// reads that back rather than assuming it.
+/// two places — the same sentence, the same citation, rendered from one
+/// entry. They differ in exactly one deliberate way: hover carries every
+/// example, completion only the first, because a completion popup is a
+/// glance while typing. This pins both the agreement and the difference.
 #[test]
-fn hover_and_completion_say_the_same_thing_about_a_word() {
+fn hover_and_completion_agree_and_completion_shows_one_example() {
     let position = position_of(DOCUMENT, "worker inspectors");
     assert!(position.is_some(), "the fixture must carry the word");
     let hovered = hover_text(position.and_then(|position| hover_at(DOCUMENT, position)));
     assert!(!hovered.is_empty(), "`worker` must hover");
-    assert_eq!(hovered, documentation_text(documentation_for("worker")));
+    let completion = documentation_text(documentation_for("worker"));
+
+    let sentence = "Declares a typed worker contract";
+    assert!(hovered.contains(sentence), "{hovered}");
+    assert!(completion.contains(sentence), "{completion}");
+    assert!(hovered.contains("AWL reference §4"), "{hovered}");
+    assert!(completion.contains("AWL reference §4"), "{completion}");
+
+    // `worker` has a workflow-document example and a worker-document one.
+    // Hover shows both; completion stops after the first.
+    assert!(hovered.contains("A worker DOCUMENT"), "{hovered}");
+    assert!(!completion.contains("A worker DOCUMENT"), "{completion}");
+    let hover_fences = hovered.matches("```awl\n").count();
+    let completion_fences = completion.matches("```awl\n").count();
+    assert_eq!(
+        completion_fences, 2,
+        "completion carries the word fence and exactly one example: {completion}"
+    );
+    assert!(
+        hover_fences > completion_fences,
+        "hover must carry every example: {hovered}"
+    );
 }
 
 /// Completion offers a positional word only where the parser recognises it,
@@ -165,7 +202,7 @@ fn an_offered_word_carries_the_language_s_sentence() {
         "the offered `run` must carry the language's own warning: {text}"
     );
     assert!(
-        text.contains("AWL-REFERENCE.md §4 — Workers, actions, and calls"),
+        text.contains("AWL reference §4 — Workers, actions, and calls"),
         "the offered `run` must cite the reference: {text}"
     );
 }

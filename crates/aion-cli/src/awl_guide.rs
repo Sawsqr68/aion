@@ -22,12 +22,14 @@ use serde::Serialize;
 ///
 /// `citation` is carried rather than recomputed so that the console prints
 /// the byte-identical pointer the CLI prints. Two renderings of one fact are
-/// two facts as soon as one of them is edited.
+/// two facts as soon as one of them is edited. `examples` is the entry's
+/// complete checked documents, verbatim, one per honest form of the word.
 #[derive(Debug, Serialize)]
 struct WireEntry {
     word: &'static str,
     kind: &'static str,
     summary: &'static str,
+    examples: &'static [&'static str],
     section: WireSection,
     citation: String,
 }
@@ -57,6 +59,7 @@ impl WireEntry {
             word: entry.word(),
             kind: entry.kind().as_str(),
             summary: entry.summary(),
+            examples: entry.examples(),
             section: WireSection {
                 number: entry.section().number(),
                 title: entry.section().title(),
@@ -95,7 +98,14 @@ pub(crate) fn json(word: Option<&str>) -> Result<String, serde_json::Error> {
 }
 
 /// Runs `aion awl guide`.
-pub(crate) fn run(word: Option<&str>, json_output: bool) -> ExitCode {
+pub(crate) fn run(word: Option<&str>, json_output: bool, reference: bool) -> ExitCode {
+    if reference {
+        // The full reference, embedded in this binary at build time — the
+        // same file the repository's guide_reference_gate reads, so what an
+        // installed binary prints is what the gate verified.
+        print!("{}", guide::reference_text());
+        return ExitCode::SUCCESS;
+    }
     if let Some(word) = word {
         let Some(entry) = guide::for_word(word) else {
             eprintln!(
@@ -137,13 +147,46 @@ fn kind_noun(kind: WordKind) -> &'static str {
     }
 }
 
+/// One complete example document, indented four spaces as a display block.
+fn indented(example: &str) -> String {
+    let mut block = String::new();
+    for line in example.lines() {
+        if line.is_empty() {
+            block.push('\n');
+        } else {
+            block.push_str("    ");
+            block.push_str(line);
+            block.push('\n');
+        }
+    }
+    block
+}
+
+/// One word: its meaning, its complete checked examples indented as blocks —
+/// numbered when the word has more than one form — then the citation and how
+/// to open the full reference from this binary.
 fn render_one(entry: GuideEntry) -> String {
+    let numbered = entry.examples().len() > 1;
+    let blocks = entry
+        .examples()
+        .iter()
+        .enumerate()
+        .map(|(index, example)| {
+            if numbered {
+                format!("  Example {}:\n\n{}", index + 1, indented(example))
+            } else {
+                indented(example)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
     format!(
-        "{}  ({})\n  {}\n  {}\n",
+        "{}  ({})\n  {}\n\n{blocks}\n  {}\n  Full reference: {}\n",
         entry.word(),
         kind_noun(entry.kind()),
         entry.summary(),
-        entry.citation()
+        entry.citation(),
+        guide::REFERENCE_COMMAND
     )
 }
 
@@ -162,7 +205,9 @@ fn render_all() -> String {
 
     let mut lines: Vec<String> = vec![
         "AWL — every word of the language, and where it is explained in full.".to_owned(),
+        "Run `aion awl guide <word>` for one word with a checked example.".to_owned(),
         String::new(),
+        format!("  Full reference   {}", guide::REFERENCE_COMMAND),
         format!("  Guide            {}", guide::GUIDE_PATH),
         format!("  Reference        {}", guide::REFERENCE_PATH),
         format!("  Authoring path   {}", guide::AUTHORING_PATH),

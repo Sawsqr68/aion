@@ -18,6 +18,13 @@ export interface AwlWord {
   readonly kind: string;
   /** One sentence of meaning. */
   readonly summary: string;
+  /**
+   * Complete `.awl` documents demonstrating the word, verbatim from the
+   * language's own glossary — one per honest form the word has. Each passes
+   * `aion awl check` unchanged; the `aion-awl` guide tests run every example
+   * through the real checker.
+   */
+  readonly examples: readonly string[];
   /** The reference section that explains the word in full. */
   readonly section: { readonly number: number; readonly title: string };
   /** The pointer to print under the summary, byte-identical to the CLI's. */

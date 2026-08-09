@@ -135,17 +135,22 @@ pub(crate) enum AwlCommand {
         #[arg(long, conflicts_with = "type")]
         queries: bool,
     },
-    /// Print what a word of AWL means, and where it is explained in full.
+    /// Print what a word of AWL means, with a checked example and where it is
+    /// explained in full.
     ///
+    /// With one word, prints its meaning, a complete example document that
+    /// passes `aion awl check`, and the reference section that explains it.
     /// With no argument, prints every word of the language grouped by the
-    /// section of `examples/assistant/resources/AWL-REFERENCE.md` that
-    /// explains it, above the paths of the documents an author needs:
-    /// `docs/authoring/AWL.md` for the tour,
+    /// section of the AWL reference that explains it, above the paths of the
+    /// documents an author needs: `docs/authoring/AWL.md` for the tour,
     /// `examples/assistant/resources/AWL-AUTHORING.md` for the path from an
     /// objective to a checked document,
     /// `examples/assistant/resources/WORKERS.md` for what actually serves an
     /// action, `examples/assistant/resources/COMMANDS.md` for the CLI loop,
     /// and `docs/workers/DECLARED-COMMANDS.md` before any `run "…"` body.
+    ///
+    /// `--reference` prints the full language reference itself, embedded in
+    /// this binary — no repository checkout required.
     ///
     /// Every sentence printed comes from the same table the language server
     /// hovers and the ops console renders, so the three surfaces cannot
@@ -157,6 +162,9 @@ pub(crate) enum AwlCommand {
         /// Emit the glossary as JSON instead of as text.
         #[arg(long)]
         json: bool,
+        /// Print the full embedded AWL language reference and exit.
+        #[arg(long, conflicts_with_all = ["word", "json"])]
+        reference: bool,
     },
     /// Run the AWL language server over stdio for editor integration.
     Lsp,
@@ -195,7 +203,11 @@ pub(crate) fn run(command: &AwlCommand) -> ExitCode {
             r#type,
             queries,
         } => schema_command(file, r#type.as_deref(), *queries),
-        AwlCommand::Guide { word, json } => crate::awl_guide::run(word.as_deref(), *json),
+        AwlCommand::Guide {
+            word,
+            json,
+            reference,
+        } => crate::awl_guide::run(word.as_deref(), *json, *reference),
         AwlCommand::Lsp => match aion_awl_lsp::run_stdio() {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {

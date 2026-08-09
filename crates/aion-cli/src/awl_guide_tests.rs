@@ -67,13 +67,74 @@ fn each_reference_section_is_printed_once_in_order() {
 }
 
 #[test]
-fn one_word_prints_its_sentence_and_its_citation() {
+fn one_word_prints_its_sentence_examples_and_citation() {
     let entry = aion_awl::guide::for_word("collect");
     assert!(entry.is_some(), "`collect` is a word of the language");
     let rendered = entry.map(render_one).unwrap_or_default();
     assert!(rendered.starts_with("collect  (reserved word)\n"));
     assert!(rendered.contains("Closes the nearest region"));
-    assert!(rendered.contains("AWL-REFERENCE.md §8 — Parallel and sequential work"));
+    assert!(
+        rendered.contains("AWL reference §8 — Parallel and sequential work"),
+        "{rendered}"
+    );
+    assert!(
+        !rendered.contains("AWL-REFERENCE.md"),
+        "the citation must not name a repository path an installed binary cannot resolve: \
+         {rendered}"
+    );
+    assert!(
+        rendered.contains("\n      collect health -> results\n"),
+        "the example document must be printed, indented as a block: {rendered}"
+    );
+    assert!(
+        rendered.contains("\n    workflow check_services\n"),
+        "the example must be a complete document, not a fragment: {rendered}"
+    );
+    assert!(
+        rendered.contains("  Example 1:\n") && rendered.contains("  Example 2:\n"),
+        "a word with several forms must number its examples: {rendered}"
+    );
+    assert!(
+        rendered.contains("collect report? -> reports"),
+        "the tolerant form must be among the examples: {rendered}"
+    );
+    assert!(
+        rendered.contains("Full reference: aion awl guide --reference"),
+        "the entry must say how to open the full reference from this binary: {rendered}"
+    );
+}
+
+/// A word with exactly one honest form prints its single example without a
+/// number — a lone "Example 1:" would promise a second that never comes.
+#[test]
+fn a_single_form_word_prints_one_unnumbered_example() {
+    let entry = aion_awl::guide::for_word("spawn");
+    assert!(entry.is_some(), "`spawn` is a word of the language");
+    let rendered = entry.map(render_one).unwrap_or_default();
+    assert!(
+        !rendered.contains("Example 1:"),
+        "a single example must not be numbered: {rendered}"
+    );
+    assert!(
+        rendered.contains("\n      spawn notify_archived(report_id: report_id)\n"),
+        "the single example must still be printed: {rendered}"
+    );
+}
+
+/// The `--reference` output is the embedded reference itself — the same file
+/// the repository's `guide_reference_gate` reads, so an installed binary
+/// prints exactly what the gate verified.
+#[test]
+fn the_embedded_reference_is_the_whole_document() {
+    let text = aion_awl::guide::reference_text();
+    assert!(
+        text.contains("## 1. Document structure"),
+        "the embedded reference must open with its first numbered section"
+    );
+    assert!(
+        text.contains("## 16. Worker documents"),
+        "the embedded reference must reach its final numbered section"
+    );
 }
 
 /// A positional word is labelled as one. An author who reads "reserved word"
@@ -106,6 +167,21 @@ fn the_json_form_carries_the_whole_inventory_and_the_paths() {
         Some("examples/assistant/resources/AWL-REFERENCE.md")
     );
     assert_eq!(parsed["entries"][0]["word"].as_str(), Some("workflow"));
+    for entry in parsed["entries"].as_array().cloned().unwrap_or_default() {
+        let examples = entry["examples"].as_array().cloned().unwrap_or_default();
+        assert!(
+            !examples.is_empty(),
+            "every entry must carry at least one example document: {entry}"
+        );
+        for example in &examples {
+            assert!(
+                example
+                    .as_str()
+                    .is_some_and(|example| example.starts_with("//!")),
+                "every example must be a complete narrated document: {entry}"
+            );
+        }
+    }
 }
 
 /// The console asset is gated by byte comparison, which is only a gate if the

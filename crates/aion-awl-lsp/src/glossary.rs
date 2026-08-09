@@ -45,7 +45,7 @@ pub(crate) fn hover_at(source: &str, position: Position) -> Option<Hover> {
     Some(Hover {
         contents: HoverContents::Markup(MarkupContent {
             kind: MarkupKind::Markdown,
-            value: render(guide::for_keyword(keyword)),
+            value: render_hover(guide::for_keyword(keyword)),
         }),
         range: Some(range_for_span(source, token.span)),
     })
@@ -55,28 +55,49 @@ pub(crate) fn hover_at(source: &str, position: Position) -> Option<Hover> {
 ///
 /// `None` for anything the language does not name, which is how a declared
 /// identifier that happens to spell a word of the language keeps its own
-/// meaning.
+/// meaning. Completion shows the FIRST example only: a completion popup is a
+/// glance while typing, and stacking every form of a word there would bury
+/// the list it sits beside. Hover is where an author reads at length, so
+/// hover carries them all.
 pub(crate) fn documentation_for(word: &str) -> Option<Documentation> {
     guide::for_word(word).map(|entry| {
+        let examples = entry.examples();
         Documentation::MarkupContent(MarkupContent {
             kind: MarkupKind::Markdown,
-            value: render(entry),
+            value: render(entry, &examples[..examples.len().min(1)]),
         })
     })
 }
 
-/// One entry as markdown: the word as AWL, its meaning, and its citation.
-fn render(entry: GuideEntry) -> String {
+/// The full rendering for hover: every checked example the word has.
+fn render_hover(entry: GuideEntry) -> String {
+    render(entry, entry.examples())
+}
+
+/// One entry as markdown: the word as AWL, its meaning, the given checked
+/// examples as fenced blocks, and its citation.
+///
+/// The citation names the reference by section rather than by repository
+/// path — the author behind this hover may be on a crates.io install with no
+/// checkout, and `aion awl guide --reference` prints the full text wherever
+/// the binary is.
+fn render(entry: GuideEntry, examples: &[&str]) -> String {
     let noun = match entry.kind() {
         WordKind::Reserved => "reserved word",
         WordKind::Positional => "positional word",
     };
+    let blocks = examples
+        .iter()
+        .map(|example| format!("```awl\n{example}\n```"))
+        .collect::<Vec<_>>()
+        .join("\n\n");
     format!(
-        "```awl\n{}\n```\n\n{} — {}\n\nFull reference: {}",
+        "```awl\n{}\n```\n\n{} — {}\n\n{blocks}\n\n{} · `{}`",
         entry.word(),
         noun,
         entry.summary(),
-        entry.citation()
+        entry.citation(),
+        guide::REFERENCE_COMMAND
     )
 }
 

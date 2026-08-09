@@ -10,631 +10,875 @@
       "word": "workflow",
       "kind": "keyword",
       "summary": "Opens the document: one `.awl` file declares exactly one workflow, named here.",
+      "examples": [
+        "//! Greet whoever starts the run.\nworkflow greet_visitor\n  input name: String\n  outcome done: type String, route success\n\nstep greet\n  \"hello \" + name -> greeting\n  route done(greeting)",
+        "//! `workflow.id` names this very run — here handed to a coordinator.\nworkflow register_run\n  input coordinator_id: String\n  send registered: String\n  outcome done: type String, route success\n\nstep register\n  send registered(workflow.id) to coordinator_id\n  route done(workflow.id)"
+      ],
       "section": {
         "number": 1,
         "title": "Document structure"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §1 — Document structure"
+      "citation": "AWL reference §1 — Document structure"
     },
     {
       "word": "input",
       "kind": "keyword",
       "summary": "Declares one field of the workflow's start contract; it is repeatable.",
+      "examples": [
+        "//! Each `input` line declares one field of the start contract.\nworkflow open_ticket\n  input title: String\n  input urgent: Bool\n  outcome done: type String, route success\n\nstep file\n  outcome fast: when urgent, route done(\"expedited: \" + title)\n  outcome slow: otherwise, route done(\"queued: \" + title)",
+        "//! Inputs can be records and lists, typed like any other value.\nworkflow plan_rollout\n  input change: Change\n  input hosts: [String]\n  outcome done: type String, route success\n\ntype Change { title: String }\n\nstep plan\n  hosts |> count -> planned\n  outcome big: when planned > 3, route done(\"staged rollout of \" + change.title)\n  outcome small: otherwise, route done(\"direct rollout of \" + change.title)"
+      ],
       "section": {
         "number": 3,
         "title": "Workflow header"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §3 — Workflow header"
+      "citation": "AWL reference §3 — Workflow header"
     },
     {
       "word": "signal",
       "kind": "keyword",
       "summary": "Declares a durable signal this workflow receives; a step body takes delivery with `wait`.",
+      "examples": [
+        "//! Hold until the declared approval signal arrives.\nworkflow release_gate\n  input build_id: String\n  signal approval: Approval\n  outcome done: type String, route success\n\ntype Approval { reviewer: String }\n\nstep hold\n  wait approval -> decision\n  route done(decision.reviewer + \" approved \" + build_id)",
+        "//! Two declared signals: a review verdict, then a go-ahead to ship.\nworkflow two_gate_release\n  input build_id: String\n  signal verdict: Verdict\n  signal go: Go\n  outcome done: type String, route success\n\ntype Verdict { approved: Bool }\ntype Go      { operator: String }\n\nstep review\n  wait verdict -> review_verdict\n\nstep ship\n  wait go -> clearance\n  outcome shipped: when review_verdict.approved, route done(clearance.operator)\n  outcome held: otherwise, route done(\"held: \" + build_id)"
+      ],
       "section": {
         "number": 3,
         "title": "Workflow header"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §3 — Workflow header"
+      "citation": "AWL reference §3 — Workflow header"
     },
     {
       "word": "outcome",
       "kind": "keyword",
       "summary": "Declares a terminal payload in the workflow header, and a guarded arm inside a step body.",
+      "examples": [
+        "//! `outcome` declares terminals in the header and guarded arms in a step.\nworkflow triage_alert\n  input urgent: Bool\n  outcome paged:  type String, route success\n  outcome logged: type String, route success\n\nstep decide\n  outcome page: when urgent, route paged(\"paged the operator\")\n  outcome log: otherwise, route logged(\"logged for morning\")",
+        "//! A subflow declares exactly one typed outcome of its own.\nworkflow audit_repo\n  input repo: String\n  outcome done: type Audit, route success\n\ntype Audit { clean: Bool }\n\nworker auditors\n  action scan(target: String) -> Audit\n\nsubflow audit_once(target: String)\n  outcome out: type Audit\n\n  step look\n    scan(target: target) -> audit\n    route out(audit)\n\nstep audit\n  audit_once(target: repo) -> audit\n\nstep finish\n  audit |> route done"
+      ],
       "section": {
         "number": 7,
         "title": "Selection, outcomes, and routes"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §7 — Selection, outcomes, and routes"
+      "citation": "AWL reference §7 — Selection, outcomes, and routes"
     },
     {
       "word": "type",
       "kind": "keyword",
       "summary": "Declares a record, an enum, or a schema door, and names the type an `outcome` carries.",
+      "examples": [
+        "//! Declare an enum and a record, then build one for the outcome.\nworkflow triage_ticket\n  input note: String\n  outcome done: type Triage, route success\n\ntype Category = Urgent | Routine\ntype Triage { category: Category, note: String }\n\nstep judge\n  route done(category: Routine, note: note)",
+        "//! `///` documents a declaration; optional fields are `T?`.\nworkflow file_finding\n  input title: String\n  outcome done: type Finding, route success\n\n/// One reviewer finding.\ntype Finding {\n  title: String,\n  /// Absent until a reviewer writes one.\n  note: String?,\n}\n\nstep file\n  route done(title: title)"
+      ],
       "section": {
         "number": 2,
         "title": "Values and types"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §2 — Values and types"
+      "citation": "AWL reference §2 — Values and types"
     },
     {
       "word": "schema",
       "kind": "keyword",
       "summary": "Opens a schema door: `schema(\"path\")` imports one, `schema { … }` inlines one, and `schema of Type` derives one in constant position.",
+      "examples": [
+        "//! An inline schema door names a JSON shape as an AWL type.\nworkflow ingest_payload\n  input raw: Payload\n  outcome done: type Payload, route success\n\ntype Payload = schema {\n  \"type\": \"object\",\n  \"required\": [\"value\"],\n  \"properties\": { \"value\": { \"type\": \"string\" } }\n}\n\nstep accept\n  route done(raw)",
+        "//! `schema of Type` in constant position, handed to an agent action.\nworkflow structured_reply\n  input question: String\n  outcome done: type Answer, route success\n\nconst answer_schema = schema of Answer\n\ntype Answer { reply: String }\n\nworker assistants\n  action ask(prompt: String, output_schema: String) -> Answer\n\nstep ask\n  ask(prompt: question, output_schema: answer_schema) -> result\n  route done(result)",
+        "//! Import a schema file as a type; the path resolves beside the document.\nworkflow ingest_existing\n  input raw: Existing\n  outcome done: type Existing, route success\n\ntype Existing = schema(\"schemas/existing.schema.json\")\n\nstep accept\n  route done(raw)"
+      ],
       "section": {
         "number": 2,
         "title": "Values and types"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §2 — Values and types"
+      "citation": "AWL reference §2 — Values and types"
     },
     {
       "word": "worker",
       "kind": "keyword",
       "summary": "Declares a typed worker contract whose name is the task queue; it is a requirement, never an implementation.",
+      "examples": [
+        "//! The worker block is a typed requirement on the `greeter` task queue.\nworkflow greet_politely\n  input name: String\n  outcome done: type Greeting, route success\n\ntype Greeting { text: String }\n\nworker greeter\n  action greet(name: String) -> Greeting\n\nstep greet\n  greet(name: name) -> reply\n  route done(reply)",
+        "//! A worker DOCUMENT: the implementation of one task queue.\nworker greeter\n  action greet(name: String) -> Greeting\n    run json \"greeter-tool --json --name $name\"\n\ntype Greeting { message: String }"
+      ],
       "section": {
         "number": 4,
         "title": "Workers, actions, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+      "citation": "AWL reference §4 — Workers, actions, and calls"
     },
     {
       "word": "action",
       "kind": "keyword",
       "summary": "Declares one wire contract on a worker: named parameters, one return type, and at most one config line.",
+      "examples": [
+        "//! Each action line is one wire contract: named parameters, one return.\nworkflow inspect_repo\n  input repo: String\n  outcome done: type Report, route success\n\ntype Report { summary: String }\n\nworker inspectors\n  action inspect(repo: String) -> Report\n\nstep inspect\n  inspect(repo: repo) -> report\n  route done(report)",
+        "//! In a worker document every action carries the command that runs it.\nworker archiver\n  action archive(path: String) -> Archived\n    run \"tar -cf archive.tar $path\"\n\ntype Archived { exit_code: Int, stderr: String }"
+      ],
       "section": {
         "number": 4,
         "title": "Workers, actions, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+      "citation": "AWL reference §4 — Workers, actions, and calls"
     },
     {
       "word": "child",
       "kind": "keyword",
       "summary": "Declares a separate durable workflow this one may call and await.",
+      "examples": [
+        "//! Call a separate durable workflow and await its result.\nworkflow grade_essay\n  input essay: String\n  outcome done: type Grade, route success\n\ntype Grade { score: Int }\n\nchild score_essay(essay: String) -> Grade\n\nstep grade\n  score_essay(essay: essay) -> grade\n  route done(grade)",
+        "//! Await one child; detach another this run never waits for.\nworkflow grade_and_notify\n  input essay: String\n  outcome done: type Grade, route success\n\ntype Grade { score: Int }\n\nchild score_essay(essay: String) -> Grade\nchild notify_graded(score: Int) -> Nil\n\nstep grade\n  score_essay(essay: essay) -> grade\n  spawn notify_graded(score: grade.score)\n  route done(grade)"
+      ],
       "section": {
         "number": 5,
         "title": "Children and subflows"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §5 — Children and subflows"
+      "citation": "AWL reference §5 — Children and subflows"
     },
     {
       "word": "step",
       "kind": "keyword",
       "summary": "Declares one node of the step graph; the statements inside it run in written order.",
+      "examples": [
+        "//! Statements inside a step run in written order; steps chain the graph.\nworkflow compose_greeting\n  input name: String\n  outcome done: type String, route success\n\nstep compose\n  \"hello \" + name -> greeting\n\nstep deliver\n  route done(greeting)",
+        "//! A body-less step of only outcomes is a pure decision.\nworkflow sort_ticket\n  input urgent: Bool\n  outcome fast: type String, route success\n  outcome slow: type String, route success\n\nstep triage\n  outcome now: when urgent, route fast(\"page\")\n  outcome later: otherwise, route slow(\"queue\")"
+      ],
       "section": {
         "number": 6,
         "title": "Steps, dependencies, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+      "citation": "AWL reference §6 — Steps, dependencies, and calls"
     },
     {
       "word": "after",
       "kind": "keyword",
       "summary": "Names the steps a step waits for, so the dependency is written rather than inferred from position.",
+      "examples": [
+        "//! `verify` waits for `build`: the dependency is written, not inferred.\nworkflow gated_build\n  input tag: String\n  outcome done: type Checked, route success\n\ntype Built   { artifact: String }\ntype Checked { ok: Bool }\n\nworker ci\n  action build(tag: String) -> Built\n  action verify(artifact: String) -> Checked\n\nstep build\n  build(tag: tag) -> built\n\nstep verify after build\n  verify(artifact: built.artifact) -> checked\n  route done(checked)",
+        "//! A diamond: build and notes run independently, publish waits for both.\nworkflow release_notes\n  input tag: String\n  outcome done: type String, route success\n\ntype Build { artifact: String }\ntype Notes { text: String }\n\nworker release\n  action build(tag: String) -> Build\n  action render_notes(tag: String) -> Notes\n\nstep start\n  \"release \" + tag -> label\n\nstep build after start\n  build(tag: tag) -> built\n\nstep notes after start\n  render_notes(tag: tag) -> rendered\n\nstep publish after build, notes\n  route done(label + \" \" + built.artifact + rendered.text)"
+      ],
       "section": {
         "number": 6,
         "title": "Steps, dependencies, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+      "citation": "AWL reference §6 — Steps, dependencies, and calls"
     },
     {
       "word": "fork",
       "kind": "keyword",
       "summary": "Runs work concurrently inside one step: `fork item in items` one branch per item, or a bare `fork` for named branches.",
+      "examples": [
+        "//! One branch per repo, checked in parallel, joined in input order.\nworkflow sweep_repos\n  input repos: [String]\n  outcome done: type [Verdict], route success\n\ntype Verdict { ok: Bool }\n\nworker ci\n  action check(repo: String) -> Verdict\n\nstep sweep\n  fork repo in repos\n    check(repo: repo)\n  join -> verdicts\n  route done(verdicts)",
+        "//! A bare fork runs named heterogeneous calls concurrently.\nworkflow load_dashboard\n  input user_id: String\n  outcome done: type String, route success\n\ntype Profile { name: String }\ntype History { entries: Int }\n\nworker accounts\n  action fetch_profile(id: String) -> Profile\n  action fetch_history(id: String) -> History\n\nstep load\n  fork\n    fetch_profile(id: user_id) -> profile\n    fetch_history(id: user_id) -> history\n  join\n  outcome busy: when history.entries > 3, route done(profile.name + \" is busy\")\n  outcome quiet: otherwise, route done(profile.name)"
+      ],
       "section": {
         "number": 8,
         "title": "Parallel and sequential work"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §8 — Parallel and sequential work"
+      "citation": "AWL reference §8 — Parallel and sequential work"
     },
     {
       "word": "join",
       "kind": "keyword",
       "summary": "Closes a `fork`, binding a collection fork's results in input order.",
+      "examples": [
+        "//! `join` closes the fork, binding the branches' results in input order.\nworkflow gather_reports\n  input repos: [String]\n  outcome done: type [Report], route success\n\ntype Report { summary: String }\n\nworker inspectors\n  action inspect(repo: String) -> Report\n\nstep gather\n  fork repo in repos\n    inspect(repo: repo)\n  join -> reports\n  route done(reports)",
+        "//! Bare `join` closes named branches; there is no collection to bind.\nworkflow warm_caches\n  input region: String\n  outcome done: type String, route success\n\nworker infra\n  action warm_dns(region: String) -> Nil\n  action warm_cdn(region: String) -> Nil\n\nstep warm\n  fork\n    warm_dns(region: region)\n    warm_cdn(region: region)\n  join\n  route done(region)"
+      ],
       "section": {
         "number": 8,
         "title": "Parallel and sequential work"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §8 — Parallel and sequential work"
+      "citation": "AWL reference §8 — Parallel and sequential work"
     },
     {
       "word": "loop",
       "kind": "keyword",
       "summary": "Runs a bounded value-threading loop whose body runs at least once and must rebind the threaded value.",
+      "examples": [
+        "//! Improve the draft until it is ready, at most three passes.\nworkflow refine_draft\n  input topic: String\n  outcome done:  type Draft,  route success\n  outcome stuck: type String, route failure\n\ntype Draft { body: String, ready: Bool }\n\nworker writers\n  action improve(topic: String, prior: Draft) -> Draft\n\nstep refine\n  loop draft = Draft(body: \"\", ready: false)\n    improve(topic: topic, prior: draft) -> draft\n    until draft.ready\n    max 3\n  outcome ready: when draft.ready, route done(draft)\n  outcome exhausted: otherwise, route stuck(\"the draft never settled\")",
+        "//! The threaded value carries state between passes; rounds are counted.\nworkflow tune_model\n  input target: String\n  outcome done:  type Int,    route success\n  outcome stuck: type String, route failure\n\ntype Tuning { score: Int, good_enough: Bool }\n\nworker lab\n  action tune(target: String, prior: Tuning) -> Tuning\n\nstep tune\n  loop tuning = Tuning(score: 0, good_enough: false) counting rounds\n    tune(target: target, prior: tuning) -> tuning\n    until tuning.good_enough\n    max 8\n  outcome tuned: when tuning.good_enough, route done(rounds)\n  outcome gave_up: otherwise, route stuck(target)"
+      ],
       "section": {
         "number": 9,
         "title": "Bounded iteration"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §9 — Bounded iteration"
+      "citation": "AWL reference §9 — Bounded iteration"
     },
     {
       "word": "counting",
       "kind": "keyword",
       "summary": "Binds the number of completed iterations of a `loop`.",
+      "examples": [
+        "//! `counting` binds how many iterations the loop completed.\nworkflow poll_job\n  input job: String\n  outcome done:  type Int,    route success\n  outcome stuck: type String, route failure\n\ntype Status { ready: Bool }\n\nworker jobs\n  action poll(job: String, prior: Status) -> Status\n\nstep watch\n  loop status = Status(ready: false) counting polls\n    poll(job: job, prior: status) -> status\n    until status.ready\n    max 10\n  outcome ready: when status.ready, route done(polls)\n  outcome gave_up: otherwise, route stuck(job)"
+      ],
       "section": {
         "number": 9,
         "title": "Bounded iteration"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §9 — Bounded iteration"
+      "citation": "AWL reference §9 — Bounded iteration"
     },
     {
       "word": "until",
       "kind": "keyword",
       "summary": "States the condition that ends a `loop`, tested after the body has run.",
+      "examples": [
+        "//! `until` ends the loop, tested after each pass of the body.\nworkflow stabilize_build\n  input tag: String\n  outcome done:  type Build,  route success\n  outcome stuck: type String, route failure\n\ntype Build { green: Bool }\n\nworker ci\n  action rebuild(tag: String, prior: Build) -> Build\n\nstep converge\n  loop build = Build(green: false)\n    rebuild(tag: tag, prior: build) -> build\n    until build.green\n    max 5\n  outcome green: when build.green, route done(build)\n  outcome exhausted: otherwise, route stuck(tag)",
+        "//! A compound condition: stop only when ready AND approved.\nworkflow draft_and_signoff\n  input topic: String\n  outcome done:  type Draft,  route success\n  outcome stuck: type String, route failure\n\ntype Draft { ready: Bool, approved: Bool }\n\nworker desks\n  action revise(topic: String, prior: Draft) -> Draft\n\nstep converge\n  loop draft = Draft(ready: false, approved: false)\n    revise(topic: topic, prior: draft) -> draft\n    until draft.ready and draft.approved\n    max 6\n  outcome settled: when draft.ready and draft.approved, route done(draft)\n  outcome exhausted: otherwise, route stuck(topic)"
+      ],
       "section": {
         "number": 9,
         "title": "Bounded iteration"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §9 — Bounded iteration"
+      "citation": "AWL reference §9 — Bounded iteration"
     },
     {
       "word": "max",
       "kind": "keyword",
       "summary": "Bounds iteration: the mandatory ceiling on a `loop`, or `max N visits` on a step inside a flow loop.",
+      "examples": [
+        "//! `max` is the mandatory ceiling; exhaustion is a distinct outcome.\nworkflow negotiate_quote\n  input request: String\n  outcome done:  type Offer,  route success\n  outcome stuck: type String, route failure\n\ntype Offer { accepted: Bool }\n\nworker brokers\n  action haggle(request: String, prior: Offer) -> Offer\n\nstep negotiate\n  loop offer = Offer(accepted: false)\n    haggle(request: request, prior: offer) -> offer\n    until offer.accepted\n    max 4\n  outcome agreed: when offer.accepted, route done(offer)\n  outcome exhausted: otherwise, route stuck(request)",
+        "//! The other place `max` stands: a visit bound on a step in a flow loop.\nworkflow polish_copy\n  input text: String\n  outcome done: type Verdict, route success\n\ntype Verdict { ok: Bool }\n\nworker desks\n  action review(text: String) -> Verdict\n\nstep review\n  review(text: text) -> verdict\n\nstep judge\n  outcome again: when not verdict.ok and visits < 2, route review\n  outcome settled: otherwise, route done(verdict)\n  max 2 visits"
+      ],
       "section": {
         "number": 9,
         "title": "Bounded iteration"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §9 — Bounded iteration"
+      "citation": "AWL reference §9 — Bounded iteration"
     },
     {
       "word": "sequential",
       "kind": "keyword",
       "summary": "Runs a collection `fork` one item at a time in input order instead of in parallel.",
+      "examples": [
+        "//! `sequential` publishes one target at a time, in input order.\nworkflow publish_targets\n  input targets: [String]\n  outcome done: type [Receipt], route success\n\ntype Receipt { target: String }\n\nworker publisher\n  action publish(target: String) -> Receipt\n\nstep publish_all\n  fork target in targets sequential\n    publish(target: target)\n  join -> receipts\n  route done(receipts)"
+      ],
       "section": {
         "number": 8,
         "title": "Parallel and sequential work"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §8 — Parallel and sequential work"
+      "citation": "AWL reference §8 — Parallel and sequential work"
     },
     {
       "word": "spawn",
       "kind": "keyword",
       "summary": "Starts a child workflow without waiting for it, so it can bind no result.",
+      "examples": [
+        "//! Start a child without waiting; it can bind no result.\nworkflow archive_report\n  input report_id: String\n  outcome done: type String, route success\n\nchild notify_archived(report_id: String) -> Nil\n\nstep archive\n  spawn notify_archived(report_id: report_id)\n  route done(report_id)"
+      ],
       "section": {
         "number": 5,
         "title": "Children and subflows"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §5 — Children and subflows"
+      "citation": "AWL reference §5 — Children and subflows"
     },
     {
       "word": "wait",
       "kind": "keyword",
       "summary": "Waits for a declared signal and binds it; a `timeout` makes that binding optional, because expiry is absence.",
+      "examples": [
+        "//! Take delivery of the declared signal, binding its payload.\nworkflow hold_for_go\n  input build_id: String\n  signal go: Approval\n  outcome done: type String, route success\n\ntype Approval { approver: String }\n\nstep hold\n  wait go -> approval\n  route done(approval.approver + \" released \" + build_id)",
+        "//! A timed wait binds an optional, because expiry is absence.\nworkflow ask_signoff\n  input change_id: String\n  signal signoff: Signoff\n  outcome shipped:   type String, route success\n  outcome escalated: type String, route failure\n\ntype Signoff { reviewer: String }\n\nstep hold\n  wait signoff timeout 2d -> decision\n  outcome approved: when decision is present, route shipped(decision.reviewer)\n  outcome lapsed: otherwise, route escalated(\"lapsed: \" + change_id)"
+      ],
       "section": {
         "number": 10,
         "title": "Waits, timeouts, signals, and sleep"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §10 — Waits, timeouts, signals, and sleep"
+      "citation": "AWL reference §10 — Waits, timeouts, signals, and sleep"
     },
     {
       "word": "sleep",
       "kind": "keyword",
       "summary": "Sleeps for a duration on a durable timer.",
+      "examples": [
+        "//! Sleep on a durable timer; the run survives a restart mid-sleep.\nworkflow cool_down\n  input build_id: String\n  outcome done: type String, route success\n\nstep pause\n  sleep 30s\n  route done(build_id)",
+        "//! Sleep between polls: a durable timer inside the loop body.\nworkflow await_export\n  input job: String\n  outcome done:  type Status, route success\n  outcome stuck: type String, route failure\n\ntype Status { finished: Bool }\n\nworker exports\n  action poll(job: String, prior: Status) -> Status\n\nstep watch\n  loop status = Status(finished: false)\n    sleep 30s\n    poll(job: job, prior: status) -> status\n    until status.finished\n    max 20\n  outcome finished: when status.finished, route done(status)\n  outcome timed_out: otherwise, route stuck(job)"
+      ],
       "section": {
         "number": 10,
         "title": "Waits, timeouts, signals, and sleep"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §10 — Waits, timeouts, signals, and sleep"
+      "citation": "AWL reference §10 — Waits, timeouts, signals, and sleep"
     },
     {
       "word": "timeout",
       "kind": "keyword",
       "summary": "Bounds the workflow run in the header, one activity on an action or call, or one `wait` — three distinct places.",
+      "examples": [
+        "//! The header timeout bounds the whole run.\nworkflow nightly_sweep\n  timeout 2h\n  input target: String\n  outcome done: type String, route success\n\nstep sweep\n  route done(\"swept \" + target)",
+        "//! An activity timeout on the declaration, tightened at one call site.\nworkflow build_twice\n  input tag: String\n  outcome done: type Build, route success\n\ntype Build { artifact: String }\n\nworker builders\n  action build(tag: String) -> Build\n    timeout 30m\n\nstep quick_probe\n  build(tag: tag) -> probe\n    timeout 5m\n\nstep full_build\n  build(tag: probe.artifact) -> built\n  route done(built)",
+        "//! A wait with a timeout binds an optional: expiry is absence.\nworkflow hold_for_signoff\n  input change_id: String\n  signal signoff: Signoff\n  outcome shipped:   type String, route success\n  outcome escalated: type String, route failure\n\ntype Signoff { reviewer: String }\n\nstep hold\n  wait signoff timeout 2d -> decision\n  outcome approved: when decision is present, route shipped(decision.reviewer)\n  outcome lapsed: otherwise, route escalated(\"window lapsed: \" + change_id)"
+      ],
       "section": {
         "number": 4,
         "title": "Workers, actions, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+      "citation": "AWL reference §4 — Workers, actions, and calls"
     },
     {
       "word": "retry",
       "kind": "keyword",
       "summary": "Sets an action's retry policy, as `retry N every DURATION` or `retry N backoff MIN..MAX`.",
+      "examples": [
+        "//! Retry the flaky pull three times before the step faults.\nworkflow sync_mirror\n  input remote: String\n  outcome done: type Synced, route success\n\ntype Synced { revision: String }\n\nworker mirrors\n  action pull(remote: String) -> Synced\n    retry 3 every 30s\n\nstep pull\n  pull(remote: remote) -> synced\n  route done(synced)",
+        "//! The growing form: intervals stretch from five seconds toward four minutes.\nworkflow crawl_source\n  input source: String\n  outcome done: type Page, route success\n\ntype Page { body: String }\n\nworker crawlers\n  action crawl(source: String) -> Page\n    retry 6 backoff 5s..4m\n\nstep crawl\n  crawl(source: source) -> page\n  route done(page)"
+      ],
       "section": {
         "number": 4,
         "title": "Workers, actions, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+      "citation": "AWL reference §4 — Workers, actions, and calls"
     },
     {
       "word": "advisory",
       "kind": "keyword",
       "summary": "Marks an action whose failure never faults its calling step; it can bind no result and be no pipe stage.",
+      "examples": [
+        "//! An advisory announcement can fail without faulting the run.\nworkflow ship_build\n  input version: String\n  outcome done: type String, route success\n\nworker notifier\n  action announce(version: String) -> Nil\n    advisory, timeout 30s\n\nstep ship\n  announce(version: version)\n  route done(version)"
+      ],
       "section": {
         "number": 4,
         "title": "Workers, actions, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+      "citation": "AWL reference §4 — Workers, actions, and calls"
     },
     {
       "word": "agent",
       "kind": "keyword",
       "summary": "Marks an action as an agent seam: its one `String` parameter carries a prompt and its `String` result the reply.",
+      "examples": [
+        "//! An agent action hands its prompt to a harness and binds the reply.\nworkflow ask_reviewer\n  input question: String\n  outcome done: type String, route success\n\nworker assistants\n  action ask(prompt: String) -> String\n    agent, timeout 10m\n\nstep ask\n  ask(prompt: question) -> reply\n  route done(reply)"
+      ],
       "section": {
         "number": 4,
         "title": "Workers, actions, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+      "citation": "AWL reference §4 — Workers, actions, and calls"
     },
     {
       "word": "every",
       "kind": "keyword",
       "summary": "Sets the fixed interval between retries in `retry N every DURATION`.",
+      "examples": [
+        "//! `every` fixes the interval between retries: ten seconds, each time.\nworkflow ping_service\n  input url: String\n  outcome done: type Pong, route success\n\ntype Pong { latency_ms: Int }\n\nworker probes\n  action ping(url: String) -> Pong\n    retry 5 every 10s\n\nstep ping\n  ping(url: url) -> pong\n  route done(pong)"
+      ],
       "section": {
         "number": 4,
         "title": "Workers, actions, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+      "citation": "AWL reference §4 — Workers, actions, and calls"
     },
     {
       "word": "backoff",
       "kind": "keyword",
       "summary": "Sets the growing retry interval in `retry N backoff MIN..MAX`.",
+      "examples": [
+        "//! `backoff` grows the retry interval from ten seconds toward two minutes.\nworkflow fetch_upstream\n  input source: String\n  outcome done: type Fetched, route success\n\ntype Fetched { bytes: Int }\n\nworker fetchers\n  action fetch(source: String) -> Fetched\n    retry 4 backoff 10s..2m\n\nstep fetch\n  fetch(source: source) -> fetched\n  route done(fetched)"
+      ],
       "section": {
         "number": 4,
         "title": "Workers, actions, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+      "citation": "AWL reference §4 — Workers, actions, and calls"
     },
     {
       "word": "node",
       "kind": "keyword",
       "summary": "Pins dispatch to a named worker node, on the action declaration or overridden at a call site.",
+      "examples": [
+        "//! Pin an action's dispatch to the named worker node.\nworkflow build_release\n  input tag: String\n  outcome done: type Build, route success\n\ntype Build { artifact: String }\n\nworker builders\n  action build(tag: String) -> Build\n    node linux_large\n\nstep build\n  build(tag: tag) -> built\n  route done(built)",
+        "//! Override the declared node at one urgent call site.\nworkflow hotfix_build\n  input tag: String\n  outcome done: type Build, route success\n\ntype Build { artifact: String }\n\nworker builders\n  action build(tag: String) -> Build\n    node standard, timeout 30m\n\nstep build\n  build(tag: tag) -> built\n    node urgent, timeout 5m\n  route done(built)"
+      ],
       "section": {
         "number": 4,
         "title": "Workers, actions, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+      "citation": "AWL reference §4 — Workers, actions, and calls"
     },
     {
       "word": "on",
       "kind": "keyword",
       "summary": "Opens `on failure`, the block a step runs when it faults, which must itself end in a route.",
+      "examples": [
+        "//! `on failure` runs when the step faults, and must end in a route.\nworkflow publish_package\n  input name: String\n  outcome done:   type String, route success\n  outcome failed: type String, route failure\n\nworker registry\n  action publish(name: String) -> Nil\n  action yank(name: String) -> Nil\n\nstep publish\n  publish(name: name)\n  route done(name)\n\n  on failure\n    yank(name: name)\n    route failed(\"publish failed; yanked\")",
+        "//! Compensation may route back into the graph, not only to an outcome.\nworkflow deploy_with_rollback\n  input build: String\n  outcome done:   type String, route success\n  outcome failed: type String, route failure\n\nworker ops\n  action deploy(build: String) -> Nil\n  action rollback(build: String) -> Nil\n  action report(build: String) -> Nil\n\nstep deploy\n  deploy(build: build)\n  route done(build)\n\n  on failure\n    rollback(build: build)\n    route notify\n\nstep notify\n  report(build: build)\n  route failed(\"deploy failed; rolled back: \" + build)"
+      ],
       "section": {
         "number": 11,
         "title": "Failure handling"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §11 — Failure handling"
+      "citation": "AWL reference §11 — Failure handling"
     },
     {
       "word": "failure",
       "kind": "keyword",
       "summary": "Maps a declared outcome to the engine's failed status, and after `on` names a step's compensation block.",
+      "examples": [
+        "//! `route failure` marks the outcome that fails the run.\nworkflow validate_order\n  input order_id: String\n  input valid: Bool\n  outcome accepted: type String, route success\n  outcome rejected: type String, route failure\n\nstep validate\n  outcome ok: when valid, route accepted(order_id)\n  outcome bad: otherwise, route rejected(\"invalid order: \" + order_id)",
+        "//! After `on`, the same word names a step's compensation block.\nworkflow guard_import\n  input dataset: String\n  outcome done:   type String, route success\n  outcome failed: type String, route failure\n\nworker importers\n  action import_rows(dataset: String) -> Nil\n\nstep import\n  import_rows(dataset: dataset)\n  route done(dataset)\n\n  on failure\n    route failed(\"import faulted: \" + dataset)"
+      ],
       "section": {
         "number": 3,
         "title": "Workflow header"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §3 — Workflow header"
+      "citation": "AWL reference §3 — Workflow header"
     },
     {
       "word": "when",
       "kind": "keyword",
       "summary": "Guards an outcome arm; the first true guard wins, and its proofs narrow optionals through that arm.",
+      "examples": [
+        "//! The first true `when` wins; its proofs hold through the arm.\nworkflow admit_finding\n  input finding: Finding\n  outcome done: type String, route success\n\ntype Finding { blocking: Bool, detail: String? }\n\nstep judge\n  outcome real: when finding.detail is present, route done(finding.detail)\n  outcome noise: otherwise, route done(\"no detail recorded\")",
+        "//! Guards over every enum variant are total; no `otherwise` needed.\nworkflow route_ticket\n  input ticket: Ticket\n  outcome done: type String, route success\n\ntype Category = Urgent | Routine | Spam\ntype Ticket { category: Category }\n\nstep route_it\n  outcome page: when ticket.category == Urgent, route done(\"page\")\n  outcome queue: when ticket.category == Routine, route done(\"queue\")\n  outcome bin: when ticket.category == Spam, route done(\"discard\")"
+      ],
       "section": {
         "number": 7,
         "title": "Selection, outcomes, and routes"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §7 — Selection, outcomes, and routes"
+      "citation": "AWL reference §7 — Selection, outcomes, and routes"
     },
     {
       "word": "otherwise",
       "kind": "keyword",
       "summary": "The complement arm of a guarded outcome set, which must come last.",
+      "examples": [
+        "//! `otherwise` is the complement arm, and must come last.\nworkflow rate_change\n  input risky: Bool\n  outcome done: type String, route success\n\nstep rate\n  outcome careful: when risky, route done(\"hold for review\")\n  outcome fine: otherwise, route done(\"ship it\")"
+      ],
       "section": {
         "number": 7,
         "title": "Selection, outcomes, and routes"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §7 — Selection, outcomes, and routes"
+      "citation": "AWL reference §7 — Selection, outcomes, and routes"
     },
     {
       "word": "route",
       "kind": "keyword",
       "summary": "Sends flow to another step or to a declared outcome, supplying that outcome's payload.",
+      "examples": [
+        "//! `route` sends flow to another step or to a declared outcome.\nworkflow escalate_alert\n  input urgent: Bool\n  outcome done: type String, route success\n\nstep assess\n  outcome page: when urgent, route page_operator\n  outcome log: otherwise, route done(\"logged\")\n\nstep page_operator\n  route done(\"paged\")",
+        "//! A backward route makes a flow loop; the cycle carries a visit bound.\nworkflow retry_gate\n  input repo: String\n  outcome done:   type Verdict, route success\n  outcome failed: type String,  route failure\n\ntype Verdict { ok: Bool }\n\nworker ci\n  action check(repo: String) -> Verdict\n\nstep attempt\n  check(repo: repo) -> verdict\n\nstep judge\n  outcome again: when not verdict.ok and visits < 3, route attempt\n  outcome good: when verdict.ok, route done(verdict)\n  outcome exhausted: otherwise, route failed(repo)\n  max 3 visits"
+      ],
       "section": {
         "number": 7,
         "title": "Selection, outcomes, and routes"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §7 — Selection, outcomes, and routes"
+      "citation": "AWL reference §7 — Selection, outcomes, and routes"
     },
     {
       "word": "success",
       "kind": "keyword",
       "summary": "Maps a declared outcome to the engine's completed status.",
+      "examples": [
+        "//! `route success` maps the outcome to the engine's completed status.\nworkflow finish_job\n  input job: String\n  outcome done: type String, route success\n\nstep wrap\n  route done(\"finished \" + job)"
+      ],
       "section": {
         "number": 3,
         "title": "Workflow header"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §3 — Workflow header"
+      "citation": "AWL reference §3 — Workflow header"
     },
     {
       "word": "filter",
       "kind": "keyword",
       "summary": "Keeps the elements of a collection its predicate accepts.",
+      "examples": [
+        "//! Keep only the findings the predicate accepts.\nworkflow keep_blockers\n  input findings: [Finding]\n  outcome done: type [Finding], route success\n\ntype Finding { title: String, blocking: Bool }\n\nstep sift\n  findings |> filter(.blocking) -> blockers\n  route done(blockers)",
+        "//! A filter stage inside a longer pipe, feeding a tally.\nworkflow measure_noise\n  input findings: [Finding]\n  outcome done:   type String, route success\n  outcome failed: type String, route failure\n\ntype Finding { resolved: Bool }\n\nstep measure\n  findings |> filter(.resolved) |> count -> settled\n  findings |> count -> total\n  outcome all_settled: when settled == total, route done(\"all settled\")\n  outcome open_items: otherwise, route failed(\"unresolved findings remain\")"
+      ],
       "section": {
         "number": 6,
         "title": "Steps, dependencies, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+      "citation": "AWL reference §6 — Steps, dependencies, and calls"
     },
     {
       "word": "map",
       "kind": "keyword",
       "summary": "Rewrites each element of a collection through a deterministic value expression.",
+      "examples": [
+        "//! Rewrite each element through a deterministic expression.\nworkflow list_titles\n  input findings: [Finding]\n  outcome done: type [String], route success\n\ntype Finding { title: String, blocking: Bool }\n\nstep rename\n  findings |> map(.title) -> titles\n  route done(titles)",
+        "//! Combinators chain: filter first, then project the titles.\nworkflow blocker_titles\n  input findings: [Finding]\n  outcome done: type [String], route success\n\ntype Finding { title: String, blocking: Bool }\n\nstep summarize\n  findings |> filter(.blocking) |> map(.title) -> titles\n  route done(titles)"
+      ],
       "section": {
         "number": 6,
         "title": "Steps, dependencies, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+      "citation": "AWL reference §6 — Steps, dependencies, and calls"
     },
     {
       "word": "sort",
       "kind": "keyword",
       "summary": "Orders a collection by a key, which the compile refuses unless it is `Int`, `Float`, or `String`.",
+      "examples": [
+        "//! Order a collection by a comparable key.\nworkflow rank_findings\n  input findings: [Finding]\n  outcome done: type [Finding], route success\n\ntype Finding { title: String, severity: Int }\n\nstep rank\n  findings |> sort(.severity) -> ranked\n  route done(ranked)",
+        "//! Sort by a key, then take the front of the ordered list.\nworkflow pick_leader\n  input candidates: [Candidate]\n  outcome done: type Candidate, route success\n\ntype Candidate { name: String, score: Int }\n\nstep choose\n  candidates |> sort(.score) -> ranked\n  ranked[0] -> leader\n  route done(leader)"
+      ],
       "section": {
         "number": 6,
         "title": "Steps, dependencies, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+      "citation": "AWL reference §6 — Steps, dependencies, and calls"
     },
     {
       "word": "count",
       "kind": "keyword",
       "summary": "Counts a collection's elements.",
+      "examples": [
+        "//! Count a collection's elements.\nworkflow tally_findings\n  input findings: [Finding]\n  outcome done: type Int, route success\n\ntype Finding { title: String }\n\nstep tally\n  findings |> count -> total\n  route done(total)",
+        "//! Two tallies, compared in a guard.\nworkflow judge_sweep\n  input receipts: [Receipt]\n  outcome done:   type String, route success\n  outcome failed: type String, route failure\n\ntype Receipt { ok: Bool }\n\nstep judge\n  receipts |> count -> attempted\n  receipts |> filter(.ok) |> count -> succeeded\n  outcome full: when succeeded == attempted, route done(\"all landed\")\n  outcome partial: otherwise, route failed(\"some failed\")"
+      ],
       "section": {
         "number": 6,
         "title": "Steps, dependencies, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+      "citation": "AWL reference §6 — Steps, dependencies, and calls"
     },
     {
       "word": "any",
       "kind": "keyword",
       "summary": "True when at least one element of a collection satisfies its predicate.",
+      "examples": [
+        "//! True when at least one element satisfies the predicate.\nworkflow spot_blocker\n  input findings: [Finding]\n  outcome done: type String, route success\n\ntype Finding { blocking: Bool }\n\nstep look\n  findings |> any(.blocking) -> has_blocker\n  outcome blocked: when has_blocker, route done(\"blocked\")\n  outcome clear: otherwise, route done(\"clear\")",
+        "//! The predicate can be compound.\nworkflow flag_hard_blockers\n  input findings: [Finding]\n  outcome done: type String, route success\n\ntype Finding { blocking: Bool, severity: String }\n\nstep look\n  findings |> any(.blocking and .severity == \"blocker\") -> has_hard_blocker\n  outcome blocked: when has_hard_blocker, route done(\"hard blocker present\")\n  outcome clear: otherwise, route done(\"no hard blockers\")"
+      ],
       "section": {
         "number": 6,
         "title": "Steps, dependencies, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+      "citation": "AWL reference §6 — Steps, dependencies, and calls"
     },
     {
       "word": "all",
       "kind": "keyword",
       "summary": "True when every element of a collection satisfies its predicate.",
+      "examples": [
+        "//! True when every element satisfies the predicate.\nworkflow verify_receipts\n  input receipts: [Receipt]\n  outcome done: type String, route success\n\ntype Receipt { ok: Bool }\n\nstep verify\n  receipts |> all(.ok) -> all_ok\n  outcome good: when all_ok, route done(\"every receipt landed\")\n  outcome partial: otherwise, route done(\"at least one failed\")",
+        "//! Universal claims read well with `or`: passed, or explicitly waived.\nworkflow verify_waivers\n  input checks: [Check]\n  outcome done: type String, route success\n\ntype Check { passed: Bool, waived: Bool }\n\nstep verify\n  checks |> all(.passed or .waived) -> acceptable\n  outcome good: when acceptable, route done(\"release may proceed\")\n  outcome bad: otherwise, route done(\"unwaived failure present\")"
+      ],
       "section": {
         "number": 6,
         "title": "Steps, dependencies, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+      "citation": "AWL reference §6 — Steps, dependencies, and calls"
     },
     {
       "word": "is",
       "kind": "keyword",
       "summary": "Opens a predicate: `is empty`, `is present`, or `is absent`.",
+      "examples": [
+        "//! `is` opens a predicate: `is empty`, `is present`, or `is absent`.\nworkflow check_queue\n  input items: [String]\n  outcome done: type String, route success\n\nstep look\n  outcome idle: when items is empty, route done(\"idle\")\n  outcome busy: otherwise, route done(\"busy\")",
+        "//! `is present` proves an optional before it is read.\nworkflow read_manifest\n  input manifest: Manifest\n  outcome done: type String, route success\n\ntype Manifest { name: String, notes: String? }\n\nstep read\n  outcome noted: when manifest.notes is present, route done(manifest.notes)\n  outcome bare: otherwise, route done(manifest.name)"
+      ],
       "section": {
         "number": 6,
         "title": "Steps, dependencies, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+      "citation": "AWL reference §6 — Steps, dependencies, and calls"
     },
     {
       "word": "empty",
       "kind": "keyword",
       "summary": "The predicate for a collection with nothing in it.",
+      "examples": [
+        "//! The predicate for a collection with nothing in it.\nworkflow judge_review\n  input findings: [String]\n  outcome clean:   type String, route success\n  outcome blocked: type String, route failure\n\nstep judge\n  outcome pass: when findings is empty, route clean(\"no findings\")\n  outcome fail: otherwise, route blocked(\"findings remain\")",
+        "//! Emptiness after filtering: no blockers left means clear.\nworkflow clear_to_land\n  input findings: [Finding]\n  outcome done:   type String, route success\n  outcome failed: type String, route failure\n\ntype Finding { blocking: Bool }\n\nstep decide\n  findings |> filter(.blocking) -> blockers\n  outcome clear: when blockers is empty, route done(\"clear to land\")\n  outcome blocked: otherwise, route failed(\"blockers remain\")"
+      ],
       "section": {
         "number": 6,
         "title": "Steps, dependencies, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+      "citation": "AWL reference §6 — Steps, dependencies, and calls"
     },
     {
       "word": "present",
       "kind": "keyword",
       "summary": "Proves an optional access path present, narrowing it from `T?` to `T` wherever that proof holds.",
+      "examples": [
+        "//! Prove the optional present; the proof narrows `T?` to `T` in the arm.\nworkflow read_note\n  input finding: Finding\n  outcome done: type String, route success\n\ntype Finding { title: String, note: String? }\n\nstep read\n  outcome noted: when finding.note is present, route done(finding.note)\n  outcome bare: otherwise, route done(finding.title)",
+        "//! Proofs chain: the first makes the record real, the second its field.\nworkflow read_deep_note\n  input report: Report\n  outcome done: type String, route success\n\ntype Detail { note: String? }\ntype Report { title: String, detail: Detail? }\n\nstep read\n  outcome noted: when report.detail is present and report.detail.note is present,\n    route done(report.detail.note)\n  outcome bare: otherwise, route done(report.title)"
+      ],
       "section": {
         "number": 6,
         "title": "Steps, dependencies, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+      "citation": "AWL reference §6 — Steps, dependencies, and calls"
     },
     {
       "word": "absent",
       "kind": "keyword",
       "summary": "Proves an optional access path absent, which is what an `or` chain narrows on its false edge.",
+      "examples": [
+        "//! Prove the optional absent, which is what omission looks like.\nworkflow chase_signoff\n  input review: Review\n  outcome done: type String, route success\n\ntype Review { change: String, verdict: String? }\n\nstep chase\n  outcome pending: when review.verdict is absent, route done(\"chase \" + review.change)\n  outcome settled: otherwise, route done(review.change)",
+        "//! Expiry IS absence: a lapsed timed wait proves the binding absent.\nworkflow chase_reply\n  input ticket: String\n  signal reply: Reply\n  outcome done:      type String, route success\n  outcome escalated: type String, route failure\n\ntype Reply { text: String }\n\nstep hold\n  wait reply timeout 1d -> response\n  outcome silent: when response is absent, route escalated(\"no reply: \" + ticket)\n  outcome answered: otherwise, route done(\"answered: \" + ticket)"
+      ],
       "section": {
         "number": 6,
         "title": "Steps, dependencies, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+      "citation": "AWL reference §6 — Steps, dependencies, and calls"
     },
     {
       "word": "not",
       "kind": "keyword",
       "summary": "Negates a boolean expression.",
+      "examples": [
+        "//! Negate a boolean expression.\nworkflow gate_ship\n  input checks_passed: Bool\n  outcome held:    type String, route failure\n  outcome shipped: type String, route success\n\nstep decide\n  outcome hold: when not checks_passed, route held(\"checks failed\")\n  outcome go: otherwise, route shipped(\"shipped\")",
+        "//! Negation inside a quantifier's predicate.\nworkflow find_open_items\n  input findings: [Finding]\n  outcome done: type String, route success\n\ntype Finding { resolved: Bool }\n\nstep look\n  findings |> any(not .resolved) -> has_open\n  outcome open: when has_open, route done(\"open items remain\")\n  outcome settled: otherwise, route done(\"all resolved\")"
+      ],
       "section": {
         "number": 6,
         "title": "Steps, dependencies, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+      "citation": "AWL reference §6 — Steps, dependencies, and calls"
     },
     {
       "word": "and",
       "kind": "keyword",
       "summary": "Boolean conjunction, where each conjunct's presence proof holds for the operands after it.",
+      "examples": [
+        "//! Both conjuncts must hold; each proof carries to the operands after it.\nworkflow admit_report\n  input report: Report\n  outcome done: type String, route success\n\ntype Report { blocking: Bool, detail: String? }\n\nstep admit\n  outcome real: when report.blocking and report.detail is present, route done(report.detail)\n  outcome noise: otherwise, route done(\"nothing blocking\")",
+        "//! Plain conjunction: both flags must hold.\nworkflow admit_release\n  input build: Build\n  outcome done:   type String, route success\n  outcome failed: type String, route failure\n\ntype Build { tests_green: Bool, signed: Bool }\n\nstep admit\n  outcome ship: when build.tests_green and build.signed, route done(\"shipped\")\n  outcome hold: otherwise, route failed(\"not ready\")"
+      ],
       "section": {
         "number": 6,
         "title": "Steps, dependencies, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+      "citation": "AWL reference §6 — Steps, dependencies, and calls"
     },
     {
       "word": "or",
       "kind": "keyword",
       "summary": "Boolean disjunction, where each disjunct's absence proof holds on its false edge.",
+      "examples": [
+        "//! Either disjunct admits; absence proofs hold on the false edge.\nworkflow accept_change\n  input change: Change\n  outcome done: type String, route success\n\ntype Change { approved: Bool, urgent: Bool, title: String }\n\nstep judge\n  outcome go: when change.approved or change.urgent, route done(change.title)\n  outcome no: otherwise, route done(\"declined: \" + change.title)",
+        "//! On the false edge of `is absent`, the right side reads the value safely.\nworkflow honor_waiver\n  input request: Request\n  outcome done: type String, route success\n\ntype Waiver  { approved: Bool }\ntype Request { title: String, waiver: Waiver? }\n\nstep judge\n  outcome waved: when request.waiver is absent or request.waiver.approved,\n    route done(\"proceed: \" + request.title)\n  outcome held: otherwise, route done(\"held: \" + request.title)"
+      ],
       "section": {
         "number": 6,
         "title": "Steps, dependencies, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §6 — Steps, dependencies, and calls"
+      "citation": "AWL reference §6 — Steps, dependencies, and calls"
     },
     {
       "word": "true",
       "kind": "keyword",
       "summary": "The `Bool` literal for truth.",
+      "examples": [
+        "//! `true` is the Bool literal for truth.\nworkflow flag_finding\n  input title: String\n  outcome done: type Finding, route success\n\ntype Finding { title: String, blocking: Bool }\n\nstep flag\n  route done(title: title, blocking: true)"
+      ],
       "section": {
         "number": 2,
         "title": "Values and types"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §2 — Values and types"
+      "citation": "AWL reference §2 — Values and types"
     },
     {
       "word": "false",
       "kind": "keyword",
       "summary": "The `Bool` literal for falsity.",
+      "examples": [
+        "//! `false` is the Bool literal for falsity.\nworkflow clear_finding\n  input title: String\n  outcome done: type Finding, route success\n\ntype Finding { title: String, blocking: Bool }\n\nstep clear\n  route done(title: title, blocking: false)",
+        "//! `false` seeds the loop's threaded value before the first pass.\nworkflow chase_approval\n  input request: String\n  outcome done:  type Verdict, route success\n  outcome stuck: type String,  route failure\n\ntype Verdict { approved: Bool }\n\nworker desks\n  action press(request: String, prior: Verdict) -> Verdict\n\nstep chase\n  loop verdict = Verdict(approved: false)\n    press(request: request, prior: verdict) -> verdict\n    until verdict.approved\n    max 3\n  outcome approved: when verdict.approved, route done(verdict)\n  outcome refused: otherwise, route stuck(request)"
+      ],
       "section": {
         "number": 2,
         "title": "Values and types"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §2 — Values and types"
+      "citation": "AWL reference §2 — Values and types"
     },
     {
       "word": "const",
       "kind": "keyword",
       "summary": "Declares a compile-time constant, which may never depend on a runtime binding.",
+      "examples": [
+        "//! A compile-time constant, usable anywhere a value is.\nworkflow announce_poll\n  input feed: String\n  outcome done: type String, route success\n\nconst prefix = \"polling: \"\n\nstep announce\n  route done(prefix + feed)",
+        "//! A multi-line constant: instructions for an agent seam.\nworkflow brief_agent\n  input goal: String\n  outcome done: type String, route success\n\nconst instructions = \"\"\"\nWork from repository evidence only.\nReturn one paragraph.\n\"\"\"\n\nworker assistants\n  action ask(prompt: String) -> String\n    agent, timeout 10m\n\nstep ask\n  ask(prompt: instructions + goal) -> reply\n  route done(reply)"
+      ],
       "section": {
         "number": 2,
         "title": "Values and types"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §2 — Values and types"
+      "citation": "AWL reference §2 — Values and types"
     },
     {
       "word": "json",
       "kind": "keyword",
-      "summary": "Opens a literal JSON body, as in `json { \"type\": \"string\" }`.",
+      "summary": "Opens a literal JSON body, as in `json { \"type\": \"string\" }`, and names the JSON capture selector in a worker document's `run json \"…\"` body — two distinct places.",
+      "examples": [
+        "//! `json { … }` opens a literal JSON body in constant position.\nworkflow request_review\n  input diff: String\n  outcome done: type String, route success\n\nconst output_schema = json { \"type\": \"string\" }\n\nworker reviewers\n  action review(prompt: String, contract: String) -> String\n\nstep review\n  review(prompt: diff, contract: output_schema) -> verdict\n  route done(verdict)",
+        "//! `run json` names the capture selector: stdout parses into the type.\nworker probes\n  action host_report(host: String) -> Report\n    run json \"host-tool --json --host $host\"\n\ntype Report { cpu_count: Int, host: String }"
+      ],
       "section": {
         "number": 2,
         "title": "Values and types"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §2 — Values and types"
+      "citation": "AWL reference §2 — Values and types"
     },
     {
       "word": "of",
       "kind": "keyword",
       "summary": "Names the subject of `schema of Type`, the constant-position schema derivation.",
+      "examples": [
+        "//! `schema of Type` derives a schema constant from a declared type.\nworkflow plan_items\n  input goal: String\n  outcome done: type Plan, route success\n\nconst plan_schema = schema of Plan\n\ntype Plan { items: [String] }\n\nworker agents\n  action plan(prompt: String, output_schema: String) -> Plan\n\nstep plan\n  plan(prompt: goal, output_schema: plan_schema) -> result\n  route done(result)"
+      ],
       "section": {
         "number": 2,
         "title": "Values and types"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §2 — Values and types"
+      "citation": "AWL reference §2 — Values and types"
     },
     {
       "word": "subflow",
       "kind": "keyword",
       "summary": "Declares an inline reusable graph with typed parameters and exactly one outcome, compiled into this workflow.",
+      "examples": [
+        "//! An inline reusable graph with typed parameters and one outcome.\nworkflow review_repo\n  input repo: String\n  outcome done: type Report, route success\n\ntype Report { summary: String }\n\nworker reviewers\n  action inspect(target: String) -> Report\n\nsubflow review_once(target: String)\n  outcome out: type Report\n\n  step look\n    inspect(target: target) -> report\n    route out(report)\n\nstep review\n  review_once(target: repo) -> report\n\nstep publish\n  report |> route done",
+        "//! One subflow, run once per item inside a distribute region.\nworkflow review_wave\n  input repos: [String]\n  outcome done: type [Verdict], route success\n\ntype Verdict { ok: Bool }\n\nworker reviewers\n  action inspect(target: String) -> Verdict\n\nsubflow review_one(target: String)\n  outcome out: type Verdict\n\n  step look\n    inspect(target: target) -> verdict\n    route out(verdict)\n\nstep open\n  distribute repo in repos\n\nstep review\n  review_one(target: repo) -> verdict\n\nstep close\n  collect verdict -> verdicts\n  route done(verdicts)"
+      ],
       "section": {
         "number": 5,
         "title": "Children and subflows"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §5 — Children and subflows"
+      "citation": "AWL reference §5 — Children and subflows"
     },
     {
       "word": "distribute",
       "kind": "keyword",
       "summary": "Opens a multi-step region that runs one item track per element in parallel.",
+      "examples": [
+        "//! Every host gets its own step track; the tracks run in parallel.\nworkflow inspect_fleet\n  input hosts: [String]\n  outcome done: type [Report], route success\n\ntype Report { host: String }\n\nworker ops\n  action inspect(host: String) -> Report\n\nstep open\n  distribute host in hosts\n\nstep work\n  inspect(host: host) -> report\n\nstep close\n  collect report -> reports\n  route done(reports)",
+        "//! Each item track is a little graph: inspect, then verify.\nworkflow remediate_fleet\n  input hosts: [String]\n  outcome done: type [Verdict], route success\n\ntype Fault   { detail: String }\ntype Verdict { ok: Bool }\n\nworker ops\n  action inspect(host: String) -> Fault\n  action verify(host: String, fault: Fault) -> Verdict\n\nstep open\n  distribute host in hosts\n\nstep inspect_host\n  inspect(host: host) -> fault\n\nstep verify_host\n  verify(host: host, fault: fault) -> verdict\n\nstep close\n  collect verdict -> verdicts\n  route done(verdicts)"
+      ],
       "section": {
         "number": 8,
         "title": "Parallel and sequential work"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §8 — Parallel and sequential work"
+      "citation": "AWL reference §8 — Parallel and sequential work"
     },
     {
       "word": "sequence",
       "kind": "keyword",
       "summary": "Opens a multi-step region that runs one item track at a time in collection order.",
+      "examples": [
+        "//! One host at a time, in collection order, each through its own track.\nworkflow roll_out\n  input hosts: [String]\n  outcome done: type [Attempt], route success\n\ntype Attempt { host: String, ok: Bool }\n\nworker ops\n  action deploy(host: String) -> Attempt\n\nstep ordered\n  sequence host in hosts\n\nstep push\n  deploy(host: host) -> attempt\n\nstep settle\n  collect attempt -> attempts\n  route done(attempts)",
+        "//! Ordered rollout with an in-track retry before each host settles.\nworkflow canary_rollout\n  input hosts: [String]\n  outcome done: type Int, route success\n\ntype Attempt { ok: Bool }\n\nworker ops\n  action deploy(host: String) -> Attempt\n  action verify(attempt: Attempt) -> Attempt\n\nstep ordered\n  sequence host in hosts\n\nstep push after ordered\n  deploy(host: host) -> attempt\n\nstep confirm\n  verify(attempt: attempt) -> checked\n  outcome retry: when not checked.ok and visits < 3, route push\n  outcome move_on: otherwise, route settle\n  max 3 visits\n\nstep settle\n  collect checked -> attempts\n  attempts |> count -> rolled\n  route done(rolled)"
+      ],
       "section": {
         "number": 8,
         "title": "Parallel and sequential work"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §8 — Parallel and sequential work"
+      "citation": "AWL reference §8 — Parallel and sequential work"
     },
     {
       "word": "collect",
       "kind": "keyword",
       "summary": "Closes the nearest region as the first statement of its close step, binding results in input order.",
+      "examples": [
+        "//! `collect` opens the close step, folding the region's results back in.\nworkflow check_services\n  input services: [String]\n  outcome done: type Int, route success\n\ntype Health { ok: Bool }\n\nworker probes\n  action probe(service: String) -> Health\n\nstep open\n  distribute service in services\n\nstep probe_one\n  probe(service: service) -> health\n\nstep close\n  collect health -> results\n  results |> count -> total\n  route done(total)",
+        "//! Tolerant collect: one optional slot per item, failures kept in history.\nworkflow best_effort_sweep\n  input repos: [String]\n  outcome done: type Int, route success\n\ntype Report { ok: Bool }\n\nworker ci\n  action check(repo: String) -> Report\n\nstep open\n  distribute repo in repos\n\nstep check_repo\n  check(repo: repo) -> report\n\nstep close\n  collect report? -> reports\n  reports |> count -> total\n  route done(total)"
+      ],
       "section": {
         "number": 8,
         "title": "Parallel and sequential work"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §8 — Parallel and sequential work"
+      "citation": "AWL reference §8 — Parallel and sequential work"
     },
     {
       "word": "visits",
       "kind": "keyword",
       "summary": "Completes a step's `max N visits` bound, and reads as the visit count inside that step's guards.",
+      "examples": [
+        "//! `max 3 visits` bounds the flow loop; `visits` reads the count in guards.\nworkflow recheck_repo\n  input repo: String\n  outcome done: type Verdict, route success\n\ntype Verdict { ok: Bool }\n\nworker ci\n  action check(repo: String) -> Verdict\n\nstep attempt\n  check(repo: repo) -> verdict\n\nstep judge\n  outcome again: when not verdict.ok and visits < 3, route attempt\n  outcome settled: otherwise, route done(verdict)\n  max 3 visits",
+        "//! The visit bound can be an expression over inputs and consts.\nworkflow bounded_polish\n  input text: String\n  input max_rounds: Int\n  outcome done: type Verdict, route success\n\ntype Verdict { ok: Bool }\n\nworker desks\n  action polish(text: String) -> Verdict\n\nstep attempt\n  polish(text: text) -> verdict\n\nstep judge\n  outcome again: when not verdict.ok and visits < max_rounds, route attempt\n  outcome settled: otherwise, route done(verdict)\n  max max_rounds visits"
+      ],
       "section": {
         "number": 9,
         "title": "Bounded iteration"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §9 — Bounded iteration"
+      "citation": "AWL reference §9 — Bounded iteration"
     },
     {
       "word": "send",
       "kind": "word",
       "summary": "Declares an outbound signal in the header, and in a step body sends it to another running workflow.",
+      "examples": [
+        "//! Signal another running workflow, addressed by its durable id.\nworkflow report_progress\n  input coordinator_id: String\n  input item: String\n  send progress: Progress\n  outcome done: type String, route success\n\ntype Progress { item: String, state: String }\n\nstep announce\n  send progress(item: item, state: \"started\") to coordinator_id\n  route done(item)",
+        "//! Three payload forms: a record, a bare value, and `Nil` with nothing.\nworkflow announce_gates\n  input coordinator_id: String\n  input item: String\n  send heartbeat: Nil\n  send progress: Progress\n  send verdict: String\n  outcome done: type String, route success\n\ntype Progress { item: String, state: String }\n\nstep announce\n  send heartbeat to coordinator_id\n  send progress(item: item, state: \"gated\") to coordinator_id\n  send verdict(\"ok: \" + item) to coordinator_id\n  route done(item)"
+      ],
       "section": {
         "number": 12,
         "title": "Sending signals to other workflows"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §12 — Sending signals to other workflows"
+      "citation": "AWL reference §12 — Sending signals to other workflows"
     },
     {
       "word": "to",
       "kind": "word",
       "summary": "Addresses the target of a `send`: a workflow id, which is a `String`.",
+      "examples": [
+        "//! `to` addresses the target: a workflow id, which is a String.\nworkflow notify_parent\n  input parent_id: String\n  input item: String\n  send finished: String\n  outcome done: type String, route success\n\nstep notify\n  send finished(\"done: \" + item) to parent_id\n  route done(item)",
+        "//! Any bound String can follow `to` — even this run's own id.\nworkflow self_note\n  input note: String\n  send reminder: String\n  outcome done: type String, route success\n\nstep remind\n  send reminder(note) to workflow.id\n  route done(note)"
+      ],
       "section": {
         "number": 12,
         "title": "Sending signals to other workflows"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §12 — Sending signals to other workflows"
+      "citation": "AWL reference §12 — Sending signals to other workflows"
     },
     {
       "word": "query",
       "kind": "word",
       "summary": "Declares what an operator may ask a running instance, and the type of the answer they receive.",
+      "examples": [
+        "//! `query` declares what an operator may ask a running instance.\nworkflow track_import\n  input dataset: String\n  query phase: String\n  outcome done: type String, route success\n\nstep ingest\n  answer phase(\"ingesting \" + dataset)\n  route done(dataset)",
+        "//! Query types are wire types: Nil, lists, and optionals all serve.\nworkflow watch_harvest\n  input crop: String\n  query heartbeat: Nil\n  query notes: [String]\n  query last_note: String?\n  outcome done: type String, route success\n\nstep harvest\n  answer heartbeat\n  answer notes([crop])\n  answer last_note(crop)\n  route done(crop)"
+      ],
       "section": {
         "number": 13,
         "title": "The read-only query surface"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §13 — The read-only query surface"
+      "citation": "AWL reference §13 — The read-only query surface"
     },
     {
       "word": "answer",
       "kind": "word",
       "summary": "Registers the value a declared query returns, computed from the bindings in scope where it stands.",
+      "examples": [
+        "//! `answer` registers the value a declared query returns.\nworkflow watch_backup\n  input volume: String\n  query progress: String\n  outcome done: type String, route success\n\nstep copy\n  answer progress(\"copying \" + volume)\n  route done(volume)",
+        "//! Re-answer inside the loop: live progress for whoever asks.\nworkflow long_review\n  input item: String\n  input max_passes: Int\n  query status: String\n  outcome done:  type Verdict, route success\n  outcome stuck: type String,  route failure\n\ntype Verdict { approved: Bool }\n\nworker desks\n  action evaluate(item: String) -> Verdict\n\nstep review\n  loop verdict = Verdict(approved: false)\n    answer status(\"reviewing \" + item)\n    evaluate(item: item) -> verdict\n    until verdict.approved\n    max max_passes\n  answer status(\"settled\")\n  outcome approved: when verdict.approved, route done(verdict)\n  outcome exhausted: otherwise, route stuck(item)"
+      ],
       "section": {
         "number": 13,
         "title": "The read-only query surface"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §13 — The read-only query surface"
+      "citation": "AWL reference §13 — The read-only query surface"
     },
     {
       "word": "run",
       "kind": "word",
       "summary": "Gives an action a declared command body, which the server runs itself with no sandbox of any kind.",
+      "examples": [
+        "//! The document is the implementation: the server runs the command itself.\nworkflow greet_by_hand\n  input name: String\n  outcome done: type Stdout, route success\n\ntype Stdout { stdout: String }\n\nworker shell\n  action greet(name: String) -> Stdout\n    run \"echo hello $name\"\n\nstep greet\n  greet(name: name) -> out\n  route done(out)",
+        "//! `run text` returns the command's trimmed stdout as one String.\nworker shell_tools\n  action checksum(path: String) -> String\n    run text \"shasum $path\"",
+        "//! `run json` parses the command's stdout into the declared type.\nworker probes\n  action disk_report(mount: String) -> Report\n    run json \"disk-tool --json $mount\"\n\ntype Report { free_bytes: Int, mount: String }"
+      ],
       "section": {
         "number": 4,
         "title": "Workers, actions, and calls"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §4 — Workers, actions, and calls"
+      "citation": "AWL reference §4 — Workers, actions, and calls"
     },
     {
       "word": "in",
       "kind": "word",
       "summary": "Names the per-item binding of a fork or a region opener, as in `fork item in items`.",
+      "examples": [
+        "//! `in` names the per-item binding: each branch sees one `name`.\nworkflow greet_everyone\n  input names: [String]\n  outcome done: type [Greeting], route success\n\ntype Greeting { text: String }\n\nworker greeter\n  action greet(name: String) -> Greeting\n\nstep greet_each\n  fork name in names\n    greet(name: name)\n  join -> greetings\n  route done(greetings)",
+        "//! The same `in` names the per-item binding of a region opener.\nworkflow document_hosts\n  input hosts: [String]\n  outcome done: type [String], route success\n\nworker ops\n  action describe(host: String) -> String\n\nstep open\n  distribute host in hosts\n\nstep describe_host\n  describe(host: host) -> description\n\nstep close\n  collect description -> descriptions\n  route done(descriptions)"
+      ],
       "section": {
         "number": 8,
         "title": "Parallel and sequential work"
       },
-      "citation": "examples/assistant/resources/AWL-REFERENCE.md §8 — Parallel and sequential work"
+      "citation": "AWL reference §8 — Parallel and sequential work"
     }
   ]
 }

@@ -1,11 +1,16 @@
 //! The shape of one glossary entry, and the reference sections entries cite.
 //!
 //! An entry is deliberately small: the word, what kind of word it is, ONE
-//! sentence of meaning, and the section of the language reference that
-//! explains it in full. The sentence is short enough to sit in a hover
-//! tooltip and in `--help` output without either surface paraphrasing it —
-//! paraphrase is how the same rule comes to be written three times and mean
-//! three things.
+//! sentence of meaning, its complete example documents, and the section of
+//! the language reference that explains it in full. The sentence is short
+//! enough to sit in a hover tooltip and in `--help` output without either
+//! surface paraphrasing it — paraphrase is how the same rule comes to be
+//! written three times and mean three things. Each example is a whole `.awl`
+//! document rather than a fragment, because a fragment teaches syntax
+//! without teaching where it stands; every example passes the crate's own
+//! parse and check pipeline, gated by
+//! `every_entry_example_passes_the_real_checker`. The example texts live in
+//! [`super::examples`], one file per vocabulary cluster.
 
 /// What kind of word a glossary entry describes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,6 +90,15 @@ pub const COMMANDS_PATH: &str = "examples/assistant/resources/COMMANDS.md";
 /// What a declared `run "…"` body can do. There is no sandbox.
 pub const DECLARED_COMMANDS_PATH: &str = "docs/workers/DECLARED-COMMANDS.md";
 
+/// The command that prints the full embedded reference from the installed
+/// binary.
+///
+/// The citation names the reference by section, not by repository path — an
+/// author who installed `aion` from crates.io has no repository to resolve a
+/// path against. This is the companion every surface may print so that author
+/// still has somewhere real to go.
+pub const REFERENCE_COMMAND: &str = "aion awl guide --reference";
+
 /// §1 of the reference.
 pub(crate) const DOCUMENT_STRUCTURE: Section = Section::new(1, "Document structure");
 /// §2 of the reference.
@@ -120,21 +134,25 @@ pub struct GuideEntry {
     kind: WordKind,
     summary: &'static str,
     section: Section,
+    examples: &'static [&'static str],
 }
 
 impl GuideEntry {
-    /// Records one word's meaning and where its full treatment lives.
+    /// Records one word's meaning, where its full treatment lives, and the
+    /// complete documents that demonstrate it.
     pub(crate) const fn new(
         word: &'static str,
         kind: WordKind,
         summary: &'static str,
         section: Section,
+        examples: &'static [&'static str],
     ) -> Self {
         Self {
             word,
             kind,
             summary,
             section,
+            examples,
         }
     }
 
@@ -162,15 +180,34 @@ impl GuideEntry {
         self.section
     }
 
+    /// The complete, minimal `.awl` documents demonstrating the word in
+    /// realistic use — one per honest form or context the word has.
+    ///
+    /// Whole documents rather than fragments, so an author can paste any one
+    /// into a file and run `aion awl check` on it unchanged. A word with
+    /// several genuinely distinct uses (a declaration form and a call form, a
+    /// workflow-document form and a worker-document form) carries one example
+    /// per use; a word with exactly one honest form carries one — a contrived
+    /// near-duplicate teaches less than a single good document. Every example
+    /// is run through the crate's real parse and check pipeline by the guide
+    /// tests, so a syntax change that broke one fails the build instead of
+    /// teaching dead syntax.
+    #[must_use]
+    pub const fn examples(self) -> &'static [&'static str] {
+        self.examples
+    }
+
     /// The citation a surface prints under the summary.
     ///
     /// Every surface renders the same string, so an author who reads the
     /// hover and an author who reads `aion awl guide` are sent to the same
-    /// place by the same words.
+    /// place by the same words. The reference is named by section rather than
+    /// by repository path — the installed binary carries the full text, and
+    /// [`REFERENCE_COMMAND`] is how a surface says where to open it.
     #[must_use]
     pub fn citation(self) -> String {
         format!(
-            "{REFERENCE_PATH} §{} — {}",
+            "AWL reference §{} — {}",
             self.section.number(),
             self.section.title()
         )

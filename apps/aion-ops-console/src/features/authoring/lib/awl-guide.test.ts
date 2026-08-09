@@ -17,6 +17,13 @@ test('the glossary carries the whole language and the documents behind it', () =
     expect(entry.word.length).toBeGreaterThan(0);
     expect(entry.summary.endsWith('.')).toBe(true);
     expect(entry.citation).toContain(`§${entry.section.number}`);
+    // Complete documents, not fragments: each opens with the mandatory
+    // narration and declares a workflow or worker family.
+    expect(entry.examples.length).toBeGreaterThan(0);
+    for (const example of entry.examples) {
+      expect(example.startsWith('//!')).toBe(true);
+      expect(/\n(workflow|worker) /.test(example)).toBe(true);
+    }
   }
 });
 
@@ -53,7 +60,12 @@ test('search reads the meaning, not only the word', () => {
 
 test('an empty search is every word, and an unmatched search is none', () => {
   expect(matching(awlGuide.entries, '   ').length).toBe(awlGuide.entries.length);
-  expect(matching(awlGuide.entries, 'select').length).toBe(0);
+  // `elseif` is nothing AWL has and appears in no summary. `select` no longer
+  // works as the unmatched probe: the language still has no `select`, but the
+  // meaning-search legitimately finds `json`, whose summary names the
+  // `run json` capture SELECTor.
+  expect(matching(awlGuide.entries, 'elseif').length).toBe(0);
+  expect(matching(awlGuide.entries, 'select').map((entry) => entry.word)).toEqual(['json']);
 });
 
 test('search ignores case', () => {

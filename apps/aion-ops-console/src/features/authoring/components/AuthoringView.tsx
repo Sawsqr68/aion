@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router';
 import { cn } from '@/lib/utils';
 
 import { DeployedPanel } from './DeployedPanel';
+import { GuideOverlay } from './GuideOverlay';
 import { LanguagePanel } from './LanguagePanel';
 import { WorkspacePanel } from './WorkspacePanel';
 
@@ -57,6 +58,10 @@ export function AuthoringView() {
       {source === 'workspace' && <WorkspacePanel />}
       {source === 'deployed' && <DeployedPanel />}
       {source === 'language' && <LanguagePanel />}
+      {/* The definitions pop-over: the guide beside the editor, so looking a
+          word up never costs the author their place. Not rendered on the
+          Language tab, which already IS the guide. */}
+      {source !== 'language' && <GuideOverlay />}
     </div>
   );
 }

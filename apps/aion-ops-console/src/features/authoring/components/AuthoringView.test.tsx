@@ -54,3 +54,25 @@ test('an unknown source falls back to the workspace', () => {
   const html = wrap(<AuthoringView />, '/authoring?source=elsewhere');
   expect(html).toContain('AWL documents and deployment checks');
 });
+
+/**
+ * The guide overlay rides the editing surfaces: its launcher must be mounted
+ * on the workspace and on the deployed view. These assertions match the
+ * overlay's `data-slot`, never its visible text — the Language panel's own
+ * search label ('Search the language') is a prefix of the overlay's
+ * ('Search the language guide'), so a text match could pass for the wrong
+ * component entirely.
+ */
+test('the guide overlay launcher is mounted on the workspace and deployed surfaces', () => {
+  expect(wrap(<AuthoringView />, '/authoring')).toContain('data-slot="guide-overlay-launcher"');
+  expect(wrap(<AuthoringView />, '/authoring?source=deployed')).toContain(
+    'data-slot="guide-overlay-launcher"'
+  );
+});
+
+/** The Language tab IS the guide; floating a second copy over it would be noise. */
+test('the language tab carries no guide overlay', () => {
+  const html = wrap(<AuthoringView />, '/authoring?source=language');
+  expect(html).not.toContain('data-slot="guide-overlay-launcher"');
+  expect(html).not.toContain('data-slot="guide-overlay"');
+});

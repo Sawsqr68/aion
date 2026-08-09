@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import { type AwlWord, awlGuide, matching, sectionsOf } from '../lib/awl-guide';
+import { WordCard } from './WordCard';
 
 /**
  * The studio's help affordance: every word of AWL, what it means, and where
@@ -88,12 +89,7 @@ function DocumentPath({ label, path }: { label: string; path: string }) {
 function WordEntry({ entry }: { entry: AwlWord }) {
   return (
     <li className="rounded-md border border-border bg-surface-elevated px-3 py-2">
-      <p className="flex items-baseline gap-2">
-        <code className="font-medium text-foreground text-sm">{entry.word}</code>
-        <span className="text-muted-foreground text-xs">{entry.kind}</span>
-      </p>
-      <p className="mt-1 text-foreground text-sm">{entry.summary}</p>
-      <p className="mt-1 text-muted-foreground text-xs">{entry.citation}</p>
+      <WordCard entry={entry} />
     </li>
   );
 }

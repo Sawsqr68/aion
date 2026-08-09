@@ -1,7 +1,11 @@
 //! The words that read values: collection operations, predicates, and the
 //! boolean connectives that carry narrowing proofs.
+//!
+//! Every entry carries complete example documents from [`super::examples`],
+//! verified against the real parse and check pipeline by the guide tests.
 
 use super::entry::{GuideEntry, STEPS_AND_CALLS, WordKind};
+use super::examples;
 
 /// `filter`.
 pub(crate) const FILTER: GuideEntry = GuideEntry::new(
@@ -9,6 +13,7 @@ pub(crate) const FILTER: GuideEntry = GuideEntry::new(
     WordKind::Reserved,
     "Keeps the elements of a collection its predicate accepts.",
     STEPS_AND_CALLS,
+    examples::FILTER,
 );
 
 /// `map`.
@@ -17,6 +22,7 @@ pub(crate) const MAP: GuideEntry = GuideEntry::new(
     WordKind::Reserved,
     "Rewrites each element of a collection through a deterministic value expression.",
     STEPS_AND_CALLS,
+    examples::MAP,
 );
 
 /// `sort`.
@@ -25,6 +31,7 @@ pub(crate) const SORT: GuideEntry = GuideEntry::new(
     WordKind::Reserved,
     "Orders a collection by a key, which the compile refuses unless it is `Int`, `Float`, or `String`.",
     STEPS_AND_CALLS,
+    examples::SORT,
 );
 
 /// `count`.
@@ -33,6 +40,7 @@ pub(crate) const COUNT: GuideEntry = GuideEntry::new(
     WordKind::Reserved,
     "Counts a collection's elements.",
     STEPS_AND_CALLS,
+    examples::COUNT,
 );
 
 /// `any`.
@@ -41,6 +49,7 @@ pub(crate) const ANY: GuideEntry = GuideEntry::new(
     WordKind::Reserved,
     "True when at least one element of a collection satisfies its predicate.",
     STEPS_AND_CALLS,
+    examples::ANY,
 );
 
 /// `all`.
@@ -49,6 +58,7 @@ pub(crate) const ALL: GuideEntry = GuideEntry::new(
     WordKind::Reserved,
     "True when every element of a collection satisfies its predicate.",
     STEPS_AND_CALLS,
+    examples::ALL,
 );
 
 /// `is`.
@@ -57,6 +67,7 @@ pub(crate) const IS: GuideEntry = GuideEntry::new(
     WordKind::Reserved,
     "Opens a predicate: `is empty`, `is present`, or `is absent`.",
     STEPS_AND_CALLS,
+    examples::IS,
 );
 
 /// `empty`.
@@ -65,6 +76,7 @@ pub(crate) const EMPTY: GuideEntry = GuideEntry::new(
     WordKind::Reserved,
     "The predicate for a collection with nothing in it.",
     STEPS_AND_CALLS,
+    examples::EMPTY,
 );
 
 /// `present`.
@@ -73,6 +85,7 @@ pub(crate) const PRESENT: GuideEntry = GuideEntry::new(
     WordKind::Reserved,
     "Proves an optional access path present, narrowing it from `T?` to `T` wherever that proof holds.",
     STEPS_AND_CALLS,
+    examples::PRESENT,
 );
 
 /// `absent`.
@@ -81,6 +94,7 @@ pub(crate) const ABSENT: GuideEntry = GuideEntry::new(
     WordKind::Reserved,
     "Proves an optional access path absent, which is what an `or` chain narrows on its false edge.",
     STEPS_AND_CALLS,
+    examples::ABSENT,
 );
 
 /// `not`.
@@ -89,6 +103,7 @@ pub(crate) const NOT: GuideEntry = GuideEntry::new(
     WordKind::Reserved,
     "Negates a boolean expression.",
     STEPS_AND_CALLS,
+    examples::NOT,
 );
 
 /// `and`.
@@ -97,6 +112,7 @@ pub(crate) const AND: GuideEntry = GuideEntry::new(
     WordKind::Reserved,
     "Boolean conjunction, where each conjunct's presence proof holds for the operands after it.",
     STEPS_AND_CALLS,
+    examples::AND,
 );
 
 /// `or`.
@@ -105,4 +121,5 @@ pub(crate) const OR: GuideEntry = GuideEntry::new(
     WordKind::Reserved,
     "Boolean disjunction, where each disjunct's absence proof holds on its false edge.",
     STEPS_AND_CALLS,
+    examples::OR,
 );

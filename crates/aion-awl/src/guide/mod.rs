@@ -15,12 +15,15 @@
 
 mod declarations;
 mod entry;
+mod examples;
 mod flow;
 mod lookup;
+mod reference;
 mod values;
 
 pub use entry::{
-    AUTHORING_PATH, COMMANDS_PATH, DECLARED_COMMANDS_PATH, GUIDE_PATH, GuideEntry, REFERENCE_PATH,
-    Section, WORKERS_PATH, WordKind,
+    AUTHORING_PATH, COMMANDS_PATH, DECLARED_COMMANDS_PATH, GUIDE_PATH, GuideEntry,
+    REFERENCE_COMMAND, REFERENCE_PATH, Section, WORKERS_PATH, WordKind,
 };
 pub use lookup::{all, for_keyword, for_positional_word, for_word};
+pub use reference::reference_text;

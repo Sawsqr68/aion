@@ -105,6 +105,17 @@ fn the_console_asset_is_readable_json_with_the_shape_the_panel_uses() {
                 "an entry is missing `{field}`: {entry}"
             );
         }
+        let examples = entry["examples"].as_array().cloned().unwrap_or_default();
+        assert!(
+            !examples.is_empty(),
+            "an entry carries no examples: {entry}"
+        );
+        for example in &examples {
+            assert!(
+                example.as_str().is_some_and(|text| !text.is_empty()),
+                "an entry carries an empty example: {entry}"
+            );
+        }
         assert!(
             entry["section"]["number"].as_u64().is_some(),
             "an entry is missing its section number: {entry}"
