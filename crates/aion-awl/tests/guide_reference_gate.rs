@@ -208,3 +208,24 @@ fn the_inventory_covers_the_whole_vocabulary() {
         aion_awl::Keyword::ALL.len() + aion_awl::POSITIONAL_WORDS.len()
     );
 }
+
+/// The crate-local embed and the authored document are the same bytes.
+///
+/// `reference_text()` ships from `guide-embed/AWL-REFERENCE.md` so a
+/// crates.io install carries the reference (an `include_str!` escaping the
+/// crate root cannot be packaged). The authored copy at `REFERENCE_PATH` is
+/// what assistant sessions read from their repository clone. Two files is a
+/// packaging necessity, not two truths: this pin fails the moment they
+/// diverge, and the fix is to copy the authored document over the embed.
+#[test]
+fn embedded_reference_matches_the_authored_document() -> TestResult {
+    let authored = fs::read_to_string(repo_path(guide::REFERENCE_PATH))?;
+    assert!(
+        guide::reference_text() == authored,
+        "crates/aion-awl/guide-embed/AWL-REFERENCE.md has drifted from {}; \
+         sync it with: cp {} crates/aion-awl/guide-embed/AWL-REFERENCE.md",
+        guide::REFERENCE_PATH,
+        guide::REFERENCE_PATH,
+    );
+    Ok(())
+}
