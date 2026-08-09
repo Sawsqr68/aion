@@ -66,6 +66,18 @@ impl Payload {
         Ok(Self::new(ContentType::Json, bytes))
     }
 
+    /// The JSON `null` document, tagged as JSON.
+    ///
+    /// This is the single canonical spelling of "the caller supplied nothing"
+    /// for surfaces that take a payload but allow it to be absent — notably
+    /// workflow query arguments, where every carrier (HTTP DTO, gRPC request,
+    /// CLI flag, client SDK) maps an omitted value to this document so the
+    /// workflow handler always receives one well-formed JSON input.
+    #[must_use]
+    pub fn json_null() -> Self {
+        Self::new(ContentType::Json, b"null".to_vec())
+    }
+
     /// Deserializes this payload as a JSON value.
     ///
     /// # Errors
@@ -129,6 +141,19 @@ mod tests {
             assert_eq!(payload.to_json()?, value);
         }
 
+        Ok(())
+    }
+
+    #[test]
+    fn json_null_is_the_serialized_null_document() -> Result<(), Box<dyn std::error::Error>> {
+        let payload = Payload::json_null();
+
+        assert_eq!(payload.content_type(), &ContentType::Json);
+        assert_eq!(payload.bytes(), b"null");
+        assert_eq!(payload.to_json()?, serde_json::Value::Null);
+        // The convenience constructor and the validated path agree, so the
+        // "nothing supplied" document has exactly one byte spelling.
+        assert_eq!(payload, Payload::from_json(&serde_json::Value::Null)?);
         Ok(())
     }
 }

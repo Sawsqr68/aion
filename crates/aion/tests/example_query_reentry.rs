@@ -176,7 +176,10 @@ async fn progress_when_registered(
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let deadline = std::time::Instant::now() + POLL_DEADLINE;
     loop {
-        match engine.query(workflow_id, run_id, "batch_progress").await {
+        match engine
+            .query(workflow_id, run_id, "batch_progress", Payload::json_null())
+            .await
+        {
             Err(EngineError::Query(QueryError::UnknownQuery(_)))
                 if std::time::Instant::now() < deadline =>
             {

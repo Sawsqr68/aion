@@ -81,7 +81,10 @@ impl TryFrom<SignalWorkflowRequest> for ProtoSignalRequest {
     }
 }
 
-/// Clean query request: ids are plain UUID strings.
+/// Clean query request: ids are plain UUID strings, arguments are plain JSON.
+///
+/// `arguments` is optional; omitting it means the query takes none, and the
+/// handler receives the canonical JSON `null` document.
 #[derive(Debug, Deserialize)]
 pub(crate) struct QueryWorkflowRequest {
     namespace: String,
@@ -89,6 +92,8 @@ pub(crate) struct QueryWorkflowRequest {
     #[serde(default)]
     run_id: Option<String>,
     query_name: String,
+    #[serde(default)]
+    arguments: Option<Value>,
 }
 
 impl TryFrom<QueryWorkflowRequest> for ProtoQueryRequest {
@@ -100,6 +105,7 @@ impl TryFrom<QueryWorkflowRequest> for ProtoQueryRequest {
             workflow_id: Some(proto_workflow_id(&request.workflow_id)?),
             run_id: optional_proto_run_id(request.run_id.as_deref())?,
             query_name: request.query_name,
+            arguments: request.arguments.map(http_input_payload).transpose()?,
         })
     }
 }

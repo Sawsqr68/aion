@@ -16,8 +16,7 @@ use crate::output::{
     resume_output, start_output, to_value,
 };
 use crate::payload::{
-    empty_query_payload, json_payload, parse_run_id, parse_status, parse_workflow_id,
-    payload_to_json,
+    json_payload, parse_run_id, parse_status, parse_workflow_id, payload_to_json,
 };
 
 mod awl;
@@ -367,6 +366,10 @@ enum RemoteCommand {
         /// Specific run identifier. Defaults to the latest run when omitted.
         #[arg(long)]
         run_id: Option<String>,
+        /// JSON arguments handed to the workflow's query handler. The default
+        /// `null` is the canonical "no arguments" document.
+        #[arg(long, default_value = "null")]
+        arguments: String,
     },
     /// Request workflow cancellation.
     Cancel {
@@ -645,7 +648,17 @@ async fn execute(client: &Client, command: &RemoteCommand) -> Result<Value> {
             workflow_id,
             query_name,
             run_id,
-        } => query_workflow(client, workflow_id, query_name, run_id.as_deref()).await,
+            arguments,
+        } => {
+            query_workflow(
+                client,
+                workflow_id,
+                query_name,
+                run_id.as_deref(),
+                arguments,
+            )
+            .await
+        }
         RemoteCommand::Cancel {
             workflow_id,
             reason,
@@ -751,15 +764,17 @@ async fn query_workflow(
     workflow_id: &str,
     query_name: &str,
     run_id: Option<&str>,
+    arguments: &str,
 ) -> Result<Value> {
     let workflow_id = parse_workflow_id(workflow_id)?;
     let run_id = run_id.map(parse_run_id).transpose()?;
+    let arguments = json_payload(arguments).context("invalid query arguments")?;
     let payload = client
         .query(
             &workflow_id,
             run_id.as_ref(),
             query_name.to_owned(),
-            empty_query_payload(),
+            arguments,
             QUERY_DEADLINE,
         )
         .await

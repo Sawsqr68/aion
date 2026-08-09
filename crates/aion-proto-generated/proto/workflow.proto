@@ -93,6 +93,11 @@ message QueryRequest {
   WorkflowId workflow_id = 2;
   RunId run_id = 3;
   string query_name = 4;
+  // Caller-supplied query arguments handed to the workflow's registered query
+  // handler. Absent means "no arguments"; the server materializes the JSON
+  // `null` document so a handler always receives one well-formed input.
+  // Arguments are read-only handler inputs and are never recorded in history.
+  Payload arguments = 5;
 }
 
 message QueryResponse {

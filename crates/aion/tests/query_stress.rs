@@ -101,7 +101,9 @@ async fn query_when_registered(
 ) -> Result<Payload, EngineError> {
     let deadline = std::time::Instant::now() + REGISTRATION_DEADLINE;
     loop {
-        let outcome = engine.query(workflow_id, run_id, name).await;
+        let outcome = engine
+            .query(workflow_id, run_id, name, Payload::json_null())
+            .await;
         match outcome {
             Err(EngineError::Query(QueryError::UnknownQuery(_)))
                 if std::time::Instant::now() < deadline =>
@@ -133,10 +135,11 @@ async fn failing_handler_is_always_handler_failed_under_stress() -> TestResult {
         background.push(tokio::spawn(async move {
             let mut failures = Vec::new();
             while !stop.load(std::sync::atomic::Ordering::Acquire) {
-                let burst = futures::future::join_all(
-                    (0..4).map(|_| engine.query(&noise_id, &noise_run, "state")),
-                )
-                .await;
+                let burst =
+                    futures::future::join_all((0..4).map(|_| {
+                        engine.query(&noise_id, &noise_run, "state", Payload::json_null())
+                    }))
+                    .await;
                 for outcome in burst {
                     match outcome {
                         // A timeout is tolerated alongside success: the beamr
@@ -159,7 +162,10 @@ async fn failing_handler_is_always_handler_failed_under_stress() -> TestResult {
     let mut wrong = Vec::new();
     let mut lost_wakeup_timeouts = 0_u32;
     for iteration in 0..BOOM_ITERATIONS {
-        match engine.query(&workflow_id, &run_id, "boom").await {
+        match engine
+            .query(&workflow_id, &run_id, "boom", Payload::json_null())
+            .await
+        {
             Err(EngineError::Query(QueryError::HandlerFailed { message })) => {
                 assert!(
                     message.contains("fixture boom"),
@@ -179,7 +185,10 @@ async fn failing_handler_is_always_handler_failed_under_stress() -> TestResult {
             // must be serviced and must surface the correct HandlerFailed.
             Err(EngineError::Query(QueryError::Timeout)) => {
                 lost_wakeup_timeouts += 1;
-                match engine.query(&workflow_id, &run_id, "boom").await {
+                match engine
+                    .query(&workflow_id, &run_id, "boom", Payload::json_null())
+                    .await
+                {
                     Err(EngineError::Query(QueryError::HandlerFailed { .. })) => {}
                     other => wrong.push((iteration, format!("retry after timeout: {other:?}"))),
                 }

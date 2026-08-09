@@ -117,6 +117,13 @@ pub(crate) struct PendingQuery {
     pub(super) query_id: String,
     /// Query name selected by the caller.
     pub(super) name: String,
+    /// Caller-supplied query arguments as the JSON text the handler receives.
+    ///
+    /// Validated as a well-formed UTF-8 JSON document by the query mailbox
+    /// before the query is queued, so building the sentinel — which embeds
+    /// this text as a JSON string value — can never fail. `null` is the
+    /// canonical "no arguments" document.
+    pub(super) arguments: String,
 }
 
 /// The await a suspended workflow process is parked on.

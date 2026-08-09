@@ -8,8 +8,10 @@
 //! entry and wake re-entry alike), *before* its own resolution, including any
 //! recorded-resolution fast path. When a query is pending, the await returns
 //! the sentinel error `{error, <<"aion_query:", Json/binary>>}` to the SDK
-//! pump instead of resolving; the pump runs the registered handler from the
-//! process dictionary, replies through `reply_query`/`reply_query_error`,
+//! pump instead of resolving; the sentinel carries the query id, the query
+//! name, and the caller's arguments document. The pump runs the registered
+//! handler from the process dictionary with those arguments, replies through
+//! `reply_query`/`reply_query_error`,
 //! and re-enters the same await, which re-resolves identically (its
 //! `pending_awaits` pin is untouched and replay resolution reads history).
 //!
@@ -157,10 +159,19 @@ fn recorded_command_counts(history: &[Event]) -> RecordedCommandCounts {
     counts
 }
 
+/// Build the `aion_query:` sentinel JSON for one pending query.
+///
+/// `arguments` is carried as a JSON **string** whose contents are the caller's
+/// arguments document, not as a nested JSON value. That is a load-bearing
+/// choice: the SDK pump extracts sentinel fields by scanning for the literal
+/// `"<key>":"` byte pattern, which is exact only because every `"` inside a
+/// string value is escaped. A nested object would let caller-controlled
+/// arguments contain a raw `"query_id":"` sequence and steer the scan.
 fn sentinel_payload(pending: &PendingQuery) -> String {
     let json = serde_json::json!({
         "query_id": pending.query_id,
         "name": pending.name,
+        "arguments": pending.arguments,
     });
     format!("{QUERY_SENTINEL_PREFIX}{json}")
 }
@@ -182,6 +193,16 @@ mod tests {
         query_id: &str,
         name: &str,
     ) -> Result<oneshot::Receiver<crate::query::QueryResult>, String> {
+        queue_query_with_arguments(state, pid, query_id, name, "null")
+    }
+
+    fn queue_query_with_arguments(
+        state: &EngineNifState,
+        pid: u64,
+        query_id: &str,
+        name: &str,
+        arguments: &str,
+    ) -> Result<oneshot::Receiver<crate::query::QueryResult>, String> {
         let (sender, receiver) = oneshot::channel();
         crate::runtime::nif_query::insert_pending_reply(state, query_id.to_owned(), pid, sender)?;
         state
@@ -191,6 +212,7 @@ mod tests {
             .push_back(PendingQuery {
                 query_id: query_id.to_owned(),
                 name: name.to_owned(),
+                arguments: arguments.to_owned(),
             });
         Ok(receiver)
     }
@@ -214,6 +236,7 @@ mod tests {
         )?;
         assert_eq!(json["query_id"], "q-1");
         assert_eq!(json["name"], "state");
+        assert_eq!(json["arguments"], "null");
         assert_eq!(
             state.servicing_queries.get(&7).map(|e| e.clone()),
             Some("q-1".to_owned())
@@ -245,6 +268,30 @@ mod tests {
         assert!(!crate::runtime::nif_query::pending_reply_is_live(
             &state, "dead"
         )?);
+        Ok(())
+    }
+
+    #[test]
+    fn sentinel_carries_arguments_as_an_escaped_json_string() -> TestResult {
+        let state = Arc::new(EngineNifState::default());
+        // Arguments that would hijack the SDK pump's literal-key scan if they
+        // were embedded as a nested JSON value instead of a string.
+        let hostile = r#"{"forged":"\"query_id\":\"attacker\"","n":3}"#;
+        let _receiver = queue_query_with_arguments(&state, 11, "q-args", "state", hostile)?;
+
+        let sentinel =
+            take_pending_query_sentinel(&state, 11).ok_or("expected a sentinel for the query")?;
+        let body = sentinel
+            .strip_prefix("aion_query:")
+            .ok_or("missing sentinel prefix")?;
+        let json: serde_json::Value = serde_json::from_str(body)?;
+
+        // The arguments survive byte-exact through the sentinel...
+        assert_eq!(json["arguments"], hostile);
+        assert_eq!(json["query_id"], "q-args");
+        // ...and the only raw `"query_id":"` byte sequence in the sentinel is
+        // the real key, so a scanning pump cannot be steered by the caller.
+        assert_eq!(body.matches("\"query_id\":\"").count(), 1);
         Ok(())
     }
 

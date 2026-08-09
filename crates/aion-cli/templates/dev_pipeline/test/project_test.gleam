@@ -9,6 +9,7 @@
 //// the channel `aion signal <run-id> review_verdict --payload '{...}'`
 //// drives on a live server.
 
+import aion/codec
 import aion/query
 import aion/signal
 import aion/testing
@@ -195,6 +196,8 @@ pub fn verify_fix_exhaustion_surfaces_typed_diagnostics_test() {
   // the capped round.
   query.dispatch(
     {{name}}_dev.status_query_name,
+    codec.nil_codec(),
+    Nil,
     codecs_workflows.dev_flow_status_codec(),
   )
   |> should.equal(Ok(DevFlowStatus(phase: "verifying", round: 2)))
@@ -330,11 +333,15 @@ pub fn status_query_answers_live_phase_and_round_per_stage_test() {
   let assert Ok(_) = {{name}}.execute(base_input(shim_set))
   query.dispatch(
     {{name}}.status_query_name,
+    codec.nil_codec(),
+    Nil,
     codecs_workflows.pipeline_status_codec(),
   )
   |> should.equal(Ok(PipelineStatus(phase: "landed", round: 1)))
   query.dispatch(
     {{name}}_dev.status_query_name,
+    codec.nil_codec(),
+    Nil,
     codecs_workflows.dev_flow_status_codec(),
   )
   |> should.equal(Ok(DevFlowStatus(phase: "converged", round: 1)))
@@ -346,6 +353,8 @@ pub fn status_query_answers_live_phase_and_round_per_stage_test() {
     {{name}}.execute(base_input(shim_set))
   query.dispatch(
     {{name}}.status_query_name,
+    codec.nil_codec(),
+    Nil,
     codecs_workflows.pipeline_status_codec(),
   )
   |> should.equal(Ok(PipelineStatus(phase: "in_review", round: 1)))

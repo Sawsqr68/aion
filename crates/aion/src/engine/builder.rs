@@ -1372,7 +1372,14 @@ mod tests {
         // The concrete seam reached the query mailbox engine, which answers
         // an unregistered name with a typed UnknownQuery — the deferred seam
         // would have failed with its "not configured" runtime error instead.
-        let result = engine.query(&workflow_id, &run_id, "state").await;
+        let result = engine
+            .query(
+                &workflow_id,
+                &run_id,
+                "state",
+                aion_core::Payload::json_null(),
+            )
+            .await;
 
         assert!(matches!(
             result,
@@ -1392,7 +1399,14 @@ mod tests {
             .await?;
         let (workflow_id, run_id) = insert_running_workflow(&engine).await?;
 
-        let result = engine.query(&workflow_id, &run_id, "state").await;
+        let result = engine
+            .query(
+                &workflow_id,
+                &run_id,
+                "state",
+                aion_core::Payload::json_null(),
+            )
+            .await;
 
         assert!(matches!(
             result,

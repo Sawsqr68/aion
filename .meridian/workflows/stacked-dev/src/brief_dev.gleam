@@ -437,8 +437,9 @@ fn set_status(phase: String, round: Int) -> Result(Nil, BriefDevError) {
   case
     query.handler(
       status_query_name,
+      codec.nil_codec(),
       codecs_workflows.brief_dev_status_codec(),
-      fn() { status },
+      fn(_) { status },
     )
   {
     Ok(Nil) -> Ok(Nil)

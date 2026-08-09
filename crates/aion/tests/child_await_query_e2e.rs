@@ -72,7 +72,10 @@ async fn query_when_registered(
 ) -> Result<Payload, Box<dyn std::error::Error>> {
     let deadline = std::time::Instant::now() + QUERY_POLL_DEADLINE;
     loop {
-        match engine.query(workflow_id, run_id, name).await {
+        match engine
+            .query(workflow_id, run_id, name, Payload::json_null())
+            .await
+        {
             Err(EngineError::Query(QueryError::UnknownQuery(_)))
                 if std::time::Instant::now() < deadline =>
             {

@@ -10,6 +10,7 @@
 //// drives on a live server.
 
 import aion/activity
+import aion/codec
 import aion/error
 import aion/query
 import aion/signal
@@ -264,6 +265,8 @@ pub fn verify_fix_exhaustion_surfaces_typed_diagnostics_test() {
   // the capped round.
   query.dispatch(
     brief_dev.status_query_name,
+    codec.nil_codec(),
+    Nil,
     codecs_workflows.brief_dev_status_codec(),
   )
   |> should.equal(Ok(BriefDevStatus(phase: "verifying", round: 2)))
@@ -399,11 +402,15 @@ pub fn status_query_answers_live_phase_and_round_per_stage_test() {
   let assert Ok(_) = stacked_dev.execute(base_input(shim_set))
   query.dispatch(
     stacked_dev.status_query_name,
+    codec.nil_codec(),
+    Nil,
     codecs_workflows.stacked_dev_status_codec(),
   )
   |> should.equal(Ok(StackedDevStatus(phase: "landed", round: 1)))
   query.dispatch(
     brief_dev.status_query_name,
+    codec.nil_codec(),
+    Nil,
     codecs_workflows.brief_dev_status_codec(),
   )
   |> should.equal(Ok(BriefDevStatus(phase: "converged", round: 1)))
@@ -415,6 +422,8 @@ pub fn status_query_answers_live_phase_and_round_per_stage_test() {
     stacked_dev.execute(base_input(shim_set))
   query.dispatch(
     stacked_dev.status_query_name,
+    codec.nil_codec(),
+    Nil,
     codecs_workflows.stacked_dev_status_codec(),
   )
   |> should.equal(Ok(StackedDevStatus(phase: "in_review", round: 1)))

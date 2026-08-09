@@ -82,8 +82,19 @@ pub trait SignalRouter: Send + Sync {
 /// handle and delegates to this trait.
 #[async_trait]
 pub trait QueryService: Send + Sync {
-    /// Dispatch a named query to the already-resolved workflow target.
-    async fn query(&self, target: &WorkflowHandle, name: String) -> Result<Payload, EngineError>;
+    /// Dispatch a named query, with its caller-supplied arguments, to the
+    /// already-resolved workflow target.
+    ///
+    /// `arguments` is a type-erased [`Payload`] carrying the JSON document the
+    /// workflow's query handler decodes. `null` is the canonical "no
+    /// arguments" document. Arguments are read-only inputs: they are handed to
+    /// the handler and never recorded.
+    async fn query(
+        &self,
+        target: &WorkflowHandle,
+        name: String,
+        arguments: Payload,
+    ) -> Result<Payload, EngineError>;
 }
 
 /// A live subscription fell behind the publisher and skipped events.
@@ -204,8 +215,13 @@ pub struct DeferredQueryService;
 
 #[async_trait]
 impl QueryService for DeferredQueryService {
-    async fn query(&self, target: &WorkflowHandle, name: String) -> Result<Payload, EngineError> {
-        let _ = (target, name);
+    async fn query(
+        &self,
+        target: &WorkflowHandle,
+        name: String,
+        arguments: Payload,
+    ) -> Result<Payload, EngineError> {
+        let _ = (target, name, arguments);
         Err(EngineError::Runtime {
             reason: "query service seam is not configured".to_owned(),
         })
@@ -314,19 +330,28 @@ impl Engine {
             .await
     }
 
-    /// Dispatch a read-only query to a live workflow run through the AT seam.
+    /// Dispatch a read-only query, with its arguments, to a live workflow run
+    /// through the AT seam.
+    ///
+    /// `arguments` is the type-erased JSON document the workflow's registered
+    /// handler decodes; `null` is the canonical "no arguments" document.
+    /// Nothing on this path records an event — arguments are inputs to a
+    /// read-only handler, never history.
     ///
     /// # Errors
     ///
     /// Returns [`EngineError::Query`] with [`crate::query::QueryError::NotRunning`]
     /// when the `(workflow, run)` pair is durably terminal,
-    /// [`EngineError::WorkflowNotFound`] when it is unknown, and other typed
-    /// errors from the configured query seam.
+    /// [`EngineError::WorkflowNotFound`] when it is unknown,
+    /// [`crate::query::QueryError::InvalidArguments`] when `arguments` is not
+    /// a well-formed JSON document, and other typed errors from the configured
+    /// query seam.
     pub async fn query(
         &self,
         id: &WorkflowId,
         run: &RunId,
         name: impl Into<String>,
+        arguments: Payload,
     ) -> Result<Payload, EngineError> {
         let handle = if let Some(handle) = self.registry().get(id, run)? {
             handle
@@ -345,7 +370,7 @@ impl Engine {
         };
         self.delegated()
             .query_service()
-            .query(&handle, name.into())
+            .query(&handle, name.into(), arguments)
             .await
     }
 
@@ -511,7 +536,7 @@ mod tests {
 
     #[derive(Debug)]
     struct QueryCapture {
-        calls: Mutex<Vec<(u64, String)>>,
+        calls: Mutex<Vec<(u64, String, Payload)>>,
         reply: Payload,
     }
 
@@ -521,11 +546,12 @@ mod tests {
             &self,
             target: &WorkflowHandle,
             name: String,
+            arguments: Payload,
         ) -> Result<Payload, EngineError> {
             self.calls
                 .lock()
                 .map_err(|_| EngineError::RegistryPoisoned)?
-                .push((target.pid(), name));
+                .push((target.pid(), name, arguments));
             Ok(self.reply.clone())
         }
     }
@@ -769,8 +795,14 @@ mod tests {
         )?;
         let handle = insert_active_handle(&engine).await?;
 
+        let arguments = payload("arguments")?;
         let returned = engine
-            .query(handle.workflow_id(), handle.run_id(), "state")
+            .query(
+                handle.workflow_id(),
+                handle.run_id(),
+                "state",
+                arguments.clone(),
+            )
             .await?;
 
         assert_eq!(returned, reply);
@@ -778,7 +810,12 @@ mod tests {
             .calls
             .lock()
             .map_err(|_| EngineError::RegistryPoisoned)?;
-        assert_eq!(calls.as_slice(), &[(handle.pid(), "state".to_owned())]);
+        // The engine resolves the target and forwards the caller's arguments
+        // to the seam verbatim.
+        assert_eq!(
+            calls.as_slice(),
+            &[(handle.pid(), "state".to_owned(), arguments)]
+        );
         drop(calls);
         engine.shutdown()?;
         Ok(())
@@ -812,14 +849,21 @@ mod tests {
             .record_workflow_completed(chrono::Utc::now(), payload("result")?)
             .await?;
 
-        let terminal = engine.query(&workflow_id, &run_id, "state").await;
+        let terminal = engine
+            .query(&workflow_id, &run_id, "state", Payload::json_null())
+            .await;
         assert!(matches!(
             terminal,
             Err(EngineError::Query(crate::query::QueryError::NotRunning(id))) if id == workflow_id
         ));
 
         let unknown = engine
-            .query(&WorkflowId::new_v4(), &RunId::new_v4(), "state")
+            .query(
+                &WorkflowId::new_v4(),
+                &RunId::new_v4(),
+                "state",
+                Payload::json_null(),
+            )
             .await;
         assert!(matches!(unknown, Err(EngineError::WorkflowNotFound { .. })));
         engine.shutdown()?;

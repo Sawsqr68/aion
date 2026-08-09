@@ -213,9 +213,11 @@ impl Client {
 
     /// Queries the latest run, or `run_id` when supplied, with a local deadline.
     ///
-    /// The current AW protobuf does not yet carry query argument payloads, so a
-    /// non-empty `args` payload returns [`ClientError::InvalidArgument`] instead
-    /// of being silently dropped.
+    /// `args` is the argument document handed to the workflow's registered
+    /// query handler. A query that takes no arguments passes
+    /// [`Payload::json_null`] — the canonical "nothing supplied" document
+    /// every carrier agrees on. The server refuses arguments that are not a
+    /// well-formed JSON document with [`ClientError::InvalidArgument`].
     ///
     /// # Errors
     ///
@@ -228,7 +230,6 @@ impl Client {
         args: Payload,
         deadline: Duration,
     ) -> Result<Payload, ClientError> {
-        validate_query_args(&args)?;
         let response = tokio::time::timeout(
             deadline,
             self.transport.query(ProtoQueryRequest {
@@ -236,6 +237,7 @@ impl Client {
                 workflow_id: Some(ProtoWorkflowId::from(workflow_id.clone())),
                 run_id: run_id.cloned().map(ProtoRunId::from),
                 query_name: name.into(),
+                arguments: Some(aion_proto::ProtoPayload::from(args)),
             }),
         )
         .await
@@ -600,26 +602,16 @@ fn validate_start_options(opts: &StartOptions) -> Result<(), ClientError> {
     Ok(())
 }
 
-fn validate_query_args(args: &Payload) -> Result<(), ClientError> {
-    if !args.bytes().is_empty() {
-        return Err(ClientError::invalid_argument(
-            "query arguments are not carried by the current wire contract; \
-             pass an empty payload",
-        ));
-    }
-    Ok(())
-}
-
+/// Serialize typed query arguments into the payload the wire carries.
+///
+/// A value that serializes to JSON `null` needs no special case: `null` *is*
+/// the canonical "no arguments" document (see [`Payload::json_null`]), so the
+/// serialized bytes are already exactly what a no-argument query sends.
 fn query_args_payload<T>(args: &T) -> Result<Payload, ClientError>
 where
     T: Serialize + ?Sized,
 {
-    let payload = to_payload(args)?;
-    if payload.bytes() == b"null" {
-        Ok(Payload::new(payload.content_type().clone(), Vec::new()))
-    } else {
-        Ok(payload)
-    }
+    to_payload(args)
 }
 
 fn validate_list_page(page: &ListPage) -> Result<(), ClientError> {

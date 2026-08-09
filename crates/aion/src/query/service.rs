@@ -47,6 +47,18 @@ pub enum QueryError {
         message: String,
     },
 
+    /// The caller's query arguments payload is not a well-formed JSON document.
+    ///
+    /// Query arguments cross into workflow code as the JSON text the caller
+    /// supplied. A payload that is not valid UTF-8 JSON can never reach a
+    /// handler, so it is refused at the delivery boundary and attributed to
+    /// the caller — never forwarded to become a misleading handler failure.
+    #[error("query arguments are invalid: {reason}")]
+    InvalidArguments {
+        /// Why the arguments payload could not be carried to the handler.
+        reason: String,
+    },
+
     /// The engine seam failed while resolving or delivering the query.
     #[error("query engine seam failed: {0}")]
     Engine(#[from] EngineSeamError),

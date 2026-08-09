@@ -43,9 +43,11 @@ pub fn run(raw_input: Dynamic) -> Result(String, WorkflowError) {
 
 fn sleep_with_queries(input: SleepInput) -> Result(String, WorkflowError) {
   let status_registered =
-    query.handler("status", status_codec(), fn() { "sleeping" })
+    query.handler("status", codec.nil_codec(), status_codec(), fn(_) {
+      "sleeping"
+    })
   let boom_registered =
-    query.handler("boom", status_codec(), fn() {
+    query.handler("boom", codec.nil_codec(), status_codec(), fn(_) {
       panic as "deliberate handler failure"
     })
   case status_registered, boom_registered {

@@ -78,6 +78,13 @@ pub struct ProtoQueryRequest {
     /// Query name registered by workflow code.
     #[prost(string, tag = "4")]
     pub query_name: String,
+    /// Caller-supplied arguments handed to the workflow's query handler.
+    ///
+    /// Absent means "no arguments": the server materializes the JSON `null`
+    /// document so a handler always receives one well-formed input. Arguments
+    /// are read-only handler inputs and are never recorded in history.
+    #[prost(message, optional, tag = "5")]
+    pub arguments: Option<ProtoPayload>,
 }
 
 /// Proto representation of `QueryResponse`.
@@ -430,6 +437,14 @@ mod tests {
             workflow_id: Some(ProtoWorkflowId::from(workflow_id())),
             run_id: Some(ProtoRunId::from(run_id())),
             query_name: String::from("state"),
+            arguments: Some(payload("arguments")?),
+        };
+        // A caller that supplies no arguments is a distinct encoded shape, not
+        // an error: the field is optional on the wire and the server supplies
+        // the canonical `null` document in its place.
+        let no_arguments_request = ProtoQueryRequest {
+            arguments: None,
+            ..request.clone()
         };
         let result_response = ProtoQueryResponse {
             outcome: Some(proto_query_response::Outcome::Result(payload("result")?)),
@@ -442,10 +457,15 @@ mod tests {
 
         assert_json_round_trip(&request)?;
         assert_proto_round_trip(&request)?;
+        assert_json_round_trip(&no_arguments_request)?;
+        assert_proto_round_trip(&no_arguments_request)?;
         assert_json_round_trip(&result_response)?;
         assert_proto_round_trip(&result_response)?;
         assert_json_round_trip(&error_response)?;
         assert_proto_round_trip(&error_response)?;
+        // The two shapes stay distinguishable across a proto round trip: a
+        // decoder can tell "no arguments supplied" from any supplied document.
+        assert!(request != no_arguments_request);
         Ok(())
     }
 

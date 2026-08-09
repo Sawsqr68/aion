@@ -19,6 +19,7 @@
 //// the parent workflow and is independently dispatchable as its own `[[workflow]]`
 //// entry (open question Q6).
 
+import aion/codec
 import aion/duration
 import aion/query
 import aion/workflow
@@ -190,8 +191,9 @@ fn set_status(phase: String, round: Int) -> Result(Nil, DevFlowError) {
   case
     query.handler(
       status_query_name,
+      codec.nil_codec(),
       codecs_workflows.dev_flow_status_codec(),
-      fn() { status },
+      fn(_) { status },
     )
   {
     Ok(Nil) -> Ok(Nil)

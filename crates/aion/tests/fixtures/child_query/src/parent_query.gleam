@@ -30,7 +30,11 @@ pub fn run(raw_input: Dynamic) -> Result(String, ParentError) {
 fn spawn_and_await(
   input: child_small.ChildInput,
 ) -> Result(String, ParentError) {
-  case query.handler("phase", phase_codec(), fn() { "awaiting-child" }) {
+  case
+    query.handler("phase", codec.nil_codec(), phase_codec(), fn(_) {
+      "awaiting-child"
+    })
+  {
     Ok(_) ->
       case
         child.spawn(
