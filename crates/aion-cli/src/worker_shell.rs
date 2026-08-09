@@ -71,6 +71,19 @@ struct ActionWiring {
 }
 
 pub async fn run(args: &ShellArgs, endpoint: &str) -> Result<()> {
+    // Install the product's own tracing subscriber BEFORE anything can log, for
+    // the same reason `aion worker agent` does (see `worker_agent::serve`): the
+    // worker SDK's redial driver reports a refused dial — a contract mismatch, a
+    // wrong address, a closed port — through tracing, and with no subscriber
+    // installed that is dropped on the floor. A shell worker that cannot connect
+    // then looks exactly like one that is idle: the process is up, and the
+    // process being up is precisely the reading a failed dial makes worthless.
+    //
+    // The agent verb knew this and the shell verb did not, which is the same
+    // shape as the endpoint defect above it: a rule two sibling paths both need,
+    // written down in one of them.
+    aion_server::observability::tracing::init()?;
+
     let source = std::fs::read_to_string(&args.manifest)
         .with_context(|| format!("failed to read shell manifest {}", args.manifest.display()))?;
     let manifest = parse_manifest(&source)?;

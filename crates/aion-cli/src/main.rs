@@ -604,10 +604,10 @@ async fn main() -> ExitCode {
         Command::Awl { ref command } => awl::run(command),
         Command::Worker { ref command } => {
             let result = match command {
-                WorkerCommand::Shell(args) => worker_shell::run(args, cli.endpoint()).await,
+                WorkerCommand::Shell(args) => worker_shell::run(args, &cli.endpoint()).await,
                 // The AWL worker dials the global gRPC endpoint, exactly as
                 // the shell worker does, and normalizes a scheme-less one.
-                WorkerCommand::Awl(args) => worker_awl::run(args, cli.endpoint()).await,
+                WorkerCommand::Awl(args) => worker_awl::run(args, &cli.endpoint()).await,
                 // The agent worker registers into the namespace the global flag
                 // names, and dials liminal candidates rather than `--endpoint`.
                 WorkerCommand::Agent(args) => worker_agent::run(args, &cli.namespace).await,
@@ -737,7 +737,7 @@ async fn run(cli: &Cli, command: &ClientCommand) -> Result<Value> {
 
 fn deploy_target(cli: &Cli) -> deploy::DeployTarget {
     deploy::DeployTarget::new(
-        normalize_endpoint(cli.endpoint()),
+        cli.endpoint(),
         cli.subject.clone(),
         deploy::resolve_token(cli.token.clone()),
     )
@@ -754,7 +754,7 @@ fn report_client_error(error: &anyhow::Error) {
 }
 
 async fn build_client(cli: &Cli) -> Result<Client> {
-    ClientBuilder::new(normalize_endpoint(cli.endpoint()))
+    ClientBuilder::new(cli.endpoint())
         .with_namespace(cli.namespace.clone())
         .with_subject(cli.subject.clone())
         .with_authorized_namespaces([cli.namespace.clone()])
@@ -1071,14 +1071,30 @@ fn server_endpoint_refusal(endpoint: Option<&str>) -> Option<String> {
 }
 
 impl Cli {
-    /// The endpoint a client dials: what the operator named, or the default.
+    /// The address a client dials: what the operator named, or the default, and
+    /// **always carrying a scheme**.
     ///
     /// The default lives here rather than in the clap attribute so that
     /// [`Self::endpoint`] being `None` still means "nobody said", which is the
     /// only way `aion server` can tell a flag it must refuse from one that was
     /// never passed.
-    fn endpoint(&self) -> &str {
-        self.endpoint.as_deref().unwrap_or(DEFAULT_ENDPOINT)
+    ///
+    /// Normalisation lives here too, and that is the load-bearing part. It used
+    /// to live at each dial site: every client verb wrapped this accessor in
+    /// [`normalize_endpoint`] and `aion worker shell` did not. Since
+    /// [`DEFAULT_ENDPOINT`] is scheme-less, a shell worker started without an
+    /// explicit `--endpoint http://…` never connected to anything. Adding the
+    /// missing wrapper at that one site would have left the shape that produced
+    /// it — one rule, "a dial address carries a scheme", known in as many places
+    /// as there are callers and agreed only by whoever remembered. There is now
+    /// no un-normalised dial address for a call site to reach for.
+    ///
+    /// [`server_endpoint_refusal`] still reads the raw `Option` field directly,
+    /// deliberately and for the opposite reason: it needs "nobody said" and the
+    /// operator's literal text, neither of which survives normalisation. It
+    /// refuses; it never dials.
+    fn endpoint(&self) -> String {
+        normalize_endpoint(self.endpoint.as_deref().unwrap_or(DEFAULT_ENDPOINT))
     }
 }
 
@@ -1865,10 +1881,10 @@ mod tests {
     -> anyhow::Result<()> {
         let cli = Cli::try_parse_from(["aion", "server"])?;
         assert!(server_endpoint_refusal(cli.endpoint.as_deref()).is_none());
-        assert_eq!(cli.endpoint(), DEFAULT_ENDPOINT);
+        assert_eq!(cli.endpoint(), format!("http://{DEFAULT_ENDPOINT}"));
 
         let dialled = Cli::try_parse_from(["aion", "--endpoint", "example:1", "list"])?;
-        assert_eq!(dialled.endpoint(), "example:1");
+        assert_eq!(dialled.endpoint(), "http://example:1");
         Ok(())
     }
 
@@ -2155,5 +2171,69 @@ mod tests {
             normalize_endpoint("127.0.0.1:50051"),
             "http://127.0.0.1:50051"
         );
+    }
+
+    /// Whatever the operator typed or did not type, the address the CLI hands a
+    /// verb to dial carries a scheme.
+    ///
+    /// `aion worker shell` used to take [`Cli::endpoint`] raw while every client
+    /// verb wrapped it in [`normalize_endpoint`], and since [`DEFAULT_ENDPOINT`]
+    /// is scheme-less, a shell worker started without an explicit `http://`
+    /// never connected — silently, because that verb also installed no tracing
+    /// subscriber, so the redial driver's warnings went nowhere. A worker that
+    /// is up and connected to nothing is indistinguishable from an idle one.
+    ///
+    /// The pin is on the accessor, not on a list of dial sites, deliberately: a
+    /// list of sites is an enumeration a new verb joins without anyone noticing,
+    /// which is exactly the shape that produced the defect. What actually
+    /// forbids the recurrence is the accessor's TYPE — it no longer yields an
+    /// un-normalised address for a caller to pass along — and this pin holds the
+    /// accessor to its side of that bargain. The one reader of the raw flag,
+    /// [`server_endpoint_refusal`], needs the operator's literal text and never
+    /// dials.
+    #[test]
+    fn every_dial_address_the_cli_hands_out_carries_a_scheme() -> anyhow::Result<()> {
+        let shell = [
+            "aion",
+            "--endpoint",
+            "example.internal:50051",
+            "worker",
+            "shell",
+            "--manifest",
+            "worker.toml",
+            "--awl",
+            "flow.awl",
+        ];
+        for argv in [
+            vec!["aion", "list"],
+            vec![
+                "aion",
+                "worker",
+                "shell",
+                "--manifest",
+                "w.toml",
+                "--awl",
+                "f.awl",
+            ],
+            vec!["aion", "--endpoint", "127.0.0.1:50051", "list"],
+            shell.to_vec(),
+            vec!["aion", "--endpoint", "https://aion.example:50051", "list"],
+        ] {
+            let dialled = Cli::try_parse_from(&argv)?.endpoint();
+            assert!(
+                dialled.contains("://"),
+                "the CLI handed `{argv:?}` the scheme-less address `{dialled}`; a verb that \
+                 dials it as given connects to nothing, which is exactly how `aion worker \
+                 shell` failed"
+            );
+        }
+
+        // And normalising never doubles a scheme the operator supplied: an
+        // address mangled into `http://https://…` fails just as silently as one
+        // with no scheme at all.
+        let explicit =
+            Cli::try_parse_from(["aion", "--endpoint", "https://aion.example:50051", "list"])?;
+        assert_eq!(explicit.endpoint(), "https://aion.example:50051");
+        Ok(())
     }
 }
