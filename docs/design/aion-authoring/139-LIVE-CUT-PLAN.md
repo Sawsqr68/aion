@@ -122,3 +122,20 @@ No ops-console bundle rebuild is required by leg C.
 - The historical design documents under `docs/design/aion-authoring/` still name
   the old path where they are recording what was true at the time. Those are
   records and were left as written.
+
+## 6. 🔴 Standing control: rollback hashes are verified, not copied (2026-08-09)
+
+Ruled by Waffles the Terrible after the 2026-08-09 cut (his ledger e374d4c),
+in force for EVERY future cut until task #174 closes: the `aion versions`
+listing and the catalog's loaded set have been measured holding DIFFERENT
+hashes for the same versions (one agent_dev pair shares a 59-character prefix
+and diverges in the last 5 hex digits — one of the two values was never
+produced by hashing). The rollback path is therefore formally BROKEN: a hash
+copied from the listing can be refused by every verb keyed on it, and the
+moment that surfaces is mid-incident.
+
+**The control:** any cut plan that names a rollback hash must verify that hash
+by recomputation against the stored content — as a PRE-step of the cut, before
+anything is touched, never as an if-things-go-wrong step. This section travels
+with the procedure: copy it into every successor cut plan until #174's fix
+(one enumeration read by both surfaces, disagreement unrepresentable) lands.
