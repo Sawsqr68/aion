@@ -14,7 +14,9 @@ use aion_package::{
 };
 use serde_json::Value;
 
-use crate::ast::{ActionBody, Document, PipeStage, RetrySpec, Statement, Step, scan_command};
+use crate::ast::{
+    ActionBody, Document, DocumentFamily, PipeStage, RetrySpec, Statement, Step, scan_command,
+};
 use crate::mir::{LowerError, lower, project_sidecar, select, verify};
 use crate::{CheckError, ParseError, SchemaError, Span};
 
@@ -117,6 +119,16 @@ pub enum CompileError {
         /// Source span of the refused construct.
         span: Span,
     },
+    /// The document is of the other family: a `worker` document handed to
+    /// the workflow compiler, or a `workflow` document handed to the worker
+    /// compiler. Carries the remedy, because the two entry points are
+    /// different calls and the caller picked the wrong one.
+    Family {
+        /// Diagnostic text, naming both families and what to run instead.
+        message: String,
+        /// Source span of the document's opening declaration.
+        span: Span,
+    },
     /// A span-anchored lowering failure.
     Lower {
         /// Diagnostic text, verbatim from the lowering.
@@ -165,7 +177,9 @@ impl fmt::Display for CompileError {
             Self::Unsupported { shape, span } => {
                 write!(f, "BC-2 does not yet lower {shape} (line {})", span.line)
             }
-            Self::Lower { message, span } => write!(f, "{message} (line {})", span.line),
+            Self::Family { message, span } | Self::Lower { message, span } => {
+                write!(f, "{message} (line {})", span.line)
+            }
             Self::Planning { message } | Self::Backend { message } => write!(f, "{message}"),
         }
     }
@@ -188,6 +202,18 @@ impl std::error::Error for CompileError {}
 /// failures rendered verbatim.
 pub fn compile(source: &str, schema_root: &Path) -> Result<CompiledWorkflow, CompileError> {
     let document = crate::parse(source).map_err(CompileError::Parse)?;
+    if document.family == DocumentFamily::Worker {
+        return Err(CompileError::Family {
+            message: format!(
+                "`{queue}` is a worker document: it implements the actions of task queue \
+                 `{queue}` and declares no workflow, so there is nothing here to compile \
+                 into a runnable artifact. Deploy the `workflow` document that calls this \
+                 queue, and serve this document with `aion worker awl`.",
+                queue = document.name
+            ),
+            span: document.name_span,
+        });
+    }
     let errors = crate::check_in(&document, schema_root);
     if !errors.is_empty() {
         return Err(CompileError::Check(errors));
@@ -278,13 +304,17 @@ fn action_implementations(document: &Document) -> Result<Vec<ActionImplementatio
     Ok(implementations)
 }
 
-fn package_contract(
+/// Derive one [`WorkerContract`] per `worker` block in `document`.
+///
+/// Shared by the workflow compiler (which commits them into package
+/// identity) and the worker-document compiler (which advertises one of them
+/// to the server): the typed surface of an action is one derivation, so a
+/// worker document and the workflow that calls it cannot describe the same
+/// action differently through two code paths.
+pub(crate) fn worker_contracts(
     document: &Document,
     schema_root: &Path,
-    input_schema: Value,
-    output_schema: Value,
-    synthesized: &[crate::SynthesizedWorkflowEntry],
-) -> Result<PackageContract, CompileError> {
+) -> Result<Vec<WorkerContract>, CompileError> {
     let mut workers = Vec::new();
     for worker in &document.workers {
         let mut actions = Vec::new();
@@ -349,6 +379,17 @@ fn package_contract(
             actions,
         });
     }
+    Ok(workers)
+}
+
+fn package_contract(
+    document: &Document,
+    schema_root: &Path,
+    input_schema: Value,
+    output_schema: Value,
+    synthesized: &[crate::SynthesizedWorkflowEntry],
+) -> Result<PackageContract, CompileError> {
+    let workers = worker_contracts(document, schema_root)?;
     let children = document
         .children
         .iter()

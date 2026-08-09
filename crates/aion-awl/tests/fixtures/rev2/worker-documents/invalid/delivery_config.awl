@@ -1,0 +1,5 @@
+//! Delivery keys belong to the caller's declaration, not the implementation.
+worker greeter
+  action greet(name: String) -> String
+    timeout 30s, retry 3 every 10s
+    run text "printf %s $name"

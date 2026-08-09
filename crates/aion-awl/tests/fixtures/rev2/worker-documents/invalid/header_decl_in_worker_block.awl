@@ -1,0 +1,5 @@
+//! A worker block holds actions only.
+worker greeter
+  input name: String
+  action greet(name: String) -> String
+    run text "printf %s $name"

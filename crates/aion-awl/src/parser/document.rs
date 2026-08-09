@@ -2,7 +2,7 @@
 //! signals, outcomes), and top-level declaration dispatch.
 
 use crate::ast::{
-    DocLine, Document, InputDecl, Lead, OutcomeDecl, RouteDirection, SignalDecl,
+    DocLine, Document, DocumentFamily, InputDecl, Lead, OutcomeDecl, RouteDirection, SignalDecl,
     WorkflowTimeoutDecl, join_span,
 };
 use crate::{Keyword, Span, TokenKind, lex};
@@ -21,7 +21,12 @@ use super::workers::{expect_duration, parse_child, parse_worker};
 const HEADER_EXPECTATION: &str = "expected `timeout`, `input`, `signal`, `send`, `query`, or \
      `outcome` in the workflow header";
 
-/// Parse a complete rev-2 AWL document.
+/// Parse a complete rev-2 AWL document of either family.
+///
+/// The file's opening declaration chooses the family: `workflow <name>` is a
+/// flow, `worker <queue>` is an implementation of one task queue. Both parse
+/// into [`Document`]; which family the file declared is recorded in
+/// [`Document::family`], and the family-conditional rules are the checker's.
 ///
 /// # Errors
 ///
@@ -34,17 +39,22 @@ pub fn parse(source: &str) -> Result<Document, ParseError> {
     let narration = parse_narration(&mut stream)?;
     let lead = stream.take_leads()?;
 
-    let workflow_token = match stream.peek() {
+    let opening = match stream.peek() {
         Some(token) if matches!(token.kind, TokenKind::Keyword(Keyword::Workflow)) => {
             let span = token.span;
             stream.next();
-            span
+            (DocumentFamily::Workflow, span)
+        }
+        Some(token) if matches!(token.kind, TokenKind::Keyword(Keyword::Worker)) => {
+            let span = token.span;
+            stream.next();
+            (DocumentFamily::Worker, span)
         }
         Some(token) => {
             return Err(ParseError::new(
                 token.span,
                 format!(
-                    "expected the `workflow` header, found {}",
+                    "expected the `workflow` or `worker` header, found {}",
                     describe(&token.kind)
                 ),
             ));
@@ -52,21 +62,21 @@ pub fn parse(source: &str) -> Result<Document, ParseError> {
         None => {
             return Err(ParseError::new(
                 stream.eof_span(),
-                "expected the `workflow` header, found end of input",
+                "expected the `workflow` or `worker` header, found end of input",
             ));
         }
     };
+    let (family, keyword_span) = opening;
+    if family == DocumentFamily::Worker {
+        return parse_worker_document(&mut stream, source, narration, lead, keyword_span);
+    }
     let (name, name_span) = stream.expect_name("a workflow name")?;
     let trailing = stream.end_line()?;
-    let workflow_span = join_span(workflow_token, name_span);
+    let workflow_span = join_span(keyword_span, name_span);
 
     let mut document = Document {
-        span: Span {
-            start: 0,
-            end: source.len(),
-            line: 1,
-            column: 1,
-        },
+        span: whole_document_span(source),
+        family,
         narration,
         lead,
         name,
@@ -109,6 +119,69 @@ pub fn parse(source: &str) -> Result<Document, ParseError> {
     Ok(document)
 }
 
+/// The span covering the whole source file.
+const fn whole_document_span(source: &str) -> Span {
+    Span {
+        start: 0,
+        end: source.len(),
+        line: 1,
+        column: 1,
+    }
+}
+
+/// Parse a worker document: the `worker` keyword has been consumed, and the
+/// block it opens IS the document's action surface.
+///
+/// The remaining top-level declarations parse through the SAME dispatcher a
+/// workflow document uses, so a `step`, a `child` or a second `worker` block
+/// in a worker document is a well-formed parse that the checker refuses by
+/// family. That is deliberate: a family mistake deserves a diagnostic that
+/// says which family the file is in and what to do about it, and a parse
+/// error at the first stray token cannot say either.
+fn parse_worker_document(
+    stream: &mut Stream,
+    source: &str,
+    narration: Vec<DocLine>,
+    lead: Vec<Lead>,
+    keyword_span: Span,
+) -> Result<Document, ParseError> {
+    let worker = parse_worker(stream, Vec::new(), Vec::new(), keyword_span)?;
+    let mut document = Document {
+        span: whole_document_span(source),
+        family: DocumentFamily::Worker,
+        narration,
+        lead,
+        name: worker.name.clone(),
+        name_span: worker.name_span,
+        // The opening declaration IS `workers[0]`, so its same-line comment
+        // belongs to that block and is printed from there. Carrying it in
+        // both places would print it twice.
+        trailing: None,
+        timeout: None,
+        inputs: Vec::new(),
+        signals: Vec::new(),
+        sends: Vec::new(),
+        queries: Vec::new(),
+        outcomes: Vec::new(),
+        consts: Vec::new(),
+        types: Vec::new(),
+        workers: vec![worker],
+        children: Vec::new(),
+        subflows: Vec::new(),
+        steps: Vec::new(),
+        epilogue: Vec::new(),
+    };
+    parse_declarations(stream, &mut document)?;
+    document.epilogue = stream.take_leads()?;
+    if let Some(token) = stream.peek() {
+        return Err(ParseError::new(
+            token.span,
+            format!("expected end of document, found {}", describe(&token.kind)),
+        ));
+    }
+    Ok(document)
+}
+
 /// Parse the mandatory `//!` narration lines at the top of the document.
 fn parse_narration(stream: &mut Stream) -> Result<Vec<DocLine>, ParseError> {
     let mut narration = Vec::new();
@@ -125,8 +198,8 @@ fn parse_narration(stream: &mut Stream) -> Result<Vec<DocLine>, ParseError> {
     if narration.is_empty() {
         return Err(ParseError::new(
             stream.peek_span(),
-            "a workflow document opens with `//!` narration — one or more lines \
-             before the `workflow` header",
+            "an AWL document opens with `//!` narration — one or more lines \
+             before the `workflow` or `worker` header",
         ));
     }
     Ok(narration)

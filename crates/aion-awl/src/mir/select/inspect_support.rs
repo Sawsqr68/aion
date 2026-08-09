@@ -36,6 +36,13 @@ pub(super) fn lowered_fixtures() -> Result<Vec<(String, MirModule)>, Box<dyn std
     for path in paths {
         let source = fs::read_to_string(&path)?;
         let document = crate::parse(&source)?;
+        // Only the workflow family lowers to a module to inspect; a worker
+        // document declares no flow. Skipped on the FAMILY it declares, not
+        // on its path, and its refusal is asserted positively in
+        // `mir::tests::a_worker_document_is_refused_by_the_lowering`.
+        if document.family != crate::ast::DocumentFamily::Workflow {
+            continue;
+        }
         match lower(&document, path.parent()) {
             Ok(module) => {
                 let label = path

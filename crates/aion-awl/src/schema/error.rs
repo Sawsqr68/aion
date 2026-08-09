@@ -55,6 +55,23 @@ pub enum SchemaError {
         /// Span of the declaration.
         span: Span,
     },
+    /// A workflow-only contract was asked of a `worker` document, which
+    /// declares no start contract, no outcomes and no queries.
+    #[error(
+        "`{name}` is a worker document: it implements the actions of task queue `{name}` \
+         and declares no workflow, so it publishes no {contract}. Ask the `workflow` \
+         document that calls this queue; a worker document's own contract is the schema \
+         of each action, which `--type` derives."
+    )]
+    NotAWorkflow {
+        /// The task queue the document serves.
+        name: String,
+        /// The workflow-only contract that was requested, named as an
+        /// operator would name it ("start contract", "outcome envelope").
+        contract: &'static str,
+        /// Span of the document's opening declaration.
+        span: Span,
+    },
 }
 
 impl SchemaError {
@@ -66,7 +83,8 @@ impl SchemaError {
             | Self::ImportUnresolved { span, .. }
             | Self::ImportUnreadable { span, .. }
             | Self::InvalidJson { span, .. }
-            | Self::UnusableSchema { span, .. } => *span,
+            | Self::UnusableSchema { span, .. }
+            | Self::NotAWorkflow { span, .. } => *span,
         }
     }
 }

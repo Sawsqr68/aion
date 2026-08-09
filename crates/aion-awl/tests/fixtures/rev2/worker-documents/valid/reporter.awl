@@ -1,0 +1,14 @@
+//! The `reporter` queue, carrying the trivia a formatter must preserve.
+// A comment between the narration and the header.
+worker reporter // and one on the header line
+  /// Render a report for one repository.
+  action render(repo: String, format: String) -> Report
+    run json "report-tool --repo $repo --format $format"
+
+  // A comment inside the worker block.
+  action ping() -> Pinged
+    run "true"
+
+type Report { text: String, lines: Int }
+
+type Pinged { exit_code: Int }

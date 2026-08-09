@@ -1,0 +1,6 @@
+//! `run text` hands back one string, so the result type must be `String`.
+worker greeter
+  action greet(name: String) -> Greeting
+    run text "printf %s $name"
+
+type Greeting { message: String }

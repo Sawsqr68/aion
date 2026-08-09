@@ -53,6 +53,66 @@ fn lower_fixture(path: &Path) -> Result<Result<MirModule, LowerError>, Box<dyn s
     Ok(lower(&document, path.parent()))
 }
 
+/// The `valid/` fixtures that declare a FLOW.
+///
+/// The coverage invariant below — "the direct path refuses nothing the corpus
+/// calls valid" — is a claim about documents that lower to a deployable
+/// module. A `worker` document declares no flow at all, so it is not in that
+/// claim's population; excluding it here is the knowing decision the
+/// invariant's comment asks for, and the family's own refusal is asserted in
+/// `a_worker_document_is_refused_by_the_lowering` rather than assumed.
+fn valid_workflow_fixtures() -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    let mut kept = Vec::new();
+    for path in valid_fixtures() {
+        let source = fs::read_to_string(&path)?;
+        let keep = match crate::parse(&source) {
+            Ok(document) => document.family == crate::ast::DocumentFamily::Workflow,
+            // A fixture that no longer parses is KEPT, so the sweep meets it
+            // as the hard error it is instead of losing it to this filter.
+            Err(_) => true,
+        };
+        if keep {
+            kept.push(path);
+        }
+    }
+    Ok(kept)
+}
+
+/// Every worker-document fixture is refused BY FAMILY, with the message that
+/// names what to compile instead — not by a downstream planning pass whose
+/// diagnostic would describe a missing start region the author never claimed
+/// to have written.
+#[test]
+fn a_worker_document_is_refused_by_the_lowering() -> Result<(), Box<dyn std::error::Error>> {
+    let mut refused = 0_usize;
+    for path in valid_fixtures() {
+        let source = fs::read_to_string(&path)?;
+        let document = crate::parse(&source)?;
+        if document.family != crate::ast::DocumentFamily::Worker {
+            continue;
+        }
+        let Err(error) = lower(&document, path.parent()) else {
+            return Err(format!(
+                "{} is a worker document and must not lower to a module",
+                path.display()
+            )
+            .into());
+        };
+        let message = error.to_string();
+        assert!(
+            message.contains("declares no workflow, so there is no flow to lower"),
+            "{}: refused with the wrong diagnostic: {message}",
+            path.display()
+        );
+        refused += 1;
+    }
+    assert!(
+        refused > 0,
+        "no worker-document fixture was swept — the refusal proved nothing"
+    );
+    Ok(())
+}
+
 fn hex(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
@@ -127,7 +187,7 @@ fn lowers_cover_and_golden() -> Result<(), Box<dyn std::error::Error>> {
     let golden_root = manifest_dir().join("tests/mir-goldens");
     let mut covered = Vec::new();
     let mut refused: Vec<String> = Vec::new();
-    let all = valid_fixtures();
+    let all = valid_workflow_fixtures()?;
     for fixture in all {
         let relative = fixture.strip_prefix(&fixtures_root)?;
         let stem = relative.with_extension("").to_string_lossy().into_owned();

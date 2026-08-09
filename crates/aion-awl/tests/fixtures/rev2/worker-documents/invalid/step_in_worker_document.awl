@@ -1,0 +1,7 @@
+//! A worker document implements a queue; it does not run a flow.
+worker greeter
+  action greet(name: String) -> String
+    run text "printf %s $name"
+
+step do_greet
+  greet(name: "ada") -> greeting

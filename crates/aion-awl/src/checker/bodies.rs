@@ -12,9 +12,10 @@
 //! process.
 
 use crate::Span;
-use crate::ast::{ActionBody, ActionDecl, TypeRef, scan_command};
+use crate::ast::{ActionBody, ActionDecl, RunCapture, TypeRef, scan_command};
 
 use super::context::Ctx;
+use super::family::capture_is_declarable;
 use super::types::{Ty, resolve};
 
 /// The members of the outcome object a `run` body always produces. A bodied
@@ -32,21 +33,71 @@ pub(super) fn check(ctx: &mut Ctx<'_>, action: &ActionDecl, returns: &Ty) {
     match &action.body {
         None => {}
         Some(ActionBody::Run {
+            capture,
             command,
             command_span,
             ..
         }) => {
             check_run(ctx, action, command, *command_span);
-            check_run_result(ctx, action, returns);
+            // A capture the document's family cannot declare is refused by
+            // the family pass, which names the remedy. Ruling on its result
+            // type as well would stack a second, narrower diagnostic on one
+            // mistake — and the rule it would apply is the other family's.
+            if capture_is_declarable(ctx.doc.family, *capture) {
+                check_run_result(ctx, action, *capture, returns);
+            }
         }
     }
 }
 
-/// A `run` body always produces `{ exit_code: Int, stdout: String, stderr:
-/// String }`. The declared result must therefore be a record naming a subset
-/// of those three, with their types — anything else would check clean and
-/// then hand the workflow an object that does not fit it.
-fn check_run_result(ctx: &mut Ctx<'_>, action: &ActionDecl, returns: &Ty) {
+/// Rule on the declared result against what the body's capture produces.
+///
+/// The bare form produces the outcome record and is checked structurally
+/// below. `run text` produces one JSON string and `run json` produces
+/// whatever the command printed — the workflow's own decoder enforces the
+/// shape of the latter at runtime, exactly as it does for any worker's
+/// result, so the only thing to rule on here is what could never fit at all.
+fn check_run_result(ctx: &mut Ctx<'_>, action: &ActionDecl, capture: RunCapture, returns: &Ty) {
+    let anchor = type_ref_span(&action.returns);
+    let resolved = resolve(returns, &ctx.types);
+    match capture {
+        RunCapture::Outcome => check_outcome_result(ctx, action, returns),
+        RunCapture::Text => {
+            if !matches!(resolved, Ty::Str | Ty::Unknown) {
+                ctx.error(
+                    anchor,
+                    format!(
+                        "action `{}` declares a `run text` body, whose result is the \
+                         command's trimmed stdout as one string, so its result type must be \
+                         `String`, not `{resolved}`; use `run json` to decode stdout into a \
+                         declared type.",
+                        action.name
+                    ),
+                );
+            }
+        }
+        RunCapture::Json => {
+            if matches!(resolved, Ty::Nil) {
+                ctx.error(
+                    anchor,
+                    format!(
+                        "action `{}` declares a `run json` body but returns `Nil`, so there \
+                         is nothing for the decoded stdout to become; use the bare `run \
+                         \"…\"` form for an effect-only action, or declare the type the \
+                         command prints.",
+                        action.name
+                    ),
+                );
+            }
+        }
+    }
+}
+
+/// A bare `run` body always produces `{ exit_code: Int, stdout: String,
+/// stderr: String }`. The declared result must therefore be a record naming a
+/// subset of those three, with their types — anything else would check clean
+/// and then hand the workflow an object that does not fit it.
+fn check_outcome_result(ctx: &mut Ctx<'_>, action: &ActionDecl, returns: &Ty) {
     let anchor = type_ref_span(&action.returns);
     let resolved = resolve(returns, &ctx.types);
     let Ty::Record(record) = resolved else {

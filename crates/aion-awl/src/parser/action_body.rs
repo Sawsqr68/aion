@@ -5,8 +5,8 @@
 //! because the body grammar is its own concern: a config line says how an
 //! action is DELIVERED, a body says what it DOES.
 
-use crate::ast::{ActionBody, ConfigLine, Lead, join_span};
-use crate::{Keyword, RUN_WORD, TokenKind};
+use crate::ast::{ActionBody, ConfigLine, Lead, RunCapture, join_span};
+use crate::{Keyword, RUN_WORD, Span, TEXT_CAPTURE_WORD, TokenKind};
 
 use super::ParseError;
 use super::stream::{Stream, describe};
@@ -105,11 +105,38 @@ fn is_run_word(kind: &TokenKind) -> bool {
     matches!(kind, TokenKind::Identifier(name) if name == RUN_WORD)
 }
 
-/// Parse one `run "<command>"` body line; the `run` word is at the cursor.
+/// The capture selector standing between `run` and its command literal.
+///
+/// `json` is a reserved keyword (the `json { … }` literal owns it), `text` is
+/// not and is read positionally in this one grammar slot — the same rule
+/// `run` itself follows, and for the same reason: `text` is a plausible
+/// field, parameter and binding name, and reserving it would break documents
+/// that exist today.
+fn capture_selector(kind: &TokenKind) -> Option<RunCapture> {
+    match kind {
+        TokenKind::Keyword(Keyword::Json) => Some(RunCapture::Json),
+        TokenKind::Identifier(word) if word == TEXT_CAPTURE_WORD => Some(RunCapture::Text),
+        _ => None,
+    }
+}
+
+/// Parse one `run [text|json] "<command>"` body line; the `run` word is at
+/// the cursor.
 fn parse_run_body(stream: &mut Stream, lead: Vec<Lead>) -> Result<ActionBody, ParseError> {
     let keyword = stream
         .eat(is_run_word)
         .ok_or_else(|| ParseError::new(stream.peek_span(), "expected a `run` command body"))?;
+    let (capture, capture_span): (RunCapture, Option<Span>) = match stream.peek() {
+        Some(token) => match capture_selector(&token.kind) {
+            Some(capture) => {
+                let span = token.span;
+                stream.next();
+                (capture, Some(span))
+            }
+            None => (RunCapture::Outcome, None),
+        },
+        None => (RunCapture::Outcome, None),
+    };
     let (command, command_span) = match stream.peek() {
         Some(token) => {
             let span = token.span;
@@ -122,15 +149,19 @@ fn parse_run_body(stream: &mut Stream, lead: Vec<Lead>) -> Result<ActionBody, Pa
                 TokenKind::Newline | TokenKind::Comment(_) => {
                     return Err(ParseError::new(
                         keyword.span,
-                        "`run` takes a quoted command line: write `run \"<command>\"`",
+                        format!(
+                            "`{form}` takes a quoted command line: write `{form} \"<command>\"`",
+                            form = body_form(capture)
+                        ),
                     ));
                 }
                 other => {
                     return Err(ParseError::new(
                         span,
                         format!(
-                            "`run` takes a quoted command line, found {}",
-                            describe(other)
+                            "`{form}` takes a quoted command line, found {found}",
+                            form = body_form(capture),
+                            found = describe(other)
                         ),
                     ));
                 }
@@ -139,7 +170,10 @@ fn parse_run_body(stream: &mut Stream, lead: Vec<Lead>) -> Result<ActionBody, Pa
         None => {
             return Err(ParseError::new(
                 keyword.span,
-                "`run` takes a quoted command line, found end of input",
+                format!(
+                    "`{form}` takes a quoted command line, found end of input",
+                    form = body_form(capture)
+                ),
             ));
         }
     };
@@ -148,7 +182,17 @@ fn parse_run_body(stream: &mut Stream, lead: Vec<Lead>) -> Result<ActionBody, Pa
         span: join_span(keyword.span, command_span),
         lead,
         trailing,
+        capture,
+        capture_span,
         command,
         command_span,
     })
+}
+
+/// How a body's opener reads in a diagnostic: `run`, `run text`, `run json`.
+fn body_form(capture: RunCapture) -> String {
+    match capture.word() {
+        Some(word) => format!("{RUN_WORD} {word}"),
+        None => RUN_WORD.to_owned(),
+    }
 }

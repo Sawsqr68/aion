@@ -1,0 +1,4 @@
+//! Decoded stdout has to become something.
+worker greeter
+  action forget(name: String) -> Nil
+    run json "forget-tool --name $name"

@@ -1,0 +1,8 @@
+//! One worker document serves one queue.
+worker greeter
+  action greet(name: String) -> String
+    run text "printf %s $name"
+
+worker shouter
+  action shout(text: String) -> String
+    run text "tr a-z A-Z"

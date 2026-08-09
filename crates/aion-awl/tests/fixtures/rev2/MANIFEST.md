@@ -585,6 +585,50 @@ Invalid (all CHECK; the unterminated-raw-string lex refusal is pinned by
   INSIDE the body.
 - `schema_of_unknown_type.awl` — `schema of Missing` → CHECK "unknown type" @6.
 
+## worker-documents — the `worker` file family (#30)
+
+A `.awl` file whose opening declaration is `worker <queue>` rather than
+`workflow <name>` is an IMPLEMENTATION of one task queue: its actions each
+carry the body that runs them, and it declares no flow. Both families parse
+through one grammar, so a workflow-shaped declaration in a worker document is
+a well-formed parse the CHECKER refuses by name — which is why almost every
+fixture below is CHECK-staged.
+
+Valid (parse, check clean, print byte-canonically; `emit` refuses these by
+family and `tests/emitter.rs` asserts that refusal positively):
+- `worker-documents/valid/greeter.awl` — the three capture forms in one file:
+  `run json` (stdout decoded into a declared type), `run text` (trimmed stdout
+  as one string), and the bare `run` (the command's outcome record, subset
+  return type).
+- `worker-documents/valid/reporter.awl` — the trivia a formatter must
+  preserve across the new file header: a comment between the narration and the
+  `worker` line, a same-line comment ON that line (which lives on the header
+  block, not on the document), a `///` doc line on an action, a
+  comment-and-blank lead inside the block, and a zero-parameter action.
+
+Invalid (stage / substring / span line):
+- `step_in_worker_document.awl` — a `step` in a worker document → CHECK
+  "implements a queue's actions and runs no flow" @6.
+- `child_in_worker_document.awl` — a `child` declaration → CHECK "a worker
+  document runs no flow" @6.
+- `const_in_worker_document.awl` — a `const` → CHECK "a worker document has no
+  expressions" @6.
+- `second_worker_block.awl` — a second `worker` block → CHECK "serves exactly
+  one queue" @6.
+- `bodyless_action.awl` — an action with no body → CHECK "declares no body" @5.
+- `delivery_config.awl` — `timeout`/`retry` on the implementation → CHECK
+  "belongs to the action's declaration in the `workflow` document" @4.
+- `text_capture_wrong_type.awl` — `run text` returning a record → CHECK "its
+  result type must be `String`" @3.
+- `json_capture_nil.awl` — `run json` returning `Nil` → CHECK "there is nothing
+  for the decoded stdout to become" @3.
+- `capture_in_workflow_document.awl` — the family rule in the other direction:
+  a `run json` body in a WORKFLOW document, whose bodies the server executes →
+  CHECK "declared bodies are executed by the server" @10.
+- `header_decl_in_worker_block.awl` — `input` inside a worker block; the one
+  PARSE-staged refusal in the family, because a header declaration cannot open
+  an action → PARSE "cannot stand inside a worker block" @3.
+
 ## flow-shape — flow-vocabulary B2: subflow, distribute/sequence, collect, visits
 
 Rev-3 surface (`AWL-FLOW-VOCABULARY.md` rev 3 §1–§3, §5–§6). B4 landed: these fixtures parse,

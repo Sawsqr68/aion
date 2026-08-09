@@ -296,7 +296,26 @@ impl<'a> Deriver<'a> {
         verified(schema, name, decl.name_span)
     }
 
+    /// Refuse a workflow-only derivation over a `worker` document.
+    ///
+    /// A worker document has no inputs, no outcomes and no queries, so each
+    /// of these derivations would otherwise return a well-formed schema of
+    /// nothing — the shape an operator would then validate a start payload
+    /// against. An empty answer to a question the document cannot be asked
+    /// is worse than no answer, so the family is refused by name.
+    fn require_workflow(&self, contract: &'static str) -> Result<(), SchemaError> {
+        if self.document.family == crate::ast::DocumentFamily::Worker {
+            return Err(SchemaError::NotAWorkflow {
+                name: self.document.name.clone(),
+                contract,
+                span: self.document.name_span,
+            });
+        }
+        Ok(())
+    }
+
     fn workflow_schema(&self) -> Result<Value, SchemaError> {
+        self.require_workflow("start contract")?;
         let mut defs = Map::new();
         let mut properties = Map::new();
         let mut required = Vec::new();
@@ -334,6 +353,7 @@ impl<'a> Deriver<'a> {
     }
 
     fn queries_schema(&self) -> Result<Value, SchemaError> {
+        self.require_workflow("read-only query surface")?;
         let mut defs = Map::new();
         let mut properties = Map::new();
         for query in &self.document.queries {
@@ -409,6 +429,7 @@ impl<'a> Deriver<'a> {
     }
 
     fn envelope_schema(&self) -> Result<Value, SchemaError> {
+        self.require_workflow("outcome envelope")?;
         let mut defs = Map::new();
         let mut arms = Vec::new();
         for outcome in &self.document.outcomes {

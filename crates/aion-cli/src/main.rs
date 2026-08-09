@@ -38,6 +38,7 @@ mod render;
 mod server;
 mod settings;
 mod worker_agent;
+mod worker_awl;
 mod worker_shell;
 mod worker_surface;
 
@@ -129,6 +130,37 @@ enum Command {
 enum WorkerCommand {
     /// Serve strict manifest-wired shell commands on an Aion task queue.
     Shell(worker_shell::ShellArgs),
+    /// Serve the queue a WORKER DOCUMENT declares — a `.awl` file whose
+    /// opening declaration is `worker <queue>` rather than `workflow <name>`.
+    ///
+    /// The document is the whole wiring: it names the queue, declares each
+    /// action's typed contract, and carries the command that serves it. A
+    /// workflow document is refused by name, as is a document that does not
+    /// check cleanly — with the checker's own diagnostics, at the desk,
+    /// rather than as a remote refusal after dialling.
+    ///
+    /// The advertised schemas are derived through the same seam the deploy
+    /// path uses, so this worker's advertisement and the server's stored
+    /// contract for the queue are two independent derivations of two
+    /// documents; the server's worker-contract admission is what holds them
+    /// equal, and refuses a worker document that has drifted from the
+    /// workflow that calls it.
+    ///
+    /// Every action runs through the same executor the server uses for a
+    /// workflow document's declared bodies: argv parsed once, each parameter
+    /// substituted as one whole argument, no shell, the host environment
+    /// CLEARED except `PATH`, and process-group containment on cancellation.
+    /// The document's capture selector decides only what a successful
+    /// command's result is — the outcome record for a bare `run`, trimmed
+    /// stdout for `run text`, decoded stdout for `run json`.
+    ///
+    /// `--identity` is derived from the queue as `<queue>-awl-worker` when
+    /// absent. Every other connection setting must be supplied by a flag or
+    /// its environment variable, and every missing one is named at once.
+    ///
+    /// `--check` prints the exact surface this worker would advertise, with
+    /// the command each action runs, then exits without connecting.
+    Awl(worker_awl::AwlWorkerArgs),
     /// Serve an agent harness compiled into this binary on the queue an `.awl`
     /// document declares — an agent worker without writing a crate.
     ///
@@ -512,6 +544,9 @@ async fn main() -> ExitCode {
         Command::Worker { ref command } => {
             let result = match command {
                 WorkerCommand::Shell(args) => worker_shell::run(args, cli.endpoint()).await,
+                // The AWL worker dials the global gRPC endpoint, exactly as
+                // the shell worker does, and normalizes a scheme-less one.
+                WorkerCommand::Awl(args) => worker_awl::run(args, cli.endpoint()).await,
                 // The agent worker registers into the namespace the global flag
                 // names, and dials liminal candidates rather than `--endpoint`.
                 WorkerCommand::Agent(args) => worker_agent::run(args, &cli.namespace).await,

@@ -148,11 +148,27 @@ fn every_valid_fixture_emits() -> Result<(), Box<dyn Error>> {
                     .map(|error| error.message.clone())
                     .collect::<Vec<_>>()
             );
+            // A worker document declares no flow, so there is no workflow
+            // module to emit and the ONLY acceptable answer is the family
+            // refusal naming what to emit instead. Asserted positively
+            // rather than skipped: an emitter that silently produced a
+            // module for a worker document would deploy something that can
+            // never be started, and a skip would not notice.
+            let worker_family = document.family == aion_awl::DocumentFamily::Worker;
             match emit_in(&document, &valid) {
-                Ok(_) => {}
+                Ok(_) => assert!(
+                    !worker_family,
+                    "{}: a worker document must not emit a workflow module",
+                    path.display()
+                ),
                 Err(error) => {
+                    let expected = if worker_family {
+                        "declares no workflow, so there is no workflow module to emit"
+                    } else {
+                        "not yet lowered"
+                    };
                     assert!(
-                        error.message.contains("not yet lowered"),
+                        error.message.contains(expected),
                         "{}: emit failed with a non-refusal error: {}",
                         path.display(),
                         error.message

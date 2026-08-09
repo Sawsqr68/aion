@@ -77,14 +77,26 @@ impl fmt::Display for LowerError {
 
 impl std::error::Error for LowerError {}
 
-/// Lower a checked document to its MIR module.
-///
-/// # Errors
-///
-/// Returns [`LowerError::Planning`] for a document the shared passes refuse or
-/// that did not check cleanly, and [`LowerError::Unsupported`] for a shape this
-/// BC-2 increment does not yet cover.
-pub fn lower(document: &Document, root: Option<&Path>) -> Result<MirModule, LowerError> {
+/// What must hold before a document reaches the planning passes: it declares
+/// a flow, it checks cleanly, and it carries no construct this increment
+/// still refuses.
+fn preconditions(document: &Document, root: Option<&Path>) -> Result<(), LowerError> {
+    // Lowering is defined for the WORKFLOW family only. A worker document
+    // declares no flow, so there is no start region to lower and no module
+    // to load; refused here, by family, before the planning passes reach a
+    // step list that is empty for a reason they cannot see.
+    if document.family == crate::ast::DocumentFamily::Worker {
+        return Err(LowerError::Message {
+            message: format!(
+                "`{queue}` is a worker document: it implements the actions of task queue \
+                 `{queue}` and declares no workflow, so there is no flow to lower. Compile \
+                 the `workflow` document that calls this queue; serve this one with \
+                 `aion worker awl`.",
+                queue = document.name
+            ),
+            span: document.name_span,
+        });
+    }
     // Lowering is defined only for documents that check cleanly: fold-time
     // const substitution is name-based and relies on the checker's
     // invariants (no shadowed consts, no input/signal collisions).
@@ -106,6 +118,18 @@ pub fn lower(document: &Document, root: Option<&Path>) -> Result<MirModule, Lowe
             span,
         });
     }
+    Ok(())
+}
+
+/// Lower a checked document to its MIR module.
+///
+/// # Errors
+///
+/// Returns [`LowerError::Planning`] for a document the shared passes refuse or
+/// that did not check cleanly, and [`LowerError::Unsupported`] for a shape this
+/// BC-2 increment does not yet cover.
+pub fn lower(document: &Document, root: Option<&Path>) -> Result<MirModule, LowerError> {
+    preconditions(document, root)?;
     // Fold the B1 ergonomics vocabulary down to plain literals, then shape
     // the rev-3 flow constructs (regions, subflows, visit counters) into
     // the planned form both backends lower.

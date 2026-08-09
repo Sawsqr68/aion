@@ -11,9 +11,10 @@ mod command_tests;
 
 pub use command::{CommandError, CommandReference, ScannedCommand, scan_command};
 pub use document::{
-    ActionBody, ActionDecl, ChildDecl, ConfigLine, ConfigValue, ConstDecl, Document, EnumVariant,
-    FieldDecl, InputDecl, OutcomeDecl, ParamDecl, QueryDecl, RetrySpec, RouteDirection, SendDecl,
-    SignalDecl, SubflowDecl, SubflowOutcome, TypeBody, TypeDecl, TypeRef, WorkerDecl,
+    ActionBody, ActionDecl, ChildDecl, ConfigLine, ConfigValue, ConstDecl, Document,
+    DocumentFamily, EnumVariant, FieldDecl, InputDecl, JSON_CAPTURE_WORD, OutcomeDecl, ParamDecl,
+    QueryDecl, RetrySpec, RouteDirection, RunCapture, SendDecl, SignalDecl, SubflowDecl,
+    SubflowOutcome, TEXT_CAPTURE_WORD, TypeBody, TypeDecl, TypeRef, WorkerDecl,
     WorkflowTimeoutDecl,
 };
 pub use expr::{Arg, BinaryOp, DurationLiteral, Expr, PredicateKind, Quantifier};
