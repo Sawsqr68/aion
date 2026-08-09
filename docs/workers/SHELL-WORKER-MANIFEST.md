@@ -1,7 +1,19 @@
 # The shell worker manifest (`worker.toml`)
 
 The built-in shell worker maps declared AWL actions to host commands, with no
-Rust crate and no source code of your own:
+Rust crate and no source code of your own.
+
+> **The typed alternative.** A [worker
+> document](AWL-WORKER-DOCUMENTS.md) — a `.awl` file opening with `worker
+> <queue>` — does the same job with the wiring written in the language rather
+> than in a schema-less TOML file: the checker rules on every command and
+> result type, and `aion worker awl` serves it. Prefer it for new wiring. The
+> manifest remains the way to point at a queue whose commands you do not want
+> committed to a document, and the two differ in one way worth knowing: a
+> manifest command inherits the worker's whole environment, a worker
+> document's command starts with a cleared one.
+
+
 
 ```sh
 aion --endpoint http://127.0.0.1:50051 worker shell \

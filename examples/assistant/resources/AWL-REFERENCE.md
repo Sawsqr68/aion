@@ -14,8 +14,10 @@ rejects a construct, upgrade before concluding the construct does not exist.
 
 ## 1. Document structure
 
-One `.awl` file declares one workflow. Use two-space indentation. The canonical
-order is:
+One `.awl` file is one document of one FAMILY, and its opening declaration says
+which: `workflow <name>` declares a flow (this section and every section up to
+§15), `worker <queue>` declares the implementation of one task queue (§16).
+Use two-space indentation. The canonical order of a workflow document is:
 
 ```awl
 //! Required workflow narration.
@@ -237,7 +239,11 @@ Rules the checker enforces:
 - **One body per action.** There is no multi-command form. To run several
   commands, name a shell explicitly — `run "sh -c 'a | b'"` — which is visible
   in review, and that is the point.
-- **The argument is one quoted string.** `run "<command>"`.
+- **The argument is one quoted string.** `run "<command>"`. In a WORKFLOW
+  document that is the only form: the capture selectors `run text "…"` and
+  `run json "…"` are worker-document vocabulary (§16) and are refused here,
+  because the server's dispatcher produces the outcome record and nothing
+  else.
 - **Interpolation is the action's own parameters only**, as `$name` or
   `${name}`, in snake_case. `$HOME` is refused: a shell variable is not an AWL
   parameter. A value is substituted as one WHOLE argv element and never
@@ -751,3 +757,76 @@ Three more:
   `const` and use the constant.
 - A route targeting a step the plan folded into the middle of a fall-through
   chain refuses — "route to a mid-chain step".
+
+## 16. Worker documents
+
+A `.awl` file whose opening declaration is `worker <queue>` is a **worker
+document**: the implementation of one task queue. It declares that queue's
+actions, each with the command that runs it, plus the types those actions use,
+and nothing else.
+
+```awl
+//! Required narration, exactly as a workflow document needs one.
+worker greeter
+  action greet(name: String) -> Greeting
+    run json "greeter-tool --json --name $name"
+  action shout(text: String) -> String
+    run text "tr a-z A-Z"
+  action archive(path: String) -> Archived
+    run "tar -cf archive.tar $path"
+
+type Greeting { message: String }
+
+type Archived { exit_code: Int, stderr: String }
+```
+
+`aion worker awl <FILE.awl>` serves it. The command runs on the WORKER's host,
+not on the server's — that is the difference from a workflow document's
+declared body (§4).
+
+### What the family refuses, and why
+
+| In a worker document | Refused because |
+|---|---|
+| `step`, `child`, `subflow` | A worker document runs no flow. |
+| `const` | It has no expressions for a compile-time value to feed. |
+| A second `worker` block | One document serves one queue: the one its opening declaration names. |
+| An action with no body | A bodyless action is a REQUIREMENT, which a workflow document declares. |
+| `timeout`, `retry`, `node`, `advisory`, `agent` | Each configures how the CALLER dispatches the action, so each belongs to the action's declaration in the workflow document. |
+
+Every refusal names the remedy. A clean check reports
+`ok: <file> (worker `<queue>`, N actions)` — there are no steps to count.
+
+`aion awl emit`, `aion deploy`, `aion run` and `aion awl schema` (without
+`--type`) all refuse a worker document by family: it declares no workflow, so
+there is no module to emit, nothing to start, and no start contract to derive.
+
+### Capture selectors
+
+The word between `run` and the command decides what a SUCCESSFUL command
+returns. It decides nothing else — a non-zero exit is retryable with the
+command's stderr, an unspawnable program and a cancellation are terminal, in
+every form.
+
+| Form | Result | Declared return type |
+|---|---|---|
+| `run "…"` | The outcome record `{ exit_code: Int, stdout: String, stderr: String }` | A record over any subset of those members |
+| `run text "…"` | Trimmed stdout as one string | `String` |
+| `run json "…"` | Trimmed stdout parsed as JSON | Any declared type except `Nil`; output that does not parse is a TERMINAL failure |
+
+Interpolation, the written-out program rule, and the absence of a shell are
+exactly as §4 states them: one implementation, two families.
+
+### The two files, and what holds them honest
+
+The workflow document declares `action greet(name: String) -> Greeting` as a
+requirement; the worker document declares the same signature with a body. What
+keeps them equal is not diligence but ADMISSION: the worker's advertised
+surface is derived through the same seam the deploy path uses, and the server
+refuses a worker whose surface differs from the queue's deployed contract,
+naming the action and the field. `aion worker awl <FILE.awl> --check` prints
+that surface, and the command each action runs, without connecting.
+
+**Read `docs/workers/AWL-WORKER-DOCUMENTS.md` before writing one. THERE IS NO
+SANDBOX** — the same boundaries `docs/workers/DECLARED-COMMANDS.md` states,
+on the worker's host instead of the server's.

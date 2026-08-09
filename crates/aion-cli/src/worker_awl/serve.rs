@@ -36,8 +36,7 @@ pub(super) struct ServedAction {
 pub(crate) async fn run(args: &AwlWorkerArgs, endpoint: &str) -> Result<()> {
     let compiled = compile(&args.document)?;
     if args.check {
-        print!("{}", report(&compiled));
-        return Ok(());
+        return report(&mut std::io::stdout(), &compiled);
     }
     let environment = Environment::from_process();
     let settings = args::resolve(args, &compiled.task_queue, &environment)?;
@@ -79,34 +78,62 @@ fn descriptors(compiled: &CompiledWorkerDocument) -> BTreeMap<String, ActivityDe
         .collect()
 }
 
-/// What `--check` prints: the queue, and one line per action naming what it
-/// runs and what its result is.
+/// Write what `--check` reports: the queue, and per action the descriptor this
+/// worker would advertise plus the command it would run.
 ///
-/// This is the whole admission decision plus the whole execution decision, on
-/// one screen, before anything connects or runs.
-pub(super) fn report(compiled: &CompiledWorkerDocument) -> String {
-    let mut out = format!(
-        "task queue: {}\nactions: {}\n",
-        compiled.task_queue,
-        compiled.actions.len()
-    );
+/// The descriptors ARE the admission decision on a contract-bearing queue —
+/// an operator diffs them against the deployed package contract — so they are
+/// canonically encoded, key order coming from the schemas' own content rather
+/// than from this build's map representation. The command and its capture ride
+/// alongside because they are the execution decision, and a report that showed
+/// only the schemas would leave an operator unable to see what will actually
+/// run. Reported by the same shape `aion worker agent --check` uses, so the
+/// two verbs' surfaces read alike.
+///
+/// # Errors
+///
+/// Returns an error when the report cannot be encoded or the writer cannot be
+/// written to (a closed pipe).
+pub(super) fn report(
+    writer: &mut impl std::io::Write,
+    compiled: &CompiledWorkerDocument,
+) -> Result<()> {
+    let descriptors = descriptors(compiled);
+    let mut actions = Vec::with_capacity(compiled.actions.len());
     for action in &compiled.actions {
-        out.push_str(&format!(
-            "  {} [{}] {}\n",
-            action.name,
-            capture_word(action.capture),
-            action.command
-        ));
+        // Refused rather than reported as null: this report exists to be
+        // diffed against a deployed contract, and a missing schema shown as an
+        // absent value would read as "the queue expects nothing here".
+        let descriptor = descriptors.get(&action.name).with_context(|| {
+            format!(
+                "no derived descriptor for action `{}`; the action surface is incomplete",
+                action.name
+            )
+        })?;
+        actions.push(serde_json::json!({
+            "name": action.name,
+            "capture": capture_word(action.capture),
+            "command": action.command,
+            "input_schema": descriptor.input_schema,
+            "output_schema": descriptor.output_schema,
+        }));
     }
-    out
+    let report = serde_json::json!({
+        "task_queue": compiled.task_queue,
+        "actions": actions,
+    });
+    serde_json::to_writer_pretty(&mut *writer, &aion_package::CanonicalJson::new(report))
+        .context("failed to encode the advertised action surface")?;
+    writeln!(writer).context("failed to write the advertised action surface")?;
+    Ok(())
 }
 
 /// How a capture reads in the `--check` report.
 const fn capture_word(capture: RunCapture) -> &'static str {
     match capture {
-        RunCapture::Outcome => "outcome record",
-        RunCapture::Text => "stdout as text",
-        RunCapture::Json => "stdout as json",
+        RunCapture::Outcome => "outcome",
+        RunCapture::Text => "text",
+        RunCapture::Json => "json",
     }
 }
 

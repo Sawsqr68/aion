@@ -120,18 +120,41 @@ fn a_document_that_does_not_check_is_refused_with_its_diagnostics() -> TestResul
     Ok(())
 }
 
+/// `--check` reports the descriptors an admission decision is made on, and the
+/// command each action would run — the two halves an operator needs before
+/// dialling.
 #[test]
-fn the_check_report_names_every_action_and_what_it_runs() -> TestResult {
+fn the_check_report_carries_the_descriptors_and_the_commands() -> TestResult {
     let path = write_document("report", DOCUMENT)?;
-    let report = serve::report(&serve::compile(&path)?);
-    assert!(report.contains("task queue: greeter"), "{report}");
-    assert!(report.contains("actions: 3"), "{report}");
-    assert!(
-        report.contains("greet [stdout as text] printf %s $name"),
-        "{report}"
+    let mut written = Vec::new();
+    serve::report(&mut written, &serve::compile(&path)?)?;
+    let report: Value = serde_json::from_slice(&written)?;
+    assert_eq!(report["task_queue"], json!("greeter"));
+    let actions = report["actions"]
+        .as_array()
+        .ok_or("the report lists its actions")?;
+    assert_eq!(actions.len(), 3);
+    assert_eq!(actions[0]["name"], json!("greet"));
+    assert_eq!(actions[0]["capture"], json!("text"));
+    assert_eq!(actions[0]["command"], json!("printf %s $name"));
+    assert_eq!(
+        actions[0]["input_schema"]["properties"]["name"]["type"],
+        json!("string")
     );
-    assert!(report.contains("record [stdout as json]"), "{report}");
-    assert!(report.contains("touch [outcome record]"), "{report}");
+    assert_eq!(actions[0]["output_schema"]["type"], json!("string"));
+    assert_eq!(actions[1]["capture"], json!("json"));
+    // A declared type's schema is derived as a `$ref` into `$defs`, exactly as
+    // the deploy path derives the caller's — asserted in that shape rather
+    // than in an inlined one, because it is the shape an operator diffs.
+    assert_eq!(
+        actions[1]["output_schema"]["$ref"],
+        json!("#/$defs/Recorded")
+    );
+    assert_eq!(
+        actions[1]["output_schema"]["$defs"]["Recorded"]["properties"]["name"]["type"],
+        json!("string")
+    );
+    assert_eq!(actions[2]["capture"], json!("outcome"));
     Ok(())
 }
 

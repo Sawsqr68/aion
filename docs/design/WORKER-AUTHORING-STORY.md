@@ -31,7 +31,7 @@ three register and serve through the same task-queue machinery.
 
 | Layer | What it is | Authoring surface | Status today |
 |---|---|---|---|
-| **1 — Command runner** | Each action runs a command; result is text or JSON | Manifest (exists), AWL worker file (planned §4) | **EXISTS**: `aion worker shell --manifest` (`[worker]` + `[[action]]` command, `result = text\|json`) — it served the live `ask_once` demo |
+| **1 — Command runner** | Each action runs a command; result is text or JSON | Manifest (exists), AWL worker document (EXISTS — §4.1/§4.2 item 1 landed) | **EXISTS twice**: `aion worker shell --manifest` (`[worker]` + `[[action]]` command, `result = text\|json`) — it served the live `ask_once` demo — and `aion worker awl FILE.awl`, where the file itself opens `worker <queue>` and each action carries `run "…"` / `run text "…"` / `run json "…"`. See [`../workers/AWL-WORKER-DOCUMENTS.md`](../workers/AWL-WORKER-DOCUMENTS.md) |
 | **2 — Script worker** | Single file doing data handling / processing (e.g. a Python script with decorated action functions) | Python SDK + script host (§3), AWL worker file for the declarative subset (§4) | NOT BUILT — the Python image-recognition examples are the first target |
 | **3 — Service worker** | Substantial long-lived processing: endpoints, payments, anything with real logic and state | Full SDKs (Gleam/Rust today; Python/TS to come) | EXISTS (Gleam/Rust SDK); more SDK languages are roadmap |
 
@@ -76,8 +76,12 @@ side: every battery above needs somewhere to live, so lifecycle lands first.
 
 ### 4.1 File kinds and namespaced vocabularies (Tom's ruling)
 
-An `.awl` file declares what it is at the top: a **workflow** (today's only kind)
-or a **worker**. The declaration selects the file's *word-set*:
+**Status: SHIPPED.** A `.awl` file declares what it is at the top: a
+**workflow** or a **worker**, and the checker enforces the boundary in both
+directions with a remedy in every message
+(`crates/aion-awl/src/checker/family.rs`, corpus under
+`crates/aion-awl/tests/fixtures/rev2/worker-documents/`). The declaration
+selects the file's *word-set*:
 
 - **Common core** (both kinds): types, values, expressions, literals, comments,
   the `worker X with actions …` *interface* declaration.
@@ -100,6 +104,13 @@ In rough order of demonstrated need:
 1. **Command execution** — lift the shell-worker manifest shape into the language:
    command, args, stdin, timeout, `result = text|json`. Semantics already proven
    by the existing shell worker; this is syntax over a working engine.
+   **SHIPPED, narrower than written**, and the narrowing is deliberate: the
+   command line IS the argv (no separate args list), and `result = text|json`
+   became the capture selectors `run text` / `run json` alongside the existing
+   outcome-record `run`. `timeout` is REFUSED in a worker document — it
+   configures how the caller dispatches the action, so it stays on the calling
+   workflow's declaration rather than becoming a second source of truth. stdin
+   is not carried: a declared command runs with stdin closed, in both families.
 2. **Templating** — string templates with typed holes (workflow inputs/outputs are
    already typed; the holes check).
 3. **Data wrangling: query / search / filter** — a typed pipeline vocabulary over

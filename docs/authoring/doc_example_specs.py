@@ -45,6 +45,20 @@ SPECS: dict[str, Spec] = {
     "docs_workers_DECLARED-COMMANDS__01": Spec(),
     "docs_workers_DECLARED-COMMANDS__02": Spec(),
     "docs_workers_SHELL-WORKER-MANIFEST__01": Spec(place="whole"),
+    # A WORKER document: a complete file of the other family, which needs no
+    # scaffold at all because it declares no flow to scaffold.
+    "docs_workers_AWL-WORKER-DOCUMENTS__01": Spec(place="whole"),
+    # The caller's side of the same interface: a `worker` block in a WORKFLOW
+    # document, whose bodyless action is a requirement on the worker document
+    # above. The scaffold supplies the flow that calls it, because an action
+    # nothing calls is not what this fragment is about.
+    "docs_workers_AWL-WORKER-DOCUMENTS__02": Spec(
+        place="decls",
+        needs=["Greeting"],
+        inputs=["name: String"],
+        outcomes=["outcome greeted: type Greeting, route success"],
+        tail="step do_greet\n  name |> greet |> route greeted",
+    ),
     "examples_assistant_resources_AWL-AUTHORING__01": Spec(place="whole"),
     "examples_assistant_resources_AWL-REFERENCE__01": Spec(
         place="whole",
@@ -54,6 +68,9 @@ SPECS: dict[str, Spec] = {
             "than copying unused declarations'"
         ),
     ),
+    # §16's worker document: a complete file of the other family. No scaffold,
+    # because there is no flow to scaffold — which is the section's point.
+    "examples_assistant_resources_AWL-REFERENCE__29": Spec(place="whole"),
     "examples_assistant_resources_AWL-REFERENCE__26": Spec(place="whole"),
     "examples_assistant_resources_AWL-REFERENCE__27": Spec(place="whole"),
     "examples_assistant_resources_AWL-AUTHORING__08": Spec(place="whole"),
@@ -93,6 +110,9 @@ SPECS: dict[str, Spec] = {
         place="decls", needs=["CommandResult"], tail=END
     ),
     "examples_assistant_resources_WORKERS__03": Spec(place="decls", tail=END),
+    # A complete WORKER document — the other family — which needs no scaffold:
+    # it declares no flow for one to supply.
+    "examples_assistant_resources_WORKERS__04": Spec(place="whole"),
     # ------------------------------------------------------------ statements
     "examples_assistant_resources_AWL-REFERENCE__07": Spec(
         place="stmts",
