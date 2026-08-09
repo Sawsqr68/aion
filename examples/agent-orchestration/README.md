@@ -58,7 +58,7 @@ The workflow source lives in `examples/agent-orchestration/src/orchestrator.glea
 aion package examples/agent-orchestration
 ```
 
-This reads the example's [`workflow.toml`](workflow.toml) and the BEAM files produced by `gleam build` (pass `--build` to compile and package in one step; see [`docs/packaging.md`](../../docs/packaging.md) for the full reference), and builds a manifest with:
+This reads the example's [`workflow.toml`](workflow.toml) and the BEAM files produced by `gleam build` (pass `--build` to compile and package in one step; see [`docs/authoring/packaging.md`](../../docs/authoring/packaging.md) for the full reference), and builds a manifest with:
 
 - entry module: `orchestrator`
 - entry function: `run`

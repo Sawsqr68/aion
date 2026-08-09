@@ -72,7 +72,8 @@ optional fields `T?`. Optional means absent; JSON `null` is invalid. `[T?]`
 cannot be written as a declared type
 (`header-types/invalid/list_element_optional.awl`), while `[T]?` means the
 whole field can be absent. The `[T?]` shape itself does exist in one place:
-a tolerant `collect binding? -> results` binds exactly it (§8).
+a tolerant `collect binding? -> results` binds exactly it (§8). A `Bool` is
+written `true` or `false`; both are reserved words.
 
 Record and enum declarations:
 

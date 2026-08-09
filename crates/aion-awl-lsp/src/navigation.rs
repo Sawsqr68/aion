@@ -122,7 +122,18 @@ pub(crate) fn definition(
     ))
 }
 
+/// Hover: what the document declares here, or failing that, what the word
+/// itself means.
+///
+/// The declaration answer wins when there is one — an author hovering their
+/// own `Report` type wants that type, not a lecture. The glossary answers
+/// everything else, including in a document that does not parse, which is
+/// where an author is most likely to be asking what a word does.
 pub(crate) fn hover(source: &str, position: Position, root: Option<&Path>) -> Option<Hover> {
+    declared_hover(source, position, root).or_else(|| crate::glossary::hover_at(source, position))
+}
+
+fn declared_hover(source: &str, position: Position, root: Option<&Path>) -> Option<Hover> {
     let document = aion_awl::parse(source).ok()?;
     let analysis = analyze(&document, root);
     let byte = byte_offset_at(source, position);

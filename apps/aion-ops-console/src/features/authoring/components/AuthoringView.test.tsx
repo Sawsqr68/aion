@@ -15,12 +15,28 @@ function wrap(node: ReactNode, url: string): string {
   );
 }
 
-test('the studio offers both sources and starts on the workspace', () => {
+test('the studio offers every source and starts on the workspace', () => {
   const html = wrap(<AuthoringView />, '/authoring');
   expect(html).toContain('Authoring source');
   expect(html).toContain('Workspace');
   expect(html).toContain('Deployed');
+  expect(html).toContain('Language');
   expect(html).toContain('AWL documents and deployment checks');
+});
+
+/**
+ * The help is one click from the editor and one shareable link from anywhere
+ * — the point of the whole weave. An author asking what `distribute` does
+ * should never have to leave the console to find out.
+ */
+test('`?source=language` opens the glossary with the words in it', () => {
+  const html = wrap(<AuthoringView />, '/authoring?source=language');
+  expect(html).toContain('Every word of AWL, and where each one is explained in full');
+  expect(html).toContain('Search the language');
+  expect(html).toContain(
+    'Opens a multi-step region that runs one item track per element in parallel.'
+  );
+  expect(html).not.toContain('AWL documents and deployment checks');
 });
 
 /**

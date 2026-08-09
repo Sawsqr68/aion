@@ -54,7 +54,7 @@ The summary shows `"status": "Completed"` and the history carries the result
 
 - Add an activity served by a worker, a durable timer, a signal, or a query:
   start from
-  [the workflow authoring guide](https://github.com/ablative-io/aion/blob/main/docs/guides/workflows.md).
+  [the workflow authoring guide](https://github.com/ablative-io/aion/blob/main/docs/authoring/workflows.md).
 - `aion new <name> --template approval-flow` demonstrates signals, timeout
   races, and queries; `--template saga` adds worker-served activities,
   retries, and compensation.

@@ -48,7 +48,7 @@ The source consumes only the public `aion_flow` modules: `aion/workflow`, `aion/
 aion package examples/batch-orchestrator
 ```
 
-This reads the example's [`workflow.toml`](workflow.toml) and the BEAM files produced by `gleam build` (pass `--build` to compile and package in one step; see [`docs/packaging.md`](../../docs/packaging.md) for the full reference) and writes **two** archives:
+This reads the example's [`workflow.toml`](workflow.toml) and the BEAM files produced by `gleam build` (pass `--build` to compile and package in one step; see [`docs/authoring/packaging.md`](../../docs/authoring/packaging.md) for the full reference) and writes **two** archives:
 
 - `examples/batch-orchestrator/batch-orchestrator.aion` — parent type `batch_orchestrator`
 - `examples/batch-orchestrator/batch-orchestrator-item.aion` — child type `batch_orchestrator_item`

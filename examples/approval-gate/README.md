@@ -60,7 +60,7 @@ Rejected and timed-out runs complete successfully too; they return `"decision": 
 aion package examples/approval-gate
 ```
 
-This reads the example's [`workflow.toml`](workflow.toml) and the BEAM files produced by `gleam build` (pass `--build` to compile and package in one step; see [`docs/packaging.md`](../../docs/packaging.md) for the full reference) and writes `examples/approval-gate/approval-gate.aion` with a manifest that uses:
+This reads the example's [`workflow.toml`](workflow.toml) and the BEAM files produced by `gleam build` (pass `--build` to compile and package in one step; see [`docs/authoring/packaging.md`](../../docs/authoring/packaging.md) for the full reference) and writes `examples/approval-gate/approval-gate.aion` with a manifest that uses:
 
 - entry module: `approval_gate`
 - entry function: `run`

@@ -400,7 +400,7 @@ fn land(
 
 /// Re-register the status handler with the current phase and round, so
 /// `{{name}}_status` queries answer live state at every yield point
-/// (re-registration per stage, per docs/guides/workflows.md).
+/// (re-registration per stage, per docs/authoring/workflows.md).
 fn set_status(phase: String, round: Int) -> Result(Nil, PipelineError) {
   let status = PipelineStatus(phase: phase, round: round)
   case

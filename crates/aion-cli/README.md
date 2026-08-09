@@ -131,4 +131,4 @@ where `<class>` is aligned with the wire error codes: `not_found`,
 surface — `deploy_denied` and `version_pinned`. Local failures without a
 taxonomy class render their full cause chain on one `error:` line. The full
 taxonomy is documented in the repository's
-[errors reference](https://github.com/ablative-io/aion/blob/main/docs/errors.md).
+[errors reference](https://github.com/ablative-io/aion/blob/main/docs/operations/errors.md).

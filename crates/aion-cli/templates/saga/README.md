@@ -43,7 +43,7 @@ cargo run --manifest-path worker/Cargo.toml
 ```
 
 Otherwise write one against a worker SDK — see the
-[activities and workers guide](https://github.com/ablative-io/aion/blob/main/docs/guides/activities-and-workers.md).
+[activities and workers guide](https://github.com/ablative-io/aion/blob/main/docs/workers/activities-and-workers.md).
 The workflow dispatches `charge_payment` and `refund_payment` on the
 `default` task queue.
 
@@ -81,5 +81,5 @@ payment and the order completes as `cancelled` with a `refund_id`.
 
 - Make `charge_payment` fail transiently (`ActivityFailure::retryable`) in
   the worker to watch the workflow-driven retry loop and durable backoff.
-- [Workflow authoring guide](https://github.com/ablative-io/aion/blob/main/docs/guides/workflows.md)
+- [Workflow authoring guide](https://github.com/ablative-io/aion/blob/main/docs/authoring/workflows.md)
   — child workflows, timers, determinism rules.

@@ -94,7 +94,7 @@ aion package examples/data-pipeline
 
 This reads the example's [`workflow.toml`](workflow.toml) and writes
 `examples/data-pipeline/data-pipeline.aion` (pass `--build` to compile and
-package in one step; see [`docs/packaging.md`](../../docs/packaging.md) for the
+package in one step; see [`docs/authoring/packaging.md`](../../docs/authoring/packaging.md) for the
 full reference). Load it with `--workflow-package` or a `workflow_packages`
 entry in `dev-config.toml`.
 
