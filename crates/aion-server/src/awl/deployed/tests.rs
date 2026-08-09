@@ -8,7 +8,10 @@
 
 use std::collections::BTreeMap;
 
-use aion_package::{AwlSource, WorkflowEntry};
+use aion_package::{
+    AdditionalWorkflowContract, AwlSource, BeamModule, BeamSet, ManifestVersion, PackageContract,
+    SignalContract, WorkflowEntry, content_hash,
+};
 use aion_store::PackageRecord;
 use chrono::{TimeZone, Utc};
 use serde_json::json;
@@ -16,10 +19,14 @@ use serde_json::json;
 use super::document::read_document;
 use super::fixtures::{
     DOCUMENT, SCHEMA_BYTES, SCHEMA_DOCUMENT, SCHEMA_PATH, catalog_entry, manifest, record,
+    record_with_contract,
 };
 use super::list::project_versions;
 use super::projection;
 use super::types::{DeployedError, DeployedSourceState};
+// Through the module's public re-export deliberately: this is the path a
+// consumer of the surface names the type by.
+use super::DeployedSignal;
 
 /// 🔴 THE READ-ONLY PIN, both halves. The archived document is served
 /// BYTE-IDENTICAL to what `Package::awl()` carries — and the archive bytes the
@@ -122,6 +129,149 @@ fn a_workflow_type_the_archive_does_not_declare_is_not_found()
         "expected not-found, got {unknown:?}"
     );
     Ok(())
+}
+
+/// 🔴 THE FORM-SURFACE PIN. The served `input_schema` and `signals` are the
+/// archive's identity-committed contract — read through the same
+/// `Package::contract` seam the `/assistant` descriptor uses — and each entry
+/// of a multi-entry archive resolves to ITS OWN commitments: its own start
+/// schema, never the primary's, and NO inherited signal set — the contract
+/// commits signals to the primary entry only, so an additional entry answers
+/// `signals: None` (absent), not the primary's list and not a false "empty".
+/// A console form built from this response is a form for exactly the version
+/// and entry the operator asked about.
+#[test]
+fn the_deployed_document_serves_the_committed_start_schema_and_signals()
+-> Result<(), Box<dyn std::error::Error>> {
+    let parent_schema = json!({
+        "type": "object",
+        "properties": { "objective": { "type": "string" } },
+        "required": ["objective"],
+    });
+    let child_schema = json!({
+        "type": "object",
+        "properties": { "count": { "type": "integer" } },
+    });
+    let signal_schema = json!({
+        "type": "object",
+        "properties": { "approved": { "type": "boolean" } },
+    });
+    let contract = PackageContract {
+        input_schema: parent_schema.clone(),
+        output_schema: json!({ "type": "object" }),
+        workers: Vec::new(),
+        children: Vec::new(),
+        signals: vec![SignalContract {
+            name: "approve".to_owned(),
+            input_schema: signal_schema.clone(),
+        }],
+        additional_workflows: vec![AdditionalWorkflowContract {
+            workflow_type: "child_flow".to_owned(),
+            input_schema: child_schema.clone(),
+            output_schema: json!({ "type": "object" }),
+        }],
+        unscoped_activities: Vec::new(),
+    };
+    let mut declared = manifest("parent_flow");
+    declared.additional_workflows = vec![WorkflowEntry {
+        workflow_type: "child_flow".to_owned(),
+        entry_module: "parent_flow".to_owned(),
+        entry_function: "run".to_owned(),
+        input_schema: child_schema.clone(),
+        output_schema: json!({ "type": "object" }),
+        timeout: None,
+        internal: false,
+    }];
+    let awl = AwlSource::new("parent_flow.awl", DOCUMENT, Vec::<(String, Vec<u8>)>::new());
+    let archives = vec![record_with_contract(
+        declared,
+        contract,
+        Some(awl),
+        1_700_000_000,
+    )?];
+
+    let parent = read_document(&archives, "parent_flow", &archives[0].content_hash)?;
+    assert_eq!(parent.input_schema, Some(parent_schema));
+    assert_eq!(
+        parent.signals,
+        Some(vec![DeployedSignal {
+            name: "approve".to_owned(),
+            input_schema: signal_schema,
+        }])
+    );
+
+    let child = read_document(&archives, "child_flow", &archives[0].content_hash)?;
+    assert_eq!(
+        child.input_schema,
+        Some(child_schema),
+        "an additional entry must serve ITS schema, not the primary's"
+    );
+    assert_eq!(
+        child.signals, None,
+        "the contract commits no signal set to an additional entry, so it \
+         must not inherit the primary's"
+    );
+    Ok(())
+}
+
+/// The `None` case, stated by the field's own doc: a package whose stored
+/// identity predates contract commitment carries NO committed contract, so
+/// `input_schema` is `None` and `signals` is empty — while the document read
+/// itself is still served whole. A schema invented from the un-committed
+/// manifest here would be a claim the version hash never made.
+#[test]
+fn a_pre_contract_package_serves_no_schema_but_still_serves_its_document()
+-> Result<(), Box<dyn std::error::Error>> {
+    let archives = vec![legacy_record(1_700_000_000)?];
+
+    let document = read_document(&archives, "legacy_probe", &archives[0].content_hash)?;
+
+    assert_eq!(
+        document.input_schema, None,
+        "a pre-contract identity commits to no start schema"
+    );
+    assert_eq!(
+        document.signals, None,
+        "a pre-contract identity commits to no signal set — absent, not empty"
+    );
+    assert_eq!(
+        document.source, DOCUMENT,
+        "the schema absence must not degrade the document read itself"
+    );
+    Ok(())
+}
+
+/// A persisted archive whose stored identity is the beams-only LEGACY hash
+/// and which carries no `contract.json` — the pre-contract deploy shape.
+/// Written by hand with the `zip` crate because the current builder
+/// (correctly) refuses to mint a contract-less identity.
+fn legacy_record(deployed_at_seconds: i64) -> Result<PackageRecord, Box<dyn std::error::Error>> {
+    use std::io::Write as _;
+
+    let beam_bytes = vec![1_u8, 2, 3];
+    let beams = BeamSet::new(vec![BeamModule::new("legacy_probe", beam_bytes.clone())])?;
+    let mut legacy_manifest = manifest("legacy_probe");
+    legacy_manifest.version = ManifestVersion::new(content_hash(&beams).to_string());
+
+    let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let options = zip::write::SimpleFileOptions::default();
+    archive.start_file("manifest.json", options)?;
+    archive.write_all(&serde_json::to_vec(&legacy_manifest)?)?;
+    archive.start_file("beam/legacy_probe.beam", options)?;
+    archive.write_all(&beam_bytes)?;
+    archive.start_file("awl/document/legacy_probe.awl", options)?;
+    archive.write_all(DOCUMENT.as_bytes())?;
+    let bytes = archive.finish()?.into_inner();
+
+    Ok(PackageRecord {
+        workflow_type: "legacy_probe".to_owned(),
+        content_hash: legacy_manifest.version.as_str().to_owned(),
+        archive: bytes,
+        deployed_at: Utc
+            .timestamp_opt(deployed_at_seconds, 0)
+            .single()
+            .ok_or("fixture instant is not representable")?,
+    })
 }
 
 /// A multi-entry archive persists ONE row under its primary type while the

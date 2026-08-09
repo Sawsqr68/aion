@@ -657,12 +657,20 @@ the workers back without anyone typing anything.
 | Operation | CLI | Wire |
 |---|---|---|
 | Report the fleet | `aion worker status` | `GET /workers/managed`, `DeployService.ListManagedWorkers` |
-| Start (and record the intent) | `aion worker start <name>` | `DeployService.StartManagedWorker` |
-| Stop (terminal) | `aion worker stop <name>` | `DeployService.StopManagedWorker` |
-| Restart (intent stays running) | `aion worker restart <name>` | `DeployService.RestartManagedWorker` |
+| Start (and record the intent) | `aion worker start <name>` | `POST /workers/managed/{name}/start`, `DeployService.StartManagedWorker` |
+| Stop (terminal) | `aion worker stop <name>` | `POST /workers/managed/{name}/stop`, `DeployService.StopManagedWorker` |
+| Restart (intent stays running) | `aion worker restart <name>` | `POST /workers/managed/{name}/restart`, `DeployService.RestartManagedWorker` |
 
 All of them carry the deployment-wide **deploy grant**, the same authority as
-the deployment records themselves.
+the deployment records themselves. The three lifecycle mutations are mounted
+only when `[deploy] enabled = true` — the same switch that mounts the gRPC
+`DeployService` and the `/worker-deployments/*` routes — so on a server that
+is not a deploy target they are a plain 404 on every transport, while the
+status read (`GET /workers/managed`) always answers. Each HTTP mutation
+responds `{"worker": …}` with the same worker shape the status read lists, and
+every durable desired-state change these verbs make is published on the
+cluster event stream (`WorkerDeploymentDesiredStateChanged`), whichever
+transport asked.
 
 Every status line reports **desired and actual together**, because either alone
 is the misleading half — `desired: running, state: stopped` is a real and

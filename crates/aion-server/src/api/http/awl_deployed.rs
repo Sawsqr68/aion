@@ -173,9 +173,20 @@ mod tests {
     }
 
     /// An archive carrying a document and the schema it imports.
+    ///
+    /// The manifest's input schema is deliberately DISTINCT from its output
+    /// schema (which stays the fixture default `{"type":"object"}`): the wire
+    /// pin below asserts on the input-only `required` marker, so a surface
+    /// that served the wrong contract half could not pass by coincidence.
     fn archived_document() -> Result<PackageRecord, Box<dyn std::error::Error>> {
+        let mut declared = manifest("deployed_probe");
+        declared.input_schema = serde_json::json!({
+            "type": "object",
+            "properties": { "order_id": { "type": "string" } },
+            "required": ["order_id"],
+        });
         record(
-            manifest("deployed_probe"),
+            declared,
             Some(AwlSource::new(
                 "deployed_probe.awl",
                 DOCUMENT,
@@ -257,6 +268,21 @@ mod tests {
              same-named one in the operator's workspace"
         );
         assert_eq!(document["projection"]["ok"], true);
+        // The console's form seam: the committed START schema reaches the
+        // wire, told apart from the output schema by its input-only
+        // `required: ["order_id"]` marker (the fixture keeps the output at the
+        // bare object schema, so a surface serving the wrong half fails here).
+        assert_eq!(document["input_schema"]["required"][0], "order_id");
+        // The primary entry of a contract-bearing archive answers a PRESENT
+        // signal list; this fixture's manifest-derived contract commits an
+        // empty one, which is `[]` — never `null`, which means "not committed
+        // to this entry".
+        assert_eq!(
+            document["signals"].as_array().map(Vec::len),
+            Some(0),
+            "this fixture's contract commits an empty signal list: {:?}",
+            document["signals"]
+        );
 
         assert_eq!(
             snapshot(workspace.path())?,

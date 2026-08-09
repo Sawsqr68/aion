@@ -18,7 +18,10 @@
 //!   progress note + transcript tail, in one read.
 //! - `assistant` — `GET /assistant`, the built-in assistant this binary carries.
 //! - `queues` — the fleet-wide unserved-queue read.
-//! - `managed_workers` — `GET /workers/managed`, the supervision status join.
+//! - `managed_workers` — `GET /workers/managed`, the supervision status join,
+//!   and the `POST /workers/managed/{name}/{start,stop,restart}` lifecycle
+//!   commands (mounted only when `[deploy].enabled`, like the gRPC
+//!   `DeployService` counterparts they mirror).
 //! - `unrecoverable` — the fleet-wide degraded-residency read.
 //! - `clean_dtos` — clean JSON request/response DTOs for the workflow POST endpoints.
 //! - `error` — wire-error-to-HTTP response mapping.

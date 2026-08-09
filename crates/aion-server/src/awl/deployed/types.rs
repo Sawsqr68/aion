@@ -64,6 +64,19 @@ pub enum DeployedSourceState {
 
 /// The archived AWL document of one deployed version, with its schema imports
 /// and the projection the studio renders.
+///
+/// # No `queries` field, deliberately
+///
+/// The `/assistant` descriptor serves query names because it derives them from
+/// the document it embeds and executes. This surface cannot make the same
+/// claim: the archived AWL source is PROVENANCE, not identity —
+/// [`aion_package::PackageBuilder::with_awl_source`] cannot change the package
+/// version hash — so a query list derived from that source would not be
+/// attributable to `content_hash`, while the contract-committed `input_schema`
+/// and `signals` are. The field's absence therefore means "not reported,
+/// because not attributable to this version", never "the document declares no
+/// queries"; a consumer that needs the declared queries reads them from
+/// `source` on its own authority.
 #[derive(Debug, Serialize)]
 pub struct DeployedDocument {
     /// Logical workflow type the requested version is registered under.
@@ -77,6 +90,32 @@ pub struct DeployedDocument {
     /// The schema files the document imports, keyed by the document-relative
     /// path the source itself names.
     pub schemas: Vec<DeployedSchema>,
+    /// The start input schema of `workflow_type`, draft 2020-12, read from the
+    /// archive's identity-committed contract ([`aion_package::Package::contract`]
+    /// — the same seam the `/assistant` descriptor derives its form surface
+    /// from), so a console can build a start form for this exact version.
+    ///
+    /// `None` exactly when the archived contract genuinely carries none: the
+    /// package's stored identity predates contract commitment (a legacy
+    /// pre-contract deploy, which [`aion_package::Package::contract`] refuses
+    /// with `RedeployRequired`), or — defence in depth the deploy path never
+    /// produces — the committed contract does not schema the requested entry.
+    pub input_schema: Option<serde_json::Value>,
+    /// The signals the archived contract commits to `workflow_type`, each with
+    /// its payload schema.
+    ///
+    /// Attributed with the same standard as `input_schema` — only what the
+    /// version hash commits to THIS entry:
+    /// - `Some(signals)` (possibly empty — the contract genuinely commits
+    ///   none) when `workflow_type` is the archive's primary entry, whose
+    ///   contract the signal declarations belong to.
+    /// - `None` when the contract commits no signal set for this entry: an
+    ///   additional workflow entry
+    ///   ([`aion_package::AdditionalWorkflowContract`] carries no signals), or
+    ///   a pre-contract package (the case `input_schema` also reports as
+    ///   `None`). Absent is not empty: a console must not offer the primary's
+    ///   signals to an entry whose contract never accepted them.
+    pub signals: Option<Vec<DeployedSignal>>,
     /// The check/semantic projection of `source`, resolved against `schemas`.
     ///
     /// Computed here rather than by a second call to `/awl/check`, because
@@ -85,6 +124,15 @@ pub struct DeployedDocument {
     /// from deployed source and workspace schemas, which is a claim about an
     /// artifact that does not exist.
     pub projection: super::super::CheckResponse,
+}
+
+/// One declared signal of a deployed version, from its archived contract.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DeployedSignal {
+    /// Signal name.
+    pub name: String,
+    /// Payload schema, draft 2020-12, as committed into the version identity.
+    pub input_schema: serde_json::Value,
 }
 
 /// One archived schema file.

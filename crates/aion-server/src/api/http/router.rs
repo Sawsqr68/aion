@@ -24,7 +24,9 @@ use super::dev_ui::{dev_register_mock, dev_replay_run, dev_trigger_run};
 use super::events::subscribe_events_socket;
 use super::history::{fetch_event, fetch_history};
 use super::intervene::{intervene, list_attempts};
-use super::managed_workers::list_managed_workers;
+use super::managed_workers::{
+    list_managed_workers, restart_managed_worker, start_managed_worker, stop_managed_worker,
+};
 use super::outbox::list_dead_letters;
 use super::queues::list_unserved_queues;
 use super::schedules::{
@@ -160,9 +162,10 @@ async fn dev_disabled() -> StatusCode {
     StatusCode::NOT_FOUND
 }
 
-/// Disabled deployment surfaces: a plain 404 with no body for both the
-/// deployed-AWL reader and worker-deployment management families. Both follow
-/// the deploy surface's switch and stay dark when the operator closes it.
+/// Disabled deployment surfaces: a plain 404 with no body for the deployed-AWL
+/// reader, worker-deployment management, and managed-worker lifecycle
+/// families. All follow the deploy surface's switch and stay dark when the
+/// operator closes it.
 async fn deploy_surface_disabled() -> StatusCode {
     StatusCode::NOT_FOUND
 }
@@ -207,6 +210,33 @@ fn worker_deployment_router(deploy_enabled: bool) -> Router<ServerState> {
         Router::new()
             .route("/worker-deployments", any(deploy_surface_disabled))
             .route("/worker-deployments/{*rest}", any(deploy_surface_disabled))
+    }
+}
+
+/// The managed-worker route family: the always-mounted status join, and the
+/// three lifecycle commands mounted only when `[deploy].enabled` is set.
+///
+/// The mount condition matches the surfaces these commands belong to: their
+/// gRPC counterparts live on `DeployService`, which joins the listener only
+/// under `[deploy].enabled` (`crate::run`), and the sibling
+/// `/worker-deployments/*` family follows the same switch. With deploy off,
+/// every path under `/workers/managed/` is a plain 404 — a server that is not
+/// a deploy target exposes no lifecycle mutation on any transport. Within a
+/// mounted route, authorization is the handlers' deploy-grant check (decided
+/// per caller; with auth disabled the single-tenant operator holds the grant
+/// server-side). The read stays mounted regardless, exactly as it always has
+/// been: reporting the fleet is not a deploy-surface mutation.
+fn managed_worker_router(deploy_enabled: bool) -> Router<ServerState> {
+    let read = Router::new().route("/workers/managed", get(list_managed_workers));
+    if deploy_enabled {
+        read.route("/workers/managed/{name}/start", post(start_managed_worker))
+            .route("/workers/managed/{name}/stop", post(stop_managed_worker))
+            .route(
+                "/workers/managed/{name}/restart",
+                post(restart_managed_worker),
+            )
+    } else {
+        read.route("/workers/managed/{*rest}", any(deploy_surface_disabled))
     }
 }
 
@@ -342,7 +372,7 @@ pub fn workflow_router(state: ServerState) -> Router {
         .route("/cluster/command", post(cluster_command))
         .route("/outbox/dead-letters", post(list_dead_letters))
         .route("/queues/unserved", get(list_unserved_queues))
-        .route("/workers/managed", get(list_managed_workers))
+        .merge(managed_worker_router(state.runtime_config().deploy.enabled))
         .route("/workers/{worker_id}/drain", post(drain_worker))
         .route("/workers/{worker_id}/stop", post(stop_worker))
         .route("/schedules", post(create_schedule).get(list_schedules))
