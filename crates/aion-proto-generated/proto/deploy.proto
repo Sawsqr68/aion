@@ -13,6 +13,10 @@ service DeployService {
   rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse);
   rpc RouteVersion(RouteVersionRequest) returns (RouteVersionResponse);
   rpc UnloadVersion(UnloadVersionRequest) returns (UnloadVersionResponse);
+  rpc ListManagedWorkers(ListManagedWorkersRequest) returns (ListManagedWorkersResponse);
+  rpc StartManagedWorker(ManagedWorkerRequest) returns (ManagedWorkerResponse);
+  rpc StopManagedWorker(ManagedWorkerRequest) returns (ManagedWorkerResponse);
+  rpc RestartManagedWorker(ManagedWorkerRequest) returns (ManagedWorkerResponse);
 }
 
 // A complete `.aion` archive, uploaded in one unary message. The server
@@ -80,3 +84,60 @@ message UnloadVersionRequest {
 }
 
 message UnloadVersionResponse {}
+
+// --- Managed worker lifecycle (W-1..W-4) -----------------------------------
+//
+// The server supervises worker PROCESSES from durable `WorkerDeployment`
+// records. These operations sit on the deploy service because that is where
+// the records themselves live and because they carry the same deployment-wide
+// deploy authority; the read is also served over HTTP at GET /workers/managed
+// from the SAME projection, so the two surfaces cannot disagree.
+
+message ListManagedWorkersRequest {}
+
+// One managed worker: durable intent joined with live supervision state.
+message ManagedWorker {
+  string name = 1;
+  string task_queue = 2;
+  // Durable operator intent: "running" or "stopped".
+  string desired = 3;
+  // Live supervision state: starting, running, backoff, stopped, failed, or
+  // uncommissioned.
+  string state = 4;
+  // Present only while a process is running.
+  optional uint32 pid = 5;
+  optional int32 process_group = 6;
+  uint32 restarts = 7;
+  // RFC 3339 instant of the last observed ending, when there has been one.
+  optional string last_exit_at = 8;
+  optional int32 last_exit_code = 9;
+  optional int32 last_exit_signal = 10;
+  // Whether the supervisor itself asked for that ending.
+  bool last_exit_requested = 11;
+  optional string last_error = 12;
+  // Content hash of the binary named at deploy time.
+  string deployed_content_hash = 13;
+  // Content hash measured at the most recent spawn. Differing from
+  // `deployed_content_hash` is an upgrade, stated rather than silent.
+  optional string spawn_content_hash = 14;
+  optional string spawn_path = 15;
+}
+
+message ListManagedWorkersResponse {
+  // False when this server has no `[worker_supervision]` policy.
+  bool commissioned = 1;
+  // The operator remedy, present exactly when `commissioned` is false.
+  optional string remedy = 2;
+  repeated ManagedWorker workers = 3;
+  // Names of durable rows present but undecodable, supervised by nothing.
+  repeated string undecodable = 4;
+}
+
+// Every lifecycle mutation addresses one deployment by its primary key.
+message ManagedWorkerRequest {
+  string name = 1;
+}
+
+message ManagedWorkerResponse {
+  ManagedWorker worker = 1;
+}

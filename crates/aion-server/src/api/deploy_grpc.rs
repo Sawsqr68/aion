@@ -12,7 +12,9 @@ use tonic::{Code, Request, Response, Status};
 
 use super::grpc::{caller_from_metadata, status_from_wire_error, status_with_code};
 use crate::api::handlers::deploy::{self, DeployApiError};
+use crate::api::handlers::managed_workers;
 use crate::config::DEPLOY_MAX_ARCHIVE_BYTES_REQUIRED;
+use crate::worker::supervisor::SupervisionError;
 use crate::{CallerIdentity, ServerState};
 
 const TRANSPORT: &str = "grpc";
@@ -157,6 +159,98 @@ impl generated::deploy_service_server::DeployService for DeployGrpcService {
         .map_err(status_from_deploy_error)?;
         Ok(Response::new(generated::UnloadVersionResponse {}))
     }
+
+    async fn list_managed_workers(
+        &self,
+        request: Request<generated::ListManagedWorkersRequest>,
+    ) -> Result<Response<generated::ListManagedWorkersResponse>, Status> {
+        let caller = self.caller(&request).await?;
+        require_deploy_grant(&caller)?;
+        let report = self
+            .state
+            .worker_supervisor()
+            .report()
+            .await
+            .map_err(|error| status_from_supervision_error(&error))?;
+        Ok(Response::new(managed_workers::managed_worker_report(
+            report,
+        )))
+    }
+
+    async fn start_managed_worker(
+        &self,
+        request: Request<generated::ManagedWorkerRequest>,
+    ) -> Result<Response<generated::ManagedWorkerResponse>, Status> {
+        let caller = self.caller(&request).await?;
+        require_deploy_grant(&caller)?;
+        let name = request.into_inner().name;
+        let status = self
+            .state
+            .worker_supervisor()
+            .start(&name)
+            .await
+            .map_err(|error| status_from_supervision_error(&error))?;
+        Ok(Response::new(generated::ManagedWorkerResponse {
+            worker: Some(managed_workers::managed_worker(status)),
+        }))
+    }
+
+    async fn stop_managed_worker(
+        &self,
+        request: Request<generated::ManagedWorkerRequest>,
+    ) -> Result<Response<generated::ManagedWorkerResponse>, Status> {
+        let caller = self.caller(&request).await?;
+        require_deploy_grant(&caller)?;
+        let name = request.into_inner().name;
+        let status = self
+            .state
+            .worker_supervisor()
+            .stop(&name)
+            .await
+            .map_err(|error| status_from_supervision_error(&error))?;
+        Ok(Response::new(generated::ManagedWorkerResponse {
+            worker: Some(managed_workers::managed_worker(status)),
+        }))
+    }
+
+    async fn restart_managed_worker(
+        &self,
+        request: Request<generated::ManagedWorkerRequest>,
+    ) -> Result<Response<generated::ManagedWorkerResponse>, Status> {
+        let caller = self.caller(&request).await?;
+        require_deploy_grant(&caller)?;
+        let name = request.into_inner().name;
+        let status = self
+            .state
+            .worker_supervisor()
+            .restart(&name)
+            .await
+            .map_err(|error| status_from_supervision_error(&error))?;
+        Ok(Response::new(generated::ManagedWorkerResponse {
+            worker: Some(managed_workers::managed_worker(status)),
+        }))
+    }
+}
+
+/// Managed-worker lifecycle carries the SAME deployment-wide deploy authority
+/// as the deployment records it acts on (ADR-022 keeps this distinct from
+/// workflow-command authority).
+fn require_deploy_grant(caller: &CallerIdentity) -> Result<(), Status> {
+    if caller.deploy_granted() {
+        Ok(())
+    } else {
+        Err(status_from_wire_error(
+            aion_proto::WireError::deploy_denied(
+                "managed-worker administration requires the deployment-wide deploy grant",
+            ),
+        ))
+    }
+}
+
+/// Supervision failure mapping, over the SAME wire-error projection the HTTP
+/// surface uses, so a refusal reads identically on both.
+fn status_from_supervision_error(error: &SupervisionError) -> Status {
+    status_from_wire_error(managed_workers::wire_error(error))
 }
 
 /// Deploy failure mapping: drain/shutdown → `Unavailable`, oversized archive

@@ -38,6 +38,7 @@ mod render;
 mod server;
 mod settings;
 mod worker_agent;
+mod worker_managed;
 mod worker_shell;
 mod worker_surface;
 
@@ -177,6 +178,37 @@ enum WorkerCommand {
     /// beforehand turns a remote contract-mismatch refusal into something
     /// checkable at the desk.
     Agent(Box<worker_agent::AgentArgs>),
+    /// Report the managed worker fleet the SERVER supervises.
+    ///
+    /// Every worker is printed with BOTH its durable desired state and its live
+    /// actual state, because either alone is the misleading half: "desired
+    /// running, state stopped" is the condition an operator most needs to see.
+    /// A server with no `[worker_supervision]` section reports
+    /// `commissioned: false` and the remedy rather than an empty, calm-looking
+    /// list.
+    Status,
+    /// Start a managed worker: record the intent durably, then supervise it.
+    ///
+    /// Idempotent — a worker already supervised is reported as it is, without a
+    /// second process.
+    Start {
+        /// Worker deployment name (the primary key used at `/worker-deployments`).
+        name: String,
+    },
+    /// Stop a managed worker. Terminal: it is not restarted until started.
+    ///
+    /// The server reports success only once it has PROVEN the worker's process
+    /// group empty, so a successful stop is an OS-level fact rather than a
+    /// bookkeeping change.
+    Stop {
+        /// Worker deployment name.
+        name: String,
+    },
+    /// Restart a managed worker, leaving its desired state at running.
+    Restart {
+        /// Worker deployment name.
+        name: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -515,6 +547,24 @@ async fn main() -> ExitCode {
                 // The agent worker registers into the namespace the global flag
                 // names, and dials liminal candidates rather than `--endpoint`.
                 WorkerCommand::Agent(args) => worker_agent::run(args, &cli.namespace).await,
+                // The managed-fleet verbs are operator commands against a
+                // RUNNING server, not worker processes this invocation hosts.
+                // They print the server's own report as JSON, through the same
+                // printer every other read uses.
+                WorkerCommand::Status => worker_managed::status(&deploy_target(&cli))
+                    .await
+                    .and_then(|value| print_json(&value, cli.pretty)),
+                WorkerCommand::Start { name } => worker_managed::start(&deploy_target(&cli), name)
+                    .await
+                    .and_then(|value| print_json(&value, cli.pretty)),
+                WorkerCommand::Stop { name } => worker_managed::stop(&deploy_target(&cli), name)
+                    .await
+                    .and_then(|value| print_json(&value, cli.pretty)),
+                WorkerCommand::Restart { name } => {
+                    worker_managed::restart(&deploy_target(&cli), name)
+                        .await
+                        .and_then(|value| print_json(&value, cli.pretty))
+                }
             };
             match result {
                 Ok(()) => ExitCode::SUCCESS,

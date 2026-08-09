@@ -182,6 +182,24 @@ pub async fn drain_after_first_signal(
         result = wait_for_drain_or_timeout(&state, &drain, timeout) => result?,
     };
 
+    // W-4 containment: managed worker PROCESSES stop with the server — AFTER
+    // the drain window, never before it. Draining exists to let in-flight work
+    // finish, and killing the workers doing that work would invert it; by the
+    // time this runs the activities have either completed or been parked for
+    // restart recovery (#207), and the next boot reconciles the fleet back up.
+    //
+    // It runs on the FORCED path too. A second signal asks for an immediate
+    // exit, and this does bound that by the operator's own `stop_grace` — but a
+    // worker outliving the server that owns it is worse than a bounded moment,
+    // and the alternative (relying on the drop guard as the process unwinds)
+    // reaps without ever verifying that it did.
+    //
+    // Deliberately NOT allowed to change the process exit contract (#72/#207):
+    // a failure here is reported in full, loudly, and shutdown proceeds.
+    // Failing the exit on a worker that would not die would turn a routine
+    // deploy red, which is how operators learn to ignore failures.
+    stop_managed_workers(&state).await;
+
     if matches!(outcome, ShutdownOutcome::Forced) {
         return Ok(outcome);
     }
@@ -228,6 +246,27 @@ async fn wait_for_drain_or_timeout(
             }
         }
     }
+}
+
+/// Stop every supervised managed worker, and say exactly what happened.
+///
+/// An empty failure list is the no-orphan claim: each stop returned only after
+/// a signal-zero probe found the worker's process group empty. Anything else is
+/// logged per worker with the observation that contradicted it — never summed
+/// into a single count that could read as calm.
+async fn stop_managed_workers(state: &ServerState) {
+    let failures = state.worker_supervisor().shutdown().await;
+    if failures.is_empty() {
+        info!("managed workers stopped; every process group confirmed empty");
+        return;
+    }
+    for failure in &failures {
+        error!(%failure, "a managed worker could not be confirmed stopped at shutdown");
+    }
+    error!(
+        unstopped = failures.len(),
+        "shutdown could not prove every managed worker stopped; check for orphaned processes"
+    );
 }
 
 fn log_parked_workers(reports: &[LostWorkerReport]) {

@@ -61,6 +61,9 @@ pub mod quota_broadcast;
 pub mod quota_cache;
 /// Connected-worker registry and handles.
 pub mod registry;
+/// Managed-worker supervision (W-1..W-4): desired state in, contained OS
+/// processes out, with a status surface that is a join of the two.
+pub mod supervisor;
 /// Transport-domain classification and re-dispatch budget for activities whose
 /// worker died before reporting a result.
 pub mod transport_loss;
@@ -115,6 +118,10 @@ pub use quota_broadcast::QuotaBroadcaster;
 pub use quota_cache::QuotaCache;
 pub use registry::{
     ConnectedWorkerRegistry, WorkerDelivery, WorkerHandle, WorkerId, WorkerRegistration,
+};
+pub use supervisor::{
+    ManagedExecutable, ManagedWorkerExit, ManagedWorkerReport, ManagedWorkerState,
+    ManagedWorkerStatus, SpawnedBinary, SupervisionError, SupervisionPolicy, WorkerSupervisor,
 };
 pub use transport_loss::{
     TRANSPORT_EXHAUSTED_REASON_PREFIX, TRANSPORT_LOSS_BUDGET_WINDOWS, TransportLossLedger,

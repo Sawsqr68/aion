@@ -15,6 +15,7 @@
 //! - `payload` — HTTP body/payload encode-decode shapes and conversions.
 //! - `build` — `GET /build`, the server's own revision.
 //! - `queues` — the fleet-wide unserved-queue read.
+//! - `managed_workers` — `GET /workers/managed`, the supervision status join.
 //! - `unrecoverable` — the fleet-wide degraded-residency read.
 //! - `clean_dtos` — clean JSON request/response DTOs for the workflow POST endpoints.
 //! - `error` — wire-error-to-HTTP response mapping.
@@ -32,6 +33,7 @@ mod error;
 mod events;
 mod history;
 mod intervene;
+mod managed_workers;
 mod outbox;
 mod payload;
 mod queues;

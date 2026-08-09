@@ -22,6 +22,7 @@ use super::dev_ui::{dev_register_mock, dev_replay_run, dev_trigger_run};
 use super::events::subscribe_events_socket;
 use super::history::{fetch_event, fetch_history};
 use super::intervene::{intervene, list_attempts};
+use super::managed_workers::list_managed_workers;
 use super::outbox::list_dead_letters;
 use super::queues::list_unserved_queues;
 use super::schedules::{
@@ -302,6 +303,7 @@ pub fn workflow_router(state: ServerState) -> Router {
         .route("/cluster/command", post(cluster_command))
         .route("/outbox/dead-letters", post(list_dead_letters))
         .route("/queues/unserved", get(list_unserved_queues))
+        .route("/workers/managed", get(list_managed_workers))
         .route("/workers/{worker_id}/drain", post(drain_worker))
         .route("/workers/{worker_id}/stop", post(stop_worker))
         .route("/schedules", post(create_schedule).get(list_schedules))

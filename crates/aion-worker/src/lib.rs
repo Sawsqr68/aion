@@ -52,7 +52,8 @@ pub mod config;
 pub mod context;
 /// Worker runtime and configuration errors.
 pub mod error;
-/// Cancellable process-group containment for worker-owned commands.
+/// Process-group containment: the one core, and the cancellable command built
+/// on it.
 pub mod process;
 /// Worker-session protocol abstractions and task types.
 pub mod protocol;
@@ -74,7 +75,7 @@ pub use config::{
 pub use context::{ActivityCancellationHandle, ActivityContext, HeartbeatRequest};
 pub use error::{MissingActivityHandler, WorkerError};
 pub use process::{
-    CancellableCommandOutput, PROCESS_GROUP_TERMINATION_GRACE, ProcessGroupError,
+    CancellableCommandOutput, ContainedChild, PROCESS_GROUP_TERMINATION_GRACE, ProcessGroupError,
     run_cancellable_command,
 };
 pub use protocol::{

@@ -35,7 +35,8 @@ use super::{
     OUTBOX_RECONCILE_INTERVAL_REQUIRED, OUTBOX_RECONCILE_STALE_AFTER_REQUIRED, ObservabilityConfig,
     OpsConsoleAssetSource, OpsConsoleConfig, OutboxConfig, QUERY_TIMEOUT_REQUIRED, RuntimeConfig,
     RuntimeSection, ServerSection, StoreBackend, StoreConfig, TlsConfig, WebSocketConfig,
-    WorkerConfig, aion_home, config_error, env, file, resolution::fill_home_defaults,
+    WorkerConfig, WorkerSupervisionConfig, aion_home, config_error, env, file,
+    resolution::fill_home_defaults,
 };
 
 /// Complete merged server configuration.
@@ -80,6 +81,9 @@ pub struct ServerConfig {
     pub outbox: OutboxConfig,
     /// Agent-observability transcript retention bounds.
     pub observability: ObservabilityConfig,
+    /// Managed-worker supervision policy. Absent = supervision uncommissioned:
+    /// the server runs no worker processes and says so with the remedy.
+    pub worker_supervision: WorkerSupervisionConfig,
 }
 
 pub(crate) struct LoadedConfig {
@@ -482,6 +486,10 @@ impl ServerConfig {
             }
         }
         self.validate_outbox()?;
+        // Resolution IS the validation: a partial or nonsensical
+        // `[worker_supervision]` section refuses here, at load, rather than at
+        // the first `aion worker start` hours later.
+        self.worker_supervision.resolve()?;
         Ok(())
     }
 

@@ -49,6 +49,7 @@ the surface they belong to.
 | `store.cluster.node_id`, `store.cluster.bind_address` | a `[store.cluster]` section is present (and each `[[store.cluster.peers]]` entry needs `name` + `address`). |
 | `outbox.reconcile_interval_ms` **and** `outbox.reconcile_stale_after_ms` | either one is set — the pair is both-or-neither; both absent leaves reconciliation dark. |
 | `outbox.liminal_listen_address` | `outbox.enabled = true` with `transport = "liminal"` (surfaced when the dispatcher spawns). |
+| every `[worker_supervision]` key | ANY `[worker_supervision]` key is set — the section is all-or-nothing and has no defaults. Absent entirely = managed-worker supervision uncommissioned; partial = startup fails naming each missing key. |
 
 Tuning knobs (`runtime.query_timeout_ms`, the websocket capacities, the
 deploy ceilings, the outbox knobs, the observability bounds) default when
@@ -264,6 +265,26 @@ max_stream_events = 20000               # default; retained events per
                                         # transcript stream — past the cap one
                                         # marker record is kept and further
                                         # events stay live-only
+
+# Managed-worker supervision. NO DEFAULTS and no partial section: write every
+# key below to commission it, or omit the section entirely and the server
+# supervises no worker processes (and says so, with this remedy, on every
+# status read and on any attempt to start one). A restart discipline has real
+# operational consequences, so it is an operator decision, never a guess.
+[worker_supervision]
+restart_backoff_initial_ms = 500        # delay before the first restart in a
+                                        # window
+restart_backoff_max_ms = 30000          # ceiling the geometric backoff clamps
+                                        # to (must be >= the initial delay)
+restart_backoff_multiplier = 2          # growth per restart already made in
+                                        # the window (1 = flat cadence)
+restart_window_ms = 60000               # sliding window restarts are counted
+                                        # over
+max_restarts_per_window = 5             # restarts allowed in one window before
+                                        # the instance is FAILED and left down
+stop_grace_ms = 5000                    # grace given to EACH of SIGTERM and
+                                        # SIGKILL when stopping a worker's
+                                        # process group
 ```
 
 (`[tls]` keys parse — `certificate_chain_path` and `private_key_path` — but
@@ -374,8 +395,9 @@ supported variables are:
 Structured values — `[store.cluster]`, `store.owned_shards`,
 `[worker.queue_service]`, `worker.heartbeat_window`, `[ops_console]`,
 `[namespace]`, `[tls]`, `namespaces.auto_create`,
-`namespaces.max_in_flight_activities`, `outbox.transport`, and
-`workflow_packages` — are config-file (or flag) only. `AION_HOME` is **not**
+`namespaces.max_in_flight_activities`, `outbox.transport`,
+`[worker_supervision]`, and `workflow_packages` — are config-file (or flag)
+only. `AION_HOME` is **not**
 a config key — it is the home resolver above. Examples:
 
 ```sh
@@ -566,6 +588,73 @@ progress report. Author-declared per-activity timeouts are still unbuilt: the
 Gleam SDK emits a `timeout_ms` field into each dispatch's `config` JSON and no
 engine component reads it (tracked under Track F of
 [`docs/vision/ROADMAP.md`](../vision/ROADMAP.md)).
+
+## Managed workers: the server owns the process
+
+A worker can be a process **the server starts, supervises, and stops** rather
+than one an operator launches by hand. There is no init system in this story:
+supervision is Aion-native (launchd/systemd as the worker supervisor is a
+standing non-goal).
+
+**Desired state is durable.** A `WorkerDeployment` record — created through
+`PUT /worker-deployments/{name}` under the deploy grant — names the artifact
+(today: `builtin`, meaning this server's own binary plus an operator-declared
+argv tail such as `["worker", "shell", "--manifest", "…"]`), the namespaces and
+task queue it serves, and whether it should be `running` or `stopped`. The argv
+tail is the whole launch contract: nothing is appended or inferred, so what runs
+is exactly what the record says.
+
+**Actual state is a supervised process.** With `[worker_supervision]`
+configured, the server converges actual toward desired: it spawns the process as
+the leader of a fresh **process group**, restarts it on exit with the configured
+backoff, and gives up loudly — status `failed`, naming
+`max_restarts_per_window` — when a crash loop spends its budget. At boot the
+whole fleet is reconciled from the durable records, so a server restart brings
+the workers back without anyone typing anything.
+
+**Verbs and reads.**
+
+| Operation | CLI | Wire |
+|---|---|---|
+| Report the fleet | `aion worker status` | `GET /workers/managed`, `DeployService.ListManagedWorkers` |
+| Start (and record the intent) | `aion worker start <name>` | `DeployService.StartManagedWorker` |
+| Stop (terminal) | `aion worker stop <name>` | `DeployService.StopManagedWorker` |
+| Restart (intent stays running) | `aion worker restart <name>` | `DeployService.RestartManagedWorker` |
+
+All of them carry the deployment-wide **deploy grant**, the same authority as
+the deployment records themselves.
+
+Every status line reports **desired and actual together**, because either alone
+is the misleading half — `desired: running, state: stopped` is a real and
+important condition. It also reports the deploy-time binary hash beside the hash
+measured **at the most recent spawn**, so a restart that picked up an upgraded
+binary is a stated fact rather than a silent swap. A server with no
+`[worker_supervision]` section reports `commissioned: false` with the remedy,
+and its deployments read `uncommissioned` — never `stopped`, which would look
+like somebody meant it.
+
+**Kill guarantees, precisely.** A stop signals the whole process group
+(`SIGTERM`, the configured `stop_grace`, then `SIGKILL`) and returns success
+only once the worker's output streams have reached **end-of-file** — which no
+process still holding them open can produce, and which is therefore proof that
+the whole tree is gone. Anything else is reported as a failure naming what was
+observed, so "the record says stopped" can never stand in for "the process is
+gone". A worker's own children (an agent it spawned, a command it ran) die with
+it, because they are in that group. Server shutdown stops every managed worker
+the same way, after the drain wait, and durable desired state is deliberately
+left alone — the next boot brings the fleet back up.
+
+Two details worth stating plainly. Signals are only ever sent while the worker's
+leading process is still un-reaped: a process-group id is that process's pid,
+and a pid is reusable the moment it is reaped, so signalling later would aim at
+whatever inherited the number. That is why the proof is end-of-file rather than
+a process-group probe. And `kill -9` of the **server** runs none of this, so a
+hard-killed server can leave managed workers behind; the ruled stronger
+mechanisms for that (cgroup v2 on Linux, a dead-man launcher on macOS) are not
+built yet.
+
+Worker stdout and stderr are captured and forwarded into the server's log, one
+line at a time, tagged with the worker name and stream.
 
 ## Shutdown and drain
 
