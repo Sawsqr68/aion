@@ -46,8 +46,8 @@ use aion_server::ServerState;
 use aion_server::config::{
     AuthConfig, AuthoringConfig, AutoCreate, DEFAULT_MAX_IN_FLIGHT_ACTIVITIES, DeployConfig,
     DevConfig, ListenConfig, MetricsConfig, NamespaceConfig, NamespaceMode, ObservabilityConfig,
-    OpsConsoleAssetSource, OpsConsoleConfig, OutboxConfig, RuntimeConfig, WebSocketConfig,
-    WorkerConfig,
+    OpsConsoleAssetSource, OpsConsoleConfig, OutboxConfig, ResolvedMcpConfig, RuntimeConfig,
+    WebSocketConfig, WorkerConfig,
 };
 use aion_server::shutdown::{self, ShutdownOutcome};
 use aion_server::worker::WorkerActivityDispatcher;
@@ -412,6 +412,7 @@ fn runtime_config() -> RuntimeConfig {
         dev: DevConfig::default(),
         outbox: OutboxConfig::default(),
         observability: ObservabilityConfig::default(),
+        mcp: ResolvedMcpConfig::default(),
         scheduler_threads: 1,
         query_timeout: Some(Duration::from_secs(10)),
         default_namespace: NAMESPACE.to_owned(),

@@ -29,7 +29,7 @@ use super::{
     DEFAULT_OUTBOX_BACKOFF_MULTIPLIER, DEFAULT_OUTBOX_BATCH_SIZE, DEFAULT_OUTBOX_MAX_ATTEMPTS,
     DEFAULT_OUTBOX_POLL_INTERVAL_MS, DEFAULT_QUERY_TIMEOUT_MS, DEPLOY_MAX_ARCHIVE_BYTES_REQUIRED,
     DEPLOY_MAX_INFLATED_BYTES_REQUIRED, DeployConfig, DevConfig, DrainConfig, HomeSource,
-    ListenConfig, MetricsConfig, NamespaceConfig, NamespaceMode, NamespacesConfig,
+    ListenConfig, McpConfig, MetricsConfig, NamespaceConfig, NamespaceMode, NamespacesConfig,
     OUTBOX_BACKOFF_BASE_REQUIRED, OUTBOX_BACKOFF_MAX_REQUIRED, OUTBOX_BACKOFF_MULTIPLIER_REQUIRED,
     OUTBOX_BATCH_SIZE_REQUIRED, OUTBOX_MAX_ATTEMPTS_REQUIRED, OUTBOX_POLL_INTERVAL_REQUIRED,
     OUTBOX_RECONCILE_INTERVAL_REQUIRED, OUTBOX_RECONCILE_STALE_AFTER_REQUIRED, ObservabilityConfig,
@@ -80,6 +80,8 @@ pub struct ServerConfig {
     pub outbox: OutboxConfig,
     /// Agent-observability transcript retention bounds.
     pub observability: ObservabilityConfig,
+    /// Model Context Protocol surface settings.
+    pub mcp: McpConfig,
 }
 
 pub(crate) struct LoadedConfig {
@@ -333,6 +335,7 @@ impl ServerConfig {
             dev: self.dev,
             outbox: self.outbox,
             observability: self.observability,
+            mcp: self.mcp.resolved(),
             scheduler_threads: self.runtime.scheduler_threads,
             query_timeout: self.runtime.query_timeout_ms.map(Duration::from_millis),
             default_namespace: self.namespaces.default,
@@ -445,6 +448,7 @@ impl ServerConfig {
         }
         self.websocket.validate()?;
         self.observability.validate()?;
+        self.mcp.validate()?;
         match self.runtime.query_timeout_ms {
             None | Some(0) => return config_error(QUERY_TIMEOUT_REQUIRED),
             Some(_) => {}
@@ -943,6 +947,129 @@ mod tests {
         let (_store, runtime) = config.into_parts();
         assert_eq!(runtime.observability.max_event_bytes, 512);
         assert_eq!(runtime.observability.max_stream_events, 3);
+        Ok(())
+    }
+
+    /// An omitted `[mcp]` section leaves the surface DARK and every lifetime at
+    /// its documented default. A config that never mentions MCP must not end up
+    /// serving one.
+    #[test]
+    fn missing_mcp_section_leaves_the_surface_dark() -> Result<(), Box<dyn std::error::Error>> {
+        let config = ServerConfig::from_slice(
+            br"
+                [runtime]
+                query_timeout_ms = 10000
+
+                [websocket]
+                event_broadcast_capacity = 64
+                cluster_broadcast_capacity = 64
+            ",
+        )?;
+        let (_store, runtime) = config.into_parts();
+        assert!(!runtime.mcp.enabled);
+        assert!(runtime.mcp.allowed_origins.is_empty());
+        assert_eq!(
+            runtime.mcp.discover_ttl_ms,
+            crate::config::DEFAULT_MCP_DISCOVER_TTL_MS
+        );
+        assert_eq!(
+            runtime.mcp.task_poll_interval_ms,
+            crate::config::DEFAULT_MCP_TASK_POLL_INTERVAL_MS
+        );
+        assert_eq!(
+            runtime.mcp.task_ttl_ms,
+            Some(crate::config::DEFAULT_MCP_TASK_TTL_MS)
+        );
+        Ok(())
+    }
+
+    /// Explicit `[mcp]` values parse and round-trip, and `task_ttl_ms = 0` is
+    /// the operator's way of saying "unlimited" — which the wire spells `null`.
+    #[test]
+    fn mcp_section_parses_and_round_trips() -> Result<(), Box<dyn std::error::Error>> {
+        let config = ServerConfig::from_slice(
+            br#"
+                [runtime]
+                query_timeout_ms = 10000
+
+                [websocket]
+                event_broadcast_capacity = 64
+                cluster_broadcast_capacity = 64
+
+                [mcp]
+                enabled = true
+                allowed_origins = ["http://localhost:5173"]
+                discover_ttl_ms = 1000
+                tools_list_ttl_ms = 2000
+                task_ttl_ms = 0
+                task_poll_interval_ms = 250
+                await_poll_interval_ms = 125
+            "#,
+        )?;
+        let (_store, runtime) = config.into_parts();
+        assert!(runtime.mcp.enabled);
+        assert_eq!(runtime.mcp.allowed_origins, vec!["http://localhost:5173"]);
+        assert_eq!(runtime.mcp.discover_ttl_ms, 1_000);
+        assert_eq!(runtime.mcp.tools_list_ttl_ms, 2_000);
+        assert_eq!(runtime.mcp.task_ttl_ms, None, "zero means unlimited");
+        assert_eq!(runtime.mcp.task_poll_interval_ms, 250);
+        assert_eq!(runtime.mcp.await_poll_interval_ms, 125);
+        Ok(())
+    }
+
+    /// A zero poll interval is a busy loop, not a fast one. It is refused at
+    /// startup with an operator-facing message rather than accepted.
+    #[test]
+    fn zero_mcp_poll_intervals_fail_startup_validation() {
+        for key in ["task_poll_interval_ms", "await_poll_interval_ms"] {
+            let source = format!(
+                "
+                [runtime]
+                query_timeout_ms = 10000
+
+                [websocket]
+                event_broadcast_capacity = 64
+                cluster_broadcast_capacity = 64
+
+                [mcp]
+                enabled = true
+                {key} = 0
+            "
+            );
+            let result = ServerConfig::from_slice(source.as_bytes());
+            let message = match result {
+                Err(crate::ServerError::Config { message }) => message,
+                _ => String::new(),
+            };
+            assert!(message.contains(key), "{key} must be refused: {message}");
+        }
+    }
+
+    /// The same zero on a DARK surface is not a boot failure: nothing reads it,
+    /// so refusing the boot would be refusing over a value that has no effect.
+    #[test]
+    fn a_dark_mcp_surface_does_not_validate_its_unused_knobs()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let config = ServerConfig::from_slice(
+            br"
+                [runtime]
+                query_timeout_ms = 10000
+
+                [websocket]
+                event_broadcast_capacity = 64
+                cluster_broadcast_capacity = 64
+
+                [mcp]
+                task_poll_interval_ms = 0
+            ",
+        )?;
+        let (_store, runtime) = config.into_parts();
+        assert!(!runtime.mcp.enabled);
+        assert_eq!(
+            runtime.mcp.task_poll_interval_ms,
+            crate::config::DEFAULT_MCP_TASK_POLL_INTERVAL_MS,
+            "an unused zero resolves to the default rather than to a busy loop"
+        );
         Ok(())
     }
 

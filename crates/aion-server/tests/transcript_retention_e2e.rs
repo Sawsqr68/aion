@@ -128,6 +128,7 @@ fn runtime_config(observability: ObservabilityConfig) -> RuntimeConfig {
         dev: aion_server::config::DevConfig::default(),
         outbox: aion_server::config::OutboxConfig::default(),
         observability,
+        mcp: aion_server::config::ResolvedMcpConfig::default(),
         scheduler_threads: 1,
         query_timeout: Some(Duration::from_secs(10)),
         default_namespace: TENANT_A.to_owned(),

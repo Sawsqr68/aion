@@ -2167,6 +2167,7 @@ mod tests {
             dev: DevConfig::default(),
             outbox: OutboxConfig::default(),
             observability: crate::config::ObservabilityConfig::default(),
+            mcp: crate::config::ResolvedMcpConfig::default(),
             scheduler_threads: 1,
             query_timeout: Some(Duration::from_secs(10)),
             default_namespace: "default".to_owned(),

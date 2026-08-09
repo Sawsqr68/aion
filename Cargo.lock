@@ -257,6 +257,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "aion-mcp"
+version = "0.12.0"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
+ "jsonschema",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "aion-package"
 version = "0.12.0"
 dependencies = [
@@ -345,6 +362,7 @@ dependencies = [
  "aion-core",
  "aion-darwin-acl",
  "aion-integrations",
+ "aion-mcp",
  "aion-package",
  "aion-proto",
  "aion-rs",
@@ -365,6 +383,7 @@ dependencies = [
  "futures",
  "haematite 0.8.1",
  "http-body-util",
+ "jsonschema",
  "jsonwebtoken",
  "libsql",
  "liminal-rs",

@@ -132,6 +132,7 @@ fn test_runtime(auto_create: AutoCreate) -> aion_server::config::RuntimeConfig {
         dev: DevConfig::default(),
         outbox: OutboxConfig::default(),
         observability: aion_server::config::ObservabilityConfig::default(),
+        mcp: aion_server::config::ResolvedMcpConfig::default(),
         scheduler_threads: 1,
         query_timeout: Some(Duration::from_secs(5)),
         default_namespace: "default".to_owned(),

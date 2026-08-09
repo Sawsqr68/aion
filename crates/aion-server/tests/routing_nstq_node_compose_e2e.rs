@@ -77,6 +77,7 @@ fn runtime_config() -> RuntimeConfig {
         dev: aion_server::config::DevConfig::default(),
         outbox: aion_server::config::OutboxConfig::default(),
         observability: aion_server::config::ObservabilityConfig::default(),
+        mcp: aion_server::config::ResolvedMcpConfig::default(),
         scheduler_threads: 1,
         query_timeout: Some(Duration::from_secs(10)),
         default_namespace: "default".to_owned(),

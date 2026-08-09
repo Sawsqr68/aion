@@ -264,7 +264,47 @@ max_stream_events = 20000               # default; retained events per
                                         # transcript stream — past the cap one
                                         # marker record is kept and further
                                         # events stay live-only
+
+[mcp]
+enabled = false                         # default; DARK. With it false the
+                                        # /mcp endpoint is not mounted and the
+                                        # path is a plain 404. An MCP endpoint
+                                        # lets a model start and cancel durable
+                                        # executions, so turning it on is an
+                                        # explicit decision
+allowed_origins = []                    # default; EMPTY means no browser
+                                        # origin may reach /mcp. A programmatic
+                                        # client sends no Origin header and is
+                                        # unaffected; a browser always does, so
+                                        # the empty list refuses every
+                                        # browser-borne request (the
+                                        # DNS-rebinding defence the transport
+                                        # requires)
+# discover_ttl_ms = 60000               # default; ttlMs on server/discover
+# tools_list_ttl_ms = 300000            # default; ttlMs on tools/list
+# task_ttl_ms = 3600000                 # default (1h); how long a created task
+                                        # lives before the server may fail and
+                                        # delete it. 0 = unlimited. The task is
+                                        # only the WAIT: the run it started
+                                        # stays reachable through the handles
+                                        # the task creation returned
+# task_poll_interval_ms = 1000          # default; pollIntervalMs advertised to
+                                        # a task's client
+# await_poll_interval_ms = 500          # default; how often an awaited
+                                        # start_run re-reads the run's status
 ```
+
+The MCP surface is served on the **same HTTP listener** as the console and the
+workflow API — one port, one process — and it inherits the server's existing
+authentication exactly: the caller is resolved by the same extractor every
+other route uses, and the tools apply the same namespace authorization. There
+is no MCP-specific auth to configure and none to drift.
+
+It implements the **2026-07-28 stateless revision** (`POST /mcp` only; `GET`
+and `DELETE` are 405; no sessions, no SSE resumability, no `initialize`
+handshake) plus the experimental `io.modelcontextprotocol/tasks` extension,
+pinned to `ext-tasks` commit `2c1425d9a288b9b1f489430fe1e00bb392b47e48`. The
+extension is advertised only to a client that declares it on the request.
 
 (`[tls]` keys parse — `certificate_chain_path` and `private_key_path` — but
 the server refuses to start with TLS material configured until transport

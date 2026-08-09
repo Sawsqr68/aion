@@ -43,6 +43,7 @@ use super::workflows::{
     list_namespaces, post_list_workflows, post_namespace, query_workflow, reopen_workflow,
     set_namespace_placement, signal_workflow, start_workflow,
 };
+use crate::mcp::{McpRuntime, mcp_disabled_router, mcp_router};
 use crate::{ServerError, ServerState, observability, ops_console::assets};
 
 /// Build the public HTTP application: workflow-management routes first, then
@@ -50,13 +51,20 @@ use crate::{ServerError, ServerState, observability, ops_console::assets};
 ///
 /// # Errors
 ///
-/// Returns [`ServerError::Config`] when ops-console assets are misconfigured.
+/// Returns [`ServerError::Config`] when ops-console assets are misconfigured, or
+/// when the MCP surface is enabled and its published tool catalog cannot be
+/// constructed.
 pub fn http_router(state: ServerState) -> Result<Router, ServerError> {
     let ops_console = assets::ops_console_router(&state.runtime_config().ops_console)?;
     let cors = cors_layer(&state.runtime_config().cors_allowed_origins)?;
     let metrics = state.metrics().cloned();
     let health = state.health().cloned();
-    let mut router = workflow_router(state);
+    let mut router = workflow_router(state.clone());
+    // The MCP endpoint is another route on THIS listener: one port, one
+    // process. It is merged here rather than inside `workflow_router` because
+    // it is a top-level protocol surface alongside `/metrics` and `/health/*`,
+    // not a workflow-management route.
+    router = router.merge(mcp_family(&state)?.with_state(state));
     if let Some(metrics) = metrics {
         router = router.merge(Router::new().route(
             "/metrics",
@@ -199,6 +207,29 @@ fn worker_deployment_router(deploy_enabled: bool) -> Router<ServerState> {
             .route("/worker-deployments", any(deploy_surface_disabled))
             .route("/worker-deployments/{*rest}", any(deploy_surface_disabled))
     }
+}
+
+/// The MCP route family, mounted on the SERVER'S OWN listener.
+///
+/// One port, one process: the MCP endpoint is another route on the same HTTP
+/// surface the console and the workflow API are served from, not a second
+/// listener. It is dark unless `[mcp].enabled` is set, and a dark surface is a
+/// plain 404 — indistinguishable from a build that never had the route.
+///
+/// A construction failure (a published tool schema that will not compile) is
+/// NOT downgraded to a dark surface: it is a server defect, and an operator who
+/// asked for the endpoint would otherwise get a 404 and no idea why.
+///
+/// Each call builds one runtime, and a runtime owns one task store. That is
+/// correct because a task is reachable only through the identifier its creator
+/// was handed: two routers are two disjoint sets of handles, never a split view
+/// of one set. The serving path builds the router exactly once.
+fn mcp_family(state: &ServerState) -> Result<Router<ServerState>, ServerError> {
+    if !state.runtime_config().mcp.enabled {
+        return Ok(mcp_disabled_router());
+    }
+    let runtime = McpRuntime::build(state.clone(), &state.runtime_config().mcp)?;
+    Ok(mcp_router(std::sync::Arc::new(runtime)))
 }
 
 /// Build the public workflow-management HTTP router.

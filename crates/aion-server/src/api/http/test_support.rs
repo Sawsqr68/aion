@@ -154,6 +154,7 @@ pub(crate) fn runtime_config() -> RuntimeConfig {
         dev: crate::config::DevConfig::default(),
         outbox: crate::config::OutboxConfig::default(),
         observability: crate::config::ObservabilityConfig::default(),
+        mcp: crate::config::ResolvedMcpConfig::default(),
         scheduler_threads: 1,
         query_timeout: Some(std::time::Duration::from_secs(10)),
         default_namespace: "default".to_owned(),

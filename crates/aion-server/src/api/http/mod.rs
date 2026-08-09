@@ -23,7 +23,7 @@
 //! - `error` — wire-error-to-HTTP response mapping.
 
 mod assistant;
-mod auth;
+pub(crate) mod auth;
 mod authoring;
 mod awl;
 mod awl_deployed;
