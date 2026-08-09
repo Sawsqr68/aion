@@ -13,10 +13,13 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use aion_core::ClusterEvent;
 use aion_store::{
     DesiredState, WorkerArtifactRef, WorkerDeployment, WorkerDeploymentListing,
     WorkerDeploymentStore,
 };
+
+use crate::cluster_publisher::ClusterEventPublisher;
 
 use super::error::SupervisionError;
 use super::executable::ManagedExecutable;
@@ -41,20 +44,30 @@ pub struct WorkerSupervisor {
     store: Arc<dyn WorkerDeploymentStore>,
     commission: OnceLock<Commission>,
     instances: Mutex<BTreeMap<String, InstanceHandle>>,
+    publisher: ClusterEventPublisher,
 }
 
 impl WorkerSupervisor {
-    /// Build an UNCOMMISSIONED supervisor over the durable deployment store.
+    /// Build an UNCOMMISSIONED supervisor over the durable deployment store,
+    /// publishing desired-state changes onto the deployment-global cluster
+    /// channel.
+    ///
+    /// The publisher lives HERE — not in the transports — so every desired-state
+    /// write the supervisor makes ([`Self::start`], [`Self::stop`], and
+    /// [`Self::restart`] through them) reaches the console's live feed
+    /// identically whichever transport asked, exactly as the
+    /// worker-deployment desired-state endpoint publishes its own writes.
     ///
     /// Nothing is supervised until [`Self::commission`] installs an operator
     /// policy: construction is not commissioning, so a server that boots
     /// without the config section never spawns anything.
     #[must_use]
-    pub fn new(store: Arc<dyn WorkerDeploymentStore>) -> Self {
+    pub fn new(store: Arc<dyn WorkerDeploymentStore>, publisher: ClusterEventPublisher) -> Self {
         Self {
             store,
             commission: OnceLock::new(),
             instances: Mutex::new(BTreeMap::new()),
+            publisher,
         }
     }
 
@@ -116,10 +129,13 @@ impl WorkerSupervisor {
     }
 
     /// Start (or adopt) supervision of one deployment, recording the intent
-    /// durably first.
+    /// durably first. A durable desired-state flip is published onto the
+    /// cluster channel, so the console's live feed sees it whichever transport
+    /// asked.
     ///
     /// Idempotent: a deployment already being supervised is reported as it is,
-    /// without a second process.
+    /// without a second process (and, already desiring `Running`, without a
+    /// second event).
     ///
     /// # Errors
     ///
@@ -133,13 +149,16 @@ impl WorkerSupervisor {
         let record = if record.desired == DesiredState::Running {
             record
         } else {
-            self.store
+            let record = self
+                .store
                 .set_desired_state(name, DesiredState::Running)
                 .await
                 .map_err(|source| SupervisionError::Store { source })?
                 .ok_or_else(|| SupervisionError::UnknownDeployment {
                     name: name.to_owned(),
-                })?
+                })?;
+            self.publish_desired_state(&record);
+            record
         };
 
         let snapshot = {
@@ -159,7 +178,9 @@ impl WorkerSupervisor {
         Ok(status_of(&record, snapshot, self.is_commissioned()))
     }
 
-    /// Stop one deployment and record the intent durably.
+    /// Stop one deployment and record the intent durably. The durable
+    /// desired-state write is published onto the cluster channel, so the
+    /// console's live feed sees it whichever transport asked.
     ///
     /// The returned status is written only once the process group has been
     /// probed empty; a group that survives the termination ladder produces
@@ -182,6 +203,7 @@ impl WorkerSupervisor {
             .ok_or_else(|| SupervisionError::UnknownDeployment {
                 name: name.to_owned(),
             })?;
+        self.publish_desired_state(&record);
         let handle = self.instances()?.remove(name);
         if let Some(handle) = handle {
             handle.stop(name).await?;
@@ -190,6 +212,10 @@ impl WorkerSupervisor {
     }
 
     /// Stop and start one deployment, leaving desired state at `Running`.
+    ///
+    /// Publishes exactly what it durably writes: a restart of an
+    /// already-`Running` deployment changes no desired state and emits no
+    /// desired-state event; one that flips it inherits [`Self::start`]'s.
     ///
     /// # Errors
     ///
@@ -295,6 +321,27 @@ impl WorkerSupervisor {
             }
         }
         failures
+    }
+
+    /// Publish one durable desired-state write onto the cluster channel — the
+    /// SAME event the worker-deployment desired-state endpoint publishes for
+    /// its writes, so the live feed cannot tell the transports apart.
+    ///
+    /// Called exactly where a write happened, never speculatively: an event
+    /// here is proof of a durable change. The emitted event's return value is
+    /// dropped deliberately — a channel with no subscribers is the calm state,
+    /// not a failure.
+    fn publish_desired_state(&self, record: &WorkerDeployment) {
+        let name = record.name.clone();
+        let desired_state = record.desired;
+        drop(
+            self.publisher
+                .emit(|meta| ClusterEvent::WorkerDeploymentDesiredStateChanged {
+                    meta,
+                    name,
+                    desired_state,
+                }),
+        );
     }
 
     fn instance_config(

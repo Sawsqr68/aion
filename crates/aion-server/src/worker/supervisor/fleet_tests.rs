@@ -74,15 +74,39 @@ fn deployment(name: &str, script: &str) -> Result<WorkerDeployment, Box<dyn std:
     )?)
 }
 
-/// A supervisor over one in-memory store, driving `/bin/sh`.
+/// A supervisor over one in-memory store, driving `/bin/sh`. The cluster
+/// publisher is a fresh test-local channel; [`supervisor_with_publisher`]
+/// exposes it to tests that assert emissions.
 async fn supervisor_with(
     records: &[WorkerDeployment],
 ) -> Result<Arc<WorkerSupervisor>, Box<dyn std::error::Error>> {
+    let (supervisor, publisher) = supervisor_with_publisher(records).await?;
+    drop(publisher);
+    Ok(supervisor)
+}
+
+/// [`supervisor_with`], keeping a handle on the cluster channel the supervisor
+/// publishes desired-state writes to.
+async fn supervisor_with_publisher(
+    records: &[WorkerDeployment],
+) -> Result<
+    (
+        Arc<WorkerSupervisor>,
+        crate::cluster_publisher::ClusterEventPublisher,
+    ),
+    Box<dyn std::error::Error>,
+> {
     let store: Arc<dyn WorkerDeploymentStore> = Arc::new(InMemoryStore::default());
     for record in records {
         drop(store.put_worker_deployment(record.clone()).await?);
     }
-    Ok(Arc::new(WorkerSupervisor::new(store)))
+    let publisher = crate::cluster_publisher::ClusterEventPublisher::new(
+        std::num::NonZeroUsize::new(64).ok_or("publisher capacity")?,
+    );
+    Ok((
+        Arc::new(WorkerSupervisor::new(store, publisher.clone())),
+        publisher,
+    ))
 }
 
 /// Ask the OS whether a pid is alive.
@@ -486,5 +510,60 @@ async fn an_unknown_deployment_is_a_typed_refusal_on_every_verb() -> TestResult 
             "unexpected refusal: {error}"
         );
     }
+    Ok(())
+}
+
+/// 🔴 Desired-state writes are published from the SUPERVISOR, so every
+/// transport that drives it (HTTP and gRPC alike) inherits the same live-feed
+/// event the worker-deployment desired-state endpoint emits — and a lifecycle
+/// call that writes nothing durable emits nothing. The ordering proves the
+/// negative: the restart between start and stop flips no desired state, so
+/// the event after the start's must be the stop's.
+#[tokio::test]
+async fn desired_state_writes_publish_cluster_events_and_non_writes_emit_none() -> TestResult {
+    use futures::StreamExt as _;
+
+    let mut record = deployment("published", "sleep 300")?;
+    record.desired = DesiredState::Stopped;
+    let (supervisor, publisher) = supervisor_with_publisher(&[record]).await?;
+    assert!(supervisor.commission(policy(20, 5)?, shell()));
+    let mut events = publisher.subscribe(0);
+
+    drop(supervisor.start("published").await?);
+    drop(supervisor.restart("published").await?);
+    drop(supervisor.stop("published").await?);
+
+    let started = events
+        .next()
+        .await
+        .ok_or("the start flip must publish an event")?
+        .map_err(|lagged| format!("cluster stream lagged: {lagged:?}"))?;
+    assert!(
+        matches!(
+            started,
+            aion_core::ClusterEvent::WorkerDeploymentDesiredStateChanged {
+                ref name,
+                desired_state,
+                ..
+            } if name == "published" && desired_state == DesiredState::Running
+        ),
+        "unexpected first event: {started:?}"
+    );
+    let stopped = events
+        .next()
+        .await
+        .ok_or("the stop must publish an event")?
+        .map_err(|lagged| format!("cluster stream lagged: {lagged:?}"))?;
+    assert!(
+        matches!(
+            stopped,
+            aion_core::ClusterEvent::WorkerDeploymentDesiredStateChanged {
+                ref name,
+                desired_state,
+                ..
+            } if name == "published" && desired_state == DesiredState::Stopped
+        ),
+        "the restart of a running deployment must not have emitted: {stopped:?}"
+    );
     Ok(())
 }

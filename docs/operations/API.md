@@ -179,6 +179,10 @@ Namespace denial, unknown workflow ids, and backend faults remain transport-leve
 | `GET` | `/queues/unserved` | Addresses nobody is serving, with everything parked on them. Grant-filtered on the same existence-leak boundary as `GET /namespaces`; an empty list is the healthy answer. |
 | `POST` | `/workers/{worker_id}/drain` | Fence one worker from assignment and ask its transport to drain gracefully. |
 | `POST` | `/workers/{worker_id}/stop` | Drain one worker, then force worker-loss teardown at the configured deadline. An absent worker is a typed 404. |
+| `GET` | `/workers/managed` | The managed-worker fleet: every durable deployment's desired state joined with live supervision state, plus `commissioned` and the remedy when no `[worker_supervision]` policy is set. Deploy-granted; always mounted. |
+| `POST` | `/workers/managed/{name}/start` | Start (or adopt) supervision of one managed deployment, recording `desired: running` durably first. Deploy-granted; mounted only when `[deploy] enabled = true` (plain 404 when off), mirroring `DeployService.StartManagedWorker`. Responds `{"worker": …}` in the same shape the fleet read lists. Uncommissioned supervision is a 409 carrying the `[worker_supervision]` remedy; an unknown name is a typed 404. |
+| `POST` | `/workers/managed/{name}/stop` | Stop one managed deployment, recording `desired: stopped` durably; success is reported only once the process group is proven empty. Same mount/grant/response as start; needs no supervision commission. |
+| `POST` | `/workers/managed/{name}/restart` | Stop and start one managed deployment, leaving `desired: running`. Same mount/grant/response and commission requirement as start. |
 
 ## Operator deploy API
 
@@ -267,7 +271,7 @@ The AWL studio surface (`crates/aion-server/src/api/http/awl.rs`) backs the visu
 | `GET` | `/awl/layout/{*path}` | Read the caller's canvas layout record for a document (keyed by caller subject). |
 | `PUT` | `/awl/layout/{*path}` | Write the caller's canvas layout record (deploy-gated). |
 | `GET` | `/awl/deployed` | Every loaded workflow version with the honest state of its archived AWL source. Deploy-guarded and follows `[deploy] enabled` (plain 404 when off) — it reads the same deployed catalog `GET /deploy/versions` serves. |
-| `GET` | `/awl/deployed/{workflow_type}/{content_hash}` | The archived AWL document of one deployed version, with its schema files and projection. Same gate as `/awl/deployed`. |
+| `GET` | `/awl/deployed/{workflow_type}/{content_hash}` | The archived AWL document of one deployed version, with its schema files and projection — plus the version's identity-committed start contract for building a start form: `input_schema` (the requested entry's own committed start schema; `null` only when the archive predates contract commitment or the contract does not schema that entry) and `signals` (name + payload schema per declared signal; present — possibly empty — for the primary entry, `null` for additional entries and pre-contract archives, whose contract commits no signal set). No `queries` field is served: archived AWL source is provenance, not identity, so a source-derived query list would not be attributable to the content hash — its absence means "not reported", never "declares no queries". Same gate as `/awl/deployed`. |
 
 ## Dev surface
 

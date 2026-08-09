@@ -28,14 +28,21 @@ use crate::{
     },
 };
 
-/// Build an uncommissioned supervisor over one durable deployment store.
+/// Build an uncommissioned supervisor over one durable deployment store and
+/// the state's cluster channel.
 ///
 /// Every state constructor routes through this, so no construction path can
 /// accidentally hand the supervisor a DIFFERENT store from the one the
 /// management API writes through — desired state written in one place and read
-/// in another is exactly the drift this single call site removes.
-fn new_supervisor(store: &Arc<dyn WorkerDeploymentStore>) -> Arc<WorkerSupervisor> {
-    Arc::new(WorkerSupervisor::new(Arc::clone(store)))
+/// in another is exactly the drift this single call site removes. The same
+/// argument holds for the publisher: it is the state's own cluster channel,
+/// so a desired-state write made by the supervisor reaches the same live feed
+/// as one made by the worker-deployment endpoints.
+fn new_supervisor(
+    store: &Arc<dyn WorkerDeploymentStore>,
+    publisher: &crate::cluster_publisher::ClusterEventPublisher,
+) -> Arc<WorkerSupervisor> {
+    Arc::new(WorkerSupervisor::new(Arc::clone(store), publisher.clone()))
 }
 
 /// Cloneable shared state passed to all server transports.
@@ -273,6 +280,8 @@ impl ServerState {
         let engine = Arc::new(engine);
         install_engine_backed_seams(&seams, &engine, runtime.outbox.enabled);
         let resolver = NamespaceResolver::from_config(runtime.namespace.clone(), engine);
+        let worker_supervisor =
+            new_supervisor(&connected.worker_deployment_store, &cluster_publisher);
         #[cfg(feature = "auth")]
         let jwks_cache = build_jwks_cache(&runtime).await?;
         Ok(Self {
@@ -288,7 +297,7 @@ impl ServerState {
                 activity_mock_registry,
                 outbox_store,
                 namespace_store: connected.namespace_store,
-                worker_supervisor: new_supervisor(&connected.worker_deployment_store),
+                worker_supervisor,
                 worker_deployment_store: connected.worker_deployment_store,
                 outbox_wake,
                 cluster_publisher,
@@ -395,7 +404,7 @@ impl ServerState {
                 activity_mock_registry: None,
                 outbox_store: None,
                 namespace_store,
-                worker_supervisor: new_supervisor(&worker_deployment_store),
+                worker_supervisor: new_supervisor(&worker_deployment_store, &cluster_publisher),
                 worker_deployment_store,
                 outbox_wake: Arc::new(tokio::sync::Notify::new()),
                 cluster_publisher,
@@ -483,7 +492,7 @@ impl ServerState {
                 activity_mock_registry: None,
                 outbox_store: None,
                 namespace_store,
-                worker_supervisor: new_supervisor(&worker_deployment_store),
+                worker_supervisor: new_supervisor(&worker_deployment_store, &cluster_publisher),
                 worker_deployment_store,
                 outbox_wake: Arc::new(tokio::sync::Notify::new()),
                 cluster_publisher,
@@ -548,6 +557,9 @@ impl ServerState {
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
         let bounds = transcript_bounds(&runtime);
+        let cluster_publisher = crate::cluster_publisher::ClusterEventPublisher::new(
+            Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
+        );
         Self {
             inner: Arc::new(ServerStateInner {
                 namespace_guard: NamespaceGuard::new(namespace_resolver),
@@ -565,12 +577,10 @@ impl ServerState {
                 // in-memory store — present so `namespace_store()` is always
                 // reachable, never mutating any durable backend.
                 namespace_store: Arc::new(aion_store::InMemoryStore::default()),
-                worker_supervisor: new_supervisor(&fallback_deployment_store),
+                worker_supervisor: new_supervisor(&fallback_deployment_store, &cluster_publisher),
                 worker_deployment_store: fallback_deployment_store,
                 outbox_wake: Arc::new(tokio::sync::Notify::new()),
-                cluster_publisher: crate::cluster_publisher::ClusterEventPublisher::new(
-                    Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
-                ),
+                cluster_publisher,
                 // NOI-5b: a from-parts / embedder state has no durable store, so
                 // the transcript sequencer runs over an in-memory `O`-keyspace
                 // impl — the transcript channel is served on every boot.
@@ -627,6 +637,9 @@ impl ServerState {
         // flow from `[observability]` config on the embedder path too, so a
         // from-parts server enforces the same truncation/cap as a full boot.
         let bounds = transcript_bounds(&runtime);
+        let cluster_publisher = crate::cluster_publisher::ClusterEventPublisher::new(
+            Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
+        );
         Self {
             inner: Arc::new(ServerStateInner {
                 namespace_guard: NamespaceGuard::new(namespace_resolver),
@@ -644,12 +657,10 @@ impl ServerState {
                 // in-memory store — present so `namespace_store()` is always
                 // reachable, never mutating any durable backend.
                 namespace_store: Arc::new(aion_store::InMemoryStore::default()),
-                worker_supervisor: new_supervisor(&fallback_deployment_store),
+                worker_supervisor: new_supervisor(&fallback_deployment_store, &cluster_publisher),
                 worker_deployment_store: fallback_deployment_store,
                 outbox_wake: Arc::new(tokio::sync::Notify::new()),
-                cluster_publisher: crate::cluster_publisher::ClusterEventPublisher::new(
-                    Self::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
-                ),
+                cluster_publisher,
                 // NOI-5b: a from-parts / embedder state has no durable store, so
                 // the transcript sequencer runs over an in-memory `O`-keyspace
                 // impl — the transcript channel is served on every boot.

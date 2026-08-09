@@ -9,7 +9,7 @@ use std::time::Duration;
 use aion::WorkflowVersionInfo;
 use aion_package::{
     AwlSource, BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, Manifest,
-    ManifestVersion, PackageBuilder,
+    ManifestVersion, PackageBuilder, PackageContract,
 };
 use aion_store::PackageRecord;
 use chrono::{TimeZone, Utc};
@@ -46,14 +46,39 @@ pub(crate) fn manifest(entry_module: &str) -> Manifest {
 }
 
 /// A persisted archive row built from `manifest`, carrying `awl` when given.
+/// The committed contract is the manifest-derived one.
 pub(crate) fn record(
     manifest: Manifest,
+    awl: Option<AwlSource>,
+    deployed_at_seconds: i64,
+) -> Result<PackageRecord, Box<dyn std::error::Error>> {
+    build_record(manifest, None, awl, deployed_at_seconds)
+}
+
+/// A persisted archive row like [`record`], but committing `contract` into
+/// the package identity — the form a compiled-AWL deploy persists, complete
+/// with signal declarations.
+pub(crate) fn record_with_contract(
+    manifest: Manifest,
+    contract: PackageContract,
+    awl: Option<AwlSource>,
+    deployed_at_seconds: i64,
+) -> Result<PackageRecord, Box<dyn std::error::Error>> {
+    build_record(manifest, Some(contract), awl, deployed_at_seconds)
+}
+
+fn build_record(
+    manifest: Manifest,
+    contract: Option<PackageContract>,
     awl: Option<AwlSource>,
     deployed_at_seconds: i64,
 ) -> Result<PackageRecord, Box<dyn std::error::Error>> {
     let workflow_type = manifest.entry_module.clone();
     let beams = BeamSet::new(vec![BeamModule::new(&workflow_type, vec![1, 2, 3])])?;
     let mut builder = PackageBuilder::new(manifest, beams);
+    if let Some(contract) = contract {
+        builder = builder.with_contract(contract);
+    }
     if let Some(awl) = awl {
         builder = builder.with_awl_source(awl);
     }

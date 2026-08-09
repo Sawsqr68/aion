@@ -23,4 +23,4 @@ mod tests;
 mod types;
 
 pub use service::{document as read_document, versions as list_versions};
-pub use types::{DeployedDocument, DeployedError, DeployedVersion};
+pub use types::{DeployedDocument, DeployedError, DeployedSignal, DeployedVersion};
