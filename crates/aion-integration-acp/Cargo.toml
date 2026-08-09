@@ -19,8 +19,8 @@ categories = ["api-bindings", "asynchronous"]
 workspace = true
 
 [dependencies]
-aion-core = { version = "0.12.0", path = "../aion-core" }
-aion-integrations = { version = "0.12.0", path = "../aion-integrations" }
+aion-core = { version = "0.13.0", path = "../aion-core" }
+aion-integrations = { version = "0.13.0", path = "../aion-integrations" }
 # Pinned EXACTLY: these are the on-wire types of an external, moving protocol. A version bump must
 # be a deliberate act that surfaces as a compile error, never a silent wire drift.
 agent-client-protocol-schema = "=1.5.0"

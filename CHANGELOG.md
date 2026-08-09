@@ -3,6 +3,61 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## 0.13.0 — 2026-08-10
+
+The everything-embedded release: `cargo install aion-cli` carries the whole
+product — console, guide, examples, assistant — with no repository checkout
+and nothing fetched at runtime.
+
+- **The guide teaches by example.** One AWL glossary now stands behind every
+  authoring surface — `aion awl guide` on the CLI, hover in the LSP, and a
+  non-modal overlay in the console — with citations into the full language
+  reference. 118 canonical examples ride with it, every one checked by the
+  gate that ships them, rendered in the console with the editor's own
+  tree-sitter highlighting in collapsible sections.
+- **The language reference ships inside the binary.** `aion awl guide
+  --reference` prints the full reference from bytes embedded at compile time;
+  an installed build carries exactly what the repository holds, and a drift
+  gate pins the embedded copy byte-identical to the authored document. This
+  also fixes the 0.12.0 packaging escape where the reference was read from a
+  path outside the `aion-awl` crate.
+- **Everything doable from the console.** Starting a workflow gets a
+  schema-driven form built from the document's declared input schema. Managed
+  worker lifecycle — deploy a worker document, start, stop, restart — runs
+  over HTTP from the console. The deployed surface shows each version's
+  authored AWL read-only, and deep links (`/workflows/<id>`, deployed
+  `?type=&version=`) survive a reload.
+- **Quiet is not a fault.** The console's connection indicator distinguishes
+  `idle` (nothing has subscribed to the event stream) from `disconnected`
+  (reconnect exhausted); an idle stream shows nothing instead of a false
+  "Disconnected". Deployed versions that carry no archived AWL source are
+  withheld from the source browser and counted honestly instead of opening an
+  empty editor.
+- **The assistant ships in the server.** `assistant.awl` is embedded in the
+  binary with an operator verb to deploy it — no checkout needed — and its
+  resource documents are current against this release's system.
+- **MCP server.** A Model Context Protocol endpoint (2026-07-28 stateless
+  revision) at `POST /mcp`: eight tools over run-scoped activity transcripts.
+  Browser-borne requests are refused by default (empty `allowed_origins`);
+  programmatic clients are unaffected.
+- **The server supervises worker processes.** Restart policy, backoff
+  windows, and kill-proving (drain + ESRCH) are configuration
+  (`[worker_supervision]`, all six keys required, no invented defaults) —
+  workers can be started, stopped, and restarted from the console.
+- **AWL worker documents.** A `worker` file family that serves a queue:
+  declared actions with bodies, captures, checker fixtures for the valid and
+  invalid shapes, and `aion worker_awl serve` to run one.
+- **Query arguments carry end to end** — through AWL, the SDK closure, and
+  both store backends in one act.
+- **Observability grows a run axis.** Activity transcripts are scoped to the
+  run that produced them; a command's output streams into its activity
+  transcript; `describe` joins live state — current step, liveness, notes,
+  transcript tail.
+- **beamr 0.17.0.** A JIT-compiled frame re-entering the interpreter now
+  carries its native services instead of an empty registry — the
+  replay-durability fix for long-running workflows.
+- **New crate: `aion-mcp`** — the protocol layer behind the MCP endpoint.
+
 ## 0.12.0 — 2026-08-08
 
 - **`aion new` scaffolds AWL by default.** A new `awl` template is the
