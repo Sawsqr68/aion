@@ -88,4 +88,9 @@ export type WhoAmIResponse = {
   namespaces?: unknown;
 };
 
+/** `GET /changelog` envelope: the changelog embedded in the running binary. */
+export type ChangelogResponse = {
+  markdown: string;
+};
+
 export type RequestBody = JsonRecord | undefined;

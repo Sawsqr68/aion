@@ -17,6 +17,7 @@ use super::awl::{
 };
 use super::awl_deployed::{get_deployed_document, list_deployed};
 use super::build::build_identity;
+use super::changelog::changelog;
 use super::cluster_command::cluster_command;
 use super::deploy::{list_versions, route_version, unload_version, upload_package};
 use super::describe_live::describe_live;
@@ -340,6 +341,9 @@ pub fn workflow_router(state: ServerState) -> Router {
         ))
         .route("/whoami", get(whoami))
         .route("/build", get(build_identity))
+        // What changed in the version this server runs — embedded in the
+        // binary, consumed by the console's "What's new" panel.
+        .route("/changelog", get(changelog))
         // The built-in assistant, always mounted: it ships in the binary like
         // the ops console, so there is no configuration under which this server
         // has one and does not say so.

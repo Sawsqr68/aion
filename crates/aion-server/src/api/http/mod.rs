@@ -32,6 +32,7 @@ mod authoring;
 mod awl;
 mod awl_deployed;
 mod build;
+mod changelog;
 mod clean_dtos;
 mod cluster_command;
 mod deploy;

@@ -3,6 +3,7 @@ export type {
   ApiCredentials,
   AttemptCapabilities,
   Capabilities,
+  ChangelogResponse,
   CreateNamespaceResult,
   HistoryWindow,
   HistoryWindowRequest,

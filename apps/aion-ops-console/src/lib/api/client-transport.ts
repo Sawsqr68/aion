@@ -20,6 +20,9 @@ export const AW_REST_CONTRACT = {
     // is the auth-scoped quorum-CAS `PUT` that sets a namespace's placement.
     namespacePlacement: '/namespaces/{name}/placement',
     whoami: '/whoami',
+    // The release changelog embedded in the running server's binary — what
+    // changed in the version it RUNS, consumed by the What's-new panel.
+    changelog: '/changelog',
     clusterCommand: '/cluster/command',
     workflowStart: '/workflows/start',
     // Deliver a named signal to a running workflow (namespace-scoped like
@@ -47,6 +50,7 @@ export const AW_REST_CONTRACT = {
     namespaceRecords: 'GET',
     namespacePlacement: 'PUT',
     whoami: 'GET',
+    changelog: 'GET',
     workflowsPlain: 'GET',
     workflowsCount: 'GET',
     workflowStart: 'POST',

@@ -49,6 +49,7 @@ import type {
   ApiClientOptions,
   AttemptCapabilities,
   Capabilities,
+  ChangelogResponse,
   InterveneParams,
   RequestOptions,
   StartWorkflowParams,
@@ -75,6 +76,7 @@ export type {
   ApiClientOptions,
   AttemptCapabilities,
   Capabilities,
+  ChangelogResponse,
   InterveneParams,
   RequestOptions,
   StartWorkflowParams,
@@ -188,6 +190,20 @@ export class ApiClient {
     );
 
     return normalizeCapabilities(response);
+  }
+
+  /**
+   * Fetch the changelog embedded in the running server's binary
+   * (`GET /changelog`): what changed in the version it RUNS, which may differ
+   * from any repository on the operator's machine. Consumed by the console's
+   * What's-new panel. Namespace-independent, like `/whoami`.
+   */
+  async getChangelog(options?: Pick<RequestOptions, 'credentials'>): Promise<ChangelogResponse> {
+    return await this.transport.request<ChangelogResponse>(
+      AW_REST_CONTRACT.endpoints.changelog,
+      AW_REST_CONTRACT.methods.changelog,
+      { namespace: '' as Namespace, credentials: options?.credentials }
+    );
   }
 
   async listNamespaces(options?: Pick<RequestOptions, 'credentials'>): Promise<Namespace[]> {

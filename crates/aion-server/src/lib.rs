@@ -35,6 +35,10 @@ pub(crate) mod awl;
 /// What code this server is: the revision stamped into the binary at build
 /// time, so a running server can be asked rather than guessed about (#123).
 pub mod build_identity;
+/// The release changelog embedded in the binary, serving the console's
+/// "What's new" panel: what changed in the version this server RUNS, never a
+/// file read from disk.
+pub mod changelog;
 /// SS-5b automatic multi-node failover detection (cluster supervisor). Only
 /// meaningful for a distributed haematite boot, so gated behind the backend.
 #[cfg(feature = "haematite-backend")]

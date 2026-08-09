@@ -3,6 +3,15 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## 0.13.1 — 2026-08-10
+
+- **The console tells you what's new.** A "What's new" button in the console
+  header opens this changelog, fetched from the new `GET /changelog` endpoint.
+  The document is embedded in the server binary at compile time — never read
+  from disk at runtime — so the panel always describes the version actually
+  serving the console, and a drift gate pins the embedded copy byte-identical
+  to the authored `CHANGELOG.md`.
+
 ## 0.13.0 — 2026-08-10
 
 The everything-embedded release: `cargo install aion-cli` carries the whole
