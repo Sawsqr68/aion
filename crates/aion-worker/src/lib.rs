@@ -46,6 +46,8 @@
 mod build_coverage;
 
 pub mod activity;
+/// A contained command's output, streamed into the activity transcript.
+pub mod command_transcript;
 /// Worker endpoint, identity, transport, and reconnect configuration.
 pub mod config;
 /// Per-activity execution context, heartbeat, and cancellation handles.
@@ -67,6 +69,7 @@ pub use activity::{
     ActivityFailure, ActivityRegistry, Classification, DescriptorNameMismatch,
     DuplicateActivityType, HandlerFuture, activity_descriptor,
 };
+pub use command_transcript::CommandTranscript;
 pub use config::{
     ReconnectConfig, TransportCredentials, WorkerConfig, WorkerConfigBuildError,
     WorkerConfigBuilder,
@@ -74,8 +77,8 @@ pub use config::{
 pub use context::{ActivityCancellationHandle, ActivityContext, HeartbeatRequest};
 pub use error::{MissingActivityHandler, WorkerError};
 pub use process::{
-    CancellableCommandOutput, PROCESS_GROUP_TERMINATION_GRACE, ProcessGroupError,
-    run_cancellable_command,
+    CancellableCommandOutput, CommandOutputObserver, CommandStream,
+    PROCESS_GROUP_TERMINATION_GRACE, ProcessGroupError, run_cancellable_command,
 };
 pub use protocol::{
     ActivityTask, GrpcWorkerSession, PendingActivityReport, ReconnectBackoff,

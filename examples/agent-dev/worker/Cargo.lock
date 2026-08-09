@@ -64,10 +64,10 @@ dependencies = [
 
 [[package]]
 name = "aion-awl"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "aion-package",
- "beamr",
+ "beamr 0.17.0",
  "gleam-types",
  "serde_json",
  "thiserror",
@@ -75,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "aion-core"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "chrono",
  "serde",
@@ -87,7 +87,7 @@ dependencies = [
 
 [[package]]
 name = "aion-integration-norn"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "aion-core",
  "aion-integrations",
@@ -102,7 +102,7 @@ dependencies = [
 
 [[package]]
 name = "aion-integrations"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "aion-core",
  "async-trait",
@@ -115,7 +115,7 @@ dependencies = [
 
 [[package]]
 name = "aion-package"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "aion-core",
  "jsonschema",
@@ -129,7 +129,7 @@ dependencies = [
 
 [[package]]
 name = "aion-proto"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "aion-core",
  "aion-proto-generated",
@@ -145,7 +145,7 @@ dependencies = [
 
 [[package]]
 name = "aion-proto-generated"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "prost",
  "protoc-bin-vendored",
@@ -158,13 +158,14 @@ dependencies = [
 
 [[package]]
 name = "aion-worker"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "aion-core",
  "aion-integrations",
  "aion-package",
  "aion-proto",
  "async-trait",
+ "chrono",
  "futures",
  "hostname",
  "liminal-rs",
@@ -298,6 +299,39 @@ name = "beamr"
 version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4860a45d64945648c6cf64c5a44e09e0f52b40df67fca0635014253e48d4d60"
+dependencies = [
+ "base64",
+ "cranelift-codegen",
+ "cranelift-frontend",
+ "cranelift-jit",
+ "cranelift-module",
+ "cranelift-native",
+ "crossbeam-channel",
+ "crossbeam-deque",
+ "crossbeam-queue",
+ "dashmap",
+ "flate2",
+ "getrandom 0.4.3",
+ "gleam-types",
+ "io-uring",
+ "libc",
+ "md5",
+ "mio",
+ "num_cpus",
+ "rand",
+ "rustix",
+ "serde_json",
+ "tokio",
+ "unicode-segmentation",
+ "web-time",
+ "zstd",
+]
+
+[[package]]
+name = "beamr"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bda4cda26194fc612d1f1c9ff2d554aae7950389278c326c8325cd24e0df4c52"
 dependencies = [
  "base64",
  "cranelift-codegen",
@@ -1095,7 +1129,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a92612160dc25dec762fa07d53518c8eb632b033c25fae74670524a33646d1c"
 dependencies = [
- "beamr",
+ "beamr 0.16.2",
  "blake3",
  "crc32fast",
  "dashmap",
@@ -1540,7 +1574,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f004ef442838bf62e9df41b2622eebeeae2d9084648faf7dd3a0c226c41d124e"
 dependencies = [
  "async-trait",
- "beamr",
+ "beamr 0.16.2",
  "chrono",
  "haematite",
  "jsonschema",

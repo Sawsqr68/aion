@@ -19,6 +19,9 @@ pub mod declared_body_ambiguity;
 /// Which retained version's body a declared-command dispatch runs — the
 /// dispatching run's own, not the queue's.
 pub mod declared_body_selection;
+/// A server-run declared command's output, published onto the same transcript
+/// an agent step's is.
+pub(crate) mod declared_body_transcript;
 /// Activity completion handling and dispatch abstractions.
 pub mod dispatch;
 /// Task-envelope generation, idempotency keys, and completion fencing.

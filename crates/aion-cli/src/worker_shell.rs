@@ -12,8 +12,8 @@ use std::time::Duration;
 use aion_package::ActivityDescriptor;
 
 use aion_worker::{
-    ActivityContext, ActivityFailure, CancellableCommandOutput, ProcessGroupError, Worker,
-    WorkerConfig, run_cancellable_command,
+    ActivityContext, ActivityFailure, CancellableCommandOutput, CommandTranscript,
+    ProcessGroupError, Worker, WorkerConfig, run_cancellable_command,
 };
 use anyhow::{Context, Result, bail};
 use clap::Args;
@@ -215,7 +215,11 @@ async fn execute(
     for (name, value) in &action.env {
         command.env(name, expand(value, input)?);
     }
-    let output = match run_cancellable_command(command, context.cancelled()).await {
+    // The wired command's output streams onto the activity's transcript seam
+    // line by line as it is written, so a manifest-driven action is as readable
+    // mid-run as any other step. The action's own result is unchanged.
+    let transcript = CommandTranscript::new(context);
+    let output = match run_cancellable_command(command, context.cancelled(), &transcript).await {
         Ok(CancellableCommandOutput::Completed(output)) => output,
         Ok(CancellableCommandOutput::Cancelled) => {
             return Err(ActivityFailure::terminal(format!(
@@ -584,6 +588,53 @@ step shout_second after greet_first
         };
         let value = execute(&json_action, &json!({"ok": true}), &context).await?;
         assert_eq!(value, json!({"ok": true}));
+        Ok(())
+    }
+
+    /// A manifest-wired action's output reaches the activity's transcript seam,
+    /// one event per line, without changing the value the action returns.
+    ///
+    /// The mid-run timing of that delivery is proven where the streaming lives
+    /// (`aion_worker::process`); what this pins is the WIRING — that this
+    /// composition root hands the running command a transcript at all.
+    #[tokio::test]
+    async fn a_wired_action_streams_its_output_onto_the_transcript() -> Result<()> {
+        let (events, mut transcript) = tokio::sync::mpsc::unbounded_channel();
+        let (context, _cancellation) = ActivityContext::with_transcript(
+            aion_core::WorkflowId::new_v4(),
+            ActivityId::from_sequence_position(3),
+            1,
+            events,
+        );
+        let action = ActionWiring {
+            name: "noisy".to_owned(),
+            command: vec![
+                "sh".to_owned(),
+                "-c".to_owned(),
+                "echo one; echo two".to_owned(),
+            ],
+            env: BTreeMap::new(),
+            result: ResultEncoding::Text,
+        };
+
+        let value = execute(&action, &Value::Null, &context).await?;
+        assert_eq!(value, json!("one\ntwo"), "the action's own result stands");
+
+        // Closing the seam ends the read below; the command has already finished.
+        drop(context);
+        let mut lines = Vec::new();
+        while let Some(event) = transcript.recv().await {
+            if let aion_core::ActivityEventKind::Message { text, .. } = event.kind {
+                lines.push((event.agent_role, text));
+            }
+        }
+        assert_eq!(
+            lines,
+            vec![
+                ("command stdout".to_owned(), "one".to_owned()),
+                ("command stdout".to_owned(), "two".to_owned()),
+            ]
+        );
         Ok(())
     }
 

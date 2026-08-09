@@ -13,6 +13,7 @@ use tokio::process::Command;
 
 use super::template::{CommandTemplate, SubstitutionError, TemplateError};
 use crate::activity::ActivityFailure;
+use crate::command_transcript::CommandTranscript;
 use crate::context::ActivityContext;
 use crate::process::{CancellableCommandOutput, ProcessGroupError, run_cancellable_command};
 
@@ -135,6 +136,11 @@ impl ShellAction {
     /// only the direct child, so a command that spawned children does not
     /// leave them running.
     ///
+    /// Output is streamed onto `context`'s transcript seam line by line as the
+    /// command writes it (see [`CommandTranscript`]), so an operator can read
+    /// what a command step is printing mid-run. The returned [`ShellOutcome`]
+    /// is unaffected: it still carries the command's complete stdout and stderr.
+    ///
     /// # Errors
     ///
     /// Returns an [`ActivityFailure`] when a referenced parameter is missing or
@@ -180,7 +186,8 @@ impl ShellAction {
             command.current_dir(directory);
         }
 
-        match run_cancellable_command(command, context.cancelled()).await {
+        let transcript = CommandTranscript::new(context);
+        match run_cancellable_command(command, context.cancelled(), &transcript).await {
             Ok(CancellableCommandOutput::Completed(output)) => {
                 let outcome = ShellOutcome {
                     exit_code: output.status.code().unwrap_or(EXIT_CODE_SIGNALLED),
@@ -525,6 +532,85 @@ mod tests {
             )
             .await?;
         assert_eq!(guarded_outcome.stdout, "[-n]");
+        Ok(())
+    }
+
+    /// THE JOIN THIS BUILD MAKES, on the real declared-action path: a command
+    /// writing to BOTH streams has those lines on the activity's transcript seam
+    /// while it is still running — the same seam, envelope and stream key an
+    /// agent step publishes on.
+    ///
+    /// The run future is polled concurrently with the reads, so a capture that
+    /// only materialized at exit would resolve the run arm first and fail the
+    /// test by name. The command then sleeps until the test cancels it, which
+    /// also holds the pre-existing cancellation contract under streaming.
+    #[tokio::test]
+    async fn a_declared_command_streams_both_streams_before_it_exits() -> TestResult {
+        use aion_core::WorkflowId;
+
+        let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
+        let (context, cancellation) = ActivityContext::with_transcript(
+            WorkflowId::new_v4(),
+            ActivityId::from_sequence_position(9),
+            3,
+            sender,
+        );
+        let action = ShellAction::new("sh -c 'echo working; echo warning >&2; sleep 30'")?;
+        let no_arguments = BTreeMap::new();
+        let run = action.run(&no_arguments, &context);
+        tokio::pin!(run);
+
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut observed: Vec<(String, String)> = Vec::new();
+        while !observed.iter().any(|(role, _)| role.contains("stdout"))
+            || !observed.iter().any(|(role, _)| role.contains("stderr"))
+        {
+            tokio::select! {
+                biased;
+                outcome = &mut run => {
+                    drop(outcome);
+                    return Err(format!(
+                        "the command completed before its output reached the transcript: \
+                         {observed:?}"
+                    )
+                    .into());
+                }
+                event = events.recv() => {
+                    let event = event.ok_or("the transcript seam closed mid-command")?;
+                    assert_eq!(event.attempt, 3, "the event carries the attempt it belongs to");
+                    assert_eq!(
+                        event.activity_id,
+                        ActivityId::from_sequence_position(9),
+                        "the event is keyed to the activity that is running"
+                    );
+                    let aion_core::ActivityEventKind::Message { text, .. } = event.kind else {
+                        return Err("an output line must be a Message".into());
+                    };
+                    observed.push((event.agent_role, text));
+                }
+                () = tokio::time::sleep_until(deadline) => {
+                    return Err(format!(
+                        "the running command's output never reached the transcript: {observed:?}"
+                    )
+                    .into());
+                }
+            }
+        }
+
+        assert!(
+            observed.contains(&("command stdout".to_owned(), "working".to_owned())),
+            "stdout must arrive labelled by its stream: {observed:?}"
+        );
+        assert!(
+            observed.contains(&("command stderr".to_owned(), "warning".to_owned())),
+            "stderr must arrive labelled by its stream: {observed:?}"
+        );
+
+        cancellation.cancel();
+        let Err(failure) = run.await else {
+            return Err("a cancelled command must fail the activity".into());
+        };
+        assert_eq!(failure.classification(), &Classification::Terminal);
         Ok(())
     }
 

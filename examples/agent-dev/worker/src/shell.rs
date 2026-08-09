@@ -11,7 +11,8 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use aion_worker::{
-    ActivityContext, CancellableCommandOutput, ProcessGroupError, run_cancellable_command,
+    ActivityContext, CancellableCommandOutput, CommandTranscript, ProcessGroupError,
+    run_cancellable_command,
 };
 use tokio::process::Command;
 
@@ -153,7 +154,13 @@ impl Shell {
         }
 
         let started = Instant::now();
-        let output = match run_cancellable_command(command, context.cancelled()).await {
+        // The CLI's output streams onto the activity's transcript as it is
+        // written, so a long provision/gate/land step is readable mid-run. The
+        // typed `CliRun` below is unaffected — it still carries the whole
+        // captured stdout and stderr.
+        let transcript = CommandTranscript::new(context);
+        let output = match run_cancellable_command(command, context.cancelled(), &transcript).await
+        {
             Ok(CancellableCommandOutput::Completed(output)) => output,
             Ok(CancellableCommandOutput::Cancelled) => return Err(CliFailure::Cancelled),
             Err(ProcessGroupError::Spawn { source }) => {
