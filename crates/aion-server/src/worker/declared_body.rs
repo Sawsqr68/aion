@@ -11,6 +11,16 @@
 //!
 //! Actions with no declared body are delegated to the wrapped production
 //! dispatcher unchanged, so remote workers keep working exactly as before.
+//!
+//! # The command is readable while it runs
+//!
+//! The executing activity carries a live transcript seam
+//! ([`ActivityContext::with_transcript`](aion_worker::ActivityContext::with_transcript)),
+//! so every line the command writes to stdout or stderr is published onto the
+//! server's transcript sequencer AS IT ARRIVES — the same stream, envelope, and
+//! cursor reads an agent step's transcript uses (see
+//! [`super::declared_body_transcript`]). The activity's recorded result is
+//! untouched by this: it still carries the command's complete output.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
@@ -21,7 +31,9 @@ use aion_worker::shell::ShellAction;
 
 use super::declared_body_ambiguity::{DeclaringVersion, ambiguous_body_refusal};
 use super::declared_body_selection::select_declared_body;
+use super::declared_body_transcript::publish_declared_transcript;
 use super::workspace_root::{WORKSPACE_ROOT_PLACEHOLDER, WorkspaceRoot};
+use crate::activity_publisher::ActivityEventPublisher;
 
 /// What a declared-body lookup found for one `(task_queue, action)` address.
 #[derive(Clone, Debug)]
@@ -200,24 +212,29 @@ pub struct DeclaredCommandDispatcher {
     bodies: DeclaredBodySource,
     tokio: tokio::runtime::Handle,
     workspace_root: WorkspaceRoot,
+    transcript: ActivityEventPublisher,
 }
 
 impl DeclaredCommandDispatcher {
-    /// Wrap `inner`, consulting `bodies` before every dispatch and expanding
+    /// Wrap `inner`, consulting `bodies` before every dispatch, expanding
     /// `{workspace_root}` in declared commands with the server-resolved
-    /// `workspace_root`.
+    /// `workspace_root`, and streaming each executed command's output onto
+    /// `transcript` — the deployment's one transcript sequencer, shared with
+    /// every agent step.
     #[must_use]
     pub fn new(
         inner: Arc<dyn ActivityDispatcher>,
         bodies: DeclaredBodySource,
         tokio: tokio::runtime::Handle,
         workspace_root: WorkspaceRoot,
+        transcript: ActivityEventPublisher,
     ) -> Self {
         Self {
             inner,
             bodies,
             tokio,
             workspace_root,
+            transcript,
         }
     }
 
@@ -263,8 +280,17 @@ impl DeclaredCommandDispatcher {
             // rather than hiding it behind a generic dispatch failure.
             format!("terminal:declared command failed to parse at dispatch: {error}")
         })?;
-        let (context, cancellation) =
-            aion_worker::ActivityContext::new(request.activity_id.clone(), request.attempt);
+        // The live transcript seam for this attempt. The context owns the
+        // sending end, so dropping it after the run closes the stream and ends
+        // the pump — which is then awaited, so no observed line is abandoned
+        // unpublished when the command finishes.
+        let (events, drain) = tokio::sync::mpsc::unbounded_channel();
+        let (context, cancellation) = aion_worker::ActivityContext::with_transcript(
+            request.workflow_id.clone(),
+            request.activity_id.clone(),
+            request.attempt,
+            events,
+        );
 
         tracing::info!(
             operation = "declared_command_dispatch",
@@ -276,7 +302,22 @@ impl DeclaredCommandDispatcher {
             "executing declared action body at the server"
         );
 
-        let outcome = self.tokio.block_on(action.run(&arguments, &context));
+        let transcript = self.transcript.clone();
+        let outcome = self.tokio.block_on(async move {
+            let pump = tokio::spawn(publish_declared_transcript(transcript, drain));
+            let outcome = action.run(&arguments, &context).await;
+            // Closing the seam is what ends the pump; the context holds it.
+            drop(context);
+            if let Err(error) = pump.await {
+                tracing::warn!(
+                    %error,
+                    operation = "declared_command_dispatch",
+                    "declared command transcript: the publishing task ended abnormally; some \
+                     output lines may not have been retained"
+                );
+            }
+            outcome
+        });
         // Held, not wired: nothing cancels a single declared-command attempt
         // today. Dropped only after the run so a future wiring cannot race a
         // handle that died early.
@@ -383,10 +424,13 @@ mod tests {
     use aion_core::{ActivityId, RunId, WorkflowId};
     use aion_package::ActionBodyContract;
 
+    use aion_core::ActivityEventKind;
+    use aion_store::ActivityStreamKey;
+
     use super::super::workspace_root::{WorkspaceRoot, WorkspaceRootError};
     use super::{
-        DeclaredBodies, DeclaredBodyLookup, DeclaredBodySource, DeclaredCommandDispatcher,
-        DeclaringVersion, DispatchingRun, decode_arguments,
+        ActivityEventPublisher, DeclaredBodies, DeclaredBodyLookup, DeclaredBodySource,
+        DeclaredCommandDispatcher, DeclaringVersion, DispatchingRun, decode_arguments,
     };
 
     /// What a test returns. Every fallible step is carried rather than
@@ -475,18 +519,31 @@ mod tests {
         // These tests exercise bodies without the placeholder, so the root's
         // value is never read; it is an explicit existing directory rather
         // than a default so nothing here depends on resolution.
-        dispatcher_with_root(
+        let (decorated, reached, _transcript) = dispatcher_with_root(
             lookup,
             reply,
             WorkspaceRoot::from_resolution(Ok(std::env::temp_dir())),
-        )
+        );
+        (decorated, reached)
     }
+
+    /// The live-tail buffer these tests give their transcript sequencer. A
+    /// `const` match rather than an unwrap: the workspace denies panicking
+    /// accessors in test code as firmly as in library code.
+    const TRANSCRIPT_CAPACITY: std::num::NonZeroUsize = match std::num::NonZeroUsize::new(64) {
+        Some(capacity) => capacity,
+        None => std::num::NonZeroUsize::MIN,
+    };
 
     fn dispatcher_with_root(
         lookup: DeclaredBodyLookup,
         reply: Result<String, String>,
         workspace_root: WorkspaceRoot,
-    ) -> (DeclaredCommandDispatcher, Arc<Mutex<Vec<String>>>) {
+    ) -> (
+        DeclaredCommandDispatcher,
+        Arc<Mutex<Vec<String>>>,
+        ActivityEventPublisher,
+    ) {
         let reached = Arc::new(Mutex::new(Vec::new()));
         let inner = RecordingInner {
             reached: Arc::clone(&reached),
@@ -494,13 +551,17 @@ mod tests {
         };
         let bodies = DeclaredBodySource::default();
         bodies.install(Arc::new(FixedBodies { lookup }));
+        let store: Arc<dyn aion_store::ObservabilityStore> =
+            Arc::new(aion_store::InMemoryObservabilityStore::default());
+        let transcript = ActivityEventPublisher::new(store, TRANSCRIPT_CAPACITY);
         let decorated = DeclaredCommandDispatcher::new(
             Arc::new(inner),
             bodies,
             tokio::runtime::Handle::current(),
             workspace_root,
+            transcript.clone(),
         );
-        (decorated, reached)
+        (decorated, reached, transcript)
     }
 
     fn reached_names(reached: &Arc<Mutex<Vec<String>>>) -> Vec<String> {
@@ -544,6 +605,74 @@ mod tests {
         assert!(
             reached_names(&reached).is_empty(),
             "the worker path must not be consulted for a bodied action"
+        );
+        Ok(())
+    }
+
+    /// THE MID-STEP ANSWER: a server-run declared body's output reaches the
+    /// deployment's transcript sequencer as one event per line, on both streams,
+    /// keyed to the dispatch's own `(workflow, activity, attempt)` — the same
+    /// durable stream an agent step's transcript is read from, so every reader
+    /// that already serves transcripts serves this without change.
+    ///
+    /// The completion contract is asserted on the same run: the recorded result
+    /// still carries the command's whole stdout.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_declared_body_publishes_its_output_onto_the_transcript() -> TestResult {
+        let (decorated, reached, transcript) = dispatcher_with_root(
+            DeclaredBodyLookup::Declared(ActionBodyContract::Run {
+                command: "sh -c 'echo one; echo two; echo warned >&2'".to_owned(),
+            }),
+            Err("terminal:the worker path must never be reached".to_owned()),
+            WorkspaceRoot::from_resolution(Ok(std::env::temp_dir())),
+        );
+        let dispatch = request("noisy", "{}");
+        let key = ActivityStreamKey::new(
+            dispatch.workflow_id.clone(),
+            dispatch.activity_id.clone(),
+            dispatch.attempt,
+        );
+
+        let handle = tokio::task::spawn_blocking(move || decorated.dispatch(dispatch));
+        let encoded = handle
+            .await?
+            .map_err(|error| format!("declared command failed: {error}"))?;
+
+        // The replay-authoritative result is untouched by the streaming.
+        let outcome: serde_json::Value = serde_json::from_str(&encoded)?;
+        assert_eq!(outcome["stdout"], "one\ntwo");
+        assert_eq!(outcome["stderr"], "warned");
+        assert!(reached_names(&reached).is_empty());
+
+        // ...and the same output is on the durable transcript, line by line.
+        let retained = transcript.replay_from(&key, 0).await?;
+        let lines = retained
+            .iter()
+            .map(|record| match &record.event.kind {
+                ActivityEventKind::Message { text, .. } => {
+                    (record.event.agent_role.clone(), text.clone())
+                }
+                other => (record.event.agent_role.clone(), format!("{other:?}")),
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            lines.contains(&("command stdout".to_owned(), "one".to_owned()))
+                && lines.contains(&("command stdout".to_owned(), "two".to_owned())),
+            "each stdout line must be its own transcript event: {lines:?}"
+        );
+        assert!(
+            lines.contains(&("command stderr".to_owned(), "warned".to_owned())),
+            "stderr must be on the transcript, labelled by its stream: {lines:?}"
+        );
+        // Sequencing is the publisher's: the durable order is gap-free from 0.
+        let sequences = retained
+            .iter()
+            .map(|record| record.store_seq)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            sequences,
+            (0..u64::try_from(retained.len())?).collect::<Vec<_>>(),
+            "the sequencer assigns a gap-free durable order"
         );
         Ok(())
     }
@@ -661,7 +790,7 @@ mod tests {
         let scratch = tempfile::tempdir()?;
         let root = scratch.path().join("clones");
         let root_text = root.to_string_lossy().into_owned();
-        let (decorated, reached) = dispatcher_with_root(
+        let (decorated, reached, _transcript) = dispatcher_with_root(
             DeclaredBodyLookup::Declared(ActionBodyContract::Run {
                 command: "echo {workspace_root}".to_owned(),
             }),
@@ -689,7 +818,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn a_placeholder_bearing_body_refuses_terminally_when_the_root_is_unresolved()
     -> TestResult {
-        let (decorated, reached) = dispatcher_with_root(
+        let (decorated, reached, _transcript) = dispatcher_with_root(
             DeclaredBodyLookup::Declared(ActionBodyContract::Run {
                 command: "echo {workspace_root}".to_owned(),
             }),
@@ -722,7 +851,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn a_shape_changing_root_refuses_terminally_naming_the_action() -> TestResult {
         // `$` in the root would open a parameter reference after splicing.
-        let (decorated, reached) = dispatcher_with_root(
+        let (decorated, reached, _transcript) = dispatcher_with_root(
             DeclaredBodyLookup::Declared(ActionBodyContract::Run {
                 command: "echo {workspace_root}".to_owned(),
             }),
@@ -756,7 +885,7 @@ mod tests {
         let scratch = tempfile::tempdir()?;
         let file = scratch.path().join("occupied");
         std::fs::write(&file, b"not a directory")?;
-        let (decorated, reached) = dispatcher_with_root(
+        let (decorated, reached, _transcript) = dispatcher_with_root(
             DeclaredBodyLookup::Declared(ActionBodyContract::Run {
                 command: "echo {workspace_root}".to_owned(),
             }),
@@ -786,7 +915,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn a_body_without_the_placeholder_is_untouched_by_resolution_failure() -> TestResult {
-        let (decorated, _reached) = dispatcher_with_root(
+        let (decorated, _reached, _transcript) = dispatcher_with_root(
             DeclaredBodyLookup::Declared(ActionBodyContract::Run {
                 command: "echo $greeting".to_owned(),
             }),
@@ -868,6 +997,10 @@ mod tests {
             bodies,
             tokio::runtime::Handle::current(),
             WorkspaceRoot::from_resolution(Ok(std::env::temp_dir())),
+            ActivityEventPublisher::new(
+                Arc::new(aion_store::InMemoryObservabilityStore::default()),
+                TRANSCRIPT_CAPACITY,
+            ),
         );
 
         let dispatch = request("plain", "{}");

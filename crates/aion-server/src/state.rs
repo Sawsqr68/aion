@@ -241,12 +241,8 @@ impl ServerState {
             &connected.worker_deployment_store,
             mint_routing,
         );
-        // #139: THE one resolution of the declared-body workspace root. The
-        // dispatcher expands `{workspace_root}` with it and the state exposes
-        // it for the startup banner; nothing else derives the value.
-        let workspace_root = crate::worker::WorkspaceRoot::resolve();
-        let (activity_dispatcher, activity_mock_registry, attempt_owners) =
-            build_decorated_dispatcher(&runtime, &seams, workspace_root.clone());
+        let (activity_dispatcher, activity_mock_registry, attempt_owners, workspace_root) =
+            build_decorated_dispatcher(&runtime, &seams, transcript_publisher.clone());
 
         let engine = build_engine(EngineAssembly {
             instrumented_store: &instrumented_store,
@@ -1415,26 +1411,38 @@ fn build_bridge_dispatcher(
 fn build_decorated_dispatcher(
     runtime: &RuntimeConfig,
     seams: &WorkerSeams,
-    workspace_root: crate::worker::WorkspaceRoot,
+    transcript: crate::activity_publisher::ActivityEventPublisher,
 ) -> (
     Arc<dyn ActivityDispatcher>,
     Option<ActivityMockRegistry>,
     crate::worker::AttemptOwnerIndex,
+    crate::worker::WorkspaceRoot,
 ) {
+    // #139: THE one resolution of the declared-body workspace root. The
+    // dispatcher expands `{workspace_root}` with it and the returned value is
+    // what the state exposes for the startup banner; nothing else derives it.
+    let workspace_root = crate::worker::WorkspaceRoot::resolve();
     let (dispatcher, attempt_owners) = build_bridge_dispatcher(runtime, seams);
     let (activity_dispatcher, activity_mock_registry) = decorate_activity_dispatcher(
         dispatcher,
         seams.declared_bodies.clone(),
-        workspace_root,
+        workspace_root.clone(),
+        transcript,
         runtime.dev.enabled,
     );
-    (activity_dispatcher, activity_mock_registry, attempt_owners)
+    (
+        activity_dispatcher,
+        activity_mock_registry,
+        attempt_owners,
+        workspace_root,
+    )
 }
 
 fn decorate_activity_dispatcher(
     dispatcher: WorkerActivityDispatcher,
     declared_bodies: crate::worker::DeclaredBodySource,
     workspace_root: crate::worker::WorkspaceRoot,
+    transcript: crate::activity_publisher::ActivityEventPublisher,
     dev_enabled: bool,
 ) -> (Arc<dyn ActivityDispatcher>, Option<ActivityMockRegistry>) {
     // The declared-body layer wraps the production dispatcher UNCONDITIONALLY:
@@ -1447,6 +1455,7 @@ fn decorate_activity_dispatcher(
         declared_bodies,
         tokio::runtime::Handle::current(),
         workspace_root,
+        transcript,
     );
     if dev_enabled {
         let registry = ActivityMockRegistry::new();

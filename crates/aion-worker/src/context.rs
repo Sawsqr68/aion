@@ -57,10 +57,48 @@ impl ActivityContext {
         Self::with_heartbeat_sender(activity_id, attempt, None)
     }
 
+    /// Creates a context whose transcript seam is live, for a host that owns
+    /// the receiving end of `events`.
+    ///
+    /// This is the seam [`Self::emit_event`] publishes on: every event a handler
+    /// emits carries this context's `(workflow_id, activity_id, attempt)`
+    /// identity, which is exactly the key the server's transcript sequencer
+    /// files it under. A host that executes an activity IN PROCESS (the server's
+    /// declared-command path) uses this to hand its own publisher the same
+    /// stream a remote worker's drain would have delivered.
+    #[must_use]
+    pub fn with_transcript(
+        workflow_id: WorkflowId,
+        activity_id: ActivityId,
+        attempt: u32,
+        events: mpsc::UnboundedSender<ActivityEvent>,
+    ) -> (Self, ActivityCancellationHandle) {
+        Self::for_workflow_with_events(
+            Some(workflow_id),
+            activity_id,
+            attempt,
+            None,
+            None,
+            Some(events),
+        )
+    }
+
     /// Returns this activity's identifier.
     #[must_use]
     pub const fn activity_id(&self) -> &ActivityId {
         &self.activity_id
+    }
+
+    /// Returns the workflow this activity belongs to.
+    ///
+    /// `None` on a context that is not attached to a live workflow (an isolated
+    /// unit-test context). A transcript event cannot be attributed without it —
+    /// the workflow is half of the stream key — so a producer that finds `None`
+    /// here has no stream to publish into and must emit nothing rather than
+    /// invent an identity.
+    #[must_use]
+    pub const fn workflow_id(&self) -> Option<&WorkflowId> {
+        self.workflow_id.as_ref()
     }
 
     /// Returns this activity's attempt number.

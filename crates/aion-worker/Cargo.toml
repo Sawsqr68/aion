@@ -25,6 +25,9 @@ aion-package = { version = "0.12.0", path = "../aion-package" }
 # the binary composition root (aion-cli), never named here.
 aion-integrations = { version = "0.12.0", path = "../aion-integrations" }
 aion-proto = { version = "0.12.0", path = "../aion-proto", features = ["generated"] }
+# Transcript events carry a producer-clock emission instant; the worker stamps
+# one per line of command output it streams.
+chrono = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tonic = { workspace = true }
 prost = { workspace = true }
@@ -68,5 +71,3 @@ liminal-transport = ["dep:liminal-sdk", "dep:liminal"]
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }
 tokio-stream = { workspace = true, features = ["net"] }
-# The trait-driver tests stamp `ActivityEvent`/`InterventionCommand` timestamps.
-chrono = { workspace = true }
