@@ -355,12 +355,19 @@ impl TryFrom<ProtoQueryResponse> for QueryWorkflowResponse {
     }
 }
 
-fn proto_workflow_id(value: &str) -> Result<ProtoWorkflowId, WireError> {
+/// Parse the clean wire's plain-UUID workflow id.
+///
+/// Shared with the live describe join so both describe routes accept exactly
+/// the same id spelling and reject the same malformed one with the same typed
+/// error.
+pub(super) fn proto_workflow_id(value: &str) -> Result<ProtoWorkflowId, WireError> {
     let id = parse_uuid(value, "workflow id")?;
     Ok(aion_core::WorkflowId::new(id).into())
 }
 
-fn optional_proto_run_id(value: Option<&str>) -> Result<Option<ProtoRunId>, WireError> {
+/// Parse the clean wire's optional plain-UUID run selector (see
+/// [`proto_workflow_id`] for why it is shared).
+pub(super) fn optional_proto_run_id(value: Option<&str>) -> Result<Option<ProtoRunId>, WireError> {
     value
         .filter(|value| !value.is_empty())
         .map(|value| parse_uuid(value, "run id").map(|id| aion_core::RunId::new(id).into()))

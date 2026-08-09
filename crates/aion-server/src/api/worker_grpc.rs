@@ -845,6 +845,7 @@ mod tests {
             InFlightActivity {
                 workflow_id: workflow_id.clone(),
                 activity_id: activity_id.clone(),
+                attempt: 1,
                 completion_token: completion_token.clone(),
             },
             Instant::now(),

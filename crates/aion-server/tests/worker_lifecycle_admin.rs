@@ -73,6 +73,7 @@ fn active_worker_heartbeat_refreshes_connection_lease() -> Result<(), Box<dyn st
         InFlightActivity {
             workflow_id: workflow_id.clone(),
             activity_id: activity_id.clone(),
+            attempt: 1,
             completion_token: CompletionToken::from_wire(
                 &workflow_id,
                 &activity_id,

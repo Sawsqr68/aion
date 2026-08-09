@@ -21,7 +21,7 @@
 //! an address with a live compatible worker, so a run whose activity is genuinely
 //! being executed produces no entry at all.
 
-use aion_core::{ActivityId, Event, UnservedActivity, WorkflowId};
+use aion_core::{ActivityId, Event, StepState, UnservedActivity, WorkflowId};
 use chrono::{DateTime, Utc};
 
 use super::census::classify;
@@ -53,102 +53,37 @@ pub struct OpenActivity {
     pub dispatched_at: DateTime<Utc>,
 }
 
-/// Working state for one activity ordinal while the segment is scanned.
-#[derive(Clone, Debug)]
-struct Open {
-    activity_id: ActivityId,
-    activity_type: String,
-    task_queue: String,
-    node: Option<String>,
-    attempt: u32,
-    dispatched_at: DateTime<Utc>,
-    started: bool,
-}
-
 /// The activities the run's active segment records as dispatched and not yet
-/// terminated, in dispatch order.
+/// terminated, in the order the ordinals were opened.
 ///
-/// Scans forward from the latest `WorkflowStarted` (the active run segment) and
-/// lets the *last* event for each activity ordinal decide: an
-/// `ActivityScheduled` (re)opens the ordinal at its stamped address, an
-/// `ActivityStarted` records the delivery attempt and the dispatch instant, and
-/// `ActivityCompleted` / `ActivityFailed` / `ActivityCancelled` retire it. An
-/// ordinal re-dispatched after a crash — the shape a restart's replay produces,
-/// and the shape the 24-day exhibit has four of — is correctly reported once, at
-/// its most recent dispatch, rather than once per re-arm.
+/// This is the DISPATCHED slice of [`aion_core::open_steps`] — the single fold
+/// that answers "what is this run's history holding open", shared with the live
+/// describe join rather than reimplemented here. Keeping one fold is the point:
+/// two scans of the same events, each with its own idea of what a terminal is,
+/// would sooner or later disagree, and an operator would be reading whichever
+/// one happened to be wired to the surface they opened.
 ///
-/// `ActivityAdvisoryExhausted` is deliberately not a terminal: it ACCOMPANIES an
-/// `ActivityFailed` and never replaces it, so retiring on it would retire the
-/// ordinal twice.
-///
-/// An `ActivityStarted` with no `ActivityScheduled` in the segment is not
-/// reported. Its address was never recorded in this segment, so there is nothing
-/// to classify, and inventing one would be the guess this module exists to avoid.
+/// A step the fold reports as `Scheduled` or `Reopened` is deliberately NOT
+/// here. Nothing has been dispatched for it, so there is no delivery for the
+/// fleet to fail to serve, and classifying one would report a queue problem
+/// against work that has not been handed to a queue.
 #[must_use]
 pub fn open_activities_in_active_segment(history: &[Event]) -> Vec<OpenActivity> {
-    let segment_start = history
-        .iter()
-        .rposition(|event| matches!(event, Event::WorkflowStarted { .. }))
-        .unwrap_or(0);
-    let mut open: Vec<Open> = Vec::new();
-    for event in &history[segment_start..] {
-        match event {
-            Event::ActivityScheduled {
-                envelope,
-                activity_id,
-                activity_type,
-                task_queue,
-                node,
-                ..
-            } => {
-                let entry = Open {
-                    activity_id: activity_id.clone(),
-                    activity_type: activity_type.clone(),
-                    task_queue: task_queue.clone(),
-                    node: node.clone(),
-                    attempt: 0,
-                    dispatched_at: envelope.recorded_at,
-                    started: false,
-                };
-                match open
-                    .iter_mut()
-                    .find(|held| &held.activity_id == activity_id)
-                {
-                    Some(held) => *held = entry,
-                    None => open.push(entry),
-                }
-            }
-            Event::ActivityStarted {
-                envelope,
-                activity_id,
+    aion_core::open_steps(history)
+        .into_iter()
+        .filter_map(|step| match step.state {
+            StepState::Dispatched {
                 attempt,
-            } => {
-                if let Some(held) = open
-                    .iter_mut()
-                    .find(|held| &held.activity_id == activity_id)
-                {
-                    held.attempt = *attempt;
-                    held.dispatched_at = envelope.recorded_at;
-                    held.started = true;
-                }
-            }
-            Event::ActivityCompleted { activity_id, .. }
-            | Event::ActivityFailed { activity_id, .. }
-            | Event::ActivityCancelled { activity_id, .. } => {
-                open.retain(|held| &held.activity_id != activity_id);
-            }
-            _ => {}
-        }
-    }
-    open.into_iter()
-        .filter(|held| held.started)
-        .map(|held| OpenActivity {
-            activity_id: held.activity_id,
-            activity_type: held.activity_type,
-            task_queue: held.task_queue,
-            node: held.node,
-            attempt: held.attempt,
-            dispatched_at: held.dispatched_at,
+                dispatched_at,
+            } => Some(OpenActivity {
+                activity_id: step.activity_id,
+                activity_type: step.activity_type,
+                task_queue: step.task_queue,
+                node: step.node,
+                attempt,
+                dispatched_at,
+            }),
+            StepState::Scheduled | StepState::Reopened { .. } => None,
         })
         .collect()
 }
