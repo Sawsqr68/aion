@@ -320,6 +320,15 @@ async fn silent_worker_with_open_stream_is_expired_and_deregistered_by_the_sweep
     let sweeper = harness.state.spawn_heartbeat_sweeper(shutdown_rx);
 
     let dispatcher = Arc::new(harness.dispatcher());
+    // Anchor BEFORE the dispatch is spawned. The sweeper's window starts from
+    // the worker's last recorded sign of life — task delivery — which happens
+    // between this instant and `next_task()` returning. An anchor taken after
+    // `next_task()` postdates the window's true start and systematically
+    // under-measures it, so a sweep firing exactly at window-end read as
+    // premature (the pre-integration flake). This instant provably precedes
+    // every server-side liveness timestamp, so a correct sweep always
+    // satisfies the assertion and an early sweep still fails it.
+    let window_lower_bound = Instant::now();
     let dispatch_task = tokio::spawn(futures::future::lazy(move |_| {
         dispatcher.dispatch(greet_request())
     }));
@@ -328,7 +337,6 @@ async fn silent_worker_with_open_stream_is_expired_and_deregistered_by_the_sweep
 
     // The worker now wedges: no heartbeat, no result, stream held OPEN. The
     // dispatch wait is unbounded by design, so ONLY the sweeper can end it.
-    let wedged_at = Instant::now();
     let result = tokio::time::timeout(EXPIRY_DEADLINE, dispatch_task)
         .await
         .map_err(|_| {
@@ -336,7 +344,7 @@ async fn silent_worker_with_open_stream_is_expired_and_deregistered_by_the_sweep
              sweeper is not expiring silent workers"
         })?
         .map_err(|join_error| join_error.to_string())?;
-    let expiry_latency = wedged_at.elapsed();
+    let expiry_latency = window_lower_bound.elapsed();
 
     let error = result.err().ok_or("expected a lost-worker failure")?;
     // TRANSPORT domain. The intent of the old `retryable:` assertion — "so the
