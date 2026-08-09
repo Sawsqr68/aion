@@ -11,6 +11,12 @@ export type DeployedListProps = {
   versions: readonly DeployedVersion[];
   selected: DeployedVersionKey | null;
   unavailable?: boolean;
+  /**
+   * How many deployed versions the panel withheld because their archives carry
+   * no readable AWL source. Keeps the empty state honest: "nothing is
+   * deployed" and "nothing deployed here can be read" are different facts.
+   */
+  sourcelessCount?: number;
   onSelect: (key: DeployedVersionKey) => void;
 };
 
@@ -18,15 +24,18 @@ export type DeployedListProps = {
  * The deployed workflow versions this server holds, each stating what it
  * carries by way of authored source.
  *
- * The list makes NO claim it has not measured. A version whose archive has no
- * AWL document says so and is not selectable; a version whose archive would not
- * read back says that instead, with the server's own reason — the two are
- * different facts and are never rendered as one.
+ * The list makes NO claim it has not measured. The panel withholds versions
+ * without readable source (this is a read surface; an entry that cannot open
+ * is not listed), but the rows stay honest for any input: a version whose
+ * archive has no AWL document says so and is not selectable; a version whose
+ * archive would not read back says that instead, with the server's own reason
+ * — the two are different facts and are never rendered as one.
  */
 export function DeployedList({
   versions,
   selected,
   unavailable = false,
+  sourcelessCount = 0,
   onSelect,
 }: DeployedListProps) {
   if (unavailable) {
@@ -43,7 +52,9 @@ export function DeployedList({
   if (versions.length === 0) {
     return (
       <p className="p-4 text-center text-muted-foreground text-xs">
-        Nothing is deployed on this server yet.
+        {sourcelessCount > 0
+          ? `${sourcelessCount} deployed version${sourcelessCount === 1 ? ' carries' : 's carry'} no archived AWL source, so there is nothing to read here.`
+          : 'Nothing is deployed on this server yet.'}
       </p>
     );
   }

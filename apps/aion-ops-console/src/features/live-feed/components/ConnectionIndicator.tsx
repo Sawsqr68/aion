@@ -11,6 +11,7 @@ const STATUS_LABELS: Record<ConnectionStatus, string> = {
   disconnected: 'Disconnected',
   'resynced-with-possible-gap': 'Live with possible gap',
   reconnecting: 'Reconnecting',
+  idle: 'Idle',
 };
 
 const STATUS_STYLES: Record<ConnectionStatus, string> = {
@@ -18,6 +19,7 @@ const STATUS_STYLES: Record<ConnectionStatus, string> = {
   disconnected: 'border-danger/40 bg-danger-glow text-danger',
   'resynced-with-possible-gap': 'border-warning/40 bg-warning-glow text-warning',
   reconnecting: 'border-warning/40 bg-warning-glow text-warning',
+  idle: 'border-border text-muted-foreground',
 };
 
 export type ConnectionIndicatorContentProps = {
@@ -70,9 +72,23 @@ export type ConnectionIndicatorProps = {
  * Live connection indicator wired to the shared WebSocket status. Surfaces
  * drop/reconnect transitions to visible state (never console-only).
  */
+/**
+ * Whether the live indicator shows at all. An idle stream — no view
+ * subscribed, nothing flowing, nothing wrong — is not a condition worth a
+ * badge: rendering one reads as a fault to anyone who has not memorised the
+ * socket lifecycle. A held error still shows, whatever the status.
+ */
+export function indicatorVisible(status: ConnectionStatus, error: AionSocketError | null): boolean {
+  return status !== 'idle' || error !== null;
+}
+
 export function ConnectionIndicator({ className }: ConnectionIndicatorProps) {
   const status = useConnectionStatus();
   const error = useSocketError();
+
+  if (!indicatorVisible(status, error)) {
+    return null;
+  }
 
   return <ConnectionIndicatorContent className={className} error={error} status={status} />;
 }

@@ -33,6 +33,17 @@ export type DeployedVersion = {
   source: DeployedSourceState;
 };
 
+/**
+ * The versions the deployed read surface lists: those whose archive carries
+ * readable AWL source. A version with nothing to read is genuinely deployed,
+ * but the operator ruled (2026-08-10) that a read surface must not list
+ * entries that cannot be opened — the complete inventory lives on the
+ * versions listing, not here.
+ */
+export function versionsWithSource(versions: readonly DeployedVersion[]): DeployedVersion[] {
+  return versions.filter((version) => version.source.state === 'available');
+}
+
 export type DeployedSchema = { path: string; text: string | null; byteLength: number };
 
 /**

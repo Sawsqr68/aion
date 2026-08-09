@@ -1,15 +1,14 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
-
-import type { ConnectionStatus } from '@/lib/api';
-
+import type { AionSocketError, ConnectionStatus } from '@/lib/api';
 import { ConnectionIndicatorContent } from './ConnectionIndicator';
 
 let currentStatus: ConnectionStatus = 'disconnected';
+let currentError: AionSocketError | null = null;
 
 mock.module('../hooks/useConnectionStatus', () => ({
   useConnectionStatus: () => currentStatus,
-  useSocketError: () => null,
+  useSocketError: () => currentError,
 }));
 
 describe('ConnectionIndicator', () => {
@@ -58,6 +57,31 @@ describe('ConnectionIndicator', () => {
 
     expect(markup).not.toContain('data-socket-error');
   });
+
+  test('an idle stream with no error renders nothing — quiet is not a fault', async () => {
+    const { ConnectionIndicator } = await import('./ConnectionIndicator');
+    currentStatus = 'idle';
+    currentError = null;
+
+    expect(renderToStaticMarkup(<ConnectionIndicator />)).toBe('');
+  });
+
+  test('an idle stream still shows a held error rather than hiding it', async () => {
+    const { ConnectionIndicator } = await import('./ConnectionIndicator');
+    currentStatus = 'idle';
+    currentError = {
+      kind: 'reconnect-exhausted',
+      subscriptionId: 'aion-events-1',
+      message: 'The live stream gave up reconnecting.',
+      cause: null,
+    };
+
+    const markup = renderToStaticMarkup(<ConnectionIndicator />);
+    currentError = null;
+
+    expect(markup).toContain('data-socket-error="reconnect-exhausted"');
+    expect(markup).toContain('The live stream gave up reconnecting.');
+  });
 });
 
 function connectionLabel(status: ConnectionStatus): string {
@@ -70,5 +94,7 @@ function connectionLabel(status: ConnectionStatus): string {
       return 'Reconnecting';
     case 'disconnected':
       return 'Disconnected';
+    case 'idle':
+      return 'Idle';
   }
 }

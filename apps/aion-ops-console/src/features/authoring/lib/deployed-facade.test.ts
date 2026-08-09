@@ -289,3 +289,34 @@ test('a refused read surfaces the server message', async () => {
   });
   await expect(facade.listDeployedVersions()).rejects.toThrow('not authorized to deploy');
 });
+
+import type { DeployedVersion } from './deployed-facade';
+import { versionsWithSource } from './deployed-facade';
+
+test('versionsWithSource keeps only versions whose archive carries readable source', () => {
+  const base: Omit<DeployedVersion, 'source' | 'contentHash'> = {
+    workflowType: 'dev_brief',
+    loaded: true,
+    routeActive: false,
+    loadedAt: null,
+    deployedAt: null,
+  };
+  const versions: DeployedVersion[] = [
+    {
+      ...base,
+      contentHash: 'a'.repeat(64),
+      source: { state: 'available', documentName: 'dev_brief.awl', schemaCount: 0 },
+    },
+    { ...base, contentHash: 'b'.repeat(64), source: { state: 'absent' } },
+    { ...base, contentHash: 'c'.repeat(64), source: { state: 'not_persisted' } },
+    {
+      ...base,
+      contentHash: 'd'.repeat(64),
+      source: { state: 'unreadable', reason: 'archive truncated' },
+    },
+  ];
+
+  const kept = versionsWithSource(versions);
+
+  expect(kept.map((version) => version.contentHash)).toEqual(['a'.repeat(64)]);
+});

@@ -42,10 +42,20 @@ export const SOCKET_CONNECTING = 0;
 export const SOCKET_OPEN = 1;
 export const SOCKET_CLOSING = 2;
 
+/**
+ * The stream's condition as the UI states it.
+ *
+ * `idle` and `disconnected` are different facts and are never rendered as
+ * one: `idle` means nothing is subscribed (or the manager was deliberately
+ * closed) — no events are flowing and nothing is wrong — while
+ * `disconnected` means a live subscription exhausted its reconnect budget
+ * and the stream is genuinely broken.
+ */
 export type ConnectionStatus =
   | 'connected'
   | 'resynced-with-possible-gap'
   | 'reconnecting'
+  | 'idle'
   | 'disconnected';
 
 /**

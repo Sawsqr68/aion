@@ -7,7 +7,7 @@ import { ErrorState } from '@/components/ErrorState';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 
 import { useDeployedDocument, useDeployedVersions } from '../hooks/useDeployedVersions';
-import { DeployedSurfaceUnavailableError } from '../lib/deployed-facade';
+import { DeployedSurfaceUnavailableError, versionsWithSource } from '../lib/deployed-facade';
 import { DeployedDocumentPane } from './DeployedDocumentPane';
 import { DeployedList, type DeployedVersionKey } from './DeployedList';
 
@@ -21,7 +21,9 @@ import { DeployedList, type DeployedVersionKey } from './DeployedList';
  */
 export function DeployedPanel() {
   const versionsQuery = useDeployedVersions();
-  const versions = versionsQuery.data ?? [];
+  const allVersions = versionsQuery.data ?? [];
+  const versions = versionsWithSource(allVersions);
+  const sourcelessCount = allVersions.length - versions.length;
   const [searchParams, setSearchParams] = useSearchParams();
   const workflowType = searchParams.get('type');
   const contentHash = searchParams.get('version');
@@ -93,6 +95,7 @@ export function DeployedPanel() {
           selected={
             workflowType === null || contentHash === null ? null : { workflowType, contentHash }
           }
+          sourcelessCount={sourcelessCount}
           unavailable={unavailable}
           versions={versions}
         />

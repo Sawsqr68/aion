@@ -118,3 +118,20 @@ test('the deployed list claims no check state it has not measured', () => {
   expect(html).not.toContain('deploys green');
   expect(html).not.toContain('data-status="healthy"');
 });
+
+test('an empty list caused by withheld sourceless versions says that, not "nothing deployed"', () => {
+  const markup = renderToStaticMarkup(
+    <DeployedList onSelect={() => {}} selected={null} sourcelessCount={3} versions={[]} />
+  );
+
+  expect(markup).toContain('3 deployed versions carry no archived AWL source');
+  expect(markup).not.toContain('Nothing is deployed on this server yet');
+});
+
+test('a single withheld sourceless version is counted in the singular', () => {
+  const markup = renderToStaticMarkup(
+    <DeployedList onSelect={() => {}} selected={null} sourcelessCount={1} versions={[]} />
+  );
+
+  expect(markup).toContain('1 deployed version carries no archived AWL source');
+});

@@ -33,7 +33,10 @@ test('renders the provider-backed list route in the app shell', () => {
 
   expect(markup).toContain('Aion Ops Console');
   expect(markup).toContain('Namespace');
-  expect(markup).toContain('Event stream');
+  // In a static render nothing has subscribed to the event stream, so the
+  // connection indicator stays hidden: an idle stream is not a fault and
+  // must not read as "Disconnected" in the header.
+  expect(markup).not.toContain('Event stream');
   expect(markup).toContain('workflow-1');
   expect(markup).toContain('href="/workflows/workflow-1"');
 });

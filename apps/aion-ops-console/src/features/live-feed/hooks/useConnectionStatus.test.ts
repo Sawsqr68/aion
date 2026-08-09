@@ -28,7 +28,9 @@ test('useConnectionStatus is exported as a hook function', async () => {
   const { useConnectionStatus } = await import('./useConnectionStatus');
 
   expect(typeof useConnectionStatus).toBe('function');
-  expect(useConnectionStatus()).toBe('disconnected');
+  // A manager nothing has subscribed to is idle, not disconnected: quiet is
+  // not a fault.
+  expect(useConnectionStatus()).toBe('idle');
 });
 
 test('manager status store reports connect, drop, and reconnect sequence consumed by the hook', () => {
@@ -56,7 +58,9 @@ test('manager status store reports connect, drop, and reconnect sequence consume
   manager.onStatusChange((status) => afterCleanupStatuses.push(status));
   secondSocket.drop();
 
-  expect(statuses).toEqual(['disconnected', 'connected', 'reconnecting', 'connected']);
+  // The sequence starts idle (nothing subscribed yet); a subscription opening
+  // its first socket stays idle until the socket actually connects.
+  expect(statuses).toEqual(['idle', 'connected', 'reconnecting', 'connected']);
   expect(afterCleanupStatuses).toEqual(['reconnecting']);
 });
 

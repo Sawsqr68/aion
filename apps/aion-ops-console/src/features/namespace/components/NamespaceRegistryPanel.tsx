@@ -61,6 +61,7 @@ const STATUS_LABEL: Record<ConnectionStatus, string> = {
   disconnected: 'Disconnected',
   'resynced-with-possible-gap': 'Live with possible gap',
   reconnecting: 'Reconnecting',
+  idle: 'Idle',
 };
 
 const STATUS_STYLE: Record<ConnectionStatus, string> = {
@@ -68,6 +69,7 @@ const STATUS_STYLE: Record<ConnectionStatus, string> = {
   disconnected: 'border-danger/40 bg-danger-glow text-danger',
   'resynced-with-possible-gap': 'border-warning/40 bg-warning-glow text-warning',
   reconnecting: 'border-warning/40 bg-warning-glow text-warning',
+  idle: 'border-border text-muted-foreground',
 };
 
 /** Friendly text for the known origin labels; unknown labels pass through raw. */

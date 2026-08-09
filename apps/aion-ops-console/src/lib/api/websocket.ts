@@ -87,7 +87,7 @@ export class AionEventWebSocketManager {
     this.errorListeners
   );
   private readonly recoveryPolicy: ApplicationRecoveryPolicy;
-  private status: ConnectionStatus = 'disconnected';
+  private status: ConnectionStatus = 'idle';
   private intentionalClose = false;
   private nextSubscriptionId = 1;
 
@@ -161,7 +161,9 @@ export class AionEventWebSocketManager {
       }
     }
 
-    this.setStatus('disconnected');
+    // A deliberate close is quiet, not broken: the operator (or teardown)
+    // asked for it, so the stream is idle rather than disconnected.
+    this.setStatus('idle');
   }
 
   subscribe(
@@ -403,7 +405,12 @@ export class AionEventWebSocketManager {
   }
 
   private updateStatus(): void {
-    let nextStatus: ConnectionStatus = 'disconnected';
+    // With no subscriptions (or after a deliberate close) the stream is idle:
+    // nothing is flowing and nothing is wrong. `disconnected` is reserved for
+    // a subscription that exhausted its reconnect budget — a genuine break.
+    // Subscriptions still opening their first socket also read as idle; they
+    // become `reconnecting`/`disconnected` only once a failure is observed.
+    let nextStatus: ConnectionStatus = 'idle';
     const connections = [...this.connections.values()];
 
     if (!this.intentionalClose && connections.length > 0) {

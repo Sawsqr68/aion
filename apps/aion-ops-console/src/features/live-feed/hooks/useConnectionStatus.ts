@@ -7,7 +7,7 @@ export function useConnectionStatus(): ConnectionStatus {
   return useSyncExternalStore(
     (notify) => configuredEventSocket.onStatusChange(notify),
     () => configuredEventSocket.getStatus(),
-    () => 'disconnected'
+    () => 'idle'
   );
 }
 

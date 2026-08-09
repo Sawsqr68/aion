@@ -39,6 +39,7 @@ const STATUS_LABEL: Record<ConnectionStatus, string> = {
   'resynced-with-possible-gap': 'possible gap',
   reconnecting: 'reconnecting',
   disconnected: 'disconnected',
+  idle: 'idle',
 };
 
 const STATUS_COLOR: Record<ConnectionStatus, string> = {
@@ -46,6 +47,7 @@ const STATUS_COLOR: Record<ConnectionStatus, string> = {
   'resynced-with-possible-gap': 'var(--status-warning)',
   reconnecting: 'var(--text-muted)',
   disconnected: 'var(--status-danger)',
+  idle: 'var(--text-muted)',
 };
 
 export function ClusterProvenance({
