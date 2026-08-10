@@ -1,0 +1,28 @@
+tree=a438977275bdb9f9bcbb3437027a02ac140edd48
+NOTE: script mkdir defect lost the live exits manifest (gate-logs/publish-0136/ did not exist);
+this manifest is reconstructed from the 22 per-crate cargo logs (each 'Uploaded <crate> v0.13.6')
+and settled against the registry sparse index below — the registry is the artifact of record.
+aion-core=registry-verified-0.13.6
+aion-darwin-acl=registry-verified-0.13.6
+aion-proto-generated=registry-verified-0.13.6
+aion-integrations=registry-verified-0.13.6
+aion-package=registry-verified-0.13.6
+aion-store=registry-verified-0.13.6
+aion-integration-acp=registry-verified-0.13.6
+aion-integration-norn=registry-verified-0.13.6
+aion-proto=registry-verified-0.13.6
+aion-store-haematite=registry-verified-0.13.6
+aion-store-libsql=registry-verified-0.13.6
+aion-toolchain=registry-verified-0.13.6
+aion-worker=registry-verified-0.13.6
+aion-awl=registry-verified-0.13.6
+aion-integration-cli=registry-verified-0.13.6
+aion-awl-lsp=registry-verified-0.13.6
+aion-awl-package=registry-verified-0.13.6
+aion-rs=registry-verified-0.13.6
+aion-client=registry-verified-0.13.6
+aion-mcp=registry-verified-0.13.6
+aion-server=registry-verified-0.13.6
+aion-cli=registry-verified-0.13.6
+registry_verified=22 missing=0
+finished=2026-08-10T08:00:13Z
