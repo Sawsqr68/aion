@@ -171,13 +171,15 @@ Work from repository evidence only.
 Return one paragraph.
 """
 
+type Reply { text: String, stop_reason: String }
+
 worker assistants
-  action ask(prompt: String) -> String
+  action ask(prompt: String) -> Reply
     agent, timeout 10m
 
 step ask
   ask(prompt: instructions + goal) -> reply
-  route done(reply)"#,
+  route done(reply.text)"#,
 ];
 
 /// `json`: the literal body in constant position, and the capture selector

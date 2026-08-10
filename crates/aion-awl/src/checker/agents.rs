@@ -1,10 +1,16 @@
 //! The `agent` marker rule.
 //!
 //! `agent` on an action declaration says one thing and one thing only: this
-//! action's single `String` parameter carries a PROMPT and its `String` result
-//! carries the REPLY. That is the whole of what an adapter needs in order to
-//! hand the call to an agent harness instead of executing it as an ordinary
-//! activity.
+//! action's single `String` parameter carries a PROMPT and its result is the
+//! canonical agent-outcome record — a declared record with exactly two
+//! fields, `text: String` (the agent's terminal reply) and
+//! `stop_reason: String` (the canonical `snake_case` stop reason). That is the
+//! whole of what an adapter needs in order to hand the call to an agent
+//! harness instead of executing it as an ordinary activity, and it is the
+//! shape every harness emits from its `wait_result` boundary (task #181's
+//! ruling: the record is defined by aion, and every harness maps its native
+//! outcome onto it — the old `-> String` rule had universalized one harness
+//! path's shape and flattened the stop reason out of every other's).
 //!
 //! Because the shape IS the meaning, the shape has to be enforced here. A
 //! marker accepted on an action of any shape would be a marker that means
@@ -13,13 +19,18 @@
 //! marker exists to remove (the hand-maintained `AGENT_ACTIVITY_TYPES` list in
 //! a worker binary), so accepting it loosely would re-create the defect one
 //! layer up instead of closing it.
+//!
+//! The author declares the record type themselves, under any name — the
+//! `RunOutcome` / DECLARED-COMMANDS precedent. The checker demands the
+//! STRUCTURE, not a blessed name.
 
 use crate::ast::{ActionBody, ActionDecl};
 
 use super::context::{Callable, Ctx};
-use super::types::Ty;
+use super::types::{RecordTy, Ty, TypeTable, resolve};
 
-/// Refuse `agent` on an action whose shape cannot carry a prompt and a reply.
+/// Refuse `agent` on an action whose shape cannot carry a prompt and the
+/// canonical agent-outcome record.
 ///
 /// Called once per action declaration, with the callable already resolved so
 /// the parameter and result types are the checker's own types rather than
@@ -56,12 +67,15 @@ pub(super) fn check(ctx: &mut Ctx<'_>, action: &ActionDecl, callable: &Callable)
         );
     }
 
-    if !is_string(&callable.returns) {
+    if !returns_agent_outcome_record(&callable.returns, &ctx.types) {
         ctx.error(
             marker,
             format!(
-                "`agent` action `{}` returns `{}` — an agent action returns the harness's \
-                 `String` reply; parse it downstream if the flow needs structure",
+                "`agent` action `{}` returns `{}` — an agent action returns the canonical \
+                 agent-outcome record: a declared record with exactly two fields, \
+                 `text: String` and `stop_reason: String`; every harness emits that \
+                 record, so declare it (any type name) and read `.text` where the flow \
+                 needs the reply",
                 action.name, callable.returns
             ),
         );
@@ -91,4 +105,36 @@ pub(super) fn check(ctx: &mut Ctx<'_>, action: &ActionDecl, callable: &Callable)
 /// at its own site, rather than a second time as a shape complaint here.
 fn is_string(ty: &Ty) -> bool {
     matches!(ty, Ty::Str | Ty::Unknown)
+}
+
+/// Whether the declared return type is (structurally) the canonical
+/// agent-outcome record: exactly the two fields `text: String` and
+/// `stop_reason: String`, in any order, under any declared name.
+///
+/// The check is structural through the type table — a `Named` reference
+/// resolves to its definition, and each field's own type resolves too, so a
+/// projected schema record of the same shape satisfies it exactly as a
+/// declared shorthand record does. [`Ty::Unknown`] passes so a return type
+/// that already failed to resolve reports once, at its own site.
+fn returns_agent_outcome_record(returns: &Ty, table: &TypeTable) -> bool {
+    match resolve(returns, table) {
+        Ty::Unknown => true,
+        Ty::Record(record) => {
+            record.fields.len() == 2
+                && field_is_string(&record, "text", table)
+                && field_is_string(&record, "stop_reason", table)
+        }
+        _ => false,
+    }
+}
+
+/// Whether `record` carries a field `name` whose type resolves to `String`.
+///
+/// `String?` is deliberately refused: both record fields are always present
+/// on the wire — an empty reply is the honest empty string, never an absent
+/// field — so an optional field would declare an absence that cannot happen.
+fn field_is_string(record: &RecordTy, name: &str, table: &TypeTable) -> bool {
+    record
+        .field(name)
+        .is_some_and(|field| matches!(resolve(&field.ty, table), Ty::Str | Ty::Unknown))
 }

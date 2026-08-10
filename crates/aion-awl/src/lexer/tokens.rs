@@ -148,7 +148,8 @@ pub enum Keyword {
     /// `advisory`.
     Advisory,
     /// `agent` — the action's single String input is an agent prompt and its
-    /// single String output is the agent's reply.
+    /// result is the canonical agent-outcome record (`text: String`,
+    /// `stop_reason: String`).
     Agent,
     /// `every`.
     Every,

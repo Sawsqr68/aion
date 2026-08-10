@@ -512,9 +512,10 @@ pub struct ConfigLine {
     ///
     /// Declaration-only, like `advisory`: an action IS an agent seam or is
     /// not. It says the action's one `String` parameter carries a prompt and
-    /// its `String` result carries the reply, which is the whole of what an
-    /// adapter needs to know to hand the call to a harness instead of running
-    /// it as an ordinary activity.
+    /// its result is the canonical agent-outcome record — a declared record
+    /// of exactly `text: String` and `stop_reason: String` — which is the
+    /// whole of what an adapter needs to know to hand the call to a harness
+    /// instead of running it as an ordinary activity.
     ///
     /// It exists because that fact was previously carried in a Rust constant
     /// listing action names by hand (`AGENT_ACTIVITY_TYPES`), so the language

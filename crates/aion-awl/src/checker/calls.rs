@@ -92,7 +92,8 @@ pub(super) fn walk_call(w: &mut Walker<'_, '_>, scope: &mut Scope, call: &CallSt
                 span,
                 "a call site may pin `node` and `timeout` only — `agent` stays on the \
                  action declaration; the marker describes the action's SHAPE (a `String` \
-                 prompt in, a `String` reply out), which one call site cannot change",
+                 prompt in, the canonical agent-outcome record out — `text: String` and \
+                 `stop_reason: String`), which one call site cannot change",
             );
         } else if let Some(retry) = &config.retry {
             let span = match retry {

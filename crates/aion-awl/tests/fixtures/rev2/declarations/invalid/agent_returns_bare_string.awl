@@ -1,0 +1,16 @@
+//! An agent action returns the canonical agent-outcome record, never a bare
+//! `String`. "Parse it downstream" was the old rule, and it flattened the
+//! stop reason out of every harness that honestly reports one.
+workflow ask_the_agent
+  input question: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+worker assistants
+  action ask(prompt: String) -> String
+    agent
+
+step ask
+  ask(prompt: question) -> reply
+  route answered(reply: reply)

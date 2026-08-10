@@ -334,12 +334,16 @@ fn nudge_cap_exhaustion_always_ends_the_session() -> TestResult {
         nudge.insert("message".to_owned(), Value::Text(message.to_owned()));
         let mut env = Env::default();
         env.records.insert(inner.var.clone(), nudge);
-        // `reply` is bound by the agent dispatch above the wait loop. It is
-        // carried into the rebind but cannot influence either exit condition;
-        // a document that ever made it load-bearing would show up as a type
-        // error from the evaluator rather than passing silently.
-        env.scalars
-            .insert("reply".to_owned(), Value::Text("an agent reply".to_owned()));
+        // `reply` is bound by the agent dispatch above the wait loop — since
+        // #181 it is the canonical agent-outcome record, and the rebind reads
+        // its `text` field. It is carried into the rebind but cannot influence
+        // either exit condition; a document that ever made it load-bearing
+        // would show up as a type error from the evaluator rather than
+        // passing silently.
+        let mut agent_reply = BTreeMap::new();
+        agent_reply.insert("text".to_owned(), Value::Text("an agent reply".to_owned()));
+        agent_reply.insert("stop_reason".to_owned(), Value::Text("end_turn".to_owned()));
+        env.records.insert("reply".to_owned(), agent_reply);
 
         if eval(inner_until, &env)?.as_bool()? {
             // The wait loop exits here on its own terms; not an exhaustion path.

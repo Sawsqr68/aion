@@ -1,0 +1,17 @@
+//! Right field names, wrong field types: `stop_reason` is the canonical
+//! snake_case string, not a number. The structure IS the contract, so the
+//! fields are checked type by type, not name by name.
+workflow ask_the_agent
+  input question: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+type Reply  { text: String, stop_reason: Int }
+
+worker assistants
+  action ask(prompt: String) -> Reply
+    agent
+
+step ask
+  ask(prompt: question) -> reply
+  route answered(reply: reply.text)

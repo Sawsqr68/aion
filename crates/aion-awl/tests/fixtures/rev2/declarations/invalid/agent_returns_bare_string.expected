@@ -1,0 +1,3 @@
+CHECK
+returns `String` — an agent action returns the canonical agent-outcome record
+12

@@ -343,9 +343,9 @@
     {
       "word": "agent",
       "kind": "keyword",
-      "summary": "Marks an action as an agent seam: its one `String` parameter carries a prompt and its `String` result the reply.",
+      "summary": "Marks an action as an agent seam: its one `String` parameter carries a prompt and its declared record result carries the agent's `text` and `stop_reason`.",
       "examples": [
-        "//! An agent action hands its prompt to a harness and binds the reply.\nworkflow ask_reviewer\n  input question: String\n  outcome done: type String, route success\n\nworker assistants\n  action ask(prompt: String) -> String\n    agent, timeout 10m\n\nstep ask\n  ask(prompt: question) -> reply\n  route done(reply)"
+        "//! An agent action hands its prompt to a harness and binds the outcome\n//! record: the agent's `text` and the canonical `stop_reason`.\nworkflow ask_reviewer\n  input question: String\n  outcome done: type String, route success\n\ntype Reply { text: String, stop_reason: String }\n\nworker assistants\n  action ask(prompt: String) -> Reply\n    agent, timeout 10m\n\nstep ask\n  ask(prompt: question) -> reply\n  route done(reply.text)"
       ],
       "section": {
         "number": 4,
@@ -690,7 +690,7 @@
       "summary": "Declares a compile-time constant, which may never depend on a runtime binding.",
       "examples": [
         "//! A compile-time constant, usable anywhere a value is.\nworkflow announce_poll\n  input feed: String\n  outcome done: type String, route success\n\nconst prefix = \"polling: \"\n\nstep announce\n  route done(prefix + feed)",
-        "//! A multi-line constant: instructions for an agent seam.\nworkflow brief_agent\n  input goal: String\n  outcome done: type String, route success\n\nconst instructions = \"\"\"\nWork from repository evidence only.\nReturn one paragraph.\n\"\"\"\n\nworker assistants\n  action ask(prompt: String) -> String\n    agent, timeout 10m\n\nstep ask\n  ask(prompt: instructions + goal) -> reply\n  route done(reply)"
+        "//! A multi-line constant: instructions for an agent seam.\nworkflow brief_agent\n  input goal: String\n  outcome done: type String, route success\n\nconst instructions = \"\"\"\nWork from repository evidence only.\nReturn one paragraph.\n\"\"\"\n\ntype Reply { text: String, stop_reason: String }\n\nworker assistants\n  action ask(prompt: String) -> Reply\n    agent, timeout 10m\n\nstep ask\n  ask(prompt: instructions + goal) -> reply\n  route done(reply.text)"
       ],
       "section": {
         "number": 2,

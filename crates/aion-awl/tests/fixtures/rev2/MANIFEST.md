@@ -147,8 +147,9 @@ Valid:
 - `declarations/valid/advisory_side_channel.awl` — an `advisory` action: announce progress on
   a side channel, then do the work the run exists for (an advisory failure never faults the
   step).
-- `declarations/valid/agent_seam.awl` — the `agent` marker: one `String` prompt in, one
-  `String` reply out — the whole of what an adapter needs to hand the call to a harness
+- `declarations/valid/agent_seam.awl` — the `agent` marker: one `String` prompt in, the
+  canonical agent-outcome record out (a declared record of `text: String` and
+  `stop_reason: String`) — the whole of what an adapter needs to hand the call to a harness
   instead of running it as an ordinary activity.
 - `declarations/valid/agent_seam_unmarked_control.awl` — the control arm: the same workflow,
   action shape, and call with the marker absent. `agent` is a declaration classification that
@@ -211,14 +212,25 @@ Invalid:
   none → CHECK "advisory" @13.
 - `advisory_call_site_override.awl` — `advisory` classifies the action itself; a call site
   cannot declare it → CHECK "advisory" @14.
-- `agent_takes_two_parameters.awl` — `agent` names a SHAPE: one `String` prompt in, one
-  `String` reply out → CHECK "takes 2 parameters" @12.
+- `agent_takes_two_parameters.awl` — `agent` names a SHAPE: one `String` prompt in, the
+  agent-outcome record out → CHECK "takes 2 parameters" @13.
 - `agent_parameter_is_not_a_string.awl` — a structured input has no place to go on the wire
-  to an agent → CHECK "`String` prompt handed to the harness" @12.
-- `agent_returns_a_record.awl` — an agent returns the harness's reply as a `String`;
-  structure is parsed downstream → CHECK "returns the harness" @11.
+  to an agent → CHECK "`String` prompt handed to the harness" @13.
+- `agent_returns_bare_string.awl` — an agent action returns the canonical agent-outcome
+  record, never a bare `String` ("parse it downstream" flattened the stop reason) →
+  CHECK "returns `String` — an agent action returns the canonical agent-outcome record" @12.
+- `agent_returns_the_wrong_record.awl` — a record of the wrong fields is not the contract;
+  the wire will never carry it →
+  CHECK "returns `Answer` — an agent action returns the canonical agent-outcome record" @12.
+- `agent_returns_wrong_field_types.awl` — right field names, wrong field types
+  (`stop_reason: Int`); the structure is checked type by type →
+  CHECK "returns `Reply` — an agent action returns the canonical agent-outcome record" @13.
 - `agent_action_declares_a_body.awl` — agent + declared body is two implementations of one
-  action → CHECK "also declares a body" @13.
+  action → CHECK "also declares a body" @14. NOT an isolated refusal, and cannot be: no
+  return type satisfies both the agent-record rule (`text` + `stop_reason`) and the bodied
+  action's rule (a record over `exit_code`/`stdout`/`stderr`) at once, so this fixture
+  necessarily emits the two run-body member diagnostics alongside the body refusal it pins
+  (3 diagnostics total); the sidecar pins the body refusal specifically.
 - `agent_call_site_override.awl` — `agent` classifies the action itself; a call site cannot
   declare it → CHECK "`agent` stays on the" @14.
 

@@ -167,18 +167,21 @@ step ship
 
 /// `agent`: the declaration marker, its one form.
 pub(crate) const AGENT: &[&str] = &[
-    r"//! An agent action hands its prompt to a harness and binds the reply.
+    r"//! An agent action hands its prompt to a harness and binds the outcome
+//! record: the agent's `text` and the canonical `stop_reason`.
 workflow ask_reviewer
   input question: String
   outcome done: type String, route success
 
+type Reply { text: String, stop_reason: String }
+
 worker assistants
-  action ask(prompt: String) -> String
+  action ask(prompt: String) -> Reply
     agent, timeout 10m
 
 step ask
   ask(prompt: question) -> reply
-  route done(reply)",
+  route done(reply.text)",
 ];
 
 /// `run`: a workflow document's declared body, and a worker document's two

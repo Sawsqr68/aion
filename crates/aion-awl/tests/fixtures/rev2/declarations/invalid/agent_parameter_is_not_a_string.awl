@@ -6,11 +6,12 @@ workflow brief_the_agent
 
 type Answer { reply: String }
 type Brief  { question: String }
+type Reply  { text: String, stop_reason: String }
 
 worker assistants
-  action ask(brief: Brief) -> String
+  action ask(brief: Brief) -> Reply
     agent
 
 step ask
   ask(brief: brief) -> reply
-  route answered(reply: reply)
+  route answered(reply: reply.text)
