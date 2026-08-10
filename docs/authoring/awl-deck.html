@@ -505,14 +505,17 @@ action normalize(repo: String) -&gt; Repo
   <section class="slide">
     <p class="eyebrow">agent</p>
     <h2>An agent is ordinary work</h2>
-    <p class="form">    agent<span class="opt">   — this parameter is a prompt, this result is the reply</span></p>
-    <pre><code>worker assistants
-  /// `agent` says: this parameter is a PROMPT and this result is the REPLY.
-  action ask(prompt: String) -&gt; String
+    <p class="form">    agent<span class="opt">   — this parameter is a prompt, this result is the outcome record</span></p>
+    <pre><code>type Reply { text: String, stop_reason: String }
+
+worker assistants
+  /// `agent` says: this parameter is a PROMPT and this result is the agent&#x27;s
+  /// outcome record — its reply `text` plus why the run stopped.
+  action ask(prompt: String) -&gt; Reply
     agent, timeout 10m</code></pre>
     <p class="src">from <b>docs/authoring/deck-examples/03-agent-seam.awl</b> — a complete document, checked</p>
     <ul class="points">
-      <li>One <code>String</code> parameter goes out as the prompt; one <code>String</code> comes back as the reply.</li>
+      <li>One <code>String</code> parameter goes out as the prompt; the agent-outcome record comes back — a record you declare with exactly <code>text: String</code> (the reply) and <code>stop_reason: String</code>; the flow reads <code>reply.text</code>.</li>
       <li>Everything else about it is a normal action — same retries, same timeout, same recording in history.</li>
     </ul>
     <ul class="points bite">

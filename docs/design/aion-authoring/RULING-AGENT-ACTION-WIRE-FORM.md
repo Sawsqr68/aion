@@ -122,3 +122,106 @@ live proof in `ASSISTANT-AWL-LIVE-PROOF.md` — is a claim about the *wrapped*
 form. The workflow logic, the loop, the signal path, and the outcome are
 unaffected and remain proven. The prompt delivery is not, and is stated as
 such there.
+
+## AMENDMENT — task #181 (2026-08-10): the return constraint is superseded
+
+The first build constraint above — *"an `agent` action must be arity-1 with a
+`String` parameter and a `String` return"* — is **superseded in its return
+half** by the ruling on task #181 (docs repo commit `c223c8c`,
+`tracking/waffles-thread-state-20260805.md`). The text above is retained
+unedited as the record of what was believed on 2026-07-30.
+
+What #181 found: the `-> String` return rule had universalized ONE harness
+path's shape. The ACP adapter honestly emitted `{stopReason, text}`
+(camelCase, undeclarable in snake_case AWL), the norn adapter passed the
+envelope's `output` through verbatim (String OR Dict — live repro `cc1d82c2`,
+"Expected String, found Dict", a serde decode error where a contract refusal
+belonged), and the CLI adapter emitted a third shape. "Parse it downstream"
+flattened the stop reason — an operational distinction (agent-chose-to-stop
+vs cut-off) retry logic needs.
+
+What #181 ruled and what now stands:
+
+- The canonical **agent-outcome record**, defined by aion in `aion-core`
+  (`AgentOutcome { text: String, stop_reason: String }`, serde snake_case),
+  is the wire truth every harness emits from `wait_result`. Every harness
+  maps its native terminal outcome at its own integration boundary;
+  `stop_reason` is the snake_case rendering of the existing neutral
+  `StopKind` set (`end_turn | tool_use | limit_reached | cancelled | error |
+  other`), spelled by the ONE mapping `StopKind::canonical_stop_reason` — no
+  second stop-reason table exists.
+- The checker now demands an `agent` action's declared return type be a
+  record of exactly `text: String` and `stop_reason: String` (author-declared
+  name, structural check — the `RunOutcome`/DECLARED-COMMANDS precedent). A
+  bare `-> String` is the refused shape; the refusal names the record and
+  both fields.
+- A norn envelope whose completed `output` is not a String is a typed
+  contract refusal at the harness boundary, naming the canonical contract and
+  what was found — never a downstream serde decode error.
+- The arity-1 `String`-parameter half of the constraint, the no-`run`-body
+  rule, the call-site refusal, and the marked/unmarked identical-lowering
+  control all stand unchanged.
+
+Migrated in the same change (#181, ruling item 5): the assistant embed
+(`crates/aion-server/assistant-embed/assistant.awl`) and its byte-coupled
+spike (`examples/assistant/awl/assistant_spike.awl`), the Gleam originals
+(`examples/assistant`, `examples/agent-dev` — decoders now read the record's
+`text`), all four harness boundaries (ACP, norn, CLI, mock), the checker
+fixtures and MIR goldens, and the guide/reference text — "parse it
+downstream" is dead everywhere it was written.
+
+## AMENDMENT 2 — task #181 R2/R3 (2026-08-10): the full migration surface and its gates
+
+The first amendment's migration list was written before the R2 review swept
+the whole tree and understated the surface. The complete record:
+
+**Five further in-tree documents carried the retired shape and were migrated
+in the same change:** `workflows/norn-dev/norn_dev.awl`,
+`workflows/norn-fleet/norn_fleet.awl`,
+`docs/authoring/tutorial-examples/repo_gate_judged.awl`,
+`docs/authoring/deck-examples/03-agent-seam.awl` — each now declares the
+record and threads `.text` through its guards and routes — plus
+`examples/general-worker/awl/general_worker_example.awl`, which had been
+UNPARSEABLE since #98 made `agent` a reserved word (it bound `-> agent`;
+nothing checked it, the same defect class). The deck and tutorial builders'
+prose and both committed HTML artifacts (`awl-deck.html`,
+`first-workflow.html`) were regenerated to teach the record, and both
+production workflow READMEs (`workflows/norn-{dev,fleet}/README.md`) were
+rewritten — the fleet README's "trade this shape records" section now cites
+THIS ruling (#181) as the enforced shape rule, superseding its citation of
+#98/`8451e0e5`.
+
+**Two derived gates now hold the class closed** (a hand-enumerated corpus is
+how four documents escaped in the first place):
+
+- `crates/aion-cli/tests/awl_corpus_gate.rs` — every living `.awl` in the
+  tree (corpus derived by walking the tree; excluded CLASSES with stated
+  reasons: fixtures/goldens, templates, `docs/design`, `gate-logs`, build
+  output) must pass the real `aion awl check`. Proven red on the unmigrated
+  tree (it named all five documents), green after.
+- `crates/aion-cli/tests/retired_doctrine_gate.rs` — no living markdown may
+  spell the retired doctrine ("parse it downstream", "one String in, one
+  String out" and its variants), matched over normalized text with the same
+  derived-scope discipline. Proven red against the actual pre-fix README
+  text, green after.
+
+**Retry classification joined the ruling's mechanism** (R2 M4): the norn
+Dict/null completed-output refusal is `HarnessError::Contract`, a variant
+whose deterministic/transient classification lives in `aion-integrations`
+(`HarnessError::is_deterministic`, exhaustive match — a new variant is a
+compile error at the deciding site) and which the worker maps to a TERMINAL
+activity failure, so a permanent misconfiguration can no longer burn a
+`retry 5 backoff 30s..5m` budget of live agent runs. A completed
+`"output": null` is in the deterministic class, settled against norn's
+DRIVEN-PROTOCOL.md stop-reason table (null output belongs only to
+non-completed reasons). All potentially-transient classes (transport,
+protocol framing, harness-reported failure, staleness, capability gating)
+remain retryable.
+
+**The CLI harness stopped inventing its stop reason** (R2 M1/M2, R3 mi4):
+the pump retains the last demuxed `Stop` and the record reports it
+(`end_turn` only as the announced-nothing fallback on a clean end); a
+signal-killed child completes with `stop_reason: "other"` — never
+`end_turn` — and the pump synthesizes a terminal transcript `Stop { Other {
+"terminated by signal" } }` so the detail survives on the channel built to
+carry it.

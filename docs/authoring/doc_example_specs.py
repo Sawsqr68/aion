@@ -84,7 +84,10 @@ SPECS: dict[str, Spec] = {
     "examples_assistant_resources_AWL-REFERENCE__06": Spec(
         place="decls", needs=["Build"], tail=END
     ),
-    "examples_assistant_resources_AWL-REFERENCE__09": Spec(place="decls", tail=END),
+    # The agent-seam block: since #181 it is a complete document — the marker
+    # demands the canonical outcome record, and the block shows the declared
+    # record, the marked action, and the `reply.text` read together.
+    "examples_assistant_resources_AWL-REFERENCE__09": Spec(place="whole"),
     "examples_assistant_resources_AWL-REFERENCE__10": Spec(place="decls", tail=END),
     "examples_assistant_resources_AWL-REFERENCE__11": Spec(
         place="decls",

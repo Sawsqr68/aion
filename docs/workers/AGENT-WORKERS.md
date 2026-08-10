@@ -3,8 +3,13 @@
 How agent-backed activities get served in Aion. An **agent action** is an
 activity whose work is done by an AI agent — its output is decided by the
 agent at run time, so there is no Rust type to derive a schema from and the
-AWL document is the only authority on what the action looks like. This guide
-covers the two ways to serve one:
+AWL document is the only authority on what the action looks like. Its result
+is always the **canonical agent-outcome record** — a declared record of
+exactly `text: String` (the agent's terminal reply) and `stop_reason: String`
+(the canonical snake_case reason: `end_turn | tool_use | limit_reached |
+cancelled | error | other`) — which every harness emits from its own
+integration boundary, so a flow reads `reply.text` and never parses
+harness-specific JSON. This guide covers the two ways to serve one:
 
 1. **`aion worker agent <file.awl>`** — the built-in agent worker. No crate
    to write: the binary you already installed serves the document's agent
@@ -216,8 +221,10 @@ actions on queue `default`, and they are served by two different things:
   [DECLARED-COMMANDS.md](DECLARED-COMMANDS.md) before changing it — including
   the parts about there being no sandbox and cancellation not being wired.
 - **`assistant` — this worker.** One norn round inside that workspace: one
-  prompt string in, one terminal-text string out. It is the worker's ONLY
-  advertised action.
+  prompt string in, the canonical agent-outcome record out (`text` — the
+  agent's terminal reply — plus the canonical snake_case `stop_reason`; the
+  document declares the record type and the harness boundary emits it). It is
+  the worker's ONLY advertised action.
 
 That split was not always so. Provisioning used to be a worker handler, and
 moved into a server-run declared body in `fe702945`; the worker's own

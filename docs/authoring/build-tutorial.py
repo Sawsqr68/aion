@@ -687,8 +687,9 @@ KEYWORD_TABLE: list[tuple[str, str]] = [
         ),
         (
             "<code>agent</code>",
-            "an action served by an agent worker: one String prompt in, one "
-            "String reply out",
+            "an action served by an agent worker: one String prompt in, the "
+            "agent-outcome record out — a declared record of "
+            "<code>text</code> and <code>stop_reason</code>",
         ),
         (
             "<code>timeout</code>",
@@ -1399,16 +1400,18 @@ SLIDES: list[Slide] = [
     Slide(
         eyebrow="Where next — perform it",
         title="Declare the judge on the same queue",
-        lede="Keep the four command bodies. Add one plain agent seam inside the "
-        "same <code>worker gate</code> block.",
+        lede="Keep the four command bodies. Declare the outcome record the "
+        "seam returns, then add one plain agent action inside the same "
+        "<code>worker gate</code> block.",
         excerpt=Excerpt(
             "repo_gate_judged.awl",
-            start="worker gate",
+            start="type Reply",
             end="agent, timeout",
             dedent=False,
         ),
         caption="One queue, two ways to serve it: the server owns the four "
-        "<code>run</code> bodies; a worker owns <code>judge</code>.",
+        "<code>run</code> bodies; a worker owns <code>judge</code>, which "
+        "returns the declared <code>Reply</code> record.",
         note="The rest of the document builds the prompt from the clone, commit, "
         "check and test outputs. Only the exact reply "
         "<code>GATE_APPROVED</code> takes the success route. Every other reply "

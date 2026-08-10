@@ -1,13 +1,18 @@
-//! An agent seam: a String prompt in, a String reply out.
+//! An agent seam: a String prompt in, the agent-outcome record out.
 workflow agent_demo
   input question: String
   outcome done: type String, route success
 
+/// The canonical agent-outcome record, declared under this document's own
+/// name: the agent's terminal `text` and the canonical `stop_reason`.
+type Reply { text: String, stop_reason: String }
+
 worker assistants
-  /// `agent` says: this parameter is a PROMPT and this result is the REPLY.
-  action ask(prompt: String) -> String
+  /// `agent` says: this parameter is a PROMPT and this result is the agent's
+  /// outcome record — its reply `text` plus why the run stopped.
+  action ask(prompt: String) -> Reply
     agent, timeout 10m
 
 step think
   ask(prompt: question) -> reply
-  reply |> route done
+  reply.text |> route done

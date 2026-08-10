@@ -254,10 +254,14 @@ SLIDES: list[Slide] = [
     Slide(
         eyebrow="agent",
         title="An agent is ordinary work",
-        form="    agent" + opt("   — this parameter is a prompt, this result is the reply"),
-        excerpt=Excerpt("03-agent-seam", "worker assistants", "agent, timeout"),
+        form="    agent"
+        + opt("   — this parameter is a prompt, this result is the outcome record"),
+        excerpt=Excerpt("03-agent-seam", "type Reply", "agent, timeout"),
         points=[
-            "One <code>String</code> parameter goes out as the prompt; one <code>String</code> comes back as the reply.",
+            "One <code>String</code> parameter goes out as the prompt; the agent-outcome "
+            "record comes back — a record you declare with exactly <code>text: String</code> "
+            "(the reply) and <code>stop_reason: String</code>; the flow reads "
+            "<code>reply.text</code>.",
             "Everything else about it is a normal action — same retries, same timeout, same recording in history.",
         ],
         bites=[

@@ -355,7 +355,7 @@
     <pre class="cmd"><code>cargo install aion-cli
 
 aion --version</code></pre>
-    <pre class="out"><code>aion 0.11.0</code></pre>
+    <pre class="out"><code>aion 0.13.6</code></pre>
     <ul class="points">
       <li>That one binary is the server, the client, and the authoring tools.</li>
       <li>The final agent-worker chapter also uses the norn CLI; that dependency is called out again where the worker starts.</li>
@@ -707,7 +707,7 @@ step verify after fetch
       <tr><td><code>worker</code></td><td>a name for the thing that does real work — the queue</td></tr>
       <tr><td><code>action</code></td><td>one job, with its parameters and the shape it returns</td></tr>
       <tr><td><code>run</code></td><td>the action's implementation, right here in the document — the server executes this command itself</td></tr>
-      <tr><td><code>agent</code></td><td>an action served by an agent worker: one String prompt in, one String reply out</td></tr>
+      <tr><td><code>agent</code></td><td>an action served by an agent worker: one String prompt in, the agent-outcome record out — a declared record of <code>text</code> and <code>stop_reason</code></td></tr>
       <tr><td><code>timeout</code></td><td>an authored action deadline carried in the contract; not enforced by the 0.11.0 engine</td></tr>
       <tr><td><code>retry</code> <code>backoff</code></td><td>how many transient failures to absorb, and how long to wait between attempts</td></tr>
       <tr><td><b>WHAT HAPPENS, IN WHAT ORDER</b></td><td><i>the plan the workflow actually executes</i></td></tr>
@@ -820,8 +820,12 @@ $ echo $?
   <section class="slide">
     <p class="eyebrow">Where next — perform it</p>
     <h2>Declare the judge on the same queue</h2>
-    <p class="lede">Keep the four command bodies. Add one plain agent seam inside the same <code>worker gate</code> block.</p>
-    <pre><code>worker gate
+    <p class="lede">Keep the four command bodies. Declare the outcome record the seam returns, then add one plain agent action inside the same <code>worker gate</code> block.</p>
+    <pre><code>type Reply   { text: String, stop_reason: String }
+type Gate    { cloned: String, commit: String, checks: String, tests: String, judgement: String }
+type Refused { reason: String, judge_reply: String }
+
+worker gate
   /// Depth 1: a gate wants the tip, not the history.
   action clone(repo: String, into: String) -&gt; Report
     run &quot;git clone --depth 1 $repo $into&quot;
@@ -837,11 +841,11 @@ $ echo $?
   /// The same queue carries server-run commands and this worker-served seam.
   /// The retry absorbs transient harness or provider failures; the authored
   /// timeout travels with the package contract but is not enforced today.
-  action judge(prompt: String) -&gt; String
+  action judge(prompt: String) -&gt; Reply
     agent, timeout 10m, retry 3 backoff 10s..1m</code></pre>
     <p class="src">from <b>docs/authoring/tutorial-examples/repo_gate_judged.awl</b> — a complete file, checked</p>
     <p class="note">The rest of the document builds the prompt from the clone, commit, check and test outputs. Only the exact reply <code>GATE_APPROVED</code> takes the success route. Every other reply takes a failure outcome that carries the reply unchanged. That stops free-form commentary being mistaken for approval; it does not make an agent's opinion true.</p>
-    <p class="caption">One queue, two ways to serve it: the server owns the four <code>run</code> bodies; a worker owns <code>judge</code>.</p>
+    <p class="caption">One queue, two ways to serve it: the server owns the four <code>run</code> bodies; a worker owns <code>judge</code>, which returns the declared <code>Reply</code> record.</p>
   </section>
 
   <section class="slide">
