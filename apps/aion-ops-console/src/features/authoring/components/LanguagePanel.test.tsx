@@ -1,5 +1,7 @@
 import { beforeAll, expect, test } from 'bun:test';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router';
 
 import { awlGuide } from '../lib/awl-guide';
 import { loadAwlHighlighter } from '../lib/awl-static-highlight';
@@ -13,8 +15,22 @@ beforeAll(async () => {
   await loadAwlHighlighter();
 });
 
+// The word cards' "Try it" affordance reads the URL and the query cache, so
+// the panel renders inside the same providers the app mounts it under.
+// Neither provider emits markup — every pin below is still about the panel.
+function render(): string {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return renderToStaticMarkup(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={['/authoring?source=language']}>
+        <LanguagePanel />
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
 test('the panel shows every word of the language with its meaning', () => {
-  const html = renderToStaticMarkup(<LanguagePanel />);
+  const html = render();
   for (const entry of awlGuide.entries) {
     expect(html).toContain(`>${entry.word}<`);
   }
@@ -27,7 +43,7 @@ test('the panel shows every word of the language with its meaning', () => {
  * definition with no way to go deeper.
  */
 test('every word carries the reference section that explains it', () => {
-  const html = renderToStaticMarkup(<LanguagePanel />);
+  const html = render();
   expect(html).toContain('AWL reference §4 — Workers, actions, and calls');
   expect(html).toContain('§8 — Parallel and sequential work');
 });
@@ -39,7 +55,7 @@ test('every word carries the reference section that explains it', () => {
  * list is the in-repo pointer, and that is where paths belong.
  */
 test('the per-word citation carries no repository path', () => {
-  const html = renderToStaticMarkup(<LanguagePanel />);
+  const html = render();
   for (const entry of awlGuide.entries) {
     expect(entry.citation).not.toContain('.md');
     expect(entry.citation).not.toContain('/');
@@ -55,7 +71,7 @@ test('the per-word citation carries no repository path', () => {
  * around a known word rather than a flat run of text.
  */
 test('every word renders its complete example documents', () => {
-  const html = renderToStaticMarkup(<LanguagePanel />);
+  const html = render();
   for (const entry of awlGuide.entries) {
     expect(entry.examples.length).toBeGreaterThan(0);
     for (const example of entry.examples) {
@@ -82,7 +98,7 @@ test('every word renders its complete example documents', () => {
  * a second edit here.
  */
 test('every example document starts collapsed', () => {
-  const html = renderToStaticMarkup(<LanguagePanel />);
+  const html = render();
   const totalExamples = awlGuide.entries.reduce((total, entry) => total + entry.examples.length, 0);
   expect(totalExamples).toBeGreaterThan(50); // non-vacuity: the corpus is loaded
   expect(html.split('<details').length - 1).toBe(totalExamples);
@@ -90,8 +106,19 @@ test('every example document starts collapsed', () => {
   expect(html).not.toContain('<details open');
 });
 
+/**
+ * Every example on the full-page guide offers "Try it" — the same shared
+ * `WordCard` footer the overlay's cards carry — so the whole corpus is one
+ * click from the editor, and the count tracks the asset with no second edit.
+ */
+test('every example document offers Try it', () => {
+  const html = render();
+  const totalExamples = awlGuide.entries.reduce((total, entry) => total + entry.examples.length, 0);
+  expect(html.split('data-slot="word-card-try-it"').length - 1).toBe(totalExamples);
+});
+
 test('the panel names the documents an author needs, including the one about sandboxing', () => {
-  const html = renderToStaticMarkup(<LanguagePanel />);
+  const html = render();
   expect(html).toContain('docs/authoring/AWL.md');
   expect(html).toContain('docs/workers/DECLARED-COMMANDS.md');
   expect(html).toContain('examples/assistant/resources/WORKERS.md');
@@ -105,7 +132,7 @@ test('the panel names the documents an author needs, including the one about san
  * the asset is what `aion awl guide --json` renders today.
  */
 test('the rendered text is the asset text, not a paraphrase of it', () => {
-  const html = renderToStaticMarkup(<LanguagePanel />);
+  const html = render();
   const sample = awlGuide.entries.find((entry) => entry.word === 'run');
   expect(sample).toBeDefined();
   if (sample !== undefined) {
@@ -115,6 +142,6 @@ test('the rendered text is the asset text, not a paraphrase of it', () => {
 });
 
 test('the panel says how many words it is showing', () => {
-  const html = renderToStaticMarkup(<LanguagePanel />);
+  const html = render();
   expect(html).toContain(`${awlGuide.entries.length}`);
 });

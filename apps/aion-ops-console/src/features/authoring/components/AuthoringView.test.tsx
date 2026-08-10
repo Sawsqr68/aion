@@ -88,4 +88,7 @@ test('the language tab’s example documents arrive collapsed', () => {
   expect(html).toContain('data-slot="word-card-example"');
   expect(html).toContain('<details');
   expect(html).not.toContain('<details open');
+  // And each disclosure carries its "Try it" footer on the composed view too:
+  // the affordance rides the shared WordCard, not one surface's wiring.
+  expect(html).toContain('data-slot="word-card-try-it"');
 });

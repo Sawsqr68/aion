@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { useTryExample } from '../hooks/useTryExample';
 import type { AwlWord } from '../lib/awl-guide';
 import {
   type AwlHighlighterState,
@@ -51,6 +52,7 @@ export function WordCard({
           <pre className="mt-1 overflow-x-auto rounded border border-border bg-surface-base p-2 text-xs">
             <ExampleCode example={example} state={state} />
           </pre>
+          <ExampleTryIt example={example} />
         </details>
       ))}
       {isUnavailable(state) && (
@@ -63,6 +65,61 @@ export function WordCard({
         </p>
       )}
       <p className="mt-1 text-muted-foreground text-xs">{entry.citation}</p>
+    </div>
+  );
+}
+
+/**
+ * The footer of an expanded example: one "Try it" button that turns the
+ * example the author just read into a workspace document — verbatim source,
+ * atomic server-side create, `_2`/`_3` collision retry — and lands them on
+ * it in the editor, Deploy/Run live.
+ *
+ * It sits INSIDE the disclosure, below the code, so it is only offered once
+ * the example is on screen.
+ */
+function ExampleTryIt({ example }: { example: string }) {
+  const { pending, refusal, tryExample } = useTryExample(example);
+  return <TryItFooter onTry={() => void tryExample()} pending={pending} refusal={refusal} />;
+}
+
+/**
+ * The footer's markup alone, with the behaviour injected: a test seam
+ * (exported, mirroring the documented `highlighter?` prop's convention) so
+ * the pending and refusal states can be pinned directly — a static render of
+ * the full card can never be mid-flight.
+ *
+ * The button never takes focus uninvited (the guide overlay's non-modal
+ * contract) and disables itself while a create is in flight. A refusal is
+ * announced, not just shown: `role="alert"` in the console's one failure
+ * vocabulary (`text-destructive`), exactly as the workspace panel's
+ * create-document form renders its own — a screen reader hears the failure
+ * instead of it passing as success.
+ */
+export function TryItFooter({
+  onTry,
+  pending,
+  refusal,
+}: {
+  onTry: () => void;
+  pending: boolean;
+  refusal: string | null;
+}) {
+  return (
+    <div className="mt-1 flex flex-wrap items-baseline gap-2" data-slot="word-card-try-it">
+      <button
+        className="rounded-md border border-border px-2 py-0.5 text-muted-foreground text-xs outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-accent-primary disabled:pointer-events-none disabled:opacity-60"
+        disabled={pending}
+        onClick={onTry}
+        type="button"
+      >
+        {pending ? 'Creating…' : 'Try it'}
+      </button>
+      {refusal !== null && (
+        <p className="text-destructive text-xs" data-slot="word-card-try-it-refusal" role="alert">
+          {refusal}
+        </p>
+      )}
     </div>
   );
 }

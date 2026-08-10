@@ -167,8 +167,21 @@ export function createAuthoringFacade(fetchImpl: Fetch = globalThis.fetch.bind(g
         ])
       );
     },
-    async createDocument(name: string): Promise<AwlDocument> {
-      const value = expectRecord(await request('/awl/documents', jsonInit('POST', { name }), true));
+    /**
+     * Creates a workspace document. With a `source`, the server stores those
+     * bytes verbatim (the guide's "Try it" path); without one it synthesises
+     * its placeholder workflow. Both forms are the same atomic create: an
+     * existing document answers with a `DocumentExists` refusal, never an
+     * overwrite.
+     */
+    async createDocument(name: string, source?: string): Promise<AwlDocument> {
+      const value = expectRecord(
+        await request(
+          '/awl/documents',
+          jsonInit('POST', source === undefined ? { name } : { name, source }),
+          true
+        )
+      );
       return {
         path: expectString(value.path, 'path'),
         name: expectString(value.name, 'name'),

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { createAuthoringFacade, GestureRefusedError } from './facade';
+import { createAuthoringFacade, GestureRefusedError, GuidedFlowRefusedError } from './facade';
 
 const fixtures = [
   {
@@ -283,5 +283,49 @@ describe('authoring facade parsing', () => {
       name: 'order_flow',
     });
     expect(JSON.parse(body)).toEqual({ name: 'order_flow' });
+  });
+
+  /**
+   * The guide's "Try it" body: a create carrying a source sends BOTH fields,
+   * and a create without one still sends only the name — the placeholder
+   * synthesis stays a server decision, never an empty-string source.
+   */
+  test('creates a document carrying its verbatim source when one is given', async () => {
+    let body = '';
+    const example = '//! Example.\nworkflow guide_example\n  sleep 30s\n';
+    const facade = createAuthoringFacade(async (_input, init) => {
+      body = String(init?.body);
+      return Response.json(
+        { path: 'guide_example.awl', name: 'guide_example', source: example },
+        { status: 201 }
+      );
+    });
+    expect(await facade.createDocument('guide_example', example)).toEqual({
+      path: 'guide_example.awl',
+      name: 'guide_example',
+    });
+    expect(JSON.parse(body)).toEqual({ name: 'guide_example', source: example });
+  });
+
+  /**
+   * A collision must arrive as the server's own refusal — `DocumentExists`
+   * with the message verbatim — because the "Try it" retry loop branches on
+   * exactly that code and surfaces anything else to the operator unchanged.
+   */
+  test('a document collision surfaces the server refusal with its error_type', async () => {
+    const facade = createAuthoringFacade(async () =>
+      Response.json(
+        { message: 'AWL document already exists: guide_example.awl', error_type: 'DocumentExists' },
+        { status: 409 }
+      )
+    );
+    try {
+      await facade.createDocument('guide_example', 'workflow guide_example\n');
+      throw new Error('collision unexpectedly succeeded');
+    } catch (error) {
+      expect(error).toBeInstanceOf(GuidedFlowRefusedError);
+      expect((error as GuidedFlowRefusedError).code).toBe('DocumentExists');
+      expect((error as Error).message).toBe('AWL document already exists: guide_example.awl');
+    }
   });
 });
