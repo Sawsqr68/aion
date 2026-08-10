@@ -27,17 +27,29 @@ the language document has errors:
 ```
 
 `ok` means there are no parser or checker errors. `steps` and `semantic` are
-non-null only when `ok` is true. `deploys_green` means `ok` is true and the
-current Gleam stopgap emitter accepted the checked document. Diagnostics have
+non-null only when `ok` is true. `deploys_green` means the checker accepted
+the document — `ok` true with no diagnostics; the check consults no emitter. Diagnostics have
 shape:
 
 ```json
-{ "class": "error", "message": "...", "line": 4, "column": 7 }
+{
+  "class": "error",
+  "message": "...",
+  "line": 4,
+  "column": 7,
+  "range": {
+    "start": { "line": 3, "character": 6 },
+    "end": { "line": 3, "character": 18 }
+  }
+}
 ```
 
-`class` is `error` for parser/checker diagnostics or `emit_subset` for a checked
-construct refused by the emitter. Messages are the language tool's verbatim
-message (without an added location suffix). Emit output is discarded.
+`class` is `error` for parser/checker diagnostics — the only class the server
+emits. `line`/`column` are the 1-based lexer position; `range` is the
+diagnostic's full extent as zero-based UTF-16 positions (the index space
+editors use — CodeMirror's and the LSP's alike), converted server-side from
+the checker's byte span. Messages are the language tool's verbatim message
+(without an added location suffix). Emit output is discarded.
 
 ### Semantic index
 
@@ -71,10 +83,26 @@ Request `{ "source": string }`. Success is 200:
 { "formatted": "canonical AWL text" }
 ```
 
-A parse failure is 422 with the same diagnostic object shape:
+A parse failure is 422 with the same diagnostic object shape documented for
+`POST /awl/check` above — `class`, `message`, `line`, `column`, and the
+UTF-16 `range` — because both routes serialize the identical server
+`Diagnostic` type:
 
 ```json
-{ "diagnostics": [{ "class": "error", "message": "...", "line": 1, "column": 1 }] }
+{
+  "diagnostics": [
+    {
+      "class": "error",
+      "message": "...",
+      "line": 1,
+      "column": 1,
+      "range": {
+        "start": { "line": 0, "character": 0 },
+        "end": { "line": 0, "character": 8 }
+      }
+    }
+  ]
+}
 ```
 
 ## Workspace documents
