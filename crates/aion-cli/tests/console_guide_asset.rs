@@ -89,13 +89,55 @@ fn the_console_asset_is_what_the_cli_renders_today() {
 }
 
 /// The asset is only useful to the console if it is what the console can
-/// actually read: valid JSON, with the shape the panel indexes.
+/// actually read: valid JSON, with the shape the panel indexes — including
+/// the grammar axis the panel groups by and the reference text it renders.
 #[test]
 fn the_console_asset_is_readable_json_with_the_shape_the_panel_uses() {
     let asset_path = repo_root().join(ASSET);
     let checked_in = fs::read_to_string(&asset_path).unwrap_or_default();
     let parsed: serde_json::Value =
         serde_json::from_str(&checked_in).unwrap_or(serde_json::Value::Null);
+
+    let forms = parsed["forms"].as_array().cloned().unwrap_or_default();
+    assert!(!forms.is_empty(), "{ASSET} carries no grammar forms");
+    let form_ids: Vec<&str> = forms
+        .iter()
+        .filter_map(|form| form["id"].as_str())
+        .collect();
+    for form in &forms {
+        for field in ["id", "label", "description"] {
+            assert!(
+                form[field].as_str().is_some_and(|text| !text.is_empty()),
+                "a form is missing `{field}`: {form}"
+            );
+        }
+    }
+    let positions = parsed["positions"].as_array().cloned().unwrap_or_default();
+    assert!(
+        !positions.is_empty(),
+        "{ASSET} carries no grammar positions"
+    );
+    let position_ids: Vec<&str> = positions
+        .iter()
+        .filter_map(|position| position["id"].as_str())
+        .collect();
+    for position in &positions {
+        for field in ["id", "label"] {
+            assert!(
+                position[field]
+                    .as_str()
+                    .is_some_and(|text| !text.is_empty()),
+                "a position is missing `{field}`: {position}"
+            );
+        }
+    }
+    assert!(
+        parsed["reference_text"]
+            .as_str()
+            .is_some_and(|text| text.contains("## 1. Document structure")),
+        "{ASSET} does not carry the language reference"
+    );
+
     let entries = parsed["entries"].as_array().cloned().unwrap_or_default();
     assert!(!entries.is_empty(), "{ASSET} carries no entries");
     for entry in &entries {
@@ -126,5 +168,24 @@ fn the_console_asset_is_readable_json_with_the_shape_the_panel_uses() {
                 .is_some_and(|title| !title.is_empty()),
             "an entry is missing its section title: {entry}"
         );
+        assert!(
+            entry["form"]
+                .as_str()
+                .is_some_and(|form| form_ids.contains(&form)),
+            "an entry is missing its form, or names one the taxonomy does not carry: {entry}"
+        );
+        let stands = entry["positions"].as_array().cloned().unwrap_or_default();
+        assert!(
+            !stands.is_empty(),
+            "an entry stands in no position: {entry}"
+        );
+        for position in &stands {
+            assert!(
+                position
+                    .as_str()
+                    .is_some_and(|position| position_ids.contains(&position)),
+                "an entry stands in a position the inventory does not carry: {entry}"
+            );
+        }
     }
 }

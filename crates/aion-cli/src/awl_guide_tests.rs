@@ -184,6 +184,79 @@ fn the_json_form_carries_the_whole_inventory_and_the_paths() {
     }
 }
 
+/// The grammar axis on the wire: the form taxonomy and position inventory
+/// ride the document, every entry names a form the taxonomy carries and
+/// positions the inventory carries, and the full reference text ships so the
+/// console can render the sections the citations point into.
+#[test]
+fn the_json_form_carries_the_grammar_axis_and_the_reference() {
+    let text = json(None).unwrap_or_default();
+    let parsed: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
+
+    let forms = parsed["forms"].as_array().cloned().unwrap_or_default();
+    let form_ids: Vec<&str> = forms
+        .iter()
+        .filter_map(|form| form["id"].as_str())
+        .collect();
+    assert_eq!(
+        form_ids.len(),
+        aion_awl::guide::GrammarForm::ALL.len(),
+        "every form of the taxonomy must ride the wire: {forms:?}"
+    );
+    for form in &forms {
+        for field in ["id", "label", "description"] {
+            assert!(
+                form[field].as_str().is_some_and(|value| !value.is_empty()),
+                "a form is missing `{field}`: {form}"
+            );
+        }
+    }
+
+    let positions = parsed["positions"].as_array().cloned().unwrap_or_default();
+    let position_ids: Vec<&str> = positions
+        .iter()
+        .filter_map(|position| position["id"].as_str())
+        .collect();
+    assert_eq!(
+        position_ids.len(),
+        aion_awl::guide::GrammarPosition::ALL.len(),
+        "every grammar position must ride the wire: {positions:?}"
+    );
+
+    for entry in parsed["entries"].as_array().cloned().unwrap_or_default() {
+        let form = entry["form"].as_str().unwrap_or_default();
+        assert!(
+            form_ids.contains(&form),
+            "an entry names a form the taxonomy does not carry: {entry}"
+        );
+        let stands = entry["positions"].as_array().cloned().unwrap_or_default();
+        assert!(
+            !stands.is_empty(),
+            "an entry stands in no position: {entry}"
+        );
+        for position in &stands {
+            assert!(
+                position
+                    .as_str()
+                    .is_some_and(|position| position_ids.contains(&position)),
+                "an entry stands in a position the inventory does not carry: {entry}"
+            );
+        }
+    }
+
+    let reference = parsed["reference_text"].as_str().unwrap_or_default();
+    assert!(
+        reference.contains("## 1. Document structure")
+            && reference.contains("## 16. Worker documents"),
+        "the wire must carry the whole reference, first section to last"
+    );
+    assert_eq!(
+        reference,
+        aion_awl::guide::reference_text(),
+        "the wire's reference must be the embedded reference, verbatim"
+    );
+}
+
 /// The console asset is gated by byte comparison, which is only a gate if the
 /// rendering is deterministic.
 #[test]
@@ -202,6 +275,7 @@ fn one_word_as_json_carries_only_that_word() {
     assert_eq!(parsed["entries"][0]["word"].as_str(), Some("distribute"));
     assert_eq!(parsed["entries"][0]["kind"].as_str(), Some("keyword"));
     assert_eq!(parsed["entries"][0]["section"]["number"].as_u64(), Some(8));
+    assert_eq!(parsed["entries"][0]["form"].as_str(), Some("statement"));
 }
 
 /// A word the language does not have must produce no entry, not an empty

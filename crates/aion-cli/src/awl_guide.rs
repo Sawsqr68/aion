@@ -15,7 +15,8 @@
 use std::collections::BTreeMap;
 use std::process::ExitCode;
 
-use aion_awl::guide::{self, GuideEntry, WordKind};
+use aion_awl::guide::{self, GrammarForm, GrammarPosition, GuideEntry, WordKind};
+use anyhow::Context as _;
 use serde::Serialize;
 
 /// One glossary entry, as the console reads it.
@@ -24,6 +25,10 @@ use serde::Serialize;
 /// the byte-identical pointer the CLI prints. Two renderings of one fact are
 /// two facts as soon as one of them is edited. `examples` is the entry's
 /// complete checked documents, verbatim, one per honest form of the word.
+/// `form` and `positions` are the grammar axis, derived from the same table
+/// the language server's completion offers words from — the console groups
+/// by `form` and looks both up in the document-level `forms` and `positions`
+/// inventories.
 #[derive(Debug, Serialize)]
 struct WireEntry {
     word: &'static str,
@@ -32,6 +37,8 @@ struct WireEntry {
     examples: &'static [&'static str],
     section: WireSection,
     citation: String,
+    form: &'static str,
+    positions: Vec<&'static str>,
 }
 
 /// The reference section an entry cites.
@@ -41,7 +48,24 @@ struct WireSection {
     title: &'static str,
 }
 
-/// The whole glossary, with the paths every surface points authors at.
+/// One grammatical form, as the console's grouping axis reads it.
+#[derive(Debug, Serialize)]
+struct WireForm {
+    id: &'static str,
+    label: &'static str,
+    description: &'static str,
+}
+
+/// One grammar position a word may stand in, with its rendered label.
+#[derive(Debug, Serialize)]
+struct WirePosition {
+    id: &'static str,
+    label: &'static str,
+}
+
+/// The whole glossary: the paths every surface points authors at, the
+/// grammar taxonomy in display order, the full reference text, and the
+/// entries themselves.
 #[derive(Debug, Serialize)]
 struct WireGuide {
     guide: &'static str,
@@ -50,12 +74,22 @@ struct WireGuide {
     workers: &'static str,
     commands: &'static str,
     declared_commands: &'static str,
+    forms: Vec<WireForm>,
+    positions: Vec<WirePosition>,
     entries: Vec<WireEntry>,
+    reference_text: &'static str,
 }
 
 impl WireEntry {
-    fn of(entry: GuideEntry) -> Self {
-        Self {
+    fn of(entry: GuideEntry) -> anyhow::Result<Self> {
+        let form = guide::form_of(entry.word()).with_context(|| {
+            format!(
+                "`{}` has a glossary entry but the grammar table offers it in no position, so it \
+                 has no form; place it in `aion_awl::guide::grammar`",
+                entry.word()
+            )
+        })?;
+        Ok(Self {
             word: entry.word(),
             kind: entry.kind().as_str(),
             summary: entry.summary(),
@@ -65,7 +99,12 @@ impl WireEntry {
                 title: entry.section().title(),
             },
             citation: entry.citation(),
-        }
+            form: form.id(),
+            positions: guide::positions_of(entry.word())
+                .into_iter()
+                .map(GrammarPosition::id)
+                .collect(),
+        })
     }
 }
 
@@ -75,13 +114,16 @@ impl WireEntry {
 /// is the language's own inventory order, so the same table always serialises
 /// to the same bytes — which is what lets the console asset be gated by
 /// comparison rather than by inspection.
-pub(crate) fn json(word: Option<&str>) -> Result<String, serde_json::Error> {
+pub(crate) fn json(word: Option<&str>) -> anyhow::Result<String> {
     let entries = match word {
         Some(word) => guide::for_word(word)
             .into_iter()
             .map(WireEntry::of)
-            .collect(),
-        None => guide::all().into_iter().map(WireEntry::of).collect(),
+            .collect::<anyhow::Result<Vec<_>>>()?,
+        None => guide::all()
+            .into_iter()
+            .map(WireEntry::of)
+            .collect::<anyhow::Result<Vec<_>>>()?,
     };
     let document = WireGuide {
         guide: guide::GUIDE_PATH,
@@ -90,9 +132,26 @@ pub(crate) fn json(word: Option<&str>) -> Result<String, serde_json::Error> {
         workers: guide::WORKERS_PATH,
         commands: guide::COMMANDS_PATH,
         declared_commands: guide::DECLARED_COMMANDS_PATH,
+        forms: GrammarForm::ALL
+            .into_iter()
+            .map(|form| WireForm {
+                id: form.id(),
+                label: form.label(),
+                description: form.description(),
+            })
+            .collect(),
+        positions: GrammarPosition::ALL
+            .into_iter()
+            .map(|position| WirePosition {
+                id: position.id(),
+                label: position.label(),
+            })
+            .collect(),
         entries,
+        reference_text: guide::reference_text(),
     };
-    let mut rendered = serde_json::to_string_pretty(&document)?;
+    let mut rendered =
+        serde_json::to_string_pretty(&document).context("the glossary could not serialise")?;
     rendered.push('\n');
     Ok(rendered)
 }
@@ -134,7 +193,7 @@ fn emit_json(word: Option<&str>) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!("error: the glossary could not be rendered as JSON: {error}");
+            eprintln!("error: the glossary could not be rendered as JSON: {error:#}");
             ExitCode::FAILURE
         }
     }
