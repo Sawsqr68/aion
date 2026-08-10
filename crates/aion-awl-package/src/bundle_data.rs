@@ -16,6 +16,10 @@ pub(crate) const MODULES: &[(&str, &[u8])] = &[
         include_bytes!("../sdk-closure/aion_flow/aion@activity.beam"),
     ),
     (
+        "aion@agent",
+        include_bytes!("../sdk-closure/aion_flow/aion@agent.beam"),
+    ),
+    (
         "aion@awl@codec",
         include_bytes!("../sdk-closure/aion_flow/aion@awl@codec.beam"),
     ),

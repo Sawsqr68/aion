@@ -36,8 +36,15 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// load-bearing rather than bookkeeping: an unregenerated closure would still
 /// export `handler/3` while the lowering minted `handler/4`, which is the
 /// `undef`-at-runtime skew that guard exists to catch.
-const BUNDLE_CHECKSUM: &str = "59b481f035dd4e883b52dde86d9f4623ba7efa394074ec7888337aef807eeb43";
-const BUNDLE_MODULE_COUNT: usize = 46;
+/// Repinned 2026-08-11 for #181: the canonical agent-outcome record added the
+/// `aion@agent` module to `aion_flow` (46 -> 47 modules), and the
+/// regeneration refreshed accumulated toolchain drift across the other
+/// modules' bytes. The freshness gate
+/// (`committed_closure_matches_a_fresh_oracle_harvest`) is what forced this
+/// repin: a workspace battery red on `fresh-only: ["aion@agent"]`, caught at
+/// the 0.13.7 release gate rather than at an operator's runtime.
+const BUNDLE_CHECKSUM: &str = "2e457591a9a047ae08a9cae90cdf6110171198828136364419e9c48d33f32aa1";
+const BUNDLE_MODULE_COUNT: usize = 47;
 const BUNDLE_SDK_VERSION: &str = "0.7.0";
 
 fn workspace_root() -> PathBuf {
@@ -130,8 +137,16 @@ fn assembling_twice_yields_byte_identical_archives() -> TestResult {
 /// checksum moved in the same commit for the same reason, and
 /// `assembling_twice_yields_byte_identical_archives` still passes, so the new
 /// bytes remain deterministic.
+/// Repinned on 2026-08-11: the #181 SDK-closure regeneration added
+/// `aion@agent` (the canonical agent-outcome record) and refreshed
+/// accumulated toolchain drift across the other modules, and the closure is
+/// an INPUT to every assembled archive — so the archive bytes changed with
+/// the CLOSURE, not with any workflow source edit. The bundle checksum moved
+/// in the same commit for the same reason, and
+/// `assembling_twice_yields_byte_identical_archives` still passes, so the
+/// new bytes remain deterministic.
 const FIXED_INPUT_ARCHIVE_SHA256: &str =
-    "55124bb09b1da582f05e56ee527b10889dbcc58124e8bb87f44d2146db32c113";
+    "448d69212fb6d57d6a856083573d503901c5df6b06b616d24692f80fdfbbf49d";
 
 /// Proof 1b — cross-process determinism: a fully fixed input assembles to
 /// pinned archive bytes.
