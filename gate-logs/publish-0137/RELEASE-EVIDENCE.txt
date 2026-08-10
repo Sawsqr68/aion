@@ -1,0 +1,8 @@
+aion 0.13.7 release evidence — 2026-08-11 (AEST)
+release commit: 466ce1df1 (rider: cb68d0e16 SDK-closure regen for #181's aion@agent)
+battery (scratchpad/0137-battery, session 5849e0d8): fmt-check 0, clippy-workspace 0, clippy-aion-server 0, test-workspace 0
+test-workspace reconciled: 264 running-headers = 264 verdict lines, 4747 passed, 0 failed, 0 FAILED/failures lines
+run 1 red (honest record): sdk-closure freshness gate caught fresh-only [aion@agent] — fixed by regen + 3 pins repinned (cb68d0e16), full battery re-run green on the fixed tree
+box state per directional-contention law: start load 16.04 / 100 GiB free; end load 5.59 / 94 GiB free (run 2); Waffles' release word 14:53Z, box pre-cleared
+publish: 22/22 exit 0 (publish-exits.txt), registry sparse-index verified 22/22 vers=0.13.7
+tag: v0.13.7

@@ -1,0 +1,8 @@
+BOX_AT_START: load: 16.04 12.83 14.24 | disk_free_gib=100
+fmt-check EXIT=0
+clippy-workspace EXIT=0
+clippy-aion-server EXIT=0
+test-workspace EXIT=0
+BOX_AT_END: load: 5.59 10.35 15.02 | disk_free_gib=94
+TREE=2fb274f6fdbdc8059cc4196cdadd1b0f5212dce1 DIRTY_HASH=aff3f4b07b36b2cf02032cbdd34810694b977a11
+BATTERY DONE 2026-08-11T01:41:10+1000
