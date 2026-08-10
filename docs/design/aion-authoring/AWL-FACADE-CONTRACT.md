@@ -89,6 +89,11 @@ Symlinks are neither traversed by listing nor accepted as writable parents.
   `{ "path": "relative/file.awl", "name": "file" }`.
 - `GET /awl/documents/{path}` returns `{ "source": string }`; a missing file is
   404 with error type `DocumentNotFound`.
+- `POST /awl/documents` accepts `{ "name": string, "source"?: string }` and
+  atomically creates `{name}.awl` at the root — storing `source` verbatim when
+  present (unchecked, as with `PUT`) and a synthesized placeholder workflow
+  when absent; an existing document is 409 with error type `DocumentExists`,
+  an invalid name 400 with `InvalidDocumentName`.
 - `PUT /awl/documents/{path}` accepts `{ "source": string }`, creates real parent
   directories inside the root, atomically replaces the file using a temporary
   sibling plus rename, and returns `{ "source": string }`.

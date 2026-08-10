@@ -169,6 +169,13 @@ The AWL studio, split into two deliberately separate surfaces:
   writes into your workspace — the two surfaces can legitimately
   disagree, which is why they are not one list with a badge.
 
+Every example in the language guide (the **Language** tab and the floating
+guide overlay alike) carries a **Try it** button: it creates a workspace
+document from the example's verbatim source — named after the example's own
+workflow or worker, collision-safe with a `_2`/`_3` suffix when the name is
+taken — and lands you on it in the editor, ready to check and deploy — and
+to run, when the example declares a workflow.
+
 If the server has no authoring workspace configured, the workspace side
 says so explicitly. The server-side Gleam authoring loop
 (`--gleam-path` + `--authoring-project-root`) is a separate, optional
