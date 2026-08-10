@@ -131,12 +131,33 @@ pub async fn run(overrides: CliOverrides) -> ExitCode {
     }
 }
 
+/// The where-to-edit half of the missing `outbox.liminal_listen_address`
+/// refusal: a liminal outbox refusal must name the FILE to edit, not just the
+/// key — the operator reading it is exactly the operator who did not write
+/// the config (a scaffolded or setup-script home).
+fn liminal_address_hint(source: &crate::config::ConfigSource) -> String {
+    match source {
+        crate::config::ConfigSource::BuiltInDefaults => {
+            "set AION_OUTBOX_LIMINAL_LISTEN_ADDRESS, or add `liminal_listen_address = \
+             \"127.0.0.1:50061\"` to `[outbox]` in a config file"
+                .to_owned()
+        }
+        source => format!(
+            "add `liminal_listen_address = \"127.0.0.1:50061\"` to `[outbox]` in the {source}"
+        ),
+    }
+}
+
 async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     observability::tracing::init()?;
 
-    let loaded = ServerConfig::load_resolved(&cli)?;
+    // #180: a boot that discovers no config anywhere first scaffolds
+    // `<AION_HOME>/config.toml` from the embedded template (claim-only-when-
+    // empty), then loads it — config LOAD itself stays pure and read-only.
+    let loaded = crate::config::load_or_scaffold(&cli)?;
     loaded.resolution.ensure_private_home()?;
     loaded.resolution.log_startup();
+    let liminal_address_hint = liminal_address_hint(&loaded.resolution.source);
     let config = loaded.config;
     reject_auth_without_feature(&config)?;
     let store_backend = config.store.backend;
@@ -249,6 +270,7 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
         outbox_clustered,
         backpressure_settings,
         &shutdown_rx,
+        &liminal_address_hint,
     )?;
     // SS-5b: a distributed boot whose peers declare owned shards runs the cluster
     // supervisor — automatic failover detection. A single-node boot spawns
@@ -517,6 +539,7 @@ fn maybe_spawn_outbox_dispatcher(
     clustered: bool,
     backpressure_settings: BackpressureSettings,
     shutdown_rx: &tokio::sync::watch::Receiver<bool>,
+    liminal_address_hint: &str,
 ) -> Result<OutboxWorkerListener, ServerError> {
     if !outbox_config.enabled {
         return Ok(OutboxWorkerListener::default());
@@ -546,6 +569,7 @@ fn maybe_spawn_outbox_dispatcher(
         shutdown_rx,
         delivery_gate.clone(),
         Arc::clone(&delivery_callback),
+        liminal_address_hint,
     )?;
     // LSUB-2: share the engine's advisory wake so the stage seam pulses this
     // dispatcher the instant a fan-out row commits, dispatching in ~RTT instead of
@@ -685,6 +709,7 @@ fn select_outbox_row_dispatch(
     shutdown_rx: &tokio::sync::watch::Receiver<bool>,
     delivery_gate: DeliveryGate,
     delivery_callback: Arc<dyn OutboxDeliveryCallback>,
+    liminal_address_hint: &str,
 ) -> Result<(Arc<dyn OutboxRowDispatch>, OutboxWorkerListener), ServerError> {
     match outbox_config.transport {
         OutboxTransport::Grpc => {
@@ -720,6 +745,7 @@ fn select_outbox_row_dispatch(
             shutdown_rx,
             delivery_gate,
             delivery_callback,
+            liminal_address_hint,
         ),
     }
 }
@@ -764,6 +790,7 @@ fn build_liminal_row_dispatch(
     shutdown_rx: &tokio::sync::watch::Receiver<bool>,
     delivery_gate: DeliveryGate,
     callback: Arc<dyn OutboxDeliveryCallback>,
+    liminal_address_hint: &str,
 ) -> Result<(Arc<dyn OutboxRowDispatch>, OutboxWorkerListener), ServerError> {
     use liminal_server::config::ServerConfig as LiminalServerConfig;
     use liminal_server::config::{LimitsConfig, ServicesConfig};
@@ -776,10 +803,11 @@ fn build_liminal_row_dispatch(
         .liminal_listen_address
         .as_ref()
         .ok_or_else(|| ServerError::Config {
-            message: "outbox.transport=liminal requires outbox.liminal_listen_address \
-                      (host:port the aion-server listens on for inbound liminal worker \
-                      connections)"
-                .to_owned(),
+            message: format!(
+                "outbox.transport=liminal requires outbox.liminal_listen_address (host:port \
+                 the aion-server listens on for inbound liminal worker connections); \
+                 {liminal_address_hint}"
+            ),
         })?;
     let listen_address: SocketAddr =
         listen_address
@@ -924,6 +952,7 @@ fn build_liminal_row_dispatch(
     _shutdown_rx: &tokio::sync::watch::Receiver<bool>,
     _delivery_gate: DeliveryGate,
     _delivery_callback: Arc<dyn OutboxDeliveryCallback>,
+    _liminal_address_hint: &str,
 ) -> Result<(Arc<dyn OutboxRowDispatch>, OutboxWorkerListener), ServerError> {
     Err(ServerError::Config {
         message: "outbox.transport=liminal requires the aion-server `liminal-transport` \
@@ -1132,6 +1161,7 @@ mod tests {
             false,
             test_backpressure_settings(),
             &rx,
+            "set outbox.liminal_listen_address in the test config",
         )
         .expect_err("outbox.enabled on the memory backend must be a config error");
         assert!(
@@ -1160,6 +1190,7 @@ mod tests {
             false,
             test_backpressure_settings(),
             &rx,
+            "set outbox.liminal_listen_address in the test config",
         )
         .expect("disabled outbox gate must be an infallible no-op");
     }
@@ -1250,6 +1281,7 @@ mod tests {
             false,
             test_backpressure_settings(),
             &rx,
+            "add `liminal_listen_address = \"127.0.0.1:50061\"` to `[outbox]` in the test config",
         )
         .expect_err("liminal transport without a listen address must be a config error");
         assert!(
@@ -1259,6 +1291,13 @@ mod tests {
         assert!(
             error.to_string().contains("liminal_listen_address"),
             "error must name the missing knob, got: {error}"
+        );
+        // #180 review MAJ-4: the refusal must carry the caller's threaded
+        // where-to-edit hint, so the production message names the resolved
+        // config FILE, not just the key.
+        assert!(
+            error.to_string().contains("in the test config"),
+            "error must carry the threaded config-location hint, got: {error}"
         );
     }
 }
@@ -1702,6 +1741,7 @@ mod lsub_prod_xnode_e2e {
             false,
             backpressure_settings,
             &shutdown_rx,
+            "set outbox.liminal_listen_address in the test config",
         )
         .map_err(test_error)?;
 

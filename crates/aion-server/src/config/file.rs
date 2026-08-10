@@ -7,7 +7,9 @@ use crate::{config::ServerConfig, error::ServerError};
 use super::ConfigSource;
 
 const PROJECT_CONFIG_FILE: &str = "aion.toml";
-const HOME_CONFIG_FILE: &str = "config.toml";
+/// The user-level config file name under the Aion home; shared with the
+/// boot-side first-run scaffold so discovery and the scaffold cannot drift.
+pub(super) const HOME_CONFIG_FILE: &str = "config.toml";
 
 /// Bytes and provenance from the winning file-discovery layer.
 pub(super) struct DiscoveredFile {

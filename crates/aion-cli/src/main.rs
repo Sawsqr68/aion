@@ -24,12 +24,14 @@ mod awl;
 mod awl_guide;
 mod awl_scaffold;
 mod check_deterministic;
+mod console;
 mod deploy;
 mod dev;
 mod generate;
 mod harness;
 mod input;
 mod inspect;
+mod launch;
 mod new;
 mod one_motion;
 mod output;
@@ -54,7 +56,8 @@ const QUERY_DEADLINE: Duration = Duration::from_secs(5);
 #[command(
     name = "aion",
     version,
-    about = "Operate Aion workflows over gRPC and run the Aion workflow server"
+    about = "Operate Aion workflows over gRPC and run the Aion workflow server. \
+             Bare `aion` starts the server in the background and opens the ops console."
 )]
 struct Cli {
     /// gRPC server endpoint a client dials. A missing scheme is interpreted as
@@ -80,8 +83,17 @@ struct Cli {
     /// Print formatted, human-readable JSON.
     #[arg(long, global = true)]
     pretty: bool,
+    /// Bare `aion` only: run the launched server in this terminal instead of
+    /// the background.
+    #[arg(long)]
+    foreground: bool,
+    /// Bare `aion` only: do not open the ops console in a browser.
+    #[arg(long)]
+    no_open: bool,
+    /// Absent means the bare launcher: start the server in the background,
+    /// wait until it is live, report in plain language, open the console.
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -556,10 +568,26 @@ enum RemoteCommand {
 #[tokio::main]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
+    if let Some(refusal) = launcher_flag_refusal(&cli) {
+        eprintln!("{refusal}");
+        return ExitCode::from(2);
+    }
     match cli.command {
+        // Bare `aion`: the launcher. Start the server in the background (or
+        // this terminal with `--foreground`), wait until it answers its own
+        // liveness probe, report in plain language, open the ops console.
+        None => {
+            // The launcher starts a server, so the same refusal applies: a
+            // dial address is not a bind address (see the Server arm below).
+            if let Some(refusal) = server_endpoint_refusal(cli.endpoint.as_deref()) {
+                eprintln!("{refusal}");
+                return ExitCode::from(2);
+            }
+            launch::run(cli.foreground, cli.no_open).await
+        }
         // The server owns its own reporting contract: tracing-logged errors
         // and the operations exit codes (2 = config, 130 = forced).
-        Command::Server(ref args) => {
+        Some(Command::Server(ref args)) => {
             // `--endpoint` is a client dial address. It was accepted here and
             // silently dropped, so an operator who passed it to move the bind
             // got a server on the default port instead — which, on a box
@@ -584,7 +612,7 @@ async fn main() -> ExitCode {
             }
             aion_server::run(args.clone().into()).await
         }
-        Command::Dev(ref args) => {
+        Some(Command::Dev(ref args)) => {
             // The dev loop runs locally and drives the running server over the
             // same operator deploy RPC `aion deploy` uses; it reports through
             // the one client rendering contract.
@@ -601,8 +629,8 @@ async fn main() -> ExitCode {
         }
         // The AWL authoring commands own their own compiler-style reporting
         // contract: diagnostics to stderr, a one-line summary to stdout.
-        Command::Awl { ref command } => awl::run(command),
-        Command::Worker { ref command } => {
+        Some(Command::Awl { ref command }) => awl::run(command),
+        Some(Command::Worker { ref command }) => {
             let result = match command {
                 WorkerCommand::Shell(args) => worker_shell::run(args, &cli.endpoint()).await,
                 // The AWL worker dials the global gRPC endpoint, exactly as
@@ -638,7 +666,7 @@ async fn main() -> ExitCode {
                 }
             }
         }
-        Command::Assistant { ref command } => {
+        Some(Command::Assistant { ref command }) => {
             // The connection is a FACTORY, not a built client: the verb dials
             // only for the subcommands that need a server, and only after it has
             // validated what the operator typed. `document` and `describe` never
@@ -662,7 +690,7 @@ async fn main() -> ExitCode {
                 }
             }
         }
-        Command::Client(ref command) => {
+        Some(Command::Client(ref command)) => {
             let result = run(&cli, command)
                 .await
                 .and_then(|value| print_json(&value, cli.pretty));
@@ -1070,6 +1098,30 @@ fn server_endpoint_refusal(endpoint: Option<&str>) -> Option<String> {
     })
 }
 
+/// The refusal for launcher-only flags combined with a subcommand, `None`
+/// when the invocation is coherent.
+///
+/// `--foreground` and `--no-open` configure the bare `aion` launcher; every
+/// subcommand already has its own answer to both questions (`aion server` IS
+/// foreground, and `aion server --open` opts INTO the browser), so accepting
+/// them here would mean silently ignoring what the operator asked for.
+fn launcher_flag_refusal(cli: &Cli) -> Option<String> {
+    if cli.command.is_none() || (!cli.foreground && !cli.no_open) {
+        return None;
+    }
+    let named = match (cli.foreground, cli.no_open) {
+        (true, true) => "`--foreground` and `--no-open` configure",
+        (true, false) => "`--foreground` configures",
+        // The guard above established at least one flag is set.
+        (false, _) => "`--no-open` configures",
+    };
+    Some(format!(
+        "refusing to start: {named} the bare `aion` launcher and cannot be combined with a \
+         subcommand. `aion server` already runs in the foreground, and `aion server --open` \
+         opts into the browser."
+    ))
+}
+
 impl Cli {
     /// The address a client dials: what the operator named, or the default, and
     /// **always carrying a scheme**.
@@ -1138,9 +1190,11 @@ mod tests {
             std::ffi::OsStr::new("--input-file"),
             path.as_os_str(),
         ])?;
-        let Command::Client(ClientCommand::Remote(RemoteCommand::Start {
-            input, input_file, ..
-        })) = cli.command
+        let Some(Command::Client(ClientCommand::Remote(RemoteCommand::Start {
+            input,
+            input_file,
+            ..
+        }))) = cli.command
         else {
             anyhow::bail!("expected start command");
         };
@@ -1155,9 +1209,11 @@ mod tests {
     #[test]
     fn start_without_input_file_keeps_inline_input() -> anyhow::Result<()> {
         let cli = Cli::try_parse_from(["aion", "start", "order_saga"])?;
-        let Command::Client(ClientCommand::Remote(RemoteCommand::Start {
-            input, input_file, ..
-        })) = cli.command
+        let Some(Command::Client(ClientCommand::Remote(RemoteCommand::Start {
+            input,
+            input_file,
+            ..
+        }))) = cli.command
         else {
             anyhow::bail!("expected start command");
         };
@@ -1234,11 +1290,11 @@ mod tests {
     fn describe_accepts_optional_run_id() -> anyhow::Result<()> {
         let cli = Cli::try_parse_from(["aion", "describe", WORKFLOW_ID, "--run-id", RUN_ID])?;
 
-        let Command::Client(ClientCommand::Remote(RemoteCommand::Describe {
+        let Some(Command::Client(ClientCommand::Remote(RemoteCommand::Describe {
             workflow_id,
             run_id,
             raw,
-        })) = cli.command
+        }))) = cli.command
         else {
             anyhow::bail!("expected describe command");
         };
@@ -1252,7 +1308,7 @@ mod tests {
     fn describe_accepts_raw_payload_flag() -> anyhow::Result<()> {
         let cli = Cli::try_parse_from(["aion", "describe", WORKFLOW_ID, "--raw"])?;
 
-        let Command::Client(ClientCommand::Remote(RemoteCommand::Describe { raw, .. })) =
+        let Some(Command::Client(ClientCommand::Remote(RemoteCommand::Describe { raw, .. }))) =
             cli.command
         else {
             anyhow::bail!("expected describe command");
@@ -1264,10 +1320,10 @@ mod tests {
     #[test]
     fn reopen_parses_workflow_id_and_optional_run_id() -> anyhow::Result<()> {
         let cli = Cli::try_parse_from(["aion", "reopen", WORKFLOW_ID])?;
-        let Command::Client(ClientCommand::Remote(RemoteCommand::Reopen {
+        let Some(Command::Client(ClientCommand::Remote(RemoteCommand::Reopen {
             workflow_id,
             run_id,
-        })) = cli.command
+        }))) = cli.command
         else {
             anyhow::bail!("expected reopen command");
         };
@@ -1275,7 +1331,7 @@ mod tests {
         assert!(run_id.is_none());
 
         let cli = Cli::try_parse_from(["aion", "reopen", WORKFLOW_ID, "--run-id", RUN_ID])?;
-        let Command::Client(ClientCommand::Remote(RemoteCommand::Reopen { run_id, .. })) =
+        let Some(Command::Client(ClientCommand::Remote(RemoteCommand::Reopen { run_id, .. }))) =
             cli.command
         else {
             anyhow::bail!("expected reopen command");
@@ -1307,7 +1363,7 @@ mod tests {
             "--worker",
             "rust",
         ])?;
-        let Command::Client(ClientCommand::New(_)) = cli.command else {
+        let Some(Command::Client(ClientCommand::New(_))) = cli.command else {
             anyhow::bail!("expected new command");
         };
 
@@ -1315,7 +1371,7 @@ mod tests {
         // default itself is pinned in `new::scaffold`'s tests, where the
         // argument fields are visible.
         let cli = Cli::try_parse_from(["aion", "new", "my_flow"])?;
-        let Command::Client(ClientCommand::New(_)) = cli.command else {
+        let Some(Command::Client(ClientCommand::New(_))) = cli.command else {
             anyhow::bail!("expected new command");
         };
 
@@ -1351,7 +1407,7 @@ mod tests {
     fn package_defaults_to_current_directory_without_build_or_out() -> anyhow::Result<()> {
         let cli = Cli::try_parse_from(["aion", "package"])?;
 
-        let Command::Client(ClientCommand::Package { path, out, build }) = cli.command else {
+        let Some(Command::Client(ClientCommand::Package { path, out, build })) = cli.command else {
             anyhow::bail!("expected package command");
         };
         assert_eq!(path, Path::new("."));
@@ -1371,7 +1427,7 @@ mod tests {
             "--build",
         ])?;
 
-        let Command::Client(ClientCommand::Package { path, out, build }) = cli.command else {
+        let Some(Command::Client(ClientCommand::Package { path, out, build })) = cli.command else {
             anyhow::bail!("expected package command");
         };
         assert_eq!(path, Path::new("examples/hello-world"));
@@ -1397,10 +1453,10 @@ mod tests {
     #[test]
     fn check_parses_path_and_requires_the_deterministic_flag() -> anyhow::Result<()> {
         let cli = Cli::try_parse_from(["aion", "check", "examples/order-saga", "--deterministic"])?;
-        let Command::Client(ClientCommand::Check {
+        let Some(Command::Client(ClientCommand::Check {
             path,
             deterministic,
-        }) = cli.command
+        })) = cli.command
         else {
             anyhow::bail!("expected check command");
         };
@@ -1409,10 +1465,10 @@ mod tests {
 
         // Path defaults to the current directory; the flag defaults off.
         let cli = Cli::try_parse_from(["aion", "check"])?;
-        let Command::Client(ClientCommand::Check {
+        let Some(Command::Client(ClientCommand::Check {
             path,
             deterministic,
-        }) = cli.command
+        })) = cli.command
         else {
             anyhow::bail!("expected check command");
         };
@@ -1424,18 +1480,18 @@ mod tests {
     #[test]
     fn awl_check_and_fmt_parse_the_file_path() -> anyhow::Result<()> {
         let cli = Cli::try_parse_from(["aion", "awl", "check", "flows/report.awl"])?;
-        let Command::Awl {
+        let Some(Command::Awl {
             command: awl::AwlCommand::Check { file },
-        } = cli.command
+        }) = cli.command
         else {
             anyhow::bail!("expected awl check command");
         };
         assert_eq!(file, Path::new("flows/report.awl"));
 
         let cli = Cli::try_parse_from(["aion", "awl", "fmt", "flows/report.awl"])?;
-        let Command::Awl {
+        let Some(Command::Awl {
             command: awl::AwlCommand::Fmt { file },
-        } = cli.command
+        }) = cli.command
         else {
             anyhow::bail!("expected awl fmt command");
         };
@@ -1455,14 +1511,14 @@ mod tests {
     #[test]
     fn awl_emit_parses_the_file_path_and_optional_output() -> anyhow::Result<()> {
         let cli = Cli::try_parse_from(["aion", "awl", "emit", "flows/report.awl"])?;
-        let Command::Awl {
+        let Some(Command::Awl {
             command:
                 awl::AwlCommand::Emit {
                     file,
                     output,
                     target,
                 },
-        } = cli.command
+        }) = cli.command
         else {
             anyhow::bail!("expected awl emit command");
         };
@@ -1482,14 +1538,14 @@ mod tests {
             "--target",
             "beam",
         ])?;
-        let Command::Awl {
+        let Some(Command::Awl {
             command:
                 awl::AwlCommand::Emit {
                     file,
                     output,
                     target,
                 },
-        } = cli.command
+        }) = cli.command
         else {
             anyhow::bail!("expected awl emit command");
         };
@@ -1507,10 +1563,10 @@ mod tests {
     #[test]
     fn input_parses_workflow_type_and_path() -> anyhow::Result<()> {
         let cli = Cli::try_parse_from(["aion", "input", "order_saga", "examples/order-saga"])?;
-        let Command::Client(ClientCommand::Input {
+        let Some(Command::Client(ClientCommand::Input {
             workflow_type,
             path,
-        }) = cli.command
+        })) = cli.command
         else {
             anyhow::bail!("expected input command");
         };
@@ -1519,7 +1575,7 @@ mod tests {
 
         // The path defaults to the current directory.
         let cli = Cli::try_parse_from(["aion", "input", "order_saga"])?;
-        let Command::Client(ClientCommand::Input { path, .. }) = cli.command else {
+        let Some(Command::Client(ClientCommand::Input { path, .. })) = cli.command else {
             anyhow::bail!("expected input command");
         };
         assert_eq!(path, Path::new("."));
@@ -1542,12 +1598,12 @@ mod tests {
     #[test]
     fn inspect_parses_workflow_run_from_and_mock() -> anyhow::Result<()> {
         let cli = Cli::try_parse_from(["aion", "inspect", WORKFLOW_ID])?;
-        let Command::Client(ClientCommand::Remote(RemoteCommand::Inspect {
+        let Some(Command::Client(ClientCommand::Remote(RemoteCommand::Inspect {
             workflow_id,
             run_id,
             from,
             mock,
-        })) = cli.command
+        }))) = cli.command
         else {
             anyhow::bail!("expected inspect command");
         };
@@ -1557,7 +1613,7 @@ mod tests {
         assert!(mock.is_none());
 
         let cli = Cli::try_parse_from(["aion", "inspect", WORKFLOW_ID, "--run-id", RUN_ID])?;
-        let Command::Client(ClientCommand::Remote(RemoteCommand::Inspect { run_id, .. })) =
+        let Some(Command::Client(ClientCommand::Remote(RemoteCommand::Inspect { run_id, .. }))) =
             cli.command
         else {
             anyhow::bail!("expected inspect command");
@@ -1573,8 +1629,9 @@ mod tests {
             "--mock",
             r#"{"kind":"timer_fired"}"#,
         ])?;
-        let Command::Client(ClientCommand::Remote(RemoteCommand::Inspect { from, mock, .. })) =
-            cli.command
+        let Some(Command::Client(ClientCommand::Remote(RemoteCommand::Inspect {
+            from, mock, ..
+        }))) = cli.command
         else {
             anyhow::bail!("expected inspect command");
         };
@@ -1626,8 +1683,10 @@ mod tests {
         ])?;
 
         for (cli, expected) in [(omitted, "null"), (supplied, "{\"n\":7}")] {
-            let Command::Client(ClientCommand::Remote(RemoteCommand::Query { arguments, .. })) =
-                cli.command
+            let Some(Command::Client(ClientCommand::Remote(RemoteCommand::Query {
+                arguments,
+                ..
+            }))) = cli.command
             else {
                 anyhow::bail!("expected the query command");
             };
@@ -1656,7 +1715,10 @@ mod tests {
 
         for args in commands {
             let cli = Cli::try_parse_from(args)?;
-            match cli.command {
+            let Some(command) = cli.command else {
+                anyhow::bail!("expected a subcommand");
+            };
+            match command {
                 Command::Client(ClientCommand::Remote(
                     RemoteCommand::Describe { run_id, .. }
                     | RemoteCommand::Signal { run_id, .. }
@@ -1715,7 +1777,10 @@ mod tests {
 
         for args in commands {
             let cli = Cli::try_parse_from(args)?;
-            match cli.command {
+            let Some(command) = cli.command else {
+                anyhow::bail!("expected a subcommand");
+            };
+            match command {
                 Command::Client(ClientCommand::Remote(
                     RemoteCommand::Signal { run_id, .. }
                     | RemoteCommand::Cancel { run_id, .. }
@@ -1764,24 +1829,24 @@ mod tests {
             "dist/order.aion",
         ])?;
         assert_eq!(cli.token.as_deref(), Some("operator-token"));
-        let Command::Client(ClientCommand::Deploy { archive }) = cli.command else {
+        let Some(Command::Client(ClientCommand::Deploy { archive })) = cli.command else {
             anyhow::bail!("expected deploy command");
         };
         assert_eq!(archive, Path::new("dist/order.aion"));
 
         let cli = Cli::try_parse_from(["aion", "versions", "--workflow-type", "order"])?;
         assert!(cli.token.is_none());
-        let Command::Client(ClientCommand::Versions { workflow_type }) = cli.command else {
+        let Some(Command::Client(ClientCommand::Versions { workflow_type })) = cli.command else {
             anyhow::bail!("expected versions command");
         };
         assert_eq!(workflow_type.as_deref(), Some("order"));
 
         let hash = "a".repeat(64);
         let cli = Cli::try_parse_from(["aion", "route", "order", &hash])?;
-        let Command::Client(ClientCommand::Route {
+        let Some(Command::Client(ClientCommand::Route {
             workflow_type,
             content_hash,
-        }) = cli.command
+        })) = cli.command
         else {
             anyhow::bail!("expected route command");
         };
@@ -1789,10 +1854,10 @@ mod tests {
         assert_eq!(content_hash, hash);
 
         let cli = Cli::try_parse_from(["aion", "unload", "order", &hash])?;
-        let Command::Client(ClientCommand::Unload {
+        let Some(Command::Client(ClientCommand::Unload {
             workflow_type,
             content_hash,
-        }) = cli.command
+        })) = cli.command
         else {
             anyhow::bail!("expected unload command");
         };
@@ -1831,7 +1896,7 @@ mod tests {
             "--drain-timeout",
             "45",
         ])?;
-        let Command::Server(args) = cli.command else {
+        let Some(Command::Server(args)) = cli.command else {
             anyhow::bail!("expected server command");
         };
         let overrides = CliOverrides::from(args);
@@ -1863,7 +1928,7 @@ mod tests {
     #[test]
     fn the_server_refuses_a_client_endpoint_instead_of_binding_the_default() -> anyhow::Result<()> {
         let cli = Cli::try_parse_from(["aion", "--endpoint", "127.0.0.1:51099", "server"])?;
-        assert!(matches!(cli.command, Command::Server(_)));
+        assert!(matches!(cli.command, Some(Command::Server(_))));
 
         let refusal = server_endpoint_refusal(cli.endpoint.as_deref())
             .ok_or_else(|| anyhow::anyhow!("an explicit --endpoint was accepted by the server"))?;
@@ -1898,7 +1963,7 @@ mod tests {
             "--authoring-project-root",
             "/srv/aion/authoring",
         ])?;
-        let Command::Server(args) = cli.command else {
+        let Some(Command::Server(args)) = cli.command else {
             anyhow::bail!("expected server command");
         };
         let overrides = CliOverrides::from(args);
@@ -1924,7 +1989,7 @@ mod tests {
             "--workflow-package",
             "local.aion",
         ])?;
-        let Command::Server(args) = cli.command else {
+        let Some(Command::Server(args)) = cli.command else {
             anyhow::bail!("expected server command");
         };
         let overrides = CliOverrides::from(args);
@@ -1967,6 +2032,41 @@ mod tests {
     }
 
     #[test]
+    fn bare_invocation_parses_as_the_launcher() -> anyhow::Result<()> {
+        let cli = Cli::try_parse_from(["aion"])?;
+        assert!(cli.command.is_none());
+        assert!(!cli.foreground);
+        assert!(!cli.no_open);
+        assert!(super::launcher_flag_refusal(&cli).is_none());
+
+        let cli = Cli::try_parse_from(["aion", "--foreground", "--no-open"])?;
+        assert!(cli.command.is_none());
+        assert!(cli.foreground);
+        assert!(cli.no_open);
+        assert!(super::launcher_flag_refusal(&cli).is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn launcher_flags_with_a_subcommand_are_refused_by_name() -> anyhow::Result<()> {
+        let cli = Cli::try_parse_from(["aion", "--foreground", "server"])?;
+        let refusal = super::launcher_flag_refusal(&cli)
+            .ok_or_else(|| anyhow::anyhow!("expected a refusal"))?;
+        assert!(refusal.contains("`--foreground` configures"));
+
+        let cli = Cli::try_parse_from(["aion", "--no-open", "versions"])?;
+        let refusal = super::launcher_flag_refusal(&cli)
+            .ok_or_else(|| anyhow::anyhow!("expected a refusal"))?;
+        assert!(refusal.contains("`--no-open` configures"));
+
+        let cli = Cli::try_parse_from(["aion", "--foreground", "--no-open", "server"])?;
+        let refusal = super::launcher_flag_refusal(&cli)
+            .ok_or_else(|| anyhow::anyhow!("expected a refusal"))?;
+        assert!(refusal.contains("`--foreground` and `--no-open` configure"));
+        Ok(())
+    }
+
+    #[test]
     fn dev_parses_path_gleam_path_and_optional_debounce() -> anyhow::Result<()> {
         let cli = Cli::try_parse_from([
             "aion",
@@ -1977,7 +2077,7 @@ mod tests {
             "--debounce-ms",
             "200",
         ])?;
-        let Command::Dev(args) = cli.command else {
+        let Some(Command::Dev(args)) = cli.command else {
             anyhow::bail!("expected dev command");
         };
         assert_eq!(args.path, Path::new("examples/hello-world"));
@@ -1990,7 +2090,7 @@ mod tests {
         // path defaults to the current directory; debounce is optional and
         // omitted by default (no invented interval).
         let cli = Cli::try_parse_from(["aion", "dev", "--gleam-path", "gleam"])?;
-        let Command::Dev(args) = cli.command else {
+        let Some(Command::Dev(args)) = cli.command else {
             anyhow::bail!("expected dev command");
         };
         assert_eq!(args.path, Path::new("."));
@@ -2058,9 +2158,9 @@ mod tests {
             "--acp-env",
             "KEY=value",
         ])?;
-        let Command::Worker {
+        let Some(Command::Worker {
             command: super::WorkerCommand::Agent(args),
-        } = cli.command
+        }) = cli.command
         else {
             anyhow::bail!("expected worker agent command");
         };
@@ -2099,9 +2199,9 @@ mod tests {
         // Every connection setting is optional at PARSE time — the environment may
         // supply it — and `--check` needs none of them.
         let cli = Cli::try_parse_from(["aion", "worker", "agent", "flows/review.awl", "--check"])?;
-        let Command::Worker {
+        let Some(Command::Worker {
             command: super::WorkerCommand::Agent(args),
-        } = cli.command
+        }) = cli.command
         else {
             anyhow::bail!("expected worker agent command");
         };

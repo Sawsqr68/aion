@@ -337,37 +337,33 @@ skips it, so re-running is safe:
 3. **Prepares `AION_HOME`** (default `~/.aion`) and `chmod 700`s it. The
    server's path-safety gate refuses a store with a group- or world-writable
    ancestor; owner-only up front means it never fires.
-4. **Writes a minimal `config.toml` when the home has none.** This is the step
-   that makes a stock server usable at all, and it is not cosmetic: config
-   discovery is read-only, so with no config file the server boots on built-in
-   defaults — and both surfaces this script needs are **dark** there. The
-   deploy gRPC service is mounted only when `deploy.enabled`, and the liminal
-   listener that remote workers connect IN to exists only when the outbox is
-   commissioned. Without the file the deploy step has nothing to talk to and
-   the worker has nothing to dial. Only the two `enabled` switches are
-   written, at mode `600`; every other value in both sections already has a
-   default that applies once the surface is on, and the script invents none of
-   them. An existing config is kept as-is, untouched.
-
-   The file says out loud what enabling deploy means — deploying is running
-   code on this server, which is why it ships off — and the script repeats
-   that on the terminal.
-5. **Starts `aion server` from `AION_HOME`** and waits up to 120 s for it. It
+4. **Starts `aion server` from `AION_HOME`** and waits up to 120 s for it.
+   The script writes no config: a first boot that finds no config at any
+   discovery layer scaffolds `<AION_HOME>/config.toml` itself (mode `600`)
+   from the server's embedded template, and that template ships with the two
+   surfaces this flow needs already on. Both are **dark** on built-in
+   defaults: the deploy gRPC service is mounted only when `deploy.enabled`,
+   and the liminal listener that remote workers connect IN to exists only
+   when the outbox is commissioned — without the scaffolded file the deploy
+   step has nothing to talk to and the worker has nothing to dial. An
+   existing config is never touched, and the file says out loud what
+   enabling deploy means — deploying is running code on this server, which
+   is why it ships off by default. The wait itself
    does not assume a port: readiness is the server's own log banner naming the
    address it bound, plus a `/build` response body carrying a `version` (the
    console's SPA fallback answers any path with 200 text/html, so a status code
    alone proves nothing).
-6. **Reads the addresses and the workspace root from the JSON startup
+5. **Reads the addresses and the workspace root from the JSON startup
    banner.** `http_address`, `grpc_address`, and `workspace_root` all come from
    the banner rather than from an assumption. A `workspace_root` reported as
    `unresolvable: <reason>` fails the script here, because declared
    provisioning cannot dispatch without one — see
    [DECLARED-COMMANDS.md](DECLARED-COMMANDS.md#workspace_root--how-a-body-learns-where-to-work).
-7. **Deploys `crates/aion-server/assistant-embed/assistant.awl`** against the banner's
+6. **Deploys `crates/aion-server/assistant-embed/assistant.awl`** against the banner's
    `grpc_address`.
-8. **Builds the worker** (release), skipping the build when the binary is
+7. **Builds the worker** (release), skipping the build when the binary is
    newer than every `.rs` under `src/`.
-9. **Starts the worker** against the liminal address from the server log's
+8. **Starts the worker** against the liminal address from the server log's
    `liminal server listener bound` line — and fails with a pointer at the
    `[outbox]` config if that line is absent. It exports
    `AION_WORKSPACE_ROOT` from the banner value first, so the worker's

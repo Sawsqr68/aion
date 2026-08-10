@@ -431,3 +431,82 @@ fn aion_home_env_probe_child() -> Result<(), Box<dyn std::error::Error>> {
     );
     Ok(())
 }
+
+/// #180 review m10: a leading `~` in the operator-supplied path VALUES
+/// (`store.data_dir`, `authoring.workspace_dir`) expands against `$HOME`
+/// exactly as it does for `AION_HOME` and `--config`, instead of silently
+/// becoming a literal `./~` directory; `~user` is refused by name; and a
+/// tilde-free path passes through byte-for-byte.
+#[test]
+fn operator_path_values_expand_a_leading_tilde() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(real_home) = std::env::var_os("HOME").filter(|value| !value.is_empty()) else {
+        // Tilde expansion is defined against $HOME; without one there is
+        // nothing to measure here (the refusal path has its own pin in
+        // `home::expand_tilde`'s tests).
+        tracing::info!("HOME is not set; skipping tilde-value expansion test");
+        return Ok(());
+    };
+    let scratch = crate::test_support::private_tempdir()?;
+    let home = scratch.path().join("home");
+    let working_dir = scratch.path().join("project");
+    fs::create_dir_all(&working_dir)?;
+
+    write(
+        &home.join("config.toml"),
+        "[store]\nbackend = \"haematite\"\ndata_dir = \"~/relocated-store\"\n\
+         [authoring]\nworkspace_dir = \"~/relocated-workspace\"\n",
+    )?;
+    let loaded = ServerConfig::load_for_test(
+        &CliOverrides::default(),
+        &home,
+        HomeSource::Derived,
+        &working_dir,
+    )?;
+    let expected_data = Path::new(&real_home).join("relocated-store");
+    assert_eq!(
+        loaded.config.store.data_dir.as_deref(),
+        expected_data.to_str(),
+        "store.data_dir must expand `~/` against $HOME"
+    );
+    assert_eq!(
+        loaded.config.authoring.workspace_dir.as_deref(),
+        Some(Path::new(&real_home).join("relocated-workspace").as_path()),
+        "authoring.workspace_dir must expand `~/` against $HOME"
+    );
+
+    // `~user` is refused by name, not passed through.
+    write(
+        &home.join("config.toml"),
+        "[store]\nbackend = \"haematite\"\ndata_dir = \"~someone/store\"\n",
+    )?;
+    let Err(error) = ServerConfig::load_for_test(
+        &CliOverrides::default(),
+        &home,
+        HomeSource::Derived,
+        &working_dir,
+    ) else {
+        return Err("~user in store.data_dir must refuse".into());
+    };
+    assert!(
+        error.to_string().contains("~user"),
+        "the refusal must name the unsupported `~user` form, got: {error}"
+    );
+
+    // A tilde-free value is untouched.
+    write(
+        &home.join("config.toml"),
+        "[store]\nbackend = \"haematite\"\ndata_dir = \"plain-data\"\n",
+    )?;
+    let loaded = ServerConfig::load_for_test(
+        &CliOverrides::default(),
+        &home,
+        HomeSource::Derived,
+        &working_dir,
+    )?;
+    assert_eq!(
+        loaded.config.store.data_dir.as_deref(),
+        Some("plain-data"),
+        "a tilde-free data_dir must pass through byte-for-byte"
+    );
+    Ok(())
+}

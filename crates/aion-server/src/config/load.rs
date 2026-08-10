@@ -35,7 +35,7 @@ use super::{
     OUTBOX_RECONCILE_INTERVAL_REQUIRED, OUTBOX_RECONCILE_STALE_AFTER_REQUIRED, ObservabilityConfig,
     OpsConsoleAssetSource, OpsConsoleConfig, OutboxConfig, QUERY_TIMEOUT_REQUIRED, RuntimeConfig,
     RuntimeSection, ServerSection, StoreBackend, StoreConfig, TlsConfig, WebSocketConfig,
-    WorkerConfig, WorkerSupervisionConfig, aion_home, config_error, env, file,
+    WorkerConfig, WorkerSupervisionConfig, aion_home, config_error, env, file, home,
     resolution::fill_home_defaults,
 };
 
@@ -93,6 +93,31 @@ pub(crate) struct LoadedConfig {
     pub(crate) resolution: ConfigResolution,
 }
 
+/// Expand a leading `~` in the operator-supplied filesystem paths.
+///
+/// #180 review m10: `~` already expands for `AION_HOME` and `--config`, so an
+/// operator naturally writes it in the path VALUES too — where it used to pass
+/// through untouched and silently become a literal `./~` directory. The same
+/// [`home::expand_tilde`] rule applies to `store.data_dir` and
+/// `authoring.workspace_dir` (the two home-adjacent state roots): `~`/`~/…`
+/// expand against `$HOME`, `~user` is refused by name, and a path with no
+/// tilde passes through byte-for-byte.
+fn expand_operator_path_tildes(config: &mut ServerConfig) -> Result<(), ServerError> {
+    if let Some(data_dir) = config.store.data_dir.as_deref() {
+        let expanded = home::expand_tilde(Path::new(data_dir))?;
+        let expanded = expanded.to_str().ok_or_else(|| ServerError::Config {
+            message: format!(
+                "store.data_dir `{data_dir}` expands to a path that is not valid UTF-8"
+            ),
+        })?;
+        config.store.data_dir = Some(expanded.to_owned());
+    }
+    if let Some(workspace_dir) = config.authoring.workspace_dir.as_deref() {
+        config.authoring.workspace_dir = Some(home::expand_tilde(workspace_dir)?);
+    }
+    Ok(())
+}
+
 impl ServerConfig {
     /// Load and merge config from defaults, optional TOML file, environment, and CLI overrides.
     ///
@@ -121,7 +146,15 @@ impl ServerConfig {
         working_dir: &Path,
         overlay_environment: bool,
     ) -> Result<LoadedConfig, ServerError> {
-        let discovered = file::discover(cli.config_path.as_deref(), home, working_dir)?;
+        // #152: `--config ~/aion.toml` reaches this point unexpanded whenever a
+        // shell did not get to it (quoted values, env files, process managers);
+        // expand it here so the operator's spelling and the loader agree.
+        let explicit = cli
+            .config_path
+            .as_deref()
+            .map(super::home::expand_tilde)
+            .transpose()?;
+        let discovered = file::discover(explicit.as_deref(), home, working_dir)?;
         let mut config = match discovered.bytes {
             Some(bytes) => Self::parse_unresolved(&bytes).map_err(|error| ServerError::Config {
                 message: format!("failed to parse {}: {error}", discovered.source),
@@ -132,6 +165,7 @@ impl ServerConfig {
             env::overlay(&mut config)?;
         }
         config.apply_cli_overrides(cli);
+        expand_operator_path_tildes(&mut config)?;
         #[cfg(not(unix))]
         let home_explicit = !overlay_environment || std::env::var_os("AION_HOME").is_some();
         #[cfg(not(unix))]
@@ -171,7 +205,7 @@ impl ServerConfig {
     /// A test that could only ever simulate one of them would pin half the
     /// behaviour and call it covered.
     #[cfg(test)]
-    fn load_for_test(
+    pub(super) fn load_for_test(
         cli: &CliOverrides,
         home: &Path,
         home_source: HomeSource,

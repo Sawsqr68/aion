@@ -3,6 +3,32 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## 0.13.4 — 2026-08-10
+
+- **A first boot configures itself (#180).** `aion server` finding no config
+  at any discovery layer now writes `<AION_HOME>/config.toml` (owner-only)
+  from its embedded template, with the deploy surface and the outbox worker
+  channel commissioned and every choice explained in comments. An existing
+  config is never touched; an explicit `--config` naming a missing file still
+  refuses. `scripts/setup.sh` no longer writes config at all.
+- **Bare `aion` is the launcher.** Typing `aion` with no subcommand starts
+  the server in the background, waits for its own liveness probe, reports in
+  plain lines where the config, data, console, and log live (and the pid that
+  stops it), and opens the ops console. `--foreground` keeps the server in
+  the terminal; `--no-open` skips the browser. An already-running server is
+  reported, never double-started; a port held by something else is refused by
+  name.
+- **Machines set up by the old `setup.sh`** (which wrote a minimal
+  `~/.aion/config.toml` enabling `[deploy]` and `[outbox]` only) will see the
+  server refuse to boot with
+  `outbox.transport=liminal requires outbox.liminal_listen_address …` naming
+  that file. The one-line fix: add
+  `liminal_listen_address = "127.0.0.1:50061"` to the `[outbox]` section of
+  the named file.
+- Tilde expansion: a leading `~` now expands against `$HOME` in
+  `store.data_dir` and `authoring.workspace_dir` (as it already did for
+  `AION_HOME` and `--config`); `~user` is refused by name.
+
 ## 0.13.3 — 2026-08-10
 
 - **Ship & Run is retired.** The all-in-one check-deploy-start button is gone;

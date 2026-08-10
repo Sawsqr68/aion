@@ -55,9 +55,10 @@ in durable workflow history.
 >
 > **Read the address the server actually bound**, rather than assuming the one
 > you configured: the server log's `liminal server listener bound` line
-> carries it. `scripts/setup.sh` does exactly that, and writes a minimal
-> config enabling `[outbox]` on a fresh Aion home for precisely this reason —
-> see [AGENT-WORKERS.md](AGENT-WORKERS.md#one-command-setup-scriptssetupsh).
+> carries it. `scripts/setup.sh` does exactly that. (On a fresh Aion home the
+> config comes from the server itself: a first boot that finds none scaffolds
+> `<AION_HOME>/config.toml` with `[outbox]` already commissioned — see
+> [AGENT-WORKERS.md](AGENT-WORKERS.md#one-command-setup-scriptssetupsh).)
 
 Workers are consumed by workflow documents (`.awl` files, or Gleam-authored
 workflows). The document declares actions with typed inputs/outputs and pins

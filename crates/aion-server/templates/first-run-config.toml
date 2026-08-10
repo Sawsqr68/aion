@@ -1,0 +1,75 @@
+# Aion server configuration.
+#
+# Written by `aion server` on a first start that found no config at any
+# discovery layer — an explicit `--config PATH`, a project-local `./aion.toml`,
+# then this file, `<AION_HOME>/config.toml` (AION_HOME defaults to `~/.aion`).
+# Yours to edit; the server never rewrites an existing file.
+# Reference: https://github.com/ablative-io/aion/blob/main/docs/operations/operations.md
+#
+# Some keys have an `AION_<SECTION>_<KEY>` environment override (for example
+# `AION_RUNTIME_QUERY_TIMEOUT_MS=10000`) which wins over this file; overrides
+# are an explicit allowlist, listed in full in the operations guide under
+# "Environment overrides". Command-line flags win over both.
+
+[server]
+listen_address = "127.0.0.1:8080"   # HTTP/JSON API + ops console
+grpc_address = "127.0.0.1:50051"    # gRPC API + worker protocol
+
+[store]
+backend = "haematite"               # durable ablative event store (the default)
+# The database directory defaults to `<AION_HOME>/data`, created on start.
+# One legacy exception: when AION_HOME is unset (a derived home) and a real
+# `./aion-data` directory sits in the server's working directory, that
+# directory is adopted and logged; an explicit AION_HOME ignores it.
+# Set `data_dir` only to relocate the database: use an absolute path whose
+# ancestor chain is owner-only (a relative path resolves against the server's
+# working directory; a leading `~` expands against $HOME).
+# shard_count = 64                  # shards on a fresh database (default 64)
+#
+# Lightweight alternative — embedded libSQL (requires the `libsql-backend`
+# feature: build with `cargo install aion-cli --features libsql-backend`):
+#   backend = "libsql"
+#   url = "aion.db"                 # embedded libSQL file, created on start
+#
+# Ephemeral only — in-memory store, loses all state on stop:
+#   backend = "memory"
+
+[runtime]
+# Reply deadline for workflow queries, in milliseconds (default 10000).
+query_timeout_ms = 10000
+
+[outbox]
+# Commissions the durable outbox, which hosts the liminal worker channel that
+# remote workers (`aion worker agent`, the assistant worker) connect IN to.
+# That surface ships dark by default; without it the listener is never bound
+# and a liminal worker's dial is refused, forever, with nothing on the server
+# side saying why. Enabled here so a first-run server can serve workers.
+# Requires a durable store: with `backend = "memory"` above, set
+# `enabled = false` or the server refuses to boot.
+# A build without the `liminal-transport` feature must set `transport = "grpc"`
+# here; leaving `liminal` is a boot-time configuration error.
+enabled = true
+transport = "liminal"
+liminal_listen_address = "127.0.0.1:50061"
+
+[websocket]
+# Capacity of the global live-event broadcast channel (default 256).
+event_broadcast_capacity = 1024
+# Capacity of the WS3 cluster topology broadcast channel (always mounted on
+# /events/stream; default 64). Cluster events are low-rate, so keep small.
+cluster_broadcast_capacity = 64
+
+[deploy]
+# Runtime package deploy/route/unload: lets `aion deploy` reach this server.
+# Deploying is running code on this server, which is why the surface ships
+# dark by default. It listens on the localhost addresses above, so it is
+# reachable by whoever can already run commands on this machine; on a shared
+# or multi-user box, decide deliberately whether that set is the set you
+# want, and disable this when you are done deploying.
+# When enabled, both ceilings default to conservative security limits (64 MiB
+# archive / 256 MiB inflated) so enabling deploy boots without sizing them.
+# When set, max_inflated_bytes must be >= max_archive_bytes (an explicit 0 is
+# rejected).
+enabled = true
+max_archive_bytes = 16777216        # 16 MiB upload ceiling
+max_inflated_bytes = 67108864       # 64 MiB decompressed-contents ceiling

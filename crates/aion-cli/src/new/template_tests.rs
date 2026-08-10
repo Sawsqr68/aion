@@ -96,13 +96,16 @@ fn aion_toml_carries_every_required_server_key() {
             "grpc_address",
             // The scaffold ships the durable ablative default backend.
             "backend = \"haematite\"",
-            "data_dir = \"aion-data\"",
             "query_timeout_ms",
             "event_broadcast_capacity",
             // Required since WS3: the cluster topology broadcast capacity, so
             // the scaffolded config boots without further edits.
             "cluster_broadcast_capacity",
             "enabled = true",
+            // The outbox trio: without all three the liminal worker listener
+            // is never bound and a remote worker's dial is refused forever.
+            "transport = \"liminal\"",
+            "liminal_listen_address = \"127.0.0.1:50061\"",
             "max_archive_bytes",
             "max_inflated_bytes",
         ] {
@@ -112,6 +115,22 @@ fn aion_toml_carries_every_required_server_key() {
                 template.id()
             );
         }
+        // The template must not pin a data_dir: the server's home default
+        // (`<AION_HOME>/data`) applies, and the historical literal
+        // `aion-data` is the legacy working-directory path that re-activates
+        // the migration guard (resolution.rs) on every boot beside it.
+        assert!(
+            !aion_toml.contains("\ndata_dir"),
+            "template {} aion.toml must not set data_dir",
+            template.id()
+        );
+        // The loader fills these keys when omitted (fill_operational_defaults);
+        // claiming they are required was a stale lie this scaffold used to teach.
+        assert!(
+            !aion_toml.contains("REQUIRED, no default"),
+            "template {} aion.toml carries a stale REQUIRED claim",
+            template.id()
+        );
     }
 }
 

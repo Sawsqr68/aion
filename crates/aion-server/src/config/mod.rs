@@ -23,6 +23,7 @@ mod home;
 mod load;
 mod resolution;
 mod runtime;
+mod scaffold;
 mod sections;
 mod worker_supervision;
 
@@ -53,6 +54,8 @@ pub use home::{AionHome, HomeSource, aion_home};
 pub use load::ServerConfig;
 pub(crate) use resolution::{ConfigResolution, ConfigSource};
 pub use runtime::{CliOverrides, RuntimeConfig};
+pub use scaffold::FIRST_RUN_CONFIG;
+pub(crate) use scaffold::load_or_scaffold;
 pub use sections::{
     AuthConfig, AuthoringConfig, AutoCreate, ClusterConfig, ClusterPeer, DeployConfig, DevConfig,
     DrainConfig, ListenConfig, McpConfig, MetricsConfig, NamespaceConfig, NamespaceMode,

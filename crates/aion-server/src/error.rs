@@ -28,8 +28,10 @@ pub enum ServerError {
     /// A path-ambient store backend was configured beneath a renameable directory.
     #[error(
         "unsafe store.data_dir `{}`: ancestor `{}` is not owner-controlled: {reason}; \
-         move store.data_dir beneath the private Aion home (`$AION_HOME`, default `~/.aion`) \
-         and keep its ancestor chain owner-only",
+         leave store.data_dir unset so it defaults beneath the private Aion home \
+         (`$AION_HOME`, default `$HOME/.aion`), or set a path whose ancestor chain is \
+         owner-only (a leading `~` expands against $HOME; a relative path resolves \
+         against the server's working directory)",
         .data_root.display(),
         .component.display()
     )]

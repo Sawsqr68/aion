@@ -118,47 +118,24 @@ else
 fi
 
 say "Preparing the Aion home directory ($AION_HOME)"
+# The server provisions and tightens its own home at boot, but the launch
+# below cds into it and writes the server log there BEFORE the server exists,
+# so the directory itself is created here.
 mkdir -p "$AION_HOME"
-# The server's path-safety gate refuses a store with a group- or
-# world-writable ancestor; owner-only up front means it never fires.
 chmod 700 "$AION_HOME"
 note "ready (owner-only permissions)"
 
-HOME_CONFIG="$AION_HOME/config.toml"
-if [ -f "$HOME_CONFIG" ]; then
-    note "existing config kept as-is: $HOME_CONFIG"
+# The config itself is the SERVER'S job now (#180): a boot that finds no
+# config anywhere writes $AION_HOME/config.toml (owner-only) from its
+# embedded template, with the two surfaces this script needs already
+# commissioned — the deploy gRPC service (mounted only when `deploy.enabled`)
+# and the outbox, which hosts the liminal listener remote workers connect IN
+# to. An existing config is never touched, so operator edits survive re-runs.
+if [ -f "$AION_HOME/config.toml" ]; then
+    note "existing config kept as-is: $AION_HOME/config.toml"
 else
-    # Config discovery is READ-ONLY (config/home.rs): with no config file the
-    # server boots on built-in defaults, and both surfaces this script needs
-    # are dark there — the deploy gRPC service is mounted only when
-    # `deploy.enabled` (run.rs), and the liminal listener remote workers
-    # connect IN to exists only when the outbox is commissioned. Without this
-    # file the deploy step below has nothing to talk to and the worker has
-    # nothing to dial. Only the two `enabled` switches are written: every
-    # other value in both sections already has a default that applies once
-    # the surface is on, and this script invents none of them.
-    cat >"$HOME_CONFIG" <<'CONFIG'
-# Written by scripts/setup.sh on first run, because this Aion home had no
-# config and both surfaces below are dark by default. Yours to edit.
-
-# Lets `aion deploy` reach the server's deploy service.
-#
-# What that MEANS: deploying is running code on this server — a deployed
-# workflow executes here. The surface ships dark for that reason. It listens
-# on localhost only, so it is reachable by whoever can already run commands
-# on this machine; on a shared or multi-user box, decide deliberately whether
-# that set is the set you want, and turn this off when you are done deploying.
-[deploy]
-enabled = true
-
-# Commissions the outbox, which hosts the liminal listener that remote
-# workers — including the assistant worker — connect in to.
-[outbox]
-enabled = true
-CONFIG
-    chmod 600 "$HOME_CONFIG"
-    note "wrote a minimal config: $HOME_CONFIG"
-    note "it enables the deploy surface — deploying runs code on this server,"
+    note "no config yet — the server scaffolds $AION_HOME/config.toml on first start."
+    note "It enables the deploy surface: deploying is running code on this server,"
     note "which is why that ships off by default. It listens on localhost only."
     note "On a shared machine, read that file before going further."
 fi

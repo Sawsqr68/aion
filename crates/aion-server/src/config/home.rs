@@ -1,6 +1,7 @@
 //! Resolution of the server's central user-level configuration and state root.
 
-use std::path::PathBuf;
+use std::ffi::OsString;
+use std::path::{Component, Path, PathBuf};
 
 use crate::error::ServerError;
 
@@ -43,7 +44,8 @@ pub struct AionHome {
 /// # Errors
 ///
 /// Returns [`ServerError::Config`] when `AION_HOME` is empty, neither
-/// `AION_HOME` nor `HOME` can identify a home directory, or a relative
+/// `AION_HOME` nor `HOME` can identify a home directory, a `~`-prefixed
+/// `AION_HOME` cannot be expanded (see [`expand_tilde`]), or a relative
 /// `AION_HOME` cannot be resolved because the current directory is unavailable.
 pub fn aion_home() -> Result<AionHome, ServerError> {
     let configured = std::env::var_os("AION_HOME");
@@ -53,7 +55,7 @@ pub fn aion_home() -> Result<AionHome, ServerError> {
                 message: "AION_HOME must not be empty".to_owned(),
             });
         }
-        Some(value) => (PathBuf::from(value), HomeSource::Explicit),
+        Some(value) => (expand_tilde(Path::new(&value))?, HomeSource::Explicit),
         None => {
             let Some(home) = std::env::var_os("HOME").filter(|value| !value.is_empty()) else {
                 return Err(ServerError::Config {
@@ -75,4 +77,125 @@ pub fn aion_home() -> Result<AionHome, ServerError> {
             })?
     };
     Ok(AionHome { path, source })
+}
+
+/// Expand a leading `~` in an operator-supplied path against `$HOME`.
+///
+/// `~` alone and `~/rest` expand (#152: `AION_HOME=~/.aion` and
+/// `--config ~/aion.toml` reach the loader unexpanded whenever a shell did not
+/// get to them — a quoted value, an env file, a process manager). Any other
+/// `~`-leading form (`~user/...`) is a loud typed refusal: expanding it needs
+/// the user database, and silently treating it as a relative directory
+/// literally named `~user` is exactly the quiet misdirection this fixes. Every
+/// other path passes through untouched.
+pub(super) fn expand_tilde(path: &Path) -> Result<PathBuf, ServerError> {
+    expand_tilde_against(path, std::env::var_os("HOME"))
+}
+
+fn expand_tilde_against(path: &Path, home: Option<OsString>) -> Result<PathBuf, ServerError> {
+    let mut components = path.components();
+    let Some(Component::Normal(first)) = components.next() else {
+        return Ok(path.to_owned());
+    };
+    if first == "~" {
+        let Some(home) = home.filter(|value| !value.is_empty()) else {
+            return Err(ServerError::Config {
+                message: format!(
+                    "cannot expand `~` in path `{}`: HOME is not set",
+                    path.display()
+                ),
+            });
+        };
+        let rest = components.as_path();
+        return Ok(if rest.as_os_str().is_empty() {
+            PathBuf::from(home)
+        } else {
+            PathBuf::from(home).join(rest)
+        });
+    }
+    if first.as_encoded_bytes().starts_with(b"~") {
+        return Err(ServerError::Config {
+            message: format!(
+                "cannot resolve `{}`: `~user` expansion is not supported; use an absolute \
+                 path (a directory literally named `{}` can be spelled `./{}`)",
+                path.display(),
+                Path::new(first).display(),
+                Path::new(first).display()
+            ),
+        });
+    }
+    Ok(path.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn home() -> OsString {
+        OsString::from("/users/probe")
+    }
+
+    #[test]
+    fn a_bare_tilde_expands_to_home() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(
+            expand_tilde_against(Path::new("~"), Some(home()))?,
+            PathBuf::from("/users/probe")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_tilde_slash_prefix_expands_under_home() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(
+            expand_tilde_against(Path::new("~/.aion/config.toml"), Some(home()))?,
+            PathBuf::from("/users/probe/.aion/config.toml")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn non_tilde_paths_pass_through_untouched() -> Result<(), Box<dyn std::error::Error>> {
+        for literal in ["/absolute/path", "relative/path", "./~escaped", ""] {
+            assert_eq!(
+                expand_tilde_against(Path::new(literal), Some(home()))?,
+                PathBuf::from(literal),
+                "`{literal}` must not be rewritten"
+            );
+        }
+        Ok(())
+    }
+
+    /// A path whose SECOND component is a tilde is a literal name, not an
+    /// expansion site — only a leading tilde means "my home".
+    #[test]
+    fn an_interior_tilde_is_a_literal_name() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(
+            expand_tilde_against(Path::new("/srv/~backup"), Some(home()))?,
+            PathBuf::from("/srv/~backup")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_tilde_user_form_is_a_loud_typed_refusal() -> Result<(), Box<dyn std::error::Error>> {
+        let error = expand_tilde_against(Path::new("~alice/.aion"), Some(home()))
+            .err()
+            .ok_or("`~alice` was accepted")?;
+        let message = error.to_string();
+        assert!(message.contains("~user"));
+        assert!(message.contains("~alice"));
+        assert!(message.contains("./~alice"));
+        Ok(())
+    }
+
+    #[test]
+    fn a_tilde_without_home_is_a_typed_error() -> Result<(), Box<dyn std::error::Error>> {
+        for absent in [None, Some(OsString::new())] {
+            let error = expand_tilde_against(Path::new("~/.aion"), absent)
+                .err()
+                .ok_or("`~` expanded without HOME")?;
+            assert!(error.to_string().contains("HOME is not set"));
+        }
+        Ok(())
+    }
 }

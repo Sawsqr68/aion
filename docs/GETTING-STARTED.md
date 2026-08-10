@@ -18,6 +18,24 @@ Parts 1 and 2 are the ones that teach you the system. Part 0 is the one that
 shows you it exists. If you only have ten minutes, take Part 0; if you are
 going to build on this, come back and walk Part 1.
 
+**The two-command start.** With only the Rust toolchain, this is a running
+server and the ops console in your browser:
+
+```sh
+cargo install aion-cli
+aion
+```
+
+Bare `aion` starts the server in the background, waits until it answers its
+own liveness probe, and tells you in plain lines where everything lives: the
+config its first boot wrote (`~/.aion/config.toml` — yours to edit, comments
+inside explain every surface it enables), the data directory, the console
+URL, the server log (`~/.aion/server.log`), and the process id that stops it.
+Run `aion` again and it reports the running server instead of starting a
+second one. `aion --foreground` keeps the server in your terminal;
+`aion --no-open` skips the browser. What it starts is exactly `aion server` —
+the engine Parts 1 and 2 teach you to drive.
+
 Working from a repository checkout and want a bundled example instead? Use
 [`examples/awl-hello/README.md`](../examples/awl-hello/README.md) for AWL or
 [`examples/hello-world/README.md`](../examples/hello-world/README.md) for
@@ -96,25 +114,26 @@ It announces each step as it goes.
 3. **Prepares `~/.aion`**, the server's home, with owner-only permissions
    (`chmod 700`). The server's path-safety gate refuses a store with a group-
    or world-writable ancestor, so doing this up front means it never fires.
-4. **Writes a minimal `config.toml`** if that home has none, enabling only the
-   two surfaces the rest of the script needs — `[deploy]`, so `aion deploy`
+4. **Starts the server** and waits up to 120 seconds for it to actually
+   answer — proven by the body of `/build`, not by a status code. A first
+   start that finds no config anywhere writes `~/.aion/config.toml` itself
+   (`chmod 600`) from the server's embedded template, with the two surfaces
+   the rest of the script needs already on — `[deploy]`, so `aion deploy`
    has something to talk to, and `[outbox]`, which hosts the listener remote
-   workers connect in to. Both ship dark by default. The file it writes says
-   in comments what each one opens and what that means; it is yours to edit,
-   and it is created `chmod 600`.
-5. **Starts the server** and waits up to 120 seconds for it to actually
-   answer — proven by the body of `/build`, not by a status code.
-6. **Reads the server's workspace root** out of its own JSON startup banner
+   workers connect in to. Both ship dark by default; the file says in
+   comments what each one opens and what that means, and it is yours to
+   edit. An existing config is never touched.
+5. **Reads the server's workspace root** out of its own JSON startup banner
    and threads that one resolved value to the worker, so both sides cannot
    disagree about where session workspaces live.
-7. **Deploys the assistant workflow** (`crates/aion-server/assistant-embed/assistant.awl`).
+6. **Deploys the assistant workflow** (`crates/aion-server/assistant-embed/assistant.awl`).
    The server also carries that document compiled into itself and installs it at
    boot on a home that holds no version of it (#139 leg C), so an install with no
    repository checkout still has an assistant; the explicit deploy here is the
    script's own, so a checkout that has EDITED the document deploys what it edited.
    Without a checkout, `aion assistant document --output assistant.awl` writes the
    same bytes out of the binary.
-8. **Builds and starts the assistant worker**, then waits up to 30 seconds for
+7. **Builds and starts the assistant worker**, then waits up to 30 seconds for
    it to register with the server — and fails loudly if it exits first.
 
 ## What success looks like
@@ -878,10 +897,11 @@ max_archive_bytes = 16777216        # 16 MiB upload ceiling
 max_inflated_bytes = 67108864       # 64 MiB decompressed-contents ceiling
 ```
 
-Every key can also be set by environment variable as
-`AION_<SECTION>_<KEY>` (for example `AION_RUNTIME_QUERY_TIMEOUT_MS=10000`).
-The complete config reference is in the
-[operations guide](operations/operations.md).
+Some keys can also be set by environment variable as
+`AION_<SECTION>_<KEY>` (for example `AION_RUNTIME_QUERY_TIMEOUT_MS=10000`);
+the supported variables are an explicit allowlist, spelled out with the
+complete config reference in the
+[operations guide](operations/operations.md#environment-overrides).
 
 Start the server (terminal 1):
 

@@ -19,7 +19,7 @@ fn require_error<T>(result: anyhow::Result<T>) -> Result<anyhow::Error, TestErro
 fn bare_new_parses_to_the_awl_template() -> Result<(), TestError> {
     use clap::Parser;
     let cli = crate::Cli::try_parse_from(["aion", "new", "my_flow"])?;
-    let crate::Command::Client(crate::ClientCommand::New(args)) = cli.command else {
+    let Some(crate::Command::Client(crate::ClientCommand::New(args))) = cli.command else {
         return Err("expected the new command".into());
     };
     assert_eq!(

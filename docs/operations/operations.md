@@ -19,10 +19,17 @@ byte-identical to the single-node path.
 The server starts from built-in defaults, then applies config-file values,
 then `AION_*` environment overrides, then `aion server` flags — last layer
 wins. When `--config` is omitted it auto-discovers `aion.toml` in the
-working directory (then `<home>/config.toml`); with neither, it runs on the
-built-in defaults. **An empty config boots**: every always-mounted surface
-has a default, and keys only become required when the operator commissions
-the surface they belong to.
+working directory (then `<home>/config.toml`). **An empty config boots**:
+every always-mounted surface has a default, and keys only become required
+when the operator commissions the surface they belong to.
+
+A boot that discovers **no config at any layer** first scaffolds
+`<home>/config.toml` (owner-only, `0600`) from the server's embedded
+template — the same file `aion new` puts in a project — with the deploy
+surface and the outbox worker channel enabled, then boots on it and logs the
+written path. An existing file is never touched, and an explicit `--config`
+naming a missing file still refuses rather than inventing one
+(`crates/aion-server/src/config/scaffold.rs`).
 
 ### `aion server` flags
 
@@ -37,7 +44,25 @@ the surface they belong to.
 | `--workflow-package <path>` | Extra `.aion` archive loaded at startup; repeatable (see "Boot-time loads"). |
 | `--gleam-path <path>` | Set `authoring.gleam_path`: commissions the server-side Gleam authoring loop and mounts `/authoring/*`; requires `--authoring-project-root`. |
 | `--authoring-project-root <path>` | Set `authoring.project_root`: the built Gleam project submitted source is written into and packaged from. |
-| `--open` | Open the ops console in the default browser once the HTTP listener accepts connections. Best-effort: failures are logged and never affect the server run. |
+| `--open` | Open the ops console in the default browser once the HTTP listener answers `/health/live`. Best-effort: failures are logged and never affect the server run. |
+
+### The bare launcher: `aion` with no subcommand
+
+Bare `aion` is the background form of `aion server`
+(`crates/aion-cli/src/launch.rs`). It resolves the same effective config the
+server would, probes the resolved HTTP address first — a live Aion server
+(HTTP 200 on `/health/live`) is reported and the console opened, never
+double-started; a port held by anything else is refused by name with exit 2 —
+then spawns `aion server` in its own process group with stdout+stderr
+appended to `<home>/server.log`, waits up to 60 seconds for liveness, and
+reports in plain lines: the config (including whether the first boot
+scaffolded it), the data directory, the console URL, the log path, and the
+process id that stops it (`kill <pid>`). A spawned server that dies during
+startup, or is still not live at the deadline, is reported loudly with the
+tail of its log — a still-starting server is left running and named, never
+killed. `--foreground` runs the server in the terminal instead (the ordinary
+`aion server` path with `--open` semantics); `--no-open` skips the browser.
+Both flags belong to the bare form only and are refused next to a subcommand.
 
 ### Conditionally required keys (startup fails naming the missing key)
 
@@ -340,7 +365,7 @@ root — before it reads any config file
 
 | Situation | Resolved home |
 |---|---|
-| `AION_HOME` is set | that path (relative paths resolve against the current directory) |
+| `AION_HOME` is set | that path (`~`/`~/…` expands against `$HOME`; relative paths resolve against the current directory; `~user` is refused) |
 | `AION_HOME` is unset | `$HOME/.aion` |
 | `AION_HOME` is set but empty | startup fails: `AION_HOME must not be empty` |
 | neither `AION_HOME` nor `HOME` identifies a directory | startup fails: `cannot resolve Aion home: set AION_HOME or HOME` |
