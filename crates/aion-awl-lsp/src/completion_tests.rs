@@ -1,9 +1,10 @@
 use std::collections::BTreeSet;
 
 use aion_awl::Keyword;
+use aion_awl::guide::{GrammarPosition, words_offered_at};
 use lsp_types::{CompletionItemKind, Position};
 
-use super::{Context, completions, keywords_for};
+use super::{completions, keywords_for};
 
 /// A document that PARSES, used where the point is context rather than damage.
 const DOCUMENT: &str = "\
@@ -198,20 +199,13 @@ fn the_positional_words_are_offered_where_the_parser_accepts_them() {
 /// to place it fails here, naming it.
 #[test]
 fn every_keyword_is_offered_somewhere() {
-    let contexts = [
-        Context::TopLevel,
-        Context::WorkflowHeader,
-        Context::WorkerBlock,
-        Context::StepBody,
-        Context::TypeBody,
-        Context::RouteTarget,
-        Context::StepReference,
-        Context::SignalReference,
-        Context::PipeStage,
-        Context::TypeReference,
-        Context::Condition,
-    ];
-    let offered: BTreeSet<&'static str> = contexts.into_iter().flat_map(keywords_for).collect();
+    // The context list is the table's own inventory, not a hand-kept copy —
+    // a position added to the grammar is swept automatically instead of
+    // being silently absent here.
+    let offered: BTreeSet<&'static str> = GrammarPosition::ALL
+        .into_iter()
+        .flat_map(keywords_for)
+        .collect();
     assert!(
         offered.len() > 20,
         "the control failed: only {} words were gathered across every context, so the comparison \
@@ -229,6 +223,111 @@ fn every_keyword_is_offered_somewhere() {
         "these reserved words are offered in NO context, so an author can never be told they \
          exist: {missing:?}"
     );
+}
+
+/// The value words are offered where authors actually write them — the
+/// cursor positions the checker accepts (`const c = schema of T`,
+/// `const c = json { … }`, `type T = schema { … }`, `run json "…"`), pinned
+/// against `completions()` itself so a cue that stops firing fails here even
+/// while the table still lists the word.
+#[test]
+fn value_words_are_offered_where_authors_actually_write_them() {
+    let at_const = labels(&at_end_of(DOCUMENT, "\nconst c = "));
+    assert!(
+        at_const.contains("schema") && at_const.contains("json"),
+        "a const's value slot must offer `schema` and `json`: {at_const:?}"
+    );
+    let at_type_door = labels(&at_end_of(DOCUMENT, "\ntype Payload = "));
+    assert!(
+        at_type_door.contains("schema"),
+        "a type door must offer `schema`: {at_type_door:?}"
+    );
+    let mid_word = labels(&at_end_of(DOCUMENT, "\ntype Payload = sch"));
+    assert!(
+        mid_word.contains("schema"),
+        "a half-typed door keyword still gets the offer — the partial word is a filter, not a \
+         context: {mid_word:?}"
+    );
+    let after_schema = labels(&at_end_of(DOCUMENT, "\nconst c = schema "));
+    assert!(
+        after_schema.contains("of"),
+        "`schema ` must offer `of`: {after_schema:?}"
+    );
+    let run_body = labels(&at_end_of(
+        DOCUMENT,
+        "\nworker shell\n  action x() -> Y\n    run ",
+    ));
+    assert!(
+        run_body.contains("json"),
+        "a declared body's `run ` must offer the `json` capture selector: {run_body:?}"
+    );
+    // The guard: an author's own `run` binding in a step body is NOT a
+    // declared body, so the capture selector is not offered there.
+    let step_run = labels(&at_end_of(DOCUMENT, "\nstep more\n  run "));
+    assert!(
+        !step_run.contains("json"),
+        "`run` outside a worker must not open the capture selector: {step_run:?}"
+    );
+}
+
+/// EVERY OFFER IS REACHABLE. For each grammar position that offers any
+/// words, a real cursor shape reaches it and `completions()` returns every
+/// offered word there. `every_keyword_is_offered_somewhere` cannot see
+/// reachability — it calls the table on a hand-written context list — so
+/// this is the pin that catches a table home no cue can reach, which is
+/// exactly how `schema` was once left offered only where the parser
+/// refuses it.
+#[test]
+fn every_offering_position_is_reachable_through_completions() {
+    let probes: Vec<(GrammarPosition, &str)> = vec![
+        (GrammarPosition::TopLevel, "\n"),
+        (GrammarPosition::WorkflowHeader, "\nworkflow more\n  "),
+        (GrammarPosition::WorkerBlock, "\nworker more\n  "),
+        (GrammarPosition::StepBody, "\nstep more\n  "),
+        (GrammarPosition::RouteTarget, "\nstep more\n  route "),
+        (GrammarPosition::StepReference, "\nstep more\n  after "),
+        (GrammarPosition::SignalReference, "\nstep more\n  wait "),
+        (GrammarPosition::PipeStage, "\nstep more\n  diagnostics |> "),
+        (
+            GrammarPosition::Condition,
+            "\nstep more\n  outcome a: when ",
+        ),
+        (GrammarPosition::ConstValue, "\nconst c = "),
+        (GrammarPosition::TypeDoor, "\ntype Payload = "),
+        (GrammarPosition::SchemaSource, "\nconst c = schema "),
+        (
+            GrammarPosition::RunCapture,
+            "\nworker shell\n  action x() -> Y\n    run ",
+        ),
+    ];
+    let covered: Vec<GrammarPosition> = probes.iter().map(|(position, _)| *position).collect();
+    for position in GrammarPosition::ALL {
+        let offered = words_offered_at(position);
+        if offered.is_empty() {
+            continue;
+        }
+        assert!(
+            covered.contains(&position),
+            "{position:?} offers words but this pin has no cursor probe for it — add one, which \
+             will force a reachable cue to exist"
+        );
+    }
+    for (position, insert) in probes {
+        let offered = words_offered_at(position);
+        assert!(
+            !offered.is_empty(),
+            "the probe for {position:?} is stale: the position no longer offers any words"
+        );
+        let found = labels(&at_end_of(DOCUMENT, insert));
+        let missing: Vec<&str> = offered
+            .into_iter()
+            .filter(|word| !found.contains(*word))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "at the {position:?} cursor, completions() omits offered words {missing:?}: {found:?}"
+        );
+    }
 }
 
 /// What the document declares sorts above the language's keywords.

@@ -17,6 +17,7 @@ mod declarations;
 mod entry;
 mod examples;
 mod flow;
+mod grammar;
 mod lookup;
 mod reference;
 mod values;
@@ -24,6 +25,10 @@ mod values;
 pub use entry::{
     AUTHORING_PATH, COMMANDS_PATH, DECLARED_COMMANDS_PATH, GUIDE_PATH, GuideEntry,
     REFERENCE_COMMAND, REFERENCE_PATH, Section, WORKERS_PATH, WordKind,
+};
+pub use grammar::{
+    GrammarForm, GrammarPosition, form_of, keywords_offered_at, positional_offered_at,
+    positions_of, words_offered_at,
 };
 pub use lookup::{all, for_keyword, for_positional_word, for_word};
 pub use reference::reference_text;

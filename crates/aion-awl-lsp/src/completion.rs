@@ -16,10 +16,8 @@
 
 use std::collections::BTreeSet;
 
-use aion_awl::{
-    ANSWER_WORD, IN_WORD, Keyword, POSITIONAL_WORDS, QUERY_WORD, RUN_WORD, SEND_WORD, TO_WORD,
-    Token, TokenKind,
-};
+use aion_awl::guide::GrammarPosition;
+use aion_awl::{Keyword, POSITIONAL_WORDS, QUERY_WORD, RUN_WORD, SEND_WORD, Token, TokenKind};
 use lsp_types::{CompletionItem, CompletionItemKind, Position};
 
 use crate::analysis::byte_offset_at;
@@ -27,35 +25,14 @@ use crate::analysis::byte_offset_at;
 /// The built-in leaf types an author can write without declaring anything.
 const BUILTIN_TYPES: [&str; 4] = ["String", "Int", "Float", "Bool"];
 
-/// What the cursor is positioned to receive.
-///
-/// Decided from the text before the cursor, never from a syntax tree — see the
-/// module note.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Context {
-    /// Column zero: the document's own declarations.
-    TopLevel,
-    /// Indented under `workflow`: the header's clauses.
-    WorkflowHeader,
-    /// Indented under `worker`: its actions.
-    WorkerBlock,
-    /// Indented under `step` or `subflow`: a statement may start here.
-    StepBody,
-    /// Indented under `type`: a field declaration.
-    TypeBody,
-    /// After `route `: where control goes.
-    RouteTarget,
-    /// After `after `: an ordering dependency on another step.
-    StepReference,
-    /// After `wait ` or `send `: a signal.
-    SignalReference,
-    /// After `|>`: a pipe stage.
-    PipeStage,
-    /// After `:`: a type.
-    TypeReference,
-    /// After `when `: a condition.
-    Condition,
-}
+// What the cursor is positioned to receive — decided from the text before
+// the cursor, never from a syntax tree; see the module note. The positions
+// themselves, and the table saying which words may stand in each, live in
+// `aion_awl::guide`, PROMOTED from this module so the ops console's language
+// panel derives its grammar axis from the same table completion offers words
+// from. This module keeps only the cursor-side reading: deciding which
+// position the text before the cursor puts an author in.
+use GrammarPosition as Context;
 
 /// A name the document declares, and what kind of thing it names.
 struct Declared {
@@ -131,6 +108,17 @@ fn context_at(source: &str, cursor: usize, line: (usize, usize)) -> Context {
     if head.ends_with(':') {
         return Context::TypeReference;
     }
+    // `=` opens a declaration's value slot — `const c = ` wants a value
+    // expression, `type T = ` wants the schema door or an enum body. The
+    // opening word decides which; an `=` on any other line (a `loop` seed,
+    // say) keeps its enclosing context.
+    if head.ends_with('=') {
+        match head.split_whitespace().next() {
+            Some(word) if word == Keyword::Const.as_word() => return Context::ConstValue,
+            Some(word) if word == Keyword::Type.as_word() => return Context::TypeDoor,
+            _ => {}
+        }
+    }
     match last_word(head) {
         Some(word) if word == Keyword::Route.as_word() => return Context::RouteTarget,
         Some(word) if word == Keyword::After.as_word() => return Context::StepReference,
@@ -138,6 +126,16 @@ fn context_at(source: &str, cursor: usize, line: (usize, usize)) -> Context {
             return Context::SignalReference;
         }
         Some(word) if word == Keyword::When.as_word() => return Context::Condition,
+        Some(word) if word == Keyword::Schema.as_word() => return Context::SchemaSource,
+        // `run ` opens the capture selector only where a declared body can
+        // stand — under a `worker` — so an author's own `run` binding in a
+        // step body keeps its statement context.
+        Some(word)
+            if word == RUN_WORD
+                && enclosing_declaration(source, line_start) == Some(Keyword::Worker.as_word()) =>
+        {
+            return Context::RunCapture;
+        }
         _ => {}
     }
 
@@ -263,124 +261,16 @@ fn push_for_keyword(harvest: &mut Harvest, keyword: Keyword, name: &str) {
     });
 }
 
-/// The keywords offered in each context.
+/// The words offered in each context: a delegation to the promoted grammar
+/// table in `aion_awl::guide`, verbatim — reserved words in the table's
+/// curated order, then the positional words the parser accepts there.
 ///
-/// Curated per context on purpose: offering all 57 reserved words everywhere is
-/// not completion, it is a dictionary. `every_keyword_is_offered_somewhere`
-/// pins that curation never drops one entirely.
+/// Curated per context on purpose: offering all 57 reserved words everywhere
+/// is not completion, it is a dictionary. `every_keyword_is_offered_somewhere`
+/// pins — now as a delegation pin — that the curation never drops one
+/// entirely.
 fn keywords_for(context: Context) -> Vec<&'static str> {
-    use Keyword as K;
-    let words: Vec<K> = match context {
-        Context::TopLevel => vec![
-            K::Workflow,
-            K::Type,
-            K::Worker,
-            K::Child,
-            K::Const,
-            K::Subflow,
-            K::Step,
-            K::Schema,
-        ],
-        Context::WorkflowHeader => vec![
-            K::Input,
-            K::Signal,
-            K::Outcome,
-            K::Timeout,
-            K::Type,
-            K::Route,
-            K::Success,
-            K::Failure,
-            K::Node,
-            K::Retry,
-            K::Every,
-            K::Backoff,
-            K::Advisory,
-            K::Agent,
-            K::Of,
-            K::Json,
-        ],
-        Context::WorkerBlock => vec![
-            K::Action,
-            K::Node,
-            K::Timeout,
-            K::Retry,
-            K::Every,
-            K::Backoff,
-            K::Advisory,
-            K::Agent,
-        ],
-        Context::StepBody => vec![
-            K::Spawn,
-            K::Wait,
-            K::Sleep,
-            K::Fork,
-            K::Join,
-            K::Loop,
-            K::Counting,
-            K::Until,
-            K::Max,
-            K::Visits,
-            K::Sequential,
-            K::Distribute,
-            K::Sequence,
-            K::Collect,
-            K::Outcome,
-            K::Route,
-            K::After,
-            K::On,
-            K::Failure,
-            K::Timeout,
-            // An `outcome` line inside a step body carries its guard, so the
-            // condition words start here too.
-            K::When,
-        ],
-        Context::TypeBody => vec![K::Json, K::Schema, K::Of],
-        Context::RouteTarget | Context::StepReference => vec![K::Success, K::Failure],
-        Context::SignalReference => vec![K::Timeout],
-        Context::PipeStage => vec![
-            K::Filter,
-            K::Sort,
-            K::Map,
-            K::Count,
-            K::Any,
-            K::All,
-            K::Route,
-        ],
-        Context::TypeReference => vec![K::Schema, K::Json, K::Of],
-        Context::Condition => vec![
-            K::Is,
-            K::Not,
-            K::And,
-            K::Or,
-            K::Empty,
-            K::Present,
-            K::Absent,
-            K::True,
-            K::False,
-            K::Otherwise,
-            K::Any,
-            K::All,
-            K::Count,
-        ],
-    };
-    let mut offered: Vec<&'static str> = words.into_iter().map(K::as_word).collect();
-    // The positional words are not in `Keyword` — deliberately, since reserving
-    // them would break real documents — but an author still has to type them.
-    offered.extend(positional_for(context));
-    offered
-}
-
-/// The non-reserved opener words offered in each context.
-fn positional_for(context: Context) -> Vec<&'static str> {
-    match context {
-        Context::TopLevel | Context::WorkflowHeader => vec![QUERY_WORD, SEND_WORD],
-        Context::WorkerBlock => vec![RUN_WORD],
-        // `in` belongs here because `distribute <var> in <collection>` is a
-        // step-body line; it is the only place an author types the word.
-        Context::StepBody => vec![SEND_WORD, ANSWER_WORD, IN_WORD],
-        Context::SignalReference => vec![TO_WORD],
-        _ => Vec::new(),
-    }
+    aion_awl::guide::words_offered_at(context)
 }
 
 /// The declared names offered in each context, in the order they are offered.
@@ -393,8 +283,16 @@ fn names_for(context: Context, harvest: &Harvest) -> Vec<&Declared> {
         Context::TypeReference | Context::TypeBody | Context::WorkflowHeader => {
             vec![&harvest.types]
         }
-        Context::Condition | Context::PipeStage => vec![&harvest.values],
-        Context::TopLevel | Context::WorkerBlock => Vec::new(),
+        // A constant's value may reference the values already in scope.
+        Context::Condition | Context::PipeStage | Context::ConstValue => vec![&harvest.values],
+        // After `schema` only `of` (or a door) may stand; after `run`, a
+        // capture selector or the command string; a type door wants its own
+        // body. None of these is a place a declared name can stand.
+        Context::TopLevel
+        | Context::WorkerBlock
+        | Context::TypeDoor
+        | Context::SchemaSource
+        | Context::RunCapture => Vec::new(),
     };
     groups.into_iter().flatten().collect()
 }
