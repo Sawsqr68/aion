@@ -23,8 +23,7 @@
 
 use agent_client_protocol_schema::v1::{PromptResponse, StopReason};
 use aion_integrations::jsonrpc::{JsonRpcError, JsonRpcResponse};
-use aion_integrations::{ContentType, HarnessError, Payload};
-use serde_json::json;
+use aion_integrations::{AgentOutcome, HarnessError, Payload};
 
 use crate::protocol;
 use crate::translate;
@@ -104,11 +103,13 @@ impl PumpEnd {
 
 /// Interprets the terminal outcome as the activity's [`Payload`], or the honest error it is.
 ///
-/// - **`end_turn`** → the completed run. The payload is
-///   `{"stopReason": "end_turn", "text": <the agent's answer>}`. ACP's Response carries ONLY a stop
-///   reason, so the answer itself has to come from the accumulated `agent_message_chunk` text; a
-///   payload of the stop reason alone would hand the workflow an activity result with no result in
-///   it.
+/// - **`end_turn`** → the completed run. The payload is the canonical [`AgentOutcome`] record,
+///   `{"text": <the agent's answer>, "stop_reason": "end_turn"}` — ACP's native stop reason mapped
+///   through the adapter's existing neutral [`translate::stop_kind`] mapping and spelled by the one
+///   canonical [`StopKind::canonical_stop_reason`](aion_integrations::StopKind::canonical_stop_reason)
+///   vocabulary. ACP's Response carries ONLY a stop reason, so the answer itself has to come from
+///   the accumulated `agent_message_chunk` text; a payload of the stop reason alone would hand the
+///   workflow an activity result with no result in it.
 /// - **`refusal`, `max_tokens`, `max_turn_requests`** → [`HarnessError::Harness`] naming the reason.
 ///   None of them is a completed run: the agent stopped short. The partial text rides along,
 ///   labelled and bounded, so a caller's accept-the-partial policy stays reachable.
@@ -136,11 +137,11 @@ pub(crate) fn outcome_into_payload(outcome: PromptOutcome) -> Result<Payload, Ha
     if !translate::is_success(prompt.stop_reason) {
         return Err(non_completion(prompt.stop_reason, label, &text));
     }
-    let value = json!({ "stopReason": label, "text": text });
-    let bytes = serde_json::to_vec(&value).map_err(|source| {
-        HarnessError::protocol(format!("the terminal payload is not encodable: {source}"))
-    })?;
-    Ok(Payload::new(ContentType::Json, bytes))
+    AgentOutcome::new(text, &translate::stop_kind(prompt.stop_reason))
+        .into_payload()
+        .map_err(|source| {
+            HarnessError::protocol(format!("the terminal payload is not encodable: {source}"))
+        })
 }
 
 /// The honest error for a turn that ended on a stop reason other than `end_turn`.
@@ -240,14 +241,15 @@ mod tests {
     }
 
     #[test]
-    fn end_turn_yields_the_stop_reason_and_the_agents_text()
-    -> Result<(), Box<dyn std::error::Error>> {
+    fn end_turn_yields_the_canonical_agent_outcome_record() -> Result<(), Box<dyn std::error::Error>>
+    {
         let payload = payload_of(json!({ "stopReason": "end_turn" }), "the answer")?;
         assert_eq!(payload.content_type(), &ContentType::Json);
         assert_eq!(
             payload.to_json()?,
-            json!({ "stopReason": "end_turn", "text": "the answer" }),
-            "ACP's response carries only a stop reason, so the answer must come from the stream"
+            json!({ "text": "the answer", "stop_reason": "end_turn" }),
+            "the completed payload is the canonical AgentOutcome record — ACP's response \
+             carries only a stop reason, so the text must come from the stream"
         );
         Ok(())
     }

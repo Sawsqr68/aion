@@ -13,15 +13,15 @@
 //!
 //! Plus [`parse_capabilities`], which gates the `initialize` result on the driven-mode protocol
 //! version (`norn-driven/1`) and reads it into the neutral [`InterventionCapabilities`] the
-//! server/console gate on, and [`run_result_to_output`], which interprets the `run/execute`
-//! versioned stop envelope into the run's `output` value (or the honest error a non-completed
-//! stop is).
+//! server/console gate on, and [`run_result_to_outcome`], which interprets the `run/execute`
+//! versioned stop envelope into the canonical [`AgentOutcome`] record (or the honest error a
+//! non-completed stop — or an output the agent-outcome contract cannot carry — is).
 //!
 //! [`UpdateBudget`]: InterventionKind::UpdateBudget
 //! [`RespondToApproval`]: InterventionKind::RespondToApproval
 
 use aion_core::{
-    ActivityEvent, ActivityEventKind, InterventionCapabilities, InterventionKind,
+    ActivityEvent, ActivityEventKind, AgentOutcome, InterventionCapabilities, InterventionKind,
     InterventionPrimitive, MessageRole, ProgressDetail, StopKind,
 };
 use aion_integrations::HarnessError;
@@ -105,11 +105,21 @@ pub fn parse_capabilities(
     Ok(InterventionCapabilities::from_primitives(primitives))
 }
 
-/// Interprets a `run/execute` success result — the versioned stop envelope — into the run's
-/// `output` value, or the honest error a non-completion is.
+/// Interprets a `run/execute` success result — the versioned stop envelope — into the canonical
+/// [`AgentOutcome`] record, or the honest error a non-completion (or an off-contract output) is.
 ///
-/// - `stop.reason == "completed"` → `Ok` with the `output` VALUE as-is (a JSON string for
-///   schema-less runs, a JSON object when Norn ran with an output schema — never re-stringified).
+/// - `stop.reason == "completed"` with a **String** `output` → `Ok(AgentOutcome)`: the string is
+///   the record's `text`, and `stop_reason` is the canonical spelling of the completed run
+///   (see [`completed_stop_kind`] — norn's real `stop.reason`, mapped, never invented).
+/// - `stop.reason == "completed"` with a **non-String** `output` (an object, array, number, bool,
+///   or null — a run configured with an output schema, or a null final output) →
+///   [`HarnessError::Contract`] NAMING the canonical agent-outcome contract and what was found.
+///   The old behaviour passed the value through verbatim and left a workflow-side decoder to
+///   choke on it ("Expected String, found Dict" — run `cc1d82c2`); the ruling on #181 makes that
+///   a typed contract refusal at THIS boundary, never a serde decode error downstream. It is the
+///   `Contract` variant — not `Protocol` — because it is DETERMINISTIC: the worker maps it to a
+///   terminal activity failure, so a permanent misconfiguration never burns a retry budget of
+///   live agent runs.
 /// - any other `stop.reason` (`schema_unreachable`, `max_iterations`, `timed_out`, `cancelled`,
 ///   `truncated`) → [`HarnessError::Harness`] whose message carries the whole `stop` object
 ///   verbatim, so the reason AND its per-variant detail fields (`elapsed_ms`, `attempts`,
@@ -120,8 +130,7 @@ pub fn parse_capabilities(
 ///   `partial output truncated for this message` marker naming the shown and total byte counts, so
 ///   a caller's accept-the-partial policy stays reachable and never mistakes a cut for the whole.
 /// - a `completed` envelope with the `output` KEY ABSENT → [`HarnessError::Protocol`] — the
-///   contract says a completed run always carries `output`. A present `"output": null` is a
-///   legal null output and passes through.
+///   contract says a completed run always carries `output`.
 /// - a result that is not the envelope shape (no `envelope_version` / `stop` / `stop.reason`) →
 ///   [`HarnessError::Protocol`] naming what was missing — no silent passthrough of unknown
 ///   shapes.
@@ -129,8 +138,9 @@ pub fn parse_capabilities(
 /// # Errors
 ///
 /// Returns [`HarnessError::Protocol`] for a non-envelope result or a completed envelope without
-/// an `output` field, and [`HarnessError::Harness`] for every non-`completed` stop.
-pub fn run_result_to_output(result: &Value) -> Result<Value, HarnessError> {
+/// an `output` field, [`HarnessError::Contract`] for a completed `output` the agent-outcome
+/// contract cannot carry, and [`HarnessError::Harness`] for every non-`completed` stop.
+pub fn run_result_to_outcome(result: &Value) -> Result<AgentOutcome, HarnessError> {
     if result.get(protocol::ENVELOPE_VERSION_KEY).is_none() {
         return Err(HarnessError::protocol(format!(
             "run/execute result is not a norn stop envelope: missing `{}`",
@@ -170,12 +180,49 @@ pub fn run_result_to_output(result: &Value) -> Result<Value, HarnessError> {
         return Err(HarnessError::harness(message));
     }
     // The contract says a completed envelope ALWAYS carries `output`; a frame without the key is
-    // off-contract. A present `"output": null` is a legal null output and passes through.
-    match result.get(protocol::OUTPUT_KEY) {
-        Some(output) => Ok(output.clone()),
-        None => Err(HarnessError::protocol(
-            "completed envelope carried no output field",
-        )),
+    // off-contract.
+    let output = result
+        .get(protocol::OUTPUT_KEY)
+        .ok_or_else(|| HarnessError::protocol("completed envelope carried no output field"))?;
+    // The agent seam's completed result is the canonical agent-outcome record, and its `text` is
+    // a String. Anything else — the structured output of a run configured with an output schema,
+    // or a null final output — cannot fill the record, and refusing it HERE, naming the contract,
+    // is the ruling's cure for the workflow-side "Expected String, found Dict" decode error.
+    let Value::String(text) = output else {
+        return Err(HarnessError::contract(format!(
+            "the run completed but its output cannot satisfy the canonical agent-outcome \
+             contract (a record of `text: String` and `stop_reason: String`): the envelope's \
+             `output` is {}, not the String that becomes `text` — a norn run serving an `agent` \
+             action must end with terminal text (a structured output schema has no place in \
+             the agent seam)",
+            json_kind(output)
+        )));
+    };
+    Ok(AgentOutcome::new(text.clone(), &completed_stop_kind()))
+}
+
+/// The neutral stop kind a `completed` envelope maps to: [`StopKind::EndTurn`].
+///
+/// Norn's envelope reason `completed` means the run finished normally with its final output
+/// (DRIVEN-PROTOCOL.md, "Stop envelope": exit 0, `output` holds the final value) — exactly the
+/// semantics of the neutral `EndTurn` ("the agent completed its turn normally and produced its
+/// result"). The stream-event mapping ([`stop_kind`]) never sees `completed` — it maps norn's
+/// per-turn `event/stop` reasons (`end_turn`/`tool_use`/`max_tokens`) — so this run-level
+/// resolution lives beside it, against norn's protocol document, and is pinned by
+/// `a_completed_envelope_maps_to_the_canonical_end_turn_stop_reason`.
+fn completed_stop_kind() -> StopKind {
+    StopKind::EndTurn
+}
+
+/// A human-readable name for a JSON value's kind, for contract-refusal messages.
+fn json_kind(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Bool(_) => "a JSON boolean",
+        Value::Number(_) => "a JSON number",
+        Value::String(_) => "a JSON string",
+        Value::Array(_) => "a JSON array",
+        Value::Object(_) => "a JSON object",
     }
 }
 
@@ -946,19 +993,85 @@ mod tests {
     // --- the run/execute stop envelope ---
 
     #[test]
-    fn completed_envelope_yields_the_output_value_as_is() -> TestResult {
+    fn completed_string_output_becomes_the_agent_outcome_record() -> TestResult {
         let envelope = json!({
             "envelope_version": 1,
             "stop": { "reason": "completed" },
-            "output": { "answer": 7 },
+            "output": "the final answer",
         });
-        let output = run_result_to_output(&envelope)
-            .map_err(|error| format!("a completed envelope must yield its output: {error}"))?;
+        let outcome = run_result_to_outcome(&envelope)
+            .map_err(|error| format!("a completed string output must yield the record: {error}"))?;
+        assert_eq!(outcome.text, "the final answer");
+        assert_eq!(outcome.stop_reason, "end_turn");
+        Ok(())
+    }
+
+    /// THE DECISION, encoded as a test rather than a comment (ruling #181): norn's envelope
+    /// reason `completed` maps to the canonical `end_turn`. The stream mapping ([`stop_kind`])
+    /// carries no `completed` arm — it maps per-turn `event/stop` reasons — so the run-level
+    /// reason is resolved against norn's own protocol document (DRIVEN-PROTOCOL.md, "Stop
+    /// envelope": `completed` = the run finished normally, exit 0, `output` holds the final
+    /// value), which is exactly the neutral `EndTurn` semantics. Never invented: it is the
+    /// envelope's real `stop.reason`, mapped.
+    #[test]
+    fn a_completed_envelope_maps_to_the_canonical_end_turn_stop_reason() -> TestResult {
+        let envelope = json!({
+            "envelope_version": 1,
+            "stop": { "reason": "completed" },
+            "output": "done",
+        });
+        let outcome = run_result_to_outcome(&envelope)
+            .map_err(|error| format!("a completed envelope must yield the record: {error}"))?;
         assert_eq!(
-            output,
-            json!({ "answer": 7 }),
-            "a structured output passes through as the value, never re-stringified"
+            outcome.stop_reason,
+            StopKind::EndTurn.canonical_stop_reason(),
+            "norn `completed` resolves to the canonical `end_turn`, through the one mapping"
         );
+        Ok(())
+    }
+
+    /// The envelope-Dict path (ruling #181 acceptance 3 + 6, live repro `cc1d82c2`): a completed
+    /// envelope whose `output` is not a String is a typed contract refusal NAMING the canonical
+    /// agent-outcome contract and what was found — never a value passed through for a
+    /// workflow-side decoder to fail on with "Expected String, found Dict".
+    #[test]
+    fn a_completed_non_string_output_is_a_contract_refusal_naming_what_was_found() -> TestResult {
+        let cases = [
+            (json!({ "answer": 7 }), "a JSON object"),
+            (json!(["a", "b"]), "a JSON array"),
+            (json!(7), "a JSON number"),
+            (json!(true), "a JSON boolean"),
+            (json!(null), "null"),
+        ];
+        for (output, found) in cases {
+            let envelope = json!({
+                "envelope_version": 1,
+                "stop": { "reason": "completed" },
+                "output": output,
+            });
+            let Err(error) = run_result_to_outcome(&envelope) else {
+                return Err(format!(
+                    "a completed `output` of {found} must be refused, never yield a record"
+                )
+                .into());
+            };
+            assert!(
+                matches!(error, HarnessError::Contract { .. }),
+                "the refusal is the typed (terminal) Contract variant, got {error:?}"
+            );
+            let message = error.to_string();
+            for fragment in [
+                "agent-outcome",
+                "`text: String`",
+                "`stop_reason: String`",
+                found,
+            ] {
+                assert!(
+                    message.contains(fragment),
+                    "the refusal must name `{fragment}`: {message}"
+                );
+            }
+        }
         Ok(())
     }
 
@@ -969,7 +1082,7 @@ mod tests {
             "stop": { "reason": "timed_out", "elapsed_ms": 30000, "iterations": 4 },
             "output": "a half-written summary",
         });
-        let Err(error) = run_result_to_output(&envelope) else {
+        let Err(error) = run_result_to_outcome(&envelope) else {
             return Err("a timed_out envelope must be refused, never yield an output".into());
         };
         assert!(matches!(error, HarnessError::Harness { .. }));
@@ -996,7 +1109,7 @@ mod tests {
             "stop": { "reason": "max_iterations" },
             "output": null,
         });
-        let Err(error) = run_result_to_output(&envelope) else {
+        let Err(error) = run_result_to_outcome(&envelope) else {
             return Err("a max_iterations envelope must be refused, never yield an output".into());
         };
         let message = error.to_string();
@@ -1017,7 +1130,7 @@ mod tests {
             "stop": { "reason": "truncated", "truncation": "max_tokens", "iterations": 2 },
             "output": huge,
         });
-        let Err(error) = run_result_to_output(&envelope) else {
+        let Err(error) = run_result_to_outcome(&envelope) else {
             return Err("a truncated envelope must be refused, never yield an output".into());
         };
         let message = error.to_string();
@@ -1045,7 +1158,7 @@ mod tests {
             "envelope_version": 1,
             "stop": { "reason": "completed" },
         });
-        let Err(error) = run_result_to_output(&envelope) else {
+        let Err(error) = run_result_to_outcome(&envelope) else {
             return Err(
                 "a completed envelope without `output` must be refused, never yield an output"
                     .into(),
@@ -1065,24 +1178,48 @@ mod tests {
     }
 
     #[test]
-    fn a_completed_envelope_with_a_present_null_output_passes_null_through() -> TestResult {
-        // A present `"output": null` is a legal null output, distinct from a missing key.
+    fn a_present_null_output_is_distinct_from_a_missing_key_and_refused_as_null() -> TestResult {
+        // A present `"output": null` is norn's legal null output, distinct from a MISSING key (a
+        // broken frame). Under the agent-outcome contract neither can complete — but the refusal
+        // must name what actually arrived: `null`, never "carried no output field".
+        //
+        // THE CLASSIFICATION DECISION (#181 mi6), settled against norn's own protocol document
+        // (DRIVEN-PROTOCOL.md, "Stop envelope" table): `null` output belongs ONLY to the
+        // non-completed reasons (`max_iterations`, `cancelled`, `error`); the `completed` row
+        // holds "the final output value" with no "if any" qualifier — unlike `timed_out` /
+        // `schema_unreachable`, whose partials are explicitly optional. A completed envelope
+        // carrying `null` is therefore configuration- or peer-determined (an output schema
+        // admitting null, or an off-doc peer), never a transient property of a legitimate run —
+        // so it is the DETERMINISTIC `Contract` refusal (terminal in the worker's mapping),
+        // exactly like every other non-String completed output.
         let envelope = json!({
             "envelope_version": 1,
             "stop": { "reason": "completed" },
             "output": null,
         });
-        let output = run_result_to_output(&envelope).map_err(|error| {
-            format!("a present null output must pass through, not fail: {error}")
-        })?;
-        assert_eq!(output, Value::Null);
+        let Err(error) = run_result_to_outcome(&envelope) else {
+            return Err("a null output cannot fill `text: String`; it must be refused".into());
+        };
+        assert!(
+            matches!(error, HarnessError::Contract { .. }),
+            "a completed null output is the deterministic Contract refusal, got {error:?}"
+        );
+        let message = error.to_string();
+        assert!(
+            message.contains("is null"),
+            "the refusal names the null that arrived: {message}"
+        );
+        assert!(
+            !message.contains("carried no output field"),
+            "a present null must not be reported as a missing key: {message}"
+        );
         Ok(())
     }
 
     #[test]
     fn a_result_without_envelope_version_is_a_protocol_error_naming_it() -> TestResult {
         // The pre-envelope shape must never silently pass through.
-        let Err(error) = run_result_to_output(&json!({ "result": "completed" })) else {
+        let Err(error) = run_result_to_outcome(&json!({ "result": "completed" })) else {
             return Err("a result without `envelope_version` must be refused".into());
         };
         assert!(matches!(error, HarnessError::Protocol { .. }));
@@ -1092,7 +1229,7 @@ mod tests {
 
     #[test]
     fn a_result_without_stop_is_a_protocol_error_naming_it() -> TestResult {
-        let Err(error) = run_result_to_output(&json!({ "envelope_version": 1, "output": "x" }))
+        let Err(error) = run_result_to_outcome(&json!({ "envelope_version": 1, "output": "x" }))
         else {
             return Err("an envelope without `stop` must be refused".into());
         };
@@ -1104,7 +1241,7 @@ mod tests {
     #[test]
     fn a_stop_without_a_string_reason_is_a_protocol_error() -> TestResult {
         let envelope = json!({ "envelope_version": 1, "stop": { "reason": 3 } });
-        let Err(error) = run_result_to_output(&envelope) else {
+        let Err(error) = run_result_to_outcome(&envelope) else {
             return Err("a `stop` without a string `reason` must be refused".into());
         };
         assert!(matches!(error, HarnessError::Protocol { .. }));

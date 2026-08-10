@@ -336,12 +336,28 @@ where
 ///
 /// A [`HarnessError::Harness`] (the agent ran but reported failure) and a
 /// transport/protocol/stale fault are all retryable activity failures: the
-/// attempt did not produce an accepted result, so the engine re-dispatches. This
-/// keeps the trait driver's failure mapping in one place beside the driver.
+/// attempt did not produce an accepted result, and each of those classes CAN
+/// be transient (a provider-overload burst, a one-off malformed frame, a
+/// dropped pipe), so the engine re-dispatches.
+///
+/// A DETERMINISTIC error ([`HarnessError::is_deterministic`] — today exactly
+/// [`HarnessError::Contract`]) is TERMINAL: the run completed, but its native
+/// outcome cannot satisfy the canonical agent-outcome contract — a property
+/// of how the run is configured, not of the attempt. Retrying it re-spends a
+/// whole live agent run to hit the same refusal (a `retry 5 backoff 30s..5m`
+/// policy would burn five model runs on a permanent misconfiguration), so it
+/// must not be retried. The classification itself lives in the seam crate as
+/// an exhaustive match, so a new variant decides its fate there, at compile
+/// time — never by this function's default.
 #[must_use]
 pub fn harness_error_to_outcome(error: &HarnessError) -> DispatchOutcome {
+    let failure = if error.is_deterministic() {
+        ActivityFailure::terminal(error.to_string())
+    } else {
+        ActivityFailure::retryable(error.to_string())
+    };
     DispatchOutcome::Failed {
-        failure: ActivityFailure::retryable(error.to_string()).into(),
+        failure: failure.into(),
     }
 }
 

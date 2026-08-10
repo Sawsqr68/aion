@@ -154,6 +154,34 @@ fn tool_result_kind(object: &Value) -> ActivityEventKind {
     }
 }
 
+/// An adapter-SYNTHESIZED terminal stop event — not derived from any stdout
+/// line, because the ending it records is precisely one the agent could not
+/// announce (a signal death). Stamped exactly as every demuxed event is, so
+/// the transcript carries the ending's detail (e.g. `Other { "terminated by
+/// signal" }`) on the channel built to carry stop detail — the outcome
+/// record's canonical `stop_reason` collapses `Other` to `"other"`, so
+/// WITHOUT this event neither channel would say why the run ended.
+#[must_use]
+pub(crate) fn synthesized_stop_event(
+    identity: &EventIdentity,
+    worker_seq: u64,
+    reason: StopKind,
+) -> ActivityEvent {
+    ActivityEvent {
+        workflow_id: identity.workflow_id.clone(),
+        run_id: identity.run_id.clone(),
+        activity_id: identity.activity_id.clone(),
+        attempt: identity.attempt,
+        agent_id: Uuid::nil(),
+        agent_role: CLI_AGENT_ROLE.to_owned(),
+        emitted_at: Utc::now(),
+        worker_seq,
+        store_seq: None,
+        ephemeral: false,
+        kind: ActivityEventKind::Stop { reason },
+    }
+}
+
 /// Builds a [`ActivityEventKind::Stop`] from a `{"type":"stop","reason":...}` line.
 fn stop_kind(object: &Value) -> ActivityEventKind {
     let reason = match object.get("reason").and_then(Value::as_str) {

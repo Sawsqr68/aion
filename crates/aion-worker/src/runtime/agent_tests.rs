@@ -367,3 +367,44 @@ async fn a_harness_reported_failure_surfaces_and_maps_to_failed() {
         DispatchOutcome::Completed { .. } => panic!("expected a Failed outcome"),
     }
 }
+
+/// The retry-classification split (#181 M4): a contract refusal is a
+/// DETERMINISTIC property of the run's configuration, so it must not retry —
+/// a `retry 5` policy would burn five live agent runs on a permanent refusal.
+/// Every potentially-transient class (a one-off malformed frame, a dropped
+/// pipe, a harness-reported failure, a stale target) stays retryable. The
+/// decision itself lives in `HarnessError::is_deterministic` (aion-integrations,
+/// exhaustive match — a new variant is a compile error THERE); this test pins
+/// the worker-side OUTCOMES of that decision.
+#[test]
+fn a_contract_refusal_is_terminal_and_every_transient_class_stays_retryable() {
+    let terminal = harness_error_to_outcome(&HarnessError::contract(
+        "the envelope's `output` is a JSON object, not the String that becomes `text`",
+    ));
+    match terminal {
+        DispatchOutcome::Failed { failure } => {
+            assert!(
+                !failure.is_retryable(),
+                "a deterministic contract refusal must not burn the retry budget"
+            );
+        }
+        DispatchOutcome::Completed { .. } => panic!("expected a Failed outcome"),
+    }
+
+    let retryable_cases = [
+        HarnessError::transport("broken pipe"),
+        HarnessError::protocol("invalid JSON frame: unexpected end of input"),
+        HarnessError::harness("run stopped without completing: stop: timed_out"),
+        HarnessError::stale_target("attempt 2 superseded"),
+        HarnessError::capability_not_supported("pause_resume"),
+    ];
+    for error in retryable_cases {
+        match harness_error_to_outcome(&error) {
+            DispatchOutcome::Failed { failure } => assert!(
+                failure.is_retryable(),
+                "{error:?} can be transient and must stay retryable"
+            ),
+            DispatchOutcome::Completed { .. } => panic!("expected a Failed outcome"),
+        }
+    }
+}

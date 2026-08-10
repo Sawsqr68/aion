@@ -28,13 +28,15 @@ use futures::StreamExt;
 ///
 /// Mixes a free-form log line (→ `Raw`) with structured JSON lines (→ mapped kinds) exactly like a
 /// real observability-only CLI, so the demux path is exercised for both the mapped and the
-/// passthrough branch.
+/// passthrough branch. The stop reason is DELIBERATELY not `end_turn`: `end_turn` is also the
+/// adapter's announced-no-stop fallback, so a fixture stopping with it could not tell a retained
+/// reason from a hardcoded one — `tool_use` can.
 const FAKE_AGENT_SCRIPT: &str = "\
 printf '%s\\n' '[info] starting the run';\
 printf '%s\\n' '{\"type\":\"message\",\"text\":\"hello from the fake cli agent\"}';\
 printf '%s\\n' '{\"type\":\"tool_call\",\"tool\":\"search\",\"call_id\":\"c1\",\"input\":{\"q\":\"x\"}}';\
 printf '%s\\n' '{\"type\":\"tool_result\",\"call_id\":\"c1\",\"output\":{\"hits\":2}}';\
-printf '%s\\n' '{\"type\":\"stop\",\"reason\":\"end_turn\"}';\
+printf '%s\\n' '{\"type\":\"stop\",\"reason\":\"tool_use\"}';\
 printf '%s\\n' 'the final answer is 42';\
 exit 0";
 
@@ -147,19 +149,62 @@ async fn cli_harness_streams_a_live_transcript_with_no_controls() {
         "the JSON stop line demuxes to Stop"
     );
 
-    // The terminal result is captured from the real process (final line + exit 0).
+    // The terminal result is captured from the real process: the canonical agent-outcome
+    // record, with the final stdout line as `text` and the reason the agent ANNOUNCED —
+    // `tool_use`, which no fallback produces — as `stop_reason`.
     let payload = tokio::time::timeout(Duration::from_secs(30), session.wait_result())
         .await
         .expect("wait_result resolves")
         .expect("a clean exit yields a result payload");
     assert_eq!(payload.content_type(), &ContentType::Json);
     let decoded = payload.to_json().expect("the result is JSON");
-    assert_eq!(decoded["result"], serde_json::json!("completed"));
     assert_eq!(
-        decoded["output"],
-        serde_json::json!("the final answer is 42")
+        decoded,
+        serde_json::json!({ "text": "the final answer is 42", "stop_reason": "tool_use" }),
+        "the record carries the demuxed stop reason, not an invented end_turn"
     );
-    assert_eq!(decoded["exit_code"], serde_json::json!(0));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_signal_killed_agent_is_not_reported_as_choosing_to_stop() {
+    // A REAL child killed by a REAL signal: the shell prints one line, then delivers SIGTERM to
+    // itself, so `wait` reports a signal termination (no exit code). The run still completes —
+    // that policy is unchanged — but the record must say `other`, never `end_turn`: a killed
+    // agent did not choose to end its turn.
+    let harness = CliHarness::new("sh")
+        .with_arg("-c")
+        .with_arg("printf '%s\\n' 'started'; kill -TERM $$; sleep 10");
+    let mut session = harness
+        .start(spec())
+        .await
+        .expect("spawn the fake cli agent");
+    let events: Vec<_> = session.events().collect().await;
+    // The detail lives on the TRANSCRIPT: the pump synthesizes a terminal Stop
+    // event whose `Other` reason carries "terminated by signal" verbatim —
+    // the record's canonical vocabulary collapses it to `"other"`, so without
+    // this event no channel would say why the run ended.
+    let synthesized = events.iter().any(|event| {
+        matches!(
+            &event.kind,
+            ActivityEventKind::Stop {
+                reason: aion_integrations::StopKind::Other { reason }
+            } if reason == "terminated by signal"
+        )
+    });
+    assert!(
+        synthesized,
+        "the transcript must carry the synthesized signal-death Stop event; got {events:?}"
+    );
+    let payload = tokio::time::timeout(Duration::from_secs(30), session.wait_result())
+        .await
+        .expect("wait_result resolves")
+        .expect("a signal-killed run still completes (policy unchanged)");
+    let decoded = payload.to_json().expect("the result is JSON");
+    assert_eq!(
+        decoded,
+        serde_json::json!({ "text": "started", "stop_reason": "other" }),
+        "a signal termination is `other`, and the last line still travels as text"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

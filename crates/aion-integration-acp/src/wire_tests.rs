@@ -667,7 +667,7 @@ async fn reasoning_never_becomes_the_activitys_result() -> TestResult {
     let decoded = payload
         .to_json()
         .map_err(|error| fail("the payload is JSON", &error))?;
-    assert_eq!(decoded, json!({ "stopReason": "end_turn", "text": "42" }));
+    assert_eq!(decoded, json!({ "text": "42", "stop_reason": "end_turn" }));
     drop(agent);
     Ok(())
 }
@@ -881,7 +881,7 @@ async fn end_turn_is_the_completed_run_and_carries_the_agents_text() -> TestResu
     let decoded = payload
         .to_json()
         .map_err(|error| fail("the payload is JSON", &error))?;
-    assert_eq!(decoded, json!({ "stopReason": "end_turn", "text": "42" }));
+    assert_eq!(decoded, json!({ "text": "42", "stop_reason": "end_turn" }));
     Ok(())
 }
 
@@ -1396,7 +1396,7 @@ async fn the_driver_contract_completes_against_an_agent_that_stays_alive() -> Te
         .map_err(|error| fail("the payload is JSON", &error))?;
     assert_eq!(
         decoded,
-        json!({ "stopReason": "end_turn", "text": "ablative" })
+        json!({ "text": "ablative", "stop_reason": "end_turn" })
     );
     drop(agent);
     Ok(())
@@ -1828,7 +1828,7 @@ async fn a_line_that_is_not_a_jsonrpc_frame_does_not_destroy_the_turn() -> TestR
         .map_err(|error| fail("the payload is JSON", &error))?;
     assert_eq!(
         decoded,
-        json!({ "stopReason": "end_turn", "text": "42" }),
+        json!({ "text": "42", "stop_reason": "end_turn" }),
         "the answer received before the bad line survives it"
     );
     drop(reader);

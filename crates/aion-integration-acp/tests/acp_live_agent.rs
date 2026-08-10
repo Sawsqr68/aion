@@ -218,9 +218,9 @@ async fn a_real_acp_agent_completes_a_turn() -> TestResult {
         .to_json()
         .map_err(|error| format!("the terminal payload must be JSON: {error}"))?;
     assert_eq!(
-        decoded["stopReason"],
+        decoded["stop_reason"],
         serde_json::json!("end_turn"),
-        "a completed turn reports end_turn: {decoded}"
+        "a completed turn reports the canonical end_turn stop reason: {decoded}"
     );
     let text = decoded["text"]
         .as_str()

@@ -18,11 +18,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use aion_core::{ActivityEvent, InterventionCapabilities, InterventionCommand, Payload};
+use aion_integrations::HarnessError;
 use aion_integrations::contract::AgentSession;
 use aion_integrations::jsonrpc::{
     IncomingMessage, JsonRpcConnection, JsonRpcId, JsonRpcRequest, JsonRpcResponse,
 };
-use aion_integrations::{ContentType, HarnessError};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -221,11 +221,15 @@ fn response_into_ack(response: JsonRpcResponse) -> Result<(), HarnessError> {
 /// Interprets a `run/execute` Response as the terminal [`Payload`].
 ///
 /// The success `result` is Norn's versioned stop envelope (`envelope_version: 1`), interpreted by
-/// [`translate::run_result_to_output`]:
+/// [`translate::run_result_to_outcome`]:
 ///
-/// - `stop.reason == "completed"` → the neutral [`Payload`] is the envelope's `output` VALUE
-///   serialized as JSON (a JSON string for schema-less runs; the JSON object itself when Norn ran
-///   with an output schema — never stringified twice),
+/// - `stop.reason == "completed"` with a String `output` → the neutral [`Payload`] is the
+///   canonical agent-outcome record `{"text": <the output string>, "stop_reason": "end_turn"}`
+///   (the envelope's own `stop.reason`, mapped through the neutral vocabulary — never invented),
+/// - `stop.reason == "completed"` with a non-String `output` → [`HarnessError::Contract`]
+///   naming the canonical agent-outcome contract and what was found — a typed, DETERMINISTIC
+///   contract refusal at this boundary (terminal in the worker's mapping), never a
+///   workflow-side serde decode error,
 /// - any other `stop.reason` → [`HarnessError::Harness`] carrying the whole `stop` object
 ///   (reason plus per-variant detail) verbatim — and the partial `output`, when the envelope
 ///   carried one — so the caller can judge retry (or accept the partial),
@@ -259,11 +263,9 @@ fn response_into_payload(response: JsonRpcResponse) -> Result<Payload, HarnessEr
         }
         Some(result) => result,
     };
-    let output = translate::run_result_to_output(&result)?;
-    let bytes = serde_json::to_vec(&output).map_err(|source| {
-        HarnessError::protocol(format!("run output is not encodable: {source}"))
-    })?;
-    Ok(Payload::new(ContentType::Json, bytes))
+    translate::run_result_to_outcome(&result)?
+        .into_payload()
+        .map_err(|source| HarnessError::protocol(format!("run output is not encodable: {source}")))
 }
 
 impl<R, W> Drop for NornSession<R, W> {
@@ -291,6 +293,7 @@ mod tests {
         ActivityEventKind, ActivityId, InjectPriority, InterventionCapabilities, InterventionKind,
         InterventionPrimitive, RunId, WorkflowId,
     };
+    use aion_integrations::ContentType;
     use aion_integrations::jsonrpc::{JsonRpcNotification, JsonRpcResponse};
     use chrono::Utc;
     use futures::StreamExt;
@@ -469,7 +472,7 @@ mod tests {
         // Only the id-matched run/execute Response is the result.
         peer.send_response(&JsonRpcResponse::success(
             run_id,
-            completed_envelope(&json!({ "answer": 7 })),
+            completed_envelope(&json!("the id-matched answer")),
         ))
         .await
         .map_err(|error| format!("the peer must send the id-matched result: {error}"))?;
@@ -481,7 +484,10 @@ mod tests {
         let decoded = payload
             .to_json()
             .map_err(|error| format!("the result payload must be JSON: {error}"))?;
-        assert_eq!(decoded, json!({ "answer": 7 }));
+        assert_eq!(
+            decoded,
+            json!({ "text": "the id-matched answer", "stop_reason": "end_turn" })
+        );
         Ok(())
     }
 
@@ -614,36 +620,58 @@ mod tests {
         let decoded = payload
             .to_json()
             .map_err(|error| format!("the result payload must be JSON: {error}"))?;
-        assert_eq!(decoded, json!("the real result"));
+        assert_eq!(
+            decoded,
+            json!({ "text": "the real result", "stop_reason": "end_turn" })
+        );
         Ok(())
     }
 
     // --- response_into_payload: the stop-envelope branches ---
 
     #[test]
-    fn completed_string_output_is_the_json_string_payload() -> TestResult {
-        // A schema-less run's output is a string: the payload is that VALUE serialized as JSON —
-        // one layer of quoting, never stringified twice.
+    fn completed_string_output_is_the_canonical_agent_outcome_record() -> TestResult {
+        // A schema-less run's output is a string: it becomes the record's `text`, with the
+        // envelope's own `completed` stop mapped to the canonical `end_turn`.
         let payload = payload_of(completed_envelope(&json!("the final answer")))
             .map_err(|error| format!("a completed string output must be a payload: {error}"))?;
         assert_eq!(payload.content_type(), &ContentType::Json);
         let decoded = payload
             .to_json()
             .map_err(|error| format!("the payload must be JSON: {error}"))?;
-        assert_eq!(decoded, json!("the final answer"));
+        assert_eq!(
+            decoded,
+            json!({ "text": "the final answer", "stop_reason": "end_turn" })
+        );
         Ok(())
     }
 
+    /// The envelope-Dict path, at the session boundary — ruling #181 acceptance (3) and (6):
+    /// run `cc1d82c2`'s shape (a completed envelope whose `output` is a JSON object) must be a
+    /// typed contract refusal NAMING the canonical agent-outcome contract and what was found,
+    /// never a payload a workflow-side decoder then fails on with a serde error.
     #[test]
-    fn completed_structured_output_passes_through_as_the_object() -> TestResult {
-        // With an output schema, `output` is the validated JSON object: it passes through as-is.
+    fn a_completed_structured_output_is_refused_naming_the_agent_outcome_contract() -> TestResult {
         let output = json!({ "verdict": "pass", "notes": ["a", "b"] });
-        let payload = payload_of(completed_envelope(&output))
-            .map_err(|error| format!("a completed structured output must be a payload: {error}"))?;
-        let decoded = payload
-            .to_json()
-            .map_err(|error| format!("the payload must be JSON: {error}"))?;
-        assert_eq!(decoded, output);
+        let Err(error) = payload_of(completed_envelope(&output)) else {
+            return Err("a structured completed output must be refused, never a payload".into());
+        };
+        assert!(
+            matches!(error, HarnessError::Contract { .. }),
+            "the refusal is the typed (terminal) Contract variant, got {error:?}"
+        );
+        let message = error.to_string();
+        for fragment in [
+            "agent-outcome",
+            "`text: String`",
+            "`stop_reason: String`",
+            "a JSON object",
+        ] {
+            assert!(
+                message.contains(fragment),
+                "the refusal must name `{fragment}`: {message}"
+            );
+        }
         Ok(())
     }
 
@@ -777,15 +805,22 @@ mod tests {
     }
 
     #[test]
-    fn completed_envelope_with_present_null_output_passes_null_through() -> TestResult {
-        // `"output": null` on a completed envelope is a legal null output — the payload is JSON
-        // null, never an error.
-        let payload = payload_of(completed_envelope(&json!(null)))
-            .map_err(|error| format!("a present null output must be a payload: {error}"))?;
-        let decoded = payload
-            .to_json()
-            .map_err(|error| format!("the payload must be JSON: {error}"))?;
-        assert_eq!(decoded, json!(null));
+    fn completed_envelope_with_present_null_output_is_refused_naming_null() -> TestResult {
+        // `"output": null` is norn's legal null output, but null cannot fill the agent-outcome
+        // record's `text: String` — since #181 it is a typed contract refusal naming the null
+        // that arrived, distinct from the missing-key protocol error below.
+        let Err(error) = payload_of(completed_envelope(&json!(null))) else {
+            return Err("a null output cannot fill `text: String`; it must be refused".into());
+        };
+        let message = error.to_string();
+        assert!(
+            message.contains("is null"),
+            "the refusal names the null that arrived: {message}"
+        );
+        assert!(
+            message.contains("agent-outcome"),
+            "the refusal names the canonical contract: {message}"
+        );
         Ok(())
     }
 

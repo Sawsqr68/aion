@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use aion_core::{
-    ActivityEvent, ActivityEventKind, ContentType, InterventionCapabilities, InterventionCommand,
+    ActivityEvent, ActivityEventKind, AgentOutcome, InterventionCapabilities, InterventionCommand,
     InterventionKind, InterventionPrimitive, MessageRole, Payload, StopKind,
 };
 use aion_integrations::contract::{AgentHarness, AgentSession};
@@ -139,11 +139,19 @@ impl AgentHarness for MockAgentHarness {
         if let Ok(mut guard) = self.run_handle.lock() {
             *guard = Some(RunHandle { keep_alive: tx });
         }
+        // The fixed terminal result is the canonical agent-outcome record — this crate exists to
+        // prove the seam is harness-neutral, so its mock emits the same shape every real harness
+        // does: the transcript's message text as `text`, its terminal EndTurn as `end_turn`.
+        let result = AgentOutcome::new("working", &StopKind::EndTurn)
+            .into_payload()
+            .map_err(|source| {
+                HarnessError::protocol(format!("mock agent result is not encodable: {source}"))
+            })?;
         Ok(MockAgentSession {
             capabilities: MockAgentHarness::advertised_capabilities(),
             applied: Arc::clone(&self.applied),
             events: Some(rx),
-            result: Payload::new(ContentType::Json, b"{\"result\":\"completed\"}".to_vec()),
+            result,
         })
     }
 }
@@ -219,7 +227,7 @@ impl AgentSession for MockAgentSession {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use aion_core::{ActivityId, ApprovalDecision, InjectPriority, RunId, WorkflowId};
+    use aion_core::{ActivityId, ApprovalDecision, ContentType, InjectPriority, RunId, WorkflowId};
     use futures::StreamExt;
 
     fn spec() -> AgentRunSpec {
@@ -316,5 +324,11 @@ mod tests {
         assert!(matches!(events[1].kind, ActivityEventKind::Stop { .. }));
         let payload = session.wait_result().await.unwrap();
         assert_eq!(payload.content_type(), &ContentType::Json);
+        let decoded = payload.to_json().unwrap();
+        assert_eq!(
+            decoded,
+            serde_json::json!({ "text": "working", "stop_reason": "end_turn" }),
+            "the mock emits the same canonical agent-outcome record every real harness does"
+        );
     }
 }
