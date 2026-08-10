@@ -77,7 +77,13 @@
     }
   },
   "files": {
-    "includes": ["**/*.ts", "**/*.tsx", "**/*.json", "!src/types/generated"],
+    "includes": [
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.json",
+      "!src/types/generated",
+      "!src/features/authoring/assets/awl-guide.json"
+    ],
     "ignoreUnknown": true
   }
 }

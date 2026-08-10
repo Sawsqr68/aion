@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { useTryExample } from '../hooks/useTryExample';
-import type { AwlWord } from '../lib/awl-guide';
+import { type AwlWord, formOf, positionLabelsOf } from '../lib/awl-guide';
 import {
   type AwlHighlighterState,
   type AwlToken,
@@ -42,8 +42,19 @@ export function WordCard({
       <p className="flex items-baseline gap-2">
         <code className="font-medium text-foreground text-sm">{entry.word}</code>
         <span className="text-muted-foreground text-xs">{entry.kind}</span>
+        <span
+          className="rounded border border-border px-1.5 py-0.5 text-muted-foreground text-xs"
+          data-slot="word-card-form"
+        >
+          {formOf(entry).label}
+        </span>
       </p>
       <p className="mt-1 text-foreground text-sm">{entry.summary}</p>
+      {/* The word's whole grammar, not just its primary form: every position
+          the completion table offers it in, in the table's own order. */}
+      <p className="mt-1 text-muted-foreground text-xs" data-slot="word-card-positions">
+        Stands {positionLabelsOf(entry).join('; ')}.
+      </p>
       {entry.examples.map((example, index) => (
         <details className="mt-2" data-slot="word-card-example" key={example}>
           <summary className="cursor-pointer select-none rounded text-muted-foreground text-xs outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-accent-primary">

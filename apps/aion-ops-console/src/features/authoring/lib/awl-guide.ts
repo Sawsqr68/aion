@@ -29,6 +29,28 @@ export interface AwlWord {
   readonly section: { readonly number: number; readonly title: string };
   /** The pointer to print under the summary, byte-identical to the CLI's. */
   readonly citation: string;
+  /**
+   * The id of the word's grammatical form — the primary grouping axis.
+   * Derived in `aion-awl` from the same grammar table the language server's
+   * completion offers words from, so this panel and an editor's completion
+   * list are structurally unable to disagree about what form a word is.
+   */
+  readonly form: string;
+  /** The ids of every grammar position the word may stand in, table order. */
+  readonly positions: readonly string[];
+}
+
+/** One grammatical form of the language, as the panel groups words by it. */
+export interface AwlForm {
+  readonly id: string;
+  readonly label: string;
+  readonly description: string;
+}
+
+/** One grammar position a word may stand in, with its rendered label. */
+export interface AwlPosition {
+  readonly id: string;
+  readonly label: string;
 }
 
 /** The whole glossary, with the documents an author is pointed at. */
@@ -39,7 +61,13 @@ export interface AwlGuide {
   readonly workers: string;
   readonly commands: string;
   readonly declared_commands: string;
+  /** The form taxonomy, in the display order the panel groups by. */
+  readonly forms: readonly AwlForm[];
+  /** Every grammar position, in the table's own order. */
+  readonly positions: readonly AwlPosition[];
   readonly entries: readonly AwlWord[];
+  /** The complete AWL language reference, verbatim markdown. */
+  readonly reference_text: string;
 }
 
 /** One reference section, with the words that belong to it. */
@@ -49,7 +77,73 @@ export interface AwlSection {
   readonly words: readonly AwlWord[];
 }
 
+/** One grammatical form, with the words that are that form. */
+export interface AwlFormGroup {
+  readonly form: AwlForm;
+  readonly words: readonly AwlWord[];
+}
+
 export const awlGuide: AwlGuide = guide;
+
+/**
+ * The words grouped by grammatical form — the panel's primary axis — in the
+ * taxonomy's own display order, words in the language's inventory order.
+ *
+ * Forms no word matches (mid-search) are omitted rather than rendered as
+ * empty headings. A word naming a form the taxonomy does not carry is a
+ * generation defect the Rust gates refuse, so it fails loudly here rather
+ * than being dropped from the panel in silence.
+ *
+ * CONSEQUENCE OF THE THROW, named deliberately (here and for `formOf` /
+ * `positionLabelsOf`, which share it): these run during render, so a
+ * malformed asset unmounts the whole Language tab into the console's
+ * `RootErrorBoundary` rather than degrading word-by-word. That is the
+ * chosen trade — the asset is generated and byte-gated against the CLI, so
+ * a self-disagreeing copy means the build is wrong, and a loud dead tab
+ * beats a panel quietly teaching a partial language.
+ */
+export function formsOf(words: readonly AwlWord[]): AwlFormGroup[] {
+  for (const entry of words) {
+    if (!awlGuide.forms.some((form) => form.id === entry.form)) {
+      throw new Error(
+        `the glossary asset files \`${entry.word}\` under an unknown form: ${entry.form}`
+      );
+    }
+  }
+  return awlGuide.forms
+    .map((form) => ({ form, words: words.filter((entry) => entry.form === form.id) }))
+    .filter((group) => group.words.length > 0);
+}
+
+/**
+ * The rendered labels of every position `entry` may stand in, in the
+ * table's own order — the card's "stands" line. A position the inventory
+ * does not carry is a generation defect, refused loudly for the same reason
+ * `formsOf` refuses an unknown form.
+ */
+export function positionLabelsOf(entry: AwlWord): string[] {
+  return entry.positions.map((id) => {
+    const position = awlGuide.positions.find((candidate) => candidate.id === id);
+    if (position === undefined) {
+      throw new Error(`the glossary asset stands \`${entry.word}\` in an unknown position: ${id}`);
+    }
+    return position.label;
+  });
+}
+
+/**
+ * The form `entry` is, in full. The asset is generated and gated, so a miss
+ * is a defect worth failing loudly over, exactly as `formsOf` does.
+ */
+export function formOf(entry: AwlWord): AwlForm {
+  const form = awlGuide.forms.find((candidate) => candidate.id === entry.form);
+  if (form === undefined) {
+    throw new Error(
+      `the glossary asset files \`${entry.word}\` under an unknown form: ${entry.form}`
+    );
+  }
+  return form;
+}
 
 /**
  * The words grouped by the reference section they cite, sections in reference

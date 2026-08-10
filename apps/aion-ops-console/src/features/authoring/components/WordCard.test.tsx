@@ -64,6 +64,25 @@ test('a single example is labelled without a number', () => {
 });
 
 /**
+ * The card wears the word's grammar: the derived form beside the kind, and
+ * the full list of positions the word may stand in — both read from the
+ * asset, which carries them from the same table the editor's completion
+ * offers words from. The strings are pinned exactly for two words whose
+ * grammar differs, so a derivation change fails here naming the drift.
+ */
+test('the card names the word’s form and every position it stands in', () => {
+  const sleep = render(<WordCard entry={entryOf('sleep')} highlighter={highlighter} />);
+  expect(sleep).toContain('data-slot="word-card-form"');
+  expect(sleep).toContain('>Step statement</span>');
+  expect(sleep).toContain('data-slot="word-card-positions"');
+  expect(sleep).toContain('Stands in a step or subflow body.');
+
+  const run = render(<WordCard entry={entryOf('run')} highlighter={highlighter} />);
+  expect(run).toContain('>Header clause</span>');
+  expect(run).toContain('Stands in a worker block.');
+});
+
+/**
  * Only the code collapses: the one-sentence meaning stays above the
  * disclosures and the citation stays below them, both always visible.
  */
