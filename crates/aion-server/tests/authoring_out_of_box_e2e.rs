@@ -230,6 +230,95 @@ async fn stock_config_studio_save_check_deploy_revision_and_status_round_trip()
     Ok(())
 }
 
+/// The guide's "Try it" contract over HTTP: `POST /awl/documents` with a
+/// `source` stores those bytes verbatim (GET returns them unchanged), refuses
+/// a second create of the same name with a 409 `DocumentExists`, refuses an
+/// invalid name with a 400 `InvalidDocumentName`, and works against a
+/// workspace directory that has never been created — create is the first
+/// write on a fresh server, so it materializes the directory instead of
+/// tripping over its absence.
+#[tokio::test]
+async fn create_with_source_round_trips_verbatim_and_refuses_collisions() -> Result<(), TestError> {
+    let harness = Harness::from_toml(b"").await?;
+    assert!(
+        !harness.workspace.exists(),
+        "the workspace must start never-created for this test to cover the fresh-server arm"
+    );
+
+    let example = "//! Guide example.\nworkflow guide_example\n  sleep 30s\n";
+    let created = request_json(
+        &harness.router,
+        "POST",
+        "/awl/documents",
+        Some(&json!({ "name": "guide_example", "source": example })),
+        StatusCode::CREATED,
+    )
+    .await?;
+    assert_eq!(created["path"], "guide_example.awl");
+    assert_eq!(created["name"], "guide_example");
+    assert_eq!(created["source"], example);
+
+    let fetched = request_json(
+        &harness.router,
+        "GET",
+        "/awl/documents/guide_example.awl",
+        None,
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(fetched["source"], example);
+    assert_eq!(fetched["content_hash"], created["content_hash"]);
+    assert_eq!(
+        std::fs::read_to_string(harness.workspace.join("guide_example.awl"))?,
+        example
+    );
+
+    let collision = request_json(
+        &harness.router,
+        "POST",
+        "/awl/documents",
+        Some(&json!({ "name": "guide_example", "source": "other bytes\n" })),
+        StatusCode::CONFLICT,
+    )
+    .await?;
+    assert_eq!(collision["error_type"], "DocumentExists");
+    assert_eq!(
+        std::fs::read_to_string(harness.workspace.join("guide_example.awl"))?,
+        example,
+        "a refused create must not overwrite the existing document"
+    );
+
+    let invalid = request_json(
+        &harness.router,
+        "POST",
+        "/awl/documents",
+        Some(&json!({ "name": "Guide-Example", "source": example })),
+        StatusCode::BAD_REQUEST,
+    )
+    .await?;
+    assert_eq!(invalid["error_type"], "InvalidDocumentName");
+    assert!(!harness.workspace.join("Guide-Example.awl").exists());
+
+    // The placeholder path is untouched: a create WITHOUT a source still
+    // synthesises the named placeholder workflow.
+    let placeholder = request_json(
+        &harness.router,
+        "POST",
+        "/awl/documents",
+        Some(&json!({ "name": "placeholder_doc" })),
+        StatusCode::CREATED,
+    )
+    .await?;
+    let placeholder_source = placeholder["source"]
+        .as_str()
+        .ok_or("placeholder create omitted source")?;
+    assert!(
+        placeholder_source.contains("workflow placeholder_doc"),
+        "placeholder source lost its named workflow: {placeholder_source}"
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn explicit_workspace_is_honored_and_traversal_is_typed_and_confined() -> Result<(), TestError>
 {

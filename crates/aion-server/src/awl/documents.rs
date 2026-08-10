@@ -21,6 +21,14 @@ pub struct DocumentResponse {
 #[derive(Debug, Deserialize)]
 pub struct CreateDocumentRequest {
     pub name: String,
+    /// Initial source for the new document, stored verbatim when present.
+    ///
+    /// When omitted the server synthesises a placeholder workflow named after
+    /// the document. The content is deliberately NOT checked here — parity
+    /// with `PUT /awl/documents/{path}`, whose saved document may also be
+    /// invalid; the editor's check surface owns validity.
+    #[serde(default)]
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -170,8 +178,12 @@ pub async fn create(
     request: CreateDocumentRequest,
 ) -> Result<CreateDocumentResponse, DocumentError> {
     validate_document_name(&request.name)?;
-    let source = new_document_source(&request.name)?;
-    let path = format!("{}.awl", request.name);
+    let CreateDocumentRequest { name, source } = request;
+    let source = match source {
+        Some(source) => source,
+        None => new_document_source(&name)?,
+    };
+    let path = format!("{name}.awl");
     let root_owned = root.to_owned();
     let path_owned = PathBuf::from(&path);
     let source_owned = source.clone();
@@ -210,7 +222,7 @@ pub async fn create(
     };
     Ok(CreateDocumentResponse {
         path,
-        name: request.name,
+        name,
         source,
         content_hash: revision.content_hash,
     })
@@ -427,6 +439,7 @@ mod tests {
             workspace.path(),
             CreateDocumentRequest {
                 name: "rollback_probe".to_owned(),
+                source: None,
             },
         )
         .await;
@@ -450,6 +463,7 @@ mod tests {
             workspace.path(),
             CreateDocumentRequest {
                 name: "rollback_probe".to_owned(),
+                source: None,
             },
         )
         .await?;
@@ -529,6 +543,7 @@ mod tests {
             workspace.path(),
             CreateDocumentRequest {
                 name: "first_workflow".to_owned(),
+                source: None,
             },
         )
         .await?;
@@ -541,7 +556,8 @@ mod tests {
             create(
                 workspace.path(),
                 CreateDocumentRequest {
-                    name: "first_workflow".to_owned()
+                    name: "first_workflow".to_owned(),
+                    source: None,
                 }
             )
             .await,
@@ -555,6 +571,114 @@ mod tests {
                 .mode();
             assert_eq!(mode & 0o777, 0o600);
         }
+        Ok(())
+    }
+
+    /// A create carrying its own source stores those bytes VERBATIM — no
+    /// placeholder synthesis, no canonical reprint, no validation. The guide's
+    /// "Try it" flow depends on the created document being the example the
+    /// author just read, byte for byte.
+    #[tokio::test]
+    async fn a_create_with_source_stores_the_bytes_verbatim()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let workspace = crate::test_support::private_tempdir()?;
+        // Deliberately NOT canonically formatted (single-space indent) and
+        // carrying a trailing comment: a reprint or a placeholder would both
+        // change these bytes.
+        let example = "//! Guide example.\nworkflow guide_example\n outcome done: type D, route success\n\ntype D { value: String }\n// tail\n";
+        let created = create(
+            workspace.path(),
+            CreateDocumentRequest {
+                name: "guide_example".to_owned(),
+                source: Some(example.to_owned()),
+            },
+        )
+        .await?;
+        assert_eq!(created.path, "guide_example.awl");
+        assert_eq!(created.name, "guide_example");
+        assert_eq!(created.source, example);
+        assert_eq!(
+            read(workspace.path(), "guide_example.awl").await?.source,
+            example
+        );
+        assert_eq!(
+            created.content_hash,
+            super::super::revisions::content_hash(example)
+        );
+
+        // Same atomic `create_new` refusal as the placeholder path: a second
+        // create of the same name is `Exists`, never an overwrite.
+        assert!(matches!(
+            create(
+                workspace.path(),
+                CreateDocumentRequest {
+                    name: "guide_example".to_owned(),
+                    source: Some("other bytes\n".to_owned()),
+                }
+            )
+            .await,
+            Err(DocumentError::Exists(_))
+        ));
+        assert_eq!(
+            read(workspace.path(), "guide_example.awl").await?.source,
+            example
+        );
+        Ok(())
+    }
+
+    /// Parity with `PUT`: the stored source may be invalid AWL. Create does
+    /// not check content — the editor's check surface owns validity — and the
+    /// name validation still guards the path.
+    #[tokio::test]
+    async fn a_create_with_source_accepts_unchecked_bytes_but_still_validates_the_name()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let workspace = crate::test_support::private_tempdir()?;
+        let created = create(
+            workspace.path(),
+            CreateDocumentRequest {
+                name: "unchecked_bytes".to_owned(),
+                source: Some("definitely not awl\n".to_owned()),
+            },
+        )
+        .await?;
+        assert_eq!(created.source, "definitely not awl\n");
+        assert!(matches!(
+            create(
+                workspace.path(),
+                CreateDocumentRequest {
+                    name: "Bad-Name".to_owned(),
+                    source: Some("workflow ok\n".to_owned()),
+                }
+            )
+            .await,
+            Err(DocumentError::InvalidName(_))
+        ));
+        assert!(!workspace.path().join("Bad-Name.awl").exists());
+        Ok(())
+    }
+
+    /// The fresh-server arm: a create-with-source against a workspace
+    /// directory that has never been created materializes it
+    /// (`open_or_create`) and succeeds — the #184/#161 ENOENT discipline
+    /// covers reads and listings, and CREATE is the write that ends it.
+    #[tokio::test]
+    async fn a_create_with_source_materializes_a_never_created_workspace()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let parent = crate::test_support::private_tempdir()?;
+        let workspace = parent.path().join("never-created");
+        let created = create(
+            &workspace,
+            CreateDocumentRequest {
+                name: "first_try".to_owned(),
+                source: Some("//! First.\nworkflow first_try\n".to_owned()),
+            },
+        )
+        .await?;
+        assert_eq!(created.path, "first_try.awl");
+        assert_eq!(
+            read(&workspace, "first_try.awl").await?.source,
+            "//! First.\nworkflow first_try\n"
+        );
         Ok(())
     }
 
