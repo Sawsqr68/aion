@@ -13,8 +13,15 @@ import { createCodeMirrorEditor } from '../editor-seam/codemirror';
 import type { AuthoringEditor, HighlightSpan } from '../editor-seam/types';
 import { nextDeployOutcome, saveThenDeploy } from '../lib/deploy-action';
 import { deployEligibility } from '../lib/deploy-eligibility';
-import { mapDiagnostics, minimalTextDelta, statusForCheck } from '../lib/diagnostics';
 import {
+  mapDiagnostics,
+  minimalTextDelta,
+  nextDiagnosticsOpen,
+  rangeToOffsets,
+  statusForCheck,
+} from '../lib/diagnostics';
+import {
+  type AwlDiagnostic,
   type AwlDocument,
   authoringFacade,
   type CheckResult,
@@ -29,6 +36,7 @@ import { runSeedWorkflowType } from '../lib/run-seed';
 import { isWorkerDocument } from '../lib/worker-deploy';
 import { DeployOutcomeLine } from './DeployOutcomeLine';
 import { DeployWorkerPanel } from './DeployWorkerPanel';
+import { DiagnosticsPanel } from './DiagnosticsPanel';
 import { EditorHeader, type EditorWorking } from './EditorHeader';
 import { type AuthoringViewMode, ProjectionPane } from './ProjectionPane';
 import { StudioPane } from './StudioPane';
@@ -61,6 +69,7 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
   const [viewMode, setViewMode] = useState<ViewMode>('text');
   const [message, setMessage] = useState<string | null>(null);
   const [working, setWorking] = useState<EditorWorking>(null);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   // This session's last landed deploy of this document: seeds the run panel's
   // workflow type and names the queue its availability line asks about.
   const [lastDeployment, setLastDeployment] = useState<DeploymentRecord | null>(null);
@@ -131,6 +140,9 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
         .then((result) => {
           if (!active) return;
           setCheck(result);
+          // A clean verdict closes the diagnostics panel; a later red does
+          // NOT reopen it unasked (the pure policy in `nextDiagnosticsOpen`).
+          setDiagnosticsOpen((open) => nextDiagnosticsOpen(open, result.diagnostics.length));
           if (result.semantic !== null) {
             semanticRef.current = result.semantic;
             setSemantic(result.semantic);
@@ -208,6 +220,15 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
     setViewMode((current) => (current === 'canvas' ? 'text' : current));
     const editor = editorRef.current;
     editor?.setCursor(byteOffsetToUtf16(sourceRef.current, byteOffset));
+    window.requestAnimationFrame(() => editor?.focus());
+  }, []);
+
+  // A diagnostic already carries its range in the editor's own index space
+  // (UTF-16, converted server-side), so navigation needs no byte conversion.
+  const jumpToDiagnostic = useCallback((diagnostic: AwlDiagnostic) => {
+    setViewMode((current) => (current === 'canvas' ? 'text' : current));
+    const editor = editorRef.current;
+    editor?.setCursor(rangeToOffsets(sourceRef.current, diagnostic.range).from);
     window.requestAnimationFrame(() => editor?.focus());
   }, []);
 
@@ -312,7 +333,19 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
         )}
       </div>
       <DeployOutcomeLine outcome={deployOutcome} />
-      <EditorStatusBar check={check} message={message} />
+      {diagnosticsOpen && check !== null && check.diagnostics.length > 0 && (
+        <DiagnosticsPanel
+          diagnostics={check.diagnostics}
+          onClose={() => setDiagnosticsOpen(false)}
+          onNavigate={jumpToDiagnostic}
+        />
+      )}
+      <EditorStatusBar
+        check={check}
+        diagnosticsOpen={diagnosticsOpen}
+        message={message}
+        onToggleDiagnostics={() => setDiagnosticsOpen((open) => !open)}
+      />
     </section>
   );
 }
@@ -320,24 +353,48 @@ export function EditorPane({ path, initialSource, documents, onOpenDocument }: E
 /** Debounced check verdict on the left, latest transient message on the right. */
 function EditorStatusBar({
   check,
+  diagnosticsOpen,
   message,
+  onToggleDiagnostics,
 }: {
   check: CheckResult | null;
+  diagnosticsOpen: boolean;
   message: string | null;
+  onToggleDiagnostics: () => void;
 }) {
   const status = check === null ? null : statusForCheck(check);
   const statusStyle = statusPresentation(status?.tone);
+  const pillClass = cn(
+    'inline-flex items-center gap-2 rounded-full border px-2.5 py-1 font-medium',
+    statusStyle.className
+  );
+  const diagnosticsCount = check?.diagnostics.length ?? 0;
   return (
     <div className="flex min-h-11 items-center justify-between gap-4 border-border border-t bg-surface-base px-4 py-2 text-xs">
-      <span
-        className={cn(
-          'inline-flex items-center gap-2 rounded-full border px-2.5 py-1 font-medium',
-          statusStyle.className
-        )}
-      >
-        <CheckStatusIcon checking={status === null} status={statusStyle.status} />
-        {status?.label ?? 'Checking…'}
-      </span>
+      {diagnosticsCount > 0 ? (
+        // The count IS the door to the diagnostics list — one click from the
+        // verdict to every finding and its range.
+        <button
+          // The id names a real element only while the panel is rendered;
+          // aria-controls must never point at an absent node.
+          aria-controls={diagnosticsOpen ? 'authoring-diagnostics-panel' : undefined}
+          aria-expanded={diagnosticsOpen}
+          className={cn(
+            pillClass,
+            'outline-none focus-visible:ring-2 focus-visible:ring-accent-primary'
+          )}
+          onClick={onToggleDiagnostics}
+          type="button"
+        >
+          <CheckStatusIcon checking={status === null} status={statusStyle.status} />
+          {status?.label ?? 'Checking…'}
+        </button>
+      ) : (
+        <span className={pillClass}>
+          <CheckStatusIcon checking={status === null} status={statusStyle.status} />
+          {status?.label ?? 'Checking…'}
+        </span>
+      )}
       <AnimatePresence initial={false} mode="wait">
         <motion.span
           animate={{ opacity: 1, y: 0 }}
@@ -358,7 +415,7 @@ function CheckStatusIcon({
   status,
 }: {
   checking: boolean;
-  status: 'healthy' | 'running' | 'failed' | 'idle';
+  status: 'healthy' | 'failed' | 'idle';
 }) {
   if (checking) {
     return <LoaderCircle aria-hidden="true" className="size-3 animate-spin" />;
@@ -366,17 +423,12 @@ function CheckStatusIcon({
   return <StatusDot className="size-1.5" status={status} />;
 }
 
-function statusPresentation(tone: 'green' | 'amber' | 'red' | undefined) {
+function statusPresentation(tone: 'green' | 'red' | undefined) {
   switch (tone) {
     case 'green':
       return {
         status: 'healthy' as const,
         className: 'border-success/30 bg-success/10 text-success',
-      };
-    case 'amber':
-      return {
-        status: 'running' as const,
-        className: 'border-warning/30 bg-warning/10 text-warning',
       };
     case 'red':
       return {

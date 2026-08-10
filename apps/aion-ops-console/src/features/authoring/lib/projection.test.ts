@@ -60,8 +60,20 @@ describe('canvas projection span lookup', () => {
 
   test('distinguishes primary diagnostics from unreachable cascades', () => {
     const tones = diagnosticsByStep(graph, [
-      { class: 'error', message: 'unknown binding', line: 2, column: 1 },
-      { class: 'error', message: 'step is unreachable', line: 5, column: 1 },
+      {
+        class: 'error',
+        message: 'unknown binding',
+        line: 2,
+        column: 1,
+        range: { start: { line: 1, character: 0 }, end: { line: 1, character: 7 } },
+      },
+      {
+        class: 'error',
+        message: 'step is unreachable',
+        line: 5,
+        column: 1,
+        range: { start: { line: 4, character: 0 }, end: { line: 4, character: 6 } },
+      },
     ]);
     expect(tones.get('first')).toBe('primary');
     expect(tones.get('second')).toBe('cascade');

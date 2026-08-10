@@ -390,22 +390,10 @@
   background: color-mix(in srgb, var(--status-danger) 8%, transparent);
 }
 
-.awl-line-warning {
-  background: var(--status-warning-glow);
-}
-
 .awl-underline-error {
   text-decoration: underline wavy var(--status-danger);
 }
 
-.awl-underline-warning {
-  text-decoration: underline wavy var(--status-warning);
-}
-
 .awl-gutter-error {
   color: var(--status-danger);
-}
-
-.awl-gutter-warning {
-  color: var(--status-warning);
 }

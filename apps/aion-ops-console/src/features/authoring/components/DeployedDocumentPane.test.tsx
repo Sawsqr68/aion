@@ -99,7 +99,15 @@ test('a projection with errors is reported, not smoothed over', () => {
           ok: false,
           deploysGreen: false,
           steps: null,
-          diagnostics: [{ class: 'error', message: 'unknown step', line: 4, column: 2 }],
+          diagnostics: [
+            {
+              class: 'error',
+              message: 'unknown step',
+              line: 4,
+              column: 2,
+              range: { start: { line: 3, character: 1 }, end: { line: 3, character: 5 } },
+            },
+          ],
           semantic: null,
         },
       })}

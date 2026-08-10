@@ -7,12 +7,7 @@ const RED_DIAGNOSTIC: AwlDiagnostic = {
   message: 'unknown step `shp`',
   line: 3,
   column: 5,
-};
-const EMIT_SUBSET_DIAGNOSTIC: AwlDiagnostic = {
-  class: 'emit_subset',
-  message: 'step `notify` is prose-only and will emit as a stub',
-  line: 7,
-  column: 3,
+  range: { start: { line: 2, character: 4 }, end: { line: 2, character: 7 } },
 };
 
 const GREEN = { deploysGreen: true, diagnostics: [] };
@@ -74,18 +69,6 @@ describe('deployEligibility', () => {
     expect(deployEligibility({ workerDocument: false, deployGranted: true, check: GREEN })).toEqual(
       { kind: 'ready' }
     );
-  });
-
-  // Catches: gating on `ok`/empty-diagnostics instead of `deploysGreen` —
-  // emit-subset notes ride a deployable document and must not withhold it.
-  test('deploys-green with emit-subset diagnostics is still ready', () => {
-    expect(
-      deployEligibility({
-        workerDocument: false,
-        deployGranted: true,
-        check: { deploysGreen: true, diagnostics: [EMIT_SUBSET_DIAGNOSTIC] },
-      })
-    ).toEqual({ kind: 'ready' });
   });
 
   // The workflow-document sweep over grant × check: every combination lands

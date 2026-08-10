@@ -262,17 +262,12 @@ function ViewButton({
   );
 }
 
-function statusPresentation(tone: 'green' | 'amber' | 'red' | undefined) {
+function statusPresentation(tone: 'green' | 'red' | undefined) {
   switch (tone) {
     case 'green':
       return {
         status: 'healthy' as const,
         className: 'border-success/30 bg-success/10 text-success',
-      };
-    case 'amber':
-      return {
-        status: 'running' as const,
-        className: 'border-warning/30 bg-warning/10 text-warning',
       };
     case 'red':
       return {

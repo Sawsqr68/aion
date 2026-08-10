@@ -30,6 +30,20 @@ export function expectNumber(value: unknown, field: string): number {
   return value;
 }
 
+/**
+ * A position-like value: a non-negative integer. Layout coordinates are
+ * legitimately fractional ([`expectNumber`]); lines, columns, and UTF-16
+ * characters are not — a fractional or negative one is a malformed response
+ * and is refused at the boundary, never fed to the editor as an offset.
+ */
+export function expectNonNegativeInteger(value: unknown, field: string): number {
+  const number = expectNumber(value, field);
+  if (!Number.isInteger(number) || number < 0) {
+    throw new Error(`Invalid authoring response: ${field}`);
+  }
+  return number;
+}
+
 export function expectBoolean(value: unknown, field: string): boolean {
   if (typeof value !== 'boolean') throw new Error(`Invalid authoring response: ${field}`);
   return value;

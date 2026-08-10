@@ -35,7 +35,6 @@ export function diagnosticsByStep(
   const ordered = [...graph.steps].sort((left, right) => left.span.line - right.span.line);
   const tones = new Map<string, CanvasDiagnosticTone>();
   for (const diagnostic of diagnostics) {
-    if (diagnostic.class !== 'error') continue;
     const step = stepAtLine(ordered, diagnostic.line);
     if (step === null) continue;
     const cascade = diagnostic.message.toLowerCase().includes('unreachable');

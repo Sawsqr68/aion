@@ -43,16 +43,32 @@ const fixtures = [
     },
   },
   {
-    ok: true,
+    ok: false,
     deploys_green: false,
-    steps: 2,
-    diagnostics: [{ class: 'emit_subset', message: 'backend subset', line: 4, column: 2 }],
+    steps: null,
+    diagnostics: [
+      {
+        class: 'error',
+        message: 'unknown after target `shp`',
+        line: 4,
+        column: 2,
+        range: { start: { line: 3, character: 1 }, end: { line: 3, character: 4 } },
+      },
+    ],
     semantic: null,
     expected: {
-      ok: true,
+      ok: false,
       deploysGreen: false,
-      steps: 2,
-      diagnostics: [{ class: 'emit_subset', message: 'backend subset', line: 4, column: 2 }],
+      steps: null,
+      diagnostics: [
+        {
+          class: 'error',
+          message: 'unknown after target `shp`',
+          line: 4,
+          column: 2,
+          range: { start: { line: 3, character: 1 }, end: { line: 3, character: 4 } },
+        },
+      ],
       semantic: null,
     },
   },
@@ -60,13 +76,29 @@ const fixtures = [
     ok: false,
     deploys_green: false,
     steps: null,
-    diagnostics: [{ class: 'error', message: 'expected step', line: 1, column: 1 }],
+    diagnostics: [
+      {
+        class: 'error',
+        message: 'expected step',
+        line: 1,
+        column: 1,
+        range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+      },
+    ],
     semantic: null,
     expected: {
       ok: false,
       deploysGreen: false,
       steps: null,
-      diagnostics: [{ class: 'error', message: 'expected step', line: 1, column: 1 }],
+      diagnostics: [
+        {
+          class: 'error',
+          message: 'expected step',
+          line: 1,
+          column: 1,
+          range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+        },
+      ],
       semantic: null,
     },
   },
@@ -81,6 +113,78 @@ describe('authoring facade parsing', () => {
       );
     });
   }
+
+  // After the range landed on the wire (#187) it is CONTRACT: a diagnostic
+  // without one is a malformed response, refused loudly — never quietly
+  // rendered as a point again.
+  test('a diagnostic without its range is refused', async () => {
+    const facade = createAuthoringFacade(async () =>
+      Response.json({
+        ok: false,
+        deploys_green: false,
+        steps: null,
+        diagnostics: [{ class: 'error', message: 'x', line: 1, column: 1 }],
+        semantic: null,
+      })
+    );
+    await expect(facade.check('workflow demo {}')).rejects.toThrow(
+      'Invalid authoring response: range'
+    );
+  });
+
+  // Positions are non-negative integers by contract: a fractional UTF-16
+  // character would flow into CodeMirror as a fractional offset. Refused at
+  // the boundary instead.
+  test('a fractional or negative position is refused', async () => {
+    const withRange = (range: unknown) => ({
+      ok: false,
+      deploys_green: false,
+      steps: null,
+      diagnostics: [{ class: 'error', message: 'x', line: 1, column: 1, range }],
+      semantic: null,
+    });
+    const fractional = createAuthoringFacade(async () =>
+      Response.json(
+        withRange({ start: { line: 0, character: 2.5 }, end: { line: 0, character: 3 } })
+      )
+    );
+    await expect(fractional.check('workflow demo {}')).rejects.toThrow(
+      'Invalid authoring response: range.start.character'
+    );
+    const negative = createAuthoringFacade(async () =>
+      Response.json(
+        withRange({ start: { line: -1, character: 0 }, end: { line: 0, character: 1 } })
+      )
+    );
+    await expect(negative.check('workflow demo {}')).rejects.toThrow(
+      'Invalid authoring response: range.start.line'
+    );
+  });
+
+  // The server enum has exactly one class; the console no longer carries a
+  // branch for classes the server cannot send (`emit_subset` died in #187).
+  test('an unknown diagnostic class is refused', async () => {
+    const facade = createAuthoringFacade(async () =>
+      Response.json({
+        ok: false,
+        deploys_green: false,
+        steps: null,
+        diagnostics: [
+          {
+            class: 'emit_subset',
+            message: 'x',
+            line: 1,
+            column: 1,
+            range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+          },
+        ],
+        semantic: null,
+      })
+    );
+    await expect(facade.check('workflow demo {}')).rejects.toThrow(
+      'Invalid authoring response: class'
+    );
+  });
 
   test('parses the flow-shape graph vocabulary across the wire', async () => {
     const span = { start: 0, end: 4, line: 1, column: 1 };

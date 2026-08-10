@@ -7,7 +7,15 @@ import { EditorHeader, type EditorHeaderProps } from './EditorHeader';
 const GREEN = { deploysGreen: true, diagnostics: [] };
 const RED = {
   deploysGreen: false,
-  diagnostics: [{ class: 'error' as const, message: 'unknown step `shp`', line: 3, column: 5 }],
+  diagnostics: [
+    {
+      class: 'error' as const,
+      message: 'unknown step `shp`',
+      line: 3,
+      column: 5,
+      range: { start: { line: 2, character: 4 }, end: { line: 2, character: 7 } },
+    },
+  ],
 };
 
 function render(overrides: Partial<EditorHeaderProps>): string {
