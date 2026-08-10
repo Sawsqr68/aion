@@ -25,6 +25,18 @@ fn document_path_property(description: &str) -> Value {
     })
 }
 
+/// One zero-based UTF-16 position inside a diagnostic's range: `line` counts
+/// lines, `character` counts UTF-16 code units — the index space editors use.
+fn diagnostic_position_schema() -> Value {
+    object_schema(
+        json!({
+            "line": { "type": "integer" },
+            "character": { "type": "integer" },
+        }),
+        &["line", "character"],
+    )
+}
+
 /// The AWL source property.
 fn source_property(description: &str) -> Value {
     json!({
@@ -113,8 +125,9 @@ pub(crate) fn check_document() -> Tool {
         description: Some(
             "Run the AWL checker over source you are drafting, WITHOUT saving anything. \
              Returns whether the document parses (`ok`), whether it would be accepted by \
-             deploy (`deploys_green`), the step count, and every diagnostic with its line \
-             and column. Pass `path` — the workspace path the document lives at or will be \
+             deploy (`deploys_green`), the step count, and every diagnostic with its line, \
+             column, and full extent (`range`, zero-based UTF-16 positions). Pass `path` — \
+             the workspace path the document lives at or will be \
              saved at — so schema imports resolve against the workspace; omit it only for a \
              document with no imports. Check after every structural edit and treat each \
              diagnostic as a source defect: a document that is not green will be refused by \
@@ -144,8 +157,15 @@ pub(crate) fn check_document() -> Tool {
                             "message": { "type": "string" },
                             "line": { "type": "integer" },
                             "column": { "type": "integer" },
+                            "range": object_schema(
+                                json!({
+                                    "start": diagnostic_position_schema(),
+                                    "end": diagnostic_position_schema(),
+                                }),
+                                &["start", "end"],
+                            ),
                         }),
-                        &["class", "message", "line", "column"],
+                        &["class", "message", "line", "column", "range"],
                     ),
                 },
             }),

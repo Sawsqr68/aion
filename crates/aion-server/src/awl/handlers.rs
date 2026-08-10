@@ -1,7 +1,7 @@
 use std::io;
 use std::path::{Component, Path};
 
-use aion_awl::{Span, TypeBody, parse, print, semantic};
+use aion_awl::{Span, TypeBody, parse, print, semantic, utf16_range_for_span};
 use serde::{Deserialize, Serialize};
 
 use crate::filesystem::ConfinedDir;
@@ -27,6 +27,25 @@ pub struct Diagnostic {
     pub message: String,
     pub line: usize,
     pub column: usize,
+    /// The diagnostic's full extent as a UTF-16 range (ruled: the wire carries
+    /// the editors' index space, converted server-side — never byte offsets).
+    pub range: DiagnosticRange,
+}
+
+/// A half-open UTF-16 range on the wire: `start` inclusive, `end` exclusive,
+/// both zero-based, `character` in UTF-16 code units — the index space
+/// `CodeMirror` and the LSP protocol share, so no client re-derives it.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct DiagnosticRange {
+    pub start: DiagnosticPosition,
+    pub end: DiagnosticPosition,
+}
+
+/// One zero-based UTF-16 position inside a [`DiagnosticRange`].
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct DiagnosticPosition {
+    pub line: u32,
+    pub character: u32,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -106,6 +125,7 @@ fn check_source_at(request: &CheckRequest, root: Option<&Path>) -> CheckResponse
                 deploys_green: false,
                 steps: None,
                 diagnostics: vec![diagnostic(
+                    &request.source,
                     DiagnosticClass::Error,
                     error.message,
                     error.span,
@@ -121,7 +141,14 @@ fn check_source_at(request: &CheckRequest, root: Option<&Path>) -> CheckResponse
     let diagnostics: Vec<_> = analysis
         .diagnostics()
         .iter()
-        .map(|error| diagnostic(DiagnosticClass::Error, error.message.clone(), error.span))
+        .map(|error| {
+            diagnostic(
+                &request.source,
+                DiagnosticClass::Error,
+                error.message.clone(),
+                error.span,
+            )
+        })
         .collect();
     if !diagnostics.is_empty() {
         return CheckResponse {
@@ -264,15 +291,33 @@ pub fn format_source(request: &FormatRequest) -> Result<FormatResponse, Diagnost
         .map(|document| FormatResponse {
             formatted: print(&document),
         })
-        .map_err(|error| diagnostic(DiagnosticClass::Error, error.message, error.span))
+        .map_err(|error| {
+            diagnostic(
+                &request.source,
+                DiagnosticClass::Error,
+                error.message,
+                error.span,
+            )
+        })
 }
 
-fn diagnostic(class: DiagnosticClass, message: String, span: Span) -> Diagnostic {
+fn diagnostic(source: &str, class: DiagnosticClass, message: String, span: Span) -> Diagnostic {
+    let range = utf16_range_for_span(source, span);
     Diagnostic {
         class,
         message,
         line: span.line,
         column: span.column,
+        range: DiagnosticRange {
+            start: DiagnosticPosition {
+                line: range.start.line,
+                character: range.start.character,
+            },
+            end: DiagnosticPosition {
+                line: range.end.line,
+                character: range.end.character,
+            },
+        },
     }
 }
 
@@ -333,6 +378,102 @@ mod tests {
             response.diagnostics[0].class,
             DiagnosticClass::Error
         ));
+        Ok(())
+    }
+
+    /// The wire diagnostic carries the checker span's FULL extent as a UTF-16
+    /// range — the fidelity this surface lost when `diagnostic()` dropped
+    /// `span.start`/`span.end` and clients underlined one code point.
+    #[test]
+    fn checker_diagnostics_carry_their_span_as_a_utf16_range()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let document = parse(INVALID)?;
+        let span = aion_awl::check(&document)
+            .first()
+            .ok_or("fixture unexpectedly checks cleanly")?
+            .span;
+        let expected = utf16_range_for_span(INVALID, span);
+        assert!(
+            span.end > span.start,
+            "the fixture's checker span must have extent for this pin to bite"
+        );
+        let response = check_source(&CheckRequest {
+            source: INVALID.to_owned(),
+            path: None,
+        });
+        let wire = serde_json::to_value(&response.diagnostics)?;
+        assert_eq!(
+            wire[0]["range"]["start"]["line"],
+            u64::from(expected.start.line)
+        );
+        assert_eq!(
+            wire[0]["range"]["start"]["character"],
+            u64::from(expected.start.character)
+        );
+        assert_eq!(
+            wire[0]["range"]["end"]["line"],
+            u64::from(expected.end.line)
+        );
+        assert_eq!(
+            wire[0]["range"]["end"]["character"],
+            u64::from(expected.end.character)
+        );
+        assert!(
+            wire[0].get("span").is_none() && wire[0].get("start").is_none(),
+            "ruled: the wire gains a UTF-16 range ONLY — no byte-span field"
+        );
+        Ok(())
+    }
+
+    /// A diagnostic AFTER a multibyte character on its own line is positioned
+    /// in UTF-16 code units, not bytes — the drift class the editor seam
+    /// documents (2026-07-12). The prefix guard makes the pin non-vacuous: if
+    /// the flagged token ever moves before the emoji, byte and UTF-16 columns
+    /// coincide and this test refuses to certify anything.
+    #[test]
+    fn a_diagnostic_after_a_multibyte_character_ranges_in_utf16_units()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let source = "//! Range probe.\nworkflow probe\n  outcome done: type Result, route success\n\ntype Result { value: String }\n\nworker work\n  action make(name: String, tag: String) -> Result\n\nstep finish\n  make(name: \"🧭 café\", tag: missing_binding) -> result\n  route done(value: result.value)\n";
+        let span = match parse(source) {
+            Err(error) => error.span,
+            Ok(document) => {
+                aion_awl::check(&document)
+                    .first()
+                    .ok_or("the multibyte probe must produce a diagnostic")?
+                    .span
+            }
+        };
+        let line_start = source[..span.start].rfind('\n').map_or(0, |at| at + 1);
+        let prefix = &source[line_start..span.start];
+        assert_ne!(
+            prefix.encode_utf16().count(),
+            prefix.len(),
+            "the flagged token must sit AFTER the multibyte text on its line, \
+             or byte and UTF-16 columns coincide and the pin is vacuous"
+        );
+        let expected_line =
+            u64::try_from(source[..span.start].matches('\n').count()).unwrap_or(u64::MAX);
+        let expected_character = u64::try_from(prefix.encode_utf16().count()).unwrap_or(u64::MAX);
+        // The END position, by the same independent arithmetic: the extent
+        // after multibyte text must land in UTF-16 units too, or a client
+        // underlines the right start with the wrong width.
+        assert!(span.end > span.start, "the probe span must have extent");
+        let end_line_start = source[..span.end].rfind('\n').map_or(0, |at| at + 1);
+        let end_prefix = &source[end_line_start..span.end];
+        let expected_end_line =
+            u64::try_from(source[..span.end].matches('\n').count()).unwrap_or(u64::MAX);
+        let expected_end_character =
+            u64::try_from(end_prefix.encode_utf16().count()).unwrap_or(u64::MAX);
+        let response = check_source(&CheckRequest {
+            source: source.to_owned(),
+            path: None,
+        });
+        assert!(!response.ok);
+        let wire = serde_json::to_value(&response.diagnostics)?;
+        assert_eq!(wire[0]["range"]["start"]["line"], expected_line);
+        assert_eq!(wire[0]["range"]["start"]["character"], expected_character);
+        assert_eq!(wire[0]["range"]["end"]["line"], expected_end_line);
+        assert_eq!(wire[0]["range"]["end"]["character"], expected_end_character);
         Ok(())
     }
 

@@ -26,6 +26,7 @@ mod lexer;
 #[doc(hidden)]
 pub mod mir;
 mod parser;
+mod positions;
 mod printer;
 mod schema;
 pub mod semantic;
@@ -59,6 +60,9 @@ pub use lexer::{
     SEND_WORD, Span, TO_WORD, Token, TokenKind, lex,
 };
 pub use parser::{ParseError, parse};
+pub use positions::{
+    Utf16Position, Utf16Range, byte_offset_at_utf16, utf16_position_at, utf16_range_for_span,
+};
 pub use printer::{expr_text, print};
 pub use schema::{
     SchemaError, schema_for_outcomes, schema_for_outcomes_in, schema_for_params_in,

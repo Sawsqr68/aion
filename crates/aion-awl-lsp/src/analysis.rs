@@ -1,34 +1,19 @@
 use std::path::Path;
 
-use aion_awl::Span;
+use aion_awl::{
+    Span, Utf16Position, byte_offset_at_utf16, utf16_position_at, utf16_range_for_span,
+};
 use lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
-
-const fn utf16_width(ch: char) -> u32 {
-    if ch.len_utf16() == 2 { 2 } else { 1 }
-}
 
 /// Converts a byte offset in `source` to a zero-based UTF-16 LSP position.
 ///
-/// Offsets beyond the document are clamped to its end. AWL spans are produced
-/// on UTF-8 boundaries; if a caller supplies an interior byte, the position is
-/// conservatively placed before that scalar value.
+/// The conversion itself is `aion_awl`'s — one shared mapping for the LSP and
+/// the server's wire diagnostics — this adapter only rehomes it into
+/// `lsp_types`. Offsets beyond the document are clamped to its end.
 #[must_use]
 pub fn position_at(source: &str, byte_offset: usize) -> Position {
-    let target = byte_offset.min(source.len());
-    let mut line = 0_u32;
-    let mut character = 0_u32;
-    for (offset, ch) in source.char_indices() {
-        if offset >= target || offset.saturating_add(ch.len_utf8()) > target {
-            break;
-        }
-        if ch == '\n' {
-            line = line.saturating_add(1);
-            character = 0;
-        } else {
-            character = character.saturating_add(utf16_width(ch));
-        }
-    }
-    Position::new(line, character)
+    let position = utf16_position_at(source, byte_offset);
+    Position::new(position.line, position.character)
 }
 
 /// Converts a zero-based UTF-16 LSP position to a byte offset in `source`.
@@ -36,46 +21,23 @@ pub fn position_at(source: &str, byte_offset: usize) -> Position {
 /// Positions past a line or the document are clamped to the nearest end.
 #[must_use]
 pub fn byte_offset_at(source: &str, position: Position) -> usize {
-    let mut line = 0_u32;
-    let mut line_start = 0_usize;
-    for (offset, ch) in source.char_indices() {
-        if line == position.line {
-            line_start = offset;
-            break;
-        }
-        if ch == '\n' {
-            line = line.saturating_add(1);
-            line_start = offset + ch.len_utf8();
-        }
-    }
-    if line < position.line {
-        return source.len();
-    }
-
-    let mut utf16 = 0_u32;
-    for (relative, ch) in source[line_start..].char_indices() {
-        if ch == '\n' || utf16 >= position.character {
-            return line_start + relative;
-        }
-        let next = utf16.saturating_add(utf16_width(ch));
-        if next > position.character {
-            return line_start + relative;
-        }
-        utf16 = next;
-    }
-    source.len()
+    byte_offset_at_utf16(
+        source,
+        Utf16Position {
+            line: position.line,
+            character: position.character,
+        },
+    )
 }
 
 /// Converts an AWL byte span to an LSP range against the live document text.
 #[must_use]
 pub fn range_for_span(source: &str, span: Span) -> Range {
-    let start = position_at(source, span.start);
-    let end = if span.end <= span.start {
-        start
-    } else {
-        position_at(source, span.end)
-    };
-    Range::new(start, end)
+    let range = utf16_range_for_span(source, span);
+    Range::new(
+        Position::new(range.start.line, range.start.character),
+        Position::new(range.end.line, range.end.character),
+    )
 }
 
 fn diagnostic(source: &str, span: Span, message: String) -> Diagnostic {

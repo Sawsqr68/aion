@@ -1518,6 +1518,25 @@ async fn check_document_returns_findings_on_a_bad_document() -> TestResult {
         );
         assert!(diagnostic["line"].as_u64().is_some(), "{diagnostic}");
         assert!(diagnostic["column"].as_u64().is_some(), "{diagnostic}");
+        // The projection rides the same wire Diagnostic the HTTP check uses,
+        // so the full extent travels here too: a zero-based UTF-16 range.
+        for position in ["start", "end"] {
+            assert!(
+                diagnostic["range"][position]["line"].as_u64().is_some(),
+                "{diagnostic}"
+            );
+            assert!(
+                diagnostic["range"][position]["character"]
+                    .as_u64()
+                    .is_some(),
+                "{diagnostic}"
+            );
+        }
+        assert!(
+            diagnostic["range"]["start"]["line"].as_u64()
+                <= diagnostic["range"]["end"]["line"].as_u64(),
+            "{diagnostic}"
+        );
     }
 
     // An unparsable document is also findings, never a crash: ok is false and
