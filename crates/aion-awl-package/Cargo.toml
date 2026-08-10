@@ -12,8 +12,8 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-aion-awl = { version = "0.13.5", path = "../aion-awl" }
-aion-package = { version = "0.13.5", path = "../aion-package" }
+aion-awl = { version = "0.13.6", path = "../aion-awl" }
+aion-package = { version = "0.13.6", path = "../aion-package" }
 serde_json.workspace = true
 thiserror.workspace = true
 

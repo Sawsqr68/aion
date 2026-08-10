@@ -3,6 +3,23 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## 0.13.6 — 2026-08-10
+
+- **Every guide example is a playground (#185).** Each of the 118 examples in
+  the console's language guide — the Language tab and the floating guide
+  overlay alike — carries a **Try it** button below its source: one click
+  creates a workspace document from the example's verbatim bytes, named after
+  the example's own `workflow`/`worker` declaration (collision-safe with a
+  `_2`/`_3` suffix, each attempt an atomic server-side create), and lands you
+  on it in the editor — ready to check and deploy, and to run when the example
+  declares a workflow. A refusal (say, no authoring workspace configured) is
+  announced in place in the console's failure vocabulary rather than passing
+  silently.
+- **`POST /awl/documents` accepts an optional `source`.** When present, the
+  document is created carrying those bytes verbatim (unchecked, exactly like
+  saving); when absent, the placeholder is synthesized as before. Same name
+  validation, same atomic create, same `DocumentExists` refusal.
+
 ## 0.13.5 — 2026-08-10
 
 - **The assistant can write (#184).** The MCP surface grows from eight run
