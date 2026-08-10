@@ -3,6 +3,33 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## 0.13.5 — 2026-08-10
+
+- **The assistant can write (#184).** The MCP surface grows from eight run
+  tools to thirteen: `list_documents`, `read_document`, `check_document`,
+  `save_document`, and `deploy_document` give an MCP-connected assistant the
+  same authoring loop the console studio has — list and read what is in the
+  workspace, check source, save it, and deploy the saved document by
+  `{path, content_hash}`. Reads need only authentication; saving and
+  deploying require the same deploy grant as `POST /awl/deploy`, and a
+  caller without it is refused as `deploy_denied` naming the grant. There is
+  deliberately no way to deploy unsaved source.
+- **`check_document` answers in what a model can act on** — `ok`,
+  `deploys_green`, the deploy `steps`, and per-line `diagnostics`. The
+  editor's semantic index (hundreds of kilobytes on a real document) stays
+  on the HTTP surface where the console uses it.
+- **A missing document is now "not found" everywhere (#161).** A freshly
+  started server has its authoring workspace configured but not yet created
+  (nothing creates the directory until the first write). Reading, checking,
+  or deploying against that state — or naming a document that simply is not
+  there — now answers `DocumentNotFound` with guidance on every transport,
+  instead of a raw operating-system error: HTTP deploy of a missing path is
+  `404` (previously a `500` on a fresh server, or a `422` labelled as a
+  revision-store fault), and the MCP tools point at `list_documents`.
+- `deploy_document` is honestly annotated non-idempotent: every deploy
+  appends a fresh deployment record to the ledger, while `save_document`
+  converges on identical bytes and stays idempotent.
+
 ## 0.13.4 — 2026-08-10
 
 - **A first boot configures itself (#180).** `aion server` finding no config
