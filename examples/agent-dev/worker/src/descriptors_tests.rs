@@ -300,30 +300,86 @@ fn the_agent_split_is_exactly_what_the_document_marks() -> TestResult {
 }
 
 /// The control arm for the marker itself: the AWL checker must REFUSE `agent`
-/// on an action that is not arity-1 `String -> String`.
+/// on an action whose return type is not the canonical agent-outcome record —
+/// a declared record of exactly `text: String` and `stop_reason: String`
+/// (#181; the pre-#181 rule demanded a bare `String`, and a bare `String` is
+/// now itself the refused shape).
 ///
 /// Without this, `agent_names` would be a set the worker trusts for its shape
 /// and nothing would establish that shape — the marker would be a name in the
 /// grammar with no force, which is the exact defect it was built to remove.
+///
+/// Two refused arms, each pinned by the RENDERED TYPE in the message so a
+/// checker that refused for some other reason cannot keep this green: the
+/// retired bare-`String` return, and a record of the wrong fields.
 #[test]
 fn the_checker_refuses_an_agent_marker_on_the_wrong_shape() -> TestResult {
-    let document = "//! control arm\n\
+    let cases = [
+        (
+            // The retired pre-#181 shape: a bare String return.
+            "//! control arm: the retired bare-String return\n\
+             workflow ask\n  \
+               input question: String\n  \
+               outcome answered: type Answer, route success\n\n\
+             type Answer { reply: String }\n\n\
+             worker default\n  \
+               action ask(prompt: String) -> String\n    \
+                 agent\n\n\
+             step ask\n  \
+               ask(prompt: question) -> reply\n  \
+               route answered(reply: reply)\n",
+            "returns `String` — an agent action returns the canonical agent-outcome record",
+        ),
+        (
+            // A record of the wrong fields is not the contract either.
+            "//! control arm: a wrong record\n\
+             workflow ask\n  \
+               input question: String\n  \
+               outcome answered: type Answer, route success\n\n\
+             type Answer { reply: String }\n\n\
+             worker default\n  \
+               action ask(prompt: String) -> Answer\n    \
+                 agent\n\n\
+             step ask\n  \
+               ask(prompt: question) -> answer\n  \
+               route answered(reply: answer.reply)\n",
+            "returns `Answer` — an agent action returns the canonical agent-outcome record",
+        ),
+    ];
+    for (document, expected_fragment) in cases {
+        let errors = aion_awl::check(&aion_awl::parse(document)?);
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.message.contains(expected_fragment)),
+            "expected a refusal containing {expected_fragment:?}; got {:?}",
+            errors.iter().map(|e| &e.message).collect::<Vec<_>>()
+        );
+    }
+    Ok(())
+}
+
+/// The positive control for the arm above: the CORRECT record shape is
+/// accepted, so the refusals over there are about the shapes and not about the
+/// marker being unusable altogether.
+#[test]
+fn the_checker_accepts_the_agent_marker_on_the_canonical_record() -> TestResult {
+    let document = "//! positive control: the canonical record\n\
                     workflow ask\n  \
                       input question: String\n  \
                       outcome answered: type Answer, route success\n\n\
-                    type Answer { reply: String }\n\n\
+                    type Answer { reply: String }\n\
+                    type Reply { text: String, stop_reason: String }\n\n\
                     worker default\n  \
-                      action ask(prompt: String) -> Answer\n    \
+                      action ask(prompt: String) -> Reply\n    \
                         agent\n\n\
                     step ask\n  \
-                      ask(prompt: question) -> answer\n  \
-                      route answered(reply: answer.reply)\n";
+                      ask(prompt: question) -> reply\n  \
+                      route answered(reply: reply.text)\n";
     let errors = aion_awl::check(&aion_awl::parse(document)?);
     assert!(
-        errors
-            .iter()
-            .any(|error| error.message.contains("agent") && error.message.contains("returns")),
-        "an `agent` action returning a record must be refused; got {:?}",
+        errors.is_empty(),
+        "the canonical record must be accepted; got {:?}",
         errors.iter().map(|e| &e.message).collect::<Vec<_>>()
     );
     Ok(())

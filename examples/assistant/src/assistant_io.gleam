@@ -7,9 +7,10 @@
 //// with its regenerated artifacts together.
 ////
 //// The `assistant` agent activity is deliberately absent from this module:
-//// its wire contract is one prompt string in, one terminal-text string out
-//// (the norn-harness contract), carried by a plain string codec in
-//// `assistant/activities` — there is no record shape to declare.
+//// its wire contract is one prompt string in, the canonical agent-outcome
+//// record out — and that record is aion's, not this workflow's, so it is
+//// imported from `aion/agent` (type + codec) in `assistant/activities`
+//// rather than declared and generated here.
 
 import gleam/option
 

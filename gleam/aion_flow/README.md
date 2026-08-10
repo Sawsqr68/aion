@@ -21,6 +21,7 @@ Public modules:
 - `aion/signal` — typed signal references and in-engine send/receive helpers.
 - `aion/query` — typed read-only query handlers and dispatch helpers.
 - `aion/codec` — typed payload codecs for values crossing engine boundaries.
+- `aion/agent` — the canonical agent-outcome record (`text` + `stop_reason`) and its codec, the shape every agent harness emits.
 - `aion/duration`, `aion/error`, `aion/child`, and `aion/testing` — supporting durations, errors, child handles, and the pure Gleam harness.
 
 ## Define a workflow

@@ -104,11 +104,14 @@ declared action, and choosing between them is an authoring decision:
    `docs/workers/AWL-WORKER-DOCUMENTS.md`).
 
 3. **An agent harness**, with the `agent` marker — the action's one `String`
-   input is a prompt and its `String` output is the reply:
+   input is a prompt and its output is the canonical agent-outcome record, a
+   record you declare with exactly `text: String` and `stop_reason: String`:
 
    ```awl
+   type Reply { text: String, stop_reason: String }
+
    worker assistants
-     action ask(prompt: String) -> String
+     action ask(prompt: String) -> Reply
        agent, timeout 10m
    ```
 

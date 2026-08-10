@@ -196,22 +196,41 @@ build(repo: request.repo, clean: true) -> built
 ### Agent seams
 
 `agent` says exactly one thing: the action's single `String` parameter carries
-a PROMPT and its `String` result carries the REPLY — the whole of what an
-adapter needs to hand the call to an agent harness instead of running it as an
-ordinary activity.
+a PROMPT and its result is the canonical agent-outcome record — a record you
+declare yourself, under any name, with exactly two fields: `text: String` (the
+agent's terminal reply) and `stop_reason: String` (the canonical snake_case
+stop reason: `end_turn | tool_use | limit_reached | cancelled | error |
+other`). That is the whole of what an adapter needs to hand the call to an
+agent harness instead of running it as an ordinary activity, and it is the
+shape every harness emits: each maps its native terminal outcome onto the
+record at its own boundary, so the flow reads `reply.text` — and can route on
+`reply.stop_reason` — without ever parsing harness-specific JSON.
 
 ```awl
+//! Ask an agent one question and route its reply text.
+workflow ask_the_agent
+  input question: String
+  outcome done: type String, route success
+
+type Reply { text: String, stop_reason: String }
+
 worker assistants
-  action ask(prompt: String) -> String
+  action ask(prompt: String) -> Reply
     agent, timeout 10m
+
+step ask
+  ask(prompt: question) -> reply
+  route done(reply.text)
 ```
 
 The checker enforces the shape: exactly one parameter, that parameter `String`
-(not `String?`), the return type `String` (parse it downstream if the flow
-needs structure), and never together with a `run` body — the server runs a
-declared body itself and never hands it to a harness. The marker classifies the
-declaration and must not change the flow: `agent_seam.awl` and
-`agent_seam_unmarked_control.awl` must lower to identical MIR.
+(not `String?`), the return type a declared record of exactly `text: String`
+and `stop_reason: String` (an empty `text` on a completed run is honest — an
+agent that finished its turn emitting only tool calls said nothing), and never
+together with a `run` body — the server runs a declared body itself and never
+hands it to a harness. The marker classifies the declaration and must not
+change the flow: `agent_seam.awl` and `agent_seam_unmarked_control.awl` must
+lower to identical MIR.
 
 `aion worker agent <FILE.awl>` serves these seams without you writing a crate.
 

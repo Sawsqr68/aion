@@ -20,12 +20,12 @@
 //// an error — and `land` is skipped on exhausted dispositions, leaving the
 //// workspace intact for inspection.
 ////
-//// scout/dev/review are agent activities under the norn-harness contract:
-//// one prompt string in, one terminal-text string out. This workflow
-//// composes every prompt (`agent_dev/prompts`) and decodes the review
-//// verdict defensively (`agent_dev/verdict`) with ONE bounded re-ask round
-//// for an unparseable reply; a still-unparseable reply counts as a failed
-//// review round.
+//// scout/dev/review are agent activities under the canonical agent-outcome
+//// contract: one prompt string in, the `aion/agent.AgentOutcome` record out
+//// (the pipeline threads each outcome's text). This workflow composes every
+//// prompt (`agent_dev/prompts`) and decodes the review verdict defensively
+//// (`agent_dev/verdict`) with ONE bounded re-ask round for an unparseable
+//// reply; a still-unparseable reply counts as a failed review round.
 ////
 //// An `agent_dev_status` query answers `{phase, round}` live state; the
 //// handler is re-registered at every stage transition, so replay re-arms it
@@ -41,6 +41,7 @@ import agent_dev/verdict
 import agent_dev_codecs as codecs
 import agent_dev_io as io
 import aion/activity
+import aion/agent.{type AgentOutcome}
 import aion/codec
 import aion/error
 import aion/query
@@ -381,16 +382,19 @@ fn run_provision(input: io.Input) -> Result(io.Workspace, io.AgentDevError) {
   }
 }
 
-/// Dispatch one agent step (scout/dev/review): prompt in, terminal text
-/// out. `step` is the typed activity constructor from `agent_dev/activities`;
+/// Dispatch one agent step (scout/dev/review): prompt in, the canonical
+/// agent-outcome record out; the pipeline threads the outcome's TEXT (the
+/// record's `stop_reason` is decoded and available; this pipeline routes
+/// nothing on it — its behaviour predates the field and stands unchanged).
+/// `step` is the typed activity constructor from `agent_dev/activities`;
 /// `stage` names the step in a typed error.
 fn run_agent(
-  step: fn(String) -> activity.Activity(String, String),
+  step: fn(String) -> activity.Activity(String, AgentOutcome),
   stage: String,
   prompt: String,
 ) -> Result(String, io.AgentDevError) {
   case workflow.run(step(prompt)) {
-    Ok(reply) -> Ok(reply)
+    Ok(outcome) -> Ok(outcome.text)
     Error(activity_error) -> stage_error(stage, activity_error)
   }
 }

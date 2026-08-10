@@ -34,8 +34,10 @@ but that one string — no issue tracker, no conversation, no shared context.
 The claim being judged, the file paths to start from, the standard to judge
 against, and the reply format all have to be inside the prompt. Building that
 string is deliberately the dispatcher's job: it keeps the judge action on the
-plain agent seam (one String in, one String out), which is the one shape a
-norn worker started from the installed binary can serve honestly.
+plain agent seam (one String prompt in, the canonical agent-outcome record
+out — `{text, stop_reason}`, the judge's terminal text plus why the run
+stopped), which is the one shape a norn worker started from the installed
+binary can serve honestly.
 
 ### The control
 
@@ -161,16 +163,18 @@ throttle between the list and the processes.
 
 ## The trade this shape records
 
-The judge returns a plain `String`, not a structured verdict type. A
-structured schema (verdict enum, evidence list, proposal field) would be
-better data — but serving it requires a custom harness binary that parses
-and validates model output into the declared type; the agent-marker shape
-rule (one String in, one String out — task #98, landed `8451e0e5`) is
-enforced by the checker. Until that binary exists, structure lives in the
-*prompt* (ask for a fixed reply format) and the dispatcher parses
-downstream. When a custom harness lands, the upgrade path is: widen the
-action's return type and let the checker force the document and worker to
-move together.
+The judge returns the canonical agent-outcome record — `text: String` plus
+`stop_reason: String` (task #181; the record superseded #98's bare-`String`
+rule and is enforced by the checker, which refuses any other agent return
+shape). The record carries the reply and why the run stopped; it does NOT
+carry a structured verdict type. A structured schema (verdict enum, evidence
+list, proposal field) would be better data — but serving it requires a
+custom harness binary that parses and validates model output into the
+declared type, and the record's `text` is deliberately a plain String. So
+structure still lives in the *prompt* (ask for a fixed reply format) and
+the dispatcher parses the record's `text` downstream. When a custom harness
+lands, the upgrade path is unchanged in kind: widen the action's return
+type and let the checker force the document and worker to move together.
 
 One further operational note: judges on a pre-`e7c748e62` binary run with
 bare norn defaults — default account, fresh session per judgement, no

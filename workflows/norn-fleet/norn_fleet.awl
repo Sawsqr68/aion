@@ -6,10 +6,11 @@
 //! The dispatcher hands this workflow the whole issue list in one input: each
 //! item carries the issue's id, its title, and a fully-built PROMPT. Building
 //! the prompt is the dispatcher's job on purpose — the judge action is the
-//! plain agent seam (one String in, one String out), which is the one shape a
-//! norn worker started from the installed binary can serve honestly, with no
-//! crate and no rebuild. A structured judgement schema would demand a custom
-//! harness binary; that trade is recorded in this folder's README.
+//! plain agent seam (one String prompt in, the canonical agent-outcome
+//! record out), which is the one shape a norn worker started from the
+//! installed binary can serve honestly, with no crate and no rebuild. A
+//! structured judgement schema would demand a custom harness binary; that
+//! trade is recorded in this folder's README.
 //!
 //! Before any issue is judged, the control step asks a question whose answer
 //! the dispatcher already knows — quote a literal that exists at a known path
@@ -55,6 +56,10 @@ type FleetReport { attempted: Int, issue_ids: [String], verdicts: [String], cont
 /// Carries what the control expected and what actually came back.
 type Refused { control_expect: String, control_reply: String, reason: String }
 
+/// The canonical agent-outcome record every dispatch of the agent seam
+/// returns: the judge's terminal `text` and the canonical `stop_reason`.
+type Reply { text: String, stop_reason: String }
+
 worker fleet
   /// The judge. Served by `aion worker agent` with the norn harness: the
   /// prompt goes to the session verbatim, the reply comes back verbatim.
@@ -64,7 +69,7 @@ worker fleet
   /// `timeout 15m` is an authored contract carried in the package hash; the
   /// engine does not enforce it today (the workflow-level `timeout 2h`
   /// above is the enforced bound).
-  action judge(prompt: String) -> String
+  action judge(prompt: String) -> Reply
     agent, timeout 15m, retry 5 backoff 30s..5m
 
 /// Ask a question whose answer is already known, before asking any that
@@ -72,19 +77,20 @@ worker fleet
 /// strings; only a known answer can tell them apart.
 step control
   judge(prompt: control_prompt) -> control_reply
-  outcome proven: when control_reply == control_expect, route open
+  outcome proven: when control_reply.text == control_expect, route open
   outcome broken: otherwise,
-    route unmeasured(control_expect: control_expect, control_reply: control_reply,
+    route unmeasured(control_expect: control_expect, control_reply: control_reply.text,
       reason: "the control judgement did not return the expected reply, so this pipeline cannot be shown to read the tree or follow instructions — no verdicts are reported")
 
 step open
   distribute issue in issues
 
 step judge_one
-  judge(prompt: issue.prompt) -> verdict
+  judge(prompt: issue.prompt) -> judged
+  judged.text -> verdict
 
 step close
   collect verdict -> verdicts
   issues |> map(.id) -> issue_ids
   issues |> count -> attempted
-  route done(attempted: attempted, issue_ids: issue_ids, verdicts: verdicts, control_reply: control_reply)
+  route done(attempted: attempted, issue_ids: issue_ids, verdicts: verdicts, control_reply: control_reply.text)

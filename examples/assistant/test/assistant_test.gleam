@@ -7,6 +7,7 @@
 //// signal with the SAME generated codec the console encodes with, so the
 //// signal decode path is exercised end to end on real wire bytes.
 
+import aion/agent
 import aion/error
 import aion/workflow
 import assistant
@@ -194,7 +195,7 @@ fn register_counting_passing(key: String) -> Nil {
   harness.register(
     Handlers(..handlers, assistant: fn(prompt) {
       let _ = harness.counter_next(key)
-      Ok("REPLY\n" <> prompt)
+      Ok(agent.AgentOutcome(text: "REPLY\n" <> prompt, stop_reason: "end_turn"))
     }),
   )
 }

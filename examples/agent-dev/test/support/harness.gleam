@@ -15,10 +15,16 @@
 
 import agent_dev/activities
 import agent_dev_io as io
+import aion/agent.{type AgentOutcome, AgentOutcome}
 import aion/error
 import aion/testing
 
 /// One handler per activity the pipeline dispatches.
+///
+/// The three agent handlers stay TEXT handlers: a scenario scripts what the
+/// agent said, and `register` wraps each in the same text-to-record mapping
+/// the production worker's harness boundary performs (the canonical
+/// agent-outcome record, `stop_reason: "end_turn"` on a completed round).
 pub type Handlers {
   Handlers(
     provision: fn(io.ProvisionInput) ->
@@ -115,11 +121,15 @@ pub fn register(handlers: Handlers) -> Nil {
       handlers.provision,
     )
   let assert Ok(_) =
-    testing.mock_activity(env, activities.scout(""), handlers.scout)
+    testing.mock_activity(env, activities.scout(""), as_outcome(handlers.scout))
   let assert Ok(_) =
-    testing.mock_activity(env, activities.dev(""), handlers.dev)
+    testing.mock_activity(env, activities.dev(""), as_outcome(handlers.dev))
   let assert Ok(_) =
-    testing.mock_activity(env, activities.review(""), handlers.review)
+    testing.mock_activity(
+      env,
+      activities.review(""),
+      as_outcome(handlers.review),
+    )
   let assert Ok(_) =
     testing.mock_activity(env, activities.gate(workspace), handlers.gate)
   let assert Ok(_) =
@@ -129,4 +139,19 @@ pub fn register(handlers: Handlers) -> Nil {
       handlers.land,
     )
   Nil
+}
+
+/// Wraps a scenario's TEXT handler in the same mapping the production
+/// worker's harness boundary performs: the agent's terminal text becomes the
+/// canonical agent-outcome record's `text`, with `end_turn` as the completed
+/// round's canonical stop reason. Errors pass through untouched.
+fn as_outcome(
+  handler: fn(String) -> Result(String, error.ActivityError),
+) -> fn(String) -> Result(AgentOutcome, error.ActivityError) {
+  fn(prompt) {
+    case handler(prompt) {
+      Ok(text) -> Ok(AgentOutcome(text: text, stop_reason: "end_turn"))
+      Error(failure) -> Error(failure)
+    }
+  }
 }

@@ -3,8 +3,9 @@
 //! anything is reported.
 //!
 //! This is the single-lane sibling of `norn_fleet`: same agent seam (one
-//! String in, one String out — the shape `aion worker agent` serves from the
-//! installed binary, no crate, no rebuild), same control-first discipline.
+//! String prompt in, the canonical agent-outcome record out — the shape
+//! `aion worker agent` serves from the installed binary, no crate, no
+//! rebuild), same control-first discipline.
 //! The dispatcher writes the whole brief into one prompt: the task, the
 //! fence, the standards, the evidence the builder must produce. The builder's
 //! reply is its report.
@@ -33,6 +34,10 @@ workflow norn_dev
 /// filled by the server for every `run`-bodied action.
 type RunOutcome { exit_code: Int, stdout: String, stderr: String }
 
+/// The canonical agent-outcome record every dispatch of the agent seam
+/// returns: the builder's terminal `text` and the canonical `stop_reason`.
+type Reply { text: String, stop_reason: String }
+
 /// A delegation that built AND gated green. `report` is the builder's own
 /// account; `gate_exit`/`gate_stderr` are the machine's, shipped together so
 /// the account can be checked against the measurement that admitted it.
@@ -52,7 +57,7 @@ worker dev
   /// Retries absorb provider-overload bursts (the tharsis postmortem's
   /// multi-minute outages), not build failures — a failed build is a reply,
   /// not an error.
-  action delegate(prompt: String) -> String
+  action delegate(prompt: String) -> Reply
     agent, timeout 90m, retry 3 backoff 30s..5m
 
   /// The gates, run by the server. The command is sealed into the package
@@ -66,9 +71,9 @@ worker dev
 /// well-formed strings; only a known answer tells them apart.
 step control
   delegate(prompt: control_prompt) -> control_reply
-  outcome proven: when control_reply == control_expect, route build
+  outcome proven: when control_reply.text == control_expect, route build
   outcome broken: otherwise,
-    route unmeasured(control_expect: control_expect, control_reply: control_reply,
+    route unmeasured(control_expect: control_expect, control_reply: control_reply.text,
       reason: "the control delegation did not return the expected reply, so this pipeline cannot be shown to read the tree or follow instructions — no build was attempted")
 
 step build
@@ -77,8 +82,8 @@ step build
 step gate
   gates(script: gate_script) -> gate_result
   outcome green: when gate_result.exit_code == 0,
-    route done(report: report, gate_exit: gate_result.exit_code, gate_stderr: gate_result.stderr,
-      control_reply: control_reply)
+    route done(report: report.text, gate_exit: gate_result.exit_code,
+      gate_stderr: gate_result.stderr, control_reply: control_reply.text)
   outcome red: otherwise,
-    route gates_red(report: report, gate_exit: gate_result.exit_code, stdout: gate_result.stdout,
-      stderr: gate_result.stderr)
+    route gates_red(report: report.text, gate_exit: gate_result.exit_code,
+      stdout: gate_result.stdout, stderr: gate_result.stderr)

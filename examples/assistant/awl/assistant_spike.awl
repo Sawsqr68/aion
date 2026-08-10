@@ -122,7 +122,14 @@ The method:
 /// recorded value.
 type Provisioned { exit_code: Int, stdout: String }
 
-/// What one proven round returns: the agent's reply and where it worked.
+/// The canonical agent-outcome record, as this document declares it: what a
+/// dispatch of the shared `assistant` action returns. Declared with the SAME
+/// name and shape as `assistant.awl`'s — the two documents share queue
+/// `default`, so the shared action's signature must agree (see the module
+/// note); the record type is part of that signature.
+type Reply { text: String, stop_reason: String }
+
+/// What one proven round returns: the agent's reply text and where it worked.
 type Answered { reply: String, workspace_path: String }
 
 worker default
@@ -152,10 +159,17 @@ worker default
   action assistant_provision(run_id: String, repo_path: String) -> Provisioned
     run "sh -c 'set -eu; case \"$2\" in \"\"|.|..|*/*) echo provision: run_id must be a single path component >&2; exit 9;; esac; if [ -z \"$1\" ]; then echo provision: workspace_root must not be empty >&2; exit 9; fi; mkdir -p \"$1\" >&2; if [ -e \"$1/$2\" ]; then mv \"$1/$2\" \"$1/$2.superseded-$(date +%Y%m%dT%H%M%S)-$$\" >&2; fi; mkdir \"$1/$2\" >&2; if [ -z \"$3\" ]; then mkdir -p \"$1/$2/repo\" >&2; git init \"$1/$2/repo\" >&2; else git clone \"$3\" \"$1/$2/repo\" >&2; fi; printf \"%s\" \"$1/$2/repo\"' -- {workspace_root} $run_id $repo_path"
 
-  /// One agent round under the norn-harness contract: ONE prompt string in,
-  /// ONE terminal-text string out. The worker pins one norn session per
+  /// One agent round under the canonical agent-outcome contract: ONE prompt
+  /// string in, the `Reply` record out. The worker pins one norn session per
   /// activity type per run, so repeated dispatches resume one conversation.
-  action assistant(prompt: String) -> String
+  ///
+  /// The SIGNATURE is identical to `assistant.awl`'s by requirement (shared
+  /// queue, shared action — see the module note). The `agent` marker itself
+  /// stays on `assistant.awl` alone: it is the routing declaration the worker
+  /// derives its agent set from, sits outside admission's signature/body
+  /// comparison, and leaving this document unmarked keeps a checked, deployed
+  /// proof that marked and unmarked declarations of one action agree.
+  action assistant(prompt: String) -> Reply
 
 step provision
   assistant_provision(run_id: workflow.id, repo_path: repo_path) -> provisioned
@@ -186,4 +200,4 @@ step round
   // bare objective instead would open the session with no contract at all.
   contract_head + workspace_path + workspace_confinement + situation + contract_tail + objective -> opening_prompt
   assistant(prompt: opening_prompt) -> reply
-  route answered(reply: reply, workspace_path: workspace_path)
+  route answered(reply: reply.text, workspace_path: workspace_path)

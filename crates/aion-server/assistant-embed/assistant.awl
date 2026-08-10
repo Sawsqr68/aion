@@ -210,6 +210,17 @@ type AssistantStatus { phase: String, round: Int? }
 /// command string and never appears in any recorded value.
 type Provisioned { exit_code: Int, stdout: String }
 
+/// The canonical agent-outcome record, as this document declares it: what
+/// every dispatch of the `assistant` agent action returns. `text` is the
+/// agent's terminal reply (the honest empty string when the agent finished a
+/// round saying nothing); `stop_reason` is the canonical snake_case reason
+/// (`end_turn` on every completed norn round — a non-completion fails the
+/// dispatch instead of returning a record). The shape is demanded by the
+/// checker on any `agent`-marked action; the NAME is this document's own.
+/// `stop_reason` is available to route on; this session deliberately does not
+/// — its routing behaviour predates the field and stands unchanged.
+type Reply { text: String, stop_reason: String }
+
 /// The one value the round loop threads, and the ONLY thing readable after
 /// the loop: the prompt the next round will send, the last reply received,
 /// whether the operator ended the session, and whether the wait loop gave up.
@@ -271,16 +282,17 @@ worker default
   action assistant_provision(run_id: String, repo_path: String) -> Provisioned
     run "sh -c 'set -eu; case \"$2\" in \"\"|.|..|*/*) echo provision: run_id must be a single path component >&2; exit 9;; esac; if [ -z \"$1\" ]; then echo provision: workspace_root must not be empty >&2; exit 9; fi; mkdir -p \"$1\" >&2; if [ -e \"$1/$2\" ]; then mv \"$1/$2\" \"$1/$2.superseded-$(date +%Y%m%dT%H%M%S)-$$\" >&2; fi; mkdir \"$1/$2\" >&2; if [ -z \"$3\" ]; then mkdir -p \"$1/$2/repo\" >&2; git init \"$1/$2/repo\" >&2; else git clone \"$3\" \"$1/$2/repo\" >&2; fi; printf \"%s\" \"$1/$2/repo\"' -- {workspace_root} $run_id $repo_path"
 
-  /// One agent round under the norn-harness contract: ONE prompt string in,
-  /// ONE terminal-text string out. NO timeout, by design. The worker pins one
-  /// norn session per action type per run, so repeated dispatches resume one
-  /// conversation.
+  /// One agent round under the canonical agent-outcome contract: ONE prompt
+  /// string in, the `Reply` record out (`text` + `stop_reason`) — the shape
+  /// every harness emits from its boundary. NO timeout, by design. The worker
+  /// pins one norn session per action type per run, so repeated dispatches
+  /// resume one conversation.
   ///
   /// The `agent` marker is what makes that routing readable from HERE. Before
   /// it, the worker binary carried the same fact as a hand-written list of
   /// action names, so this document could declare an agent round and the
   /// worker had no way to know it had.
-  action assistant(prompt: String) -> String
+  action assistant(prompt: String) -> Reply
     agent
 
 step provision
@@ -349,7 +361,7 @@ step session
       // until ended or stalled). AWL requires a literal bound on every loop,
       // so this is the language formality set beyond reach, not a budget.
       max 1000000
-    Round(prompt: nudge.message, reply: reply, ended: nudge.end, stalled: not nudge.end and nudge.message == "") -> round
+    Round(prompt: nudge.message, reply: reply.text, ended: nudge.end, stalled: not nudge.end and nudge.message == "") -> round
     until round.ended or round.stalled
     // Same formality as the inner bound: no round budget exists — the session
     // ends when the operator ends it or a wait stalls out.

@@ -42,16 +42,21 @@ on the queue the document declares — an agent worker without writing a crate.
 It is the counterpart to the `agent` marker on an action declaration:
 
 ```awl
+type Reply { text: String, stop_reason: String }
+
 worker assistants
-  action ask(prompt: String) -> String
+  action ask(prompt: String) -> Reply
     agent, timeout 10m
 ```
 
-The marker says the action's single `String` input is a prompt and its `String`
-output is the agent's reply. That is the whole contract an adapter needs, and
-it is why the document is the ONLY possible source of the advertised schemas:
-an agent activity's output is decided by the agent, so there is no Rust type to
-derive one from.
+The marker says the action's single `String` input is a prompt and its output
+is the canonical agent-outcome record — a declared record of exactly
+`text: String` (the agent's terminal reply) and `stop_reason: String` (the
+canonical snake_case stop reason), which every harness emits from its own
+boundary. That is the whole contract an adapter needs, and it is why the
+document is the ONLY possible source of the advertised schemas: an agent
+activity's output is decided by the agent, so there is no Rust type to derive
+one from.
 
 Facts to check before claiming this works in a session:
 

@@ -21,11 +21,7 @@ type CommandResult {
 type ParseResult { ok: Bool, value: String, error: String }
 
 /// Final evidence from all three activities.
-type Completed {
-  command: CommandResult,
-  parsed: ParseResult,
-  agent: AgentResult,
-}
+type Completed { command: CommandResult, parsed: ParseResult, agent: AgentResult }
 
 worker general
   action run_agent(instructions: String, prompt: String, output_schema: String, session_key: String?, workspace_path: String, disallowed_tools: String?) -> AgentResult
@@ -38,5 +34,5 @@ worker general
 step exercise_worker
   run_command(workspace_path: workspace_path, name: "emit example JSON", argv: ["printf", "{\"topic\":\"general-worker\"}\n"]) -> command
   parse_output(text: command.stdout, mode: "json_path", query: "topic") -> parsed
-  run_agent(instructions: "Return a concise workspace summary that satisfies the supplied schema.", prompt: "Inspect the workspace and summarize what this general-worker example provides.", output_schema: "{\"type\":\"object\",\"properties\":{\"summary\":{\"type\":\"string\"}},\"required\":[\"summary\"],\"additionalProperties\":false}", session_key: workflow.id + "-general-example", workspace_path: workspace_path, disallowed_tools: "write,edit,apply_patch") -> agent
-  route completed(command: command, parsed: parsed, agent: agent)
+  run_agent(instructions: "Return a concise workspace summary that satisfies the supplied schema.", prompt: "Inspect the workspace and summarize what this general-worker example provides.", output_schema: "{\"type\":\"object\",\"properties\":{\"summary\":{\"type\":\"string\"}},\"required\":[\"summary\"],\"additionalProperties\":false}", session_key: workflow.id + "-general-example", workspace_path: workspace_path, disallowed_tools: "write,edit,apply_patch") -> agent_reply
+  route completed(command: command, parsed: parsed, agent: agent_reply)

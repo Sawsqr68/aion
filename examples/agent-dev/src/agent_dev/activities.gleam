@@ -1,9 +1,10 @@
 //// Typed activity constructors for the agent-dev pipeline.
 ////
 //// Every activity here is served by the agent-dev worker in production. The
-//// scout/dev/review agent activities speak the norn-harness contract: ONE
-//// prompt string in, ONE terminal-text string out — the workflow composes
-//// every prompt and decodes the review verdict defensively
+//// scout/dev/review agent activities speak the canonical agent-outcome
+//// contract: ONE prompt string in, the `aion/agent.AgentOutcome` record out
+//// (`text` + `stop_reason`) — the workflow composes every prompt, threads
+//// each outcome's TEXT, and decodes the review verdict defensively
 //// (`agent_dev/verdict`). The worker pins one norn session per role per run,
 //// so a resume round's lean feedback-only prompt lands in the same session
 //// that did the original work.
@@ -18,6 +19,7 @@
 import agent_dev_codecs as codecs
 import agent_dev_io as io
 import aion/activity
+import aion/agent.{type AgentOutcome}
 import aion/codec
 import aion/duration
 import aion/error
@@ -58,21 +60,22 @@ pub fn provision(
 }
 
 /// The scout agent step: a read-only research pass over the workspace that
-/// returns an implementation plan as terminal text.
-pub fn scout(prompt: String) -> activity.Activity(String, String) {
+/// returns an implementation plan as the outcome's terminal text.
+pub fn scout(prompt: String) -> activity.Activity(String, AgentOutcome) {
   agent_step("scout", prompt)
 }
 
 /// The dev agent step: implements (round one) or applies feedback (resume
-/// rounds) in the workspace, returning a work report as terminal text.
-pub fn dev(prompt: String) -> activity.Activity(String, String) {
+/// rounds) in the workspace, returning a work report as the outcome's
+/// terminal text.
+pub fn dev(prompt: String) -> activity.Activity(String, AgentOutcome) {
   agent_step("dev", prompt)
 }
 
 /// The review agent step: adversarially reviews the work against the
-/// contract, ending its terminal text with the JSON verdict the workflow
-/// decodes defensively.
-pub fn review(prompt: String) -> activity.Activity(String, String) {
+/// contract, ending its outcome's terminal text with the JSON verdict the
+/// workflow decodes defensively.
+pub fn review(prompt: String) -> activity.Activity(String, AgentOutcome) {
   agent_step("review", prompt)
 }
 
@@ -104,17 +107,24 @@ pub fn land(
   )
 }
 
-/// One agent step under the norn-harness contract: prompt in, terminal text
-/// out, both plain JSON strings on the wire.
+/// One agent step under the canonical agent-outcome contract: prompt in (a
+/// bare JSON string on the wire), the `AgentOutcome` record out — the shape
+/// every harness emits from its `wait_result` boundary since #181.
 fn agent_step(
   role: String,
   prompt: String,
-) -> activity.Activity(String, String) {
-  activity.new(role, prompt, text_codec(), text_codec(), unserved(role))
+) -> activity.Activity(String, AgentOutcome) {
+  activity.new(
+    role,
+    prompt,
+    text_codec(),
+    agent.outcome_codec(),
+    unserved(role),
+  )
   |> survives_worker_restart
 }
 
-/// The wire codec for agent prompts and terminal text: a bare JSON string.
+/// The wire codec for agent prompts: a bare JSON string.
 pub fn text_codec() -> codec.Codec(String) {
   codec.json_codec(json.string, decode.string)
 }

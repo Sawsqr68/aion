@@ -1,9 +1,10 @@
 //// Typed activity constructors for the assistant session.
 ////
 //// Both activities are served by the agent-dev worker in production. The
-//// `assistant` agent activity speaks the norn-harness contract: ONE prompt
-//// string in, ONE terminal-text string out — the workflow composes every
-//// prompt (`assistant/prompts`). The worker pins one norn session per
+//// `assistant` agent activity speaks the canonical agent-outcome contract:
+//// ONE prompt string in, the `aion/agent.AgentOutcome` record out (`text` +
+//// `stop_reason`) — the workflow composes every prompt
+//// (`assistant/prompts`). The worker pins one norn session per
 //// activity TYPE per run (`{workflow_id}-assistant` + `--resume-if-exists`),
 //// so every round of this session — each a fresh dispatch of the same
 //// `assistant` activity type — resumes the SAME conversation.
@@ -16,6 +17,7 @@
 //// and it fails loudly saying so.
 
 import aion/activity
+import aion/agent.{type AgentOutcome}
 import aion/codec
 import aion/duration
 import aion/error
@@ -59,20 +61,21 @@ pub fn provision(
   |> survives_worker_restart
 }
 
-/// One assistant round under the norn-harness contract: prompt in, terminal
-/// text out, both plain JSON strings on the wire.
-pub fn assistant(prompt: String) -> activity.Activity(String, String) {
+/// One assistant round under the canonical agent-outcome contract: prompt in
+/// (a bare JSON string on the wire), the `AgentOutcome` record out — the
+/// shape every harness emits from its `wait_result` boundary since #181.
+pub fn assistant(prompt: String) -> activity.Activity(String, AgentOutcome) {
   activity.new(
     "assistant",
     prompt,
     text_codec(),
-    text_codec(),
+    agent.outcome_codec(),
     unserved("assistant"),
   )
   |> survives_worker_restart
 }
 
-/// The wire codec for agent prompts and terminal text: a bare JSON string.
+/// The wire codec for agent prompts: a bare JSON string.
 pub fn text_codec() -> codec.Codec(String) {
   codec.json_codec(json.string, decode.string)
 }

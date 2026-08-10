@@ -19,6 +19,7 @@
 //// carried. `counter_next` (test FFI, process-dictionary scoped) is the
 //// seam for counting dispatches.
 
+import aion/agent.{type AgentOutcome, AgentOutcome}
 import aion/codec
 import aion/error
 import aion/signal
@@ -29,12 +30,14 @@ import assistant_codecs as codecs
 import assistant_io as io
 import gleam/option.{None, Some}
 
-/// One handler per activity the session dispatches.
+/// One handler per activity the session dispatches. The assistant handler
+/// returns the canonical agent-outcome record, exactly as the worker's
+/// harness boundary does since #181.
 pub type Handlers {
   Handlers(
     provision: fn(io.ProvisionInput) ->
       Result(io.Workspace, error.ActivityError),
-    assistant: fn(String) -> Result(String, error.ActivityError),
+    assistant: fn(String) -> Result(AgentOutcome, error.ActivityError),
   )
 }
 
@@ -53,11 +56,13 @@ pub fn base_input() -> io.Input {
 
 /// The baseline: provisioning succeeds deterministically (the test double's
 /// workflow id keys the directory, mirroring production) and the assistant
-/// echoes its prompt into the reply.
+/// echoes its prompt into the reply text of a completed (`end_turn`) outcome.
 pub fn passing() -> Handlers {
   Handlers(
     provision: fn(input) { Ok(io.Workspace(path: "/work/" <> input.run_id)) },
-    assistant: fn(prompt) { Ok("REPLY\n" <> prompt) },
+    assistant: fn(prompt) {
+      Ok(AgentOutcome(text: "REPLY\n" <> prompt, stop_reason: "end_turn"))
+    },
   )
 }
 

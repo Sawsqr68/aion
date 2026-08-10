@@ -7,9 +7,10 @@
 //// with its regenerated artifacts together.
 ////
 //// The scout/dev/review agent activities are deliberately absent from this
-//// module: their wire contract is one prompt string in, one terminal-text
-//// string out (the norn-harness contract), carried by a plain string codec
-//// in `agent_dev/activities` — there is no record shape to declare.
+//// module: their wire contract is one prompt string in, the canonical
+//// agent-outcome record out — and that record is aion's, not this
+//// workflow's, so it is imported from `aion/agent` (type + codec) in
+//// `agent_dev/activities` rather than declared and generated here.
 
 /// The run's terminal disposition. Exhausting a loop budget is a disposition,
 /// never a workflow error: the run completes and the workspace persists for
