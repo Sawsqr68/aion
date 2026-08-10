@@ -78,15 +78,25 @@ A server may also expose an MCP endpoint: `POST /mcp`, on the SAME HTTP
 listener as the console and the workflow API, mounted only when the server's
 config sets `enabled = true` under `[mcp]` — the default is off, and with it
 off the path is a plain 404. It inherits the server's existing authentication
-and namespace authorization (there is no MCP-specific auth), and it implements
-the 2026-07-28 stateless revision: `POST /mcp` only, with `GET` and `DELETE`
-answered 405. `docs/operations/operations.md` carries the authoritative
-section. Never claim an MCP endpoint is live without the operator's config or
-an actual checked response. Do not assume the default endpoint is the operator's
-target, do not start or restart a server, and do not claim a deploy or run
-succeeded unless the actual command or ops console reported it. When server
-access is not explicitly available, finish at a checked `.awl` file and state
-that deploy/run was not performed.
+(there is no MCP-specific auth), and it implements the 2026-07-28 stateless
+revision: `POST /mcp` only, with `GET` and `DELETE` answered 405. It
+publishes thirteen tools. Run tools, which apply the server's namespace
+authorization: `describe_run`, `read_transcript`, `read_history`,
+`list_runs`, `query`, `start_run`, `signal`, `cancel`. Authoring tools over
+the server's AWL workspace, which is deployment-global, not namespaced:
+`list_documents`, `read_document`, `check_document` (any authenticated
+caller), and `save_document` / `deploy_document` (deploy grant required —
+without it they refuse `deploy_denied` and name the missing grant). The
+authoring loop is list/read → edit → `check_document` → `save_document` →
+`deploy_document` with the exact `content_hash` the save returned; deploy
+verifies the SAVED document against that hash, and there is deliberately no
+way to deploy unsaved source. `docs/operations/operations.md` carries the
+authoritative section. Never claim an MCP endpoint is live without the
+operator's config or an actual checked response. Do not assume the default
+endpoint is the operator's target, do not start or restart a server, and do
+not claim a deploy or run succeeded unless the actual command or ops console
+reported it. When server access is not explicitly available, finish at a
+checked `.awl` file and state that deploy/run was not performed.
 
 ## The operator's server state lives in the Aion home
 

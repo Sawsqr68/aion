@@ -296,7 +296,9 @@ enabled = false                         # default; DARK. With it false the
                                         # /mcp endpoint is not mounted and the
                                         # path is a plain 404. An MCP endpoint
                                         # lets a model start and cancel durable
-                                        # executions, so turning it on is an
+                                        # executions and — behind the deploy
+                                        # grant — save and deploy AWL
+                                        # documents, so turning it on is an
                                         # explicit decision
 allowed_origins = []                    # default; EMPTY means no browser
                                         # origin may reach /mcp. A programmatic
@@ -343,8 +345,33 @@ stop_grace_ms = 5000                    # grace given to EACH of SIGTERM and
 The MCP surface is served on the **same HTTP listener** as the console and the
 workflow API — one port, one process — and it inherits the server's existing
 authentication exactly: the caller is resolved by the same extractor every
-other route uses, and the tools apply the same namespace authorization. There
-is no MCP-specific auth to configure and none to drift.
+other route uses. Authorization then follows each tool family's own scope.
+The eight run tools apply the same **namespace authorization** as the
+workflow API — a namespace the caller does not hold answers as not-found.
+The five authoring tools are **not namespace-scoped**: the authoring
+workspace is one deployment-global directory, exactly as it is for the ops
+console studio, so any authenticated caller can list, read, and check, and
+the write pair is gated by the deployment-wide deploy grant instead. There is
+no MCP-specific auth to configure and none to drift.
+
+It publishes **thirteen tools**. Eight drive runs: `describe_run`,
+`read_transcript`, `read_history`, `list_runs`, `query` (reads), and
+`start_run`, `signal`, `cancel` (mutations; `cancel` is the only destructive
+one). Five author AWL documents in the server's authoring workspace
+(`authoring.workspace_dir`) through the same seams the ops console studio
+uses: `list_documents`, `read_document`, and `check_document` need only an
+authenticated caller, while `save_document` and `deploy_document` require the
+**deploy grant** — the same grant `/awl/deploy` requires, carried by the JWT
+`deploy` claim or the development `x-aion-deploy` header — and refuse
+`deploy_denied`, naming the missing grant, without it. Deploy takes
+`{path, content_hash}` and verifies the hash against the **saved** document
+(the hash comes from `save_document` or `read_document`); a mismatch is
+refused as `RevisionMismatch`, and there is deliberately no way to deploy
+unsaved source. With no workspace configured, every authoring tool refuses
+loudly and names `authoring.workspace_dir` — a state only an embedder
+constructing the runtime config directly can reach: a served `aion server`
+always fills the `<home>/authoring` default, so omitting the key does not
+disable MCP authoring.
 
 It implements the **2026-07-28 stateless revision** (`POST /mcp` only; `GET`
 and `DELETE` are 405; no sessions, no SSE resumability, no `initialize`

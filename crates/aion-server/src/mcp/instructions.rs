@@ -59,6 +59,15 @@ without it the call is refused rather than quietly turned into a plain start. Ca
 task stops your WAIT, not the run. Stopping the run is the cancel tool, and cancel is \
 destructive: it records a terminal cancellation the run cannot be talked out of.\n\
 \n\
+AUTHORING IS A LOOP, NOT A GUESS. The server holds one AWL workspace. list_documents and \
+read_document show what exists; check_document runs the checker over source you are drafting \
+(pass its workspace path so schema imports resolve); save_document writes it and hands back a \
+content_hash; deploy_document takes that path and hash and deploys exactly the SAVED document \
+— there is no way to deploy unsaved source. Check before saving, save before deploying, and \
+always deploy the hash you were just handed: a hash that no longer matches the saved document \
+means it changed under you and is refused. save_document and deploy_document need the deploy \
+grant; without it they refuse and name what is missing.\n\
+\n\
 FAILURES ARE INFORMATION. A tool that refuses tells you what went wrong and what to do about \
 it, in the result. Read it and correct the call; do not retry the same call with the same \
 arguments hoping for a different answer, except where the failure explicitly says the fault \
@@ -79,6 +88,9 @@ mod tests {
             "REQUIRES a run_id",
             "unserved",
             "await_completion",
+            "AUTHORING IS A LOOP",
+            "deploys exactly the SAVED document",
+            "deploy grant",
         ] {
             assert!(text.contains(phrase), "instructions must mention {phrase}");
         }

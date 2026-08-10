@@ -1,5 +1,8 @@
 //! Module declarations.
 
+/// `list_documents`, `read_document`, `check_document`, `save_document`, and
+/// `deploy_document`.
+pub(crate) mod authoring;
 /// `signal`, `query`, and `cancel`.
 pub(crate) mod control;
 /// `describe_run` and the current-step projection.

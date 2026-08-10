@@ -1,5 +1,8 @@
 //! Module declarations.
 
+/// The authoring tools: `list_documents`, `read_document`, `check_document`,
+/// `save_document`, `deploy_document`.
+pub(crate) mod authoring;
 /// Catalog assembly and the published tool-name constants.
 pub(crate) mod build;
 /// The mutating tools: `start_run`, `signal`, `cancel`.

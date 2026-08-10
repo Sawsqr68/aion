@@ -30,7 +30,13 @@ const FROZEN_ENTRY: &str = "awl_hello";
 type TestError = Box<dyn std::error::Error>;
 
 struct Harness {
-    workspace: tempfile::TempDir,
+    /// Keep-alive for the on-disk world (same guard shape as the MCP
+    /// harness); never read — `workspace_root` is the path tests use.
+    _workspace: tempfile::TempDir,
+    /// The root the server is actually configured with. Under
+    /// `new_unmaterialized` this is a never-created child of the tempdir, so
+    /// tests must resolve document paths against this, not the tempdir.
+    workspace_root: std::path::PathBuf,
     engine: Arc<Engine>,
     store: Arc<InMemoryStore>,
     state: ServerState,
@@ -39,10 +45,21 @@ struct Harness {
 
 impl Harness {
     async fn new() -> Result<Self, TestError> {
-        Self::new_with_auth(false).await
+        Self::build(false, false).await
     }
 
     async fn new_with_auth(auth_enabled: bool) -> Result<Self, TestError> {
+        Self::build(auth_enabled, false).await
+    }
+
+    /// A freshly started server's world: `authoring.workspace_dir` is
+    /// configured (config resolution always fills it) but the directory has
+    /// never been created — nothing materializes it until the first write.
+    async fn new_unmaterialized() -> Result<Self, TestError> {
+        Self::build(false, true).await
+    }
+
+    async fn build(auth_enabled: bool, unmaterialized: bool) -> Result<Self, TestError> {
         let workspace = tempfile::tempdir()?;
         // `tempfile::tempdir` inherits the umask; the server's private-root
         // validation requires the workspace root itself to be `0700`.
@@ -73,7 +90,12 @@ impl Harness {
             },
             Arc::clone(&engine),
         );
-        let config = runtime_config(workspace.path().to_path_buf(), template_root, auth_enabled);
+        let workspace_root = if unmaterialized {
+            workspace.path().join("never-created")
+        } else {
+            workspace.path().to_path_buf()
+        };
+        let config = runtime_config(workspace_root.clone(), template_root, auth_enabled);
         #[cfg(feature = "auth")]
         let state = if auth_enabled {
             let mut config = config;
@@ -92,7 +114,8 @@ impl Harness {
         let state = ServerState::from_parts(resolver, config);
         let router = http_router(state.clone())?;
         Ok(Self {
-            workspace,
+            _workspace: workspace,
+            workspace_root,
             engine,
             store,
             state,
@@ -101,7 +124,7 @@ impl Harness {
     }
 
     fn workspace(&self) -> &std::path::Path {
-        self.workspace.path()
+        &self.workspace_root
     }
 }
 
@@ -423,6 +446,63 @@ async fn awl_draining_checker_refusal_is_unavailable_before_revision_or_compile(
         "server is draining and not accepting authoring submissions"
     );
     assert_ne!(body["error_type"], "DirectCompile");
+    Ok(())
+}
+
+/// Deploying a path that was never saved is the same refusal the document
+/// routes give for that path — `404` with `error_type: DocumentNotFound` —
+/// never a stringified revision-record fault. Deliberate pin for the typed
+/// `RunLoopError::Document` path, asserted in BOTH worlds: a workspace that
+/// exists (already written to) and a fresh server whose configured workspace
+/// directory was never created. The fresh world used to answer this with a
+/// raw ENOENT dressed as a 500 `DocumentIoError`.
+#[tokio::test]
+async fn awl_deploy_of_a_nonexistent_path_is_404_document_not_found() -> Result<(), TestError> {
+    for (world, harness) in [
+        ("materialized workspace", Harness::new().await?),
+        ("fresh server", Harness::new_unmaterialized().await?),
+    ] {
+        let response = deploy_request(&harness.router, "never_saved.awl", &"0".repeat(64)).await?;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{world}");
+        let body = read_json(response).await?;
+        assert_eq!(body["error_type"], "DocumentNotFound", "{world}: {body}");
+        assert!(
+            body["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("never_saved.awl")),
+            "{world}: the refusal must name the missing document: {body}"
+        );
+    }
+    Ok(())
+}
+
+/// A schema import that resolves to a symlink is refused during deploy as its
+/// own typed document class — `400` with `error_type: InvalidDocumentPath`
+/// and the link named — never flattened into a stringified `RevisionStore`
+/// fault. Pins the typed `stage_schema_imports` path inside deploy.
+#[cfg(unix)]
+#[tokio::test]
+async fn awl_deploy_with_a_symlinked_schema_import_is_a_typed_document_refusal()
+-> Result<(), TestError> {
+    use std::os::unix::fs::symlink;
+
+    let harness = Harness::new().await?;
+    let source = "//! Symlinked schema import probe.\nworkflow linked_import\n  input submission: Submission\n  outcome done: type Done, route success\n\ntype Submission = schema(\"linked.schema.json\")\ntype Done { value: String }\n\nstep finish\n  route done(value: \"ok\")\n";
+    let content_hash = save_document(&harness.router, "linked_import.awl", source).await?;
+    // The import target is a symlink; confinement refuses to follow ANY link,
+    // wherever it points, so the target's own path never matters.
+    symlink("/etc/hosts", harness.workspace().join("linked.schema.json"))?;
+
+    let response = deploy_request(&harness.router, "linked_import.awl", &content_hash).await?;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = read_json(response).await?;
+    assert_eq!(body["error_type"], "InvalidDocumentPath", "{body}");
+    assert!(
+        body["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("contains a link")),
+        "the refusal must say what was wrong with the import: {body}"
+    );
     Ok(())
 }
 

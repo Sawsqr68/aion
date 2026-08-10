@@ -67,6 +67,45 @@ pub enum DocumentError {
     },
 }
 
+impl DocumentError {
+    /// The stable wire `error_type` label for this failure class.
+    ///
+    /// One vocabulary in one place: the HTTP studio routes and the MCP
+    /// authoring tools both label their refusals through this, so a caller
+    /// branching on `error_type` sees the same word whichever surface it used.
+    #[must_use]
+    pub fn error_type(&self) -> &'static str {
+        match self {
+            Self::InvalidPath(_) => "InvalidDocumentPath",
+            Self::InvalidName(_) => "InvalidDocumentName",
+            Self::NotFound(_) => "DocumentNotFound",
+            Self::Exists(_) => "DocumentExists",
+            Self::WorkspaceUnconfigured => "AuthoringWorkspaceUnconfigured",
+            Self::Io(_) => "DocumentIoError",
+            Self::CreateRollbackFailed { .. } => "DocumentCreateRollbackFailed",
+        }
+    }
+
+    /// The wire form of this failure: code class and `error_type` together.
+    ///
+    /// The class mapping lives HERE, next to the variants, so every surface
+    /// that carries a document refusal — the run-loop deploy path and the MCP
+    /// tools alike — answers with the same code for the same failure.
+    #[must_use]
+    pub fn to_wire_error(&self) -> aion_proto::WireError {
+        let wire = match self {
+            Self::NotFound(_) => aion_proto::WireError::not_found(self.to_string()),
+            Self::InvalidPath(_) | Self::InvalidName(_) | Self::Exists(_) => {
+                aion_proto::WireError::invalid_input(self.to_string())
+            }
+            Self::WorkspaceUnconfigured | Self::Io(_) | Self::CreateRollbackFailed { .. } => {
+                aion_proto::WireError::backend(self.to_string())
+            }
+        };
+        wire.with_error_type(self.error_type())
+    }
+}
+
 pub async fn list(root: &Path) -> Result<Vec<DocumentEntry>, DocumentError> {
     let root = root.to_owned();
     blocking("document listing", move || {
@@ -98,7 +137,19 @@ pub async fn read(root: &Path, requested: &str) -> Result<DocumentResponse, Docu
     let root = root.to_owned();
     let requested = requested.to_owned();
     let source = blocking("document read", move || {
-        let workspace = ConfinedDir::open(&root).map_err(DocumentError::Io)?;
+        // A workspace root that does not exist yet is the module's normal
+        // fresh-server state (nothing creates the configured directory until
+        // the first write), and a document in a workspace that does not exist
+        // is exactly as not-found as a document missing from one that does.
+        // Only ENOENT takes this branch; EACCES/ELOOP/ENOTDIR still surface
+        // as the I/O faults they are.
+        let workspace = match ConfinedDir::open(&root) {
+            Ok(workspace) => workspace,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Err(DocumentError::NotFound(requested));
+            }
+            Err(error) => return Err(DocumentError::Io(error)),
+        };
         workspace.read_to_string(&relative).map_err(|error| {
             if error.kind() == io::ErrorKind::NotFound {
                 DocumentError::NotFound(requested)
@@ -298,6 +349,26 @@ mod tests {
         let workspace = parent.path().join("aion-authoring");
         assert!(list(&workspace).await?.is_empty());
         assert!(!workspace.exists());
+        Ok(())
+    }
+
+    /// The read twin of the listing test above: on a fresh server the
+    /// configured workspace directory does not exist until the first write,
+    /// and a read against that absence is `NotFound` — the same refusal, with
+    /// the same guidance downstream, as a document missing from a workspace
+    /// that does exist — never a raw ENOENT dressed as an I/O fault. And the
+    /// read must not materialize the directory as a side effect.
+    #[tokio::test]
+    async fn missing_workspace_reads_not_found_without_materializing_it()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let parent = crate::test_support::private_tempdir()?;
+        let workspace = parent.path().join("never-created");
+        let refusal = read(&workspace, "any.awl").await;
+        assert!(
+            matches!(refusal, Err(DocumentError::NotFound(ref path)) if path == "any.awl"),
+            "expected NotFound(any.awl), got {refusal:?}"
+        );
+        assert!(!workspace.exists(), "the read materialized the workspace");
         Ok(())
     }
 

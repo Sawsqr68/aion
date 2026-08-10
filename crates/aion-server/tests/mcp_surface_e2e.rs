@@ -156,7 +156,13 @@ fn transcript_event(run_id: RunId, worker_seq: u64, text: &str) -> ActivityEvent
     }
 }
 
-fn runtime_config(mcp_enabled: bool) -> RuntimeConfig {
+/// Shared-secret bearer accepted by the auth-on dev-token path
+/// (`auth.enabled = true`, `not(feature = "auth")`), mirroring the
+/// `deploy_api_e2e` convention.
+#[cfg(not(feature = "auth"))]
+const AUTH_ON_TOKEN: &str = "mcp-authoring-secret";
+
+fn runtime_config(mcp_enabled: bool, options: &HarnessOptions) -> RuntimeConfig {
     RuntimeConfig {
         listen: ListenConfig {
             grpc: SocketAddr::from(([127, 0, 0, 1], 0)),
@@ -164,8 +170,8 @@ fn runtime_config(mcp_enabled: bool) -> RuntimeConfig {
         },
         tls: None,
         auth: AuthConfig {
-            enabled: false,
-            jwks_url: None,
+            enabled: options.auth_enabled,
+            jwks_url: options.auth_token.map(str::to_owned),
             jwks_refresh_seconds: 300,
         },
         ops_console: OpsConsoleConfig {
@@ -185,7 +191,11 @@ fn runtime_config(mcp_enabled: bool) -> RuntimeConfig {
         },
         workflow_packages: Vec::new(),
         deploy: DeployConfig::default(),
-        authoring: AuthoringConfig::default(),
+        authoring: AuthoringConfig {
+            gleam_path: None,
+            project_root: None,
+            workspace_dir: options.workspace_dir.clone(),
+        },
         dev: aion_server::config::DevConfig::default(),
         outbox: aion_server::config::OutboxConfig::default(),
         observability: aion_server::config::ObservabilityConfig::default(),
@@ -206,14 +216,87 @@ fn runtime_config(mcp_enabled: bool) -> RuntimeConfig {
     }
 }
 
+/// How a harness is configured beyond the MCP switch.
+#[derive(Default)]
+struct HarnessOptions {
+    /// The authoring workspace root, when the harness carries one. The default
+    /// harness carries none, which is exactly the unconfigured-workspace state
+    /// the authoring tools must refuse loudly.
+    workspace_dir: Option<std::path::PathBuf>,
+    /// Whether the server authenticates callers. Off means every caller is the
+    /// operator and already holds the deploy grant.
+    auth_enabled: bool,
+    /// The dev-token shared secret, when `auth_enabled` uses the
+    /// `not(feature = "auth")` token path.
+    auth_token: Option<&'static str>,
+}
+
+/// A private (0700) tempdir for the authoring workspace, per the server's
+/// private-root requirement and the e2e convention in `awl_deploy_direct_e2e`.
+fn private_workspace() -> Result<tempfile::TempDir, Box<dyn std::error::Error>> {
+    let workspace = tempfile::tempdir()?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(workspace.path(), std::fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(workspace)
+}
+
 /// A server whose store already holds the colliding chain, and whose transcript
 /// keyspace already holds two events on the shared stream.
 struct Harness {
     router: Router,
+    /// Keeps the authoring workspace alive for the harness's lifetime.
+    _workspace: Option<tempfile::TempDir>,
 }
 
 impl Harness {
     async fn start(mcp_enabled: bool) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::start_configured(mcp_enabled, None, HarnessOptions::default()).await
+    }
+
+    /// A harness with a real, private authoring workspace and auth off: the
+    /// caller is the operator and holds the deploy grant.
+    async fn start_authoring() -> Result<Self, Box<dyn std::error::Error>> {
+        let workspace = private_workspace()?;
+        let options = HarnessOptions {
+            workspace_dir: Some(workspace.path().to_path_buf()),
+            ..HarnessOptions::default()
+        };
+        Self::start_configured(true, Some(workspace), options).await
+    }
+
+    /// A freshly started server's world: `authoring.workspace_dir` is
+    /// configured (config resolution always fills it) but the directory was
+    /// never created — nothing materializes it until the first write.
+    async fn start_authoring_unmaterialized() -> Result<Self, Box<dyn std::error::Error>> {
+        let workspace = private_workspace()?;
+        let options = HarnessOptions {
+            workspace_dir: Some(workspace.path().join("never-created")),
+            ..HarnessOptions::default()
+        };
+        Self::start_configured(true, Some(workspace), options).await
+    }
+
+    /// A harness with a workspace AND authentication on (dev-token path), so a
+    /// caller can be authenticated while NOT holding the deploy grant.
+    #[cfg(not(feature = "auth"))]
+    async fn start_authoring_with_auth() -> Result<Self, Box<dyn std::error::Error>> {
+        let workspace = private_workspace()?;
+        let options = HarnessOptions {
+            workspace_dir: Some(workspace.path().to_path_buf()),
+            auth_enabled: true,
+            auth_token: Some(AUTH_ON_TOKEN),
+        };
+        Self::start_configured(true, Some(workspace), options).await
+    }
+
+    async fn start_configured(
+        mcp_enabled: bool,
+        workspace: Option<tempfile::TempDir>,
+        options: HarnessOptions,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let backing = Arc::new(InMemoryStore::default());
         let store: Arc<dyn EventStore> = backing.clone();
         let visibility: Arc<dyn VisibilityStore> = backing;
@@ -241,7 +324,7 @@ impl Harness {
             Arc::new(ownership),
             Arc::new(StaticScheduleNamespaces::default()),
         );
-        let state = ServerState::from_parts(resolver, runtime_config(mcp_enabled));
+        let state = ServerState::from_parts(resolver, runtime_config(mcp_enabled, &options));
         // Generation one's transcript sits on ITS OWN stream: the run is an
         // axis of the durable key, so this event must never surface in a read
         // addressed to generation two. The commit-allocated `store_seq` is
@@ -264,6 +347,7 @@ impl Harness {
         }
         Ok(Self {
             router: http_router(state)?,
+            _workspace: workspace,
         })
     }
 
@@ -559,7 +643,7 @@ async fn the_tasks_extension_is_advertised_only_to_a_declaring_client() -> TestR
 }
 
 #[tokio::test]
-async fn tools_list_publishes_eight_fully_annotated_tools() -> TestResult {
+async fn tools_list_publishes_thirteen_fully_annotated_tools() -> TestResult {
     let harness = Harness::start(true).await?;
     let (status, value) = harness
         .post(&rpc("tools/list", &json!({ "_meta": meta(false) })), &[])
@@ -580,9 +664,14 @@ async fn tools_list_publishes_eight_fully_annotated_tools() -> TestResult {
             "read_history",
             "list_runs",
             "query",
+            "list_documents",
+            "read_document",
+            "check_document",
             "start_run",
             "signal",
             "cancel",
+            "save_document",
+            "deploy_document",
         ]
     );
     for tool in tools {
@@ -603,9 +692,20 @@ async fn tools_list_publishes_eight_fully_annotated_tools() -> TestResult {
         let read_only = tool["annotations"]["readOnlyHint"] == json!(true);
         let is_read_tool = matches!(
             tool["name"].as_str().unwrap_or_default(),
-            "describe_run" | "read_transcript" | "read_history" | "list_runs" | "query"
+            "describe_run"
+                | "read_transcript"
+                | "read_history"
+                | "list_runs"
+                | "query"
+                | "list_documents"
+                | "read_document"
+                | "check_document"
         );
         assert_eq!(read_only, is_read_tool, "{}", tool["name"]);
+        // Cancel stays the ONLY destructive tool: the authoring mutations are
+        // revision-retaining (save) and content-hash-additive (deploy).
+        let destructive = tool["annotations"]["destructiveHint"] == json!(true);
+        assert_eq!(destructive, tool["name"] == "cancel", "{}", tool["name"]);
     }
     assert_eq!(value["result"]["cacheScope"], "private");
     assert!(value["result"]["ttlMs"].as_u64().is_some());
@@ -1239,6 +1339,465 @@ async fn tasks_methods_are_gated_and_unknown_ids_are_minus_32602() -> TestResult
     }
     Ok(())
 }
+
+// ---------------------------------------------------------------- authoring
+
+/// A checker-green document that needs no worker: deployable end to end with
+/// nothing connected, mirroring `awl_deploy_direct_e2e::workerless_source`.
+fn workerless_source(name: &str) -> String {
+    format!(
+        "//! MCP authoring fixture.\nworkflow {name}\n  outcome done: type Done, route success\n\ntype Done {{ value: String }}\n\nstep finish\n  route done(value: \"ok\")\n"
+    )
+}
+
+/// A document the checker refuses: `missing` is not a declared value.
+const CHECK_REFUSED: &str = "//! Focused checker refusal.\nworkflow mcp_check_refused\n  outcome done: type Done, route success\n\ntype Done { value: String }\n\nstep finish\n  route done(value: missing)\n";
+
+/// The failure text of a refused call, so assertions read the refusal.
+fn refusal_text(value: &Value) -> String {
+    value["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned()
+}
+
+/// The machine-readable failure detail of a refused call: the second content
+/// block carries the `{code, message, error_type}` JSON a programmatic caller
+/// branches on.
+fn refusal_detail(value: &Value) -> Result<Value, Box<dyn std::error::Error>> {
+    let text = value["result"]["content"][1]["text"]
+        .as_str()
+        .ok_or_else(|| format!("no detail content block in {value}"))?;
+    Ok(serde_json::from_str(text)?)
+}
+
+/// The whole loop the tools exist for, through the real router: list an empty
+/// workspace, check a draft, save it, read it back byte-identical, see it
+/// listed, and deploy exactly the saved revision.
+#[tokio::test]
+async fn the_authoring_loop_lists_checks_saves_and_deploys() -> TestResult {
+    let harness = Harness::start_authoring().await?;
+
+    // An empty workspace is a normal starting state, not an error.
+    let (status, value) = harness
+        .post(&call("list_documents", &json!({}), false), &[])
+        .await?;
+    assert_eq!(status, StatusCode::OK);
+    let listed = structured(&value)?;
+    assert_eq!(listed["count"], 0);
+    assert_eq!(listed["documents"].as_array().map(Vec::len), Some(0));
+
+    // The draft checks green before anything is written.
+    let source = workerless_source("mcp_authoring_loop");
+    let (status, value) = harness
+        .post(
+            &call(
+                "check_document",
+                &json!({ "source": source, "path": "mcp_authoring_loop.awl" }),
+                false,
+            ),
+            &[],
+        )
+        .await?;
+    assert_eq!(status, StatusCode::OK);
+    let checked = structured(&value)?;
+    assert_eq!(checked["ok"], true);
+    assert_eq!(checked["deploys_green"], true);
+    assert_eq!(checked["diagnostics"].as_array().map(Vec::len), Some(0));
+    assert_eq!(checked["steps"], 1);
+
+    // Save hands back the revision identity.
+    let (status, value) = harness
+        .post(
+            &call(
+                "save_document",
+                &json!({ "path": "mcp_authoring_loop.awl", "source": source }),
+                false,
+            ),
+            &[],
+        )
+        .await?;
+    assert_eq!(status, StatusCode::OK);
+    let saved = structured(&value)?;
+    let content_hash = saved["content_hash"]
+        .as_str()
+        .ok_or("save_document must return content_hash")?
+        .to_owned();
+    assert!(!content_hash.is_empty());
+    assert_eq!(saved["path"], "mcp_authoring_loop.awl");
+
+    // Read-back is byte-identical and carries the same hash.
+    let (_status, value) = harness
+        .post(
+            &call(
+                "read_document",
+                &json!({ "path": "mcp_authoring_loop.awl" }),
+                false,
+            ),
+            &[],
+        )
+        .await?;
+    let read_back = structured(&value)?;
+    assert_eq!(read_back["source"], source);
+    assert_eq!(read_back["content_hash"], content_hash);
+
+    // The listing now shows it.
+    let (_status, value) = harness
+        .post(&call("list_documents", &json!({}), false), &[])
+        .await?;
+    let listed = structured(&value)?;
+    assert_eq!(listed["count"], 1);
+    assert_eq!(listed["documents"][0]["path"], "mcp_authoring_loop.awl");
+    assert_eq!(listed["documents"][0]["name"], "mcp_authoring_loop");
+
+    // Deploy exactly the saved revision, with the hash save handed back.
+    let (status, value) = harness
+        .post(
+            &call(
+                "deploy_document",
+                &json!({ "path": "mcp_authoring_loop.awl", "content_hash": content_hash }),
+                false,
+            ),
+            &[],
+        )
+        .await?;
+    assert_eq!(status, StatusCode::OK);
+    let deployed = structured(&value)?;
+    assert_eq!(
+        deployed["deployment"]["document_path"],
+        "mcp_authoring_loop.awl"
+    );
+    assert_eq!(deployed["deployment"]["content_hash"], content_hash);
+    assert_eq!(
+        deployed["deployment"]["workflow_type"],
+        "mcp_authoring_loop"
+    );
+    assert!(
+        deployed["deployment"]["package_id"]
+            .as_str()
+            .is_some_and(|id| !id.is_empty()),
+        "a deployment must name the loaded package"
+    );
+    let steps: Vec<&str> = deployed["steps"]
+        .as_array()
+        .ok_or("steps must be an array")?
+        .iter()
+        .filter_map(|step| step["step"].as_str())
+        .collect();
+    assert_eq!(steps, vec!["check", "compile", "package", "deploy"]);
+    Ok(())
+}
+
+/// Diagnostics are the RESULT of a successful check call, not a failure: the
+/// model reads them, with line and column, and corrects the source.
+#[tokio::test]
+async fn check_document_returns_findings_on_a_bad_document() -> TestResult {
+    let harness = Harness::start_authoring().await?;
+    let (status, value) = harness
+        .post(
+            &call("check_document", &json!({ "source": CHECK_REFUSED }), false),
+            &[],
+        )
+        .await?;
+    assert_eq!(status, StatusCode::OK);
+    let checked = structured(&value)?;
+    assert_eq!(checked["deploys_green"], false);
+    let diagnostics = checked["diagnostics"]
+        .as_array()
+        .ok_or("diagnostics must be an array")?;
+    assert!(
+        !diagnostics.is_empty(),
+        "a refused document must carry at least one diagnostic"
+    );
+    for diagnostic in diagnostics {
+        assert!(
+            diagnostic["message"]
+                .as_str()
+                .is_some_and(|message| !message.is_empty()),
+            "{diagnostic}"
+        );
+        assert!(diagnostic["line"].as_u64().is_some(), "{diagnostic}");
+        assert!(diagnostic["column"].as_u64().is_some(), "{diagnostic}");
+    }
+
+    // An unparsable document is also findings, never a crash: ok is false and
+    // the parse error carries its position.
+    let (status, value) = harness
+        .post(
+            &call("check_document", &json!({ "source": "workflow" }), false),
+            &[],
+        )
+        .await?;
+    assert_eq!(status, StatusCode::OK);
+    let checked = structured(&value)?;
+    assert_eq!(checked["ok"], false);
+    assert_eq!(checked["deploys_green"], false);
+    assert!(
+        checked["diagnostics"]
+            .as_array()
+            .is_some_and(|list| !list.is_empty())
+    );
+    Ok(())
+}
+
+/// The check result is a bounded projection, proven against a REAL document.
+///
+/// `CheckResponse` carries a `semantic` index (spans, types, graph, studio
+/// layout) that weighs hundreds of kilobytes on a document of production size
+/// — and the MCP transport serializes every result twice (structuredContent
+/// plus the text copy). The invariant asserted here is the field set itself:
+/// a green check of a multi-hundred-line production document comes back as
+/// EXACTLY {`ok`, `deploys_green`, `steps`, `diagnostics`} — no `semantic` key, and
+/// no other key this test has not named. Green matters for non-vacuity: on a
+/// green check the seam DOES produce a semantic index, so its absence here
+/// proves the projection dropped it rather than the checker never making it.
+#[tokio::test]
+async fn check_document_projects_a_bounded_result_even_for_a_large_document() -> TestResult {
+    const PRODUCTION_DOCUMENT: &str = include_str!("../../../examples/dev-brief/awl/dev_brief.awl");
+    assert!(
+        PRODUCTION_DOCUMENT.lines().count() > 150,
+        "the fixture must be a document of production size"
+    );
+    let harness = Harness::start_authoring().await?;
+    let (status, value) = harness
+        .post(
+            &call(
+                "check_document",
+                &json!({ "source": PRODUCTION_DOCUMENT, "path": "dev_brief.awl" }),
+                false,
+            ),
+            &[],
+        )
+        .await?;
+    assert_eq!(status, StatusCode::OK);
+    let checked = structured(&value)?;
+    assert_eq!(checked["ok"], true, "{checked}");
+    assert_eq!(checked["deploys_green"], true, "{checked}");
+    let mut keys: Vec<&str> = checked
+        .as_object()
+        .ok_or("check result must be an object")?
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(
+        keys,
+        vec!["deploys_green", "diagnostics", "ok", "steps"],
+        "the MCP check result is exactly the projection — the semantic index \
+         belongs to the HTTP /awl/check surface, not to a model's context"
+    );
+    Ok(())
+}
+
+/// Deploying or reading a path that was never saved is a DOCUMENT refusal —
+/// `DocumentNotFound`, with `list_documents` guidance — never an opaque
+/// revision-record fault or a raw errno. Asserted in BOTH worlds: a workspace
+/// that exists (already written to) and a fresh server whose configured
+/// workspace directory was never created. The fresh world used to answer
+/// with `backend`/`DocumentIoError` ("os error 2") and no guidance.
+#[tokio::test]
+async fn a_nonexistent_path_is_a_document_not_found_refusal_in_both_worlds() -> TestResult {
+    for (world, harness) in [
+        ("materialized workspace", Harness::start_authoring().await?),
+        (
+            "fresh server",
+            Harness::start_authoring_unmaterialized().await?,
+        ),
+    ] {
+        for (tool, arguments) in [
+            ("read_document", json!({ "path": "never_saved.awl" })),
+            (
+                "deploy_document",
+                json!({ "path": "never_saved.awl", "content_hash": "0".repeat(64) }),
+            ),
+        ] {
+            let (status, value) = harness.post(&call(tool, &arguments, false), &[]).await?;
+            assert_eq!(status, StatusCode::OK, "{world}/{tool}");
+            assert_eq!(value["result"]["isError"], true, "{world}/{tool}: {value}");
+            let detail = refusal_detail(&value)?;
+            assert_eq!(
+                detail["error_type"], "DocumentNotFound",
+                "{world}/{tool}: {value}"
+            );
+            assert_eq!(detail["code"], "not_found", "{world}/{tool}: {value}");
+            let text = refusal_text(&value);
+            assert!(
+                text.contains("list_documents"),
+                "{world}/{tool}: the refusal must point at the tool that shows what exists: {text}"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// A hash that does not match the saved document is the `RevisionMismatch`
+/// refusal, telling the model how to recover — never a deploy of the wrong
+/// bytes.
+#[tokio::test]
+async fn a_stale_hash_is_refused_as_a_revision_mismatch() -> TestResult {
+    let harness = Harness::start_authoring().await?;
+    let source = workerless_source("mcp_stale_hash");
+    let (_status, value) = harness
+        .post(
+            &call(
+                "save_document",
+                &json!({ "path": "mcp_stale_hash.awl", "source": source }),
+                false,
+            ),
+            &[],
+        )
+        .await?;
+    drop(structured(&value)?);
+
+    let (status, value) = harness
+        .post(
+            &call(
+                "deploy_document",
+                &json!({ "path": "mcp_stale_hash.awl", "content_hash": "0".repeat(64) }),
+                false,
+            ),
+            &[],
+        )
+        .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(value["result"]["isError"], true);
+    let text = refusal_text(&value);
+    assert!(text.contains("does not match the saved document"), "{text}");
+    assert!(
+        text.contains("Re-read"),
+        "the refusal must say how to recover: {text}"
+    );
+    let detail = refusal_detail(&value)?;
+    assert_eq!(detail["error_type"], "RevisionMismatch", "{value}");
+    assert_eq!(detail["code"], "invalid_input", "{value}");
+    Ok(())
+}
+
+/// The default harness carries NO workspace: every authoring tool must refuse
+/// loudly and name the operator knob, never invent a directory.
+#[tokio::test]
+async fn an_unconfigured_workspace_is_a_loud_refusal_naming_the_knob() -> TestResult {
+    let harness = Harness::start(true).await?;
+    for (tool, arguments) in [
+        ("list_documents", json!({})),
+        ("read_document", json!({ "path": "any.awl" })),
+        ("check_document", json!({ "source": "workflow x\n" })),
+        ("save_document", json!({ "path": "any.awl", "source": "x" })),
+        (
+            "deploy_document",
+            json!({ "path": "any.awl", "content_hash": "0".repeat(64) }),
+        ),
+    ] {
+        let (status, value) = harness.post(&call(tool, &arguments, false), &[]).await?;
+        assert_eq!(status, StatusCode::OK, "{tool}");
+        assert_eq!(value["result"]["isError"], true, "{tool}: {value}");
+        let text = refusal_text(&value);
+        assert!(
+            text.contains("authoring.workspace_dir"),
+            "{tool} must name the missing configuration: {text}"
+        );
+    }
+    Ok(())
+}
+
+/// The write half of the loop is behind the deploy grant; the read half needs
+/// only authentication. An authenticated caller WITHOUT the grant can list,
+/// read, and check — and is refused `deploy_denied`, with the missing grant
+/// named, on save and deploy. The same caller WITH the grant saves cleanly.
+///
+/// Runs on the dev-token auth path (`auth.enabled = true` without the `auth`
+/// feature), the same convention `deploy_api_e2e` uses.
+#[cfg(not(feature = "auth"))]
+#[tokio::test]
+async fn save_and_deploy_without_the_deploy_grant_are_refused_deploy_denied() -> TestResult {
+    let harness = Harness::start_authoring_with_auth().await?;
+    let authenticated: &[(&str, &str)] = &[
+        ("authorization", "Bearer mcp-authoring-secret"),
+        ("x-aion-subject", "authoring-caller"),
+        ("x-aion-namespaces", NAMESPACE),
+    ];
+    let granted: &[(&str, &str)] = &[
+        ("authorization", "Bearer mcp-authoring-secret"),
+        ("x-aion-subject", "authoring-caller"),
+        ("x-aion-namespaces", NAMESPACE),
+        ("x-aion-deploy", "true"),
+    ];
+    let source = workerless_source("mcp_grant_gate");
+
+    // The read half works without the grant.
+    let (status, value) = harness
+        .post(&call("list_documents", &json!({}), false), authenticated)
+        .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(structured(&value)?["count"], 0);
+    let (_status, value) = harness
+        .post(
+            &call("check_document", &json!({ "source": source }), false),
+            authenticated,
+        )
+        .await?;
+    assert_eq!(structured(&value)?["deploys_green"], true);
+
+    // The write half refuses with the grant named.
+    for (tool, arguments) in [
+        (
+            "save_document",
+            json!({ "path": "mcp_grant_gate.awl", "source": source }),
+        ),
+        (
+            "deploy_document",
+            json!({ "path": "mcp_grant_gate.awl", "content_hash": "0".repeat(64) }),
+        ),
+    ] {
+        let (status, value) = harness
+            .post(&call(tool, &arguments, false), authenticated)
+            .await?;
+        assert_eq!(status, StatusCode::OK, "{tool}");
+        assert_eq!(
+            value["result"]["isError"], true,
+            "{tool} must refuse without the deploy grant: {value}"
+        );
+        assert_eq!(
+            refusal_detail(&value)?["code"],
+            "deploy_denied",
+            "{tool}: {value}"
+        );
+        let text = refusal_text(&value);
+        assert!(
+            text.contains("deploy grant") && text.contains("x-aion-deploy"),
+            "{tool} must name the missing grant and the knob that carries it: {text}"
+        );
+    }
+
+    // An unauthenticated caller does not even reach the read half.
+    let (status, value) = harness
+        .post(&call("list_documents", &json!({}), false), &[])
+        .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(value["result"]["isError"], true, "{value}");
+
+    // The SAME caller with the grant saves cleanly: the gate is the grant,
+    // nothing else.
+    let (status, value) = harness
+        .post(
+            &call(
+                "save_document",
+                &json!({ "path": "mcp_grant_gate.awl", "source": source }),
+                false,
+            ),
+            granted,
+        )
+        .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        structured(&value)?["content_hash"]
+            .as_str()
+            .is_some_and(|hash| !hash.is_empty())
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------- tasks (cont)
 
 #[tokio::test]
 async fn tasks_cancel_is_acknowledged_empty_and_stops_the_wait() -> TestResult {

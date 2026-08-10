@@ -30,7 +30,11 @@ pub(crate) fn tool_failure(error: &WireError) -> ToolFailure {
 }
 
 /// The stable, client-branchable label for a wire code.
-fn wire_code_label(code: WireErrorCode) -> &'static str {
+///
+/// `pub(crate)` so every tool failure — including the authoring failures that
+/// carry their own guidance instead of riding [`tool_failure`] — spells its
+/// code through this one vocabulary.
+pub(crate) fn wire_code_label(code: WireErrorCode) -> &'static str {
     match code {
         WireErrorCode::NotFound => "not_found",
         WireErrorCode::NamespaceDenied => "namespace_denied",
@@ -74,11 +78,15 @@ fn guidance_for(code: WireErrorCode) -> Option<&'static str> {
             "this is a retryable routing or write race, not a mistake in your request. Retry \
              the same call",
         ),
+        WireErrorCode::DeployDenied => Some(
+            "saving or deploying needs the deploy grant, which your credential does not carry. \
+             The refusal names the exact knob that grants it; ask the operator to grant your \
+             subject deploy, and do not retry until it is granted",
+        ),
         WireErrorCode::InvalidInput
         | WireErrorCode::Lagged
         | WireErrorCode::Backend
         | WireErrorCode::QueryFailed
-        | WireErrorCode::DeployDenied
         | WireErrorCode::VersionPinned
         | WireErrorCode::InvalidState => None,
     }
@@ -96,6 +104,29 @@ mod tests {
         assert_eq!(failure.detail["code"], "not_found");
         assert!(failure.message.contains("workflow x was not found"));
         assert!(failure.message.contains("do not retry with a guessed one"));
+    }
+
+    /// A deploy denial must teach the model what is missing — the grant — not
+    /// just that it was denied: the wire message already names the exact knob,
+    /// and the appended guidance says what class of thing that knob is and
+    /// that retrying without it is pointless.
+    #[test]
+    fn a_deploy_denial_names_the_missing_grant_and_forbids_blind_retry() {
+        let failure = tool_failure(&WireError::deploy_denied(
+            "subject `assistant` is not authorized to deploy; \
+             set x-aion-deploy: true for subject `assistant`",
+        ));
+        assert_eq!(failure.detail["code"], "deploy_denied");
+        assert!(
+            failure.message.contains("deploy grant"),
+            "{}",
+            failure.message
+        );
+        assert!(
+            failure.message.contains("x-aion-deploy"),
+            "the wire message's own hint must survive the rewrite: {}",
+            failure.message
+        );
     }
 
     #[test]

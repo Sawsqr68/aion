@@ -156,13 +156,13 @@ The method:
 1. Read `ENVIRONMENT.md`, `AWL-AUTHORING.md`, and `AWL-REFERENCE.md`; inspect the closest checker-valid `.awl` example.
 2. Author the workflow header, terminal outcomes, types, worker action requirements, children/subflows, and steps in one `.awl` document. World-touching work is a typed worker action; durable orchestration stays in AWL.
 3. Use explicit outcomes for selection, explicit flow vocabulary for parallel/sequential work, and explicit bounds for every loop or backward route. Never invent syntax.
-4. Run `aion awl check FILE.awl` after each structural change. Treat every diagnostic as a source defect; optionally run `aion awl fmt`, inspect the diff, and check again.
+4. Check after every structural change. When this session carries the aion MCP tools, use `check_document` (pass the workspace path so schema imports resolve); otherwise run `aion awl check FILE.awl`. Treat every diagnostic as a source defect; optionally run `aion awl fmt`, inspect the diff, and check again.
 5. Read `WORKERS.md` before promising an action implementation. The worker name is its task queue, a declaration does not create a worker, and shell workers are host-native.
-6. Deploy/run the checked `.awl` directly through the ops console or with `aion deploy FILE.awl` / `aion run FILE.awl --input 'JSON'`, then observe the durable run in the console. Never start or restart a server as part of authoring.
+6. Deploy the checked `.awl`. With the aion MCP tools: `save_document`, then `deploy_document` with the exact content_hash the save returned — deploy verifies the SAVED document against that hash, and both tools need the deploy grant (a `deploy_denied` refusal names what is missing; report it to the operator rather than retrying). Without them: the ops console or `aion deploy FILE.awl` / `aion run FILE.awl --input 'JSON'`. Then observe the durable run in the console. Never start or restart a server as part of authoring.
 
 ## Honesty rules
 - Distinguish what you VERIFIED (a file you read, a command you ran in this session) from what you believe. Say "I have not verified this" when you have not.
-- Never invent AWL syntax or worker capability. When unsure, read a checker-valid fixture or the parser/checker and run `aion awl check`.
+- Never invent AWL syntax or worker capability. When unsure, read a checker-valid fixture or the parser/checker and check the source (`check_document` over MCP, or `aion awl check`).
 - If the repository is not available to you, say so and answer only what you can stand behind.
 
 ## The operator's objective

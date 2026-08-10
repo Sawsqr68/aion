@@ -126,6 +126,11 @@ pub enum RunLoopError {
     Package(#[from] PackageError),
     #[error(transparent)]
     Revision(#[from] RevisionError),
+    /// A workspace-document failure surfaced by the deploy path — kept typed
+    /// so a missing document reaches every transport as `DocumentNotFound`,
+    /// never as a stringified revision fault.
+    #[error(transparent)]
+    Document(#[from] super::documents::DocumentError),
     #[error("authoring deploy was refused")]
     Authoring(AuthoringApiError),
     #[error("worker registry inspection failed: {0}")]
@@ -193,12 +198,14 @@ pub async fn deploy(
     state: &ServerState,
     caller: &CallerIdentity,
     root: &Path,
+    transport: &'static str,
     request: DeployAuthoringRequest,
 ) -> Result<DeployAuthoringResponse, RunLoopError> {
-    crate::authoring::handlers::admit_mutation(state, caller, "http", "awl.deploy")?;
-    let saved = super::documents::read(root, &request.path)
-        .await
-        .map_err(|error| RevisionError::InvalidRecord(error.to_string()))?;
+    crate::authoring::handlers::admit_mutation(state, caller, transport, "awl.deploy")?;
+    // The document error stays TYPED: a deploy of a path that does not exist
+    // must reach the caller as the document refusal it is (`DocumentNotFound`
+    // with document guidance), not as a stringified revision-record fault.
+    let saved = super::documents::read(root, &request.path).await?;
     if saved.content_hash != request.content_hash {
         return Err(RunLoopError::RevisionMismatch {
             requested: request.content_hash,
@@ -210,12 +217,16 @@ pub async fn deploy(
     let document_path = request.path.clone();
     let revision_source = revision.source.clone();
     let prepared = tokio::task::spawn_blocking(move || {
+        // Typed, not stringified: a schema import that fails staging (a
+        // symlinked import, a confinement refusal, an I/O fault) surfaces as
+        // its own `DocumentError` class on every transport, exactly as the
+        // document read above does.
         let (_staging, schema_root) = super::handlers::stage_schema_imports(
             &workspace_root,
             &document_path,
             &revision_source,
         )
-        .map_err(|error| RevisionError::InvalidRecord(error.to_string()))?;
+        .map_err(RunLoopError::Document)?;
         // The staged root mirrors the document's own directory, so the
         // archived document name is the document's basename and every
         // archived schema path stays relative to that root.
@@ -247,7 +258,7 @@ pub async fn deploy(
     let loaded = crate::authoring::handlers::load_admitted_package(
         state,
         caller,
-        "http",
+        transport,
         "awl.deploy",
         package,
     )
@@ -524,6 +535,9 @@ pub fn wire_error(error: &RunLoopError) -> WireError {
         | RunLoopError::Revision(_) => {
             WireError::invalid_input(error.to_string()).with_error_type(error_type(error))
         }
+        // The document class mapping is the document error's own: one truth
+        // for which code a missing document answers with, on every surface.
+        RunLoopError::Document(error) => error.to_wire_error(),
         RunLoopError::Authoring(_) | RunLoopError::WorkerRegistry(_) => {
             WireError::backend(error.to_string()).with_error_type(error_type(error))
         }
@@ -562,6 +576,7 @@ fn error_type(error: &RunLoopError) -> &'static str {
         RunLoopError::Direct(_) => "DirectCompile",
         RunLoopError::Package(_) => "Package",
         RunLoopError::Revision(_) => "RevisionStore",
+        RunLoopError::Document(error) => error.error_type(),
         RunLoopError::Authoring(_) => "AuthoringDeploy",
         RunLoopError::WorkerRegistry(_) => "WorkerRegistry",
         RunLoopError::EngineUnavailable { .. } => "EngineUnavailable",

@@ -16,7 +16,7 @@ use crate::{CallerIdentity, ServerState};
 
 use super::catalog::aion_tool_catalog;
 use super::instructions::instructions;
-use super::tools::{control, describe, history, list, start, transcript};
+use super::tools::{authoring, control, describe, history, list, start, transcript};
 
 /// The Aion tool implementation.
 pub struct AionToolService {
@@ -86,6 +86,11 @@ impl ToolService for AionToolService {
             }
             "signal" => control::signal(&self.state, caller, &call).await,
             "cancel" => control::cancel(&self.state, caller, &call).await,
+            "list_documents" => authoring::list_documents(&self.state, caller, &call).await,
+            "read_document" => authoring::read_document(&self.state, caller, &call).await,
+            "check_document" => authoring::check_document(&self.state, caller, &call).await,
+            "save_document" => authoring::save_document(&self.state, caller, &call).await,
+            "deploy_document" => authoring::deploy_document(&self.state, caller, &call).await,
             // Unreachable through the dispatcher, which refuses an unpublished
             // name with `-32602` before this is called. Handled anyway: a
             // catch-all that cannot be reached is still the difference between

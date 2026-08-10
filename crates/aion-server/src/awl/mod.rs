@@ -15,6 +15,7 @@ pub mod scaffold;
 #[cfg(test)]
 mod scaffold_tests;
 mod studio_projection;
+pub(crate) mod workspace;
 
 pub use documents::{
     CreateDocumentRequest, CreateDocumentResponse, DocumentEntry, DocumentResponse,

@@ -165,7 +165,7 @@ pub(crate) async fn deploy_authoring(
     Json(request): Json<awl::run_loop::DeployAuthoringRequest>,
 ) -> Result<Json<awl::run_loop::DeployAuthoringResponse>, RunLoopHttpError> {
     let root = workspace(&state).map_err(|error| RunLoopHttpError::Document(error.0))?;
-    awl::run_loop::deploy(&state, &caller, &root, request)
+    awl::run_loop::deploy(&state, &caller, &root, "http", request)
         .await
         .map(Json)
         .map_err(RunLoopHttpError::RunLoop)
@@ -237,7 +237,13 @@ pub(crate) enum RunLoopHttpError {
 impl IntoResponse for RunLoopHttpError {
     fn into_response(self) -> Response {
         match self {
-            Self::Document(error) => DocumentHttpError(error).into_response(),
+            // Both document arms render identically: a deploy that failed on
+            // the workspace document (e.g. the path does not exist) is the
+            // same refusal, with the same status and error_type, as the
+            // document routes' own.
+            Self::Document(error) | Self::RunLoop(awl::run_loop::RunLoopError::Document(error)) => {
+                DocumentHttpError(error).into_response()
+            }
             Self::RunLoop(awl::run_loop::RunLoopError::Authoring(error)) => {
                 AuthoringHttpError(error).into_response()
             }
@@ -281,15 +287,10 @@ fn require_mutation(
         .map_err(|error| AwlAuthorizationError(error.to_wire_error()))
 }
 
+/// Thin HTTP shell over the one shared workspace derivation
+/// ([`awl::workspace::workspace_root`]); this adds only the HTTP error wrapper.
 fn workspace(state: &ServerState) -> Result<std::path::PathBuf, DocumentHttpError> {
-    state
-        .runtime_config()
-        .authoring
-        .workspace_dir
-        .clone()
-        .ok_or(DocumentHttpError(
-            awl::documents::DocumentError::WorkspaceUnconfigured,
-        ))
+    awl::workspace::workspace_root(state).map_err(DocumentHttpError)
 }
 
 pub(crate) struct FormatHttpError {
@@ -350,45 +351,68 @@ pub(crate) struct DocumentHttpError(pub(crate) awl::documents::DocumentError);
 
 impl IntoResponse for DocumentHttpError {
     fn into_response(self) -> Response {
-        let (status, error_type, message) = match self.0 {
-            awl::documents::DocumentError::InvalidPath(message) => {
-                (StatusCode::BAD_REQUEST, "InvalidDocumentPath", message)
+        let status = match self.0 {
+            awl::documents::DocumentError::InvalidPath(_)
+            | awl::documents::DocumentError::InvalidName(_) => StatusCode::BAD_REQUEST,
+            awl::documents::DocumentError::NotFound(_) => StatusCode::NOT_FOUND,
+            awl::documents::DocumentError::Exists(_) => StatusCode::CONFLICT,
+            awl::documents::DocumentError::WorkspaceUnconfigured => StatusCode::SERVICE_UNAVAILABLE,
+            // `CreateRollbackFailed` deliberately keeps its own error type
+            // rather than folding into a generic I/O failure: the workspace
+            // has been left holding a document that was never successfully
+            // created, so every retry of this create will come back as
+            // `DocumentExists`, and the message names the file that has to be
+            // removed by hand.
+            awl::documents::DocumentError::Io(_)
+            | awl::documents::DocumentError::CreateRollbackFailed { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
             }
-            awl::documents::DocumentError::InvalidName(message) => {
-                (StatusCode::BAD_REQUEST, "InvalidDocumentName", message)
-            }
-            awl::documents::DocumentError::NotFound(message) => {
-                (StatusCode::NOT_FOUND, "DocumentNotFound", message)
-            }
-            awl::documents::DocumentError::Exists(message) => {
-                (StatusCode::CONFLICT, "DocumentExists", message)
-            }
-            awl::documents::DocumentError::WorkspaceUnconfigured => (
-                StatusCode::SERVICE_UNAVAILABLE,
-                "AuthoringWorkspaceUnconfigured",
-                "AWL workspace is not configured".to_owned(),
-            ),
-            awl::documents::DocumentError::Io(error) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DocumentIoError",
-                error.to_string(),
-            ),
-            // Its own error type rather than a generic I/O failure: the
-            // workspace has been left holding a document that was never
-            // successfully created, so every retry of this create will come
-            // back as `DocumentExists`. A caller that cannot tell the two
-            // apart has no way to explain that to the operator, and the
-            // message names the file that has to be removed by hand.
-            error @ awl::documents::DocumentError::CreateRollbackFailed { .. } => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DocumentCreateRollbackFailed",
-                error.to_string(),
-            ),
+        };
+        let error_type = self.0.error_type();
+        let message = match self.0 {
+            awl::documents::DocumentError::InvalidPath(message)
+            | awl::documents::DocumentError::InvalidName(message)
+            | awl::documents::DocumentError::NotFound(message)
+            | awl::documents::DocumentError::Exists(message) => message,
+            // The I/O body renders the inner error ALONE — no "AWL workspace
+            // I/O failed" prefix — exactly as it did before `error_type` was
+            // shared; `DocumentIoError` already classifies it.
+            awl::documents::DocumentError::Io(error) => error.to_string(),
+            error => error.to_string(),
         };
         (
             status,
             Json(WireError::invalid_input(message).with_error_type(error_type)),
         )
             .into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::response::IntoResponse;
+
+    use super::DocumentHttpError;
+    use crate::awl::documents::DocumentError;
+
+    /// Pins the pre-refactor rendering of an I/O failure: the body's message
+    /// is the inner error ALONE. The `Display` of `DocumentError::Io`
+    /// prepends "AWL workspace I/O failed: ", and a fallthrough that rendered
+    /// `Display` silently changed every I/O body once already — this stops
+    /// the next refactor doing it again.
+    #[tokio::test]
+    async fn an_io_error_body_carries_the_inner_message_without_a_prefix()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let response = DocumentHttpError(DocumentError::Io(std::io::Error::other("disk full")))
+            .into_response();
+        assert_eq!(
+            response.status(),
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await?;
+        let body: serde_json::Value = serde_json::from_slice(&bytes)?;
+        assert_eq!(body["message"], "disk full", "{body}");
+        assert_eq!(body["error_type"], "DocumentIoError", "{body}");
+        Ok(())
     }
 }

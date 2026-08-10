@@ -206,12 +206,23 @@ pub(crate) fn stage_schema_imports(
     let document_path = super::documents::document_path(requested_path)?;
     let document = parse(source)
         .map_err(|error| super::documents::DocumentError::InvalidPath(error.message))?;
-    let workspace =
-        ConfinedDir::open(workspace_root).map_err(super::documents::DocumentError::Io)?;
+    // A workspace directory that does not exist yet is a NORMAL state on a
+    // fresh server — the default workspace is materialized on first write.
+    // No directory means no schema files can exist to import, so the check
+    // proceeds against an empty staged root instead of failing with a raw
+    // errno (mirrors `documents::list` on the same absence).
+    let workspace = match ConfinedDir::open(workspace_root) {
+        Ok(workspace) => Some(workspace),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => return Err(super::documents::DocumentError::Io(error)),
+    };
     let staging = tempfile::Builder::new().prefix("aion-schema-").tempdir()?;
     let document_parent = document_path.parent().unwrap_or_else(|| Path::new(""));
     let analysis_root = staging.path().join(document_parent);
     std::fs::create_dir_all(&analysis_root)?;
+    let Some(workspace) = workspace else {
+        return Ok((staging, analysis_root));
+    };
     for declaration in &document.types {
         let TypeBody::SchemaImport { path, .. } = &declaration.body else {
             continue;
@@ -334,6 +345,33 @@ mod tests {
         assert!(response.ok, "diagnostics: {:?}", response.diagnostics);
         assert!(response.deploys_green);
         assert!(response.diagnostics.is_empty());
+    }
+
+    /// A fresh server's default workspace directory does not exist until the
+    /// first write materializes it. A check that names a `path` must still
+    /// succeed against that absence — no directory means no schema files to
+    /// import, not a raw errno.
+    #[tokio::test]
+    async fn a_pathed_check_succeeds_when_the_workspace_does_not_exist_yet()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let parent = crate::test_support::private_tempdir()?;
+        let workspace = parent.path().join("never-created");
+        assert!(!workspace.exists());
+        let response = check_source_in_workspace(
+            &workspace,
+            &CheckRequest {
+                source: HAPPY.to_owned(),
+                path: Some("drafts/after_single.awl".to_owned()),
+            },
+        )
+        .await?;
+        assert!(response.ok, "diagnostics: {:?}", response.diagnostics);
+        assert!(response.deploys_green);
+        assert!(
+            !workspace.exists(),
+            "a check must not materialize the workspace"
+        );
+        Ok(())
     }
 
     #[cfg(unix)]
