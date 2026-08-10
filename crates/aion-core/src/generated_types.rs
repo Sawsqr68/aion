@@ -25,7 +25,7 @@ use std::path::PathBuf;
 use ts_rs::{Config, TS};
 
 use crate::{
-    ActivityError, ActivityErrorKind, ActivityEvent, ActivityEventKind, ActivityId,
+    ActivityError, ActivityErrorKind, ActivityEvent, ActivityEventKind, ActivityId, AgentOutcome,
     ApprovalDecision, AttemptLiveness, CatchUpPolicy, ClusterCommand, ClusterDeployment,
     ClusterEvent, ClusterEventMeta, ClusterPeer, ClusterShard, ClusterSnapshot, ClusterStreamError,
     ClusterWorker, ContentType, CurrentStep, DeploymentAssociation, DescribeLiveResponse,
@@ -212,6 +212,7 @@ fn ops_console_wire_types() -> Result<String, ts_rs::ExportError> {
     push_type::<MessageRole>(&mut pipeline)?;
     push_type::<ProgressDetail>(&mut pipeline)?;
     push_type::<StopKind>(&mut pipeline)?;
+    push_type::<AgentOutcome>(&mut pipeline)?;
     push_type::<ActivityEventKind>(&mut pipeline)?;
     push_type::<ActivityEvent>(&mut pipeline)?;
     push_type::<InjectPriority>(&mut pipeline)?;

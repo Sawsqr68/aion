@@ -92,10 +92,23 @@ pub trait AgentSession: Send {
     /// Consumes the session: exactly one terminal result is produced per attempt, and it is the
     /// replay-authoritative activity output the worker captures.
     ///
+    /// **The completed result is the canonical agent-outcome record.** A completed run's payload
+    /// is the JSON serialization of [`aion_core::AgentOutcome`] —
+    /// `{"text": <the agent's terminal text>, "stop_reason": <canonical snake_case reason>}` —
+    /// from EVERY harness. The adapter maps its native terminal outcome onto the record at this
+    /// boundary (`stop_reason` spelled through the one
+    /// [`StopKind::canonical_stop_reason`](aion_core::StopKind::canonical_stop_reason) mapping);
+    /// a native outcome that cannot fill the record (e.g. a structured, non-text output) is a
+    /// typed [`HarnessError::Contract`] naming this contract and what was found — a deterministic
+    /// refusal the worker maps to a terminal activity failure — never a payload a workflow's
+    /// decoder then chokes on.
+    ///
     /// # Errors
     ///
-    /// Returns [`HarnessError::Harness`] when the run reported an application-level failure, or a
-    /// transport/protocol error when the terminal result could not be received.
+    /// Returns [`HarnessError::Harness`] when the run reported an application-level failure,
+    /// [`HarnessError::Contract`] when the completed run's native outcome cannot satisfy the
+    /// agent-outcome contract, or a transport/protocol error when the terminal result could not
+    /// be received.
     async fn wait_result(self) -> Result<Payload, HarnessError>;
 }
 

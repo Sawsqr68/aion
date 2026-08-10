@@ -62,6 +62,21 @@ pub enum HarnessError {
         /// Human-readable description of the reported failure.
         detail: String,
     },
+    /// The run completed, but its native outcome cannot satisfy the canonical
+    /// agent-outcome contract (`AgentOutcome { text, stop_reason }`).
+    ///
+    /// A DETERMINISTIC refusal, and that is the whole reason it is its own variant: the channel
+    /// was sound ([`Self::Transport`] is wrong), the frames were well-formed ([`Self::Protocol`]
+    /// is wrong — and a protocol fault CAN be a transient peer flake, which this never is), and
+    /// the run did not fail ([`Self::Harness`] is wrong). The run's *configuration* produces an
+    /// outcome the seam excludes — e.g. a structured output where the contract's `text` demands a
+    /// String — so re-running it re-spends a whole agent run to hit the same wall. The worker
+    /// maps this variant to a TERMINAL activity failure; every other variant stays retryable.
+    #[error("agent-outcome contract refusal: {detail}")]
+    Contract {
+        /// Human-readable description naming the contract and what was found.
+        detail: String,
+    },
 }
 
 impl HarnessError {
@@ -104,6 +119,52 @@ impl HarnessError {
             detail: detail.into(),
         }
     }
+
+    /// Builds a [`Self::Contract`] with a detail message naming the canonical
+    /// agent-outcome contract and what was found instead.
+    #[must_use]
+    pub fn contract(detail: impl Into<String>) -> Self {
+        Self::Contract {
+            detail: detail.into(),
+        }
+    }
+
+    /// Whether this error is DETERMINISTIC — a property of how the run is
+    /// configured, so retrying re-spends a whole agent run to hit the same
+    /// wall — as opposed to potentially transient (a provider-overload burst,
+    /// a one-off malformed frame, a dropped pipe, a superseded attempt).
+    ///
+    /// This is THE retry-classification decision for the seam, made here in
+    /// the defining crate with an EXHAUSTIVE match — legal despite
+    /// `#[non_exhaustive]` — so adding a variant is a compile error at this
+    /// site and its classification is decided on purpose, never defaulted by
+    /// a caller's wildcard arm. The worker maps `true` to a terminal activity
+    /// failure and `false` to a retryable one.
+    ///
+    /// Per variant:
+    /// - [`Self::Contract`]: deterministic by definition — the run completed
+    ///   and its configured outcome shape cannot satisfy the agent-outcome
+    ///   contract; the next attempt is configured identically.
+    /// - [`Self::Transport`]: a broken channel can heal.
+    /// - [`Self::Protocol`]: a malformed frame CAN be a one-off peer flake
+    ///   (truncated stream, interleaved write), so it stays retryable even
+    ///   though some protocol faults are in fact permanent.
+    /// - [`Self::Harness`]: the run failed; overload and timeouts recur or
+    ///   do not — that judgement belongs to the retry policy.
+    /// - [`Self::CapabilityNotSupported`] / [`Self::StaleTarget`]: gating and
+    ///   staleness outcomes on the intervention path; when they surface from
+    ///   a result path at all they describe a racing world, not a fixed one.
+    #[must_use]
+    pub fn is_deterministic(&self) -> bool {
+        match self {
+            Self::Contract { .. } => true,
+            Self::CapabilityNotSupported { .. }
+            | Self::StaleTarget { .. }
+            | Self::Transport { .. }
+            | Self::Protocol { .. }
+            | Self::Harness { .. } => false,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -142,5 +203,31 @@ mod tests {
             HarnessError::harness("exit code 1").to_string(),
             "harness reported failure: exit code 1"
         );
+        assert_eq!(
+            HarnessError::contract("output is a JSON object").to_string(),
+            "agent-outcome contract refusal: output is a JSON object"
+        );
+    }
+
+    /// The retry-classification decision, pinned in the crate that makes it:
+    /// exactly the contract refusal is deterministic; every class that can be
+    /// transient stays non-deterministic. (The match inside `is_deterministic`
+    /// is exhaustive, so a new variant fails compilation there — this test
+    /// pins the ANSWERS, the compiler pins the completeness.)
+    #[test]
+    fn only_the_contract_refusal_is_deterministic() {
+        assert!(HarnessError::contract("output is a JSON object").is_deterministic());
+        for transient in [
+            HarnessError::transport("broken pipe"),
+            HarnessError::protocol("invalid JSON frame"),
+            HarnessError::harness("run stopped without completing"),
+            HarnessError::stale_target("attempt 2 superseded"),
+            HarnessError::capability_not_supported("pause_resume"),
+        ] {
+            assert!(
+                !transient.is_deterministic(),
+                "{transient:?} can be transient and must not classify deterministic"
+            );
+        }
     }
 }

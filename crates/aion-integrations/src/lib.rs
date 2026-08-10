@@ -47,7 +47,7 @@ pub use spec::AgentRunSpec;
 // Curated re-export of the neutral `aion-core` types the integration surface speaks, so an
 // integrator has one dependency and never reaches directly into `aion-core` for these.
 pub use aion_core::{
-    ActivityEvent, ActivityEventKind, ApprovalDecision, ContentType, InjectPriority,
+    ActivityEvent, ActivityEventKind, AgentOutcome, ApprovalDecision, ContentType, InjectPriority,
     InterventionCapabilities, InterventionCommand, InterventionKind, InterventionPrimitive,
     MessageRole, Payload, ProgressDetail, StopKind,
 };

@@ -18,6 +18,8 @@
 
 /// Agent-observability transcript events for the ops console real-time channel.
 pub mod activity_event;
+/// The canonical agent-outcome record every harness emits from the seam.
+pub mod agent_outcome;
 /// Cluster topology and ownership events for the ops console real-time channel (WS3).
 pub mod cluster_event;
 /// Which step a run is on, folded from its own history.
@@ -48,6 +50,7 @@ pub mod search;
 pub mod status;
 
 pub use activity_event::{ActivityEvent, ActivityEventKind, MessageRole, ProgressDetail, StopKind};
+pub use agent_outcome::AgentOutcome;
 pub use cluster_event::{
     ClusterCommand, ClusterDeployment, ClusterEvent, ClusterEventMeta, ClusterPeer, ClusterShard,
     ClusterSnapshot, ClusterStreamError, ClusterWorker, DeploymentAssociation, DesiredState,

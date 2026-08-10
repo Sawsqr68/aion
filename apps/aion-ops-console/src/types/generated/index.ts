@@ -1230,6 +1230,17 @@ message: string, } | { "stop": "Other",
  */
 reason: string, };
 
+export type AgentOutcome = {
+/**
+ * The agent's terminal text — the run's actual output.
+ */
+text: string,
+/**
+ * The canonical `snake_case` stop reason
+ * ([`StopKind::canonical_stop_reason`]).
+ */
+stop_reason: string, };
+
 export type ActivityEventKind = { "kind": "Message",
 /**
  * Who the message is attributed to.
