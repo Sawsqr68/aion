@@ -3,6 +3,28 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## 0.13.7 — 2026-08-11
+
+- **Agent steps return a structured outcome (#181).** An `agent` action now
+  returns the canonical record `{ text, stop_reason }` from every harness —
+  Claude (ACP), Norn, and the plain-CLI adapter alike — in place of one bare
+  string whose shape depended on which harness produced it. `text` carries the
+  agent's terminal text (honestly empty when a completed turn emitted only
+  tool calls); `stop_reason` is one closed vocabulary:
+  `end_turn | tool_use | limit_reached | cancelled | error | other`. A
+  workflow declares a record of that shape on its `agent` action and reads
+  `reply.text` / `reply.stop_reason` as ordinary fields — so it can route on
+  *why* the agent stopped, not guess from the text.
+- **The checker demands the record.** `aion awl check` refuses an `agent`
+  action whose declared return is the retired bare `String`, and the refusal
+  names both fields the record needs. Every shipped example, workflow, guide
+  entry, and document is migrated; the language guide and reference teach the
+  record.
+- **Misconfigured agent steps fail once, not five times.** A harness contract
+  violation — a completed run carrying a null or non-string output — is now a
+  terminal, deterministic activity failure that names the violated contract,
+  instead of burning the retry budget on a failure retries cannot fix.
+
 ## 0.13.6 — 2026-08-10
 
 - **Every guide example is a playground (#185).** Each of the 118 examples in
