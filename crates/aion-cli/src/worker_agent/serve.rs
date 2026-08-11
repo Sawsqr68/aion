@@ -46,6 +46,7 @@
 use anyhow::{Context, Result};
 
 use super::args::{self, AgentArgs, ConnectionSettings};
+use super::environment_report::report_absent_pass_through;
 use super::surface::{self, AdvertisedSurface};
 use crate::harness::ResolvedHarness;
 use crate::settings::Environment;
@@ -97,6 +98,18 @@ async fn prepare(args: &AgentArgs) -> Result<Prepared> {
         Some(declared) => crate::harness::resolve_declared(declared, &document)?,
         None => None,
     };
+    // BEFORE the `--check` branch, and long before the serve loop installs its tracing
+    // subscriber, so both paths carry it and neither depends on a listener that does not
+    // exist yet. Stderr, because stdout on this verb is the `--check` report's and an
+    // operator piping that into `jq` must not have a warning land in the middle of it.
+    if let Some(resolved) = &harness {
+        report_absent_pass_through(
+            &mut std::io::stderr().lock(),
+            resolved.environment(),
+            &document,
+            &surface.task_queue,
+        )?;
+    }
     if args.check {
         let mut stdout = std::io::stdout().lock();
         surface::print(

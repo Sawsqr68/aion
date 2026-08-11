@@ -15,6 +15,9 @@
 //! * [`surface`] derives the typed action surface from the document (through
 //!   [`crate::worker_surface`], shared with `aion worker shell`) and renders it for
 //!   `--check`.
+//! * [`environment_report`] tells the operator which declared pass-through variables
+//!   this machine does not carry — written to a real channel, because the first version
+//!   of it logged into a subscriber that did not exist yet.
 //! * [`serve`] reads the document's declared harness, resolves it against the adapters
 //!   this build links, honours `--check`, and runs the liminal serve loop.
 //!
@@ -25,7 +28,8 @@
 //! reports the surface and then refuses to serve.
 
 mod args;
-pub(super) mod serve;
+mod environment_report;
+mod serve;
 mod surface;
 
 #[cfg(test)]
