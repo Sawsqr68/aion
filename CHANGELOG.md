@@ -3,7 +3,7 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
-## Unreleased
+## 0.14.1 — 2026-08-12
 
 - **The embedded assistant document is launchable by the verb the server
   recommends (#209).** 0.14.0's QUEUE MOVE warning told the operator to start
