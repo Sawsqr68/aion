@@ -3,14 +3,20 @@
 //!
 //! # Why this lives in one place
 //!
-//! Two independent groups of settings now share it — the agent worker's CONNECTION
-//! settings ([`crate::worker_agent`]) and the per-harness CONFIGURATION the
-//! composition root resolves after a harness is selected ([`crate::harness`]) — and
-//! an operator cannot tell the two apart from the command line. If each resolved its
-//! own way, one shell invocation could be told "supply `--identity`" on one run
-//! and "supply `--identity`" on the next, when both were missing all along. So the
-//! collection of misses is shared, and the refusal is rendered once from the whole
-//! set.
+//! Two verbs' connection settings share it — the agent worker's
+//! ([`crate::worker_agent`]) and the AWL shell worker's ([`crate::worker_awl`]) — and an
+//! operator cannot tell one verb's resolution from the other's at a shell. If each
+//! resolved its own way, one invocation missing both `--identity` and
+//! `--liminal-address` could be told "supply `--identity`" on one run and "supply
+//! `--liminal-address`" on the next, when both were missing all along. So the collection
+//! of misses is shared, and the refusal is rendered once from the whole set.
+//!
+//! An agent worker's LAUNCH settings no longer pass through here at all: they are
+//! declared in the worker document's `harness` section, and a missing one is named by
+//! `aion awl check` against the document rather than by this contract against a command
+//! line. That is a different surface with a different refusal, and deliberately so — the
+//! document is reviewed and deployed once, where a command line is retyped on every
+//! box.
 //!
 //! # The rules, and why each one is the rule
 //!

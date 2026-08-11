@@ -561,9 +561,107 @@ enum RemoteCommand {
     },
 }
 
+/// Every launch setting that moved out of `aion worker agent` and into the worker
+/// document's `harness` section, with the field that replaced it.
+///
+/// This is a REFUSAL that teaches, never a compat shim: not one of these is accepted,
+/// and the process still exits on clap's own argument error. What it adds is the
+/// sentence clap cannot know — that the setting still exists, in a different file, under
+/// a different name. Without it an operator reads "unexpected argument
+/// `--acp-permission`" and has no way to tell a deleted setting from a typo.
+const MIGRATED_LAUNCH_FLAGS: [(&str, &str); 14] = [
+    ("--harness", "kind"),
+    ("--concurrency", "concurrency"),
+    ("--reconnect-initial-backoff", "reconnect_initial_backoff"),
+    ("--reconnect-max-backoff", "reconnect_max_backoff"),
+    ("--reconnect-max-attempts", "reconnect_max_attempts"),
+    ("--acp-command", "command"),
+    ("--acp-arg", "args"),
+    ("--acp-cwd", "cwd"),
+    ("--acp-permission", "permission"),
+    ("--acp-env", "env_pass"),
+    ("--acp-exit-grace", "exit_grace"),
+    ("--norn-binary", "binary"),
+    ("--norn-arg", "args"),
+    ("--norn-unset-env", "env_pass"),
+];
+
+/// The extra sentence a deleted launch flag earns, when `argv` carries one.
+///
+/// Read off the RAW argv rather than off clap's error, because clap reports the first
+/// unexpected argument and an operator pasting an old runbook line has typically
+/// supplied several — naming one of six would send them round the loop six times.
+///
+/// `=`-joined forms (`--norn-arg=--account`) are matched on their flag half, because
+/// that is the shape market-mirror's own runbook used.
+fn migrated_flag_advice(argv: &[String]) -> Option<String> {
+    let supplied: Vec<&(&str, &str)> = MIGRATED_LAUNCH_FLAGS
+        .iter()
+        .filter(|(flag, _)| {
+            argv.iter().any(|argument| {
+                argument == flag
+                    || argument
+                        .split_once('=')
+                        .is_some_and(|(head, _)| head == *flag)
+            })
+        })
+        .collect();
+    if supplied.is_empty() {
+        return None;
+    }
+    let moved = supplied
+        .iter()
+        .map(|(flag, field)| format!("  {flag}  ->  `{field}` in the document's `harness` section"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Some(format!(
+        "\nThese are not unknown arguments — they are DELETED ones. An agent worker's launch \
+         is declared in the `.awl` document it serves, in the `harness` section of its \
+         `worker` block, and there is no flag for any of it:\n\n{moved}\n\nIf you typed this \
+         command: write the section into the document, then re-run without those flags. \
+         `aion awl check <FILE.awl>` names every setting the section is still missing, scoped \
+         to the kind the section declares.\n\nIf you did NOT type this command, a managed-worker \
+         deployment replayed it. A `builtin` worker-deployment record stores the argv it was \
+         created with, verbatim and durably, and the supervisor replays exactly that on every \
+         restart — so a record minted before the launch settings moved will fail this way on \
+         every restart until its budget is spent, and editing the document will not change it. \
+         The record is the thing to fix: add the `harness` section to the document, then \
+         re-mint the deployment (`PUT /worker-deployments/<name>`, or the ops console's deploy \
+         form) so its stored argv no longer carries these flags."
+    ))
+}
+
+/// The parsed command line, or the exit code to leave on.
+///
+/// Wraps [`Cli::try_parse`] rather than calling [`clap::Parser::parse`] for one reason:
+/// clap renders and exits by itself, and this binary has a sentence clap cannot know —
+/// that some of the arguments it calls "unexpected" are DELETED, and where the settings
+/// they carried live now. clap's own rendering and its own exit code are preserved
+/// exactly; the advice is written after them, never instead of them.
+fn parse_or_refuse() -> Result<Cli, ExitCode> {
+    match Cli::try_parse() {
+        Ok(cli) => Ok(cli),
+        Err(error) => {
+            // Collected BEFORE printing, so a closed stderr cannot lose the advice while
+            // keeping the error.
+            let advice = migrated_flag_advice(&std::env::args().collect::<Vec<_>>());
+            // clap writes its own error to the right stream and this is the end of the
+            // process either way, so a failed write has nowhere left to be reported.
+            drop(error.print());
+            if let Some(advice) = advice {
+                eprintln!("{advice}");
+            }
+            Err(ExitCode::from(u8::try_from(error.exit_code()).unwrap_or(2)))
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = match parse_or_refuse() {
+        Ok(cli) => cli,
+        Err(code) => return code,
+    };
     if let Some(refusal) = launcher_flag_refusal(&cli) {
         eprintln!("{refusal}");
         return ExitCode::from(2);
@@ -2223,6 +2321,95 @@ mod tests {
                  when the document decides it"
             );
         }
+    }
+
+    /// A managed-worker record minted BEFORE the launch settings moved replays its stored
+    /// argv on every supervised restart, and nobody is at a terminal to read a generic
+    /// "unexpected argument". This is the exact argv such a record carries — the tail a
+    /// `WorkerArtifactRef::Builtin` stores — and what it must earn is the NAMED refusal,
+    /// not clap's bare exit-2.
+    ///
+    /// The supervisor forwards a managed worker's stderr into the server's tracing output
+    /// tagged with the worker name, so this sentence is what an operator finds against the
+    /// record that could not start.
+    #[test]
+    fn the_argv_a_pre_change_managed_worker_record_replays_earns_a_named_refusal() {
+        // Verbatim from market-mirror's OPERATIONS.md, the surface the CLAUDECODE
+        // incident lived on — a record minted from that runbook carries exactly this.
+        let stored_verb = [
+            "worker",
+            "agent",
+            "workflows/mm_fleet_loop.awl",
+            "--harness",
+            "norn",
+            "--task-queue",
+            "mm_loop_build",
+            "--identity",
+            "mm-loop-builder",
+            "--liminal-address",
+            "127.0.0.1:50061",
+            "--concurrency",
+            "4",
+            "--reconnect-initial-backoff",
+            "1",
+            "--reconnect-max-backoff",
+            "30",
+            "--reconnect-max-attempts",
+            "100",
+            "--norn-arg=--account",
+            "--norn-arg=default",
+        ];
+
+        // It must still be REFUSED — a tolerant parse would be a compat shim.
+        let mut argv = vec!["aion"];
+        argv.extend(stored_verb);
+        assert!(
+            Cli::try_parse_from(&argv).is_err(),
+            "a stored record does not buy a deleted flag its way back in"
+        );
+
+        // ...and the refusal must NAME what happened, on the record-driven path as much
+        // as on a hand-typed one.
+        let owned: Vec<String> = argv.into_iter().map(str::to_owned).collect();
+        let Some(advice) = super::migrated_flag_advice(&owned) else {
+            unreachable!("an argv carrying deleted flags must earn the advice");
+        };
+        for expected in [
+            "--harness",
+            "--concurrency",
+            "--reconnect-initial-backoff",
+            // The `=`-joined form is what the runbook actually used; matching only the
+            // separated spelling would miss every record minted from it.
+            "--norn-arg",
+            "harness",
+            "managed-worker",
+            "re-mint",
+            "worker-deployments",
+        ] {
+            assert!(
+                advice.contains(expected),
+                "the refusal must name `{expected}`, got:\n{advice}"
+            );
+        }
+        assert!(
+            !advice.contains("--task-queue") && !advice.contains("--identity"),
+            "a flag that SURVIVED must not be named as deleted, or the operator strips a \
+             setting the verb still needs:\n{advice}"
+        );
+    }
+
+    /// An invocation carrying no deleted flag earns no advice at all — otherwise every
+    /// ordinary typo would be answered with a lecture about the harness section.
+    #[test]
+    fn an_argv_with_no_deleted_flag_earns_no_migration_advice() {
+        let argv: Vec<String> = ["aion", "worker", "agent", "flows/review.awl", "--nonsense"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        assert!(
+            super::migrated_flag_advice(&argv).is_none(),
+            "the advice is for DELETED flags, not for every unknown argument"
+        );
     }
 
     /// MIGRATION RIDER (b): a bare invocation refuses LOUDLY with the new shape named.

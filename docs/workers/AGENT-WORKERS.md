@@ -70,14 +70,83 @@ The version string cannot tell you which side of that a binary is on. Check the
 binary: `aion worker agent --help`. One that still accepts `--concurrency`
 predates the move and reads no `harness` section at all.
 
-Neither document this repository ships with an agent action —
-`crates/aion-server/assistant-embed/assistant.awl` and
-`workflows/norn-fleet/norn_fleet.awl` — carries a `harness` section yet, so
-serving either with this verb means adding one first. Hand it a document
+None of the three documents this repository ships with an agent action —
+`crates/aion-server/assistant-embed/assistant.awl`,
+`workflows/norn-fleet/norn_fleet.awl` and `workflows/norn-dev/norn_dev.awl` —
+carries a `harness` section yet, so serving any of them with this verb means
+adding one first. (The census is every document with an `agent`-marked action:
+`grep -rln 'agent,\|^    agent$' workflows/ crates/aion-server/assistant-embed/`.) Hand it a document
 without one and it refuses by saying so: the queue "declares no `harness`
 section", "There is no flag for any of it", and run `aion awl check` on it. The
 section below is the whole of what to write, and the checker names anything you
 leave out.
+
+### A managed-worker record minted before this change
+
+`aion worker agent` is also started by the SERVER, through the managed-worker
+motion: a `builtin` worker-deployment record stores the operator's argv tail
+verbatim and durably, and the supervisor replays exactly that on every restart
+(`crates/aion-server/src/worker/supervisor/fleet.rs`,
+`WorkerArtifactRef::Builtin`). So a record minted before the launch settings
+moved carries the deleted flags **inside the record**, and:
+
+- it fails on its next supervised restart, not on a deploy — the change lands
+  quietly and the record breaks the next time something restarts it;
+- it fails again on every retry, because the argv is fixed, until the crash-loop
+  guard spends `max_restarts_per_window` and parks it as `Failed`;
+- **editing the document does not fix it.** The document is not what the record
+  replays.
+
+There is no migration for these records and there is deliberately no tolerant
+parse. There is nothing to migrate a stored argv *from* — the values a `harness`
+section needs (this box's concurrency, its reconnect budget, the absolute path
+to its agent, the variables that agent may see) were never in the record — and a
+parse that accepted the old flags would be the compat shim this repository does
+not build.
+
+What there is instead is a refusal that says so. The verb recognises every one
+of the fourteen deleted flags on its own argv and prints, beneath clap's
+argument error, which flags were supplied, which document field replaced each,
+and both remedies — including the record-shaped one, because an operator reading
+a supervised failure did not type the command:
+
+> If you did NOT type this command, a managed-worker deployment replayed it. […]
+> The record is the thing to fix: add the `harness` section to the document,
+> then re-mint the deployment (`PUT /worker-deployments/<name>`, or the ops
+> console's deploy form) so its stored argv no longer carries these flags.
+
+The supervisor forwards a managed worker's stderr into the server's own tracing
+output, tagged with the worker name, so that sentence is what an operator finds
+against the deployment that will not start. **Re-minting the record is the fix**:
+write the `harness` section into the document, then `PUT` the deployment again
+with a verb tail carrying only the document and the connection flags.
+
+### Why the SERVER's own spawn environment is not cleared
+
+`env_pass` governs the AGENT SUBPROCESS — the `claude-code-acp` or `norn` a
+worker launches. It does not govern the worker PROCESS itself, and the managed
+-worker supervisor (`crates/aion-server/src/worker/supervisor/`) still hands a
+supervised worker the server's own environment, inherited. That is deliberate,
+and it is not a gap left in the fence:
+
+- The worker process's own settings are read from that environment BY DESIGN.
+  The ops console's deploy form documents it in as many words — a setting left
+  blank "must come from the server process's environment
+  (`AION_WORKER_CONCURRENCY`, `AION_RECONNECT_*`)" — so clearing it would break
+  every deployed `aion worker awl` worker that relies on it, silently, at the
+  next supervised restart.
+- Clearing it would not add safety where the incident happened. `CLAUDECODE`
+  reaching a worker process harms nothing; it broke a live run by reaching the
+  AGENT the worker spawned. That boundary is now closed at the spawn site,
+  which is downstream of every launcher — a hand-run CLI, a console click, a
+  supervised restart — so one mechanism covers all three and none of them can
+  opt out.
+- The two are independent by construction: whatever the worker process
+  inherits, the agent child gets `env_pass` and nothing else.
+
+Declaring the worker process's own environment is a separate decision on a
+separate surface, and it needs the operator's word on what a supervised worker
+is allowed to see. It is not this change.
 
 The rules it lives by, and why:
 

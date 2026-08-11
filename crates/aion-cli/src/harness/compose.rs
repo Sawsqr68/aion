@@ -17,8 +17,10 @@
 //! adapters, so a configuration for a harness this build does not carry is not a value
 //! that exists. There is no unreachable arm to write and nothing to refuse: by the time
 //! a configuration reaches this module, the adapter it names is present. The refusal for
-//! a harness a build does not compile in lives where a supplied configuration is first
-//! validated (`super::settings::Supplied::parse`), which already has an error channel.
+//! a harness a build does not compile in lives where the document's declared `kind` is
+//! first checked against the catalogue (`super::catalogue::resolve`, reached from
+//! `super::settings::resolve`), which already has an error channel and can name what the
+//! build does carry.
 //!
 //! [`AgentHarness`]: aion_integrations::AgentHarness
 
