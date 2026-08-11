@@ -659,3 +659,10 @@ struct InvalidMaxConcurrency;
 #[cfg(test)]
 #[path = "loop_tests.rs"]
 mod tests;
+
+/// Head-of-line measurement for the transport liveness ping (#197): what a
+/// ping's answer costs when a delivery is already in flight, and what it costs
+/// when the concurrency budget is exhausted.
+#[cfg(test)]
+#[path = "liveness_answer_tests.rs"]
+mod liveness_answer_tests;
