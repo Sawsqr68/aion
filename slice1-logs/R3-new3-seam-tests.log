@@ -1,0 +1,13 @@
+   Compiling aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-worker)
+   Compiling aion-awl v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 19.41s
+     Running unittests src/lib.rs (target/debug/deps/aion_awl-5339af56338025d0)
+
+running 4 tests
+test harness_config::tests::a_relative_acp_command_is_named_by_its_own_field ... ok
+test harness_config::tests::an_omitted_norn_binary_is_absence_and_not_a_refusal ... ok
+test harness_config::tests::an_absolute_norn_binary_passes_the_same_net ... ok
+test harness_config::tests::a_relative_norn_binary_is_named_at_the_launch_seam_not_carried_through ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 157 filtered out; finished in 0.06s
+

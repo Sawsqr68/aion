@@ -1,7 +1,7 @@
 # binary:  ./target/debug/aion
 # version: aion 0.13.8
-# tree:    798037ca0593e1c19901d82144ddb60a7347a965 99 uncommitted path(s)
-# date:    2026-08-11T20:34:51+1000
+# tree:    d573a260859f4f50653e630c82e31b12a7ed2e6f 19 uncommitted path(s)
+# date:    2026-08-11T21:04:27+1000
 
 === rider (b): a bare invocation refuses LOUDLY, naming the new shape
 $ ./target/debug/aion worker agent
@@ -109,8 +109,8 @@ $ ./target/debug/aion worker agent crates/aion-awl/tests/fixtures/rev2/harness-s
 [exit=0]
 
 === B1: an absent declared pass-through is REPORTED before --check returns
-$ ./target/debug/aion worker agent /var/folders/87/tdf6vfls1fj_4ydz_y6sk3580000gn/T//aion-acceptance-absent-48670.awl --check
-warning: queue `assistants` in /var/folders/87/tdf6vfls1fj_4ydz_y6sk3580000gn/T//aion-acceptance-absent-48670.awl declares 1 environment pass-through variable(s) that are NOT set on this machine, so the agent subprocess will run without them: AION_ACCEPTANCE_UNSET_VARIABLE.
+$ ./target/debug/aion worker agent /var/folders/87/tdf6vfls1fj_4ydz_y6sk3580000gn/T//aion-acceptance-absent-52180.awl --check
+warning: queue `assistants` in /var/folders/87/tdf6vfls1fj_4ydz_y6sk3580000gn/T//aion-acceptance-absent-52180.awl declares 1 environment pass-through variable(s) that are NOT set on this machine, so the agent subprocess will run without them: AION_ACCEPTANCE_UNSET_VARIABLE.
   The `env_pass` list is the agent's whole environment — this worker carries 1 of them — and an agent missing a credential or a home directory fails inside its own error message, a long way from this cause. Set them here, or drop them from the document's `harness` section.
 {
   "actions": [

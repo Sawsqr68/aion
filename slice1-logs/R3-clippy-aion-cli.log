@@ -1,0 +1,14 @@
+# argv:  cargo clippy -p aion-cli --all-targets -- -D warnings
+# cwd:   /Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1
+# tree:  d573a260859f4f50653e630c82e31b12a7ed2e6f
+# date:  2026-08-11T20:53:35+1000
+# ---
+    Checking aion-awl v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl)
+    Checking aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-worker)
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-server)
+    Checking aion-awl-package v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl-package)
+    Checking aion-awl-lsp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl-lsp)
+    Checking aion-cli v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 54.31s
+# ---
+# exit:  0

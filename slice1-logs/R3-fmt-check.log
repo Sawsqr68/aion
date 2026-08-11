@@ -1,0 +1,7 @@
+# argv:  cargo fmt -p aion-awl -p aion-integrations -p aion-integration-acp -p aion-integration-norn -p aion-cli -p aion-server -p aion-worker -- --check
+# cwd:   /Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1
+# tree:  d573a260859f4f50653e630c82e31b12a7ed2e6f
+# date:  2026-08-11T20:53:23+1000
+# ---
+# ---
+# exit:  0
