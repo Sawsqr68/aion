@@ -124,6 +124,7 @@ impl WorkerProtocol for WorkerGrpcService {
                 registry: &registry,
                 pending: &pending,
                 drain: &drain,
+                liveness_waiters: &liveness_waiters,
             };
             let session = WorkerSession {
                 worker_id,
@@ -146,20 +147,6 @@ impl WorkerProtocol for WorkerGrpcService {
             write_handle.abort();
             drop(task_tx);
             drop(teardown);
-            // #197: this worker can no longer answer anything. Leaving an armed
-            // waiter behind would grow the map by one entry per departed worker
-            // on a never-dying server, and would let a re-registered worker id
-            // inherit a sequence from a stream that is gone. The probe's own
-            // cadence would eventually judge the ping unanswered either way, so
-            // nothing here changes a verdict — it only stops the leak.
-            if let Err(error) = liveness_waiters.disarm(worker_id) {
-                tracing::error!(
-                    worker_id = ?worker_id,
-                    %error,
-                    "gRPC liveness waiter map is poisoned; armed pings for departed workers \
-                     can no longer be released"
-                );
-            }
             // The teardown sweep already deregistered the stream; consuming
             // the registration here is an idempotent no-op that still
             // surfaces a poisoned-lock error loudly.
@@ -226,6 +213,10 @@ struct StreamTeardown<'a> {
     registry: &'a crate::worker::ConnectedWorkerRegistry,
     pending: &'a PendingActivities,
     drain: &'a crate::shutdown::DrainState,
+    /// The probe's answer-correlation registry (#197), released here for the
+    /// same reason the sweep runs here: a guard fires on EVERY exit from the
+    /// stream task, a plain call after the loop does not.
+    liveness_waiters: &'a crate::worker::GrpcLivenessWaiters,
 }
 
 impl Drop for StreamTeardown<'_> {
@@ -237,6 +228,22 @@ impl Drop for StreamTeardown<'_> {
             self.pending,
             self.drain,
         );
+        // #197: this worker can no longer answer anything. Inside the guard
+        // rather than after the inbound loop, because a panic unwinding
+        // `process_inbound` would skip a plain call and leak the armed waiter
+        // for the life of the process — one entry per panicking stream on a
+        // server built never to die. It changes no verdict: the probe's own
+        // cadence judges an unanswered ping either way. It only stops the leak,
+        // and stops a re-registered worker id inheriting a sequence from a
+        // stream that is gone.
+        if let Err(error) = self.liveness_waiters.disarm(self.worker_id) {
+            tracing::error!(
+                worker_id = ?self.worker_id,
+                %error,
+                "gRPC liveness waiter map is poisoned; armed pings for departed workers can no \
+                 longer be released"
+            );
+        }
     }
 }
 

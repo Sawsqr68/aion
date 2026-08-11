@@ -1147,34 +1147,49 @@ impl ConnectedWorkerRegistry {
             .collect())
     }
 
-    /// How many workers matching one dispatch address are currently excluded
-    /// from selection by the liveness verdict (#197 R3).
+    /// How many workers that selection COULD have chosen are currently excluded
+    /// from it by the liveness verdict (#197 R3).
     ///
-    /// Read under the SAME lock and with the SAME filters
-    /// [`Self::select_worker`] applies, so a refusal that quotes this count
-    /// describes the fleet selection actually saw. It is what separates "this
-    /// pool is empty" from "this pool's workers are all serving probation or
-    /// have had eligibility withdrawn" — two facts an operator must act on
-    /// differently, and which a single catch-all refusal conflates into a
-    /// misdiagnosis.
+    /// `tiers` is the ordered sequence of node filters the selection actually
+    /// walked, and taking it as an argument — rather than re-deriving one here
+    /// — is the whole point of the method. Selection over a `Pinned{L}`
+    /// namespace walks the required labels and NEVER spills to a `None`
+    /// any-node tier; a census taken over the row's own node instead would pass
+    /// `None`, match every worker in the pool, and report an unlabelled worker
+    /// that was never a candidate as the reason the row found nobody. The
+    /// refusal built on that count then tells an operator not to start the
+    /// labelled worker that is the only remedy.
+    ///
+    /// Counted as a UNION over the tiers and over DISTINCT workers: the pool is
+    /// walked once and a worker admissible to more than one tier is counted
+    /// once, so the number is a headcount rather than a sum of overlapping
+    /// matches.
+    ///
+    /// Read under the SAME lock and with the SAME `worker_matches_node` filter
+    /// [`Self::select_worker`] applies, so a refusal quoting this count
+    /// describes the fleet selection actually saw.
     ///
     /// # Errors
     ///
     /// Returns [`ServerError::LockPoisoned`] if the registry lock is poisoned.
-    pub fn ineligible_workers_for(
+    pub fn ineligible_workers_over_tiers(
         &self,
         namespace: &str,
         task_queue: &str,
         activity_type: &str,
-        node: Option<&str>,
+        tiers: &[Option<String>],
     ) -> Result<usize, ServerError> {
         let state = self.state()?;
         let key = ActivityKey::new(PoolAddress::new(namespace, task_queue), activity_type);
         Ok(state.by_activity.get(&key).map_or(0, |workers| {
             workers
                 .values()
-                .filter(|worker| worker_matches_node(worker, node))
                 .filter(|worker| state.dispatch_ineligible.contains(&worker.id))
+                .filter(|worker| {
+                    tiers
+                        .iter()
+                        .any(|tier| worker_matches_node(worker, tier.as_deref()))
+                })
                 .count()
         }))
     }

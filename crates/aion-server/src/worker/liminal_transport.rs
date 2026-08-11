@@ -886,6 +886,22 @@ impl std::fmt::Debug for RegistryLiminalDispatch {
     }
 }
 
+/// One selection attempt: the worker it found, and the node filters it WALKED.
+///
+/// The tiers travel WITH the outcome because a miss can only be explained over
+/// the filters selection actually applied. Recomputing them at the refusal site
+/// is how the two answers drift: the recomputation has no access to the
+/// namespace placement the selection resolved, so it silently substitutes the
+/// row's own node and describes a different fleet from the one selection saw.
+struct SelectionAttempt {
+    /// The selected worker, or `None` when no tier held an eligible one.
+    worker: Option<WorkerHandle>,
+    /// The ordered node filters walked, in the order they were tried. For a
+    /// `Pinned{L}` namespace these are the required labels and nothing else —
+    /// there is deliberately no `None` any-node tier to fall back on.
+    tiers: Vec<Option<String>>,
+}
+
 impl RegistryLiminalDispatch {
     /// Build a registry-backed liminal dispatch that re-enters worker results
     /// through `callback` (the shared `ServerOutboxDeliveryCallback`).
@@ -960,33 +976,34 @@ impl RegistryLiminalDispatch {
     async fn select_liminal_worker(
         &self,
         row: &OutboxRow,
-    ) -> Result<Option<WorkerHandle>, ServerError> {
+    ) -> Result<SelectionAttempt, ServerError> {
         // A pinned row or an absent cache: one selection off the row's own node.
         let (Some(cache), None) = (&self.placement_cache, &row.node) else {
-            return self.registry.select_worker(
+            let tiers = vec![row.node.clone()];
+            let worker = self.registry.select_worker(
                 &row.namespace,
                 &row.task_queue,
                 &row.activity_type,
                 row.node.as_deref(),
-            );
+            )?;
+            return Ok(SelectionAttempt { worker, tiers });
         };
         // Unpinned + placement-aware: resolve the shared selection decision, so this
         // liminal path and the gRPC path can never diverge on Prefer-vs-Pinned. The
         // row's `node` is never mutated — selection is a pure dispatch-time input.
         let placement = cache.placement(&row.namespace).await;
-        match crate::worker::worker_selection_for(&placement) {
+        let tiers: Vec<Option<String>> = match crate::worker::worker_selection_for(&placement) {
             // Prefer/Unplaced: walk the prefer-then-spill tiers (the `None` spill is
             // always last), stopping at the first tier with a live worker.
-            crate::worker::WorkerSelection::PreferTiers(tiers) => {
-                self.select_over_tiers(row, tiers.iter().map(Option::as_deref))
-            }
+            crate::worker::WorkerSelection::PreferTiers(tiers) => tiers,
             // Pinned{L}: try ONLY the required labels — no `None` spill. When none is
-            // live, return None so the caller retries/stalls (never any-node).
-            crate::worker::WorkerSelection::Required(required) => self.select_over_tiers(
-                row,
-                required.iter().map(|label| Some(String::as_str(label))),
-            ),
-        }
+            // live, select nothing so the caller retries/stalls (never any-node).
+            crate::worker::WorkerSelection::Required(required) => {
+                required.into_iter().map(Some).collect()
+            }
+        };
+        let worker = self.select_over_tiers(row, tiers.iter().map(Option::as_deref))?;
+        Ok(SelectionAttempt { worker, tiers })
     }
 
     /// Select the first live worker over an ordered sequence of node filters,
@@ -1031,19 +1048,40 @@ impl RegistryLiminalDispatch {
     /// gRPC-delivered workers: before, no gRPC worker was ever pinged, so its
     /// exclusion was permanent and invisible behind "nobody is registered".
     ///
-    /// A census read failure falls back to the bare miss. Losing the REASON
-    /// must never suppress the refusal itself, and inventing an exclusion count
-    /// this call could not read would be worse than saying less.
-    fn selection_miss_reason(&self, row: &OutboxRow) -> String {
-        let excluded = self
-            .registry
-            .ineligible_workers_for(
-                &row.namespace,
-                &row.task_queue,
-                &row.activity_type,
-                row.node.as_deref(),
-            )
-            .unwrap_or(0);
+    /// `tiers` MUST be the sequence [`Self::select_liminal_worker`] actually
+    /// walked, which is why it travels here from the selection rather than
+    /// being re-derived. A `Pinned{L}` namespace walks the required labels and
+    /// never spills to a `None` any-node tier; counting over the row's own node
+    /// instead would match every worker in the pool and blame the miss on an
+    /// unlabelled worker that was never a candidate — telling the operator not
+    /// to start the labelled worker that is the only remedy.
+    ///
+    /// A census read failure falls back to the bare miss, LOUDLY. Losing the
+    /// REASON must never suppress the refusal itself, and inventing an
+    /// exclusion count this call could not read would be worse than saying
+    /// less — but a poisoned registry lock is a corruption signal that must not
+    /// leave only a quieter refusal behind as its trace.
+    fn selection_miss_reason(&self, row: &OutboxRow, tiers: &[Option<String>]) -> String {
+        let excluded = match self.registry.ineligible_workers_over_tiers(
+            &row.namespace,
+            &row.task_queue,
+            &row.activity_type,
+            tiers,
+        ) {
+            Ok(excluded) => excluded,
+            Err(error) => {
+                tracing::warn!(
+                    %error,
+                    namespace = %row.namespace,
+                    task_queue = %row.task_queue,
+                    activity_type = %row.activity_type,
+                    "could not read the dispatch-eligibility census for a selection miss; this \
+                     refusal falls back to the bare no-worker message and may therefore describe \
+                     a pool whose workers are merely EXCLUDED as though it were empty"
+                );
+                0
+            }
+        };
         if excluded == 0 {
             return "no liminal worker registered for the row's pool".to_owned();
         }
@@ -1076,10 +1114,11 @@ impl OutboxRowDispatch for RegistryLiminalDispatch {
         // node affinity, applying the SHARED `Prefer` two-tier spill for an
         // unpinned row when a placement cache is attached. No worker for the pool
         // => honest no-worker error => the outbox retries (never a false `done`).
-        let Some(worker) = self.select_liminal_worker(row).await? else {
+        let attempt = self.select_liminal_worker(row).await?;
+        let Some(worker) = attempt.worker else {
             return Err(dispatch_error(
                 &channel_for_row(row),
-                self.selection_miss_reason(row),
+                self.selection_miss_reason(row, &attempt.tiers),
             ));
         };
 
@@ -2313,6 +2352,58 @@ mod tests {
             )
         }
 
+        /// Register a worker carrying NO node label (`node == None`) — the
+        /// any-node worker a `Prefer` tier spills to and a `Pinned` tier never
+        /// admits. The distinction is the whole subject of the refusal tests
+        /// below.
+        fn register_unlabelled_worker(
+            registry: &ConnectedWorkerRegistry,
+            namespace: &str,
+        ) -> Result<WorkerRegistration, ServerError> {
+            let (tx, _rx) = tokio::sync::mpsc::channel::<WorkerMessage>(1);
+            let types = [String::from("charge")];
+            registry.register_namespaces(
+                [namespace.to_owned()],
+                String::from("default"),
+                None,
+                types.iter(),
+                tx,
+            )
+        }
+
+        /// Publish `worker` as dispatch-ineligible, exactly as a liveness round
+        /// would.
+        fn exclude(
+            registry: &ConnectedWorkerRegistry,
+            worker: &WorkerRegistration,
+        ) -> Result<(), Box<dyn std::error::Error>> {
+            let worker_id = worker
+                .worker_id()
+                .ok_or("registration assigned no worker id")?;
+            registry.set_dispatch_ineligible([worker_id].into_iter().collect())?;
+            Ok(())
+        }
+
+        /// Drive the REAL dispatch path and hand back the refusal's reason.
+        ///
+        /// Through `OutboxRowDispatch::dispatch`, not through the reason
+        /// function directly: the reason is a STRING an operator reads, and a
+        /// test that called the private helper would leave the wiring between
+        /// selection and refusal — the exact seam that got the tiers wrong —
+        /// uncovered.
+        async fn refusal_reason(
+            dispatch: &RegistryLiminalDispatch,
+            row: &OutboxRow,
+        ) -> Result<String, Box<dyn std::error::Error>> {
+            match super::super::OutboxRowDispatch::dispatch(dispatch, row).await {
+                Ok(()) => Err("the dispatch must be refused: no worker is selectable".into()),
+                Err(ServerError::WorkerDispatch { reason, .. }) => Ok(reason),
+                Err(other) => {
+                    Err(format!("expected a worker-dispatch refusal, got: {other}").into())
+                }
+            }
+        }
+
         /// Build an UNPINNED outbox row (`node == None`) in `namespace` for `charge`.
         fn unpinned_row(namespace: &str) -> OutboxRow {
             OutboxRow::pending(
@@ -2382,6 +2473,128 @@ mod tests {
             .with_placement_cache(cache)
         }
 
+        /// R3 (#197): a pool whose only worker is eligibility-excluded says SO,
+        /// and does not report itself empty.
+        ///
+        /// The remedies differ and are close to opposite: an empty pool needs a
+        /// worker started, an excluded pool needs its liveness verdict read —
+        /// and starting a second worker there changes nothing, because the new
+        /// one serves the same probation.
+        #[tokio::test]
+        async fn an_excluded_pool_refusal_names_the_exclusion()
+        -> Result<(), Box<dyn std::error::Error>> {
+            let registry = ConnectedWorkerRegistry::default();
+            let worker = register_unlabelled_worker(&registry, "t")?;
+            exclude(&registry, &worker)?;
+            let dispatch = RegistryLiminalDispatch::new(
+                registry.clone(),
+                Arc::new(NoopCallback),
+                DeliveryGate::default(),
+            );
+
+            let reason = refusal_reason(&dispatch, &unpinned_row("t")).await?;
+            assert!(
+                reason.contains("NONE is currently dispatch-eligible"),
+                "the refusal must name the exclusion it found; said: {reason}"
+            );
+            assert!(
+                !reason.contains("no liminal worker registered"),
+                "a pool holding a registered worker is not an empty pool; said: {reason}"
+            );
+            Ok(())
+        }
+
+        /// THE CONTROL for the test above: a genuinely empty pool still reports
+        /// itself empty.
+        ///
+        /// Without it a refusal hard-coded to the exclusion sentence would
+        /// satisfy that test and misdiagnose every truly unserved queue,
+        /// telling an operator not to start the worker they need.
+        #[tokio::test]
+        async fn an_empty_pool_refusal_says_nobody_is_registered()
+        -> Result<(), Box<dyn std::error::Error>> {
+            let registry = ConnectedWorkerRegistry::default();
+            let dispatch = RegistryLiminalDispatch::new(
+                registry.clone(),
+                Arc::new(NoopCallback),
+                DeliveryGate::default(),
+            );
+
+            let reason = refusal_reason(&dispatch, &unpinned_row("t")).await?;
+            assert!(
+                reason.contains("no liminal worker registered for the row\'s pool"),
+                "an empty pool must say nobody is registered; said: {reason}"
+            );
+            assert!(
+                !reason.contains("starting another worker will not help"),
+                "starting a worker is EXACTLY the remedy for an empty pool; said: {reason}"
+            );
+            Ok(())
+        }
+
+        /// 🔴 F3: a `Pinned{{n1}}` namespace with no n1-labelled worker must not
+        /// be blamed on an ineligible UNLABELLED worker.
+        ///
+        /// Selection walked `Required{{n1}}` — the unlabelled worker was never a
+        /// candidate, because a hard pin has no `None` spill. Counting the
+        /// exclusion over the row\'s own node instead (`None`, which matches
+        /// EVERY worker in the pool) makes the refusal say "starting another
+        /// worker will not help" when starting an n1-labelled worker is the one
+        /// thing that would.
+        ///
+        /// A refusal that sends an operator away from the only remedy is worse
+        /// than the catch-all it replaced, so the count must be taken over the
+        /// SAME tier sequence selection actually walked.
+        #[tokio::test]
+        async fn a_pinned_namespace_miss_is_not_blamed_on_an_ineligible_unlabelled_worker()
+        -> Result<(), Box<dyn std::error::Error>> {
+            let ns_store = pinned_store("t", &["n1"]).await?;
+            let registry = ConnectedWorkerRegistry::default();
+            // The only worker in the pool: unlabelled, and excluded. No
+            // n1-labelled worker exists at all.
+            let worker = register_unlabelled_worker(&registry, "t")?;
+            exclude(&registry, &worker)?;
+            let dispatch = liminal_dispatch(&registry, Arc::clone(&ns_store));
+
+            let reason = refusal_reason(&dispatch, &unpinned_row("t")).await?;
+            assert!(
+                !reason.contains("starting another worker will not help"),
+                "the excluded worker was never admissible for a hard pin, so it cannot be the \
+                 reason this row found nobody — and an n1-labelled worker IS the remedy this \
+                 refusal just told the operator not to try. Said: {reason}"
+            );
+            assert!(
+                reason.contains("no liminal worker registered for the row\'s pool"),
+                "no worker admissible to the pin is registered, and that is what the refusal \
+                 must say; said: {reason}"
+            );
+            Ok(())
+        }
+
+        /// THE CONTROL for the pin test: with an n1-labelled worker present and
+        /// excluded, the SAME namespace does report the exclusion.
+        ///
+        /// Without it, a count that always returned zero under a pin would
+        /// satisfy the test above and silently retire the whole R3 distinction
+        /// for every pinned namespace.
+        #[tokio::test]
+        async fn a_pinned_namespace_does_report_an_excluded_admissible_worker()
+        -> Result<(), Box<dyn std::error::Error>> {
+            let ns_store = pinned_store("t", &["n1"]).await?;
+            let registry = ConnectedWorkerRegistry::default();
+            let worker = register_node_worker(&registry, "t", "n1")?;
+            exclude(&registry, &worker)?;
+            let dispatch = liminal_dispatch(&registry, Arc::clone(&ns_store));
+
+            let reason = refusal_reason(&dispatch, &unpinned_row("t")).await?;
+            assert!(
+                reason.contains("NONE is currently dispatch-eligible"),
+                "an n1-labelled worker IS admissible to Pinned{{n1}}, so its exclusion is exactly \
+                 why this row found nobody; said: {reason}"
+            );
+            Ok(())
+        }
+
         /// #163 (prefer): an unpinned row in a `Prefer{n1}` namespace selects the
         /// n1 worker on the liminal path when one is live, even with an n2 worker
         /// also connected.
@@ -2398,6 +2611,7 @@ mod tests {
             let selected = dispatch
                 .select_liminal_worker(&row)
                 .await?
+                .worker
                 .ok_or("a worker must be selected")?;
             assert_eq!(
                 selected.node(),
@@ -2425,6 +2639,7 @@ mod tests {
             let selected = dispatch
                 .select_liminal_worker(&row)
                 .await?
+                .worker
                 .ok_or("the spill must select the live n2 worker")?;
             assert_eq!(
                 selected.node(),
@@ -2453,6 +2668,7 @@ mod tests {
             let selected_a = dispatch
                 .select_liminal_worker(&row_a)
                 .await?
+                .worker
                 .ok_or("routing A must select a worker")?;
             assert_eq!(selected_a.node(), Some("n1"));
 
@@ -2465,6 +2681,7 @@ mod tests {
             let selected_b = dispatch
                 .select_liminal_worker(&row_b)
                 .await?
+                .worker
                 .ok_or("routing B must spill to a worker")?;
             assert_eq!(selected_b.node(), Some("n2"));
 
@@ -2495,6 +2712,7 @@ mod tests {
             let selected = dispatch
                 .select_liminal_worker(&row)
                 .await?
+                .worker
                 .ok_or("the required n1 worker must be selected")?;
             assert_eq!(selected.node(), Some("n1"));
             assert_eq!(row.node, None, "placement must never mutate the row's node");
@@ -2518,7 +2736,7 @@ mod tests {
             let dispatch = liminal_dispatch(&registry, Arc::clone(&ns_store));
 
             let row = unpinned_row("t");
-            let selected = dispatch.select_liminal_worker(&row).await?;
+            let selected = dispatch.select_liminal_worker(&row).await?.worker;
             assert!(
                 selected.is_none(),
                 "Pinned{{n1}} must NOT spill to the live n2 worker — it selects nothing \
@@ -2546,6 +2764,7 @@ mod tests {
             let selected = dispatch
                 .select_liminal_worker(&row)
                 .await?
+                .worker
                 .ok_or("the authored pin must select the n2 worker")?;
             assert_eq!(
                 selected.node(),
@@ -2575,6 +2794,7 @@ mod tests {
             let selected = dispatch
                 .select_liminal_worker(&unpinned_row("t"))
                 .await?
+                .worker
                 .ok_or("an Unplaced namespace still selects a live worker")?;
             assert_eq!(
                 selected.node(),
@@ -2605,6 +2825,7 @@ mod tests {
             let selected = dispatch
                 .select_liminal_worker(&unpinned_row("t"))
                 .await?
+                .worker
                 .ok_or("without a cache the unpinned row still selects any worker")?;
             assert_eq!(
                 selected.node(),

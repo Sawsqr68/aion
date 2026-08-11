@@ -275,7 +275,7 @@ impl LivenessProbe {
         info!(
             cadence_ms = self.cadence.as_millis(),
             silence_window_ms = self.silence_window.as_millis(),
-            "liminal worker liveness probe started"
+            "worker liveness probe started (liminal + grpc)"
         );
         let mut sequence = 0_u64;
         let mut ticks = tokio::time::interval(self.cadence);
@@ -298,16 +298,17 @@ impl LivenessProbe {
                 }
             }
         }
-        info!("liminal worker liveness probe stopped");
+        info!("worker liveness probe stopped");
     }
 
     /// Ping every reachable worker once — liminal connections and gRPC task
     /// streams alike, concurrently — apply each answer to the worker's dispatch
     /// probation, and publish ONE verdict for the round.
     ///
-    /// The two transports are pinged over their own wires and are otherwise
-    /// indistinguishable from here down: the same probation, the same tracker,
-    /// the same single [`Self::publish_reachability_verdict`] call. A round with
+    /// The two transports are pinged over their own wires, CONCURRENTLY with
+    /// each other, and are otherwise indistinguishable from here down: the same
+    /// probation, the same tracker, the same single
+    /// [`Self::publish_reachability_verdict`] call. A round with
     /// no target of either kind publishes nothing — there is no verdict to form
     /// about an empty fleet, and publishing an empty exclusion set would be
     /// indistinguishable from clearing one.
@@ -331,9 +332,18 @@ impl LivenessProbe {
             return;
         }
         let silence_window_ms = u64::try_from(self.silence_window.as_millis()).unwrap_or(u64::MAX);
-        self.probe_liminal(sequence, silence_window_ms, liminal)
-            .await;
-        self.probe_grpc(sequence, silence_window_ms, grpc).await;
+        // Joined, not sequenced. Each half bounds its own pings by the cadence,
+        // so awaiting them in turn would let a round of unanswered gRPC pings
+        // push the NEXT liminal ping a full cadence late — stretching the gap
+        // between a healthy liminal connection's refreshes toward three
+        // quarters of the heartbeat window and eroding the four-refreshes-per-
+        // window margin this module's timings are derived to guarantee. The
+        // halves share no state until their answers are applied, so there is
+        // nothing to serialize.
+        tokio::join!(
+            self.probe_liminal(sequence, silence_window_ms, liminal),
+            self.probe_grpc(sequence, silence_window_ms, grpc),
+        );
         self.publish_reachability_verdict(sequence);
     }
 
@@ -463,6 +473,36 @@ impl LivenessProbe {
     /// So the three transitions are now distinguished and all three are said:
     /// the probation opening (ordinary, INFO), the loss of eligibility that was
     /// actually held (an incident, WARN), and the recovery (INFO).
+    ///
+    /// # A KNOWN FALSE RED IN THE WITHDRAWAL, STATED PLAINLY
+    ///
+    /// A gRPC worker running at its full concurrency stops reading its task
+    /// stream: the worker runtime's receive loop waits for a concurrency permit
+    /// before it reads the next frame, so a ping already on the wire is not
+    /// answered until a permit frees. A worker saturated for longer than one
+    /// probe cadence therefore LOOKS silent while it is in fact working, and
+    /// this WARN will say its dispatch path is unreachable when the truth is
+    /// that it is busy. The line is honest about what was measured — no answer
+    /// arrived — and wrong about what that means.
+    ///
+    /// It is bounded and self-healing, and no operator action is required:
+    /// eligibility is withdrawn, so no further dispatch is sent to that worker;
+    /// the worker finishes its in-flight activities and its permits free; it
+    /// reads and answers the next ping; it serves its two-ping probation and
+    /// returns to the eligible set with the INFO all-clear. In-flight work is
+    /// untouched throughout — this verdict governs who may be SELECTED, never
+    /// what happens to work already dispatched.
+    ///
+    /// The fix is on the admission path (the receive loop must read a frame
+    /// before it waits for a permit), which is a change to how work is
+    /// ACCEPTED, not to how liveness is measured, and it is board item #206.
+    /// This paragraph is struck by the change that lands it.
+    ///
+    /// It is written here rather than left to the reviewer's notes because a
+    /// verdict must not lie about what it measured: an operator reading a
+    /// withdrawal for a saturated worker deserves to find, at the place the
+    /// reason is minted, that this case is known, is not their fault, and needs
+    /// nothing from them.
     fn publish_reachability_verdict(&self, sequence: u64) {
         let now = Instant::now();
         let unreachable = match self.tracker.unreachable_workers(now) {

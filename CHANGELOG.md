@@ -3,6 +3,38 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## Unreleased
+
+- **gRPC workers now prove the server can reach them before they are given
+  work (#197).** A worker connected over gRPC is sent a liveness ping down the
+  same stream its tasks arrive on, and answers it. Until it has answered two in
+  a row it is not selected for dispatch — the identical probation a
+  liminal-connected worker has always served. Previously the probe never
+  reached gRPC workers at all, which is why `aion worker awl serve` could
+  register successfully and then sit idle forever.
+
+  **Who this affects.** Any worker running a binary built before this release
+  on a server that runs the liveness probe: it does not know how to answer the
+  ping, so it never clears probation and stops being dispatched to. The bundled
+  Python and TypeScript SDK stubs are in this position until their regeneration
+  lands (#201). Rust workers rebuilt against this release answer automatically —
+  the worker runtime answers, not your activity code, so nothing in a workflow
+  or an action needs changing.
+
+  **What you will see.** Not silence. The server says why, by worker id: a
+  `SERVING ITS DISPATCH PROBATION` line while a worker is earning eligibility,
+  a `WITHDRAWING DISPATCH ELIGIBILITY` line naming the reason if a worker that
+  had it stops answering, and a `DISPATCH ELIGIBILITY RESTORED` line when it
+  recovers. A dispatch that finds no usable worker now also distinguishes "no
+  worker is registered for this queue" from "workers are registered and none is
+  currently eligible" — the second tells you to read the verdict above rather
+  than start another worker, which would only serve the same probation.
+
+  **What to do.** Upgrade the worker binary to one built from this release. If
+  you are on the Python or TypeScript SDK, the answer arrives with #201's stub
+  regeneration; until then those workers are excluded from dispatch on a server
+  whose probe is running.
+
 ## 0.13.8 — 2026-08-11
 
 - **Errors explain themselves in the editor (#187).** An AWL diagnostic now

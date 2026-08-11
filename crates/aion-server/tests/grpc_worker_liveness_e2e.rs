@@ -371,7 +371,10 @@ async fn next_ping(
         .await
         .map_err(|_| {
             format!(
-                "NO LIVENESS PING REACHED THIS gRPC WORKER within {PING_WAIT:?}. The probe did                  not enumerate its delivery, so it can never be asked, can never answer, and can                  never clear its dispatch probation — it is undispatchable for the life of the                  process"
+                "NO LIVENESS PING REACHED THIS gRPC WORKER within {PING_WAIT:?}. The probe \
+                 did not enumerate its delivery, so it can never be asked, can never answer, and \
+                 can never clear its dispatch probation — it is undispatchable for the life of \
+                 the process"
             )
         })??
         .ok_or("the worker stream closed while waiting for a liveness ping")?
@@ -498,9 +501,12 @@ async fn an_unprobated_grpc_worker_is_not_dispatched_to() -> Result<(), TestErro
          it reaches can only fail"
     );
     assert_eq!(
-        harness
-            .registry
-            .ineligible_workers_for(NAMESPACE, TASK_QUEUE, ACTIVITY_TYPE, None)?,
+        harness.registry.ineligible_workers_over_tiers(
+            NAMESPACE,
+            TASK_QUEUE,
+            ACTIVITY_TYPE,
+            &[None]
+        )?,
         1,
         "R3: the pool is NOT empty — one worker is registered and excluded, and a refusal that \
          says 'no worker registered' sends the operator to start a second one that would serve \

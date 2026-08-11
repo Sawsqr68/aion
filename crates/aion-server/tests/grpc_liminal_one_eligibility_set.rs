@@ -130,7 +130,9 @@ impl MixedFleet {
                 .await
                 .map_err(|_| -> TestError {
                     format!(
-                        "NO LIVENESS PING REACHED THE gRPC WORKER within {PING_WAIT:?}: the probe                          did not enumerate its delivery, so it can never clear its probation"
+                        "NO LIVENESS PING REACHED THE gRPC WORKER within {PING_WAIT:?}: the \
+                         probe did not enumerate its delivery, so it can never clear its \
+                         probation"
                     )
                     .into()
                 })?;
@@ -228,19 +230,22 @@ async fn an_excluded_pool_is_distinguishable_from_an_empty_one() -> Result<(), T
         "precondition: selection finds nobody, which is the miss R3 is about"
     );
     assert_eq!(
-        fleet
-            .registry
-            .ineligible_workers_for(NAMESPACE, TASK_QUEUE, ACTIVITY_TYPE, None)?,
+        fleet.registry.ineligible_workers_over_tiers(
+            NAMESPACE,
+            TASK_QUEUE,
+            ACTIVITY_TYPE,
+            &[None]
+        )?,
         2,
         "both registered workers are excluded, and the refusal must be able to say so instead of \
          telling an operator nobody is registered"
     );
     assert_eq!(
-        fleet.registry.ineligible_workers_for(
+        fleet.registry.ineligible_workers_over_tiers(
             NAMESPACE,
             "nobody-serves-this",
             ACTIVITY_TYPE,
-            None
+            &[None]
         )?,
         0,
         "THE CONTROL: a genuinely empty address reports zero excluded workers. Without this, a \
