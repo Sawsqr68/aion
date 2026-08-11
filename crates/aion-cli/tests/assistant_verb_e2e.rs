@@ -98,7 +98,11 @@ async fn serve() -> Result<(std::net::SocketAddr, tokio::task::JoinHandle<()>), 
     let state =
         ServerState::build_with_store(aion_store::InMemoryStore::default(), runtime_config())
             .await?;
-    let install = install_embedded_assistant_for_server(&state).await;
+    let install = install_embedded_assistant_for_server(
+        &state,
+        "add `liminal_listen_address` to `[outbox]` in the e2e config",
+    )
+    .await;
     let embedded = EmbeddedAssistant::load()?;
     assert_eq!(
         install,

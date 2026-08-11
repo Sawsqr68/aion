@@ -53,7 +53,7 @@ So the whole invocation is short:
 ```
 aion worker agent assistant.awl \
     --liminal-address 127.0.0.1:50061 \
-    --identity assistant-agent-worker
+    --identity assistant-worker
 ```
 
 The launch settings used to be a dozen flags on this verb — `--harness`,
@@ -70,11 +70,23 @@ The version string cannot tell you which side of that a binary is on. Check the
 binary: `aion worker agent --help`. One that still accepts `--concurrency`
 predates the move and reads no `harness` section at all.
 
-None of the three documents this repository ships with an agent action —
-`crates/aion-server/assistant-embed/assistant.awl`,
-`workflows/norn-fleet/norn_fleet.awl` and `workflows/norn-dev/norn_dev.awl` —
-carries a `harness` section yet, so serving any of them with this verb means
-adding one first. (The census is every document with an `agent`-marked action:
+Of the three documents this repository ships with an agent action, the
+embedded assistant (`crates/aion-server/assistant-embed/assistant.awl`)
+carries its `harness` section — it is the document the invocation above
+serves as written. One thing the shipped section deliberately omits: the
+`--workspace-root`/`-C` pair the pre-#204 flag launch passed. Those two take a
+per-box filesystem root, and harness `args` expand only `{workflow_id}` and
+`{activity_type}` — there is no `{workspace_root}` expansion yet (board task
+#210), so a shipped document cannot name a root that is true on every box. The document's session
+prompt therefore INSTRUCTS the agent to work inside its per-session workspace
+instead of asserting a confinement the launch does not provide. An operator
+who wants the confinement back adds the pair to the harness `args` with their
+own root before deploying — the norn example under "The `norn` harness" below
+shows the shape, with `<workspace_root>` as the token the operator replaces.
+`workflows/norn-fleet/norn_fleet.awl` and
+`workflows/norn-dev/norn_dev.awl` do not yet, so serving either with this
+verb means adding one first. (The census is every document with an
+`agent`-marked action:
 `grep -rln 'agent,\|^    agent$' workflows/ crates/aion-server/assistant-embed/`.) Hand it a document
 without one and it refuses by saying so: the queue "declares no `harness`
 section", "There is no flag for any of it", and run `aion awl check` on it. The
@@ -420,7 +432,8 @@ starts.
 ### What it serves, and what the server runs instead
 
 The assistant workflow (`crates/aion-server/assistant-embed/assistant.awl`) declares two
-actions on queue `default`, and they are served by two different things:
+actions on its private queue `assistant` (#200 moved it off `default` — that is
+the out-of-box workers' queue), and they are served by two different things:
 
 - **`assistant_provision` — SERVER-RUN.** It carries a `run "…"` body, so the
   server executes it from the deployed contract; no worker serves it, and a

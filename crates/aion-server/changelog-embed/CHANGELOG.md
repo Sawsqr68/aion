@@ -3,6 +3,47 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## Unreleased
+
+- **The embedded assistant document is launchable by the verb the server
+  recommends (#209).** 0.14.0's QUEUE MOVE warning told the operator to start
+  the assistant's worker with `aion worker agent assistant.awl …` — and the
+  embedded document carried no `harness` section, so that exact invocation
+  refused. The document now declares its own launch: `kind norn`,
+  `concurrency 4`, the reconnect policy carried verbatim from the invocation
+  the docs published for this document before the flag migration (1s initial,
+  30s cap, 100 attempts — the old flags had no defaults; these were the
+  documented values), `env_pass "PATH", "HOME"`, and the norn session
+  arguments (`--session-id {workflow_id}-{activity_type}`,
+  `--resume-if-exists`, `--account default`).
+
+  **Who this affects.** Anyone following the 0.14.0 queue-move instructions,
+  and anyone re-exporting the document with `aion assistant document` — the
+  exported bytes change.
+
+  **What you will see.** `aion worker agent assistant.awl --liminal-address
+  <addr> --identity assistant-worker` now comes up on queue `assistant` as
+  the warning says it will. Three behaviours differ from a pre-#204 flag
+  launch: the spawned norn child's environment is constructed from `env_pass`
+  alone (exactly `PATH` and `HOME` — a box whose norn needs another variable
+  adds it to that list), sessions run under the `default` norn account alias
+  (edit that one token in the document for a different account), and the
+  session prompt now instructs the agent to work inside its per-session
+  workspace rather than asserting a confinement the launch does not provide
+  (`--workspace-root`/`-C` were flag-era settings; operators who want
+  filesystem confinement add the pair to the document's harness `args` with
+  their own root before deploying — `{workspace_root}` expansion, which would
+  return that confinement to the shipped artifact, is board task #210).
+
+  **What to do.** Nothing, if you already made the queue move with a working
+  launch. Otherwise follow the warning's own instructions — they now produce
+  a worker that comes up on the assistant's queue instead of a refusal. The
+  warning also tells the whole truth about the listener: a
+  boot whose outbox does not dispatch on liminal (memory-backend quickstart
+  included) is told it binds NO liminal worker listener, and which `[outbox]`
+  settings commission one, instead of being handed an address that was never
+  going to answer.
+
 ## 0.14.0 — 2026-08-11
 
 - **The built-in assistant no longer claims queue `default` (#200).** The

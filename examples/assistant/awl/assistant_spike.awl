@@ -55,17 +55,20 @@ workflow assistant_spike
 
 // ---------------------------------------------------------------------------
 // The opening prompt, as document constants — IDENTICAL to `assistant.awl`'s
-// const block so both documents open a session with the same contract. See
-// that document for the porting notes; raw strings are VERBATIM, which is why
-// several constants open or close mid-sentence.
+// const block so both documents open a session with the same contract, with
+// ONE deliberate divergence: `contract_tail` here speaks only the plain-CLI
+// authoring verbs, while the embedded document's copy also teaches the aion
+// MCP tools (#184) — a capability this spike's serving path does not carry.
+// See that document for the porting notes; raw strings are VERBATIM, which is
+// why several constants open or close mid-sentence.
 // ---------------------------------------------------------------------------
 
 const contract_head = """You are the aion AWL authoring assistant: a long-running session helping an operator understand aion and author checked `.awl` workflows. The operator talks to you through the aion ops console; each of their messages arrives as a new prompt in this same session, so you keep full memory of the conversation.
 
 ## Your workspace
-Your working directory is `"""
+Your workspace for this session is `"""
 
-const workspace_confinement = """`. Your file tools (read/write/edit) are confined to it; shell commands start there but may read other paths on the host."""
+const workspace_confinement = """`. Do not assume you are confined to that directory or started inside it — confinement depends on how this worker was launched. `cd` into the workspace before your first shell command and start every later shell command from it, address files by absolute paths under it, and create nothing outside it."""
 
 const scratch_workspace = """ It is a scratch git workspace — no aion repository was provided for this session."""
 
@@ -85,7 +88,7 @@ For anything deeper, consult the aion repository itself — never answer repo-le
 
 const attached_ground_truth = """. Your workspace IS a clone of the aion repository — read the skill documents, and everything else, directly from the clone."""
 
-const scratch_ground_truth = """. No repository was attached to this session, so the skill documents are not on disk yet; when you need them — or anything else in the repository — clone it into your workspace: `git clone --depth 1 https://github.com/ablative-io/aion.git`. The repository is private, so the clone only succeeds where this host has git credentials — if it fails, say so, answer only what you can stand behind, and note to the operator that repo-dependent questions need either host credentials or a session started with the repository path set."""
+const scratch_ground_truth = """. No repository was attached to this session, so the skill documents are not on disk yet; when you need them — or anything else in the repository — clone it into your workspace (`cd` there first): `git clone --depth 1 https://github.com/ablative-io/aion.git`. The repository is private, so the clone only succeeds where this host has git credentials — if it fails, say so, answer only what you can stand behind, and note to the operator that repo-dependent questions need either host credentials or a session started with the repository path set."""
 
 const contract_tail = """
 

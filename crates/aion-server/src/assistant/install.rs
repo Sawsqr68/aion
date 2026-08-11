@@ -160,13 +160,90 @@ impl AssistantInstall {
     }
 }
 
+/// The connection facts the queue-move announcement renders (#209).
+///
+/// `listener` is the address a liminal worker listener WILL be bound on this
+/// boot — `None` when no listener will exist. It is NOT the raw configured
+/// address: an address alone does not imply a listener (the dispatcher is
+/// spawned only when the outbox is enabled on the liminal transport), and
+/// keying the announcement off the raw field printed a dial command that was
+/// guaranteed to hang on an `enabled = false` boot — the first-run template's
+/// own memory-backend instruction leaves the address line in place. It is
+/// derived by [`Self::for_boot`]; no other constructor can claim a listener.
+///
+/// `config_hint` is where the operator commissions a listener when there is
+/// none: the boot's resolved config-source hint (`run::liminal_address_hint`,
+/// which names the actual file), or [`Self::without_boot_context`]'s generic
+/// key-naming form where no boot context exists.
+#[derive(Clone, Copy, Debug)]
+pub struct WorkerListenerAdvice<'a> {
+    /// Address a liminal worker listener will be bound on, if any.
+    listener: Option<&'a str>,
+    /// Where the operator adds `liminal_listen_address` when `listener` is `None`.
+    config_hint: &'a str,
+}
+
+impl<'a> WorkerListenerAdvice<'a> {
+    /// Advice for a server boot: the listener claim is DERIVED from the boot's
+    /// own outbox configuration through [`liminal_worker_listener`], never
+    /// passed in raw. The fields are private and this is the only constructor
+    /// that can claim a listener, so a call site outside this module cannot
+    /// hand the announcement the raw configured address again by accident —
+    /// the mistake that was #209's second face.
+    #[must_use]
+    pub fn for_boot(outbox: &'a crate::config::OutboxConfig, config_hint: &'a str) -> Self {
+        Self {
+            listener: liminal_worker_listener(outbox),
+            config_hint,
+        }
+    }
+}
+
+impl WorkerListenerAdvice<'static> {
+    /// Advice for an install with no boot context (direct engine installs, as
+    /// the tests and library callers perform): no listener claim is made, and
+    /// the hint can only name the key and its environment override, not a file.
+    #[must_use]
+    pub fn without_boot_context() -> Self {
+        Self {
+            listener: None,
+            config_hint: "add `liminal_listen_address = \"127.0.0.1:50061\"` to `[outbox]` in a \
+                          config file",
+        }
+    }
+}
+
+/// The address a liminal worker listener will be bound on this boot, if any.
+///
+/// The single predicate for [`WorkerListenerAdvice::listener`]: the listener
+/// exists only when the outbox dispatcher is enabled AND on the liminal
+/// transport AND an address is configured — the same gate
+/// `run::maybe_spawn_outbox_dispatcher` applies before building the liminal
+/// dispatch path. Any weaker read (the raw address field) re-creates #209 one
+/// arm over: a printed command that dials a port nothing listens on.
+///
+/// KNOWN LIMIT, accepted: this is the CONFIGURED listen address, read before
+/// the listener binds (the install runs early in boot; the bind happens later
+/// in the serve phase), so a wildcard host (`0.0.0.0`, `[::]`) or `:0` port
+/// prints a target the operator must translate to a dialable one. Emitting
+/// the bound address would need the announcement moved past the bind point.
+#[must_use]
+fn liminal_worker_listener(outbox: &crate::config::OutboxConfig) -> Option<&str> {
+    (outbox.enabled && matches!(outbox.transport, crate::config::OutboxTransport::Liminal))
+        .then_some(outbox.liminal_listen_address.as_deref())
+        .flatten()
+}
+
 /// Installs the embedded assistant into `engine` under the rule above, logging
 /// exactly what happened.
 ///
 /// Never returns an error: a server whose assistant could not be installed is a
 /// server with no assistant, not a server that must refuse to boot. The outcome
 /// is returned (and logged) so the caller and `/assistant` can both say so.
-pub async fn install_embedded_assistant(engine: &Engine) -> AssistantInstall {
+pub async fn install_embedded_assistant(
+    engine: &Engine,
+    advice: WorkerListenerAdvice<'_>,
+) -> AssistantInstall {
     let embedded = match embedded_assistant() {
         Ok(embedded) => embedded,
         Err(error) => {
@@ -182,7 +259,7 @@ pub async fn install_embedded_assistant(engine: &Engine) -> AssistantInstall {
         }
     };
     let outcome = install_verified(engine, embedded).await;
-    log_outcome(&outcome);
+    log_outcome(&outcome, advice);
     outcome
 }
 
@@ -191,13 +268,23 @@ pub async fn install_embedded_assistant(engine: &Engine) -> AssistantInstall {
 /// The server's own boot path. An engine that cannot be resolved is reported as
 /// a failed install rather than a failed boot: the transports, the console, and
 /// every other surface stay up.
-pub async fn install_embedded_assistant_for_server(state: &crate::ServerState) -> AssistantInstall {
+///
+/// `liminal_address_hint` is the boot's resolved where-to-edit hint (the one
+/// naming the actual config file), threaded so the queue-move announcement's
+/// no-listener arm sends the operator to the right file rather than only the
+/// right key (#209 R1-m3).
+pub async fn install_embedded_assistant_for_server(
+    state: &crate::ServerState,
+    liminal_address_hint: &str,
+) -> AssistantInstall {
+    let advice =
+        WorkerListenerAdvice::for_boot(&state.runtime_config().outbox, liminal_address_hint);
     match state.engine() {
-        Ok(engine) => install_embedded_assistant(engine.as_ref()).await,
+        Ok(engine) => install_embedded_assistant(engine.as_ref(), advice).await,
         Err(error) => {
             let reason = format!("the engine is not available: {error}");
             let outcome = AssistantInstall::Failed { reason };
-            log_outcome(&outcome);
+            log_outcome(&outcome, advice);
             outcome
         }
     }
@@ -293,9 +380,29 @@ fn routed_queues(engine: &Engine, version: &WorkflowVersionInfo) -> RoutedQueues
     }
 }
 
+/// The one worker-step command, rendered from a single place so the two
+/// announcement arms cannot drift apart (#209 R1-m2). `address` is the real
+/// listener address on the arm that has one, or the `<that address>`
+/// placeholder the operator substitutes after commissioning a listener.
+fn worker_agent_command(address: &str) -> String {
+    format!(
+        "aion worker agent assistant.awl --liminal-address {address} --identity assistant-worker"
+    )
+}
+
 /// One structured line per boot stating what the install did, and — when it
 /// stood down — what the operator would run to complete the cut.
-fn log_outcome(outcome: &AssistantInstall) {
+///
+/// `advice.listener` is the address a liminal worker listener WILL be bound on
+/// this boot (see [`liminal_worker_listener`] — NOT the raw configured field),
+/// threaded in so the queue-move announcement can print the worker launch
+/// command with the REAL address in it. An instruction an operator must first
+/// complete by hand is one they can get wrong; the server knows the address,
+/// so the server says it (#209). `None` is a boot that will bind no liminal
+/// listener — the announcement then says a worker has nothing to dial and
+/// names every setting that changes that, instead of printing a command
+/// guaranteed to hang.
+fn log_outcome(outcome: &AssistantInstall, advice: WorkerListenerAdvice<'_>) {
     match outcome {
         AssistantInstall::Installed {
             workflow_type,
@@ -344,6 +451,31 @@ fn log_outcome(outcome: &AssistantInstall) {
                 // full — from, to, and why — so the move is a decision the
                 // operator makes with the facts, not one they reconstruct from
                 // a stalled session afterwards.
+                //
+                // The worker step is a COMMAND, not a description: the
+                // document carries its own launch in its `harness` section
+                // (#204), so the whole remaining variable is the connection —
+                // and the address half of that is this server's own setting,
+                // printed here rather than left for the operator to hunt down.
+                let worker_step = match advice.listener {
+                    Some(address) => format!(
+                        "start the worker the document itself configures: \
+                         `{}` (the launch — harness, concurrency, reconnects, environment — is \
+                         in the document's `harness` section; only the connection is a flag)",
+                        worker_agent_command(address)
+                    ),
+                    None => format!(
+                        "start a worker on the new queue — but this boot binds NO liminal \
+                         worker listener, so an agent worker has nothing to dial. Commission \
+                         one under `[outbox]`: set `enabled = true`, `transport = \"liminal\"`, \
+                         and the listen address ({hint}; env override \
+                         AION_OUTBOX_LIMINAL_LISTEN_ADDRESS); note `enabled = true` requires \
+                         a durable store backend — a `[store] backend = \"memory\"` boot \
+                         refuses it. Then restart, and `{command}`",
+                        hint = advice.config_hint,
+                        command = worker_agent_command("<that address>")
+                    ),
+                };
                 tracing::warn!(
                     operation = "assistant.install",
                     outcome = outcome.outcome(),
@@ -360,9 +492,8 @@ fn log_outcome(outcome: &AssistantInstall) {
                      WAS MOVED: routing is untouched and the sessions on the routed version keep \
                      running on `{routed_queue}`. To make the move deliberately: `aion assistant \
                      document --output assistant.awl`, then `aion deploy assistant.awl` (which \
-                     loads AND routes it), and then start a worker on `{embedded_queue}` — a \
-                     worker still serving `{routed_queue}` will not receive the new version's \
-                     dispatches"
+                     loads AND routes it), and then {worker_step} — a worker still serving \
+                     `{routed_queue}` will not receive the new version's dispatches"
                 );
             } else {
                 tracing::warn!(

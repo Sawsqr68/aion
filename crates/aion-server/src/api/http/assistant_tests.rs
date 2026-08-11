@@ -17,7 +17,7 @@ use super::super::router::workflow_router;
 use super::super::test_support::{get_request, read_json, read_text, runtime_config, server_state};
 use crate::assistant::{
     CONTINUE_SIGNAL, EMBEDDED_ASSISTANT_DOCUMENT, EmbeddedAssistant, OBJECTIVE_INPUT,
-    REPO_PATH_INPUT, STATUS_QUERY, install_embedded_assistant,
+    REPO_PATH_INPUT, STATUS_QUERY, WorkerListenerAdvice, install_embedded_assistant,
 };
 use crate::{
     NamespaceResolver, StaticScheduleNamespaces, StaticWorkflowNamespaces, config::NamespaceMode,
@@ -37,7 +37,11 @@ async fn router(install: bool) -> Result<axum::Router, Box<dyn std::error::Error
             .await?,
     );
     if install {
-        install_embedded_assistant(engine.as_ref()).await;
+        install_embedded_assistant(
+            engine.as_ref(),
+            WorkerListenerAdvice::without_boot_context(),
+        )
+        .await;
     }
     let resolver = NamespaceResolver::from_parts(
         NamespaceMode::SharedEngine,

@@ -63,6 +63,6 @@ pub use document::{
     REPO_PATH_INPUT, STATUS_QUERY, embedded_assistant, private_task_queue,
 };
 pub use install::{
-    AssistantInstall, RoutedQueues, install_embedded_assistant,
+    AssistantInstall, RoutedQueues, WorkerListenerAdvice, install_embedded_assistant,
     install_embedded_assistant_for_server,
 };

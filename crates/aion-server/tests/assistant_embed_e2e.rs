@@ -129,7 +129,11 @@ async fn a_stock_server_on_a_fresh_home_serves_a_routed_assistant() -> Result<()
     let harness = Harness::boot().await?;
     let embedded = EmbeddedAssistant::load()?;
 
-    let install = install_embedded_assistant_for_server(&harness.state).await;
+    let install = install_embedded_assistant_for_server(
+        &harness.state,
+        "add `liminal_listen_address` to `[outbox]` in the e2e config",
+    )
+    .await;
     assert_eq!(
         install,
         AssistantInstall::Installed {

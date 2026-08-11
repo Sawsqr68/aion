@@ -7,9 +7,11 @@ Generated Gleam from `aion awl emit` is a toolchain view, not authored source.
 
 ## Workspace boundary
 
-Your file tools are confined to the session workspace. Shell commands start in
-that workspace and may read paths outside it, subject to host permissions.
-Keep every file you author inside the workspace. If the workspace is a clone of
+Do not assume you are confined to the session workspace or started inside it —
+confinement depends on how your worker was launched, and some launches set no
+working directory and confine no tool. `cd` into the workspace before your
+first shell command and start every later shell command from it, address files
+by absolute paths under it, and keep every file you author inside it. If the workspace is a clone of
 the aion repository, preserve unrelated changes and use the repository itself
 as the authority. If it is scratch space, nothing is materialized for you:
 clone the repository when you need it, and use `aion awl guide` for the

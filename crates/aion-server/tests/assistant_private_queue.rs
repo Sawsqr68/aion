@@ -34,7 +34,8 @@ use std::sync::Arc;
 use aion::{Engine, EngineBuilder};
 use aion_package::{ActivityDescriptor, ExtractionLimits, Package};
 use aion_server::assistant::{
-    AssistantInstall, EmbeddedAssistant, install_embedded_assistant, private_task_queue,
+    AssistantInstall, EmbeddedAssistant, WorkerListenerAdvice, install_embedded_assistant,
+    private_task_queue,
 };
 use aion_server::worker::AdmissionAudit;
 use aion_server::worker::contracts::{WorkerAdvertisement, validate_worker_contracts};
@@ -121,7 +122,11 @@ async fn a_fresh_server_serves_default_workflows_with_no_interference_from_the_a
     let engine = engine().await?;
     let embedded = EmbeddedAssistant::load()?;
 
-    let install = install_embedded_assistant(engine.as_ref()).await;
+    let install = install_embedded_assistant(
+        engine.as_ref(),
+        WorkerListenerAdvice::without_boot_context(),
+    )
+    .await;
     assert_eq!(
         install,
         AssistantInstall::Installed {
@@ -271,7 +276,11 @@ async fn an_assistant_on_default_refuses_the_out_of_box_worker() -> Result<(), T
 async fn a_fresh_catalog_declares_the_private_queue_and_not_default() -> Result<(), TestError> {
     let engine = engine().await?;
     let embedded = EmbeddedAssistant::load()?;
-    let install = install_embedded_assistant(engine.as_ref()).await;
+    let install = install_embedded_assistant(
+        engine.as_ref(),
+        WorkerListenerAdvice::without_boot_context(),
+    )
+    .await;
     assert!(matches!(install, AssistantInstall::Installed { .. }));
 
     let declared = engine.declared_task_queues()?;
