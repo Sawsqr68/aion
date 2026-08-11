@@ -118,16 +118,37 @@ Honesty about the failure face, as of today:
 
 ## Running a fleet
 
+First, the document has to say how the judge is launched. `norn_fleet.awl` as
+tracked carries **no `harness` section**, and `aion worker agent` refuses a
+document without one — the launch is not a flag and never falls back to a
+default. Add it to the `worker fleet` block, above the `judge` action:
+
+```awl
+worker fleet
+  harness
+    kind norn
+    concurrency 4
+    reconnect_initial_backoff 1s
+    reconnect_max_backoff 30s
+    reconnect_max_attempts 100
+    env_pass "PATH", "HOME"
+    args "--workspace-root", "/srv/fleet/{workflow_id}", "-C", "/srv/fleet/{workflow_id}", "--account", "default"
+```
+
+`{workflow_id}` and `{activity_type}` are expanded per dispatch by the Norn
+adapter; everything else is literal. `env_pass` is the judge's whole
+environment — a variable not named there is absent in the spawned norn, whatever
+the shell that started the worker exported. `aion awl check` names any setting
+left out.
+
 ```sh
 # 1. Validate locally (no server)
 aion awl check workflows/norn-fleet/norn_fleet.awl
 
 # 2. Start the judge worker (from the repository root — see the warning below)
 aion worker agent workflows/norn-fleet/norn_fleet.awl \
-    --harness norn --liminal-address 127.0.0.1:50061 \
-    --identity fleet-judge-worker --concurrency 4 \
-    --reconnect-initial-backoff 1 --reconnect-max-backoff 30 \
-    --reconnect-max-attempts 100
+    --liminal-address 127.0.0.1:50061 \
+    --identity fleet-judge-worker
 
 # 3. Confirm the queue is servable
 curl -s -X POST http://127.0.0.1:8080/awl/workers/availability \
@@ -142,19 +163,17 @@ aion run workflows/norn-fleet/norn_fleet.awl --input "$(cat issues.json)"
 
 There is **no sandbox and no file boundary** on this path. The worker's
 working directory is only what the judges' relative paths resolve against —
-nothing confines them to it. Confinement would come from norn's
-`--workspace-root`, which requires the worker's `--norn-arg` passthrough —
-and a binary built before commit `e7c748e62` does not have that flag (check
-yours: `aion worker agent --help | grep norn-arg`; the version string won't
-discriminate — both sides of that commit say 0.11.0). On such a binary each
-judge runs with the operator's full filesystem access, restrained only by
-its prompt. Start the worker from the repository root so relative paths
-resolve sensibly, write prompts that do not ask for writes, and treat every
-fleet as running unattended agents under your own account — because it is.
+nothing confines them to it. Confinement comes from norn's own
+`--workspace-root`, which is an entry in the `harness` section's `args` and
+therefore something you have to write: a section without it launches judges
+with the operator's full filesystem access, restrained only by their prompts.
+Write it, start the worker from the repository root so relative paths resolve
+sensibly, write prompts that do not ask for writes, and treat every fleet as
+running unattended agents under your own account — because it is.
 
 ### Concurrency is the fan-out width
 
-The `--concurrency` flag is required by the worker builder but is **inert
+The document's `concurrency` is required by the worker builder but is **inert
 for agent dispatches on this transport** — every judgement dispatched to the
 worker starts its own norn process immediately. A fleet of N issues is N
 simultaneous norn sessions (plus the control, which runs alone before them).
@@ -176,9 +195,11 @@ the dispatcher parses the record's `text` downstream. When a custom harness
 lands, the upgrade path is unchanged in kind: widen the action's return
 type and let the checker force the document and worker to move together.
 
-One further operational note: judges on a pre-`e7c748e62` binary run with
-bare norn defaults — default account, fresh session per judgement, no
-session pinning. And the standing hold on *long* fleet runs is the beamr
+One further operational note: a `harness` section whose `args` list is empty or
+absent runs judges on bare norn defaults — default account, fresh session per
+judgement, no session pinning, no workspace confinement. Everything the judge
+gets, it gets because the document said so. And the standing hold on *long*
+fleet runs is the beamr
 JIT `NativeServices` defect (#82) — a compiled frame re-entering the
 interpreter loses its services mid-run, which is what killed the 55-minute
 tharsis fleet. Keep fleets short until the fixed beamr lands.

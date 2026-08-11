@@ -115,8 +115,13 @@ declared action, and choosing between them is an authoring decision:
        agent, timeout 10m
    ```
 
-   `aion worker agent FILE.awl` serves it without anyone writing a crate.
-   `agent` and a `run` body are mutually exclusive.
+   `aion worker agent FILE.awl` serves it without anyone writing a crate —
+   once the same `worker` block carries a `harness` section saying how to
+   launch the agent (`kind`, `concurrency`, the reconnect trio, `env_pass`,
+   and the per-kind settings). None of that is a flag; `aion awl check` names
+   anything the section is missing. See `WORKERS.md` and
+   `docs/workers/AGENT-WORKERS.md`. `agent` and a `run` body are mutually
+   exclusive.
 
 4. **`aion worker shell`**, for host commands wired by a strict manifest.
 

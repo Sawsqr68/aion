@@ -1,0 +1,9 @@
+    Checking aion-awl v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl)
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-server)
+    Checking aion-integration-norn v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-norn)
+    Checking aion-integrations v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integrations)
+    Checking aion-integration-acp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-acp)
+    Checking aion-awl-package v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl-package)
+    Checking aion-awl-lsp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl-lsp)
+    Checking aion-cli v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3m 16s

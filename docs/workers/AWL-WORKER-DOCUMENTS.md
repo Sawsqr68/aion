@@ -102,6 +102,51 @@ only the action's own declared parameters. See
 [`DECLARED-COMMANDS.md`](DECLARED-COMMANDS.md) for the full interpolation
 table, including the single-quote trap.
 
+## The `harness` section
+
+A `worker` block may also carry a `harness` section: the launch settings for an
+**agent** worker serving that queue — which harness, how many activities at
+once, the reconnect trio, the environment the agent subprocess is given, and
+the agent's own command and arguments. It sits before the block's `action`
+declarations, one setting per line.
+
+```awl
+worker assistants
+  harness
+    kind acp
+    concurrency 4
+    reconnect_initial_backoff 5s
+    reconnect_max_backoff 2m
+    reconnect_max_attempts 100
+    env_pass "PATH", "HOME"
+    command "/usr/local/bin/claude-code-acp"
+    cwd "/srv/agents/workspace"
+    permission "deny"
+    exit_grace 10s
+  action ask(prompt: String) -> Reply
+    agent
+```
+
+**In practice that block is in a workflow document, not a worker document**,
+and two rules make it so. A `harness` section says how to launch an
+agent for the actions on the queue that nothing else runs — so a queue whose
+actions all carry declared bodies is refused, naming them, because there is
+nothing there for an agent to serve and the launch would start a subprocess no
+work is ever sent to. A worker document, meanwhile, requires *every* action to
+carry a body. The two conditions cannot both hold, so a `harness` section
+belongs where a bodyless action can: in the `worker` block of a workflow
+document, which is the shape
+`crates/aion-server/assistant-embed/assistant.awl` uses. Both families are
+checked by the same pass, so writing one here is refused rather than quietly
+accepted.
+
+The section is the only place those settings exist — `aion worker agent` has no
+flag for any of them — and the full field table, the per-kind required sets, and
+what each refusal means are in
+[AGENT-WORKERS.md](AGENT-WORKERS.md#the-harness-section--the-whole-launch-in-the-document).
+Ground truth: `crates/aion-awl/src/checker/harness.rs` and the corpus under
+`crates/aion-awl/tests/fixtures/rev2/harness-section/`.
+
 ## How a worker document and its caller stay honest
 
 The workflow document declares what it needs:
@@ -179,6 +224,14 @@ What a worker document does give you, and the manifest does not:
    document's declared bodies, because the host process legitimately holds
    credentials and a document must not be able to read them by running `env`.
    The manifest shell worker inherits the worker's whole environment.
+
+   That rule is this executor's, and it is fixed: a declared command gets
+   `PATH` and nothing else, and no document can widen it. An **agent harness**
+   child is a different subprocess with a different rule — its environment is
+   constructed from the `harness` section's `env_pass` list, so it gets exactly
+   the variables that document names and nothing more. Neither inherits, and
+   the difference is which one you are looking at: a `run` body's environment
+   is not declarable, and an agent's is declared in full.
 2. **A parameter value can never become code.** The command is parsed once
    into an argv whose elements are literal text or named parameter holes, and
    a value is substituted as one WHOLE argv element that never re-enters a

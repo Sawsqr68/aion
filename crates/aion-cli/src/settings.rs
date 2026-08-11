@@ -7,7 +7,7 @@
 //! settings ([`crate::worker_agent`]) and the per-harness CONFIGURATION the
 //! composition root resolves after a harness is selected ([`crate::harness`]) — and
 //! an operator cannot tell the two apart from the command line. If each resolved its
-//! own way, one shell invocation could be told "supply `--acp-permission`" on one run
+//! own way, one shell invocation could be told "supply `--identity`" on one run
 //! and "supply `--identity`" on the next, when both were missing all along. So the
 //! collection of misses is shared, and the refusal is rendered once from the whole
 //! set.

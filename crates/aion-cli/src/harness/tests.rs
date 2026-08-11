@@ -259,8 +259,7 @@ fn each_permission_spelling_resolves_to_the_adapters_policy() -> TestResult {
 
 #[cfg(feature = "norn")]
 #[test]
-fn the_norn_binary_is_optional_and_the_absence_takes_the_adapters_own_default()
--> TestResult {
+fn the_norn_binary_is_optional_and_the_absence_takes_the_adapters_own_default() -> TestResult {
     let Some(resolved) = super::settings::resolve(&norn(), &document())? else {
         return Err("this build links the norn adapter".into());
     };
@@ -283,7 +282,10 @@ fn the_norn_binary_is_optional_and_the_absence_takes_the_adapters_own_default()
     let super::settings::HarnessConfig::Norn(config) = resolved.config else {
         return Err("a norn declaration must produce a norn configuration".into());
     };
-    assert_eq!(config.binary.as_deref(), Some(Path::new("/opt/norn/bin/norn")));
+    assert_eq!(
+        config.binary.as_deref(),
+        Some(Path::new("/opt/norn/bin/norn"))
+    );
     Ok(())
 }
 

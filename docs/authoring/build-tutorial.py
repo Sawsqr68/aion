@@ -1461,22 +1461,42 @@ SLIDES: list[Slide] = [
         title="Start the worker in a second terminal",
         cmd=[
             "aion worker agent repo_gate_judged.awl \\",
-            "  --harness norn \\",
             "  --liminal-address 127.0.0.1:50169 \\",
-            "  --identity repo-gate-judge --concurrency 4 \\",
-            "  --reconnect-initial-backoff 1 \\",
-            "  --reconnect-max-backoff 30 \\",
-            "  --reconnect-max-attempts 100",
+            "  --identity repo-gate-judge",
+        ],
+        bites=[
+            "Declare the launch first, in <code>repo_gate_judged.awl</code>, "
+            "indented under <code>worker gate</code> and above its actions: "
+            "<code>harness</code>, then <code>kind norn</code>, "
+            "<code>concurrency 4</code>, "
+            "<code>reconnect_initial_backoff 1s</code>, "
+            "<code>reconnect_max_backoff 30s</code>, "
+            "<code>reconnect_max_attempts 100</code>, and "
+            "<code>env_pass \"PATH\", \"HOME\"</code> — one setting per line.",
         ],
         points=[
             "The address is the tutorial config's <code>[outbox]</code> listener "
             "— not its HTTP port and not its gRPC port.",
-            "Identity, concurrency and all three reconnect values are required "
-            "operator policy on 0.11.0; the worker refuses to invent them.",
-            "The installed 0.11.0 binary carries the norn and ACP adapters, but "
-            "does not expose its plain-CLI harness. This teachable path therefore "
-            "uses norn and requires the <code>norn</code> CLI on "
-            "<code>PATH</code>.",
+            "The LAUNCH is declared in the document, in the "
+            "<code>harness</code> section of the <code>worker</code> block: which "
+            "harness, how many activities at once, how it reconnects, and which "
+            "environment variables the agent subprocess is given. Every value is "
+            "required operator policy — nothing anywhere invents one — and "
+            "<code>aion awl check</code> names any you leave out.",
+            "<code>env_pass</code> is the agent subprocess's WHOLE environment. "
+            "The document names the variables, this machine supplies their "
+            "values, and a variable you do not name is absent in the agent "
+            "whatever your shell exported. Nothing is inherited.",
+            "What is left on the command line is the connection: which document, "
+            "where to dial, and who this worker says it is. There is no "
+            "<code>--harness</code>, no <code>--concurrency</code> and no "
+            "<code>--reconnect-*</code> flag — they were deleted when the section "
+            "shipped, and passing one is an arg-parse error.",
+            "The shipped binary carries the norn and ACP adapters, but does not "
+            "expose its plain-CLI harness. This teachable path therefore declares "
+            "<code>kind norn</code> and requires the <code>norn</code> CLI on "
+            "<code>PATH</code> — which is also why <code>PATH</code> is in the "
+            "<code>env_pass</code> list above.",
             "The one-block document derives queue <code>gate</code>; no "
             "<code>--task-queue</code> flag is needed.",
         ],

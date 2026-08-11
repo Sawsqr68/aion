@@ -60,7 +60,6 @@ pub(crate) mod compose;
 mod tests;
 
 pub(crate) use catalogue::{HarnessKind, announce_composed_harness, registration_capabilities};
-pub(crate) use settings::{ResolvedHarness, resolve as resolve_declared};
 #[cfg(test)]
 pub(crate) use settings::test_environment;
-
+pub(crate) use settings::{ResolvedHarness, resolve as resolve_declared};

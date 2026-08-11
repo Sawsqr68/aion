@@ -101,7 +101,7 @@ pub(crate) fn derive(document: &Path, requested_queue: Option<&str>) -> Result<A
 /// in a report an operator reads instead of a remote refusal.
 ///
 /// `harness` is the harness this invocation resolved, `None` when the build compiles
-/// none in. It is reported by the short name `--harness` accepts, beside the
+/// none in. It is reported by the short name a document's `harness kind` declares, beside the
 /// registration-time capability set that harness's adapter publishes: those two
 /// together are what the server will route operator commands on, so a build or a
 /// selection that would offer the wrong controls is visible before the worker dials.

@@ -39,12 +39,20 @@ supervises worker processes itself (see "Managed workers" below).
 
 `aion worker agent FILE.awl` serves the agent harness compiled into the binary
 on the queue the document declares — an agent worker without writing a crate.
-It is the counterpart to the `agent` marker on an action declaration:
+It is the counterpart to the `agent` marker on an action declaration, and the
+`harness` section beside it is where the launch is declared:
 
 ```awl
 type Reply { text: String, stop_reason: String }
 
 worker assistants
+  harness
+    kind norn
+    concurrency 4
+    reconnect_initial_backoff 1s
+    reconnect_max_backoff 30s
+    reconnect_max_attempts 100
+    env_pass "PATH", "HOME"
   action ask(prompt: String) -> Reply
     agent, timeout 10m
 ```
@@ -63,15 +71,27 @@ Facts to check before claiming this works in a session:
 - The worker dials `--liminal-address` candidates (repeatable, for ordered
   redial), **not** the global gRPC `--endpoint`. The agent-harness seam exists
   only on the liminal worker transport.
-- `--harness` selects among the adapters the binary was built with. The default
-  build carries `norn` and `acp`, so the flag is REQUIRED; a build carrying
-  exactly one derives it, and an unknown name is refused naming what the build
-  does carry. A flag configuring a harness this invocation is not serving is
-  refused rather than ignored.
-- Connection settings (`--identity`, `--concurrency`, the three reconnect
-  settings, and at least one `--liminal-address`) each come from a flag or a
-  named environment variable, the flag wins, nothing is invented, and every
-  missing one is named at once.
+- The LAUNCH is the document's, in the `worker` block's `harness` section
+  above: `kind` (`acp` or `norn`), `concurrency`, the three reconnect settings,
+  `env_pass`, and per kind `command`/`cwd`/`permission`/`exit_grace` for `acp`
+  or the optional `binary` for `norn`, plus optional `args` for either. **There
+  is no flag for any of it** — the per-setting flags this verb used to take
+  (`--harness`, `--concurrency`, `--reconnect-*`, `--acp-*`, `--norn-*`) are
+  deleted and no longer parse. A document with a queue but no `harness` section
+  is refused, by name.
+- `aion awl check FILE.awl` names any setting the section is missing, scoped to
+  the KIND it declares: an `acp` section needs no `binary`, a `norn` section
+  needs no `command`, and a setting written for the other kind is refused
+  rather than ignored. The default build carries both adapters; a `kind` this
+  binary was not built with is refused naming what it does carry.
+- `env_pass` is the agent subprocess's WHOLE environment. The document names
+  the variables, the machine supplies their values, and a variable it does not
+  name is absent in the agent whatever the worker inherited. Entries are names
+  only — one containing `=` is refused, because a value written into a document
+  is a secret in a file that gets committed.
+- Connection settings (`--identity` and at least one `--liminal-address`) each
+  come from a flag or a named environment variable, the flag wins, nothing is
+  invented, and every missing one is named at once.
 - The task queue is derived when the document declares exactly one `worker`
   block, and selected with `--task-queue` when it declares several. Serving is
   all-or-nothing: a queue is served whole or the verb refuses by name. An

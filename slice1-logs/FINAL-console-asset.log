@@ -1,0 +1,16 @@
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-server)
+   Compiling aion-cli v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-cli)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-cli` (bin "aion") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3m 03s
+     Running tests/console_guide_asset.rs (target/debug/deps/console_guide_asset-ed0a5553cc40aa8b)
+
+running 2 tests
+test the_console_asset_is_readable_json_with_the_shape_the_panel_uses ... ok
+test the_console_asset_is_what_the_cli_renders_today ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.50s
+

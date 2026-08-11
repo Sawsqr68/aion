@@ -232,7 +232,9 @@ hands it to a harness. The marker classifies the declaration and must not
 change the flow: `agent_seam.awl` and `agent_seam_unmarked_control.awl` must
 lower to identical MIR.
 
-`aion worker agent <FILE.awl>` serves these seams without you writing a crate.
+`aion worker agent <FILE.awl>` serves these seams without you writing a crate,
+launching the agent from the `harness` section the same `worker` block carries
+(§16).
 
 ### Declared command bodies
 
@@ -853,3 +855,71 @@ that surface, and the command each action runs, without connecting.
 **Read `docs/workers/AWL-WORKER-DOCUMENTS.md` before writing one. THERE IS NO
 SANDBOX** — the same boundaries `docs/workers/DECLARED-COMMANDS.md` states,
 on the worker's host instead of the server's.
+
+### The `harness` section
+
+A `worker` block may also carry a `harness` section: the launch settings for an
+AGENT worker serving that queue. It sits before the block's `action`
+declarations, one setting per line. Every word in it — `harness` itself and each
+field name — is an ordinary identifier rather than a reserved word, so nothing
+else in the language loses those names.
+
+```awl
+worker assistants
+  harness
+    kind acp
+    concurrency 4
+    reconnect_initial_backoff 5s
+    reconnect_max_backoff 2m
+    reconnect_max_attempts 100
+    env_pass "PATH", "HOME"
+    command "/usr/local/bin/claude-code-acp"
+    cwd "/srv/agents/workspace"
+    permission "deny"
+    exit_grace 10s
+  action ask(prompt: String) -> Reply
+    agent
+```
+
+| Setting | Kind | Value |
+|---|---|---|
+| `kind` | both, required | the bare word `acp` or `norn` |
+| `concurrency` | both, required | a whole number greater than zero |
+| `reconnect_initial_backoff` | both, required | a positive duration |
+| `reconnect_max_backoff` | both, required | a positive duration, not shorter than the initial |
+| `reconnect_max_attempts` | both, required | a whole number greater than zero |
+| `env_pass` | both, required | quoted variable NAMES, comma-separated |
+| `args` | both, optional | quoted strings, comma-separated, order preserved |
+| `command` | `acp` only, required | a quoted ABSOLUTE path |
+| `cwd` | `acp` only, required | a quoted ABSOLUTE path |
+| `permission` | `acp` only, required | `"deny"` or `"allow-once"` |
+| `exit_grace` | `acp` only, required | a duration; `0s` is legitimate and means close stdin, then kill at once |
+| `binary` | `norn` only, optional | a quoted path; omitted takes the adapter's own `norn`-on-`PATH` default |
+
+The required set is the DECLARED KIND's. An `acp` section carrying no `binary`
+is complete, a `norn` section carrying no `command`, `cwd`, `permission` or
+`exit_grace` is complete, and a setting belonging to the kind the section does
+not declare is refused BY NAME rather than ignored — a setting that silently
+does nothing is how an operator comes to believe a policy is in force when it is
+not. Nothing is defaulted: `aion awl check` names every required setting the
+section omits.
+
+`env_pass` is the agent subprocess's WHOLE environment. The document names the
+variables, the machine running the worker supplies their values, and a variable
+the list does not name is absent in the agent whatever the worker's own
+environment carries. Entries are names only; one containing `=` is refused,
+because a value written into a document is a secret in a file that gets
+committed, diffed and deployed.
+
+A list does not wrap — a comma at the end of a line is a parse error — and
+`aion awl fmt` prints the fields in the fixed order above whatever order they
+were written in. The section is launch configuration and not flow meaning: a
+document carrying one lowers to the same MIR as the same document without it.
+
+**Where it goes.** A `harness` section says how to launch an agent for the
+actions on a queue that nothing else runs, so a queue whose actions ALL carry
+declared bodies is refused, naming them: there is nothing there for an agent to
+serve. A worker document requires a body on every action, so in practice the
+section lives in the `worker` block of a WORKFLOW document — the one place a
+bodyless action and a launch can sit together. `aion worker agent <FILE.awl>`
+reads it, and has no flag for any of the settings in it.

@@ -1,0 +1,84 @@
+=== rider (b): a bare invocation refuses LOUDLY, naming the new shape ===
+error: `aion worker agent` serves the queue an `.awl` document declares, and no document was named.
+
+  aion worker agent <FILE.awl> --liminal-address <HOST:PORT> --identity <NAME>
+
+Everything about the LAUNCH — the harness kind, the concurrency, the reconnect settings, the agent's command, working directory, permission policy and shutdown grace, and the environment variables the agent subprocess is given — is declared in that document's `harness` section and is no longer a flag. Check a document with `aion awl check <FILE.awl>`; the checker names any setting it is missing.
+exit=1
+
+=== migration: a deleted launch flag no longer parses at all ===
+error: unexpected argument '--concurrency' found
+
+  tip: to pass '--concurrency' as a value, use '-- --concurrency'
+
+Usage: aion worker agent <AWL>
+
+For more information, try '--help'.
+exit=2
+
+=== rider (a): the VERB survives and takes a document reference ===
+{
+  "actions": [
+    {
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      },
+      "name": "ask",
+      "output_schema": {
+        "$defs": {
+          "Reply": {
+            "description": "The canonical agent-outcome record: the checker demands the STRUCTURE, not a blessed name.",
+            "properties": {
+              "stop_reason": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text",
+              "stop_reason"
+            ],
+            "type": "object"
+          }
+        },
+        "$ref": "#/$defs/Reply"
+      }
+    }
+  ],
+  "harness": "norn",
+  "intervention_capabilities": {
+    "supported": [
+      {
+        "primitive": "InjectMessage"
+      },
+      {
+        "primitive": "Cancel"
+      }
+    ]
+  },
+  "task_queue": "assistants"
+}
+exit=0
+
+=== the checker names the missing field, scoped to the declared kind ===
+crates/aion-awl/tests/fixtures/rev2/harness-section/invalid/missing_acp_permission.awl:14:3: error: the `harness` section of worker `assistants` declares no `permission`, and nothing supplies one: an unattended activity has no operator to ask, so how the agent's permission requests are answered is decided up front: write `permission "deny"` or `permission "allow-once"`.
+
+crates/aion-awl/tests/fixtures/rev2/harness-section/invalid/missing_env_pass_on_norn.awl:14:3: error: the `harness` section of worker `assistants` declares no `env_pass`, and nothing supplies one: the harness child's environment is CONSTRUCTED from this list and never inherited, so a section without it declares an environment nobody chose; name every variable the agent needs, for example `env_pass "PATH", "HOME"`.
+
+crates/aion-awl/tests/fixtures/rev2/harness-section/invalid/norn_section_carrying_an_acp_command.awl:23:5: error: `command` configures the `acp` harness, and this section declares `kind norn`. A setting that silently does nothing is how an operator comes to believe a policy is in force when it is not, so it is refused rather than ignored.
+
+=== a complete acp section is COMPLETE without any norn setting ===
+ok: crates/aion-awl/tests/fixtures/rev2/harness-section/valid/acp_harness.awl (1 step)
+=== a complete norn section is COMPLETE without any acp setting ===
+ok: crates/aion-awl/tests/fixtures/rev2/harness-section/valid/norn_harness.awl (1 step)

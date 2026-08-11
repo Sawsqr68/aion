@@ -140,12 +140,13 @@ fn child_environment(
     declared: &CompiledHarness,
     document: &std::path::Path,
 ) -> Result<ChildEnvironment> {
-    let declaration = EnvironmentDeclaration::new(declared.env_pass.clone()).with_context(|| {
-        format!(
-            "the `harness` section of {} declares an unusable `env_pass` list",
-            document.display()
-        )
-    })?;
+    let declaration =
+        EnvironmentDeclaration::new(declared.env_pass.clone()).with_context(|| {
+            format!(
+                "the `harness` section of {} declares an unusable `env_pass` list",
+                document.display()
+            )
+        })?;
     let environment = declaration.resolve_from_process();
     if !environment.absent().is_empty() {
         tracing::warn!(

@@ -124,7 +124,10 @@ async fn prepare(args: &AgentArgs) -> Result<Prepared> {
 /// operator meeting this has almost certainly arrived with the deleted flags in their
 /// fingers, and the useful answer is where those settings live now — not that one of
 /// them is absent.
-pub(super) fn no_harness_section(surface: &AdvertisedSurface, document: &std::path::Path) -> anyhow::Error {
+pub(super) fn no_harness_section(
+    surface: &AdvertisedSurface,
+    document: &std::path::Path,
+) -> anyhow::Error {
     anyhow::anyhow!(
         "queue `{queue}` in {path} declares no `harness` section, so this document does not say \
          how to launch an agent for it.\n\nAn agent worker's launch — the harness kind, the \

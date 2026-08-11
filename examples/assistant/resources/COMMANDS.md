@@ -190,10 +190,7 @@ can get past its first call:
 ```sh
 aion --endpoint HOST:PORT worker shell --manifest worker.toml --awl FILE.awl
 aion --endpoint HOST:PORT worker awl WORKER_FILE.awl
-aion worker agent FILE.awl --harness norn --liminal-address HOST:PORT \
-  --identity NAME --concurrency N \
-  --reconnect-initial-backoff S --reconnect-max-backoff S \
-  --reconnect-max-attempts N
+aion worker agent FILE.awl --liminal-address HOST:PORT --identity NAME
 ```
 
 `aion worker shell` requires BOTH `--manifest` and `--awl`: the manifest
@@ -217,12 +214,26 @@ that matter before running it:
 - It dials `--liminal-address` candidates (repeatable, for ordered redial),
   **not** the global gRPC `--endpoint` — the agent-harness seam exists only on
   the liminal worker transport.
-- The default build carries two harnesses, `norn` and `acp`, so `--harness` is
-  REQUIRED; a build carrying exactly one derives it. A flag configuring a
-  harness this invocation is not serving is refused, never ignored.
-- Every connection setting comes from a flag or its named environment variable
-  (the flag wins), nothing is invented, and every missing one is reported by
-  name at once.
+- The LAUNCH is declared in the document, in the `worker` block's `harness`
+  section, and there is **no flag for any of it**: `kind` (`acp` or `norn`),
+  `concurrency`, the three reconnect settings, `env_pass`, plus `command`,
+  `cwd`, `permission` and `exit_grace` for `acp`, the optional `binary` for
+  `norn`, and optional `args` for either. The per-setting flags this verb used
+  to take (`--harness`, `--concurrency`, `--reconnect-*`, `--acp-*`,
+  `--norn-*`) are DELETED: passing one is an argument-parse error. Do not teach
+  them.
+- `aion awl check FILE.awl` names any setting the section is missing, scoped to
+  the kind it declares — an `acp` section needs no `binary` and a `norn`
+  section needs no `command`. A setting written for the kind the section does
+  not declare is refused rather than ignored.
+- A document with a queue but no `harness` section is refused by the verb,
+  saying so and pointing at `aion awl check`. Neither document this repository
+  ships with an agent action carries one yet.
+- The default build carries two harnesses, `norn` and `acp`; a `kind` this
+  binary was not built with is refused, naming what the build does carry.
+- Every remaining CONNECTION setting (`--liminal-address`, `--identity`) comes
+  from a flag or its named environment variable (the flag wins), nothing is
+  invented, and every missing one is reported by name at once.
 - The queue is derived when the document declares exactly one `worker` block,
   and selected with `--task-queue` when it declares several. A queue is served
   whole or the verb refuses.

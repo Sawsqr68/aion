@@ -517,3 +517,79 @@ COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): agent_gen_gate, a
 test agent_scaffold_generate_round_trips_byte_identically ... ok
 COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): hello_gen_gate, hello_gen_gate_codecs, hello_gen_gate_io
 test hello_world_scaffold_generate_round_trips_byte_identically ... ok
+test saga_worker_crate_passes_cargo_check ... ok
+test dev_pipeline_worker_crate_is_formatted_and_passes_cargo_check ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 44.88s
+
+     Running tests/one_motion_awl.rs (target/debug/deps/one_motion_awl-15ddb24551830879)
+
+running 2 tests
+test invalid_awl_deploy_exits_nonzero_with_the_compiler_span_diagnostic ... ok
+test mismatching_run_input_prints_schema_without_attempting_deploy ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/one_motion_live_e2e.rs (target/debug/deps/one_motion_live_e2e-bdd651cc8e96aced)
+
+running 5 tests
+test the_run_timeout_flag_has_no_default ... ok
+test one_motion_run_reports_a_failure_outcome_with_its_details_and_exits_nonzero ... ok
+test one_motion_run_compiles_deploys_starts_awaits_and_reports_the_result ... ok
+test an_operator_timeout_stops_the_wait_and_leaves_the_run_running ... ok
+test a_declared_document_timeout_terminates_the_one_motion_await ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.59s
+
+     Running tests/package_command.rs (target/debug/deps/package_command-b50f3017f0a0f709)
+
+running 4 tests
+test package_hello_world_succeeds_offline_with_result_document ... ok
+test package_out_override_with_dotdot_is_exempt_from_confinement ... ok
+test package_build_failure_is_surfaced_before_packaging ... ok
+test package_without_descriptor_fails_with_error_chain_and_no_dial ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/parked_timer_osproc_kill9_failover_e2e.rs (target/debug/deps/parked_timer_osproc_kill9_failover_e2e-9993ade26c885785)
+
+running 9 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+COSTLY_PROOF_SKIPPED (PROVES NOTHING): a workflow parked on a timer surviving a hard kill, resuming, and completing EXACTLY ONCE — not established by this run. Set AION_RUN_COSTLY_TESTS=1 to run it. [crates/aion-cli/tests/parked_timer_osproc_kill9_failover_e2e.rs:564]
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test osproc_kill9_parked_timer_resumes_and_completes_exactly_once ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/retired_doctrine_gate.rs (target/debug/deps/retired_doctrine_gate-6be4327bc93434ee)
+
+running 3 tests
+test the_matcher_finds_each_banned_phrase_through_markdown_disguises ... ok
+test the_derived_scope_is_non_vacuous_and_covers_the_documents_that_slipped ... ok
+test no_living_markdown_teaches_the_retired_doctrine ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests/server_command.rs (target/debug/deps/server_command-d4926a6c7d612596)
+
+running 3 tests
+test an_explicit_missing_config_refuses_and_scaffolds_nothing ... ok
+test server_subcommand_boots_serves_and_drains_cleanly ... ok
+test a_bare_boot_scaffolds_the_home_config_and_serves_deploy_and_outbox ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.19s
+
+     Running tests/stacked_dev_live_e2e.rs (target/debug/deps/stacked_dev_live_e2e-501e32d69b985b0a)
+
+running 1 test
+COSTLY_PROOF_SKIPPED (PROVES NOTHING): a stacked-dev change landing through a REAL worker process and returning a review signal — not established by this run. Set AION_RUN_COSTLY_TESTS=1 to run it. [crates/aion-cli/tests/stacked_dev_live_e2e.rs:484]
+test stacked_dev_lands_through_the_real_worker_and_review_signal ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
