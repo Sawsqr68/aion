@@ -1,0 +1,91 @@
+aion 0.14.0 — release evidence
+==============================
+
+Release commit (published tree, tag target): 2d7a7e42338c88c505bf1fc24baf10bdf57c8a78
+Tag: v0.14.0
+Delta over v0.13.8, commit by commit:
+  9ffe42637  #200 landing evidence + agent-dev rider (merge b5ad0bc47)
+  28ea6249b  #204 slice-one landing evidence (merge 5f7579ed6)
+  db1a89492  CHANGELOG entries (#200/#204) + 204-CUT-RUNBOOK.md
+  65d2f96f1  release: aion 0.14.0 (22-file bump: workspace version,
+             intra-workspace pins, Cargo.lock, changelog stamp root+embedded)
+  c13b4c75b  test(bc4): covered ratchet admits the four harness-section
+             fixtures (107 -> 111) — the battery-certified code tree
+  9f5eec144  battery evidence (gate-logs/deans-box-0140/, no build inputs)
+  2d7a7e423  #85 known-issues entry in BOTH changelog copies (the embedded
+             copy is an aion-server build input — re-verified, below)
+
+The cut carries the worker bring-up chain: #197 (gRPC worker liveness),
+#200 (assistant off queue `default`), #204 slice-one (harness section,
+declared child environment, 14-flag migration). The #197 truth-in-verdict
+release-note entry travels in this artifact per Waffles' 10:57Z ruling
+(struck when #206 lands).
+
+Rulings
+-------
+Waffles the Terrible, 2026-08-11:
+  10:57Z — collector does not ship on 0.13.8; deploy rides a fresh cut
+           carrying all three landings; runbook's Builtin re-write step
+           carries its own verification line; he holds the one Tom notice.
+  11:45Z — version word 0.14.0; proceed bump -> battery at final tree,
+           Dean's box venue -> publish + tag on battery green, 22/22
+           registry-verified; Tom notice fires at registry-verified.
+  13:30Z — PUBLISH under the #85 classification ("five honest runs with a
+           classification beat one lucky one"); riding condition: settle
+           production-reachability of the double-close and put whichever
+           truth holds into the artifact.
+
+Battery attestation (Dean's box, rustc 1.97.1, tree c13b4c75b)
+--------------------------------------------------------------
+Full record with every red kept: gate-logs/deans-box-0140/NOTE.md.
+  fmt-check EXIT=0 · clippy-workspace EXIT=0 · clippy-percrate EXIT=0
+  test leg: run-5 (--no-fail-fast) FULL COVERAGE, 273/273 binaries
+  reconciled running-lines vs verdict-lines; 272 binaries green; the sole
+  red is one #85-signature failure (aion-store-libsql pool test).
+  Run-1's red was REAL (BC-4 ratchet vs slice-one fixtures) and is fixed
+  INTO the release tree as c13b4c75b. Run-3's red was environmental
+  (detached-shell fd limit 256). Runs 2/4/5 each carried exactly one
+  #85-face failure at a moving location; isolation series outbox_e2e 5/5
+  green, aion-store-libsql 4/5 with one hit at yet another test.
+
+#85 classification and the ruled reachability answer
+----------------------------------------------------
+libsql 0.9.30 double-close (use-after-free), task #85, filed 2026-08-06,
+mechanism verified in the dependency source; predates this cut; the 0.14.0
+delta touches no store-layer code. Settled REACHABLE in production: the
+failing pool test models the server's own one-store/many-tasks shape and
+store.backend = "libsql" is a selectable production backend. Accordingly
+the known-issues entry ships in the 0.14.0 changelog, both copies (root +
+crates/aion-server/changelog-embed/). Default haematite backend and the
+memory backend do not use libsql and are unaffected.
+
+Input-scoped re-verification at 2d7a7e423 (changelog commit)
+------------------------------------------------------------
+The embedded changelog is include_str!'d into aion-server, so that crate's
+inputs changed after the battery tree. Re-verified on Dean's box at
+2d7a7e423 (gate-logs/deans-box-0140/server-reverify.log):
+  cargo fmt --check                                   FMT_EXIT=0
+  cargo clippy -p aion-server --all-targets -D warnings  CLIPPY_EXIT=0
+  cargo test -p aion-server                           TEST_EXIT=0
+  55 running-lines vs 55 verdict-lines, 0 failed.
+Every other crate's inputs are byte-identical to c13b4c75b; their battery
+verdicts carry.
+
+Publish + registry verification
+-------------------------------
+publish-exits.txt: 22 crates, 0.13.8-recorded dependency order, every exit
+0, started 13:39:46Z finished 13:53:53Z, tree 2d7a7e423.
+registry-verify.txt: all 22 crates answer 0.14.0 un-yanked from the
+crates.io API. First verifier pass reported 22x MISSING — the tool, not
+the registry: crates.io refuses UA-less requests. Calibrated against the
+known-published aion-core 0.13.8 before trusting either answer; with a
+proper User-Agent the control answered and all 22 verified live.
+
+What this release does NOT do
+-----------------------------
+No worker restart, no server swap, no collector start rides this publish.
+Deploy execution follows 204-CUT-RUNBOOK.md: queue moves and document
+deploys BEFORE any worker restart; restarts on TOM'S WORD only, delivered
+through Waffles' single notice. The collector (#196) serves only on a
+binary carrying #197 — this cut is that binary; its start still waits on
+Tom's parameter yes.
