@@ -1,0 +1,15 @@
+== leg start: avail=24Gi :: cargo clippy -p aion-proto -p aion-server -p aion-worker --all-targets -- -D warnings ==
+    Checking aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+error: matching over `()` is more explicit
+   --> crates/aion-server/tests/grpc_liminal_one_eligibility_set.rs:147:14
+    |
+147 |         let (_, answered) = tokio::join!(probe.probe_once(sequence), answering);
+    |              ^ help: use `()` instead of `_`: `()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#ignored_unit_patterns
+    = note: `-D clippy::ignored-unit-patterns` implied by `-D clippy::pedantic`
+    = help: to override `-D clippy::pedantic` add `#[allow(clippy::ignored_unit_patterns)]`
+
+error: could not compile `aion-server` (test "grpc_liminal_one_eligibility_set") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+== leg end: exit=101 avail=24Gi ==

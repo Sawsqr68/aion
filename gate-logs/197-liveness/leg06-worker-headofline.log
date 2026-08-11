@@ -1,0 +1,34 @@
+== leg start: avail=26Gi :: cargo test -p aion-worker --lib -- liveness_answer ==
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.13s
+     Running unittests src/lib.rs (target/debug/deps/aion_worker-47815a22f18d441d)
+
+running 2 tests
+test runtime::loop_::liveness_answer_tests::a_ping_behind_a_running_activity_is_answered_while_it_runs ... FAILED
+test runtime::loop_::liveness_answer_tests::a_ping_behind_a_task_that_cannot_get_a_permit_waits_for_that_permit ... FAILED
+
+failures:
+
+---- runtime::loop_::liveness_answer_tests::a_ping_behind_a_running_activity_is_answered_while_it_runs stdout ----
+
+thread 'runtime::loop_::liveness_answer_tests::a_ping_behind_a_running_activity_is_answered_while_it_runs' (123279433) panicked at crates/aion-worker/src/runtime/liveness_answer_tests.rs:249:5:
+assertion `left == right` failed: the ping must be answered while the delivery is still in flight; a runtime that answered only after the activity finished would report every busy worker as unreachable
+  left: []
+ right: [7]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- runtime::loop_::liveness_answer_tests::a_ping_behind_a_task_that_cannot_get_a_permit_waits_for_that_permit stdout ----
+
+thread 'runtime::loop_::liveness_answer_tests::a_ping_behind_a_task_that_cannot_get_a_permit_waits_for_that_permit' (123279434) panicked at crates/aion-worker/src/runtime/liveness_answer_tests.rs:293:5:
+assertion `left == right` failed: once a permit frees, the queued ping is read and answered — so the silence measured above was head-of-line blocking, not an unwired answer
+  left: []
+ right: [9]
+
+
+failures:
+    runtime::loop_::liveness_answer_tests::a_ping_behind_a_running_activity_is_answered_while_it_runs
+    runtime::loop_::liveness_answer_tests::a_ping_behind_a_task_that_cannot_get_a_permit_waits_for_that_permit
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 136 filtered out; finished in 0.62s
+
+error: test failed, to rerun pass `-p aion-worker --lib`
+== leg end: exit=101 avail=27Gi ==

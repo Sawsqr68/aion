@@ -1,0 +1,41 @@
+== leg start: avail=28Gi :: cargo test -p aion-server --test grpc_worker_liveness_e2e --test grpc_liminal_one_eligibility_set ==
+warning: method `grpc_targets` is never used
+   --> crates/aion-server/src/worker/liminal_liveness.rs:346:8
+    |
+192 | impl LivenessProbe {
+    | ------------------ method in this implementation
+...
+346 |     fn grpc_targets(&self) -> Vec<GrpcLivenessTarget> {
+    |        ^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `aion-server` (lib) generated 1 warning
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 21.40s
+     Running tests/grpc_liminal_one_eligibility_set.rs (target/debug/deps/grpc_liminal_one_eligibility_set-11bc6b20ae9180cf)
+
+running 2 tests
+test an_excluded_pool_is_distinguishable_from_an_empty_one ... FAILED
+test one_round_publishes_one_set_covering_both_transports ... FAILED
+
+failures:
+
+---- an_excluded_pool_is_distinguishable_from_an_empty_one stdout ----
+
+thread 'an_excluded_pool_is_distinguishable_from_an_empty_one' (123408037) panicked at crates/aion-server/tests/grpc_liminal_one_eligibility_set.rs:223:5:
+precondition: selection finds nobody, which is the miss R3 is about
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- one_round_publishes_one_set_covering_both_transports stdout ----
+Error: "NO LIVENESS PING REACHED THE gRPC WORKER within 5s: the probe                          did not enumerate its delivery, so it can never clear its probation"
+
+
+failures:
+    an_excluded_pool_is_distinguishable_from_an_empty_one
+    one_round_publishes_one_set_covering_both_transports
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.09s
+
+error: test failed, to rerun pass `-p aion-server --test grpc_liminal_one_eligibility_set`
+== leg end: exit=101 avail=28Gi ==

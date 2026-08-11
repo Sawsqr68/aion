@@ -1,0 +1,24 @@
+== leg start: avail=28Gi :: cargo test -p aion-server --test grpc_worker_liveness_e2e --test grpc_liminal_one_eligibility_set --no-fail-fast ==
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 10.32s
+     Running tests/grpc_liminal_one_eligibility_set.rs (target/debug/deps/grpc_liminal_one_eligibility_set-11bc6b20ae9180cf)
+
+running 2 tests
+test one_round_publishes_one_set_covering_both_transports ... ok
+test an_excluded_pool_is_distinguishable_from_an_empty_one ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.12s
+
+     Running tests/grpc_worker_liveness_e2e.rs (target/debug/deps/grpc_worker_liveness_e2e-879f8152067f8bce)
+
+running 6 tests
+test a_grpc_worker_clears_the_same_probation_a_liminal_worker_serves ... ok
+test a_cleared_grpc_worker_receives_a_dispatch ... ok
+test an_unprobated_grpc_worker_is_not_dispatched_to ... ok
+test mid_probation_silence_raises_no_withdrawal_alarm ... ok
+test mid_probation_silence_restarts_the_run_from_zero ... ok
+test post_clearance_silence_withdraws_loudly_and_recovery_says_the_all_clear ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.02s
+
+== leg end: exit=0 avail=28Gi ==

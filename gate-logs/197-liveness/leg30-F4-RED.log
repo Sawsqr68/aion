@@ -1,0 +1,15 @@
+== leg start: avail=16Gi :: cargo test -p aion-server --lib -- placement_selection --no-fail-fast ==
+   Compiling aion-proto-generated v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+   Compiling aion-proto v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+   Compiling aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-server` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 03s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-d13c31182cf5b476)
+error: Unrecognized option: 'no-fail-fast'
+error: test failed, to rerun pass `-p aion-server --lib`
+== leg end: exit=101 avail=15Gi ==

@@ -1,0 +1,20 @@
+== leg start: avail=24Gi :: cargo clippy -p aion-proto -p aion-server -p aion-worker --all-targets -- -D warnings ==
+    Checking aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+error: item in documentation is missing backticks
+  --> crates/aion-server/tests/grpc_worker_liveness_e2e.rs:11:27
+   |
+11 | //! serve` — the path the mm_capture collector needs — could register
+   |                           ^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#doc_markdown
+   = note: `-D clippy::doc-markdown` implied by `-D clippy::pedantic`
+   = help: to override `-D clippy::pedantic` add `#[allow(clippy::doc_markdown)]`
+help: try
+   |
+11 - //! serve` — the path the mm_capture collector needs — could register
+11 + //! serve` — the path the `mm_capture` collector needs — could register
+   |
+
+error: could not compile `aion-server` (test "grpc_worker_liveness_e2e") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+== leg end: exit=101 avail=23Gi ==

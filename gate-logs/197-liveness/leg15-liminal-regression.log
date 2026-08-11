@@ -1,0 +1,12 @@
+== leg start: avail=29Gi :: cargo test -p aion-server --test dead_man_switch_e2e --lib -- --no-fail-fast ==
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-server` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3m 55s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-d13c31182cf5b476)
+error: Unrecognized option: 'no-fail-fast'
+error: test failed, to rerun pass `-p aion-server --lib`
+== leg end: exit=101 avail=30Gi ==

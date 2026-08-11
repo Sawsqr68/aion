@@ -1,0 +1,8 @@
+== leg start: avail=14Gi :: cargo clippy -p aion-proto -p aion-server -p aion-worker --all-targets -- -D warnings ==
+    Blocking waiting for file lock on package cache
+   Compiling aion-proto-generated v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Checking aion-proto v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+    Checking aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2m 05s
+== leg end: exit=0 avail=11Gi ==

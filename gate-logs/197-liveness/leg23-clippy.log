@@ -1,0 +1,4 @@
+== leg start: avail=23Gi :: cargo clippy -p aion-proto -p aion-server -p aion-worker --all-targets -- -D warnings ==
+    Checking aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.78s
+== leg end: exit=0 avail=23Gi ==

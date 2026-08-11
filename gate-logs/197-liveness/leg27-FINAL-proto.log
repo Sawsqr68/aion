@@ -1,0 +1,64 @@
+== leg start: avail=21Gi :: cargo test -p aion-proto --features generated --no-fail-fast ==
+   Compiling aion-proto v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.87s
+     Running unittests src/lib.rs (target/debug/deps/aion_proto-5fe5e390bbeecb43)
+
+running 46 tests
+test build_coverage::generated_stubs_compiled_into_this_build_so_contracts_can_be_checked ... ok
+test convert::tests::activity_id_round_trips_both_directions ... ok
+test convert::tests::envelope_rejects_missing_payload ... ok
+test convert::tests::timer_id_rejects_missing_and_empty_name ... ok
+test convert::tests::workflow_id_round_trips_both_directions ... ok
+test convert::tests::run_id_round_trips_both_directions ... ok
+test convert::tests::timer_id_round_trips_both_directions ... ok
+test convert::tests::workflow_status_round_trips_both_directions ... ok
+test convert::tests::payload_round_trips_all_json_kinds_and_raw_bytes ... ok
+test error::tests::proto_numeric_values_are_pinned ... ok
+test error::tests::json_codes_match_as_str_and_round_trip ... ok
+test deploy::tests::deploy_shapes_round_trip_through_json ... ok
+test error::tests::proto_round_trips_every_code ... ok
+test error::tests::rejects_unspecified_proto_code ... ok
+test convert::tests::core_event_round_trips_through_wire_envelope ... ok
+test error::tests::string_codes_are_pinned ... ok
+test error::tests::representative_documented_mappings_use_stable_codes ... ok
+test error::tests::wire_error_is_send_sync ... ok
+test events::tests::per_workflow_resume_cursor_round_trips_prost ... ok
+test events::tests::streamed_event_rejects_missing_envelope ... ok
+test events::tests::streamed_event_rejects_namespace_mismatch ... ok
+test events::tests::per_workflow_resume_cursor_json_shape_is_pinned ... ok
+test events::tests::streamed_event_round_trips_core_event ... ok
+test events::tests::subscription_request_without_resume_field_decodes_to_none ... ok
+test events::tests::subscription_request_round_trips_all_variants ... ok
+test worker::tests::activity_error_round_trips_preserving_classification ... ok
+test worker::tests::activity_error_result_round_trips_through_serde_and_proto ... ok
+test worker::tests::activity_success_result_round_trips_through_serde_and_proto ... ok
+test worker::tests::activity_task_attempt_uses_wire_tag_five ... ok
+test worker::tests::drain_request_round_trips_through_serde_and_proto ... ok
+test worker::tests::activity_task_round_trips_through_serde_and_proto ... ok
+test worker::tests::liveness_answer_round_trips_and_echoes_the_ping_sequence_field ... ok
+test worker::tests::heartbeat_round_trips_through_serde_and_proto ... ok
+test worker::tests::liveness_frames_are_disjoint_from_the_other_stream_frames ... ok
+test worker::tests::liveness_ping_round_trips_and_pins_its_wire_tags ... ok
+test worker::tests::register_ack_round_trips_through_serde_and_proto ... ok
+test worker::tests::result_ack_round_trips_through_serde_and_proto ... ok
+test worker::tests::server_to_worker_ack_arms_pin_oneof_tags_three_and_four ... ok
+test worker::tests::worker_instance_identity_uses_wire_tag_seven ... ok
+test worker::tests::worker_registration_repeated_namespaces_round_trip ... ok
+test worker::tests::worker_registration_task_queue_and_node_use_wire_tags_three_and_four ... ok
+test worker::tests::worker_registration_round_trips_through_serde_and_proto ... ok
+test workflow::tests::reopen_round_trips_json_and_proto ... ok
+test workflow::tests::query_round_trips_json_and_proto ... ok
+test workflow::tests::start_workflow_round_trips_json_and_proto ... ok
+test workflow::tests::list_workflows_round_trips_json_and_proto ... ok
+
+test result: ok. 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests aion_proto
+
+running 1 test
+test crates/aion-proto/src/lib.rs - (line 9) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 1.01s; merged doctests compilation took 0.63s
+== leg end: exit=0 avail=21Gi ==

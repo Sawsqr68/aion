@@ -1,0 +1,32 @@
+== leg start: avail=29Gi :: cargo clippy -p aion-proto -p aion-server -p aion-worker --all-targets -- -D warnings ==
+   Compiling aion-proto-generated v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+    Checking aion-integrations v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+    Checking aion-awl v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl)
+    Checking aion-rs v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Checking aion-store-haematite v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Checking aion-mcp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-mcp)
+    Checking aion-store-libsql v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-libsql)
+    Checking aion-proto v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+    Checking aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+    Checking aion-awl-package v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-package)
+error: this function has too many lines (110/100)
+   --> crates/aion-worker/src/runtime/loop_.rs:172:1
+    |
+172 | / pub async fn serve_activity_tasks_until<S, D, Shutdown>(
+173 | |     config: &WorkerConfig,
+174 | |     session: &mut S,
+175 | |     dispatcher: Arc<D>,
+...   |
+182 | |     D: ActivityDispatcher,
+183 | |     Shutdown: Future<Output = ()> + Send,
+    | |_________________________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#too_many_lines
+    = note: `-D clippy::too-many-lines` implied by `-D clippy::pedantic`
+    = help: to override `-D clippy::pedantic` add `#[allow(clippy::too_many_lines)]`
+
+error: could not compile `aion-worker` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `aion-worker` (lib test) due to 1 previous error
+== leg end: exit=101 avail=29Gi ==

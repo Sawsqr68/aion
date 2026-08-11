@@ -1,0 +1,12 @@
+== leg start: avail=29Gi :: cargo test -p aion-worker --lib -- liveness_answer ==
+   Compiling aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.93s
+     Running unittests src/lib.rs (target/debug/deps/aion_worker-47815a22f18d441d)
+
+running 2 tests
+test runtime::loop_::liveness_answer_tests::a_ping_behind_a_running_activity_is_answered_while_it_runs ... ok
+test runtime::loop_::liveness_answer_tests::a_ping_behind_a_task_that_cannot_get_a_permit_waits_for_that_permit ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 136 filtered out; finished in 0.63s
+
+== leg end: exit=0 avail=29Gi ==

@@ -1,0 +1,27 @@
+== leg start: avail=15Gi :: cargo test -p aion-server --lib -- placement_selection ==
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-server` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 14s
+     Running unittests src/lib.rs (target/debug/deps/aion_server-d13c31182cf5b476)
+
+running 12 tests
+test worker::liminal_transport::tests::placement_selection::no_cache_selection_is_byte_identical_to_pre_163 ... ok
+test worker::liminal_transport::tests::placement_selection::authored_node_pin_wins_over_namespace_prefer_on_liminal_path ... ok
+test worker::liminal_transport::tests::placement_selection::an_excluded_pool_refusal_names_the_exclusion ... ok
+test worker::liminal_transport::tests::placement_selection::an_empty_pool_refusal_says_nobody_is_registered ... ok
+test worker::liminal_transport::tests::placement_selection::pinned_never_spills_to_a_wrong_node_worker_on_liminal_path ... ok
+test worker::liminal_transport::tests::placement_selection::a_pinned_namespace_does_report_an_excluded_admissible_worker ... ok
+test worker::liminal_transport::tests::placement_selection::a_pinned_namespace_miss_is_not_blamed_on_an_ineligible_unlabelled_worker ... ok
+test worker::liminal_transport::tests::placement_selection::prefer_selects_preferred_node_worker_on_liminal_path ... ok
+test worker::liminal_transport::tests::placement_selection::pinned_selects_required_node_worker_on_liminal_path ... ok
+test worker::liminal_transport::tests::placement_selection::placement_never_mutates_recorded_row_node_on_liminal_path ... ok
+test worker::liminal_transport::tests::placement_selection::unplaced_namespace_selects_any_worker_on_liminal_path ... ok
+test worker::liminal_transport::tests::placement_selection::prefer_spills_to_any_live_worker_on_liminal_path ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 1038 filtered out; finished in 0.02s
+
+== leg end: exit=0 avail=14Gi ==

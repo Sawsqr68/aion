@@ -1,0 +1,2 @@
+== leg start: avail=11Gi :: cargo fmt --all --check ==
+== leg end: exit=0 avail=11Gi ==

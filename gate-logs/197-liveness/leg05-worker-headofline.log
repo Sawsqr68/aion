@@ -1,0 +1,30 @@
+== leg start: avail=14Gi :: cargo test -p aion-worker --lib -- runtime::liveness_answer_tests --nocapture ==
+   Compiling aion-proto-generated v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+   Compiling aion-proto v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+   Compiling aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+error[E0432]: unresolved import `super::loop_`
+  --> crates/aion-worker/src/runtime/liveness_answer_tests.rs:40:12
+   |
+40 | use super::loop_::{ActivityDispatcher, DispatchOutcome, serve_activity_tasks};
+   |            ^^^^^ could not find `loop_` in `super`
+
+error[E0433]: cannot find `loop_` in `super`
+   --> crates/aion-worker/src/runtime/liveness_answer_tests.rs:193:50
+    |
+193 |     serve: tokio::task::JoinHandle<Result<super::loop_::ServeEnd, WorkerError>>,
+    |                                                  ^^^^^ could not find `loop_` in `super`
+    |
+help: consider importing this module
+    |
+ 31 + use crate::runtime::loop_;
+    |
+help: if you import `loop_`, refer to it directly
+    |
+193 -     serve: tokio::task::JoinHandle<Result<super::loop_::ServeEnd, WorkerError>>,
+193 +     serve: tokio::task::JoinHandle<Result<loop_::ServeEnd, WorkerError>>,
+    |
+
+Some errors have detailed explanations: E0432, E0433.
+For more information about an error, try `rustc --explain E0432`.
+error: could not compile `aion-worker` (lib test) due to 2 previous errors
+== leg end: exit=101 avail=17Gi ==

@@ -1,0 +1,77 @@
+== leg start: avail=28Gi :: cargo test -p aion-server --test grpc_worker_liveness_e2e --test grpc_liminal_one_eligibility_set --no-fail-fast ==
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 03s
+     Running tests/grpc_liminal_one_eligibility_set.rs (target/debug/deps/grpc_liminal_one_eligibility_set-11bc6b20ae9180cf)
+
+running 2 tests
+test one_round_publishes_one_set_covering_both_transports ... ok
+test an_excluded_pool_is_distinguishable_from_an_empty_one ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.14s
+
+     Running tests/grpc_worker_liveness_e2e.rs (target/debug/deps/grpc_worker_liveness_e2e-879f8152067f8bce)
+
+running 6 tests
+test a_grpc_worker_clears_the_same_probation_a_liminal_worker_serves ... FAILED
+test a_cleared_grpc_worker_receives_a_dispatch ... ok
+test an_unprobated_grpc_worker_is_not_dispatched_to ... ok
+test mid_probation_silence_raises_no_withdrawal_alarm ... ok
+test mid_probation_silence_restarts_the_run_from_zero ... ok
+test post_clearance_silence_withdraws_loudly_and_recovery_says_the_all_clear ... FAILED
+
+failures:
+
+---- a_grpc_worker_clears_the_same_probation_a_liminal_worker_serves stdout ----
+
+thread 'a_grpc_worker_clears_the_same_probation_a_liminal_worker_serves' (123525398) panicked at crates/aion-server/tests/grpc_worker_liveness_e2e.rs:409:5:
+precondition: registration opens a probation and grants nothing — the handshake ack is SENT by this server and nothing reports it was received
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- post_clearance_silence_withdraws_loudly_and_recovery_says_the_all_clear stdout ----
+
+thread 'post_clearance_silence_withdraws_loudly_and_recovery_says_the_all_clear' (123525402) panicked at crates/aion-server/tests/grpc_worker_liveness_e2e.rs:657:5:
+assertion `left == right` failed: the recovery must be announced exactly once. Captured: 
+  725 events captured in total (6 from aion targets, 719 from elsewhere — the subscriber was demonstrably live)
+  [WARN] aion_server::api::worker_grpc: worker contract check skipped: server state has no engine handle, so no deployed contracts exist to check against {"identity": "liveness-test-worker", "task_queue": "default"}
+  [INFO] aion_server::worker::liminal_liveness: worker is SERVING ITS DISPATCH PROBATION: it has answered 1 of 2 consecutive liveness pings since it connected, and is not selected for dispatch until the run is complete. This is the ordinary cost of connecting — every healthy worker start passes through it, on every transport — not a fault, and not a statement that anything is unreachable {"answers_banked": "1", "answers_required": "2", "liveness_ping": "1", "task_queue": "default", "transport": "grpc", "worker_id": "1"}
+  [INFO] aion_server::worker::liminal_liveness: DISPATCH ELIGIBILITY RESTORED to worker: it has answered a full run of consecutive liveness pings, so the server can again prove it reaches this worker's dispatch path. Dispatch selection includes it from now {"liveness_ping": "2", "task_queue": "default", "transport": "grpc", "worker_id": "1"}
+  [WARN] aion_server::worker::liminal_liveness: grpc worker did not answer its liveness ping; the server could not prove it can reach this worker's dispatch path, so its dispatch eligibility is withdrawn NOW and it must answer a full run of consecutive pings to earn it back — an unanswered probe is direct evidence about the push leg, not mere silence. NOTE: the worker's connection lease may still be fresh — its liveness pump beats from a background task and keeps proving the process is alive — so do NOT expect an expiry sweep to reap it {"liveness_ping": "3", "reason": "no answer arrived within the 1s probe cadence", "silence_window_ms": "4000", "task_queue": "default", "transport": "grpc", "worker_id": "1"}
+  [WARN] aion_server::worker::liminal_liveness: WITHDRAWING DISPATCH ELIGIBILITY from worker: it had PROVED its dispatch path reachable on this connection and the server can no longer prove it — either a liveness ping failed or the last proof aged out of the window. It stays registered and keeps its in-flight work, and becomes eligible again after 2 consecutive answered pings {"answers_required": "2", "liveness_ping": "3", "silence_window_ms": "4000", "task_queue": "default", "transport": "grpc", "worker_id": "1"}
+  [INFO] aion_server::worker::liminal_liveness: DISPATCH ELIGIBILITY RESTORED to worker: it has answered a full run of consecutive liveness pings, so the server can again prove it reaches this worker's dispatch path. Dispatch selection includes it from now {"liveness_ping": "5", "task_queue": "default", "transport": "grpc", "worker_id": "1"}
+  (2× h2::client, not shown)
+  (122× h2::codec::framed_read, not shown)
+  (70× h2::codec::framed_write, not shown)
+  (2× h2::frame::headers, not shown)
+  (11× h2::frame::settings, not shown)
+  (2× h2::frame::window_update, not shown)
+  (13× h2::hpack::decoder, not shown)
+  (46× h2::proto::connection, not shown)
+  (4× h2::proto::settings, not shown)
+  (39× h2::proto::streams::counts, not shown)
+  (59× h2::proto::streams::flow_control, not shown)
+  (210× h2::proto::streams::prioritize, not shown)
+  (41× h2::proto::streams::recv, not shown)
+  (2× h2::proto::streams::send, not shown)
+  (32× h2::proto::streams::store, not shown)
+  (33× h2::proto::streams::stream, not shown)
+  (4× h2::proto::streams::streams, not shown)
+  (6× h2::server, not shown)
+  (3× hyper_util::client::legacy::connect::http, not shown)
+  (9× tonic::transport::channel::service::reconnect, not shown)
+  (1× tonic::transport::server, not shown)
+  (1× tower::buffer::service, not shown)
+  (7× tower::buffer::worker, not shown)
+  left: 2
+ right: 1
+
+
+failures:
+    a_grpc_worker_clears_the_same_probation_a_liminal_worker_serves
+    post_clearance_silence_withdraws_loudly_and_recovery_says_the_all_clear
+
+test result: FAILED. 4 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.02s
+
+error: test failed, to rerun pass `-p aion-server --test grpc_worker_liveness_e2e`
+error: 1 target failed:
+    `-p aion-server --test grpc_worker_liveness_e2e`
+== leg end: exit=101 avail=28Gi ==

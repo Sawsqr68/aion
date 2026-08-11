@@ -1,0 +1,63 @@
+    Checking aion-core v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+    Checking beamr v0.16.3
+    Checking tokio-tungstenite v0.29.0
+   Compiling aion-proto-generated v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+    Checking beamr v0.17.0
+    Checking tokio-rustls v0.26.4
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+    Checking libsql v0.9.30
+    Checking aion-mcp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-mcp)
+    Checking aion-darwin-acl v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-darwin-acl)
+    Checking hyper-rustls v0.27.9
+    Checking axum v0.8.9
+    Checking reqwest v0.13.4
+    Checking tonic v0.14.6
+    Checking aion-package v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+    Checking aion-integrations v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+    Checking aion-store v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store)
+    Checking tonic-prost v0.14.5
+    Checking haematite v0.7.0
+    Checking haematite v0.8.1
+    Checking aion-awl v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl)
+    Checking aion-toolchain v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-toolchain)
+    Checking aion-rs v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion)
+    Checking aion-store-libsql v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-libsql)
+    Checking liminal-rs v0.5.0
+    Checking aion-store-haematite v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-store-haematite)
+    Checking aion-proto v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+    Checking aion-awl-package v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl-package)
+    Checking liminal-sdk v0.5.0
+    Checking liminal-server v0.5.0
+    Checking aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+warning: calls to `std::mem::drop` with a value that implements `Copy` does nothing
+   --> crates/aion-worker/src/protocol/session.rs:185:9
+    |
+185 |         drop(sequence);
+    |         ^^^^^--------^
+    |              |
+    |              argument has type `u64`
+    |
+    = note: `#[warn(dropping_copy_types)]` on by default
+help: use `let _ = ...` to ignore the expression or result
+    |
+185 -         drop(sequence);
+185 +         let _ = sequence;
+    |
+
+warning: calls to `std::mem::drop` with a value that implements `Copy` does nothing
+   --> crates/aion-worker/src/runtime/loop_.rs:258:25
+    |
+258 |                         drop(silence_window);
+    |                         ^^^^^--------------^
+    |                              |
+    |                              argument has type `Duration`
+    |
+help: use `let _ = ...` to ignore the expression or result
+    |
+258 -                         drop(silence_window);
+258 +                         let _ = silence_window;
+    |
+
+warning: `aion-worker` (lib) generated 2 warnings
+warning: `aion-worker` (lib test) generated 2 warnings (2 duplicates)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3m 39s

@@ -1,0 +1,20 @@
+== leg start: avail=19Gi :: cargo test -p aion-worker --lib -- runtime::liveness_answer_tests --nocapture ==
+   Compiling aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+error[E0533]: expected value, found struct variant `DispatchOutcome::Completed`
+   --> crates/aion-worker/src/runtime/liveness_answer_tests.rs:145:12
+    |
+145 |         Ok(DispatchOutcome::Completed(Payload::new(
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^ not a value
+    |
+help: you might have meant to create a new value of the struct
+    |
+145 -         Ok(DispatchOutcome::Completed(Payload::new(
+146 -             ContentType::Json,
+147 -             b"{}".to_vec(),
+148 -         )))
+145 +         Ok(DispatchOutcome::Completed { output: /* value */ })
+    |
+
+For more information about this error, try `rustc --explain E0533`.
+error: could not compile `aion-worker` (lib test) due to 1 previous error
+== leg end: exit=101 avail=21Gi ==

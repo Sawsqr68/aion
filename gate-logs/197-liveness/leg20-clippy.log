@@ -1,0 +1,31 @@
+== leg start: avail=25Gi :: cargo clippy -p aion-proto -p aion-server -p aion-worker --all-targets -- -D warnings ==
+    Checking aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+    Checking aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)
+error: this could be rewritten as `let...else`
+    --> crates/aion-server/src/worker/liminal_transport.rs:1079:9
+     |
+1079 | /         let worker = match self.select_liminal_worker(row).await? {
+1080 | |             Some(worker) => worker,
+1081 | |             None => {
+1082 | |                 return Err(dispatch_error(
+...    |
+1087 | |         };
+     | |__________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#manual_let_else
+     = note: `-D clippy::manual-let-else` implied by `-D clippy::pedantic`
+     = help: to override `-D clippy::pedantic` add `#[allow(clippy::manual_let_else)]`
+help: consider writing
+     |
+1079 ~         let Some(worker) = self.select_liminal_worker(row).await? else {
+1080 +                 return Err(dispatch_error(
+1081 +                     &channel_for_row(row),
+1082 +                     self.selection_miss_reason(row),
+1083 +                 ));
+1084 +             };
+     |
+
+error: could not compile `aion-server` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `aion-server` (lib test) due to 1 previous error
+== leg end: exit=101 avail=24Gi ==
