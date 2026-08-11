@@ -1,0 +1,55 @@
+   Compiling serde_core v1.0.228
+   Compiling serde v1.0.228
+   Compiling serde_json v1.0.150
+   Compiling num-traits v0.2.19
+   Compiling getrandom v0.4.2
+   Compiling syn v2.0.117
+   Compiling strsim v0.11.1
+   Compiling futures-core v0.3.32
+   Compiling futures-sink v0.3.32
+   Compiling ident_case v1.0.1
+   Compiling futures-channel v0.3.32
+   Compiling slab v0.4.12
+   Compiling errno v0.3.14
+   Compiling unicode-segmentation v1.13.3
+   Compiling signal-hook-registry v1.4.8
+   Compiling mio v1.2.1
+   Compiling unicode-xid v0.2.6
+   Compiling anyhow v1.0.102
+   Compiling convert_case v0.10.0
+   Compiling darling_core v0.23.0
+   Compiling serde_derive_internals v0.29.1
+   Compiling serde_derive v1.0.228
+   Compiling thiserror-impl v2.0.18
+   Compiling futures-macro v0.3.32
+   Compiling ts-rs-macros v12.0.1
+   Compiling ref-cast-impl v1.0.25
+   Compiling tokio-macros v2.7.0
+   Compiling derive_more-impl v2.1.1
+   Compiling schemars_derive v1.2.1
+   Compiling ref-cast v1.0.25
+   Compiling tokio v1.52.3
+   Compiling futures-util v0.3.32
+   Compiling uuid v1.23.4
+   Compiling thiserror v2.0.18
+   Compiling tracing-attributes v0.1.31
+   Compiling async-trait v0.1.89
+   Compiling strum_macros v0.28.0
+   Compiling derive_more v2.1.1
+   Compiling darling_macro v0.23.0
+   Compiling tracing v0.1.44
+   Compiling darling v0.23.0
+   Compiling strum v0.28.0
+   Compiling serde_with_macros v3.21.0
+   Compiling futures-executor v0.3.32
+   Compiling futures v0.3.32
+   Compiling chrono v0.4.45
+   Compiling schemars v1.2.1
+   Compiling ts-rs v12.0.1
+   Compiling serde_with v3.21.0
+   Compiling aion-core v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-core)
+   Compiling agent-client-protocol-schema v1.5.0
+   Compiling aion-integrations v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integrations)
+   Compiling aion-integration-norn v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-norn)
+   Compiling aion-integration-acp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-acp)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 20.39s

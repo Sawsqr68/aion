@@ -3,6 +3,7 @@
 
 mod document;
 mod exprs;
+mod harness;
 mod steps;
 
 pub use document::print;

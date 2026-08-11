@@ -23,7 +23,7 @@
 //! then refuses to serve.
 
 mod args;
-mod serve;
+pub(super) mod serve;
 mod surface;
 
 #[cfg(test)]

@@ -1,0 +1,82 @@
+   Compiling aion-integration-norn v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-norn)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.08s
+     Running unittests src/lib.rs (target/debug/deps/aion_integration_norn-f83bdbde75bde096)
+
+running 74 tests
+test advice::tests::the_advice_is_withheld_once_the_opt_in_was_given ... ok
+test advice::tests::a_hand_written_workers_spelling_is_carried_verbatim_too ... ok
+test advice::tests::the_advice_names_the_deployments_own_opt_in_and_states_the_tradeoff ... ok
+test advice::tests::the_recorded_refusal_is_recognised ... ok
+test advice::tests::the_composed_argv_is_what_decides_the_opt_in ... ok
+test advice::tests::a_transport_refusal_is_advised_too ... ok
+test advice::tests::a_capability_rejection_is_never_rewritten ... ok
+test advice::tests::unrelated_failures_are_not_mistaken_for_it ... ok
+test advice::tests::a_successful_run_forwards_its_payload ... ok
+test advice::tests::unrelated_failures_are_passed_through_unadvised ... ok
+test advice::tests::once_the_opt_in_is_given_the_advice_goes_quiet ... ok
+test advice::tests::a_refusal_at_the_terminal_result_is_advised ... ok
+test advice::tests::a_refusal_at_session_open_is_advised ... ok
+test advice::tests::unrelated_failures_pass_through_untouched ... ok
+test harness::tests::a_declared_environment_rides_the_previewable_invocation ... ok
+test harness::tests::argument_without_placeholders_passes_through_unchanged ... ok
+test harness::tests::expands_both_placeholders_amid_literal_text ... ok
+test harness::tests::invalid_utf8_input_still_errors ... ok
+test harness::tests::json_object_input_passes_through_as_its_json_text ... ok
+test harness::tests::json_string_input_unwraps_to_the_exact_inner_text ... ok
+test harness::tests::json_tagged_plain_text_input_passes_through_unchanged ... ok
+test harness::tests::removed_env_vars_are_expressed_as_child_removals ... ok
+test harness::tests::template_args_expand_and_literal_args_preserve_reserved_substrings ... ok
+test harness::tests::the_invocation_preview_is_the_spawned_reality ... ok
+test harness::tests::the_published_set_is_exactly_what_the_adapter_can_translate ... ok
+test harness::tests::unrecognised_braced_text_is_literal ... ok
+test session::tests::a_completed_structured_output_is_refused_naming_the_agent_outcome_contract ... ok
+test session::tests::a_response_with_neither_result_nor_error_is_a_protocol_error ... ok
+test session::tests::completed_envelope_missing_the_output_key_is_a_protocol_error ... ok
+test session::tests::completed_envelope_with_present_null_output_is_refused_naming_null ... ok
+test session::tests::capabilities_are_the_negotiated_set ... ok
+test session::tests::completed_string_output_is_the_canonical_agent_outcome_record ... ok
+test session::tests::a_notification_is_never_captured_as_the_result ... ok
+test session::tests::each_non_completed_stop_reason_surfaces_with_its_detail_and_partial_verbatim ... ok
+test session::tests::intervene_rejects_an_unsupported_primitive_without_sending ... ok
+test session::tests::null_result_is_the_slash_command_harness_error ... ok
+test session::tests::non_envelope_result_is_a_protocol_error_never_a_silent_passthrough ... ok
+test translate::tests::a_completed_envelope_maps_to_the_canonical_end_turn_stop_reason ... ok
+test translate::tests::a_completed_envelope_without_the_output_key_is_a_protocol_error ... ok
+test session::tests::intervene_surfaces_a_peer_error_ack ... ok
+test session::tests::intervene_sends_request_and_awaits_the_peer_ack ... ok
+test translate::tests::a_present_null_output_is_distinct_from_a_missing_key_and_refused_as_null ... ok
+test translate::tests::a_result_without_envelope_version_is_a_protocol_error_naming_it ... ok
+test translate::tests::a_result_without_stop_is_a_protocol_error_naming_it ... ok
+test translate::tests::a_stop_without_a_string_reason_is_a_protocol_error ... ok
+test session::tests::wait_result_returns_the_id_matched_run_execute_response_payload ... ok
+test translate::tests::a_completed_non_string_output_is_a_contract_refusal_naming_what_was_found ... ok
+test translate::tests::cancel_maps_to_cancel_request ... ok
+test translate::tests::completed_string_output_becomes_the_agent_outcome_record ... ok
+test session::tests::live_events_stream_from_peer_notifications ... ok
+test translate::tests::different_protocol_version_is_a_protocol_error_naming_expected_and_received ... ok
+test translate::tests::inject_interrupt_maps_to_inject_message_request ... ok
+test translate::tests::inject_normal_maps_to_normal_priority ... ok
+test translate::tests::message_notification_maps_to_message_event ... ok
+test translate::tests::an_enormous_partial_output_is_bounded_with_an_explicit_marker ... ok
+test translate::tests::missing_agent_id_falls_back_to_nil_never_panics ... ok
+test translate::tests::missing_protocol_field_is_a_protocol_error_naming_expected_and_received ... ok
+test translate::tests::non_completed_stop_is_a_harness_error_carrying_the_stop_object_and_partial ... ok
+test translate::tests::non_completed_stop_with_null_output_carries_no_partial_label ... ok
+test translate::tests::parse_capabilities_ignores_unknown_labels ... ok
+test translate::tests::non_string_protocol_field_is_reported_as_the_value_received ... ok
+test translate::tests::parse_capabilities_missing_array_is_empty_set ... ok
+test translate::tests::parse_capabilities_reads_norns_advertised_set ... ok
+test translate::tests::raw_non_delta_notification_stays_durable ... ok
+test translate::tests::raw_per_token_delta_notification_is_ephemeral_and_drops_its_payload ... ok
+test translate::tests::stop_notification_maps_stop_reasons ... ok
+test translate::tests::text_delta_notification_maps_to_ephemeral_delta ... ok
+test translate::tests::tool_call_delta_notification_is_ephemeral ... ok
+test translate::tests::tool_call_notification_maps_to_tool_call_event ... ok
+test translate::tests::tool_result_notification_maps_to_tool_result_event ... ok
+test translate::tests::unclassifiable_notification_falls_through_to_raw ... ok
+test translate::tests::unknown_stop_reason_falls_through_to_other ... ok
+test translate::tests::unsupported_primitives_are_capability_not_supported_and_never_build_a_request ... ok
+test translate::tests::usage_estimate_notification_maps_to_progress ... ok
+
+test result: ok. 74 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

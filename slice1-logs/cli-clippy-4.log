@@ -1,0 +1,19 @@
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-server)
+    Checking aion-cli v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-cli)
+warning: function `non_negative_seconds` is never used
+   --> crates/aion-cli/src/settings.rs:189:15
+    |
+189 | pub(crate) fn non_negative_seconds(raw: &str, flag: &str, variable: &str) -> Result<Duration> {
+    |               ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+error[E0599]: no method named `registration_capabilities` found for struct `std::sync::Arc<dyn aion_integrations::DynAgentHarness>` in the current scope
+   --> crates/aion-cli/src/harness/tests.rs:418:22
+    |
+418 |             composed.registration_capabilities(),
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^ method not found in `std::sync::Arc<dyn aion_integrations::DynAgentHarness>`
+
+warning: `aion-cli` (bin "aion") generated 1 warning
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `aion-cli` (bin "aion" test) due to 1 previous error

@@ -1,0 +1,17 @@
+    Blocking waiting for file lock on build directory
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-server)
+   Compiling aion-cli v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-cli)
+warning: function `non_negative_seconds` is never used
+   --> crates/aion-cli/src/settings.rs:189:15
+    |
+189 | pub(crate) fn non_negative_seconds(raw: &str, flag: &str, variable: &str) -> Result<Duration> {
+    |               ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-cli` (bin "aion") generated 2 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 34.84s

@@ -1,0 +1,79 @@
+    Checking libc v0.2.186
+    Checking serde_core v1.0.228
+    Checking futures-sink v0.3.32
+    Checking futures-core v0.3.32
+    Checking slab v0.4.12
+    Checking num-traits v0.2.19
+    Checking thiserror v2.0.18
+    Checking ref-cast v1.0.25
+    Checking tracing v0.1.44
+    Checking strum v0.28.0
+    Checking anyhow v1.0.102
+    Checking futures-channel v0.3.32
+    Checking derive_more v2.1.1
+    Checking fastrand v2.4.1
+    Checking futures-util v0.3.32
+    Checking errno v0.3.14
+    Checking getrandom v0.4.2
+    Checking socket2 v0.6.4
+    Checking mio v1.2.1
+    Checking signal-hook-registry v1.4.8
+    Checking rustix v1.1.4
+    Checking tokio v1.52.3
+    Checking tempfile v3.27.0
+    Checking serde v1.0.228
+    Checking serde_json v1.0.150
+    Checking uuid v1.23.4
+    Checking chrono v0.4.45
+    Checking schemars v1.2.1
+    Checking futures-executor v0.3.32
+    Checking futures v0.3.32
+    Checking serde_with v3.21.0
+    Checking ts-rs v12.0.1
+    Checking aion-core v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-core)
+    Checking agent-client-protocol-schema v1.5.0
+    Checking aion-integrations v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integrations)
+    Checking aion-integration-norn v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-norn)
+error: `panic` should not be present in production code
+  --> crates/aion-integrations/src/environment/tests.rs:20:23
+   |
+20 |         Err(error) => panic!("declaration {names:?} should be valid: {error}"),
+   |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#panic
+   = note: requested on the command line with `-D clippy::panic`
+
+error: `panic` should not be present in production code
+  --> crates/aion-integrations/src/environment/tests.rs:82:9
+   |
+82 |         panic!("a KEY=VALUE entry is not a pass-through name");
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#panic
+
+error: `panic` should not be present in production code
+   --> crates/aion-integrations/src/environment/tests.rs:100:9
+    |
+100 |         panic!("a bare program name cannot be found without PATH");
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#panic
+
+error: `panic` should not be present in production code
+   --> crates/aion-integrations/src/environment/tests.rs:165:9
+    |
+165 |         panic!("an empty environment cannot resolve a bare program name");
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#panic
+
+error: could not compile `aion-integrations` (lib test) due to 4 previous errors
+warning: build failed, waiting for other jobs to finish...
+error[E0063]: missing field `declared_environment` in initializer of `harness::NornInvocation`
+   --> crates/aion-integration-norn/src/harness.rs:643:13
+    |
+643 |             super::NornInvocation {
+    |             ^^^^^^^^^^^^^^^^^^^^^ missing `declared_environment`
+
+For more information about this error, try `rustc --explain E0063`.
+error: could not compile `aion-integration-norn` (lib test) due to 1 previous error

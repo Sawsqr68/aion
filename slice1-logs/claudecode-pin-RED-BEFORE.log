@@ -1,0 +1,24 @@
+   Compiling aion-integration-acp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-acp)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.95s
+     Running tests/declared_environment_e2e.rs (target/debug/deps/declared_environment_e2e-d6e369f4846091ee)
+
+running 3 tests
+test a_bare_command_with_no_path_declared_is_refused_naming_path ... ok
+test without_a_declaration_the_child_still_inherits_which_is_what_makes_the_pin_meaningful ... ok
+test a_declared_environment_keeps_claudecode_out_of_the_agent_child ... FAILED
+
+failures:
+
+---- a_declared_environment_keeps_claudecode_out_of_the_agent_child stdout ----
+
+thread 'a_declared_environment_keeps_claudecode_out_of_the_agent_child' (122338862) panicked at crates/aion-integration-acp/tests/declared_environment_e2e.rs:141:5:
+CLAUDECODE was in the launching context and is not declared, so it must be absent from the child; the child carried: ["AICHAT_CONFIG_DIR", "AI_AGENT", "ATLASSIAN_API_KEY", "ATUIN_HISTORY_ID", "ATUIN_SESSION", "ATUIN_SHLVL", "ATUIN_TMUX_POPUP", "BUN_INSTALL", "CARGO", "CARGO_HOME", "CARGO_MANIFEST_DIR", "CARGO_MANIFEST_PATH", "CARGO_PKG_AUTHORS", "CARGO_PKG_DESCRIPTION", "CARGO_PKG_HOMEPAGE", "CARGO_PKG_LICENSE", "CARGO_PKG_LICENSE_FILE", "CARGO_PKG_NAME", "CARGO_PKG_README", "CARGO_PKG_REPOSITORY", "CARGO_PKG_RUST_VERSION", "CARGO_PKG_VERSION", "CARGO_PKG_VERSION_MAJOR", "CARGO_PKG_VERSION_MINOR", "CARGO_PKG_VERSION_PATCH", "CARGO_PKG_VERSION_PRE", "CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_EXECPATH", "CLAUDE_CODE_SESSION_ID", "CLAUDE_EFFORT", "CLAUDE_PID", "COLORTERM", "COMMAND_MODE", "CONDA_EXE", "CONDA_PYTHON_EXE", "CONDA_SHLVL", "COREPACK_ENABLE_AUTO_PIN", "CPLUS_INCLUDE_PATH", "CPPFLAGS", "C_INCLUDE_PATH", "DISPLAY", "EDITOR", "ELEVENLABS_API_KEY", "FAST_EMBED_CACHE", "FNM_ARCH", "FNM_COREPACK_ENABLED", "FNM_DIR", "FNM_LOGLEVEL", "FNM_MULTISHELL_PATH", "FNM_NODE_DIST_MIRROR", "FNM_RESOLVE_ENGINES", "FNM_VERSION_FILE_STRATEGY", "FPATH", "GEMINI_API_KEY", "GHOSTTY_BIN_DIR", "GHOSTTY_RESOURCES_DIR", "GHOSTTY_SHELL_FEATURES", "GIT_EDITOR", "GOOGLE_PSE_ID", "GOOGLE_PSE_KEY", "HERDR_ENV", "HERDR_PANE_ID", "HERDR_SOCKET_PATH", "HERDR_STARTUP_CWD", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID", "HEXPM_API_KEY", "HF_ACCESS_TOKEN", "HF_TOKEN", "HOME", "HOMEBREW_CELLAR", "HOMEBREW_PREFIX", "HOMEBREW_REPOSITORY", "INFOPATH", "LANCEDB_API_KEY", "LANG", "LDFLAGS", "LIBRARY_PATH", "LOGNAME", "MANPATH", "MISTRALAPI_KEY", "NoDefaultCurrentDirectoryInExePath", "OPENAI_ADMIN_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "OSLogRateLimit", "PATH", "PERPLEXITY_API_KEY", "PKG_CONFIG_PATH", "PNPM_HOME", "PROTO_HOME", "PWD", "QDRANT_API_KEY", "RUSTUP_HOME", "RUSTUP_TOOLCHAIN", "RUSTUP_TOOLCHAIN_SOURCE", "RUST_RECURSION_COUNT", "SHELL", "SHLVL", "SSH_AUTH_SOCK", "STARSHIP_SESSION_KEY", "STARSHIP_SHELL", "TAURI_PRIVATE_OPENAI_API_KEY", "TERM", "TERMINFO", "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "TMPDIR", "USER", "VOYAGE_API_KEY", "XAI_API_KEY", "XDG_CONFIG_HOME", "XDG_DATA_DIRS", "XPC_FLAGS", "XPC_SERVICE_NAME", "_", "_CE_CONDA", "_CE_M", "_CONDA_EXE", "_CONDA_ROOT", "__CFBundleIdentifier", "__CF_USER_TEXT_ENCODING"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    a_declared_environment_keeps_claudecode_out_of_the_agent_child
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+error: test failed, to rerun pass `-p aion-integration-acp --test declared_environment_e2e`

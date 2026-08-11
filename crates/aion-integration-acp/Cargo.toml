@@ -45,6 +45,9 @@ uuid = { workspace = true }
 [dev-dependencies]
 chrono = { workspace = true }
 futures = { workspace = true }
+# The declared-environment pin spawns a REAL agent process that writes its own environment to a
+# file; the sandbox that file lives in is a temporary directory, cleaned up with the test.
+tempfile = { workspace = true }
 tokio = { workspace = true, features = [
     "io-util",
     "macros",

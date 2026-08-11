@@ -170,30 +170,6 @@ pub(crate) fn positive_seconds(raw: &str, flag: &str, variable: &str) -> Result<
     duration(seconds, raw, flag, variable)
 }
 
-/// A duration in seconds that MAY be zero, or a refusal naming the setting.
-///
-/// Zero is a real choice for a setting whose consumer documents it as one — the ACP
-/// agent's shutdown grace means "close stdin, then kill at once" at zero — so the
-/// floor is separate from [`positive_seconds`] rather than a parameter, and each
-/// caller picks the parser whose rule matches the setting it is reading.
-///
-/// Gated on the `acp` feature because that grace is currently the only setting in the
-/// binary whose floor is zero: a build without the ACP adapter has nothing to read with
-/// this rule, and carrying it anyway would be code no configuration can reach.
-///
-/// # Errors
-///
-/// Returns an error when `raw` is not a number, is not finite, is negative, or is too
-/// large to be a [`Duration`].
-#[cfg(feature = "acp")]
-pub(crate) fn non_negative_seconds(raw: &str, flag: &str, variable: &str) -> Result<Duration> {
-    let seconds = finite_seconds(raw, flag, variable)?;
-    if seconds < 0.0 {
-        bail!("{flag} / ${variable} must not be negative, got `{raw}`");
-    }
-    duration(seconds, raw, flag, variable)
-}
-
 /// A finite number of seconds, or a refusal naming the setting and the value.
 ///
 /// `NaN` and the infinities are rejected here rather than by the sign comparisons

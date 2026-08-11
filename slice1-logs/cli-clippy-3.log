@@ -1,0 +1,355 @@
+    Checking aion-core v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-core)
+   Compiling aion-proto-generated v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-proto-generated)
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-server)
+    Checking aion-mcp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-mcp)
+    Checking aion-darwin-acl v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-darwin-acl)
+    Checking aion-package v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-package)
+    Checking aion-integrations v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integrations)
+    Checking aion-store v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-store)
+    Checking aion-proto v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-proto)
+    Checking aion-integration-norn v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-norn)
+    Checking aion-integration-acp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-acp)
+    Checking aion-store-haematite v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-store-haematite)
+    Checking aion-awl v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl)
+    Checking aion-rs v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion)
+    Checking aion-toolchain v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-toolchain)
+    Checking aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-worker)
+    Checking aion-awl-package v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl-package)
+    Checking aion-awl-lsp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl-lsp)
+    Checking aion-client v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-client)
+    Checking aion-cli v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-cli)
+error[E0432]: unresolved import `crate::harness::HarnessArgs`
+  --> crates/aion-cli/src/worker_agent/tests.rs:15:5
+   |
+15 | use crate::harness::HarnessArgs;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `HarnessArgs` in `harness`
+
+error[E0599]: no method named `registration_capabilities` found for struct `std::sync::Arc<dyn aion_integrations::DynAgentHarness>` in the current scope
+   --> crates/aion-cli/src/harness/tests.rs:418:22
+    |
+418 |             composed.registration_capabilities(),
+    |                      ^^^^^^^^^^^^^^^^^^^^^^^^^ method not found in `std::sync::Arc<dyn aion_integrations::DynAgentHarness>`
+
+warning: function `non_negative_seconds` is never used
+   --> crates/aion-cli/src/settings.rs:189:15
+    |
+189 | pub(crate) fn non_negative_seconds(raw: &str, flag: &str, variable: &str) -> Result<Duration> {
+    |               ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+error[E0308]: mismatched types
+  --> crates/aion-cli/src/worker_agent/tests.rs:57:14
+   |
+57 |         awl: document.to_path_buf(),
+   |              ^^^^^^^^^^^^^^^^^^^^^^ expected `Option<PathBuf>`, found `PathBuf`
+   |
+   = note: expected enum `std::option::Option<std::path::PathBuf>`
+            found struct `std::path::PathBuf`
+help: try wrapping the expression in `Some`
+   |
+57 |         awl: Some(document.to_path_buf()),
+   |              +++++                      +
+
+error[E0560]: struct `worker_agent::args::AgentArgs` has no field named `concurrency`
+  --> crates/aion-cli/src/worker_agent/tests.rs:61:9
+   |
+61 |         concurrency: None,
+   |         ^^^^^^^^^^^ `worker_agent::args::AgentArgs` does not have this field
+   |
+   = note: all struct fields are already assigned
+
+error[E0560]: struct `worker_agent::args::AgentArgs` has no field named `reconnect_initial_backoff`
+  --> crates/aion-cli/src/worker_agent/tests.rs:62:9
+   |
+62 |         reconnect_initial_backoff: None,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^ `worker_agent::args::AgentArgs` does not have this field
+   |
+   = note: all struct fields are already assigned
+
+error[E0560]: struct `worker_agent::args::AgentArgs` has no field named `reconnect_max_backoff`
+  --> crates/aion-cli/src/worker_agent/tests.rs:63:9
+   |
+63 |         reconnect_max_backoff: None,
+   |         ^^^^^^^^^^^^^^^^^^^^^ `worker_agent::args::AgentArgs` does not have this field
+   |
+   = note: all struct fields are already assigned
+
+error[E0560]: struct `worker_agent::args::AgentArgs` has no field named `reconnect_max_attempts`
+  --> crates/aion-cli/src/worker_agent/tests.rs:64:9
+   |
+64 |         reconnect_max_attempts: None,
+   |         ^^^^^^^^^^^^^^^^^^^^^^ `worker_agent::args::AgentArgs` does not have this field
+   |
+   = note: all struct fields are already assigned
+
+error[E0560]: struct `worker_agent::args::AgentArgs` has no field named `harness`
+  --> crates/aion-cli/src/worker_agent/tests.rs:67:9
+   |
+67 |         harness: HarnessArgs::default(),
+   |         ^^^^^^^ `worker_agent::args::AgentArgs` does not have this field
+   |
+   = note: all struct fields are already assigned
+
+error[E0061]: this function takes 2 arguments but 3 arguments were supplied
+   --> crates/aion-cli/src/worker_agent/tests.rs:267:22
+    |
+267 |     let Err(error) = args::resolve(&args_for(&document), &Environment::default(), None) else {
+    |                      ^^^^^^^^^^^^^                                                ---- unexpected argument #3 of type `std::option::Option<_>`
+    |
+note: function defined here
+   --> crates/aion-cli/src/worker_agent/args.rs:154:15
+    |
+154 | pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<ConnectionSettings> {
+    |               ^^^^^^^
+help: remove the extra argument
+    |
+267 -     let Err(error) = args::resolve(&args_for(&document), &Environment::default(), None) else {
+267 +     let Err(error) = args::resolve(&args_for(&document), &Environment::default()) else {
+    |
+
+error[E0061]: this function takes 2 arguments but 3 arguments were supplied
+   --> crates/aion-cli/src/worker_agent/tests.rs:306:31
+    |
+306 |     let (resolved, harness) = args::resolve(&args_for(&document), &environment, None)?;
+    |                               ^^^^^^^^^^^^^                                     ---- unexpected argument #3 of type `std::option::Option<_>`
+    |
+note: function defined here
+   --> crates/aion-cli/src/worker_agent/args.rs:154:15
+    |
+154 | pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<ConnectionSettings> {
+    |               ^^^^^^^
+help: remove the extra argument
+    |
+306 -     let (resolved, harness) = args::resolve(&args_for(&document), &environment, None)?;
+306 +     let (resolved, harness) = args::resolve(&args_for(&document), &environment)?;
+    |
+
+error[E0308]: mismatched types
+   --> crates/aion-cli/src/worker_agent/tests.rs:306:9
+    |
+306 |     let (resolved, harness) = args::resolve(&args_for(&document), &environment, None)?;
+    |         ^^^^^^^^^^^^^^^^^^^   -------------------------------------------------------- this expression has type `worker_agent::args::ConnectionSettings`
+    |         |
+    |         expected `ConnectionSettings`, found `(_, _)`
+    |
+    = note: expected struct `worker_agent::args::ConnectionSettings`
+                found tuple `(_, _)`
+
+error[E0061]: this function takes 2 arguments but 3 arguments were supplied
+   --> crates/aion-cli/src/worker_agent/tests.rs:330:25
+    |
+330 |     let (resolved, _) = args::resolve(&arguments, &environment, None)?;
+    |                         ^^^^^^^^^^^^^                           ---- unexpected argument #3 of type `std::option::Option<_>`
+    |
+note: function defined here
+   --> crates/aion-cli/src/worker_agent/args.rs:154:15
+    |
+154 | pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<ConnectionSettings> {
+    |               ^^^^^^^
+help: remove the extra argument
+    |
+330 -     let (resolved, _) = args::resolve(&arguments, &environment, None)?;
+330 +     let (resolved, _) = args::resolve(&arguments, &environment)?;
+    |
+
+error[E0308]: mismatched types
+   --> crates/aion-cli/src/worker_agent/tests.rs:330:9
+    |
+330 |     let (resolved, _) = args::resolve(&arguments, &environment, None)?;
+    |         ^^^^^^^^^^^^^   ---------------------------------------------- this expression has type `worker_agent::args::ConnectionSettings`
+    |         |
+    |         expected `ConnectionSettings`, found `(_, _)`
+    |
+    = note: expected struct `worker_agent::args::ConnectionSettings`
+                found tuple `(_, _)`
+
+error[E0061]: this function takes 2 arguments but 3 arguments were supplied
+   --> crates/aion-cli/src/worker_agent/tests.rs:349:22
+    |
+349 |     let Err(error) = args::resolve(&args_for(&document), &environment, None) else {
+    |                      ^^^^^^^^^^^^^                                     ---- unexpected argument #3 of type `std::option::Option<_>`
+    |
+note: function defined here
+   --> crates/aion-cli/src/worker_agent/args.rs:154:15
+    |
+154 | pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<ConnectionSettings> {
+    |               ^^^^^^^
+help: remove the extra argument
+    |
+349 -     let Err(error) = args::resolve(&args_for(&document), &environment, None) else {
+349 +     let Err(error) = args::resolve(&args_for(&document), &environment) else {
+    |
+
+error[E0061]: this function takes 2 arguments but 3 arguments were supplied
+   --> crates/aion-cli/src/worker_agent/tests.rs:374:22
+    |
+374 |     let Err(error) = args::resolve(&arguments, &supplied("0", "1"), None) else {
+    |                      ^^^^^^^^^^^^^                                  ---- unexpected argument #3 of type `std::option::Option<_>`
+    |
+note: function defined here
+   --> crates/aion-cli/src/worker_agent/args.rs:154:15
+    |
+154 | pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<ConnectionSettings> {
+    |               ^^^^^^^
+help: remove the extra argument
+    |
+374 -     let Err(error) = args::resolve(&arguments, &supplied("0", "1"), None) else {
+374 +     let Err(error) = args::resolve(&arguments, &supplied("0", "1")) else {
+    |
+
+error[E0061]: this function takes 2 arguments but 3 arguments were supplied
+   --> crates/aion-cli/src/worker_agent/tests.rs:382:22
+    |
+382 |     let Err(error) = args::resolve(&arguments, &supplied("4", "nonsense"), None) else {
+    |                      ^^^^^^^^^^^^^                                         ---- unexpected argument #3 of type `std::option::Option<_>`
+    |
+note: function defined here
+   --> crates/aion-cli/src/worker_agent/args.rs:154:15
+    |
+154 | pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<ConnectionSettings> {
+    |               ^^^^^^^
+help: remove the extra argument
+    |
+382 -     let Err(error) = args::resolve(&arguments, &supplied("4", "nonsense"), None) else {
+382 +     let Err(error) = args::resolve(&arguments, &supplied("4", "nonsense")) else {
+    |
+
+error[E0609]: no field `harness` on type `worker_agent::args::AgentArgs`
+   --> crates/aion-cli/src/worker_agent/tests.rs:489:15
+    |
+489 |     arguments.harness.acp_command = Some(String::from("opencode"));
+    |               ^^^^^^^ unknown field
+    |
+    = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `worker_agent::args::AgentArgs`
+   --> crates/aion-cli/src/worker_agent/tests.rs:490:15
+    |
+490 |     arguments.harness.acp_cwd = Some(String::from("/srv/workspace"));
+    |               ^^^^^^^ unknown field
+    |
+    = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `worker_agent::args::AgentArgs`
+   --> crates/aion-cli/src/worker_agent/tests.rs:491:15
+    |
+491 |     arguments.harness.acp_exit_grace = Some(String::from("2"));
+    |               ^^^^^^^ unknown field
+    |
+    = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0061]: this function takes 2 arguments but 3 arguments were supplied
+   --> crates/aion-cli/src/worker_agent/tests.rs:495:22
+    |
+495 |     let Err(error) = args::resolve(
+    |                      ^^^^^^^^^^^^^
+...
+498 |         Some(crate::harness::HarnessKind::Acp),
+    |         -------------------------------------- unexpected argument #3 of type `std::option::Option<harness::catalogue::HarnessKind>`
+    |
+note: function defined here
+   --> crates/aion-cli/src/worker_agent/args.rs:154:15
+    |
+154 | pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<ConnectionSettings> {
+    |               ^^^^^^^
+help: remove the extra argument
+    |
+497 -         &Environment::default(),
+498 -         Some(crate::harness::HarnessKind::Acp),
+497 +         &Environment::default(),
+    |
+
+error[E0308]: mismatched types
+    --> crates/aion-cli/src/main.rs:2163:30
+     |
+2163 |         assert_eq!(args.awl, Path::new("flows/review.awl"));
+     |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Option<PathBuf>`, found `&Path`
+     |
+     = note:   expected enum `std::option::Option<std::path::PathBuf>`
+             found reference `&std::path::Path`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2178:25
+     |
+2178 |         assert_eq!(args.harness.harness.as_deref(), Some("acp"));
+     |                         ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2179:25
+     |
+2179 |         assert_eq!(args.harness.acp_command.as_deref(), Some("npx"));
+     |                         ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2183:18
+     |
+2183 |             args.harness.acp_args,
+     |                  ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2186:25
+     |
+2186 |         assert_eq!(args.harness.acp_cwd.as_deref(), Some("/srv/workspace"));
+     |                         ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2187:25
+     |
+2187 |         assert_eq!(args.harness.acp_permission.as_deref(), Some("deny"));
+     |                         ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2188:25
+     |
+2188 |         assert_eq!(args.harness.acp_exit_grace.as_deref(), Some("2"));
+     |                         ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2189:25
+     |
+2189 |         assert_eq!(args.harness.acp_env, vec![String::from("KEY=value")]);
+     |                         ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2209:22
+     |
+2209 |         assert!(args.harness.harness.is_none());
+     |                      ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2210:22
+     |
+2210 |         assert!(args.harness.acp_command.is_none());
+     |                      ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2211:22
+     |
+2211 |         assert!(args.harness.acp_args.is_empty());
+     |                      ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+warning: `aion-cli` (bin "aion") generated 1 warning
+Some errors have detailed explanations: E0061, E0308, E0432, E0560, E0599, E0609.
+For more information about an error, try `rustc --explain E0061`.
+error: could not compile `aion-cli` (bin "aion" test) due to 31 previous errors

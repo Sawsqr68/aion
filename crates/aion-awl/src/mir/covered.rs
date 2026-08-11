@@ -141,6 +141,14 @@ pub(super) const COVERED: &[&str] = &[
     "flow-shape/valid/temporary_hygiene",
     // The canonical arm: `route done(note)` at the workflow boundary.
     "flow-shape/valid/value_route_payload",
+    // The `harness` section is LAUNCH configuration — how a worker process
+    // starts an agent — and not flow meaning, so a document carrying one must
+    // lower exactly as the same document without it. Pinning all three shapes
+    // here is what proves it: a section that changed the lowering would be a
+    // launch setting that changed what the workflow does.
+    "harness-section/valid/acp_harness",
+    "harness-section/valid/norn_harness",
+    "harness-section/valid/norn_harness_without_optional_settings",
     "header-types/valid/builtins",
     "header-types/valid/combined",
     "header-types/valid/doc_comments",

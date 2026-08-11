@@ -1,0 +1,48 @@
+   Compiling serde_core v1.0.228
+   Compiling anyhow v1.0.102
+    Checking cranelift-module v0.131.2
+   Compiling strum_macros v0.28.0
+   Compiling darling_core v0.23.0
+    Checking tempfile v3.27.0
+   Compiling derive_more-impl v2.1.1
+   Compiling prost-derive v0.14.3
+    Checking cranelift-jit v0.131.2
+   Compiling prost v0.14.3
+    Checking strum v0.28.0
+    Checking derive_more v2.1.1
+   Compiling darling_macro v0.23.0
+   Compiling prost-types v0.14.3
+   Compiling darling v0.23.0
+    Checking serde v1.0.228
+    Checking serde_json v1.0.150
+    Checking uuid v1.23.4
+    Checking axum v0.8.9
+    Checking toml_datetime v1.1.1+spec-1.1.0
+    Checking serde_spanned v1.1.1
+    Checking toml v1.1.2+spec-1.1.0
+    Checking chrono v0.4.45
+    Checking fluent-uri v0.4.1
+    Checking ahash v0.8.12
+    Checking email_address v0.2.9
+   Compiling prost-build v0.14.3
+    Checking schemars v1.2.1
+    Checking beamr v0.17.0
+   Compiling serde_with_macros v3.21.0
+    Checking referencing v0.46.6
+   Compiling tonic-prost-build v0.14.5
+    Checking jsonschema v0.46.6
+    Checking ts-rs v12.0.1
+    Checking serde_with v3.21.0
+   Compiling aion-proto-generated v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-proto-generated)
+    Checking aion-core v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-core)
+    Checking tonic v0.14.6
+    Checking agent-client-protocol-schema v1.5.0
+    Checking tonic-prost v0.14.5
+    Checking aion-integrations v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integrations)
+    Checking aion-package v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-package)
+    Checking aion-proto v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-proto)
+    Checking aion-integration-norn v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-norn)
+    Checking aion-integration-acp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-acp)
+    Checking aion-awl v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl)
+    Checking aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-worker)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 22.77s

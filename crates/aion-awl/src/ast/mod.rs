@@ -3,6 +3,7 @@
 mod command;
 mod document;
 mod expr;
+mod harness;
 mod steps;
 mod trivia;
 
@@ -19,6 +20,14 @@ pub use document::{
 };
 pub use expr::{Arg, BinaryOp, DurationLiteral, Expr, PredicateKind, Quantifier};
 pub(crate) use expr::{access_path, chain_operands, field_path, join_span};
+pub use harness::{
+    HARNESS_ARGS_FIELD, HARNESS_BINARY_FIELD, HARNESS_COMMAND_FIELD, HARNESS_CONCURRENCY_FIELD,
+    HARNESS_CWD_FIELD, HARNESS_ENV_PASS_FIELD, HARNESS_EXIT_GRACE_FIELD, HARNESS_FIELDS,
+    HARNESS_KIND_ACP, HARNESS_KIND_FIELD, HARNESS_KIND_NORN, HARNESS_PERMISSION_ALLOW_ONCE,
+    HARNESS_PERMISSION_DENY, HARNESS_PERMISSION_FIELD, HARNESS_RECONNECT_INITIAL_BACKOFF_FIELD,
+    HARNESS_RECONNECT_MAX_ATTEMPTS_FIELD, HARNESS_RECONNECT_MAX_BACKOFF_FIELD, HARNESS_WORD,
+    HarnessDecl, HarnessInteger, HarnessSetting, HarnessText, HarnessWord,
+};
 pub use steps::{
     AfterRef, AnswerStmt, Binding, Call, CallStmt, CollectStmt, CombinatorCall, CombinatorKind,
     DeliveryVerb, DistributeStmt, ForkHeader, ForkStmt, Guard, JoinLine, LoopStmt, LoopTail,

@@ -1,0 +1,30 @@
+//! The same `norn` launch with both optional settings omitted: no `args`
+//! (the agent needs none) and no `binary` (the adapter's own documented
+//! `norn`-on-`PATH` default stands, which is the library's value and not one
+//! invented at this boundary). A section is complete when it carries its
+//! kind's REQUIRED set; an optional setting left out is a declaration, not a
+//! gap.
+workflow ask_the_agent
+  input question: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+/// The canonical agent-outcome record: the checker demands the STRUCTURE, not
+/// a blessed name.
+type Reply { text: String, stop_reason: String }
+
+worker assistants
+  harness
+    kind norn
+    concurrency 2
+    reconnect_initial_backoff 5s
+    reconnect_max_backoff 1m
+    reconnect_max_attempts 50
+    env_pass "PATH", "HOME"
+  action ask(prompt: String) -> Reply
+    agent
+
+step ask
+  ask(prompt: question) -> reply
+  route answered(reply: reply.text)

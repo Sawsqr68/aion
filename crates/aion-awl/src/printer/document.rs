@@ -421,6 +421,12 @@ fn print_worker(printer: &mut Printer, worker: &WorkerDecl) {
         &format!("worker {}", worker.name),
         worker.trailing.as_ref(),
     );
+    // The launch declaration prints BEFORE the actions, mirroring the order inside an
+    // action (config first, then body): what the queue is served BY comes before what
+    // it serves.
+    if let Some(harness) = &worker.harness {
+        super::harness::print_harness(printer, 1, harness);
+    }
     for action in &worker.actions {
         print_action(printer, action);
     }

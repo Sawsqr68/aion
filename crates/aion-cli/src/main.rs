@@ -220,25 +220,21 @@ enum WorkerCommand {
     /// variable, the flag wins, and nothing is invented — a missing setting is
     /// reported by name, with all of them listed at once.
     ///
-    /// WHICH harness is `--harness`, resolved over the adapters this binary was
-    /// built with: a build carrying exactly one derives it, a build carrying
-    /// several refuses until one is selected and names every choice, and a name
-    /// this build does not carry is refused naming what it does. The default
-    /// build carries `norn` and `acp`, so it requires the flag.
+    /// The LAUNCH is declared in the document, in the `worker` block's `harness`
+    /// section, and is not a flag: `kind` (`acp` or `norn`), `concurrency`, the
+    /// three reconnect settings, `env_pass`, and the per-kind settings — `command`
+    /// (absolute), `cwd` (absolute), `permission` (`deny` or `allow-once`, no
+    /// default, because it decides whether an unattended agent may write files and
+    /// run commands) and `exit_grace` for `acp`; the optional `binary` for `norn`;
+    /// optional `args` for either. Nothing is inferred: the checker refuses a
+    /// section missing any field of ITS DECLARED KIND's required set, by name, at
+    /// `aion awl check`. A `kind` this binary was not built with is refused here,
+    /// naming what the build does carry.
     ///
-    /// Each harness is configured by its own settings, demanded only when it is
-    /// the resolved one. The `acp` harness needs `--acp-command`, `--acp-cwd`
-    /// (absolute), `--acp-permission` (`deny` or `allow-once`, no default —
-    /// it decides whether an unattended agent may write files and run commands)
-    /// and `--acp-exit-grace`, plus repeatable `--acp-arg` / `--acp-env`; ACP has
-    /// no standard launch flag, so nothing about the command is inferred from an
-    /// agent's name. The `norn` harness's settings are all optional: `--norn-binary`
-    /// if `norn` is not on the worker's PATH, repeatable `--norn-arg` pass-through
-    /// arguments (with `{workflow_id}` / `{activity_type}` expanded per run), and
-    /// repeatable `--norn-unset-env` to strip a variable from the spawned norn's
-    /// environment. A flag configuring a harness this invocation is not serving is
-    /// REFUSED, never ignored: a flag that silently does nothing is how an operator
-    /// comes to believe a policy is in force when it is not.
+    /// `env_pass` is the agent subprocess's WHOLE environment: the document names
+    /// the variables, this machine supplies their values, and a variable that is
+    /// not named is absent in the agent whatever this worker's own environment
+    /// carries. Nothing is inherited.
     ///
     /// `--check` prints the exact action surface this worker would advertise, the
     /// resolved harness, and the intervention controls that harness advertises,
@@ -2137,26 +2133,8 @@ mod tests {
             "127.0.0.1:50062",
             "--identity",
             "reviewer-worker",
-            "--concurrency",
-            "4",
             "--task-queue",
             "reviewers",
-            "--harness",
-            "acp",
-            "--acp-command",
-            "npx",
-            "--acp-arg",
-            "@google/gemini-cli",
-            "--acp-arg",
-            "--acp",
-            "--acp-cwd",
-            "/srv/workspace",
-            "--acp-permission",
-            "deny",
-            "--acp-exit-grace",
-            "2",
-            "--acp-env",
-            "KEY=value",
         ])?;
         let Some(Command::Worker {
             command: super::WorkerCommand::Agent(args),
@@ -2164,7 +2142,7 @@ mod tests {
         else {
             anyhow::bail!("expected worker agent command");
         };
-        assert_eq!(args.awl, Path::new("flows/review.awl"));
+        assert_eq!(args.awl.as_deref(), Some(Path::new("flows/review.awl")));
         // Repeating the flag builds an ordered candidate list, which is what lets a
         // worker migrate to a survivor after its server dies.
         assert_eq!(
@@ -2177,24 +2155,6 @@ mod tests {
         assert_eq!(args.identity.as_deref(), Some("reviewer-worker"));
         assert_eq!(args.task_queue.as_deref(), Some("reviewers"));
         assert!(!args.check);
-        // The harness settings are flattened in from the composition root, so the verb
-        // parses them without knowing which adapters exist.
-        assert_eq!(args.harness.harness.as_deref(), Some("acp"));
-        assert_eq!(args.harness.acp_command.as_deref(), Some("npx"));
-        // Repeated, ORDER PRESERVED: an ACP agent's argv is exactly what was configured,
-        // because there is no standard launch flag to infer one from.
-        assert_eq!(
-            args.harness.acp_args,
-            vec![String::from("@google/gemini-cli"), String::from("--acp")]
-        );
-        assert_eq!(args.harness.acp_cwd.as_deref(), Some("/srv/workspace"));
-        assert_eq!(args.harness.acp_permission.as_deref(), Some("deny"));
-        assert_eq!(args.harness.acp_exit_grace.as_deref(), Some("2"));
-        assert_eq!(args.harness.acp_env, vec![String::from("KEY=value")]);
-
-        // The document is mandatory: there is nothing to derive a surface from
-        // without it, and nothing else is defaulted in its place.
-        assert!(Cli::try_parse_from(["aion", "worker", "agent"]).is_err());
 
         // Every connection setting is optional at PARSE time — the environment may
         // supply it — and `--check` needs none of them.
@@ -2208,11 +2168,93 @@ mod tests {
         assert!(args.check);
         assert!(args.liminal_addresses.is_empty());
         assert!(args.identity.is_none());
-        // Including the harness settings: `--check` reports what a build carries and
-        // demands no configuration to do it.
-        assert!(args.harness.harness.is_none());
-        assert!(args.harness.acp_command.is_none());
-        assert!(args.harness.acp_args.is_empty());
+        Ok(())
+    }
+
+    /// MIGRATION RIDER (a): the VERB SURVIVES and takes a document reference.
+    ///
+    /// Deleting the launch flags must not delete the door a human starts a worker
+    /// through. The assertion is on the parse, not on the help text: a verb that
+    /// documents itself and no longer parses is the same outage.
+    #[test]
+    fn the_agent_verb_survives_the_flag_deletion_and_takes_a_document() -> anyhow::Result<()> {
+        let cli = Cli::try_parse_from(["aion", "worker", "agent", "flows/review.awl"])?;
+        let Some(Command::Worker {
+            command: super::WorkerCommand::Agent(args),
+        }) = cli.command
+        else {
+            anyhow::bail!("`aion worker agent <FILE.awl>` must still be the door in");
+        };
+        assert_eq!(args.awl.as_deref(), Some(Path::new("flows/review.awl")));
+        Ok(())
+    }
+
+    /// MIGRATION RIDER: the per-setting launch flags are DELETED, not deprecated and
+    /// not kept alongside.
+    ///
+    /// Asserted as a PARSE REFUSAL of each one by name, because that is the only
+    /// difference an operator can observe between a deleted flag and a silently ignored
+    /// one — and a silently ignored `--acp-permission` reads exactly like a permission
+    /// policy being enforced.
+    #[test]
+    fn every_migrated_launch_flag_is_refused_by_the_parser() {
+        for (flag, value) in [
+            ("--harness", Some("acp")),
+            ("--concurrency", Some("4")),
+            ("--reconnect-initial-backoff", Some("5")),
+            ("--reconnect-max-backoff", Some("60")),
+            ("--reconnect-max-attempts", Some("100")),
+            ("--acp-command", Some("/usr/local/bin/claude-code-acp")),
+            ("--acp-arg", Some("--acp")),
+            ("--acp-cwd", Some("/srv/workspace")),
+            ("--acp-permission", Some("deny")),
+            ("--acp-env", Some("KEY=value")),
+            ("--acp-exit-grace", Some("2")),
+            ("--norn-binary", Some("/usr/local/bin/norn")),
+            ("--norn-arg", Some("--account")),
+            ("--norn-unset-env", Some("OPENAI_API_KEY")),
+        ] {
+            let mut argv = vec!["aion", "worker", "agent", "flows/review.awl", flag];
+            argv.extend(value);
+            assert!(
+                Cli::try_parse_from(&argv).is_err(),
+                "`{flag}` moved into the document's `harness` section and must no longer \
+                 parse; accepting it would leave an operator believing a setting is in force \
+                 when the document decides it"
+            );
+        }
+    }
+
+    /// MIGRATION RIDER (b): a bare invocation refuses LOUDLY with the new shape named.
+    ///
+    /// The document is OPTIONAL to clap on purpose, so the refusal is this verb's own
+    /// sentence rather than "the following required arguments were not provided" — which
+    /// tells an operator arriving with the old flags nothing about where those settings
+    /// went.
+    #[test]
+    fn a_bare_invocation_refuses_loudly_naming_the_new_shape() -> anyhow::Result<()> {
+        let cli = Cli::try_parse_from(["aion", "worker", "agent"])?;
+        let Some(Command::Worker {
+            command: super::WorkerCommand::Agent(args),
+        }) = cli.command
+        else {
+            anyhow::bail!("a bare invocation must PARSE, so the verb can refuse in its own words");
+        };
+        let Err(error) = args.document() else {
+            anyhow::bail!("an invocation naming no document must be refused");
+        };
+        let message = error.to_string();
+        for expected in [
+            "aion worker agent <FILE.awl>",
+            "harness",
+            "aion awl check",
+            "no longer a flag",
+        ] {
+            assert!(
+                message.contains(expected),
+                "the refusal must name `{expected}`, got:\n{message}"
+            );
+        }
         Ok(())
     }
 
@@ -2236,24 +2278,22 @@ mod tests {
         assert!(help.contains("all-or-nothing"));
         assert!(help.contains("liminal worker transport"));
         assert!(help.contains("nothing is invented"));
-        // Harness selection and per-harness configuration: an operator must be able to
-        // read WHICH harness will run, and what an ACP one needs, off the help alone.
+        // Where the LAUNCH is declared, and every setting it carries: an operator must
+        // be able to read off the help alone that these are document fields and not
+        // flags, and which ones the kind they are declaring needs.
         for expected in [
-            "--harness",
-            "--norn-binary",
-            "--acp-command",
-            "--acp-arg",
-            "--acp-cwd",
-            "--acp-permission",
-            "--acp-env",
-            "--acp-exit-grace",
+            "`harness` section",
+            "concurrency",
+            "env_pass",
+            "permission",
+            "exit_grace",
+            "no default",
         ] {
             assert!(help.contains(expected), "help must document `{expected}`");
         }
-        // And the two rulings an operator cannot afford to learn by surprise: the
-        // security decision has no default, and a flag for another harness is refused.
-        assert!(help.contains("no default"));
-        assert!(help.contains("REFUSED"));
+        // The two rulings an operator cannot afford to learn by surprise: the security
+        // decision has no default, and the agent's environment is not inherited.
+        assert!(help.contains("Nothing is inherited"));
         Ok(())
     }
 

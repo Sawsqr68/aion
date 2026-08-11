@@ -28,13 +28,14 @@ use aion_integrations::DynAgentHarness;
 
 use super::settings::HarnessConfig;
 
-/// How this verb spells Norn's degraded-session opt-in, for the advice attached to
-/// that refusal: the operator restarts the worker passing Norn's own flag through
-/// `--norn-arg`. Stated here because the spelling belongs to THIS command line — the
-/// adapter's advice machinery deliberately takes it as a parameter rather than
-/// guessing at a caller's flags.
+/// How a document spells Norn's degraded-session opt-in, for the advice attached to
+/// that refusal: the operator adds Norn's own flag to the `harness` section's `args`
+/// list and redeploys. Stated here because the spelling belongs to THIS surface — the
+/// adapter's advice machinery deliberately takes it as a parameter rather than guessing
+/// at a caller's configuration.
 #[cfg(feature = "norn")]
-const NORN_DEGRADED_SESSION_OPT_IN: &str = "--norn-arg --allow-degraded-session";
+const NORN_DEGRADED_SESSION_OPT_IN: &str =
+    "the worker document's `harness` section: add \"--allow-degraded-session\" to its `args`";
 
 /// Builds the configured harness, erased for the worker serve path to hold.
 ///
@@ -61,13 +62,13 @@ pub(crate) fn build(config: &HarnessConfig) -> Arc<dyn DynAgentHarness> {
 
 /// The Norn adapter for `config`.
 ///
-/// With no binary configured the adapter's own constructor supplies its documented
+/// With no binary declared the adapter's own constructor supplies its documented
 /// `norn`-on-`PATH` default, so the default lives in the library that owns the
-/// behaviour rather than being restated at this boundary. The operator's `--norn-arg`
-/// values are applied through the adapter's `with_arg` builder — which is what expands
-/// the `{workflow_id}` / `{activity_type}` run-identity placeholders at spawn time —
-/// and every `--norn-unset-env` name through `without_env`, which strips the variable
-/// from the SPAWNED child only and wins over inherited and set values alike.
+/// behaviour rather than being restated at this boundary. The document's `args` values
+/// are applied through the adapter's `with_arg` builder — which is what expands the
+/// `{workflow_id}` / `{activity_type}` run-identity placeholders at spawn time — and
+/// the document's `env_pass` list through `with_declared_environment`, which makes the
+/// spawned child's environment the declared one INSTEAD of an inherited one.
 ///
 /// `pub(super)` rather than private so the module's tests can assert the composed
 /// child invocation (`NornHarness::invocation`) — a flag only observed through a live
@@ -85,32 +86,26 @@ pub(super) fn build_norn(
     for arg in &config.args {
         harness = harness.with_arg(arg.clone());
     }
-    for key in &config.unset_env {
-        harness = harness.without_env(key.clone());
-    }
-    harness
+    harness.with_declared_environment(config.environment.clone())
 }
 
 /// The ACP adapter for `config`.
 ///
-/// Every argument the adapter requires comes from the operator: the command and its
+/// Every argument the adapter requires comes from the document: the command and its
 /// arguments verbatim (ACP has no standard launch flag), the absolute session root, the
-/// permission policy, and the shutdown grace. The child environment is applied through
-/// the adapter's builder, which sets it on the SPAWNED process only and never mutates
-/// this one.
+/// permission policy, and the shutdown grace. The child's environment is the DECLARED
+/// one — constructed from the document's `env_pass` names, set on the spawned process
+/// only, and never inherited from whatever shell or supervisor started this worker.
 #[cfg(feature = "acp")]
 fn build_acp(config: &super::settings::AcpConfig) -> aion_integration_acp::AcpHarness {
     use aion_integration_acp::AcpHarness;
 
-    let mut harness = AcpHarness::new(
+    AcpHarness::new(
         config.command.clone(),
         config.args.clone(),
         config.cwd.clone(),
         config.permission,
         config.exit_grace,
-    );
-    for (key, value) in &config.env {
-        harness = harness.with_env(key, value);
-    }
-    harness
+    )
+    .with_declared_environment(config.environment.clone())
 }

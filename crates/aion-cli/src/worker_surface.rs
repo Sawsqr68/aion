@@ -220,3 +220,53 @@ pub(crate) fn reconcile(
     }
     Ok(descriptors)
 }
+
+/// The LAUNCH the `worker` block for `task_queue` in `document` declares, when it
+/// declares one.
+///
+/// A second parse of the same file, deliberately: the contract derivation above goes
+/// through `aion_awl::compile`, whose product is the typed surface committed into
+/// package identity, and a launch declaration has no business in that. Compilation has
+/// already run the checker over this document, so a section reaching here is one the
+/// checker ruled complete.
+///
+/// # Errors
+///
+/// Returns an error when the document cannot be read or parsed, when it declares no
+/// `worker` block for `task_queue`, or when a section that passed the checker cannot be
+/// turned into a launch — which is a checker defect and says so.
+pub(crate) fn compile_harness(
+    document: &Path,
+    task_queue: &str,
+) -> Result<Option<aion_awl::CompiledHarness>> {
+    let source = std::fs::read_to_string(document)
+        .with_context(|| format!("failed to read AWL document {}", document.display()))?;
+    let parsed = aion_awl::parse(&source).map_err(|error| {
+        anyhow::anyhow!(
+            "{}:{}:{}: {}",
+            document.display(),
+            error.span.line,
+            error.span.column,
+            error.message
+        )
+    })?;
+    let Some(worker) = parsed
+        .workers
+        .iter()
+        .find(|worker| worker.name == task_queue)
+    else {
+        bail!(
+            "{} declares no `worker {task_queue}` block, so there is no launch declaration to \
+             read for that queue",
+            document.display()
+        );
+    };
+    aion_awl::compile_harness(worker).map_err(|error| {
+        anyhow::anyhow!(
+            "{}:{}:{}: {error}",
+            document.display(),
+            error.span().line,
+            error.span().column
+        )
+    })
+}
