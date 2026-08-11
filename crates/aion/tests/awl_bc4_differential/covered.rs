@@ -73,7 +73,16 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// so only a run decides whether the routed failure outcome triggers
 /// compensation on one backend and not the other. Their buckets below were read
 /// off the run, not predicted.
-const COVERED_COUNT: usize = 107;
+///
+/// 111 since the harness section (#204): the four `harness-section/valid/*`
+/// fixtures — both harness kinds, the optional-settings-omitted shape, and the
+/// harness-absent control. A `harness` section is serve-surface configuration
+/// the lowering must CARRY WITHOUT CHANGING CONTROL FLOW, so the differential
+/// question is whether its presence perturbs the lowered workflow at all; all
+/// four ran byte-identical and to completion on both backends (0 divergences,
+/// 0 infra), and their `EXPECTED_SUCCEEDED` entries below were read off that
+/// run, not predicted.
+const COVERED_COUNT: usize = 111;
 
 /// Out-of-oracle (r2 finding 3): fixtures whose durable park boundary is NOT
 /// observable through any engine surface without racy sampling.
@@ -366,6 +375,10 @@ const EXPECTED_SUCCEEDED: &[&str] = &[
     // The canonical value payload: `route done(note)` at the workflow
     // boundary, completing its real work -> route path on both backends.
     "flow-shape/valid/value_route_payload",
+    "harness-section/valid/acp_harness",
+    "harness-section/valid/harness_absent_control",
+    "harness-section/valid/norn_harness",
+    "harness-section/valid/norn_harness_without_optional_settings",
     "header-types/valid/doc_comments",
     "header-types/valid/enum",
     "header-types/valid/line_width",
