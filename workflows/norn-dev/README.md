@@ -22,6 +22,51 @@ of itself.
    The real exit code routes the workflow: `0` → `done`, anything else →
    `gates_red` with both streams attached. The builder cannot route this fork.
 
+## Serving the `dev` queue
+
+`norn_dev.awl` declares one agent-served action on queue `dev`, and it does
+**not** yet carry a `harness` section — so `aion worker agent` refuses it by
+name until one is written. That is not an oversight to work around with flags:
+the flags are gone, and every field of the section is operator policy with no
+default (how many activities this box serves at once, how long a reconnect
+budget is worth, exactly which environment variables the builder agent may
+see). Nobody can write those on an operator's behalf, least of all a file
+committed to this repository.
+
+Add the section under `worker dev`, above its actions:
+
+```awl
+worker dev
+  harness
+    kind norn
+    concurrency <n>
+    reconnect_initial_backoff <n>s
+    reconnect_max_backoff <n>s
+    reconnect_max_attempts <n>
+    env_pass "PATH", "HOME"
+    args "--account", "<account>"
+```
+
+then serve it — the command line now carries only the connection:
+
+```sh
+aion worker agent workflows/norn-dev/norn_dev.awl \
+    --liminal-address <host:port> \
+    --identity norn-dev-builder
+```
+
+`aion awl check workflows/norn-dev/norn_dev.awl` names every setting the
+section is missing, scoped to the kind it declares, so the document can be
+brought up against the checker rather than against this README.
+
+`env_pass` is the one that changes behaviour rather than just moving house: it
+is the builder agent's **entire** environment. The document names the
+variables, this machine supplies their values, and a variable that is not named
+is absent in the agent whatever your shell exported. Nothing is inherited —
+which is exactly what stops an agent's own `CLAUDECODE` reaching a nested agent
+and killing the run. See [AGENT-WORKERS.md](../../docs/workers/AGENT-WORKERS.md)
+for the whole section.
+
 ## What the dispatcher owes the run
 
 - **`brief`**: complete and self-contained — the task, the file fence, the
