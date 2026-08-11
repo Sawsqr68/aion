@@ -1,0 +1,92 @@
+//! update_watch — the update check on an operator-named cadence.
+//!
+//! The embedded update-check document is manual-only by design: the server
+//! never phones home on its own. This document does not change that law —
+//! it IS the explicit operator act, stretched over time. Nothing schedules
+//! this workflow either; the operator starts ONE run and names, as demanded
+//! inputs, how often it checks and how many checks it makes. When the run
+//! completes, the checking stops until an operator starts another. A longer
+//! watch is another run, started with its own named parameters.
+//!
+//! THE CHECK ITSELF IS THE EMBEDDED CHECK, NOT A COPY. The server's
+//! update-status observer recognises a check by its task queue, its action
+//! name, and the resolved command — verbatim against the constants in
+//! `crates/aion-server/src/update_check/document.rs` — not by workflow
+//! type. This document declares exactly that queue, that action, and that
+//! command, so every cycle's completed fetch is recorded by the same
+//! observer that records a console "check now", and `GET /update-status`
+//! (and the console's update pill) refreshes on each cycle. An edit here
+//! that drifts the command from the constant produces fetches the observer
+//! IGNORES — visibly, because the pill's `checked_at` stops moving.
+//!
+//! The cadence is a demanded input spent as `pace(seconds: ...)` — the
+//! language's durable `sleep` takes only duration literals, and a literal
+//! cadence would be an authored value the operator never named. The check
+//! count is a demanded input spent as the flow-loop visit bound; "never
+//! emulate an unbounded loop" is the language's law. 48 × 1800 s = one day
+//! of half-hourly checks.
+//!
+//! WHAT IT NEVER DOES: no install, no upgrade, no restart — the same line
+//! the embedded check draws. Knowing a newer aion exists and becoming it
+//! are different acts, and neither this document nor the check takes the
+//! second one.
+workflow update_watch
+  input interval_seconds: Int
+  input checks: Int
+  query last_check: Fetched
+  outcome completed: type WatchReport, route success
+  outcome refused:   type Refused,     route failure
+  outcome died:      type Refused,     route failure
+
+// The declared-body executor's whole result — the same record the embedded
+// update-check document declares, kept field-for-field so the recorded
+// activity result carries exactly what the fetch answered.
+type Fetched { exit_code: Int, stdout: String, stderr: String }
+
+/// What a completed watch reports: the parameters it was named with and its
+/// final check. Every check's result is in the run's history.
+type WatchReport { checks_requested: Int, interval_seconds: Int, last_check: Fetched }
+
+/// A run that did not watch, said out loud rather than reported as a pass.
+type Refused { reason: String }
+
+worker update_check
+  /// One GET of the sparse-index line file for `aion-cli` — VERBATIM the
+  /// embedded check's command, because the observer records a result only
+  /// from this exact body on this exact queue and action.
+  action fetch_crate_index() -> Fetched
+    run "curl -fsS https://index.crates.io/ai/on/aion-cli"
+
+worker update_watch
+  /// The cadence, spent as a parameterized sleep through the declared-body
+  /// spine: `sleep` resolved via PATH, the demanded seconds its one argument.
+  action pace(seconds: Int) -> Paced
+    run "sleep $seconds"
+
+/// The pace leg's outcome record subset: its exit status, nothing more.
+type Paced { exit_code: Int }
+
+/// Refuse out-of-range values by name before anything runs. The engine has
+/// already refused a start missing any input; this step refuses one that
+/// names a value no run could mean.
+step validate
+  outcome named: when interval_seconds >= 1 and checks >= 1,
+    route check
+  outcome unnamed: otherwise,
+    route refused(reason: "refusing to start: interval_seconds and checks must both be >= 1. There are no defaults; the values are the operator's to name.")
+
+step check
+  fetch_crate_index() -> fetched
+  answer last_check(fetched)
+  on failure
+    route died(reason: "an update check died — curl exited non-zero (network down, crates.io unreachable, or an HTTP error status). The leg's own stderr is in the run history; nothing was retried silently.")
+
+step decide
+  outcome more: when visits < checks, route pace
+  outcome finished: otherwise,
+    route completed(checks_requested: checks, interval_seconds: interval_seconds, last_check: fetched)
+  max checks visits
+
+step pace
+  pace(seconds: interval_seconds)
+  route check
