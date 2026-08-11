@@ -20,9 +20,16 @@ export const AW_REST_CONTRACT = {
     // is the auth-scoped quorum-CAS `PUT` that sets a namespace's placement.
     namespacePlacement: '/namespaces/{name}/placement',
     whoami: '/whoami',
+    // The running server's compiled-in identity (#123): version, commit,
+    // dirty, built_at. The update panel renders "installed" from this.
+    build: '/build',
     // The release changelog embedded in the running server's binary — what
     // changed in the version it RUNS, consumed by the What's-new panel.
     changelog: '/changelog',
+    // The installed version joined with the last completed MANUAL update
+    // check: {installed, latest_known, checked_at}; the check fields are null
+    // until an operator has ever run a check. Polled by the update pill.
+    updateStatus: '/update-status',
     clusterCommand: '/cluster/command',
     workflowStart: '/workflows/start',
     // Deliver a named signal to a running workflow (namespace-scoped like
@@ -50,7 +57,9 @@ export const AW_REST_CONTRACT = {
     namespaceRecords: 'GET',
     namespacePlacement: 'PUT',
     whoami: 'GET',
+    build: 'GET',
     changelog: 'GET',
+    updateStatus: 'GET',
     workflowsPlain: 'GET',
     workflowsCount: 'GET',
     workflowStart: 'POST',

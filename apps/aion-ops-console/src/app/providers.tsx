@@ -4,12 +4,9 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { CapabilitiesProvider } from '@/features/capabilities';
 import { NamespaceProvider } from '@/features/namespace';
 import type { AionEventWebSocketManager, ApiClient } from '@/lib/api';
-import { configuredEventSocket } from '@/lib/config';
+import { configuredEventSocket, QUERY_GC_TIME_MS, QUERY_STALE_TIME_MS } from '@/lib/config';
 import { KeybindingsProvider } from '@/lib/keybindings';
 import type { Namespace } from '@/types';
-
-const QUERY_STALE_TIME_MS = 30_000;
-const QUERY_GC_TIME_MS = 5 * 60_000;
 
 export type AppProvidersProps = {
   apiClient?: Pick<ApiClient, 'listNamespaces' | 'getCapabilities'> | undefined;

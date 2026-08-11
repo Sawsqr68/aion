@@ -48,11 +48,13 @@ import { AW_REST_CONTRACT, toBinaryBody } from './client-transport';
 import type {
   ApiClientOptions,
   AttemptCapabilities,
+  BuildIdentityResponse,
   Capabilities,
   ChangelogResponse,
   InterveneParams,
   RequestOptions,
   StartWorkflowParams,
+  UpdateStatusResponse,
   WhoAmIResponse,
   WorkflowPageRequest,
 } from './client-types';
@@ -75,11 +77,13 @@ export type { ApiCredentials } from './client-transport';
 export type {
   ApiClientOptions,
   AttemptCapabilities,
+  BuildIdentityResponse,
   Capabilities,
   ChangelogResponse,
   InterveneParams,
   RequestOptions,
   StartWorkflowParams,
+  UpdateStatusResponse,
   WorkflowPageRequest,
 } from './client-types';
 export type { HistoryWindow, HistoryWindowRequest } from './workflow-history-contract';
@@ -202,6 +206,39 @@ export class ApiClient {
     return await this.transport.request<ChangelogResponse>(
       AW_REST_CONTRACT.endpoints.changelog,
       AW_REST_CONTRACT.methods.changelog,
+      { namespace: '' as Namespace, credentials: options?.credentials }
+    );
+  }
+
+  /**
+   * Fetch the running server's compiled-in identity (`GET /build`, #123): the
+   * version, commit, dirty flag, and build timestamp of the binary actually
+   * serving this console — never a value baked into the console bundle, which
+   * may be older or newer than the server it happens to be served by.
+   * Namespace-independent, like `/whoami`.
+   */
+  async getBuild(options?: Pick<RequestOptions, 'credentials'>): Promise<BuildIdentityResponse> {
+    return await this.transport.request<BuildIdentityResponse>(
+      AW_REST_CONTRACT.endpoints.build,
+      AW_REST_CONTRACT.methods.build,
+      { namespace: '' as Namespace, credentials: options?.credentials }
+    );
+  }
+
+  /**
+   * Fetch the update-check status (`GET /update-status`, #189 slice one): the
+   * installed version joined with the last completed MANUAL check's
+   * `latest_known`/`checked_at`, both `null` until an operator has ever run a
+   * check. Serving this never touches the network on the server side; it only
+   * reports what the last operator-started check recorded.
+   * Namespace-independent, like `/whoami`.
+   */
+  async getUpdateStatus(
+    options?: Pick<RequestOptions, 'credentials'>
+  ): Promise<UpdateStatusResponse> {
+    return await this.transport.request<UpdateStatusResponse>(
+      AW_REST_CONTRACT.endpoints.updateStatus,
+      AW_REST_CONTRACT.methods.updateStatus,
       { namespace: '' as Namespace, credentials: options?.credentials }
     );
   }

@@ -5,6 +5,7 @@ import { RootErrorBoundary } from '@/components/RootErrorBoundary';
 import { ConnectionIndicator } from '@/features/live-feed';
 import { NamespaceSelector } from '@/features/namespace';
 import { PaletteHost } from '@/features/palette';
+import { UpdateStatus } from '@/features/update';
 import { WhatsNew } from '@/features/whats-new';
 
 import { GlobalActions } from './GlobalActions';
@@ -59,6 +60,7 @@ export function AppShell() {
             <AppNav currentPath={navPath} items={NAV_ITEMS} renderLink={renderNavLink} />
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <UpdateStatus />
             <WhatsNew />
             <NamespaceSelector />
             <ConnectionIndicator />

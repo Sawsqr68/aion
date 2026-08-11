@@ -93,4 +93,28 @@ export type ChangelogResponse = {
   markdown: string;
 };
 
+/**
+ * `GET /build` envelope (#123): the running server's compiled-in identity.
+ * Unestablished fields carry the literal string `"unknown"`, never an empty
+ * value — the server stamps absence as a word so it reads as a measurement.
+ */
+export type BuildIdentityResponse = {
+  version: string;
+  commit: string;
+  dirty: string;
+  built_at: string;
+};
+
+/**
+ * `GET /update-status` envelope (#189 slice one): the installed version
+ * joined with the last completed MANUAL update check. `latest_known` and
+ * `checked_at` are `null` until a check has ever completed — a fresh server
+ * has honestly never checked, and no field fabricates otherwise.
+ */
+export type UpdateStatusResponse = {
+  installed: string;
+  latest_known: string | null;
+  checked_at: string | null;
+};
+
 export type RequestBody = JsonRecord | undefined;
