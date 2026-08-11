@@ -1,0 +1,55 @@
+# Standalone liminal activity worker for the first-party `gates` workflow
+# (workflows/gates/gates.awl). Serves the `lane_gates` task queue by invoking
+# the committed gate-runner.zsh, so the gate commands live in exactly one
+# reviewed place.
+[package]
+name = "lane-gates-worker"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Aion liminal worker that runs the aion lane battery through workflows/gates/gate-runner.zsh."
+
+[[bin]]
+name = "lane-gates-worker"
+path = "src/main.rs"
+
+[lib]
+name = "lane_gates_worker"
+path = "src/lib.rs"
+
+# Its own workspace THIS round (root membership is a named follow-up: the
+# release lane owns the root Cargo.toml right now, and membership needs
+# release-tooling verification first). The lint block below is the workspace's
+# own deny-level block, copied verbatim, so the standalone crate is held to
+# the same bar; the battery's `gates_worker` leg runs this crate's fmt,
+# clippy, and tests so the instrument is gated even while standalone.
+[workspace]
+
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "warn"
+
+[dependencies]
+aion-worker = { path = "../../../crates/aion-worker", features = ["liminal-transport"] }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "process", "macros", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+aion-awl = { path = "../../../crates/aion-awl" }
+aion-core = { path = "../../../crates/aion-core" }
+aion-package = { path = "../../../crates/aion-package" }
+tempfile = "3"
+uuid = { version = "1", features = ["v4"] }

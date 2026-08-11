@@ -1,0 +1,7 @@
+# Per-run full leg logs written by the gates workflow's runner
+# (workflows/gates/gate-runner.zsh). A stated home on the measuring box, not
+# a committed artifact: the committed record is the run's manifest, which
+# names this directory and pins the tails by digest; multi-megabyte cargo
+# logs do not belong in history (the repo has already paid ~2 GiB for that
+# mistake once).
+gates-runs/

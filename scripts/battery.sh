@@ -462,6 +462,30 @@ if require_tool bun "The ops console is a separate bun project; without it the c
   gate_in "console:test" apps/aion-ops-console bun test
 fi
 
+# --- The gates workflow's own worker crate -------------------------------------
+#
+# workflows/gates/worker is deliberately its OWN cargo workspace (root
+# membership is a named follow-up), so every workspace-wide Rust gate above
+# compiles NONE of it — and it is the crate that RUNS the workflow battery.
+# An instrument nothing gates is exactly how a mutation to a gate command
+# ships silently (the #57 r1 review proved it with one). The aion-side gates
+# workflow carries the same three checks as its `gates_worker` leg; this entry
+# keeps the hand battery's coverage identical, so the F3 comparison stays
+# leg-for-leg over the overlap.
+
+# The three checks do NOT short-circuit: they are three independent questions
+# about one crate, and `&&`-chaining hides the clippy and test answers behind
+# a formatting failure — the same truncated-diagnosis shape `--no-fail-fast`
+# exists to prevent, one level up. All three run; the gate's exit code is the
+# FIRST failure's, so the verdict is unchanged and only the diagnosis is
+# complete.
+gate_in "gates:worker-crate" workflows/gates/worker bash -c '
+  first=0
+  cargo fmt --check; s=$?; [ "$first" -eq 0 ] && first=$s
+  cargo clippy --all-targets -- -D warnings; s=$?; [ "$first" -eq 0 ] && first=$s
+  cargo test; s=$?; [ "$first" -eq 0 ] && first=$s
+  exit "$first"'
+
 # --- Python SDKs --------------------------------------------------------------
 #
 # These carry the proto-drift gates that are the remediation for the wire-dead

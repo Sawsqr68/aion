@@ -35,6 +35,7 @@ authority of a machine.
 
 | Workflow | What it answers |
 |---|---|
+| [`gates/`](gates/) | Does this checkout pass the lane battery? — seven legs with real exit codes and coverage floors as data, and a committed manifest derived from the run's own history that names its own instrument by sha. |
 | [`issue-recheck/`](issue-recheck/) | Is this reported-missing thing still missing? — with a control that refuses to answer on a broken search. |
 | [`norn-fleet/`](norn-fleet/) | What does a reader make of each of these issues? — norn-backed judges fanned out in parallel, behind a control that refuses to judge on a pipeline that cannot prove it reads the tree. |
 | [`norn-dev/`](norn-dev/) | Did this delegated build actually pass its gates? — one brief to a norn-backed builder, admitted by the server running the gate script, never by the builder's own account. |

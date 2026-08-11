@@ -1,0 +1,8 @@
+HALF 1 — zsh special table: 114 names
+  control OK: `path` is in the table
+  control OK: `status` is in the table
+  control OK: `argv` is in the table
+HALF 2 — declared names extracted: 87
+  .data, "ActivityCompleted"), |, absence_cause, acknowledged, build_json, CMD_BUN, CMD_CLIPPY_SERVER, CMD_CLIPPY_WORKSPACE, CMD_FMT, CMD_TEST, code, component, count, counts, crate, derived_at, describe, describe_err, digest, dir, distinct_heads, distinct_runners, EMBED_STAGE_1, EMBED_STAGE_2, EMBED_STAGE_3, EMBED_STAGE_4, expected, first_failure, floor, floor_fn, gate, gate_commands, gate_filter, git_err, git_output, grpc, head_commit, head_commit_at_derivation, http, identity_block, identity_dir, identity_files, identity_note, legs, log, logs_dir, missing, observation_count, observations, observed_at, observed_head, observed_head_json, observed_runner_json, observed_runner_sha, out, package_version, passed, porcelain_file, ran, run_id, run_status, runner_digest, runner_path, RUNNER_SELF, runner_sha, select(.type, sibling_logs, stage_status, started_at, status_sha, subcommand, TAIL_LINES, targets, tool, tool_location, tool_versions, unpaired, untracked_mode, version, wid, WORKER_STAGE_1, WORKER_STAGE_2, WORKER_STAGE_3, workflow_id, workflow_type, ws
+  control OK: the extractor SEES a shadowing fixture (found: path, status, tool, version)
+RESULT: no local/typeset/readonly in workflows/gates/gate-runner.zsh shadows a zsh special parameter.

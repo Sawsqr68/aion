@@ -1,0 +1,68 @@
+{
+  "schema": "aion.gates.manifest.v1",
+  "derived_at": "2026-08-11T12:33:01+1000",
+  "workflow": {
+    "workflow_id": "cb4316df-194d-49b7-863b-8366a740f0bd",
+    "workflow_type": "gates",
+    "run_id": "00f64249-72e4-4f09-8aec-7fee6c732192",
+    "package_version": "23a2fa9be9ce95dcf3e87c4551ec080895499cd8a1e822d946865718b9aac4d0",
+    "started_at": "2026-08-11T02:02:27.314032Z",
+    "status_at_derivation": "Running"
+  },
+  "server": {
+    "grpc": "127.0.0.1:50051",
+    "http": "http://127.0.0.1:8080",
+    "build": {
+      "version": "0.13.7",
+      "commit": "unknown",
+      "dirty": "unknown",
+      "built_at": "2026-08-10T16:10:12+00:00"
+    }
+  },
+  "workspace": {
+    "path": "/Users/tom/Developer/ablative/stack/aion",
+    "head_commit": "712c8bcf4caa87b9a0e48794976c6cc60d23b2c6",
+    "dirty_files": 7
+  },
+  "legs": [
+    {
+      "gate": "fmt",
+      "activity_id": 0,
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "gate": "bun",
+      "activity_id": 1,
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "gate": "clippy_workspace",
+      "activity_id": 2,
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "gate": "clippy_server",
+      "activity_id": 3,
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "gate": "test",
+      "activity_id": 4,
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "gate": "embed",
+      "activity_id": 5,
+      "exit_code": 0,
+      "passed": true
+    }
+  ],
+  "legs_recorded": 6,
+  "legs_failed": 0,
+  "tails_digest": "sha256:0d5dfbb3b66cf56bcf305b9ea4e21d7e195cc0f940a3c82740c59b2b85834f81"
+}

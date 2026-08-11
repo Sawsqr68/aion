@@ -1,0 +1,133 @@
+//! gates — the aion lane battery, run as a durable workflow on the engine it
+//! gates: fmt, clippy twice (the two feature resolutions are two different
+//! programs), the workspace test suite, the console's bun suite, the embed
+//! freshness check, and the battery's own worker crate, each leg coming back
+//! as data with its command's REAL exit code. The verdict is computed from
+//! what actually ran — a red gate names itself, and per-leg exit codes are
+//! the participation-predicate law applied to gates: a verdict-less death
+//! inside one leg surfaces as that leg's failed activity or non-zero exit,
+//! never vanishing into a summed tally. The `test` and `bun` legs carry
+//! coverage floors of their own (target/result pairing; a nonzero test
+//! count), so an exit code from a run that measured nothing is a RED leg
+//! with a named reason, not a green.
+//!
+//! The final leg derives the committed-manifest record MECHANICALLY from
+//! this run's own event history (per-leg exit codes, a digest of the tails,
+//! the run id, the server's own build identity, the measured checkout's
+//! commit and its porcelain status INLINED so the pinned hash has a
+//! committed preimage, and the INSTRUMENT — the runner script by path and
+//! sha256, every gate command, the resolved toolchain and PATH) and writes
+//! it where the operator names — the run's history is the instrument, the
+//! manifest is the record, and there is no hand-maintained copy to drift.
+//! Each leg captures the tree and the runner it is about to measure BEFORE
+//! it measures, and the derivation refuses when those observations disagree
+//! with each other or with what it reads at derivation time: a record that
+//! cannot say which tree it measured is not written. The manifest is written
+//! on GREEN AND ON RED, and the green outcome additionally requires the
+//! recorded leg count to equal the seven this document declares.
+//!
+//! Sequencing is reasoned, not decorative: the workspace cargo legs (clippy
+//! ×2, test — and the embed leg's wire-type assert) share one target/ build
+//! lock, so fanning them out would only serialise them on the lock while
+//! confounding their timings. Exactly one workspace-lock-holder runs per
+//! layer: fmt (rustfmt takes no build lock) and the console's bun suite fan
+//! out beside the first clippy leg; everything cargo-locked after that runs
+//! in sequence, and the worker-crate leg (its own workspace, its own lock)
+//! runs sequenced too so the box is never contended.
+//!
+//! WHAT THIS DOES NOT PROVE: a green battery proves what these seven
+//! commands measure against the named checkout, nothing more. Review of the
+//! diff is a reader's job, after this returns. Started by hand, never on a
+//! cadence — a schedule is a value the operator names, and none is named
+//! here.
+workflow gates
+  timeout 4h
+  input workspace_path: String
+  input manifest_path: String
+  input server_grpc: String
+  input server_http: String
+  outcome clean:   type Clean,   route success
+  outcome failing: type Failing, route failure
+
+/// One gate's actual result — exit status is data, never a silent failure.
+/// `passed` is true exactly when the command exited 0 AND the leg's coverage
+/// floor held; a floor violation names itself at the head of the tail.
+type GateResult {
+  gate: String,
+  exit_code: Int,
+  passed: Bool,
+  /// Last lines of combined output, enough to read the failure without the
+  /// full log; the complete log is retained at
+  /// `<workspace>/gate-logs/gates-runs/<workflow_id>/<gate>.log`.
+  output_tail: String,
+}
+
+/// The manifest generator's receipt: where the record landed and the digest
+/// that pins it, so the outcome payload carries its own corroboration.
+type ManifestReceipt { path: String, run_id: String, tails_digest: String, legs_recorded: Int }
+
+type Clean { gates_run: Int, manifest: ManifestReceipt }
+/// Carries ALL gate results, passed flags included — the reader sees every
+/// leg's exit code, not a failed-only summary.
+type Failing { gates: [GateResult], manifest: ManifestReceipt }
+
+worker lane_gates
+  /// `cargo fmt --all -- --check` — non-mutating by construction.
+  action fmt_gate(workspace: String, workflow_id: String) -> GateResult
+  /// `cargo clippy --workspace --all-targets -- -D warnings`. The
+  /// `--workspace` resolution turns serde_json/preserve_order ON by feature
+  /// unification — a different program from the `-p` leg below, which is why
+  /// clippy is two legs and both are required.
+  action clippy_workspace_gate(workspace: String, workflow_id: String) -> GateResult
+  /// `cargo clippy -p aion-server --all-targets -- -D warnings` — the
+  /// preserve_order-OFF resolution.
+  action clippy_server_gate(workspace: String, workflow_id: String) -> GateResult
+  /// `cargo test --workspace --no-fail-fast`, with the estate's
+  /// target/result pairing control and a nonzero-targets floor applied to
+  /// the retained full log — a truncated or empty run is a red leg with a
+  /// named reason, never a green.
+  action test_gate(workspace: String, workflow_id: String) -> GateResult
+  /// `bun test` in apps/aion-ops-console, with a nonzero-tests floor.
+  action bun_gate(workspace: String, workflow_id: String) -> GateResult
+  /// The non-mutating embed freshness check: wire types asserted, console
+  /// rebuilt to its gitignored dist/, rebuild diffed against the committed
+  /// crates/aion-server/ops-console-embed bundle.
+  action embed_gate(workspace: String, workflow_id: String) -> GateResult
+  /// The battery gates its own instrument: fmt, clippy (-D warnings), and
+  /// tests of the lane-gates-worker crate, which is its own cargo workspace
+  /// and therefore untouched by the workspace-wide legs above.
+  action gates_worker_gate(workspace: String, workflow_id: String) -> GateResult
+  /// Derives the committed manifest from THIS run's recorded history, the
+  /// server's own build surface, the measured checkout, and the runner's own
+  /// bytes. `expected_legs` comes from this document — the one place the
+  /// legs are declared — so a history holding a different number of
+  /// completed gates refuses the derivation instead of recording a different
+  /// battery.
+  action write_manifest(workflow_id: String, server_grpc: String, server_http: String, manifest_path: String, expected_legs: Int, workspace: String) -> ManifestReceipt
+
+step first_band
+  fork
+    fmt_gate(workspace: workspace_path, workflow_id: workflow.id) -> fmt
+    bun_gate(workspace: workspace_path, workflow_id: workflow.id) -> bun
+    clippy_workspace_gate(workspace: workspace_path, workflow_id: workflow.id) -> clippy_workspace
+  join
+
+step clippy_server_band
+  clippy_server_gate(workspace: workspace_path, workflow_id: workflow.id) -> clippy_server
+
+step test_band
+  test_gate(workspace: workspace_path, workflow_id: workflow.id) -> tests
+
+step embed_band
+  embed_gate(workspace: workspace_path, workflow_id: workflow.id) -> embed
+
+step gates_worker_band
+  gates_worker_gate(workspace: workspace_path, workflow_id: workflow.id) -> gates_worker
+
+step manifest
+  write_manifest(workflow_id: workflow.id, server_grpc: server_grpc, server_http: server_http, manifest_path: manifest_path, expected_legs: 7, workspace: workspace_path) -> receipt
+  outcome green: when fmt.passed and bun.passed and clippy_workspace.passed and clippy_server.passed and tests.passed and embed.passed and gates_worker.passed and receipt.legs_recorded == 7,
+    route clean(gates_run: 7, manifest: receipt)
+  outcome red: otherwise,
+    route failing(gates: [fmt, bun, clippy_workspace, clippy_server, tests, embed, gates_worker],
+      manifest: receipt)
