@@ -1,0 +1,64 @@
+aion 0.13.8 — release evidence
+==============================
+
+Release commit: fbd88cef4c1b120f8ad5592a5b6934391f1bf7dd (release: aion 0.13.8)
+Tag: v0.13.8
+Delta over v0.13.7: EXACTLY the release commit's 22-file set — workspace
+version bump, intra-workspace path-dep versions, Cargo.lock (aion-only
+delta, verified), and the 0.13.8 changelog entry (root + embedded copy).
+Same file set as the 0.13.7 release commit 466ce1df1. The changelog entry
+covers #187 (editor diagnostics), #188 (grammar panel), #189 (update
+check) — all landed and pushed before this cut.
+
+Ruling: Waffles the Terrible, 2026-08-11 05:15Z, branch (a) — ship under
+attestation, every verdict named. Tom, 05:14Z: "let's publish the 13.8
+release." Publish + swap under Tom's standing swap authorization
+(2026-08-11 01:45Z).
+
+Battery attestation (full battery, run 2, tree fbd88cef4's content —
+run at the identical pre-commit tree; the commit added no code bytes)
+--------------------------------------------------------------------
+Instrument: scripts/battery.sh (~20 sections). STRONGER than the 0.13.7
+battery instrument, which ran only fmt / clippy-workspace /
+clippy-aion-server / test-workspace (gate-logs/publish-0137/
+battery-exits.txt). The extra sections surface pre-existing debt; NONE
+of the red verdicts below is in this release's delta (bump + changelog
+only).
+
+Run 1: RED — invalidated by measured cause: disk exhaustion (ENOSPC,
+os error 28 in every failure; target/ at 125 GiB, disk to zero). Battery
+tree killed by verified pid; four leaked Saturday e2e orphans killed;
+target/ removed; relaunched. Evidence scratchpad/release-0138/
+battery-run1-red-enospc.log.
+
+Run 2 (started 13:56:27, finished 14:52:52 local, disk 165G→99G free):
+BATTERY_EXIT=1. Six red sections, five verdict classes, all read
+verbatim (scratchpad/release-0138/battery.log, run2-rust-test*.log):
+
+1. test-workspace: #85 libsql 0.9.30 double-close flake (known signature,
+   contended-box; isolated runs green 5/5 on prior reproduction).
+2. gleam SDK fetch: hex.pm network flake (transient fetch failure).
+3. test-all-features: #200 — embedded assistant on queue `default`
+   refuses fresh-store default-queue workers. LATENT SINCE v0.13.7 (leg C
+   b5e628b5 is in the 0.13.7 tag; e2e file unchanged since); first
+   MEASURED here because 0.13.7's battery never ran all-features.
+   Filed #200; design direction at Waffles' desk (#178 board).
+4. fmt: #57-lane contamination (uncommitted worker-crate dirt from the
+   in-flight #57 builder; attributed via MARKER doc; not release files).
+5. SDK gates (python worker+client, ts worker): #201 protobuf stub drift
+   + bun vi.advanceTimersByTimeAsync shim gap. Pre-existing; sdks/ are
+   NOT in the 22-crate publish set.
+
+Publish record
+--------------
+Order: proven 0.13.7 leaf-first order (this directory,
+publish-exits.txt): 22 crates, every exit 0, all_published=22,
+started 2026-08-11T05:18:19Z finished 05:33:17Z.
+Registry: sparse-index verified 22/22 at 0.13.8 (index.crates.io),
+2026-08-11 ~05:36Z.
+
+Post-publish: cargo install aion-cli 0.13.8 → swap of the operator's
+server (old pid 11694, 0.13.7) under the standing word → swap ladder
+(health, versions, worker re-registration, live shell_run, MCP tools,
+served changelog) — results recorded in the seat log
+(scratchpad/r22-lane-state.txt) and reported to Tom.
