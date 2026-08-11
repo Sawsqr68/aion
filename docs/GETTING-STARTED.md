@@ -195,6 +195,7 @@ the console. There are no round limits.
 | The script stops at "Waiting for the server to answer" | tail `~/.aion/server.log` — the last error line names the cause |
 | The worker "did not register within 30s" | `norn` missing or not signed in; tail `~/.aion/assistant-worker.log` |
 | Console loads, but the assistant never answers | the worker log again — is it still running? `pgrep -fl agent-dev-worker` |
+| The assistant session starts and then sits there, with a worker connected | the worker is serving a different task queue from the one the deployed document declares. The assistant has its own private queue (it is not `default`); `grep task_queue ~/.aion/assistant-worker.log` and compare with the `worker` line in `crates/aion-server/assistant-embed/assistant.awl`, or with `task_queue` from `aion assistant describe`. Stop the worker and re-run the script |
 | "the server's workspace root is unresolvable" | the server booted but could not resolve `<AION_HOME>/clones`; the reason is in the banner and in `~/.aion/server.log` |
 | The clone fails | network, not access — the repository is public |
 

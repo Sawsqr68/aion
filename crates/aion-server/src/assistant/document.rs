@@ -19,12 +19,32 @@
 //! changes the continuation's fields therefore fails loudly at load — at boot,
 //! in the verb, and in this module's own tests — instead of leaving a constant
 //! quietly disagreeing with the document it names.
+//!
+//! # The task queue is DERIVED, and it is never `default`
+//!
+//! The built-in assistant owns a private queue named after itself:
+//! [`private_task_queue`] IS the rule, and the queue is that function of the
+//! document's own workflow type — not a constant beside it, not a
+//! configuration key with a default. [`EmbeddedAssistant::load`] proves the
+//! document declares exactly that one queue and refuses it otherwise, so the
+//! derivation cannot drift from the document and the document cannot drift
+//! from the server.
+//!
+//! `default` is where an out-of-box worker comes up when nobody has told it
+//! otherwise. Contract admission holds a registering worker against EVERY
+//! reachable contract on its queue at once, so while the assistant sat on
+//! `default` the first worker a newcomer started was refused for not
+//! advertising `assistant` — the built-in assistant starved the workers it
+//! exists to welcome (#200). The queue therefore belongs to those workers, and
+//! this document never claims it.
 
 use std::path::Path;
 use std::sync::OnceLock;
 
 use aion_awl::{CompiledWorkflow, TypeBody};
-use aion_package::{ContentHash, ExtractionLimits, Package, PackageError, SignalContract};
+use aion_package::{
+    ContentHash, ExtractionLimits, Package, PackageContract, PackageError, SignalContract,
+};
 use serde_json::Value;
 
 /// The embedded assistant document, compiled into the binary.
@@ -57,6 +77,22 @@ pub const CONTINUE_END_FIELD: &str = "end";
 
 /// The read-only query reporting a live session's phase and round count.
 pub const STATUS_QUERY: &str = "assistant_status";
+
+/// The assistant's private task queue, derived from its own identity.
+///
+/// The derivation IS the value: the built-in assistant serves the queue named
+/// after the workflow type it exports, and there is nowhere else a queue name
+/// is written down. [`EmbeddedAssistant::load`] holds the embedded document to
+/// this — a document declaring any other queue does not load — so the server,
+/// the document, and every surface that reports the queue read one rule.
+///
+/// It is deliberately NOT operator-configurable and has no default to fall
+/// back to. A configurable queue with a default is how the assistant ended up
+/// on `default` in the first place.
+#[must_use]
+pub const fn private_task_queue(workflow_type: &str) -> &str {
+    workflow_type
+}
 
 /// The schema-import root presented to the compiler.
 ///
@@ -173,6 +209,57 @@ pub enum EmbeddedAssistantError {
         /// Why the contract could not be read.
         message: String,
     },
+
+    /// The document's own workflow type would derive the out-of-box workers'
+    /// queue, so the assistant cannot have a private queue at all.
+    #[error(
+        "the embedded assistant exports workflow type `{workflow_type}`, so its derived private \
+         queue would be `{default_queue}` — the queue every out-of-box worker comes up on. The \
+         built-in assistant never claims it (#200); the workflow must be named something else"
+    )]
+    QueueWouldBeDefault {
+        /// The workflow type the document exports.
+        workflow_type: String,
+        /// The out-of-box workers' queue this would collide with.
+        default_queue: &'static str,
+    },
+
+    /// The document declares no `worker` block, so it claims no queue.
+    #[error(
+        "the embedded assistant document declares no `worker` block, so it claims no task queue; \
+         the assistant's queue is derived from its own workflow type and the document must \
+         declare `worker {expected}`"
+    )]
+    MissingWorkerBlock {
+        /// The queue the derivation requires.
+        expected: String,
+    },
+
+    /// The document declares more than one `worker` block, so "the assistant's
+    /// queue" is not one value.
+    #[error(
+        "the embedded assistant document declares more than one `worker` block (`{declared}`); \
+         the built-in assistant serves exactly one derived private queue, `{expected}`"
+    )]
+    AmbiguousQueue {
+        /// Every declared queue, in declaration order, comma-separated.
+        declared: String,
+        /// The queue the derivation requires.
+        expected: String,
+    },
+
+    /// The document declares a queue other than its derived private one.
+    #[error(
+        "the embedded assistant document declares task queue `{declared}`, but the assistant's \
+         queue is derived from its own workflow type and must be `{expected}`. `default` is the \
+         out-of-box workers' queue and the built-in assistant never claims it (#200)"
+    )]
+    QueueNotDerived {
+        /// The queue the document declares.
+        declared: String,
+        /// The queue the derivation requires.
+        expected: String,
+    },
 }
 
 /// The embedded assistant: the document's bytes, the package compiled from
@@ -186,6 +273,7 @@ pub struct EmbeddedAssistant {
     source: &'static str,
     package: Package,
     workflow_type: String,
+    task_queue: String,
     input_schema: Value,
     signals: Vec<SignalContract>,
     queries: Vec<String>,
@@ -252,6 +340,7 @@ impl EmbeddedAssistant {
                     message: error.to_string(),
                 })?;
         let signals = contract.signals.clone();
+        let task_queue = verified_task_queue(&workflow_type, contract)?;
 
         for name in [OBJECTIVE_INPUT, REPO_PATH_INPUT] {
             if !document.inputs.iter().any(|input| input.name == name) {
@@ -285,6 +374,7 @@ impl EmbeddedAssistant {
             source,
             package,
             workflow_type,
+            task_queue,
             input_schema,
             signals,
             queries,
@@ -301,6 +391,17 @@ impl EmbeddedAssistant {
     #[must_use]
     pub fn workflow_type(&self) -> &str {
         &self.workflow_type
+    }
+
+    /// The assistant's private task queue: the one a worker must serve for a
+    /// session to run, and never `default`.
+    ///
+    /// Verified at load against [`private_task_queue`], so this is the
+    /// document's own declaration and the derivation at once — holding an
+    /// [`EmbeddedAssistant`] is proof they agree.
+    #[must_use]
+    pub fn task_queue(&self) -> &str {
+        &self.task_queue
     }
 
     /// The package's content hash — this document's version identity.
@@ -352,6 +453,50 @@ impl EmbeddedAssistant {
                 name: CONTINUE_SIGNAL,
             })
     }
+}
+
+/// The queue the compiled document declares, proved equal to the derivation.
+///
+/// Four ways this refuses, and each is a refusal to guess rather than a
+/// limitation: a workflow type whose derived queue would be the out-of-box
+/// workers' queue, a document that declares no queue at all, one that declares
+/// several (so "the assistant's queue" is not one value), and one that declares
+/// a queue the derivation did not produce.
+fn verified_task_queue(
+    workflow_type: &str,
+    contract: &PackageContract,
+) -> Result<String, EmbeddedAssistantError> {
+    let expected = private_task_queue(workflow_type);
+    if expected == aion_core::DEFAULT_TASK_QUEUE {
+        return Err(EmbeddedAssistantError::QueueWouldBeDefault {
+            workflow_type: workflow_type.to_owned(),
+            default_queue: aion_core::DEFAULT_TASK_QUEUE,
+        });
+    }
+    let declared: Vec<&str> = contract
+        .workers
+        .iter()
+        .map(|worker| worker.task_queue.as_str())
+        .collect();
+    let [only] = declared.as_slice() else {
+        return Err(if declared.is_empty() {
+            EmbeddedAssistantError::MissingWorkerBlock {
+                expected: expected.to_owned(),
+            }
+        } else {
+            EmbeddedAssistantError::AmbiguousQueue {
+                declared: declared.join(", "),
+                expected: expected.to_owned(),
+            }
+        });
+    };
+    if *only != expected {
+        return Err(EmbeddedAssistantError::QueueNotDerived {
+            declared: (*only).to_owned(),
+            expected: expected.to_owned(),
+        });
+    }
+    Ok(expected.to_owned())
 }
 
 /// Whether `schema` declares `property` under `properties`.

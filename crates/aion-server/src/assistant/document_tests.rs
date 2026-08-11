@@ -144,6 +144,167 @@ fn a_document_that_renames_the_objective_input_is_refused_by_name() -> TestResul
     }
 }
 
+/// THE #200 SOURCE OF TRUTH. The embedded document's queue is its own workflow
+/// type, and it is not `default`.
+///
+/// Both halves matter. The first is the derivation: the queue is a function of
+/// the assistant's identity, so nothing can name a queue the document does not
+/// declare. The second is the defect this fixes — `default` is the queue an
+/// out-of-box worker comes up on, and an assistant sitting there refuses it.
+#[test]
+fn the_embedded_queue_is_derived_from_the_workflow_type_and_is_never_default() -> TestResult {
+    let embedded = EmbeddedAssistant::load()?;
+    assert_eq!(
+        embedded.task_queue(),
+        private_task_queue(embedded.workflow_type()),
+        "the declared queue must BE the derivation, not a value beside it"
+    );
+    assert_ne!(
+        embedded.task_queue(),
+        aion_core::DEFAULT_TASK_QUEUE,
+        "the built-in assistant must never claim the out-of-box workers' queue (#200)"
+    );
+    // Read the compiled contract literally rather than through the accessor:
+    // the accessor is what is under test.
+    let contract = embedded.package().contract()?;
+    let declared: Vec<&str> = contract
+        .workers
+        .iter()
+        .map(|worker| worker.task_queue.as_str())
+        .collect();
+    assert_eq!(
+        declared,
+        vec![embedded.task_queue()],
+        "the document must declare exactly the one private queue"
+    );
+    Ok(())
+}
+
+/// VACUITY CONTROL for the derivation. A document that declares `worker
+/// default` — the exact shape #200 removed — is refused BY NAME, naming both
+/// the queue it declared and the queue the derivation requires.
+///
+/// Without this the check above passes just as green with the verification
+/// deleted, because the shipped document satisfies it and the check never
+/// fires.
+#[test]
+fn a_document_that_claims_the_default_queue_is_refused_by_name() -> TestResult {
+    let on_default: &'static str = Box::leak(
+        EMBEDDED_ASSISTANT_DOCUMENT
+            .replace("\nworker assistant\n", "\nworker default\n")
+            .into_boxed_str(),
+    );
+    assert_ne!(
+        on_default, EMBEDDED_ASSISTANT_DOCUMENT,
+        "the mutation must change the document, or this test measures nothing"
+    );
+    match EmbeddedAssistant::from_source(on_default) {
+        Err(EmbeddedAssistantError::QueueNotDerived { declared, expected }) => {
+            assert_eq!(declared, aion_core::DEFAULT_TASK_QUEUE);
+            assert_eq!(expected, "assistant");
+            Ok(())
+        }
+        Err(other) => Err(format!(
+            "a document on `default` must be refused for its QUEUE, not for {other}; a compile \
+             failure here would mean the mutation never reached the queue check"
+        )
+        .into()),
+        Ok(_) => Err(
+            "a document declaring `worker default` was accepted — the queue derivation is not on \
+             the load path, and the assistant can ship on the out-of-box workers' queue again"
+                .into(),
+        ),
+    }
+}
+
+/// Every other way the derivation refuses, exercised against the verifier
+/// itself.
+///
+/// The document mutation above proves the check is ON THE LOAD PATH. These
+/// prove the check is COMPLETE: no queue, several queues, and a workflow type
+/// that would derive `default` are each refused, by name, with both the value
+/// found and the value required. Driving them through the AWL compiler would
+/// mean hand-writing three documents whose compile failures could masquerade as
+/// refusals; the contract is the verifier's actual input, so it is the input
+/// under test.
+#[test]
+fn the_derivation_refuses_every_other_disagreement_by_name() -> TestResult {
+    let queue = |name: &str| aion_package::WorkerContract {
+        task_queue: String::from(name),
+        actions: Vec::new(),
+    };
+
+    let none = aion_package::PackageContract::default();
+    match verified_task_queue("assistant", &none) {
+        Err(EmbeddedAssistantError::MissingWorkerBlock { expected }) => {
+            assert_eq!(expected, "assistant");
+        }
+        other => {
+            return Err(format!("a contract with no queue must be refused; got {other:?}").into());
+        }
+    }
+
+    let several = aion_package::PackageContract {
+        workers: vec![queue("assistant"), queue("assistant_extra")],
+        ..aion_package::PackageContract::default()
+    };
+    match verified_task_queue("assistant", &several) {
+        Err(EmbeddedAssistantError::AmbiguousQueue { declared, expected }) => {
+            assert_eq!(declared, "assistant, assistant_extra");
+            assert_eq!(expected, "assistant");
+        }
+        other => {
+            return Err(format!("two queues must be refused as ambiguous; got {other:?}").into());
+        }
+    }
+
+    let elsewhere = aion_package::PackageContract {
+        workers: vec![queue("something_else")],
+        ..aion_package::PackageContract::default()
+    };
+    match verified_task_queue("assistant", &elsewhere) {
+        Err(EmbeddedAssistantError::QueueNotDerived { declared, expected }) => {
+            assert_eq!(declared, "something_else");
+            assert_eq!(expected, "assistant");
+        }
+        other => {
+            return Err(format!("an underived queue must be refused; got {other:?}").into());
+        }
+    }
+
+    // The rule holds even against the derivation itself: a workflow type that
+    // WOULD derive the out-of-box workers' queue is refused rather than
+    // quietly producing the very collision #200 removed.
+    let colliding = aion_package::PackageContract {
+        workers: vec![queue(aion_core::DEFAULT_TASK_QUEUE)],
+        ..aion_package::PackageContract::default()
+    };
+    match verified_task_queue(aion_core::DEFAULT_TASK_QUEUE, &colliding) {
+        Err(EmbeddedAssistantError::QueueWouldBeDefault {
+            workflow_type,
+            default_queue,
+        }) => {
+            assert_eq!(workflow_type, aion_core::DEFAULT_TASK_QUEUE);
+            assert_eq!(default_queue, aion_core::DEFAULT_TASK_QUEUE);
+        }
+        other => {
+            return Err(format!(
+                "a workflow type deriving `default` must be refused; got {other:?}"
+            )
+            .into());
+        }
+    }
+
+    // AND the agreeing case is accepted, so the refusals above are not a
+    // verifier that refuses everything.
+    let derived = aion_package::PackageContract {
+        workers: vec![queue("assistant")],
+        ..aion_package::PackageContract::default()
+    };
+    assert_eq!(verified_task_queue("assistant", &derived)?, "assistant");
+    Ok(())
+}
+
 /// A document carrying a `schema(…)` import is refused before compilation,
 /// naming the import: the binary embeds one file and no directory to resolve
 /// against, and resolving one against the server's cwd would be a silent

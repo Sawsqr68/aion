@@ -185,10 +185,13 @@ fn the_embedded_document_is_the_shipped_one() -> TestResult {
 /// actions identically, because contract admission holds a registering worker
 /// against EVERY reachable contract on that queue at once. One document that
 /// disagrees does not degrade gracefully — the worker is refused outright and
-/// NONE of the documents on the queue can run. That is what took `default`
-/// down: the spike declared `assistant_provision(repo_path, run_id)` while the
-/// full session added `objective`, and input compatibility is contravariant, so
-/// no single worker could satisfy both.
+/// NONE of the documents on the queue can run. That is what took the shared
+/// queue down: the spike declared `assistant_provision(repo_path, run_id)`
+/// while the full session added `objective`, and input compatibility is
+/// contravariant, so no single worker could satisfy both. (That queue was
+/// `default` at the time; it is the assistant's own private queue now — #200
+/// moved it off `default` so an out-of-box worker is never held against these
+/// contracts at all.)
 ///
 /// This asserts the property that must hold FOREVER, not the accident that the
 /// two once disagreed. A new `.awl` document sharing this queue belongs in the
@@ -200,7 +203,9 @@ fn the_embedded_document_is_the_shipped_one() -> TestResult {
 /// admission permits a worker to serve more than one contract needs.
 #[test]
 fn every_document_on_this_queue_agrees_with_the_advertised_surface() -> TestResult {
-    // Every AWL document deployed to queue `default` and served by this worker.
+    // Every AWL document deployed to this worker's queue — the assistant's own
+    // private queue, derived from `assistant.awl` itself and read from the
+    // surface below rather than named here.
     let documents = [
         ("assistant.awl", ASSISTANT_DOCUMENT),
         (

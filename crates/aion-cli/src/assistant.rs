@@ -194,6 +194,11 @@ fn describe(embedded: &EmbeddedAssistant) -> Result<Value> {
         .collect();
     Ok(json!({
         "workflow_type": embedded.workflow_type(),
+        // The queue something must serve for a session to run. Reported here
+        // because `describe` is the surface an operator with no checkout reads,
+        // and a worker on the wrong queue fails silently: it connects, it
+        // registers, and it is never dispatched to.
+        "task_queue": embedded.task_queue(),
         "content_hash": embedded.content_hash().to_string(),
         "document_bytes": embedded.source().len(),
         "input_schema": embedded.input_schema(),

@@ -12,10 +12,25 @@
 //! # The brain is a seam, not a dependency
 //!
 //! Nothing here names an agent harness. The document declares one `agent`
-//! action on the `default` queue; WHICH agent serves that queue is the
-//! worker's business (`aion worker agent --harness …`, norn today, ACP for
-//! external agents). This module installs the document and describes it; it
-//! neither spawns nor selects a brain.
+//! action on the assistant's own private queue; WHICH agent serves that queue
+//! is the worker's business (`aion worker agent --harness …`, norn today, ACP
+//! for external agents). This module installs the document and describes it;
+//! it neither spawns nor selects a brain.
+//!
+//! # The queue is the assistant's own name, never `default`
+//!
+//! [`document::private_task_queue`] IS the rule: the built-in assistant serves
+//! the queue named after the workflow type it exports, and the embedded
+//! document is refused at load if it declares anything else. `default` is
+//! where an out-of-box worker comes up with no configuration, and contract
+//! admission holds a registering worker against every reachable contract on
+//! its queue — so an assistant sitting on `default` refused the first worker a
+//! newcomer started (#200). The queue belongs to those workers.
+//!
+//! A catalog that predates that change still has its assistant on the old
+//! queue. Nothing here moves it: [`install`] reports the divergence at WARN,
+//! naming both queues and the verbs that perform the move, and leaves routing
+//! exactly as the operator left it.
 //!
 //! # What the install will and will not do
 //!
@@ -44,8 +59,9 @@ pub use descriptor::{
 pub use document::{
     CONTINUE_END_FIELD, CONTINUE_MESSAGE_FIELD, CONTINUE_SIGNAL, EMBEDDED_ASSISTANT_DOCUMENT,
     EMBEDDED_ASSISTANT_FILENAME, EmbeddedAssistant, EmbeddedAssistantError, OBJECTIVE_INPUT,
-    REPO_PATH_INPUT, STATUS_QUERY, embedded_assistant,
+    REPO_PATH_INPUT, STATUS_QUERY, embedded_assistant, private_task_queue,
 };
 pub use install::{
-    AssistantInstall, install_embedded_assistant, install_embedded_assistant_for_server,
+    AssistantInstall, RoutedQueues, install_embedded_assistant,
+    install_embedded_assistant_for_server,
 };

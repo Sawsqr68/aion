@@ -105,6 +105,7 @@ async fn serve() -> Result<(std::net::SocketAddr, tokio::task::JoinHandle<()>), 
         AssistantInstall::Installed {
             workflow_type: embedded.workflow_type().to_owned(),
             content_hash: embedded.content_hash().to_string(),
+            task_queue: embedded.task_queue().to_owned(),
         },
         "the verb is being exercised against a server that really carries the assistant"
     );

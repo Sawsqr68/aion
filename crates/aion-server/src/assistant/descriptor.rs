@@ -90,6 +90,14 @@ pub struct AssistantSignal {
 pub struct AssistantDescriptor {
     /// The workflow type an operator starts.
     pub workflow_type: String,
+    /// The private task queue a worker must serve for a session to run.
+    ///
+    /// Published because an operator with no checkout has no other way to
+    /// learn it, and because getting it wrong is silent: a worker on the wrong
+    /// queue connects, registers, and never receives a dispatch. Derived from
+    /// the document's own identity and never `default` — see
+    /// [`super::document::private_task_queue`].
+    pub task_queue: String,
     /// The embedded document's content hash — its version identity.
     pub content_hash: String,
     /// The document's filename inside the binary.
@@ -114,6 +122,7 @@ pub struct AssistantDescriptor {
 pub fn describe(embedded: &EmbeddedAssistant, engine: &Engine) -> AssistantDescriptor {
     AssistantDescriptor {
         workflow_type: embedded.workflow_type().to_owned(),
+        task_queue: embedded.task_queue().to_owned(),
         content_hash: embedded.content_hash().to_string(),
         document_filename: EMBEDDED_ASSISTANT_FILENAME,
         document_bytes: embedded.source().len(),
