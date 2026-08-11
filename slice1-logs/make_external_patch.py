@@ -199,6 +199,6 @@ header = """# BRINGUP SLICE 1 — patches for surfaces OUTSIDE the aion reposito
 
 """
 
-pathlib.Path("BRINGUP-SLICE1-EXTERNAL-PATCHES.diff").write_text(header + body + "\n")
+pathlib.Path("slice1-logs/BRINGUP-SLICE1-EXTERNAL-PATCHES.diff").write_text(header + body + "\n")
 print("hunks:", body.count("\n@@ ") + body.count("@@ -"))
 print("bytes:", len(header + body))

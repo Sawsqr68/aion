@@ -1,0 +1,21 @@
+    Checking futures-core v0.3.32
+    Checking serde_core v1.0.228
+    Checking libc v0.2.186
+    Checking futures-sink v0.3.32
+    Checking num-traits v0.2.19
+    Checking slab v0.4.12
+    Checking thiserror v2.0.18
+    Checking tokio v1.52.3
+    Checking futures-channel v0.3.32
+    Checking futures-util v0.3.32
+    Checking getrandom v0.4.2
+    Checking serde v1.0.228
+    Checking uuid v1.23.4
+    Checking serde_json v1.0.150
+    Checking chrono v0.4.45
+    Checking futures-executor v0.3.32
+    Checking futures v0.3.32
+    Checking ts-rs v12.0.1
+    Checking aion-core v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-core)
+    Checking aion-integrations v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integrations)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.65s

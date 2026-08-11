@@ -1,0 +1,55 @@
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-server)
+   Compiling aion-cli v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-cli)
+warning: unused import: `super::environment_report::report_absent_pass_through`
+  --> crates/aion-cli/src/worker_agent/serve.rs:49:5
+   |
+49 | use super::environment_report::report_absent_pass_through;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: method `environment` is never used
+   --> crates/aion-cli/src/harness/settings.rs:116:25
+    |
+109 | impl ResolvedHarness {
+    | -------------------- method in this implementation
+...
+116 |     pub(crate) const fn environment(&self) -> &ChildEnvironment {
+    |                         ^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `report_absent_pass_through` is never used
+  --> crates/aion-cli/src/worker_agent/environment_report.rs:44:15
+   |
+44 | pub(super) fn report_absent_pass_through(
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-cli` (bin "aion") generated 4 warnings (run `cargo fix --bin "aion" -p aion-cli` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 57s
+     Running tests/declared_environment_report_e2e.rs (target/debug/deps/declared_environment_report_e2e-9be2fee73f47137d)
+
+running 2 tests
+test a_declaration_this_machine_can_satisfy_produces_no_warning_at_all ... ok
+test an_absent_declared_variable_is_reported_on_stderr_where_an_operator_reads_it ... FAILED
+
+failures:
+
+---- an_absent_declared_variable_is_reported_on_stderr_where_an_operator_reads_it stdout ----
+
+thread 'an_absent_declared_variable_is_reported_on_stderr_where_an_operator_reads_it' (123761870) panicked at crates/aion-cli/tests/declared_environment_report_e2e.rs:88:5:
+the operator must be told WHICH variable is missing; stderr was:
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    an_absent_declared_variable_is_reported_on_stderr_where_an_operator_reads_it
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.55s
+
+error: test failed, to rerun pass `-p aion-cli --test declared_environment_report_e2e`

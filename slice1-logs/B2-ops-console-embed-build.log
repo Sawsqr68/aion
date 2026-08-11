@@ -1,0 +1,124 @@
+   Compiling xtask v0.0.0 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/xtask)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.50s
+     Running `target/debug/xtask build-ops-console`
+[xtask] regenerating ts-rs wire types
+   Compiling libc v0.2.186
+   Compiling memchr v2.8.1
+   Compiling syn v2.0.117
+   Compiling serde_json v1.0.150
+   Compiling getrandom v0.4.2
+   Compiling uuid v1.23.4
+   Compiling serde_derive v1.0.228
+   Compiling thiserror-impl v2.0.18
+   Compiling ts-rs-macros v12.0.1
+   Compiling thiserror v2.0.18
+   Compiling serde v1.0.228
+   Compiling chrono v0.4.45
+   Compiling ts-rs v12.0.1
+   Compiling aion-core v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.06s
+     Running unittests src/lib.rs (target/debug/deps/aion_core-e11d71a5b53c155c)
+
+running 1 test
+test generated_types::export_ops_console_wire_types ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 107 filtered out; finished in 0.01s
+
+[xtask] bun install
+bun install v1.3.14 (0d9b296a)
+
++ @biomejs/biome@2.4.16
++ @playwright/test@1.61.1
++ @types/bun@1.3.14
++ @types/react@19.2.16
++ @types/react-dom@19.2.3
++ @vitejs/plugin-react@5.2.0
++ playwright@1.61.1
++ tw-animate-css@1.4.0
++ vite@7.3.5
++ @codemirror/commands@6.10.4
++ @codemirror/language@6.12.4
++ @codemirror/state@6.7.1
++ @codemirror/view@6.43.6
++ @fontsource-variable/dm-sans@5.2.8
++ @fontsource-variable/jetbrains-mono@5.2.8
++ @radix-ui/react-select@2.2.6
++ @radix-ui/react-slot@1.3.0
++ @radix-ui/react-tooltip@1.2.8
++ @tailwindcss/vite@4.3.0
++ @tanstack/react-query@5.101.0
++ @tanstack/react-virtual@3.14.8
++ class-variance-authority@0.7.1
++ clsx@2.1.1
++ cmdk@1.1.1
++ dagre@0.8.5
++ lucide-react@0.562.0
++ motion@12.42.2
++ react@19.2.7
++ react-dom@19.2.7
++ react-markdown@10.1.0
++ react-router@7.17.0
++ react-use-measure@2.1.7
++ reactflow@11.11.4
++ tailwind-merge@3.6.0
++ tailwindcss@4.3.0
++ web-tree-sitter@0.26.10
++ zustand@5.0.14
++ typescript@5.9.3
+
+1000 packages installed [3.05s]
+[xtask] bun run build
+$ vite build
+vite v7.3.5 building client environment for production...
+(node:96892) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+transforming...
+[plugin vite:resolve] Module "fs/promises" has been externalized for browser compatibility, imported by "/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin vite:resolve] Module "module" has been externalized for browser compatibility, imported by "/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin vite:resolve] Module "fs/promises" has been externalized for browser compatibility, imported by "/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin vite:resolve] Module "module" has been externalized for browser compatibility, imported by "/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin vite:resolve] Module "fs/promises" has been externalized for browser compatibility, imported by "/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin vite:resolve] Module "module" has been externalized for browser compatibility, imported by "/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js (2343:30): Use of eval in "../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js (2366:32): Use of eval in "../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js (2343:30): Use of eval in "../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js (2366:32): Use of eval in "../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+✓ 3170 modules transformed.
+../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js (2343:30): Use of eval in "../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js (2366:32): Use of eval in "../../node_modules/.bun/web-tree-sitter@0.26.10/node_modules/web-tree-sitter/web-tree-sitter.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+rendering chunks...
+computing gzip size...
+dist/assets/__vite-browser-external-9wXp6ZBx.js                       0.03 kB
+dist/index.html                                                       0.64 kB │ gzip:   0.37 kB
+dist/assets/jetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2      7.50 kB
+dist/assets/jetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2           9.00 kB
+dist/assets/jetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2       12.11 kB
+dist/assets/jetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2      15.20 kB
+dist/assets/dm-sans-latin-ext-wght-normal-BOFOeGcA.woff2             18.23 kB
+dist/assets/awl-DfQ96jGA.wasm                                        34.44 kB │ gzip:   9.01 kB
+dist/assets/dm-sans-latin-wght-normal-Xz1IZZA0.woff2                 36.93 kB
+dist/assets/jetbrains-mono-latin-wght-normal-B9CIFXIH.woff2          40.40 kB
+dist/assets/highlight.worker-BQzOZfgU.js                             75.72 kB
+dist/assets/web-tree-sitter-amZjDXNy.wasm                           200.45 kB │ gzip:  80.39 kB
+dist/assets/index-B5DZHykP.css                                        7.32 kB │ gzip:   1.60 kB
+dist/assets/index-Q6YyfUea.css                                       81.06 kB │ gzip:  18.72 kB
+dist/assets/__vite-browser-external-BIHI7g3E.js                       0.03 kB │ gzip:   0.05 kB
+dist/assets/index-DH1R4u7-.js                                         6.01 kB │ gzip:   2.31 kB
+dist/assets/index-uT9vIIHG.js                                         9.61 kB │ gzip:   3.53 kB
+dist/assets/index-pblFixfr.js                                        11.24 kB │ gzip:   3.53 kB
+dist/assets/startWorkflowDraft-CpO8klBW.js                           13.03 kB │ gzip:   3.95 kB
+dist/assets/StartWorkflowForm-DIkXq-86.js                            16.84 kB │ gzip:   5.32 kB
+dist/assets/index-xkOxVpcp.js                                        27.68 kB │ gzip:   8.75 kB
+dist/assets/index-C7yci7gS.js                                       880.66 kB │ gzip: 250.32 kB
+dist/assets/index-9wooPx5c.js                                     1,016.49 kB │ gzip: 316.10 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 3.79s
+[xtask] syncing dist -> crates/aion-server/ops-console-embed
+
+embed pipeline complete. The ops console is ALWAYS embedded — a plain
+`cargo build -p aion-cli` now ships the real UI at `/`. Commit the
+refreshed `crates/aion-server/ops-console-embed/` bundle.

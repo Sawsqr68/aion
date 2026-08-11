@@ -1,0 +1,43 @@
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-server)
+   Compiling aion-cli v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-cli)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-cli` (bin "aion") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 30s
+     Running tests/awl_corpus_gate.rs (target/debug/deps/awl_corpus_gate-af70f9c90be4b533)
+
+running 3 tests
+test the_derived_corpus_is_non_vacuous_and_covers_every_area ... ok
+test the_gate_refuses_the_retired_agent_shape ... ok
+test every_living_awl_document_checks_clean ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.42s
+
+     Running tests/console_guide_asset.rs (target/debug/deps/console_guide_asset-ed0a5553cc40aa8b)
+
+running 2 tests
+test the_console_asset_is_readable_json_with_the_shape_the_panel_uses ... ok
+test the_console_asset_is_what_the_cli_renders_today ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/declared_environment_report_e2e.rs (target/debug/deps/declared_environment_report_e2e-9be2fee73f47137d)
+
+running 2 tests
+test a_declaration_this_machine_can_satisfy_produces_no_warning_at_all ... ok
+test an_absent_declared_variable_is_reported_on_stderr_where_an_operator_reads_it ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/doc_pointer_gate.rs (target/debug/deps/doc_pointer_gate-765d9da3acb113fe)
+
+running 4 tests
+test the_gate_rejects_a_pointer_at_a_path_that_is_not_there ... ok
+test the_extractor_reads_both_pointer_forms_and_skips_what_is_not_a_path ... ok
+test the_project_templates_still_point_somewhere ... ok
+test every_documentation_pointer_names_a_file_that_exists ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+

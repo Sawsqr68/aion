@@ -1,0 +1,342 @@
+   Compiling serde_core v1.0.228
+   Compiling serde v1.0.228
+   Compiling serde_json v1.0.150
+   Compiling num-traits v0.2.19
+   Compiling getrandom v0.4.2
+   Compiling syn v2.0.117
+   Compiling errno v0.3.14
+   Compiling mio v1.2.1
+   Compiling strsim v0.11.1
+   Compiling ident_case v1.0.1
+   Compiling signal-hook-registry v1.4.8
+   Compiling rustix v1.1.4
+   Compiling unicode-segmentation v1.13.3
+   Compiling fastrand v2.4.1
+   Compiling unicode-xid v0.2.6
+   Compiling anyhow v1.0.102
+   Compiling convert_case v0.10.0
+   Compiling tempfile v3.27.0
+   Compiling darling_core v0.23.0
+   Compiling serde_derive_internals v0.29.1
+   Compiling serde_derive v1.0.228
+   Compiling futures-macro v0.3.32
+   Compiling thiserror-impl v2.0.18
+   Compiling ts-rs-macros v12.0.1
+   Compiling tokio-macros v2.7.0
+   Compiling async-trait v0.1.89
+   Compiling tracing-attributes v0.1.31
+   Compiling ref-cast-impl v1.0.25
+   Compiling tokio v1.52.3
+   Compiling futures-util v0.3.32
+   Compiling ref-cast v1.0.25
+   Compiling schemars_derive v1.2.1
+   Compiling tracing v0.1.44
+   Compiling thiserror v2.0.18
+   Compiling strum_macros v0.28.0
+   Compiling derive_more-impl v2.1.1
+   Compiling uuid v1.23.4
+   Compiling darling_macro v0.23.0
+   Compiling darling v0.23.0
+   Compiling serde_with_macros v3.21.0
+   Compiling strum v0.28.0
+   Compiling derive_more v2.1.1
+   Compiling chrono v0.4.45
+   Compiling schemars v1.2.1
+   Compiling futures-executor v0.3.32
+   Compiling futures v0.3.32
+   Compiling ts-rs v12.0.1
+   Compiling serde_with v3.21.0
+   Compiling aion-core v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-core)
+   Compiling agent-client-protocol-schema v1.5.0
+   Compiling aion-integrations v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integrations)
+   Compiling aion-integration-norn v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-norn)
+warning: function `every_environment_fault_reaches_the_seam_as_a_DETERMINISTIC_refusal` should have a snake case name
+   --> crates/aion-integrations/src/environment/tests.rs:157:4
+    |
+157 | fn every_environment_fault_reaches_the_seam_as_a_DETERMINISTIC_refusal() {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `every_environment_fault_reaches_the_seam_as_a_deterministic_refusal`
+    |
+    = note: `#[warn(non_snake_case)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: `aion-integrations` (lib test) generated 1 warning
+   Compiling aion-integration-acp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-acp)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 22.97s
+     Running unittests src/lib.rs (target/debug/deps/aion_integration_acp-a9e25fada2bea059)
+
+running 98 tests
+test harness::tests::json_string_input_unwraps_to_the_exact_inner_text ... ok
+test harness::tests::json_tagged_plain_text_input_passes_through_unchanged ... ok
+test harness::tests::json_object_input_passes_through_as_its_json_text ... ok
+test harness::tests::invalid_utf8_input_is_refused ... ok
+test harness::tests::a_relative_cwd_is_refused_naming_the_setting ... ok
+test harness::tests::a_relative_additional_directory_is_refused ... ok
+test harness::tests::absolute_paths_pass_validation ... ok
+test harness::tests::the_child_runs_in_the_session_cwd ... ok
+test harness::tests::the_registration_set_is_the_negotiated_set ... ok
+test harness::tests::removed_env_vars_are_expressed_as_child_removals ... ok
+test harness::tests::the_configured_command_and_args_are_passed_through_verbatim ... ok
+test messages::tests::a_changed_message_id_closes_the_previous_message_durably ... ok
+test messages::tests::a_dropped_message_id_does_not_fabricate_a_boundary ... ok
+test messages::tests::a_first_untagged_chunk_does_not_split_a_later_tagged_one ... ok
+test harness::tests::the_published_set_is_exactly_what_the_adapter_can_translate ... ok
+test messages::tests::a_new_user_message_id_closes_the_previous_user_turn ... ok
+test messages::tests::a_non_text_chunk_survives_verbatim_and_is_not_appended ... ok
+test messages::tests::a_non_text_thought_or_user_block_is_recorded_under_its_own_stream ... ok
+test messages::tests::a_streamed_user_turn_becomes_one_durable_message ... ok
+test messages::tests::each_agent_chunk_yields_one_ephemeral_delta ... ok
+test messages::tests::finish_closes_the_open_message_and_is_idempotent ... ok
+test messages::tests::reasoning_never_enters_the_runs_result ... ok
+test messages::tests::reasoning_streams_live_and_survives_durably ... ok
+test messages::tests::the_three_streams_do_not_interleave_into_each_other ... ok
+test messages::tests::two_completed_messages_are_joined_by_a_newline ... ok
+test messages::tests::untagged_chunks_accumulate_as_one_message ... ok
+test outcome::tests::a_request_cancelled_error_is_reported_as_a_cancellation ... ok
+test outcome::tests::a_response_with_neither_result_nor_error_is_a_protocol_error ... ok
+test outcome::tests::an_auth_required_error_names_the_authentication_it_needs ... ok
+test outcome::tests::an_ordinary_error_response_surfaces_its_code_and_message ... ok
+test outcome::tests::a_result_that_is_not_a_prompt_response_is_a_protocol_error ... ok
+test outcome::tests::cancelled_is_distinguishable_from_any_other_failure ... ok
+test outcome::tests::an_enormous_partial_answer_is_bounded_with_an_explicit_marker ... ok
+test outcome::tests::each_non_completing_stop_reason_is_a_failure_naming_itself ... ok
+test outcome::tests::end_turn_yields_the_canonical_agent_outcome_record ... ok
+test outcome::tests::refusal_is_never_reported_as_success ... ok
+test permission::tests::allow_once_never_widens_to_allow_always ... ok
+test permission::tests::allow_once_selects_the_allow_once_option ... ok
+test permission::tests::an_empty_option_list_still_produces_an_answer ... ok
+test permission::tests::deny_cancels_when_no_reject_option_is_offered ... ok
+test permission::tests::deny_falls_back_to_reject_always_when_no_reject_once_is_offered ... ok
+test permission::tests::deny_selects_the_reject_once_option ... ok
+test permission::tests::each_policy_has_a_distinct_audit_label ... ok
+test protocol::tests::advertised_client_capabilities_are_all_false ... ok
+test protocol::tests::client_info_names_this_crate_and_its_real_version ... ok
+test protocol::tests::error_codes_match_the_specified_numbers ... ok
+test protocol::tests::method_names_match_the_published_wire_strings ... ok
+test protocol::tests::protocol_version_is_the_integer_one ... ok
+test translate::tests::a_cancelled_decision_is_recorded_as_cancelled ... ok
+test translate::tests::a_failed_tool_call_update_marks_the_result_as_an_error ... ok
+test translate::tests::a_mismatched_protocol_version_is_refused_naming_both_versions ... ok
+test translate::tests::a_completed_tool_call_update_yields_a_tool_result ... ok
+test translate::tests::a_non_terminal_tool_call_update_is_the_verbatim_frame_alone ... ok
+test translate::tests::a_plan_reaches_the_transcript_with_all_its_entries ... ok
+test translate::tests::a_permission_request_and_its_decision_are_both_recorded ... ok
+test translate::tests::a_refused_peer_request_is_recorded_with_its_code ... ok
+test translate::tests::a_user_message_chunk_accumulates_into_a_durable_user_message ... ok
+test translate::tests::a_tool_call_yields_the_classified_event_and_the_verbatim_frame ... ok
+test translate::tests::an_agent_message_chunk_streams_an_ephemeral_delta ... ok
+test translate::tests::an_agent_thought_chunk_streams_a_note_and_survives_durably ... ok
+test translate::tests::every_stop_reason_maps_to_a_kind_and_a_wire_label ... ok
+test translate::tests::only_cancel_is_advertised ... ok
+test translate::tests::only_end_turn_is_a_completed_run ... ok
+test translate::tests::stamping_fills_the_run_identity_and_the_acp_attribution ... ok
+test translate::tests::the_matching_protocol_version_passes_the_gate ... ok
+test translate::tests::the_remaining_variants_each_reach_the_transcript_verbatim ... ok
+test translate::tests::the_terminal_response_is_recorded_verbatim_with_its_meta ... ok
+test wire_tests::a_user_message_chunk_becomes_one_durable_user_message ... ok
+test wire_tests::a_plan_reaches_the_transcript_with_every_entry ... ok
+test wire_tests::a_failed_terminal_frame_still_emits_a_terminal_boundary ... ok
+test wire_tests::a_multi_chunk_user_turn_is_still_one_durable_message ... ok
+test wire_tests::a_failed_tool_call_update_is_an_error_result ... ok
+test wire_tests::a_notification_read_during_the_handshake_reaches_the_transcript ... ok
+test wire_tests::a_cancelled_stop_reason_is_distinguishable_from_a_failure ... ok
+test wire_tests::a_line_that_is_not_a_jsonrpc_frame_does_not_destroy_the_turn ... ok
+test wire_tests::a_version_the_adapter_cannot_speak_is_refused_before_a_session_exists ... ok
+test wire_tests::a_tool_call_and_its_completion_become_a_call_and_a_result ... ok
+test wire_tests::a_permission_request_arriving_after_a_cancel_is_answered_cancelled ... ok
+test wire_tests::an_agent_thought_chunk_streams_live_and_survives_durably ... ok
+test wire_tests::an_agent_message_chunk_streams_a_delta_and_closes_a_durable_message ... ok
+test wire_tests::an_undecodable_terminal_result_still_emits_a_terminal_boundary ... ok
+test wire_tests::an_unrecognised_update_variant_still_reaches_the_transcript ... ok
+test wire_tests::an_unadvertised_primitive_is_gated_before_anything_is_written ... ok
+test wire_tests::an_inbound_terminal_create_is_refused_the_same_way ... ok
+test wire_tests::an_inbound_fs_read_gets_an_error_response_rather_than_silence ... ok
+test wire_tests::cancelling_sends_session_cancel_and_ends_the_turn_as_cancelled ... ok
+test wire_tests::end_turn_is_the_completed_run_and_carries_the_agents_text ... ok
+test wire_tests::the_agent_closing_the_channel_is_a_transport_error_not_a_hang ... ok
+test wire_tests::reasoning_never_becomes_the_activitys_result ... ok
+test wire_tests::the_initialize_request_sends_the_integer_version_and_all_false_capabilities ... ok
+test wire_tests::the_handshake_negotiates_version_one_and_opens_a_session ... ok
+test wire_tests::the_driver_contract_completes_against_an_agent_that_stays_alive ... ok
+test wire_tests::the_allow_once_policy_selects_allow_once_and_records_the_decision ... ok
+test wire_tests::the_deny_policy_selects_a_reject_option_and_records_the_decision ... ok
+test wire_tests::the_terminal_response_is_recorded_verbatim_on_the_transcript ... ok
+test wire_tests::refusal_and_the_two_limits_are_failures_naming_themselves ... ok
+test wire_tests::the_six_remaining_update_variants_each_reach_the_transcript ... ok
+test wire_tests::answering_a_flood_of_peer_requests_does_not_stall_the_read_loop ... ok
+
+test result: ok. 98 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/acp_live_agent.rs (target/debug/deps/acp_live_agent-5fb3885ed3bbb17b)
+
+running 1 test
+test a_real_acp_agent_completes_a_turn ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/declared_environment_e2e.rs (target/debug/deps/declared_environment_e2e-370eda2bd38b2beb)
+
+running 3 tests
+test a_bare_command_with_no_path_declared_is_refused_naming_path ... ok
+test without_a_declaration_the_child_still_inherits_which_is_what_makes_the_pin_meaningful ... ok
+test a_declared_environment_keeps_claudecode_out_of_the_agent_child ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+
+     Running unittests src/lib.rs (target/debug/deps/aion_integration_norn-26278f6a0a9c06da)
+
+running 74 tests
+test advice::tests::the_advice_is_withheld_once_the_opt_in_was_given ... ok
+test advice::tests::a_hand_written_workers_spelling_is_carried_verbatim_too ... ok
+test advice::tests::the_advice_names_the_deployments_own_opt_in_and_states_the_tradeoff ... ok
+test advice::tests::the_composed_argv_is_what_decides_the_opt_in ... ok
+test advice::tests::a_capability_rejection_is_never_rewritten ... ok
+test advice::tests::a_refusal_at_the_terminal_result_is_advised ... ok
+test advice::tests::a_successful_run_forwards_its_payload ... ok
+test advice::tests::a_refusal_at_session_open_is_advised ... ok
+test advice::tests::a_transport_refusal_is_advised_too ... ok
+test advice::tests::once_the_opt_in_is_given_the_advice_goes_quiet ... ok
+test advice::tests::the_recorded_refusal_is_recognised ... ok
+test advice::tests::unrelated_failures_are_not_mistaken_for_it ... ok
+test advice::tests::unrelated_failures_are_passed_through_unadvised ... ok
+test advice::tests::unrelated_failures_pass_through_untouched ... ok
+test harness::tests::invalid_utf8_input_still_errors ... ok
+test harness::tests::a_declared_environment_rides_the_previewable_invocation ... ok
+test harness::tests::argument_without_placeholders_passes_through_unchanged ... ok
+test harness::tests::json_tagged_plain_text_input_passes_through_unchanged ... ok
+test harness::tests::expands_both_placeholders_amid_literal_text ... ok
+test harness::tests::removed_env_vars_are_expressed_as_child_removals ... ok
+test harness::tests::json_object_input_passes_through_as_its_json_text ... ok
+test harness::tests::json_string_input_unwraps_to_the_exact_inner_text ... ok
+test harness::tests::template_args_expand_and_literal_args_preserve_reserved_substrings ... ok
+test harness::tests::the_published_set_is_exactly_what_the_adapter_can_translate ... ok
+test harness::tests::the_invocation_preview_is_the_spawned_reality ... ok
+test harness::tests::unrecognised_braced_text_is_literal ... ok
+test session::tests::a_completed_structured_output_is_refused_naming_the_agent_outcome_contract ... ok
+test session::tests::a_response_with_neither_result_nor_error_is_a_protocol_error ... ok
+test session::tests::completed_envelope_missing_the_output_key_is_a_protocol_error ... ok
+test session::tests::completed_envelope_with_present_null_output_is_refused_naming_null ... ok
+test session::tests::capabilities_are_the_negotiated_set ... ok
+test session::tests::completed_string_output_is_the_canonical_agent_outcome_record ... ok
+test session::tests::intervene_rejects_an_unsupported_primitive_without_sending ... ok
+test session::tests::each_non_completed_stop_reason_surfaces_with_its_detail_and_partial_verbatim ... ok
+test session::tests::null_result_is_the_slash_command_harness_error ... ok
+test session::tests::a_notification_is_never_captured_as_the_result ... ok
+test session::tests::non_envelope_result_is_a_protocol_error_never_a_silent_passthrough ... ok
+test translate::tests::a_completed_envelope_without_the_output_key_is_a_protocol_error ... ok
+test translate::tests::a_completed_envelope_maps_to_the_canonical_end_turn_stop_reason ... ok
+test translate::tests::a_completed_non_string_output_is_a_contract_refusal_naming_what_was_found ... ok
+test translate::tests::a_result_without_stop_is_a_protocol_error_naming_it ... ok
+test translate::tests::a_present_null_output_is_distinct_from_a_missing_key_and_refused_as_null ... ok
+test translate::tests::a_result_without_envelope_version_is_a_protocol_error_naming_it ... ok
+test session::tests::intervene_sends_request_and_awaits_the_peer_ack ... ok
+test translate::tests::cancel_maps_to_cancel_request ... ok
+test translate::tests::a_stop_without_a_string_reason_is_a_protocol_error ... ok
+test translate::tests::completed_string_output_becomes_the_agent_outcome_record ... ok
+test session::tests::intervene_surfaces_a_peer_error_ack ... ok
+test translate::tests::different_protocol_version_is_a_protocol_error_naming_expected_and_received ... ok
+test session::tests::wait_result_returns_the_id_matched_run_execute_response_payload ... ok
+test translate::tests::inject_interrupt_maps_to_inject_message_request ... ok
+test translate::tests::inject_normal_maps_to_normal_priority ... ok
+test session::tests::live_events_stream_from_peer_notifications ... ok
+test translate::tests::message_notification_maps_to_message_event ... ok
+test translate::tests::missing_agent_id_falls_back_to_nil_never_panics ... ok
+test translate::tests::missing_protocol_field_is_a_protocol_error_naming_expected_and_received ... ok
+test translate::tests::non_completed_stop_is_a_harness_error_carrying_the_stop_object_and_partial ... ok
+test translate::tests::non_completed_stop_with_null_output_carries_no_partial_label ... ok
+test translate::tests::an_enormous_partial_output_is_bounded_with_an_explicit_marker ... ok
+test translate::tests::non_string_protocol_field_is_reported_as_the_value_received ... ok
+test translate::tests::parse_capabilities_ignores_unknown_labels ... ok
+test translate::tests::parse_capabilities_missing_array_is_empty_set ... ok
+test translate::tests::parse_capabilities_reads_norns_advertised_set ... ok
+test translate::tests::raw_per_token_delta_notification_is_ephemeral_and_drops_its_payload ... ok
+test translate::tests::raw_non_delta_notification_stays_durable ... ok
+test translate::tests::stop_notification_maps_stop_reasons ... ok
+test translate::tests::text_delta_notification_maps_to_ephemeral_delta ... ok
+test translate::tests::tool_call_delta_notification_is_ephemeral ... ok
+test translate::tests::tool_call_notification_maps_to_tool_call_event ... ok
+test translate::tests::tool_result_notification_maps_to_tool_result_event ... ok
+test translate::tests::unclassifiable_notification_falls_through_to_raw ... ok
+test translate::tests::unknown_stop_reason_falls_through_to_other ... ok
+test translate::tests::unsupported_primitives_are_capability_not_supported_and_never_build_a_request ... ok
+test translate::tests::usage_estimate_notification_maps_to_progress ... ok
+
+test result: ok. 74 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/declared_environment_e2e.rs (target/debug/deps/declared_environment_e2e-e628796ba2875bea)
+
+running 3 tests
+test a_binary_on_path_with_no_path_declared_is_refused_naming_path ... ok
+test a_declared_environment_keeps_claudecode_out_of_the_norn_child ... ok
+test without_a_declaration_the_norn_child_still_inherits ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s
+
+     Running tests/norn_e2e.rs (target/debug/deps/norn_e2e-8779f4e267b16e83)
+
+running 1 test
+test norn_harness_drives_a_real_run_end_to_end ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/aion_integrations-2732bdb01d7481d3)
+
+running 30 tests
+test environment::tests::a_declared_name_the_context_does_not_carry_is_reported_absent_not_invented ... ok
+test environment::tests::a_bare_program_with_path_declared_is_permitted ... ok
+test environment::tests::a_relative_multi_component_program_is_not_gated_on_path ... ok
+test environment::tests::a_key_value_pair_is_refused_rather_than_split ... ok
+test environment::tests::a_blank_entry_is_refused_because_no_environment_can_carry_one ... ok
+test environment::tests::an_absolute_program_needs_no_path_so_a_hermetic_declaration_stays_legitimate ... ok
+test environment::tests::a_variable_the_declaration_does_not_name_is_absent_in_the_child ... ok
+test environment::tests::declaration_order_is_the_operators_and_duplicates_collapse_once ... ok
+test environment::tests::an_empty_declaration_renders_as_words_in_a_refusal ... ok
+test environment::tests::a_bare_program_without_path_in_the_declaration_is_refused_naming_path ... ok
+test environment::tests::every_environment_fault_reaches_the_seam_as_a_DETERMINISTIC_refusal ... ok
+test environment::tests::the_resolved_pairs_are_the_childs_entire_environment_not_an_overlay ... ok
+test error::tests::capability_not_supported_names_the_primitive ... ok
+test error::tests::each_constructor_renders_its_class ... ok
+test environment::tests::the_process_snapshot_really_reads_this_process ... ok
+test error::tests::harness_error_is_send_sync_static ... ok
+test error::tests::only_the_contract_refusal_is_deterministic ... ok
+test jsonrpc::envelope::tests::a_null_id_is_treated_as_a_notification_not_a_request ... ok
+test jsonrpc::envelope::tests::a_present_null_result_decodes_as_some_null ... ok
+test jsonrpc::envelope::tests::an_absent_result_decodes_as_none ... ok
+test jsonrpc::envelope::tests::classifies_request_notification_and_response ... ok
+test jsonrpc::envelope::tests::error_response_carries_result_none ... ok
+test jsonrpc::envelope::tests::notification_never_carries_an_id ... ok
+test jsonrpc::envelope::tests::request_serialises_with_id_and_omits_absent_params ... ok
+test jsonrpc::envelope::tests::string_ids_round_trip ... ok
+test spec::tests::spec_carries_run_identity_and_input ... ok
+test spec::tests::two_generations_of_one_chain_are_distinct_specs ... ok
+test jsonrpc::transport::tests::recv_returns_none_at_end_of_stream ... ok
+test jsonrpc::transport::tests::ids_are_monotonic ... ok
+test jsonrpc::transport::tests::request_and_notification_round_trip_over_a_duplex ... ok
+
+test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/mock_harness.rs (target/debug/deps/mock_harness-74a6a8c084648baf)
+
+running 3 tests
+test rich_harness_streams_events_accepts_supported_command_and_returns_result ... ok
+test unadvertised_command_is_rejected_even_when_some_are_supported ... ok
+test observability_only_harness_is_first_class ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests aion_integration_acp
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests aion_integration_norn
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests aion_integrations
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

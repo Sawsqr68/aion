@@ -1,0 +1,70 @@
+    Checking serde_json v1.0.150
+    Checking tokio v1.52.3
+    Checking aws-lc-sys v0.41.0
+   Compiling prost-derive v0.14.3
+   Compiling beamr v0.16.3
+    Checking zip v8.6.0
+    Checking axum-core v0.5.6
+    Checking blake3 v1.8.5
+   Compiling cpufeatures v0.2.17
+    Checking tungstenite v0.30.0
+   Compiling sha2 v0.10.9
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-server)
+   Compiling rust-embed-utils v8.11.0
+    Checking aws-lc-rs v1.17.0
+    Checking prometheus v0.14.0
+   Compiling rust-embed-impl v8.11.0
+    Checking tower-http v0.6.11
+    Checking aion-core v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-core)
+    Checking referencing v0.46.6
+    Checking schemars v1.2.1
+    Checking rust-embed v8.11.0
+    Checking tracing-subscriber v0.3.23
+    Checking lsp-types v0.97.0
+    Checking lsp-server v0.8.0
+    Checking jsonschema v0.46.6
+   Compiling prost v0.14.3
+    Checking rustls-webpki v0.103.13
+    Checking serde_with v3.21.0
+   Compiling prost-types v0.14.3
+    Checking rustls v0.23.40
+   Compiling prost-build v0.14.3
+   Compiling tonic-prost-build v0.14.5
+    Checking agent-client-protocol-schema v1.5.0
+   Compiling aion-proto-generated v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-proto-generated)
+    Checking tokio-util v0.7.18
+    Checking tokio-stream v0.1.18
+    Checking beamr v0.17.0
+    Checking h2 v0.4.14
+    Checking tower v0.5.3
+    Checking aion-mcp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-mcp)
+    Checking tokio-rustls v0.26.4
+    Checking tungstenite v0.29.0
+    Checking tokio-tungstenite v0.29.0
+    Checking aion-package v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-package)
+    Checking aion-integrations v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integrations)
+    Checking aion-store v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-store)
+    Checking hyper v1.10.1
+    Checking aion-integration-norn v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-norn)
+    Checking hyper-util v0.1.20
+    Checking aion-integration-acp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-acp)
+    Checking hyper-timeout v0.5.2
+    Checking axum v0.8.9
+    Checking aion-toolchain v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-toolchain)
+    Checking haematite v0.7.0
+    Checking haematite v0.8.1
+    Checking aion-awl v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl)
+    Checking aion-rs v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion)
+    Checking liminal-rs v0.5.0
+    Checking aion-store-haematite v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-store-haematite)
+    Checking tonic v0.14.6
+    Checking tonic-prost v0.14.5
+    Checking aion-awl-package v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl-package)
+    Checking aion-awl-lsp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl-lsp)
+    Checking aion-proto v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-proto)
+    Checking aion-client v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-client)
+    Checking liminal-sdk v0.5.0
+    Checking liminal-server v0.5.0
+    Checking aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-worker)
+    Checking aion-cli v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 30s
