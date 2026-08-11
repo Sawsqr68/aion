@@ -15,7 +15,7 @@
 //! worker end to end, which it did, on a real server. It is kept — and kept in
 //! agreement — for a reason that is operational rather than sentimental:
 //!
-//!   THIS DOCUMENT SHARES QUEUE `default` WITH `assistant.awl`, AND THE TWO
+//!   THIS DOCUMENT SHARES QUEUE `assistant` WITH `assistant.awl`, AND THE TWO
 //!   MUST DECLARE THE SHARED ACTIONS IDENTICALLY.
 //!
 //! Worker contract admission holds a registering worker against EVERY
@@ -23,10 +23,16 @@
 //! When this document declared `assistant_provision(repo_path, run_id)` and
 //! the full session declared it with `objective` as well, the worker could
 //! satisfy only one of them — so it was refused outright and NEITHER document
-//! could run. That took queue `default` down. Declared bodies raise the
+//! could run. That took the shared queue down. Declared bodies raise the
 //! stakes: retained contracts declaring DIFFERENT bodies for one action name
 //! refuse every dispatch of it terminally, so the `run` line below must stay
 //! byte-identical with `assistant.awl`'s.
+//!
+//! THE SHARED QUEUE IS `assistant`, NOT `default` (#200). The full session's
+//! queue is derived from its own workflow name and the server verifies that
+//! derivation at load; this document follows it because one worker serves both
+//! documents and a worker serves exactly one queue. `default` is the queue an
+//! out-of-box worker comes up on, and neither of these documents claims it.
 //!
 //! A deployed workflow type cannot be removed from a running server (a
 //! route-active version refuses to unload, and there is no operation that
@@ -125,14 +131,16 @@ type Provisioned { exit_code: Int, stdout: String }
 /// The canonical agent-outcome record, as this document declares it: what a
 /// dispatch of the shared `assistant` action returns. Declared with the SAME
 /// name and shape as `assistant.awl`'s — the two documents share queue
-/// `default`, so the shared action's signature must agree (see the module
+/// `assistant`, so the shared action's signature must agree (see the module
 /// note); the record type is part of that signature.
 type Reply { text: String, stop_reason: String }
 
 /// What one proven round returns: the agent's reply text and where it worked.
 type Answered { reply: String, workspace_path: String }
 
-worker default
+// The assistant's private queue, shared with `assistant.awl` (see the module
+// note). Never `default` — that queue is the out-of-box workers'.
+worker assistant
   /// Materialises the session workspace at `<workspace_root>/<run_id>/repo`
   /// and prints that resolved path as its SOLE stdout.
   /// SERVER-RUN, NO SANDBOX: this declared body executes on the server host as

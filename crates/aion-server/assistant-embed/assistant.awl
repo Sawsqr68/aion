@@ -40,6 +40,21 @@
 //! docs/design/aion-authoring/ASSISTANT-AWL-PORT.md — read it before changing
 //! anything here.
 //!
+//! THE QUEUE IS PRIVATE, AND IT IS DERIVED. The `worker` block below is named
+//! `assistant` — this workflow's own logical name — and NEVER `default`. It is
+//! not a preference and it is not configurable: the server verifies at load
+//! that the embedded document's declared queue is exactly its workflow type
+//! (`crates/aion-server/src/assistant/document.rs`, `private_task_queue`), and
+//! refuses the document if it declares anything else.
+//!
+//! The reason is #200. `default` is where an out-of-box worker comes up when
+//! nobody has told it otherwise, and contract admission holds a registering
+//! worker against EVERY reachable contract on its queue at once. While this
+//! document sat on `default`, the first worker a newcomer started was refused
+//! for not advertising `assistant` — the built-in assistant starved the very
+//! workers it was meant to welcome. `default` belongs to the out-of-box
+//! workers; the assistant lives on its own name.
+//!
 //! DELIBERATE OMISSION — no `timeout` in the header. An agent round carries no
 //! timeout by design (a wedged round is cancelled or intervened, never timed
 //! out), and the session itself is operator-paced: a real run has parked on
@@ -244,7 +259,11 @@ type Round { prompt: String, reply: String, ended: Bool, stalled: Bool }
 /// final agent reply, and the workspace path (which persists for inspection).
 type Session { disposition: Disposition, rounds: Int, last_reply: String, workspace_path: String }
 
-worker default
+// The assistant's PRIVATE queue, named after the workflow itself. See the
+// narration: `default` is the out-of-box workers' queue and this document
+// never claims it, and the server refuses to load an embedded assistant whose
+// declared queue is anything but its own workflow type.
+worker assistant
   /// Materialises the session workspace at `<workspace_root>/<run_id>/repo`
   /// and prints that resolved path as its SOLE stdout — the recorded activity
   /// result is where the workflow reads the workspace path from.
@@ -276,7 +295,7 @@ worker default
   /// the agent works somewhere other than where it was provisioned.
   ///
   /// BYTE-IDENTICAL with `assistant_spike.awl` by requirement, not
-  /// coincidence: the two documents share queue `default`, and retained
+  /// coincidence: the two documents share queue `assistant`, and retained
   /// contracts declaring DIFFERENT bodies for one action name refuse every
   /// dispatch of it terminally.
   action assistant_provision(run_id: String, repo_path: String) -> Provisioned
