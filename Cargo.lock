@@ -70,7 +70,7 @@ dependencies = [
 
 [[package]]
 name = "aion-awl"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-package",
  "aion-worker",
@@ -84,7 +84,7 @@ dependencies = [
 
 [[package]]
 name = "aion-awl-lsp"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-awl",
  "lsp-server",
@@ -98,7 +98,7 @@ dependencies = [
 
 [[package]]
 name = "aion-awl-package"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-awl",
  "aion-package",
@@ -112,7 +112,7 @@ dependencies = [
 
 [[package]]
 name = "aion-cli"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-awl",
  "aion-awl-lsp",
@@ -149,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "aion-client"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-core",
  "aion-proto",
@@ -174,7 +174,7 @@ dependencies = [
 
 [[package]]
 name = "aion-core"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "chrono",
  "serde",
@@ -186,7 +186,7 @@ dependencies = [
 
 [[package]]
 name = "aion-darwin-acl"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "libc",
  "uuid",
@@ -194,7 +194,7 @@ dependencies = [
 
 [[package]]
 name = "aion-integration-acp"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "agent-client-protocol-schema",
  "aion-core",
@@ -211,7 +211,7 @@ dependencies = [
 
 [[package]]
 name = "aion-integration-cli"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-core",
  "aion-integrations",
@@ -228,7 +228,7 @@ dependencies = [
 
 [[package]]
 name = "aion-integration-norn"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-core",
  "aion-integrations",
@@ -243,7 +243,7 @@ dependencies = [
 
 [[package]]
 name = "aion-integrations"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-core",
  "async-trait",
@@ -258,7 +258,7 @@ dependencies = [
 
 [[package]]
 name = "aion-mcp"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -275,7 +275,7 @@ dependencies = [
 
 [[package]]
 name = "aion-package"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-core",
  "jsonschema",
@@ -291,7 +291,7 @@ dependencies = [
 
 [[package]]
 name = "aion-proto"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-core",
  "aion-proto-generated",
@@ -308,7 +308,7 @@ dependencies = [
 
 [[package]]
 name = "aion-proto-generated"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "prost 0.14.3",
  "protoc-bin-vendored",
@@ -321,7 +321,7 @@ dependencies = [
 
 [[package]]
 name = "aion-rs"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-awl",
  "aion-awl-package",
@@ -355,7 +355,7 @@ dependencies = [
 
 [[package]]
 name = "aion-server"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-awl",
  "aion-awl-package",
@@ -416,7 +416,7 @@ dependencies = [
 
 [[package]]
 name = "aion-store"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-core",
  "async-trait",
@@ -432,7 +432,7 @@ dependencies = [
 
 [[package]]
 name = "aion-store-haematite"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-core",
  "aion-store",
@@ -450,7 +450,7 @@ dependencies = [
 
 [[package]]
 name = "aion-store-libsql"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-core",
  "aion-store",
@@ -467,7 +467,7 @@ dependencies = [
 
 [[package]]
 name = "aion-toolchain"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-package",
  "serde",
@@ -478,7 +478,7 @@ dependencies = [
 
 [[package]]
 name = "aion-worker"
-version = "0.13.7"
+version = "0.13.8"
 dependencies = [
  "aion-core",
  "aion-integrations",

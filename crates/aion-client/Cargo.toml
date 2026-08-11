@@ -16,8 +16,8 @@ categories = ["api-bindings", "asynchronous"]
 workspace = true
 
 [dependencies]
-aion-core = { version = "0.13.7", path = "../aion-core" }
-aion-proto = { version = "0.13.7", path = "../aion-proto", features = ["generated"] }
+aion-core = { version = "0.13.8", path = "../aion-core" }
+aion-proto = { version = "0.13.8", path = "../aion-proto", features = ["generated"] }
 tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
 tokio-tungstenite = { workspace = true, features = ["rustls-tls-webpki-roots"] }
 rustls = { workspace = true }
@@ -33,14 +33,14 @@ async-trait = { workspace = true }
 http = { workspace = true }
 chrono.workspace = true
 uuid.workspace = true
-aion = { version = "0.13.7", path = "../aion", optional = true, package = "aion-rs" }
-aion-store = { version = "0.13.7", path = "../aion-store" }
+aion = { version = "0.13.8", path = "../aion", optional = true, package = "aion-rs" }
+aion-store = { version = "0.13.8", path = "../aion-store" }
 
 [dev-dependencies]
 # The store doubles under `aion_store::testing` are gated behind `test-support`
 # so they never ship in a release build. Enabled here rather than on the normal
 # dependency for the same reason.
-aion-store = { version = "0.13.7", path = "../aion-store", features = [
+aion-store = { version = "0.13.8", path = "../aion-store", features = [
     "test-support",
 ] }
 tokio = { workspace = true, features = [

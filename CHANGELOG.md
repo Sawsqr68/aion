@@ -3,6 +3,40 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## 0.13.8 — 2026-08-11
+
+- **Errors explain themselves in the editor (#187).** An AWL diagnostic now
+  carries its full extent on the wire as a UTF-16 `{ from, to }` range — on
+  `/awl/check` and on `/awl/fmt`'s 422 arm alike — and the console editor
+  shows it: squiggles under the error's whole extent (the old one-character
+  approximation is deleted), hover and cursor tooltips carrying the remedy
+  prose, and a diagnostics panel listing every diagnostic in full — the
+  assistive-tech path to the same information. A rangeless response, or one
+  with fractional or negative positions, is refused at the boundary rather
+  than guessed at.
+- **The language panel organizes by the grammar (#188).** The console's
+  language panel now groups its 63 words by grammatical form — with a
+  By form / By section toggle, since the CLI still speaks sections — and
+  every word card wears its form chip and the full list of positions where
+  the parser actually admits it. The whole §1–§16 language reference renders
+  in the panel in a collapsed disclosure, pipe tables and all. The grammar
+  table behind the panel is promoted into the compiler and gated against the
+  parser itself, so the panel and the editor's completion are structurally
+  unable to disagree about a word's form — a promotion that caught and
+  corrected fourteen words the old table offered at positions the parser or
+  checker refuses.
+- **The server knows the latest installable aion (#189).** A manual,
+  operator-started update check — an AWL workflow shipped inside the binary,
+  whose declared action curls the crates.io index through the ordinary
+  declared-body spine, so the server compiles in no outbound-HTTP dependency
+  — records the greatest installable `aion-cli` version: not yanked, not a
+  prerelease. `GET /update-status` (authenticated like `/build`) answers
+  `{ latest_known, checked_at }`, honest nulls until the first check. The
+  console header shows an "update available" pill only when the latest is
+  newer than the running build, with a loud "version unreadable" state
+  instead of a silent hide when either side won't parse. Manual-only by
+  design: no cadence, no timer — nothing fires without an operator's start.
+
 ## 0.13.7 — 2026-08-11
 
 - **Agent steps return a structured outcome (#181).** An `agent` action now
