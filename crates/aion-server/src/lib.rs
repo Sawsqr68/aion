@@ -84,6 +84,9 @@ pub mod stream;
 /// private-root validation.
 #[cfg(test)]
 pub(crate) mod test_support;
+/// The built-in manual-only update check: embedded document, boot install,
+/// completed-check recording, and the served last-check state.
+pub mod update_check;
 /// Remote-worker registry, heartbeat, and dispatch support.
 pub mod worker;
 

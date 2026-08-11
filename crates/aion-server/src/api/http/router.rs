@@ -36,6 +36,7 @@ use super::schedules::{
 };
 use super::transcripts::{fetch_transcript, list_transcript_streams};
 use super::unrecoverable::list_unrecoverable_runs;
+use super::update_status::update_status;
 use super::whoami::whoami;
 use super::worker_deployments::{
     delete_worker_deployment, get_worker_deployment, list_worker_deployments,
@@ -341,6 +342,10 @@ pub fn workflow_router(state: ServerState) -> Router {
         ))
         .route("/whoami", get(whoami))
         .route("/build", get(build_identity))
+        // The installed version joined with the last completed manual update
+        // check — the ops console's update pill reads this. Serving it never
+        // touches the network.
+        .route("/update-status", get(update_status))
         // What changed in the version this server runs — embedded in the
         // binary, consumed by the console's "What's new" panel.
         .route("/changelog", get(changelog))

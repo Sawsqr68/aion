@@ -1,0 +1,52 @@
+//! The update check: does a newer `aion-cli` exist on crates.io?
+//!
+//! MANUAL-ONLY BY DESIGN. Nothing schedules this workflow — no timer, no
+//! cadence, no check-on-startup. Every run is one explicit operator act (the
+//! ops console's "check now", or a plain `POST /workflows/start`), and the
+//! absence of a cadence configuration key is the design, not a missing
+//! default: the server never phones home on its own.
+//!
+//! THE FETCH IS SERVER-RUN, NOT COMPILED IN. `fetch_crate_index` declares a
+//! command body, so the server executes it through the declared-body spine
+//! (argv substitution, no shell, process-group containment) exactly as it runs
+//! any deployed document's declared command. The transfer is runtime `curl`;
+//! the server binary keeps ZERO outbound-HTTP dependencies in its default
+//! build. Every line curl writes is streamed onto the transcript as it
+//! arrives, so the operator can read the raw index answer live.
+//!
+//! WHAT IT FETCHES: the crates.io sparse index line file for `aion-cli` —
+//! newline-delimited JSON, one line per published version, each carrying
+//! `name`, `vers`, and `yanked`. The workspace releases every crate at one
+//! version, so this single crate answers for the whole toolchain. The server
+//! (not this document, and not the command) parses the fetched lines and
+//! records the greatest INSTALLABLE version for `GET /update-status`:
+//! yanked releases and prereleases are both excluded, because a plain
+//! `cargo install` refuses both — see `crates/aion-server/src/update_check/`.
+//!
+//! WHAT IT NEVER DOES: no install, no upgrade, no restart. Knowing that
+//! 0.14.0 exists and BECOMING 0.14.0 are different acts, and the second is
+//! not this document's to take.
+workflow update_check
+  outcome checked: type Fetched, route success
+
+// The declared-body executor's whole result: curl's exit code and both
+// streams. Retained in full so the recorded activity result — and therefore
+// the workflow outcome — carries exactly what the fetch answered.
+type Fetched { exit_code: Int, stdout: String, stderr: String }
+
+worker update_check
+  /// One GET of the sparse-index line file for `aion-cli`. `-f` turns an HTTP
+  /// error status into a non-zero exit (a failed check fails, it never
+  /// records garbage), `-sS` silences the progress meter but keeps real
+  /// errors on stderr, where the transcript stream picks them up.
+  ///
+  /// The server verifies this command verbatim against the constant in
+  /// `crates/aion-server/src/update_check/document.rs` before recording any
+  /// result parsed from it — an edit here that forgets the constant fails
+  /// loudly at load, never silently records from a different command.
+  action fetch_crate_index() -> Fetched
+    run "curl -fsS https://index.crates.io/ai/on/aion-cli"
+
+step fetch
+  fetch_crate_index() -> fetched
+  fetched |> route checked

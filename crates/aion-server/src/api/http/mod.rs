@@ -14,6 +14,8 @@
 //! - `visibility` — visibility query-string parsing and namespace scoping.
 //! - `payload` — HTTP body/payload encode-decode shapes and conversions.
 //! - `build` — `GET /build`, the server's own revision.
+//! - `update_status` — `GET /update-status`, the installed version joined
+//!   with the last completed manual update check.
 //! - `describe_live` — the mid-step join: current step + attempt liveness +
 //!   progress note + transcript tail, in one read.
 //! - `assistant` — `GET /assistant`, the built-in assistant this binary carries.
@@ -50,6 +52,7 @@ mod router;
 mod schedules;
 mod transcripts;
 mod unrecoverable;
+mod update_status;
 mod visibility;
 mod whoami;
 mod worker_deployments;

@@ -120,6 +120,12 @@ struct ServerStateInner {
     /// the engine exists. Held so surfaces (and the bridge) share ONE reader
     /// rather than each building their own view of the deployed contracts.
     queue_declarations: crate::worker::QueueDeclarationSource,
+    /// The last completed update check (#189 slice one), shared with the
+    /// [`crate::update_check::UpdateCheckObserver`] decorator that writes it
+    /// on the full boot path. Always present and always EMPTY at
+    /// construction: a server that has never checked says so, and nothing
+    /// here ever fetches anything — every check is an explicit operator act.
+    update_status: crate::update_check::UpdateStatusState,
     /// The server-resolved workspace root for declared action bodies (#139):
     /// the aion home's `clones/` directory, resolved ONCE at state
     /// construction. The declared-body dispatcher expands `{workspace_root}`
@@ -240,20 +246,8 @@ impl ServerState {
         let (event_broadcast_capacity, query_timeout) = required_engine_seams(&runtime)?;
         let (cluster_publisher, transcript_publisher) =
             build_real_time_publishers(&runtime, connected.observability_store)?;
-        let metrics = Metrics::new().map_err(|error| metrics_config_error(&error))?;
-        // LSUB-2 advisory wake: one process-wide `Notify` shared by the engine's
-        // stage seam and the outbox dispatcher. A single handle is correct here
-        // because there is exactly one in-process dispatcher that sweeps all owned
-        // shards per tick — a wake just means "something was staged; sweep".
-        let outbox_wake = Arc::new(tokio::sync::Notify::new());
-        let instrumented_store = Arc::new(
-            InstrumentedEventStore::new(
-                connected.event_store,
-                metrics.clone(),
-                runtime.default_namespace.clone(),
-            )
-            .with_outbox_wake(Arc::clone(&outbox_wake)),
-        );
+        let (metrics, outbox_wake, instrumented_store) =
+            build_instrumented_store(&runtime, connected.event_store)?;
         let exported_metrics = runtime.metrics.enabled.then_some(metrics.clone());
         #[cfg(not(feature = "haematite-backend"))]
         let mint_routing: Option<crate::namespace::NamespaceRouting> = None;
@@ -264,8 +258,13 @@ impl ServerState {
             &connected.worker_deployment_store,
             mint_routing,
         );
-        let (activity_dispatcher, activity_mock_registry, attempt_owners, workspace_root) =
-            build_decorated_dispatcher(&runtime, &seams, transcript_publisher.clone());
+        let (
+            activity_dispatcher,
+            activity_mock_registry,
+            attempt_owners,
+            workspace_root,
+            update_status,
+        ) = build_decorated_dispatcher(&runtime, &seams, transcript_publisher.clone());
 
         let engine = build_engine(EngineAssembly {
             instrumented_store: &instrumented_store,
@@ -305,6 +304,7 @@ impl ServerState {
                 attempt_owners,
                 queue_service_state: seams.queue_service_state,
                 queue_declarations: seams.queue_declarations,
+                update_status,
                 workspace_root,
                 cluster_self_node,
                 #[cfg(feature = "haematite-backend")]
@@ -419,6 +419,10 @@ impl ServerState {
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
                 queue_declarations: crate::worker::QueueDeclarationSource::default(),
+                // Empty and STAYING empty: this constructor builds no
+                // dispatcher, so no observer ever writes it — the honest
+                // answer for an embedder/test state is "never checked".
+                update_status: crate::update_check::UpdateStatusState::default(),
                 // Inert here: this constructor builds no declared-body
                 // dispatcher, so nothing expands `{workspace_root}` with this
                 // value — it exists so `workspace_root()` is always readable.
@@ -507,6 +511,10 @@ impl ServerState {
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
                 queue_declarations: crate::worker::QueueDeclarationSource::default(),
+                // Empty and STAYING empty: this constructor builds no
+                // dispatcher, so no observer ever writes it — the honest
+                // answer for an embedder/test state is "never checked".
+                update_status: crate::update_check::UpdateStatusState::default(),
                 // Inert here: this constructor builds no declared-body
                 // dispatcher, so nothing expands `{workspace_root}` with this
                 // value — it exists so `workspace_root()` is always readable.
@@ -592,6 +600,10 @@ impl ServerState {
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
                 queue_declarations: crate::worker::QueueDeclarationSource::default(),
+                // Empty and STAYING empty: this constructor builds no
+                // dispatcher, so no observer ever writes it — the honest
+                // answer for an embedder/test state is "never checked".
+                update_status: crate::update_check::UpdateStatusState::default(),
                 // Inert here: this constructor builds no declared-body
                 // dispatcher, so nothing expands `{workspace_root}` with this
                 // value — it exists so `workspace_root()` is always readable.
@@ -672,6 +684,10 @@ impl ServerState {
                 attempt_owners: crate::worker::AttemptOwnerIndex::new(),
                 queue_service_state: crate::worker::QueueServiceState::default(),
                 queue_declarations: crate::worker::QueueDeclarationSource::default(),
+                // Empty and STAYING empty: this constructor builds no
+                // dispatcher, so no observer ever writes it — the honest
+                // answer for an embedder/test state is "never checked".
+                update_status: crate::update_check::UpdateStatusState::default(),
                 // Inert here: this constructor builds no declared-body
                 // dispatcher, so nothing expands `{workspace_root}` with this
                 // value — it exists so `workspace_root()` is always readable.
@@ -709,6 +725,18 @@ impl ServerState {
     #[must_use]
     pub fn runtime_config(&self) -> &RuntimeConfig {
         &self.inner.runtime
+    }
+
+    /// Borrow the last-completed-update-check slot (#189 slice one).
+    ///
+    /// Written only by the [`crate::update_check::UpdateCheckObserver`] on the
+    /// full boot path; read by `GET /update-status`. Empty until a check has
+    /// genuinely completed — a fresh server has honestly never checked.
+    /// Crate-visible only: the slot's type is implementation detail behind
+    /// the route, not `aion-server` public API.
+    #[must_use]
+    pub(crate) fn update_status(&self) -> &crate::update_check::UpdateStatusState {
+        &self.inner.update_status
     }
 
     /// Borrow the server-resolved workspace root declared bodies expand
@@ -1459,8 +1487,46 @@ fn build_bridge_dispatcher(
     (dispatcher, attempt_owners)
 }
 
+/// Build the process metrics, the LSUB-2 advisory outbox wake, and the
+/// instrumented event store wired to pulse it — the storage-side trio the
+/// full boot path assembles before the engine exists.
+///
+/// The wake is one process-wide `Notify` shared by the engine's stage seam
+/// and the outbox dispatcher. A single handle is correct here because there
+/// is exactly one in-process dispatcher that sweeps all owned shards per tick
+/// — a wake just means "something was staged; sweep".
+///
+/// # Errors
+///
+/// Returns [`ServerError`] when the metrics registry cannot be constructed.
+fn build_instrumented_store(
+    runtime: &RuntimeConfig,
+    event_store: Arc<dyn EventStore>,
+) -> Result<
+    (
+        Metrics,
+        Arc<tokio::sync::Notify>,
+        Arc<InstrumentedEventStore>,
+    ),
+    ServerError,
+> {
+    let metrics = Metrics::new().map_err(|error| metrics_config_error(&error))?;
+    let outbox_wake = Arc::new(tokio::sync::Notify::new());
+    let instrumented_store = Arc::new(
+        InstrumentedEventStore::new(
+            event_store,
+            metrics.clone(),
+            runtime.default_namespace.clone(),
+        )
+        .with_outbox_wake(Arc::clone(&outbox_wake)),
+    );
+    Ok((metrics, outbox_wake, instrumented_store))
+}
+
 /// Build the production bridge dispatcher and its decoration stack in one
-/// step: declared-body execution always, the dev mock when commissioned.
+/// step: declared-body execution always, the update-check observer above it,
+/// the dev mock when commissioned. Also mints the update-status slot the
+/// observer writes, returned so the state serves the same slot.
 fn build_decorated_dispatcher(
     runtime: &RuntimeConfig,
     seams: &WorkerSeams,
@@ -1470,17 +1536,22 @@ fn build_decorated_dispatcher(
     Option<ActivityMockRegistry>,
     crate::worker::AttemptOwnerIndex,
     crate::worker::WorkspaceRoot,
+    crate::update_check::UpdateStatusState,
 ) {
     // #139: THE one resolution of the declared-body workspace root. The
     // dispatcher expands `{workspace_root}` with it and the returned value is
     // what the state exposes for the startup banner; nothing else derives it.
     let workspace_root = crate::worker::WorkspaceRoot::resolve();
+    // #189 slice one: the update-status slot is created beside the observer
+    // that writes it and returned so the state serves the SAME slot.
+    let update_status = crate::update_check::UpdateStatusState::default();
     let (dispatcher, attempt_owners) = build_bridge_dispatcher(runtime, seams);
     let (activity_dispatcher, activity_mock_registry) = decorate_activity_dispatcher(
         dispatcher,
         seams.declared_bodies.clone(),
         workspace_root.clone(),
         transcript,
+        update_status.clone(),
         runtime.dev.enabled,
     );
     (
@@ -1488,6 +1559,7 @@ fn build_decorated_dispatcher(
         activity_mock_registry,
         attempt_owners,
         workspace_root,
+        update_status,
     )
 }
 
@@ -1496,26 +1568,34 @@ fn decorate_activity_dispatcher(
     declared_bodies: crate::worker::DeclaredBodySource,
     workspace_root: crate::worker::WorkspaceRoot,
     transcript: crate::activity_publisher::ActivityEventPublisher,
+    update_status: crate::update_check::UpdateStatusState,
     dev_enabled: bool,
 ) -> (Arc<dyn ActivityDispatcher>, Option<ActivityMockRegistry>) {
     // The declared-body layer wraps the production dispatcher UNCONDITIONALLY:
     // an action whose deployed contract declares a body executes at the
     // server, everything else falls through to the worker path untouched. The
-    // dev mock (when commissioned) stays outermost so a mocked activity
-    // short-circuits before either real execution path.
+    // update-check observer wraps THAT layer so it sees each completed
+    // declared execution's result (it records completed checks and touches
+    // nothing else). The dev mock (when commissioned) stays outermost so a
+    // mocked activity short-circuits before either real execution path.
     let declared = crate::worker::DeclaredCommandDispatcher::new(
         Arc::new(dispatcher),
-        declared_bodies,
+        declared_bodies.clone(),
         tokio::runtime::Handle::current(),
         workspace_root,
         transcript,
     );
+    let observed = crate::update_check::UpdateCheckObserver::new(
+        Arc::new(declared),
+        declared_bodies,
+        update_status,
+    );
     if dev_enabled {
         let registry = ActivityMockRegistry::new();
-        let decorated = DevMockingDispatcher::new(Arc::new(declared), registry.clone());
+        let decorated = DevMockingDispatcher::new(Arc::new(observed), registry.clone());
         (Arc::new(decorated), Some(registry))
     } else {
-        (Arc::new(declared), None)
+        (Arc::new(observed), None)
     }
 }
 
@@ -2985,6 +3065,138 @@ mod tests {
             error.to_string().contains("runtime.query_timeout_ms"),
             "error must name the zero-valued key: {error}"
         );
+        Ok(())
+    }
+
+    /// THE #189 WIRING PIN (r1 Blocker B1): a completed update check driven
+    /// through the dispatcher stack `build_decorated_dispatcher` actually
+    /// builds lands in the update-status slot that same call RETURNS — the
+    /// slot the boot path stores and `GET /update-status` serves.
+    ///
+    /// Everything between the dispatch and the slot is the production object:
+    /// the real `DeclaredCommandDispatcher` executes a real server-run command
+    /// through the real `ShellAction` (transcript pump and all), the real
+    /// `UpdateCheckObserver` sits in its real position, and the assertion
+    /// reads the slot off the function's own return value. The one test
+    /// double is the `DeclaredBodies` source — the seam production code
+    /// installs after the engine exists — and it is SEQUENCED because the
+    /// gates run offline: the observer's verification (first resolution)
+    /// sees the genuine `FETCH_COMMAND`, and the executor (second
+    /// resolution) is handed a local `cat` of the captured real index body,
+    /// standing in for the network transfer the genuine curl would perform.
+    ///
+    /// The r1 review proved the absence of this pin by mutation: returning a
+    /// FRESH slot instead of the observer's left all 1268 tests green while
+    /// `/update-status` would answer null forever. Under this test that
+    /// exact mutation goes red: the returned slot stays empty and the
+    /// assertion below names it.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_completed_check_through_the_built_dispatcher_lands_in_the_returned_slot()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use std::collections::{BTreeMap, VecDeque};
+        use std::sync::{Arc, Mutex};
+
+        use aion::ActivityDispatch;
+        use aion_core::{ActivityId, RunId, WorkflowId};
+        use aion_package::ActionBodyContract;
+
+        use crate::update_check::document::{FETCH_ACTION, FETCH_COMMAND, UPDATE_CHECK_QUEUE};
+        use crate::worker::{DeclaredBodies, DeclaredBodyLookup, DispatchingRun};
+
+        /// Hands out one scripted resolution per call, in order. Documented
+        /// above: first the observer's verification, then the executor's.
+        struct SequencedBodies {
+            replies: Mutex<VecDeque<DeclaredBodyLookup>>,
+        }
+
+        impl DeclaredBodies for SequencedBodies {
+            fn body_for(
+                &self,
+                _task_queue: &str,
+                _action: &str,
+                _run: DispatchingRun<'_>,
+            ) -> DeclaredBodyLookup {
+                let mut replies = match self.replies.lock() {
+                    Ok(replies) => replies,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+                replies.pop_front().unwrap_or(DeclaredBodyLookup::None)
+            }
+        }
+
+        let runtime = runtime_config();
+        let cluster_publisher = crate::cluster_publisher::ClusterEventPublisher::new(
+            ServerState::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
+        );
+        let namespace_store: Arc<dyn aion_store::NamespaceStore> =
+            Arc::new(InMemoryStore::default());
+        let worker_deployment_store: Arc<dyn aion_store::WorkerDeploymentStore> =
+            Arc::new(InMemoryStore::default());
+        let seams = super::build_worker_seams(
+            &runtime,
+            &cluster_publisher,
+            &namespace_store,
+            &worker_deployment_store,
+            None,
+        );
+
+        // The captured REAL index body, served to the executor by a local
+        // command instead of the network (gates run offline).
+        let fixture = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/update_check/fixtures/aion-cli-index.jsonl"
+        );
+        seams.declared_bodies.install(Arc::new(SequencedBodies {
+            replies: Mutex::new(VecDeque::from([
+                DeclaredBodyLookup::Declared(ActionBodyContract::Run {
+                    command: FETCH_COMMAND.to_owned(),
+                }),
+                DeclaredBodyLookup::Declared(ActionBodyContract::Run {
+                    command: format!("cat {fixture}"),
+                }),
+            ])),
+        }));
+
+        let transcript = crate::activity_publisher::ActivityEventPublisher::new(
+            Arc::new(aion_store::InMemoryObservabilityStore::default()),
+            ServerState::FALLBACK_CLUSTER_BROADCAST_CAPACITY,
+        );
+        let (dispatcher, _mock_registry, _attempt_owners, _workspace_root, update_status) =
+            super::build_decorated_dispatcher(&runtime, &seams, transcript);
+
+        assert_eq!(
+            update_status.last(),
+            None,
+            "the returned slot must start honestly empty"
+        );
+
+        let dispatch = ActivityDispatch {
+            namespace: "default".to_owned(),
+            task_queue: UPDATE_CHECK_QUEUE.to_owned(),
+            node: None,
+            workflow_id: WorkflowId::new_v4(),
+            run_id: RunId::new_v4(),
+            activity_id: ActivityId::from_sequence_position(1),
+            name: FETCH_ACTION.to_owned(),
+            input: "{}".to_owned(),
+            config: "{}".to_owned(),
+            attempt: 1,
+            labels: BTreeMap::new(),
+            advisory: false,
+        };
+        let handle = tokio::task::spawn_blocking(move || dispatcher.dispatch(dispatch));
+        let encoded = handle
+            .await?
+            .map_err(|error| format!("the check dispatch failed: {error}"))?;
+        let outcome: serde_json::Value = serde_json::from_str(&encoded)?;
+        assert_eq!(outcome["exit_code"], 0, "the local stand-in command ran");
+
+        let recorded = update_status.last().ok_or(
+            "the completed check must land in the RETURNED slot — the one the boot path \
+             stores and /update-status serves; an empty slot here is the disconnected-\
+             producer mis-wire the r1 review proved unmeasured",
+        )?;
+        assert_eq!(recorded.latest_known, "0.13.7");
         Ok(())
     }
 }

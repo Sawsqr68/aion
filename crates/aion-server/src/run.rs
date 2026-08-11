@@ -241,6 +241,10 @@ async fn run_server(cli: CliOverrides) -> Result<ExitCode, ServerError> {
     // catalog holding no version of the assistant type; anything else is the
     // operator's cut to make, and the outcome says so in the log either way.
     crate::assistant::install_embedded_assistant_for_server(&state).await;
+    // #189 slice one: the built-in update check ships the same way, under the
+    // same only-the-empty-case install rule. Installing makes it STARTABLE
+    // and nothing else — no check runs without an explicit operator act.
+    crate::update_check::install_embedded_update_check_for_server(&state).await;
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
     // LSUB-4-1: a distributed haematite boot carries a `[store.cluster]` section.
     // The single outbox dispatcher task is spawned in BOTH modes; the difference
