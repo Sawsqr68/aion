@@ -3,6 +3,7 @@ import { Boxes, Wifi, WifiOff } from 'lucide-react';
 
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
+import { InstantText } from '@/components/InstantText';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import {
   Badge,
@@ -216,10 +217,10 @@ function NamespaceTable({ namespaces, quotas, onSetPlacement }: NamespaceTablePr
               <QuotaBadge quota={quotas[record.name]} />
             </TableCell>
             <TableCell className="text-muted-foreground">
-              <FormattedInstant value={record.createdAt} />
+              <InstantText value={record.createdAt} />
             </TableCell>
             <TableCell className="text-muted-foreground">
-              <FormattedInstant value={record.lastSeen} />
+              <InstantText value={record.lastSeen} />
             </TableCell>
             <TableCell>
               <Badge variant="outline" className="w-fit">
@@ -230,20 +231,6 @@ function NamespaceTable({ namespaces, quotas, onSetPlacement }: NamespaceTablePr
         ))}
       </TableBody>
     </Table>
-  );
-}
-
-/** Render an RFC 3339 instant as a localized, hover-for-exact timestamp. */
-function FormattedInstant({ value }: { value: string }) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return <span>{value}</span>;
-  }
-
-  return (
-    <time dateTime={value} title={value}>
-      {parsed.toLocaleString()}
-    </time>
   );
 }
 

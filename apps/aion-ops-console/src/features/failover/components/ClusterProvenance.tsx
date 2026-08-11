@@ -1,4 +1,5 @@
 import type { AionSocketError, ConnectionStatus } from '@/lib/api';
+import { formatInstant } from '@/lib/time';
 
 /**
  * Always-on cluster provenance line (ADR-016). Every cluster surface must say
@@ -75,7 +76,9 @@ export function ClusterProvenance({
         <span>self: {selfNode ?? (primed ? 'standalone' : '…')}</span>
         <span>cluster_seq: {primed ? lastSeq : '—'}</span>
         {lastObservedAt !== null ? (
-          <span title={lastObservedAt}>last change {formatInstant(lastObservedAt)}</span>
+          <span title={lastObservedAt}>
+            last change {formatInstant(lastObservedAt, { style: 'time' })}
+          </span>
         ) : null}
       </div>
 
@@ -94,12 +97,4 @@ export function ClusterProvenance({
       ) : null}
     </div>
   );
-}
-
-function formatInstant(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-  return date.toLocaleTimeString();
 }

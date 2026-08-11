@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
 import { EventIcon, type EventIconKind } from '@/components/EventIcon';
+import { InstantText } from '@/components/InstantText';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { StatusBadge } from '@/components/StatusBadge';
 import type { WorkflowStatus } from '@/types';
@@ -104,5 +105,44 @@ describe('shared async state panels', () => {
     expect(list).not.toEqual(timeline);
     expect(list).toContain('data-slot="skeleton"');
     expect(timeline).toContain('data-slot="skeleton"');
+  });
+});
+
+describe('InstantText', () => {
+  const INSTANT = '2026-07-15T00:00:02.500Z';
+
+  test('a parseable instant renders a <time> whose dateTime and title carry the raw UTC value', () => {
+    const markup = renderToStaticMarkup(<InstantText value={INSTANT} />);
+    expect(markup).toBe(
+      `<time dateTime="${INSTANT}" title="${INSTANT}">Jul 15, 2026 at 10:00:02 AM GMT+10</time>`
+    );
+  });
+
+  test('className lands on the <time> element', () => {
+    const markup = renderToStaticMarkup(<InstantText className="text-xs" value={INSTANT} />);
+    expect(markup).toContain('class="text-xs"');
+    expect(markup).toContain(`dateTime="${INSTANT}"`);
+  });
+
+  test('an absent value renders a bare em-dash with NO <time> wrapper', () => {
+    for (const value of [null, undefined, '']) {
+      const markup = renderToStaticMarkup(<InstantText value={value} />);
+      expect(markup).toBe('—');
+      expect(markup).not.toContain('<time');
+    }
+  });
+
+  test('an absent value with a className renders the em-dash in a plain span', () => {
+    const markup = renderToStaticMarkup(<InstantText className="text-xs" value={null} />);
+    expect(markup).toBe('<span class="text-xs">—</span>');
+  });
+
+  test('a non-RFC3339 value renders plain labelled text with no dateTime attribute', () => {
+    for (const value of ['not-a-timestamp', '2026-07-15T00:00:02', '2026-07-15']) {
+      const markup = renderToStaticMarkup(<InstantText value={value} />);
+      expect(markup).toBe(`${value} (unparseable timestamp)`);
+      expect(markup).not.toContain('dateTime');
+      expect(markup).not.toContain('<time');
+    }
   });
 });

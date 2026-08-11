@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 
 import type { BuildIdentityResponse, StartWorkflowResult, UpdateStatusResponse } from '@/lib/api';
 import { QUERY_STALE_TIME_MS } from '@/lib/config';
+import { formatInstant } from '@/lib/time';
 import type { WorkflowId, WorkflowStatus } from '@/types';
 
 import { hasRecordedSince } from '../lib/followCheck';
@@ -415,7 +416,7 @@ function LatestLine({
           <span className="text-muted-foreground"> — up to date</span>
         )}
       </p>
-      <p className="text-muted-foreground text-xs">Checked {renderCheckedAt(status.checked_at)}</p>
+      <p className="text-muted-foreground text-xs">Checked {formatInstant(status.checked_at)}</p>
       {comparison?.state === 'malformed' && (
         <p className="text-status-warning text-xs" data-slot="update-malformed-detail" role="alert">
           These versions cannot be compared: {comparison.reason}
@@ -428,19 +429,4 @@ function LatestLine({
 /** An error's message without swallowing non-`Error` throwables. */
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-/**
- * A checked-at timestamp for display, refusing loudly instead of rendering
- * the browser's "Invalid Date" (r1 m12): an unparseable timestamp is shown
- * raw and NAMED unparseable — consistent with how this file treats a
- * malformed version. Unreachable from a healthy server (RFC 3339 on the
- * wire), which is exactly when a silent "Invalid Date" would otherwise ship.
- */
-function renderCheckedAt(raw: string): string {
-  const parsed = Date.parse(raw);
-  if (Number.isNaN(parsed)) {
-    return `${raw} (unparseable timestamp)`;
-  }
-  return new Date(parsed).toLocaleString();
 }

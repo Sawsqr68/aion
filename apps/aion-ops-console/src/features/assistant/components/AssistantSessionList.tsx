@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { assistantSessionHref } from '@/app/routePaths';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
+import { InstantText } from '@/components/InstantText';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui';
@@ -93,8 +94,12 @@ export function AssistantSessionRows({ sessions }: { sessions: readonly Workflow
             <TableCell>
               <StatusBadge status={session.status} />
             </TableCell>
-            <TableCell>{session.started_at}</TableCell>
-            <TableCell>{session.ended_at ?? '—'}</TableCell>
+            <TableCell>
+              <InstantText value={session.started_at} />
+            </TableCell>
+            <TableCell>
+              <InstantText value={session.ended_at} />
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>

@@ -1,5 +1,6 @@
 import { type CSSProperties, memo, type RefCallback } from 'react';
 import { EventIcon, type EventIconTone } from '@/components/EventIcon';
+import { InstantText } from '@/components/InstantText';
 import { Badge } from '@/components/ui';
 import { cn } from '@/lib/utils';
 
@@ -68,9 +69,7 @@ const TimelineEntry = memo(function TimelineEntry({
           >
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">seq {entry.sequence}</Badge>
-              <time className="text-muted-foreground text-xs" dateTime={entry.recordedAt}>
-                {formatRecordedAt(entry.recordedAt)}
-              </time>
+              <InstantText className="text-muted-foreground text-xs" value={entry.recordedAt} />
             </div>
             <h3 className="font-medium text-foreground">{entry.summary}</h3>
           </button>
@@ -195,14 +194,4 @@ function activityTone(status: ActivityEntry['status']): EventIconTone {
   return status === 'failed' ? 'danger' : 'neutral';
 }
 
-function formatRecordedAt(value: string): string {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString();
-}
-
-export { formatRecordedAt, TimelineEntry };
+export { TimelineEntry };

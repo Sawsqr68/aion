@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import { InstantText } from '@/components/InstantText';
 import { eventContainingPayload } from '../lib/timeline';
 import type { TimelineEntry as TimelineEntryModel } from '../types';
 import { PayloadView } from './PayloadView';
@@ -24,7 +26,7 @@ function DetailPanelBody({ entry }: DetailPanelBodyProps) {
       <dl className="space-y-2 text-sm">
         <Field label="Event type" value={eventType} />
         <Field label="Sequence" value={String(entry.envelope.seq)} />
-        <Field label="Recorded at" value={entry.envelope.recorded_at} />
+        <Field label="Recorded at" value={<InstantText value={entry.envelope.recorded_at} />} />
         <Field label="Workflow" value={entry.envelope.workflow_id} />
         {entry.events.length > 1 ? (
           <Field label="Correlated events" value={`${entry.events.length} in this lane`} />
@@ -41,7 +43,7 @@ function DetailPanelBody({ entry }: DetailPanelBodyProps) {
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-2">
       <dt className="text-muted-foreground text-xs uppercase tracking-wide">{label}</dt>

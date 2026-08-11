@@ -1,6 +1,7 @@
 import { type CSSProperties, memo, type RefCallback, useCallback, useMemo } from 'react';
 import { EventIcon, type EventIconKind } from '@/components/EventIcon';
 import { Button } from '@/components/ui';
+import { formatInstant, formatInstantMs } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import type { WorkflowId } from '@/types';
 
@@ -69,10 +70,10 @@ export function Axis({ axis, labelWidth }: { axis: AxisLayout | null; labelWidth
         {axis === null ? null : axis.mode === 'time' ? (
           <>
             <span className="absolute top-1 left-1 text-[10px] text-muted-foreground tabular-nums">
-              {formatAxisTime(axis.bounds.t0)}
+              {formatInstantMs(axis.bounds.t0, { style: 'time' })}
             </span>
             <span className="absolute top-1 right-1 text-[10px] text-muted-foreground tabular-nums">
-              {formatAxisTime(axis.bounds.tEnd)}
+              {formatInstantMs(axis.bounds.tEnd, { style: 'time' })}
             </span>
           </>
         ) : (
@@ -81,7 +82,7 @@ export function Axis({ axis, labelWidth }: { axis: AxisLayout | null; labelWidth
               className="absolute top-1 text-[10px] text-muted-foreground tabular-nums"
               key={event.key}
               style={{ left: rank * axis.rankWidth + 4 }}
-              title={`${event.workflowId} · ${event.recordedAt}`}
+              title={`${event.workflowId} · ${formatInstant(event.recordedAt)} (${event.recordedAt})`}
             >
               {event.sequence}
             </span>
@@ -328,8 +329,4 @@ export function NoticeRow({
       </div>
     </li>
   );
-}
-
-function formatAxisTime(timestampMs: number): string {
-  return new Date(timestampMs).toISOString().replace('.000Z', 'Z');
 }

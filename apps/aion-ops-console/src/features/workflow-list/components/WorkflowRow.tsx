@@ -1,4 +1,5 @@
 import { generatePath, Link } from 'react-router';
+import { InstantText } from '@/components/InstantText';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TableCell, TableRow } from '@/components/ui';
 import type { WorkflowSummary } from '@/types';
@@ -25,8 +26,12 @@ export function WorkflowRow({ workflow }: WorkflowRowProps) {
           <FailureContext failedStep={workflow.failed_step} reason={workflow.failure_reason} />
         </div>
       </TableCell>
-      <TableCell>{formatWorkflowTimestamp(workflow.started_at)}</TableCell>
-      <TableCell>{formatWorkflowTimestamp(workflow.ended_at)}</TableCell>
+      <TableCell>
+        <InstantText value={workflow.started_at} />
+      </TableCell>
+      <TableCell>
+        <InstantText value={workflow.ended_at} />
+      </TableCell>
     </TableRow>
   );
 }
@@ -60,12 +65,4 @@ function FailureContext({
       {hasReason ? <span className="line-clamp-2 max-w-xs">{reason}</span> : null}
     </div>
   );
-}
-
-function formatWorkflowTimestamp(value: string | null | undefined): string {
-  if (value === null || value === undefined || value.length === 0) {
-    return '—';
-  }
-
-  return value;
 }

@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
 
 import { failoverHref, workflowDetailHref } from '@/app/routePaths';
+import { InstantText } from '@/components/InstantText';
 
 import type { Incident, IncidentKind } from '../lib/incidents';
 
@@ -42,7 +43,9 @@ export function IncidentCard({ incident }: IncidentCardProps) {
         <p className="truncate font-medium text-foreground text-sm">{incident.title}</p>
         <p className="truncate text-muted-foreground text-xs">{incident.detail}</p>
         {incident.at === null ? null : (
-          <p className="text-muted-foreground text-xs">{incident.at}</p>
+          <p className="text-muted-foreground text-xs">
+            <InstantText value={incident.at} />
+          </p>
         )}
       </div>
 

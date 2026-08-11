@@ -138,7 +138,10 @@ test('scrubber renders continuous time and stepped global-rank readouts', () => 
     <Scrubber axis={timeAxis} mode="time" onScrub={() => {}} scrubPosition={BASE + 2_500} />
   );
   expect(timeMarkup).toContain('Scrub to recorded time');
-  expect(timeMarkup).toContain('2026-07-15T00:00:02.500Z');
+  // Viewer-local millisecond readout (issue #212) under the test-run's pinned
+  // zone (Australia/Sydney, test-setup.ts) — the wire value stays UTC, and the
+  // ms-stepping range input renders a string that moves with every step.
+  expect(timeMarkup).toContain('10:00:02.500 AM GMT+10');
 
   const steppedAxis = buildAxisLayout(workflows, 'stepped', 500, BASE + 4_000);
   const steppedMarkup = renderToStaticMarkup(
@@ -162,6 +165,25 @@ test('Swimlane applies the shared time cut to its workflow prefix', () => {
   );
   expect(markup).toContain('Workflow swimlane');
   expect(markup).not.toContain('charge');
+});
+
+test('axis bounds labels render viewer-local time-style strings, not raw ISO', () => {
+  const markup = renderToStaticMarkup(
+    <Swimlane
+      entries={fullRun()}
+      isRunning={false}
+      nowMs={BASE + 4_000}
+      onScrubChange={() => {}}
+      onSelect={() => {}}
+      scrubPosition={null}
+      selectedSequence={null}
+      workflowId={WORKFLOW_ID as WorkflowId}
+    />
+  );
+  // Time-style (no date, no milliseconds) under the pinned Sydney zone.
+  expect(markup).toContain('10:00:01 AM GMT+10');
+  expect(markup).toContain('10:00:04 AM GMT+10');
+  expect(markup).not.toContain('2026-07-15T');
 });
 
 test('empty axis yields no scrubber', () => {

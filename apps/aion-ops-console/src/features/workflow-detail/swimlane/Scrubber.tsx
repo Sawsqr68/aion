@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui';
+import { formatInstantMs } from '@/lib/time';
 import { cn } from '@/lib/utils';
 
 import { snapGlobalRank } from './scrub';
@@ -53,7 +54,7 @@ function Scrubber({ axis, mode, scrubPosition, onScrub }: ScrubberProps) {
       />
       <output
         aria-live="polite"
-        className="w-44 shrink-0 text-right text-foreground text-xs tabular-nums"
+        className="w-52 shrink-0 text-right text-foreground text-xs tabular-nums"
       >
         {isLive ? <span className="text-live">live</span> : scrubReadout(mode, active, axis)}
       </output>
@@ -77,7 +78,9 @@ function clampPosition(position: number, minimum: number, maximum: number): numb
 
 function scrubReadout(mode: AxisMode, position: number, axis: AxisLayout): string {
   if (mode === 'time') {
-    return new Date(position).toISOString();
+    // The range input steps in MILLISECONDS: the readout must move with every
+    // step, so it carries milliseconds ('time-ms'), unlike the axis labels.
+    return formatInstantMs(position, { style: 'time-ms' });
   }
   const rank = snapGlobalRank(position, axis.events.length);
   const event = axis.events[rank];

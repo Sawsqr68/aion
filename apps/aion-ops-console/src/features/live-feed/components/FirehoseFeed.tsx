@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import { EmptyState } from '@/components/EmptyState';
+import { InstantText } from '@/components/InstantText';
 import { isSelectedNamespace, useNamespace } from '@/features/namespace';
 import {
   eventRecordedAt,
@@ -134,9 +135,10 @@ export function FirehoseFeedContent({
                   workflow {event.data.envelope.workflow_id}
                 </span>
               </div>
-              <time className="text-muted-foreground text-xs" dateTime={eventRecordedAt(event)}>
-                {eventRecordedAt(event)}
-              </time>
+              <InstantText
+                className="text-muted-foreground text-xs"
+                value={eventRecordedAt(event)}
+              />
             </li>
           ))}
         </ol>
