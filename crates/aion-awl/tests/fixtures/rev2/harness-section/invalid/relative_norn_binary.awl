@@ -1,0 +1,31 @@
+//! A relative `binary`. A worker is started from whatever directory a
+//! supervisor or a shell happens to be in, so a relative path names a different
+//! file on every launch — the same reason `command` and `cwd` must be absolute.
+//! A section that wants the adapter's own `norn`-on-`PATH` default omits
+//! `binary` entirely.
+workflow ask_the_agent
+  input question: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+/// The canonical agent-outcome record: the checker demands the STRUCTURE, not
+/// a blessed name.
+type Reply { text: String, stop_reason: String }
+
+worker assistants
+  harness
+    kind norn
+    concurrency 2
+    reconnect_initial_backoff 5s
+    reconnect_max_backoff 1m
+    reconnect_max_attempts 50
+    env_pass "PATH", "HOME"
+    args "--account", "default"
+    binary "bin/norn"
+  action ask(prompt: String) -> Reply
+    agent
+
+step ask
+  ask(prompt: question) -> reply
+  route answered(reply: reply.text)

@@ -52,9 +52,12 @@ pub const HARNESS_WORD: &str = "harness";
 
 /// Every field word the section admits, in canonical print order.
 ///
-/// The parser refuses anything else by name against this list, and the printer walks
-/// it, so the two cannot drift: a field added to the grammar without a print position
-/// would print nothing and vanish on `aion awl fmt`.
+/// Two duties, one table. The parser refuses an unknown field by naming this list, and
+/// the printer emits the section in exactly this ORDER — enforced by
+/// `printer::harness::tests`, because the printer cannot walk an array of twelve
+/// differently-typed values without becoming a pile of closures. A field added to the
+/// grammar with no print position fails that pin rather than printing nothing and
+/// vanishing from a deployed document on `aion awl fmt`.
 pub const HARNESS_FIELDS: [&str; 12] = [
     HARNESS_KIND_FIELD,
     HARNESS_CONCURRENCY_FIELD,

@@ -1,4 +1,4 @@
-module ask_the_agent source=ask_the_agent.awl
+module acp_harness_launch source=acp_harness_launch.awl
 exports: run/1, definition/0, execute/1
 == effect schedule ==
   step_ask:
@@ -9,7 +9,7 @@ exports: run/1, definition/0, execute/1
   [0] answer
   [1] reply
   [2] ask_input
-  [3] ask_the_agent_input
+  [3] acp_harness_launch_input
   [4] answered_outcome
   [5] ok
 == literals ==
@@ -21,7 +21,7 @@ exports: run/1, definition/0, execute/1
   [5] "answered"
   [6] "outcome"
   [7] ""
-  [8] "AskTheAgentOutcome"
+  [8] "AcpHarnessLaunchOutcome"
   [9] "answered"
   [10] "payload"
   [11] "assistants"
@@ -33,135 +33,135 @@ exports: run/1, definition/0, execute/1
     stop_reason: string
   record AskInput tag=ask_input
     prompt: string
-  record AskTheAgentInput tag=ask_the_agent_input
+  record AcpHarnessLaunchInput tag=acp_harness_launch_input
     question: string
-  union AskTheAgentOutcome
+  union AcpHarnessLaunchOutcome
     answered -> answered_outcome(ref(Answer))
 == fn run/1 origin=run ==
   sig: (Dynamic) -> Result(String, AwlError)
-  T-RUN input=ask_the_agent_input_codec output=ask_the_agent_outcome_codec
+  T-RUN input=acp_harness_launch_input_codec output=acp_harness_launch_outcome_codec
 == fn definition/0 origin=definition ==
-  sig: () -> WorkflowDefinition(ask_the_agent.AskTheAgentInput, ask_the_agent.AskTheAgentOutcome, AwlError)
-  T-DEF name="ask_the_agent" input=ask_the_agent_input_codec output=ask_the_agent_outcome_codec
+  sig: () -> WorkflowDefinition(acp_harness_launch.AcpHarnessLaunchInput, acp_harness_launch.AcpHarnessLaunchOutcome, AwlError)
+  T-DEF name="acp_harness_launch" input=acp_harness_launch_input_codec output=acp_harness_launch_outcome_codec
 == fn execute/1 origin=execute ==
-  sig: (ask_the_agent.AskTheAgentInput) -> Result(ask_the_agent.AskTheAgentOutcome, AwlError)
+  sig: (acp_harness_launch.AcpHarnessLaunchInput) -> Result(acp_harness_launch.AcpHarnessLaunchOutcome, AwlError)
   T-EXEC fields=[question:String] entry=step_ask args=[0]
 == fn answer_codec/0 origin=codec_template(RecordTrio, Answer, record#0) ==
-  sig: () -> Codec(ask_the_agent.Answer)
+  sig: () -> Codec(acp_harness_launch.Answer)
   v0 = make_closure answer_to_json captures=[]
   v1 = call_local answer_decoder() live_after=[v0]
   tail_rt aion@codec:json_codec/2(v0, v1)
 == fn answer_to_json/1 origin=codec_template(RecordTrio, Answer, record#0) ==
-  sig: (ask_the_agent.Answer) -> Json
+  sig: (acp_harness_launch.Answer) -> Json
   v1 = field(v0, 1)
   v2 = json_obj {"reply": v1|>awlc.string_to_json}
   return v2
 == fn answer_decoder/0 origin=codec_template(RecordTrio, Answer, record#0) ==
-  sig: () -> Decoder(ask_the_agent.Answer)
+  sig: () -> Decoder(acp_harness_launch.Answer)
   v0 = call_rt aion@awl@codec:string_decoder/0()
   v1 = make_closure answer_decoder$0 captures=[]
   tail_rt gleam@dynamic@decode:field/3(lit#0, v0, v1)
 == fn answer_decoder$0/1 origin=lifted(answer_decoder, #0) ==
-  sig: (String) -> Decoder(ask_the_agent.Answer)
+  sig: (String) -> Decoder(acp_harness_launch.Answer)
   v1 = record(answer, [v0])
   tail_rt gleam@dynamic@decode:success/1(v1)
 == fn reply_codec/0 origin=codec_template(RecordTrio, Reply, record#1) ==
-  sig: () -> Codec(ask_the_agent.Reply)
+  sig: () -> Codec(acp_harness_launch.Reply)
   v0 = make_closure reply_to_json captures=[]
   v1 = call_local reply_decoder() live_after=[v0]
   tail_rt aion@codec:json_codec/2(v0, v1)
 == fn reply_to_json/1 origin=codec_template(RecordTrio, Reply, record#1) ==
-  sig: (ask_the_agent.Reply) -> Json
+  sig: (acp_harness_launch.Reply) -> Json
   v1 = field(v0, 1)
   v2 = field(v0, 2)
   v3 = json_obj {"text": v1|>awlc.string_to_json, "stop_reason": v2|>awlc.string_to_json}
   return v3
 == fn reply_decoder/0 origin=codec_template(RecordTrio, Reply, record#1) ==
-  sig: () -> Decoder(ask_the_agent.Reply)
+  sig: () -> Decoder(acp_harness_launch.Reply)
   v0 = call_rt aion@awl@codec:string_decoder/0()
   v1 = make_closure reply_decoder$0 captures=[]
   tail_rt gleam@dynamic@decode:field/3(lit#1, v0, v1)
 == fn reply_decoder$0/1 origin=lifted(reply_decoder, #0) ==
-  sig: (String) -> Decoder(ask_the_agent.Reply)
+  sig: (String) -> Decoder(acp_harness_launch.Reply)
   v1 = call_rt aion@awl@codec:string_decoder/0() live_after=[v0]
   v2 = make_closure reply_decoder$1 captures=[v0]
   tail_rt gleam@dynamic@decode:field/3(lit#2, v1, v2)
 == fn reply_decoder$1/2 origin=lifted(reply_decoder, #1) ==
-  sig: (String, String) -> Decoder(ask_the_agent.Reply)
+  sig: (String, String) -> Decoder(acp_harness_launch.Reply)
   v2 = record(reply, [v1, v0])
   tail_rt gleam@dynamic@decode:success/1(v2)
 == fn ask_input_codec/0 origin=codec_template(RecordTrio, AskInput, record#2) ==
-  sig: () -> Codec(ask_the_agent.AskInput)
+  sig: () -> Codec(acp_harness_launch.AskInput)
   v0 = make_closure ask_input_to_json captures=[]
   v1 = call_local ask_input_decoder() live_after=[v0]
   tail_rt aion@codec:json_codec/2(v0, v1)
 == fn ask_input_to_json/1 origin=codec_template(RecordTrio, AskInput, record#2) ==
-  sig: (ask_the_agent.AskInput) -> Json
+  sig: (acp_harness_launch.AskInput) -> Json
   v1 = field(v0, 1)
   v2 = json_obj {"prompt": v1|>awlc.string_to_json}
   return v2
 == fn ask_input_decoder/0 origin=codec_template(RecordTrio, AskInput, record#2) ==
-  sig: () -> Decoder(ask_the_agent.AskInput)
+  sig: () -> Decoder(acp_harness_launch.AskInput)
   v0 = call_rt aion@awl@codec:string_decoder/0()
   v1 = make_closure ask_input_decoder$0 captures=[]
   tail_rt gleam@dynamic@decode:field/3(lit#3, v0, v1)
 == fn ask_input_decoder$0/1 origin=lifted(ask_input_decoder, #0) ==
-  sig: (String) -> Decoder(ask_the_agent.AskInput)
+  sig: (String) -> Decoder(acp_harness_launch.AskInput)
   v1 = record(ask_input, [v0])
   tail_rt gleam@dynamic@decode:success/1(v1)
-== fn ask_the_agent_input_codec/0 origin=codec_template(RecordTrio, AskTheAgentInput, record#3) ==
-  sig: () -> Codec(ask_the_agent.AskTheAgentInput)
-  v0 = make_closure ask_the_agent_input_to_json captures=[]
-  v1 = call_local ask_the_agent_input_decoder() live_after=[v0]
+== fn acp_harness_launch_input_codec/0 origin=codec_template(RecordTrio, AcpHarnessLaunchInput, record#3) ==
+  sig: () -> Codec(acp_harness_launch.AcpHarnessLaunchInput)
+  v0 = make_closure acp_harness_launch_input_to_json captures=[]
+  v1 = call_local acp_harness_launch_input_decoder() live_after=[v0]
   tail_rt aion@codec:json_codec/2(v0, v1)
-== fn ask_the_agent_input_to_json/1 origin=codec_template(RecordTrio, AskTheAgentInput, record#3) ==
-  sig: (ask_the_agent.AskTheAgentInput) -> Json
+== fn acp_harness_launch_input_to_json/1 origin=codec_template(RecordTrio, AcpHarnessLaunchInput, record#3) ==
+  sig: (acp_harness_launch.AcpHarnessLaunchInput) -> Json
   v1 = field(v0, 1)
   v2 = json_obj {"question": v1|>awlc.string_to_json}
   return v2
-== fn ask_the_agent_input_decoder/0 origin=codec_template(RecordTrio, AskTheAgentInput, record#3) ==
-  sig: () -> Decoder(ask_the_agent.AskTheAgentInput)
+== fn acp_harness_launch_input_decoder/0 origin=codec_template(RecordTrio, AcpHarnessLaunchInput, record#3) ==
+  sig: () -> Decoder(acp_harness_launch.AcpHarnessLaunchInput)
   v0 = call_rt aion@awl@codec:string_decoder/0()
-  v1 = make_closure ask_the_agent_input_decoder$0 captures=[]
+  v1 = make_closure acp_harness_launch_input_decoder$0 captures=[]
   tail_rt gleam@dynamic@decode:field/3(lit#4, v0, v1)
-== fn ask_the_agent_input_decoder$0/1 origin=lifted(ask_the_agent_input_decoder, #0) ==
-  sig: (String) -> Decoder(ask_the_agent.AskTheAgentInput)
-  v1 = record(ask_the_agent_input, [v0])
+== fn acp_harness_launch_input_decoder$0/1 origin=lifted(acp_harness_launch_input_decoder, #0) ==
+  sig: (String) -> Decoder(acp_harness_launch.AcpHarnessLaunchInput)
+  v1 = record(acp_harness_launch_input, [v0])
   tail_rt gleam@dynamic@decode:success/1(v1)
-== fn ask_the_agent_outcome_codec/0 origin=codec_template(UnionTrio, AskTheAgentOutcome, union#4) ==
-  sig: () -> Codec(ask_the_agent.AskTheAgentOutcome)
-  v0 = make_closure ask_the_agent_outcome_to_json captures=[]
-  v1 = call_local ask_the_agent_outcome_decoder() live_after=[v0]
+== fn acp_harness_launch_outcome_codec/0 origin=codec_template(UnionTrio, AcpHarnessLaunchOutcome, union#4) ==
+  sig: () -> Codec(acp_harness_launch.AcpHarnessLaunchOutcome)
+  v0 = make_closure acp_harness_launch_outcome_to_json captures=[]
+  v1 = call_local acp_harness_launch_outcome_decoder() live_after=[v0]
   tail_rt aion@codec:json_codec/2(v0, v1)
-== fn ask_the_agent_outcome_to_json/1 origin=codec_template(UnionTrio, AskTheAgentOutcome, union#4) ==
-  sig: (ask_the_agent.AskTheAgentOutcome) -> Json
+== fn acp_harness_launch_outcome_to_json/1 origin=codec_template(UnionTrio, AcpHarnessLaunchOutcome, union#4) ==
+  sig: (acp_harness_launch.AcpHarnessLaunchOutcome) -> Json
   v1 = field(v0, 1)
   v2 = json_obj {"outcome": lit#5|>awlc.string_to_json, "payload": v1|>answer_to_json}
   return v2
-== fn ask_the_agent_outcome_decoder/0 origin=codec_template(UnionTrio, AskTheAgentOutcome, union#4) ==
-  sig: () -> Decoder(ask_the_agent.AskTheAgentOutcome)
+== fn acp_harness_launch_outcome_decoder/0 origin=codec_template(UnionTrio, AcpHarnessLaunchOutcome, union#4) ==
+  sig: () -> Decoder(acp_harness_launch.AcpHarnessLaunchOutcome)
   v0 = call_rt aion@awl@codec:string_decoder/0()
-  v1 = make_closure ask_the_agent_outcome_decoder$outcome captures=[]
+  v1 = make_closure acp_harness_launch_outcome_decoder$outcome captures=[]
   tail_rt gleam@dynamic@decode:field/3(lit#6, v0, v1)
-== fn ask_the_agent_outcome_decoder$outcome/1 origin=lifted(ask_the_agent_outcome_decoder, #0) ==
-  sig: (String) -> Decoder(ask_the_agent.AskTheAgentOutcome)
+== fn acp_harness_launch_outcome_decoder$outcome/1 origin=lifted(acp_harness_launch_outcome_decoder, #0) ==
+  sig: (String) -> Decoder(acp_harness_launch.AcpHarnessLaunchOutcome)
   if cmp Eq v0 lit#9:
     v3 = call_local answer_decoder()
-    v4 = make_closure ask_the_agent_outcome_decoder$arm0 captures=[]
+    v4 = make_closure acp_harness_launch_outcome_decoder$arm0 captures=[]
     tail_rt gleam@dynamic@decode:field/3(lit#10, v3, v4)
   else:
     v1 = record(answer, [lit#7])
     v2 = record(answered_outcome, [v1])
     tail_rt gleam@dynamic@decode:failure/2(v2, lit#8)
-== fn ask_the_agent_outcome_decoder$arm0/1 origin=lifted(ask_the_agent_outcome_decoder, #1) ==
-  sig: (ask_the_agent.Answer) -> Decoder(ask_the_agent.AskTheAgentOutcome)
+== fn acp_harness_launch_outcome_decoder$arm0/1 origin=lifted(acp_harness_launch_outcome_decoder, #1) ==
+  sig: (acp_harness_launch.Answer) -> Decoder(acp_harness_launch.AcpHarnessLaunchOutcome)
   v1 = record(answered_outcome, [v0])
   tail_rt gleam@dynamic@decode:success/1(v1)
 == fn ask_activity/1 origin=activity_wrapper(ask, raw=false) ==
-  sig: (String) -> Activity(ask_the_agent.AskInput, ask_the_agent.Reply)
+  sig: (String) -> Activity(acp_harness_launch.AskInput, acp_harness_launch.Reply)
   T-ACT action=ask input_codec=ask_input_codec return=reply_codec
 == fn step_ask/1 origin=region(ask) ==
-  sig: (String) -> Result(ask_the_agent.AskTheAgentOutcome, AwlError)
+  sig: (String) -> Result(acp_harness_launch.AcpHarnessLaunchOutcome, AwlError)
   v1 = call_local ask_activity(v0)
   v2 = call_rt aion@activity:task_queue/2(v1, lit#11)
   v3 = call_rt aion@workflow:run/1(v2)

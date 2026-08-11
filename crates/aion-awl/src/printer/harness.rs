@@ -1,10 +1,20 @@
 //! Canonical printing of a worker block's `harness` section.
 //!
-//! The section prints in a FIXED field order — [`HARNESS_FIELDS`] — rather than the
+//! The section prints in a FIXED field order — [`HARNESS_FIELDS`]' — rather than the
 //! order it was written in, for the same reason an action's config line does: `aion awl
 //! fmt` gives one shape per document, so two operators who declared the same launch in
 //! different orders end up with the same bytes and their diff shows what actually
 //! changed.
+//!
+//! The printer emits one `if let` per setting rather than WALKING that array: the twelve
+//! values have twelve different types, and a table of extractors would trade a readable
+//! sequence for a pile of closures. The correspondence is therefore not enforced by
+//! construction — it is enforced by [`tests`], which prints a section carrying every
+//! field in a scrambled order and asserts the emitted field words are exactly
+//! [`HARNESS_FIELDS`], in its order, with nothing else. A field added to the grammar
+//! with no print position fails there instead of vanishing on `aion awl fmt`.
+//!
+//! [`HARNESS_FIELDS`]: crate::ast::HARNESS_FIELDS
 //!
 //! The order itself reads outward from the harness: what it is (`kind`), how much of it
 //! runs (`concurrency`), how it recovers (the reconnect trio), what crosses the process
@@ -141,3 +151,6 @@ fn text_list(values: &[HarnessText]) -> String {
         .collect::<Vec<_>>()
         .join(", ")
 }
+
+#[cfg(test)]
+mod tests;

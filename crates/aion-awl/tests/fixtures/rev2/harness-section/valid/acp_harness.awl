@@ -6,7 +6,7 @@
 //!
 //! The `env_pass` list is the child's WHOLE environment: `PATH` and `HOME` and
 //! nothing else cross into the agent, whatever the launching shell exports.
-workflow ask_the_agent
+workflow acp_harness_launch
   input question: String
   outcome answered: type Answer, route success
 

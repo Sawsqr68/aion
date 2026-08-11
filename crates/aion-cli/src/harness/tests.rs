@@ -141,10 +141,33 @@ fn the_declared_env_pass_list_is_the_childs_whole_environment() -> TestResult {
         return Err("a build carrying an adapter must resolve the declared kind".into());
     };
     let environment = environment_of(&resolved.config);
+
+    // The PRESENCE twin. This resolution reads THIS process's environment, so the
+    // absence assertion below is only worth something if the process really carries
+    // something that did not cross — otherwise it would pass just as well against an
+    // implementation that resolved nothing at all. Cargo sets `CARGO_PKG_NAME` on every
+    // test process, and it is not declared.
+    assert!(
+        std::env::var_os("CARGO_PKG_NAME").is_some(),
+        "this test needs a variable the launching process really carries, or the \
+         absence assertion below proves nothing"
+    );
+    assert!(
+        environment.carries("PATH"),
+        "the declared variable IS carried, so an absent reading cannot come from an \
+         environment that resolved nothing: {:?}",
+        environment.pairs()
+    );
     assert_eq!(
         environment.declared(),
         ["PATH"],
         "the declaration is exactly what the document wrote"
+    );
+    assert!(
+        !environment.carries("CARGO_PKG_NAME"),
+        "a variable this process really carries, and the document does not name, does \
+         not cross: {:?}",
+        environment.pairs()
     );
     assert!(
         !environment.carries("CLAUDECODE"),

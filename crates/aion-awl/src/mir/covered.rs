@@ -147,6 +147,11 @@ pub(super) const COVERED: &[&str] = &[
     // here is what proves it: a section that changed the lowering would be a
     // launch setting that changed what the workflow does.
     "harness-section/valid/acp_harness",
+    // The ABSENCE control: the norn fixture with its section removed. Its
+    // golden must equal the norn fixture's, which is what turns "the section
+    // does not change the lowering" from a claim about three documents that
+    // all carry one into a comparison against a document that does not.
+    "harness-section/valid/harness_absent_control",
     "harness-section/valid/norn_harness",
     "harness-section/valid/norn_harness_without_optional_settings",
     "header-types/valid/builtins",
