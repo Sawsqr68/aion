@@ -53,8 +53,10 @@ corrected here rather than rewritten:
   what was run to make it happen, and a suite that crashed before printing its
   verdict line would look the same as one that printed nothing.
 
-The round-three logs (`slice1-logs/R3-*.log`) carry the treatment the claim
-described: each opens with the exact command line and closes with its exit code.
+Of the round-three logs (`slice1-logs/R3-*.log`), six carry gate.sh's treatment
+(argv, cwd, tree, date, exit code); `R3-verb-gate-live.log` carries its own
+equivalent header with per-case argv and `[exit=N]` lines; `R3-build-awl.log`
+and `R3-new3-seam-tests.log` carry neither and reconcile only by reading.
 The R2 logs are left as they are — history is not rewritten to make an old
 sentence true.
 
