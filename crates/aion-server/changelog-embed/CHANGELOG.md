@@ -3,6 +3,92 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## 0.14.0 — 2026-08-11
+
+- **The built-in assistant no longer claims queue `default` (#200).** The
+  embedded assistant document now declares its own private queue, named after
+  the workflow type it exports, and the server refuses the embedded document
+  at load if it declares anything else. `default` is the queue every
+  out-of-box worker comes up on with no configuration, and contract admission
+  holds a registering worker against every reachable contract on its queue —
+  so an assistant sitting on `default` refused the first worker a newcomer
+  started.
+
+  **Who this affects.** Operators whose catalog was created before this
+  release: the routed assistant there still declares the old queue.
+
+  **What you will see.** Nothing moves by itself — a restart never re-points
+  a route an operator placed. The server logs `QUEUE MOVE PENDING` at WARN,
+  naming the queue the routed version serves, the private queue the embedded
+  version declares, and the commands that perform the move; sessions on the
+  routed version keep running where they are.
+
+  **What to do.** Make the move deliberately: `aion assistant document
+  --output assistant.awl`, then `aion deploy assistant.awl` (which loads and
+  routes it), then start a worker on the private queue. A worker still
+  serving the old queue will not receive the new version's dispatches.
+
+- **A worker document's `harness` section is now the one truth for how its
+  agent is launched (#204).** Agent-carrying worker documents declare the
+  harness in the document itself — `kind` (norn or acp) with the fields that
+  kind requires — and the spawned agent child runs under the DECLARED
+  environment: the `env_pass` list names exactly which variables reach the
+  child, and nothing is inherited from whatever shell or supervisor started
+  the worker. Fourteen launch flags are deleted from `aion worker agent`
+  (`--harness`, `--concurrency`, the three `--reconnect-*`, the five
+  `--acp-*`, and the three `--norn-*`); each setting lives in the `harness`
+  section under the field the refusal names.
+
+  **Who this affects.** Anyone starting `aion worker agent` from an old
+  runbook line, and any durable Builtin supervision record written with the
+  old flags — a supervised restart of such a record is refused, naming the
+  record, the flag, and the remedy. `aion worker awl` is untouched:
+  `--concurrency` and the `--reconnect-*` trio remain live, required flags
+  there, and worker-family documents cannot carry a `harness` section (every
+  action in them has a declared body; there is nothing for an agent to
+  serve).
+
+  **What you will see.** On `aion worker agent` with a deleted flag: clap's
+  own argument error, followed by one sentence per deleted flag naming the
+  `harness`-section field that replaced it. On a supervised restart of an
+  old-flag record: a refusal naming the record and the remedy — never a
+  silent drop or a half-started worker.
+
+  **What to do.** Move each named setting into the worker document's
+  `harness` section and redeploy; re-write Builtin supervision records to the
+  new shape before relying on supervised restart (the release runbook carries
+  the verification step).
+
+- **gRPC workers now prove the server can reach them before they are given
+  work (#197).** A worker connected over gRPC is sent a liveness ping down the
+  same stream its tasks arrive on, and answers it. Until it has answered two in
+  a row it is not selected for dispatch — the identical probation a
+  liminal-connected worker has always served. Previously the probe never
+  reached gRPC workers at all, which is why `aion worker awl serve` could
+  register successfully and then sit idle forever.
+
+  **Who this affects.** Any worker running a binary built before this release
+  on a server that runs the liveness probe: it does not know how to answer the
+  ping, so it never clears probation and stops being dispatched to. The bundled
+  Python and TypeScript SDK stubs are in this position until their regeneration
+  lands (#201). Rust workers rebuilt against this release answer automatically —
+  the worker runtime answers, not your activity code, so nothing in a workflow
+  or an action needs changing.
+
+  **What you will see.** Not silence. The server says why, by worker id: a
+  `SERVING ITS DISPATCH PROBATION` line while a worker is earning eligibility,
+  a `WITHDRAWING DISPATCH ELIGIBILITY` line naming the reason if a worker that
+  had it stops answering, and a `DISPATCH ELIGIBILITY RESTORED` line when it
+  recovers. A dispatch that finds no usable worker now also distinguishes "no
+  worker is registered for this queue" from "workers are registered and none is
+  currently eligible" — the second tells you to read the verdict above rather
+  than start another worker, which would only serve the same probation.
+
+  **What to do.** Upgrade the worker binary to one built from this release. If
+  you are on the Python or TypeScript SDK, the answer arrives with #201's stub
+  regeneration; until then those workers are excluded from dispatch on a server
+  whose probe is running.
+
 ## 0.13.8 — 2026-08-11
 
 - **Errors explain themselves in the editor (#187).** An AWL diagnostic now

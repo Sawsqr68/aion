@@ -3,7 +3,7 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
-## Unreleased
+## 0.14.0 — 2026-08-11
 
 - **The built-in assistant no longer claims queue `default` (#200).** The
   embedded assistant document now declares its own private queue, named after
