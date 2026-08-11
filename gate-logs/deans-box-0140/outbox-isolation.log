@@ -1,0 +1,9 @@
+   Compiling aion-rs v0.14.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.88s
+     Running tests/outbox_e2e.rs (target/debug/deps/outbox_e2e-fbd31636cdcf6aa2)
+
+running 8 tests
+error: test failed, to rerun pass `-p aion-rs --test outbox_e2e`
+
+Caused by:
+  process didn't exit successfully: `/Users/deanwhiting/Developer/stack/aion/target/debug/deps/outbox_e2e-fbd31636cdcf6aa2` (signal: 6, SIGABRT: process abort signal)

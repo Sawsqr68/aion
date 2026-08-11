@@ -1,0 +1,209 @@
+   Compiling libc v0.2.186
+   Compiling serde_core v1.0.228
+   Compiling smallvec v1.15.1
+   Compiling scopeguard v1.2.0
+   Compiling getrandom v0.3.4
+   Compiling either v1.16.0
+   Compiling serde_json v1.0.150
+   Compiling rustix v1.1.4
+   Compiling memchr v2.8.1
+   Compiling crypto-common v0.1.7
+   Compiling toml_parser v1.1.2+spec-1.1.0
+   Compiling toml_writer v1.1.1+spec-1.1.0
+   Compiling lock_api v0.4.14
+   Compiling cipher v0.4.4
+   Compiling regalloc2 v0.15.1
+   Compiling icu_normalizer v2.2.0
+   Compiling itertools v0.12.1
+   Compiling nom v7.1.3
+   Compiling cbc v0.1.2
+   Compiling idna_adapter v1.2.2
+   Compiling jobserver v0.1.34
+   Compiling errno v0.3.14
+   Compiling clang-sys v1.8.1
+   Compiling idna v1.1.0
+   Compiling rustix v0.38.44
+   Compiling cc v1.2.63
+   Compiling prost-derive v0.12.6
+   Compiling cranelift-codegen v0.131.2
+   Compiling cexpr v0.6.0
+   Compiling which v4.4.2
+   Compiling cmake v0.1.58
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling ring v0.17.14
+   Compiling libsql-sqlite3-parser v0.13.0
+   Compiling blake3 v1.8.5
+   Compiling bindgen v0.66.1
+   Compiling parking_lot_core v0.9.12
+   Compiling mio v1.2.1
+   Compiling socket2 v0.6.4
+   Compiling getrandom v0.4.2
+   Compiling getrandom v0.2.17
+   Compiling signal-hook-registry v1.4.8
+   Compiling parking_lot v0.12.5
+   Compiling cpufeatures v0.3.0
+   Compiling mach2 v0.4.3
+   Compiling socket2 v0.5.10
+   Compiling serde v1.0.228
+   Compiling uuid v1.23.4
+   Compiling rand_core v0.6.4
+   Compiling wasmtime-internal-jit-icache-coherence v44.0.2
+   Compiling rand v0.10.2
+   Compiling region v3.0.2
+   Compiling num_cpus v1.17.0
+   Compiling sha2 v0.11.0
+   Compiling rand_chacha v0.3.1
+   Compiling sha1 v0.11.0
+   Compiling bytes v1.11.1
+   Compiling ahash v0.8.12
+   Compiling chrono v0.4.45
+   Compiling fluent-uri v0.4.1
+   Compiling email_address v0.2.9
+   Compiling rand v0.8.6
+   Compiling aes v0.9.1
+   Compiling hashbrown v0.14.5
+   Compiling lzma-rust2 v0.16.4
+   Compiling serde_spanned v1.1.1
+   Compiling tokio v1.52.3
+   Compiling http v0.2.12
+   Compiling prost v0.12.6
+   Compiling referencing v0.46.6
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling core-foundation v0.9.4
+   Compiling dashmap v6.2.1
+   Compiling hashlink v0.8.4
+   Compiling ts-rs v12.0.1
+   Compiling security-framework-sys v2.17.0
+   Compiling http-body v0.4.6
+   Compiling toml v1.1.2+spec-1.1.0
+   Compiling security-framework v2.11.1
+   Compiling cpufeatures v0.2.17
+   Compiling aion-core v0.14.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-core)
+   Compiling jsonschema v0.46.6
+   Compiling axum-core v0.3.4
+   Compiling aes v0.8.4
+   Compiling libsql-hrana v0.9.30
+   Compiling tempfile v3.27.0
+   Compiling rustls-native-certs v0.7.3
+   Compiling libsql-ffi v0.9.30
+   Compiling bincode v1.3.3
+   Compiling saffron v0.1.0
+   Compiling tracing-serde v0.2.0
+   Compiling fs4 v1.1.0
+   Compiling tracing-subscriber v0.3.23
+   Compiling tokio-util v0.7.18
+   Compiling tokio-io-timeout v1.2.1
+   Compiling tokio-stream v0.1.18
+   Compiling rustls v0.22.4
+   Compiling h2 v0.3.27
+   Compiling cranelift-module v0.131.2
+   Compiling cranelift-native v0.131.2
+   Compiling cranelift-frontend v0.131.2
+   Compiling cranelift-jit v0.131.2
+   Compiling tower v0.4.13
+   Compiling rustls-webpki v0.102.8
+   Compiling aion-store v0.14.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-store)
+   Compiling tower-http v0.4.4
+   Compiling zstd-safe v7.2.4
+   Compiling hyper v0.14.32
+   Compiling zstd v0.13.3
+   Compiling tokio-rustls v0.25.0
+   Compiling zip v8.6.0
+   Compiling beamr v0.17.0
+   Compiling beamr v0.16.3
+   Compiling libsql-rusqlite v0.9.30
+   Compiling libsql-sys v0.9.30
+   Compiling aion-package v0.14.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-package)
+   Compiling axum v0.6.20
+   Compiling hyper-timeout v0.4.1
+   Compiling hyper-rustls v0.25.0
+   Compiling tonic v0.11.0
+   Compiling tonic-web v0.11.0
+   Compiling libsql_replication v0.9.30
+   Compiling libsql v0.9.30
+   Compiling aion-awl v0.14.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-awl)
+   Compiling aion-rs v0.14.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion)
+   Compiling haematite v0.8.1
+   Compiling aion-store-libsql v0.14.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-store-libsql)
+   Compiling aion-awl-package v0.14.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-awl-package)
+   Compiling aion-store-haematite v0.14.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-store-haematite)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 24.94s
+     Running tests/awl_bc4_differential.rs (target/debug/deps/awl_bc4_differential-191020e9eceb2f81)
+
+running 29 tests
+test driver::classification_tests::aliasing_erases_identities_and_nothing_else ... ok
+test driver::classification_tests::identical_refusals_are_agreement_not_infrastructure_noise ... ok
+test driver::classification_tests::a_one_sided_refusal_is_a_divergence ... ok
+test driver::classification_tests::refusals_for_different_reasons_are_a_divergence ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_project_gleam_refuses_fails_as_a_code_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::the_shared_gleam_support_copies_have_not_diverged ... ok
+test covered::the_exclusion_list_is_exactly_the_unobservable_park_population ... ok
+test serde_pin::event_serde_field_names_match_the_normalizer_literals ... ok
+test covered::every_covered_fixture_declares_a_distinct_workflow_name ... ok
+test serde_pin::normalizer_leaves_adversarially_named_or_valued_fields_untouched ... ok
+test serde_pin::normalizer_replaces_every_identity_field ... ok
+test adversarial::adversarial_fixtures_classify_as_expected ... ok
+test gleam_test_support::every_gleam_support_file_is_classified ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): awl_hello
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): awl_hello
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): compensate_to_outcome, compensate_to_step
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): awl_hello, float_threshold_guard
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): release_pipeline
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): awl_hello, float_threshold_guard
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): publish_with_cleanup
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): awl_hello, float_threshold_guard
+COMPILED 7 module(s) under real `gleam build` in 1 attempt(s): child_spawn_combo, empty_fork_collection, max_arity_record, nested_handlers, runtime_sized_fork, timeout_inside_retry, unicode_payloads
+COMPILED 3 module(s) under real `gleam build` in 1 attempt(s): child_spawn_combo, grade_essay, process_order
+test abi::abi_static_rows_over_spliced_entry ... ok
+test abi::int_code_end_terminator_is_rejected ... ok
+test oracle_self_test::reference_package_under_direct_expectation_is_refused ... ok
+test child_boundary::declarations_combined_fails_via_data_driven_route_failure ... ok
+test compensation::a_routed_failure_outcome_never_compensates ... ok
+test covered::flagship_awl_hello_matches ... ok
+test abi::abi_entry_result_recording_through_the_trail ... ok
+COMPILED 108 module(s) under real `gleam build` in 1 attempt(s): acp_harness_launch, action_param_hygiene, after_single, analyze_snapshot, announce_and_build, ask_the_agent, ask_the_agent_control, awl_hello, bounded_region_close, build_once, calls_and_side_effects, chained_polish, child_collection_fork, child_collection_fork_sequential, child_spawn_combo, collection_predicates, combinators, comma_tolerance, compensate_to_outcome, compensate_to_step, confirm_gate, counter_hygiene, dev_brief, dev_flow, diamond_report, drafting, empty_fork_collection, fall_through_chain, fallible_all_short_circuit, fallible_any_short_circuit, fallible_collection_predicates, fan_children, fan_children_tolerant, fan_scores, fetch_upstream, fixed_ping, float_threshold_guard, flow_vocab_b1, fork_action_fanout, fork_collection_join, fork_in_loop_live_ins, fork_named_branches, fork_named_homogeneous, fork_sequential_route, gated_review, general_concat, grade_essay, greet_by_hand, guard_chain_carries_every_proof, guard_narrows_a_deep_optional_field, guard_narrows_an_optional_field, import_constraints, import_nested_defs, import_ticket, index_and_concat, inline_schema_round, inline_verbatim_constraints, layer_hygiene, literal_forms, max_arity_record, measure_widths, mixed_doors, nested_handlers, nested_region_locals, nested_subflows, norn_harness_launch, norn_harness_launch_control, norn_harness_minimal_launch, notify_once, optional_shorthand, ordered_tolerant, ping_host, pipe_chain_stages, poll_job, predicates_and_operators, prepare_dataset, process_order, publish_assets, publish_with_cleanup, refresh_cache, region_decision, release_pipeline, release_pipeline_combined, render_scene, rollout, runtime_sized_fork, scoped_names, sequential_migrations, settle_draft, ship_release, short_circuit_optional, sibling_region_locals, sit_one, step_bodies_combined, substep_cleanup, summarize, summarize_document, temporary_hygiene, timed_report, timeout_inside_retry, transcribe_and_summarize, triage_message, triage_ticket, unicode_payloads, value_route, wait_and_sleep, wait_timeout_optional, workflow_id
+test child_boundary::child_spawning_fixtures_fail_at_the_child_boundary ... ok
+test compensation::compensation_arms_execute_on_both_backends ... ok
+test adversarial::adversarial_differential_is_byte_identical ... ok
+test covered::covered_set_is_byte_identical has been running for over 60 seconds
+test covered::covered_set_is_byte_identical ... FAILED
+
+failures:
+
+---- covered::covered_set_is_byte_identical stdout ----
+differential report: 67 succeeded, 38 failed-path, 0 cancelled, 3 timer-parked, 3 excluded, 0 refused, 0 AGREED-REFUSAL, 0 DIVERGENCES, 0 INFRA
+  timer-parked loop-outcomes/valid/guard_optional_wait on ["timer:anonymous:0", "timer:named:deadline:<run>"]
+  timer-parked step-bodies/valid/wait_and_sleep on ["timer:anonymous:0", "timer:named:deadline:<run>"]
+  timer-parked step-bodies/valid/wait_timeout_optional on ["timer:anonymous:0", "timer:named:deadline:<run>"]
+  excluded header-types/valid/combined
+  excluded header-types/valid/signal_wait
+  excluded step-bodies/valid/send_signal
+
+
+thread 'covered::covered_set_is_byte_identical' (47336856) panicked at crates/aion/tests/awl_bc4_differential/covered.rs:463:5:
+assertion `left == right` failed: succeeded set drifted:
+differential report: 67 succeeded, 38 failed-path, 0 cancelled, 3 timer-parked, 3 excluded, 0 refused, 0 AGREED-REFUSAL, 0 DIVERGENCES, 0 INFRA
+  timer-parked loop-outcomes/valid/guard_optional_wait on ["timer:anonymous:0", "timer:named:deadline:<run>"]
+  timer-parked step-bodies/valid/wait_and_sleep on ["timer:anonymous:0", "timer:named:deadline:<run>"]
+  timer-parked step-bodies/valid/wait_timeout_optional on ["timer:anonymous:0", "timer:named:deadline:<run>"]
+  excluded header-types/valid/combined
+  excluded header-types/valid/signal_wait
+  excluded step-bodies/valid/send_signal
+
+  left: ["dag-fork/valid/after_single", "dag-fork/valid/child_collection_fork", "dag-fork/valid/child_collection_fork_sequential", "dag-fork/valid/empty_fork_collection", "dag-fork/valid/fall_through_chain", "dag-fork/valid/fork_action_fanout", "dag-fork/valid/fork_collection_join", "dag-fork/valid/fork_named_homogeneous", "dag-fork/valid/fork_sequential", "dag-fork/valid/fork_sequential_route", "dag-fork/valid/release_pipeline_combined", "dag-fork/valid/runtime_sized_fork", "dag-fork/valid/sit_one", "declarations/valid/action_run_bodies", "declarations/valid/advisory_side_channel", "declarations/valid/agent_seam", "declarations/valid/agent_seam_unmarked_control", "declarations/valid/timeout_inside_retry", "declarations/valid/worker_retry_backoff", "declarations/valid/worker_single_action", "declarations/valid/workers_multiple", "ergonomics/valid/flow_vocab_b1", "flagship/valid/awl_hello", "flow-shape/valid/action_param_hygiene", "flow-shape/valid/counter_hygiene", "flow-shape/valid/dev_flow", "flow-shape/valid/distribute_activity_tolerant", "flow-shape/valid/distribute_child_collect", "flow-shape/valid/distribute_child_tolerant", "flow-shape/valid/layer_hygiene", "flow-shape/valid/on_failure_compensates_to_step", "flow-shape/valid/region_close_bounded", "flow-shape/valid/region_nested_local_reuse", "flow-shape/valid/region_pure_decision", "flow-shape/valid/region_sibling_local_reuse", "flow-shape/valid/sequence_activity_tolerant", "flow-shape/valid/sequence_region_loopback", "flow-shape/valid/subflow_local_names", "flow-shape/valid/subflow_nested", "flow-shape/valid/value_route_payload", "harness-section/valid/acp_harness", "harness-section/valid/harness_absent_control", "harness-section/valid/norn_harness", "harness-section/valid/norn_harness_without_optional_settings", "header-types/valid/doc_comments", "header-types/valid/enum", "header-types/valid/line_width", "header-types/valid/max_arity_record", "header-types/valid/minimal", "header-types/valid/noncanonical_commas", "header-types/valid/workflow_timeout", "loop-outcomes/valid/enum_when_totality", "loop-outcomes/valid/nested_handlers", "schema-doors/valid/inline_verbatim_constraints", "schema-doors/valid/mixed_doors", "schema-doors/valid/optional_shorthand", "schema-doors/valid/short_circuit_optional", "step-bodies/valid/calls_and_side_effects", "step-bodies/valid/combinators", "step-bodies/valid/fallible_all_short_circuit", "step-bodies/valid/fallible_any_short_circuit", "step-bodies/valid/fallible_collection_predicates", "step-bodies/valid/general_concat", "step-bodies/valid/pipe_chain_stages", "step-bodies/valid/step_bodies_combined", "step-bodies/valid/unicode_payloads", "step-bodies/valid/workflow_id"]
+ right: ["dag-fork/valid/after_single", "dag-fork/valid/child_collection_fork", "dag-fork/valid/child_collection_fork_sequential", "dag-fork/valid/empty_fork_collection", "dag-fork/valid/fall_through_chain", "dag-fork/valid/fork_action_fanout", "dag-fork/valid/fork_collection_join", "dag-fork/valid/fork_named_homogeneous", "dag-fork/valid/fork_sequential", "dag-fork/valid/fork_sequential_route", "dag-fork/valid/release_pipeline_combined", "dag-fork/valid/runtime_sized_fork", "dag-fork/valid/sit_one", "declarations/valid/action_run_bodies", "declarations/valid/advisory_side_channel", "declarations/valid/agent_seam", "declarations/valid/agent_seam_unmarked_control", "declarations/valid/timeout_inside_retry", "declarations/valid/worker_retry_backoff", "declarations/valid/worker_single_action", "declarations/valid/workers_multiple", "ergonomics/valid/flow_vocab_b1", "flagship/valid/awl_hello", "flow-shape/valid/action_param_hygiene", "flow-shape/valid/counter_hygiene", "flow-shape/valid/dev_flow", "flow-shape/valid/distribute_activity_tolerant", "flow-shape/valid/distribute_child_collect", "flow-shape/valid/distribute_child_tolerant", "flow-shape/valid/layer_hygiene", "flow-shape/valid/on_failure_compensates_to_step", "flow-shape/valid/region_close_bounded", "flow-shape/valid/region_nested_local_reuse", "flow-shape/valid/region_pure_decision", "flow-shape/valid/region_sibling_local_reuse", "flow-shape/valid/sequence_activity_tolerant", "flow-shape/valid/sequence_region_loopback", "flow-shape/valid/subflow_local_names", "flow-shape/valid/subflow_nested", "flow-shape/valid/value_route_payload", "header-types/valid/doc_comments", "header-types/valid/enum", "header-types/valid/line_width", "header-types/valid/max_arity_record", "header-types/valid/minimal", "header-types/valid/noncanonical_commas", "header-types/valid/workflow_timeout", "loop-outcomes/valid/enum_when_totality", "loop-outcomes/valid/nested_handlers", "schema-doors/valid/inline_verbatim_constraints", "schema-doors/valid/mixed_doors", "schema-doors/valid/optional_shorthand", "schema-doors/valid/short_circuit_optional", "step-bodies/valid/calls_and_side_effects", "step-bodies/valid/combinators", "step-bodies/valid/fallible_all_short_circuit", "step-bodies/valid/fallible_any_short_circuit", "step-bodies/valid/fallible_collection_predicates", "step-bodies/valid/general_concat", "step-bodies/valid/pipe_chain_stages", "step-bodies/valid/step_bodies_combined", "step-bodies/valid/unicode_payloads", "step-bodies/valid/workflow_id"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    covered::covered_set_is_byte_identical
+
+test result: FAILED. 28 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 69.35s
+
+error: test failed, to rerun pass `-p aion-rs --test awl_bc4_differential`
+EXIT=0

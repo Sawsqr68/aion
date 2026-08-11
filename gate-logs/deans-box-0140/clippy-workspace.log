@@ -1,0 +1,9 @@
+argv: cargo clippy --workspace --all-targets -- -D warnings
+cwd: /Users/deanwhiting/Developer/stack/aion  tree: c13b4c75b2f852ecdb8737574d21c7fdea3df69e  date: 2026-08-11T12:20:11+0000
+# ---
+   Compiling aion-server v0.14.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-server)
+    Checking aion-rs v0.14.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion)
+    Checking aion-cli v0.14.0 (/Users/deanwhiting/Developer/stack/aion/crates/aion-cli)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.63s
+# ---
+EXIT=0

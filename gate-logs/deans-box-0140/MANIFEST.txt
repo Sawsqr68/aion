@@ -1,0 +1,13 @@
+TREE=c13b4c75b2f852ecdb8737574d21c7fdea3df69e
+START=2026-08-11T12:20:09+0000
+fmt-check EXIT=0
+clippy-workspace EXIT=0
+clippy-percrate EXIT=0
+test-workspace EXIT=101
+END=2026-08-11T12:26:34+0000
+test-workspace-run3 EXIT=101
+END3=2026-08-11T12:42:39+0000
+test-workspace-run4 EXIT=101
+END4=2026-08-11T12:56:06+0000
+test-workspace-run5 EXIT=101
+END5=2026-08-11T13:19:19+0000

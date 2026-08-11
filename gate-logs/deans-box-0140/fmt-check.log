@@ -1,0 +1,5 @@
+argv: cargo fmt --check
+cwd: /Users/deanwhiting/Developer/stack/aion  tree: c13b4c75b2f852ecdb8737574d21c7fdea3df69e  date: 2026-08-11T12:20:09+0000
+# ---
+# ---
+EXIT=0

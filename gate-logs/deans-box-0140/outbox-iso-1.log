@@ -1,0 +1,15 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s
+     Running tests/outbox_e2e.rs (target/debug/deps/outbox_e2e-fbd31636cdcf6aa2)
+
+running 8 tests
+test outbox_late_completion_for_cancelled_ordinal_is_dropped ... ok
+test outbox_race_settles_first_completion_and_cancels_losers ... ok
+test outbox_failure_fails_fast_and_cancels_unresolved_siblings ... ok
+test outbox_map_completes_with_n_terminals_and_ordered_result ... ok
+test outbox_happy_path_completes_with_n_terminals_in_order ... ok
+test outbox_out_of_order_completions_still_settle_with_n_terminals ... ok
+test outbox_duplicate_completion_records_exactly_one_terminal ... ok
+test outbox_crash_recovery_rearms_stranded_done_row_and_finishes ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.68s
+

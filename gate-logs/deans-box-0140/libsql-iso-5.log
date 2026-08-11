@@ -1,0 +1,100 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running unittests src/lib.rs (target/debug/deps/aion_store_libsql-f1b41049a0159326)
+
+running 83 tests
+test config::tests::omitted_tunables_remain_unset ... ok
+test config::tests::deserializes_embedded_replica_mode ... ok
+test config::tests::deserializes_embedded_mode ... ok
+test config::tests::embedded_replica_requires_primary_url ... ok
+test error::tests::maps_libsql_error_to_backend ... ok
+test error::tests::maps_serde_json_error_to_serialization ... ok
+test connection::tests::opens_embedded_connection_and_queries ... ok
+test connection::tests::concurrent_writers_on_the_same_file_do_not_lock_each_other_out ... ok
+test namespace::tests::put_namespace_is_idempotent_on_existing_name ... ok
+test namespace::tests::register_creates_if_absent_and_persists ... ok
+test namespace::tests::get_returns_none_for_absent_name ... ok
+test append::tests::concurrent_same_expected_sequence_has_one_winner ... ok
+test namespace::tests::deprecate_sets_state_and_is_idempotent ... ok
+test namespace::tests::second_register_already_existed_bumps_last_seen_only ... ok
+test namespace::tests::list_orders_by_created_at_then_name ... ok
+test append::tests::non_contiguous_batch_rolls_back_without_writes ... ok
+test append::tests::empty_batch_checks_guard_and_leaves_head_unchanged ... ok
+test append::tests::ahead_expected_sequence_rolls_back_without_writes ... ok
+test append::tests::appends_first_batch_from_empty_history ... ok
+test append::tests::appends_multi_event_batch_with_contiguous_sequences ... ok
+test append::tests::stale_expected_sequence_rolls_back_without_writes ... ok
+test namespace::tests::set_placement_updates_existing_and_is_not_found_when_absent ... ok
+test outbox_tests::append_outbox_batch_ignores_duplicate_dispatch_key ... ok
+test outbox_tests::append_with_outbox_rolls_back_both_on_failure ... ok
+test outbox_tests::legacy_null_node_reads_back_as_none ... ok
+test outbox_tests::legacy_null_namespace_and_task_queue_read_back_as_default ... ok
+test outbox_tests::claim_respects_limit ... ok
+test outbox_tests::append_with_outbox_commits_events_and_rows_atomically ... ok
+test outbox_tests::count_inflight_outbox_rows_excludes_terminal_only_namespace ... ok
+test outbox_tests::event_only_append_with_outbox_matches_plain_append ... ok
+test outbox_tests::staged_row_round_trips_node_affinity ... FAILED
+test outbox_tests::count_inflight_outbox_rows_counts_pending_and_claimed_per_namespace ... ok
+test outbox_tests::claim_complete_retry_round_trip ... ok
+test outbox_tests::count_claimed_outbox_rows_counts_only_claimed_not_pending_backlog ... ok
+test outbox_tests::node_less_scoped_claim_excludes_pinned_rows ... ok
+test outbox_tests::count_claimed_by_namespace_matches_per_namespace_scalar_counts ... ok
+test outbox_tests::staged_row_round_trips_namespace_and_task_queue ... ok
+test outbox_tests::pending_outbox_routes_enumerates_distinct_claimable_routes ... ok
+test outbox_tests::scoped_claim_matches_namespace_task_queue_and_node_predicate ... ok
+test outbox_tests::unscoped_claim_still_claims_any_row ... ok
+test package::tests::deployed_at_round_trips_through_persisted_row ... ok
+test outbox_tests::rearm_outbox_pending_revives_a_done_row_and_inserts_a_fresh_one ... ok
+test pool::tests::an_absent_read_pool_size_retains_nothing ... ok
+test outbox_tests::stale_claim_rearm_touches_only_old_claimed_rows_and_preserves_attempt ... ok
+test pool::tests::many_tasks_against_one_store_interleave_writes_and_reads_safely ... ok
+test outbox_tests::settle_cancelled_is_idempotent_and_terminal ... ok
+test pool::tests::the_pool_retains_at_most_the_configured_count ... ok
+test read::tests::list_active_returns_only_running_workflows ... ok
+test read::tests::malformed_event_blob_maps_to_serialization_error ... ok
+test read::tests::query_combines_filter_dimensions ... ok
+test read::tests::query_binds_filter_values_with_sql_metacharacters ... ok
+test pool::tests::a_pooled_connection_carries_the_configured_pragmas_not_only_the_first ... ok
+test read::tests::query_combines_parent_with_child_filters ... ok
+test read::tests::query_default_returns_all_workflows ... ok
+test read::tests::query_filters_by_start_time_bounds ... ok
+test store::tests::libsql_store_is_send_sync_static ... ok
+test read::tests::query_filters_by_parent ... ok
+test read::tests::read_history_from_range_scan_uses_primary_key_index ... ok
+test read::tests::query_filters_by_status ... ok
+test timer::tests::fire_at_encoding_round_trips_losslessly ... ok
+test read::tests::read_history_returns_empty_for_unknown_workflow ... ok
+test read::tests::query_filters_by_workflow_type ... ok
+test read::tests::validate_event_compatibility_rejects_stale_workflow_started_blob ... ok
+test read::tests::read_history_from_returns_range_suffix ... ok
+test read::tests::read_history_returns_events_in_appended_order ... ok
+test schema::tests::ensure_schema_creates_tables_and_indexes ... ok
+test schema::tests::ensure_schema_is_idempotent ... ok
+test read::tests::status_projection_reports_running_and_completed ... ok
+test visibility::tests::timestamp_encoding_round_trips_losslessly ... ok
+test store::tests::a_write_is_visible_from_a_different_pooled_connection ... ok
+test store::tests::store_can_be_used_as_event_store_trait_object ... ok
+test timer::tests::expired_timers_returns_due_rows_including_as_of_boundary ... ok
+test timer::tests::schedule_timer_replaces_existing_row_for_same_key ... ok
+test visibility::tests::libsql_store_implements_visibility_store_trait ... ok
+test visibility::tests::count_workflows_counts_total_and_filtered_matches ... ok
+test store::tests::open_creates_schema ... ok
+test visibility::tests::list_filters_standard_fields_and_time_ranges ... ok
+test visibility::tests::list_empty_filter_orders_by_start_time_desc_and_paginates ... ok
+test visibility::tests::record_visibility_round_trips_failed_step_and_reason ... ok
+test visibility::tests::list_filters_custom_search_attributes ... ok
+test visibility::tests::record_visibility_inserts_and_updates_queryable_row ... ok
+test connection::tests::maps_replica_open_failure_to_backend ... ok
+test outbox_tests::a_completion_survives_a_rollback_of_a_concurrent_writer_transaction ... ok
+
+failures:
+
+---- outbox_tests::staged_row_round_trips_node_affinity stdout ----
+Error: Backend("SQLite failure: `bad parameter or other API misuse`")
+
+
+failures:
+    outbox_tests::staged_row_round_trips_node_affinity
+
+test result: FAILED. 82 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+error: test failed, to rerun pass `-p aion-store-libsql --lib`
