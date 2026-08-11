@@ -19,11 +19,12 @@ use std::time::Duration;
 
 use crate::Span;
 use crate::ast::{
-    HARNESS_COMMAND_FIELD, HARNESS_CONCURRENCY_FIELD, HARNESS_CWD_FIELD, HARNESS_ENV_PASS_FIELD,
-    HARNESS_EXIT_GRACE_FIELD, HARNESS_KIND_ACP, HARNESS_KIND_FIELD, HARNESS_KIND_NORN,
-    HARNESS_PERMISSION_ALLOW_ONCE, HARNESS_PERMISSION_DENY, HARNESS_PERMISSION_FIELD,
-    HARNESS_RECONNECT_INITIAL_BACKOFF_FIELD, HARNESS_RECONNECT_MAX_ATTEMPTS_FIELD,
-    HARNESS_RECONNECT_MAX_BACKOFF_FIELD, HarnessDecl, WorkerDecl,
+    HARNESS_BINARY_FIELD, HARNESS_COMMAND_FIELD, HARNESS_CONCURRENCY_FIELD, HARNESS_CWD_FIELD,
+    HARNESS_ENV_PASS_FIELD, HARNESS_EXIT_GRACE_FIELD, HARNESS_KIND_ACP, HARNESS_KIND_FIELD,
+    HARNESS_KIND_NORN, HARNESS_PERMISSION_ALLOW_ONCE, HARNESS_PERMISSION_DENY,
+    HARNESS_PERMISSION_FIELD, HARNESS_RECONNECT_INITIAL_BACKOFF_FIELD,
+    HARNESS_RECONNECT_MAX_ATTEMPTS_FIELD, HARNESS_RECONNECT_MAX_BACKOFF_FIELD, HarnessDecl,
+    WorkerDecl,
 };
 
 /// A `harness` section that passed the checker and could still not be turned into a
@@ -257,10 +258,14 @@ fn build_kind(
             })
         }
         Some(HARNESS_KIND_NORN) => Ok(CompiledHarnessKind::Norn {
-            binary: harness
-                .binary
-                .as_ref()
-                .map(|binary| PathBuf::from(&binary.value.value)),
+            // OPTIONAL, so it goes through `optional_path` rather than `required_path` —
+            // but through the same absoluteness net. The checker rules `binary` absolute
+            // exactly as it rules `command` and `cwd`; carrying the value here with a bare
+            // `PathBuf::from` would have left that one rule with no backstop, so a future
+            // checker edit that dropped it would surface as a `norn` spawned from whatever
+            // directory a supervisor happened to be in, at three in the morning, instead of
+            // as the named defect this error type exists to report.
+            binary: optional_path(queue, HARNESS_BINARY_FIELD, harness.binary.as_ref())?,
         }),
         Some(other) => Err(HarnessConfigError::Unusable {
             queue: queue.to_owned(),
@@ -343,6 +348,37 @@ fn required_path(
             span: harness.span,
         });
     };
+    absolute_path(queue, field, setting)
+}
+
+/// An OPTIONAL absolute-path setting, held to the same rule as a required one.
+///
+/// `Ok(None)` is the setting's absence, which is a first-class state for `binary` — the
+/// adapter's own documented `norn`-on-`PATH` default stands. What absence is NOT is an
+/// excuse to skip the check on a value that IS present: the checker rules this field
+/// absolute exactly as it rules `command` and `cwd`, and this is that rule's backstop.
+fn optional_path(
+    queue: &str,
+    field: &'static str,
+    setting: Option<&crate::ast::HarnessSetting<crate::ast::HarnessText>>,
+) -> Result<Option<PathBuf>, HarnessConfigError> {
+    setting
+        .map(|setting| absolute_path(queue, field, setting))
+        .transpose()
+}
+
+/// The absoluteness rule itself, stated once so the required and optional forms cannot
+/// come to disagree about what an acceptable path is.
+///
+/// Reaching here with a relative path is a CHECKER DEFECT, not an operator mistake: the
+/// checker refuses one by name, with a written reason. Reported rather than resolved,
+/// because resolving it against the launching process's directory is precisely the
+/// silent scoping the whole rule exists to prevent.
+fn absolute_path(
+    queue: &str,
+    field: &'static str,
+    setting: &crate::ast::HarnessSetting<crate::ast::HarnessText>,
+) -> Result<PathBuf, HarnessConfigError> {
     let path = PathBuf::from(&setting.value.value);
     if !path.is_absolute() {
         return Err(HarnessConfigError::Unusable {
@@ -355,3 +391,6 @@ fn required_path(
     }
     Ok(path)
 }
+
+#[cfg(test)]
+mod tests;

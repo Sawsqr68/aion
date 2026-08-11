@@ -340,15 +340,26 @@ where
 /// be transient (a provider-overload burst, a one-off malformed frame, a
 /// dropped pipe), so the engine re-dispatches.
 ///
-/// A DETERMINISTIC error ([`HarnessError::is_deterministic`] — today exactly
-/// [`HarnessError::Contract`]) is TERMINAL: the run completed, but its native
-/// outcome cannot satisfy the canonical agent-outcome contract — a property
-/// of how the run is configured, not of the attempt. Retrying it re-spends a
-/// whole live agent run to hit the same refusal (a `retry 5 backoff 30s..5m`
-/// policy would burn five model runs on a permanent misconfiguration), so it
-/// must not be retried. The classification itself lives in the seam crate as
-/// an exhaustive match, so a new variant decides its fate there, at compile
-/// time — never by this function's default.
+/// A DETERMINISTIC error ([`HarnessError::is_deterministic`] — today
+/// [`HarnessError::Contract`] or [`HarnessError::Configuration`]) is TERMINAL,
+/// and both arms are terminal for one reason: the next attempt meets the same
+/// wall, because the wall is a property of how the run is CONFIGURED rather
+/// than of the attempt.
+///
+/// * [`HarnessError::Contract`] — the run completed, but its native outcome
+///   cannot satisfy the canonical agent-outcome contract.
+/// * [`HarnessError::Configuration`] — the harness could not be LAUNCHED as
+///   configured, so no run started at all: an environment pass-through entry
+///   that is a `KEY=VALUE` pair instead of a name, a declaration omitting the
+///   variable the program is looked up on. The next attempt reads the same
+///   document.
+///
+/// Retrying either re-spends a whole live agent run — or a whole dispatch
+/// budget — to hit the same refusal (a `retry 5 backoff 30s..5m` policy would
+/// burn five attempts on a permanent misconfiguration), so neither is
+/// retried. The classification itself lives in the seam crate as an exhaustive
+/// match, so a new variant decides its fate there, at compile time — never by
+/// this function's default, and never by this comment falling behind it.
 #[must_use]
 pub fn harness_error_to_outcome(error: &HarnessError) -> DispatchOutcome {
     let failure = if error.is_deterministic() {
