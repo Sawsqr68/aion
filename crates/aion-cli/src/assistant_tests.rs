@@ -144,6 +144,14 @@ fn describe_reports_the_embedded_identity_and_contract() -> TestResult {
     assert_eq!(report["session"]["continue_signal"], CONTINUE_SIGNAL);
     assert_eq!(report["session"]["status_query"], STATUS_QUERY);
     assert_eq!(report["document_bytes"], json!(embedded.source().len()));
+    // The queue is part of the identity an operator has to act on: without it
+    // they can start a session and have no way to learn what to serve.
+    assert_eq!(report["task_queue"], embedded.task_queue());
+    assert_ne!(
+        report["task_queue"],
+        aion_core::DEFAULT_TASK_QUEUE,
+        "the built-in assistant must never report the out-of-box workers' queue (#200)"
+    );
     Ok(())
 }
 

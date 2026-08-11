@@ -242,6 +242,25 @@ LIMINAL_ADDRESS="$(liminal_listen_address)" || fail "the server log shows no lim
 # the binary name — another Aion home's worker on this box is not ours.
 if pgrep -f "agent-dev-worker --address $LIMINAL_ADDRESS" >/dev/null 2>&1; then
     note "a worker for $LIMINAL_ADDRESS is already running (pid $(pgrep -f "agent-dev-worker --address $LIMINAL_ADDRESS" | head -1)) — leaving it alone"
+    # ...but say so if it is serving a queue the deployed document no longer
+    # dispatches on. The assistant moved off `default` onto its own private
+    # queue (#200); a worker started before that move connects, registers, and
+    # then receives nothing at all — a silent park that looks exactly like a
+    # wedged agent. The document states the queue; the worker's own startup
+    # line states what it serves.
+    DECLARED_QUEUE="$(awk '/^worker [a-z][a-z0-9_]*$/ { print $2; exit }' "$ASSISTANT_AWL")"
+    if [ -z "$DECLARED_QUEUE" ]; then
+        note "WARNING: could not read the task queue from $ASSISTANT_AWL, so the running worker's"
+        note "         queue could not be checked. If the assistant never answers, restart it."
+    elif ! grep -qE "task_queue=$DECLARED_QUEUE([^A-Za-z0-9_]|$)" "$WORKER_LOG" 2>/dev/null; then
+        note "WARNING: the running worker does not report serving task queue '$DECLARED_QUEUE',"
+        note "         which is the queue $ASSISTANT_AWL declares. A worker on another queue"
+        note "         registers happily and then receives no dispatch at all. Stop it and re-run"
+        note "         this script:  pkill -f \"agent-dev-worker --address $LIMINAL_ADDRESS\""
+        note "         (evidence: $WORKER_LOG)"
+    else
+        note "the running worker serves task queue '$DECLARED_QUEUE', as the document declares"
+    fi
 else
     REGISTRATIONS_BEFORE="$(grep -c '"identity":"agent-dev-worker"' "$SERVER_LOG" || true)"
     WORKER_ARGS=(--address "$LIMINAL_ADDRESS" --norn-account "$NORN_ACCOUNT")
