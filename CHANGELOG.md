@@ -89,6 +89,29 @@ whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
   regeneration; until then those workers are excluded from dispatch on a server
   whose probe is running.
 
+- **Known issue: the libsql backend can fail under concurrent store access
+  (#85).** The `libsql` dependency this release pins (0.9.30) carries a
+  double-close defect — a use-after-free in connection teardown — that can
+  fire when many tasks drive one store concurrently. It surfaces as a store
+  error naming `SQLite failure: bad parameter or other API misuse`, or as a
+  process abort (SIGSEGV/SIGABRT). The defect is in the dependency, not in
+  aion's store adapter, and it predates this release: 0.13.8 ships the same
+  pin. The concurrent-tasks-against-one-store shape is exactly how the server
+  uses its store, so this is reachable in production, not only in tests.
+
+  **Who this affects.** Servers explicitly configured with
+  `store.backend = "libsql"`. The default haematite backend and the memory
+  backend do not use libsql and are unaffected.
+
+  **What you will see.** Rarely, under concurrent load: the API-misuse store
+  error above, or a process crash. In this release's own gate battery the
+  defect fired roughly once per full workspace test run — each time at a
+  different test, always with the same face.
+
+  **What to do.** Prefer the default haematite backend. If you run libsql
+  and hit this face, it is this known defect, not an aion regression; the
+  remedy is a dependency move, tracked as #85.
+
 ## 0.13.8 — 2026-08-11
 
 - **Errors explain themselves in the editor (#187).** An AWL diagnostic now

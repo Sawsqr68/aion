@@ -81,3 +81,18 @@ known-mechanism dependency flake (#85) as the only red class, each affected
 binary isolation-proven green at the same tree. Publish/hold decision on this
 classification routed to Waffles (his 11:45Z ruling conditioned publish on
 battery green; this is green-except-#85-classified, so the word is his).
+
+## Waffles' word (13:30Z): PUBLISH, with the reachability question settled
+
+Ruled: publish under the classification. His riding condition — settle whether
+the double-close is production-reachable or test-only — is settled REACHABLE:
+the failing pool test models the server's own shape (many tasks against one
+Arc-shared store through the connection pool), and `store.backend = "libsql"`
+is a selectable production backend (`config/env.rs:252`). Accordingly the
+known-issues entry ships in the 0.14.0 CHANGELOG (both copies — root and
+`crates/aion-server/changelog-embed/`). The default haematite backend and the
+memory backend do not use libsql and are unaffected. Because the embedded
+changelog is a build input to aion-server, that crate was re-verified against
+its inputs at the changelog commit (fmt + clippy + full crate tests on Dean's
+box); every other crate's inputs are byte-identical to c13b4c75b and their
+battery verdicts carry.
