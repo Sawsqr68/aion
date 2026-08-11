@@ -892,3 +892,100 @@ curl -sS -X POST "http://127.0.0.1:8080/schedules/<uuid>/resume?namespace=defaul
 curl -sS "http://127.0.0.1:8080/schedules/<uuid>?namespace=default"
 curl -sS -X DELETE "http://127.0.0.1:8080/schedules/<uuid>?namespace=default"
 ```
+
+## The update check (slice one: know and show)
+
+"Does a newer `aion-cli` exist on crates.io?" — the server can answer, and
+the answer is always something an operator asked for.
+
+### What it is
+
+The server binary embeds a small AWL document,
+`crates/aion-server/update-check-embed/update-check.awl`, installed into the
+engine catalog at boot under the same only-the-empty-case rule as the
+built-in assistant (a restart never re-points a route an operator chose).
+Its one action declares a command body:
+
+```
+run "curl -fsS https://index.crates.io/ai/on/aion-cli"
+```
+
+so the fetch is **runtime `curl` through the declared-body spine** — the
+server's default build carries zero outbound-HTTP dependencies, and every
+line curl writes streams onto the run's transcript as it arrives, exactly
+like any other declared command. When the run completes, the server parses
+the fetched sparse-index lines, refuses loudly on anything malformed
+(including a body whose lines name a different crate), and records the
+greatest **installable** version: yanked releases and prereleases are both
+excluded, because a plain `cargo install aion-cli` refuses both — announcing
+`0.14.0-rc.1` against a stable `0.13.7` would send you through the upgrade
+and hand you `0.13.7` back.
+
+`GET /update-status` (authenticated, same posture as `/build`) serves the
+result:
+
+```json
+{"installed": "0.13.7", "latest_known": "0.14.0", "checked_at": "2026-08-11T01:00:00Z"}
+```
+
+`latest_known` and `checked_at` are `null` until a check has ever completed
+— a fresh server has honestly never checked, and nothing fabricates
+otherwise. The recorded value is in-memory: a restart honestly forgets it,
+because the registry may have moved while the server was down.
+
+The ops console shows the result in the header, beside "What's new": an
+"update available" pill appears only when `latest_known` is present and
+semver-greater than the installed version (a malformed version on either
+side is shown as its own loud state, never silently hidden), and the panel's
+**Check now** button is the way to run a check — it starts one
+`update_check` workflow in the selected namespace through the ordinary
+start surface. From the CLI the exact command is:
+
+```sh
+aion start update_check --input '{}'
+```
+
+The `--input '{}'` is required: the document declares no inputs, so its
+input schema is the empty object, and the CLI's default `--input null` is
+refused by start-input validation (`null is not of type "object"` — a typed
+refusal, pinned by `crates/aion-server/tests/update_check_start_binding.rs`).
+
+### Manual-only, by design
+
+There is **no cadence configuration key, no timer, and no check on
+startup** — and the absent key is the design, not a missing default. The
+server never phones home on its own; every check is one explicit operator
+act. If a cadence is ever wanted, it gets designed then, with the
+operator's number.
+
+### A hung or failed check
+
+The declared `curl` carries no timeout (a timeout would be an invented
+number), so a check against an unreachable registry is an ordinary running
+workflow that never completes — visible in the workflow list, cancellable
+like any run:
+
+```sh
+aion cancel <workflow-id> --reason 'update check hung'
+# or through the console's workflow view, or POST /workflows/cancel
+```
+
+A **failed** check (curl exit non-zero, e.g. no network) is a single
+attempt — no retry policy is declared, so one click never becomes a retry
+loop — and shows as a Failed `update_check` workflow; `/update-status`
+keeps the previous answer and its `checked_at` visibly does not move.
+Note also that, as with every activity, the command's whole output is
+recorded into the run's durable event history: the fetched index body
+(~a few KB today) is persisted per check, which is the durability contract
+working as designed — worth knowing before pointing the check at anything
+that answers with megabytes.
+
+### What slice one will not do
+
+Slice one performs **no install and no restart**. It knows and shows;
+becoming the newer version is a separate act, and the estate law below
+governs any future motion in that direction:
+
+> **Ratified estate law:** any action that restarts Tom's live server gates
+> on Tom's explicit act, always — his act must be the mechanism, not a
+> confirmation dialog.
