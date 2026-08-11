@@ -31,13 +31,19 @@ use std::sync::OnceLock;
 use agent_dev_worker::handlers;
 use agent_dev_worker::shell::Shell;
 use agent_dev_worker::types::{GateInput, LandInput, ProvisionInput};
-use aion_core::ActivityId;
+use aion_core::{ActivityId, RunId, WorkflowId};
 use aion_worker::ActivityContext;
 
 type TestResult = Result<(), Box<dyn Error>>;
 
 fn activity_context() -> ActivityContext {
-    ActivityContext::new(ActivityId::from_sequence_position(1), 1).0
+    ActivityContext::new(
+        WorkflowId::new_v4(),
+        RunId::new_v4(),
+        ActivityId::from_sequence_position(1),
+        1,
+    )
+    .0
 }
 
 static WORKSPACE_ROOT: OnceLock<PathBuf> = OnceLock::new();

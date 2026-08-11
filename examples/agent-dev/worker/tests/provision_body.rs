@@ -26,7 +26,7 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 
 use agent_dev_worker::descriptors::ASSISTANT_DOCUMENT;
-use aion_core::ActivityId;
+use aion_core::{ActivityId, RunId, WorkflowId};
 use aion_worker::ActivityContext;
 use aion_worker::shell::ShellAction;
 
@@ -85,7 +85,13 @@ fn expand(command: &str, root: &Path) -> Result<String, Box<dyn Error>> {
 }
 
 fn activity_context() -> ActivityContext {
-    ActivityContext::new(ActivityId::from_sequence_position(1), 1).0
+    ActivityContext::new(
+        WorkflowId::new_v4(),
+        RunId::new_v4(),
+        ActivityId::from_sequence_position(1),
+        1,
+    )
+    .0
 }
 
 fn arguments(run_id: &str, repo_path: &str) -> BTreeMap<String, serde_json::Value> {

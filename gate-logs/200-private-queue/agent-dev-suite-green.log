@@ -1,0 +1,107 @@
+   Compiling agent-dev-worker v0.1.0 (/Users/tom/Developer/ablative/stack/aion/examples/agent-dev/worker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 16.06s
+     Running unittests src/lib.rs (target/debug/deps/agent_dev_worker-4dc610e1b43fca97)
+
+running 28 tests
+test descriptors::tests::the_embedded_document_is_the_shipped_one ... ok
+test descriptors::tests::the_checker_refuses_an_agent_marker_on_the_wrong_shape ... ok
+test descriptors::tests::the_checker_accepts_the_agent_marker_on_the_canonical_record ... ok
+test descriptors::tests::the_shared_queue_invariant_covers_more_than_one_document ... ok
+test descriptors::tests::advertising_no_descriptors_is_refused_by_the_same_gate ... ok
+test descriptors::tests::names_and_descriptors_cannot_disagree ... ok
+test descriptors::tests::the_advertised_surface_is_admitted_by_the_assistant_contract ... ok
+test descriptors::tests::the_agent_split_is_exactly_what_the_document_marks ... ok
+test handlers::tests::tail_keeps_the_end_of_long_output_and_short_output_whole ... ok
+test handlers::tests::workspace_root_defaults_under_home ... ok
+test handlers::tests::workspace_root_empty_override_falls_back_to_home ... ok
+test descriptors::tests::a_drifted_schema_is_refused ... ok
+test descriptors::tests::the_surface_is_deterministic ... ok
+test descriptors::tests::the_queue_comes_from_the_document ... ok
+test handlers::tests::workspace_root_override_wins_over_home ... ok
+test descriptors::tests::every_document_on_this_queue_agrees_with_the_advertised_surface ... ok
+test handlers::tests::workspace_root_relative_home_is_a_hard_error ... ok
+test handlers::tests::workspace_root_relative_override_is_a_hard_error ... ok
+test handlers::tests::workspace_root_without_home_or_override_is_a_hard_error ... ok
+test norn_invocation::tests::a_supplied_model_reaches_the_argv_as_norns_model_flag ... ok
+test norn_invocation::tests::the_advice_names_this_workers_own_flag_spelling ... ok
+test norn_invocation::tests::the_argv_carries_the_confinement_the_session_pin_and_the_account ... ok
+test norn_invocation::tests::the_argv_is_otherwise_identical_with_and_without_the_opt_in ... ok
+test norn_invocation::tests::the_model_is_purely_additive_to_the_argv ... ok
+test norn_invocation::tests::the_opt_in_puts_the_flag_in_the_argv ... ok
+test norn_invocation::tests::the_promoted_detection_reads_the_opt_in_from_this_workers_argv ... ok
+test norn_invocation::tests::without_a_model_the_flag_is_absent_so_norn_chooses ... ok
+test norn_invocation::tests::without_the_opt_in_the_flag_is_absent ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.43s
+
+     Running unittests src/main.rs (target/debug/deps/agent_dev_worker-c4995b9217adb6d4)
+
+running 8 tests
+test tests::all_flags_with_values_parse_and_addresses_repeat ... ok
+test tests::the_other_flags_still_default_once_the_account_is_supplied ... ok
+test tests::degraded_session_resume_is_off_unless_asked_for ... ok
+test tests::the_degraded_session_switch_takes_no_value ... ok
+test tests::the_norn_model_passes_through_when_supplied ... ok
+test tests::every_value_taking_flag_bails_when_its_value_is_missing ... ok
+test tests::no_arguments_bails_because_the_norn_account_has_no_default ... ok
+test tests::unknown_argument_bails ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/handlers_shims.rs (target/debug/deps/handlers_shims-7da6ba5d88f6ca7e)
+
+running 12 tests
+test gate_land::gate_that_cannot_run_at_all_is_a_loud_terminal_failure ... ok
+test gate_land::gate_against_a_missing_workspace_is_the_explicit_diagnostic ... ok
+test provision_rejects_a_run_id_that_escapes_the_root ... ok
+test gate_land::land_with_an_empty_rev_parse_is_terminal ... ok
+test gate_land::land_with_nothing_to_commit_is_terminal ... ok
+test gate_land::gate_failure_is_recorded_data_carrying_the_diagnostics_tail ... ok
+test gate_land::gate_test_failure_after_clean_clippy_is_recorded_data ... ok
+test gate_land::gate_pass_runs_clippy_then_tests ... ok
+test gate_land::land_commits_and_returns_the_commit_sha ... ok
+test provision_collision_renames_the_stale_attempt_aside ... ok
+test provision_clones_into_the_run_keyed_layout_and_creates_the_branch ... ok
+test provision_failing_clone_is_terminal_with_diagnostics ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.86s
+
+     Running tests/provision_body.rs (target/debug/deps/provision_body-7b0275f566242e07)
+
+running 5 tests
+test an_empty_root_fails_with_empty_stdout ... ok
+test a_malformed_run_id_fails_with_empty_stdout ... ok
+test the_scratch_branch_prints_exactly_the_workspace_path ... ok
+test the_rename_aside_branch_prints_exactly_the_workspace_path ... ok
+test the_attached_branch_prints_exactly_the_workspace_path ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.28s
+
+     Running tests/wire_compat.rs (target/debug/deps/wire_compat-1a24a1932eacdbdf)
+
+running 6 tests
+test workspace_and_gate_input_match_the_gleam_codec ... ok
+test gate_result_matches_the_gleam_codec ... ok
+test land_result_matches_the_gleam_codec ... ok
+test contract_schemas_exist_beside_the_package ... ok
+test provision_input_matches_the_gleam_codec ... ok
+test land_input_matches_the_gleam_codec ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/workspace_persistence.rs (target/debug/deps/workspace_persistence-a62982f60149d33f)
+
+running 3 tests
+test missing_workspace_fails_with_the_explicit_diagnostic ... ok
+test run_id_collision_renames_the_stale_attempt_aside_and_reprovisions ... ok
+test workspace_survives_reboot_purge_and_later_activity_succeeds ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.14s
+
+   Doc-tests agent_dev_worker
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+SUITE_EXIT=0

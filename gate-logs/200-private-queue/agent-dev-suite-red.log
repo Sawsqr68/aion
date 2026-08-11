@@ -1,0 +1,72 @@
+     Locking 8 packages to latest Rust 1.97.1 compatible versions
+    Updating aion-awl v0.13.6 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl) -> v0.13.8
+    Updating aion-core v0.13.6 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core) -> v0.13.8
+    Updating aion-integration-norn v0.13.6 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-norn) -> v0.13.8
+    Updating aion-integrations v0.13.6 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations) -> v0.13.8
+    Updating aion-package v0.13.6 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package) -> v0.13.8
+    Updating aion-proto v0.13.6 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto) -> v0.13.8
+    Updating aion-proto-generated v0.13.6 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated) -> v0.13.8
+    Updating aion-worker v0.13.6 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker) -> v0.13.8
+   Compiling aion-core v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-core)
+   Compiling aion-proto-generated v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto-generated)
+   Compiling aion-package v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-package)
+   Compiling aion-integrations v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integrations)
+   Compiling aion-integration-norn v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-integration-norn)
+   Compiling aion-proto v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-proto)
+   Compiling aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-worker)
+   Compiling aion-awl v0.13.8 (/Users/tom/Developer/ablative/stack/aion/crates/aion-awl)
+   Compiling agent-dev-worker v0.1.0 (/Users/tom/Developer/ablative/stack/aion/examples/agent-dev/worker)
+error[E0061]: this function takes 4 arguments but 2 arguments were supplied
+  --> tests/workspace_persistence.rs:40:5
+   |
+40 |     ActivityContext::new(ActivityId::from_sequence_position(1), 1).0
+   |     ^^^^^^^^^^^^^^^^^^^^ ---------------------------------------- two arguments of type `WorkflowId` and `RunId` are missing
+   |
+note: associated function defined here
+  --> /Users/tom/Developer/ablative/stack/aion/crates/aion-worker/src/context.rs:70:12
+   |
+70 |     pub fn new(
+   |            ^^^
+help: provide the arguments
+   |
+40 |     ActivityContext::new(/* WorkflowId */, /* RunId */, ActivityId::from_sequence_position(1), 1).0
+   |                          ++++++++++++++++++++++++++++++
+
+error[E0061]: this function takes 4 arguments but 2 arguments were supplied
+  --> tests/handlers_shims.rs:25:5
+   |
+25 |     ActivityContext::new(ActivityId::from_sequence_position(1), 1).0
+   |     ^^^^^^^^^^^^^^^^^^^^ ---------------------------------------- two arguments of type `WorkflowId` and `RunId` are missing
+   |
+note: associated function defined here
+  --> /Users/tom/Developer/ablative/stack/aion/crates/aion-worker/src/context.rs:70:12
+   |
+70 |     pub fn new(
+   |            ^^^
+help: provide the arguments
+   |
+25 |     ActivityContext::new(/* WorkflowId */, /* RunId */, ActivityId::from_sequence_position(1), 1).0
+   |                          ++++++++++++++++++++++++++++++
+
+error[E0061]: this function takes 4 arguments but 2 arguments were supplied
+  --> tests/provision_body.rs:88:5
+   |
+88 |     ActivityContext::new(ActivityId::from_sequence_position(1), 1).0
+   |     ^^^^^^^^^^^^^^^^^^^^ ---------------------------------------- two arguments of type `WorkflowId` and `RunId` are missing
+   |
+note: associated function defined here
+  --> /Users/tom/Developer/ablative/stack/aion/crates/aion-worker/src/context.rs:70:12
+   |
+70 |     pub fn new(
+   |            ^^^
+help: provide the arguments
+   |
+88 |     ActivityContext::new(/* WorkflowId */, /* RunId */, ActivityId::from_sequence_position(1), 1).0
+   |                          ++++++++++++++++++++++++++++++
+
+For more information about this error, try `rustc --explain E0061`.
+error: could not compile `agent-dev-worker` (test "workspace_persistence") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `agent-dev-worker` (test "provision_body") due to 1 previous error
+error: could not compile `agent-dev-worker` (test "handlers_shims") due to 1 previous error
+SUITE_EXIT=101
