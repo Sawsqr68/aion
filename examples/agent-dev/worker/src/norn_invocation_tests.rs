@@ -77,7 +77,8 @@ fn the_promoted_detection_reads_the_opt_in_from_this_workers_argv() {
 fn the_advice_names_this_workers_own_flag_spelling() {
     // The promoted advice carries the caller's opt-in instruction verbatim;
     // this worker's is its own `--norn-allow-degraded-session`, not norn's
-    // flag and not the built-in verb's `--norn-arg` spelling.
+    // flag and not the built-in verb's — which is no longer a flag at all, but
+    // an entry in the worker document's `harness` section `args` list.
     let advice = degraded_session_advice(RECORDED_REFUSAL, false, DEGRADED_SESSION_OPT_IN)
         .unwrap_or_default();
     assert!(

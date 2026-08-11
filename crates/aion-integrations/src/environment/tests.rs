@@ -154,18 +154,35 @@ fn a_relative_multi_component_program_is_not_gated_on_path() -> TestResult {
 }
 
 #[test]
-fn an_environment_fault_reaches_the_seam_as_a_retryable_transport_failure() {
-    let error = EnvironmentError::MissingForExec {
-        variable: "PATH",
-        program: "norn".to_owned(),
-        declared: "HOME".to_owned(),
-    };
-    let mapped: crate::HarnessError = error.into();
-    assert!(
-        matches!(mapped, crate::HarnessError::Transport { .. }),
-        "a corrected declaration makes the same run succeed, so it stays retryable: {mapped:?}"
-    );
-    assert!(mapped.to_string().contains("PATH"), "{mapped}");
+fn every_environment_fault_reaches_the_seam_as_a_deterministic_refusal() {
+    for error in [
+        EnvironmentError::EmptyName,
+        EnvironmentError::NameContainsEquals {
+            entry: "PATH=/usr/bin".to_owned(),
+        },
+        EnvironmentError::MissingForExec {
+            variable: "PATH",
+            program: "norn".to_owned(),
+            declared: "HOME".to_owned(),
+        },
+    ] {
+        let rendered = error.to_string();
+        let mapped: crate::HarnessError = error.into();
+        assert!(
+            matches!(mapped, crate::HarnessError::Configuration { .. }),
+            "the launch was refused by a value in the document, and the next attempt reads \
+             the same document: {mapped:?}"
+        );
+        assert!(
+            mapped.is_deterministic(),
+            "a config refusal that presented as retryable would spend the whole attempt \
+             budget confirming a wall that cannot move: {mapped:?}"
+        );
+        assert!(
+            mapped.to_string().contains(&rendered),
+            "the seam error carries the declaration fault's own words: {mapped}"
+        );
+    }
 }
 
 #[test]

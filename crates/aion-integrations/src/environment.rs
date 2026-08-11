@@ -92,11 +92,16 @@ pub enum EnvironmentError {
 
 impl From<EnvironmentError> for HarnessError {
     fn from(error: EnvironmentError) -> Self {
-        // A declaration fault surfaces on the seam as a TRANSPORT failure: the channel to
-        // the agent could not be opened. It is deliberately not `Protocol` — nothing was
-        // malformed on a wire — and not `Contract` — a corrected declaration makes the very
-        // same run succeed, so it must stay retryable.
-        Self::transport(error.to_string())
+        // DETERMINISTIC, against `HarnessError::is_deterministic`'s own rule: every variant
+        // of this error is a property of how the run is CONFIGURED, and the next attempt
+        // reads the same document. A blank pass-through entry cannot become non-blank by
+        // being retried; a `KEY=VALUE` entry cannot become a name; a declaration that omits
+        // the variable the program is looked up on omits it just as hard a second time.
+        //
+        // It is deliberately not `Transport` — the channel never opened, and a config
+        // refusal presenting as a flaky pipe tells the operator the wrong story and spends
+        // the whole attempt budget confirming it.
+        Self::configuration(error.to_string())
     }
 }
 
@@ -139,9 +144,19 @@ impl EnvironmentDeclaration {
 
     /// The declaration naming NO variable.
     ///
-    /// Infallible, because there is no entry to be malformed. It is a real, expressible
-    /// state and not a degenerate one: a child launched under it gets an empty
-    /// environment, which is legitimate for an absolute command that needs nothing.
+    /// Infallible, because there is no entry to be malformed. A child launched under it
+    /// gets a genuinely empty environment, which is a coherent thing for an absolute
+    /// command that needs nothing at all.
+    ///
+    /// It is reachable only from a hand-written composition root, and that is deliberate
+    /// rather than an oversight in the grammar: a worker DOCUMENT cannot express it,
+    /// because `env_pass` takes one or more names and there is no spelling for none. An
+    /// empty list in a file is indistinguishable from an unfinished line, and the cost of
+    /// reading one as the other is an agent launched with no `PATH`, no `HOME` and no
+    /// credentials, failing three layers down for a reason nobody wrote. A caller
+    /// constructing this in code has stated it unambiguously; an author typing it into a
+    /// document has not. If the hermetic-empty case is ever wanted from a document it
+    /// needs its own explicit spelling, not a permissive reading of an empty list.
     #[must_use]
     pub fn empty() -> Self {
         Self { names: Vec::new() }
