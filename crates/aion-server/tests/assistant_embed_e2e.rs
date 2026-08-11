@@ -135,6 +135,7 @@ async fn a_stock_server_on_a_fresh_home_serves_a_routed_assistant() -> Result<()
         AssistantInstall::Installed {
             workflow_type: embedded.workflow_type().to_owned(),
             content_hash: embedded.content_hash().to_string(),
+            task_queue: embedded.task_queue().to_owned(),
         },
         "a home that has never seen a deploy must be claimed by the boot install"
     );
@@ -158,6 +159,11 @@ async fn a_stock_server_on_a_fresh_home_serves_a_routed_assistant() -> Result<()
         "a fresh boot must leave the embedded assistant startable: {body}"
     );
     assert_eq!(body["session"]["continue_signal"], "assistant_continue");
+    assert_eq!(
+        body["task_queue"],
+        embedded.task_queue(),
+        "an operator with no checkout learns the queue to serve from here and nowhere else: {body}"
+    );
     Ok(())
 }
 
