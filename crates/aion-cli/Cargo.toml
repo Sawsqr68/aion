@@ -158,9 +158,11 @@ norn = [
 # Protocol out-of-box — the same "our complete experience is the default" thread as
 # `haematite-backend` / `liminal-transport` / `norn`. ON by default.
 #
-# With both `norn` and `acp` compiled in, `aion worker agent` requires `--harness` to
-# select one: two adapters means there is something to choose, and choosing for the
-# operator would silently run their agent through a harness they did not ask for.
+# With both `norn` and `acp` compiled in, a worker document's `harness` section names
+# which one it wants with `kind acp` / `kind norn`: two adapters means there is
+# something to choose, and choosing for the operator would silently run their agent
+# through a harness they did not ask for. A `kind` this build does not carry is refused
+# naming what it does.
 #
 # NOTE: this feature raises the build's minimum rustc to 1.88.0 (see the package's
 # `rust-version`), which is why the adapter is a separate crate carrying that floor

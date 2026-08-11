@@ -29,26 +29,23 @@
 //!
 //! So the root has three parts:
 //!
-//! * [`catalogue`] — which harnesses this build carries, and the resolution of
-//!   `--harness` over them. Exactly one compiled in is DERIVED (nothing to choose is
-//!   unambiguous derivation, not an assumed default); several with no selection is
-//!   refused naming every choice; a name this build does not carry is refused naming
-//!   what it does. That is deliberately the same shape as
-//!   [`select_worker`]'s queue resolution, whose reasoning is already justified there.
-//! * [`settings`] — the flag/environment vocabulary for each harness and its
-//!   resolution, following [`crate::settings`]' contract to the letter. A harness's
-//!   configuration is demanded only when that harness is the resolved one, and a flag
-//!   belonging to a DIFFERENT harness is refused rather than ignored.
+//! * [`catalogue`] — which harnesses this build carries, and the check of the
+//!   document's declared `kind` against them. A name this build does not carry is
+//!   refused naming what it does; a build carrying none resolves to `None`, which is
+//!   not an error until something tries to serve.
+//! * [`settings`] — one harness's configuration, built from the `harness` section of
+//!   the document being served. No flag, no config file and no ambient variable
+//!   contributes a setting; the only thing read from the launching context is the
+//!   VALUE of each variable the document named in `env_pass`.
 //! * `compose` — the only code that constructs an adapter, erased behind
 //!   `Arc<dyn DynAgentHarness>` for the worker serve path to hold.
 //!
 //! Naming a concrete adapter's settings HERE rather than in `aion worker agent` is
 //! the point: the verb stays harness-neutral and knows only that a harness was
-//! selected and configured, while the settings that name `norn` and `acp` live with
-//! the code that names those adapters anyway.
+//! declared and configured, while the code that reads `norn` and `acp` out of a
+//! document lives with the code that names those adapters anyway.
 //!
 //! [`AgentHarness`]: aion_integrations::AgentHarness
-//! [`select_worker`]: crate::worker_surface::select_worker
 
 pub(crate) mod catalogue;
 pub(crate) mod settings;
@@ -63,4 +60,6 @@ pub(crate) mod compose;
 mod tests;
 
 pub(crate) use catalogue::{HarnessKind, announce_composed_harness, registration_capabilities};
-pub(crate) use settings::{HarnessArgs, ResolvedHarness};
+#[cfg(test)]
+pub(crate) use settings::test_environment;
+pub(crate) use settings::{ResolvedHarness, resolve as resolve_declared};

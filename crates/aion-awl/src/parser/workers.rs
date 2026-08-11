@@ -23,6 +23,7 @@ pub(super) fn parse_worker(
     let trailing = stream.end_line()?;
 
     let mut actions = Vec::new();
+    let mut harness: Option<crate::ast::HarnessDecl> = None;
     let outer_leads = stream.take_leads()?;
     if stream.open_block() {
         stream.push_back_leads(outer_leads);
@@ -33,6 +34,29 @@ pub(super) fn parse_worker(
                 break;
             }
             let action_docs = stream.take_docs();
+            if super::harness::at_harness(stream) {
+                // Refused HERE rather than in the checker: a second section is a
+                // parse-level ambiguity about which one configures the launch, and
+                // there is no reading that keeps both.
+                if let Some(first) = &harness {
+                    return Err(ParseError::new(
+                        stream.peek_span(),
+                        format!(
+                            "worker `{name}` declares a second `{word}` section; a queue has one \
+                             launch, so the first section (line {line}) is already its whole \
+                             truth",
+                            word = crate::ast::HARNESS_WORD,
+                            line = first.span.line
+                        ),
+                    ));
+                }
+                harness = Some(super::harness::parse_harness(
+                    stream,
+                    action_lead,
+                    action_docs,
+                )?);
+                continue;
+            }
             actions.push(parse_action(stream, action_lead, action_docs)?);
         }
         let stray = stream.take_leads()?;
@@ -58,6 +82,7 @@ pub(super) fn parse_worker(
         trailing,
         name,
         name_span,
+        harness,
         actions,
     })
 }

@@ -12,10 +12,11 @@
 //! # The brain is a seam, not a dependency
 //!
 //! Nothing here names an agent harness. The document declares one `agent`
-//! action on the assistant's own private queue; WHICH agent serves that queue
-//! is the worker's business (`aion worker agent --harness …`, norn today, ACP
-//! for external agents). This module installs the document and describes it;
-//! it neither spawns nor selects a brain.
+//! action on the assistant's own private queue; WHICH agent serves that
+//! queue, and how it is launched, is declared in the DOCUMENT a worker is
+//! started from — its `harness` section names the kind (norn today, ACP for
+//! external agents) and every launch setting. This module installs the
+//! embedded document and describes it; it neither spawns nor selects a brain.
 //!
 //! # The queue is the assistant's own name, never `default`
 //!

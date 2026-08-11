@@ -641,6 +641,61 @@ Invalid (stage / substring / span line):
   PARSE-staged refusal in the family, because a header declaration cannot open
   an action → PARSE "cannot stand inside a worker block" @3.
 
+## harness-section — the `harness` block inside a `worker` block
+
+A `worker` block may declare the LAUNCH of the agent worker that serves its
+queue: which harness, how many activities at once, how it reconnects, which
+environment variables cross into the agent subprocess, and the per-kind launch
+settings. Every setting is the operator's; nothing anywhere invents one, and a
+section missing a field of ITS DECLARED KIND's required set is refused naming
+the field. The section is launch configuration and not flow meaning, which the
+MIR ratchet pins: all three valid fixtures lower to byte-identical MIR.
+
+Valid (parse, check clean, print byte-canonically; the printer emits the fixed
+field order, so these files are already canonical):
+- `harness-section/valid/acp_harness.awl` — a complete `acp` launch. Carries no
+  Norn setting and is COMPLETE, which is the kind-scoping ruling in one file.
+- `harness-section/valid/norn_harness.awl` — a complete `norn` launch, with the
+  two optional settings (`args`, `binary`) present. Carries no `command`,
+  `cwd`, `permission` or `exit_grace` and is COMPLETE.
+- `harness-section/valid/norn_harness_without_optional_settings.awl` — the same
+  launch with both optional settings omitted: an optional setting left out is a
+  declaration, not a gap, and the adapter's own `norn`-on-`PATH` default is the
+  library's value rather than one invented at the boundary.
+
+Invalid (stage / substring / span line) — one per required field of each kind,
+then the value and kind-scoping refusals. Every missing-field refusal anchors on
+the `harness` line, because the section is what omitted the setting:
+- `missing_kind.awl`, `missing_concurrency.awl`,
+  `missing_reconnect_initial_backoff.awl`, `missing_reconnect_max_backoff.awl`,
+  `missing_reconnect_max_attempts.awl`, `missing_env_pass.awl` → CHECK
+  "declares no `<field>`", anchored on the `harness` line — the
+  kind-independent required set.
+- `missing_acp_command.awl`, `missing_acp_cwd.awl`,
+  `missing_acp_permission.awl`, `missing_acp_exit_grace.awl` → CHECK
+  "declares no `<field>`", anchored on the `harness` line — the `acp` kind's
+  own required set. There is no
+  `norn` counterpart for any of them, which is the point.
+- `missing_kind_on_a_norn_shape.awl`, `missing_env_pass_on_norn.awl`,
+  `missing_concurrency_on_norn.awl` → the kind-independent set again on a Norn
+  section, so the rule is witnessed on both kinds rather than inferred from one.
+- `norn_section_carrying_an_acp_command.awl` → CHECK "`command` configures the
+  `acp` harness"; `acp_section_carrying_a_norn_binary.awl` → CHECK "`binary`
+  configures the `norn` harness". Both directions, because a setting that
+  silently does nothing is how an operator comes to believe a policy is in
+  force when it is not.
+- `unknown_kind.awl` → CHECK "names no agent harness"; `unknown_permission.awl`
+  → CHECK "names no permission policy"; `relative_acp_command.awl` → CHECK
+  "must be an ABSOLUTE path"; `zero_concurrency.awl` → CHECK "must be greater
+  than zero"; `reconnect_cap_below_the_first_wait.awl` → CHECK "is shorter
+  than".
+- `env_pass_carrying_a_value.awl` → CHECK "takes variable NAMES": the list says
+  WHICH variables cross into the child, and writing a value into a document
+  puts a secret in a file that gets committed, diffed and deployed.
+- `harness_with_nothing_to_serve.awl` → CHECK "nothing on this queue for an
+  agent harness to serve": every action carries a declared body, so the launch
+  would start a subprocess no work is ever sent to.
+
 ## flow-shape — flow-vocabulary B2: subflow, distribute/sequence, collect, visits
 
 Rev-3 surface (`AWL-FLOW-VOCABULARY.md` rev 3 §1–§3, §5–§6). B4 landed: these fixtures parse,

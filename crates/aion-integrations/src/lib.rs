@@ -33,6 +33,8 @@
 
 /// The harness-integration seam: the [`AgentHarness`] / [`AgentSession`] traits.
 pub mod contract;
+/// The DECLARED environment a harness subprocess is launched with.
+pub mod environment;
 /// The harness-neutral error taxonomy for the seam.
 pub mod error;
 /// A generic JSON-RPC 2.0 over newline-delimited stdio building block.
@@ -41,6 +43,9 @@ pub mod jsonrpc;
 pub mod spec;
 
 pub use contract::{AgentHarness, AgentSession, DynAgentHarness, DynAgentSession};
+pub use environment::{
+    ChildEnvironment, EnvironmentDeclaration, EnvironmentError, process_environment,
+};
 pub use error::HarnessError;
 pub use spec::AgentRunSpec;
 

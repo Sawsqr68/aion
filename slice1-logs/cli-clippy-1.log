@@ -1,0 +1,658 @@
+    Checking log v0.4.32
+    Checking tracing-core v0.1.36
+    Checking getrandom v0.3.4
+    Checking rustix v1.1.4
+    Checking generic-array v0.14.7
+    Checking rustls-pki-types v1.14.1
+    Checking aion-core v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-core)
+    Checking aws-lc-sys v0.41.0
+    Checking ppv-lite86 v0.2.21
+    Checking cpufeatures v0.2.17
+    Checking mio v1.2.1
+    Checking regalloc2 v0.15.1
+    Checking ahash v0.8.12
+    Checking tracing v0.1.44
+    Checking untrusted v0.9.0
+    Checking rand_core v0.9.5
+    Checking referencing v0.46.6
+    Checking subtle v2.6.1
+    Checking toml_parser v1.1.2+spec-1.1.0
+    Checking rand_chacha v0.9.0
+    Checking tokio v1.52.3
+    Checking form_urlencoded v1.2.2
+    Checking aws-lc-rs v1.17.0
+    Checking crypto-common v0.1.7
+    Checking block-buffer v0.10.4
+    Checking serde_spanned v1.1.1
+    Checking toml_writer v1.1.1+spec-1.1.0
+    Checking digest v0.10.7
+    Checking rand v0.9.4
+    Checking webpki-roots v1.0.7
+    Checking zopfli v0.8.3
+    Checking sha1 v0.10.6
+   Compiling beamr v0.16.3
+    Checking jsonschema v0.46.6
+    Checking foldhash v0.1.5
+    Checking zip v8.6.0
+    Checking hashbrown v0.15.5
+    Checking toml v1.1.2+spec-1.1.0
+    Checking rustls-webpki v0.103.13
+    Checking webpki-roots v0.26.11
+    Checking cranelift-codegen v0.131.2
+    Checking arrayref v0.3.9
+    Checking rustls v0.23.40
+    Checking ryu v1.0.23
+    Checking arrayvec v0.7.7
+    Checking axum-core v0.5.6
+    Checking serde_urlencoded v0.7.1
+    Checking blake3 v1.8.5
+    Checking tempfile v3.27.0
+    Checking lru v0.12.5
+    Checking serde_path_to_error v0.1.20
+   Compiling aion-proto-generated v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-proto-generated)
+    Checking utf8parse v0.2.2
+    Checking anstyle-parse v1.0.0
+    Checking io-lifetimes v2.0.4
+    Checking io-lifetimes v3.0.1
+    Checking winnow v0.7.15
+    Checking anstyle v1.0.14
+    Checking same-file v1.0.6
+    Checking colorchoice v1.0.5
+    Checking is_terminal_polyfill v1.70.2
+    Checking anstyle-query v1.1.5
+    Checking anstream v1.0.0
+    Checking walkdir v2.5.0
+   Compiling sha2 v0.10.9
+    Checking io-extras v0.19.0
+    Checking thiserror v1.0.69
+    Checking fs-set-times v0.20.3
+    Checking nom v5.1.3
+    Checking tungstenite v0.30.0
+    Checking toml_datetime v0.6.11
+    Checking serde_spanned v0.6.9
+    Checking ipnet v2.12.0
+    Checking strsim v0.11.1
+    Checking ambient-authority v0.0.2
+    Checking clap_lex v1.1.0
+    Checking liminal-protocol v0.3.2
+    Checking maybe-owned v0.3.4
+    Checking toml_write v0.1.2
+    Checking cap-primitives v4.0.2
+    Checking clap_builder v4.6.0
+    Checking toml_edit v0.22.27
+    Checking protobuf-support v3.7.2
+   Compiling rust-embed-utils v8.11.0
+    Checking saffron v0.1.0
+    Checking rand_chacha v0.10.0
+    Checking spin v0.9.8
+    Checking tokio-util v0.7.18
+    Checking tokio-stream v0.1.18
+   Compiling rust-embed-impl v8.11.0
+    Checking protobuf v3.7.2
+    Checking tungstenite v0.29.0
+    Checking tokio-rustls v0.26.4
+    Checking h2 v0.4.14
+    Checking tower v0.5.3
+    Checking signal-hook v0.3.18
+    Checking tokio-tungstenite v0.29.0
+    Checking cap-std v4.0.2
+    Checking tracing-serde v0.2.0
+    Checking tracing-log v0.2.0
+    Checking sharded-slab v0.1.7
+    Checking matchers v0.2.0
+    Checking fluent-uri v0.1.4
+    Checking clap v4.6.1
+    Checking thread_local v1.1.9
+    Checking toml v0.8.23
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-server)
+    Checking nu-ansi-term v0.50.3
+    Checking lsp-types v0.97.0
+    Checking tracing-subscriber v0.3.23
+    Checking cap-fs-ext v4.0.2
+    Checking rust-embed v8.11.0
+    Checking aion-mcp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-mcp)
+    Checking tower-http v0.6.11
+    Checking url v2.5.8
+    Checking rustls-pemfile v2.2.0
+    Checking lsp-server v0.8.0
+    Checking aion-darwin-acl v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-darwin-acl)
+    Checking notify-types v2.1.0
+    Checking toml_datetime v0.7.5+spec-1.1.0
+    Checking fsevent-sys v4.1.0
+    Checking fs4 v1.1.0
+    Checking notify v8.2.0
+    Checking toml_edit v0.23.10+spec-1.0.0
+    Checking prometheus v0.14.0
+    Checking aion-package v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-package)
+    Checking aion-integrations v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integrations)
+    Checking aion-store v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-store)
+    Checking hyper v1.10.1
+    Checking hyper-util v0.1.20
+    Checking aion-integration-norn v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-norn)
+    Checking aion-integration-acp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-acp)
+    Checking cranelift-module v0.131.2
+    Checking cranelift-native v0.131.2
+    Checking cranelift-frontend v0.131.2
+    Checking cranelift-jit v0.131.2
+    Checking beamr v0.17.0
+    Checking axum v0.8.9
+    Checking hyper-timeout v0.5.2
+    Checking tonic v0.14.6
+    Checking aion-toolchain v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-toolchain)
+    Checking tonic-prost v0.14.5
+    Checking aion-awl v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl)
+    Checking aion-rs v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion)
+    Checking haematite v0.7.0
+    Checking haematite v0.8.1
+    Checking liminal-rs v0.5.0
+    Checking aion-store-haematite v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-store-haematite)
+    Checking aion-proto v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-proto)
+    Checking aion-awl-package v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl-package)
+    Checking aion-awl-lsp v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl-lsp)
+    Checking liminal-sdk v0.5.0
+    Checking liminal-server v0.5.0
+    Checking aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-worker)
+    Checking aion-client v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-client)
+    Checking aion-cli v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-cli)
+error[E0432]: unresolved import `crate::harness::HarnessArgs`
+  --> crates/aion-cli/src/worker_agent/tests.rs:15:5
+   |
+15 | use crate::harness::HarnessArgs;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `HarnessArgs` in `harness`
+
+error[E0432]: unresolved import `super::settings::HarnessArgs`
+  --> crates/aion-cli/src/harness/tests.rs:17:5
+   |
+17 | use super::settings::HarnessArgs;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `HarnessArgs` in `harness::settings`
+
+warning: function `non_negative_seconds` is never used
+   --> crates/aion-cli/src/settings.rs:189:15
+    |
+189 | pub(crate) fn non_negative_seconds(raw: &str, flag: &str, variable: &str) -> Result<Duration> {
+    |               ^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+error[E0599]: no method named `settings` found for enum `harness::catalogue::HarnessKind` in the current scope
+   --> crates/aion-cli/src/harness/tests.rs:229:26
+    |
+229 |         HarnessKind::Acp.settings(),
+    |                          ^^^^^^^^ method not found in `harness::catalogue::HarnessKind`
+    |
+   ::: crates/aion-cli/src/harness/catalogue.rs:27:1
+    |
+ 27 | pub(crate) enum HarnessKind {
+    | --------------------------- method `settings` not found for this enum
+
+error[E0599]: no method named `settings` found for enum `harness::catalogue::HarnessKind` in the current scope
+   --> crates/aion-cli/src/harness/tests.rs:285:30
+    |
+285 |             HarnessKind::Acp.settings(),
+    |                              ^^^^^^^^ method not found in `harness::catalogue::HarnessKind`
+    |
+   ::: crates/aion-cli/src/harness/catalogue.rs:27:1
+    |
+ 27 | pub(crate) enum HarnessKind {
+    | --------------------------- method `settings` not found for this enum
+
+error[E0609]: no field `env` on type `harness::settings::AcpConfig`
+   --> crates/aion-cli/src/harness/tests.rs:312:13
+    |
+312 |         acp.env,
+    |             ^^^ unknown field
+    |
+    = note: available fields are: `command`, `args`, `cwd`, `permission`, `environment`, `exit_grace`
+
+error[E0599]: no method named `settings` found for enum `harness::catalogue::HarnessKind` in the current scope
+   --> crates/aion-cli/src/harness/tests.rs:335:35
+    |
+335 |         .collect(HarnessKind::Acp.settings(), &environment, &mut missing)
+    |                                   ^^^^^^^^ method not found in `harness::catalogue::HarnessKind`
+    |
+   ::: crates/aion-cli/src/harness/catalogue.rs:27:1
+    |
+ 27 | pub(crate) enum HarnessKind {
+    | --------------------------- method `settings` not found for this enum
+
+error[E0599]: no method named `settings` found for enum `harness::catalogue::HarnessKind` in the current scope
+   --> crates/aion-cli/src/harness/tests.rs:354:37
+    |
+354 |     args().collect(HarnessKind::Acp.settings(), &blank, &mut missing);
+    |                                     ^^^^^^^^ method not found in `harness::catalogue::HarnessKind`
+    |
+   ::: crates/aion-cli/src/harness/catalogue.rs:27:1
+    |
+ 27 | pub(crate) enum HarnessKind {
+    | --------------------------- method `settings` not found for this enum
+
+error[E0599]: no method named `settings` found for enum `harness::catalogue::HarnessKind` in the current scope
+   --> crates/aion-cli/src/harness/tests.rs:379:30
+    |
+379 |             HarnessKind::Acp.settings(),
+    |                              ^^^^^^^^ method not found in `harness::catalogue::HarnessKind`
+    |
+   ::: crates/aion-cli/src/harness/catalogue.rs:27:1
+    |
+ 27 | pub(crate) enum HarnessKind {
+    | --------------------------- method `settings` not found for this enum
+
+error[E0599]: no method named `settings` found for enum `harness::catalogue::HarnessKind` in the current scope
+   --> crates/aion-cli/src/harness/tests.rs:413:30
+    |
+413 |             HarnessKind::Acp.settings(),
+    |                              ^^^^^^^^ method not found in `harness::catalogue::HarnessKind`
+    |
+   ::: crates/aion-cli/src/harness/catalogue.rs:27:1
+    |
+ 27 | pub(crate) enum HarnessKind {
+    | --------------------------- method `settings` not found for this enum
+
+error[E0599]: no method named `settings` found for enum `harness::catalogue::HarnessKind` in the current scope
+   --> crates/aion-cli/src/harness/tests.rs:453:34
+    |
+453 |                 HarnessKind::Acp.settings(),
+    |                                  ^^^^^^^^ method not found in `harness::catalogue::HarnessKind`
+    |
+   ::: crates/aion-cli/src/harness/catalogue.rs:27:1
+    |
+ 27 | pub(crate) enum HarnessKind {
+    | --------------------------- method `settings` not found for this enum
+
+error[E0599]: no method named `settings` found for enum `harness::catalogue::HarnessKind` in the current scope
+   --> crates/aion-cli/src/harness/tests.rs:480:31
+    |
+480 |             HarnessKind::Norn.settings(),
+    |                               ^^^^^^^^ method not found in `harness::catalogue::HarnessKind`
+    |
+   ::: crates/aion-cli/src/harness/catalogue.rs:27:1
+    |
+ 27 | pub(crate) enum HarnessKind {
+    | --------------------------- method `settings` not found for this enum
+
+error[E0560]: struct `harness::settings::NornConfig` has no field named `unset_env`
+   --> crates/aion-cli/src/harness/tests.rs:494:13
+    |
+494 |             unset_env: Vec::new(),
+    |             ^^^^^^^^^ `harness::settings::NornConfig` does not have this field
+    |
+    = note: available fields are: `environment`
+
+error[E0599]: no method named `settings` found for enum `harness::catalogue::HarnessKind` in the current scope
+   --> crates/aion-cli/src/harness/tests.rs:501:36
+    |
+501 |         .collect(HarnessKind::Norn.settings(), &environment, &mut missing)
+    |                                    ^^^^^^^^ method not found in `harness::catalogue::HarnessKind`
+    |
+   ::: crates/aion-cli/src/harness/catalogue.rs:27:1
+    |
+ 27 | pub(crate) enum HarnessKind {
+    | --------------------------- method `settings` not found for this enum
+
+error[E0560]: struct `harness::settings::NornConfig` has no field named `unset_env`
+   --> crates/aion-cli/src/harness/tests.rs:508:13
+    |
+508 |             unset_env: Vec::new(),
+    |             ^^^^^^^^^ `harness::settings::NornConfig` does not have this field
+    |
+    = note: available fields are: `environment`
+
+error[E0599]: no method named `settings` found for enum `harness::catalogue::HarnessKind` in the current scope
+   --> crates/aion-cli/src/harness/tests.rs:526:35
+    |
+526 |                 HarnessKind::Norn.settings(),
+    |                                   ^^^^^^^^ method not found in `harness::catalogue::HarnessKind`
+    |
+   ::: crates/aion-cli/src/harness/catalogue.rs:27:1
+    |
+ 27 | pub(crate) enum HarnessKind {
+    | --------------------------- method `settings` not found for this enum
+
+error[E0599]: no method named `settings` found for enum `harness::catalogue::HarnessKind` in the current scope
+   --> crates/aion-cli/src/harness/tests.rs:575:31
+    |
+575 |             HarnessKind::Norn.settings(),
+    |                               ^^^^^^^^ method not found in `harness::catalogue::HarnessKind`
+    |
+   ::: crates/aion-cli/src/harness/catalogue.rs:27:1
+    |
+ 27 | pub(crate) enum HarnessKind {
+    | --------------------------- method `settings` not found for this enum
+
+error[E0599]: no method named `settings` found for enum `harness::catalogue::HarnessKind` in the current scope
+   --> crates/aion-cli/src/harness/tests.rs:638:21
+    |
+638 |             harness.settings().harness_name(),
+    |                     ^^^^^^^^ method not found in `harness::catalogue::HarnessKind`
+    |
+   ::: crates/aion-cli/src/harness/catalogue.rs:27:1
+    |
+ 27 | pub(crate) enum HarnessKind {
+    | --------------------------- method `settings` not found for this enum
+
+error[E0599]: no method named `settings` found for enum `harness::catalogue::HarnessKind` in the current scope
+   --> crates/aion-cli/src/harness/tests.rs:736:34
+    |
+736 |                 HarnessKind::Acp.settings(),
+    |                                  ^^^^^^^^ method not found in `harness::catalogue::HarnessKind`
+    |
+   ::: crates/aion-cli/src/harness/catalogue.rs:27:1
+    |
+ 27 | pub(crate) enum HarnessKind {
+    | --------------------------- method `settings` not found for this enum
+
+error[E0308]: mismatched types
+  --> crates/aion-cli/src/worker_agent/tests.rs:57:14
+   |
+57 |         awl: document.to_path_buf(),
+   |              ^^^^^^^^^^^^^^^^^^^^^^ expected `Option<PathBuf>`, found `PathBuf`
+   |
+   = note: expected enum `std::option::Option<std::path::PathBuf>`
+            found struct `std::path::PathBuf`
+help: try wrapping the expression in `Some`
+   |
+57 |         awl: Some(document.to_path_buf()),
+   |              +++++                      +
+
+error[E0560]: struct `worker_agent::args::AgentArgs` has no field named `concurrency`
+  --> crates/aion-cli/src/worker_agent/tests.rs:61:9
+   |
+61 |         concurrency: None,
+   |         ^^^^^^^^^^^ `worker_agent::args::AgentArgs` does not have this field
+   |
+   = note: all struct fields are already assigned
+
+error[E0560]: struct `worker_agent::args::AgentArgs` has no field named `reconnect_initial_backoff`
+  --> crates/aion-cli/src/worker_agent/tests.rs:62:9
+   |
+62 |         reconnect_initial_backoff: None,
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^ `worker_agent::args::AgentArgs` does not have this field
+   |
+   = note: all struct fields are already assigned
+
+error[E0560]: struct `worker_agent::args::AgentArgs` has no field named `reconnect_max_backoff`
+  --> crates/aion-cli/src/worker_agent/tests.rs:63:9
+   |
+63 |         reconnect_max_backoff: None,
+   |         ^^^^^^^^^^^^^^^^^^^^^ `worker_agent::args::AgentArgs` does not have this field
+   |
+   = note: all struct fields are already assigned
+
+error[E0560]: struct `worker_agent::args::AgentArgs` has no field named `reconnect_max_attempts`
+  --> crates/aion-cli/src/worker_agent/tests.rs:64:9
+   |
+64 |         reconnect_max_attempts: None,
+   |         ^^^^^^^^^^^^^^^^^^^^^^ `worker_agent::args::AgentArgs` does not have this field
+   |
+   = note: all struct fields are already assigned
+
+error[E0560]: struct `worker_agent::args::AgentArgs` has no field named `harness`
+  --> crates/aion-cli/src/worker_agent/tests.rs:67:9
+   |
+67 |         harness: HarnessArgs::default(),
+   |         ^^^^^^^ `worker_agent::args::AgentArgs` does not have this field
+   |
+   = note: all struct fields are already assigned
+
+error[E0061]: this function takes 2 arguments but 3 arguments were supplied
+   --> crates/aion-cli/src/worker_agent/tests.rs:267:22
+    |
+267 |     let Err(error) = args::resolve(&args_for(&document), &Environment::default(), None) else {
+    |                      ^^^^^^^^^^^^^                                                ---- unexpected argument #3 of type `std::option::Option<_>`
+    |
+note: function defined here
+   --> crates/aion-cli/src/worker_agent/args.rs:154:15
+    |
+154 | pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<ConnectionSettings> {
+    |               ^^^^^^^
+help: remove the extra argument
+    |
+267 -     let Err(error) = args::resolve(&args_for(&document), &Environment::default(), None) else {
+267 +     let Err(error) = args::resolve(&args_for(&document), &Environment::default()) else {
+    |
+
+error[E0061]: this function takes 2 arguments but 3 arguments were supplied
+   --> crates/aion-cli/src/worker_agent/tests.rs:306:31
+    |
+306 |     let (resolved, harness) = args::resolve(&args_for(&document), &environment, None)?;
+    |                               ^^^^^^^^^^^^^                                     ---- unexpected argument #3 of type `std::option::Option<_>`
+    |
+note: function defined here
+   --> crates/aion-cli/src/worker_agent/args.rs:154:15
+    |
+154 | pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<ConnectionSettings> {
+    |               ^^^^^^^
+help: remove the extra argument
+    |
+306 -     let (resolved, harness) = args::resolve(&args_for(&document), &environment, None)?;
+306 +     let (resolved, harness) = args::resolve(&args_for(&document), &environment)?;
+    |
+
+error[E0308]: mismatched types
+   --> crates/aion-cli/src/worker_agent/tests.rs:306:9
+    |
+306 |     let (resolved, harness) = args::resolve(&args_for(&document), &environment, None)?;
+    |         ^^^^^^^^^^^^^^^^^^^   -------------------------------------------------------- this expression has type `worker_agent::args::ConnectionSettings`
+    |         |
+    |         expected `ConnectionSettings`, found `(_, _)`
+    |
+    = note: expected struct `worker_agent::args::ConnectionSettings`
+                found tuple `(_, _)`
+
+error[E0061]: this function takes 2 arguments but 3 arguments were supplied
+   --> crates/aion-cli/src/worker_agent/tests.rs:330:25
+    |
+330 |     let (resolved, _) = args::resolve(&arguments, &environment, None)?;
+    |                         ^^^^^^^^^^^^^                           ---- unexpected argument #3 of type `std::option::Option<_>`
+    |
+note: function defined here
+   --> crates/aion-cli/src/worker_agent/args.rs:154:15
+    |
+154 | pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<ConnectionSettings> {
+    |               ^^^^^^^
+help: remove the extra argument
+    |
+330 -     let (resolved, _) = args::resolve(&arguments, &environment, None)?;
+330 +     let (resolved, _) = args::resolve(&arguments, &environment)?;
+    |
+
+error[E0308]: mismatched types
+   --> crates/aion-cli/src/worker_agent/tests.rs:330:9
+    |
+330 |     let (resolved, _) = args::resolve(&arguments, &environment, None)?;
+    |         ^^^^^^^^^^^^^   ---------------------------------------------- this expression has type `worker_agent::args::ConnectionSettings`
+    |         |
+    |         expected `ConnectionSettings`, found `(_, _)`
+    |
+    = note: expected struct `worker_agent::args::ConnectionSettings`
+                found tuple `(_, _)`
+
+error[E0061]: this function takes 2 arguments but 3 arguments were supplied
+   --> crates/aion-cli/src/worker_agent/tests.rs:349:22
+    |
+349 |     let Err(error) = args::resolve(&args_for(&document), &environment, None) else {
+    |                      ^^^^^^^^^^^^^                                     ---- unexpected argument #3 of type `std::option::Option<_>`
+    |
+note: function defined here
+   --> crates/aion-cli/src/worker_agent/args.rs:154:15
+    |
+154 | pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<ConnectionSettings> {
+    |               ^^^^^^^
+help: remove the extra argument
+    |
+349 -     let Err(error) = args::resolve(&args_for(&document), &environment, None) else {
+349 +     let Err(error) = args::resolve(&args_for(&document), &environment) else {
+    |
+
+error[E0061]: this function takes 2 arguments but 3 arguments were supplied
+   --> crates/aion-cli/src/worker_agent/tests.rs:374:22
+    |
+374 |     let Err(error) = args::resolve(&arguments, &supplied("0", "1"), None) else {
+    |                      ^^^^^^^^^^^^^                                  ---- unexpected argument #3 of type `std::option::Option<_>`
+    |
+note: function defined here
+   --> crates/aion-cli/src/worker_agent/args.rs:154:15
+    |
+154 | pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<ConnectionSettings> {
+    |               ^^^^^^^
+help: remove the extra argument
+    |
+374 -     let Err(error) = args::resolve(&arguments, &supplied("0", "1"), None) else {
+374 +     let Err(error) = args::resolve(&arguments, &supplied("0", "1")) else {
+    |
+
+error[E0061]: this function takes 2 arguments but 3 arguments were supplied
+   --> crates/aion-cli/src/worker_agent/tests.rs:382:22
+    |
+382 |     let Err(error) = args::resolve(&arguments, &supplied("4", "nonsense"), None) else {
+    |                      ^^^^^^^^^^^^^                                         ---- unexpected argument #3 of type `std::option::Option<_>`
+    |
+note: function defined here
+   --> crates/aion-cli/src/worker_agent/args.rs:154:15
+    |
+154 | pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<ConnectionSettings> {
+    |               ^^^^^^^
+help: remove the extra argument
+    |
+382 -     let Err(error) = args::resolve(&arguments, &supplied("4", "nonsense"), None) else {
+382 +     let Err(error) = args::resolve(&arguments, &supplied("4", "nonsense")) else {
+    |
+
+error[E0609]: no field `harness` on type `worker_agent::args::AgentArgs`
+   --> crates/aion-cli/src/worker_agent/tests.rs:489:15
+    |
+489 |     arguments.harness.acp_command = Some(String::from("opencode"));
+    |               ^^^^^^^ unknown field
+    |
+    = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `worker_agent::args::AgentArgs`
+   --> crates/aion-cli/src/worker_agent/tests.rs:490:15
+    |
+490 |     arguments.harness.acp_cwd = Some(String::from("/srv/workspace"));
+    |               ^^^^^^^ unknown field
+    |
+    = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `worker_agent::args::AgentArgs`
+   --> crates/aion-cli/src/worker_agent/tests.rs:491:15
+    |
+491 |     arguments.harness.acp_exit_grace = Some(String::from("2"));
+    |               ^^^^^^^ unknown field
+    |
+    = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0061]: this function takes 2 arguments but 3 arguments were supplied
+   --> crates/aion-cli/src/worker_agent/tests.rs:495:22
+    |
+495 |     let Err(error) = args::resolve(
+    |                      ^^^^^^^^^^^^^
+...
+498 |         Some(crate::harness::HarnessKind::Acp),
+    |         -------------------------------------- unexpected argument #3 of type `std::option::Option<harness::catalogue::HarnessKind>`
+    |
+note: function defined here
+   --> crates/aion-cli/src/worker_agent/args.rs:154:15
+    |
+154 | pub(crate) fn resolve(args: &AgentArgs, environment: &Environment) -> Result<ConnectionSettings> {
+    |               ^^^^^^^
+help: remove the extra argument
+    |
+497 -         &Environment::default(),
+498 -         Some(crate::harness::HarnessKind::Acp),
+497 +         &Environment::default(),
+    |
+
+warning: `aion-cli` (bin "aion") generated 1 warning
+error[E0308]: mismatched types
+    --> crates/aion-cli/src/main.rs:2163:30
+     |
+2163 |         assert_eq!(args.awl, Path::new("flows/review.awl"));
+     |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `Option<PathBuf>`, found `&Path`
+     |
+     = note:   expected enum `std::option::Option<std::path::PathBuf>`
+             found reference `&std::path::Path`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2178:25
+     |
+2178 |         assert_eq!(args.harness.harness.as_deref(), Some("acp"));
+     |                         ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2179:25
+     |
+2179 |         assert_eq!(args.harness.acp_command.as_deref(), Some("npx"));
+     |                         ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2183:18
+     |
+2183 |             args.harness.acp_args,
+     |                  ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2186:25
+     |
+2186 |         assert_eq!(args.harness.acp_cwd.as_deref(), Some("/srv/workspace"));
+     |                         ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2187:25
+     |
+2187 |         assert_eq!(args.harness.acp_permission.as_deref(), Some("deny"));
+     |                         ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2188:25
+     |
+2188 |         assert_eq!(args.harness.acp_exit_grace.as_deref(), Some("2"));
+     |                         ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2189:25
+     |
+2189 |         assert_eq!(args.harness.acp_env, vec![String::from("KEY=value")]);
+     |                         ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2209:22
+     |
+2209 |         assert!(args.harness.harness.is_none());
+     |                      ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2210:22
+     |
+2210 |         assert!(args.harness.acp_command.is_none());
+     |                      ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+error[E0609]: no field `harness` on type `std::boxed::Box<worker_agent::args::AgentArgs>`
+    --> crates/aion-cli/src/main.rs:2211:22
+     |
+2211 |         assert!(args.harness.acp_args.is_empty());
+     |                      ^^^^^^^ unknown field
+     |
+     = note: available fields are: `awl`, `liminal_addresses`, `task_queue`, `identity`, `node`, `check`
+
+Some errors have detailed explanations: E0061, E0308, E0432, E0560, E0599, E0609.
+For more information about an error, try `rustc --explain E0061`.
+error: could not compile `aion-cli` (bin "aion" test) due to 47 previous errors

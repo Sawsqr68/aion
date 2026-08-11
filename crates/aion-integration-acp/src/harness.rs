@@ -66,7 +66,7 @@ use aion_integrations::contract::AgentHarness;
 use aion_integrations::jsonrpc::{
     IncomingMessage, JsonRpcConnection, JsonRpcId, JsonRpcNotification, JsonRpcRequest,
 };
-use aion_integrations::{AgentRunSpec, HarnessError};
+use aion_integrations::{AgentRunSpec, ChildEnvironment, HarnessError};
 use async_trait::async_trait;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -141,6 +141,7 @@ pub fn registration_capabilities() -> aion_core::InterventionCapabilities {
 pub struct AcpHarness {
     command: PathBuf,
     args: Vec<OsString>,
+    declared_environment: Option<ChildEnvironment>,
     env: Vec<(String, String)>,
     env_removed: Vec<String>,
     cwd: PathBuf,
@@ -198,6 +199,7 @@ impl AcpHarness {
         Self {
             command: command.into(),
             args: args.into_iter().map(Into::into).collect(),
+            declared_environment: None,
             env: Vec::new(),
             env_removed: Vec::new(),
             cwd: cwd.into(),
@@ -205,6 +207,23 @@ impl AcpHarness {
             permission_policy,
             exit_grace,
         }
+    }
+
+    /// Declares the agent child's WHOLE environment.
+    ///
+    /// Without this the child inherits the worker process's environment, which is how an agent's
+    /// own shell variable once reached a nested `claude-code-acp` and made it refuse every
+    /// `session/new`. With it the child's environment is CONSTRUCTED: the spawn clears everything
+    /// first and sets exactly the resolved pairs, so a variable the declaration does not name is
+    /// absent in the child whatever the parent carries.
+    ///
+    /// [`Self::with_env`] and [`Self::without_env`] still apply, on top of the declared set rather
+    /// than on top of an inherited one — a caller that both declares an environment and sets a
+    /// value gets the value it set.
+    #[must_use]
+    pub fn with_declared_environment(mut self, environment: ChildEnvironment) -> Self {
+        self.declared_environment = Some(environment);
+        self
     }
 
     /// Sets an environment variable on every spawned agent process.
@@ -248,9 +267,15 @@ impl AcpHarness {
     /// protocol says the session is rooted.
     fn command(&self) -> Command {
         let mut command = Command::new(&self.command);
+        command.args(&self.args).current_dir(&self.cwd);
+        // A DECLARED environment is total: everything the parent carries is cleared and the
+        // declared pairs are the child's whole environment. Without a declaration the child
+        // inherits, which is the pre-declaration behaviour a hand-written worker still gets.
+        if let Some(declared) = &self.declared_environment {
+            command.env_clear();
+            command.envs(declared.pairs().iter().map(|(key, value)| (key, value)));
+        }
         command
-            .args(&self.args)
-            .current_dir(&self.cwd)
             .envs(self.env.iter().map(|(key, value)| (key, value)))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -606,6 +631,12 @@ impl AgentHarness for AcpHarness {
 
     async fn start(&self, spec: AgentRunSpec) -> Result<Self::Session, HarnessError> {
         self.validate_paths()?;
+        // Named BEFORE the spawn: a declaration that omits the variable this program needs to be
+        // found would otherwise surface as the kernel's `No such file or directory` against a
+        // command the operator can see is spelled correctly.
+        if let Some(declared) = &self.declared_environment {
+            declared.require_for_program(&self.command)?;
+        }
         let prompt = prompt_from_spec(&spec)?;
         let mut child = self.spawn()?;
         let (stdout, stdin) = take_child_io(&mut child)?;

@@ -1,0 +1,904 @@
+   Compiling aion-awl v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 26.68s
+     Running unittests src/lib.rs (target/debug/deps/aion_awl-5339af56338025d0)
+
+running 157 tests
+test ast::command_tests::a_doubled_dollar_before_a_brace_stays_literal ... ok
+test ast::command_tests::a_dollar_before_a_space_is_refused ... ok
+test ast::command_tests::a_brace_reference_holding_a_non_name_is_refused ... ok
+test ast::command_tests::a_brace_reference_holding_spaces_is_refused ... ok
+test ast::command_tests::a_dangling_dollar_at_the_end_is_refused ... ok
+test ast::command_tests::a_command_without_a_dollar_has_no_references ... ok
+test ast::command_tests::a_dollar_inside_single_quotes_is_literal ... ok
+test ast::command_tests::a_dollar_before_a_hyphen_is_refused ... ok
+test ast::command_tests::a_bare_reference_reports_its_name_offset_and_length ... ok
+test ast::command_tests::a_dollar_inside_double_quotes_is_a_reference ... ok
+test ast::command_tests::a_doubled_dollar_is_a_literal_dollar_and_never_a_reference ... ok
+test ast::command_tests::a_name_may_carry_digits_and_underscores ... ok
+test ast::command_tests::a_reference_ending_the_command_is_measured_to_the_end ... ok
+test ast::command_tests::a_reference_in_program_position_is_reported_inside_the_program_word ... ok
+test ast::command_tests::adjacent_references_are_both_found ... ok
+test ast::command_tests::a_unicode_name_is_refused_rather_than_split ... ok
+test ast::command_tests::an_empty_brace_reference_is_refused ... ok
+test ast::command_tests::an_unterminated_brace_reference_is_refused ... ok
+test ast::command_tests::an_unterminated_double_quote_is_refused ... ok
+test ast::command_tests::an_unterminated_single_quote_is_refused ... ok
+test ast::command_tests::an_uppercase_shell_variable_is_refused_with_the_escape_hint ... ok
+test ast::command_tests::braces_delimit_a_reference_that_abuts_more_name_characters ... ok
+test ast::command_tests::multibyte_text_before_a_reference_keeps_byte_offsets_honest ... ok
+test ast::command_tests::the_empty_command_scans_to_nothing ... ok
+test ast::command_tests::the_program_word_ends_at_the_first_unquoted_whitespace ... ok
+test ast::command_tests::parameters_are_sorted_and_deduplicated ... ok
+test checker::harness::tests::a_duplicate_setting_is_refused_at_the_parse_because_neither_reading_is_honest ... ok
+test checker::harness::tests::an_unknown_setting_is_refused_naming_what_the_section_carries ... ok
+test guide::grammar::grammar_tests::every_derived_form_is_honest_against_the_table ... ok
+test guide::grammar::grammar_tests::every_form_files_at_least_one_word ... ok
+test guide::grammar::grammar_tests::offered_words_compose_keywords_then_positional_words ... ok
+test guide::grammar::grammar_tests::positions_are_read_from_both_halves_of_the_table_in_order ... ok
+test guide::grammar::grammar_tests::every_word_of_the_vocabulary_stands_somewhere ... ok
+test checker::harness::tests::an_env_pass_entry_carrying_a_value_is_refused_rather_than_split ... ok
+test checker::harness::tests::a_norn_section_is_never_asked_for_an_acp_setting ... ok
+test checker::harness::tests::an_unknown_kind_suppresses_the_per_kind_demands_rather_than_guessing_one ... ok
+test guide::grammar::grammar_tests::the_all_inventories_carry_every_variant ... ok
+test guide::grammar::grammar_tests::the_canonical_words_land_in_their_forms ... ok
+test checker::harness::tests::a_setting_for_the_other_kind_is_refused_by_name_in_both_directions ... ok
+test guide::grammar::grammar_tests::the_table_offers_no_word_the_lexer_does_not_name ... ok
+test guide::grammar::grammar_tests::wire_identifiers_are_distinct_and_prose_is_one_finished_line ... ok
+test guide::lookup::guide_tests::a_citation_names_the_reference_and_the_section ... ok
+test guide::lookup::guide_tests::every_keyword_entry_names_the_word_the_lexer_produces ... ok
+test guide::lookup::guide_tests::every_positional_word_has_an_entry_recorded_as_positional ... ok
+test guide::lookup::guide_tests::every_summary_is_one_rendered_line ... ok
+test checker::harness::tests::every_required_norn_field_is_named_when_it_is_the_one_removed ... ok
+test guide::lookup::guide_tests::every_word_of_the_language_is_reachable_by_name ... ok
+test guide::lookup::guide_tests::the_example_word_matcher_reads_tokens_not_text ... ok
+test guide::lookup::guide_tests::the_two_inventories_do_not_overlap ... ok
+test guide::lookup::guide_tests::the_inventory_is_complete_and_carries_no_duplicate ... ok
+test lexer::grammar_vocabulary_tests::every_reserved_word_is_known_to_the_editor_grammar ... ok
+test lexer::grammar_vocabulary_tests::the_coloured_exception_is_a_genuine_positional_word ... ok
+test lexer::grammar_vocabulary_tests::the_bindable_positional_words_are_deliberately_left_plain ... ok
+test lexer::grammar_vocabulary_tests::the_grammar_colours_nothing_the_lexer_cannot_account_for ... ok
+test checker::harness::tests::every_required_acp_field_is_named_when_it_is_the_one_removed ... ok
+test lexer::grammar_vocabulary_tests::the_specifically_typed_words_are_still_covered ... ok
+test lexer::tokens_tests::every_keyword_in_the_inventory_round_trips_and_is_distinct ... ok
+test lexer::tokens_tests::keyword_inventory_covers_every_variant ... ok
+test lexer::tokens_tests::the_positional_words_are_named_without_being_reserved ... ok
+test guide::lookup::guide_tests::the_embedded_reference_carries_the_cited_sections ... ok
+test mir::agent_control_tests::agent_marked_and_unmarked_lower_identically ... ok
+test mir::agent_control_tests::the_control_pair_differs_only_by_the_marker ... ok
+test guide::lookup::guide_tests::every_entry_example_is_a_complete_document_using_its_word ... ok
+test checker::harness::tests::an_acp_section_is_complete_without_any_norn_setting ... ok
+test checker::harness::tests::a_norn_section_is_complete_without_command_cwd_permission_or_exit_grace ... ok
+test mir::codec_tests::required_recursive_default_is_refused_on_both_sides ... ok
+test mir::codec_tests::colliding_codec_stems_are_refused_not_cross_wired ... ok
+test mir::deferred_tests::a_subflow_outcome_payload_is_wrapped_for_an_optional_outcome ... ok
+test mir::child_fork_tests::sequential_child_fork_matches_reference_fold_order ... ok
+test mir::deferred_tests::a_parallel_layer_dispatches_through_one_workflow_all ... ok
+test mir::child_fork_tests::child_spawn_keeps_identity_and_outcome_envelope_codec ... ok
+test mir::deferred_tests::a_substep_chain_hands_off_and_closes_on_the_parents_arms ... ok
+test mir::deferred_tests::a_substep_visit_bound_refuses_rather_than_going_unenforced ... ok
+test mir::child_fork_tests::parallel_child_fork_is_spawn_all_then_ordered_await_with_emitter_parity ... ok
+test mir::deferred_tests::a_value_payload_is_wrapped_for_an_optional_outcome ... ok
+test mir::deferred_tests::a_substeps_failure_edge_keeps_its_routed_outcome_out_of_the_guard ... ok
+test mir::deferred_tests::bc4_zero_step_workflow_refuses_no_start_region ... ok
+test mir::deferred_tests::guard_optional_wait_now_lowers ... ok
+test mir::deferred_tests::nested_handlers_on_failure_now_lowers ... ok
+test mir::deferred_tests::ordinary_call_index_lowers_with_the_anchored_runtime_message ... ok
+test mir::deferred_tests::an_advisory_call_keeps_its_layer_in_written_order ... ok
+test mir::deferred_tests::a_degraded_parallel_layer_is_marked_on_its_first_member_only ... ok
+test mir::deferred_tests::post_join_combinator_now_lowers ... ok
+test mir::deferred_tests::each_subflow_keeps_its_own_binding_environment ... ok
+test mir::deferred_tests::sort_non_comparable_key_refuses_with_the_reference_class ... ok
+test mir::fork_tests::collection_child_fork_config_refuses_with_the_child_class ... ok
+test mir::deferred_tests::statement_level_child_forms_plan_the_witness ... ok
+test mir::deferred_tests::substep_fixtures_now_lower ... ok
+test mir::fork_tests::fork_branch_call_site_config_lowers_with_per_key_merge ... ok
+test mir::fork_tests::action_and_child_collection_forks_route_distinctly ... ok
+test mir::fork_tests::named_child_branch_refuses_cleanly ... ok
+test mir::deferred_tests::value_route_payloads_now_lower ... ok
+test mir::fork_tests::parallel_action_fork_pins_map_fanout_semantics ... ok
+test mir::deferred_tests::subflow_declarations_now_lower ... ok
+test mir::fork_tests::heterogeneous_named_fork_pins_raw_twins_and_positional_decode ... ok
+test mir::harness_control_tests::the_control_pair_differs_only_by_the_section ... ok
+test mir::pipe_tests::post_stage_any_all_lower_through_predicate_closures ... ok
+test mir::harness_control_tests::a_harness_section_does_not_change_the_lowering ... ok
+test mir::fork_tests::homogeneous_named_fork_pins_one_typed_all ... ok
+test mir::runtime::tests::enumeration_covers_every_variant_exactly_once ... ok
+test mir::pipe_tests::pipe_child_stage_lowers_to_spawn_and_wait ... ok
+test mir::runtime::tests::query_handler_is_not_a_durable_effect ... ok
+test mir::fork_tests::stopgap_refusals_match_the_reference_classes ... ok
+test mir::runtime::tests::import_surface_projects_the_full_enumeration ... ok
+test mir::pipe_tests::sort_string_key_selects_string_compare ... ok
+test mir::fork_tests::sequential_fork_pins_fold_initial_state_and_result_order ... ok
+test mir::pipe_tests::combinator_stages_lower_to_list_runtime_calls ... ok
+test mir::select::control_tests::assert_list_badmatch_traps_the_subject_list ... ok
+test mir::select::inspect_tests::framed_return_reloads_the_return_value_into_x0 ... ok
+test mir::select::control_tests::enum_total_tail_selects_with_explicit_case_end_trap ... ok
+test mir::select::inspect_tests::return_keeps_x0_live_across_a_preceding_heap_op ... ok
+test mir::select::control_tests::loop_counter_selects_a_gc_bif2_against_erlang_plus ... ok
+test mir::select::inspect_tests::awl_hello_outcome_route_returns_not_tail_calls ... ok
+test mir::select::control_tests::short_circuit_optional_selects_checked_assert_some ... ok
+test mir::deferred_tests::parallel_layer_fixtures_now_lower ... ok
+test mir::select::inspect_tests::targeted_frameless_body_uses_no_frame_or_y ... ok
+test mir::select::inspect_tests::marshaling_rejects_swapped_args_dropped_store_and_wrong_arity ... ok
+test mir::select::inspect_tests::targeted_framed_function_brackets_and_single_exits ... ok
+test mir::select::control_tests::outcome_guard_decision_tree_uses_real_failure_labels ... ok
+test mir::select::inspect_tests::targeted_heap_ops_declare_accurate_live ... ok
+test mir::select::tests::minimal_module_has_the_expected_abi_structure ... ok
+test mir::select::inspect_tests::targeted_loop_recursion_is_a_self_tail_call ... ok
+test mir::select::tests::dead_body_is_a_real_sidecar_visible_function ... ok
+test mir::select::tests::shape_call_import ... ok
+test mir::select::tests::shape_call_local ... ok
+test mir::select::tests::run_shell_passes_raw_payload_not_the_closure ... ok
+test mir::select::tests::shape_field_get ... ok
+test mir::select::tests::shape_frameless_tail_import ... ok
+test mir::select::tests::shape_json_obj_two_pairs ... ok
+test mir::select::tests::shape_make_closure ... ok
+test mir::select::tests::shape_record_tuple ... ok
+test mir::select::tests::shape_record_with_literal_int ... ok
+test mir::select::inspect_tests::targeted_route_to_step_is_a_local_tail_call ... ok
+test mir::select::tests::shape_record_zero_field ... ok
+test mir::select::tests::shape_try_bind ... ok
+test mir::select::tests::selection_is_deterministic ... ok
+test mir::tests::backward_route_reentry_now_lowers ... ok
+test mir::tests::compound_until_clones_control_only_into_unresolved_leaves ... ok
+test mir::tests::counterless_loop_pins_the_scalar_result_path ... ok
+test mir::tests::loop_lowering_pins_the_reference_semantics ... ok
+test mir::tests::optional_rhs_is_nested_below_short_circuit_branch ... ok
+test positions::tests::a_multibyte_span_covers_its_full_extent_in_utf16_units ... ok
+test positions::tests::an_inverted_span_collapses_to_its_start ... ok
+test mir::tests::minimal_exercises_core_op_shapes ... ok
+test positions::tests::offsets_past_the_document_clamp_to_its_end ... ok
+test positions::tests::point_spans_stay_points ... ok
+test positions::tests::positions_are_utf16_not_bytes_or_scalar_columns ... ok
+test printer::harness::tests::the_printer_emits_every_field_in_exactly_the_canonical_order ... ok
+test printer::harness::tests::the_scrambled_fixture_really_is_scrambled ... ok
+test mir::tests::typed_codec_bodies_pin_the_wire_shapes ... ok
+test mir::tests::a_worker_document_is_refused_by_the_lowering ... ok
+test guide::lookup::guide_tests::every_entry_example_passes_the_real_checker ... ok
+test mir::select::inspect_tests::make_fun_capture_reads_are_modeled_and_a_removed_reload_is_caught ... ok
+test mir::select::inspect_tests::wrong_live_expectation_goes_red ... ok
+test mir::tests::lowers_cover_and_golden ... ok
+test mir::select::tests::every_lowered_fixture_emits_and_validates ... ok
+test mir::select::inspect_tests::covered_ratchet_upholds_ir14_and_section_11 ... ok
+
+test result: ok. 157 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.12s
+
+     Running tests/action_bodies.rs (target/debug/deps/action_bodies-1ec5d43706095cdf)
+
+running 11 tests
+test two_bodies_on_one_action_are_a_parse_error ... ok
+test a_declared_body_parses_onto_its_action_and_a_bodyless_action_keeps_none ... ok
+test comments_around_a_body_survive_the_round_trip ... ok
+test a_body_round_trips_and_prints_idempotently ... ok
+test a_body_written_before_the_config_line_normalizes_to_canonical_order ... ok
+test two_config_lines_on_one_action_are_a_parse_error ... ok
+test run_is_still_usable_as_an_ordinary_name ... ok
+test escapes_inside_a_command_survive_the_round_trip ... ok
+test a_bodyless_document_still_checks_clean ... ok
+test the_compiled_workflow_carries_the_command_and_its_binding ... ok
+test a_document_with_no_bodies_compiles_to_no_implementations ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/action_body_executor_parity.rs (target/debug/deps/action_body_executor_parity-cbf9e5b5d6e5c315)
+
+running 5 tests
+test the_refused_table_is_actually_refused ... ok
+test a_parameter_in_program_position_is_refused_by_both ... ok
+test the_accepted_table_is_actually_accepted ... ok
+test every_command_the_checker_accepts_the_executor_also_accepts ... ok
+test the_compiled_binding_matches_what_the_executor_would_parse ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/assistant_example.rs (target/debug/deps/assistant_example-1dfc00d813673f10)
+
+running 7 tests
+test the_wait_loop_dispatches_nothing ... ok
+test the_round_loop_dispatches_exactly_once_per_iteration ... ok
+test nudge_cap_exhaustion_always_ends_the_session ... ok
+test the_assistant_example_checks_clean_and_is_canonically_formatted ... ok
+test the_emitted_round_loop_exits_on_the_stalled_field ... ok
+test the_assistant_example_compiles ... ok
+test the_assistant_example_answers_the_status_query ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/awl2_defects.rs (target/debug/deps/awl2_defects-042a3db0817a1cf8)
+
+running 10 tests
+test dead_header_keywords_get_targeted_fix_its ... ok
+test guard_error_deep_in_document_reports_true_line_and_offset ... ok
+test guard_error_at_exactly_line_forty_is_source_correct ... ok
+test inline_schema_error_column_after_multibyte_content_is_character_correct ... ok
+test error_column_after_multibyte_prose_is_character_correct ... ok
+test own_line_comments_survive_at_every_nesting_level ... ok
+test comment_torture_document_round_trips_byte_identically ... ok
+test action_config_duration_span_matches_flagship_true_position ... ok
+test dead_statement_keywords_get_targeted_fix_its ... ok
+test fork_collection_span_matches_flagship_true_position ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/b2_review_regressions.rs (target/debug/deps/b2_review_regressions-590904c371646a08)
+
+running 13 tests
+test a_failure_route_does_not_inherit_success_bindings ... ok
+test a_self_routing_substep_without_a_bound_is_rejected ... ok
+test a_substep_visits_bound_is_type_checked ... ok
+test a_subflow_parameter_cannot_shadow_a_const ... ok
+test a_failure_route_into_a_collect_breaks_definite_assignment ... ok
+test a_sub_cycle_avoiding_the_bounded_vertex_is_rejected ... ok
+test an_unbounded_sibling_substep_cycle_is_rejected ... ok
+test the_failure_binding_document_is_refused_before_emission ... ok
+test incompatible_per_path_collected_types_are_rejected ... ok
+test a_bounded_sibling_substep_cycle_is_accepted ... ok
+test bounds_covering_every_overlapping_cycle_check_clean ... ok
+test same_named_subflow_outcomes_resolve_to_their_own_declarations ... ok
+test compensation_bindings_before_the_failure_route_do_flow ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/b2_review_round2.rs (target/debug/deps/b2_review_round2-7aae3869f6a18503)
+
+running 8 tests
+test a_pure_sibling_after_cycle_is_rejected ... ok
+test a_sibling_substep_after_cycle_is_rejected ... ok
+test incompatible_types_meeting_at_a_join_are_rejected_there ... ok
+test an_unknown_sibling_after_target_is_rejected ... ok
+test a_structurally_equal_join_rejects_incompatible_consumption ... ok
+test a_structurally_equal_join_keeps_a_concrete_type ... ok
+test disjoint_branches_may_reuse_a_name_at_different_types ... ok
+test substep_after_is_refused_at_emission ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/canonical_emission.rs (target/debug/deps/canonical_emission-6fe012c519a07b69)
+
+running 5 tests
+test derived_schemas_serialize_key_sorted ... ok
+test the_sidecar_matches_a_key_sorted_expectation ... ok
+test authored_key_order_cannot_change_the_emitted_bytes ... ok
+test projected_record_fields_are_emitted_in_key_order ... ok
+test folded_schema_text_is_key_sorted_in_the_emitted_source ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/checker.rs (target/debug/deps/checker-91668f12fa1cbb50)
+
+running 8 tests
+test unknown_binding_error_is_span_exact ... ok
+test duplicate_step_names_are_refused ... ok
+test imported_optional_field_is_optional_in_the_projection_direction ... ok
+test check_without_a_root_reports_unresolvable_imports ... ok
+test diagnostics_arrive_sorted_by_source_position ... ok
+test route_targeted_earlier_step_reads_a_later_steps_binding ... ok
+test every_check_staged_invalid_fixture_is_rejected_as_expected ... ok
+test every_valid_fixture_checks_clean ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running tests/checker_hardening.rs (target/debug/deps/checker_hardening-e544ca3b735babc7)
+
+running 7 tests
+test call_site_config_on_a_child_call_is_refused ... ok
+test inline_schema_error_anchors_at_the_offending_nested_token ... ok
+test outcome_clauses_behind_a_body_terminal_route_are_refused ... ok
+test statements_after_an_unconditional_route_are_refused ... ok
+test inline_schema_refusal_skips_an_earlier_property_named_like_the_keyword ... ok
+test deep_record_mismatch_is_refused_past_the_old_depth_cap ... ok
+test structurally_equal_recursive_types_are_compatible_and_terminate ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/checker_regressions.rs (target/debug/deps/checker_regressions-a5e7a9b31d1f3088)
+
+running 11 tests
+test piped_route_to_a_step_is_refused ... ok
+test loop_max_may_not_read_loop_locals ... ok
+test dangling_middle_step_is_refused ... ok
+test named_fork_join_binding_is_refused ... ok
+test loop_rebind_inside_a_collection_fork_branch_does_not_count ... ok
+test loop_max_may_not_read_the_counter ... ok
+test backward_route_re_armed_by_an_after_edge_needs_a_bound ... ok
+test named_fork_branch_cannot_read_a_sibling_bindings ... ok
+test step_sharing_a_workflow_outcome_name_is_refused ... ok
+test falling_step_consumed_by_an_after_dependent_is_legal ... ok
+test loop_max_over_inputs_stays_clean ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/checker_rulings.rs (target/debug/deps/checker_rulings-f985dd0a33a891ee)
+
+running 8 tests
+test list_element_optional_is_refused_in_input_position ... ok
+test loop_inside_a_fork_branch_still_requires_outcome_clauses ... ok
+test nested_list_element_optional_is_refused ... ok
+test list_element_optional_is_refused_in_outcome_and_child_positions ... ok
+test route_nested_in_a_fork_inside_a_loop_is_refused_by_check ... ok
+test loop_inside_a_substep_answers_to_the_substep ... ok
+test routes_outside_loop_bodies_stay_legal ... ok
+test optional_list_stays_legal ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/compile.rs (target/debug/deps/compile-1021261a58e8c79e)
+
+running 12 tests
+test lowering_display_parity_for_message_and_planning ... ok
+test multi_outcome_envelope_derives_one_arm_per_outcome ... ok
+test language_errors_pass_through_verbatim ... ok
+test mutually_recursive_payload_falls_back_via_trial_defs ... ok
+test recursive_payload_derives_through_defs_not_inline ... ok
+test declared_node_and_override_both_surface ... ok
+test refusal_passthrough_is_lossless ... ok
+test call_site_node_override_yields_the_override ... ok
+test awl_hello_actions_are_the_two_unpinned_requirements ... ok
+test awl_hello_contracts_match_the_reference_shapes ... ok
+test awl_hello_compiles_deterministically_to_the_select_bytes ... ok
+test fork_action_fanout_compiles_deterministically_to_the_select_bytes ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/compile_child_fork.rs (target/debug/deps/compile_child_fork-34f8ba7dcf6f93cd)
+
+running 1 test
+test child_collection_fork_compiles_deterministically_to_the_select_bytes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/concat_lowering.rs (target/debug/deps/concat_lowering-9c8204e30c10de80)
+
+running 4 tests
+test direct_lower_refuses_concat_unless_both_operands_are_strings ... ok
+test int_alias_plus_string_still_refuses_at_direct_lowering ... ok
+test checked_compile_rejects_mixed_concat_before_lowering ... ok
+test checker_approved_string_alias_concat_lowers_and_selects ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/declared_signal_contract.rs (target/debug/deps/declared_signal_contract-cb833580d7403d4b)
+
+running 3 tests
+test every_declared_signal_reaches_the_contract ... ok
+test each_signal_carries_its_own_declared_schema ... ok
+test the_declared_schema_admits_conforming_and_refuses_malformed ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/editor_assets.rs (target/debug/deps/editor_assets-8c55333f708b670d)
+
+running 4 tests
+test the_recorded_pin_is_present_on_the_public_mirror ... ok
+test every_editor_covers_every_node_the_authoritative_query_colours ... ok
+test the_zed_pin_names_a_mirror_commit_carrying_this_grammar ... ok
+test no_query_names_a_node_the_grammar_does_not_produce ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/emitter.rs (target/debug/deps/emitter-80f17367c298794c)
+
+running 40 tests
+test compile_tests::the_compile_proof_builds_where_cargo_clean_can_reach_it ... ok
+test child_tests::named_fork_child_refusal_is_honest ... ok
+test child_tests::spawn_lowers_detached ... ok
+test child_tests::child_call_lowers_to_string_name_spawn ... ok
+test conflicting_binding_types_across_branches_are_refused ... ok
+test codec_bodies_pin_the_same_wire_fragments ... ok
+test enum_total_outcomes_lower_to_case ... ok
+test float_orderings_render_float_operators ... ok
+test fork_forms_map_and_fold ... ok
+test child_tests::child_collection_fork_spawns_all_then_awaits_all ... ok
+test fork_tests::parallel_action_fork_is_one_map_with_error_collapse ... ok
+test gleam_keywords_are_sanitized_everywhere ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test fork_tests::homogeneous_named_fork_is_one_typed_all ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test fork_tests::sequential_fork_folds_from_empty_and_reverses ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test loop_counter_is_language_owned ... ok
+test flagship_scout_and_warm_build_share_one_parallel_all ... ok
+test heterogeneous_named_fork_dispatches_one_parallel_all ... ok
+test loop_tests::compound_until_is_short_circuited_in_nested_loops ... ok
+test loop_tests::counting_name_collision_is_checker_refused ... ok
+test loop_tests::route_inside_a_loop_body_is_refused ... ok
+test loop_tests::loop_max_must_be_loop_invariant ... ok
+test loop_tests::unchecked_counter_is_not_in_until_scope ... ok
+test piped_route_with_payload_is_refused_at_emit ... ok
+test loop_tests::counterless_loop_uses_the_scalar_result_path ... ok
+test nested_boolean_expressions_use_gleam_block_grouping ... ok
+test on_failure_compensates_then_routes ... ok
+test emitted_sources_avoid_nondeterministic_apis ... ok
+test wait_timeout_binds_optionally ... ok
+test schema_import_without_root_is_a_spanned_emit_error ... ok
+test sequential_layer_fallback_is_announced ... ok
+test every_valid_fixture_emits ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): gated_review
+test compile_tests::query_surface_fixture_compiles_under_gleam ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): gated_item
+test compile_tests::signal_sender_fixture_compiles_under_gleam ... ok
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): awl_hello, dev_brief
+test compile_tests::flagship_fixtures_compile_under_gleam ... ok
+COMPILED 17 module(s) under real `gleam build` in 1 attempt(s): guard_optional_wait, loop_counting_until_max, release_pipeline, fork_named, child_collection_fork, fork_action_fanout, fork_sequential_route, fork_named_homogeneous, archived_awl_exam, compound_until_nested, loop_without_counting, substeps, combinators, float_guard, step_bodies, mixed_doors, declarations
+test compile_tests::loop_and_fork_fixtures_compile_under_gleam ... ok
+
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.05s
+
+     Running tests/feature_any_all_workflow_id.rs (target/debug/deps/feature_any_all_workflow_id-445cf7b01299f66f)
+
+running 3 tests
+test workflow_id_has_reference_direct_structural_parity ... ok
+test fallible_predicates_have_result_callbacks_and_outer_binds ... ok
+test nested_any_all_has_reference_direct_structural_parity ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/flow_vocab_b4_compile_proof.rs (target/debug/deps/flow_vocab_b4_compile_proof-6783ca78e8fac9b8)
+
+running 6 tests
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+COMPILED 21 module(s) under real `gleam build` in 1 attempt(s): dev_flow, rollout, fan_scores, fan_children, fan_children_tolerant, ordered_tolerant, nested_subflows, scoped_names, sibling_region_locals, nested_region_locals, region_decision, counter_hygiene, bounded_region_close, layer_hygiene, action_param_hygiene, temporary_hygiene, publish_with_cleanup, substep_cleanup, value_route, drafting, ship_release
+test b4_flow_shape_fixtures_compile_under_gleam ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.73s
+
+     Running tests/flow_vocab_compile_proof.rs (target/debug/deps/flow_vocab_compile_proof-9bd87a09ae3d1326)
+
+running 6 tests
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): flow_vocab_b1
+test flow_vocab_b1_fixture_compiles_under_gleam ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.62s
+
+     Running tests/flow_vocab_ergonomics.rs (target/debug/deps/flow_vocab_ergonomics-f2d1940195499483)
+
+running 22 tests
+test an_expression_headed_statement_still_needs_a_terminator ... ok
+test const_cycles_are_rejected_at_the_backward_reference ... ok
+test invalid_json_error_span_stays_on_char_boundaries_for_non_ascii ... ok
+test invalid_json_body_points_into_the_body ... ok
+test duplicate_consts_are_rejected_at_the_second_declaration ... ok
+test bindings_cannot_shadow_consts ... ok
+test const_values_reject_runtime_reads ... ok
+test json_is_a_reserved_word_at_declaration_sites ... ok
+test emit_refuses_documents_that_do_not_check_cleanly ... ok
+test of_is_a_reserved_word_at_declaration_sites ... ok
+test malformed_multiline_json_string_is_reported_inside_the_body ... ok
+test raw_string_value_is_verbatim_with_no_escape_processing ... ok
+test mir_lower_refuses_documents_that_do_not_check_cleanly ... ok
+test schema_of_an_undeclared_type_is_rejected ... ok
+test undefined_const_references_are_rejected ... ok
+test unterminated_json_body_is_refused_at_the_open_brace ... ok
+test unterminated_raw_string_is_refused_at_the_opener ... ok
+test json_body_brace_counting_respects_braces_inside_strings ... ok
+test the_semantic_index_declares_consts_with_their_folded_type ... ok
+test a_statement_may_start_with_a_string_literal ... ok
+test consts_fold_through_emission_as_plain_strings ... ok
+test the_vocabulary_document_round_trips_byte_identically ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/flow_vocab_refusals.rs (target/debug/deps/flow_vocab_refusals-8bf6ed5fa6e3c175)
+
+running 1 test
+test every_new_construct_emits_with_its_generated_shape ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/flow_vocab_regions.rs (target/debug/deps/flow_vocab_regions-dd35efd6caec032e)
+
+running 19 tests
+test a_collect_with_no_open_region_is_rejected ... ok
+test a_distribute_step_may_not_carry_outcomes ... ok
+test a_route_to_the_collect_from_outside_is_rejected ... ok
+test a_route_to_a_flow_outcome_from_inside_is_rejected ... ok
+test a_route_out_of_the_region_is_rejected ... ok
+test an_after_edge_may_not_cross_the_region_boundary ... ok
+test a_collect_closes_the_nearest_open_region ... ok
+test a_route_entering_the_region_mid_track_is_rejected ... ok
+test an_unclosed_region_is_rejected_at_its_opener ... ok
+test distribute_must_be_its_steps_only_line ... ok
+test distribute_needs_a_list_collection ... ok
+test collect_must_open_its_step ... ok
+test region_statements_are_step_level_only ... ok
+test region_locals_fall_out_of_scope_at_the_collect ... ok
+test the_collected_binding_must_be_assigned_on_every_success_path ... ok
+test the_collected_binding_must_be_produced_inside_the_region ... ok
+test an_empty_collection_is_legal ... ok
+test an_in_region_loopback_is_legal_and_stays_inside ... ok
+test nested_regions_with_inner_loopback_check_clean ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/flow_vocab_roundtrip_property.rs (target/debug/deps/flow_vocab_roundtrip_property-69dd1eafbb052248)
+
+running 2 tests
+test generated_vocabulary_documents_round_trip_losslessly ... ok
+test generated_flow_shape_documents_round_trip_losslessly ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/flow_vocab_shape.rs (target/debug/deps/flow_vocab_shape-b7d8fb1a3f5c7080)
+
+running 7 tests
+test sequence_steps_classify_as_sequence ... ok
+test every_step_carries_its_kind_in_the_semantic_index ... ok
+test every_step_carries_its_region_membership_in_the_semantic_index ... ok
+test the_subflow_declaration_reaches_the_semantic_index ... ok
+test a_sequence_region_with_a_strict_collect_round_trips ... ok
+test the_shape_document_round_trips_byte_identically ... ok
+test collect_results_type_strict_and_tolerant_forms ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/flow_vocab_subflows.rs (target/debug/deps/flow_vocab_subflows-1291421a15f3d6cf)
+
+running 14 tests
+test a_subflow_without_an_outcome_is_refused ... ok
+test a_subflow_declares_exactly_one_outcome ... ok
+test a_step_level_max_must_end_in_visits ... ok
+test a_subflow_outcome_carries_no_route ... ok
+test collect_requires_its_result_binding ... ok
+test a_subflow_is_not_a_pipe_stage ... ok
+test a_subflow_captures_nothing_from_the_enclosing_flow ... ok
+test a_subflow_cannot_be_spawned ... ok
+test a_subflow_call_must_be_its_steps_only_statement ... ok
+test a_subflow_call_may_not_nest_inside_a_block ... ok
+test a_value_route_payload_must_match_the_outcome_type ... ok
+test subflow_recursion_is_rejected ... ok
+test a_subflow_call_binds_the_outcome_type ... ok
+test document_consts_stay_visible_inside_a_subflow ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/flow_vocab_visits.rs (target/debug/deps/flow_vocab_visits-73144b380b0caa06)
+
+running 8 tests
+test a_cycle_bounded_only_by_an_inner_loop_is_now_rejected ... ok
+test a_non_cycle_step_still_may_not_rebind ... ok
+test the_visits_bound_must_be_input_derived ... ok
+test the_visits_bound_must_be_an_int ... ok
+test a_cycle_rebinding_that_changes_the_type_is_rejected ... ok
+test visits_is_unreadable_outside_the_bounded_steps_guards ... ok
+test a_visits_bound_on_a_cycle_member_makes_the_cycle_legal ... ok
+test a_cycle_step_may_rebind_a_cycle_threaded_name_keeping_its_type ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/grammar_parser_gate.rs (target/debug/deps/grammar_parser_gate-a8c87c28739c1163)
+
+running 6 tests
+test the_top_level_offer_is_exactly_what_the_parser_admits ... ok
+test the_type_positions_offer_nothing_because_the_parser_admits_nothing ... ok
+test the_refusal_diagnostics_name_what_the_parser_actually_admits ... ok
+test the_header_offer_is_openers_plus_witnessed_midline_words ... ok
+test every_value_position_offer_is_witnessed_in_its_slot ... ok
+test the_worker_block_offer_is_openers_plus_witnessed_words ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/guide_reference_gate.rs (target/debug/deps/guide_reference_gate-e7351aca0fe52ecb)
+
+running 7 tests
+test every_documented_path_the_glossary_names_exists ... ok
+test the_inventory_covers_the_whole_vocabulary ... ok
+test the_whole_word_matcher_reads_boundaries ... ok
+test embedded_reference_matches_the_authored_document ... ok
+test the_gate_rejects_a_citation_the_reference_cannot_answer ... ok
+test every_cited_section_exists_with_the_title_the_glossary_writes ... ok
+test every_cited_section_actually_discusses_the_word ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/implicit_child_identity.rs (target/debug/deps/implicit_child_identity-ceb16f51e04a10d4)
+
+running 1 test
+test same_shape_parents_receive_distinct_reserved_child_types ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/lexer.rs (target/debug/deps/lexer-415dc2a546970e61)
+
+running 13 tests
+test doc_line_spans_carry_true_position_and_marker ... ok
+test doc_header_lines_lex_as_data_with_verbatim_text ... ok
+test awl_hello_flagship_lexes_to_the_exact_token_sequence ... ok
+test four_slashes_and_plain_comments_stay_trivia ... ok
+test dead_awl0_words_lex_as_plain_identifiers ... ok
+test keywords_embedded_in_longer_identifiers_stay_identifiers ... ok
+test every_rev2_keyword_lexes_as_a_keyword ... ok
+test trailing_comment_after_code_stays_trivia_before_newline ... ok
+test doc_lines_lex_as_data_and_do_not_disturb_indentation ... ok
+test trailing_doc_header_marker_after_code_is_trivia_not_doc_data ... ok
+test trailing_triple_slash_after_code_is_trivia_not_doc_data ... ok
+test dev_brief_loop_region_lexes_loop_counting_until_max ... ok
+test entire_rev2_corpus_lexes_without_error ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/lexer_spans.rs (target/debug/deps/lexer_spans-e62a0ca6dd73cbb8)
+
+running 14 tests
+test lf_newline_span_is_the_single_terminator_byte ... ok
+test columns_after_multibyte_content_on_the_same_line_are_char_based ... ok
+test crlf_newline_spans_cover_the_full_terminator ... ok
+test lone_dot_without_field_name_reports_span ... ok
+test odd_indentation_reports_span ... ok
+test bad_escape_reports_escape_span ... ok
+test over_indentation_jump_reports_a_lexical_error ... ok
+test spans_stay_byte_correct_after_multibyte_doc_lines ... ok
+test lex_error_deep_in_document_reports_true_line_and_offset ... ok
+test stray_character_reports_span ... ok
+test tab_in_indentation_reports_span ... ok
+test tokens_expose_byte_line_and_column_spans ... ok
+test unterminated_string_reports_span ... ok
+test token_deep_in_document_reports_true_line_and_offset ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/operators_and_literals.rs (target/debug/deps/operators_and_literals-b874a835a4426bcb)
+
+running 17 tests
+test combinators_take_accessor_arguments ... ok
+test durations_lex_with_all_units_and_backoff_ranges ... ok
+test arrow_binds_call_results_and_accessors_chain ... ok
+test comparisons_booleans_and_string_concat_lex ... ok
+test enum_bar_is_distinct_from_pipe ... ok
+test fork_line_lexes_with_in_as_identifier ... ok
+test list_literals_and_literal_indexing_lex ... ok
+test float_lexeme_is_preserved_verbatim ... ok
+test inline_schema_json_tokens_lex ... ok
+test pipe_chain_with_accessor_stage_and_route_terminator ... ok
+test loop_seed_equal_and_schema_door_equal_lex_as_equal ... ok
+test question_marks_optional_types_including_list_types ... ok
+test predicates_lex_as_keyword_pairs ... ok
+test separated_unit_letter_is_not_a_duration ... ok
+test spawn_join_wait_timeout_line_shapes_lex ... ok
+test string_escapes_booleans_and_floats_lex ... ok
+test unit_prefixed_identifier_is_not_a_duration ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/parser_corpus.rs (target/debug/deps/parser_corpus-20599f0054dda2e9)
+
+running 4 tests
+test corpus_has_not_shrunk ... ok
+test every_valid_fixture_parses ... ok
+test every_parse_staged_invalid_fixture_fails_as_expected ... ok
+test every_check_staged_invalid_fixture_parses_cleanly ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/parser_diagnostics.rs (target/debug/deps/parser_diagnostics-a211ec6c89faffdc)
+
+running 4 tests
+test call_headed_pipe_chain_gets_a_targeted_fix_it ... ok
+test statement_after_an_outcome_clause_is_rejected ... ok
+test duplicate_loop_until_is_rejected_at_the_second_keyword ... ok
+test duplicate_loop_max_is_rejected_at_the_second_keyword ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/printer_roundtrip.rs (target/debug/deps/printer_roundtrip-6a1bd2daadd564e2)
+
+running 7 tests
+test comma_tolerance_normalizes_to_canonical_form ... ok
+test stageless_bind_over_the_width_limit_stays_on_one_line_and_reparses ... ok
+test trailing_comments_survive_and_normalize ... ok
+test long_pipe_chains_break_before_each_stage ... ok
+test wrapped_bind_chain_keeps_its_trailing_comment ... ok
+test parse_print_is_identity_over_the_canonical_corpus ... ok
+test print_parse_print_is_idempotent_over_the_whole_corpus ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/query_surface.rs (target/debug/deps/query_surface-6272e0f0dccab9c9)
+
+running 10 tests
+test both_words_stay_usable_as_ordinary_names ... ok
+test queries_parse_only_when_declared ... ok
+test the_derived_schema_carries_the_query_surface ... ok
+test the_reference_backend_emits_one_handler_per_answer ... ok
+test the_checker_refuses_each_broken_shape_and_accepts_its_repair ... ok
+test the_printer_round_trips_the_surface ... ok
+test the_direct_backend_lowers_one_handler_call_per_answer ... ok
+test both_backends_register_the_same_number_of_answers ... ok
+test both_backends_register_against_the_arguments_bearing_handler ... ok
+test the_compile_seam_carries_the_surface_into_the_beam ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/retry_counting.rs (target/debug/deps/retry_counting-9243ff8a4b303160)
+
+running 4 tests
+test reference_emitter_maps_three_further_attempts_to_four_total ... ok
+test zero_further_attempts_is_one_total_execution ... ok
+test direct_lowering_maps_three_further_attempts_to_four_total ... ok
+test declared_count_is_the_identity_and_does_not_move ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/runtime_codecs.rs (target/debug/deps/runtime_codecs-a215909f3f6787e0)
+
+running 28 tests
+test assert_list_badmatch_reports_the_subject_at_runtime ... ok
+test fix_cycle::empty_list_literal_materializes_nil_at_runtime ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): ref_fork_named_config
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): ref_optional_shorthand, ref_triage_message
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): ref_fork_in_loop
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): ref_general_concat
+test concat::general_concat_executes_with_emitter_byte_parity ... ok
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): ref_child_collection_fork, ref_sit_one
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): ref_child_collection_fork, ref_sit_one
+test direct_codecs_execute_with_reference_parity ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): ref_fork_config
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): ref_fork_named_hetero_config
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): ref_fallible_collection_predicates
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): ref_dev_brief
+test fork_generality::fork_inside_loop_completes_two_passes_with_reference_parity ... ok
+test gleam_test_support::a_rejected_module_is_a_defect ... ok
+test gleam_test_support::an_unreachable_registry_is_infrastructure ... ok
+test gleam_test_support::an_unsatisfiable_requirement_is_a_defect ... ok
+test gleam_test_support::download_progress_alone_is_not_a_registry_failure ... ok
+test gleam_test_support::the_ci_tar_archive_failure_is_infrastructure ... ok
+test fork_generality::named_fork_homogeneous_site_config_parity ... ok
+test fix_cycle::dev_brief_fix_cycle_encode_reaches_dispatch_with_reference_parity ... ok
+test fork_generality::parallel_action_fork_site_config_dispatches_with_reference_parity ... ok
+test child_envelope::real_child_outcome_envelope_completes_parent_fold_on_both_backends ... ok
+test semantic_pins::value_boolean_operators_skip_faulting_rhs_at_runtime ... ok
+test fork_generality::named_fork_heterogeneous_site_config_parity ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): ref_call_config
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): ref_fork_config_seq
+test child_envelope::child_output_codec_is_strict_and_symmetric_on_both_backends ... ok
+test fork_generality::plain_call_site_config_merges_per_key_with_reference_parity ... ok
+test fork_generality::sequential_fork_site_config_and_index_prelude_dispatch_with_reference_parity ... ok
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): ref_fallible_any_short_circuit, ref_fallible_all_short_circuit
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): ref_duration_boundary
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): ref_collection_predicates
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): ref_pipe_child, ref_score_essay
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): ref_index_lists
+COMPILED 2 module(s) under real `gleam build` in 1 attempt(s): ref_child_call, ref_score_essay_stmt
+test nested_collection_predicates_execute_with_reference_parity ... ok
+test stmt_parity::index_and_lists_execute_with_reference_parity ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): ref_pipe_combinators
+test pipes::pipe_combinators_execute_with_reference_parity ... ok
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): ref_wait_signal
+COMPILED 1 module(s) under real `gleam build` in 1 attempt(s): ref_wait_timeout
+test semantic_pins::duration_boundary_executes_exactly_and_next_second_is_refused ... ok
+test fallible_predicates_execute_through_production_hosts_with_parity ... ok
+test stmt_parity::child_call_statement_and_spawn_execute_with_reference_parity ... ok
+test pipes::pipe_child_stage_executes_with_reference_parity ... ok
+test stmt_parity::wait_signal_binds_payload_with_reference_parity ... ok
+test stmt_parity::wait_timeout_arms_execute_with_reference_parity ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.84s
+
+     Running tests/schema.rs (target/debug/deps/schema-7a3c012a48262d31)
+
+running 14 tests
+test import_derivation_without_a_root_refuses ... ok
+test enums_derive_string_enum_schemas ... ok
+test doc_comments_flow_to_descriptions_at_type_and_field_level ... ok
+test named_type_references_become_local_defs ... ok
+test inline_schemas_reemit_their_pasted_json_with_constraints ... ok
+test builtins_lists_and_optionals_map_to_json_types ... ok
+test optional_fields_are_omitted_from_required_and_never_nullable ... ok
+test an_imported_schemas_internal_refs_survive_composition ... ok
+test imported_schemas_reemit_verbatim_with_constraints_preserved ... ok
+test recursive_records_self_reference_the_schema_root ... ok
+test unknown_types_are_refused_by_name ... ok
+test workflow_contract_covers_inputs_with_optionality_and_narration ... ok
+test check_proves_the_signal_child_and_activity_schemas_too ... ok
+test a_door_the_validator_cannot_compile_is_refused_at_check ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/schema_door.rs (target/debug/deps/schema_door-1ebc1c5128282130)
+
+running 11 tests
+test pasted_schema_with_non_two_space_indentation_lexes ... ok
+test braces_and_escaped_quotes_inside_json_strings_do_not_close_the_body ... ok
+test inline_schema_body_is_one_verbatim_token ... ok
+test negative_numbers_exponents_and_json_escapes_pass_verbatim ... ok
+test no_structural_tokens_are_emitted_inside_a_multiline_body ... ok
+test schema_file_import_door_is_not_raw_captured ... ok
+test brace_on_the_line_after_schema_is_not_a_raw_door ... ok
+test schema_body_span_is_document_true ... ok
+test single_line_schema_body_keeps_lexing_the_rest_of_the_line ... ok
+test tokens_after_a_multiline_body_report_the_closing_line ... ok
+test unterminated_schema_body_reports_the_opening_brace ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/semantic.rs (target/debug/deps/semantic-4f6a404956036ce3)
+
+running 1 test
+test semantic_spans_cover_declarations_and_checker_owned_scopes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/shell_run_example.rs (target/debug/deps/shell_run_example-c675e5ce42ff74e0)
+
+running 3 tests
+test the_shell_run_example_checks_clean_and_is_canonically_formatted ... ok
+test the_shell_run_example_compiles_with_its_command_in_the_package_contract ... ok
+test the_example_command_is_identity_bound ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/short_circuit.rs (target/debug/deps/short_circuit-5c41429db6bc4380)
+
+running 1 test
+test gleam_emitter_keeps_optional_rhs_inside_some_branch ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/signal_sender.rs (target/debug/deps/signal_sender-9c5f196e68486c67)
+
+running 20 tests
+test a_send_without_a_target_is_named ... ok
+test a_send_is_not_an_action_body ... ok
+test an_outbound_name_must_be_snake_case ... ok
+test named_fields_on_a_leaf_payload_are_refused ... ok
+test a_non_string_target_is_refused ... ok
+test a_missing_payload_field_is_refused ... ok
+test a_duplicate_outbound_declaration_is_refused ... ok
+test a_payload_field_of_the_wrong_type_is_refused ... ok
+test sending_a_receive_only_signal_names_the_direction ... ok
+test sending_an_undeclared_signal_is_a_check_error ... ok
+test the_bare_form_is_refused_for_a_non_nil_payload ... ok
+test the_payload_after_the_target_gets_a_fix_it ... ok
+test the_corpus_fixture_is_already_canonical ... ok
+test one_name_may_be_declared_inbound_and_outbound ... ok
+test a_well_formed_send_parses_checks_and_round_trips ... ok
+test send_is_not_reserved_and_still_names_an_action ... ok
+test a_send_is_legal_inside_an_on_failure_block ... ok
+test a_document_without_sends_is_unaffected ... ok
+test the_direct_backend_reaches_the_same_sdk_entry_point ... ok
+test the_reference_backend_emits_signal_send ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/worker_documents.rs (target/debug/deps/worker_documents-0604cb68c8ed9dd5)
+
+running 10 tests
+test a_worker_document_publishes_no_start_contract ... ok
+test every_action_body_carries_its_capture ... ok
+test the_opening_declaration_chooses_the_family ... ok
+test the_workflow_compiler_refuses_a_worker_document_by_name ... ok
+test the_worker_compiler_refuses_a_workflow_document_by_name ... ok
+test printing_normalizes_and_reparses ... ok
+test command_hygiene_holds_in_the_worker_family ... ok
+test a_worker_document_checks_clean_and_prints_canonically ... ok
+test the_advertised_contract_stays_worker_owed ... ok
+test the_advertised_surface_matches_the_callers_contract ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/workflow_timeout.rs (target/debug/deps/workflow_timeout-63ff8394b57dd684)
+
+running 4 tests
+test workflow_timeout_parses_and_prints_with_header_trivia ... ok
+test zero_and_negative_workflow_timeouts_are_checked_at_the_declaration ... ok
+test overflowing_workflow_timeout_is_checked_at_the_declaration ... ok
+test timeout_is_compile_metadata_for_both_backends_not_workflow_code ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+   Doc-tests aion_awl
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

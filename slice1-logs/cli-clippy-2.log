@@ -1,0 +1,5 @@
+error: failed to link or copy `/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/target/debug/build/signal-hook-e32dd59819018dca/build_script_build-e32dd59819018dca` to `/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/target/debug/build/signal-hook-e32dd59819018dca/build-script-build`
+
+Caused by:
+  No space left on device (os error 28)
+warning: build failed, waiting for other jobs to finish...

@@ -12,7 +12,6 @@ use serde_json::{Value, json};
 
 use super::args::{self, AgentArgs};
 use super::surface;
-use crate::harness::HarnessArgs;
 use crate::settings::Environment;
 use crate::worker_surface::{self, ServingSource};
 
@@ -54,17 +53,12 @@ fn write_document(label: &str, source: &str) -> Result<PathBuf, Box<dyn Error>> 
 /// Arguments with only the document set — the shape `--check` is invoked with.
 fn args_for(document: &Path) -> AgentArgs {
     AgentArgs {
-        awl: document.to_path_buf(),
+        awl: Some(document.to_path_buf()),
         liminal_addresses: Vec::new(),
         task_queue: None,
         identity: None,
-        concurrency: None,
-        reconnect_initial_backoff: None,
-        reconnect_max_backoff: None,
-        reconnect_max_attempts: None,
         node: None,
         check: false,
-        harness: HarnessArgs::default(),
     }
 }
 
@@ -254,31 +248,34 @@ fn a_document_that_does_not_compile_is_refused_with_its_diagnostics() -> TestRes
 }
 
 /// Every connection setting must be supplied. A worker started from a shell should
-/// need ONE correction, not seven — so every missing setting is named at once, by
-/// both the flag and the variable that could supply it.
+/// need ONE correction, not two — so every missing setting is named at once, by both
+/// the flag and the variable that could supply it.
 ///
-/// Resolved with NO harness, which isolates the connection contract: a build compiling
-/// no adapter in demands no harness configuration, and the harness settings have their
-/// own coverage in [`crate::harness`]. That the two groups share ONE refusal is pinned
-/// by `a_missing_harness_setting_joins_the_connection_report` below.
+/// The set is deliberately SHORT now: concurrency and the three reconnect settings are
+/// declared in the document's `harness` section and are no longer flags, so a missing
+/// one is refused by `aion awl check` with the field named, long before a worker is
+/// started. What is left is what genuinely belongs to this process on this box.
 #[test]
 fn missing_settings_are_reported_by_name_and_all_at_once() -> TestResult {
     let document = write_document("missing", DOCUMENT)?;
-    let Err(error) = args::resolve(&args_for(&document), &Environment::default(), None) else {
+    let Err(error) = args::resolve(&args_for(&document), &Environment::default()) else {
         return Err("resolution with nothing supplied must be refused".into());
     };
     let report = error.to_string();
     for expected in [
         "--liminal-address or $AION_WORKER_LIMINAL_ADDRESSES",
         "--identity or $AION_WORKER_IDENTITY",
-        "--concurrency or $AION_WORKER_CONCURRENCY",
-        "--reconnect-initial-backoff or $AION_RECONNECT_INITIAL_BACKOFF_SECONDS",
-        "--reconnect-max-backoff or $AION_RECONNECT_MAX_BACKOFF_SECONDS",
-        "--reconnect-max-attempts or $AION_RECONNECT_MAX_ATTEMPTS",
     ] {
         assert!(
             report.contains(expected),
             "the report must name `{expected}`, got:\n{report}"
+        );
+    }
+    for deleted in ["--concurrency", "--reconnect-"] {
+        assert!(
+            !report.contains(deleted),
+            "`{deleted}` is declared in the document now, so the connection report must \
+             not ask for it: {report}"
         );
     }
     Ok(())
@@ -296,18 +293,10 @@ fn the_environment_supplies_settings_and_the_flag_wins() -> TestResult {
             "127.0.0.1:50061, 127.0.0.1:50062",
         ),
         ("AION_WORKER_IDENTITY", "from-environment"),
-        ("AION_WORKER_CONCURRENCY", "3"),
-        ("AION_RECONNECT_INITIAL_BACKOFF_SECONDS", "0.25"),
-        ("AION_RECONNECT_MAX_BACKOFF_SECONDS", "5"),
-        ("AION_RECONNECT_MAX_ATTEMPTS", "9"),
         ("AION_TASK_QUEUE", "reviewers"),
     ]);
 
-    let (resolved, harness) = args::resolve(&args_for(&document), &environment, None)?;
-    assert_eq!(
-        harness, None,
-        "no harness resolved means no harness configuration"
-    );
+    let resolved = args::resolve(&args_for(&document), &environment)?;
     assert_eq!(
         resolved.addresses,
         vec![
@@ -317,17 +306,13 @@ fn the_environment_supplies_settings_and_the_flag_wins() -> TestResult {
         "a comma-separated list keeps its order and drops blank entries"
     );
     assert_eq!(resolved.identity, "from-environment");
-    assert_eq!(resolved.concurrency, 3);
-    assert_eq!(resolved.initial_backoff, Duration::from_millis(250));
-    assert_eq!(resolved.max_backoff, Duration::from_secs(5));
-    assert_eq!(resolved.max_attempts, 9);
     assert_eq!(resolved.node, None, "node is the SDK's default, not ours");
 
     let mut arguments = args_for(&document);
     arguments.identity = Some(String::from("from-flag"));
     arguments.liminal_addresses = vec![String::from("127.0.0.1:50099")];
     arguments.task_queue = Some(String::from("from-flag-queue"));
-    let (resolved, _) = args::resolve(&arguments, &environment, None)?;
+    let resolved = args::resolve(&arguments, &environment)?;
     assert_eq!(resolved.identity, "from-flag");
     assert_eq!(resolved.addresses, vec![String::from("127.0.0.1:50099")]);
     assert_eq!(
@@ -346,7 +331,7 @@ fn a_blank_environment_value_counts_as_missing() -> TestResult {
         ("AION_WORKER_LIMINAL_ADDRESSES", "  ,  "),
         ("AION_WORKER_IDENTITY", "   "),
     ]);
-    let Err(error) = args::resolve(&args_for(&document), &environment, None) else {
+    let Err(error) = args::resolve(&args_for(&document), &environment) else {
         return Err("blank values must be refused as missing".into());
     };
     let report = error.to_string();
@@ -355,38 +340,67 @@ fn a_blank_environment_value_counts_as_missing() -> TestResult {
     Ok(())
 }
 
-/// An unusable value is refused naming the setting and the value, never coerced.
+/// The LAUNCH comes from the document and from nowhere else.
+///
+/// The four settings that moved — concurrency and the reconnect trio — are read off a
+/// compiled `harness` section here. The pin is that the values reaching the worker are
+/// the DOCUMENT's, so a future edit that reintroduced an environment fallback for any of
+/// them would be caught even though the flags are gone.
 #[test]
-fn an_unusable_setting_value_is_refused_by_name() -> TestResult {
-    let document = write_document("unusable", DOCUMENT)?;
-    let supplied = |concurrency: &str, backoff: &str| {
-        Environment::from_pairs([
-            ("AION_WORKER_LIMINAL_ADDRESSES", "127.0.0.1:50061"),
-            ("AION_WORKER_IDENTITY", "reviewer-worker"),
-            ("AION_WORKER_CONCURRENCY", concurrency),
-            ("AION_RECONNECT_INITIAL_BACKOFF_SECONDS", backoff),
-            ("AION_RECONNECT_MAX_BACKOFF_SECONDS", "5"),
-            ("AION_RECONNECT_MAX_ATTEMPTS", "9"),
-        ])
+fn the_launch_settings_come_from_the_documents_harness_section() -> TestResult {
+    let document = write_document("launch", &harness_document())?;
+    let Some(launch) = crate::worker_surface::compile_harness(&document, "reviewers")? else {
+        return Err("the document declares a harness section".into());
     };
-    let arguments = args_for(&document);
-
-    let Err(error) = args::resolve(&arguments, &supplied("0", "1"), None) else {
-        return Err("a zero concurrency must be refused".into());
-    };
-    assert!(
-        error.to_string().contains("--concurrency"),
-        "the refusal must name the setting, got: {error}"
+    assert_eq!(launch.concurrency, 7);
+    assert_eq!(launch.reconnect_initial_backoff, Duration::from_secs(5));
+    assert_eq!(launch.reconnect_max_backoff, Duration::from_secs(120));
+    assert_eq!(launch.reconnect_max_attempts, 42);
+    assert_eq!(
+        launch.env_pass,
+        vec![String::from("PATH"), String::from("HOME")],
+        "the pass-through list is the agent child's WHOLE environment"
     );
+    Ok(())
+}
 
-    let Err(error) = args::resolve(&arguments, &supplied("4", "nonsense"), None) else {
-        return Err("a non-numeric backoff must be refused".into());
-    };
+/// A document with no `harness` section declares no launch, and that is a first-class
+/// answer rather than an error: a queue served by a worker SDK build or by declared
+/// bodies has no agent to start.
+#[test]
+fn a_document_without_a_harness_section_declares_no_launch() -> TestResult {
+    let document = write_document("nolaunch", DOCUMENT)?;
+    let launch = crate::worker_surface::compile_harness(&document, "reviewers")?;
+    assert!(
+        launch.is_none(),
+        "no section means no launch, not an empty one"
+    );
+    Ok(())
+}
+
+/// MIGRATION RIDER: a document that declares a queue but no launch is refused LOUDLY,
+/// naming where the settings live now.
+///
+/// This is the refusal an operator meets after the flags were deleted, so it carries the
+/// whole shape rather than one missing field: they have almost certainly arrived with
+/// the old flags in their fingers.
+#[test]
+fn serving_a_document_with_no_harness_section_refuses_naming_the_section() -> TestResult {
+    let document = write_document("refusal", DOCUMENT)?;
+    let surface = surface::derive(&document, None)?;
+    let error = super::serve::no_harness_section(&surface, &document);
     let message = error.to_string();
-    assert!(
-        message.contains("--reconnect-initial-backoff") && message.contains("nonsense"),
-        "the refusal must name the setting and the value, got: {message}"
-    );
+    for expected in [
+        "declares no `harness` section",
+        "There is no flag for any of it",
+        "aion awl check",
+        "reviewers",
+    ] {
+        assert!(
+            message.contains(expected),
+            "the refusal must name `{expected}`, got:\n{message}"
+        );
+    }
     Ok(())
 }
 
@@ -472,46 +486,6 @@ fn the_acp_check_report_advertises_exactly_cancel() -> TestResult {
         report["intervention_capabilities"]["supported"],
         json!([{ "primitive": "Cancel" }]),
         "ACP can deliver exactly one primitive, so exactly one is advertised"
-    );
-    Ok(())
-}
-
-/// A missing HARNESS setting appears in the SAME refusal as a missing connection
-/// setting. One shell invocation with two mistakes is one mistake to correct, and this
-/// is the acceptance the whole shared-resolution contract exists for.
-#[cfg(feature = "acp")]
-#[test]
-fn a_missing_harness_setting_joins_the_connection_report() -> TestResult {
-    let document = write_document("bothmissing", DOCUMENT)?;
-    let mut arguments = args_for(&document);
-    // Everything the ACP harness needs EXCEPT the permission policy, which has no
-    // default because it is a security decision.
-    arguments.harness.acp_command = Some(String::from("opencode"));
-    arguments.harness.acp_cwd = Some(String::from("/srv/workspace"));
-    arguments.harness.acp_exit_grace = Some(String::from("2"));
-    // ... and a connection setting supplied, so the report has to carry both halves.
-    arguments.identity = Some(String::from("reviewer-worker"));
-
-    let Err(error) = args::resolve(
-        &arguments,
-        &Environment::default(),
-        Some(crate::harness::HarnessKind::Acp),
-    ) else {
-        return Err("an ACP worker with no permission policy must be refused".into());
-    };
-    let report = error.to_string();
-    assert!(
-        report.contains("--acp-permission or $AION_ACP_PERMISSION"),
-        "the report must name the missing security decision, got:\n{report}"
-    );
-    assert!(
-        report.contains("--liminal-address or $AION_WORKER_LIMINAL_ADDRESSES")
-            && report.contains("--concurrency or $AION_WORKER_CONCURRENCY"),
-        "the report must name the missing connection settings in the SAME message, got:\n{report}"
-    );
-    assert!(
-        !report.contains("--identity"),
-        "a setting that WAS supplied must not be reported missing, got:\n{report}"
     );
     Ok(())
 }
@@ -617,3 +591,13 @@ worker reviewers
 step do_stamp
   brief |> stamp |> route stamped
 "#;
+
+/// The queue document with a complete `norn` launch declared on it.
+fn harness_document() -> String {
+    DOCUMENT.replace(
+        "worker reviewers\n",
+        "worker reviewers\n  harness\n    kind norn\n    concurrency 7\n    \
+         reconnect_initial_backoff 5s\n    reconnect_max_backoff 2m\n    \
+         reconnect_max_attempts 42\n    env_pass \"PATH\", \"HOME\"\n",
+    )
+}

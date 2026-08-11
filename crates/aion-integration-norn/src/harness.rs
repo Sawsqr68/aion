@@ -19,7 +19,7 @@ use std::sync::Arc;
 use aion_core::{InterventionCapabilities, InterventionPrimitive};
 use aion_integrations::contract::AgentHarness;
 use aion_integrations::jsonrpc::{IncomingMessage, JsonRpcConnection, JsonRpcId, JsonRpcRequest};
-use aion_integrations::{AgentRunSpec, HarnessError};
+use aion_integrations::{AgentRunSpec, ChildEnvironment, HarnessError};
 use async_trait::async_trait;
 use serde_json::{Value, json};
 use tokio::process::{ChildStdin, ChildStdout, Command};
@@ -104,6 +104,10 @@ pub struct NornInvocation {
     /// followed by the configured extra arguments with their run-identity
     /// placeholders expanded.
     pub argv: Vec<String>,
+    /// The child's WHOLE declared environment, when one was declared. Present means the spawn
+    /// CLEARS the inherited environment and sets exactly these pairs; absent means the child
+    /// inherits, which is what a hand-written worker that declares nothing still gets.
+    pub declared_environment: Option<ChildEnvironment>,
     /// The `KEY=VALUE` pairs set on the child's environment, in order.
     pub env: Vec<(String, String)>,
     /// The variables removed from the child's environment. Removals are
@@ -119,6 +123,7 @@ pub struct NornInvocation {
 pub struct NornHarness {
     binary: PathBuf,
     extra_args: Vec<NornArgument>,
+    declared_environment: Option<ChildEnvironment>,
     env: Vec<(String, String)>,
     env_removed: Vec<String>,
 }
@@ -136,6 +141,7 @@ impl NornHarness {
         Self {
             binary: PathBuf::from(DEFAULT_NORN_BINARY),
             extra_args: Vec::new(),
+            declared_environment: None,
             env: Vec::new(),
             env_removed: Vec::new(),
         }
@@ -147,6 +153,7 @@ impl NornHarness {
         Self {
             binary: binary.into(),
             extra_args: Vec::new(),
+            declared_environment: None,
             env: Vec::new(),
             env_removed: Vec::new(),
         }
@@ -171,6 +178,20 @@ impl NornHarness {
     #[must_use]
     pub fn with_literal_arg(mut self, arg: impl Into<String>) -> Self {
         self.extra_args.push(NornArgument::Literal(arg.into()));
+        self
+    }
+
+    /// Declares the `norn` child's WHOLE environment.
+    ///
+    /// Without this the child inherits the worker process's environment, which is invisible
+    /// configuration nobody wrote down and nobody reviewed. With it the child's environment is
+    /// CONSTRUCTED: the spawn clears everything first and sets exactly the resolved pairs, so a
+    /// variable the declaration does not name is absent in the child whatever the parent carries.
+    ///
+    /// [`Self::with_env`] and [`Self::without_env`] still apply, on top of the declared set.
+    #[must_use]
+    pub fn with_declared_environment(mut self, environment: ChildEnvironment) -> Self {
+        self.declared_environment = Some(environment);
         self
     }
 
@@ -217,6 +238,7 @@ impl NornHarness {
         NornInvocation {
             program: self.binary.clone(),
             argv,
+            declared_environment: self.declared_environment.clone(),
             env: self.env.clone(),
             env_removed: self.env_removed.clone(),
         }
@@ -228,6 +250,10 @@ impl NornHarness {
         let invocation = self.invocation(spec);
         let mut command = Command::new(&invocation.program);
         command.args(&invocation.argv);
+        if let Some(declared) = &invocation.declared_environment {
+            command.env_clear();
+            command.envs(declared.pairs().iter().map(|(key, value)| (key, value)));
+        }
         command
             .envs(invocation.env.iter().map(|(key, value)| (key, value)))
             .stdin(Stdio::piped())
@@ -386,6 +412,11 @@ impl AgentHarness for NornHarness {
 
     async fn start(&self, spec: AgentRunSpec) -> Result<Self::Session, HarnessError> {
         let prompt = prompt_from_spec(&spec)?;
+        // Named BEFORE the spawn: `norn` is resolved on `PATH` by default, and a declaration
+        // that omits `PATH` would otherwise die as a bare `No such file or directory`.
+        if let Some(declared) = &self.declared_environment {
+            declared.require_for_program(&self.binary)?;
+        }
         let mut child = self.spawn(&spec)?;
         let (stdout, stdin) = take_child_io(&mut child)?;
         let connection = Arc::new(JsonRpcConnection::new(stdout, stdin));
@@ -617,6 +648,9 @@ mod tests {
                     "--session-id".to_owned(),
                     format!("{}-dev", spec.workflow_id),
                 ],
+                // None: this harness declares no environment, so the child inherits —
+                // the pre-declaration behaviour a hand-written worker still gets.
+                declared_environment: None,
                 env: vec![("NORN_LOG".to_owned(), "debug".to_owned())],
                 env_removed: vec!["OPENAI_API_KEY".to_owned()],
             }
@@ -625,6 +659,35 @@ mod tests {
             argv(&harness, &spec)?,
             invocation.argv,
             "the command's argv must be exactly the previewed argv"
+        );
+        Ok(())
+    }
+
+    /// A DECLARED environment travels on the previewable invocation, so what a
+    /// composition root asserts is what the spawn performs — the same reason the argv
+    /// preview exists.
+    #[test]
+    fn a_declared_environment_rides_the_previewable_invocation() -> Result<(), String> {
+        let spec = spec();
+        let mut context = std::collections::BTreeMap::new();
+        context.insert("PATH".to_owned(), "/usr/bin".to_owned());
+        context.insert("CLAUDECODE".to_owned(), "1".to_owned());
+        let declaration = aion_integrations::EnvironmentDeclaration::new(["PATH"])
+            .map_err(|error| error.to_string())?;
+
+        let harness = NornHarness::with_binary("/bin/norn")
+            .with_declared_environment(declaration.resolve(&context));
+        let invocation = harness.invocation(&spec);
+        let Some(declared) = invocation.declared_environment else {
+            return Err("the declaration must reach the invocation preview".to_owned());
+        };
+        assert_eq!(
+            declared.pairs(),
+            [("PATH".to_owned(), "/usr/bin".to_owned())]
+        );
+        assert!(
+            !declared.carries("CLAUDECODE"),
+            "a variable the declaration does not name is absent whatever the parent carries"
         );
         Ok(())
     }

@@ -72,21 +72,40 @@ let harness = AcpHarness::new(
 The `aion` binary composes this adapter in behind its default-on `acp` cargo feature, so an operator
 serves an ACP agent on the queue an `.awl` document declares with no Rust at all:
 
-```text
-aion worker agent flows/review.awl \
-  --harness acp \
-  --acp-command npx --acp-arg @google/gemini-cli --acp-arg --acp \
-  --acp-cwd /srv/workspace \
-  --acp-permission deny \
-  --acp-exit-grace 5 \
-  --liminal-address 127.0.0.1:50061 --identity reviewer-worker --concurrency 4 \
-  --reconnect-initial-backoff 1 --reconnect-max-backoff 30 --reconnect-max-attempts 10
+The launch is declared in the document, in the `worker` block's `harness` section — there is no flag
+for any of it:
+
+```awl
+worker reviewers
+  harness
+    kind acp
+    concurrency 4
+    reconnect_initial_backoff 1s
+    reconnect_max_backoff 30s
+    reconnect_max_attempts 10
+    env_pass "PATH", "HOME", "GEMINI_API_KEY"
+    command "/usr/local/bin/npx"
+    args "@google/gemini-cli", "--acp"
+    cwd "/srv/workspace"
+    permission "deny"
+    exit_grace 5s
+  action review(prompt: String) -> Reply
+    agent
 ```
 
-Every one of those settings can come from its `AION_*` environment variable instead, except the two
-repeatable ones (`--acp-arg`, `--acp-env`), which have no safe single-variable encoding. Add `--check`
-to print the exact action surface, the resolved harness, and the intervention controls it advertises
-without connecting to anything. `aion worker agent --help` is the full contract.
+```text
+aion worker agent flows/review.awl \
+  --liminal-address 127.0.0.1:50061 --identity reviewer-worker
+```
+
+`command` is an absolute path because a worker starts from whatever directory a supervisor happened
+to be in — the table above spells the launchers the way a shell does, and the document wants that
+program's full path with the rest of the line in `args`. `env_pass` is the agent's WHOLE environment: the document names the variables, the box
+supplies their values, and a variable it does not name is absent in the agent whatever the worker
+inherited. `aion awl check flows/review.awl` names any setting the section is missing, scoped to the
+kind it declares. Add `--check` to the command to print the exact action surface, the resolved
+harness, and the intervention controls it advertises without connecting to anything.
+`aion worker agent --help` is the full contract.
 
 ## Wire types
 

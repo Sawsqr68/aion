@@ -220,25 +220,21 @@ enum WorkerCommand {
     /// variable, the flag wins, and nothing is invented — a missing setting is
     /// reported by name, with all of them listed at once.
     ///
-    /// WHICH harness is `--harness`, resolved over the adapters this binary was
-    /// built with: a build carrying exactly one derives it, a build carrying
-    /// several refuses until one is selected and names every choice, and a name
-    /// this build does not carry is refused naming what it does. The default
-    /// build carries `norn` and `acp`, so it requires the flag.
+    /// The LAUNCH is declared in the document, in the `worker` block's `harness`
+    /// section, and is not a flag: `kind` (`acp` or `norn`), `concurrency`, the
+    /// three reconnect settings, `env_pass`, and the per-kind settings — `command`
+    /// (absolute), `cwd` (absolute), `permission` (`deny` or `allow-once`, no
+    /// default, because it decides whether an unattended agent may write files and
+    /// run commands) and `exit_grace` for `acp`; the optional `binary` for `norn`;
+    /// optional `args` for either. Nothing is inferred: the checker refuses a
+    /// section missing any field of ITS DECLARED KIND's required set, by name, at
+    /// `aion awl check`. A `kind` this binary was not built with is refused here,
+    /// naming what the build does carry.
     ///
-    /// Each harness is configured by its own settings, demanded only when it is
-    /// the resolved one. The `acp` harness needs `--acp-command`, `--acp-cwd`
-    /// (absolute), `--acp-permission` (`deny` or `allow-once`, no default —
-    /// it decides whether an unattended agent may write files and run commands)
-    /// and `--acp-exit-grace`, plus repeatable `--acp-arg` / `--acp-env`; ACP has
-    /// no standard launch flag, so nothing about the command is inferred from an
-    /// agent's name. The `norn` harness's settings are all optional: `--norn-binary`
-    /// if `norn` is not on the worker's PATH, repeatable `--norn-arg` pass-through
-    /// arguments (with `{workflow_id}` / `{activity_type}` expanded per run), and
-    /// repeatable `--norn-unset-env` to strip a variable from the spawned norn's
-    /// environment. A flag configuring a harness this invocation is not serving is
-    /// REFUSED, never ignored: a flag that silently does nothing is how an operator
-    /// comes to believe a policy is in force when it is not.
+    /// `env_pass` is the agent subprocess's WHOLE environment: the document names
+    /// the variables, this machine supplies their values, and a variable that is
+    /// not named is absent in the agent whatever this worker's own environment
+    /// carries. Nothing is inherited.
     ///
     /// `--check` prints the exact action surface this worker would advertise, the
     /// resolved harness, and the intervention controls that harness advertises,
@@ -565,9 +561,135 @@ enum RemoteCommand {
     },
 }
 
+/// Every launch setting that moved out of `aion worker agent` and into the worker
+/// document's `harness` section, with the field that replaced it.
+///
+/// This is a REFUSAL that teaches, never a compat shim: not one of these is accepted,
+/// and the process still exits on clap's own argument error. What it adds is the
+/// sentence clap cannot know — that the setting still exists, in a different file, under
+/// a different name. Without it an operator reads "unexpected argument
+/// `--acp-permission`" and has no way to tell a deleted setting from a typo.
+const MIGRATED_LAUNCH_FLAGS: [(&str, &str); 14] = [
+    ("--harness", "kind"),
+    ("--concurrency", "concurrency"),
+    ("--reconnect-initial-backoff", "reconnect_initial_backoff"),
+    ("--reconnect-max-backoff", "reconnect_max_backoff"),
+    ("--reconnect-max-attempts", "reconnect_max_attempts"),
+    ("--acp-command", "command"),
+    ("--acp-arg", "args"),
+    ("--acp-cwd", "cwd"),
+    ("--acp-permission", "permission"),
+    ("--acp-env", "env_pass"),
+    ("--acp-exit-grace", "exit_grace"),
+    ("--norn-binary", "binary"),
+    ("--norn-arg", "args"),
+    ("--norn-unset-env", "env_pass"),
+];
+
+/// The subcommand path whose launch flags were deleted.
+///
+/// The advice is scoped to THIS verb and no other, which is not a nicety: four of the
+/// deleted spellings — `--concurrency` and the three `--reconnect-*` — are LIVE, REQUIRED
+/// flags on `aion worker awl` (see [`crate::worker_awl::args`], and the start command
+/// `docs/workers/AWL-WORKER-DOCUMENTS.md` publishes). An operator who mistypes that
+/// documented line must not be told those flags are deleted and sent to write a `harness`
+/// section — a worker-family document is FORBIDDEN to carry one, because every action in
+/// it has a declared body and there is nothing for an agent to serve. That advice would
+/// send them to a refusal, from a refusal, for a flag that was never wrong.
+const MIGRATED_FLAG_VERB: [&str; 2] = ["worker", "agent"];
+
+/// Whether `argv` invokes the verb whose launch flags were deleted.
+///
+/// Matched as the adjacent token pair, which is what a subcommand path looks like on a
+/// raw argv: `aion [global flags] worker agent …`. Deliberately not read off clap's
+/// rendered usage line — the advice stays a pure function of the argv, so it can be
+/// tested without a parser in the loop and cannot change meaning when clap rewords
+/// itself.
+fn invokes_migrated_flag_verb(argv: &[String]) -> bool {
+    argv.windows(MIGRATED_FLAG_VERB.len())
+        .any(|pair| pair == MIGRATED_FLAG_VERB)
+}
+
+/// The extra sentence a deleted launch flag earns, when `argv` invokes `worker agent`
+/// AND carries one.
+///
+/// Read off the RAW argv rather than off clap's error, because clap reports the first
+/// unexpected argument and an operator pasting an old runbook line has typically
+/// supplied several — naming one of six would send them round the loop six times.
+///
+/// `=`-joined forms (`--norn-arg=--account`) are matched on their flag half, because
+/// that is the shape market-mirror's own runbook used.
+fn migrated_flag_advice(argv: &[String]) -> Option<String> {
+    if !invokes_migrated_flag_verb(argv) {
+        return None;
+    }
+    let supplied: Vec<&(&str, &str)> = MIGRATED_LAUNCH_FLAGS
+        .iter()
+        .filter(|(flag, _)| {
+            argv.iter().any(|argument| {
+                argument == flag
+                    || argument
+                        .split_once('=')
+                        .is_some_and(|(head, _)| head == *flag)
+            })
+        })
+        .collect();
+    if supplied.is_empty() {
+        return None;
+    }
+    let moved = supplied
+        .iter()
+        .map(|(flag, field)| format!("  {flag}  ->  `{field}` in the document's `harness` section"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Some(format!(
+        "\nThese are not unknown arguments — they are DELETED ones. An agent worker's launch \
+         is declared in the `.awl` document it serves, in the `harness` section of its \
+         `worker` block, and there is no flag for any of it:\n\n{moved}\n\nIf you typed this \
+         command: write the section into the document, then re-run without those flags. \
+         `aion awl check <FILE.awl>` names every setting the section is still missing, scoped \
+         to the kind the section declares.\n\nIf you did NOT type this command, a managed-worker \
+         deployment replayed it. A `builtin` worker-deployment record stores the argv it was \
+         created with, verbatim and durably, and the supervisor replays exactly that on every \
+         restart — so a record minted before the launch settings moved will fail this way on \
+         every restart until its budget is spent, and editing the document will not change it. \
+         The record is the thing to fix: add the `harness` section to the document, then \
+         re-mint the deployment (`PUT /worker-deployments/<name>`, or the ops console's deploy \
+         form) so its stored argv no longer carries these flags."
+    ))
+}
+
+/// The parsed command line, or the exit code to leave on.
+///
+/// Wraps [`Cli::try_parse`] rather than calling [`clap::Parser::parse`] for one reason:
+/// clap renders and exits by itself, and this binary has a sentence clap cannot know —
+/// that some of the arguments it calls "unexpected" are DELETED, and where the settings
+/// they carried live now. clap's own rendering and its own exit code are preserved
+/// exactly; the advice is written after them, never instead of them.
+fn parse_or_refuse() -> Result<Cli, ExitCode> {
+    match Cli::try_parse() {
+        Ok(cli) => Ok(cli),
+        Err(error) => {
+            // Collected BEFORE printing, so a closed stderr cannot lose the advice while
+            // keeping the error.
+            let advice = migrated_flag_advice(&std::env::args().collect::<Vec<_>>());
+            // clap writes its own error to the right stream and this is the end of the
+            // process either way, so a failed write has nowhere left to be reported.
+            drop(error.print());
+            if let Some(advice) = advice {
+                eprintln!("{advice}");
+            }
+            Err(ExitCode::from(u8::try_from(error.exit_code()).unwrap_or(2)))
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = match parse_or_refuse() {
+        Ok(cli) => cli,
+        Err(code) => return code,
+    };
     if let Some(refusal) = launcher_flag_refusal(&cli) {
         eprintln!("{refusal}");
         return ExitCode::from(2);
@@ -2137,26 +2259,8 @@ mod tests {
             "127.0.0.1:50062",
             "--identity",
             "reviewer-worker",
-            "--concurrency",
-            "4",
             "--task-queue",
             "reviewers",
-            "--harness",
-            "acp",
-            "--acp-command",
-            "npx",
-            "--acp-arg",
-            "@google/gemini-cli",
-            "--acp-arg",
-            "--acp",
-            "--acp-cwd",
-            "/srv/workspace",
-            "--acp-permission",
-            "deny",
-            "--acp-exit-grace",
-            "2",
-            "--acp-env",
-            "KEY=value",
         ])?;
         let Some(Command::Worker {
             command: super::WorkerCommand::Agent(args),
@@ -2164,7 +2268,7 @@ mod tests {
         else {
             anyhow::bail!("expected worker agent command");
         };
-        assert_eq!(args.awl, Path::new("flows/review.awl"));
+        assert_eq!(args.awl.as_deref(), Some(Path::new("flows/review.awl")));
         // Repeating the flag builds an ordered candidate list, which is what lets a
         // worker migrate to a survivor after its server dies.
         assert_eq!(
@@ -2177,24 +2281,6 @@ mod tests {
         assert_eq!(args.identity.as_deref(), Some("reviewer-worker"));
         assert_eq!(args.task_queue.as_deref(), Some("reviewers"));
         assert!(!args.check);
-        // The harness settings are flattened in from the composition root, so the verb
-        // parses them without knowing which adapters exist.
-        assert_eq!(args.harness.harness.as_deref(), Some("acp"));
-        assert_eq!(args.harness.acp_command.as_deref(), Some("npx"));
-        // Repeated, ORDER PRESERVED: an ACP agent's argv is exactly what was configured,
-        // because there is no standard launch flag to infer one from.
-        assert_eq!(
-            args.harness.acp_args,
-            vec![String::from("@google/gemini-cli"), String::from("--acp")]
-        );
-        assert_eq!(args.harness.acp_cwd.as_deref(), Some("/srv/workspace"));
-        assert_eq!(args.harness.acp_permission.as_deref(), Some("deny"));
-        assert_eq!(args.harness.acp_exit_grace.as_deref(), Some("2"));
-        assert_eq!(args.harness.acp_env, vec![String::from("KEY=value")]);
-
-        // The document is mandatory: there is nothing to derive a surface from
-        // without it, and nothing else is defaulted in its place.
-        assert!(Cli::try_parse_from(["aion", "worker", "agent"]).is_err());
 
         // Every connection setting is optional at PARSE time — the environment may
         // supply it — and `--check` needs none of them.
@@ -2208,11 +2294,263 @@ mod tests {
         assert!(args.check);
         assert!(args.liminal_addresses.is_empty());
         assert!(args.identity.is_none());
-        // Including the harness settings: `--check` reports what a build carries and
-        // demands no configuration to do it.
-        assert!(args.harness.harness.is_none());
-        assert!(args.harness.acp_command.is_none());
-        assert!(args.harness.acp_args.is_empty());
+        Ok(())
+    }
+
+    /// MIGRATION RIDER (a): the VERB SURVIVES and takes a document reference.
+    ///
+    /// Deleting the launch flags must not delete the door a human starts a worker
+    /// through. The assertion is on the parse, not on the help text: a verb that
+    /// documents itself and no longer parses is the same outage.
+    #[test]
+    fn the_agent_verb_survives_the_flag_deletion_and_takes_a_document() -> anyhow::Result<()> {
+        let cli = Cli::try_parse_from(["aion", "worker", "agent", "flows/review.awl"])?;
+        let Some(Command::Worker {
+            command: super::WorkerCommand::Agent(args),
+        }) = cli.command
+        else {
+            anyhow::bail!("`aion worker agent <FILE.awl>` must still be the door in");
+        };
+        assert_eq!(args.awl.as_deref(), Some(Path::new("flows/review.awl")));
+        Ok(())
+    }
+
+    /// MIGRATION RIDER: the per-setting launch flags are DELETED, not deprecated and
+    /// not kept alongside.
+    ///
+    /// Asserted as a PARSE REFUSAL of each one by name, because that is the only
+    /// difference an operator can observe between a deleted flag and a silently ignored
+    /// one — and a silently ignored `--acp-permission` reads exactly like a permission
+    /// policy being enforced.
+    #[test]
+    fn every_migrated_launch_flag_is_refused_by_the_parser() {
+        for (flag, value) in [
+            ("--harness", Some("acp")),
+            ("--concurrency", Some("4")),
+            ("--reconnect-initial-backoff", Some("5")),
+            ("--reconnect-max-backoff", Some("60")),
+            ("--reconnect-max-attempts", Some("100")),
+            ("--acp-command", Some("/usr/local/bin/claude-code-acp")),
+            ("--acp-arg", Some("--acp")),
+            ("--acp-cwd", Some("/srv/workspace")),
+            ("--acp-permission", Some("deny")),
+            ("--acp-env", Some("KEY=value")),
+            ("--acp-exit-grace", Some("2")),
+            ("--norn-binary", Some("/usr/local/bin/norn")),
+            ("--norn-arg", Some("--account")),
+            ("--norn-unset-env", Some("OPENAI_API_KEY")),
+        ] {
+            let mut argv = vec!["aion", "worker", "agent", "flows/review.awl", flag];
+            argv.extend(value);
+            assert!(
+                Cli::try_parse_from(&argv).is_err(),
+                "`{flag}` moved into the document's `harness` section and must no longer \
+                 parse; accepting it would leave an operator believing a setting is in force \
+                 when the document decides it"
+            );
+        }
+    }
+
+    /// A managed-worker record minted BEFORE the launch settings moved replays its stored
+    /// argv on every supervised restart, and nobody is at a terminal to read a generic
+    /// "unexpected argument". This is the exact argv such a record carries — the tail a
+    /// `WorkerArtifactRef::Builtin` stores — and what it must earn is the NAMED refusal,
+    /// not clap's bare exit-2.
+    ///
+    /// The supervisor forwards a managed worker's stderr into the server's tracing output
+    /// tagged with the worker name, so this sentence is what an operator finds against the
+    /// record that could not start.
+    #[test]
+    fn the_argv_a_pre_change_managed_worker_record_replays_earns_a_named_refusal() {
+        // Verbatim from market-mirror's OPERATIONS.md, the surface the CLAUDECODE
+        // incident lived on — a record minted from that runbook carries exactly this.
+        let stored_verb = [
+            "worker",
+            "agent",
+            "workflows/mm_fleet_loop.awl",
+            "--harness",
+            "norn",
+            "--task-queue",
+            "mm_loop_build",
+            "--identity",
+            "mm-loop-builder",
+            "--liminal-address",
+            "127.0.0.1:50061",
+            "--concurrency",
+            "4",
+            "--reconnect-initial-backoff",
+            "1",
+            "--reconnect-max-backoff",
+            "30",
+            "--reconnect-max-attempts",
+            "100",
+            "--norn-arg=--account",
+            "--norn-arg=default",
+        ];
+
+        // It must still be REFUSED — a tolerant parse would be a compat shim.
+        let mut argv = vec!["aion"];
+        argv.extend(stored_verb);
+        assert!(
+            Cli::try_parse_from(&argv).is_err(),
+            "a stored record does not buy a deleted flag its way back in"
+        );
+
+        // ...and the refusal must NAME what happened, on the record-driven path as much
+        // as on a hand-typed one.
+        let owned: Vec<String> = argv.into_iter().map(str::to_owned).collect();
+        let Some(advice) = super::migrated_flag_advice(&owned) else {
+            unreachable!("an argv carrying deleted flags must earn the advice");
+        };
+        for expected in [
+            "--harness",
+            "--concurrency",
+            "--reconnect-initial-backoff",
+            // The `=`-joined form is what the runbook actually used; matching only the
+            // separated spelling would miss every record minted from it.
+            "--norn-arg",
+            "harness",
+            "managed-worker",
+            "re-mint",
+            "worker-deployments",
+        ] {
+            assert!(
+                advice.contains(expected),
+                "the refusal must name `{expected}`, got:\n{advice}"
+            );
+        }
+        assert!(
+            !advice.contains("--task-queue") && !advice.contains("--identity"),
+            "a flag that SURVIVED must not be named as deleted, or the operator strips a \
+             setting the verb still needs:\n{advice}"
+        );
+    }
+
+    /// THE VERB GATE. `--concurrency` and the three `--reconnect-*` are DELETED on
+    /// `worker agent` and LIVE, REQUIRED flags on `worker awl` — same spellings, two
+    /// verbs, opposite truths.
+    ///
+    /// This argv is the start command `docs/workers/AWL-WORKER-DOCUMENTS.md` publishes,
+    /// with one typo'd flag so the parse fails and the advice path runs. It must earn
+    /// NOTHING: telling this operator those flags are deleted would send them to write a
+    /// `harness` section into a worker-family document, which the checker forbids
+    /// outright — a refusal reached from a refusal, over a flag that was never wrong.
+    #[test]
+    fn a_worker_awl_invocation_earns_no_migration_advice() {
+        let published: Vec<String> = [
+            "aion",
+            "worker",
+            "awl",
+            "greeter.awl",
+            "--concurrency",
+            "4",
+            "--reconnect-initial-backoff",
+            "0.1",
+            "--reconnect-max-backoff",
+            "5",
+            "--reconnect-max-attempts",
+            "1000",
+            // The typo that makes clap fail and puts the advice path in play.
+            "--identty",
+            "greeter-worker",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+
+        assert!(
+            Cli::try_parse_from(&published).is_err(),
+            "the control needs a FAILING parse, or the advice path never runs and this \
+             test proves nothing"
+        );
+        assert_eq!(
+            super::migrated_flag_advice(&published),
+            None,
+            "`--concurrency` and the reconnect trio are live REQUIRED flags on `worker \
+             awl`; advice claiming they are deleted would send an operator to write a \
+             `harness` section into a worker-family document, which cannot carry one"
+        );
+    }
+
+    /// The presence twin of the gate: the SAME four flags, on the verb where they really
+    /// were deleted, still earn the advice. Without this arm the gate above could pass on
+    /// an implementation that never gives advice at all.
+    #[test]
+    fn the_same_flags_on_worker_agent_still_earn_the_advice() {
+        let agent: Vec<String> = [
+            "aion",
+            "worker",
+            "agent",
+            "flows/review.awl",
+            "--concurrency",
+            "4",
+            "--reconnect-initial-backoff",
+            "1",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        let Some(advice) = super::migrated_flag_advice(&agent) else {
+            unreachable!("the deleted flags on their own verb must earn the advice");
+        };
+        assert!(advice.contains("--concurrency") && advice.contains("harness"));
+    }
+
+    /// A deleted flag on a THIRD verb earns nothing either — the gate is an allow-list of
+    /// one path, not a deny-list of one other.
+    #[test]
+    fn a_deleted_flag_on_an_unrelated_verb_earns_no_advice() {
+        let unrelated: Vec<String> = ["aion", "worker", "shell", "--concurrency", "4"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        assert_eq!(super::migrated_flag_advice(&unrelated), None);
+    }
+
+    /// An invocation carrying no deleted flag earns no advice at all — otherwise every
+    /// ordinary typo would be answered with a lecture about the harness section.
+    #[test]
+    fn an_argv_with_no_deleted_flag_earns_no_migration_advice() {
+        let argv: Vec<String> = ["aion", "worker", "agent", "flows/review.awl", "--nonsense"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        assert!(
+            super::migrated_flag_advice(&argv).is_none(),
+            "the advice is for DELETED flags, not for every unknown argument"
+        );
+    }
+
+    /// MIGRATION RIDER (b): a bare invocation refuses LOUDLY with the new shape named.
+    ///
+    /// The document is OPTIONAL to clap on purpose, so the refusal is this verb's own
+    /// sentence rather than "the following required arguments were not provided" — which
+    /// tells an operator arriving with the old flags nothing about where those settings
+    /// went.
+    #[test]
+    fn a_bare_invocation_refuses_loudly_naming_the_new_shape() -> anyhow::Result<()> {
+        let cli = Cli::try_parse_from(["aion", "worker", "agent"])?;
+        let Some(Command::Worker {
+            command: super::WorkerCommand::Agent(args),
+        }) = cli.command
+        else {
+            anyhow::bail!("a bare invocation must PARSE, so the verb can refuse in its own words");
+        };
+        let Err(error) = args.document() else {
+            anyhow::bail!("an invocation naming no document must be refused");
+        };
+        let message = error.to_string();
+        for expected in [
+            "aion worker agent <FILE.awl>",
+            "harness",
+            "aion awl check",
+            "no longer a flag",
+        ] {
+            assert!(
+                message.contains(expected),
+                "the refusal must name `{expected}`, got:\n{message}"
+            );
+        }
         Ok(())
     }
 
@@ -2236,24 +2574,22 @@ mod tests {
         assert!(help.contains("all-or-nothing"));
         assert!(help.contains("liminal worker transport"));
         assert!(help.contains("nothing is invented"));
-        // Harness selection and per-harness configuration: an operator must be able to
-        // read WHICH harness will run, and what an ACP one needs, off the help alone.
+        // Where the LAUNCH is declared, and every setting it carries: an operator must
+        // be able to read off the help alone that these are document fields and not
+        // flags, and which ones the kind they are declaring needs.
         for expected in [
-            "--harness",
-            "--norn-binary",
-            "--acp-command",
-            "--acp-arg",
-            "--acp-cwd",
-            "--acp-permission",
-            "--acp-env",
-            "--acp-exit-grace",
+            "`harness` section",
+            "concurrency",
+            "env_pass",
+            "permission",
+            "exit_grace",
+            "no default",
         ] {
             assert!(help.contains(expected), "help must document `{expected}`");
         }
-        // And the two rulings an operator cannot afford to learn by surprise: the
-        // security decision has no default, and a flag for another harness is refused.
-        assert!(help.contains("no default"));
-        assert!(help.contains("REFUSED"));
+        // The two rulings an operator cannot afford to learn by surprise: the security
+        // decision has no default, and the agent's environment is not inherited.
+        assert!(help.contains("Nothing is inherited"));
         Ok(())
     }
 

@@ -8,7 +8,7 @@ use crate::semantic::SemanticAnalysis;
 
 use super::context::{Ctx, Flow};
 use super::error::CheckError;
-use super::{consts, decls, durations, family, graph, queries, subflows, walk};
+use super::{consts, decls, durations, family, graph, harness, queries, subflows, walk};
 
 /// Typecheck a parsed document with no document directory: schema imports
 /// (`type X = schema("file")`) cannot resolve and are reported as errors.
@@ -85,6 +85,7 @@ fn workflow_passes<'a>(ctx: &mut Ctx<'a>, document: &'a Document) {
     queries::check_declared_answers(ctx);
     subflows::run(ctx);
     family::run(ctx);
+    harness::run(ctx);
     // Every flow — the workflow's own steps, then each subflow's — gets the
     // full graph pass and flow walk over its own inputs and outcomes.
     let workflow_flow = Flow::workflow(ctx);
@@ -108,6 +109,7 @@ fn worker_passes(ctx: &mut Ctx<'_>) {
     decls::run(ctx);
     consts::run(ctx);
     family::run(ctx);
+    harness::run(ctx);
 }
 
 /// The unusable-schema refusals among derived schemas, as check errors.

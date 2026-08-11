@@ -55,10 +55,14 @@ Deploying and running an `.awl` document needs no Gleam build, no
   `.aion` archives at boot.
 - `aion worker shell --manifest worker.toml --awl <FILE.awl>` serves strict
   manifest-wired host commands on a task queue.
-- `aion worker agent --harness <name> ...` serves an agent harness compiled
-  into this binary on the queue an `.awl` document declares — an agent worker
-  without writing a crate. `--check` prints the exact action surface, resolved
-  harness, and intervention controls, then exits without connecting.
+- `aion worker agent <FILE.awl> --liminal-address <HOST:PORT> --identity <NAME>`
+  serves an agent harness compiled into this binary on the queue an `.awl`
+  document declares — an agent worker without writing a crate. The LAUNCH is
+  the document's, in the `worker` block's `harness` section (kind, concurrency,
+  reconnect policy, environment pass-through, and the agent's command and
+  arguments); the command line carries only where this worker connects and who
+  it says it is. `--check` prints the exact action surface, resolved harness,
+  and intervention controls, then exits without connecting.
 - `aion new <name> [--template <t>] [--worker rust]` scaffolds a workflow
   project — a checked, runnable AWL document by default, or one of five
   buildable Gleam templates.

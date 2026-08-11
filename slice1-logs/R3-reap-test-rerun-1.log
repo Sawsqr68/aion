@@ -1,0 +1,17 @@
+# argv:  cargo test -p aion-cli --bin aion worker_shell::tests::cancellation_reaps_the_entire_spawned_process_group
+# cwd:   /Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1
+# tree:  d573a260859f4f50653e630c82e31b12a7ed2e6f
+# date:  2026-08-11T20:58:08+1000
+# ---
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-server)
+   Compiling aion-cli v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 03s
+     Running unittests src/main.rs (target/debug/deps/aion-c416dedaa300c93f)
+
+running 1 test
+test worker_shell::tests::cancellation_reaps_the_entire_spawned_process_group ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 272 filtered out; finished in 2.08s
+
+# ---
+# exit:  0

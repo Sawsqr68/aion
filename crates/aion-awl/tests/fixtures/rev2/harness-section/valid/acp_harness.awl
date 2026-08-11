@@ -1,0 +1,36 @@
+//! A complete `acp` harness declaration: an Agent Client Protocol agent
+//! launched as a subprocess, with every setting the operator's own. It carries
+//! no Norn setting and is COMPLETE — the required set is scoped to the declared
+//! kind, so an `acp` document is not asked for a `norn` binary it has no use
+//! for.
+//!
+//! The `env_pass` list is the child's WHOLE environment: `PATH` and `HOME` and
+//! nothing else cross into the agent, whatever the launching shell exports.
+workflow acp_harness_launch
+  input question: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+/// The canonical agent-outcome record: the checker demands the STRUCTURE, not
+/// a blessed name.
+type Reply { text: String, stop_reason: String }
+
+worker assistants
+  harness
+    kind acp
+    concurrency 4
+    reconnect_initial_backoff 5s
+    reconnect_max_backoff 2m
+    reconnect_max_attempts 100
+    env_pass "PATH", "HOME"
+    command "/usr/local/bin/claude-code-acp"
+    cwd "/srv/agents/workspace"
+    permission "deny"
+    exit_grace 10s
+  action ask(prompt: String) -> Reply
+    agent
+
+step ask
+  ask(prompt: question) -> reply
+  route answered(reply: reply.text)

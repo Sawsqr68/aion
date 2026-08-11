@@ -14,6 +14,7 @@ that does not hold together.
 
 import html
 import json
+import os
 import re
 import shlex
 import shutil
@@ -1461,22 +1462,42 @@ SLIDES: list[Slide] = [
         title="Start the worker in a second terminal",
         cmd=[
             "aion worker agent repo_gate_judged.awl \\",
-            "  --harness norn \\",
             "  --liminal-address 127.0.0.1:50169 \\",
-            "  --identity repo-gate-judge --concurrency 4 \\",
-            "  --reconnect-initial-backoff 1 \\",
-            "  --reconnect-max-backoff 30 \\",
-            "  --reconnect-max-attempts 100",
+            "  --identity repo-gate-judge",
+        ],
+        bites=[
+            "Declare the launch first, in <code>repo_gate_judged.awl</code>, "
+            "indented under <code>worker gate</code> and above its actions: "
+            "<code>harness</code>, then <code>kind norn</code>, "
+            "<code>concurrency 4</code>, "
+            "<code>reconnect_initial_backoff 1s</code>, "
+            "<code>reconnect_max_backoff 30s</code>, "
+            "<code>reconnect_max_attempts 100</code>, and "
+            "<code>env_pass \"PATH\", \"HOME\"</code> — one setting per line.",
         ],
         points=[
             "The address is the tutorial config's <code>[outbox]</code> listener "
             "— not its HTTP port and not its gRPC port.",
-            "Identity, concurrency and all three reconnect values are required "
-            "operator policy on 0.11.0; the worker refuses to invent them.",
-            "The installed 0.11.0 binary carries the norn and ACP adapters, but "
-            "does not expose its plain-CLI harness. This teachable path therefore "
-            "uses norn and requires the <code>norn</code> CLI on "
-            "<code>PATH</code>.",
+            "The LAUNCH is declared in the document, in the "
+            "<code>harness</code> section of the <code>worker</code> block: which "
+            "harness, how many activities at once, how it reconnects, and which "
+            "environment variables the agent subprocess is given. Every value is "
+            "required operator policy — nothing anywhere invents one — and "
+            "<code>aion awl check</code> names any you leave out.",
+            "<code>env_pass</code> is the agent subprocess's WHOLE environment. "
+            "The document names the variables, this machine supplies their "
+            "values, and a variable you do not name is absent in the agent "
+            "whatever your shell exported. Nothing is inherited.",
+            "What is left on the command line is the connection: which document, "
+            "where to dial, and who this worker says it is. There is no "
+            "<code>--harness</code>, no <code>--concurrency</code> and no "
+            "<code>--reconnect-*</code> flag — they were deleted when the section "
+            "shipped, and passing one is an arg-parse error.",
+            "The shipped binary carries the norn and ACP adapters, but does not "
+            "expose its plain-CLI harness. This teachable path therefore declares "
+            "<code>kind norn</code> and requires the <code>norn</code> CLI on "
+            "<code>PATH</code> — which is also why <code>PATH</code> is in the "
+            "<code>env_pass</code> list above.",
             "The one-block document derives queue <code>gate</code>; no "
             "<code>--task-queue</code> flag is needed.",
         ],
@@ -1562,14 +1583,34 @@ SLIDES: list[Slide] = [
 # --------------------------------------------------------------------------
 
 
+# Overrides which `aion` gates the deck. Without it the gate uses whatever is
+# installed on PATH — which is the right default for an author checking that a
+# RELEASED binary can follow the deck, and exactly wrong when the change being
+# made is to the CLI itself. A deck gated by a binary that predates the change
+# reports green about a command line that no longer exists; that is how the
+# `--concurrency` slide survived the flags being deleted.
+BIN_ENV = "AION_TUTORIAL_BIN"
+
+
 def _binary() -> str:
+    override = os.environ.get(BIN_ENV, "").strip()
+    if override:
+        path = Path(override)
+        if not path.is_file():
+            raise SystemExit(
+                f"refusing to build: ${BIN_ENV} is set to `{override}`, which is "
+                "not a file. Point it at a built `aion` (for this clone: "
+                "`target/debug/aion`), or unset it to gate against PATH."
+            )
+        return str(path.resolve())
     found = shutil.which("aion")
     if found is None:
         raise SystemExit(
             "refusing to build: `aion` is not on PATH, so nothing in this "
             f"deck can be checked. Install it with `cargo install "
             f"{CLI_CRATE}`, or from this clone with `cargo install --path "
-            "crates/aion-cli`."
+            f"crates/aion-cli`. To gate against a binary you have just built "
+            f"instead, set ${BIN_ENV} to its path."
         )
     return found
 

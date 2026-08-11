@@ -1,0 +1,40 @@
+# binary:  ./target/debug/aion  (aion 0.13.8)
+# tree:    d573a260859f4f50653e630c82e31b12a7ed2e6f
+# date:    2026-08-11T21:04:15+1000
+
+=== worker awl: the line docs/workers/AWL-WORKER-DOCUMENTS.md publishes, plus a typo
+$ ./target/debug/aion worker awl greeter.awl --concurrency 4 --reconnect-initial-backoff 0.1 --reconnect-max-backoff 5 --reconnect-max-attempts 1000 --identty greeter-worker
+error: unexpected argument '--identty' found
+
+  tip: a similar argument exists: '--identity'
+
+Usage: aion worker awl --concurrency <CONCURRENCY> --reconnect-initial-backoff <RECONNECT_INITIAL_BACKOFF> --reconnect-max-backoff <RECONNECT_MAX_BACKOFF> --reconnect-max-attempts <RECONNECT_MAX_ATTEMPTS> --identity <IDENTITY> <DOCUMENT>
+
+For more information, try '--help'.
+[exit=2]
+# ^ MUST NOT mention DELETED or harness: those flags are live and REQUIRED here.
+
+=== worker agent: the same four spellings, on the verb where they really were deleted
+$ ./target/debug/aion worker agent flows/review.awl --concurrency 4 --reconnect-initial-backoff 1
+error: unexpected argument '--concurrency' found
+
+  tip: to pass '--concurrency' as a value, use '-- --concurrency'
+
+Usage: aion worker agent <AWL>
+
+For more information, try '--help'.
+
+These are not unknown arguments — they are DELETED ones. An agent worker's launch is declared in the `.awl` document it serves, in the `harness` section of its `worker` block, and there is no flag for any of it:
+
+  --concurrency  ->  `concurrency` in the document's `harness` section
+  --reconnect-initial-backoff  ->  `reconnect_initial_backoff` in the document's `harness` section
+
+If you typed this command: write the section into the document, then re-run without those flags. `aion awl check <FILE.awl>` names every setting the section is still missing, scoped to the kind the section declares.
+
+If you did NOT type this command, a managed-worker deployment replayed it. A `builtin` worker-deployment record stores the argv it was created with, verbatim and durably, and the supervisor replays exactly that on every restart — so a record minted before the launch settings moved will fail this way on every restart until its budget is spent, and editing the document will not change it. The record is the thing to fix: add the `harness` section to the document, then re-mint the deployment (`PUT /worker-deployments/<name>`, or the ops console's deploy form) so its stored argv no longer carries these flags.
+[exit=2]
+
+=== the DEFERRED.md sweep: --help and --version still exit 0 through parse_or_refuse
+--help    [exit=0]
+--version [exit=0]
+worker agent --help [exit=0]

@@ -21,7 +21,8 @@
 //!
 //! This module is that route out, promoted from the assistant's example worker
 //! so EVERY composition root that drives a [`NornHarness`] — the built-in
-//! `aion worker agent --harness norn` verb and hand-written workers alike —
+//! `aion worker agent` verb serving a document that declares `kind norn`, and
+//! hand-written workers alike —
 //! surfaces the same teaching failure. This is a durability hole in the AGENT
 //! layer, not the engine: any durable agent that parks longer than a provider
 //! epoch hits it.
@@ -101,10 +102,11 @@ where
 /// the decision is informed.
 ///
 /// `opt_in` is the exact restart instruction as THIS deployment spells it —
-/// `--norn-arg --allow-degraded-session` for the built-in
-/// `aion worker agent` verb, a worker's own flag for a hand-written
+/// for the built-in `aion worker agent` verb, adding
+/// `"--allow-degraded-session"` to the worker document's `harness` section
+/// `args` list and redeploying; a worker's own flag for a hand-written
 /// composition root. It is a parameter with no default because the spelling
-/// belongs to the deployment's command line, which this crate cannot know.
+/// belongs to the deployment, which this crate cannot know.
 ///
 /// The advice is withheld once the opt-in has been given
 /// (`allow_degraded_session`): at that point Norn has refused for some other
@@ -274,7 +276,12 @@ mod tests {
          projection; explicit resume approval is required";
 
     /// The restart instruction the built-in `aion worker agent` verb supplies.
-    const OPT_IN: &str = "--norn-arg --allow-degraded-session";
+    ///
+    /// It is a sentence about a DOCUMENT rather than a flag: the launch settings moved
+    /// into the worker document's `harness` section, so the route out of a degraded
+    /// session is an edit and a redeploy, not a different command line.
+    const OPT_IN: &str =
+        "the worker document's `harness` section: add \"--allow-degraded-session\" to its `args`";
 
     #[test]
     fn the_recorded_refusal_is_recognised() {

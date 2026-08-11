@@ -1,0 +1,15 @@
+# argv:  cargo build -p aion-cli --bin aion
+# cwd:   /Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1
+# tree:  d573a260859f4f50653e630c82e31b12a7ed2e6f
+# date:  2026-08-11T21:02:31+1000
+# ---
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-server)
+   Compiling aion-cli v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-cli)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-cli` (bin "aion") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 21s
+# ---
+# exit:  0

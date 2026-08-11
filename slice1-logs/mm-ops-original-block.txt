@@ -1,0 +1,49 @@
+The operator-facing worker commands are:
+
+```sh
+# Judgement legs (norn harness) for the fleet-build workflow. The document
+# declares two worker blocks, so the queue must be selected; the agent seam
+# exists only on the liminal worker transport:
+aion worker agent workflows/mm_fleet_build.awl --harness norn \
+    --task-queue mm_fleet --identity <name> \
+    --liminal-address <host:port> --concurrency <n> \
+    --reconnect-initial-backoff <s> --reconnect-max-backoff <s> \
+    --reconnect-max-attempts <n>
+
+# Mechanical gates: NO worker. The mm_gates actions carry `run` bodies in
+# mm_fleet_build.awl (mm-gate --verdict), so the SERVER runs them itself.
+# (aion #197 — gRPC-registered workers invisible to liminal outbox dispatch —
+# blocks `aion worker awl` serving today; workflows/mm_gates_worker.awl is
+# kept as the worker-served story for after that fix.)
+
+# Collector queues (phase a / phase c):
+aion worker awl workflows/mm_capture_worker.awl \
+    --endpoint <grpc-url> --identity <name> --concurrency <n> \
+    --reconnect-initial-backoff <s> --reconnect-max-backoff <s> \
+    --reconnect-max-attempts <n>
+aion worker awl workflows/mm_watched_worker.awl \
+    --endpoint <grpc-url> --identity <name> --concurrency <n> \
+    --reconnect-initial-backoff <s> --reconnect-max-backoff <s> \
+    --reconnect-max-attempts <n>
+
+# The looping fleet (mm_fleet_loop.awl) declares TWO agent seats on two
+# queues, served by two different harnesses on purpose — the reviewer must
+# not share the builder's blind spots. Same gates note as above: mm_gates
+# runs server-side, no worker.
+#
+# The swarm fleet (mm_fleet_swarm.awl) uses the SAME two queues and action
+# names, so the same two workers serve it — but the build worker's
+# --concurrency must be at least the lane count, or the "parallel" lanes
+# queue behind one seat.
+aion worker agent workflows/mm_fleet_loop.awl --harness norn \
+    --task-queue mm_loop_build --identity <name> \
+    --liminal-address <host:port> --concurrency <n> \
+    --reconnect-initial-backoff <s> --reconnect-max-backoff <s> \
+    --reconnect-max-attempts <n> --norn-arg=--account --norn-arg=<account>
+aion worker agent workflows/mm_fleet_loop.awl --harness acp \
+    --task-queue mm_loop_oversight --identity <name> \
+    --liminal-address <host:port> --concurrency <n> \
+    --reconnect-initial-backoff <s> --reconnect-max-backoff <s> \
+    --reconnect-max-attempts <n> --acp-command <path-to-claude-code-acp> \
+    --acp-cwd <repo> --acp-permission <mode> --acp-exit-grace <s>
+```

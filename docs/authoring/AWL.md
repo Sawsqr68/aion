@@ -88,7 +88,7 @@ aion awl guide --json > apps/aion-ops-console/src/features/authoring/assets/awl-
 | `aion run <FILE.awl> --input '<json>' [--timeout <dur>]` | Compile, deploy, start, and await in one motion. |
 | `aion worker awl <FILE.awl>` | Serves the queue a **worker document** declares — a `.awl` file opening with `worker <queue>` instead of `workflow <name>`, whose actions each carry the command that runs them. See [`AWL-WORKER-DOCUMENTS.md`](../workers/AWL-WORKER-DOCUMENTS.md). |
 | `aion worker shell --manifest worker.toml --awl <FILE.awl>` | Serves manifest-wired host commands on the declared queue. |
-| `aion worker agent <FILE.awl> --harness <name> --liminal-address <addr>` | Serves a compiled-in agent harness on the queue the document declares. |
+| `aion worker agent <FILE.awl> --liminal-address <addr> --identity <name>` | Serves a compiled-in agent harness on the queue the document declares. Which harness, and every other launch setting, comes from the `worker` block's `harness` section — not from a flag. See [AGENT-WORKERS.md](../workers/AGENT-WORKERS.md). |
 
 `aion list`, `describe`, `inspect`, `signal`, `query`, `pause`, `resume`,
 `cancel`, `reopen`, and `versions` operate the resulting runs; see the
@@ -154,7 +154,10 @@ A clean `aion awl check` proves the document is internally consistent. It does
 3. **`aion worker shell`** — host commands wired by a strict manifest.
 4. **A real worker process** — `aion awl scaffold` generates a Rust one, or
    use any worker SDK. `aion worker agent` serves an agent harness without a
-   crate at all.
+   crate at all, launching it from a `harness` section written inside the
+   `worker` block — the one thing a `worker` block carries that is
+   configuration rather than requirement. See
+   [`AGENT-WORKERS.md`](../workers/AGENT-WORKERS.md).
 
 ## Deployed packages carry their source
 

@@ -1,0 +1,71 @@
+    Checking log v0.4.32
+    Checking serde_core v1.0.228
+    Checking scopeguard v1.2.0
+    Checking bytes v1.11.1
+    Checking tracing-core v0.1.36
+   Compiling getrandom v0.4.2
+   Compiling rustix v1.1.4
+    Checking sync_wrapper v1.0.2
+    Checking zstd-sys v2.0.16+zstd.1.5.7
+    Checking getrandom v0.3.4
+    Checking lock_api v0.4.14
+    Checking mio v1.2.1
+    Checking regalloc2 v0.15.1
+    Checking zstd-safe v7.2.4
+    Checking zstd v0.13.3
+    Checking toml_parser v1.1.2+spec-1.1.0
+    Checking parking_lot v0.12.5
+    Checking tracing v0.1.44
+    Checking anyhow v1.0.102
+    Checking zopfli v0.8.3
+    Checking toml_writer v1.1.1+spec-1.1.0
+    Checking tokio v1.52.3
+    Checking http v1.4.1
+    Checking prost v0.14.3
+    Checking hashbrown v0.14.5
+   Compiling beamr v0.17.0
+    Checking zip v8.6.0
+    Checking dashmap v6.2.1
+    Checking http-body v1.0.1
+   Compiling tempfile v3.27.0
+    Checking http-body-util v0.1.3
+   Compiling prost-build v0.14.3
+    Checking axum-core v0.5.6
+    Checking cranelift-codegen v0.131.2
+    Checking serde v1.0.228
+    Checking serde_json v1.0.150
+    Checking uuid v1.23.4
+    Checking serde_spanned v1.1.1
+    Checking toml_datetime v1.1.1+spec-1.1.0
+    Checking toml v1.1.2+spec-1.1.0
+   Compiling tonic-prost-build v0.14.5
+    Checking chrono v0.4.45
+    Checking fluent-uri v0.4.1
+    Checking ahash v0.8.12
+    Checking email_address v0.2.9
+   Compiling aion-proto-generated v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-proto-generated)
+    Checking schemars v1.2.1
+    Checking referencing v0.46.6
+    Checking ts-rs v12.0.1
+    Checking jsonschema v0.46.6
+    Checking aion-core v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-core)
+    Checking tokio-util v0.7.18
+    Checking tokio-stream v0.1.18
+    Checking h2 v0.4.14
+    Checking tower v0.5.3
+    Checking axum v0.8.9
+    Checking hyper v1.10.1
+    Checking hyper-util v0.1.20
+    Checking hyper-timeout v0.5.2
+    Checking cranelift-module v0.131.2
+    Checking cranelift-native v0.131.2
+    Checking cranelift-frontend v0.131.2
+    Checking tonic v0.14.6
+    Checking aion-package v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-package)
+    Checking aion-integrations v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integrations)
+    Checking cranelift-jit v0.131.2
+    Checking tonic-prost v0.14.5
+    Checking aion-proto v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-proto)
+    Checking aion-worker v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-worker)
+    Checking aion-awl v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-awl)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 20.53s

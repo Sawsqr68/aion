@@ -1,0 +1,11 @@
+   Compiling aion-integration-norn v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-integration-norn)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.49s
+     Running tests/declared_environment_e2e.rs (target/debug/deps/declared_environment_e2e-cdced62dc926da03)
+
+running 3 tests
+test a_binary_on_path_with_no_path_declared_is_refused_naming_path ... ok
+test without_a_declaration_the_norn_child_still_inherits ... ok
+test a_declared_environment_keeps_claudecode_out_of_the_norn_child ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.79s
+

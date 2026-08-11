@@ -1,6 +1,7 @@
 use crate::Span;
 
 use super::expr::{DurationLiteral, Expr};
+use super::harness::HarnessDecl;
 use super::steps::Step;
 use super::trivia::{Comment, DocLine, Lead};
 
@@ -366,6 +367,14 @@ pub struct WorkerDecl {
     pub name: String,
     /// Source span of the worker name.
     pub name_span: Span,
+    /// The launch declaration for an agent worker on this queue, when the
+    /// document carries one.
+    ///
+    /// `None` is a first-class, permanent case: a queue served by a worker SDK
+    /// build, by `aion worker shell`, or by declared `run` bodies has no agent
+    /// harness to launch and nothing to declare. A section that IS present is
+    /// the complete launch truth — see [`HarnessDecl`].
+    pub harness: Option<HarnessDecl>,
     /// Action requirements declared on this worker (one or more).
     pub actions: Vec<ActionDecl>,
 }

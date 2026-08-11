@@ -1,0 +1,30 @@
+//! A complete `norn` harness declaration. It carries no `command`, no `cwd`,
+//! no `permission` and no `exit_grace` — those are ACP's, and Norn's argv is
+//! the adapter's own — and it is COMPLETE, for the same kind-scoping reason the
+//! ACP document is.
+workflow norn_harness_launch
+  input question: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+/// The canonical agent-outcome record: the checker demands the STRUCTURE, not
+/// a blessed name.
+type Reply { text: String, stop_reason: String }
+
+worker assistants
+  harness
+    kind norn
+    concurrency 2
+    reconnect_initial_backoff 5s
+    reconnect_max_backoff 1m
+    reconnect_max_attempts 50
+    env_pass "PATH", "HOME"
+    args "--account", "default"
+    binary "/usr/local/bin/norn"
+  action ask(prompt: String) -> Reply
+    agent
+
+step ask
+  ask(prompt: question) -> reply
+  route answered(reply: reply.text)

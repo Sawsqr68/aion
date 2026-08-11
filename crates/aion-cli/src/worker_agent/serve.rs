@@ -15,17 +15,17 @@
 //! 1. **The action surface**, from the document. It comes first because `--check` must
 //!    work on a build that could not serve, and a document fault must never hide behind
 //!    a missing-configuration complaint.
-//! 2. **The harness selection**, over the adapters compiled into this binary — plus the
-//!    refusal of any harness flag belonging to a harness other than the resolved one.
-//!    Both are part of the `--check` report: which harness would drive the surface is
-//!    exactly as load-bearing as the surface itself, and a flag that cannot take effect
+//! 2. **The declared harness**, read from the same document's `harness` section and
+//!    checked against the adapters compiled into this binary. It is part of the
+//!    `--check` report: which harness would drive the surface is exactly as load-bearing
+//!    as the surface itself, and a document naming a harness this build does not carry
 //!    should be refused before anything runs rather than at the next deploy.
-//! 3. **Every remaining setting** — the connection settings and the resolved harness's
-//!    own configuration, resolved together so one refusal names every missing one.
+//! 3. **The connection settings** — where this worker dials, who it says it is, and
+//!    where it sits. Those are the only settings that are still flags, because they are
+//!    properties of this process on this box rather than of the queue.
 //!
-//! `--check` stops after (2), demanding no settings at all. That is the same line the
-//! verb already drew for the connection settings: a report that connects to nothing must
-//! not require the configuration of a connection it will not make.
+//! `--check` stops after (2), demanding no connection at all: a report that connects to
+//! nothing must not require the configuration of a connection it will not make.
 //!
 //! # Why the serve loop gets its own thread
 //!
@@ -46,9 +46,11 @@
 use anyhow::{Context, Result};
 
 use super::args::{self, AgentArgs, ConnectionSettings};
+use super::environment_report::report_absent_pass_through;
 use super::surface::{self, AdvertisedSurface};
 use crate::harness::ResolvedHarness;
 use crate::settings::Environment;
+use crate::worker_surface;
 
 /// Everything a serve needs, resolved — or `None` when `--check` has already reported
 /// and there is nothing left to do.
@@ -58,9 +60,12 @@ type Prepared = Option<Plan>;
 struct Plan {
     /// The typed action surface to advertise.
     surface: AdvertisedSurface,
-    /// The connection settings to register with.
+    /// The connection settings to register with — the only half still supplied by flags.
     connection: ConnectionSettings,
-    /// The selected and configured harness, `None` when this build compiles none in.
+    /// The launch the document declares: concurrency, the reconnect trio, the
+    /// environment pass-through list, and the per-kind settings.
+    launch: aion_awl::CompiledHarness,
+    /// The declared and configured harness, `None` when this build compiles none in.
     harness: Option<ResolvedHarness>,
 }
 
@@ -81,24 +86,73 @@ struct Plan {
 /// resolved one, or when a setting has no source.
 async fn prepare(args: &AgentArgs) -> Result<Prepared> {
     let environment = Environment::from_process();
-    let document = args.awl.clone();
+    let document = args.document()?.to_path_buf();
     let requested = args.requested_queue(&environment);
+    let derivation = document.clone();
     let surface =
-        tokio::task::spawn_blocking(move || surface::derive(&document, requested.as_deref()))
+        tokio::task::spawn_blocking(move || surface::derive(&derivation, requested.as_deref()))
             .await
             .context("the action-surface derivation task did not complete")??;
-    let harness = args.harness.select(&environment)?;
+    let declared = worker_surface::compile_harness(&document, &surface.task_queue)?;
+    let harness = match &declared {
+        Some(declared) => crate::harness::resolve_declared(declared, &document)?,
+        None => None,
+    };
+    // BEFORE the `--check` branch, and long before the serve loop installs its tracing
+    // subscriber, so both paths carry it and neither depends on a listener that does not
+    // exist yet. Stderr, because stdout on this verb is the `--check` report's and an
+    // operator piping that into `jq` must not have a warning land in the middle of it.
+    if let Some(resolved) = &harness {
+        report_absent_pass_through(
+            &mut std::io::stderr().lock(),
+            resolved.environment(),
+            &document,
+            &surface.task_queue,
+        )?;
+    }
     if args.check {
         let mut stdout = std::io::stdout().lock();
-        surface::print(&mut stdout, &surface, harness)?;
+        surface::print(
+            &mut stdout,
+            &surface,
+            harness.as_ref().map(|resolved| resolved.kind),
+        )?;
         return Ok(None);
     }
-    let (connection, harness) = args::resolve(args, &environment, harness)?;
+    let Some(launch) = declared else {
+        return Err(no_harness_section(&surface, &document));
+    };
+    let connection = args::resolve(args, &environment)?;
     Ok(Some(Plan {
         surface,
         connection,
+        launch,
         harness,
     }))
+}
+
+/// The refusal for a document that declares a queue but no launch for it.
+///
+/// Loud on purpose, and it names the whole shape rather than one missing field: an
+/// operator meeting this has almost certainly arrived with the deleted flags in their
+/// fingers, and the useful answer is where those settings live now — not that one of
+/// them is absent.
+pub(super) fn no_harness_section(
+    surface: &AdvertisedSurface,
+    document: &std::path::Path,
+) -> anyhow::Error {
+    anyhow::anyhow!(
+        "queue `{queue}` in {path} declares no `harness` section, so this document does not say \
+         how to launch an agent for it.\n\nAn agent worker's launch — the harness kind, the \
+         concurrency, the three reconnect settings, the agent's command, working directory, \
+         permission policy and shutdown grace, and the environment variables the agent \
+         subprocess is given — is declared in the document and nowhere else. There is no flag \
+         for any of it.\n\nAdd a `harness` section under `worker {queue}` and run `aion awl \
+         check {path}`: the checker names every setting the section is missing, scoped to the \
+         kind it declares.",
+        queue = surface.task_queue,
+        path = document.display()
+    )
 }
 
 /// Serves the selected agent harness on the queue `args.awl` declares.
@@ -125,7 +179,14 @@ pub(crate) async fn run(args: &AgentArgs, namespace: &str) -> Result<()> {
             plan.surface.task_queue
         );
     };
-    serve(&plan.surface, &plan.connection, &harness, namespace).await
+    serve(
+        &plan.surface,
+        &plan.connection,
+        &plan.launch,
+        &harness,
+        namespace,
+    )
+    .await
 }
 
 /// Derives and reports the surface exactly as a complete build does, then refuses
@@ -205,6 +266,7 @@ fn compose(
 fn worker_config(
     surface: &AdvertisedSurface,
     settings: &ConnectionSettings,
+    launch: &aion_awl::CompiledHarness,
     namespace: &str,
 ) -> Result<aion_worker::WorkerConfig> {
     let mut builder = aion_worker::WorkerConfig::builder()
@@ -212,10 +274,10 @@ fn worker_config(
         .namespace(namespace)
         .task_queue(&surface.task_queue)
         .identity(&settings.identity)
-        .max_concurrency(settings.concurrency)
-        .reconnect_initial_backoff(settings.initial_backoff)
-        .reconnect_max_backoff(settings.max_backoff)
-        .reconnect_max_attempts(settings.max_attempts);
+        .max_concurrency(launch.concurrency)
+        .reconnect_initial_backoff(launch.reconnect_initial_backoff)
+        .reconnect_max_backoff(launch.reconnect_max_backoff)
+        .reconnect_max_attempts(launch.reconnect_max_attempts);
     if let Some(node) = &settings.node {
         builder = builder.node(node.clone());
     }
@@ -228,6 +290,7 @@ fn worker_config(
 async fn serve(
     surface: &AdvertisedSurface,
     settings: &ConnectionSettings,
+    launch: &aion_awl::CompiledHarness,
     harness: &ResolvedHarness,
     namespace: &str,
 ) -> Result<()> {
@@ -246,7 +309,7 @@ async fn serve(
 
     let advertised = surface.names();
     let agent = compose(surface, harness)?;
-    let config = worker_config(surface, settings, namespace)?;
+    let config = worker_config(surface, settings, launch, namespace)?;
     // The harness owns every action on this queue, so the typed registry is EMPTY:
     // an agent activity is executed by driving the harness, never by a registered
     // handler. The advertisement is the only thing that makes the worker selectable.
@@ -257,7 +320,10 @@ async fn serve(
     let served = advertised.iter().cloned().collect::<Vec<_>>().join(", ");
     let candidates = settings.addresses.join(", ");
     let addresses = settings.addresses.clone();
-    let timing = aion_worker::RedialTiming::new(settings.initial_backoff, settings.max_backoff);
+    let timing = aion_worker::RedialTiming::new(
+        launch.reconnect_initial_backoff,
+        launch.reconnect_max_backoff,
+    );
     let stop = Arc::new(AtomicBool::new(false));
     let serve_stop = Arc::clone(&stop);
     let (finished, ended) = tokio::sync::oneshot::channel();

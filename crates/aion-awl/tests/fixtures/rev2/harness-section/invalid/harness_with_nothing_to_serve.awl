@@ -1,0 +1,13 @@
+//! Every action on this queue carries a declared body, which whatever
+//! dispatched it runs itself. A harness section here would launch a subprocess
+//! no work is ever sent to.
+worker greeter
+  harness
+    kind norn
+    concurrency 1
+    reconnect_initial_backoff 5s
+    reconnect_max_backoff 1m
+    reconnect_max_attempts 10
+    env_pass "PATH"
+  action greet(name: String) -> String
+    run text "printf %s $name"

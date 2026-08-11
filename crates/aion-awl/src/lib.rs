@@ -23,6 +23,7 @@ mod lexer;
 // `AWL-BC-IR.md` "BC-2 implementation status"; tightening to `pub(crate)` is a
 // panel/operator decision once `lower` constructs the full op surface and the
 // `ResultTry` marker is resolved.
+mod harness_config;
 #[doc(hidden)]
 pub mod mir;
 mod parser;
@@ -39,12 +40,18 @@ pub use ast::{
     ChildDecl, CollectStmt, CombinatorCall, CombinatorKind, CommandError, CommandReference,
     Comment, ConfigLine, ConfigValue, ConstDecl, DeliveryVerb, DistributeStmt, DocLine, Document,
     DocumentFamily, DurationLiteral, EnumVariant, Expr, FieldDecl, ForkHeader, ForkStmt, Guard,
-    InputDecl, JSON_CAPTURE_WORD, JoinLine, Lead, LoopStmt, LoopTail, MaxVisits, OnFailure,
-    OutcomeClause, OutcomeDecl, ParamDecl, PipeEnd, PipeStage, PipeStmt, PredicateKind, Quantifier,
-    QueryDecl, RetrySpec, RouteDirection, RoutePayload, RouteStmt, RouteTarget, RunCapture,
-    ScannedCommand, SendDecl, SendStmt, SignalDecl, SleepStmt, SpawnStmt, Statement, Step,
-    SubflowDecl, SubflowOutcome, TEXT_CAPTURE_WORD, TypeBody, TypeDecl, TypeRef, WaitStmt,
-    WorkerDecl, WorkflowTimeoutDecl, scan_command,
+    HARNESS_ARGS_FIELD, HARNESS_BINARY_FIELD, HARNESS_COMMAND_FIELD, HARNESS_CONCURRENCY_FIELD,
+    HARNESS_CWD_FIELD, HARNESS_ENV_PASS_FIELD, HARNESS_EXIT_GRACE_FIELD, HARNESS_FIELDS,
+    HARNESS_KIND_ACP, HARNESS_KIND_FIELD, HARNESS_KIND_NORN, HARNESS_PERMISSION_ALLOW_ONCE,
+    HARNESS_PERMISSION_DENY, HARNESS_PERMISSION_FIELD, HARNESS_RECONNECT_INITIAL_BACKOFF_FIELD,
+    HARNESS_RECONNECT_MAX_ATTEMPTS_FIELD, HARNESS_RECONNECT_MAX_BACKOFF_FIELD, HARNESS_WORD,
+    HarnessDecl, HarnessInteger, HarnessSetting, HarnessText, HarnessWord, InputDecl,
+    JSON_CAPTURE_WORD, JoinLine, Lead, LoopStmt, LoopTail, MaxVisits, OnFailure, OutcomeClause,
+    OutcomeDecl, ParamDecl, PipeEnd, PipeStage, PipeStmt, PredicateKind, Quantifier, QueryDecl,
+    RetrySpec, RouteDirection, RoutePayload, RouteStmt, RouteTarget, RunCapture, ScannedCommand,
+    SendDecl, SendStmt, SignalDecl, SleepStmt, SpawnStmt, Statement, Step, SubflowDecl,
+    SubflowOutcome, TEXT_CAPTURE_WORD, TypeBody, TypeDecl, TypeRef, WaitStmt, WorkerDecl,
+    WorkflowTimeoutDecl, scan_command,
 };
 pub use checker::{CheckError, check, check_in};
 pub use compile::{
@@ -54,6 +61,9 @@ pub use compile::{
 pub use emitter::{
     EmitError, EmittedArtifact, SynthesizedWorkflowEntry, emit, emit_artifact, emit_artifact_in,
     emit_in,
+};
+pub use harness_config::{
+    CompiledHarness, CompiledHarnessKind, HarnessConfigError, HarnessPermission, compile_harness,
 };
 pub use lexer::{
     ANSWER_WORD, DurationUnit, IN_WORD, Keyword, LexError, POSITIONAL_WORDS, QUERY_WORD, RUN_WORD,

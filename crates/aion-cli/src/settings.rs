@@ -3,14 +3,20 @@
 //!
 //! # Why this lives in one place
 //!
-//! Two independent groups of settings now share it — the agent worker's CONNECTION
-//! settings ([`crate::worker_agent`]) and the per-harness CONFIGURATION the
-//! composition root resolves after a harness is selected ([`crate::harness`]) — and
-//! an operator cannot tell the two apart from the command line. If each resolved its
-//! own way, one shell invocation could be told "supply `--acp-permission`" on one run
-//! and "supply `--identity`" on the next, when both were missing all along. So the
-//! collection of misses is shared, and the refusal is rendered once from the whole
-//! set.
+//! Two verbs' connection settings share it — the agent worker's
+//! ([`crate::worker_agent`]) and the AWL shell worker's ([`crate::worker_awl`]) — and an
+//! operator cannot tell one verb's resolution from the other's at a shell. If each
+//! resolved its own way, one invocation missing both `--identity` and
+//! `--liminal-address` could be told "supply `--identity`" on one run and "supply
+//! `--liminal-address`" on the next, when both were missing all along. So the collection
+//! of misses is shared, and the refusal is rendered once from the whole set.
+//!
+//! An agent worker's LAUNCH settings no longer pass through here at all: they are
+//! declared in the worker document's `harness` section, and a missing one is named by
+//! `aion awl check` against the document rather than by this contract against a command
+//! line. That is a different surface with a different refusal, and deliberately so — the
+//! document is reviewed and deployed once, where a command line is retyped on every
+//! box.
 //!
 //! # The rules, and why each one is the rule
 //!
@@ -166,30 +172,6 @@ pub(crate) fn positive_seconds(raw: &str, flag: &str, variable: &str) -> Result<
     let seconds = finite_seconds(raw, flag, variable)?;
     if seconds <= 0.0 {
         bail!("{flag} / ${variable} must be a finite number greater than zero, got `{raw}`");
-    }
-    duration(seconds, raw, flag, variable)
-}
-
-/// A duration in seconds that MAY be zero, or a refusal naming the setting.
-///
-/// Zero is a real choice for a setting whose consumer documents it as one — the ACP
-/// agent's shutdown grace means "close stdin, then kill at once" at zero — so the
-/// floor is separate from [`positive_seconds`] rather than a parameter, and each
-/// caller picks the parser whose rule matches the setting it is reading.
-///
-/// Gated on the `acp` feature because that grace is currently the only setting in the
-/// binary whose floor is zero: a build without the ACP adapter has nothing to read with
-/// this rule, and carrying it anyway would be code no configuration can reach.
-///
-/// # Errors
-///
-/// Returns an error when `raw` is not a number, is not finite, is negative, or is too
-/// large to be a [`Duration`].
-#[cfg(feature = "acp")]
-pub(crate) fn non_negative_seconds(raw: &str, flag: &str, variable: &str) -> Result<Duration> {
-    let seconds = finite_seconds(raw, flag, variable)?;
-    if seconds < 0.0 {
-        bail!("{flag} / ${variable} must not be negative, got `{raw}`");
     }
     duration(seconds, raw, flag, variable)
 }

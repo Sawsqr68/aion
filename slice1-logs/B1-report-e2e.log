@@ -1,0 +1,17 @@
+   Compiling aion-server v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-server)
+   Compiling fs4 v1.1.0
+   Compiling aion-cli v0.13.8 (/Users/tom/Developer/ablative/stack/aion/.claude/worktrees/agent-aeb792cde74e034e1/crates/aion-cli)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `aion-cli` (bin "aion") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 37s
+     Running tests/declared_environment_report_e2e.rs (target/debug/deps/declared_environment_report_e2e-9be2fee73f47137d)
+
+running 2 tests
+test a_declaration_this_machine_can_satisfy_produces_no_warning_at_all ... ok
+test an_absent_declared_variable_is_reported_on_stderr_where_an_operator_reads_it ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.32s
+

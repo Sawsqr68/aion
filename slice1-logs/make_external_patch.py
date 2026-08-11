@@ -1,0 +1,204 @@
+"""Build the ready-to-apply patch for market-mirror's OPERATIONS.md.
+
+The file lives outside this repository, so it is not edited here: the patch is
+written to BRINGUP-SLICE1-EXTERNAL-PATCHES.diff at the worktree root for its owner
+to apply.
+"""
+
+import difflib
+import pathlib
+
+target = pathlib.Path(
+    "/Users/tom/Developer/ablative/prototyping/market-mirror/docs/OPERATIONS.md"
+)
+original = target.read_text().split("\n")
+
+old_block = """# Judgement legs (norn harness) for the fleet-build workflow. The document
+# declares two worker blocks, so the queue must be selected; the agent seam
+# exists only on the liminal worker transport:
+aion worker agent workflows/mm_fleet_build.awl --harness norn \\
+    --task-queue mm_fleet --identity <name> \\
+    --liminal-address <host:port> --concurrency <n> \\
+    --reconnect-initial-backoff <s> --reconnect-max-backoff <s> \\
+    --reconnect-max-attempts <n>
+"""
+
+new_block = """# Judgement legs (norn harness) for the fleet-build workflow. The document
+# declares two worker blocks, so the queue must be selected; the agent seam
+# exists only on the liminal worker transport.
+#
+# THE LAUNCH IS IN THE DOCUMENT. As of the worker bring-up landing, an agent
+# worker's launch settings are declared in the `.awl` document's `harness`
+# section and there are no flags for them: `--harness`, `--concurrency`, the
+# three `--reconnect-*`, every `--acp-*` and every `--norn-*` were DELETED, and
+# passing one is now an arg-parse error. What is left on the command line is
+# the connection: which document, which queue, where to dial, and who this
+# worker says it is.
+aion worker agent workflows/mm_fleet_build.awl \\
+    --task-queue mm_fleet --identity <name> \\
+    --liminal-address <host:port>
+"""
+
+old_loop = """aion worker agent workflows/mm_fleet_loop.awl --harness norn \\
+    --task-queue mm_loop_build --identity <name> \\
+    --liminal-address <host:port> --concurrency <n> \\
+    --reconnect-initial-backoff <s> --reconnect-max-backoff <s> \\
+    --reconnect-max-attempts <n> --norn-arg=--account --norn-arg=<account>
+aion worker agent workflows/mm_fleet_loop.awl --harness acp \\
+    --task-queue mm_loop_oversight --identity <name> \\
+    --liminal-address <host:port> --concurrency <n> \\
+    --reconnect-initial-backoff <s> --reconnect-max-backoff <s> \\
+    --reconnect-max-attempts <n> --acp-command <path-to-claude-code-acp> \\
+    --acp-cwd <repo> --acp-permission <mode> --acp-exit-grace <s>
+```
+"""
+
+new_loop = """aion worker agent workflows/mm_fleet_loop.awl \\
+    --task-queue mm_loop_build --identity <name> \\
+    --liminal-address <host:port>
+aion worker agent workflows/mm_fleet_loop.awl \\
+    --task-queue mm_loop_oversight --identity <name> \\
+    --liminal-address <host:port>
+```
+
+### The `harness` section each agent queue now needs
+
+Every setting the two commands above used to carry is declared in the worker
+block that owns the queue, and `aion awl check <FILE.awl>` refuses a section
+missing any field of ITS DECLARED KIND's required set, naming the field. So
+each of `mm_fleet_build.awl`, `mm_fleet_loop.awl` and `mm_fleet_swarm.awl`
+needs one section per agent `worker` block before it can be served. The
+values below are the OPERATOR'S — nothing anywhere invents one, which is why
+they are still written as placeholders here:
+
+```awl
+worker mm_loop_build
+  harness
+    kind norn
+    concurrency <n>
+    reconnect_initial_backoff <n>s
+    reconnect_max_backoff <n>s
+    reconnect_max_attempts <n>
+    env_pass "PATH", "HOME"
+    args "--account", "<account>"
+  action ...
+
+worker mm_loop_oversight
+  harness
+    kind acp
+    concurrency <n>
+    reconnect_initial_backoff <n>s
+    reconnect_max_backoff <n>s
+    reconnect_max_attempts <n>
+    env_pass "PATH", "HOME"
+    command "<absolute-path-to-claude-code-acp>"
+    cwd "<absolute-repo-path>"
+    permission "deny"
+    exit_grace <n>s
+  action ...
+```
+
+`env_pass` is the ONE that changes behaviour rather than just moving house,
+and it is the whole reason this landing exists. It is a list of variable
+NAMES, and it is the agent subprocess's ENTIRE environment: the document says
+which variables cross the process boundary, this machine supplies their
+values, and a variable that is not named is ABSENT in the agent whatever the
+launching shell exported. Nothing is inherited.
+
+That is the 2026-08-11 oversight-seat incident, killed structurally. An
+agent's own shell exports `CLAUDECODE`; the worker was started from that
+shell, inherited it invisibly, and passed it to the `claude-code-acp` it
+spawned — which refuses to launch nested, so every `session/new` came back
+`-32603` and the oversight seats were dead until somebody read the JSON-RPC
+error code by hand. Under `env_pass` that variable cannot reach the agent,
+because nobody declared it.
+
+Two consequences worth knowing before the first start:
+
+* An `env_pass` list is a promise about what the agent CAN see. If the agent
+  needs a credential — an API key, a `HOME` for its config, a `PATH` to find
+  a tool it shells out to — name it, or the agent will fail for a reason that
+  looks nothing like a missing variable.
+* `command` must be an ABSOLUTE path, and a program named without one is
+  refused BEFORE the spawn naming `PATH`, rather than dying as a bare
+  `No such file or directory` against a command that is spelled correctly.
+
+Two more shapes to know: `--concurrency` was the flag the swarm note below
+warns about, and it is now `concurrency` inside the build queue's section —
+the same rule applies, it must be at least the lane count. And a bare
+`aion worker agent` with no document now refuses loudly with the new shape
+named, rather than a generic missing-argument error.
+"""
+
+old_swarm = """# --concurrency must be at least the lane count, or the "parallel" lanes"""
+new_swarm = """# `concurrency` (in the build queue's `harness` section) must be at least the
+# lane count, or the "parallel" lanes"""
+
+text = "\n".join(original)
+for old, new in ((old_block, new_block), (old_loop, new_loop), (old_swarm, new_swarm)):
+    if old not in text:
+        raise SystemExit(f"context not found:\n{old[:200]}")
+    text = text.replace(old, new, 1)
+
+updated = text.split("\n")
+diff = difflib.unified_diff(
+    original,
+    updated,
+    fromfile="a/docs/OPERATIONS.md",
+    tofile="b/docs/OPERATIONS.md",
+    lineterm="",
+    n=3,
+)
+body = "\n".join(diff)
+
+header = """# BRINGUP SLICE 1 — patches for surfaces OUTSIDE the aion repository
+#
+# The worker bring-up landing (aion, worktree branch
+# `worktree-agent-aeb792cde74e034e1`) DELETED the per-setting launch flags on
+# `aion worker agent` and moved them into the worker document's `harness`
+# section. Rider (c) of the migration ruling says every runbook that spells the
+# old flags updates in the same change — including surfaces this repository
+# does not own. Those are not edited here; they are patched here, for their
+# owner to apply.
+#
+# APPLY WITH, from /Users/tom/Developer/ablative/prototyping/market-mirror:
+#
+#   git apply --check /path/to/BRINGUP-SLICE1-EXTERNAL-PATCHES.diff
+#   git apply /path/to/BRINGUP-SLICE1-EXTERNAL-PATCHES.diff
+#
+# Generated against docs/OPERATIONS.md as of the commit checked out on
+# 2026-08-11. If that file has moved on, re-generate rather than force it: the
+# hunks below carry three lines of context each and a stale apply is a silent
+# wrong answer.
+#
+# ---------------------------------------------------------------------------
+# STILL OUTSTANDING, AND NOT PATCHED HERE
+#
+# The three fleet documents need a `harness` section per agent `worker` block
+# before any of these commands can serve:
+#
+#   prototyping/market-mirror/workflows/mm_fleet_build.awl   (queue mm_fleet)
+#   prototyping/market-mirror/workflows/mm_fleet_loop.awl    (queues
+#                                     mm_loop_build, mm_loop_oversight)
+#   prototyping/market-mirror/workflows/mm_fleet_swarm.awl   (same two queues)
+#
+# No patch is offered for those, deliberately. Every field of a `harness`
+# section is operator policy with no default — the concurrency that sizes THIS
+# machine, the reconnect budget, the absolute path to this box's
+# claude-code-acp, the repository the ACP session is rooted at, and the exact
+# set of environment variables the agents are allowed to see. Drafting them
+# here would be inventing values on somebody else's behalf and committing them
+# to a file, which is the failure the whole landing exists to prevent. The
+# shape and the meaning of each field are in the OPERATIONS.md hunk below; the
+# values are the operator's word.
+#
+# `aion awl check <FILE.awl>` names every setting a section is missing, scoped
+# to the kind it declares, so the documents can be brought up to date against
+# the checker rather than against this comment.
+# ---------------------------------------------------------------------------
+
+"""
+
+pathlib.Path("slice1-logs/BRINGUP-SLICE1-EXTERNAL-PATCHES.diff").write_text(header + body + "\n")
+print("hunks:", body.count("\n@@ ") + body.count("@@ -"))
+print("bytes:", len(header + body))

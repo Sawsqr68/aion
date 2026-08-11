@@ -34,28 +34,119 @@ to the tracked one every path below names:
 aion assistant document --output assistant.awl
 ```
 
-One command serves a document's agent actions. The surface below is the
-current tree's — and the version string cannot tell you whether a binary has
-it, because `--norn-arg` and `--norn-unset-env` landed in `e7c748e62` without
-a version bump: a binary built before that commit says 0.11.0 and refuses
-both flags, and one built after says 0.11.0 and accepts them. Check the
-binary itself: `aion worker agent --help | grep norn-arg`. On a pre-that
-binary, spawned norn processes run with bare norn defaults (default account,
-no session pinning, **no `--workspace-root` confinement**):
+Two things start an agent worker, and the split between them is deliberate:
+
+- **The document declares the LAUNCH.** Which harness, how many activities run
+  at once, how a dropped session is retried, what environment the agent
+  subprocess is given, and the agent's own command and arguments — all of it in
+  a `harness` section inside the `worker` block, reviewed and deployed with the
+  rest of the document and read by `aion awl check`. **There is no flag for any
+  of it.**
+- **The command line declares the CONNECTION.** Where this process dials, who
+  it says it is, and where it sits. Those are properties of one worker on one
+  box rather than of the queue: two workers serving the same document
+  legitimately differ in all three, which is exactly why they are not in the
+  file.
+
+So the whole invocation is short:
 
 ```
-aion worker agent crates/aion-server/assistant-embed/assistant.awl \
-    --harness norn \
+aion worker agent assistant.awl \
     --liminal-address 127.0.0.1:50061 \
-    --identity assistant-agent-worker \
-    --concurrency 4 \
-    --reconnect-initial-backoff 1 \
-    --reconnect-max-backoff 30 \
-    --reconnect-max-attempts 100
+    --identity assistant-agent-worker
 ```
 
-That is the whole required set, and it is longer than it looks like it
-should be on purpose — see "Nothing is invented" below.
+The launch settings used to be a dozen flags on this verb — `--harness`,
+`--concurrency`, the three `--reconnect-*`, every `--acp-*` and every
+`--norn-*`. They are **deleted, not deprecated**: an invocation carrying one is
+an argument-parse error, and their environment forms (`AION_AGENT_HARNESS`,
+`AION_NORN_BINARY`, `AION_ACP_COMMAND`, `AION_ACP_CWD`, `AION_ACP_PERMISSION`,
+`AION_ACP_EXIT_GRACE_SECONDS`, and — for this verb only — `AION_WORKER_CONCURRENCY`
+and the three `AION_RECONNECT_*`) went with them. Keeping both would have been
+a hand-maintained drift pair, and a launch setting that can come from two
+places has already come from the wrong one.
+
+The version string cannot tell you which side of that a binary is on. Check the
+binary: `aion worker agent --help`. One that still accepts `--concurrency`
+predates the move and reads no `harness` section at all.
+
+None of the three documents this repository ships with an agent action —
+`crates/aion-server/assistant-embed/assistant.awl`,
+`workflows/norn-fleet/norn_fleet.awl` and `workflows/norn-dev/norn_dev.awl` —
+carries a `harness` section yet, so serving any of them with this verb means
+adding one first. (The census is every document with an `agent`-marked action:
+`grep -rln 'agent,\|^    agent$' workflows/ crates/aion-server/assistant-embed/`.) Hand it a document
+without one and it refuses by saying so: the queue "declares no `harness`
+section", "There is no flag for any of it", and run `aion awl check` on it. The
+section below is the whole of what to write, and the checker names anything you
+leave out.
+
+### A managed-worker record minted before this change
+
+`aion worker agent` is also started by the SERVER, through the managed-worker
+motion: a `builtin` worker-deployment record stores the operator's argv tail
+verbatim and durably, and the supervisor replays exactly that on every restart
+(`crates/aion-server/src/worker/supervisor/fleet.rs`,
+`WorkerArtifactRef::Builtin`). So a record minted before the launch settings
+moved carries the deleted flags **inside the record**, and:
+
+- it fails on its next supervised restart, not on a deploy — the change lands
+  quietly and the record breaks the next time something restarts it;
+- it fails again on every retry, because the argv is fixed, until the crash-loop
+  guard spends `max_restarts_per_window` and parks it as `Failed`;
+- **editing the document does not fix it.** The document is not what the record
+  replays.
+
+There is no migration for these records and there is deliberately no tolerant
+parse. There is nothing to migrate a stored argv *from* — the values a `harness`
+section needs (this box's concurrency, its reconnect budget, the absolute path
+to its agent, the variables that agent may see) were never in the record — and a
+parse that accepted the old flags would be the compat shim this repository does
+not build.
+
+What there is instead is a refusal that says so. The verb recognises every one
+of the fourteen deleted flags on its own argv and prints, beneath clap's
+argument error, which flags were supplied, which document field replaced each,
+and both remedies — including the record-shaped one, because an operator reading
+a supervised failure did not type the command:
+
+> If you did NOT type this command, a managed-worker deployment replayed it. […]
+> The record is the thing to fix: add the `harness` section to the document,
+> then re-mint the deployment (`PUT /worker-deployments/<name>`, or the ops
+> console's deploy form) so its stored argv no longer carries these flags.
+
+The supervisor forwards a managed worker's stderr into the server's own tracing
+output, tagged with the worker name, so that sentence is what an operator finds
+against the deployment that will not start. **Re-minting the record is the fix**:
+write the `harness` section into the document, then `PUT` the deployment again
+with a verb tail carrying only the document and the connection flags.
+
+### Why the SERVER's own spawn environment is not cleared
+
+`env_pass` governs the AGENT SUBPROCESS — the `claude-code-acp` or `norn` a
+worker launches. It does not govern the worker PROCESS itself, and the managed
+-worker supervisor (`crates/aion-server/src/worker/supervisor/`) still hands a
+supervised worker the server's own environment, inherited. That is deliberate,
+and it is not a gap left in the fence:
+
+- The worker process's own settings are read from that environment BY DESIGN.
+  The ops console's deploy form documents it in as many words — a setting left
+  blank "must come from the server process's environment
+  (`AION_WORKER_CONCURRENCY`, `AION_RECONNECT_*`)" — so clearing it would break
+  every deployed `aion worker awl` worker that relies on it, silently, at the
+  next supervised restart.
+- Clearing it would not add safety where the incident happened. `CLAUDECODE`
+  reaching a worker process harms nothing; it broke a live run by reaching the
+  AGENT the worker spawned. That boundary is now closed at the spawn site,
+  which is downstream of every launcher — a hand-run CLI, a console click, a
+  supervised restart — so one mechanism covers all three and none of them can
+  opt out.
+- The two are independent by construction: whatever the worker process
+  inherits, the agent child gets `env_pass` and nothing else.
+
+Declaring the worker process's own environment is a separate decision on a
+separate surface, and it needs the operator's word on what a supervised worker
+is allowed to see. It is not this change.
 
 The rules it lives by, and why:
 
@@ -81,125 +172,245 @@ The rules it lives by, and why:
 - **The namespace comes from the global `--namespace`** (default `default`),
   not from the document. Namespace and task queue are independent — see
   [activities-and-workers.md](activities-and-workers.md#the-routing-model-namespace--task-queue--node).
-- **`--harness` picks the agent harness.** The default build compiles in
-  both `norn` and `acp`, so the flag is required; a build carrying exactly
-  one derives it. Env: `AION_AGENT_HARNESS`.
-- **A flag for a harness you are not serving is refused, never ignored.** A
-  flag that silently does nothing is how an operator comes to believe a
-  policy is in force when it is not. An ambient environment *variable* for
-  another harness is not refused: a box may legitimately export both.
+- **The harness kind is the document's, and it is checked against the build.**
+  `kind acp` or `kind norn` in the section; the default build compiles both
+  adapters in. A document naming a kind this binary was not built with is
+  refused, naming what the build does carry.
+- **A setting written for the kind the section does not declare is refused,
+  never ignored.** A setting that silently does nothing is how an operator
+  comes to believe a policy is in force when it is not: `permission "deny"`
+  accepted and ignored on a `norn` section reads exactly like a denial being
+  enforced.
 - **`--check` prints the surface without connecting**: the exact action
   descriptors the worker would advertise, the resolved harness, and its
   intervention controls. Those descriptors are the whole admission decision
   on a queue carrying a deployed contract — read them at the desk instead of
-  decoding a remote refusal. `--check` needs the document and the harness
-  selection and **nothing else**: a report that connects to nothing must not
-  demand the configuration of a connection it will not make.
+  decoding a remote refusal. `--check` needs the document and **nothing
+  else** — not even a `harness` section, because a report that connects to
+  nothing must not demand the configuration of a connection it will not make,
+  and reading the surface is exactly what you do before writing the launch.
 
-### Nothing is invented — the settings you must supply
+### Nothing is invented — the connection settings you must supply
 
-`aion_worker::WorkerConfigBuilder` refuses to build without an identity, a
-concurrency, and all three reconnect settings, because those are operator
-policy and the SDK has no business guessing them. This verb does not guess
-them either. Every one is supplied by a flag or by its named
-environment variable, the flag wins, and a missing one is reported BY NAME —
-with every missing setting listed at once, so a shell invocation needs one
-correction rather than seven
+`aion_worker::WorkerConfigBuilder` refuses to build without an identity,
+because that is operator policy and the SDK has no business guessing it. This
+verb does not guess it either. Every connection setting is supplied by a flag
+or by its named environment variable, the flag wins, and a missing one is
+reported BY NAME — with every missing setting listed at once, so a shell
+invocation needs one correction rather than two
 (`crates/aion-cli/src/worker_agent/args.rs`).
 
 | Flag | Required | Env | What it decides |
 |---|---|---|---|
-| *(positional)* `<file.awl>` | yes | — | the document declaring the queue and the actions to serve |
+| *(positional)* `<FILE.awl>` | yes | — | the document declaring the queue, the actions to serve, and the `harness` section that says how to launch the agent |
 | `--liminal-address` | yes (repeatable) | `AION_WORKER_LIMINAL_ADDRESSES` | ordered liminal candidates; extras are redial targets for failover |
 | `--identity` | yes | `AION_WORKER_IDENTITY` | stable worker-build identity, used to correlate compatibility decisions |
-| `--concurrency` | yes | `AION_WORKER_CONCURRENCY` | maximum activities served at once; must be > 0 |
-| `--reconnect-initial-backoff` | yes | `AION_RECONNECT_INITIAL_BACKOFF_SECONDS` | seconds before the first reconnect attempt; fractions accepted |
-| `--reconnect-max-backoff` | yes | `AION_RECONNECT_MAX_BACKOFF_SECONDS` | reconnect backoff cap, in seconds |
-| `--reconnect-max-attempts` | yes | `AION_RECONNECT_MAX_ATTEMPTS` | cumulative session-drop budget |
 | `--task-queue` | no | `AION_TASK_QUEUE` | selects among several `worker` blocks; a document with one leaves nothing to choose |
 | `--node` | no | — | locality affinity advertised at registration; omitted takes the worker SDK's own hostname default |
 | `--check` | no | — | print the surface and exit without connecting |
+
+The global `--namespace` (default `default`) belongs to the `aion` binary, not
+to this verb, and goes before it.
 
 Omit the required settings and you get this, before anything dials — every
 one named at once, flag and variable:
 
 ```
 error: these worker settings have no value; supply each as a flag or an environment variable:
-  --concurrency or $AION_WORKER_CONCURRENCY
   --identity or $AION_WORKER_IDENTITY
   --liminal-address or $AION_WORKER_LIMINAL_ADDRESSES
-  --reconnect-initial-backoff or $AION_RECONNECT_INITIAL_BACKOFF_SECONDS
-  --reconnect-max-attempts or $AION_RECONNECT_MAX_ATTEMPTS
-  --reconnect-max-backoff or $AION_RECONNECT_MAX_BACKOFF_SECONDS
 ```
+
+Name no document at all and the refusal is louder, because an operator meeting
+it has almost certainly arrived with the deleted flags in their fingers: it
+prints the shape the verb takes now, says the launch settings are "no longer a
+flag", and points at `aion awl check`.
+
+### The `harness` section — the whole launch, in the document
+
+The section lives inside a `worker <queue>` block, before that block's `action`
+declarations, one setting per line, indented one level under `harness`. Every
+word in it — `harness` itself and each field name — is a plain identifier
+rather than a reserved keyword: reserving twelve words in every other position
+in the language to spell one section would be a poor trade.
+
+```awl
+worker default
+  harness
+    kind norn
+    concurrency 4
+    reconnect_initial_backoff 1s
+    reconnect_max_backoff 30s
+    reconnect_max_attempts 100
+    env_pass "PATH", "HOME"
+    args "--account", "default"
+  action assistant(prompt: String) -> Reply
+    agent
+```
+
+`aion awl fmt` prints the fields in one fixed order — the one above, then
+`command`, `args`, `cwd`, `permission`, `exit_grace`, `binary` — whatever order
+they were written in, so two operators who declared the same launch end up with
+the same bytes and a review diff shows what actually changed.
+
+The section is launch configuration and **not flow meaning**: the MIR ratchet
+pins all three checked fixtures to the lowering the same document without a
+section produces (`crates/aion-awl/src/mir/covered.rs`). Adding one changes how
+a worker process starts an agent, and nothing about what the workflow does.
+
+| Setting | Kind | Value | What it decides |
+|---|---|---|---|
+| `kind` | both, required | bare word `acp` or `norn` | which harness launches; it scopes every other required setting |
+| `concurrency` | both, required | whole number > 0 | maximum activities served at once |
+| `reconnect_initial_backoff` | both, required | duration (`5s`, `2m`, `1h`, `1d`), positive | wait before the first reconnect attempt |
+| `reconnect_max_backoff` | both, required | duration, positive, not shorter than the initial | the cap the backoff climbs to |
+| `reconnect_max_attempts` | both, required | whole number > 0 | cumulative session-drop budget |
+| `env_pass` | both, required | quoted variable NAMES, comma-separated | the agent subprocess's WHOLE environment — see below |
+| `args` | both, optional | quoted strings, comma-separated, order preserved | the agent's own launch arguments |
+| `command` | `acp` only, required | quoted ABSOLUTE path | the agent executable, passed verbatim |
+| `cwd` | `acp` only, required | quoted ABSOLUTE path | the directory ACP sessions are rooted at |
+| `permission` | `acp` only, required | `"deny"` or `"allow-once"` | how an *unattended* activity answers the agent's permission requests |
+| `exit_grace` | `acp` only, required | duration; `0s` is legitimate | how long the agent may take to exit after its stdin closes before it is killed |
+| `binary` | `norn` only, optional | quoted path | the `norn` binary; omitted takes the adapter's own documented `norn`-on-`PATH` default |
+
+**The required set is the DECLARED KIND's.** An `acp` section carrying no
+`binary` is complete, and a `norn` section carrying no `command`, `cwd`,
+`permission` or `exit_grace` is complete: demanding a value that configures
+nothing is how a file comes to be full of settings nobody believes. In the
+other direction, a setting belonging to the kind the section does *not* declare
+is refused by name rather than ignored.
+
+**`aion awl check <FILE.awl>` is where a missing setting is named**, before any
+worker starts and before anything is deployed. `permission` and `cwd` in
+particular have no defaults and now cannot acquire one: a defaulted permission
+policy silently decides whether an unattended agent may write files and run
+commands, and a defaulted working directory silently roots an agent somewhere
+nobody chose. Moving them into the document did not soften either rule — it
+moved the refusal earlier.
+
+A `harness` section on a queue whose actions ALL carry declared `run` bodies is
+refused too, naming them: the server runs those from the deployed contract, so
+there is nothing on that queue for an agent to serve and the launch would start
+a subprocess no work is ever sent to.
+
+#### `env_pass` — the agent's whole environment, declared
+
+A spawned process inherits its parent's environment unless something stops it,
+and that inheritance is invisible: nobody wrote it down, nobody reviewed it,
+and it changes with whatever shell started the worker. On 2026-08-11 that cost
+a live run — an agent's own shell exports `CLAUDECODE`, the worker inherited
+it, the spawned `claude-code-acp` saw it, refused to launch nested, and every
+`session/new` came back `-32603`. Nothing in the worker's configuration
+mentioned `CLAUDECODE`; nothing could have.
+
+So a harness child's environment is **constructed, never inherited**. The
+document names the variables; the machine running the worker supplies their
+values; the child starts from empty and receives exactly those pairs. A
+variable the document does not name is absent in the agent whatever the
+worker's own environment carries — which is also how the old
+`--norn-unset-env OPENAI_API_KEY` is spelled now: leave `OPENAI_API_KEY` out of
+the list and it cannot reach norn.
+
+Entries are **names only**. An entry containing `=` is refused: the value
+belongs to the box, and writing one into a document puts a secret in a file
+that gets committed, diffed and deployed. A named variable the machine does not
+carry contributes nothing and is logged as absent, so a missing credential
+surfaces at the worker rather than three layers down inside an agent's own
+error message.
+
+One refusal is worth knowing in advance. A `command` that is a bare program
+name is looked up on `PATH`, so a launch whose `env_pass` omits `PATH` is
+refused **before the spawn**, naming `PATH` — rather than arriving as the
+kernel's bare `No such file or directory` against a command you can see is
+spelled correctly.
 
 ### The `norn` harness
 
-Every setting is optional — a norn that needs no extra arguments and no
-environment stripping is a complete configuration:
+Norn's own setting is `binary`, and it is optional; `args` is optional too. So
+a norn that sits on `PATH` and needs no extra arguments is already a complete
+declaration — its whole section is the kind-independent six.
 
-| Flag | Required | What it decides |
-|---|---|---|
-| `--norn-binary` | no | the `norn` binary (env `AION_NORN_BINARY`) if `norn` is not on the worker's PATH; omitted means the adapter's own `norn`-on-PATH default |
-| `--norn-arg` | repeatable | one launch argument for the spawned norn, order preserved; hyphen-leading values accepted verbatim, because the arguments you most need to pass ARE flags (`--session-id`, `--resume-if-exists`, `--account`) |
-| `--norn-unset-env` | repeatable | a variable REMOVED from the spawned norn's environment only — e.g. `--norn-unset-env OPENAI_API_KEY` forces norn onto its OAuth login when a stray ambient key would otherwise take precedence and fail |
-
-Both repeatable flags are flag-only (no environment variable): an ordered
-list of arbitrary strings has no safe single-variable encoding, and even a
-variable *name* may contain a would-be separator.
-
-The adapter expands two run-identity placeholders in each `--norn-arg` at
-spawn time — `{workflow_id}` and `{activity_type}`; any other `{...}` text
-passes through literally
-(`crates/aion-integration-norn/src/harness.rs`, `expand_arg`). That makes the
-example worker's session-pinned invocation (below) reproducible without a
-crate:
-
-```
-aion worker agent crates/aion-server/assistant-embed/assistant.awl \
-    --harness norn --liminal-address 127.0.0.1:50061 \
-    --identity assistant-agent-worker --concurrency 4 \
-    --reconnect-initial-backoff 1 --reconnect-max-backoff 30 \
-    --reconnect-max-attempts 100 \
-    --norn-arg --workspace-root --norn-arg "<workspace_root>/{workflow_id}/repo" \
-    --norn-arg -C --norn-arg "<workspace_root>/{workflow_id}/repo" \
-    --norn-arg --session-id --norn-arg "{workflow_id}-{activity_type}" \
-    --norn-arg --resume-if-exists \
-    --norn-arg --account --norn-arg default \
-    --norn-unset-env OPENAI_API_KEY
+```awl
+worker default
+  harness
+    kind norn
+    concurrency 4
+    reconnect_initial_backoff 1s
+    reconnect_max_backoff 30s
+    reconnect_max_attempts 100
+    env_pass "PATH", "HOME"
+    args "--workspace-root", "<workspace_root>/{workflow_id}/repo", "-C", "<workspace_root>/{workflow_id}/repo", "--session-id", "{workflow_id}-{activity_type}", "--resume-if-exists", "--account", "default"
+    binary "/usr/local/bin/norn"
+  action assistant(prompt: String) -> Reply
+    agent
 ```
 
-`<workspace_root>` there is a value **you** substitute, not a placeholder the
-adapter expands. It must be the same directory the server provisions the run's
-workspace under, or the agent works somewhere other than where it was
-provisioned. Read it from the server's JSON startup banner's `workspace_root`
-field — that is the server's own resolved value, and re-deriving it is exactly
-how two components come to disagree about one path. See
+Each setting is one whole line, and a list does not wrap: a comma at the end of
+a line is a parse error, so `args` and `env_pass` run long. That is the trade
+for a refusal that can anchor on the field it is about.
+
+The adapter expands two run-identity placeholders in each `args` entry at spawn
+time — `{workflow_id}` and `{activity_type}`; any other `{...}` text passes
+through literally (`crates/aion-integration-norn/src/harness.rs`, `expand_arg`).
+That is what makes the example worker's session-pinned invocation (below)
+reproducible without writing a crate.
+
+`<workspace_root>` there is a value **you** substitute before checking the
+document, not a placeholder the adapter expands. It must be the same directory
+the server provisions the run's workspace under, or the agent works somewhere
+other than where it was provisioned. Read it from the server's JSON startup
+banner's `workspace_root` field — that is the server's own resolved value, and
+re-deriving it is exactly how two components come to disagree about one path.
+See
 [DECLARED-COMMANDS.md](DECLARED-COMMANDS.md#workspace_root--how-a-body-learns-where-to-work).
 
-The composed argv is asserted in the harness tests, not just observed
-through live runs — a flag only ever seen firing is untested in the case
-that matters.
+Note what is *not* in that `env_pass`: no `OPENAI_API_KEY`. A stray ambient key
+would otherwise take precedence over norn's OAuth login and fail every round,
+and the way to keep it out is to not name it.
 
-The verb also recognises norn's degraded-session refusal (see the 28-day
-story below) and attaches the route out to the activity failure: restart
-with `--norn-arg --allow-degraded-session`. The advice goes quiet exactly
-when that flag is already in the composed argv.
+The composed argv is asserted in the harness tests, not just observed through
+live runs — an argument only ever seen firing is untested in the case that
+matters.
+
+The verb also recognises norn's degraded-session refusal (see the 28-day story
+below) and attaches the route out to the activity failure: add
+`"--allow-degraded-session"` to the section's `args` and restart the worker.
+The advice goes quiet exactly when that argument is already in the composed
+argv.
 
 ### The `acp` harness
 
-ACP has no standard launch flag, so nothing is inferred from an agent's
-name; every setting is explicit, and the required ones have **no defaults**
-because they are security and correctness decisions:
+ACP has no standard launch flag, so nothing is inferred from an agent's name;
+every setting is explicit, and the required ones have **no defaults** because
+they are security and correctness decisions.
 
-| Flag | Required | Env | What it decides |
-|---|---|---|---|
-| `--acp-command` | yes | `AION_ACP_COMMAND` | the agent executable, passed verbatim |
-| `--acp-cwd` | yes | `AION_ACP_CWD` | the ABSOLUTE directory sessions are rooted at; a relative path is refused rather than resolved against an unstated base |
-| `--acp-permission` | yes | `AION_ACP_PERMISSION` | `deny` or `allow-once`: how an *unattended* activity answers the agent's permission requests; recorded on the transcript every time |
-| `--acp-exit-grace` | yes | `AION_ACP_EXIT_GRACE_SECONDS` | seconds the agent may take to exit after the turn before it is killed (`0` = kill at once) |
-| `--acp-arg` | repeatable | — | one launch argument (e.g. Gemini CLI needs `--acp-arg --acp`); hyphen-leading values accepted verbatim |
-| `--acp-env` | repeatable | — | a `KEY=VALUE` set on the spawned agent only |
+```awl
+worker default
+  harness
+    kind acp
+    concurrency 4
+    reconnect_initial_backoff 1s
+    reconnect_max_backoff 30s
+    reconnect_max_attempts 100
+    env_pass "PATH", "HOME"
+    command "/usr/local/bin/claude-code-acp"
+    cwd "/srv/agents/workspace"
+    permission "deny"
+    exit_grace 10s
+  action assistant(prompt: String) -> Reply
+    agent
+```
+
+`command` is the agent executable and must be an ABSOLUTE path: a worker is
+started from whatever directory a supervisor or a shell happens to be in, so a
+relative path names a different place on every launch. `cwd` is the directory
+ACP's `session/new` roots sessions at, absolute for the same reason. `args`
+carries the agent's own launch arguments in order — Gemini CLI needs `--acp`,
+OpenCode needs `acp`, Claude Code's ACP adapter needs none. `permission` is
+`"deny"` (refuse every gated action) or `"allow-once"` (a one-shot approval,
+never a remember-this-choice grant), and it is recorded on the transcript every
+time. `exit_grace` is how long the agent gets to flush its logs and release
+what it holds once its stdin closes; `0s` means close stdin, then kill at once.
 
 ## The assistant's worker (`examples/agent-dev/worker/`)
 
@@ -311,8 +522,9 @@ The recognition and advice live in `aion-integration-norn` now, so both
 paths teach the same way, each naming its own restart spelling: this worker
 recognises that specific refusal and attaches the route out to the activity
 failure — restart with `--norn-allow-degraded-session` — and the built-in
-`aion worker agent` verb does the same, naming
-`--norn-arg --allow-degraded-session`. The tradeoff, stated so the decision
+`aion worker agent` verb does the same, naming the document instead: add
+`"--allow-degraded-session"` to the `harness` section's `args`. The tradeoff,
+stated so the decision
 is informed: the session resumes from a fresh provider epoch — the
 *conversation* is retained, provider-side fidelity is reduced. It is an
 operator opt-in with no default because that tradeoff is not the worker's

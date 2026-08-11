@@ -1,0 +1,204 @@
+# binary:  ./target/debug/aion
+# version: aion 0.13.8
+# tree:    d573a260859f4f50653e630c82e31b12a7ed2e6f 19 uncommitted path(s)
+# date:    2026-08-11T21:04:27+1000
+
+=== rider (b): a bare invocation refuses LOUDLY, naming the new shape
+$ ./target/debug/aion worker agent
+error: `aion worker agent` serves the queue an `.awl` document declares, and no document was named.
+
+  aion worker agent <FILE.awl> --liminal-address <HOST:PORT> --identity <NAME>
+
+Everything about the LAUNCH — the harness kind, the concurrency, the reconnect settings, the agent's command, working directory, permission policy and shutdown grace, and the environment variables the agent subprocess is given — is declared in that document's `harness` section and is no longer a flag. Check a document with `aion awl check <FILE.awl>`; the checker names any setting it is missing.
+[exit=1]
+
+=== migration: a deleted launch flag no longer parses, and the refusal TEACHES
+$ ./target/debug/aion worker agent flows/x.awl --concurrency 4
+error: unexpected argument '--concurrency' found
+
+  tip: to pass '--concurrency' as a value, use '-- --concurrency'
+
+Usage: aion worker agent <AWL>
+
+For more information, try '--help'.
+
+These are not unknown arguments — they are DELETED ones. An agent worker's launch is declared in the `.awl` document it serves, in the `harness` section of its `worker` block, and there is no flag for any of it:
+
+  --concurrency  ->  `concurrency` in the document's `harness` section
+
+If you typed this command: write the section into the document, then re-run without those flags. `aion awl check <FILE.awl>` names every setting the section is still missing, scoped to the kind the section declares.
+
+If you did NOT type this command, a managed-worker deployment replayed it. A `builtin` worker-deployment record stores the argv it was created with, verbatim and durably, and the supervisor replays exactly that on every restart — so a record minted before the launch settings moved will fail this way on every restart until its budget is spent, and editing the document will not change it. The record is the thing to fix: add the `harness` section to the document, then re-mint the deployment (`PUT /worker-deployments/<name>`, or the ops console's deploy form) so its stored argv no longer carries these flags.
+[exit=2]
+
+=== migration: several deleted flags at once are ALL named, not just the first
+$ ./target/debug/aion worker agent flows/x.awl --harness norn --norn-arg=--account --acp-permission deny
+error: unexpected argument '--harness' found
+
+  tip: to pass '--harness' as a value, use '-- --harness'
+
+Usage: aion worker agent <AWL>
+
+For more information, try '--help'.
+
+These are not unknown arguments — they are DELETED ones. An agent worker's launch is declared in the `.awl` document it serves, in the `harness` section of its `worker` block, and there is no flag for any of it:
+
+  --harness  ->  `kind` in the document's `harness` section
+  --acp-permission  ->  `permission` in the document's `harness` section
+  --norn-arg  ->  `args` in the document's `harness` section
+
+If you typed this command: write the section into the document, then re-run without those flags. `aion awl check <FILE.awl>` names every setting the section is still missing, scoped to the kind the section declares.
+
+If you did NOT type this command, a managed-worker deployment replayed it. A `builtin` worker-deployment record stores the argv it was created with, verbatim and durably, and the supervisor replays exactly that on every restart — so a record minted before the launch settings moved will fail this way on every restart until its budget is spent, and editing the document will not change it. The record is the thing to fix: add the `harness` section to the document, then re-mint the deployment (`PUT /worker-deployments/<name>`, or the ops console's deploy form) so its stored argv no longer carries these flags.
+[exit=2]
+
+=== rider (a): the VERB survives and takes a document reference
+$ ./target/debug/aion worker agent crates/aion-awl/tests/fixtures/rev2/harness-section/valid/norn_harness.awl --check
+{
+  "actions": [
+    {
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      },
+      "name": "ask",
+      "output_schema": {
+        "$defs": {
+          "Reply": {
+            "description": "The canonical agent-outcome record: the checker demands the STRUCTURE, not a blessed name.",
+            "properties": {
+              "stop_reason": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text",
+              "stop_reason"
+            ],
+            "type": "object"
+          }
+        },
+        "$ref": "#/$defs/Reply"
+      }
+    }
+  ],
+  "harness": "norn",
+  "intervention_capabilities": {
+    "supported": [
+      {
+        "primitive": "InjectMessage"
+      },
+      {
+        "primitive": "Cancel"
+      }
+    ]
+  },
+  "task_queue": "assistants"
+}
+[exit=0]
+
+=== B1: an absent declared pass-through is REPORTED before --check returns
+$ ./target/debug/aion worker agent /var/folders/87/tdf6vfls1fj_4ydz_y6sk3580000gn/T//aion-acceptance-absent-52180.awl --check
+warning: queue `assistants` in /var/folders/87/tdf6vfls1fj_4ydz_y6sk3580000gn/T//aion-acceptance-absent-52180.awl declares 1 environment pass-through variable(s) that are NOT set on this machine, so the agent subprocess will run without them: AION_ACCEPTANCE_UNSET_VARIABLE.
+  The `env_pass` list is the agent's whole environment — this worker carries 1 of them — and an agent missing a credential or a home directory fails inside its own error message, a long way from this cause. Set them here, or drop them from the document's `harness` section.
+{
+  "actions": [
+    {
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      },
+      "name": "ask",
+      "output_schema": {
+        "$defs": {
+          "Reply": {
+            "description": "The canonical agent-outcome record: the checker demands the STRUCTURE, not a blessed name.",
+            "properties": {
+              "stop_reason": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text",
+              "stop_reason"
+            ],
+            "type": "object"
+          }
+        },
+        "$ref": "#/$defs/Reply"
+      }
+    }
+  ],
+  "harness": "norn",
+  "intervention_capabilities": {
+    "supported": [
+      {
+        "primitive": "InjectMessage"
+      },
+      {
+        "primitive": "Cancel"
+      }
+    ]
+  },
+  "task_queue": "assistants"
+}
+[exit=0]
+
+=== the checker names the missing field, scoped to the declared kind
+$ ./target/debug/aion awl check crates/aion-awl/tests/fixtures/rev2/harness-section/invalid/missing_acp_permission.awl
+crates/aion-awl/tests/fixtures/rev2/harness-section/invalid/missing_acp_permission.awl:14:3: error: the `harness` section of worker `assistants` declares no `permission`, and nothing supplies one: an unattended activity has no operator to ask, so how the agent's permission requests are answered is decided up front: write `permission "deny"` or `permission "allow-once"`.
+[exit=1]
+
+=== ...and on the other kind, so the rule is witnessed on both
+$ ./target/debug/aion awl check crates/aion-awl/tests/fixtures/rev2/harness-section/invalid/missing_env_pass_on_norn.awl
+crates/aion-awl/tests/fixtures/rev2/harness-section/invalid/missing_env_pass_on_norn.awl:14:3: error: the `harness` section of worker `assistants` declares no `env_pass`, and nothing supplies one: the harness child's environment is CONSTRUCTED from this list and never inherited, so a section without it declares an environment nobody chose; name every variable the agent needs, for example `env_pass "PATH", "HOME"`.
+[exit=1]
+
+=== a setting for the kind the section does NOT declare is refused by name
+$ ./target/debug/aion awl check crates/aion-awl/tests/fixtures/rev2/harness-section/invalid/norn_section_carrying_an_acp_command.awl
+crates/aion-awl/tests/fixtures/rev2/harness-section/invalid/norn_section_carrying_an_acp_command.awl:23:5: error: `command` configures the `acp` harness, and this section declares `kind norn`. A setting that silently does nothing is how an operator comes to believe a policy is in force when it is not, so it is refused rather than ignored.
+[exit=1]
+
+=== M4: a relative norn binary is refused by the same absolute-path doctrine
+$ ./target/debug/aion awl check crates/aion-awl/tests/fixtures/rev2/harness-section/invalid/relative_norn_binary.awl
+crates/aion-awl/tests/fixtures/rev2/harness-section/invalid/relative_norn_binary.awl:25:12: error: `binary "bin/norn"` must be an ABSOLUTE path. A worker is started from whatever directory a supervisor or a shell happens to be in, so a relative path names a different file on every launch. To take the adapter's own `norn`-on-`PATH` default instead, omit `binary` entirely.
+[exit=1]
+
+=== a complete acp section is COMPLETE without any norn setting
+$ ./target/debug/aion awl check crates/aion-awl/tests/fixtures/rev2/harness-section/valid/acp_harness.awl
+ok: crates/aion-awl/tests/fixtures/rev2/harness-section/valid/acp_harness.awl (1 step)
+[exit=0]
+
+=== a complete norn section is COMPLETE without any acp setting
+$ ./target/debug/aion awl check crates/aion-awl/tests/fixtures/rev2/harness-section/valid/norn_harness.awl
+ok: crates/aion-awl/tests/fixtures/rev2/harness-section/valid/norn_harness.awl (1 step)
+[exit=0]
+
+=== m8: the absence control checks clean too — no section is a first-class state
+$ ./target/debug/aion awl check crates/aion-awl/tests/fixtures/rev2/harness-section/valid/harness_absent_control.awl
+ok: crates/aion-awl/tests/fixtures/rev2/harness-section/valid/harness_absent_control.awl (1 step)
+[exit=0]
+
+# end of acceptance

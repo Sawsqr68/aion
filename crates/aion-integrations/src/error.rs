@@ -62,6 +62,22 @@ pub enum HarnessError {
         /// Human-readable description of the reported failure.
         detail: String,
     },
+    /// The harness cannot be launched as CONFIGURED, so no run was started.
+    ///
+    /// A DETERMINISTIC refusal, and its own variant for the same reason
+    /// [`Self::Contract`] is: the channel never opened, so [`Self::Transport`] is wrong
+    /// and would tell an operator a story about a flaky pipe; no frame was exchanged, so
+    /// [`Self::Protocol`] is wrong; and nothing ran, so [`Self::Harness`] is wrong. What
+    /// is wrong is a value somebody WROTE — an environment pass-through entry that is a
+    /// `KEY=VALUE` pair instead of a name, a declaration that omits the variable the
+    /// program is looked up on. The next attempt reads the same document and meets the
+    /// same wall, so retrying spends a worker's attempt budget to learn nothing. The
+    /// worker maps this variant to a TERMINAL activity failure.
+    #[error("harness configuration refusal: {detail}")]
+    Configuration {
+        /// Human-readable description naming the setting and what is wrong with it.
+        detail: String,
+    },
     /// The run completed, but its native outcome cannot satisfy the canonical
     /// agent-outcome contract (`AgentOutcome { text, stop_reason }`).
     ///
@@ -129,6 +145,15 @@ impl HarnessError {
         }
     }
 
+    /// Builds a [`Self::Configuration`] with a detail message naming the setting that
+    /// makes the harness unlaunchable.
+    #[must_use]
+    pub fn configuration(detail: impl Into<String>) -> Self {
+        Self::Configuration {
+            detail: detail.into(),
+        }
+    }
+
     /// Whether this error is DETERMINISTIC — a property of how the run is
     /// configured, so retrying re-spends a whole agent run to hit the same
     /// wall — as opposed to potentially transient (a provider-overload burst,
@@ -145,6 +170,11 @@ impl HarnessError {
     /// - [`Self::Contract`]: deterministic by definition — the run completed
     ///   and its configured outcome shape cannot satisfy the agent-outcome
     ///   contract; the next attempt is configured identically.
+    /// - [`Self::Configuration`]: deterministic by definition — the launch was
+    ///   refused by a value in the document, and the next attempt reads the
+    ///   same document. A refusal that presented as a transient transport
+    ///   failure would tell the operator the wrong story AND spend the whole
+    ///   attempt budget confirming it.
     /// - [`Self::Transport`]: a broken channel can heal.
     /// - [`Self::Protocol`]: a malformed frame CAN be a one-off peer flake
     ///   (truncated stream, interleaved write), so it stays retryable even
@@ -157,7 +187,7 @@ impl HarnessError {
     #[must_use]
     pub fn is_deterministic(&self) -> bool {
         match self {
-            Self::Contract { .. } => true,
+            Self::Contract { .. } | Self::Configuration { .. } => true,
             Self::CapabilityNotSupported { .. }
             | Self::StaleTarget { .. }
             | Self::Transport { .. }

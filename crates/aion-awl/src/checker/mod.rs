@@ -23,6 +23,7 @@ mod exhaustive;
 mod exprs;
 mod family;
 mod graph;
+mod harness;
 mod narrow;
 mod operators;
 mod outcomes;

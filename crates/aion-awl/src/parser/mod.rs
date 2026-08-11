@@ -7,6 +7,7 @@ mod document;
 mod error;
 mod exprs;
 mod flow;
+mod harness;
 mod hints;
 mod query;
 mod send;
