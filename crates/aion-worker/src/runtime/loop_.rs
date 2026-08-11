@@ -185,7 +185,7 @@ where
     ensure_max_concurrency(config)?;
     let semaphore = Arc::new(Semaphore::new(config.max_concurrency));
     let (result_sender, heartbeat_sender, mut channels) = runtime_channels();
-    let heartbeat_bookkeeper = HeartbeatBookkeeper::default();
+    let bookkeeper = HeartbeatBookkeeper::default();
     let mut liveness_pump = liveness_pump_for(session);
     let mut stream = session.receive_tasks();
     let mut in_flight = HashMap::<ActivityExecutionKey, InFlightActivity>::new();
@@ -193,6 +193,11 @@ where
     // Overridden at the shutdown break sites; every other clean exit is the
     // server ending the stream.
     let mut end = ServeEnd::StreamClosed;
+    // Every handle a spawned activity needs is stable for the loop's whole
+    // life, so it is assembled ONCE here rather than rebuilt at every task
+    // frame. It borrows the two senders, so it is dropped explicitly below
+    // BEFORE they are — the drain depends on those channels closing.
+    let spawn = SpawnContext::new(dispatcher, &result_sender, &heartbeat_sender, &bookkeeper);
     tokio::pin!(shutdown);
 
     // No batching preamble: the select arms below consume queued dispatch
@@ -213,7 +218,7 @@ where
             finished = channels.results.recv() => {
                 consume_finished(
                     session,
-                    &heartbeat_bookkeeper,
+                    &bookkeeper,
                     finished,
                     &mut in_flight,
                     tracker,
@@ -226,15 +231,13 @@ where
             // reason: the server's liveness window must be beatable while the
             // stream is idle.
             request = channels.heartbeats.recv() => {
-                forward_heartbeat(session, &heartbeat_bookkeeper, request, &mut pending_error)
-                    .await;
+                forward_heartbeat(session, &bookkeeper, request, &mut pending_error).await;
             }
             // Automatic connection lease beat plus per-task liveness beats.
             // This arm remains active while idle so an open but wedged runtime
             // becomes detectable by the server's connection lease.
             () = tick_liveness_pump(&mut liveness_pump) => {
-                pump_liveness(session, &heartbeat_bookkeeper, &in_flight, &mut pending_error)
-                    .await;
+                pump_liveness(session, &bookkeeper, &in_flight, &mut pending_error).await;
             }
             event = stream.next() => {
                 let Some(event) = event else { break; };
@@ -247,30 +250,8 @@ where
                     Ok(WorkerSessionEvent::ResultAck { workflow_id, activity_id }) => {
                         acknowledge_result(&workflow_id, &activity_id, tracker);
                     }
-                    // #197: the RUNTIME answers the transport liveness ping,
-                    // inline and without a concurrency permit. Two properties
-                    // are load-bearing. It takes no permit, so a worker running
-                    // at full concurrency still answers — the server is asking
-                    // whether it can REACH this worker, and a busy worker is
-                    // reachable. And no handler is consulted, so the answer
-                    // cannot be delayed or refused by action code.
                     Ok(WorkerSessionEvent::LivenessPing { sequence, silence_window }) => {
-                        // The declared window is logged rather than acted on:
-                        // it is what the SERVER will judge this worker against,
-                        // and an operator asking why a worker never clears its
-                        // probation needs to see both halves of the exchange.
-                        // A worker-side dead-man switch off this window is the
-                        // liminal transport's (`runtime::liminal_liveness`) and
-                        // is not this lane's.
-                        tracing::trace!(
-                            liveness_ping = sequence,
-                            silence_window_ms = silence_window.as_millis(),
-                            "answering the server's transport liveness ping"
-                        );
-                        record_first_error(
-                            &mut pending_error,
-                            session.answer_liveness_ping(sequence).await,
-                        );
+                        answer_ping(session, sequence, silence_window, &mut pending_error).await;
                     }
                     Ok(WorkerSessionEvent::Drain) => {
                         info!("server drain received; finishing in-flight work before reconnect");
@@ -283,24 +264,18 @@ where
                         break;
                     }
                     Ok(WorkerSessionEvent::Task(proto_task)) => {
-                        let Some(permit) =
-                            acquire_permit_or_shutdown(shutdown.as_mut(), &semaphore).await?
-                        else {
+                        let permit =
+                            acquire_permit_or_shutdown(shutdown.as_mut(), &semaphore).await?;
+                        let Some(permit) = permit else {
                             cancel_all_in_flight(&in_flight);
                             end = ServeEnd::Shutdown;
                             break;
                         };
-                        if !handle_task(
+                        if !spawn.admit(
                             *proto_task,
-                            SessionEventContext {
-                                permit,
-                                dispatcher: Arc::clone(&dispatcher),
-                                result_sender: &result_sender,
-                                heartbeat_sender: &heartbeat_sender,
-                                heartbeat_bookkeeper: &heartbeat_bookkeeper,
-                                in_flight: &mut in_flight,
-                                pending_error: &mut pending_error,
-                            },
+                            permit,
+                            &mut in_flight,
+                            &mut pending_error,
                         )? {
                             break;
                         }
@@ -315,10 +290,14 @@ where
     // reset decision measures connected time, never drain time.
     health.stream_ended_at = Some(tokio::time::Instant::now());
 
+    // The spawn context borrows both senders, so it goes first: `drain_remaining`
+    // reads the runtime channels to completion, and they only end once every
+    // sender is gone.
+    drop(spawn);
     drop((result_sender, heartbeat_sender));
     drain_remaining(
         session,
-        &heartbeat_bookkeeper,
+        &bookkeeper,
         &mut channels,
         &mut in_flight,
         tracker,
@@ -345,41 +324,70 @@ fn runtime_channels() -> (
     (result_sender, heartbeat_sender, channels)
 }
 
-struct SessionEventContext<'a, D> {
-    permit: tokio::sync::OwnedSemaphorePermit,
+/// The handles every spawned activity needs, assembled once for the receive
+/// loop's whole life.
+///
+/// Held as one value rather than seven locals so the loop's task arm stays a
+/// call rather than a seven-field literal — the shape that pushed
+/// [`serve_activity_tasks_until`] past its length budget when the liveness-ping
+/// arm landed beside it.
+struct SpawnContext<'a, D> {
     dispatcher: Arc<D>,
     result_sender: &'a mpsc::UnboundedSender<DispatchFinished>,
     heartbeat_sender: &'a mpsc::UnboundedSender<HeartbeatRequest>,
     heartbeat_bookkeeper: &'a HeartbeatBookkeeper,
-    in_flight: &'a mut HashMap<ActivityExecutionKey, InFlightActivity>,
-    pending_error: &'a mut Option<WorkerError>,
 }
 
-fn handle_task<D>(
-    proto_task: aion_proto::ProtoActivityTask,
-    ctx: SessionEventContext<'_, D>,
-) -> Result<bool, WorkerError>
+impl<'a, D> SpawnContext<'a, D>
 where
     D: ActivityDispatcher,
 {
-    let task = match ActivityTask::try_from(proto_task) {
-        Ok(task) => task,
-        Err(error) => {
-            drop(ctx.permit);
-            *ctx.pending_error = Some(error);
-            return Ok(false);
+    /// Bundle the loop's stable spawn handles.
+    const fn new(
+        dispatcher: Arc<D>,
+        result_sender: &'a mpsc::UnboundedSender<DispatchFinished>,
+        heartbeat_sender: &'a mpsc::UnboundedSender<HeartbeatRequest>,
+        heartbeat_bookkeeper: &'a HeartbeatBookkeeper,
+    ) -> Self {
+        Self {
+            dispatcher,
+            result_sender,
+            heartbeat_sender,
+            heartbeat_bookkeeper,
         }
-    };
-    spawn_activity(
-        task,
-        ctx.permit,
-        ctx.dispatcher,
-        ctx.result_sender.clone(),
-        ctx.heartbeat_sender.clone(),
-        ctx.heartbeat_bookkeeper,
-        ctx.in_flight,
-    )?;
-    Ok(true)
+    }
+
+    /// Decode one pushed task and spawn it against `permit`.
+    ///
+    /// Returns `false` when the task could not be decoded: the error is
+    /// recorded in `pending_error` and the caller must stop serving. The permit
+    /// is released on that path, because nothing was spawned to hold it.
+    fn admit(
+        &self,
+        proto_task: aion_proto::ProtoActivityTask,
+        permit: tokio::sync::OwnedSemaphorePermit,
+        in_flight: &mut HashMap<ActivityExecutionKey, InFlightActivity>,
+        pending_error: &mut Option<WorkerError>,
+    ) -> Result<bool, WorkerError> {
+        let task = match ActivityTask::try_from(proto_task) {
+            Ok(task) => task,
+            Err(error) => {
+                drop(permit);
+                *pending_error = Some(error);
+                return Ok(false);
+            }
+        };
+        spawn_activity(
+            task,
+            permit,
+            Arc::clone(&self.dispatcher),
+            self.result_sender.clone(),
+            self.heartbeat_sender.clone(),
+            self.heartbeat_bookkeeper,
+            in_flight,
+        )?;
+        Ok(true)
+    }
 }
 
 /// Rejects a zero `max_concurrency` before the serve loop starts.
@@ -515,6 +523,38 @@ async fn pump_liveness<S>(
             return;
         }
     }
+}
+
+/// Answer one server transport liveness ping (#197).
+///
+/// Two properties of WHERE this is called are load-bearing, and both are
+/// properties of the caller rather than of this function:
+///
+/// - it takes no concurrency permit, so a worker running at full concurrency
+///   still answers. The server is asking whether it can REACH this worker, and
+///   a worker that is busy is reachable;
+/// - no handler is consulted, so the answer cannot be delayed or refused by
+///   action code. Liveness is a RUNTIME obligation.
+///
+/// The declared silence window is logged rather than acted on. It is what the
+/// SERVER will judge this worker against, and an operator asking why a worker
+/// never clears its probation needs both halves of the exchange in one place. A
+/// worker-side dead-man switch off that window belongs to the liminal transport
+/// ([`runtime::liminal_liveness`](crate::runtime::liminal_liveness)).
+async fn answer_ping<S>(
+    session: &mut S,
+    sequence: u64,
+    silence_window: std::time::Duration,
+    pending_error: &mut Option<WorkerError>,
+) where
+    S: WorkerSession,
+{
+    tracing::trace!(
+        liveness_ping = sequence,
+        silence_window_ms = silence_window.as_millis(),
+        "answering the server's transport liveness ping"
+    );
+    record_first_error(pending_error, session.answer_liveness_ping(sequence).await);
 }
 
 /// Forwards one queued handler heartbeat (a `None` channel read is a no-op)

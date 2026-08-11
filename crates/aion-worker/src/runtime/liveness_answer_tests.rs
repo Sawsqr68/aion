@@ -33,11 +33,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use aion_core::{ActivityId, ContentType, Payload, RunId, WorkflowId};
-use aion_proto::{ProtoActivityId, ProtoActivityTask, ProtoWorkflowId};
+use aion_proto::{ProtoActivityId, ProtoActivityTask, ProtoPayload, ProtoWorkflowId};
 use async_trait::async_trait;
 use tokio::sync::{Mutex, Notify, mpsc};
 
-use super::loop_::{ActivityDispatcher, DispatchOutcome, serve_activity_tasks};
+use super::{ActivityDispatcher, DispatchOutcome, ServeEnd, serve_activity_tasks};
 use crate::context::ActivityContext;
 use crate::error::WorkerError;
 use crate::protocol::{
@@ -142,10 +142,9 @@ impl ActivityDispatcher for HeldDispatcher {
     ) -> Result<DispatchOutcome, WorkerError> {
         drop((task, context));
         self.release.notified().await;
-        Ok(DispatchOutcome::Completed(Payload::new(
-            ContentType::Json,
-            b"{}".to_vec(),
-        )))
+        Ok(DispatchOutcome::Completed {
+            output: Payload::new(ContentType::Json, b"{}".to_vec()),
+        })
     }
 
     fn activity_types(&self) -> BTreeSet<String> {
@@ -169,7 +168,14 @@ fn task_event() -> WorkerSessionEvent {
         workflow_id: Some(ProtoWorkflowId::from(WorkflowId::new_v4())),
         activity_id: Some(ProtoActivityId::from(ActivityId::from_sequence_position(1))),
         activity_type: String::from(ACTIVITY_TYPE),
-        input: None,
+        // A real input: a task that fails `ActivityTask::try_from` sets the
+        // loop's pending error and BREAKS it, so the ping behind it would never
+        // be read for a reason that has nothing to do with head-of-line
+        // blocking — the measurement would be of a decode failure.
+        input: Some(ProtoPayload::from(Payload::new(
+            ContentType::Json,
+            b"{}".to_vec(),
+        ))),
         attempt: 1,
         labels: std::collections::HashMap::new(),
         run_id: Some(aion_proto::ProtoRunId::from(RunId::new_v4())),
@@ -190,7 +196,7 @@ struct Fixture {
     events: mpsc::Sender<Result<WorkerSessionEvent, WorkerError>>,
     answered: Arc<Mutex<Vec<u64>>>,
     release: Arc<Notify>,
-    serve: tokio::task::JoinHandle<Result<super::loop_::ServeEnd, WorkerError>>,
+    serve: tokio::task::JoinHandle<Result<ServeEnd, WorkerError>>,
 }
 
 impl Fixture {

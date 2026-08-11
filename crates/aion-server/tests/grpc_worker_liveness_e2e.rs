@@ -8,7 +8,7 @@
 //! enumerate only liminal connections, so a `WorkerDelivery::Grpc` worker was
 //! never pinged once: its probation opened at registration and could never bank
 //! an answer, `select_worker` filtered it out forever, and `aion worker awl
-//! serve` — the path the mm_capture collector needs — could register
+//! serve` — the path the `mm_capture` collector needs — could register
 //! successfully and never be given a single task.
 //!
 //! Nothing is faked below the test's own worker. The real tonic
@@ -65,6 +65,16 @@ const ACTIVITY_TYPE: &str = "greet";
 /// proof banked in one round cannot age out during the next assertion and turn
 /// a law failure into a timing failure.
 const HEARTBEAT_WINDOW: Duration = Duration::from_secs(4);
+
+/// How long the test's worker waits for a ping before declaring that none was
+/// sent.
+///
+/// Bounded on purpose. A probe that never pings this worker would otherwise
+/// leave the test parked on its stream forever, and a HANG is a strictly worse
+/// signal than a failure: it reports nothing, it cannot be read from a log, and
+/// it costs a whole suite. Generously wider than the one-second cadence, so it
+/// can only elapse when no ping is coming at all.
+const PING_WAIT: Duration = Duration::from_secs(5);
 
 fn runtime_config() -> RuntimeConfig {
     RuntimeConfig {
@@ -244,7 +254,7 @@ impl Harness {
             worker_tx,
             ..
         } = self;
-        let (_, answered) = tokio::join!(
+        let ((), answered) = tokio::join!(
             probe.probe_once(sequence),
             answer_next_ping(inbound, worker_tx)
         );
@@ -259,7 +269,7 @@ impl Harness {
     /// worker that receives the ping and does not reply.
     async fn silent_round(&mut self, sequence: u64) -> Result<(), TestError> {
         let Self { probe, inbound, .. } = self;
-        let (_, drained) = tokio::join!(probe.probe_once(sequence), drain_next_ping(inbound));
+        let ((), drained) = tokio::join!(probe.probe_once(sequence), drain_next_ping(inbound));
         drained
     }
 
@@ -272,7 +282,10 @@ impl Harness {
     /// any liveness ping that arrives first (and answering it, so a dispatch
     /// wait can never itself cause a withdrawal).
     async fn next_task(&mut self) -> Result<generated::ActivityTask, TestError> {
-        while let Some(message) = self.inbound.message().await? {
+        while let Some(message) = tokio::time::timeout(PING_WAIT, self.inbound.message())
+            .await
+            .map_err(|_| format!("no dispatch reached this gRPC worker within {PING_WAIT:?}"))??
+        {
             match message.message {
                 Some(server_to_worker::Message::Task(task)) => return Ok(task),
                 Some(server_to_worker::Message::LivenessPing(ping)) => {
@@ -354,9 +367,13 @@ async fn drain_next_ping(
 async fn next_ping(
     inbound: &mut tonic::Streaming<generated::ServerToWorker>,
 ) -> Result<generated::LivenessPing, TestError> {
-    let frame = inbound
-        .message()
-        .await?
+    let frame = tokio::time::timeout(PING_WAIT, inbound.message())
+        .await
+        .map_err(|_| {
+            format!(
+                "NO LIVENESS PING REACHED THIS gRPC WORKER within {PING_WAIT:?}. The probe did                  not enumerate its delivery, so it can never be asked, can never answer, and can                  never clear its dispatch probation — it is undispatchable for the life of the                  process"
+            )
+        })??
         .ok_or("the worker stream closed while waiting for a liveness ping")?
         .message
         .ok_or("the server sent an empty frame")?;
@@ -389,10 +406,17 @@ async fn a_grpc_worker_clears_the_same_probation_a_liminal_worker_serves() -> Re
 {
     let mut harness = Harness::start().await?;
 
+    // Asserted at the TRACKER, not at the published verdict. Registration grants
+    // nothing — the handshake ack is SENT by this server and nothing reports it
+    // was received — but the published exclusion set is simply EMPTY until a
+    // round forms one, and an empty set is not a statement that this worker is
+    // eligible. Reading the verdict here would test the absence of a round.
     assert!(
-        !harness.is_eligible()?,
-        "precondition: registration opens a probation and grants nothing — the handshake ack is \
-         SENT by this server and nothing reports it was received"
+        !harness
+            .state
+            .heartbeat_tracker()
+            .is_dispatch_reachable(harness.worker_id, std::time::Instant::now())?,
+        "precondition: a brand-new connection has proved nothing about the push leg"
     );
 
     harness.answered_round(1).await?;
@@ -632,7 +656,20 @@ async fn post_clearance_silence_withdraws_loudly_and_recovery_says_the_all_clear
         "recovery requires the FULL run again, and this is it"
     );
     let captured = events.lock().map_err(|_| "capture log poisoned")?.clone();
+    // Located RELATIVE TO THE WITHDRAWAL, not counted over the whole log. A
+    // worker completing its OPENING probation also leaves the exclusion set,
+    // and the existing three-transition table announces that departure with the
+    // same all-clear line — standing liminal law this lane does not redesign.
+    // The recovery all-clear is therefore the one that comes AFTER the
+    // withdrawal, and identifying it any other way would count the ordinary
+    // first clearance as a recovery from an incident that had not happened.
+    let withdrawal_at = captured
+        .iter()
+        .position(|event| event.message.contains("WITHDRAWING DISPATCH ELIGIBILITY"))
+        .ok_or("the withdrawal asserted above is no longer in the captured log")?;
     let all_clears: Vec<CapturedEvent> = captured
+        .get(withdrawal_at..)
+        .ok_or("captured log shrank between reads")?
         .iter()
         .filter(|event| event.message.contains("DISPATCH ELIGIBILITY RESTORED"))
         .cloned()
@@ -640,7 +677,7 @@ async fn post_clearance_silence_withdraws_loudly_and_recovery_says_the_all_clear
     assert_eq!(
         all_clears.len(),
         1,
-        "the recovery must be announced exactly once. Captured: {}",
+        "the recovery from the withdrawal must be announced exactly once. Captured: {}",
         render(&captured)
     );
     let all_clear = all_clears.first().ok_or("all-clear vanished")?;

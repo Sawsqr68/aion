@@ -1076,14 +1076,11 @@ impl OutboxRowDispatch for RegistryLiminalDispatch {
         // node affinity, applying the SHARED `Prefer` two-tier spill for an
         // unpinned row when a placement cache is attached. No worker for the pool
         // => honest no-worker error => the outbox retries (never a false `done`).
-        let worker = match self.select_liminal_worker(row).await? {
-            Some(worker) => worker,
-            None => {
-                return Err(dispatch_error(
-                    &channel_for_row(row),
-                    self.selection_miss_reason(row),
-                ));
-            }
+        let Some(worker) = self.select_liminal_worker(row).await? else {
+            return Err(dispatch_error(
+                &channel_for_row(row),
+                self.selection_miss_reason(row),
+            ));
         };
 
         let delivery = match worker.delivery() {

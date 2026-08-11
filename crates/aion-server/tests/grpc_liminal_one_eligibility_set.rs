@@ -33,6 +33,11 @@ const TASK_QUEUE: &str = "default";
 const ACTIVITY_TYPE: &str = "greet";
 const HEARTBEAT_WINDOW: Duration = Duration::from_secs(4);
 
+/// How long the test's gRPC worker waits for a ping before declaring that none
+/// was sent. Bounded so a probe that never enumerates gRPC deliveries produces
+/// a readable FAILURE rather than a hung suite.
+const PING_WAIT: Duration = Duration::from_secs(5);
+
 /// A fleet of exactly one worker per transport, sharing one registry, one
 /// tracker, one waiter registry and one probe.
 struct MixedFleet {
@@ -121,7 +126,15 @@ impl MixedFleet {
             ..
         } = self;
         let answering = async {
-            let Some(WorkerMessage::LivenessPing(ping)) = grpc_stream.recv().await else {
+            let received = tokio::time::timeout(PING_WAIT, grpc_stream.recv())
+                .await
+                .map_err(|_| -> TestError {
+                    format!(
+                        "NO LIVENESS PING REACHED THE gRPC WORKER within {PING_WAIT:?}: the probe                          did not enumerate its delivery, so it can never clear its probation"
+                    )
+                    .into()
+                })?;
+            let Some(WorkerMessage::LivenessPing(ping)) = received else {
                 return Err::<(), TestError>(
                     "the probe did not ping the gRPC worker in this round".into(),
                 );
@@ -131,7 +144,7 @@ impl MixedFleet {
             }
             Ok(())
         };
-        let (_, answered) = tokio::join!(probe.probe_once(sequence), answering);
+        let ((), answered) = tokio::join!(probe.probe_once(sequence), answering);
         answered
     }
 }
