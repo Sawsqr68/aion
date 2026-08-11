@@ -1,0 +1,63 @@
+aion 0.14.1 — release evidence (Vesper, 2026-08-12 AEST)
+
+WHAT SHIPS
+The #209 fix: the embedded assistant document is launchable by the verb the
+server's own QUEUE MOVE warn recommends. Harness declared in the document
+(norn, parity values), both warn arms truthful about the liminal listener,
+WorkerListenerAdvice constructible only from the server's own outbox config,
+and a four-arm e2e gate (embedded_assistant_launchable_e2e.rs) whose serve-pin
+arm is the test that would have caught 0.14.0. Fix cut on an unbroken API;
+patch bump is Waffles' version word (2026-08-12).
+
+RULINGS
+- Waffles re-read the full Opus chain (R1 refused 2B/6M/6m → R2 refused
+  1B/4M/7m → R3 CLEAR 0B/0M/6m, all minors discharged) before any commit.
+- Commit GO + version word 0.14.1: his DM 2026-08-11T17:24Z.
+- Publish GATED on one real agent round under the exact shipped env
+  (env_clear + env_pass PATH,HOME) — his same DM; conditional GO on green.
+- Execute confirmation: his DM 2026-08-11T19:16Z.
+
+PUBLISH GATE (the round that discharged it)
+Isolated world (own AION_HOME under owner-only ancestors, ports
+28080/28051/28061, haematite store; torn down after). Binary's exported
+document sha == tree (9d909d62…). Worker via the recommended invocation →
+registered queue=assistant, harness=norn. Real round: norn child under the
+shipped stripped env answered {"text":"I can hear you.","stop_reason":
+"end_turn"}; session ended by the documented signal → Completed /
+OperatorEnded. Mechanism, not just outcome: norn's credentials live under
+$HOME on disk, so env_pass HOME carries them; nothing depends on ambient
+env vars. Incidental receipt: the path-safety gate refused a /tmp home
+(mode-1777 ancestor) — the product defending itself correctly.
+
+OPERATOR-STEP SETTLE (Waffles' second ask)
+Live session 1f81ae95-edfb-44f0-9eff-a59eb5ca7be6 (Tom's server) is Running,
+bound to package_version 4e234a5b58…, task_queue=assistant. The deploy step
+therefore DROPS OUT of the operator instructions: a worker brought up on
+queue `assistant` serves it directly.
+
+BATTERY AT THE STAMPED TREE (2df07065f; twelve legs)
+Eleven green in-battery at load ~20: server 55 running-headers == 55
+result-lines, 1312/0; clippy -p aion-server AND --workspace, both
+--all-targets -D warnings; assistant-example 7/0; awl-corpus 3/0; e2e-verb
+7/0; e2e-envreport 2/0; fmt-check empty/0; agent-dev-worker 7==7, 62/0;
+retired-doctrine 3/0; doc-pointer 4/0.
+One contended red, attributed and re-proven: e2e-launchable failed IN
+BATTERY (serve-pin arm, empty child log at the 10s deadline — the child
+never reached its first log line at load 19.9; contention starves presence
+arms toward false RED). Solo re-run at load 7.9: 4/4 green in 7.51s.
+Both logs preserved (0141-e2e-launchable.log red, -rerun.log green).
+
+PUBLISH + VERIFY
+22 crates, 0.13.8-recorded order, all exit 0, tree 3f74c5bae
+(publish-exits.txt). Registry verification with a UA-carrying client
+calibrated against known-published 0.14.0 before trusting any answer:
+all 22 answer 0.14.1 live, un-yanked (registry-verify.txt).
+
+WHAT THIS RELEASE DELIBERATELY DOES NOT DO
+No worker restart, no deploy, no touch of the operator's running server —
+those steps remain on Tom's word through Waffles' notice, per
+204-CUT-RUNBOOK.md (whose queue-move step is already executed on his box).
+The memory-backend boot edge R3 recorded (enabled outbox + memory store
+prints the runnable command then refuses at the durable-store check) is
+accepted, doc-comment owed on next touch of that predicate. #210
+({workspace_root} expansion) remains the filed follow-up.
