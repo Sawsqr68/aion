@@ -106,3 +106,40 @@ fn the_fetched_url_and_the_accepted_crate_name_agree() {
          other crate"
     );
 }
+
+/// The repository's `workflows/update_watch.awl` cadence poller inherits the
+/// observer's recording path ONLY by declaring the embedded check's queue,
+/// action, and command verbatim — the observer keys on those three names, so
+/// a paraphrase there stops its cycles being recorded with no red anywhere.
+/// This pin makes that drift a red. It reads the repo file at test time
+/// (never `include_str!` — the file lives outside the crate and must not be
+/// bound into `cargo package`), and an absent file FAILS rather than skips:
+/// this gate runs where the repository is, and a silent skip is a green that
+/// measured nothing.
+#[test]
+fn the_repo_update_watch_document_authors_the_same_names() -> TestResult {
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../workflows/update_watch.awl");
+    let source = std::fs::read_to_string(&path).map_err(|error| {
+        format!(
+            "workflows/update_watch.awl must be readable from the repository root \
+             (this gate is repo-level by design): {error}"
+        )
+    })?;
+    assert!(
+        source.contains(&format!("run \"{FETCH_COMMAND}\"")),
+        "update_watch must author `run \"{FETCH_COMMAND}\"` verbatim — the observer records \
+         results only from that exact body"
+    );
+    assert!(
+        source.contains(&format!("worker {UPDATE_CHECK_QUEUE}")),
+        "update_watch must declare its fetch on queue `{UPDATE_CHECK_QUEUE}` — the observer \
+         recognises the check by queue"
+    );
+    assert!(
+        source.contains(&format!("action {FETCH_ACTION}(")),
+        "update_watch must declare action `{FETCH_ACTION}` — the observer recognises the check \
+         by action name"
+    );
+    Ok(())
+}
