@@ -32,6 +32,7 @@ message WorkerToServer {
     RegisterWorker register = 1;
     ActivityResult result = 2;
     Heartbeat heartbeat = 3;
+    LivenessAnswer liveness_answer = 4;
   }
 }
 
@@ -42,7 +43,36 @@ message ServerToWorker {
     DrainRequest drain = 2;
     RegisterAck register_ack = 3;
     ResultAck result_ack = 4;
+    LivenessPing liveness_ping = 5;
   }
+}
+
+// Transport-level liveness ping, pushed by the server down the SAME stream a
+// dispatch travels. It is answered by the worker SDK RUNTIME, never by action
+// code: the fact it establishes is "the server can reach this worker's
+// dispatch path", and only a frame that rides that exact path can establish
+// it. An open stream sender is not an answering worker — the server can hold a
+// perfectly healthy-looking channel to a wedged process indefinitely, which is
+// the failure class this ping exists to detect.
+//
+// Distinct from Heartbeat: Heartbeat travels worker-to-server and proves the
+// worker PROCESS is alive; this pair travels server-to-worker-and-back and
+// proves the server-to-worker LEG carries. Those are different facts, and only
+// the second is a dispatch precondition.
+message LivenessPing {
+  // Monotonic ping sequence within this server's probe, echoed verbatim on the
+  // answer so a stale or reordered answer cannot be mistaken for a fresh one.
+  uint64 liveness_ping = 1;
+  // How long the worker may hear NOTHING on this stream before it should treat
+  // the link as dead — this server's operator-configured heartbeat window,
+  // carried on the wire so the worker never holds a second copy of it.
+  uint64 silence_window_ms = 2;
+}
+
+// The worker runtime's answer to a LivenessPing, echoing its sequence.
+message LivenessAnswer {
+  // The sequence of the ping being answered, echoed verbatim.
+  uint64 liveness_ping = 1;
 }
 
 // Positive registration acknowledgement. Always the first frame on the

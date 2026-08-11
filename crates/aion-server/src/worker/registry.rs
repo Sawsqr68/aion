@@ -8,7 +8,7 @@ use aion_core::{
     ClusterEvent, DeploymentAssociation, InterventionCapabilities, WorkerDeathReason,
     WorkerTransport,
 };
-use aion_proto::{ProtoActivityTask, ProtoRegisterWorker};
+use aion_proto::{ProtoActivityTask, ProtoLivenessPing, ProtoRegisterWorker};
 use aion_store::{NamespaceOrigin, NamespacePlacement, NamespaceStore, WorkerDeploymentStore};
 use tokio::sync::{Notify, mpsc};
 
@@ -65,6 +65,14 @@ pub enum WorkerMessage {
     ActivityTask(Box<ProtoActivityTask>),
     /// Graceful-shutdown notification; no new work will be dispatched.
     DrainRequest,
+    /// Transport liveness ping pushed by the liveness probe (#197).
+    ///
+    /// It travels this channel — the SAME one dispatches travel — deliberately.
+    /// The fact the probe needs is whether the server can reach this worker's
+    /// DISPATCH path, and a ping on a parallel channel could be answered by a
+    /// process whose dispatch path is dead. Answered by the worker SDK RUNTIME,
+    /// never by action code.
+    LivenessPing(ProtoLivenessPing),
 }
 
 /// Address of a worker pool: the two disjoint routing dimensions that select a
@@ -1101,6 +1109,74 @@ impl ConnectedWorkerRegistry {
     /// Returns [`ServerError::LockPoisoned`] if the registry lock is poisoned.
     pub fn is_dispatch_ineligible(&self, worker_id: WorkerId) -> Result<bool, ServerError> {
         Ok(self.state()?.dispatch_ineligible.contains(&worker_id))
+    }
+
+    /// Every gRPC-delivered worker the liveness probe must ping this round,
+    /// paired with the stream sender the ping rides (#197).
+    ///
+    /// The liminal half of the same census is
+    /// [`LiminalConnectionNotifier::liveness_targets`](crate::worker::LiminalConnectionNotifier::liveness_targets),
+    /// which enumerates CONNECTIONS. This one enumerates REGISTRATIONS, because
+    /// a gRPC worker's only server-side identity is its registry handle: the
+    /// stream is owned by a tonic task and reachable solely through the sender
+    /// the registration carries.
+    ///
+    /// Deliberately not filtered by current eligibility. A worker excluded from
+    /// dispatch is precisely the worker whose next answered ping restores it,
+    /// so skipping the excluded set would make exclusion permanent — the exact
+    /// defect this lane exists to remove.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if the registry lock is poisoned.
+    pub fn grpc_liveness_targets(
+        &self,
+    ) -> Result<Vec<super::grpc_liveness::GrpcLivenessTarget>, ServerError> {
+        Ok(self
+            .state()?
+            .workers
+            .values()
+            .filter_map(|worker| match &worker.delivery {
+                WorkerDelivery::Grpc(sender) => Some(super::grpc_liveness::GrpcLivenessTarget {
+                    worker_id: worker.id,
+                    sender: sender.clone(),
+                }),
+                #[cfg(feature = "liminal-transport")]
+                WorkerDelivery::Liminal(_) => None,
+            })
+            .collect())
+    }
+
+    /// How many workers matching one dispatch address are currently excluded
+    /// from selection by the liveness verdict (#197 R3).
+    ///
+    /// Read under the SAME lock and with the SAME filters
+    /// [`Self::select_worker`] applies, so a refusal that quotes this count
+    /// describes the fleet selection actually saw. It is what separates "this
+    /// pool is empty" from "this pool's workers are all serving probation or
+    /// have had eligibility withdrawn" — two facts an operator must act on
+    /// differently, and which a single catch-all refusal conflates into a
+    /// misdiagnosis.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if the registry lock is poisoned.
+    pub fn ineligible_workers_for(
+        &self,
+        namespace: &str,
+        task_queue: &str,
+        activity_type: &str,
+        node: Option<&str>,
+    ) -> Result<usize, ServerError> {
+        let state = self.state()?;
+        let key = ActivityKey::new(PoolAddress::new(namespace, task_queue), activity_type);
+        Ok(state.by_activity.get(&key).map_or(0, |workers| {
+            workers
+                .values()
+                .filter(|worker| worker_matches_node(worker, node))
+                .filter(|worker| state.dispatch_ineligible.contains(&worker.id))
+                .count()
+        }))
     }
 
     /// The currently published exclusion set, read as a whole.

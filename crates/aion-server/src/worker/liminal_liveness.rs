@@ -75,6 +75,30 @@
 //!
 //! Nothing here is separately configurable, and the worker holds no copy of the
 //! window: it is carried on every ping.
+//!
+//! # Both transports, one probation (#197)
+//!
+//! This module is named for the transport it was built against, but
+//! [`LivenessProbe`] is no longer liminal-only. A round enumerates liminal
+//! connections AND gRPC-delivered registrations
+//! ([`grpc_liveness`](super::grpc_liveness)), pings each over ITS OWN
+//! transport, and feeds every answer into the SAME
+//! [`HeartbeatTracker`] probation and the SAME
+//! [`publish_reachability_verdict`](LivenessProbe::publish_reachability_verdict)
+//! — one [`DISPATCH_PROBATION_PINGS`], one eligibility set, one set of
+//! announcement transitions, no per-transport constant and no exemption.
+//!
+//! Only the wire differs: a liminal worker is pinged with the serde
+//! [`LivenessPing`] on its connection, a gRPC worker with the protobuf
+//! [`ProtoLivenessPing`](aion_proto::ProtoLivenessPing) on its task stream. The
+//! fact each establishes is identical, which is why the verdict is.
+//!
+//! The accepted cost of riding the task stream is that stream death is not a
+//! separate signal: a closed stream simply makes the NEXT ping unanswerable, so
+//! withdrawal latency is bounded by the probe cadence rather than being
+//! instantaneous. That is deliberate — a special-case fast path for stream
+//! death would be a second, softer route into the eligibility verdict, and the
+//! registry's own disconnect teardown already owns deregistration.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -84,11 +108,13 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tracing::{info, warn};
 
+use super::grpc_liveness::{GrpcLivenessTarget, GrpcLivenessWaiters, ping_grpc_worker};
 use super::heartbeat::{
     DISPATCH_PROBATION_PINGS, DispatchExclusion, ExcludedWorker, HeartbeatTracker, sweep_interval,
 };
 use super::liminal_transport::{LiminalConnectionNotifier, LiminalWorkerDelivery};
-use super::registry::{ConnectedWorkerRegistry, WorkerId};
+use super::liveness::{PingFailure, ProbedTransport};
+use super::registry::{ConnectedWorkerRegistry, WorkerDelivery, WorkerId};
 
 /// Wire liveness ping the server pushes on an established liminal connection.
 ///
@@ -133,7 +159,20 @@ pub struct LivenessTarget {
 /// Shares the server's shutdown watch, so it drains with the transports exactly
 /// like [`HeartbeatSweeper`](super::HeartbeatSweeper) and the outbox dispatcher.
 pub struct LivenessProbe {
-    notifier: Arc<LiminalConnectionNotifier>,
+    /// The liminal connection census, or `None` on a boot that hosts no liminal
+    /// listener. `None` is not "no liveness": the gRPC half below still runs.
+    notifier: Option<Arc<LiminalConnectionNotifier>>,
+    /// The gRPC answer-correlation registry, or `None` when this probe has no
+    /// channel to receive gRPC answers on.
+    ///
+    /// Structural rather than a flag: a probe with no correlation registry
+    /// cannot hear a gRPC answer, so it must not push gRPC pings either — every
+    /// one would time out and hold healthy workers off dispatch. The production
+    /// wiring
+    /// ([`ServerState::spawn_liminal_liveness_probe`](crate::ServerState::spawn_liminal_liveness_probe))
+    /// always supplies one; [`LivenessProbe::new`] is the liminal-only
+    /// construction for callers with no gRPC fleet.
+    grpc: Option<GrpcLivenessWaiters>,
     tracker: HeartbeatTracker,
     registry: ConnectedWorkerRegistry,
     cadence: Duration,
@@ -157,6 +196,9 @@ impl LivenessProbe {
     ///
     /// Both timings derive from `heartbeat_window` (see the module docs); there
     /// is no separate configuration surface.
+    /// This construction probes the LIMINAL transport only: it carries no gRPC
+    /// answer-correlation registry, so it does not enumerate gRPC deliveries.
+    /// Use [`Self::across_transports`] for the production probe.
     #[must_use]
     pub fn new(
         notifier: Arc<LiminalConnectionNotifier>,
@@ -164,8 +206,32 @@ impl LivenessProbe {
         registry: ConnectedWorkerRegistry,
         heartbeat_window: Duration,
     ) -> Self {
+        Self::across_transports(Some(notifier), None, tracker, registry, heartbeat_window)
+    }
+
+    /// Build the probe that covers EVERY transport a worker may be delivered
+    /// over (#197).
+    ///
+    /// `notifier` is `None` on a boot with no liminal listener; `grpc` is the
+    /// correlation registry the gRPC stream handler delivers answers into, and
+    /// is `None` only for a probe that must not push gRPC pings it could never
+    /// hear the answers to.
+    ///
+    /// There is exactly ONE probe per server. Two would each publish a whole
+    /// eligibility set over the other's — the verdict is a replacement, not a
+    /// merge — so the last writer would silently erase the other transport's
+    /// findings every cadence.
+    #[must_use]
+    pub fn across_transports(
+        notifier: Option<Arc<LiminalConnectionNotifier>>,
+        grpc: Option<GrpcLivenessWaiters>,
+        tracker: HeartbeatTracker,
+        registry: ConnectedWorkerRegistry,
+        heartbeat_window: Duration,
+    ) -> Self {
         Self {
             notifier,
+            grpc,
             tracker,
             registry,
             cadence: sweep_interval(heartbeat_window),
@@ -235,16 +301,75 @@ impl LivenessProbe {
         info!("liminal worker liveness probe stopped");
     }
 
-    /// Ping every live liminal connection once, concurrently, and apply each
-    /// answer to the worker's connection lease.
-    async fn probe_once(&self, sequence: u64) {
-        let targets = self.notifier.liveness_targets();
+    /// Ping every reachable worker once — liminal connections and gRPC task
+    /// streams alike, concurrently — apply each answer to the worker's dispatch
+    /// probation, and publish ONE verdict for the round.
+    ///
+    /// The two transports are pinged over their own wires and are otherwise
+    /// indistinguishable from here down: the same probation, the same tracker,
+    /// the same single [`Self::publish_reachability_verdict`] call. A round with
+    /// no target of either kind publishes nothing — there is no verdict to form
+    /// about an empty fleet, and publishing an empty exclusion set would be
+    /// indistinguishable from clearing one.
+    ///
+    /// Public because it is the whole unit of work: [`Self::run`] is a timer
+    /// around it and adds nothing but the schedule. Driving rounds directly is
+    /// how a test states a probation in ROUNDS rather than in wall-clock
+    /// sleeps, which is the difference between asserting the law and asserting
+    /// this machine's timing.
+    ///
+    /// `sequence` must advance between rounds: it is the echo a worker's answer
+    /// is matched against, and repeating one would let a previous round's late
+    /// answer satisfy this round's ping.
+    pub async fn probe_once(&self, sequence: u64) {
+        let liminal = self
+            .notifier
+            .as_ref()
+            .map_or_else(Vec::new, |notifier| notifier.liveness_targets());
+        let grpc = self.grpc_targets();
+        if liminal.is_empty() && grpc.is_empty() {
+            return;
+        }
+        let silence_window_ms = u64::try_from(self.silence_window.as_millis()).unwrap_or(u64::MAX);
+        self.probe_liminal(sequence, silence_window_ms, liminal)
+            .await;
+        self.probe_grpc(sequence, silence_window_ms, grpc).await;
+        self.publish_reachability_verdict(sequence);
+    }
+
+    /// This round's gRPC targets, or none when this probe carries no answer
+    /// channel (see [`Self::grpc`]). A registry read failure is LOUD and yields
+    /// no targets: the alternative is pinging a fleet the probe cannot describe.
+    fn grpc_targets(&self) -> Vec<GrpcLivenessTarget> {
+        let Some(_) = self.grpc.as_ref() else {
+            return Vec::new();
+        };
+        match self.registry.grpc_liveness_targets() {
+            Ok(targets) => targets,
+            Err(error) => {
+                warn!(
+                    %error,
+                    "could not enumerate gRPC-delivered workers for this liveness round; they \
+                     go unprobed and will therefore not clear their dispatch probation"
+                );
+                Vec::new()
+            }
+        }
+    }
+
+    /// Push the serde ping to every liminal connection concurrently.
+    async fn probe_liminal(
+        &self,
+        sequence: u64,
+        silence_window_ms: u64,
+        targets: Vec<LivenessTarget>,
+    ) {
         if targets.is_empty() {
             return;
         }
         let ping = LivenessPing {
             liveness_ping: sequence,
-            silence_window_ms: u64::try_from(self.silence_window.as_millis()).unwrap_or(u64::MAX),
+            silence_window_ms,
         };
         let payload = match serde_json::to_vec(&ping) {
             Ok(payload) => payload,
@@ -270,7 +395,35 @@ impl LivenessProbe {
         for (pid, worker_id, outcome) in futures::future::join_all(answers).await {
             self.apply_answer(pid, worker_id, sequence, outcome);
         }
-        self.publish_reachability_verdict(sequence);
+    }
+
+    /// Push the protobuf ping down every gRPC task stream concurrently.
+    async fn probe_grpc(
+        &self,
+        sequence: u64,
+        silence_window_ms: u64,
+        targets: Vec<GrpcLivenessTarget>,
+    ) {
+        let (Some(waiters), false) = (self.grpc.as_ref(), targets.is_empty()) else {
+            return;
+        };
+        let deadline = self.cadence;
+        let answers = targets.iter().map(|target| async move {
+            let outcome = ping_grpc_worker(
+                waiters,
+                target,
+                aion_proto::ProtoLivenessPing {
+                    liveness_ping: sequence,
+                    silence_window_ms,
+                },
+                deadline,
+            )
+            .await;
+            (target.worker_id, outcome)
+        });
+        for (worker_id, outcome) in futures::future::join_all(answers).await {
+            self.apply_grpc_answer(worker_id, sequence, outcome);
+        }
     }
 
     /// Publish this round's reachability verdict to the registry, so dispatch
@@ -408,39 +561,59 @@ impl LivenessProbe {
         task_queue: &str,
         announcement: Announcement,
     ) {
+        let transport = self.transport_of(worker_id);
         match announcement {
             Announcement::ProbationOpened { answers } => info!(
                 worker_id = worker_id.value(),
                 task_queue,
+                transport,
                 liveness_ping = sequence,
                 answers_banked = answers,
                 answers_required = DISPATCH_PROBATION_PINGS,
-                "liminal worker is SERVING ITS DISPATCH PROBATION: it has answered {answers} of \
+                "worker is SERVING ITS DISPATCH PROBATION: it has answered {answers} of \
                  {DISPATCH_PROBATION_PINGS} consecutive liveness pings since it connected, and is \
                  not selected for dispatch until the run is complete. This is the ordinary cost of \
-                 connecting — every healthy worker start passes through it — not a fault, and not \
-                 a statement that anything is unreachable"
+                 connecting — every healthy worker start passes through it, on every transport — \
+                 not a fault, and not a statement that anything is unreachable"
             ),
             Announcement::EligibilityWithdrawn => warn!(
                 worker_id = worker_id.value(),
                 task_queue,
+                transport,
                 liveness_ping = sequence,
                 answers_required = DISPATCH_PROBATION_PINGS,
                 silence_window_ms = self.silence_window.as_millis(),
-                "WITHDRAWING DISPATCH ELIGIBILITY from liminal worker: it had PROVED its dispatch \
-                 path reachable on this connection and the server can no longer prove it — either \
-                 a liveness ping failed or the last proof aged out of the window. It stays \
+                "WITHDRAWING DISPATCH ELIGIBILITY from worker: it had PROVED its dispatch path \
+                 reachable on this connection and the server can no longer prove it — either a \
+                 liveness ping failed or the last proof aged out of the window. It stays \
                  registered and keeps its in-flight work, and becomes eligible again after \
                  {DISPATCH_PROBATION_PINGS} consecutive answered pings"
             ),
             Announcement::EligibilityRestored => info!(
                 worker_id = worker_id.value(),
                 task_queue,
+                transport,
                 liveness_ping = sequence,
-                "DISPATCH ELIGIBILITY RESTORED to liminal worker: it has answered a full run of \
+                "DISPATCH ELIGIBILITY RESTORED to worker: it has answered a full run of \
                  consecutive liveness pings, so the server can again prove it reaches this \
                  worker's dispatch path. Dispatch selection includes it from now"
             ),
+        }
+    }
+
+    /// The transport a worker is delivered over, for the announcement line.
+    ///
+    /// `"<unregistered>"` when the worker has left the registry or the registry
+    /// cannot be read — a departed worker's transport is genuinely unknowable
+    /// here, and naming one would be a fabrication.
+    fn transport_of(&self, worker_id: WorkerId) -> &'static str {
+        match self.registry.worker_by_id(worker_id) {
+            Ok(Some(handle)) => match handle.delivery() {
+                WorkerDelivery::Grpc(_) => ProbedTransport::Grpc.name(),
+                #[cfg(feature = "liminal-transport")]
+                WorkerDelivery::Liminal(_) => ProbedTransport::Liminal { pid: 0 }.name(),
+            },
+            Ok(None) | Err(_) => "<unregistered>",
         }
     }
 
@@ -464,39 +637,95 @@ impl LivenessProbe {
                 pong.liveness_pong
             )),
             Ok(Ok(_)) => {
-                // The one thing that proves the server can reach this worker's
-                // DISPATCH path: a push we sent came back answered. Only this
-                // advances reachability — an inbound frame proves the opposite
-                // direction and cannot stand in for it. A `false` return means
-                // the worker was already deregistered (a pong racing a reap);
-                // an answer must never resurrect it.
-                if let Err(error) = self
-                    .tracker
-                    .record_dispatch_reachability(worker_id, Instant::now())
-                {
-                    warn!(
-                        %error,
-                        connection_pid = pid,
-                        worker_id = worker_id.value(),
-                        "failed to record liminal worker dispatch reachability from a liveness answer"
-                    );
-                }
+                self.record_reachable(ProbedTransport::Liminal { pid }, worker_id);
                 return;
             }
         };
-        // A probation is CONSECUTIVE, so any failure resets it to zero. Without
-        // this the counter would be cumulative, and a link that answers one probe
-        // in three would still accrue its way to eligibility and then flap in and
-        // out of it forever — which is exactly the defect the probation exists to
-        // stop. Both failure classes below reset: whether we could not ask or the
-        // worker did not answer, the run of answers is broken either way.
-        // `Ok(false)` means the worker was already deregistered; nothing to reset.
+        self.record_unreachable(
+            ProbedTransport::Liminal { pid },
+            worker_id,
+            sequence,
+            failure,
+        );
+    }
+
+    /// The gRPC counterpart of [`Self::apply_answer`] (#197).
+    ///
+    /// Deliberately the same two outcomes fed into the same two recorders: the
+    /// only gRPC-specific step is that a mismatched echo cannot reach here at
+    /// all, because the correlation registry
+    /// ([`GrpcLivenessWaiters::answer`](super::grpc_liveness::GrpcLivenessWaiters::answer))
+    /// refuses to match one — so an echo that arrives is by construction the
+    /// sequence that was sent.
+    fn apply_grpc_answer(
+        &self,
+        worker_id: WorkerId,
+        sequence: u64,
+        outcome: Result<u64, PingFailure>,
+    ) {
+        match outcome {
+            Ok(echoed) if echoed == sequence => {
+                self.record_reachable(ProbedTransport::Grpc, worker_id);
+            }
+            Ok(echoed) => self.record_unreachable(
+                ProbedTransport::Grpc,
+                worker_id,
+                sequence,
+                PingFailure::Unanswered(format!(
+                    "worker answered with mismatched sequence {echoed}"
+                )),
+            ),
+            Err(failure) => {
+                self.record_unreachable(ProbedTransport::Grpc, worker_id, sequence, failure);
+            }
+        }
+    }
+
+    /// Bank one answered ping: the ONE thing that proves the server can reach
+    /// this worker's DISPATCH path.
+    ///
+    /// Only an answer advances reachability — an inbound frame proves the
+    /// opposite direction and cannot stand in for it. A `false` return from the
+    /// tracker means the worker was already deregistered (an answer racing a
+    /// reap); an answer must never resurrect it.
+    fn record_reachable(&self, transport: ProbedTransport, worker_id: WorkerId) {
+        if let Err(error) = self
+            .tracker
+            .record_dispatch_reachability(worker_id, Instant::now())
+        {
+            warn!(
+                %error,
+                connection_pid = transport.pid(),
+                transport = transport.name(),
+                worker_id = worker_id.value(),
+                "failed to record worker dispatch reachability from a liveness answer"
+            );
+        }
+    }
+
+    /// Record one FAILED ping and say which of the two failures it was.
+    ///
+    /// A probation is CONSECUTIVE, so any failure resets it to zero. Without
+    /// this the counter would be cumulative, and a link that answers one probe
+    /// in three would still accrue its way to eligibility and then flap in and
+    /// out of it forever — which is exactly the defect the probation exists to
+    /// stop. Both failure classes reset: whether we could not ask or the worker
+    /// did not answer, the run of answers is broken either way. `Ok(false)`
+    /// means the worker was already deregistered; nothing to reset.
+    fn record_unreachable(
+        &self,
+        transport: ProbedTransport,
+        worker_id: WorkerId,
+        sequence: u64,
+        failure: PingFailure,
+    ) {
         if let Err(error) = self.tracker.record_dispatch_unreachable(worker_id) {
             warn!(
                 %error,
-                connection_pid = pid,
+                connection_pid = transport.pid(),
+                transport = transport.name(),
                 worker_id = worker_id.value(),
-                "failed to reset liminal worker dispatch probation after a failed liveness ping; \
+                "failed to reset worker dispatch probation after a failed liveness ping; \
                  its eligibility may outlive the proof that earned it"
             );
         }
@@ -505,35 +734,38 @@ impl LivenessProbe {
         let task_queue = self
             .task_queue_of(worker_id)
             .unwrap_or_else(|| "<unregistered>".to_owned());
+        let transport_name = transport.name();
         match failure {
             PingFailure::Unaskable(reason) => warn!(
-                connection_pid = pid,
+                connection_pid = transport.pid(),
+                transport = transport_name,
                 worker_id = worker_id.value(),
                 task_queue = %task_queue,
                 liveness_ping = sequence,
                 reason = %reason,
                 silence_window_ms = self.silence_window.as_millis(),
-                "THE SERVER COULD NOT ASK this liminal worker for liveness — the push itself was \
-                 refused, so nothing was sent and the worker has no idea it was probed. A dispatch \
-                 would be refused by the same connection for the same reason. This says nothing \
-                 about whether the worker is healthy; it says this server cannot currently reach \
-                 it. Its dispatch eligibility is withdrawn NOW and it must answer a full run of \
-                 consecutive pings to earn it back"
+                "THE SERVER COULD NOT ASK this {transport_name} worker for liveness — the push \
+                 itself was refused, so nothing was sent and the worker has no idea it was probed. \
+                 A dispatch would be refused by the same channel for the same reason. This says \
+                 nothing about whether the worker is healthy; it says this server cannot currently \
+                 reach it. Its dispatch eligibility is withdrawn NOW and it must answer a full run \
+                 of consecutive pings to earn it back"
             ),
             PingFailure::Unanswered(reason) => warn!(
-                connection_pid = pid,
+                connection_pid = transport.pid(),
+                transport = transport_name,
                 worker_id = worker_id.value(),
                 task_queue = %task_queue,
                 liveness_ping = sequence,
                 reason = %reason,
                 silence_window_ms = self.silence_window.as_millis(),
-                "liminal worker did not answer its liveness ping; the server could not prove it \
-                 can reach this worker's dispatch path, so its dispatch eligibility is withdrawn \
-                 NOW and it must answer a full run of consecutive pings to earn it back — an \
-                 unanswered probe is direct evidence about the push leg, not mere silence. NOTE: \
-                 the worker's connection lease may still be fresh — its liveness pump beats from a \
-                 background task and keeps proving the process is alive — so do NOT expect an \
-                 expiry sweep to reap it"
+                "{transport_name} worker did not answer its liveness ping; the server could not \
+                 prove it can reach this worker's dispatch path, so its dispatch eligibility is \
+                 withdrawn NOW and it must answer a full run of consecutive pings to earn it back \
+                 — an unanswered probe is direct evidence about the push leg, not mere silence. \
+                 NOTE: the worker's connection lease may still be fresh — its liveness pump beats \
+                 from a background task and keeps proving the process is alive — so do NOT expect \
+                 an expiry sweep to reap it"
             ),
         }
     }
@@ -598,23 +830,6 @@ const fn transition(
         // eligible. Both are silence, for different reasons.
         (true, Some(_)) | (false, None) => None,
     }
-}
-
-/// Why one liveness round produced no proof of dispatch reachability.
-///
-/// The two cases are different facts about different parties and an operator
-/// must be able to act on the difference, so they are typed rather than folded
-/// into one string. Collapsing them is how the old WARN came to blame a worker
-/// for a connection the server had itself exhausted.
-#[derive(Debug)]
-enum PingFailure {
-    /// The server could not ASK. Push admission was refused, so no frame left
-    /// the server and the worker was never probed. A dispatch on this
-    /// connection would be refused identically. Says nothing about the worker.
-    Unaskable(String),
-    /// The server asked and got no usable answer. The push was admitted; the
-    /// reply did not arrive in the cadence, or did not decode.
-    Unanswered(String),
 }
 
 fn ping_one(

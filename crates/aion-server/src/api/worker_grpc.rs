@@ -80,6 +80,7 @@ impl WorkerProtocol for WorkerGrpcService {
         let heartbeat = self.state.heartbeat_tracker().clone();
         let drain = self.state.drain_state().clone();
         let registry = self.state.worker_registry().clone();
+        let liveness_waiters = self.state.grpc_liveness_waiters().clone();
         let worker_id = registration
             .worker_id()
             .ok_or_else(|| Status::internal("worker registration missing id"))?;
@@ -132,6 +133,7 @@ impl WorkerProtocol for WorkerGrpcService {
                 token_expires_at,
                 heartbeat_grace,
                 task_tx: task_tx.clone(),
+                liveness_waiters: liveness_waiters.clone(),
             };
             if let Err(status) = process_inbound(inbound, session).await {
                 tracing::info!(
@@ -144,6 +146,20 @@ impl WorkerProtocol for WorkerGrpcService {
             write_handle.abort();
             drop(task_tx);
             drop(teardown);
+            // #197: this worker can no longer answer anything. Leaving an armed
+            // waiter behind would grow the map by one entry per departed worker
+            // on a never-dying server, and would let a re-registered worker id
+            // inherit a sequence from a stream that is gone. The probe's own
+            // cadence would eventually judge the ping unanswered either way, so
+            // nothing here changes a verdict — it only stops the leak.
+            if let Err(error) = liveness_waiters.disarm(worker_id) {
+                tracing::error!(
+                    worker_id = ?worker_id,
+                    %error,
+                    "gRPC liveness waiter map is poisoned; armed pings for departed workers \
+                     can no longer be released"
+                );
+            }
             // The teardown sweep already deregistered the stream; consuming
             // the registration here is an idempotent no-op that still
             // surfaces a poisoned-lock error loudly.
@@ -303,6 +319,10 @@ struct WorkerSession<'a> {
     token_expires_at: Option<u64>,
     heartbeat_grace: std::time::Duration,
     task_tx: mpsc::Sender<Result<generated::ServerToWorker, Status>>,
+    /// The liveness probe's answer-correlation registry (#197). The probe
+    /// pushes pings from its own timer loop and cannot see this stream; this
+    /// handle is the only thing the two halves share.
+    liveness_waiters: crate::worker::GrpcLivenessWaiters,
 }
 
 async fn process_inbound(
@@ -387,6 +407,14 @@ async fn process_inbound(
             generated::worker_to_server::Message::Register(_) => {
                 warn_duplicate_registration(session.worker_id);
             }
+            // #197: the answer to a transport liveness ping. It proves the one
+            // fact dispatch eligibility is gated on — that the server reached
+            // this worker's dispatch path — but it proves it only through the
+            // probe, which is the party that knows which sequence it asked.
+            // Nothing is recorded here beyond handing the echo across.
+            generated::worker_to_server::Message::LivenessAnswer(answer) => {
+                deliver_liveness_answer(&session, answer.liveness_ping);
+            }
             generated::worker_to_server::Message::Heartbeat(heartbeat_msg) => {
                 // Empty task ids are the connection-level lease beat. The frame
                 // already advanced the lease above; it intentionally has no
@@ -422,6 +450,35 @@ async fn process_inbound(
         }
     }
     Ok(())
+}
+
+/// Hand one `LivenessAnswer`'s echoed sequence to the probe's correlation
+/// registry (#197).
+///
+/// Never silent. An unmatched answer is a real fact about this link — the
+/// worker replied after the probe's cadence had already expired, or echoed a
+/// sequence that was not asked — and it is exactly the evidence an operator
+/// needs when a worker keeps failing to clear its probation while looking
+/// healthy from the outside. A poisoned waiter map is louder still: it means
+/// no gRPC worker on this server can clear probation at all.
+fn deliver_liveness_answer(session: &WorkerSession<'_>, sequence: u64) {
+    match session.liveness_waiters.answer(session.worker_id, sequence) {
+        Ok(true) => {}
+        Ok(false) => tracing::warn!(
+            worker_id = ?session.worker_id,
+            liveness_ping = sequence,
+            "worker answered a liveness ping the server was no longer waiting for; the answer \
+             arrived after its probe cadence expired, or echoed a sequence that was never asked. \
+             It banks NOTHING toward the dispatch probation"
+        ),
+        Err(error) => tracing::error!(
+            worker_id = ?session.worker_id,
+            liveness_ping = sequence,
+            %error,
+            "gRPC liveness waiter map is poisoned; no gRPC worker on this server can clear its \
+             dispatch probation until the process is restarted"
+        ),
+    }
 }
 
 fn refresh_connection_lease(session: &WorkerSession<'_>) -> Result<(), Status> {
@@ -678,6 +735,15 @@ fn encode_server_to_worker(message: WorkerMessage) -> generated::ServerToWorker 
         }
         WorkerMessage::DrainRequest => {
             generated::server_to_worker::Message::Drain(generated::DrainRequest {})
+        }
+        // #197: the liveness ping rides the SAME forwarder a dispatch rides,
+        // deliberately — that is the whole point of it. Encoding it anywhere
+        // else would measure a channel no dispatch travels.
+        WorkerMessage::LivenessPing(ping) => {
+            generated::server_to_worker::Message::LivenessPing(generated::LivenessPing {
+                liveness_ping: ping.liveness_ping,
+                silence_window_ms: ping.silence_window_ms,
+            })
         }
     };
     generated::ServerToWorker {

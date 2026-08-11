@@ -26,6 +26,10 @@ pub(crate) mod declared_body_transcript;
 pub mod dispatch;
 /// Task-envelope generation, idempotency keys, and completion fencing.
 pub mod envelope;
+/// gRPC half of the worker dead-man switch (#197): the transport liveness ping
+/// pushed down a worker's task stream, and the registry its answers correlate
+/// through.
+pub mod grpc_liveness;
 /// Worker heartbeat and liveness tracking.
 pub mod heartbeat;
 /// Server-side mid-run intervention routing (NOI-6): capability gate + attempt
@@ -39,6 +43,9 @@ pub mod liminal_liveness;
 /// Cross-node outbox dispatch over the liminal bus (#13-0 spike, feature-gated).
 #[cfg(feature = "liminal-transport")]
 pub mod liminal_transport;
+/// The transport-neutral vocabulary the dead-man switch's transport halves
+/// share: why a ping failed, and which wire carried it.
+pub mod liveness;
 /// The outbox dead-letter path: retire the row, tell the workflow, record whether it was told.
 pub(crate) mod outbox_dead_letter;
 /// Server-side outbox completion delivery into live workflows.
@@ -90,6 +97,7 @@ pub use dispatch::{
     ScheduledActivity, handle_activity_result,
 };
 pub use envelope::{CompletionFences, CompletionToken, idempotency_key};
+pub use grpc_liveness::{GrpcLivenessTarget, GrpcLivenessWaiters};
 pub use heartbeat::{
     HeartbeatSweeper, HeartbeatTracker, HeartbeatUpdate, InFlightActivity, LostWorkerReport,
     TaskLiveness, sweep_interval,

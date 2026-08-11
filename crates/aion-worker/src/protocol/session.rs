@@ -54,6 +54,21 @@ pub enum WorkerSessionEvent {
         /// Activity to mark cancelled.
         activity_id: ActivityId,
     },
+    /// Transport liveness ping from the server (#197): answer it, promptly, or
+    /// this worker is not selected for dispatch.
+    ///
+    /// The RUNTIME answers it — never action code. The server is measuring
+    /// whether it can reach this worker's DISPATCH path, and an answer produced
+    /// by a handler would measure whether a handler happens to be running.
+    LivenessPing {
+        /// Sequence to echo back verbatim. An answer carrying anything else is
+        /// discarded by the server as a stale or fabricated echo.
+        sequence: u64,
+        /// How long this worker may hear NOTHING on this stream before it
+        /// should treat the link as dead — the server's own configured window,
+        /// carried on every ping so the worker holds no second copy of it.
+        silence_window: std::time::Duration,
+    },
 }
 
 /// Transport abstraction for the AW-owned worker protocol.
@@ -146,6 +161,33 @@ pub trait WorkerSession: Send {
     /// The gRPC transport encodes this on the existing heartbeat path with no
     /// task identifiers. Transport fakes may retain the no-op default.
     async fn send_connection_heartbeat(&mut self) -> Result<(), WorkerError> {
+        Ok(())
+    }
+
+    /// Answer a server [`WorkerSessionEvent::LivenessPing`], echoing `sequence`
+    /// verbatim (#197).
+    ///
+    /// This is a RUNTIME obligation and the serve loop discharges it directly;
+    /// no handler is consulted and no concurrency permit is taken, because the
+    /// question is about the transport, not about the work.
+    ///
+    /// The default is a no-op for transports that carry no such frame (fakes,
+    /// and the liminal session, which answers its own ping/pong pair on its own
+    /// connection). That is not a silent failure: a session whose wire does
+    /// carry the ping and which does not answer it simply never clears its
+    /// dispatch probation, which is the honest verdict for a worker the server
+    /// cannot prove it reaches.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkerError::Transport`] when the answer cannot be sent.
+    async fn answer_liveness_ping(&mut self, sequence: u64) -> Result<(), WorkerError> {
+        tracing::debug!(
+            liveness_ping = sequence,
+            "this session's transport carries no liveness-answer frame, so nothing was sent. A \
+             server that probed over this transport will judge the ping unanswered — the honest \
+             verdict for a link this worker cannot answer on"
+        );
         Ok(())
     }
 
@@ -573,6 +615,17 @@ impl WorkerSession for GrpcWorkerSession {
         .await
     }
 
+    async fn answer_liveness_ping(&mut self, sequence: u64) -> Result<(), WorkerError> {
+        self.send_to_server(
+            aion_proto::generated::worker_to_server::Message::LivenessAnswer(
+                aion_proto::generated::LivenessAnswer {
+                    liveness_ping: sequence,
+                },
+            ),
+        )
+        .await
+    }
+
     fn heartbeat_window(&self) -> Option<std::time::Duration> {
         self.registered_info
             .as_ref()
@@ -592,6 +645,12 @@ fn decode_server_message(
         }
         Some(aion_proto::generated::server_to_worker::Message::ResultAck(ack)) => {
             decode_result_ack(ack)
+        }
+        Some(aion_proto::generated::server_to_worker::Message::LivenessPing(ping)) => {
+            Ok(WorkerSessionEvent::LivenessPing {
+                sequence: ping.liveness_ping,
+                silence_window: std::time::Duration::from_millis(ping.silence_window_ms),
+            })
         }
         Some(aion_proto::generated::server_to_worker::Message::RegisterAck(_)) => {
             // The ack is consumed inside `open_registered_stream`; a second

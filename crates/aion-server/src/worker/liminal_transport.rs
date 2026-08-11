@@ -1012,6 +1012,50 @@ impl RegistryLiminalDispatch {
         Ok(None)
     }
 
+    /// Why this row found no worker — stated as the fact it IS (#197 R3).
+    ///
+    /// A selection miss has two causes an operator must act on differently, and
+    /// the single catch-all this replaces conflated them into a misdiagnosis:
+    ///
+    /// - **nobody is there.** No worker registered for the row's address. The
+    ///   remedy is to start one.
+    /// - **workers are there and none is currently eligible.** They registered
+    ///   and the liveness verdict excludes them — each is either still serving
+    ///   its opening probation (ordinary, self-clearing within a couple of
+    ///   probe cadences) or has had its eligibility withdrawn (an incident, and
+    ///   the WARN naming it is already in the log). The remedy is to read that
+    ///   verdict, and NEVER to start another worker — a second one would serve
+    ///   the same probation and change nothing.
+    ///
+    /// The distinction became newly visible when the probe learned to reach
+    /// gRPC-delivered workers: before, no gRPC worker was ever pinged, so its
+    /// exclusion was permanent and invisible behind "nobody is registered".
+    ///
+    /// A census read failure falls back to the bare miss. Losing the REASON
+    /// must never suppress the refusal itself, and inventing an exclusion count
+    /// this call could not read would be worse than saying less.
+    fn selection_miss_reason(&self, row: &OutboxRow) -> String {
+        let excluded = self
+            .registry
+            .ineligible_workers_for(
+                &row.namespace,
+                &row.task_queue,
+                &row.activity_type,
+                row.node.as_deref(),
+            )
+            .unwrap_or(0);
+        if excluded == 0 {
+            return "no liminal worker registered for the row's pool".to_owned();
+        }
+        format!(
+            "{excluded} worker(s) are registered for the row's pool but NONE is currently \
+             dispatch-eligible: each is either serving its opening liveness probation or has had \
+             its eligibility withdrawn. This is not an empty pool — starting another worker will \
+             not help. Read the liveness verdict for these workers (the probation/withdrawal lines \
+             carry the worker ids and the reason)"
+        )
+    }
+
     fn revoke_completion(
         &self,
         row: &OutboxRow,
@@ -1032,12 +1076,15 @@ impl OutboxRowDispatch for RegistryLiminalDispatch {
         // node affinity, applying the SHARED `Prefer` two-tier spill for an
         // unpinned row when a placement cache is attached. No worker for the pool
         // => honest no-worker error => the outbox retries (never a false `done`).
-        let worker = self.select_liminal_worker(row).await?.ok_or_else(|| {
-            dispatch_error(
-                &channel_for_row(row),
-                "no liminal worker registered for the row's pool".to_owned(),
-            )
-        })?;
+        let worker = match self.select_liminal_worker(row).await? {
+            Some(worker) => worker,
+            None => {
+                return Err(dispatch_error(
+                    &channel_for_row(row),
+                    self.selection_miss_reason(row),
+                ));
+            }
+        };
 
         let delivery = match worker.delivery() {
             WorkerDelivery::Liminal(delivery) => delivery.clone(),

@@ -223,6 +223,39 @@ pub mod proto_activity_result {
     }
 }
 
+/// Transport-level liveness ping pushed by the server down a worker's task
+/// stream — the gRPC counterpart of the liminal transport's `LivenessPing`.
+///
+/// Answered by the SDK RUNTIME, never by action code. It rides the SAME stream
+/// a dispatch travels, because the only fact worth measuring is whether the
+/// server can reach this worker's DISPATCH path; a parallel channel could be
+/// healthy while the real one is not, and an open `mpsc` sender is not an
+/// answering worker.
+///
+/// Distinct from [`ProtoHeartbeat`], which travels worker-to-server and proves
+/// the worker PROCESS is alive. Only the server-to-worker-and-back round trip
+/// this pair performs is a dispatch precondition.
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, prost::Message)]
+pub struct ProtoLivenessPing {
+    /// Monotonic ping sequence within this server's probe, echoed verbatim on
+    /// the answer so a stale or reordered answer cannot be counted as fresh.
+    #[prost(uint64, tag = "1")]
+    pub liveness_ping: u64,
+    /// How long the worker may hear NOTHING on this stream before it should
+    /// treat the link as dead — this server's `worker.heartbeat_window`,
+    /// carried on the wire so the worker holds no second copy of it.
+    #[prost(uint64, tag = "2")]
+    pub silence_window_ms: u64,
+}
+
+/// The worker runtime's answer to a [`ProtoLivenessPing`], echoing its sequence.
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, prost::Message)]
+pub struct ProtoLivenessAnswer {
+    /// The sequence of the ping being answered, echoed verbatim.
+    #[prost(uint64, tag = "1")]
+    pub liveness_ping: u64,
+}
+
 /// Worker heartbeat for an in-flight activity.
 #[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, prost::Message)]
 pub struct ProtoHeartbeat {
@@ -294,8 +327,8 @@ mod tests {
 
     use super::{
         ProtoActivityError, ProtoActivityErrorKind, ProtoActivityResult, ProtoActivityTask,
-        ProtoDrainRequest, ProtoHeartbeat, ProtoRegisterAck, ProtoRegisterWorker, ProtoResultAck,
-        proto_activity_result,
+        ProtoDrainRequest, ProtoHeartbeat, ProtoLivenessAnswer, ProtoLivenessPing,
+        ProtoRegisterAck, ProtoRegisterWorker, ProtoResultAck, proto_activity_result,
     };
     use crate::{ProtoActivityId, ProtoPayload, ProtoWorkflowId, WireError};
 
@@ -599,6 +632,89 @@ mod tests {
         };
 
         assert_json_and_proto_round_trip(&result)
+    }
+
+    /// The liveness pair round-trips and pins its wire tags: `liveness_ping`
+    /// at tag 1 (field key 0x08, varint) and `silence_window_ms` at tag 2
+    /// (0x10). The Python/TS stubs are regenerated from the same `.proto`
+    /// (#201), so a silent tag drift here would land as a worker that answers
+    /// with the wrong sequence and never clears probation.
+    #[test]
+    fn liveness_ping_round_trips_and_pins_its_wire_tags() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let ping = ProtoLivenessPing {
+            liveness_ping: 7,
+            silence_window_ms: 30_000,
+        };
+        let mut bytes = Vec::new();
+        ping.encode(&mut bytes)?;
+        assert_eq!(bytes, vec![0x08, 7, 0x10, 0xB0, 0xEA, 0x01]);
+        assert_json_and_proto_round_trip(&ping)
+    }
+
+    /// The answer echoes the ping's sequence on the SAME field number, so an
+    /// SDK that echoes the frame it received is correct by construction.
+    #[test]
+    fn liveness_answer_round_trips_and_echoes_the_ping_sequence_field()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let answer = ProtoLivenessAnswer { liveness_ping: 7 };
+        let mut bytes = Vec::new();
+        answer.encode(&mut bytes)?;
+        assert_eq!(bytes, vec![0x08, 7]);
+        // The answer's sequence field shares the ping's tag AND its varint
+        // encoding: the first two bytes of an encoded ping with the same
+        // sequence are byte-identical.
+        let mut ping_bytes = Vec::new();
+        ProtoLivenessPing {
+            liveness_ping: 7,
+            silence_window_ms: 0,
+        }
+        .encode(&mut ping_bytes)?;
+        assert_eq!(ping_bytes, bytes);
+        assert_json_and_proto_round_trip(&answer)
+    }
+
+    /// A liveness ping must never decode as any other pushed frame, and no
+    /// other pushed frame may decode as a ping — the demux contract the worker
+    /// runtime's stream arm relies on. Asserted on the ONEOF wrapper, which is
+    /// what the wire actually carries: bare prost messages are permissive
+    /// enough that a same-shaped payload could decode either way, and the
+    /// discriminating fact is the oneof tag.
+    #[cfg(feature = "generated")]
+    #[test]
+    fn liveness_frames_are_disjoint_from_the_other_stream_frames()
+    -> Result<(), Box<dyn std::error::Error>> {
+        // Pins the ServerToWorker liveness arm to tag 5 (field key 0x2A) and
+        // the WorkerToServer answer arm to tag 4 (0x22).
+        let ping = crate::generated::ServerToWorker {
+            message: Some(crate::generated::server_to_worker::Message::LivenessPing(
+                crate::generated::LivenessPing {
+                    liveness_ping: 3,
+                    silence_window_ms: 1_000,
+                },
+            )),
+        };
+        let mut bytes = Vec::new();
+        ping.encode(&mut bytes)?;
+        assert_eq!(bytes.first(), Some(&0x2A));
+        assert_eq!(
+            crate::generated::ServerToWorker::decode(bytes.as_slice())?,
+            ping
+        );
+
+        let answer = crate::generated::WorkerToServer {
+            message: Some(crate::generated::worker_to_server::Message::LivenessAnswer(
+                crate::generated::LivenessAnswer { liveness_ping: 3 },
+            )),
+        };
+        let mut bytes = Vec::new();
+        answer.encode(&mut bytes)?;
+        assert_eq!(bytes.first(), Some(&0x22));
+        assert_eq!(
+            crate::generated::WorkerToServer::decode(bytes.as_slice())?,
+            answer
+        );
+        Ok(())
     }
 
     #[test]

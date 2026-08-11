@@ -57,6 +57,13 @@ struct ServerStateInner {
     worker_registry: ConnectedWorkerRegistry,
     pending_activities: PendingActivities,
     heartbeat_tracker: HeartbeatTracker,
+    /// Correlation registry joining the liveness probe's pushed gRPC pings to
+    /// the answers that come back up each worker's inbound stream (#197).
+    ///
+    /// Held on the state because the two halves live in tasks that cannot see
+    /// each other: the probe owns a timer loop, and each answer arrives inside
+    /// the tonic stream handler for one worker.
+    grpc_liveness_waiters: crate::worker::GrpcLivenessWaiters,
     drain_state: DrainState,
     metrics: Option<Metrics>,
     health: Option<HealthState>,
@@ -291,6 +298,7 @@ impl ServerState {
                 worker_registry: seams.worker_registry,
                 pending_activities: seams.pending_activities,
                 heartbeat_tracker: seams.heartbeat_tracker,
+                grpc_liveness_waiters: crate::worker::GrpcLivenessWaiters::new(),
                 drain_state: seams.drain_state,
                 health: Some(HealthState::new(instrumented_store, true)),
                 activity_mock_registry,
@@ -398,6 +406,7 @@ impl ServerState {
                     .with_cluster_publisher(cluster_publisher.clone()),
                 pending_activities,
                 heartbeat_tracker,
+                grpc_liveness_waiters: crate::worker::GrpcLivenessWaiters::new(),
                 drain_state: DrainState::default(),
                 metrics: None,
                 health: None,
@@ -490,6 +499,7 @@ impl ServerState {
                     .with_cluster_publisher(cluster_publisher.clone()),
                 pending_activities,
                 heartbeat_tracker,
+                grpc_liveness_waiters: crate::worker::GrpcLivenessWaiters::new(),
                 drain_state: DrainState::default(),
                 metrics: None,
                 health: None,
@@ -575,6 +585,7 @@ impl ServerState {
                 worker_registry: ConnectedWorkerRegistry::default(),
                 pending_activities,
                 heartbeat_tracker,
+                grpc_liveness_waiters: crate::worker::GrpcLivenessWaiters::new(),
                 drain_state: DrainState::default(),
                 metrics: None,
                 health: None,
@@ -659,6 +670,7 @@ impl ServerState {
                 worker_registry,
                 pending_activities,
                 heartbeat_tracker,
+                grpc_liveness_waiters: crate::worker::GrpcLivenessWaiters::new(),
                 drain_state: DrainState::default(),
                 metrics: None,
                 health: None,
@@ -913,6 +925,16 @@ impl ServerState {
         &self.inner.heartbeat_tracker
     }
 
+    /// Borrow the gRPC liveness answer-correlation registry (#197).
+    ///
+    /// The worker stream handler delivers each `LivenessAnswer` into it; the
+    /// liveness probe arms and awaits through the SAME handle. There is exactly
+    /// one per server, for the same reason there is exactly one probe.
+    #[must_use]
+    pub fn grpc_liveness_waiters(&self) -> &crate::worker::GrpcLivenessWaiters {
+        &self.inner.grpc_liveness_waiters
+    }
+
     /// Borrow the drain gate shared by transports and worker dispatch.
     #[must_use]
     pub fn drain_state(&self) -> &DrainState {
@@ -1135,8 +1157,13 @@ impl ServerState {
         notifier: std::sync::Arc<crate::worker::LiminalConnectionNotifier>,
         shutdown: tokio::sync::watch::Receiver<bool>,
     ) -> tokio::task::JoinHandle<()> {
-        let probe = crate::worker::LivenessProbe::new(
-            notifier,
+        let probe = crate::worker::LivenessProbe::across_transports(
+            Some(notifier),
+            // #197: the SAME probe covers gRPC-delivered workers. One probe,
+            // one probation, one eligibility set — two probes would each
+            // publish a whole verdict over the other's, because publication is
+            // a replacement rather than a merge.
+            Some(self.inner.grpc_liveness_waiters.clone()),
             self.inner.heartbeat_tracker.clone(),
             self.inner.worker_registry.clone(),
             self.inner.runtime.worker.heartbeat_window,

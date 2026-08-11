@@ -247,6 +247,31 @@ where
                     Ok(WorkerSessionEvent::ResultAck { workflow_id, activity_id }) => {
                         acknowledge_result(&workflow_id, &activity_id, tracker);
                     }
+                    // #197: the RUNTIME answers the transport liveness ping,
+                    // inline and without a concurrency permit. Two properties
+                    // are load-bearing. It takes no permit, so a worker running
+                    // at full concurrency still answers — the server is asking
+                    // whether it can REACH this worker, and a busy worker is
+                    // reachable. And no handler is consulted, so the answer
+                    // cannot be delayed or refused by action code.
+                    Ok(WorkerSessionEvent::LivenessPing { sequence, silence_window }) => {
+                        // The declared window is logged rather than acted on:
+                        // it is what the SERVER will judge this worker against,
+                        // and an operator asking why a worker never clears its
+                        // probation needs to see both halves of the exchange.
+                        // A worker-side dead-man switch off this window is the
+                        // liminal transport's (`runtime::liminal_liveness`) and
+                        // is not this lane's.
+                        tracing::trace!(
+                            liveness_ping = sequence,
+                            silence_window_ms = silence_window.as_millis(),
+                            "answering the server's transport liveness ping"
+                        );
+                        record_first_error(
+                            &mut pending_error,
+                            session.answer_liveness_ping(sequence).await,
+                        );
+                    }
                     Ok(WorkerSessionEvent::Drain) => {
                         info!("server drain received; finishing in-flight work before reconnect");
                         health.drain_received = true;
