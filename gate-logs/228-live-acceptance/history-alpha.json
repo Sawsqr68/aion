@@ -1,0 +1,141 @@
+{
+  "summary": {
+    "workflow_id": "a38554f6-fb93-482c-ba72-0852d78e21b0",
+    "workflow_type": "accept228",
+    "status": "Completed",
+    "started_at": "2026-08-12T23:47:07.282853Z",
+    "ended_at": "2026-08-12T23:47:34.895239Z",
+    "parent": null
+  },
+  "history": [
+    {
+      "type": "WorkflowStarted",
+      "data": {
+        "envelope": {
+          "seq": 1,
+          "recorded_at": "2026-08-12T23:47:07.282853Z",
+          "workflow_id": "a38554f6-fb93-482c-ba72-0852d78e21b0"
+        },
+        "workflow_type": "accept228",
+        "input": {
+          "repo": "/Users/tom/.aion-228-accept/tree-alpha",
+          "prompt": "Read the file ANCHOR.txt in your current working directory and reply with its first line exactly. Reply with that line and nothing else: no explanation, no punctuation, no quotes, no formatting.",
+          "expect": "ANCHOR-ALPHA-9f2c17"
+        },
+        "run_id": "d8e68fb6-f4b2-48b0-bc2d-b66d03d5df66",
+        "parent_run_id": null,
+        "package_version": "1b1bffb7461cace74106c878b932863980ab4ab79f34834f5917f353e6b0edc9"
+      }
+    },
+    {
+      "type": "SearchAttributesUpdated",
+      "data": {
+        "envelope": {
+          "seq": 2,
+          "recorded_at": "2026-08-12T23:47:07.282853Z",
+          "workflow_id": "a38554f6-fb93-482c-ba72-0852d78e21b0"
+        },
+        "workflow_id": "a38554f6-fb93-482c-ba72-0852d78e21b0",
+        "attributes": {
+          "aion.namespace": {
+            "type": "String",
+            "data": "default"
+          }
+        }
+      }
+    },
+    {
+      "type": "TimerStarted",
+      "data": {
+        "envelope": {
+          "seq": 3,
+          "recorded_at": "2026-08-12T23:47:07.282853Z",
+          "workflow_id": "a38554f6-fb93-482c-ba72-0852d78e21b0"
+        },
+        "timer_id": {
+          "Named": "deadline:d8e68fb6-f4b2-48b0-bc2d-b66d03d5df66"
+        },
+        "fire_at": "2026-08-13T00:07:07.282853Z"
+      }
+    },
+    {
+      "type": "ActivityScheduled",
+      "data": {
+        "envelope": {
+          "seq": 4,
+          "recorded_at": "2026-08-12T23:47:07.382828Z",
+          "workflow_id": "a38554f6-fb93-482c-ba72-0852d78e21b0"
+        },
+        "activity_id": 0,
+        "activity_type": "ask",
+        "input": {
+          "repo": "/Users/tom/.aion-228-accept/tree-alpha",
+          "prompt": "Read the file ANCHOR.txt in your current working directory and reply with its first line exactly. Reply with that line and nothing else: no explanation, no punctuation, no quotes, no formatting."
+        },
+        "task_queue": "accept",
+        "node": null
+      }
+    },
+    {
+      "type": "ActivityStarted",
+      "data": {
+        "envelope": {
+          "seq": 5,
+          "recorded_at": "2026-08-12T23:47:07.382828Z",
+          "workflow_id": "a38554f6-fb93-482c-ba72-0852d78e21b0"
+        },
+        "activity_id": 0,
+        "attempt": 1
+      }
+    },
+    {
+      "type": "ActivityCompleted",
+      "data": {
+        "envelope": {
+          "seq": 6,
+          "recorded_at": "2026-08-12T23:47:34.858428Z",
+          "workflow_id": "a38554f6-fb93-482c-ba72-0852d78e21b0"
+        },
+        "activity_id": 0,
+        "result": {
+          "text": "ANCHOR-ALPHA-9f2c17",
+          "stop_reason": "end_turn"
+        },
+        "attempt": 1
+      }
+    },
+    {
+      "type": "WorkflowCompleted",
+      "data": {
+        "envelope": {
+          "seq": 7,
+          "recorded_at": "2026-08-12T23:47:34.895239Z",
+          "workflow_id": "a38554f6-fb93-482c-ba72-0852d78e21b0"
+        },
+        "result": {
+          "outcome": "matched",
+          "payload": {
+            "repo": "/Users/tom/.aion-228-accept/tree-alpha",
+            "expect": "ANCHOR-ALPHA-9f2c17",
+            "reply": "ANCHOR-ALPHA-9f2c17",
+            "stop_reason": "end_turn"
+          }
+        }
+      }
+    },
+    {
+      "type": "TimerCancelled",
+      "data": {
+        "envelope": {
+          "seq": 8,
+          "recorded_at": "2026-08-12T23:47:34.935021Z",
+          "workflow_id": "a38554f6-fb93-482c-ba72-0852d78e21b0"
+        },
+        "timer_id": {
+          "Named": "deadline:d8e68fb6-f4b2-48b0-bc2d-b66d03d5df66"
+        },
+        "cause": "WorkflowIntent"
+      }
+    }
+  ]
+}

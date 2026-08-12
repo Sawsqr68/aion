@@ -1,0 +1,80 @@
+//! accept228 — the live acceptance for task #228: the working directory an
+//! agent runs in is a property of the RUN, not of the worker's launch.
+//!
+//! This document exists to be run twice against the SAME worker process with
+//! two different `repo` inputs. Each tree carries an ANCHOR.txt holding a
+//! string that exists nowhere else, and the prompt asks for that string back
+//! by a RELATIVE path. A worker whose directory came from its launch answers
+//! from one tree both times, or from neither; only a worker taking the
+//! directory from the dispatch can return alpha's anchor for alpha's run and
+//! beta's for beta's.
+//!
+//! The worker is deliberately started from a directory that holds no
+//! ANCHOR.txt at all. That is the subtraction control: an inherited launch
+//! directory cannot produce a right answer by luck, it can only produce a
+//! wrong one.
+//!
+//! The reply is also the prompt-shape evidence. An exact-match anchor can only
+//! come back if the agent was handed the prompt TEXT — the defect this task
+//! closed handed agents the literal `{"prompt":"..."}` envelope instead.
+workflow accept228
+  timeout 20m
+  input repo: String
+  input prompt: String
+  input expect: String
+  outcome matched:  type Proof,   route success
+  outcome mismatch: type Refused, route failure
+
+/// The canonical agent-outcome record every agent seam returns: the leg's
+/// terminal `text` and the canonical `stop_reason`.
+type Reply { text: String, stop_reason: String }
+
+/// The run answered with the anchor its OWN tree carries. `repo` travels with
+/// the answer so the pairing is on the record rather than in the operator's
+/// memory of which run was which.
+type Proof { repo: String, expect: String, reply: String, stop_reason: String }
+
+/// The run did not answer with its tree's anchor. Said out loud, with both
+/// sides, rather than reported as a pass.
+type Refused { repo: String, expect: String, reply: String, stop_reason: String }
+
+worker accept
+  /// Served with:
+  /// aion worker agent accept228.awl --liminal-address 127.0.0.1:50161
+  ///
+  /// `cwd from repo` is the whole subject of this document: the harness takes
+  /// each attempt's working directory from the dispatch's `repo` parameter.
+  /// `aion awl check` refuses this document if any action this harness serves
+  /// fails to declare `repo` as a `String`, and the adapter refuses the
+  /// attempt — before spawning anything — if the run does not carry one.
+  harness
+    kind norn
+    /// One: the two runs are driven sequentially so each answer is attributable
+    /// to the tree it was asked about, with nothing else in flight.
+    concurrency 1
+    reconnect_initial_backoff 1s
+    reconnect_max_backoff 30s
+    reconnect_max_attempts 100
+    /// The agent subprocess's WHOLE environment: what is not named here is
+    /// ABSENT in the child whatever this worker inherits. HOME/USER/LOGNAME
+    /// are here because a scrubbed-environment agent cannot find its login
+    /// and answers "Not logged in" instead of failing loudly.
+    env_pass "PATH", "HOME", "USER", "LOGNAME", "TMPDIR"
+    /// Every dispatch says where it works. See the note above the section.
+    cwd from repo
+    /// `binary` deliberately omitted: norn resolves on PATH here.
+    args "--account", "default"
+  /// The agent seam under test. Two parameters: the bound directory and the
+  /// prompt. The checker defines the prompt by subtraction — the one parameter
+  /// that is not the harness's bound directory.
+  action ask(repo: String, prompt: String) -> Reply
+    agent, timeout 10m, retry 2 backoff 30s..2m
+
+step run_it
+  ask(repo: repo, prompt: prompt) -> answer
+  outcome hit: when answer.text == expect,
+    route matched(repo: repo, expect: expect, reply: answer.text,
+      stop_reason: answer.stop_reason)
+  outcome miss: otherwise,
+    route mismatch(repo: repo, expect: expect, reply: answer.text,
+      stop_reason: answer.stop_reason)

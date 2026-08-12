@@ -1,0 +1,14 @@
+{
+  "workflow_type": "accept228",
+  "workflow_id": "691cbb3d-e767-496c-a2b0-0986fcd012d4",
+  "run_id": "b9a6e22c-9fdf-4ad2-b71a-0a0ec7d23c8b",
+  "result": {
+    "outcome": "matched",
+    "payload": {
+      "repo": "/Users/tom/.aion-228-accept/tree-beta",
+      "expect": "ANCHOR-BETA-4d81ae",
+      "reply": "ANCHOR-BETA-4d81ae",
+      "stop_reason": "end_turn"
+    }
+  }
+}

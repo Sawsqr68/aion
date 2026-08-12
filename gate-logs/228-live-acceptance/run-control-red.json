@@ -1,0 +1,2 @@
+error: workflow run failed: workflow 3 returned error
+  details: {"tag":"AwlOutcomeFailure","outcome":"mismatch","payload":"{\"repo\":\"/Users/tom/.aion-228-accept/tree-beta\",\"expect\":\"ANCHOR-ALPHA-9f2c17\",\"reply\":\"ANCHOR-BETA-4d81ae\",\"stop_reason\":\"end_turn\"}"}
