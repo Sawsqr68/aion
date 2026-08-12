@@ -43,9 +43,15 @@ refused (#200) or an old-flag record wedges a supervised restart (#204).
 6. **Worker restarts — ON TOM'S WORD ONLY:**
    - the assistant worker (moves onto the private queue, new binary);
    - the ACP demo worker pid 8790 (new binary, document-declared harness);
-   - any collector worker (#196) — the collector serves ONLY on a binary
-     carrying #197; the installed 0.13.8 predates the fix, so the collector
-     waits for this cut by ruling.
+   - any collector worker (#196) — **the collector is the live experiment.**
+     ~~the collector serves ONLY on a binary carrying #197; the installed
+     0.13.8 predates the fix, so the collector waits for this cut by ruling.~~
+     STRUCK 2026-08-12 (Waffles): that reason described a box that no longer
+     exists — #197 shipped and 0.14.1 is installed, so the binary argument is
+     spent. The rule stands on its replacement reason: the running collector
+     IS the soak measurement's control arm, watched to the 15th. Restarting it
+     to tidy a flag list spends the experiment. It moves on Tom's word about
+     the experiment, not on this runbook.
 7. **Post-swap ladder:** `aion versions` non-empty from repo root, worker
    re-registration observed with the probation lines (#197's
    `SERVING ITS DISPATCH PROBATION` → eligibility), one live run Completed,
