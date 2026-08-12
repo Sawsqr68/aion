@@ -116,11 +116,13 @@ pub(super) struct RetryRecorderSeam {
 }
 
 /// The retry loop's final disposition, carrying the attempt that produced it.
+#[derive(Debug)]
 pub(super) struct RetryLoopOutcome {
     pub(super) attempt: u32,
     pub(super) terminal: RetryLoopTerminal,
 }
 
+#[derive(Debug)]
 pub(super) enum RetryLoopTerminal {
     /// The encoded output of the successful attempt.
     Completed(String),
@@ -166,44 +168,97 @@ fn stood_down_on_closed_epoch(request: &ActivityDispatch, attempt: u32) -> Retry
 /// dangling ordinal); a non-retryable class, an absent policy (`"retry":
 /// null`), or an exhausted budget fails with the reason verbatim. `None`
 /// means the loop retries under the policy.
+///
+/// `expired` says the loop itself ended the attempt on the authored
+/// per-attempt bound (#223) rather than the worker reporting a reason. It is
+/// passed rather than re-derived from `reason` deliberately: the expiry
+/// reason carries the `timeout:` prefix, which is a NON-retryable class on the
+/// wire because it types the SDK's `error.ActivityTimedOut`, and re-parsing
+/// our own synthesized string to recover a fact we already hold is exactly the
+/// drift this codebase keeps closing. The eligibility itself is read off the
+/// language: `declarations/valid/timeout_inside_retry` states the bound is
+/// "a per-attempt timeout [that] sits INSIDE a bounded retry schedule", so the
+/// schedule takes an expiry while budget remains. Per-attempt has no meaning
+/// otherwise.
 fn failure_stand_down(
     policy: Option<&super::nif_activity_retry::RetryPolicy>,
     reason: &str,
     attempt: u32,
+    expired: bool,
 ) -> Option<RetryLoopTerminal> {
     use super::nif_activity_retry::{is_parked_reason, is_retryable_reason};
 
     if is_parked_reason(reason) {
         return Some(RetryLoopTerminal::Parked);
     }
+    let retry_eligible = expired || is_retryable_reason(reason);
     match policy {
-        Some(policy) if is_retryable_reason(reason) && attempt < policy.max_attempts => None,
+        Some(policy) if retry_eligible && attempt < policy.max_attempts => None,
         _ => Some(RetryLoopTerminal::Failed(reason.to_owned())),
     }
 }
 
+/// The loop's success terminal for one attempt.
+const fn dispatch_completed(attempt: u32, payload: String) -> RetryLoopOutcome {
+    RetryLoopOutcome {
+        attempt,
+        terminal: RetryLoopTerminal::Completed(payload),
+    }
+}
+
+/// Deliver ONE attempt, bounded by the authored per-attempt timeout when the
+/// document declared one (#223).
+///
+/// `Err((reason, expired))` carries the failure reason and whether this loop
+/// ended the attempt on the bound — see [`failure_stand_down`] for why that
+/// fact travels rather than being re-read out of the reason string.
+///
+/// On expiry the dispatch future is DROPPED, which stops this run waiting and
+/// nothing more. The default `dispatch_async` runs the dispatcher on
+/// `spawn_blocking`, and a blocking task cannot be cancelled, so the
+/// worker-side call runs on to its own end and its result is discarded. That
+/// is the bound this word promises — the same one `with_timeout` gives a
+/// `wait` — and reaching into the worker's child process is a cancellation
+/// question, not this one.
+async fn deliver_one_attempt(
+    dispatcher: &Arc<dyn ActivityDispatcher>,
+    delivery: ActivityDispatch,
+    bound: Option<std::time::Duration>,
+) -> Result<String, (String, bool)> {
+    use super::nif_activity_retry::activity_timeout_reason;
+
+    let dispatch = Arc::clone(dispatcher).dispatch_async(delivery);
+    match bound {
+        None => dispatch.await.map_err(|reason| (reason, false)),
+        Some(bound) => match tokio::time::timeout(bound, dispatch).await {
+            Ok(result) => result.map_err(|reason| (reason, false)),
+            Err(_elapsed) => Err((activity_timeout_reason(bound), true)),
+        },
+    }
+}
+
 /// Drive one activity dispatch to its final outcome under the SDK-declared
-/// retry policy carried in the dispatch config (#197).
+/// retry policy and per-attempt timeout carried in the dispatch config
+/// (#197, #223).
 pub(super) async fn dispatch_with_retries(
     dispatcher: &Arc<dyn ActivityDispatcher>,
     seam: &RetryRecorderSeam,
     request: &ActivityDispatch,
 ) -> RetryLoopOutcome {
-    use super::nif_activity_retry::retry_policy_from_config;
+    use super::nif_activity_retry::{activity_timeout_from_config, retry_policy_from_config};
 
     let policy = retry_policy_from_config(&request.config);
+    // #223: the AUTHORED per-attempt bound, or `None` for unbounded. The
+    // engine imposes no deadline of its own — an activity whose document
+    // declares no `timeout` waits exactly as long as it always has.
+    let bound = activity_timeout_from_config(&request.config);
     let mut attempt = request.attempt;
     loop {
         let mut delivery = request.clone();
         delivery.attempt = attempt;
-        let reason = match Arc::clone(dispatcher).dispatch_async(delivery).await {
-            Ok(payload) => {
-                return RetryLoopOutcome {
-                    attempt,
-                    terminal: RetryLoopTerminal::Completed(payload),
-                };
-            }
-            Err(reason) => reason,
+        let (reason, expired) = match deliver_one_attempt(dispatcher, delivery, bound).await {
+            Ok(payload) => return dispatch_completed(attempt, payload),
+            Err(failure) => failure,
         };
         // TRANSPORT-domain worker loss: the activity never executed to a result,
         // so it is re-dispatched at the SAME attempt with NOTHING recorded —
@@ -226,7 +281,7 @@ pub(super) async fn dispatch_with_retries(
                 None => continue,
             }
         }
-        if let Some(terminal) = failure_stand_down(policy.as_ref(), &reason, attempt) {
+        if let Some(terminal) = failure_stand_down(policy.as_ref(), &reason, attempt, expired) {
             if matches!(terminal, RetryLoopTerminal::Failed(_)) {
                 record_advisory_exhaustion(seam, request, &reason, attempt).await;
             }

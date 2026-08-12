@@ -220,6 +220,58 @@ pub(super) fn retry_policy_from_config(config: &str) -> Option<RetryPolicy> {
     policy
 }
 
+/// Decode the SDK-declared per-attempt activity timeout from the dispatch
+/// `config` JSON (#223).
+///
+/// Returns `None` — unbounded, the behaviour before this reader existed — when
+/// the config omits `timeout_ms`, carries `"timeout_ms": null`, or carries a
+/// value that is not a positive whole number of milliseconds.
+///
+/// Absence is the NORMAL case here, not an edge. The field is written by the
+/// Gleam SDK's `activity_dispatch.config` and by nothing else in this
+/// workspace, so a dispatch that did not come through it carries no key at
+/// all.
+///
+/// A present-but-unusable value is logged and treated as absent, never
+/// coerced, exactly as [`retry_policy_from_config`] treats a malformed policy:
+/// a broken declaration must not invent a bound the workflow author never
+/// wrote. A non-positive value is that class, and rejecting it mirrors the
+/// retry decoder rejecting `max_attempts: 0` — a `timeout 0s` would expire
+/// every attempt before it began, which is not a deadline anyone authored.
+pub(super) fn activity_timeout_from_config(config: &str) -> Option<Duration> {
+    let value: serde_json::Value = serde_json::from_str(config).ok()?;
+    let timeout = value.get("timeout_ms")?;
+    if timeout.is_null() {
+        return None;
+    }
+    let Some(milliseconds) = timeout.as_u64().filter(|milliseconds| *milliseconds > 0) else {
+        tracing::warn!(
+            timeout_ms = %timeout,
+            "unusable SDK activity timeout in dispatch config; treating the activity as \
+             unbounded (no per-attempt deadline)"
+        );
+        return None;
+    };
+    Some(Duration::from_millis(milliseconds))
+}
+
+/// The dispatcher failure reason recorded when an attempt outlives its
+/// authored per-attempt bound (#223).
+///
+/// Carries the `timeout:` prefix the SDK's `activity_dispatch.parse_error`
+/// maps to the typed `error.ActivityTimedOut`, so the authored word surfaces
+/// to workflow code as a timeout rather than as an anonymous engine failure.
+/// The bound is stated in the message because an operator reading the failure
+/// needs to know WHICH deadline fired — this one is per attempt, and the
+/// enclosing `with_timeout` scope has its own distinct
+/// `timeout:deadline expired`.
+pub(super) fn activity_timeout_reason(bound: Duration) -> String {
+    format!(
+        "timeout:activity exceeded its per-attempt bound of {}ms",
+        bound.as_millis()
+    )
+}
+
 fn decode_policy(retry: &serde_json::Value) -> Option<RetryPolicy> {
     let max_attempts = u32::try_from(retry.get("max_attempts")?.as_u64()?).ok()?;
     if max_attempts == 0 {
@@ -350,13 +402,105 @@ mod tests {
     };
 
     use super::{
-        Backoff, PARKED_ACTIVITY_REASON, RetryPolicy, activity_settled, is_parked_reason,
+        Backoff, PARKED_ACTIVITY_REASON, RetryPolicy, activity_settled,
+        activity_timeout_from_config, activity_timeout_reason, is_parked_reason,
         is_retryable_reason, latest_recorded_attempt, next_delivery_attempt,
         retry_policy_from_config,
     };
 
     fn config_with(retry: &str) -> String {
         format!(r#"{{"retry":{retry},"timeout_ms":null,"labels":{{}}}}"#)
+    }
+
+    /// Build the activity-dispatch config the SDK emits, with `timeout_ms`
+    /// set to the supplied JSON.
+    fn config_with_timeout(timeout_ms: &str) -> String {
+        format!(r#"{{"retry":null,"timeout_ms":{timeout_ms},"labels":{{}}}}"#)
+    }
+
+    /// #223. Absence is the NORMAL case — the field is written by the Gleam
+    /// SDK and by nothing else, so an omitted key, an explicit `null`, and
+    /// unparseable config all mean UNBOUNDED. None of them may be read as a
+    /// bound of any size.
+    #[test]
+    fn absent_null_and_unparseable_configs_decode_to_no_bound() {
+        assert_eq!(activity_timeout_from_config("{}"), None);
+        assert_eq!(
+            activity_timeout_from_config(&config_with_timeout("null")),
+            None
+        );
+        assert_eq!(activity_timeout_from_config("not json"), None);
+    }
+
+    /// A positive whole number of milliseconds is the bound, verbatim — no
+    /// rounding, no floor, no ceiling imposed by the engine.
+    #[test]
+    fn a_positive_millisecond_value_is_the_authored_bound() {
+        assert_eq!(
+            activity_timeout_from_config(&config_with_timeout("1")),
+            Some(Duration::from_millis(1)),
+            "the smallest expressible bound survives the decode"
+        );
+        assert_eq!(
+            activity_timeout_from_config(&config_with_timeout("5400000")),
+            Some(Duration::from_secs(5400)),
+            "a 90m action timeout survives the decode"
+        );
+    }
+
+    /// Degenerate and malformed values decode to NO BOUND rather than to a
+    /// bound of zero, mirroring the retry decoder's `max_attempts: 0`
+    /// rejection. A zero bound would expire every attempt before it began,
+    /// which is not a deadline any author wrote.
+    #[test]
+    fn degenerate_and_malformed_bounds_decode_to_no_bound() {
+        assert_eq!(
+            activity_timeout_from_config(&config_with_timeout("0")),
+            None
+        );
+        assert_eq!(
+            activity_timeout_from_config(&config_with_timeout("-1")),
+            None
+        );
+        assert_eq!(
+            activity_timeout_from_config(&config_with_timeout("1.5")),
+            None
+        );
+        assert_eq!(
+            activity_timeout_from_config(&config_with_timeout(r#""30s""#)),
+            None
+        );
+        assert_eq!(
+            activity_timeout_from_config(&config_with_timeout("{}")),
+            None
+        );
+    }
+
+    /// 🔴 The coupling that forces the dispatch loop to carry expiry as a
+    /// FACT rather than re-read it from the reason string.
+    ///
+    /// The expiry reason must carry the `timeout:` prefix, because that is
+    /// what the SDK's `activity_dispatch.parse_error` maps to the typed
+    /// `error.ActivityTimedOut`. That prefix is NOT the retryable class, so
+    /// anyone who "simplifies" the loop's `expired || is_retryable_reason(..)`
+    /// down to the reason check alone silently makes an authored
+    /// `timeout … retry N` mean one attempt.
+    #[test]
+    fn the_expiry_reason_types_a_timeout_and_is_not_retryable_class() {
+        let reason = activity_timeout_reason(Duration::from_secs(30));
+        assert!(
+            reason.starts_with("timeout:"),
+            "the SDK types ActivityTimedOut off this prefix: {reason}"
+        );
+        assert!(
+            reason.contains("30000ms"),
+            "an operator must be able to see WHICH bound fired: {reason}"
+        );
+        assert!(
+            !is_retryable_reason(&reason),
+            "the retryable classification must NOT come from this string — the loop \
+             carries the expiry fact instead: {reason}"
+        );
     }
 
     #[test]
