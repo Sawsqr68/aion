@@ -189,7 +189,15 @@ fn delivery_key_refusals(action: &str, config: &ConfigLine) -> Vec<(Span, String
         refuse(
             timeout.span,
             "timeout",
-            "bounds the dispatch the engine schedules",
+            // Ownership, not arming. "bounds the dispatch the ENGINE
+            // schedules" was the stated reason here and it was false at the
+            // time — the engine wrote `timeout_ms` and read it back nowhere
+            // (#198, closed by #223). Whether the engine arms the word is a
+            // fact that changes; whose declaration owns it is not, and it is
+            // the same reason the sibling keys above are refused. A refusal
+            // propped on a reason a reader can disprove invites them to
+            // distrust the refusal too.
+            "bounds the dispatch a caller schedules",
         );
     }
     if let Some(retry) = &config.retry {
