@@ -289,8 +289,41 @@ async def _run_all(server_url: str) -> None:
     scenarios_doc = _load_scenarios()
     defaults = _mapping(scenarios_doc["defaults"])
     fixtures = _mapping(scenarios_doc["fixtures"])
+    divergences: list[str] = []
     for scenario_value in _list(scenarios_doc["scenarios"]):
-        await _run_scenario(_mapping(scenario_value), defaults, fixtures, server_url)
+        await _run_scenario(_mapping(scenario_value), defaults, fixtures, server_url, divergences)
+    assert not divergences, "{} conformance divergence(s):\n{}".format(
+        len(divergences), "\n".join(f"  {entry}" for entry in divergences)
+    )
+
+
+def _record_divergence(
+    divergences: list[str],
+    scenario: str,
+    step: str,
+    expected: Mapping[str, Any],
+    actual: Observable,
+    reason: str,
+) -> None:
+    """Record a divergent step and emit the shared cross-SDK report line.
+
+    A divergence is DATA, never an abort of the run. The eight scenarios are
+    independent — each opens its own client and its own ``ScenarioContext``, and
+    nothing crosses between them — so one scenario that cannot be executed must
+    never delete the observables of the seven that can. In particular
+    ``not-found-anti-leak`` is a SECURITY control (a foreign-namespace probe must
+    be byte-identical to a nonexistent-workflow probe, which is also the standing
+    evidence that name-shaped visibility predicates cannot escape namespace
+    scoping), and a control an unrelated earlier failure can silently skip is not
+    a control at all.
+    """
+
+    divergences.append(f"scenario={scenario} step={step}: {reason}")
+    print(
+        f"DIVERGENCE sdk=python scenario={scenario} step={step} "
+        f"expected={json.dumps(expected, sort_keys=True, separators=(',', ':'), default=str)} "
+        f"actual={json.dumps(actual, sort_keys=True, separators=(',', ':'), default=str)}"
+    )
 
 
 async def _run_scenario(
@@ -298,6 +331,7 @@ async def _run_scenario(
     defaults: Mapping[str, Any],
     fixtures: Mapping[str, Any],
     server_url: str,
+    divergences: list[str],
 ) -> None:
     scenario_id = str(scenario["id"])
     context = ScenarioContext()
@@ -311,18 +345,44 @@ async def _run_scenario(
             input_value = _resolve(step.get("input", None), defaults, fixtures, scenario_id, context, started_at, now)
             expected = _mapping(_resolve(step["expect"], defaults, fixtures, scenario_id, context, started_at, now))
             error_identity: Observable | None = None
+            unexecutable: str | None = None
             try:
                 ok = await _execute(operation, _mapping(input_value), context, server_url)
                 actual: Observable = {"ok": ok}
             except AionClientError as exc:
                 actual = {"error": exc.code.value}
                 error_identity = {"code": exc.code.value, "message": str(exc), "detail": exc.detail}
+            except Exception as exc:
+                # Not a taxonomy outcome: the SDK or the harness could not
+                # execute the step at all. That is a divergence from the shared
+                # contract — reported as one, and NOT re-raised, because an abort
+                # would delete every scenario after this one.
+                actual = {"harnessError": f"{type(exc).__name__}: {exc}"}
+                unexecutable = f"{type(exc).__name__}: {exc}"
             print(
                 "AION_CONFORMANCE "
                 f"sdk=python scenario={scenario_id} step={step_id} "
-                f"result={json.dumps(actual, sort_keys=True, separators=(',', ':'))}"
+                f"result={json.dumps(actual, sort_keys=True, separators=(',', ':'), default=str)}"
             )
-            _assert_matches(scenario_id, step_id, actual, expected, context, error_identity)
+            if unexecutable is not None:
+                _record_divergence(
+                    divergences,
+                    scenario_id,
+                    step_id,
+                    expected,
+                    actual,
+                    f"step could not be executed: {unexecutable}",
+                )
+                return
+            try:
+                _assert_matches(scenario_id, step_id, actual, expected, context, error_identity)
+            except AssertionError as exc:
+                # A divergent step stops THIS scenario — later steps reference
+                # earlier ones by `$scenario.step`, so continuing past a failed
+                # step would measure nothing — and leaves the rest of the matrix
+                # to run.
+                _record_divergence(divergences, scenario_id, step_id, expected, actual, str(exc))
+                return
             context.record(scenario_id, step_id, actual)
             if error_identity is not None:
                 context.record_error_identity(scenario_id, step_id, error_identity)
@@ -380,12 +440,19 @@ async def _execute(
         )
         return {"kind": "client"}
     if operation == "start":
-        handle = await context.require_client().start(
-            str(input_value["workflowType"]),
-            _payload_json(input_value.get("payload")),
-            namespace=str(input_value.get("namespace", "conformance")),
-            idempotency_key=_optional_str(input_value.get("idempotencyKey")),
-        )
+        # `.handle` because start reports more than the run now: an idempotent
+        # replay that could not apply a requested display name says so on the
+        # outcome (#211). The scenarios observe the handle, and the Rust harness
+        # unwraps the same field from the same shape.
+        handle = (
+            await context.require_client().start(
+                str(input_value["workflowType"]),
+                _payload_json(input_value.get("payload")),
+                namespace=str(input_value.get("namespace", "conformance")),
+                idempotency_key=_optional_str(input_value.get("idempotencyKey")),
+                display_name=_optional_str(input_value.get("displayName")),
+            )
+        ).handle
         return {"kind": "handle", "workflowId": handle.workflow_id, "runId": handle.run_id}
     if operation == "signal":
         await context.require_client().signal(
@@ -420,6 +487,7 @@ async def _execute(
             "workflowId": summary.get("workflowId"),
             "runId": input_value.get("runId"),
             "status": summary.get("status"),
+            "displayName": summary.get("displayName"),
             "history": [_normalize_event(event) for event in description.history],
         }
     if operation == "subscribe":
@@ -662,6 +730,21 @@ def _assert_matches(
         assert isinstance(ok.get("runId"), str) and ok["runId"]
     if "payloadEquals" in expected_ok:
         assert ok.get("value") == expected_ok["payloadEquals"], detail
+    if "displayNameEquals" in expected_ok:
+        # #211: pins the summarised name, `null` asserting the workflow is
+        # unnamed.
+        #
+        # The observable must CARRY the key. Absent-vs-null is a real wire
+        # distinction and is folded exactly once, in `_normalize_summary`, where
+        # an unnamed workflow genuinely has no recorded attribute. By THIS layer
+        # the harness owns the shape and always emits the key, so a missing one
+        # means the harness stopped projecting at all — and `ok.get(...)`
+        # returning `None` would let that failure satisfy every
+        # `displayNameEquals: null` expectation in the document. Right answer and
+        # plausible-wrong answer coinciding distinguishes nothing, so the absence
+        # is refused instead of absorbed.
+        assert "displayName" in ok, f"{detail} observable did not project displayName"
+        assert ok["displayName"] == expected_ok["displayNameEquals"], detail
     if "sameHandleAs" in expected_ok:
         # The resolver may already have replaced the `$scenario.step`
         # reference with the recorded step's ok payload; both shapes pin the
@@ -758,10 +841,19 @@ def _normalize_summary(summary: Any) -> Observable:
         or _id_value(value.get("workflowId"))
         or _optional_str(value.get("workflowId"))
     )
+    # #211: the summarised display name is part of the shared observable — an
+    # SDK that cannot carry a name to the server, or cannot read the one the
+    # server recorded, must diverge here rather than pass quietly. `None` is the
+    # observable for an unnamed workflow, and an absent key means the same
+    # thing.
+    display_name = value.get("display_name")
+    if display_name is None:
+        display_name = value.get("displayName")
     return {
         "workflowId": workflow_id,
         "workflowType": value.get("workflow_type") or value.get("workflowType"),
         "status": _status_name(value.get("status")),
+        "displayName": _optional_str(display_name),
     }
 
 

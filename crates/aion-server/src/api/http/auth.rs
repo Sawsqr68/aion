@@ -59,6 +59,132 @@ impl FromRequestParts<ServerState> for WsCaller {
     }
 }
 
+/// Every request header this boundary reads as a caller credential.
+///
+/// Kept in step with what [`promote_query_credentials`] resolves its aliases to
+/// — and with what [`caller_from_headers`] actually authorizes with — by
+/// `credential_headers_cover_every_promoted_alias` in this module's tests, not
+/// by this sentence. That test walks [`CREDENTIAL_QUERY_ALIASES`] itself rather
+/// than a copy of it, so an alias added to the promotion table and not to this
+/// constant fails there. A forwarded request that carried a different notion of
+/// "the caller's credentials" than the one this server authorizes with would
+/// refuse on the owner for reasons the caller could not see.
+#[cfg(any(test, feature = "haematite-backend"))]
+const CREDENTIAL_HEADERS: [&str; 4] = [
+    "authorization",
+    "x-aion-namespaces",
+    "x-aion-subject",
+    "x-aion-deploy",
+];
+
+/// The caller's credentials as outbound gRPC metadata, for a request this node
+/// forwards to a shard owner (`api/http/routing.rs`).
+///
+/// Only [`CREDENTIAL_HEADERS`] are copied. Nothing else is: the forward-hop
+/// counter in particular must NOT be inherited from an inbound HTTP request —
+/// an HTTP request begins a forward chain rather than continuing one, and the
+/// forwarder stamps the hop itself.
+///
+/// # Errors
+///
+/// Returns an invalid-input [`WireError`] naming the header — never its value,
+/// which is a credential — when a present credential header cannot be
+/// represented as gRPC metadata. Dropping it instead would forward an
+/// unauthenticated request and surface as an unexplained refusal from the
+/// owner.
+#[cfg(feature = "haematite-backend")]
+pub(crate) fn caller_credentials_metadata(
+    headers: &HeaderMap,
+) -> Result<tonic::metadata::MetadataMap, aion_proto::WireError> {
+    let mut metadata = tonic::metadata::MetadataMap::new();
+    for name in CREDENTIAL_HEADERS {
+        let Some(value) = headers.get(name) else {
+            continue;
+        };
+        let key = tonic::metadata::MetadataKey::from_bytes(name.as_bytes())
+            .map_err(|_error| credential_header_rejected(name))?;
+        let value = tonic::metadata::MetadataValue::try_from(value.as_bytes())
+            .map_err(|_error| credential_header_rejected(name))?;
+        metadata.insert(key, value);
+    }
+    Ok(metadata)
+}
+
+#[cfg(feature = "haematite-backend")]
+fn credential_header_rejected(name: &str) -> aion_proto::WireError {
+    aion_proto::WireError::invalid_input(format!(
+        "the `{name}` header is not a valid credential value and cannot be carried to the \
+         workflow shard's owner"
+    ))
+}
+
+/// One credential query parameter the WebSocket handshake recognizes.
+struct CredentialAlias {
+    /// The query-parameter name accepted on the handshake URL.
+    param: &'static str,
+    /// The request header it promotes to.
+    header: &'static str,
+    /// Whether the value must be wrapped in the `Bearer` scheme to match the
+    /// `Authorization` header form.
+    bearer_scheme: bool,
+}
+
+/// The promotion table: every credential query parameter, and the header it
+/// becomes.
+///
+/// A TABLE rather than `match` arms because it has to be DATA. Both
+/// [`promote_query_credentials`] and
+/// `credential_headers_cover_every_promoted_alias` read THIS, so an alias added
+/// here is covered by that test by construction. A test that restated the
+/// aliases as its own list would have been checking a copy: a ninth alias would
+/// have promoted to an unforwarded header with every assertion still green.
+///
+/// It carries `bearer_scheme` for the same reason — the wrapping rule was a
+/// second enumeration of the same three names, and two enumerations of one fact
+/// are one drift away from disagreeing.
+const CREDENTIAL_QUERY_ALIASES: &[CredentialAlias] = &[
+    CredentialAlias {
+        param: "x-aion-namespaces",
+        header: "x-aion-namespaces",
+        bearer_scheme: false,
+    },
+    CredentialAlias {
+        param: "namespaces",
+        header: "x-aion-namespaces",
+        bearer_scheme: false,
+    },
+    CredentialAlias {
+        param: "x-aion-subject",
+        header: "x-aion-subject",
+        bearer_scheme: false,
+    },
+    CredentialAlias {
+        param: "subject",
+        header: "x-aion-subject",
+        bearer_scheme: false,
+    },
+    CredentialAlias {
+        param: "x-aion-deploy",
+        header: "x-aion-deploy",
+        bearer_scheme: false,
+    },
+    CredentialAlias {
+        param: "authorization",
+        header: "authorization",
+        bearer_scheme: false,
+    },
+    CredentialAlias {
+        param: "access_token",
+        header: "authorization",
+        bearer_scheme: true,
+    },
+    CredentialAlias {
+        param: "token",
+        header: "authorization",
+        bearer_scheme: true,
+    },
+];
+
 /// Promote recognized credential query parameters into their request-header
 /// equivalents so [`caller_from_headers`] resolves the caller identically to a
 /// header-bearing REST request. A header already present on the handshake is
@@ -66,17 +192,17 @@ impl FromRequestParts<ServerState> for WsCaller {
 /// scheme to match the `Authorization` header form.
 fn promote_query_credentials(params: &HashMap<String, String>, headers: &mut HeaderMap) {
     for (key, value) in params {
-        let header_name: &'static str = match key.as_str() {
-            "x-aion-namespaces" | "namespaces" => "x-aion-namespaces",
-            "x-aion-subject" | "subject" => "x-aion-subject",
-            "x-aion-deploy" => "x-aion-deploy",
-            "authorization" | "access_token" | "token" => "authorization",
-            _ => continue,
+        let Some(alias) = CREDENTIAL_QUERY_ALIASES
+            .iter()
+            .find(|candidate| candidate.param == key.as_str())
+        else {
+            continue;
         };
+        let header_name = alias.header;
         if headers.contains_key(header_name) {
             continue;
         }
-        let header_value = if matches!(key.as_str(), "access_token" | "token") {
+        let header_value = if alias.bearer_scheme {
             format!("Bearer {value}")
         } else {
             value.clone()
@@ -701,5 +827,104 @@ mod tests {
         Ok(builder
             .header("x-aion-namespaces", namespace)
             .body(body::Body::from(body))?)
+    }
+
+    /// #211 forward path: the credential headers this boundary authorizes with
+    /// are exactly the ones carried to a shard owner — and nothing else is.
+    ///
+    /// The forward-hop counter is the one that matters: inheriting it from an
+    /// inbound HTTP request would let a caller start a forward chain at the cap
+    /// and be told `NotOwner` for a workflow this node cannot serve.
+    #[cfg(feature = "haematite-backend")]
+    #[test]
+    fn only_credential_headers_are_carried_to_a_shard_owner()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", "Bearer token".parse()?);
+        headers.insert("x-aion-subject", "alice".parse()?);
+        headers.insert("x-aion-namespaces", NAMESPACE.parse()?);
+        headers.insert("x-aion-deploy", "true".parse()?);
+        headers.insert("content-type", "application/json".parse()?);
+        headers.insert(crate::routing::FORWARD_HOPS_METADATA, "2".parse()?);
+
+        let metadata = super::caller_credentials_metadata(&headers)?;
+
+        for name in super::CREDENTIAL_HEADERS {
+            assert!(
+                metadata.get(name).is_some(),
+                "the `{name}` credential must reach the owner, or it authorizes a different caller"
+            );
+        }
+        assert_eq!(metadata.len(), super::CREDENTIAL_HEADERS.len());
+        assert!(
+            metadata.get("content-type").is_none(),
+            "a non-credential header must not be relayed"
+        );
+        assert_eq!(
+            crate::routing::current_hops(&metadata),
+            0,
+            "an HTTP request STARTS a forward chain; the inbound hop header must not be inherited"
+        );
+        Ok(())
+    }
+
+    /// An absent credential is absent, not empty: nothing is invented for a
+    /// caller that sent nothing.
+    #[cfg(feature = "haematite-backend")]
+    #[test]
+    fn absent_credentials_are_not_invented() -> Result<(), Box<dyn std::error::Error>> {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-aion-subject", "alice".parse()?);
+
+        let metadata = super::caller_credentials_metadata(&headers)?;
+
+        assert_eq!(metadata.len(), 1);
+        assert!(metadata.get("authorization").is_none());
+        Ok(())
+    }
+
+    /// Every alias the WebSocket handshake promotes resolves to a header in
+    /// [`super::CREDENTIAL_HEADERS`] — the mechanism behind that constant's
+    /// claim, so a credential added to the promotion table without being added
+    /// there fails here instead of silently not being forwarded.
+    ///
+    /// The aliases are read from [`super::CREDENTIAL_QUERY_ALIASES`], the table
+    /// the production path itself resolves through — NOT restated here. A
+    /// hand-copied list would have made this an assertion about the copy: a
+    /// ninth alias would have promoted to an unforwarded header with this test
+    /// still green, which is exactly the failure the constant's doc promises is
+    /// impossible.
+    #[test]
+    fn credential_headers_cover_every_promoted_alias() {
+        // Vacuity control: an emptied table would satisfy every loop below.
+        assert!(
+            !super::CREDENTIAL_QUERY_ALIASES.is_empty(),
+            "the promotion table is empty, so this test measures nothing"
+        );
+        for alias in super::CREDENTIAL_QUERY_ALIASES {
+            let params =
+                std::collections::HashMap::from([(alias.param.to_owned(), "v".to_owned())]);
+            let mut headers = HeaderMap::new();
+            super::promote_query_credentials(&params, &mut headers);
+            for name in headers.keys() {
+                assert!(
+                    super::CREDENTIAL_HEADERS.contains(&name.as_str()),
+                    "`{}` promotes to `{name}`, which is not carried onto a forward",
+                    alias.param
+                );
+            }
+            assert_eq!(
+                headers.len(),
+                1,
+                "`{}` must promote to exactly one header",
+                alias.param
+            );
+            assert!(
+                headers.contains_key(alias.header),
+                "`{}` must promote to the header its table row declares (`{}`)",
+                alias.param,
+                alias.header
+            );
+        }
     }
 }

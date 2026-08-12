@@ -1288,6 +1288,30 @@ struct EngineAssembly<'a> {
     runtime: &'a RuntimeConfig,
 }
 
+/// The search-attribute schema every server-embedded engine runs with.
+///
+/// The engine REFUSES an append carrying an unregistered attribute, and this is
+/// the only place the server registers any. So every attribute name a server
+/// writer records must appear here or the write it rides on fails outright — a
+/// missing `display_name` registration does not lose the label, it fails every
+/// named start (#211). Kept as its own function so that coupling is testable
+/// against the actual writers rather than only observable at boot.
+fn server_search_attribute_schema() -> Result<aion_core::SearchAttributeSchema, ServerError> {
+    let mut schema = aion_core::SearchAttributeSchema::new();
+    for (name, label) in [
+        (crate::namespace::NAMESPACE_ATTRIBUTE, "namespace"),
+        (crate::namespace::TASK_QUEUE_ATTRIBUTE, "task_queue"),
+        (crate::namespace::DISPLAY_NAME_ATTRIBUTE, "display_name"),
+    ] {
+        schema
+            .register(name, aion_core::SearchAttributeType::String)
+            .map_err(|error| ServerError::Config {
+                message: format!("failed to register {label} search attribute: {error}"),
+            })?;
+    }
+    Ok(schema)
+}
+
 /// Assemble the embedded engine from the server's runtime configuration.
 ///
 /// Factored out of [`ServerState::build_with_connected_store`] to keep that
@@ -1295,23 +1319,7 @@ struct EngineAssembly<'a> {
 /// bootstrap gate fed from real ownership and the `owned_shards` hook that drives
 /// both scoping and the per-shard election before recovery.
 async fn build_engine(assembly: EngineAssembly<'_>) -> Result<aion::Engine, ServerError> {
-    let mut search_attribute_schema = aion_core::SearchAttributeSchema::new();
-    search_attribute_schema
-        .register(
-            crate::namespace::NAMESPACE_ATTRIBUTE,
-            aion_core::SearchAttributeType::String,
-        )
-        .map_err(|error| ServerError::Config {
-            message: format!("failed to register namespace search attribute: {error}"),
-        })?;
-    search_attribute_schema
-        .register(
-            crate::namespace::TASK_QUEUE_ATTRIBUTE,
-            aion_core::SearchAttributeType::String,
-        )
-        .map_err(|error| ServerError::Config {
-            message: format!("failed to register task_queue search attribute: {error}"),
-        })?;
+    let search_attribute_schema = server_search_attribute_schema()?;
     let runtime = assembly.runtime;
     let builder = EngineBuilder::new()
         .store_arc(assembly.instrumented_store.clone())
@@ -2338,6 +2346,41 @@ mod tests {
             owned_shards: Vec::new(),
             cors_allowed_origins: Vec::new(),
         }
+    }
+
+    /// The engine's schema must accept EVERY attribute the server's start
+    /// writer actually records — the invariant, not an enumeration of names.
+    ///
+    /// The two sides are genuinely coupled at runtime: the recorder validates
+    /// each attribute against this schema before appending, so an attribute the
+    /// writer produces and the schema does not register fails the START, not
+    /// just the label (#211). The map is taken from the production
+    /// `start_search_attributes` with every optional field populated, so any
+    /// future attribute the writer learns to record is covered here without
+    /// this test being edited.
+    #[test]
+    fn engine_schema_accepts_every_attribute_the_start_writer_records()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let schema = super::server_search_attribute_schema()?;
+        let recorded = crate::api::handlers::workflows::start_search_attributes(
+            "tenant-a",
+            Some("gpu"),
+            Some("Nightly settlement"),
+        );
+
+        assert!(
+            recorded.contains_key(crate::namespace::DISPLAY_NAME_ATTRIBUTE),
+            "the fixture must exercise the display-name attribute, or this test \
+             cannot see its registration go missing"
+        );
+        for (name, value) in &recorded {
+            schema.validate(name, value).map_err(|error| {
+                format!(
+                    "the start writer records {name}, but the engine's schema refuses it: {error}"
+                )
+            })?;
+        }
+        Ok(())
     }
 
     #[tokio::test]

@@ -17,7 +17,10 @@ import {
   type JsonObject,
   missingRequiredPaths,
 } from '../lib/schemaForm';
-import { startWorkflowDraftStoreFor } from '../lib/startWorkflowDraft';
+import {
+  startWorkflowDraftStoreFor,
+  startWorkflowParamsFromDraft,
+} from '../lib/startWorkflowDraft';
 import { StartInputEditor, type StartInputMode, serializeInput } from './StartInputEditor';
 
 export type StartWorkflowFormProps = {
@@ -154,21 +157,20 @@ export function StartWorkflowForm({
       }
     }
 
-    const trimmedRoutingKey = draft.routingKey.trim();
-    const trimmedTaskQueue = draft.taskQueue.trim();
+    // #211: a whitespace-only display name is refused here, before the request
+    // is built — the same answer the server and every SDK give, rather than a
+    // silent unnamed start the operator never hears about.
+    const built = startWorkflowParamsFromDraft(draft, parsed.value);
+    if (!built.ok) {
+      setInputError(built.error);
+      return;
+    }
+
     setStartedNamespace(effectiveNamespace);
-    start.mutate(
-      {
-        workflowType: trimmedType,
-        input: parsed.value,
-        ...(trimmedRoutingKey.length === 0 ? {} : { routingKey: trimmedRoutingKey }),
-        ...(trimmedTaskQueue.length === 0 ? {} : { taskQueue: trimmedTaskQueue }),
-      },
-      {
-        // A confirmed start consumes the draft; a failed one keeps it for retry.
-        onSuccess: () => clearDraft(),
-      }
-    );
+    start.mutate(built.params, {
+      // A confirmed start consumes the draft; a failed one keeps it for retry.
+      onSuccess: () => clearDraft(),
+    });
   }
 
   return (
@@ -228,6 +230,19 @@ export function StartWorkflowForm({
             value={draft.taskQueue}
             onChange={(event) => updateDraft({ taskQueue: event.currentTarget.value })}
           />
+        </label>
+        <label className="flex flex-col gap-2 font-medium text-sm" htmlFor={ids.displayName}>
+          Display name (optional)
+          <input
+            className={FIELD_CLASS}
+            id={ids.displayName}
+            placeholder="a label for this run; omit it to show the bare id"
+            value={draft.displayName}
+            onChange={(event) => updateDraft({ displayName: event.currentTarget.value })}
+          />
+          <span className="font-normal text-muted-foreground text-xs">
+            A label only — the run is still addressed by its id, and it can be renamed later.
+          </span>
         </label>
         <div className="flex items-center gap-3">
           <Button disabled={!canSubmit} type="submit">
@@ -300,5 +315,6 @@ function useFieldIds() {
     input: `${prefix}-input`,
     routingKey: `${prefix}-routing-key`,
     taskQueue: `${prefix}-task-queue`,
+    displayName: `${prefix}-display-name`,
   };
 }

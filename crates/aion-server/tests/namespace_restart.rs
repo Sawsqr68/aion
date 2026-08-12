@@ -161,6 +161,7 @@ fn start_request(
         input: Some(Payload::from_json(input)?.into()),
         routing_key: None,
         task_queue: None,
+        display_name: None,
     })
 }
 
@@ -178,6 +179,7 @@ fn start_request_on_task_queue(
         input: Some(Payload::from_json(input)?.into()),
         routing_key: None,
         task_queue: Some(task_queue.to_owned()),
+        display_name: None,
     })
 }
 

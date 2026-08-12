@@ -1,9 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  BLANK_DISPLAY_NAME_ERROR,
   EMPTY_START_WORKFLOW_DRAFT,
+  type StartWorkflowDraft,
   startWorkflowDraftStore,
   startWorkflowDraftStoreFor,
+  startWorkflowParamsFromDraft,
 } from './startWorkflowDraft';
 
 describe('startWorkflowDraftStoreFor', () => {
@@ -41,5 +44,84 @@ describe('startWorkflowDraftStoreFor', () => {
     expect(authoring.getState().draft).toEqual(EMPTY_START_WORKFLOW_DRAFT);
     expect(other.getState().draft.workflowType).toBe('other_flow');
     other.getState().clearDraft();
+  });
+});
+
+describe('startWorkflowParamsFromDraft', () => {
+  function draft(overrides: Partial<StartWorkflowDraft> = {}): StartWorkflowDraft {
+    return { ...EMPTY_START_WORKFLOW_DRAFT, workflowType: 'EmailDigest', ...overrides };
+  }
+
+  function ok(result: ReturnType<typeof startWorkflowParamsFromDraft>) {
+    if (!result.ok) throw new Error(`expected params, got refusal: ${result.error}`);
+    return result.params;
+  }
+
+  // Catches: an EMPTY field sending `displayName: ''`. Nothing typed is the
+  // operator choosing nothing, which must reach the wire as ABSENCE — an empty
+  // string is a value the server would have to interpret, and it refuses it.
+  test('an empty display name field is omitted entirely, never sent as an empty string', () => {
+    const params = ok(startWorkflowParamsFromDraft(draft({ displayName: '' }), {}));
+
+    expect('displayName' in params).toBe(false);
+    expect(params).toEqual({ workflowType: 'EmailDigest', input: {} });
+  });
+
+  // Catches: a whitespace-only name being silently dropped, which would start an
+  // unnamed run while the operator believed they had named it. The server, and
+  // every SDK, refuse a present-but-blank name; the console must give the same
+  // answer rather than teach that blank means unnamed.
+  test.each([
+    '   ',
+    '\t',
+    '\n ',
+    ' ',
+  ])('a whitespace-only display name is refused, not quietly dropped (%j)', (blank) => {
+    const result = startWorkflowParamsFromDraft(draft({ displayName: blank }), {});
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.error).toBe(BLANK_DISPLAY_NAME_ERROR);
+  });
+
+  // Catches: the name field being dropped, or sent untrimmed.
+  test('a typed display name travels trimmed', () => {
+    const params = ok(
+      startWorkflowParamsFromDraft(draft({ displayName: '  nightly digest  ' }), { to: 'ops' })
+    );
+
+    expect(params.displayName).toBe('nightly digest');
+    expect(params.input).toEqual({ to: 'ops' });
+  });
+
+  // Catches: the routing fields diverging from the omission rule, and the name
+  // field being folded back INTO it. The two rules differ on purpose — the
+  // server reads a blank routing key or task queue as "not selected" but
+  // refuses a blank name — so this pins both halves in one place.
+  test('routing fields trim-or-omit; the display name refuses a blank instead', () => {
+    const filled = ok(
+      startWorkflowParamsFromDraft(
+        draft({ routingKey: ' shard-1 ', taskQueue: ' gpu ', displayName: ' named ' }),
+        {}
+      )
+    );
+    expect(filled).toEqual({
+      workflowType: 'EmailDigest',
+      input: {},
+      routingKey: 'shard-1',
+      taskQueue: 'gpu',
+      displayName: 'named',
+    });
+
+    const blankRouting = ok(
+      startWorkflowParamsFromDraft(draft({ routingKey: ' ', taskQueue: '', displayName: '' }), {})
+    );
+    expect(blankRouting).toEqual({ workflowType: 'EmailDigest', input: {} });
+
+    const blankName = startWorkflowParamsFromDraft(
+      draft({ routingKey: ' ', taskQueue: '', displayName: '\t' }),
+      {}
+    );
+    expect(blankName.ok).toBe(false);
   });
 });

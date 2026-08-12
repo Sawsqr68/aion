@@ -29,6 +29,14 @@ T = TypeVar("T")
 # handle for a key reused with a different task queue would silently discard the
 # caller's second, different intent and hand back the first workflow as though it
 # had honoured it.
+#
+# `display_name` (#211) is deliberately NOT in here. The fingerprint answers "is
+# this the same act?", and a label carries no identity — nothing resolves a
+# workflow by name — so two starts differing only in their name are the same act
+# and must dedupe to one run rather than conflict. What the exclusion costs is
+# reported instead of swallowed: see `StartOutcome.display_name_not_applied`.
+# The Rust caller SDK keys the same six values, and the cross-SDK conformance
+# contract requires the two to agree on what a key *means*.
 StartFingerprint = tuple[str, str, str, bytes, str | None, str | None]
 
 
@@ -68,6 +76,96 @@ class RunOutcome:
 
     run_id: str
     status: str
+
+
+@dataclass(frozen=True, slots=True)
+class DisplayNameNotApplied:
+    """The report that an idempotent start replay did not apply a display name (#211).
+
+    Carries both sides so the caller can act on the difference: use a different
+    idempotency key, accept the standing name, or rename the run through the
+    console/HTTP rename surface (`POST /workflows/rename`). Renaming is NOT an
+    operation on this SDK in this release, so it is not a remedy this object can
+    hand you — it is an operator action taken elsewhere.
+    """
+
+    requested: str
+    """The display name this start asked for. Never blank and never ``None``:
+    the report is raised only for a call that actually requested a name, so
+    there is always a name that did not get applied."""
+
+    standing: str | None
+    """The display name the matched run was started with and still wears
+    (``None`` when that run was started unnamed)."""
+
+
+@dataclass(frozen=True, slots=True)
+class StartOutcome:
+    """What :meth:`Client.start` returns: the started (or idempotently replayed)
+    run, plus the note that a requested display name was NOT applied.
+
+    The note exists because ``display_name`` is deliberately outside
+    :data:`StartFingerprint`: the fingerprint answers "is this the same act?",
+    and a label carries no identity, so two starts differing only in name are the
+    same act and dedupe to one run. That leaves a second, different name with
+    nowhere to go — and dropping it silently would hand the caller a run wearing
+    a name they did not ask for while saying nothing. So the drop is REPORTED
+    here instead. The replayed run keeps its EXISTING name; nothing is renamed
+    behind the caller's back.
+    """
+
+    handle: WorkflowHandle
+    """Handle to the started run, or to the existing run an idempotent replay
+    matched."""
+
+    display_name_not_applied: DisplayNameNotApplied | None
+    """Present ONLY when this call REQUESTED a display name, an idempotency-key
+    replay matched an existing run, and that run does not already wear the
+    requested name — whether it wears a different one or none at all.
+
+    ``None`` on every other path: a first start (which applies the name it asked
+    for), a replay that requested the same name, and — the rule this field's
+    absence states — any call that requested NO name. A caller who asked for
+    nothing had nothing dropped, so there is nothing to report, even when the
+    standing run wears a name of its own."""
+
+
+@dataclass(frozen=True, slots=True)
+class _CachedStart:
+    """One idempotency-cache entry: the fingerprint the start was keyed by, the
+    handle to replay, and the display name that start requested (#211).
+
+    The display name is stored BESIDE the fingerprint, never inside it. Inside,
+    it would make two starts differing only in a label two different acts and
+    break the dedupe ruling; absent entirely, a replay could not tell the caller
+    which name the standing run actually wears. Beside is what lets the replay
+    dedupe AND report.
+    """
+
+    fingerprint: StartFingerprint
+    handle: WorkflowHandle
+    display_name: str | None
+
+    def display_name_not_applied(self, requested: str | None) -> DisplayNameNotApplied | None:
+        """The report that ``requested`` was not applied, or ``None`` when there
+        is nothing to report.
+
+        The rule, exactly: a report is raised when this replay ASKED for a name
+        that the standing run does not already wear — whether that run wears a
+        different name or no name at all. Both of those callers asked for
+        something the replay could not give them, so both are told.
+
+        A replay that asked for NO name gets no report, whatever the standing run
+        wears. Nothing was requested, so nothing was dropped, and the report's
+        absence is precisely the statement that no requested name went missing
+        (see :attr:`StartOutcome.display_name_not_applied`). Raising it there
+        would report a drop that never happened and push callers who branch on
+        the field into acting on a run they never tried to name.
+        """
+
+        if requested is None or requested == self.display_name:
+            return None
+        return DisplayNameNotApplied(requested=requested, standing=self.display_name)
 
 
 class Client:
@@ -121,9 +219,10 @@ class Client:
         # SDK-boundary start idempotency (the contract's hard case): the same
         # key retried with an identical request returns the original handle;
         # conflicting reuse raises AlreadyExists. Keyed by idempotency key,
-        # fingerprinted over every field of the start request (see
-        # StartFingerprint).
-        self._idempotent_starts: dict[str, tuple[StartFingerprint, WorkflowHandle]] = {}
+        # fingerprinted over every IDENTIFYING field of the start request (see
+        # StartFingerprint), with the requested display name carried alongside
+        # so a replay can report a name it did not apply (see _CachedStart).
+        self._idempotent_starts: dict[str, _CachedStart] = {}
 
     @classmethod
     async def connect(
@@ -201,8 +300,9 @@ class Client:
         idempotency_key: str | None = None,
         routing_key: str | None = None,
         task_queue: str | None = None,
-    ) -> WorkflowHandle:
-        """Start a workflow and return a bound ``WorkflowHandle``.
+        display_name: str | None = None,
+    ) -> StartOutcome:
+        """Start a workflow and return a :class:`StartOutcome` bound to the run.
 
         ``routing_key`` steers the start to the owner of
         ``shard_for(routing_key)``, forwarding there when the dialed node is not
@@ -211,10 +311,33 @@ class Client:
         recorded durably on the start so it survives replay and failover;
         omitting it keeps the namespace's default queue.
 
-        Neither accepts an empty or whitespace-only string. The server treats a
-        blank value as "not selected" and falls back to the default, so accepting
-        one would mean a caller who believed they had chosen a shard or a queue
-        silently got neither. Pass ``None`` to mean "no selection".
+        ``display_name`` is the operator-facing name for the workflow this start
+        creates (#211), recorded durably on the start. It is a LABEL over the
+        UUID identity, never an address: no SDK call resolves a workflow by name,
+        and two workflows may wear the same one. Omitting it starts the workflow
+        unnamed, which shows its bare UUID. It is trimmed before it is sent,
+        because the server trims it before recording it — so the name this SDK
+        remembers is the name the workflow actually wears, and surrounding
+        whitespace is never mistaken for a different name.
+
+        You name the run you are starting, but the label READS BACK per
+        workflow: the recorded attribute carries no run id, so every reader folds
+        it over the whole history, last write wins. A continue-as-new successor
+        of this run inherits the name, and describing any run of the workflow
+        returns whatever name was recorded most recently.
+
+        None of the three accepts an empty or whitespace-only string; pass
+        ``None`` to mean "no selection" / "no name". For ``routing_key`` and
+        ``task_queue`` the server reads a blank as "not selected" and falls back
+        to the default, so a caller who believed they had chosen one would
+        silently get neither. For ``display_name`` the server REFUSES a
+        present-but-blank name with ``invalid_input`` rather than reading it as
+        unnamed — only ABSENCE starts a run unnamed.
+
+        The return is a :class:`StartOutcome` rather than a bare handle so an
+        idempotent replay can REPORT a display name it did not apply instead of
+        dropping it in silence — see
+        :attr:`StartOutcome.display_name_not_applied`.
 
         Raises:
             AlreadyExists, Unauthenticated, NamespaceDenied, Unavailable,
@@ -225,6 +348,18 @@ class Client:
             raise InvalidArgument("workflow_type must not be empty")
         _reject_blank_selection("routing_key", routing_key)
         _reject_blank_selection("task_queue", task_queue)
+        _reject_blank_selection("display_name", display_name)
+        # The server trims the name before recording it, so the run wears the
+        # TRIMMED string. Trim here too and the SDK's cached "standing name" is
+        # the name the run actually has — otherwise a replay comparing `"X"`
+        # against a cached `"  X  "` would report a difference the server had
+        # already erased. This is not a silent normalization: it is the same
+        # trim the server performs, applied where the SDK's own bookkeeping can
+        # see it. Blank-after-trim was refused just above, so this can never
+        # turn a name into no name. One trimmed value is then what is SENT, what
+        # is STORED in the cache entry, and what is COMPARED on a replay — one
+        # value, three uses, so they cannot disagree.
+        display_name = display_name.strip() if display_name is not None else None
         payload = ensure_payload(input, raw=raw, content_type=content_type)
         fingerprint: StartFingerprint | None = None
         if idempotency_key is not None:
@@ -238,23 +373,32 @@ class Client:
             )
             cached = self._idempotent_starts.get(idempotency_key)
             if cached is not None:
-                cached_fingerprint, cached_handle = cached
-                if cached_fingerprint == fingerprint:
-                    return cached_handle
+                if cached.fingerprint == fingerprint:
+                    # The run already exists and keeps the name it already
+                    # wears. If this call asked for a different one, say so
+                    # rather than quietly handing back a differently-named run.
+                    return StartOutcome(
+                        handle=cached.handle,
+                        display_name_not_applied=cached.display_name_not_applied(display_name),
+                    )
                 raise _idempotency_conflict()
         request = self._message("StartWorkflowRequest")
         request.namespace = namespace or self.namespace
         request.workflow_type = workflow_type
         assign_payload(request.input, payload)
-        # `routing_key` and `task_queue` are proto3 `optional`, so assigning them
-        # is what marks them present. Leaving them unassigned is how "no
-        # selection" is expressed on the wire — never an empty string, which the
-        # server reads as absent anyway but which would make the request claim a
-        # selection it does not carry.
+        # `routing_key`, `task_queue`, and `display_name` are proto3 `optional`,
+        # so assigning them is what marks them present. Leaving them unassigned
+        # is how "no selection" is expressed on the wire — never an empty string.
+        # For `routing_key` and `task_queue` a blank would make the request claim
+        # a selection it does not carry; for `display_name` the server refuses a
+        # present-but-blank value outright, so absence is the only way to start
+        # a run unnamed.
         if routing_key is not None:
             request.routing_key = routing_key
         if task_queue is not None:
             request.task_queue = task_queue
+        if display_name is not None:
+            request.display_name = display_name
         try:
             response = await self._transport.start_workflow(
                 request,
@@ -274,10 +418,17 @@ class Client:
         )
         if idempotency_key is not None and fingerprint is not None:
             recorded = self._idempotent_starts.get(idempotency_key)
-            if recorded is not None and recorded[0] != fingerprint:
+            if recorded is not None and recorded.fingerprint != fingerprint:
                 raise _idempotency_conflict()
-            self._idempotent_starts.setdefault(idempotency_key, (fingerprint, handle))
-        return handle
+            self._idempotent_starts.setdefault(
+                idempotency_key,
+                _CachedStart(fingerprint=fingerprint, handle=handle, display_name=display_name),
+            )
+        # This call reached the server, so whatever name it asked for was applied
+        # to the run it started: there is nothing unapplied to report. That holds
+        # even when a concurrent start won the cache race above — the handle
+        # returned here is THIS start's own run, wearing THIS call's own name.
+        return StartOutcome(handle=handle, display_name_not_applied=None)
 
     async def signal(
         self,
@@ -319,8 +470,14 @@ class Client:
     ) -> T | JSONValue | bytes:
         """Run a synchronous workflow query and decode its result.
 
-        Query arguments are validated now and will be forwarded once AW exposes
-        a query payload field in ``QueryRequest``.
+        Query arguments passed here are validated and then DROPPED: this SDK
+        does not populate ``QueryRequest.arguments``, so the server substitutes
+        the canonical JSON ``null`` document and the handler is called with no
+        arguments. The wire field exists — it is tag 5 on ``QueryRequest`` and
+        the regenerated stubs carry it — so this is a gap in this client, not in
+        the contract, and it is tracked as one rather than described as a
+        contract limitation. Until it is closed, do not pass ``payload``/``raw``
+        expecting the handler to see them.
 
         Raises:
             NotFound, QueryFailed, QueryTimeout, Unauthenticated,
@@ -531,18 +688,27 @@ def _idempotency_conflict() -> AlreadyExists:
 
 
 def _reject_blank_selection(field: str, value: str | None) -> None:
-    """Refuse a present-but-blank routing selection.
+    """Refuse a present-but-blank start selection.
 
-    The server trims these fields and treats a blank as "not selected", so a
-    caller passing `""` or `"  "` gets the default placement or queue with no
-    error — the request looks honoured and is not. `None` is the way to say "no
-    selection"; a blank string is a caller mistake and is reported as one.
+    `None` is the only way to say "no selection"; a blank string is a caller
+    mistake and is reported as one. The server's own handling of a blank differs
+    by field, and refusing here gives every field the same answer before a round
+    trip:
+
+    * `routing_key` and `task_queue` — the server trims them and reads a blank
+      as "not selected", falling back to the default placement or the
+      namespace's default queue. A caller who believed they had chosen one would
+      silently get neither, with no error.
+    * `display_name` — the server REFUSES a present-but-blank name with
+      `invalid_input`; it does NOT read one as unnamed. Absence is how a start
+      says "unnamed". Forwarding a blank would only buy a round trip to the same
+      refusal.
     """
 
     if value is not None and not value.strip():
         raise InvalidArgument(
-            f"{field} must not be empty or whitespace; the server reads a blank "
-            f"{field} as no selection at all, so pass None to mean that explicitly"
+            f"{field} must not be empty or whitespace; pass None to mean "
+            f"no {field} explicitly"
         )
 
 

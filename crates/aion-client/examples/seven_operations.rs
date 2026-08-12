@@ -67,7 +67,8 @@ async fn run() -> Result<(), ClientError> {
                 ..StartOptions::default()
             },
         )
-        .await?;
+        .await?
+        .handle;
     println!(
         "started workflow={} run={}",
         handle.workflow_id(),

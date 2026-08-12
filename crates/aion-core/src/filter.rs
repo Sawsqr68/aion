@@ -89,6 +89,18 @@ pub struct WorkflowSummary {
     /// whose current-lease terminal is [`Event::WorkflowFailed`]. `None` otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure_reason: Option<String>,
+    /// The WORKFLOW's operator-facing display name (#211), projected from the
+    /// `aion.display_name` search attribute (last write wins, so a rename's
+    /// later recorded update supersedes the start-time name). A label over the
+    /// UUID identity, never an address: `None` renders as the bare UUID.
+    ///
+    /// Per workflow, not per run, unlike the rest of this summary: the recorded
+    /// attribute carries no run id and the projection folds the whole history,
+    /// so a continue-as-new successor's summary carries the name its
+    /// predecessor was wearing — see
+    /// [`WorkflowSummary::from_history`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
 }
 
 impl WorkflowSummary {
@@ -104,6 +116,13 @@ impl WorkflowSummary {
     /// lease's terminal event is [`Event::WorkflowFailed`] (see
     /// [`failure_projection`]); a reopened, running, completed, or cancelled
     /// workflow leaves both `None`.
+    ///
+    /// `display_name` (#211) is NOT scoped that way. It is folded over the
+    /// whole history by [`crate::display_name`], last write wins, and the
+    /// recorded attribute carries no run id — so it is a per-WORKFLOW label
+    /// even though the rest of this summary projects the current run. Hand this
+    /// a history that continued as new and the successor's summary carries the
+    /// name its predecessor was wearing, until something renames it.
     #[must_use]
     pub fn from_history(events: &[Event]) -> Option<Self> {
         let (workflow_id, workflow_type, started_at) = events.iter().rev().find_map(|event| {
@@ -133,6 +152,7 @@ impl WorkflowSummary {
             parent: None,
             failed_step,
             failure_reason,
+            display_name: crate::display_name(events),
         })
     }
 }
@@ -259,6 +279,7 @@ mod tests {
             parent,
             failed_step: None,
             failure_reason: None,
+            display_name: None,
         }
     }
 
@@ -480,6 +501,115 @@ mod tests {
         assert_eq!(summary.started_at, recorded_at(1));
         assert_eq!(summary.ended_at, Some(recorded_at(3)));
         assert_eq!(summary.parent, None);
+        // No aion.display_name attribute was recorded, so the summary is unnamed.
+        assert_eq!(summary.display_name, None);
+        Ok(())
+    }
+
+    /// #211: `from_history` projects the workflow's current display name from
+    /// the recorded `aion.display_name` attribute, folded over the whole
+    /// history, last write wins — a rename's later recorded update supersedes
+    /// the start-time name.
+    #[test]
+    fn summary_from_history_projects_latest_display_name() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let workflow_id = WorkflowId::new(uuid::Uuid::from_u128(1));
+        let name_event = |seq: u64, name: &str| Event::SearchAttributesUpdated {
+            envelope: envelope(seq, &workflow_id),
+            workflow_id: workflow_id.clone(),
+            attributes: HashMap::from([(
+                crate::DISPLAY_NAME_ATTRIBUTE.to_owned(),
+                SearchAttributeValue::String(String::from(name)),
+            )]),
+        };
+        let events = vec![
+            Event::WorkflowStarted {
+                envelope: envelope(1, &workflow_id),
+                workflow_type: String::from("checkout"),
+                input: payload("input")?,
+                run_id: RunId::new(uuid::Uuid::from_u128(1)),
+                parent_run_id: None,
+                package_version: crate::PackageVersion::new("a".repeat(64)),
+            },
+            name_event(2, "Nightly settlement"),
+            name_event(3, "Nightly settlement (rerun)"),
+        ];
+
+        let summary = WorkflowSummary::from_history(&events).ok_or("summary")?;
+        assert_eq!(
+            summary.display_name.as_deref(),
+            Some("Nightly settlement (rerun)"),
+            "the latest recorded name wins; history keeps both"
+        );
+        Ok(())
+    }
+
+    /// #211: the display name is a per-WORKFLOW label, not a per-run one — the
+    /// documented consequence being that a continue-as-new SUCCESSOR reads back
+    /// the name its predecessor was wearing.
+    ///
+    /// The recorded attribute carries no run id and the projection folds the
+    /// whole history, so the successor's summary — projected from the LATER
+    /// `WorkflowStarted`, as `summary_projects_current_run_after_continue_as_new`
+    /// pins — still carries the predecessor's name. Anything that documents this
+    /// as "the run's display name" is describing a scoping the code does not
+    /// have.
+    #[test]
+    fn a_continue_as_new_successor_inherits_its_predecessors_display_name()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let workflow_id = WorkflowId::new(uuid::Uuid::from_u128(1));
+        let parent_run_id = RunId::new(uuid::Uuid::from_u128(2));
+        let events = vec![
+            Event::WorkflowStarted {
+                envelope: envelope(1, &workflow_id),
+                workflow_type: String::from("checkout"),
+                input: payload("input")?,
+                run_id: RunId::new(uuid::Uuid::from_u128(1)),
+                parent_run_id: None,
+                package_version: crate::PackageVersion::new("a".repeat(64)),
+            },
+            // Named while the FIRST run was live.
+            Event::SearchAttributesUpdated {
+                envelope: envelope(2, &workflow_id),
+                workflow_id: workflow_id.clone(),
+                attributes: HashMap::from([(
+                    crate::DISPLAY_NAME_ATTRIBUTE.to_owned(),
+                    SearchAttributeValue::String(String::from("Nightly settlement")),
+                )]),
+            },
+            Event::WorkflowContinuedAsNew {
+                envelope: envelope(3, &workflow_id),
+                input: payload("continued-input")?,
+                workflow_type: Some(String::from("checkout")),
+                parent_run_id: parent_run_id.clone(),
+            },
+            // The successor records no name of its own.
+            Event::WorkflowStarted {
+                envelope: envelope(4, &workflow_id),
+                workflow_type: String::from("checkout"),
+                input: payload("continued-input")?,
+                run_id: RunId::new(uuid::Uuid::from_u128(3)),
+                parent_run_id: Some(parent_run_id),
+                package_version: crate::PackageVersion::new("a".repeat(64)),
+            },
+        ];
+
+        let summary = WorkflowSummary::from_history(&events).ok_or("summary")?;
+        assert_eq!(
+            summary.status,
+            WorkflowStatus::Running,
+            "the summary is the successor's, not the predecessor's"
+        );
+        assert_eq!(
+            summary.display_name.as_deref(),
+            Some("Nightly settlement"),
+            "the successor inherits the label; it is per workflow, not per run"
+        );
+        assert_eq!(
+            crate::display_name(&events).as_deref(),
+            Some("Nightly settlement"),
+            "the history projector agrees with the summary"
+        );
         Ok(())
     }
 

@@ -21,6 +21,8 @@ export type TimerCancelCause = "WorkflowIntent" | "CancelTeardown";
 
 export type Namespace = string;
 
+export const DISPLAY_NAME_ATTRIBUTE = "aion.display_name";
+
 export type ContentType = "Json";
 
 export type PayloadElision = { __elided: true, size_bytes: number, };
@@ -155,7 +157,20 @@ failed_step?: string | null,
  * The terminal `WorkflowFailed` error message, populated ONLY for a workflow
  * whose current-lease terminal is [`Event::WorkflowFailed`]. `None` otherwise.
  */
-failure_reason?: string | null, };
+failure_reason?: string | null,
+/**
+ * The WORKFLOW's operator-facing display name (#211), projected from the
+ * `aion.display_name` search attribute (last write wins, so a rename's
+ * later recorded update supersedes the start-time name). A label over the
+ * UUID identity, never an address: `None` renders as the bare UUID.
+ *
+ * Per workflow, not per run, unlike the rest of this summary: the recorded
+ * attribute carries no run id and the projection folds the whole history,
+ * so a continue-as-new successor's summary carries the name its
+ * predecessor was wearing — see
+ * [`WorkflowSummary::from_history`].
+ */
+display_name?: string | null, };
 
 export type SearchAttributeType = "String" | "Int" | "Float" | "Bool" | "Datetime" | "KeywordList";
 

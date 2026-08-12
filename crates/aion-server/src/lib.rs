@@ -97,8 +97,8 @@ pub use dev_ui::{ActivityMockRegistry, DevMockingDispatcher, MockedActivity};
 pub use error::{ServerError, StreamFailure};
 pub use mcp::{AionToolService, McpRuntime};
 pub use namespace::{
-    CallerIdentity, NAMESPACE_ATTRIBUTE, NamespaceGuard, NamespaceMinter, NamespaceOperation,
-    NamespaceResolver, ScheduleNamespaceSource, ScheduleTarget, ScopedEngine,
+    CallerIdentity, DISPLAY_NAME_ATTRIBUTE, NAMESPACE_ATTRIBUTE, NamespaceGuard, NamespaceMinter,
+    NamespaceOperation, NamespaceResolver, ScheduleNamespaceSource, ScheduleTarget, ScopedEngine,
     StaticScheduleNamespaces, StaticWorkflowNamespaces, SubscriptionScope, TASK_QUEUE_ATTRIBUTE,
     WorkflowAttribution, WorkflowNamespaceSource, WorkflowTarget,
 };

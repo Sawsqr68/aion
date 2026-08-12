@@ -48,6 +48,11 @@ pub enum ForwardRequest {
     Pause(generated::PauseRequest),
     /// A `resume` to relay verbatim to the owner (#204).
     Resume(generated::ResumeRequest),
+    /// A `rename` to relay verbatim to the owner (#211). A rename APPENDS a
+    /// recorded event, so it must reach the shard owner like every other write;
+    /// serving it locally would append from a non-owner and break the
+    /// single-writer invariant.
+    Rename(generated::RenameRequest),
     /// An already-authorized namespace mint to relay to the namespace registry
     /// shard's owner, which applies its own auto-create policy to it.
     MintNamespace(generated::MintNamespaceRequest),
@@ -70,6 +75,8 @@ pub enum ForwardReply {
     Pause(generated::PauseResponse),
     /// The owner's `resume` reply (#204).
     Resume(generated::ResumeResponse),
+    /// The owner's `rename` reply (#211).
+    Rename(generated::RenameResponse),
     /// The owner's namespace-mint ack.
     MintNamespace(generated::MintNamespaceResponse),
 }
@@ -203,6 +210,14 @@ impl RequestForwarder for GrpcRequestForwarder {
                     .resume(outbound)
                     .await
                     .map(|response| ForwardReply::Resume(response.into_inner()))
+            }
+            ForwardRequest::Rename(message) => {
+                let mut outbound = Request::new(message);
+                *outbound.metadata_mut() = metadata;
+                client
+                    .rename(outbound)
+                    .await
+                    .map(|response| ForwardReply::Rename(response.into_inner()))
             }
             ForwardRequest::MintNamespace(message) => {
                 let mut outbound = Request::new(message);

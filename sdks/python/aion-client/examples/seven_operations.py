@@ -38,12 +38,26 @@ async def run() -> None:
         # separate address from the gRPC endpoint; there is no default.
         stream_endpoint=os.environ.get("AION_STREAM_URL"),
     ) as client:
-        handle = await client.start(
+        outcome = await client.start(
             "conformance_echo",
             {"message": "hello", "counter": 1},
             idempotency_key=f"aion-client-python-seven-operations-{os.getpid()}",
+            # A LABEL over the run's UUID identity, for the operator's eyes. It
+            # is never an address: nothing here or anywhere else in the SDK
+            # resolves a workflow by name.
+            display_name="seven-operations example",
         )
+        handle = outcome.handle
         print(f"started workflow={handle.workflow_id} run={handle.run_id}")
+        # An idempotency-key replay keeps the run it matched, and the name that
+        # run already wears. When this call asked for a different one, the
+        # outcome says so rather than dropping it in silence.
+        if outcome.display_name_not_applied is not None:
+            not_applied = outcome.display_name_not_applied
+            print(
+                f"display name {not_applied.requested!r} was NOT applied; the "
+                f"existing run keeps {not_applied.standing!r}"
+            )
 
         await handle.signal("record", {"value": "signal-observed"})
         print("sent signal record")

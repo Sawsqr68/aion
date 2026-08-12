@@ -29,6 +29,50 @@ pub(crate) fn optional_str(call: &ToolCall, key: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// An optional string argument that must not be BLANK when it is present.
+///
+/// [`optional_str`] reads `""` as absent, which is the right reading for a
+/// selector — `task_queue`, `routing_key`, `run_id` — where "not selected" and
+/// "selected as nothing" mean the same thing. It is the wrong reading for a
+/// value the caller is ASSERTING. A present but blank `display_name` read as
+/// absent starts the run unnamed and answers success, so an operator who
+/// believed they had named the run is told nothing about the name being
+/// dropped. MCP is the transport where a blank string is most likely — a model
+/// filling in a schema field it has no value for — so the refusal is made here,
+/// where the offending argument can be named back to the caller, instead of
+/// depending on the argument surviving as far as the start handler.
+///
+/// Whitespace-only is refused on the same ground rather than as a separate
+/// rule: the start handler and the engine's rename both trim before recording,
+/// so `"   "` records exactly as much of a name as `""` does.
+///
+/// An ABSENT argument stays `Ok(None)`. That is a caller who asked for no
+/// value, not a caller whose value was dropped.
+///
+/// The accepted value is handed on UNTRIMMED, exactly as the HTTP and gRPC
+/// boundaries hand it on: the start handler trims and the engine records the
+/// trimmed string, and keeping a single trimming authority is what stops the
+/// three transports from disagreeing about what was recorded.
+pub(crate) fn optional_non_blank_str(
+    call: &ToolCall,
+    key: &str,
+) -> Result<Option<String>, ToolFailure> {
+    let Some(value) = call.arguments.get(key).and_then(Value::as_str) else {
+        return Ok(None);
+    };
+    if value.trim().is_empty() {
+        return Err(ToolFailure::new(
+            format!(
+                "`{key}` must not be blank on `{}`; omit it entirely rather than sending an \
+                 empty or whitespace-only value",
+                call.name
+            ),
+            json!({ "code": "invalid_argument", "argument": key, "value": value }),
+        ));
+    }
+    Ok(Some(value.to_owned()))
+}
+
 /// A required UUID-shaped workflow identifier.
 pub(crate) fn required_workflow_id(call: &ToolCall, key: &str) -> Result<WorkflowId, ToolFailure> {
     let raw = required_str(call, key)?;
@@ -140,7 +184,10 @@ mod tests {
     use aion_mcp::tools::service::ToolCall;
     use serde_json::{Map, Value, json};
 
-    use super::{optional_bool, optional_run_id, optional_u32, required_str, required_u32};
+    use super::{
+        optional_bool, optional_non_blank_str, optional_run_id, optional_u32, required_str,
+        required_u32,
+    };
 
     fn call(arguments: &Value) -> Result<ToolCall, serde_json::Error> {
         let arguments: Map<String, Value> = serde_json::from_value(arguments.clone())?;
@@ -174,6 +221,65 @@ mod tests {
             None
         );
         assert!(optional_run_id(&call(&json!({ "run_id": "nope" }))?, "run_id").is_err());
+        Ok(())
+    }
+
+    /// #211: a present but blank `display_name` is a caller mistake, not a
+    /// request for an unnamed run. Reading it as absent would start the run
+    /// unnamed and answer success — the silent drop the boundary exists to
+    /// stop — and would also put MCP at odds with the HTTP/gRPC start handler,
+    /// which refuses the same input.
+    #[test]
+    fn a_present_but_blank_value_is_refused_rather_than_read_as_absent()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for blank in ["", "   ", "\t\n "] {
+            let call = call(&json!({ "display_name": blank }))?;
+            let failure = optional_non_blank_str(&call, "display_name")
+                .err()
+                .ok_or_else(|| format!("a blank display_name {blank:?} must be refused"))?;
+            assert!(
+                failure.message.contains("display_name"),
+                "the refusal must name the argument, got {}",
+                failure.message
+            );
+            assert_eq!(
+                failure.detail,
+                json!({
+                    "code": "invalid_argument",
+                    "argument": "display_name",
+                    "value": blank,
+                }),
+                "the refusal must carry the same structured shape as the other argument refusals"
+            );
+        }
+        Ok(())
+    }
+
+    /// An ABSENT argument is not a dropped value: nothing was requested, so
+    /// `None` is the honest answer and the start proceeds unnamed. A present
+    /// name is handed on untrimmed — the start handler is the single trimming
+    /// authority, as it is for the HTTP and gRPC boundaries.
+    #[test]
+    fn an_absent_value_is_none_and_a_named_one_is_carried_verbatim()
+    -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(
+            optional_non_blank_str(&call(&json!({}))?, "display_name")?,
+            None
+        );
+        assert_eq!(
+            optional_non_blank_str(
+                &call(&json!({ "display_name": "Nightly settlement" }))?,
+                "display_name"
+            )?,
+            Some("Nightly settlement".to_owned())
+        );
+        assert_eq!(
+            optional_non_blank_str(
+                &call(&json!({ "display_name": "  Nightly settlement  " }))?,
+                "display_name"
+            )?,
+            Some("  Nightly settlement  ".to_owned())
+        );
         Ok(())
     }
 

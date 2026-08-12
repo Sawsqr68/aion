@@ -20,11 +20,13 @@ pub(crate) mod managed_workers;
 mod payload;
 mod runs;
 mod visibility;
-mod workflows;
+pub(crate) mod workflows;
 
 #[cfg(test)]
 mod test_support;
 
 pub use describe::describe;
 pub use visibility::{count, list};
-pub use workflows::{cancel, pause, query, reopen, resume, signal, start, start_with_placement};
+pub use workflows::{
+    cancel, pause, query, rename, reopen, resume, signal, start, start_with_placement,
+};

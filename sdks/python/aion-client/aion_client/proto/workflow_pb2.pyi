@@ -34,18 +34,20 @@ class MintNamespaceResponse(_message.Message):
     def __init__(self) -> None: ...
 
 class StartWorkflowRequest(_message.Message):
-    __slots__ = ("namespace", "workflow_type", "input", "routing_key", "task_queue")
+    __slots__ = ("namespace", "workflow_type", "input", "routing_key", "task_queue", "display_name")
     NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_TYPE_FIELD_NUMBER: _ClassVar[int]
     INPUT_FIELD_NUMBER: _ClassVar[int]
     ROUTING_KEY_FIELD_NUMBER: _ClassVar[int]
     TASK_QUEUE_FIELD_NUMBER: _ClassVar[int]
+    DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
     namespace: str
     workflow_type: str
     input: _common_pb2.Payload
     routing_key: str
     task_queue: str
-    def __init__(self, namespace: _Optional[str] = ..., workflow_type: _Optional[str] = ..., input: _Optional[_Union[_common_pb2.Payload, _Mapping]] = ..., routing_key: _Optional[str] = ..., task_queue: _Optional[str] = ...) -> None: ...
+    display_name: str
+    def __init__(self, namespace: _Optional[str] = ..., workflow_type: _Optional[str] = ..., input: _Optional[_Union[_common_pb2.Payload, _Mapping]] = ..., routing_key: _Optional[str] = ..., task_queue: _Optional[str] = ..., display_name: _Optional[str] = ...) -> None: ...
 
 class StartWorkflowResponse(_message.Message):
     __slots__ = ("workflow_id", "run_id")
@@ -74,16 +76,18 @@ class SignalResponse(_message.Message):
     def __init__(self) -> None: ...
 
 class QueryRequest(_message.Message):
-    __slots__ = ("namespace", "workflow_id", "run_id", "query_name")
+    __slots__ = ("namespace", "workflow_id", "run_id", "query_name", "arguments")
     NAMESPACE_FIELD_NUMBER: _ClassVar[int]
     WORKFLOW_ID_FIELD_NUMBER: _ClassVar[int]
     RUN_ID_FIELD_NUMBER: _ClassVar[int]
     QUERY_NAME_FIELD_NUMBER: _ClassVar[int]
+    ARGUMENTS_FIELD_NUMBER: _ClassVar[int]
     namespace: str
     workflow_id: _common_pb2.WorkflowId
     run_id: _common_pb2.RunId
     query_name: str
-    def __init__(self, namespace: _Optional[str] = ..., workflow_id: _Optional[_Union[_common_pb2.WorkflowId, _Mapping]] = ..., run_id: _Optional[_Union[_common_pb2.RunId, _Mapping]] = ..., query_name: _Optional[str] = ...) -> None: ...
+    arguments: _common_pb2.Payload
+    def __init__(self, namespace: _Optional[str] = ..., workflow_id: _Optional[_Union[_common_pb2.WorkflowId, _Mapping]] = ..., run_id: _Optional[_Union[_common_pb2.RunId, _Mapping]] = ..., query_name: _Optional[str] = ..., arguments: _Optional[_Union[_common_pb2.Payload, _Mapping]] = ...) -> None: ...
 
 class QueryResponse(_message.Message):
     __slots__ = ("result", "error")
@@ -164,6 +168,26 @@ class ResumeResponse(_message.Message):
     run_id: _common_pb2.RunId
     status: _common_pb2.WorkflowStatus
     def __init__(self, run_id: _Optional[_Union[_common_pb2.RunId, _Mapping]] = ..., status: _Optional[_Union[_common_pb2.WorkflowStatus, str]] = ...) -> None: ...
+
+class RenameRequest(_message.Message):
+    __slots__ = ("namespace", "workflow_id", "run_id", "display_name")
+    NAMESPACE_FIELD_NUMBER: _ClassVar[int]
+    WORKFLOW_ID_FIELD_NUMBER: _ClassVar[int]
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
+    namespace: str
+    workflow_id: _common_pb2.WorkflowId
+    run_id: _common_pb2.RunId
+    display_name: str
+    def __init__(self, namespace: _Optional[str] = ..., workflow_id: _Optional[_Union[_common_pb2.WorkflowId, _Mapping]] = ..., run_id: _Optional[_Union[_common_pb2.RunId, _Mapping]] = ..., display_name: _Optional[str] = ...) -> None: ...
+
+class RenameResponse(_message.Message):
+    __slots__ = ("run_id", "display_name")
+    RUN_ID_FIELD_NUMBER: _ClassVar[int]
+    DISPLAY_NAME_FIELD_NUMBER: _ClassVar[int]
+    run_id: _common_pb2.RunId
+    display_name: str
+    def __init__(self, run_id: _Optional[_Union[_common_pb2.RunId, _Mapping]] = ..., display_name: _Optional[str] = ...) -> None: ...
 
 class ListWorkflowsRequest(_message.Message):
     __slots__ = ("namespace", "filter")

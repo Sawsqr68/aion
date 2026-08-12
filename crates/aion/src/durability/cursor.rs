@@ -366,21 +366,64 @@ impl HistoryCursor {
         CursorResolveResult::Exhausted
     }
 
+    /// Consumes the matched start's `Started -> outcome` events, keyed by timer
+    /// identity.
+    ///
+    /// Asynchronous arrivals (signals, child terminals, a parallel activity's
+    /// or a parallel timer's events) and operator records (a rename, a
+    /// pause/resume marker) can be recorded between this start's anchor and its
+    /// outcome — a sleeping run is precisely when an operator acts on it. They
+    /// belong to other commands, or to no command at all: the walk skips them
+    /// in place — neither consuming them nor failing replay — leaving them
+    /// matchable for their own commands, exactly as [`HistoryCursor::resolve_activity`]
+    /// does. Determinism is enforced at the anchor by `resolve_next`'s
+    /// family/key equality check; a foreign interior event is an interleaving
+    /// artifact, not a command-stream divergence.
+    ///
+    /// The walk stops at a re-arm of the SAME timer (a later `TimerStarted`
+    /// carrying this start's timer id, which reopen records — #222). An outcome
+    /// recorded after a re-arm belongs to that later arm's own command, never to
+    /// this one, so this start resolves `TimerStarted` there. That bound confines
+    /// this walk to interleaved foreign events and nothing else.
+    ///
+    /// What happens to that `TimerStarted` resolution depends on WHO is
+    /// replaying, and the two answers differ:
+    ///
+    /// - **The NIF-hosted workflow path.** `nif_timer`/`nif_timeout` re-read the
+    ///   terminal from the run segment (`nif_timer.rs`, the
+    ///   `Resolution::TimerStarted` arm) and park when it is not yet recorded.
+    ///   The awaiting process therefore still learns fired-vs-cancelled.
+    /// - **The pure-Rust `replay_inspect` path.** It has no natives at all: it
+    ///   walks recorded history directly and never consumes a `Resolution`, so
+    ///   there is nothing here for it to re-read. It reads the re-armed timer's
+    ///   own recorded events in sequence, exactly as it did before this walk
+    ///   existed — the behaviour is unchanged there, so the re-arm bound is
+    ///   neutral rather than beneficial for that path, not a second mechanism
+    ///   it depends on.
+    ///
+    /// With no outcome found the start alone is consumed, resolving
+    /// `Resolution::TimerStarted` — a dangling timer whose terminal has not been
+    /// recorded yet, which the timer natives handle by parking. The walk never
+    /// reports `Exhausted`: the anchor is recorded, so the command is not
+    /// unresolved.
     fn resolve_started_with_immediate_outcome(
         &mut self,
         expected_key: &CorrelationKey,
     ) -> CursorResolveResult {
         let start = self.position;
-        let next = self.position + 1;
-        if self
-            .events
-            .get(next)
-            .is_some_and(|event| self.is_outcome_for_start_key(event, expected_key))
-        {
-            CursorResolveResult::Matched(self.take_range(start, next + 1))
-        } else {
-            self.consume_one()
+        let mut index = start + 1;
+
+        while let Some(event) = self.events.get(index) {
+            if self.is_outcome_for_start_key(event, expected_key) {
+                return self.consume_indices(vec![start, index]);
+            }
+            if is_rearm_of_start_key(event, expected_key) {
+                break;
+            }
+            index += 1;
         }
+
+        self.consume_one()
     }
 
     fn consume_one(&mut self) -> CursorResolveResult {
@@ -527,6 +570,20 @@ impl HistoryCursor {
             _ => false,
         }
     }
+}
+
+/// Whether `event` re-arms the timer named by `expected_key` — a later
+/// `TimerStarted` for the same timer id. Reopen records one (#222), and the
+/// outcome after it belongs to that arm's command, not to the one being
+/// resolved.
+fn is_rearm_of_start_key(event: &Event, expected_key: &CorrelationKey) -> bool {
+    matches!(
+        (event, expected_key),
+        (
+            Event::TimerStarted { timer_id, .. },
+            CorrelationKey::Timer(expected_timer_id),
+        ) if timer_id == expected_timer_id
+    )
 }
 
 fn is_child_terminal_for(event: &Event, child_workflow_id: &WorkflowId) -> bool {
@@ -1293,6 +1350,336 @@ mod tests {
             );
         }
         assert_eq!(cursor.current_sequence(), None);
+        Ok(())
+    }
+
+    fn timer_started(seq: u64, timer: u64) -> Result<Event, Box<dyn std::error::Error>> {
+        Ok(Event::TimerStarted {
+            envelope: envelope(seq)?,
+            timer_id: TimerId::anonymous(timer),
+            fire_at: timestamp()?,
+        })
+    }
+
+    fn timer_fired(seq: u64, timer: u64) -> Result<Event, Box<dyn std::error::Error>> {
+        Ok(Event::TimerFired {
+            envelope: envelope(seq)?,
+            timer_id: TimerId::anonymous(timer),
+        })
+    }
+
+    fn renamed(seq: u64, name: &str) -> Result<Event, Box<dyn std::error::Error>> {
+        Ok(Event::SearchAttributesUpdated {
+            envelope: envelope(seq)?,
+            workflow_id: WorkflowId::new(Uuid::nil()),
+            attributes: std::collections::HashMap::from([(
+                aion_core::DISPLAY_NAME_ATTRIBUTE.to_owned(),
+                aion_core::SearchAttributeValue::String(name.to_owned()),
+            )]),
+        })
+    }
+
+    /// Asserts the timer command resolves to its recorded `TimerFired` across
+    /// `interior`, and that the cursor is left where the commands AFTER it still
+    /// resolve — the cascade half of the defect.
+    ///
+    /// `drain_interleaved` resolves whatever commands the interior events
+    /// legitimately belong to, in history order, exactly as the real command
+    /// stream would. Skipping them would ask strict replay to jump an
+    /// unconsumed recorded command, which it must refuse — so a fixture that
+    /// omitted them would be asserting the opposite of the design.
+    ///
+    /// The trailing activity is the cascade probe: an outcome left matchable
+    /// ahead of the low-water mark is offered to that command, mismatches on
+    /// family, and `replay_inspect` maps the resulting `NonDeterminism` to
+    /// `StepProjection::NonReplay` for every later step.
+    fn assert_timer_window_resolves_and_cursor_advances(
+        interior: Vec<Event>,
+        drain_interleaved: impl FnOnce(&mut HistoryCursor) -> Result<(), Box<dyn std::error::Error>>,
+    ) -> Result<HistoryCursor, Box<dyn std::error::Error>> {
+        let mut events = vec![timer_started(1, 4)?];
+        events.extend(interior);
+        events.push(timer_fired(8, 4)?);
+        events.push(scheduled(9, 0)?);
+        events.push(completed(10, 0)?);
+        let mut cursor = HistoryCursor::new(events)?;
+
+        let timer = cursor.resolve_next(
+            RecordedEventFamily::Timer,
+            CorrelationKey::Timer(TimerId::anonymous(4)),
+        );
+        match timer {
+            CursorResolveResult::Matched(events) => {
+                assert!(
+                    matches!(events.last(), Some(Event::TimerFired { .. })),
+                    "the timer demonstrably fired; it must resolve to TimerFired, got {events:?}"
+                );
+            }
+            other => {
+                return Err(
+                    format!("the timer must resolve to its recorded fire, got {other:?}").into(),
+                );
+            }
+        }
+
+        drain_interleaved(&mut cursor)?;
+
+        let cascade =
+            cursor.resolve_next(RecordedEventFamily::Activity, CorrelationKey::Activity(0));
+        match cascade {
+            CursorResolveResult::Matched(events) => {
+                assert!(
+                    matches!(events.last(), Some(Event::ActivityCompleted { .. })),
+                    "the command after the timer must resolve to its own outcome, got {events:?}"
+                );
+            }
+            other => {
+                return Err(format!(
+                    "the cursor must not strand the timer outcome ahead of the low-water mark: \
+                     the next command resolved {other:?}"
+                )
+                .into());
+            }
+        }
+        Ok(cursor)
+    }
+
+    /// Resolves one command and requires it to match, for the interleaved
+    /// drains above.
+    fn drain_one(
+        cursor: &mut HistoryCursor,
+        family: RecordedEventFamily,
+        key: &CorrelationKey,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        match cursor.resolve_next(family, key.clone()) {
+            CursorResolveResult::Matched(_) => Ok(()),
+            other => Err(format!(
+                "the interleaved command {key:?} must stay matchable for itself, got {other:?}"
+            )
+            .into()),
+        }
+    }
+
+    fn with_timeout_completed(seq: u64, timer: u64) -> Result<Event, Box<dyn std::error::Error>> {
+        Ok(Event::WithTimeoutCompleted {
+            envelope: envelope(seq)?,
+            timer_id: TimerId::anonymous(timer),
+            outcome: aion_core::WithTimeoutOutcome::OperationCompleted,
+            result: Some(payload()?),
+        })
+    }
+
+    /// The CASCADE, at the one outcome variant that can actually strand.
+    ///
+    /// NAME THE CARRIER, because the obvious candidate is the wrong one.
+    /// `family_for_event` (this file, the `_ => None` arm) gives `TimerFired`
+    /// NO family, so `next_matchable_index` skips a stranded `TimerFired`
+    /// entirely: it is invisible to later commands and can never cascade. A
+    /// fixture built on `TimerFired` therefore resolves the next command
+    /// correctly whether or not the timer's outcome was left behind, which
+    /// makes it a pin that measures nothing — there is deliberately no
+    /// `TimerFired` twin of this test, and one must not be reintroduced.
+    ///
+    /// `WithTimeoutCompleted` is the real carrier: it is the only timer OUTCOME
+    /// variant `family_for_event` maps to `RecordedEventFamily::Timer`, so
+    /// leaving it unconsumed ahead of the low-water mark offers it to the NEXT
+    /// command, which mismatches on family — and `replay_inspect` maps that
+    /// `NonDeterminism` to `StepProjection::NonReplay` for every later step.
+    ///
+    /// Measured, not asserted: restoring the pre-#211 single-step
+    /// `resolve_started_with_immediate_outcome` (which looked only at
+    /// `position + 1`) turns this test RED, along with every
+    /// `timer_resolves_across_*` arm below.
+    #[test]
+    fn a_with_timeout_outcome_is_not_stranded_for_the_next_command()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut cursor = HistoryCursor::new(vec![
+            timer_started(1, 4)?,
+            renamed(2, "Nightly settlement")?,
+            with_timeout_completed(3, 4)?,
+            scheduled(4, 0)?,
+            completed(5, 0)?,
+        ])?;
+
+        // The timer's own answer is deliberately not asserted here: this arm
+        // pins only where the cursor is left.
+        let _ = cursor.resolve_next(
+            RecordedEventFamily::Timer,
+            CorrelationKey::Timer(TimerId::anonymous(4)),
+        );
+
+        let next = cursor.resolve_next(RecordedEventFamily::Activity, CorrelationKey::Activity(0));
+        match next {
+            CursorResolveResult::Matched(events) => {
+                assert!(
+                    matches!(events.last(), Some(Event::ActivityCompleted { .. })),
+                    "the next command must resolve to its own outcome, got {events:?}"
+                );
+            }
+            other => {
+                return Err(format!(
+                    "the with_timeout outcome was left stranded and matchable: the next command \
+                     resolved {other:?} instead of its own recorded events"
+                )
+                .into());
+            }
+        }
+        Ok(())
+    }
+
+    /// #211: an operator rename recorded INSIDE a timer's start->outcome span —
+    /// a sleeping run is the likeliest moment to be renamed — must be invisible
+    /// to timer resolution, exactly as it is to activity resolution.
+    #[test]
+    fn timer_resolves_across_an_interleaved_rename() -> Result<(), Box<dyn std::error::Error>> {
+        // A rename is matchable by nothing, so it drains no command.
+        assert_timer_window_resolves_and_cursor_advances(
+            vec![renamed(2, "Nightly settlement")?],
+            |_| Ok(()),
+        )?;
+        Ok(())
+    }
+
+    /// The SAME defect, reachable without any rename: an asynchronous signal
+    /// arrival inside the timer window. This arm is the class, not the #211
+    /// instance — it predates the display-name lane entirely.
+    #[test]
+    fn timer_resolves_across_an_interleaved_signal() -> Result<(), Box<dyn std::error::Error>> {
+        assert_timer_window_resolves_and_cursor_advances(
+            vec![signal_received(2, "mid")?],
+            |cursor| {
+                drain_one(
+                    cursor,
+                    RecordedEventFamily::Signal,
+                    &CorrelationKey::Signal {
+                        name: "mid".to_owned(),
+                        index: 0,
+                    },
+                )
+            },
+        )?;
+        Ok(())
+    }
+
+    /// A parallel sleep's own `TimerStarted` inside the window: the interior
+    /// event is the SAME family as the anchor, so nothing but the correlation
+    /// key distinguishes it. It must be skipped and left matchable.
+    #[test]
+    fn timer_resolves_across_an_interleaved_parallel_timer()
+    -> Result<(), Box<dyn std::error::Error>> {
+        assert_timer_window_resolves_and_cursor_advances(vec![timer_started(2, 5)?], |cursor| {
+            drain_one(
+                cursor,
+                RecordedEventFamily::Timer,
+                &CorrelationKey::Timer(TimerId::anonymous(5)),
+            )
+        })?;
+        Ok(())
+    }
+
+    /// Operator pause/resume markers inside the timer window: the same class as
+    /// the rename (no family, no key), recorded by a different operator verb.
+    #[test]
+    fn timer_resolves_across_interleaved_pause_and_resume() -> Result<(), Box<dyn std::error::Error>>
+    {
+        assert_timer_window_resolves_and_cursor_advances(
+            vec![paused(2)?, resumed(3)?],
+            |_| Ok(()),
+        )?;
+        Ok(())
+    }
+
+    /// A parallel activity's whole recorded span inside the timer window, and a
+    /// child spawn and terminal alongside it: every matchable family that can
+    /// interleave, drained through its own commands in history order.
+    #[test]
+    fn timer_resolves_across_an_interleaved_activity_and_child_terminal()
+    -> Result<(), Box<dyn std::error::Error>> {
+        assert_timer_window_resolves_and_cursor_advances(
+            vec![
+                scheduled(2, 1)?,
+                started(3, 1)?,
+                completed(4, 1)?,
+                child_started(5, 7)?,
+                child_completed(6, 7)?,
+            ],
+            |cursor| {
+                drain_one(
+                    cursor,
+                    RecordedEventFamily::Activity,
+                    &CorrelationKey::Activity(1),
+                )?;
+                drain_one(
+                    cursor,
+                    RecordedEventFamily::Child,
+                    &CorrelationKey::Child(0),
+                )?;
+                match cursor.resolve_child_terminal(&child_id(7)) {
+                    ChildTerminalResolveResult::Matched(_) => Ok(()),
+                    other => Err(format!(
+                        "the interleaved child terminal must stay matchable, got {other:?}"
+                    )
+                    .into()),
+                }
+            },
+        )?;
+        Ok(())
+    }
+
+    /// The forward scan must not invent an outcome: a timer with no recorded
+    /// terminal anywhere in history still resolves `TimerStarted`, which the
+    /// timer natives handle by parking. Scanning must not turn a dangling
+    /// timer into `Exhausted` or into a foreign timer's fire.
+    #[test]
+    fn timer_without_a_recorded_terminal_still_resolves_started()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut cursor = HistoryCursor::new(vec![
+            timer_started(1, 4)?,
+            renamed(2, "Nightly settlement")?,
+            timer_fired(3, 9)?,
+        ])?;
+
+        let result = cursor.resolve_next(
+            RecordedEventFamily::Timer,
+            CorrelationKey::Timer(TimerId::anonymous(4)),
+        );
+
+        match result {
+            CursorResolveResult::Matched(events) => {
+                assert_eq!(events.len(), 1, "only the start is consumed: {events:?}");
+                assert!(
+                    matches!(events.first(), Some(Event::TimerStarted { .. })),
+                    "a dangling timer resolves TimerStarted, got {events:?}"
+                );
+            }
+            other => {
+                return Err(
+                    format!("a dangling timer must resolve TimerStarted, got {other:?}").into(),
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// The adjacent case is unchanged: start and outcome next to each other
+    /// consume exactly the two events, as they did before the scan.
+    #[test]
+    fn adjacent_timer_start_and_fire_resolve_unchanged() -> Result<(), Box<dyn std::error::Error>> {
+        let mut cursor = HistoryCursor::new(vec![timer_started(1, 4)?, timer_fired(2, 4)?])?;
+
+        let result = cursor.resolve_next(
+            RecordedEventFamily::Timer,
+            CorrelationKey::Timer(TimerId::anonymous(4)),
+        );
+
+        match result {
+            CursorResolveResult::Matched(events) => {
+                assert_eq!(events.len(), 2);
+                assert!(matches!(events.last(), Some(Event::TimerFired { .. })));
+                assert_eq!(cursor.current_sequence(), None);
+            }
+            other => return Err(format!("expected the adjacent match, got {other:?}").into()),
+        }
         Ok(())
     }
 

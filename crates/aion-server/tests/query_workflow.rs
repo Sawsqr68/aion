@@ -178,6 +178,7 @@ async fn start_parked(
             input: Some(Payload::from_json(&json!({ "fixture": "input" }))?.into()),
             routing_key: None,
             task_queue: None,
+            display_name: None,
         },
     )
     .await?;

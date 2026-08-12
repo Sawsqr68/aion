@@ -1,3 +1,4 @@
+import { displayNameFromAttributes, type SearchAttributes } from '@/lib/workflowIdentity';
 import type { Event } from '@/types';
 
 /**
@@ -125,7 +126,7 @@ export function genericSummary(event: Event): string {
     case 'WorkflowReopened':
       return `Workflow reopened (${event.data.reopened.length} activity reset point(s))`;
     case 'SearchAttributesUpdated':
-      return `Search attributes updated (${Object.keys(event.data.attributes).length} key(s))`;
+      return searchAttributesSummary(event.data.attributes);
     case 'ScheduleCreated':
       return `Schedule created: ${event.data.schedule_id}`;
     case 'ScheduleUpdated':
@@ -141,6 +142,34 @@ export function genericSummary(event: Event): string {
     default:
       return humanizeEventType(event.type);
   }
+}
+
+/**
+ * Label for a recorded `SearchAttributesUpdated` (#211).
+ *
+ * A naming update — the start-time stamp or an operator rename — is the way a
+ * run's display name is recorded, so the row READS as the naming it is rather
+ * than as an anonymous "1 key" marker. The wording is "set to" rather than
+ * "renamed to" because a single event cannot tell the run's FIRST naming from a
+ * later rename, and the timeline must not claim a history it cannot see.
+ *
+ * An update that carries other attributes alongside the name reports both, and
+ * an update with no name at all keeps the original generic count — so the
+ * generic case is never lost.
+ */
+export function searchAttributesSummary(attributes: SearchAttributes): string {
+  const keyCount = Object.keys(attributes).length;
+  const displayName = displayNameFromAttributes(attributes);
+
+  if (displayName === null) {
+    return `Search attributes updated (${keyCount} key(s))`;
+  }
+
+  const others = keyCount - 1;
+
+  return others === 0
+    ? `Display name set to "${displayName}"`
+    : `Display name set to "${displayName}" (+${others} other key(s))`;
 }
 
 /** Turns a PascalCase event type into a spaced, sentence-cased label. */

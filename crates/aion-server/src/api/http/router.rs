@@ -45,8 +45,8 @@ use super::worker_deployments::{
 use super::workers::{drain_worker, stop_worker};
 use super::workflows::{
     cancel_workflow, count_workflows, describe_workflow, get_workflows, list_namespace_records,
-    list_namespaces, post_list_workflows, post_namespace, query_workflow, reopen_workflow,
-    set_namespace_placement, signal_workflow, start_workflow,
+    list_namespaces, post_list_workflows, post_namespace, query_workflow, rename_workflow,
+    reopen_workflow, set_namespace_placement, signal_workflow, start_workflow,
 };
 use crate::mcp::{McpRuntime, mcp_disabled_router, mcp_router};
 use crate::{ServerError, ServerState, observability, ops_console::assets};
@@ -366,6 +366,7 @@ pub fn workflow_router(state: ServerState) -> Router {
         .route("/workflows/signal", post(signal_workflow))
         .route("/workflows/query", post(query_workflow))
         .route("/workflows/cancel", post(cancel_workflow))
+        .route("/workflows/rename", post(rename_workflow))
         .route("/workflows/reopen", post(reopen_workflow))
         .route("/workflows/list", post(post_list_workflows))
         .route("/workflows/describe", post(describe_workflow))

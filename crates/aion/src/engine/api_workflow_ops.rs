@@ -398,6 +398,67 @@ impl Engine {
         result
     }
 
+    /// Record a new operator-facing display name for a run (#211).
+    ///
+    /// The name is a LABEL over the UUID identity, never an address: nothing
+    /// resolves a workflow by name. Every rename is a RECORDED
+    /// `SearchAttributesUpdated` event (the `aion.display_name` attribute), so
+    /// history keeps every name that has been worn and the current name is the
+    /// last-write-wins fold.
+    ///
+    /// Both halves of that are true at once and are easy to confuse. You
+    /// ADDRESS a run — this operation takes a workflow id AND a run id, because
+    /// which run is live decides whether the append is safe — but what you
+    /// RECORD is a workflow-level attribute with no run id in it. Readers fold
+    /// it over the whole history, so the name reads back for every run of the
+    /// workflow, a continue-as-new successor inherits it, and (below) a
+    /// superseded predecessor cannot be renamed at all.
+    ///
+    /// There is no status precondition on the label itself — a completed run's
+    /// name is as legitimate as a running one's. Status decides only HOW the
+    /// event is appended: a REGISTERED run appends through its own
+    /// single-writer recorder under that recorder's lock, while a run with no
+    /// registered handle appends through a one-shot recorder at the durable
+    /// head — and only when its durable status proves no live recorder can
+    /// exist (terminal, or `Paused` and so excluded from respawn by design).
+    /// A non-resident run in any other status is REFUSED rather than raced.
+    /// A run superseded by a later run of the same workflow is refused too:
+    /// `SearchAttributesUpdated` carries no run id, so a recorded name would
+    /// land on the later run. So is a run that has recorded its own
+    /// `WorkflowContinuedAsNew` and is therefore ABOUT to be superseded — its
+    /// successor's recorder has already read the head this rename would append
+    /// to, and appending there would strand the chain with no successor run.
+    ///
+    /// Returns the name exactly as recorded (trimmed).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EngineError::ShuttingDown`] after shutdown begins;
+    /// [`EngineError::InvalidState`] when the trimmed name is empty, when the
+    /// run is non-terminal, not `Paused`, and not resident on this node (RETRY
+    /// once it is resident), or when the run has been superseded or has
+    /// continued as new;
+    /// [`EngineError::WorkflowNotFound`] when no history exists for the pair;
+    /// and [`EngineError::Durability`] when the schema refuses the attribute or
+    /// the store rejects the append. Every rejection appends nothing.
+    pub async fn rename_workflow(
+        &self,
+        id: &WorkflowId,
+        run: &RunId,
+        display_name: &str,
+    ) -> Result<String, EngineError> {
+        let operation = self.shutdown_gate.begin_operation()?;
+        let context = crate::lifecycle::RenameWorkflowContext {
+            store: self.store(),
+            visibility_store: Arc::clone(&self.visibility_store),
+            registry: &self.registry,
+            search_attribute_schema: Arc::clone(&self.search_attribute_schema),
+        };
+        let result = crate::lifecycle::rename::rename(&context, id, run, display_name).await;
+        drop(operation);
+        result
+    }
+
     /// Resume a `Paused` run, releasing the dispatch hold (#204).
     ///
     /// Named `resume_paused_workflow` to avoid colliding with the existing

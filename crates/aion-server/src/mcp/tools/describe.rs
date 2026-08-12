@@ -178,6 +178,13 @@ pub(crate) async fn describe_run(
             "workflow_id": view.workflow_id.to_string(),
             "run_id": view.run_id.to_string(),
             "workflow_type": view.summary.workflow_type,
+            // #211: the operator-facing label, so an agent that SET a display
+            // name can read it back here rather than only through `list_runs`.
+            // Per WORKFLOW, not per run — the recorded attribute carries no run
+            // id and the projection folds the whole history — which is why it
+            // sits beside the workflow's own fields and not inside
+            // `current_step`.
+            "display_name": view.summary.display_name,
             "status": view.summary.status,
             "started_at": view.summary.started_at.to_rfc3339(),
             "ended_at": view.summary.ended_at.map(|at| at.to_rfc3339()),

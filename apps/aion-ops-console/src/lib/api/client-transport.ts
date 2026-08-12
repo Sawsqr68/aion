@@ -42,6 +42,10 @@ export const AW_REST_CONTRACT = {
     // Reopen a terminal (Failed/Cancelled) workflow: re-dispatches the failed
     // tail and returns the reopened run + its projected Running status.
     workflowReopen: '/workflows/reopen',
+    // #211: record an operator-facing display name. The target is always the
+    // run's id — the name is the LABEL being set, never a way to address a
+    // workflow — while what is recorded reads back per workflow.
+    workflowRename: '/workflows/rename',
     deployPackages: '/deploy/packages',
     deployVersions: '/deploy/versions',
     deployRoute: '/deploy/route',
@@ -67,6 +71,7 @@ export const AW_REST_CONTRACT = {
     workflowIntervene: 'POST',
     workflowAttempts: 'POST',
     workflowReopen: 'POST',
+    workflowRename: 'POST',
     deployPackages: 'POST',
     deployVersions: 'GET',
     deployRoute: 'POST',
@@ -80,6 +85,8 @@ export const AW_REST_CONTRACT = {
     workflowId: 'workflow_id',
     runId: 'run_id',
     signalName: 'signal_name',
+    // #211 body key, shared by the optional start-time name and the rename.
+    displayName: 'display_name',
     payload: 'payload',
     includeHistory: 'include_history',
     pagination: {

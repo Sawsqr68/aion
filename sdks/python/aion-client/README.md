@@ -41,14 +41,16 @@ client = await Client.connect(
 
 ## start
 
-JSON values are the typed payload path. `idempotency_key` makes start safe to retry: a repeated identical start returns the original handle, while conflicting reuse raises `AlreadyExists`.
+JSON values are the typed payload path. `start` returns a `StartOutcome`: `.handle` is the bound `WorkflowHandle`, and `.display_name_not_applied` reports a display name an idempotent replay could not apply (see below). `idempotency_key` makes start safe to retry: a repeated identical start returns the original handle, while conflicting reuse raises `AlreadyExists`.
 
 ```python
-handle = await client.start(
-    "conformance.echo",
-    {"message": "hello", "counter": 1},
-    idempotency_key="readme-seven-operations",
-)
+handle = (
+    await client.start(
+        "conformance.echo",
+        {"message": "hello", "counter": 1},
+        idempotency_key="readme-seven-operations",
+    )
+).handle
 ```
 
 `routing_key` and `task_queue` are the two targeting dimensions. `routing_key` steers the start to the owner of that key's shard, forwarding there when the node you dialled is not the owner. `task_queue` sets the queue this workflow's activities default to, recorded durably on the start so it survives replay and failover. Omit either to mean "no selection" — a blank string is refused rather than sent, because the server reads a blank as no selection and you would get the default without being told.
@@ -56,12 +58,36 @@ handle = await client.start(
 Both are part of the idempotency identity: reusing a key with a different routing key or task queue raises `AlreadyExists` instead of handing back the first workflow.
 
 ```python
-handle = await client.start(
+handle = (
+    await client.start(
+        "reports.monthly",
+        {"period": "2026-07"},
+        routing_key="tenant-42",
+        task_queue="reports",
+    )
+).handle
+```
+
+`display_name` is the operator-facing name for the workflow this start creates, recorded durably on the start. It is a **label over the UUID identity, never an address**: no SDK call resolves a workflow by name, and two workflows may wear the same one. Omit it to start unnamed — a blank string is refused. Note the routing fields differ here: the server reads a blank `routing_key` or `task_queue` as "no selection", but it REFUSES a present-but-blank `display_name` with `invalid_input` rather than starting the run unnamed, so absence is the only way to say "no name".
+
+You name the run you are starting, but the label **reads back per workflow**: the recorded attribute carries no run id, so every reader folds it over the whole history, last write wins. A continue-as-new successor of this run inherits the name, and describing any run of the workflow returns whatever name was recorded most recently.
+
+A display name is deliberately **not** part of the idempotency identity. The key answers "is this the same act?", and a label carries no identity, so two starts differing only in name are the same act and dedupe to one run rather than raising `AlreadyExists`. The name that did not get applied is reported rather than dropped: the replay returns the existing run wearing its existing name, and `display_name_not_applied` carries both sides.
+
+The report fires only when this call **asked for** a name the standing run does not wear — whether that run wears a different name or none at all. A call that asked for no name dropped nothing, so it is told nothing even when the standing run has a name of its own; the report's absence is the statement that no requested name went missing.
+
+```python
+outcome = await client.start(
     "reports.monthly",
     {"period": "2026-07"},
-    routing_key="tenant-42",
-    task_queue="reports",
+    idempotency_key="reports-2026-07",
+    display_name="July invoice run",
 )
+if outcome.display_name_not_applied is not None:
+    print(
+        f"{outcome.display_name_not_applied.requested!r} was not applied; "
+        f"the run keeps {outcome.display_name_not_applied.standing!r}"
+    )
 ```
 
 ## signal

@@ -420,6 +420,146 @@ test('startWorkflow omits task_queue when not provided', async () => {
   expect('task_queue' in body).toBe(false);
 });
 
+// #211. Catches: the summary read dragging the whole run's history over the
+// wire to read one field, or asking the windowed endpoint (which cannot
+// answer for a name recorded outside the window).
+test('getWorkflowSummary describes the run WITHOUT history and returns the projection', async () => {
+  const calls: Request[] = [];
+  const client = new ApiClient({
+    baseUrl: 'https://aion.example',
+    fetchImpl: async (input, init) => {
+      calls.push(new Request(input, init));
+      return jsonResponse({
+        summary: { ...summary, display_name: 'nightly digest' },
+        history: [],
+        unserved: [],
+      });
+    },
+  });
+
+  const result = await client.getWorkflowSummary(workflowId, { namespace });
+
+  expect(calls[0]?.url).toBe('https://aion.example/workflows/describe');
+  await expect(calls[0]?.json()).resolves.toEqual({
+    namespace,
+    workflow_id: workflowId,
+    run_id: null,
+    include_history: false,
+  });
+  expect(result?.display_name).toBe('nightly digest');
+});
+
+test('getWorkflowSummary answers null for a workflow the server does not know', async () => {
+  const client = new ApiClient({
+    fetchImpl: async () => jsonResponse({ summary: null, history: [], unserved: [] }),
+  });
+
+  expect(await client.getWorkflowSummary(workflowId, { namespace })).toBeNull();
+});
+
+// Catches: a malformed describe response being read as "this run is unnamed",
+// which would present a read failure as a fact about the workflow.
+test('a malformed describe response is a typed error, never a phantom summary', async () => {
+  const notAnObject = new ApiClient({ fetchImpl: async () => jsonResponse(['nope']) });
+  await expect(notAnObject.getWorkflowSummary(workflowId, { namespace })).rejects.toBeInstanceOf(
+    ApiError
+  );
+
+  const badSummary = new ApiClient({
+    fetchImpl: async () => jsonResponse({ summary: { workflow_id: 7 } }),
+  });
+  await expect(badSummary.getWorkflowSummary(workflowId, { namespace })).rejects.toBeInstanceOf(
+    ApiError
+  );
+});
+
+// #211. Catches: the describe summary being cast through rather than validated
+// field by field, the way every sibling normalizer validates. A wrong-typed
+// `display_name` would reach `normalizeDisplayName`, come back `null`, and the
+// run would render UNNAMED — presenting a contract violation as a fact about
+// the workflow, which is exactly what the sibling test above forbids.
+test('a wrong-typed field in a describe summary is an error, never a silent unnamed render', async () => {
+  const wrongTypedName = new ApiClient({
+    fetchImpl: async () =>
+      jsonResponse({ summary: { ...summary, display_name: 42 }, history: [], unserved: [] }),
+  });
+  await expect(wrongTypedName.getWorkflowSummary(workflowId, { namespace })).rejects.toBeInstanceOf(
+    ApiError
+  );
+
+  // Every other summary field the console renders gets the same treatment.
+  for (const badField of [
+    { workflow_type: 7 },
+    { status: 'NotAStatus' },
+    { started_at: 7 },
+    { ended_at: 7 },
+    { failed_step: 7 },
+    { failure_reason: 7 },
+  ]) {
+    const client = new ApiClient({
+      fetchImpl: async () =>
+        jsonResponse({ summary: { ...summary, ...badField }, history: [], unserved: [] }),
+    });
+    await expect(client.getWorkflowSummary(workflowId, { namespace })).rejects.toBeInstanceOf(
+      ApiError
+    );
+  }
+
+  // CONTROL: a well-formed summary — including the legitimately absent and
+  // legitimately null optional fields — still passes. Without this the
+  // assertions above would pass if the normalizer rejected everything.
+  const good = new ApiClient({
+    fetchImpl: async () =>
+      jsonResponse({
+        summary: { ...summary, display_name: null, ended_at: null, parent: null },
+        history: [],
+        unserved: [],
+      }),
+  });
+  expect((await good.getWorkflowSummary(workflowId, { namespace }))?.display_name).toBeNull();
+});
+
+test('startWorkflow forwards an optional display_name to the server body', async () => {
+  const calls: Request[] = [];
+  const client = new ApiClient({
+    baseUrl: 'https://aion.example',
+    fetchImpl: async (input, init) => {
+      calls.push(new Request(input, init));
+      return jsonResponse({ workflow_id: 'w', run_id: 'r' });
+    },
+  });
+
+  await client.startWorkflow(
+    { workflowType: 'T', input: {}, displayName: 'nightly digest' },
+    { namespace }
+  );
+
+  await expect(calls[0]?.json()).resolves.toEqual({
+    namespace,
+    workflow_type: 'T',
+    input: {},
+    display_name: 'nightly digest',
+  });
+});
+
+// Catches: an unnamed start sending `display_name: ""`, which is a value the
+// server would have to interpret rather than the absence the operator meant.
+test('startWorkflow omits display_name when not provided', async () => {
+  const calls: Request[] = [];
+  const client = new ApiClient({
+    baseUrl: 'https://aion.example',
+    fetchImpl: async (input, init) => {
+      calls.push(new Request(input, init));
+      return jsonResponse({ workflow_id: 'w', run_id: 'r' });
+    },
+  });
+
+  await client.startWorkflow({ workflowType: 'T', input: {} }, { namespace });
+
+  const body = (await calls[0]?.json()) as Record<string, unknown>;
+  expect('display_name' in body).toBe(false);
+});
+
 test('startWorkflow throws a typed ApiError on WorkflowTypeNotFound', async () => {
   const client = new ApiClient({
     fetchImpl: async () =>

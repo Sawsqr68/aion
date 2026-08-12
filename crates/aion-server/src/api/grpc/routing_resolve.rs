@@ -7,8 +7,9 @@
 
 use tonic::Status;
 
-use aion_proto::WireError;
 use aion_proto::generated;
+
+use crate::routing::{not_owner_wire, owner_refusal};
 
 use super::WorkflowGrpcService;
 use super::status::status_from_wire_error;
@@ -22,8 +23,10 @@ impl WorkflowGrpcService {
     ///   store), so the default path is unchanged.
     /// - [`RouteResolution::Reply`] — the request was forwarded to the owner and
     ///   this is its relayed reply.
-    /// - [`RouteResolution::Reject`] — return this typed `NotOwner` status (no
-    ///   forward target, hop cap exceeded, or re-resolution still off-owner).
+    /// - [`RouteResolution::Reject`] — return this typed status to the caller:
+    ///   the OWNER'S own refusal when the forward reached it and it refused, or
+    ///   `NotOwner` when no owner could be reached at all (no forward target,
+    ///   hop cap exceeded, re-resolution still off-owner, or a failed dial).
     ///
     /// `workflow_id` is the request's (optional) proto id; a missing/malformed id
     /// is left to the handler's existing validation (routing only acts on a
@@ -62,8 +65,9 @@ impl WorkflowGrpcService {
 
     /// Forward a resolved non-local request to `owner`, enforcing the hop cap and
     /// returning a typed `NotOwner` rather than forwarding when the owner is not
-    /// forwardable, the cap is exceeded, or the forward itself reports the target
-    /// is stale (§2.5: re-resolve-or-reject discipline).
+    /// forwardable or the cap is exceeded (§2.5: re-resolve-or-reject
+    /// discipline). A forward that DID reach the owner comes back as the owner's
+    /// own answer — reply or refusal — through [`relay_forward_failure`].
     async fn forward_or_reject(
         &self,
         owner: crate::routing::NodeRef,
@@ -87,10 +91,7 @@ impl WorkflowGrpcService {
         };
         match forwarder.forward(target, metadata.clone(), request).await {
             Ok(reply) => RouteResolution::Reply(reply),
-            // The forward target is stale or unreachable (it may have just died /
-            // not yet adopted). Return NotOwner so the caller re-resolves; under
-            // the v1.5 overlay the directory then sees the target down (§2.5).
-            Err(_status) => RouteResolution::Reject(not_owner_status(shard)),
+            Err(status) => RouteResolution::Reject(relay_forward_failure(status, shard)),
         }
     }
 
@@ -145,8 +146,9 @@ impl WorkflowGrpcService {
 
     /// Forward a steered `start` to its shard owner, enforcing the hop cap and
     /// returning `NotOwner` rather than forwarding when the owner is not
-    /// forwardable, the cap is exceeded, or the forward reports a stale target
-    /// (§2.5 re-resolve-or-reject — identical discipline to signal/query/cancel).
+    /// forwardable or the cap is exceeded (§2.5 re-resolve-or-reject — identical
+    /// discipline to signal/query/cancel). A forward that reached the owner
+    /// comes back as the owner's own answer through [`relay_forward_failure`].
     async fn forward_or_reject_start(
         &self,
         owner: crate::routing::NodeRef,
@@ -172,10 +174,39 @@ impl WorkflowGrpcService {
             Ok(_) => {
                 StartResolution::Reject(Status::internal("forwarder returned a mismatched reply"))
             }
-            // Stale/unreachable target: NotOwner so the caller re-resolves (§2.5).
-            Err(_status) => StartResolution::Reject(not_owner_status(shard)),
+            Err(status) => StartResolution::Reject(relay_forward_failure(status, shard)),
         }
     }
+}
+
+/// Answer a caller whose FORWARDED request came back as an error.
+///
+/// The owner encodes its typed `WireError` into the status details on every
+/// refusal it authors, so a `not_found`, `invalid_input`, `namespace_denied` or
+/// `invalid_state` from the owner is present on this status and is relayed
+/// VERBATIM — same code, same message, same detail payload. That is the whole
+/// promise of forwarding: the caller gets the owner's answer, not this node's
+/// guess about it. Flattening every failure into `NotOwner` would instead tell
+/// the caller to re-resolve and retry a request that can never succeed, and
+/// would throw the cause away.
+///
+/// `NotOwner` is answered ONLY when the status carries no authored detail — the
+/// target was stale or unreachable (it may have just died, or not yet have
+/// adopted the shard), which is exactly the §2.5 re-resolve case; under the
+/// v1.5 overlay the directory then sees the target down. That case is logged,
+/// because a transport failure's cause exists nowhere else.
+fn relay_forward_failure(status: Status, shard: usize) -> Status {
+    if owner_refusal(&status).is_some() {
+        return status;
+    }
+    tracing::warn!(
+        shard,
+        grpc_code = %status.code(),
+        grpc_message = status.message(),
+        "forwarded request never reached the shard owner; answering NotOwner so the caller \
+         re-resolves"
+    );
+    not_owner_status(shard)
 }
 
 /// The edge's routing outcome for a `start` (R-1 remint / R-4 steered start).
@@ -184,7 +215,8 @@ pub(super) enum StartResolution {
     Local(Option<aion_core::WorkflowId>),
     /// The steered start was forwarded; relay this reply to the caller.
     Reply(generated::StartWorkflowResponse),
-    /// Return this typed status (`NotOwner` / internal) to the caller.
+    /// Return this typed status to the caller: the owner's own refusal, else
+    /// `NotOwner` (unreachable owner) or internal (mismatched reply).
     Reject(Status),
 }
 
@@ -194,15 +226,77 @@ pub(super) enum RouteResolution {
     Local,
     /// The request was forwarded; relay this reply to the caller.
     Reply(crate::routing::ForwardReply),
-    /// Return this typed `NotOwner` status to the caller.
+    /// Return this typed status to the caller: the owner's own refusal when it
+    /// authored one, else `NotOwner`.
     Reject(Status),
 }
 
-/// Build the typed retryable `NotOwner` tonic status for shard `shard` (R-1).
+/// Build the typed retryable `NotOwner` tonic status for shard `shard` (R-1),
+/// over the one shared wire-error builder both edges use.
 fn not_owner_status(shard: usize) -> Status {
-    let wire = WireError::not_owner(format!(
-        "workflow shard {shard} is owned by another cluster node"
-    ))
-    .with_error_type("NotOwner");
-    status_from_wire_error(wire)
+    status_from_wire_error(not_owner_wire(shard))
+}
+
+#[cfg(test)]
+mod tests {
+    use aion_proto::{ProtoWireError, WireError};
+    use prost::Message as _;
+    use tonic::{Code, Status};
+
+    use super::relay_forward_failure;
+
+    const SHARD: usize = 3;
+
+    /// Decode what the CALLER would receive, the way a detail-aware client does.
+    fn caller_sees(status: &Status) -> Option<WireError> {
+        if status.details().is_empty() {
+            return None;
+        }
+        let proto = ProtoWireError::decode(status.details()).ok()?;
+        WireError::try_from(proto).ok()
+    }
+
+    /// THE RELAY, PINNED: a refusal the owner authored reaches the caller as the
+    /// OWNER'S OWN typed error — code, message, and detail payload — never
+    /// flattened into the retryable `NotOwner` the caller would spin on.
+    #[test]
+    fn an_owners_refusal_is_relayed_verbatim() -> Result<(), Box<dyn std::error::Error>> {
+        let refusals = [
+            WireError::not_found("workflow 7 has no recorded history"),
+            WireError::invalid_input("display_name must not be blank"),
+            WireError::namespace_denied("tenant-b is not visible to this caller"),
+            WireError::invalid_state("run has been superseded by a later run"),
+        ];
+        for refusal in refusals {
+            let owner = super::status_from_wire_error(refusal.clone());
+            let code = owner.code();
+            let relayed = relay_forward_failure(owner, SHARD);
+            assert_eq!(relayed.code(), code, "the owner's gRPC code must survive");
+            assert_eq!(relayed.message(), refusal.message);
+            let seen = caller_sees(&relayed).ok_or("the typed detail must survive the relay")?;
+            assert_eq!(seen.code, refusal.code);
+            assert_ne!(
+                seen.code,
+                aion_proto::WireErrorCode::NotOwner,
+                "flattening the owner's answer is the defect this pins"
+            );
+        }
+        Ok(())
+    }
+
+    /// A transport failure carries no authored answer, so `NotOwner` is the
+    /// honest instruction — and it is the ONLY case that produces one.
+    #[test]
+    fn a_transport_failure_becomes_the_typed_not_owner() -> Result<(), Box<dyn std::error::Error>> {
+        let relayed = relay_forward_failure(Status::unavailable("forward dial failed"), SHARD);
+        assert_eq!(relayed.code(), Code::Aborted);
+        let seen = caller_sees(&relayed).ok_or("NotOwner must carry its typed detail")?;
+        assert_eq!(seen.code, aion_proto::WireErrorCode::NotOwner);
+        assert!(
+            seen.message.contains(&format!("shard {SHARD}")),
+            "the refusal names the shard to re-resolve: {}",
+            seen.message
+        );
+        Ok(())
+    }
 }

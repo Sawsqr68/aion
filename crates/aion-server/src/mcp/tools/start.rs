@@ -7,7 +7,9 @@ use aion_mcp::tools::service::{ToolCall, ToolFailure, ToolOutcome};
 use aion_proto::{ProtoStartWorkflowRequest, WireError};
 use serde_json::json;
 
-use crate::mcp::args::{optional_bool, optional_json, optional_str, required_str};
+use crate::mcp::args::{
+    optional_bool, optional_json, optional_non_blank_str, optional_str, required_str,
+};
 use crate::{CallerIdentity, ServerState};
 
 use super::errors::tool_failure;
@@ -44,28 +46,14 @@ pub(crate) async fn start_run(
             json!({ "code": "draining" }),
         ));
     }
-    let namespace = required_str(call, "namespace")?;
-    let workflow_type = required_str(call, "workflow_type")?;
-    let input = optional_json(call, "input")
-        .map(|value| {
-            aion_core::Payload::from_json(&value).map_err(|error| {
-                tool_failure(&WireError::invalid_input(format!(
-                    "the workflow input could not be encoded: {error}"
-                )))
-            })
-        })
-        .transpose()?;
+    let request = start_request(call)?;
+    let namespace = request.namespace.clone();
+    let workflow_type = request.workflow_type.clone();
     let minter = state.namespace_minter();
     let response = crate::api::handlers::start_with_placement(
         state.namespace_guard(),
         caller,
-        ProtoStartWorkflowRequest {
-            namespace: namespace.clone(),
-            workflow_type: workflow_type.clone(),
-            input: input.map(Into::into),
-            routing_key: optional_str(call, "routing_key"),
-            task_queue: optional_str(call, "task_queue"),
-        },
+        request,
         None,
         Some(&minter),
     )
@@ -119,6 +107,43 @@ pub(crate) async fn start_run(
     })
 }
 
+/// Build the start request from the tool call's arguments.
+///
+/// Extraction is separated from the engine call so the argument reading — the
+/// part that decides what the caller actually asked for — is exercised by unit
+/// tests directly, rather than only through a live server.
+///
+/// # Errors
+///
+/// [`ToolFailure`] when a required argument is missing, the input cannot be
+/// encoded as a payload, or `display_name` is present but blank.
+fn start_request(call: &ToolCall) -> Result<ProtoStartWorkflowRequest, ToolFailure> {
+    let input = optional_json(call, "input")
+        .map(|value| {
+            aion_core::Payload::from_json(&value).map_err(|error| {
+                tool_failure(&WireError::invalid_input(format!(
+                    "the workflow input could not be encoded: {error}"
+                )))
+            })
+        })
+        .transpose()?;
+    Ok(ProtoStartWorkflowRequest {
+        namespace: required_str(call, "namespace")?,
+        workflow_type: required_str(call, "workflow_type")?,
+        input: input.map(Into::into),
+        routing_key: optional_str(call, "routing_key"),
+        task_queue: optional_str(call, "task_queue"),
+        // #211: a LABEL the caller may set on the run it is starting. This is
+        // not a by-name lookup — no tool takes a name as a target.
+        //
+        // Read with `optional_non_blank_str`, NOT `optional_str`: a blank name
+        // read as absent would start the run unnamed and answer success,
+        // dropping a name the caller asked for. Absent stays absent and starts
+        // the run unnamed, which is what "no name" means.
+        display_name: optional_non_blank_str(call, "display_name")?,
+    })
+}
+
 /// Poll a workflow until its projected status is terminal.
 ///
 /// The loop has no iteration cap and no deadline of its own, deliberately: a
@@ -152,13 +177,21 @@ mod tests {
     use aion_mcp::tools::service::ToolCall;
     use serde_json::{Map, Value, json};
 
-    use super::awaits_completion;
+    use super::{awaits_completion, start_request};
 
     fn call(name: &str, arguments: &Value) -> Result<ToolCall, serde_json::Error> {
         Ok(ToolCall {
             name: name.to_owned(),
             arguments: serde_json::from_value::<Map<String, Value>>(arguments.clone())?,
         })
+    }
+
+    fn start_call(display_name: Option<&str>) -> Result<ToolCall, serde_json::Error> {
+        let mut arguments = json!({ "namespace": "ops", "workflow_type": "settlement" });
+        if let Some(display_name) = display_name {
+            arguments["display_name"] = json!(display_name);
+        }
+        call("start_run", &arguments)
     }
 
     #[test]
@@ -177,6 +210,46 @@ mod tests {
             "describe_run",
             &json!({ "await_completion": true })
         )?));
+        Ok(())
+    }
+
+    /// #211: `start_run` must not reach the engine with a blank name silently
+    /// turned into "unnamed". This exercises the tool's own argument reading,
+    /// so swapping `optional_non_blank_str` back to `optional_str` here fails
+    /// even though the helper's own tests would still pass.
+    #[test]
+    fn a_blank_display_name_never_reaches_the_start_request()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for blank in ["", "   ", "\t\n "] {
+            let failure = start_request(&start_call(Some(blank))?)
+                .err()
+                .ok_or_else(|| format!("start_run must refuse a blank display_name {blank:?}"))?;
+            assert!(
+                failure.message.contains("display_name"),
+                "the refusal must name the argument, got {}",
+                failure.message
+            );
+            assert_eq!(failure.detail["code"], json!("invalid_argument"));
+        }
+        Ok(())
+    }
+
+    /// An OMITTED name is not a dropped name: the run starts, unnamed. A name
+    /// that was given is carried through untrimmed, leaving the start handler
+    /// as the single authority on the recorded form.
+    #[test]
+    fn an_omitted_display_name_starts_unnamed_and_a_given_one_is_carried()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let unnamed = start_request(&start_call(None)?)?;
+        assert_eq!(unnamed.display_name, None);
+        assert_eq!(unnamed.namespace, "ops");
+        assert_eq!(unnamed.workflow_type, "settlement");
+
+        let named = start_request(&start_call(Some("  Nightly settlement  "))?)?;
+        assert_eq!(
+            named.display_name.as_deref(),
+            Some("  Nightly settlement  ")
+        );
         Ok(())
     }
 }

@@ -21,8 +21,8 @@ pub use guard::{
 pub use mint_forward::GrpcMintForwarder;
 pub use minter::NamespaceMinter;
 pub use resolver::{
-    CallerIdentity, NAMESPACE_ATTRIBUTE, NamespaceResolver, ScopedEngine, StaticWorkflowNamespaces,
-    TASK_QUEUE_ATTRIBUTE, WorkflowAttribution, WorkflowNamespaceSource,
+    CallerIdentity, DISPLAY_NAME_ATTRIBUTE, NAMESPACE_ATTRIBUTE, NamespaceResolver, ScopedEngine,
+    StaticWorkflowNamespaces, TASK_QUEUE_ATTRIBUTE, WorkflowAttribution, WorkflowNamespaceSource,
 };
 pub use route::{
     ForwardMintError, MintCredentials, MintForwarder, MintOwner, MintRoute, MintShardOwners,

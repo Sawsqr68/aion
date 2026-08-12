@@ -12,11 +12,11 @@ use aion_proto::{
     ProtoDeleteScheduleResponse, ProtoDescribeScheduleResponse, ProtoDescribeWorkflowRequest,
     ProtoDescribeWorkflowResponse, ProtoListSchedulesRequest, ProtoListSchedulesResponse,
     ProtoListWorkflowsRequest, ProtoListWorkflowsResponse, ProtoPauseRequest, ProtoPauseResponse,
-    ProtoPauseScheduleResponse, ProtoQueryRequest, ProtoQueryResponse, ProtoReopenRequest,
-    ProtoReopenResponse, ProtoResumeRequest, ProtoResumeResponse, ProtoResumeScheduleResponse,
-    ProtoScheduleIdRequest, ProtoSignalRequest, ProtoSignalResponse, ProtoStartWorkflowRequest,
-    ProtoStartWorkflowResponse, ProtoUpdateScheduleRequest, ProtoUpdateScheduleResponse,
-    ProtoWireError, generated,
+    ProtoPauseScheduleResponse, ProtoQueryRequest, ProtoQueryResponse, ProtoRenameRequest,
+    ProtoRenameResponse, ProtoReopenRequest, ProtoReopenResponse, ProtoResumeRequest,
+    ProtoResumeResponse, ProtoResumeScheduleResponse, ProtoScheduleIdRequest, ProtoSignalRequest,
+    ProtoSignalResponse, ProtoStartWorkflowRequest, ProtoStartWorkflowResponse,
+    ProtoUpdateScheduleRequest, ProtoUpdateScheduleResponse, ProtoWireError, generated,
 };
 
 pub(super) fn decode_workflow_id(value: generated::WorkflowId) -> aion_proto::ProtoWorkflowId {
@@ -82,6 +82,7 @@ pub(super) fn decode_start_request(
         input: value.input.map(decode_payload),
         routing_key: value.routing_key,
         task_queue: value.task_queue,
+        display_name: value.display_name,
     }
 }
 
@@ -201,6 +202,48 @@ pub(super) fn encode_resume_response(value: ProtoResumeResponse) -> generated::R
     generated::ResumeResponse {
         run_id: value.run_id.map(encode_run_id),
         status: value.status,
+    }
+}
+
+pub(super) fn decode_rename_request(value: generated::RenameRequest) -> ProtoRenameRequest {
+    ProtoRenameRequest {
+        namespace: value.namespace,
+        workflow_id: value.workflow_id.map(decode_workflow_id),
+        run_id: value.run_id.map(decode_run_id),
+        display_name: value.display_name,
+    }
+}
+
+/// Encode a rename request for RELAY to a shard owner (#211).
+///
+/// The gRPC edge forwards the inbound message verbatim and never needs this;
+/// the HTTP edge decodes JSON into the proto shape first, so it does need it
+/// (`api/http/routing.rs`). Lives here with every other proto/generated
+/// conversion rather than beside its one caller, so the two directions of the
+/// same message cannot drift apart.
+#[cfg(feature = "haematite-backend")]
+pub(crate) fn encode_rename_request(value: ProtoRenameRequest) -> generated::RenameRequest {
+    generated::RenameRequest {
+        namespace: value.namespace,
+        workflow_id: value.workflow_id.map(encode_workflow_id),
+        run_id: value.run_id.map(encode_run_id),
+        display_name: value.display_name,
+    }
+}
+
+/// Decode a shard owner's rename reply for relay back to an HTTP caller (#211).
+#[cfg(feature = "haematite-backend")]
+pub(crate) fn decode_rename_response(value: generated::RenameResponse) -> ProtoRenameResponse {
+    ProtoRenameResponse {
+        run_id: value.run_id.map(decode_run_id),
+        display_name: value.display_name,
+    }
+}
+
+pub(super) fn encode_rename_response(value: ProtoRenameResponse) -> generated::RenameResponse {
+    generated::RenameResponse {
+        run_id: value.run_id.map(encode_run_id),
+        display_name: value.display_name,
     }
 }
 

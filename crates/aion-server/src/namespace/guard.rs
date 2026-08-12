@@ -6,9 +6,9 @@ use aion_proto::{
     FilteredSubscription, FirehoseSubscription, PerWorkflowSubscription, ProtoCancelRequest,
     ProtoCountWorkflowsRequest, ProtoCreateScheduleRequest, ProtoDescribeWorkflowRequest,
     ProtoListSchedulesRequest, ProtoListWorkflowsRequest, ProtoPauseRequest, ProtoQueryRequest,
-    ProtoRegisterWorker, ProtoReopenRequest, ProtoResumeRequest, ProtoScheduleIdRequest,
-    ProtoSignalRequest, ProtoStartWorkflowRequest, ProtoUpdateScheduleRequest, SubscriptionRequest,
-    subscription_request,
+    ProtoRegisterWorker, ProtoRenameRequest, ProtoReopenRequest, ProtoResumeRequest,
+    ProtoScheduleIdRequest, ProtoSignalRequest, ProtoStartWorkflowRequest,
+    ProtoUpdateScheduleRequest, SubscriptionRequest, subscription_request,
 };
 
 use crate::error::ServerError;
@@ -134,6 +134,8 @@ pub enum NamespaceOperation<'a> {
     PauseWorkflow(&'a ProtoPauseRequest, WorkflowTarget<'a>),
     /// Resume (paused) workflow request (#204).
     ResumeWorkflow(&'a ProtoResumeRequest, WorkflowTarget<'a>),
+    /// Rename workflow request (#211): namespace grant + durable ownership.
+    RenameWorkflow(&'a ProtoRenameRequest, WorkflowTarget<'a>),
     /// List workflow request.
     ListWorkflows(&'a ProtoListWorkflowsRequest, &'a WorkflowFilter),
     /// Count workflow request.
@@ -216,6 +218,15 @@ impl<'a> NamespaceOperation<'a> {
         target: WorkflowTarget<'a>,
     ) -> Self {
         Self::ResumeWorkflow(request, target)
+    }
+
+    /// Create a rename-workflow operation descriptor (#211).
+    #[must_use]
+    pub const fn rename_workflow(
+        request: &'a ProtoRenameRequest,
+        target: WorkflowTarget<'a>,
+    ) -> Self {
+        Self::RenameWorkflow(request, target)
     }
 
     /// Create a list-workflows operation descriptor.
@@ -323,6 +334,7 @@ impl<'a> NamespaceOperation<'a> {
             Self::Reopen(request, _target) => request.namespace.as_str(),
             Self::PauseWorkflow(request, _target) => request.namespace.as_str(),
             Self::ResumeWorkflow(request, _target) => request.namespace.as_str(),
+            Self::RenameWorkflow(request, _target) => request.namespace.as_str(),
             Self::ListWorkflows(request, _filter) => request.namespace.as_str(),
             Self::CountWorkflows(request) => request.namespace.as_str(),
             Self::Describe(request, _target) => request.namespace.as_str(),
@@ -359,6 +371,7 @@ impl<'a> NamespaceOperation<'a> {
             | Self::Reopen(_, target)
             | Self::PauseWorkflow(_, target)
             | Self::ResumeWorkflow(_, target)
+            | Self::RenameWorkflow(_, target)
             | Self::Describe(_, target)
             | Self::Intervene { target, .. } => target.verify(resolver, authorized_namespace).await,
             Self::UpdateSchedule(_, target)
@@ -1030,6 +1043,7 @@ mod tests {
             input: None,
             routing_key: None,
             task_queue: None,
+            display_name: None,
         };
 
         let scoped = guard

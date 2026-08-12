@@ -13,6 +13,7 @@ service WorkflowService {
   rpc Reopen(ReopenRequest) returns (ReopenResponse);
   rpc Pause(PauseRequest) returns (PauseResponse);
   rpc Resume(ResumeRequest) returns (ResumeResponse);
+  rpc Rename(RenameRequest) returns (RenameResponse);
   rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse);
   rpc CountWorkflows(CountWorkflowsRequest) returns (CountWorkflowsResponse);
   rpc DescribeWorkflow(DescribeWorkflowRequest) returns (DescribeWorkflowResponse);
@@ -71,6 +72,16 @@ message StartWorkflowRequest {
   // on the start so it survives replay/failover. Empty/absent keeps the
   // namespace's default queue.
   optional string task_queue = 5;
+  // Optional operator-facing display name for the run (#211). A LABEL over the
+  // UUID identity, never an address: nothing resolves a workflow by name. When
+  // set, it is recorded durably (as the aion.display_name search attribute) in
+  // the same atomic append as the start. ABSENT (this optional field unset)
+  // starts the run unnamed; a PRESENT but blank (empty or whitespace-only)
+  // value is REFUSED with invalid_input rather than reinterpreted as unnamed,
+  // so leave the field unset to mean "no name" — do not send "". This differs
+  // from routing_key and task_queue above, where empty does mean "not
+  // selected".
+  optional string display_name = 6;
 }
 
 message StartWorkflowResponse {
@@ -159,6 +170,26 @@ message ResumeRequest {
 message ResumeResponse {
   RunId run_id = 1;
   WorkflowStatus status = 2;
+}
+
+// Rename records a new operator-facing display name for a run (#211). The name
+// is a label over the UUID identity, never an address; every rename is a
+// RECORDED SearchAttributesUpdated event, so history keeps every name the run
+// has worn.
+message RenameRequest {
+  string namespace = 1;
+  WorkflowId workflow_id = 2;
+  // Optional run id; absent means the latest run.
+  RunId run_id = 3;
+  // The new display name. Trimmed by the server; must be non-empty after
+  // trimming.
+  string display_name = 4;
+}
+
+// Rename returns the run id and the display name as recorded (trimmed).
+message RenameResponse {
+  RunId run_id = 1;
+  string display_name = 2;
 }
 
 message ListWorkflowsRequest {

@@ -9,9 +9,8 @@ use aion_core::{
 use aion_proto::{
     ProtoCancelRequest, ProtoDescribeWorkflowRequest, ProtoListWorkflowsRequest, ProtoPauseRequest,
     ProtoPayload, ProtoQueryRequest, ProtoReopenRequest, ProtoResumeRequest, ProtoRunId,
-    ProtoSignalRequest, ProtoStartWorkflowRequest, ProtoWorkflowId, ProtoWorkflowStatus, WireError,
-    decode_core_value, decode_event, decode_workflow_summary, encode_core_value,
-    proto_query_response,
+    ProtoSignalRequest, ProtoWorkflowId, ProtoWorkflowStatus, WireError, decode_core_value,
+    decode_event, decode_workflow_summary, encode_core_value, proto_query_response,
 };
 use aion_store::visibility::ListWorkflowsFilter;
 
@@ -20,31 +19,8 @@ use serde::de::DeserializeOwned;
 
 use crate::client::Client;
 use crate::error::ClientError;
-use crate::handle::WorkflowHandle;
 use crate::payload::{from_payload, to_payload};
 use crate::stream::{EventStream, SubscribeTarget, event_stream, event_stream_from};
-
-/// Options accepted by [`Client::start`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct StartOptions {
-    /// Namespace override for this start request.
-    pub namespace: Option<String>,
-    /// Caller-supplied idempotency key for safe local retry replay.
-    ///
-    /// The current AW protobuf has not added an idempotency field yet, so this is
-    /// enforced at the SDK boundary without inventing a client-owned wire field.
-    /// Reusing a key for a different start request returns
-    /// [`ClientError::AlreadyExists`].
-    pub idempotency_key: Option<String>,
-    /// R-4 steered-start routing key. When set, the cluster steers this start to
-    /// `shard_for(routing_key)`'s owner (forwarding there when the dialed node is
-    /// not the owner). `None` keeps the default unsteered placement.
-    pub routing_key: Option<String>,
-    /// Optional default task queue for this workflow's activities. When set, the
-    /// server records it durably on the start (the namespace × `task_queue`
-    /// targeting story); `None` keeps the namespace's default queue.
-    pub task_queue: Option<String>,
-}
 
 /// Pagination options accepted by [`Client::list`].
 ///
@@ -98,75 +74,6 @@ pub struct ResumeOutcome {
 }
 
 impl Client {
-    /// Starts a workflow and returns the assigned workflow and run identifiers.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ClientError`] when transport, server, or response conversion fails.
-    pub async fn start(
-        &self,
-        workflow_type: impl Into<String>,
-        input: Payload,
-        opts: StartOptions,
-    ) -> Result<WorkflowHandle, ClientError> {
-        validate_start_options(&opts)?;
-        let idempotency_key = opts.idempotency_key.clone();
-        let routing_key = opts.routing_key.clone();
-        let task_queue = opts.task_queue.clone();
-        let namespace = operation_namespace(self, opts.namespace);
-        let workflow_type = workflow_type.into();
-        let fingerprint = idempotency_key.as_ref().map(|key| {
-            StartFingerprint::new(
-                namespace.clone(),
-                workflow_type.clone(),
-                &input,
-                routing_key.clone(),
-                task_queue.clone(),
-                key.clone(),
-            )
-        });
-        if let Some(fingerprint) = &fingerprint {
-            if let Some(handle) = self.cached_start(fingerprint).await? {
-                return Ok(handle);
-            }
-        }
-        let response = self
-            .transport
-            .start_workflow(ProtoStartWorkflowRequest {
-                namespace,
-                workflow_type,
-                input: Some(ProtoPayload::from(input)),
-                routing_key,
-                task_queue,
-            })
-            .await?;
-        let workflow_id = decode_required_workflow_id(response.workflow_id, "start response")?;
-        let run_id = decode_required_run_id(response.run_id, "start response")?;
-        let handle = WorkflowHandle::from_ids(self.clone(), workflow_id, run_id);
-        if let Some(fingerprint) = fingerprint {
-            self.record_start(fingerprint, handle.clone()).await?;
-        }
-        Ok(handle)
-    }
-
-    /// Starts a workflow after serializing `input` as JSON.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ClientError::InvalidArgument`] when serialization fails, or the
-    /// delegated start error otherwise.
-    pub async fn start_typed<T>(
-        &self,
-        workflow_type: impl Into<String>,
-        input: &T,
-        opts: StartOptions,
-    ) -> Result<WorkflowHandle, ClientError>
-    where
-        T: Serialize + ?Sized,
-    {
-        self.start(workflow_type, to_payload(input)?, opts).await
-    }
-
     /// Sends a signal to the latest run, or to `run_id` when supplied.
     ///
     /// # Errors
@@ -539,67 +446,8 @@ impl Client {
     }
 }
 
-/// What a start request is keyed by for SDK-boundary idempotency: the namespace,
-/// the workflow type, the payload's content type and bytes, and BOTH routing
-/// dimensions.
-///
-/// The routing fields are part of the key because they change where the workflow
-/// runs and which queue its activities go to. Replaying a cached handle for a key
-/// reused with a different `task_queue` would silently discard the caller's
-/// second, different intent and hand back the first workflow as though it had
-/// honoured it. The Python SDK keys the same six values, and the cross-SDK
-/// conformance contract requires the two to agree on what a key *means*.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct StartFingerprint {
-    namespace: String,
-    workflow_type: String,
-    content_type: aion_core::ContentType,
-    bytes: Vec<u8>,
-    routing_key: Option<String>,
-    task_queue: Option<String>,
-    idempotency_key: String,
-}
-
-impl StartFingerprint {
-    fn new(
-        namespace: String,
-        workflow_type: String,
-        input: &Payload,
-        routing_key: Option<String>,
-        task_queue: Option<String>,
-        idempotency_key: String,
-    ) -> Self {
-        Self {
-            namespace,
-            workflow_type,
-            content_type: input.content_type().clone(),
-            bytes: input.bytes().to_vec(),
-            routing_key,
-            task_queue,
-            idempotency_key,
-        }
-    }
-
-    pub(crate) fn key(&self) -> &str {
-        &self.idempotency_key
-    }
-}
-
-fn operation_namespace(client: &Client, namespace: Option<String>) -> String {
+pub(crate) fn operation_namespace(client: &Client, namespace: Option<String>) -> String {
     namespace.unwrap_or_else(|| client.namespace().to_owned())
-}
-
-fn validate_start_options(opts: &StartOptions) -> Result<(), ClientError> {
-    if opts
-        .idempotency_key
-        .as_ref()
-        .is_some_and(std::string::String::is_empty)
-    {
-        return Err(ClientError::invalid_argument(
-            "idempotency_key must not be empty",
-        ));
-    }
-    Ok(())
 }
 
 /// Serialize typed query arguments into the payload the wire carries.
@@ -655,10 +503,11 @@ fn decode_visibility_summary(
         parent: None,
         failed_step: summary.failed_step,
         failure_reason: summary.failure_reason,
+        display_name: aion_core::display_name_from_attributes(&summary.search_attributes),
     })
 }
 
-fn decode_required_workflow_id(
+pub(crate) fn decode_required_workflow_id(
     value: Option<ProtoWorkflowId>,
     context: &str,
 ) -> Result<WorkflowId, ClientError> {
@@ -668,7 +517,10 @@ fn decode_required_workflow_id(
         .map_err(ClientError::from_wire_error)
 }
 
-fn decode_required_run_id(value: Option<ProtoRunId>, context: &str) -> Result<RunId, ClientError> {
+pub(crate) fn decode_required_run_id(
+    value: Option<ProtoRunId>,
+    context: &str,
+) -> Result<RunId, ClientError> {
     value
         .ok_or_else(|| ClientError::server(format!("{context} run id is missing")))?
         .try_into()
@@ -702,9 +554,10 @@ mod tests {
     use futures::stream;
     use tokio::sync::Mutex;
 
-    use super::{ListPage, StartOptions};
+    use super::ListPage;
     use crate::client::{Client, ClientBuilder, ClientConfig};
     use crate::error::ClientError;
+    use crate::start::{DisplayNameNotApplied, StartOptions};
     use crate::transport::{SubscriptionAttempt, WorkflowTransport};
 
     #[derive(Default)]
@@ -720,6 +573,10 @@ mod tests {
         signal_error: Mutex<Option<ClientError>>,
         query_response: Mutex<Option<Result<ProtoQueryResponse, ClientError>>>,
         reopen_response: Mutex<Option<Result<ProtoReopenResponse, ClientError>>>,
+        /// How many starts actually reached the transport. `last_start` alone
+        /// cannot distinguish "deduped, never sent" from "sent again with the
+        /// same values", which is exactly what the #211 replay tests assert.
+        start_calls: std::sync::atomic::AtomicUsize,
     }
 
     #[async_trait]
@@ -728,6 +585,8 @@ mod tests {
             &self,
             request: aion_proto::ProtoStartWorkflowRequest,
         ) -> Result<ProtoStartWorkflowResponse, ClientError> {
+            self.start_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             *self.last_start.lock().await = Some(request);
             if let Some(error) = self.start_error.lock().await.take() {
                 return Err(error);
@@ -876,6 +735,7 @@ mod tests {
             parent: None,
             failed_step: None,
             failure_reason: None,
+            display_name: None,
         }
     }
 
@@ -908,7 +768,11 @@ mod tests {
         assert_eq!(request.namespace, "tenant-a");
         assert_eq!(request.workflow_type, "checkout");
         assert!(request.input.is_some());
-        assert_ne!(result.workflow_id(), &WorkflowId::new(uuid::Uuid::nil()));
+        assert_ne!(
+            result.handle.workflow_id(),
+            &WorkflowId::new(uuid::Uuid::nil())
+        );
+        assert_eq!(result.display_name_not_applied, None);
         Ok(())
     }
 
@@ -922,6 +786,7 @@ mod tests {
             idempotency_key: Some(String::from("retry-key")),
             routing_key: None,
             task_queue: None,
+            display_name: None,
         };
 
         let original = client
@@ -936,6 +801,231 @@ mod tests {
         assert!(
             matches!(conflict, Err(ClientError::AlreadyExists { .. })),
             "got {conflict:?}"
+        );
+        Ok(())
+    }
+
+    /// #211 fingerprint ruling: a display name is NOT part of the idempotency
+    /// fingerprint, so two starts differing only in name are the SAME act and
+    /// dedupe to one run — but the second name is not silently applied and not
+    /// silently dropped. The caller gets the EXISTING run wearing its EXISTING
+    /// name, plus a note saying which name was not applied.
+    #[tokio::test]
+    async fn a_replay_with_a_different_name_dedupes_and_reports_the_unapplied_name()
+    -> Result<(), ClientError> {
+        let stub = Arc::new(StubTransport::default());
+        let client = client_with(Arc::clone(&stub));
+        let named = |name: Option<&str>| StartOptions {
+            idempotency_key: Some(String::from("retry-key")),
+            display_name: name.map(str::to_owned),
+            ..StartOptions::default()
+        };
+
+        let first = client
+            .start(
+                "checkout",
+                payload("input"),
+                named(Some("Nightly settlement")),
+            )
+            .await?;
+        assert_eq!(
+            first.display_name_not_applied, None,
+            "a first start applies the name it asked for"
+        );
+
+        // Same act, different label: one run, and the difference is REPORTED.
+        let replayed = client
+            .start("checkout", payload("input"), named(Some("Something else")))
+            .await?;
+        assert_eq!(
+            replayed.handle, first.handle,
+            "the label carries no identity, so the act deduped to one run"
+        );
+        assert_eq!(
+            replayed.display_name_not_applied,
+            Some(DisplayNameNotApplied {
+                requested: String::from("Something else"),
+                standing: Some(String::from("Nightly settlement")),
+            }),
+            "the name that was NOT applied must be reported, never dropped in silence"
+        );
+
+        // Asking for NO name drops nothing, so it reports nothing — even
+        // against a run that wears a name of its own. See the four-combination
+        // test below for the whole rule.
+        let replayed = client
+            .start("checkout", payload("input"), named(None))
+            .await?;
+        assert_eq!(
+            replayed.display_name_not_applied, None,
+            "a caller that requested no name had no name dropped"
+        );
+
+        // Asking for the SAME name is not a difference and reports nothing.
+        let replayed = client
+            .start(
+                "checkout",
+                payload("input"),
+                named(Some("Nightly settlement")),
+            )
+            .await?;
+        assert_eq!(replayed.display_name_not_applied, None);
+
+        // Surrounding whitespace is not a difference either: the server trims
+        // before recording, so the run already wears the trimmed name.
+        let replayed = client
+            .start(
+                "checkout",
+                payload("input"),
+                named(Some("  Nightly settlement  ")),
+            )
+            .await?;
+        assert_eq!(
+            replayed.display_name_not_applied, None,
+            "whitespace the server would have erased is not an unapplied name"
+        );
+
+        // Exactly ONE start reached the transport across all five calls.
+        assert_eq!(
+            stub.start_calls.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+        Ok(())
+    }
+
+    /// #211: the WHOLE rule for when an idempotent replay reports an unapplied
+    /// display name, one case per combination of what the replay asked for and
+    /// what the standing run wears.
+    ///
+    /// The report is raised only when the caller ASKED for a name the standing
+    /// run does not wear. A caller that asked for nothing dropped nothing, so
+    /// it is told nothing — the report's absence is exactly the statement that
+    /// no requested name went missing, and firing it for an empty request would
+    /// say the opposite of the truth.
+    #[tokio::test]
+    async fn the_unapplied_name_report_fires_only_for_a_replay_that_asked_for_a_name()
+    -> Result<(), ClientError> {
+        /// One combination: what the FIRST start requested (and so what the
+        /// standing run wears), what the REPLAY requests, and the report the
+        /// replay must produce.
+        struct Case {
+            label: &'static str,
+            standing: Option<&'static str>,
+            requested: Option<&'static str>,
+            expected: Option<DisplayNameNotApplied>,
+        }
+
+        let cases = [
+            Case {
+                label: "requested none, standing none",
+                standing: None,
+                requested: None,
+                expected: None,
+            },
+            Case {
+                label: "requested none, standing some",
+                standing: Some("Nightly"),
+                requested: None,
+                expected: None,
+            },
+            Case {
+                label: "requested some, standing none",
+                standing: None,
+                requested: Some("Nightly"),
+                expected: Some(DisplayNameNotApplied {
+                    requested: String::from("Nightly"),
+                    standing: None,
+                }),
+            },
+            Case {
+                label: "requested some, standing a different some",
+                standing: Some("Nightly"),
+                requested: Some("Weekly"),
+                expected: Some(DisplayNameNotApplied {
+                    requested: String::from("Weekly"),
+                    standing: Some(String::from("Nightly")),
+                }),
+            },
+            Case {
+                label: "requested some, standing the same some",
+                standing: Some("Nightly"),
+                requested: Some("Nightly"),
+                expected: None,
+            },
+        ];
+
+        for Case {
+            label,
+            standing,
+            requested,
+            expected,
+        } in cases
+        {
+            let stub = Arc::new(StubTransport::default());
+            let client = client_with(Arc::clone(&stub));
+            let named = |name: Option<&str>| StartOptions {
+                idempotency_key: Some(String::from("retry-key")),
+                display_name: name.map(str::to_owned),
+                ..StartOptions::default()
+            };
+
+            let first = client
+                .start("checkout", payload("input"), named(standing))
+                .await?;
+            assert_eq!(
+                first.display_name_not_applied, None,
+                "{label}: a first start applies the name it asked for"
+            );
+
+            let replayed = client
+                .start("checkout", payload("input"), named(requested))
+                .await?;
+            assert_eq!(
+                replayed.handle, first.handle,
+                "{label}: the name carries no identity, so the act deduped to one run"
+            );
+            assert_eq!(
+                replayed.display_name_not_applied, expected,
+                "{label}: the report must fire exactly when a REQUESTED name was not applied"
+            );
+            assert_eq!(
+                stub.start_calls.load(std::sync::atomic::Ordering::SeqCst),
+                1,
+                "{label}: the replay must not reach the transport"
+            );
+        }
+        Ok(())
+    }
+
+    /// #211: a blank display name is refused at the SDK boundary, matching the
+    /// server, which refuses a present-but-blank name with `invalid_input`
+    /// rather than reading it as "unnamed". Absence is how a caller says
+    /// "unnamed"; forwarding a blank would only buy a round trip to the same
+    /// refusal.
+    #[tokio::test]
+    async fn a_blank_display_name_is_refused() -> Result<(), ClientError> {
+        let stub = Arc::new(StubTransport::default());
+        let client = client_with(Arc::clone(&stub));
+
+        for blank in ["", "   ", "\t\n "] {
+            let result = client
+                .start(
+                    "checkout",
+                    payload("input"),
+                    StartOptions {
+                        display_name: Some(String::from(blank)),
+                        ..StartOptions::default()
+                    },
+                )
+                .await;
+            assert!(
+                matches!(result, Err(ClientError::InvalidArgument { .. })),
+                "blank {blank:?} must be refused, got {result:?}"
+            );
+        }
+        assert_eq!(
+            stub.start_calls.load(std::sync::atomic::Ordering::SeqCst),
+            0
         );
         Ok(())
     }

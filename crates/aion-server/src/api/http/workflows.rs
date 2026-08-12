@@ -15,8 +15,9 @@ use aion_store::NamespacePlacement;
 use super::auth::HttpCaller;
 use super::clean_dtos::{
     CancelWorkflowRequest, DescribeWorkflowRequest, ListWorkflowsRequest, ListWorkflowsResponse,
-    QueryWorkflowRequest, QueryWorkflowResponse, ReopenWorkflowRequest, ReopenWorkflowResponse,
-    SignalWorkflowRequest, StartWorkflowRequest, StartWorkflowResponse, core_summary_from_store,
+    QueryWorkflowRequest, QueryWorkflowResponse, RenameWorkflowRequest, RenameWorkflowResponse,
+    ReopenWorkflowRequest, ReopenWorkflowResponse, SignalWorkflowRequest, StartWorkflowRequest,
+    StartWorkflowResponse, core_summary_from_store,
 };
 use super::error::{HttpStartError, HttpWireError};
 use super::payload::describe_response_to_ops_console;
@@ -89,6 +90,70 @@ pub(crate) async fn cancel_workflow(
         .await
         .map(Json)
         .map_err(HttpWireError)
+}
+
+/// Records a new operator-facing display name for a run (#211), on a node that
+/// may not own the workflow's shard.
+///
+/// A rename APPENDS a recorded event, so — like every other write — it belongs
+/// to the shard OWNER, and this build has a cluster to forward it to. The gRPC
+/// edge already forwards it; HTTP must too, because HTTP is what the ops
+/// console speaks and rename's engine-side residency gate turns a rename
+/// served on a non-owner into a refusal telling the console to "retry once it
+/// is resident" — a retry that can never succeed from that node. See
+/// [`super::routing::forward_rename`].
+///
+/// The name LABELS an id-addressed run; this endpoint never resolves a
+/// workflow by name.
+#[cfg(feature = "haematite-backend")]
+pub(crate) async fn rename_workflow(
+    State(state): State<ServerState>,
+    HttpCaller(caller): HttpCaller,
+    headers: axum::http::HeaderMap,
+    Json(request): Json<RenameWorkflowRequest>,
+) -> Result<Json<RenameWorkflowResponse>, HttpWireError> {
+    let request: aion_proto::ProtoRenameRequest = request.try_into().map_err(HttpWireError)?;
+    if let Some(forwarded) = super::routing::forward_rename(&state, &headers, &request)
+        .await
+        .map_err(HttpWireError)?
+    {
+        return RenameWorkflowResponse::try_from(forwarded).map(Json);
+    }
+    serve_rename_locally(&state, &caller, request).await
+}
+
+/// Records a new operator-facing display name for a run (#211).
+///
+/// No cluster backend is linked in this build: there is no shard map and no
+/// owner but this node, so there is nothing to route and the request is served
+/// here. The clustered build takes the request headers as well, to carry the
+/// caller's credentials onto a forward.
+///
+/// The name LABELS an id-addressed run; this endpoint never resolves a
+/// workflow by name.
+#[cfg(not(feature = "haematite-backend"))]
+pub(crate) async fn rename_workflow(
+    State(state): State<ServerState>,
+    HttpCaller(caller): HttpCaller,
+    Json(request): Json<RenameWorkflowRequest>,
+) -> Result<Json<RenameWorkflowResponse>, HttpWireError> {
+    let request = request.try_into().map_err(HttpWireError)?;
+    serve_rename_locally(&state, &caller, request).await
+}
+
+/// Serve a rename on this node: the guard scopes the namespace, the shared
+/// handler resolves the run and records the name as a durable
+/// `SearchAttributesUpdated` event. Shared by both builds' entry points so the
+/// local answer cannot differ between them.
+async fn serve_rename_locally(
+    state: &ServerState,
+    caller: &crate::CallerIdentity,
+    request: aion_proto::ProtoRenameRequest,
+) -> Result<Json<RenameWorkflowResponse>, HttpWireError> {
+    let response = handlers::rename(state.namespace_guard(), caller, request)
+        .await
+        .map_err(HttpWireError)?;
+    RenameWorkflowResponse::try_from(response).map(Json)
 }
 
 pub(crate) async fn reopen_workflow(
@@ -556,10 +621,16 @@ mod tests {
                 close_time: None,
                 failed_step: None,
                 failure_reason: None,
-                search_attributes: std::collections::HashMap::from([(
-                    crate::namespace::NAMESPACE_ATTRIBUTE.to_owned(),
-                    aion_core::SearchAttributeValue::String(NAMESPACE.to_owned()),
-                )]),
+                search_attributes: std::collections::HashMap::from([
+                    (
+                        crate::namespace::NAMESPACE_ATTRIBUTE.to_owned(),
+                        aion_core::SearchAttributeValue::String(NAMESPACE.to_owned()),
+                    ),
+                    (
+                        crate::namespace::DISPLAY_NAME_ATTRIBUTE.to_owned(),
+                        aion_core::SearchAttributeValue::String(String::from("Nightly settlement")),
+                    ),
+                ]),
             })
             .await?;
         // Clean wire contract: filter is plain JSON with string-keyed
@@ -582,6 +653,98 @@ mod tests {
             workflow_id().to_string(),
             "list summaries must expose clean string ids"
         );
+        // #211: the display name is carried from the store all the way to the
+        // HTTP boundary. This is the point it used to be dropped — the store
+        // row's `search_attributes` reach `core_summary_from_store`, which must
+        // project `aion.display_name` onto the summary rather than discard it.
+        assert_eq!(
+            summaries[0]["display_name"], "Nightly settlement",
+            "the list surface must carry the recorded display name"
+        );
+        Ok(())
+    }
+
+    /// #211: an unnamed run OMITS `display_name` from the wire rather than
+    /// sending an explicit null, so the console's optional field reads absent
+    /// and the row falls back to the bare UUID.
+    #[tokio::test]
+    async fn http_list_omits_display_name_for_an_unnamed_run()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let (router, visibility_store) = workflow_router_with_visibility().await?;
+        visibility_store
+            .record_visibility(VisibilityRecord {
+                workflow_id: workflow_id(),
+                run_id: run_id(),
+                workflow_type: String::from("fixture"),
+                status: WorkflowStatus::Running,
+                start_time: Utc::now(),
+                close_time: None,
+                failed_step: None,
+                failure_reason: None,
+                search_attributes: std::collections::HashMap::from([(
+                    crate::namespace::NAMESPACE_ATTRIBUTE.to_owned(),
+                    aion_core::SearchAttributeValue::String(NAMESPACE.to_owned()),
+                )]),
+            })
+            .await?;
+
+        let list = json!({ "namespace": NAMESPACE, "filter": {} });
+        let response = router
+            .oneshot(json_request("/workflows/list", &list)?)
+            .await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: serde_json::Value = read_json(response).await?;
+        let summaries = body["summaries"].as_array().ok_or("summaries missing")?;
+        assert_eq!(summaries.len(), 1);
+        assert!(
+            summaries[0].get("display_name").is_none(),
+            "an unnamed run must omit the field entirely, got {}",
+            summaries[0]
+        );
+        Ok(())
+    }
+
+    /// #211: the rename route is mounted, scopes the namespace, and refuses a
+    /// blank name as `invalid_input` — a rename records a non-empty label or
+    /// nothing at all.
+    #[tokio::test]
+    async fn http_rename_refuses_a_blank_name() -> Result<(), Box<dyn std::error::Error>> {
+        let (router, _visibility_store) = workflow_router_with_visibility().await?;
+
+        let rename = json!({
+            "namespace": NAMESPACE,
+            "workflow_id": workflow_id().to_string(),
+            "display_name": "   ",
+        });
+        let response = router
+            .oneshot(json_request("/workflows/rename", &rename)?)
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let error: WireError = read_json(response).await?;
+        assert_eq!(error.code, WireErrorCode::InvalidInput);
+        Ok(())
+    }
+
+    /// #211: the rename route addresses a run by ID. A well-formed rename of an
+    /// id that has no history is `not_found` — nothing here resolves a workflow
+    /// by name.
+    #[tokio::test]
+    async fn http_rename_reports_an_absent_workflow() -> Result<(), Box<dyn std::error::Error>> {
+        let (router, _visibility_store) = workflow_router_with_visibility().await?;
+
+        let rename = json!({
+            "namespace": NAMESPACE,
+            "workflow_id": uuid::Uuid::from_u128(0xdead_beef).to_string(),
+            "display_name": "Nightly settlement",
+        });
+        let response = router
+            .oneshot(json_request("/workflows/rename", &rename)?)
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let error: WireError = read_json(response).await?;
+        assert_eq!(error.code, WireErrorCode::NotFound);
         Ok(())
     }
 

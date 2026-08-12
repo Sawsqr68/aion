@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
-use aion_client::{Client, ClientBuilder, ClientError, ListPage, StartOptions, WorkflowHandle};
+use aion_client::{Client, ClientBuilder, ClientError, ListPage};
 use aion_core::{Payload, WorkflowFilter, WorkflowStatus};
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -13,11 +13,12 @@ use serde_json::Value;
 
 use crate::output::{
     AcknowledgementOutput, QueryOutput, describe_output, pause_output, print_json, reopen_output,
-    resume_output, start_output, to_value,
+    resume_output, to_value,
 };
 use crate::payload::{
     json_payload, parse_run_id, parse_status, parse_workflow_id, payload_to_json,
 };
+use crate::start::{start_workflow, start_workflow_handle};
 
 mod assistant;
 mod awl;
@@ -40,6 +41,7 @@ mod payload;
 mod render;
 mod server;
 mod settings;
+mod start;
 mod worker_agent;
 mod worker_awl;
 mod worker_managed;
@@ -441,6 +443,18 @@ enum RemoteCommand {
         /// Read the JSON input payload from a UTF-8 file instead of `--input`.
         #[arg(long, conflicts_with = "input")]
         input_file: Option<PathBuf>,
+        /// Operator-facing display name for this workflow (#211).
+        ///
+        /// A LABEL shown beside the id, recorded durably on the start. It is
+        /// not an address: no command takes a name as a target, so you still
+        /// operate on the workflow by its id. Omit to start it unnamed.
+        ///
+        /// You name the run you are starting, but the label reads back per
+        /// WORKFLOW: the recorded attribute carries no run id, so a
+        /// continue-as-new successor inherits it and `aion describe` returns
+        /// the most recently recorded name for any run of the workflow.
+        #[arg(long = "name")]
+        display_name: Option<String>,
     },
     /// Send a signal to the latest run of a workflow.
     Signal {
@@ -919,9 +933,10 @@ async fn execute(client: &Client, command: &RemoteCommand) -> Result<Value> {
             workflow_type,
             input,
             input_file,
+            display_name,
         } => {
             let input = resolve_start_input(input, input_file.as_deref())?;
-            start_workflow(client, workflow_type, input).await
+            start_workflow(client, workflow_type, input, display_name.clone()).await
         }
         RemoteCommand::Signal {
             workflow_id,
@@ -1001,22 +1016,6 @@ fn resolve_start_input(input: &str, input_file: Option<&Path>) -> Result<Payload
         }
         None => json_payload(input).context("invalid --input JSON"),
     }
-}
-
-async fn start_workflow_handle(
-    client: &Client,
-    workflow_type: &str,
-    input: Payload,
-) -> Result<WorkflowHandle> {
-    client
-        .start(workflow_type.to_owned(), input, StartOptions::default())
-        .await
-        .context("failed to start workflow")
-}
-
-async fn start_workflow(client: &Client, workflow_type: &str, input: Payload) -> Result<Value> {
-    let handle = start_workflow_handle(client, workflow_type, input).await?;
-    to_value(start_output(&handle))
 }
 
 async fn signal_workflow(
@@ -1342,6 +1341,42 @@ mod tests {
         assert!(input_file.is_none());
         let payload = resolve_start_input(&input, input_file.as_deref())?;
         assert_eq!(payload_to_json(&payload)?, Value::Null);
+        Ok(())
+    }
+
+    /// #211: `--name` sets the run's operator-facing label, and omitting it
+    /// leaves the run unnamed. The flag is spelled `--name` while the field is
+    /// `display_name`, so this pins the spelling an operator actually types.
+    #[test]
+    fn start_reads_the_display_name_flag() -> anyhow::Result<()> {
+        let cli = Cli::try_parse_from([
+            "aion",
+            "start",
+            "order_saga",
+            "--name",
+            "Nightly settlement",
+        ])?;
+        let Some(Command::Client(ClientCommand::Remote(RemoteCommand::Start {
+            display_name, ..
+        }))) = cli.command
+        else {
+            anyhow::bail!("expected start command");
+        };
+        assert_eq!(display_name.as_deref(), Some("Nightly settlement"));
+
+        let cli = Cli::try_parse_from(["aion", "start", "order_saga"])?;
+        let Some(Command::Client(ClientCommand::Remote(RemoteCommand::Start {
+            display_name, ..
+        }))) = cli.command
+        else {
+            anyhow::bail!("expected start command");
+        };
+        assert_eq!(display_name, None, "an unnamed start selects no label");
+        // A whitespace-only `--name` is refused, but the refusal lives in the
+        // client SDK's start-option validation (`aion-client`'s
+        // `a_blank_display_name_is_refused`), which every CLI start goes
+        // through — clap itself has no opinion on a blank string, and a test
+        // here that only re-asserted the string would measure nothing.
         Ok(())
     }
 

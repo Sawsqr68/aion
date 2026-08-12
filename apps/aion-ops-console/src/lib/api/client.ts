@@ -1,3 +1,4 @@
+import { isBlankDisplayName } from '@/lib/workflowIdentity';
 import type {
   ClusterCommand,
   ClusterSnapshot,
@@ -29,14 +30,17 @@ import {
   type NamespaceRecordsResponse,
   type NamespacesResponse,
   normalizeCreateNamespace,
+  normalizeDescribeSummary,
   normalizeHistory,
   normalizeLoadPackage,
   normalizeNamespaceRecords,
   normalizeNamespaces,
+  normalizeRenameWorkflow,
   normalizeReopenWorkflow,
   normalizeStartWorkflow,
   normalizeWorkflowPage,
   normalizeWorkflowVersions,
+  type RenameWorkflowResult,
   type ReopenWorkflowResult,
   type StartWorkflowResult,
   type WorkflowPage,
@@ -52,6 +56,7 @@ import type {
   Capabilities,
   ChangelogResponse,
   InterveneParams,
+  RenameWorkflowParams,
   RequestOptions,
   StartWorkflowParams,
   UpdateStatusResponse,
@@ -68,6 +73,7 @@ export type {
   JsonRecord,
   LoadPackageResult,
   NamespaceRecord,
+  RenameWorkflowResult,
   ReopenWorkflowResult,
   StartWorkflowResult,
   WorkflowPage,
@@ -81,6 +87,7 @@ export type {
   Capabilities,
   ChangelogResponse,
   InterveneParams,
+  RenameWorkflowParams,
   RequestOptions,
   StartWorkflowParams,
   UpdateStatusResponse,
@@ -130,6 +137,42 @@ export class ApiClient {
     );
 
     return normalizeHistory(response);
+  }
+
+  /**
+   * Fetch ONE workflow's server-projected summary (`POST /workflows/describe`
+   * with `include_history: false`).
+   *
+   * The summary is projected from the run's FULL recorded history server-side,
+   * so it is the authority for fields a client-side fold over a loaded history
+   * WINDOW cannot establish — notably `display_name` (#211), whose start-time
+   * naming event sits at the head of history and can therefore fall outside the
+   * detail view's tail window. History is deliberately excluded from the
+   * response: the detail view already loads history through the windowed
+   * endpoint, and asking for it twice would ship the whole run over the wire to
+   * read one field.
+   *
+   * `null` is the honest answer for an unknown workflow, not an error; an
+   * authorization failure or malformed response propagates as an
+   * {@link ApiError}.
+   */
+  async getWorkflowSummary(
+    workflowId: WorkflowId,
+    options: RequestOptions
+  ): Promise<WorkflowSummary | null> {
+    const response = await this.transport.request<unknown>(
+      AW_REST_CONTRACT.endpoints.history,
+      AW_REST_CONTRACT.methods.history,
+      options,
+      {
+        [AW_REST_CONTRACT.requestKeys.namespace]: options.namespace,
+        [AW_REST_CONTRACT.requestKeys.workflowId]: workflowId,
+        [AW_REST_CONTRACT.requestKeys.runId]: null,
+        [AW_REST_CONTRACT.requestKeys.includeHistory]: false,
+      }
+    );
+
+    return normalizeDescribeSummary(response);
   }
 
   /** Fetch an elision-aware, ascending window of durable workflow history. */
@@ -389,6 +432,16 @@ export class ApiClient {
     if (params.taskQueue !== undefined) {
       body.task_queue = params.taskQueue;
     }
+    if (params.displayName !== undefined) {
+      // #211: absence is how a start says "unnamed". A present-but-blank name
+      // is refused HERE, at the library boundary, not forwarded as `''` — the
+      // server refuses one, and so do the Rust, Python, and TypeScript caller
+      // SDKs. Forwarding it would make this client the one caller in the system
+      // that buys a round trip to a refusal it could have given itself, and it
+      // would let a library caller that skipped the form validation start a run
+      // it believed it had named.
+      body[AW_REST_CONTRACT.requestKeys.displayName] = requireNamedDisplayName(params.displayName);
+    }
 
     const response = await this.transport.request<unknown>(
       AW_REST_CONTRACT.endpoints.workflowStart,
@@ -494,6 +547,44 @@ export class ApiClient {
   }
 
   /**
+   * Record a run's operator-facing display name (`POST /workflows/rename`,
+   * #211). Namespace-scoped exactly like cancel/reopen (ADR-022 per-namespace
+   * command authority).
+   *
+   * The name is a LABEL over UUID identity: the TARGET is always the id
+   * (`run_id` omitted targets the latest run, which the server resolves), and
+   * nothing here resolves a workflow by name. The rename is recorded as an
+   * ordinary `SearchAttributesUpdated` event, so history keeps every name that
+   * has been worn — and because that event carries no run id, what is recorded
+   * reads back as the WORKFLOW's current name.
+   *
+   * A blank/whitespace-only name (`invalid_input`), an absent workflow
+   * (`not_found`), or a denied grant propagates as a typed {@link ApiError} —
+   * never swallowed and never reinterpreted as success. The response echoes the
+   * name as RECORDED (trimmed), which is what the caller should display.
+   */
+  async rename(
+    params: RenameWorkflowParams,
+    options: RequestOptions
+  ): Promise<RenameWorkflowResult> {
+    const response = await this.transport.request<unknown>(
+      AW_REST_CONTRACT.endpoints.workflowRename,
+      AW_REST_CONTRACT.methods.workflowRename,
+      options,
+      {
+        [AW_REST_CONTRACT.requestKeys.namespace]: options.namespace,
+        [AW_REST_CONTRACT.requestKeys.workflowId]: params.workflowId,
+        [AW_REST_CONTRACT.requestKeys.displayName]: requireNamedDisplayName(params.displayName),
+        ...(params.runId === undefined
+          ? {}
+          : { [AW_REST_CONTRACT.requestKeys.runId]: params.runId }),
+      }
+    );
+
+    return normalizeRenameWorkflow(response);
+  }
+
+  /**
    * Deliver a named signal to a running workflow (`POST /workflows/signal`).
    * Namespace-scoped exactly like cancel/reopen (ADR-022 per-namespace command
    * authority). The plain-JSON `payload` is auto-wrapped server-side as an
@@ -573,6 +664,31 @@ export class ApiClient {
       [AW_REST_CONTRACT.requestKeys.includeHistory]: true,
     };
   }
+}
+
+/**
+ * The trimmed display name, or a refusal (#211).
+ *
+ * Trimmed because the server trims before recording, so the trimmed string is
+ * what the run will actually wear; refused when blank because a blank is never
+ * how a caller says "unnamed" — on `start` that is said by OMITTING the field,
+ * and `rename` has no un-name at all. The blank predicate is shared with the
+ * start form and the rename submit path (`@/lib/workflowIdentity`) so the three
+ * surfaces cannot drift into three slightly different rules; only the sentence
+ * differs, because each surface tells the operator something different about
+ * what to do next.
+ *
+ * A plain `Error`, not an {@link ApiError}: nothing was sent, so there is no
+ * HTTP status to report and manufacturing one would misattribute a client-side
+ * refusal to the server.
+ */
+function requireNamedDisplayName(displayName: string): string {
+  if (isBlankDisplayName(displayName)) {
+    throw new Error(
+      'A display name must not be blank — omit it to start a run unnamed; a rename records a name.'
+    );
+  }
+  return displayName.trim();
 }
 
 export function createApiClient(options?: ApiClientOptions): ApiClient {

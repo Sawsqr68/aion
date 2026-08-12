@@ -104,6 +104,7 @@ impl aion_store::ReadableEventStore for RacingSuccessorStore {
             parent: None,
             failed_step: None,
             failure_reason: None,
+            display_name: None,
         }])
     }
 

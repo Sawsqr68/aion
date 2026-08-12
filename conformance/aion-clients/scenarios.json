@@ -31,6 +31,7 @@
     "eventsInclude": "stream contains events matching all listed event predicates",
     "sequenceContiguousUnique": "delivered event sequence numbers contain no gaps and no duplicates after resume",
     "sameHandleAs": "returned handle has the same workflowId and runId as the referenced start step",
+    "displayNameEquals": "the summarised operator-facing display name equals the given value; null asserts the workflow is unnamed",
     "errorSameAs": "the SDK-observable error identity (taxonomy member, message, and detail) is byte-identical to the error recorded by the referenced scenario step"
   },
   "fixtures": {
@@ -44,6 +45,7 @@
       "slow": "slow"
     },
     "deniedNamespace": "conformance-denied",
+    "displayName": "Conformance display name",
     "foreignWorkflow": {
       "workflowId": "f0e1d2c3-0000-4000-8000-000000000403",
       "runId": "f0e1d2c3-0000-4000-8000-000000000404"
@@ -315,6 +317,136 @@
           },
           "expect": {
             "error": "AlreadyExists"
+          }
+        }
+      ]
+    },
+    {
+      "id": "display-name",
+      "description": "A start may carry an operator-facing display name (#211), and every SDK must carry the same one to the same place: the server records it durably on the start and describe reads it back. A start that names nothing describes as unnamed, and a present-but-blank name is InvalidArgument at the SDK boundary rather than a quietly unnamed run.",
+      "requires": [
+        "The server registers the aion.display_name search attribute and projects it onto the WorkflowSummary that describe returns.",
+        "The SDK carries an optional display name on start, trims it, and refuses a present-but-blank one at its own boundary."
+      ],
+      "steps": [
+        {
+          "id": "connect",
+          "operation": "connect",
+          "input": {
+            "endpoint": "${defaults.endpoint}",
+            "auth": "${defaults.auth}",
+            "tls": "${defaults.tls}"
+          },
+          "expect": {
+            "ok": {
+              "kind": "client"
+            }
+          }
+        },
+        {
+          "id": "start-named",
+          "operation": "start",
+          "input": {
+            "namespace": "${defaults.namespace}",
+            "workflowType": "${fixtures.workflowType}",
+            "idempotencyKey": "display-name-001",
+            "displayName": "${fixtures.displayName}",
+            "payload": {
+              "contentType": "application/json",
+              "json": {
+                "message": "named"
+              }
+            }
+          },
+          "expect": {
+            "ok": {
+              "kind": "handle",
+              "workflowId": "anyString",
+              "runId": "anyString"
+            }
+          }
+        },
+        {
+          "id": "describe-named",
+          "operation": "describe",
+          "input": {
+            "workflowId": "$display-name.start-named.workflowId",
+            "runId": "$display-name.start-named.runId",
+            "includeHistory": false
+          },
+          "expect": {
+            "ok": {
+              "kind": "workflowDescription",
+              "workflowId": "$display-name.start-named.workflowId",
+              "runId": "$display-name.start-named.runId",
+              "displayNameEquals": "${fixtures.displayName}",
+              "statusIn": [
+                "RUNNING",
+                "COMPLETED"
+              ]
+            }
+          }
+        },
+        {
+          "id": "start-unnamed",
+          "operation": "start",
+          "input": {
+            "namespace": "${defaults.namespace}",
+            "workflowType": "${fixtures.workflowType}",
+            "idempotencyKey": "display-name-002",
+            "payload": {
+              "contentType": "application/json",
+              "json": {
+                "message": "unnamed"
+              }
+            }
+          },
+          "expect": {
+            "ok": {
+              "kind": "handle",
+              "workflowId": "anyString",
+              "runId": "anyString"
+            }
+          }
+        },
+        {
+          "id": "describe-unnamed",
+          "operation": "describe",
+          "input": {
+            "workflowId": "$display-name.start-unnamed.workflowId",
+            "runId": "$display-name.start-unnamed.runId",
+            "includeHistory": false
+          },
+          "expect": {
+            "ok": {
+              "kind": "workflowDescription",
+              "workflowId": "$display-name.start-unnamed.workflowId",
+              "runId": "$display-name.start-unnamed.runId",
+              "displayNameEquals": null,
+              "statusIn": [
+                "RUNNING",
+                "COMPLETED"
+              ]
+            }
+          }
+        },
+        {
+          "id": "start-blank-name",
+          "operation": "start",
+          "input": {
+            "namespace": "${defaults.namespace}",
+            "workflowType": "${fixtures.workflowType}",
+            "idempotencyKey": "display-name-003",
+            "displayName": "   ",
+            "payload": {
+              "contentType": "application/json",
+              "json": {
+                "message": "must-not-start"
+              }
+            }
+          },
+          "expect": {
+            "error": "InvalidArgument"
           }
         }
       ]

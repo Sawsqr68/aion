@@ -31,6 +31,8 @@ pub mod handle;
 pub mod ops;
 /// Typed conversion helpers between serde values and Aion payloads.
 pub mod payload;
+/// The start surface: options, outcome, and the SDK-boundary idempotency key.
+pub mod start;
 /// Event stream and subscription helpers.
 pub mod stream;
 /// Transport adapters (gRPC, WebSocket event streaming, embedded engine).
@@ -39,8 +41,7 @@ pub mod transport;
 pub use client::{Client, ClientAuth, ClientBuilder, TlsOptions};
 pub use error::{ClientError, ErrorDetail};
 pub use handle::WorkflowHandle;
-pub use ops::{
-    ListPage, PauseOutcome, ReopenOutcome, ResumeOutcome, StartOptions, WorkflowDescription,
-};
+pub use ops::{ListPage, PauseOutcome, ReopenOutcome, ResumeOutcome, WorkflowDescription};
 pub use payload::{from_payload, to_payload};
+pub use start::{DisplayNameNotApplied, StartOptions, StartOutcome};
 pub use stream::{EventStream, ResumingEventStream, SubscribeTarget};

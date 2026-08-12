@@ -132,7 +132,10 @@ impl<'a> PauseWorkflowContext<'a> {
     }
 }
 
-fn status_name(status: WorkflowStatus) -> &'static str {
+/// The status's operator-facing name, used by every rejection that has to say
+/// what state the run is actually in. Shared with `rename.rs` so the two cannot
+/// print different words for the same status.
+pub(crate) fn status_name(status: WorkflowStatus) -> &'static str {
     match status {
         WorkflowStatus::Running => "Running",
         WorkflowStatus::Completed => "Completed",

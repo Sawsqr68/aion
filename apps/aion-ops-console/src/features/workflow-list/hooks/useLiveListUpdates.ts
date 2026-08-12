@@ -9,6 +9,7 @@ import type {
   WorkflowPage,
   WorkflowPageRequest,
 } from '@/lib/api';
+import { displayNameFromEvent, normalizeDisplayName } from '@/lib/workflowIdentity';
 import type { Event, WorkflowFilter, WorkflowStatus, WorkflowSummary } from '@/types';
 import { workflowListQueryKey } from './useWorkflowQuery';
 
@@ -146,9 +147,17 @@ export async function refetchWorkflowListForRecovery(
   }
 }
 
-/** True only for lifecycle frames that can change a workflow-list summary. */
+/**
+ * True for frames that can change a workflow-list summary: the lifecycle events
+ * that move `status`/`started_at`/`ended_at`, and (#211) a recorded naming
+ * update, which moves `display_name`.
+ *
+ * The name is patched on exactly the same terms as the status. A list whose
+ * status column updates live while the name silently does not is worse than one
+ * where neither does, because the operator cannot tell which columns to trust.
+ */
 export function affectsWorkflowSummaryProjection(event: Event): boolean {
-  return statusFromEvent(event) !== null;
+  return statusFromEvent(event) !== null || displayNameFromEvent(event) !== null;
 }
 
 /**
@@ -212,6 +221,14 @@ export function patchWorkflowPage(
     return { ...page, items };
   }
 
+  // A naming update for a workflow that is not on this page changes nothing
+  // here: it can never START a row, so the page is returned UNCHANGED rather
+  // than reported as "could not patch" (which would spend a refetch, or be
+  // miscounted as a new row above, on a rename the operator cannot see).
+  if (displayNameFromEvent(event) !== null) {
+    return page;
+  }
+
   if (!allowInsert) {
     return null;
   }
@@ -232,6 +249,17 @@ export function patchWorkflowPage(
 }
 
 function patchExistingSummary(summary: WorkflowSummary, event: Event): WorkflowSummary | null {
+  // #211: a recorded naming update carries no status, so it is folded first.
+  // An unchanged name returns null (no patch), which leaves the cached page
+  // object identical rather than re-rendering the whole list for nothing.
+  const renamedTo = displayNameFromEvent(event);
+
+  if (renamedTo !== null) {
+    return normalizeDisplayName(summary.display_name) === renamedTo
+      ? null
+      : { ...summary, display_name: renamedTo };
+  }
+
   const nextStatus = statusFromEvent(event);
 
   if (nextStatus === null && event.type !== 'WorkflowStarted') {

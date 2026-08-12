@@ -40,3 +40,9 @@ export type {
   WorkflowStatus,
   WorkflowSummary,
 } from './generated';
+
+// The one VALUE this barrel carries. `DISPLAY_NAME_ATTRIBUTE` (#211) is emitted
+// into the generated bindings by the ts-rs pipeline from
+// `aion_core::DISPLAY_NAME_ATTRIBUTE`, so the key the console reads a display
+// name by is the key Rust records it under — by generation, not by a copy.
+export { DISPLAY_NAME_ATTRIBUTE } from './generated';

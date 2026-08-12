@@ -74,6 +74,7 @@ pub(crate) fn encode_start_request(
         input: value.input.map(encode_payload),
         routing_key: value.routing_key,
         task_queue: value.task_queue,
+        display_name: value.display_name,
     }
 }
 

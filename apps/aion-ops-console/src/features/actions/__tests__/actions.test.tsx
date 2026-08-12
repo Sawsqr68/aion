@@ -79,6 +79,22 @@ describe('StartWorkflowForm', () => {
     // A selected namespace takes precedence, so the free-form hint is absent.
     expect(markup).not.toContain('created when the run starts');
   });
+
+  // #211. Catches: the optional display-name field missing from the start
+  // surface, or being presented as a way to FIND a run rather than label one.
+  //
+  // It also catches the field regrowing its neighbours' `blank = …` phrasing.
+  // Routing key and task queue can honestly say "blank = <default>" because the
+  // server reads a blank one as "not selected"; a blank display name is REFUSED
+  // everywhere, so saying "blank = unnamed" here would teach an equivalence the
+  // rest of the system rejects. Absence is the word, not blankness.
+  test('offers an optional display name, described as a label over the id', () => {
+    const markup = wrap(<StartWorkflowForm namespace={NAMESPACE} />);
+    expect(markup).toContain('Display name (optional)');
+    expect(markup).toContain('omit it to show the bare id');
+    expect(markup).not.toContain('blank = unnamed');
+    expect(markup).toContain('addressed by its id');
+  });
 });
 
 describe('StartWorkflowForm drafts', () => {
@@ -98,6 +114,15 @@ describe('StartWorkflowForm drafts', () => {
     expect(markup).toContain('DraftedDigest');
     expect(markup).toContain('ops-draft');
     expect(markup).toContain('draft-rk-7');
+  });
+
+  // Catches: the #211 name field left out of the draft, so a half-filled form
+  // loses the name on navigation while every sibling field survives.
+  test('the display name is drafted like every other field', () => {
+    startWorkflowDraftStore.getState().setDraft({ displayName: 'drafted-run-name' });
+
+    const markup = wrap(<StartWorkflowForm namespace={NAMESPACE} />);
+    expect(markup).toContain('drafted-run-name');
   });
 
   test('the free-form namespace entry is drafted too', () => {

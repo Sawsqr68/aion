@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use aion_client::transport::ws::EVENT_STREAM_PATH;
 use aion_client::{Client, ClientAuth, ClientError, ListPage, StartOptions, TlsOptions};
-use aion_core::{ContentType, Event, Payload, RunId, WorkflowFilter, WorkflowId, WorkflowStatus};
+use aion_core::{Event, Payload, RunId, WorkflowFilter, WorkflowId, WorkflowStatus};
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
 use serde_json::{Map, Value, json};
@@ -61,11 +61,61 @@ async fn shared_client_contract_conformance() -> Result<(), Box<dyn std::error::
         .and_then(Value::as_array)
         .ok_or("scenarios.json scenarios must be an array")?;
 
+    let mut divergences: Vec<String> = Vec::new();
     for scenario in scenario_values {
-        run_scenario(scenario, defaults, fixtures, &server_url).await?;
+        run_scenario(scenario, defaults, fixtures, &server_url, &mut divergences).await?;
     }
 
+    assert!(
+        divergences.is_empty(),
+        "{} conformance divergence(s):\n{}",
+        divergences.len(),
+        divergences
+            .iter()
+            .map(|entry| format!("  {entry}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+
     Ok(())
+}
+
+/// Records a divergent step and emits the shared cross-SDK report line.
+///
+/// A divergence is DATA, never an abort of the run. The eight scenarios are
+/// independent — each opens its own client and its own [`ScenarioContext`], and
+/// nothing crosses between them — so one scenario that cannot be executed must
+/// never delete the observables of the seven that can. In particular
+/// `not-found-anti-leak` is a SECURITY control (a foreign-namespace probe must
+/// be byte-identical to a nonexistent-workflow probe, which is also the standing
+/// evidence that name-shaped visibility predicates cannot escape namespace
+/// scoping), and a control an unrelated earlier failure can silently skip is not
+/// a control at all.
+fn record_divergence(
+    divergences: &mut Vec<String>,
+    scenario: &str,
+    step: &str,
+    expected: &Value,
+    actual: &Value,
+    reason: &str,
+) {
+    divergences.push(format!("scenario={scenario} step={step}: {reason}"));
+    println!(
+        "DIVERGENCE sdk=rust scenario={scenario} step={step} expected={expected} actual={actual}"
+    );
+}
+
+/// The message carried by a failed assertion, whatever shape it was panicked
+/// with.
+fn panic_text(payload: &(dyn std::any::Any + Send)) -> String {
+    payload.downcast_ref::<String>().map_or_else(
+        || {
+            payload
+                .downcast_ref::<&'static str>()
+                .map_or_else(|| "assertion failed".to_owned(), |text| (*text).to_owned())
+        },
+        Clone::clone,
+    )
 }
 
 fn load_scenarios() -> Result<Value, Box<dyn std::error::Error>> {
@@ -80,6 +130,7 @@ async fn run_scenario(
     defaults: &Map<String, Value>,
     fixtures: &Map<String, Value>,
     server_url: &str,
+    divergences: &mut Vec<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let scenario_id = require_str(scenario, "id")?;
     let steps = scenario
@@ -94,6 +145,7 @@ async fn run_scenario(
         fixtures,
         server_url,
         &mut context,
+        divergences,
     )
     .await;
     context.teardown();
@@ -107,6 +159,7 @@ async fn run_scenario_steps(
     fixtures: &Map<String, Value>,
     server_url: &str,
     context: &mut ScenarioContext,
+    divergences: &mut Vec<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let started_at = Utc::now() - chrono::Duration::seconds(30);
     let now = Utc::now() + chrono::Duration::seconds(30);
@@ -146,14 +199,37 @@ async fn run_scenario_steps(
             "AION_CONFORMANCE sdk=rust scenario={scenario_id} step={step_id} result={}",
             serde_json::to_string(&normalized)?
         );
-        assert_matches(
-            scenario_id,
-            step_id,
-            &normalized,
-            &expected,
-            context,
-            error_identity.as_ref(),
-        );
+        // The assertions below are `assert!`/`assert_eq!`, so a mismatch
+        // arrives as a panic. It is caught HERE and turned into a recorded
+        // divergence rather than allowed to unwind out of the test: an unwind
+        // would take the remaining scenarios with it (see
+        // [`record_divergence`]). The default panic hook still prints the full
+        // assertion detail, so nothing is quieter than before — only less
+        // destructive.
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            assert_matches(
+                scenario_id,
+                step_id,
+                &normalized,
+                &expected,
+                context,
+                error_identity.as_ref(),
+            );
+        }));
+        if let Err(payload) = outcome {
+            // A divergent step stops THIS scenario — later steps reference
+            // earlier ones by `$scenario.step`, so continuing past a failed step
+            // would measure nothing — and leaves the rest of the matrix to run.
+            record_divergence(
+                divergences,
+                scenario_id,
+                step_id,
+                &expected,
+                &normalized,
+                &panic_text(payload.as_ref()),
+            );
+            return Ok(());
+        }
         context.record(scenario_id, step_id, normalized);
         if let Some(identity) = error_identity {
             context.record_error_identity(scenario_id, step_id, identity);
@@ -390,9 +466,11 @@ async fn execute_start(input: &Value, context: &mut ScenarioContext) -> Result<V
                 idempotency_key: input_str(input, "idempotencyKey").map(ToOwned::to_owned),
                 routing_key: input_str(input, "routingKey").map(ToOwned::to_owned),
                 task_queue: input_str(input, "taskQueue").map(ToOwned::to_owned),
+                display_name: input_str(input, "displayName").map(ToOwned::to_owned),
             },
         )
-        .await?;
+        .await?
+        .handle;
     Ok(json!({
         "kind": "handle",
         "workflowId": handle.workflow_id().to_string(),
@@ -440,7 +518,13 @@ async fn execute_query(input: &Value, context: &mut ScenarioContext) -> Result<V
                 &wf_id,
                 run_id.as_ref(),
                 input_str(input, "queryName").unwrap_or_default(),
-                Payload::new(ContentType::Json, Vec::new()),
+                // The scenarios' queries take no arguments, and "no arguments"
+                // is the JSON null DOCUMENT — not zero bytes. An empty payload
+                // is not a well-formed JSON document, so the server refuses it
+                // with `InvalidArgument` and the step can never reach the
+                // handler. `Payload::json_null` is the canonical spelling the
+                // whole carrier agrees on (see `Client::query`).
+                Payload::json_null(),
                 Duration::from_millis(deadline_ms),
             )
             .await;
@@ -517,6 +601,11 @@ async fn execute_describe(
         "workflowId": description.summary.workflow_id.to_string(),
         "runId": input_str(input, "runId"),
         "status": status_name(description.summary.status),
+        // #211: the summarised display name is part of the shared observable —
+        // an SDK that cannot carry a name to the server, or cannot read the one
+        // the server recorded, must diverge here rather than pass quietly.
+        // `null` is the observable for an unnamed workflow.
+        "displayName": description.summary.display_name,
         "history": description.history.iter().map(normalize_event).collect::<Vec<_>>()
     }))
 }
@@ -647,6 +736,29 @@ fn assert_matches(
             actual_ok.get("value"),
             Some(expected_value),
             "scenario={scenario} step={step}"
+        );
+    }
+    // #211: `displayNameEquals` pins the summarised name, `null` asserting the
+    // workflow is unnamed.
+    //
+    // The observable must CARRY the key. Absent-vs-null is a real wire
+    // distinction and is folded exactly once, where the summary is normalized
+    // and an unnamed workflow genuinely has no recorded attribute. By THIS
+    // layer the harness owns the shape and always emits the key, so a missing
+    // one means the harness stopped projecting at all — and defaulting it here
+    // to `Value::Null` would let that failure satisfy every
+    // `displayNameEquals: null` expectation in the document. Right answer and
+    // plausible-wrong answer coinciding distinguishes nothing, so the absence
+    // is refused instead of absorbed.
+    if let Some(expected_name) = expected_ok.get("displayNameEquals") {
+        assert!(
+            actual_ok.get("displayName").is_some(),
+            "scenario={scenario} step={step} observable did not project displayName"
+        );
+        assert_eq!(
+            actual_ok.get("displayName"),
+            Some(expected_name),
+            "scenario={scenario} step={step} displayNameEquals"
         );
     }
     if let Some(reference) = expected_ok.get("sameHandleAs") {

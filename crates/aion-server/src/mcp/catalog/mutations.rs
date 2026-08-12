@@ -49,6 +49,15 @@ pub(crate) fn start_run() -> Tool {
                     "description": "Steers placement onto a specific shard in a clustered \
                                     deployment. Omit unless you have been told to set it.",
                 },
+                "display_name": {
+                    "type": "string",
+                    "description": "An operator-facing label for this run, shown beside its id \
+                                    in the console. It is only a label: no tool addresses a run \
+                                    by name, so you still need the run_id to act on it. Omit to \
+                                    leave the run showing its bare id — an empty or \
+                                    whitespace-only value is refused rather than treated as \
+                                    omitted, so the run never starts unnamed by accident.",
+                },
                 "await_completion": {
                     "type": "boolean",
                     "description": "When true the call is answered as a task that settles when \

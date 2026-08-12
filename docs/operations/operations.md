@@ -771,7 +771,7 @@ sourcing — but in-flight activities will re-dispatch on recovery.
 ```sh
 aion list [--status running|paused|completed|failed|cancelled|timed-out|continued-as-new]
 aion describe <workflow-id> [--run-id <id>] [--raw] --pretty
-aion start <workflow-type> --input '<json>'      # or --input-file <path>
+aion start <workflow-type> --input '<json>' [--name '<label>']   # or --input-file <path>
 aion signal <workflow-id> <signal-name> --payload '<json>'
 aion query <workflow-id> <query-name>
 aion cancel <workflow-id> [--reason '<text>']
@@ -782,6 +782,23 @@ aion inspect <workflow-id> [--run-id <id>] [--from <seq> --mock '<json>']
 ```
 
 Every id-taking verb accepts `--run-id`; omitted, it targets the latest run.
+
+- **`start --name`** — an optional operator-facing LABEL for the workflow you
+  are starting, shown beside its id in the ops console and recorded durably on
+  the start, so it survives replay and failover. It is only a label: **no verb
+  takes a name as a target**, so you still address the workflow by its id. A
+  whitespace-only `--name` is refused rather than quietly starting an unnamed
+  run (the server refuses it too, so a raw HTTP or gRPC caller gets the same
+  answer). Omit it and the workflow shows its bare id. Renaming is a console
+  action (`POST /workflows/rename`), not a CLI verb.
+
+  You name a run, but the name READS BACK per workflow. The recorded attribute
+  carries no run id, so `aion list` and `aion describe` fold every recorded name
+  over the whole history and show the last one — for every run of that workflow.
+  Two consequences worth knowing at the terminal: a continue-as-new successor
+  keeps showing the name its predecessor was given, and only a workflow's
+  CURRENT run can be renamed, because a predecessor's new name would land on the
+  successor that now owns the history head.
 
 - **`pause` / `resume`** — `pause` durably holds **new** activity dispatch
   while preserving all durable state: the run projects the non-terminal

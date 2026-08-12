@@ -31,6 +31,8 @@ mod directory;
 mod edge;
 #[cfg(feature = "haematite-backend")]
 mod forwarder;
+#[cfg(feature = "haematite-backend")]
+mod relay;
 
 #[cfg(feature = "haematite-backend")]
 pub use directory::{DirectoryPeer, NodeRef, OwnerView, ShardDirectory, StaticShardDirectory};
@@ -43,3 +45,5 @@ pub use forwarder::{
     FORWARD_HOPS_METADATA, ForwardReply, ForwardRequest, GrpcRequestForwarder, MAX_FORWARD_HOPS,
     RequestForwarder, current_hops,
 };
+#[cfg(feature = "haematite-backend")]
+pub use relay::{not_owner_wire, owner_refusal};

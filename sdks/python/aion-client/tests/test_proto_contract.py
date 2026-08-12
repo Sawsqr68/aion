@@ -316,6 +316,67 @@ def test_patching_already_patched_output_is_accepted(tmp_path: Path) -> None:
     assert target.read_text(encoding="utf-8") == already
 
 
+def test_the_stubs_carry_the_start_display_name_field_at_its_contract_tag() -> None:
+    """`StartWorkflowRequest.display_name` must be present, optional, and tag 6 (#211).
+
+    The byte-comparison gate above already fails on stale stubs, but it fails as
+    an anonymous diff. This names the one field the SDK now depends on and pins
+    its TAG, because a tag is what the wire actually carries: a field renumbered
+    on either side keeps compiling, keeps every byte comparison against ITS OWN
+    generator honest, and silently writes a display name into whatever field 6
+    has become. Presence (`optional`) is checked too, since that is what lets
+    "unnamed" be absence rather than an empty string.
+    """
+
+    from aion_client.proto import workflow_pb2
+
+    field = workflow_pb2.StartWorkflowRequest.DESCRIPTOR.fields_by_name.get("display_name")
+    assert field is not None, (
+        "StartWorkflowRequest has no display_name field; the committed stubs predate #211. "
+        "Regenerate with `uv run --extra dev python -m proto_codegen`."
+    )
+    assert field.number == 6, f"display_name is tag {field.number}, but the wire contract assigns it 6"
+    assert field.has_presence, "display_name must be a proto3 `optional`, so an unnamed run is absence, not a blank"
+
+
+def test_the_stubs_carry_the_rename_rpc_and_its_messages() -> None:
+    """The `Rename` RPC and both its messages must exist (#211).
+
+    This SDK exposes NO rename operation — renaming is a console/HTTP action in
+    this release (`POST /workflows/rename`), not an SDK or CLI verb — so there is
+    no caller reach to lose. The pin exists for a different and sharper reason:
+    precisely BECAUSE nothing in `aion_client` touches these descriptors, nothing
+    in the SDK's own test suite would notice if a regeneration dropped them.
+    Contrast `StartWorkflowRequest.display_name` above, which `Client.start`
+    assigns directly: lose that and the client tests break loudly on their own.
+    `Rename` has no such witness, so this file is its only one.
+
+    What it adds over the byte-comparison gate is the same thing the
+    `display_name` pin adds — that gate fails as an ANONYMOUS diff, while this
+    names the missing RPC and the command that restores it.
+
+    Checked through the service descriptor rather than by module attribute, so
+    the RPC itself is proven, not merely two message types that happen to be
+    named for it.
+    """
+
+    from aion_client.proto import workflow_pb2
+
+    service = workflow_pb2.DESCRIPTOR.services_by_name["WorkflowService"]
+    method = service.FindMethodByName("Rename")
+    assert method is not None, (
+        "WorkflowService has no Rename RPC; the committed stubs predate #211. "
+        "Regenerate with `uv run --extra dev python -m proto_codegen`."
+    )
+    assert method.input_type.name == "RenameRequest"
+    assert method.output_type.name == "RenameResponse"
+
+    request_fields = workflow_pb2.RenameRequest.DESCRIPTOR.fields_by_name
+    assert set(request_fields) == {"namespace", "workflow_id", "run_id", "display_name"}
+    response_fields = workflow_pb2.RenameResponse.DESCRIPTOR.fields_by_name
+    assert set(response_fields) == {"run_id", "display_name"}
+
+
 def test_a_generated_file_without_a_version_banner_is_refused(tmp_path: Path) -> None:
     """Version extraction must not invent an answer for input it cannot read."""
 

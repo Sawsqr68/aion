@@ -39,15 +39,40 @@ const client = await connect({
 
 Generic JSON payloads are the typed path. `idempotencyKey` makes caller retries safe: identical retry returns the original handle, conflicting reuse raises `AlreadyExistsError`.
 
+`start` returns a `StartOutcome`, not a bare handle: `{ handle, displayNameNotApplied }`.
+
 ```ts
 type StartInput = { message: string; counter: number };
 
-const handle = await client.start<StartInput>({
+const { handle } = await client.start<StartInput>({
   workflowType: "conformance.echo",
   input: { message: "hello", counter: 1 },
   idempotencyKey: "readme-seven-operations",
+  displayName: "Nightly settlement",
 });
 ```
+
+`displayName` is an optional operator-facing label recorded durably on the start. It is trimmed before it is sent (the server trims it too), and a present-but-blank one raises `InvalidArgumentError` before any round trip — omit the option to start the run unnamed. It is a LABEL over the UUID identity, never an address: no SDK call resolves a workflow by name, and this SDK deliberately offers no "find by name and act" helper — name-shaped filtering returns candidates and the caller chooses.
+
+The name is not part of the idempotency fingerprint, because a label carries no identity: two starts differing only in name are the same act and dedupe to one run. When a replay matches a run that does not already wear the requested name, the drop is reported rather than swallowed:
+
+```ts
+const outcome = await client.start<StartInput>({
+  workflowType: "conformance.echo",
+  input: { message: "hello", counter: 1 },
+  idempotencyKey: "readme-seven-operations",
+  displayName: "A different name",
+});
+if (outcome.displayNameNotApplied !== undefined) {
+  // The replayed run keeps its existing name; nothing is renamed behind you.
+  console.log(
+    outcome.displayNameNotApplied.requested,
+    outcome.displayNameNotApplied.standing ?? "(unnamed)",
+  );
+}
+```
+
+Renaming an existing run is a console/HTTP action (`POST /workflows/rename`), not an SDK or CLI operation in this release.
 
 ## signal
 

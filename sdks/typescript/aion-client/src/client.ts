@@ -42,6 +42,29 @@ export interface StartOptions<I> {
   readonly workflowType: string;
   readonly input: I;
   readonly idempotencyKey?: string;
+  /**
+   * Optional operator-facing display name for the workflow this start creates
+   * (#211). When set, the server records it durably on the start as the
+   * `aion.display_name` search attribute; omitting it starts the run unnamed
+   * (it shows its bare UUID).
+   *
+   * A LABEL over the UUID identity, never an address: no SDK call resolves a
+   * workflow by name, and no SDK helper composes name-filter → take-first →
+   * act. It is trimmed before it is sent, because the server trims it before
+   * recording it, and a present-but-blank name is refused rather than read as
+   * "unnamed" — only ABSENCE starts a run unnamed.
+   *
+   * It is deliberately NOT part of the idempotency fingerprint — see
+   * {@link StartOutcome.displayNameNotApplied} for what happens when a reused
+   * key carries a different name.
+   *
+   * You name the run you are starting, but the label READS BACK per workflow:
+   * the recorded attribute carries no run id, so every reader folds it over the
+   * whole history, last write wins. A continue-as-new successor of this run
+   * inherits the name, and describing any run of the workflow returns whatever
+   * name was recorded most recently.
+   */
+  readonly displayName?: string;
 }
 
 export interface StartRawOptions {
@@ -49,6 +72,70 @@ export interface StartRawOptions {
   readonly workflowType: string;
   readonly input: Payload;
   readonly idempotencyKey?: string;
+  /** See {@link StartOptions.displayName}. */
+  readonly displayName?: string;
+}
+
+/**
+ * The report that an idempotent start replay did not apply the display name
+ * this call requested (#211).
+ *
+ * Carries both sides so the caller can act on the difference: use a different
+ * idempotency key, accept the standing name, or rename the run through the
+ * console/HTTP rename surface (renaming is not an SDK operation in this
+ * release).
+ */
+export interface DisplayNameNotApplied {
+  /**
+   * The display name this start asked for. Never blank and never absent: the
+   * report is raised only for a call that actually requested a name, so there
+   * is always a name that did not get applied.
+   */
+  readonly requested: string;
+  /**
+   * The display name the CACHED start requested for that run (`undefined` when
+   * that start asked for no name).
+   *
+   * This is what the first start asked for, not a live read: the cache is never
+   * refreshed, so if the run has since been renamed, this is the name it was
+   * STARTED with rather than the one it now wears. Read it as "the name this
+   * key already stood for", and read the run itself if you need its current
+   * name.
+   */
+  readonly standing: string | undefined;
+}
+
+/**
+ * What {@link Client.start} returns: the started (or idempotently replayed)
+ * run, plus the note that a requested display name was NOT applied.
+ *
+ * The note exists because `displayName` is deliberately outside the idempotency
+ * fingerprint: the fingerprint answers "is this the same act?", and a label
+ * carries no identity, so two starts differing only in name are the same act
+ * and dedupe to one run. That leaves a second, different name with nowhere to
+ * go — and dropping it silently would hand the caller a run wearing a name they
+ * did not ask for while saying nothing. So the drop is REPORTED here instead.
+ * The replayed run keeps its EXISTING name; nothing is renamed behind the
+ * caller's back.
+ */
+export interface StartOutcome {
+  /**
+   * Handle to the started run, or to the existing run an idempotent replay
+   * matched.
+   */
+  readonly handle: WorkflowHandle;
+  /**
+   * Present ONLY when this call REQUESTED a display name, an idempotency-key
+   * replay matched an existing run, and that run does not already wear the
+   * requested name — whether it wears a different one or none at all.
+   *
+   * `undefined` on every other path: a first start (which applies the name it
+   * asked for), a replay that requested the same name, and — the rule this
+   * field's absence states — any call that requested NO name. A caller who
+   * asked for nothing had nothing dropped, so there is nothing to report, even
+   * when the standing run wears a name of its own.
+   */
+  readonly displayNameNotApplied: DisplayNameNotApplied | undefined;
 }
 
 export interface SignalOptions<I> extends WorkflowRef {
@@ -126,6 +213,12 @@ export interface ProtoStartWorkflowRequest {
   readonly namespace: string;
   readonly workflow_type: string;
   readonly input: Payload;
+  /**
+   * #211. Absent is how the wire says "unnamed": the server refuses a
+   * present-but-blank name with `invalid_input` rather than reinterpreting one
+   * as unnamed, so this key is omitted entirely rather than sent empty.
+   */
+  readonly display_name?: string;
 }
 
 export interface ProtoStartWorkflowResponse {
@@ -197,11 +290,14 @@ export class Client {
    * conflicting reuse throws {@link AlreadyExistsError}. Keyed by
    * idempotency key, fingerprinted over namespace, workflow type, and the
    * encoded input payload.
+   *
+   * The requested display name is carried BESIDE the fingerprint, never inside
+   * it (#211). Inside, it would make two starts differing only in a label two
+   * different acts and break the dedupe ruling; absent entirely, a replay could
+   * not tell the caller which name the standing run actually wears. Beside is
+   * what lets the replay dedupe AND report — see {@link StartOutcome}.
    */
-  private readonly idempotentStarts = new Map<
-    string,
-    { readonly fingerprint: string; readonly handle: WorkflowHandle }
-  >();
+  private readonly idempotentStarts = new Map<string, CachedStart>();
 
   constructor(options: ClientOptions) {
     this.endpoint = normalizeEndpoint(options.endpoint, options.tls);
@@ -223,15 +319,50 @@ export class Client {
       });
   }
 
-  async start<I>(options: StartOptions<I>): Promise<WorkflowHandle> {
+  /**
+   * Starts a workflow and returns the assigned run.
+   *
+   * Returns a {@link StartOutcome} rather than a bare handle so an idempotent
+   * replay can report a display name it did NOT apply (#211) instead of
+   * dropping it silently — see {@link StartOutcome.displayNameNotApplied}.
+   */
+  async start<I>(options: StartOptions<I>): Promise<StartOutcome> {
     return this.startRaw({
       ...options,
       input: toPayload(options.input),
     });
   }
 
-  async startRaw(options: StartRawOptions): Promise<WorkflowHandle> {
+  async startRaw(options: StartRawOptions): Promise<StartOutcome> {
+    // #211: the server REFUSES a present-but-blank display name with
+    // `invalid_input` — it does not reinterpret one as "unnamed", the way it
+    // reinterprets a blank `task_queue` as "no selection". Refusing here too
+    // means a caller who passed `"  "` gets the same answer from the SDK as
+    // from the raw HTTP route, and gets it before a round trip. Omitting the
+    // option is how a caller says "no name"; absence is what the server accepts
+    // as unnamed.
+    if (
+      options.displayName !== undefined &&
+      options.displayName.trim().length === 0
+    ) {
+      throw new InvalidArgumentError(
+        "displayName must not be blank; omit it to start the run unnamed",
+      );
+    }
+    // The server trims the name before recording it, so the run wears the
+    // TRIMMED string. Trim here too and the SDK's cached "standing name" is the
+    // name the run actually has — otherwise a replay comparing `"X"` against a
+    // cached `"  X  "` would report a difference the server had already erased.
+    // Blank-after-trim was refused above, so this can never turn a name into no
+    // name. One trimmed value is then what is SENT, what is STORED in the cache
+    // entry, and what is COMPARED on a replay — one value, three uses, so they
+    // cannot disagree.
+    const displayName =
+      options.displayName === undefined ? undefined : options.displayName.trim();
     const namespace = this.resolveNamespace(options.namespace);
+    // `displayName` is deliberately absent from the fingerprint: a label
+    // carries no identity, so two starts differing only in name are the SAME
+    // act and must dedupe to one run rather than conflict.
     const fingerprint =
       options.idempotencyKey === undefined
         ? undefined
@@ -245,7 +376,13 @@ export class Client {
       const cached = this.idempotentStarts.get(options.idempotencyKey);
       if (cached !== undefined) {
         if (cached.fingerprint === fingerprint) {
-          return cached.handle;
+          // The run already exists and keeps the name it already wears. If this
+          // call asked for a different one, say so rather than quietly handing
+          // back a differently-named run (#211).
+          return {
+            handle: cached.handle,
+            displayNameNotApplied: displayNameNotApplied(cached, displayName),
+          };
         }
         throw idempotencyConflict();
       }
@@ -254,6 +391,7 @@ export class Client {
       namespace,
       workflow_type: options.workflowType,
       input: options.input,
+      ...(displayName === undefined ? {} : { display_name: displayName }),
     });
     const workflowId = response.workflow_id?.uuid;
     const runId = response.run_id?.uuid;
@@ -273,10 +411,15 @@ export class Client {
         this.idempotentStarts.set(options.idempotencyKey, {
           fingerprint,
           handle,
+          displayName,
         });
       }
     }
-    return handle;
+    // This call reached the server, so whatever name it asked for was applied
+    // to the run it started: there is nothing unapplied to report. That holds
+    // even when a concurrent start won the cache race above — the handle
+    // returned here is THIS start's own run, wearing THIS call's own name.
+    return { handle, displayNameNotApplied: undefined };
   }
 
   async signal<I>(options: SignalOptions<I>): Promise<void> {
@@ -516,6 +659,42 @@ class HttpWorkflowTransport implements WorkflowTransport {
       ...authHeaders(this.auth),
     };
   }
+}
+
+/**
+ * One idempotency-cache entry: the fingerprint the start was keyed by, the
+ * handle to replay, and the display name that start requested (#211).
+ */
+interface CachedStart {
+  readonly fingerprint: string;
+  readonly handle: WorkflowHandle;
+  readonly displayName: string | undefined;
+}
+
+/**
+ * The report that `requested` was not applied to `cached`'s run, or `undefined`
+ * when there is nothing to report.
+ *
+ * The rule, exactly: a report is raised when this replay ASKED for a name
+ * (`requested !== undefined`) that the standing run does not already wear —
+ * whether that run wears a different name or no name at all. Both of those
+ * callers asked for something the replay could not give them, so both are told.
+ *
+ * A replay that asked for NO name gets no report, whatever the standing run
+ * wears. Nothing was requested, so nothing was dropped, and the report's absence
+ * is precisely the statement that no requested name went missing — see
+ * {@link StartOutcome.displayNameNotApplied}. Raising it there would report a
+ * drop that never happened and push callers who branch on the field into acting
+ * on a run they never tried to name.
+ */
+function displayNameNotApplied(
+  cached: CachedStart,
+  requested: string | undefined,
+): DisplayNameNotApplied | undefined {
+  if (requested === undefined || cached.displayName === requested) {
+    return undefined;
+  }
+  return { requested, standing: cached.displayName };
 }
 
 /**

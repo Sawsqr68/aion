@@ -19,6 +19,27 @@ export type StartWorkflowParams = {
   routingKey?: string | undefined;
   /** Empty/absent selects the namespace's default activity task queue. */
   taskQueue?: string | undefined;
+  /**
+   * Optional operator-facing display name for the run being started (#211). A
+   * LABEL over UUID identity, recorded durably on the start; absent starts the
+   * run unnamed. What is recorded is a workflow-level attribute, so it reads
+   * back for every run of the workflow. Nothing resolves a workflow by name.
+   */
+  displayName?: string | undefined;
+};
+
+/**
+ * Rename inputs (camelCase) for `POST /workflows/rename` (#211).
+ *
+ * The TARGET is always an id: `workflowId` plus an optional `runId` (absent
+ * targets the latest run, which the server resolves). `displayName` is the new
+ * label — never a lookup key.
+ */
+export type RenameWorkflowParams = {
+  workflowId: WorkflowId;
+  displayName: string;
+  /** Absent targets the workflow's latest run (server-resolved). */
+  runId?: RunId | undefined;
 };
 
 /**

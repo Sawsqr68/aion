@@ -102,6 +102,98 @@ pub fn start_time_task_queue(events: &[Event]) -> Option<String> {
     }
 }
 
+/// Search attribute name that carries a workflow's operator-facing display
+/// name (#211).
+///
+/// The display name is a LABEL over the workflow's UUID identity, never an
+/// address. Stated exactly, because the label rule is about ACTS and not about
+/// whether a name may appear on the wire:
+///
+/// 1. **No operation acts on a name.** Every act-verb — start, signal, query,
+///    cancel, pause, resume, reopen, rename, intervene — takes a `WorkflowId`
+///    (and optionally a `RunId`). None of them accepts a name as its target.
+/// 2. **Name-shaped FILTERING returns lists and acts on nothing.** This
+///    attribute is an ordinary search attribute, so it is filterable like any
+///    other: a visibility predicate on it yields candidate summaries. That is
+///    the first half of a picker (name in, candidates out, an operator
+///    chooses, a UUID acts), and it is deliberately supported.
+/// 3. **The composition is prohibited.** No SDK, CLI verb, MCP tool, or
+///    convenience function may compose name-filter → take-first → act. That
+///    composition re-imports addressing one layer up: the system, not the
+///    caller, would be choosing the referent. The CHOOSING STEP STAYS WITH THE
+///    CALLER, BY CONTRACT. A future "find by name" helper RETURNS CANDIDATES
+///    AND STOPS.
+///
+/// The sweep predicate, written down so the next audit checks the right thing
+/// rather than re-deriving it: *for every verb, HTTP route, RPC, MCP tool, and
+/// SDK function that CHANGES state, the target is identified by a UUID; a
+/// display name appears only as a value being SET, never as the selector, and
+/// no single call turns a name into an act.* The MCP tool catalogue enforces
+/// this mechanically (`aion_server::mcp::catalog` — see its
+/// `name_is_not_an_address_tests`); the other surfaces are Rust types rather
+/// than data and are checked by reading against that predicate.
+///
+/// It is recorded durably as an ordinary [`Event::SearchAttributesUpdated`]
+/// search attribute — stamped in the same atomic append as
+/// [`Event::WorkflowStarted`] when the start named one, and re-recorded by
+/// every rename — so history keeps every name the workflow has worn and
+/// replay/failover re-derive the current one.
+///
+/// The recorded attribute carries NO run id. A rename is addressed to a
+/// workflow AND a run, but what it records is a workflow-level attribute, and
+/// every reader folds it over the whole history (see [`display_name`]). So a
+/// continue-as-new successor inherits the name its predecessor was wearing, and
+/// describing any run of the workflow reads back the same, current name.
+///
+/// This is the canonical name for the whole workspace;
+/// `aion_server::DISPLAY_NAME_ATTRIBUTE` re-exports it rather than redeclaring
+/// the literal, so the projector below and the server's recorded attribute
+/// cannot drift.
+pub const DISPLAY_NAME_ATTRIBUTE: &str = "aion.display_name";
+
+/// The workflow's current display name, projected from recorded history.
+///
+/// Reads the [`DISPLAY_NAME_ATTRIBUTE`] search attribute folded over EVERY
+/// [`Event::SearchAttributesUpdated`] in `events`, last write wins — so a
+/// rename's later update supersedes the start-time name while history keeps
+/// both. Returns `None` when no name was ever recorded (the unnamed workflow
+/// renders as its bare UUID).
+///
+/// The fold is per WORKFLOW, not per run: it is not run-scoped the way
+/// [`crate::failure_projection`] and [`crate::current_lease_terminal`] are, and
+/// the recorded attribute carries no run id to scope it by. Hand it a whole
+/// workflow history and the newest recorded name wins whichever run recorded
+/// it — so a continue-as-new successor reads back the name its predecessor was
+/// wearing until something renames it.
+///
+/// Because the value is read purely from recorded history (never from live or
+/// wall-clock state), it is replay-deterministic: the same history always
+/// projects the same display name.
+#[must_use]
+pub fn display_name(events: &[Event]) -> Option<String> {
+    display_name_from_attributes(&crate::search_attributes_from_events(events))
+}
+
+/// The display name carried by an already-folded search-attribute map.
+///
+/// The same projection as [`display_name`], for readers that hold the folded
+/// map rather than the events — the visibility projection's
+/// `search_attributes`, which the store keeps refreshed on every append. Both
+/// entry points share this one lookup so the attribute name and the
+/// String-typed expectation cannot drift between the history reader and the
+/// visibility reader. The map is itself folded over a whole workflow history,
+/// so this reads the same per-workflow label with the same last-write-wins
+/// rule.
+#[must_use]
+pub fn display_name_from_attributes<S: std::hash::BuildHasher>(
+    attributes: &std::collections::HashMap<String, crate::SearchAttributeValue, S>,
+) -> Option<String> {
+    match attributes.get(DISPLAY_NAME_ATTRIBUTE) {
+        Some(crate::SearchAttributeValue::String(name)) => Some(name.clone()),
+        _ => None,
+    }
+}
+
 /// A recorded workflow history event.
 ///
 /// User data is carried as opaque [`Payload`] values, while failures use the closed workflow and
@@ -1138,6 +1230,95 @@ mod tests {
         }];
 
         assert_eq!(start_time_task_queue(&events), None);
+        Ok(())
+    }
+
+    /// #211: the display name projects from the `aion.display_name` search
+    /// attribute recorded by `SearchAttributesUpdated`, mirroring the
+    /// `aion.task_queue` projection.
+    #[test]
+    fn display_name_projects_from_recorded_attribute() -> Result<(), Box<dyn std::error::Error>> {
+        use super::{DISPLAY_NAME_ATTRIBUTE, display_name};
+        use crate::SearchAttributeValue;
+
+        let events = vec![
+            Event::WorkflowStarted {
+                envelope: envelope(1),
+                workflow_type: String::from("checkout"),
+                input: payload("input")?,
+                run_id: RunId::new(uuid::Uuid::from_u128(1)),
+                parent_run_id: None,
+                package_version: package_version(),
+            },
+            Event::SearchAttributesUpdated {
+                envelope: envelope(2),
+                workflow_id: WorkflowId::new(uuid::Uuid::nil()),
+                attributes: HashMap::from([(
+                    DISPLAY_NAME_ATTRIBUTE.to_owned(),
+                    SearchAttributeValue::String(String::from("Nightly settlement")),
+                )]),
+            },
+        ];
+
+        assert_eq!(display_name(&events).as_deref(), Some("Nightly settlement"));
+        Ok(())
+    }
+
+    /// #211 back-compat: a history with no recorded `aion.display_name`
+    /// attribute projects `None`, so the unnamed run renders as its bare UUID.
+    #[test]
+    fn display_name_is_none_without_the_attribute() -> Result<(), Box<dyn std::error::Error>> {
+        use super::display_name;
+
+        let events = vec![Event::WorkflowStarted {
+            envelope: envelope(1),
+            workflow_type: String::from("checkout"),
+            input: payload("input")?,
+            run_id: RunId::new(uuid::Uuid::from_u128(1)),
+            parent_run_id: None,
+            package_version: package_version(),
+        }];
+
+        assert_eq!(display_name(&events), None);
+        Ok(())
+    }
+
+    /// #211 rename invariant: a later `SearchAttributesUpdated` overrides the
+    /// earlier name (last write wins) while BOTH remain in history — a rename
+    /// is a recorded event, never an overwrite of the past.
+    #[test]
+    fn display_name_later_update_overrides_earlier() -> Result<(), Box<dyn std::error::Error>> {
+        use super::{DISPLAY_NAME_ATTRIBUTE, display_name};
+        use crate::SearchAttributeValue;
+
+        let name_event = |seq: u64, name: &str| Event::SearchAttributesUpdated {
+            envelope: envelope(seq),
+            workflow_id: WorkflowId::new(uuid::Uuid::nil()),
+            attributes: HashMap::from([(
+                DISPLAY_NAME_ATTRIBUTE.to_owned(),
+                SearchAttributeValue::String(String::from(name)),
+            )]),
+        };
+        let events = vec![
+            Event::WorkflowStarted {
+                envelope: envelope(1),
+                workflow_type: String::from("checkout"),
+                input: payload("input")?,
+                run_id: RunId::new(uuid::Uuid::from_u128(1)),
+                parent_run_id: None,
+                package_version: package_version(),
+            },
+            name_event(2, "first name"),
+            name_event(3, "second name"),
+        ];
+
+        assert_eq!(display_name(&events).as_deref(), Some("second name"));
+        // NOTE: the "history keeps both names" half of this invariant is NOT
+        // asserted here. `events` is this test's own literal, so counting it
+        // would measure the `vec!` rather than any behaviour. It is proven
+        // where it can be — against events a real recorder appended — by
+        // `aion/tests/rename_e2e.rs`
+        // `renaming_twice_supersedes_while_history_keeps_both_names`.
         Ok(())
     }
 

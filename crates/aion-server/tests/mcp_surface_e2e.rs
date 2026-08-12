@@ -247,6 +247,10 @@ fn private_workspace() -> Result<tempfile::TempDir, Box<dyn std::error::Error>> 
 /// keyspace already holds two events on the shared stream.
 struct Harness {
     router: Router,
+    /// The SAME store the router serves from, so a test can record an event
+    /// the way the engine records it and then read the answer back through the
+    /// real tool surface.
+    store: Arc<dyn EventStore>,
     /// Keeps the authoring workspace alive for the harness's lifetime.
     _workspace: Option<tempfile::TempDir>,
 }
@@ -347,6 +351,7 @@ impl Harness {
         }
         Ok(Self {
             router: http_router(state)?,
+            store,
             _workspace: workspace,
         })
     }
@@ -763,6 +768,64 @@ async fn describe_run_joins_status_current_step_and_transcript_handles() -> Test
     assert_eq!(transcripts[0]["run_id"], second_run().to_string());
     assert_eq!(transcripts[0]["activity_id"], 0);
     assert_eq!(transcripts[0]["attempt"], 1);
+    Ok(())
+}
+
+/// #211, SET-THEN-READ-BACK: a display name an agent records is readable
+/// through `describe_run`, not only through `list_runs`.
+///
+/// The name is recorded exactly as the engine's rename op records it — an
+/// ordinary `SearchAttributesUpdated` appended at the workflow head — and the
+/// tool is then asked the same question twice, before and after. An unnamed
+/// workflow answers `null` rather than omitting the key, so an agent can tell
+/// "no name" from "this tool does not report names".
+///
+/// The name is folded per WORKFLOW (the recorded attribute carries no run id),
+/// which is why it reads back on the SECOND generation of a chain that was
+/// named at the head.
+#[tokio::test]
+async fn describe_run_reads_back_a_recorded_display_name() -> TestResult {
+    let harness = Harness::start(true).await?;
+    let describe = call(
+        "describe_run",
+        &json!({ "namespace": NAMESPACE, "workflow_id": workflow_id().to_string() }),
+        false,
+    );
+
+    let (status, value) = harness.post(&describe, &[]).await?;
+    assert_eq!(status, StatusCode::OK);
+    let before = structured(&value)?;
+    assert_eq!(
+        before["display_name"],
+        Value::Null,
+        "an unnamed workflow reports the field as null, never omits it: {before}"
+    );
+
+    let chain = colliding_chain();
+    harness
+        .store
+        .append(
+            WriteToken::recorder(),
+            &workflow_id(),
+            &[Event::SearchAttributesUpdated {
+                envelope: envelope(u64::try_from(chain.len())? + 1),
+                workflow_id: workflow_id(),
+                attributes: std::collections::HashMap::from([(
+                    aion_core::DISPLAY_NAME_ATTRIBUTE.to_owned(),
+                    aion_core::SearchAttributeValue::String("Nightly settlement".to_owned()),
+                )]),
+            }],
+            u64::try_from(chain.len())?,
+        )
+        .await?;
+
+    let (status, value) = harness.post(&describe, &[]).await?;
+    assert_eq!(status, StatusCode::OK);
+    let after = structured(&value)?;
+    assert_eq!(
+        after["display_name"], "Nightly settlement",
+        "a name that was set must be readable back through describe_run: {after}"
+    );
     Ok(())
 }
 

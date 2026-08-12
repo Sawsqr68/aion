@@ -19,7 +19,14 @@ from typing import Any
 
 import pytest
 
-from aion_client import AlreadyExists, Client, InvalidArgument, RunOutcome, ServerError
+from aion_client import (
+    AlreadyExists,
+    Client,
+    DisplayNameNotApplied,
+    InvalidArgument,
+    RunOutcome,
+    ServerError,
+)
 from aion_client.proto import common_pb2, workflow_pb2
 from aion_client.transport import GrpcWorkflowTransport, MappingMetadata
 
@@ -113,10 +120,13 @@ async def test_start_sends_both_routing_dimensions() -> None:
 async def test_start_without_routing_leaves_both_fields_absent() -> None:
     """Absent, not empty.
 
-    Both fields are proto3 `optional`, so presence is observable on the wire. An
-    empty string would read as absent to the server anyway, but it would make the
-    request claim a selection it is not carrying — and it would defeat any future
-    server-side check that distinguishes "chose nothing" from "chose blank".
+    All three optional start fields are proto3 `optional`, so presence is
+    observable on the wire, and the server distinguishes "chose nothing" from
+    "chose blank" TODAY: a present-but-blank `display_name` is refused with
+    `invalid_input`, so sending `""` for an unnamed start would fail the start
+    outright. For `routing_key` and `task_queue` a blank reads as "not
+    selected", but it would still make the request claim a selection it is not
+    carrying.
     """
 
     transport = _RecordingTransport(start_workflow=_start_response())
@@ -124,16 +134,38 @@ async def test_start_without_routing_leaves_both_fields_absent() -> None:
     request = _only_request(transport)
     assert not request.HasField("routing_key")
     assert not request.HasField("task_queue")
+    assert not request.HasField("display_name")
 
 
-@pytest.mark.parametrize("field", ["routing_key", "task_queue"])
+async def test_start_sends_the_display_name_it_was_given() -> None:
+    """The operator-facing label reaches the wire, exactly as passed (#211)."""
+
+    transport = _RecordingTransport(start_workflow=_start_response())
+    outcome = await _client(transport).start(
+        "testing.echo",
+        {"message": "hello"},
+        display_name="July invoice run",
+    )
+    request = _only_request(transport)
+    assert request.HasField("display_name")
+    assert request.display_name == "July invoice run"
+    # A first start applies the name it asked for, so there is nothing to report.
+    assert outcome.display_name_not_applied is None
+
+
+@pytest.mark.parametrize("field", ["routing_key", "task_queue", "display_name"])
 @pytest.mark.parametrize("blank", ["", "   ", "\t"])
-async def test_start_refuses_a_blank_routing_selection(field: str, blank: str) -> None:
-    """A blank selection is silently discarded by the server, so it is refused here.
+async def test_start_refuses_a_blank_selection(field: str, blank: str) -> None:
+    """A blank is never how a caller says "no selection", so it is refused here.
 
-    The server trims both fields and treats a blank as "not selected". Forwarding
-    one would give the caller the default placement or the namespace default queue
-    while every signal said the request had been honoured.
+    `routing_key` and `task_queue` are trimmed by the server and read as "not
+    selected", so forwarding a blank would hand back the default placement or
+    the namespace default queue while every signal said the request had been
+    honoured. `display_name` is different: the server REFUSES a present-but-blank
+    name with `invalid_input` rather than starting the run unnamed, so
+    forwarding one would only buy a round trip to the same refusal. Either way
+    `None` is the way to mean "no selection", and the SDK gives all three fields
+    the same answer.
     """
 
     transport = _RecordingTransport(start_workflow=_start_response())
@@ -148,8 +180,140 @@ async def test_start_idempotency_key_replays_an_identical_routed_start() -> None
     client = _client(transport)
     first = await client.start("testing.echo", {"n": 1}, idempotency_key="k", routing_key="a", task_queue="q")
     second = await client.start("testing.echo", {"n": 1}, idempotency_key="k", routing_key="a", task_queue="q")
-    assert first is second
+    assert first.handle is second.handle
+    assert second.display_name_not_applied is None
     assert len(transport.requests) == 1, "an identical retry must not reach the server again"
+
+
+async def test_start_trims_the_display_name_before_sending_it() -> None:
+    """The wire carries the trimmed name, because that is what the run will wear.
+
+    The server trims before recording, so an untrimmed name sent from here would
+    leave this SDK remembering a string the run does not have.
+    """
+
+    transport = _RecordingTransport(start_workflow=_start_response())
+    await _client(transport).start("testing.echo", None, display_name="  Nightly settlement  ")
+    assert _only_request(transport).display_name == "Nightly settlement"
+
+
+@pytest.mark.parametrize("replayed_name", ["  Nightly settlement  ", "Nightly settlement", "\tNightly settlement\n"])
+async def test_whitespace_around_a_replayed_name_is_not_a_dropped_name(replayed_name: str) -> None:
+    """Whitespace the server would have erased must not be reported as a difference.
+
+    Both sides of the replay comparison are trimmed, so `"  X  "` and `"X"` are
+    the same name — the run wears `"X"` either way. Reporting that as a name that
+    could not be applied would be a false alarm about a drop that never happened,
+    and false alarms are how a real report gets ignored.
+    """
+
+    transport = _RecordingTransport(start_workflow=_start_response())
+    client = _client(transport)
+    await client.start("testing.echo", {"n": 1}, idempotency_key="k", display_name="Nightly settlement")
+    replayed = await client.start("testing.echo", {"n": 1}, idempotency_key="k", display_name=replayed_name)
+
+    assert replayed.display_name_not_applied is None
+    assert len(transport.requests) == 1
+
+
+@pytest.mark.parametrize("name", [None, "July invoice run"])
+async def test_replaying_a_start_with_the_same_name_reports_nothing(name: str | None) -> None:
+    """Same act, same label: nothing was dropped, so nothing is reported.
+
+    The unnamed case is the one worth stating: two nameless starts must not
+    manufacture a note about a name neither of them asked for.
+    """
+
+    transport = _RecordingTransport(start_workflow=_start_response())
+    client = _client(transport)
+    first = await client.start("testing.echo", {"n": 1}, idempotency_key="k", display_name=name)
+    second = await client.start("testing.echo", {"n": 1}, idempotency_key="k", display_name=name)
+    assert first.handle is second.handle
+    assert first.display_name_not_applied is None
+    assert second.display_name_not_applied is None
+    assert len(transport.requests) == 1
+
+
+@pytest.mark.parametrize(
+    ("first_name", "second_name"),
+    [
+        ("July invoice run", "August invoice run"),
+        (None, "August invoice run"),
+    ],
+)
+async def test_replaying_a_start_with_a_different_name_returns_the_standing_run_and_says_so(
+    first_name: str | None, second_name: str
+) -> None:
+    """A label carries no identity, so it does not split the idempotency key —
+    but the name that did not get applied is REPORTED rather than dropped (#211).
+
+    Two starts differing only in their display name are the same act: the
+    fingerprint deliberately excludes the name, so the second dedupes to the
+    first run instead of raising `AlreadyExists`. What must never happen is the
+    quiet version of that — handing back a run wearing a name the caller did not
+    ask for while saying nothing, or renaming the standing run behind their back.
+    So the replay returns the EXISTING handle, the existing run keeps the name it
+    already wears, and the outcome carries both sides of the difference.
+    """
+
+    transport = _RecordingTransport(start_workflow=_start_response())
+    client = _client(transport)
+    first = await client.start("testing.echo", {"n": 1}, idempotency_key="k", display_name=first_name)
+    second = await client.start("testing.echo", {"n": 1}, idempotency_key="k", display_name=second_name)
+
+    assert second.handle is first.handle, "a name difference must not start a second run"
+    assert len(transport.requests) == 1, "a name difference is the same act; it must not reach the server again"
+    assert second.display_name_not_applied == DisplayNameNotApplied(
+        requested=second_name,
+        standing=first_name,
+    )
+    # The standing run keeps its own name: nothing was renamed behind the caller.
+    #
+    # Presence, not the value: `display_name` is proto3 `optional`, so an absent
+    # field and an explicitly-blank one both read back as `""`. Comparing the
+    # value alone would collapse "started unnamed" into "started with a blank
+    # name" — the exact distinction #211 turns on, and the one the server
+    # refuses. So the unnamed case asserts ABSENCE on the wire.
+    standing_request = transport.requests[0][1]
+    if first_name is None:
+        assert not standing_request.HasField("display_name")
+    else:
+        assert standing_request.HasField("display_name")
+        assert standing_request.display_name == first_name
+
+
+@pytest.mark.parametrize(
+    ("standing", "requested", "expected"),
+    [
+        (None, None, None),
+        ("Nightly", None, None),
+        (None, "Nightly", DisplayNameNotApplied(requested="Nightly", standing=None)),
+        ("Nightly", "Weekly", DisplayNameNotApplied(requested="Weekly", standing="Nightly")),
+        ("Nightly", "Nightly", None),
+    ],
+)
+async def test_the_unapplied_name_report_fires_only_for_a_replay_that_asked_for_a_name(
+    standing: str | None, requested: str | None, expected: DisplayNameNotApplied | None
+) -> None:
+    """The WHOLE rule, one case per combination of what the replay asked for and
+    what the standing run wears (#211).
+
+    The report is raised only when the caller ASKED for a name the standing run
+    does not wear. A caller that asked for nothing dropped nothing, so it is told
+    nothing — the report's absence is exactly the statement that no requested
+    name went missing, and firing it for an empty request would say the opposite
+    of the truth. The Rust SDK pins the same five cases.
+    """
+
+    transport = _RecordingTransport(start_workflow=_start_response())
+    client = _client(transport)
+    first = await client.start("testing.echo", {"n": 1}, idempotency_key="k", display_name=standing)
+    replayed = await client.start("testing.echo", {"n": 1}, idempotency_key="k", display_name=requested)
+
+    assert first.display_name_not_applied is None, "a first start applies the name it asked for"
+    assert replayed.handle is first.handle, "the label carries no identity, so the act deduped to one run"
+    assert replayed.display_name_not_applied == expected
+    assert len(transport.requests) == 1, "the replay must not reach the server again"
 
 
 @pytest.mark.parametrize(
@@ -351,7 +515,7 @@ async def test_handle_bound_lifecycle_operations_target_the_handle_s_run() -> No
         ),
     )
     client = _client(transport)
-    handle = await client.start("testing.echo", None)
+    handle = (await client.start("testing.echo", None)).handle
 
     assert (await handle.pause(reason="held")).status == "PAUSED"
     assert (await handle.resume()).status == "RUNNING"

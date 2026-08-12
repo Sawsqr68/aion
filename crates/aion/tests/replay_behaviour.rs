@@ -739,6 +739,300 @@ async fn replay_determinism_round_trip_uses_recorded_now() -> Result<(), Box<dyn
     Ok(())
 }
 
+/// A history whose recorded commands are interrupted by a mid-run rename
+/// (#211): the operator renamed the workflow between its activity and its
+/// timer, so an `Event::SearchAttributesUpdated` sits in the middle of the span
+/// replay walks.
+///
+/// The name is recorded through the production
+/// `Recorder::record_search_attributes_updated`, schema and all — the same
+/// append `Engine::rename_workflow` makes — so this is the real event, not a
+/// hand-built lookalike.
+async fn record_history_with_mid_run_rename(
+    store: Arc<dyn EventStore>,
+) -> Result<Vec<aion_core::Event>, Box<dyn std::error::Error>> {
+    let mut schema = aion_core::SearchAttributeSchema::new();
+    schema.register(
+        aion_core::DISPLAY_NAME_ATTRIBUTE,
+        aion_core::SearchAttributeType::String,
+    )?;
+    let mut recorder = Recorder::new(workflow_id(), Arc::clone(&store));
+    let activity_id = ActivityId::from_sequence_position(0);
+    let timer_id = TimerId::anonymous(4);
+
+    recorder
+        .record_workflow_started(
+            timestamp(10)?,
+            aion::durability::WorkflowStartRecord {
+                workflow_type: "workflow".to_owned(),
+                input: payload("input")?,
+                run_id: run_id(),
+                parent_run_id: None,
+                package_version: aion_core::PackageVersion::new("a".repeat(64)),
+            },
+        )
+        .await?;
+    recorder
+        .record_activity_scheduled(
+            timestamp(20)?,
+            activity_id.clone(),
+            "activity".to_owned(),
+            payload("activity-input")?,
+            String::from("default"),
+            None,
+        )
+        .await?;
+    recorder
+        .record_activity_completed(timestamp(30)?, activity_id, payload("activity-result")?, 1)
+        .await?;
+    // THE RENAME, mid-run: between one recorded command's outcome and the next
+    // command's own recorded events.
+    recorder
+        .record_search_attributes_updated(
+            timestamp(35)?,
+            HashMap::from([(
+                aion_core::DISPLAY_NAME_ATTRIBUTE.to_owned(),
+                aion_core::SearchAttributeValue::String("Nightly settlement".to_owned()),
+            )]),
+            &schema,
+        )
+        .await?;
+    recorder
+        .record_timer_started(timestamp(40)?, timer_id.clone(), timestamp(100)?)
+        .await?;
+    recorder
+        .record_timer_fired(timestamp(50)?, timer_id)
+        .await?;
+    recorder
+        .record_signal_received(
+            timestamp(60)?,
+            "ready".to_owned(),
+            payload("signal-payload")?,
+        )
+        .await?;
+    recorder
+        .record_workflow_completed(timestamp(70)?, payload("workflow-result")?)
+        .await?;
+
+    Ok(store.read_history(&workflow_id()).await?)
+}
+
+/// #211 REPLAY TRANSPARENCY, at the cursor: a rename recorded MID-RUN is
+/// invisible to command matching.
+///
+/// A rename appends at the workflow head, wherever that head is — so it lands
+/// INSIDE the span replay walks. Nothing about it correlates to a command:
+/// `family_for_event` gives it no recorded event family, so
+/// `next_matchable_index` steps over it while resolving each command. If it
+/// were matchable it would be offered to the timer command as that command's
+/// recorded event, the key would not correlate, and the walk would report
+/// non-determinism against a workflow whose only sin was being renamed.
+///
+/// This drives the STRICT replay path (`Replay::drive`), which resolves each
+/// command against the cursor with no fast-forward to soften a mismatch, so the
+/// skip is what carries the whole result.
+///
+/// Killing mutation: give `SearchAttributesUpdated` a family in
+/// `durability/cursor.rs::family_for_event`. Replay then fails the timer
+/// command with a `NonDeterminism` error naming the rename.
+#[tokio::test]
+async fn a_mid_run_rename_is_invisible_to_replay_matching() -> Result<(), Box<dyn std::error::Error>>
+{
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+    let history = record_history_with_mid_run_rename(store).await?;
+
+    // The fixture is what it claims: the rename sits BETWEEN the activity's
+    // recorded outcome and the timer's own recorded events, not at either end.
+    let rename_index = history
+        .iter()
+        .position(|event| matches!(event, aion_core::Event::SearchAttributesUpdated { .. }))
+        .ok_or("the fixture must record the rename")?;
+    let activity_index = history
+        .iter()
+        .position(|event| matches!(event, aion_core::Event::ActivityCompleted { .. }))
+        .ok_or("the fixture must record the activity outcome")?;
+    let timer_index = history
+        .iter()
+        .position(|event| matches!(event, aion_core::Event::TimerStarted { .. }))
+        .ok_or("the fixture must record the timer")?;
+    assert!(
+        activity_index < rename_index && rename_index < timer_index,
+        "a rename outside the walked span would prove nothing: {history:#?}"
+    );
+    assert_eq!(
+        aion_core::display_name(&history).as_deref(),
+        Some("Nightly settlement")
+    );
+
+    let workflow_id = workflow_id();
+    let run_id = run_id();
+    let mut replay = Replay::new(&workflow_id, &run_id, history)?;
+
+    let outcome = replay.drive(vec![
+        activity_command(0)?,
+        timer_command(TimerId::anonymous(4))?,
+        signal_command("ready", 0),
+    ])?;
+
+    // `Replay::drive` is synchronous and takes no executor: every command above
+    // resolving from history IS the no-re-execution claim. A `CountingExecutor`
+    // asserted at zero here would be true by construction — it was never wired
+    // to anything — and would survive deletion of every line it appeared to pin.
+    assert_eq!(
+        outcome,
+        ReplayOutcome::Terminal {
+            terminal: ReplayTerminal::Completed(payload("workflow-result")?),
+            recorded: vec![
+                Resolution::ActivityCompleted(payload("activity-result")?),
+                Resolution::TimerFired,
+                Resolution::SignalDelivered(payload("signal-payload")?),
+            ],
+        },
+        "every command must still resolve from history across the rename"
+    );
+    Ok(())
+}
+
+/// The same history, with the rename moved INSIDE the timer's start->outcome
+/// span — the position a sleeping run is actually renamed at.
+///
+/// `record_history_with_mid_run_rename` places the rename between the
+/// activity's outcome and the timer's start, which is the one position in that
+/// history where strict adjacency happens to hold: the timer's `TimerStarted`
+/// and `TimerFired` stay neighbours, so the resolver's outcome lookup never has
+/// to step over anything. This fixture puts the rename where the defect lives.
+async fn record_history_renamed_inside_the_timer_window(
+    store: Arc<dyn EventStore>,
+) -> Result<Vec<aion_core::Event>, Box<dyn std::error::Error>> {
+    let mut schema = aion_core::SearchAttributeSchema::new();
+    schema.register(
+        aion_core::DISPLAY_NAME_ATTRIBUTE,
+        aion_core::SearchAttributeType::String,
+    )?;
+    let mut recorder = Recorder::new(workflow_id(), Arc::clone(&store));
+    let activity_id = ActivityId::from_sequence_position(0);
+    let timer_id = TimerId::anonymous(4);
+
+    recorder
+        .record_workflow_started(
+            timestamp(10)?,
+            aion::durability::WorkflowStartRecord {
+                workflow_type: "workflow".to_owned(),
+                input: payload("input")?,
+                run_id: run_id(),
+                parent_run_id: None,
+                package_version: aion_core::PackageVersion::new("a".repeat(64)),
+            },
+        )
+        .await?;
+    recorder
+        .record_activity_scheduled(
+            timestamp(20)?,
+            activity_id.clone(),
+            "activity".to_owned(),
+            payload("activity-input")?,
+            String::from("default"),
+            None,
+        )
+        .await?;
+    recorder
+        .record_activity_completed(timestamp(30)?, activity_id, payload("activity-result")?, 1)
+        .await?;
+    recorder
+        .record_timer_started(timestamp(40)?, timer_id.clone(), timestamp(100)?)
+        .await?;
+    // THE RENAME, while the run is ASLEEP: between the timer's start and its
+    // fire, so the resolver's outcome lookup must step over it.
+    recorder
+        .record_search_attributes_updated(
+            timestamp(45)?,
+            HashMap::from([(
+                aion_core::DISPLAY_NAME_ATTRIBUTE.to_owned(),
+                aion_core::SearchAttributeValue::String("Nightly settlement".to_owned()),
+            )]),
+            &schema,
+        )
+        .await?;
+    recorder
+        .record_timer_fired(timestamp(50)?, timer_id)
+        .await?;
+    recorder
+        .record_signal_received(
+            timestamp(60)?,
+            "ready".to_owned(),
+            payload("signal-payload")?,
+        )
+        .await?;
+    recorder
+        .record_workflow_completed(timestamp(70)?, payload("workflow-result")?)
+        .await?;
+
+    Ok(store.read_history(&workflow_id()).await?)
+}
+
+/// #211 REPLAY TRANSPARENCY, inside the timer window: a run renamed WHILE
+/// ASLEEP still replays its timer as fired.
+///
+/// A workflow sleeping on a timer is the single most likely moment for an
+/// operator to rename it, and that puts `SearchAttributesUpdated` between
+/// `TimerStarted` and `TimerFired`. The timer's outcome lookup must step over
+/// the rename the way the activity walk already steps over foreign interior
+/// events; if it required strict adjacency, the timer would replay as
+/// `Resolution::TimerStarted` for a timer that demonstrably fired.
+///
+/// Killing mutation: restore the strict `position + 1` adjacency check in
+/// `durability/cursor.rs::resolve_started_with_immediate_outcome`. The timer
+/// then replays `Resolution::TimerStarted` and this assertion fails.
+#[tokio::test]
+async fn a_rename_inside_the_timer_window_still_replays_the_timer_as_fired()
+-> Result<(), Box<dyn std::error::Error>> {
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+    let history = record_history_renamed_inside_the_timer_window(store).await?;
+
+    // The fixture is what it claims: the rename sits BETWEEN the timer's start
+    // and its fire, not before the start where adjacency still holds.
+    let rename_index = history
+        .iter()
+        .position(|event| matches!(event, aion_core::Event::SearchAttributesUpdated { .. }))
+        .ok_or("the fixture must record the rename")?;
+    let timer_started_index = history
+        .iter()
+        .position(|event| matches!(event, aion_core::Event::TimerStarted { .. }))
+        .ok_or("the fixture must record the timer start")?;
+    let timer_fired_index = history
+        .iter()
+        .position(|event| matches!(event, aion_core::Event::TimerFired { .. }))
+        .ok_or("the fixture must record the timer fire")?;
+    assert!(
+        timer_started_index < rename_index && rename_index < timer_fired_index,
+        "a rename outside the timer window would prove nothing: {history:#?}"
+    );
+
+    let workflow_id = workflow_id();
+    let run_id = run_id();
+    let mut replay = Replay::new(&workflow_id, &run_id, history)?;
+
+    let outcome = replay.drive(vec![
+        activity_command(0)?,
+        timer_command(TimerId::anonymous(4))?,
+        signal_command("ready", 0),
+    ])?;
+
+    assert_eq!(
+        outcome,
+        ReplayOutcome::Terminal {
+            terminal: ReplayTerminal::Completed(payload("workflow-result")?),
+            recorded: vec![
+                Resolution::ActivityCompleted(payload("activity-result")?),
+                Resolution::TimerFired,
+                Resolution::SignalDelivered(payload("signal-payload")?),
+            ],
+        },
+        "a timer that fired must replay as fired even when the run was renamed mid-sleep"
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn partial_history_reports_resume_point_and_last_recorded_timestamp()
 -> Result<(), Box<dyn std::error::Error>> {

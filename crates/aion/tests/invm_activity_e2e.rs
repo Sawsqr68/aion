@@ -23,8 +23,8 @@ use aion::runtime::{Mfa, NifEntry};
 use aion::signal::ConcreteSignalRouter;
 use aion::{Engine, EngineBuilder, RuntimeHandle, SignalRouter};
 use aion_core::{
-    ActivityId, Event, EventEnvelope, Payload, RunId, WorkflowId, WorkflowStatus,
-    status_from_events,
+    ActivityId, DISPLAY_NAME_ATTRIBUTE, Event, EventEnvelope, Payload, RunId,
+    SearchAttributeSchema, SearchAttributeType, WorkflowId, WorkflowStatus, status_from_events,
 };
 use aion_package::{
     BeamModule, BeamSet, CURRENT_FORMAT_VERSION, DeclaredActivity, ExtractionLimits, Manifest,
@@ -106,14 +106,23 @@ fn fixture_package(entry_function: &str) -> Result<Package, Box<dyn std::error::
 /// Build an engine over `store` with the fixture loaded and the counter NIF
 /// registered — and deliberately NO activity dispatcher: the in-VM tier must
 /// work without one.
+///
+/// The display-name attribute (#211) is registered because the recorder REFUSES
+/// an unregistered search attribute, so an engine without it cannot record a
+/// rename at all — and [`a_mid_run_rename_is_replay_transparent`] needs one
+/// recorded mid-run. Registering an attribute changes nothing for a run that
+/// never records it, so every other test here is unaffected.
 async fn engine_over(
     store: &Arc<dyn EventStore>,
     entry_function: &str,
 ) -> Result<Engine, Box<dyn std::error::Error>> {
+    let mut schema = SearchAttributeSchema::new();
+    schema.register(DISPLAY_NAME_ATTRIBUTE, SearchAttributeType::String)?;
     Ok(EngineBuilder::new()
         .in_process_activity_serving()
         .store_arc(Arc::clone(store))
         .in_memory_visibility()
+        .search_attribute_schema(schema)
         .scheduler_threads(1)
         .signal_router_factory(|runtime: Arc<RuntimeHandle>, handoff| {
             Arc::new(ConcreteSignalRouter::new(runtime, handoff)) as Arc<dyn SignalRouter>
@@ -258,6 +267,131 @@ async fn in_vm_activity_runs_once_and_replay_returns_the_recording() -> TestResu
     let payload = result.map_err(|error| format!("workflow failed: {error:?}"))?;
     assert_eq!(payload.bytes(), b"1");
     assert_eq!(counter_for(&key), 1);
+    recovered.shutdown()?;
+    Ok(())
+}
+
+/// #211 REPLAY TRANSPARENCY, over a whole engine: a run renamed MID-ACTIVITY
+/// still recovers, resolves its recorded activity from history, and completes.
+///
+/// A rename appends an `Event::SearchAttributesUpdated` at the workflow head,
+/// wherever that head happens to be — so it lands INSIDE the span replay walks.
+/// The posture here is the real one: the in-VM activity's terminal is recorded,
+/// the run is parked on its release signal, the operator renames it, and only
+/// then does the node die. The recovered epoch must resolve the recorded
+/// dispatch and completion from history — appending nothing, re-running nothing
+/// — walk past the injected rename, and park live on the release it never
+/// received.
+///
+/// What this test does NOT establish, and does not claim: that the cursor's
+/// SKIP is what carries it. A BEAM workflow resolves each command through
+/// `NifContext::resolve_command`, which fast-forwards to the command's own
+/// correlation key first, so a hypothetically-matchable rename would be stepped
+/// over there as well — the mutation that makes `family_for_event` return a
+/// family for `SearchAttributesUpdated` was RUN against this test and it still
+/// passed. The cursor-level claim is pinned where it is decisive instead, on
+/// the strict replay path with no fast-forward:
+/// `tests/replay_behaviour.rs::a_mid_run_rename_is_invisible_to_replay_matching`,
+/// which that same mutation does kill. The two together are the proof: the
+/// mechanism at the cursor, and the whole engine end to end.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_mid_run_rename_is_replay_transparent() -> TestResult {
+    const NAME: &str = "Nightly settlement";
+
+    let store: Arc<dyn EventStore> = Arc::new(InMemoryStore::default());
+    let engine = engine_over(&store, "run_once_gated").await?;
+    let key = unique_key("invm-rename-replay");
+    let (workflow_id, run_id) = start(&engine, &key).await?;
+
+    // Mid-activity in the durable sense the replay cursor cares about: the
+    // activity's dispatch and terminal are recorded, and the run is parked on
+    // the release signal it has not been sent.
+    wait_for_event(
+        &store,
+        &workflow_id,
+        |event| matches!(event, Event::ActivityCompleted { .. }),
+        "the in-VM activity completion",
+    )
+    .await?;
+    assert_eq!(counter_for(&key), 1, "the runner must have executed once");
+
+    // THE RENAME, recorded through the live run's own recorder at the head.
+    assert_eq!(
+        engine.rename_workflow(&workflow_id, &run_id, NAME).await?,
+        NAME
+    );
+
+    let pre_restart = store.read_history(&workflow_id).await?;
+    assert!(
+        matches!(
+            pre_restart.last(),
+            Some(Event::SearchAttributesUpdated { .. })
+        ),
+        "the rename must be the head event, sitting AFTER the recorded activity events \
+         replay has to match: {pre_restart:#?}"
+    );
+    assert!(
+        pre_restart
+            .iter()
+            .any(|event| matches!(event, Event::ActivityScheduled { .. }))
+            && pre_restart
+                .iter()
+                .any(|event| matches!(event, Event::ActivityCompleted { .. })),
+        "the recorded activity the replay must resolve has to be in the history the rename \
+         was injected into: {pre_restart:#?}"
+    );
+    assert_eq!(aion_core::display_name(&pre_restart).as_deref(), Some(NAME));
+
+    // Node death, then a fresh epoch over the same store: this is the replay.
+    engine.shutdown()?;
+    let recovered = engine_over(&store, "run_once_gated").await?;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while recovered.registry().get(&workflow_id, &run_id)?.is_none() {
+        assert!(
+            Instant::now() < deadline,
+            "the renamed run was not re-registered, so replay did not resolve its history"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    // Replay resolved the recorded dispatch and completion ACROSS the injected
+    // rename: nothing appended, nothing re-run.
+    assert_eq!(
+        store.read_history(&workflow_id).await?,
+        pre_restart,
+        "replay must append nothing — a rename in the walk must not force a re-dispatch"
+    );
+    assert_eq!(counter_for(&key), 1, "replay must not re-run the runner");
+
+    // And the recovered run is genuinely live: it takes the release it never
+    // received before the crash and completes with the RECORDED result.
+    release(&recovered, &workflow_id, &run_id).await?;
+    let payload = recovered
+        .result(&workflow_id, &run_id)
+        .await?
+        .map_err(|error| format!("the recovered run failed: {error:?}"))?;
+    assert_eq!(
+        payload.bytes(),
+        b"1",
+        "the recorded result, not a re-run one"
+    );
+    assert_eq!(counter_for(&key), 1);
+
+    let final_history = store.read_history(&workflow_id).await?;
+    assert_eq!(
+        &final_history[..pre_restart.len()],
+        pre_restart.as_slice(),
+        "replay must not rewrite recorded history"
+    );
+    assert_eq!(
+        aion_core::display_name(&final_history).as_deref(),
+        Some(NAME),
+        "the name survives the crash it was recorded before"
+    );
+    assert_eq!(
+        status_from_events(&final_history),
+        WorkflowStatus::Completed
+    );
     recovered.shutdown()?;
     Ok(())
 }

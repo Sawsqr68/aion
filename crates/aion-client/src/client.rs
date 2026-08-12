@@ -7,8 +7,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::error::ClientError;
-use crate::handle::WorkflowHandle;
-use crate::ops::StartFingerprint;
+use crate::start::{CachedStart, StartFingerprint};
 use crate::transport::{GrpcWorkflowTransport, WorkflowTransport};
 
 /// Reusable caller-side SDK client for an `aion-server` deployment.
@@ -34,7 +33,7 @@ use crate::transport::{GrpcWorkflowTransport, WorkflowTransport};
 pub struct Client {
     pub(crate) transport: Arc<dyn WorkflowTransport>,
     pub(crate) config: ClientConfig,
-    idempotent_starts: Arc<Mutex<HashMap<String, (StartFingerprint, WorkflowHandle)>>>,
+    idempotent_starts: Arc<Mutex<HashMap<String, CachedStart>>>,
 }
 
 impl Client {
@@ -78,32 +77,36 @@ impl Client {
         &self.config.namespace
     }
 
+    /// Looks up a cached start for `fingerprint`'s idempotency key.
+    ///
+    /// Returns the whole cached entry — handle AND the display name the cached
+    /// start requested — because the caller has to compare that standing name
+    /// against the one this call asked for (#211): the name is deliberately
+    /// outside the fingerprint, so a replay can match while carrying a
+    /// different, unapplied name that must be reported rather than dropped.
     pub(crate) async fn cached_start(
         &self,
         fingerprint: &StartFingerprint,
-    ) -> Result<Option<WorkflowHandle>, ClientError> {
+    ) -> Result<Option<CachedStart>, ClientError> {
         let cache = self.idempotent_starts.lock().await;
-        let Some((cached_fingerprint, handle)) = cache.get(fingerprint.key()) else {
+        let Some(cached) = cache.get(fingerprint.key()) else {
             return Ok(None);
         };
-        if cached_fingerprint == fingerprint {
-            Ok(Some(handle.clone()))
+        if cached.fingerprint() == fingerprint {
+            Ok(Some(cached.clone()))
         } else {
             Err(idempotency_conflict())
         }
     }
 
-    pub(crate) async fn record_start(
-        &self,
-        fingerprint: StartFingerprint,
-        handle: WorkflowHandle,
-    ) -> Result<(), ClientError> {
+    pub(crate) async fn record_start(&self, cached: CachedStart) -> Result<(), ClientError> {
         let mut cache = self.idempotent_starts.lock().await;
-        match cache.get(fingerprint.key()) {
-            Some((cached_fingerprint, _)) if cached_fingerprint == &fingerprint => Ok(()),
+        let key = cached.fingerprint().key().to_owned();
+        match cache.get(&key) {
+            Some(existing) if existing.fingerprint() == cached.fingerprint() => Ok(()),
             Some(_) => Err(idempotency_conflict()),
             None => {
-                cache.insert(fingerprint.key().to_owned(), (fingerprint, handle));
+                cache.insert(key, cached);
                 Ok(())
             }
         }

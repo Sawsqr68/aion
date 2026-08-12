@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 
+import { DISPLAY_NAME_ATTRIBUTE } from '@/lib/workflowIdentity';
 import type { Event, Payload } from '@/types';
 import type { ScheduleConfig } from '@/types/generated';
 
@@ -421,6 +422,25 @@ test('each of the 32 variants projects to a real typed row (no silent drop)', ()
       }
     }
   }
+});
+
+// #211. Catches: a recorded rename reading as an anonymous "1 key" marker in
+// the projected timeline — the row an operator scans to see WHEN the run was
+// named must say what it was named.
+test('a recorded display-name update projects a naming row, not a bare marker', () => {
+  const renamed: Event = {
+    type: 'SearchAttributesUpdated',
+    data: {
+      envelope: envelope(1),
+      workflow_id: workflowId,
+      attributes: { [DISPLAY_NAME_ATTRIBUTE]: { type: 'String', data: 'nightly digest' } },
+    },
+  };
+
+  const [entry] = projectTimeline([renamed]);
+
+  expect(entry?.kind).toBe('generic');
+  expect(entry?.summary).toBe('Display name set to "nightly digest"');
 });
 
 test('SignalSent carries direction + target; WithTimeoutCompleted closes the timer lane', () => {

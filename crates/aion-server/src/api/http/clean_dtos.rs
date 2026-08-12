@@ -11,10 +11,10 @@
 use aion_core::{WorkflowStatus, WorkflowSummary};
 use aion_proto::{
     ProtoCancelRequest, ProtoDescribeWorkflowRequest, ProtoListWorkflowsRequest,
-    ProtoListWorkflowsResponse, ProtoQueryRequest, ProtoQueryResponse, ProtoReopenRequest,
-    ProtoReopenResponse, ProtoRunId, ProtoSignalRequest, ProtoStartWorkflowRequest,
-    ProtoStartWorkflowResponse, ProtoWorkflowId, ProtoWorkflowStatus, WireError,
-    proto_query_response,
+    ProtoListWorkflowsResponse, ProtoQueryRequest, ProtoQueryResponse, ProtoRenameRequest,
+    ProtoRenameResponse, ProtoReopenRequest, ProtoReopenResponse, ProtoRunId, ProtoSignalRequest,
+    ProtoStartWorkflowRequest, ProtoStartWorkflowResponse, ProtoWorkflowId, ProtoWorkflowStatus,
+    WireError, proto_query_response,
 };
 use aion_store::visibility::{ListWorkflowsFilter, WorkflowSummary as StoreWorkflowSummary};
 use chrono::{DateTime, Utc};
@@ -39,6 +39,13 @@ pub(crate) struct StartWorkflowRequest {
     /// the namespace's default queue). Recorded durably on the start.
     #[serde(default)]
     task_queue: Option<String>,
+    /// Optional operator-facing display name for the run being started (#211).
+    /// A LABEL over the UUID identity, never an address: nothing resolves a
+    /// workflow by name. Recorded durably on the start; absent starts the run
+    /// unnamed. What is recorded is a workflow-level attribute carrying no run
+    /// id, so it reads back for every run of the workflow.
+    #[serde(default)]
+    display_name: Option<String>,
 }
 
 impl TryFrom<StartWorkflowRequest> for ProtoStartWorkflowRequest {
@@ -51,6 +58,7 @@ impl TryFrom<StartWorkflowRequest> for ProtoStartWorkflowRequest {
             input: request.input.map(http_input_payload).transpose()?,
             routing_key: request.routing_key,
             task_queue: request.task_queue,
+            display_name: request.display_name,
         })
     }
 }
@@ -173,6 +181,52 @@ impl TryFrom<ProtoReopenResponse> for ReopenWorkflowResponse {
             .map_err(|_error| HttpWireError(WireError::backend("reopen status is invalid")))?;
         let status = WorkflowStatus::try_from(status).map_err(HttpWireError)?;
         Ok(Self { run_id, status })
+    }
+}
+
+/// Clean rename request (#211): ids are plain UUID strings and the new display
+/// name is a plain string. Mirrors the cancel request's shape — a target plus
+/// the operator's payload. The name LABELS an id-addressed run; nothing here
+/// resolves a workflow by name.
+#[derive(Debug, Deserialize)]
+pub(crate) struct RenameWorkflowRequest {
+    namespace: String,
+    workflow_id: String,
+    #[serde(default)]
+    run_id: Option<String>,
+    display_name: String,
+}
+
+impl TryFrom<RenameWorkflowRequest> for ProtoRenameRequest {
+    type Error = WireError;
+
+    fn try_from(request: RenameWorkflowRequest) -> Result<Self, Self::Error> {
+        Ok(Self {
+            namespace: request.namespace,
+            workflow_id: Some(proto_workflow_id(&request.workflow_id)?),
+            run_id: optional_proto_run_id(request.run_id.as_deref())?,
+            display_name: request.display_name,
+        })
+    }
+}
+
+/// Clean rename response (#211): the renamed run id (plain UUID string) and the
+/// display name exactly as recorded (trimmed), so the caller sees the label the
+/// run now wears rather than the string it sent.
+#[derive(Debug, Serialize)]
+pub(crate) struct RenameWorkflowResponse {
+    run_id: String,
+    display_name: String,
+}
+
+impl TryFrom<ProtoRenameResponse> for RenameWorkflowResponse {
+    type Error = HttpWireError;
+
+    fn try_from(response: ProtoRenameResponse) -> Result<Self, Self::Error> {
+        Ok(Self {
+            run_id: required_uuid(response.run_id.map(|id| id.uuid), "run id")?,
+            display_name: response.display_name,
+        })
     }
 }
 
@@ -317,6 +371,15 @@ impl TryFrom<ProtoListWorkflowsResponse> for ListWorkflowsResponse {
 /// [`WorkflowSummary`] wire shape. `start_time`/`close_time` map to
 /// `started_at`/`ended_at`; `parent` is not carried in the visibility
 /// projection, so it is `None` (matching `from_history`).
+///
+/// `display_name` (#211) is projected out of the store row's
+/// `search_attributes`, which the recorder refreshes on every append — so a
+/// rename's recorded `SearchAttributesUpdated` reaches this surface without a
+/// visibility rebuild. It is the WORKFLOW's name, not the row's run's: the
+/// attribute carries no run id and is folded over the whole history, so a
+/// continue-as-new successor lists under the name its predecessor was wearing. Without this extraction the attribute would be carried
+/// all the way from the store to here and then dropped at the HTTP boundary,
+/// leaving every list row unnamed.
 pub(crate) fn core_summary_from_store(summary: StoreWorkflowSummary) -> WorkflowSummary {
     WorkflowSummary {
         workflow_id: summary.workflow_id,
@@ -327,6 +390,7 @@ pub(crate) fn core_summary_from_store(summary: StoreWorkflowSummary) -> Workflow
         parent: None,
         failed_step: summary.failed_step,
         failure_reason: summary.failure_reason,
+        display_name: aion_core::display_name_from_attributes(&summary.search_attributes),
     }
 }
 
@@ -538,5 +602,81 @@ mod tests {
         assert_eq!(value["workflow_id"], "00000000-0000-0000-0000-000000000001");
         assert_eq!(value["run_id"], "00000000-0000-0000-0000-00000000000a");
         Ok(())
+    }
+
+    /// #211: the HTTP start body carries `display_name` under the same
+    /// `snake_case` spelling as `task_queue`, and its absence is a valid body
+    /// (the field is `#[serde(default)]`, not required).
+    #[test]
+    fn clean_start_request_carries_display_name_and_tolerates_its_absence()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let named: StartWorkflowRequest = serde_json::from_value(json!({
+            "namespace": "tenant-a",
+            "workflow_type": "checkout",
+            "display_name": "Nightly settlement",
+        }))?;
+        let proto = ProtoStartWorkflowRequest::try_from(named)?;
+        assert_eq!(proto.display_name.as_deref(), Some("Nightly settlement"));
+
+        let unnamed: StartWorkflowRequest = serde_json::from_value(json!({
+            "namespace": "tenant-a",
+            "workflow_type": "checkout",
+        }))?;
+        let proto = ProtoStartWorkflowRequest::try_from(unnamed)?;
+        assert_eq!(proto.display_name, None);
+        Ok(())
+    }
+
+    /// #211 rename DTO: ids are plain UUID strings, `run_id` is optional
+    /// (absent means the latest run), and the response echoes the name as
+    /// recorded.
+    #[test]
+    fn clean_rename_request_and_response_use_plain_strings()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let request: RenameWorkflowRequest = serde_json::from_value(json!({
+            "namespace": "tenant-a",
+            "workflow_id": "00000000-0000-0000-0000-000000000001",
+            "display_name": "Nightly settlement",
+        }))?;
+        let proto = ProtoRenameRequest::try_from(request)?;
+        assert_eq!(proto.display_name, "Nightly settlement");
+        assert!(proto.run_id.is_none(), "absent run_id means the latest run");
+
+        let clean = RenameWorkflowResponse::try_from(ProtoRenameResponse {
+            run_id: Some(aion_core::RunId::new(uuid::Uuid::from_u128(10)).into()),
+            display_name: String::from("Nightly settlement"),
+        })
+        .map_err(|error| error.0.message)?;
+        let value = serde_json::to_value(&clean)?;
+        assert_eq!(value["run_id"], "00000000-0000-0000-0000-00000000000a");
+        assert_eq!(value["display_name"], "Nightly settlement");
+        Ok(())
+    }
+
+    /// #211 read path: `core_summary_from_store` PROJECTS the display name out
+    /// of the store row's search attributes instead of dropping it at the HTTP
+    /// boundary — and leaves it `None` when the row carries no name.
+    #[test]
+    fn core_summary_from_store_projects_the_display_name() {
+        let row = |attributes| StoreWorkflowSummary {
+            workflow_id: aion_core::WorkflowId::new(uuid::Uuid::from_u128(1)),
+            run_id: aion_core::RunId::new(uuid::Uuid::from_u128(10)),
+            workflow_type: String::from("checkout"),
+            status: aion_core::WorkflowStatus::Running,
+            start_time: Utc::now(),
+            close_time: None,
+            failed_step: None,
+            failure_reason: None,
+            search_attributes: attributes,
+        };
+
+        let named = core_summary_from_store(row(std::collections::HashMap::from([(
+            aion_core::DISPLAY_NAME_ATTRIBUTE.to_owned(),
+            aion_core::SearchAttributeValue::String(String::from("Nightly settlement")),
+        )])));
+        assert_eq!(named.display_name.as_deref(), Some("Nightly settlement"));
+
+        let unnamed = core_summary_from_store(row(std::collections::HashMap::new()));
+        assert_eq!(unnamed.display_name, None);
     }
 }

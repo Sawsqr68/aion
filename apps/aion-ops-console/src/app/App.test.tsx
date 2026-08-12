@@ -45,7 +45,12 @@ test('renders the detail route and can create a list router again for back navig
   const detailMarkup = renderApp('/workflows/workflow-1');
   const listMarkup = renderApp('/');
 
-  expect(detailMarkup).toContain('Workflow workflow-1');
+  // #211 R2: the header is the run's name over its id. This run was never
+  // named, so it reads as the fallback heading — with the id, IN FULL, always
+  // beneath it: a label never costs the operator the identity to address the
+  // run by.
+  expect(detailMarkup).toContain('>Workflow</h1>');
+  expect(detailMarkup).toMatch(/data-testid="workflow-id"[^>]*>workflow-1</);
   expect(detailMarkup).toContain('Workflow started: EmailDigest');
   expect(listMarkup).toContain('workflow-1');
 });

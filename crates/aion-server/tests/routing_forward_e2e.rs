@@ -183,6 +183,7 @@ async fn forward_start_relays_owner_reply() -> Result<(), TestError> {
         }),
         routing_key: Some("tenant-a/order-1".to_owned()),
         task_queue: None,
+        display_name: None,
     });
 
     let result = forwarder.forward(addr, metadata, request).await;
@@ -193,6 +194,43 @@ async fn forward_start_relays_owner_reply() -> Result<(), TestError> {
     let status = result
         .err()
         .ok_or("expected the owner to reject the start")?;
+    assert_eq!(status.code(), tonic::Code::NotFound);
+    Ok(())
+}
+
+/// A rename forwarded to the owner runs THERE over the real gRPC hop (#211).
+///
+/// Rename is a write — it appends a recorded `SearchAttributesUpdated` — so it
+/// must reach the shard owner like every other write, and the HTTP edge
+/// (`api/http/routing.rs`) now relays it through this same forwarder. The owner
+/// has no such workflow, so it answers with its typed `NotFound`, relayed
+/// verbatim: the dial, the metadata copy, the hop stamp and the `Rename` arm of
+/// the forwarder are all on the path of that answer.
+#[tokio::test]
+async fn forward_rename_relays_owner_reply() -> Result<(), TestError> {
+    let state = owner_state().await?;
+    let (addr, shutdown) = spawn_owner(workflow_service(state)).await?;
+
+    let forwarder = GrpcRequestForwarder::new();
+    let mut metadata = tonic::metadata::MetadataMap::new();
+    metadata.insert("x-aion-subject", "alice".parse()?);
+    metadata.insert("x-aion-namespaces", NAMESPACE.parse()?);
+
+    let request = ForwardRequest::Rename(generated::RenameRequest {
+        namespace: NAMESPACE.to_owned(),
+        workflow_id: Some(generated::WorkflowId {
+            uuid: uuid::Uuid::from_u128(424_243).to_string(),
+        }),
+        run_id: None,
+        display_name: "Nightly settlement".to_owned(),
+    });
+
+    let result = forwarder.forward(addr, metadata, request).await;
+    let _ = shutdown.send(());
+
+    let status = result
+        .err()
+        .ok_or("expected the owner to reject the rename")?;
     assert_eq!(status.code(), tonic::Code::NotFound);
     Ok(())
 }

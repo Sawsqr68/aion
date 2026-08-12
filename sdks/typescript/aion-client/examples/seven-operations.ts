@@ -25,14 +25,23 @@ async function run(): Promise<void> {
     },
   });
 
-  const handle = await client.start({
+  const { handle, displayNameNotApplied } = await client.start({
     workflowType: "conformance.echo",
     input: { message: "hello", counter: 1 },
     idempotencyKey: `aion-client-typescript-seven-operations-${process.pid}`,
+    displayName: "Seven operations example",
   });
   console.log(
     `started workflow=${handle.workflowId} run=${handle.runId ?? "latest"}`,
   );
+  if (displayNameNotApplied !== undefined) {
+    // An idempotent replay matched a run that does not wear the requested name.
+    // The run keeps the name it already has; nothing is renamed behind us.
+    console.log(
+      `display name not applied: requested=${displayNameNotApplied.requested} ` +
+        `standing=${displayNameNotApplied.standing ?? "(unnamed)"}`,
+    );
+  }
 
   await handle.signal({
     signalName: "record",

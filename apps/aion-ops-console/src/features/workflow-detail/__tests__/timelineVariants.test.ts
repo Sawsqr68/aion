@@ -1,10 +1,12 @@
 import { expect, test } from 'bun:test';
 
+import { DISPLAY_NAME_ATTRIBUTE, type SearchAttributes } from '@/lib/workflowIdentity';
 import {
   classifyKnownEvent,
   type EventVariantFamily,
   KNOWN_EVENT_TYPES,
   type KnownEventType,
+  searchAttributesSummary,
 } from '../lib/timelineVariants';
 
 test('KNOWN_EVENT_TYPES enumerates exactly the 32 generated variants', () => {
@@ -59,6 +61,47 @@ test('classifyKnownEvent assigns the expected families', () => {
   for (const [eventType, family] of Object.entries(expectations)) {
     expect(classifyKnownEvent(eventType)?.family).toBe(family);
   }
+});
+
+// #211. Catches: a naming update rendering as a generic key count, so a rename
+// is invisible in the timeline that is supposed to record it.
+test('a display-name update reads as the naming it is', () => {
+  const attributes: SearchAttributes = {
+    [DISPLAY_NAME_ATTRIBUTE]: { type: 'String', data: 'nightly digest' },
+  };
+
+  expect(searchAttributesSummary(attributes)).toBe('Display name set to "nightly digest"');
+});
+
+// Catches: the display-name arm swallowing the other attributes in the same
+// recorded update, which would under-report what the event actually changed.
+test('other attributes recorded alongside the name are still reported', () => {
+  const attributes: SearchAttributes = {
+    [DISPLAY_NAME_ATTRIBUTE]: { type: 'String', data: 'nightly digest' },
+    customer: { type: 'String', data: 'acme' },
+    region: { type: 'String', data: 'apse2' },
+  };
+
+  expect(searchAttributesSummary(attributes)).toBe(
+    'Display name set to "nightly digest" (+2 other key(s))'
+  );
+});
+
+// Catches: the generic case regressing — an update that never touched the name
+// must keep reading as an ordinary search-attribute update.
+test('an update with no display name keeps the generic key-count label', () => {
+  expect(searchAttributesSummary({ customer: { type: 'String', data: 'acme' } })).toBe(
+    'Search attributes updated (1 key(s))'
+  );
+  expect(searchAttributesSummary({})).toBe('Search attributes updated (0 key(s))');
+});
+
+// Catches: coercing a non-String value into a label. The server only ever
+// records the name as a String, so anything else is foreign data, not a name.
+test('a non-String value under the name attribute is not a name', () => {
+  expect(searchAttributesSummary({ [DISPLAY_NAME_ATTRIBUTE]: { type: 'Int', data: 7 } })).toBe(
+    'Search attributes updated (1 key(s))'
+  );
 });
 
 test('classifyKnownEvent returns null for a genuinely-unknown future variant', () => {

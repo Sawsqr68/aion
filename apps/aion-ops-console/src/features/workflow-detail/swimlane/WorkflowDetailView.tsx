@@ -1,6 +1,7 @@
 import { useLiveWorkflowEvents } from '../hooks/useLiveWorkflowEvents';
 import { useWorkflowHistory } from '../hooks/useWorkflowHistory';
 import { useWorkflowSelectionParams } from '../hooks/useWorkflowSelectionParams';
+import { useWorkflowSummary } from '../hooks/useWorkflowSummary';
 import type { WorkflowDetailProps } from '../types';
 import { WorkflowDetailViewContent } from './WorkflowDetailViewContent';
 
@@ -26,6 +27,9 @@ function WorkflowDetailView({ workflowId, namespace }: WorkflowDetailProps) {
   // wrapper owns them and hands the resolved values + setters to the presentational
   // content, which stays renderable without a router (SSR tests).
   const selection = useWorkflowSelectionParams();
+  // The server-projected name (#211). Read here rather than inside the
+  // presentational content so the content stays a pure function of its props.
+  const summary = useWorkflowSummary({ workflowId });
 
   return (
     <WorkflowDetailViewContent
@@ -46,6 +50,8 @@ function WorkflowDetailView({ workflowId, namespace }: WorkflowDetailProps) {
       onSelectSequence={selection.setSelectedSequence}
       scrubPosition={selection.scrubPosition}
       selectedSequence={selection.selectedSequence}
+      summaryDisplayName={summary.data?.display_name ?? null}
+      summaryUnavailable={summary.isError}
       terminalOutcome={live.terminalOutcome}
       timeline={live.timeline}
       workflowId={workflowId}

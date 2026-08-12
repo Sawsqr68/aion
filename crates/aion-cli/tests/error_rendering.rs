@@ -237,6 +237,13 @@ impl WorkflowService for MockWorkflowService {
         off_scope()
     }
 
+    async fn rename(
+        &self,
+        _: Request<generated::RenameRequest>,
+    ) -> Result<Response<generated::RenameResponse>, Status> {
+        off_scope()
+    }
+
     async fn list_workflows(
         &self,
         _: Request<generated::ListWorkflowsRequest>,

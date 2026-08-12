@@ -12,6 +12,8 @@ pub mod continue_as_new;
 pub mod deadline;
 /// Durable operator pause/resume (#204): hold new activity dispatch while paused.
 pub mod pause;
+/// Durable operator rename (#211): record a display name.
+pub mod rename;
 /// Reopen a terminal-Failed or terminal-Cancelled workflow and re-drive it.
 pub mod reopen;
 /// Workflow start request and initialization helpers.
@@ -25,6 +27,7 @@ pub mod visibility;
 
 pub use continue_as_new::{ContinueAsNewContext, ContinueAsNewRequest, continue_as_new};
 pub use pause::{PauseWorkflowContext, PausedRuns};
+pub use rename::RenameWorkflowContext;
 pub use reopen::{ReopenWorkflowContext, reopen};
 pub use terminate::{TerminateWorkflowContext, cancel, complete, fail};
 pub use transition::{resume, suspend};

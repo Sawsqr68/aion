@@ -37,6 +37,31 @@ type Json =
 type JsonRecord = { readonly [key: string]: Json };
 type MutableJsonRecord = { [key: string]: Json };
 
+/**
+ * One shared-contract step whose observable did not match the scenario
+ * document, or which the harness could not execute at all.
+ *
+ * A divergence is DATA, not a thrown abort. The eight scenarios are
+ * independent — each opens its own client and its own {@link ScenarioContext},
+ * and nothing crosses between them — so one scenario that cannot be executed
+ * must never delete the observables of the seven that can. In particular the
+ * `not-found-anti-leak` scenario is a SECURITY control (a foreign-namespace
+ * probe must be byte-identical to a nonexistent-workflow probe), and a security
+ * control that an unrelated earlier failure can silently skip is not a control
+ * at all.
+ *
+ * Within a scenario a divergent step still stops that scenario: later steps
+ * reference earlier ones by `$scenario.step`, so continuing past a failed step
+ * would measure nothing. Loud, per-step, and in the matrix — never swallowed.
+ */
+interface Divergence {
+	readonly scenario: string;
+	readonly step: string;
+	readonly expected: JsonRecord;
+	readonly actual: JsonRecord;
+	readonly reason: string;
+}
+
 test("shared client contract conformance", async () => {
 	const serverUrl = process.env[serverUrlEnv];
 	if (serverUrl === undefined || serverUrl.length === 0) {
@@ -50,10 +75,38 @@ test("shared client contract conformance", async () => {
 	);
 	const defaults = asRecord(document.defaults);
 	const fixtures = asRecord(document.fixtures);
+	const divergences: Divergence[] = [];
 	for (const scenario of asArray(document.scenarios).map(asRecord)) {
-		await runScenario(scenario, defaults, fixtures, serverUrl);
+		await runScenario(scenario, defaults, fixtures, serverUrl, divergences);
 	}
+	assert.equal(
+		divergences.length,
+		0,
+		`${String(divergences.length)} conformance divergence(s):\n${divergences
+			.map(
+				(divergence) =>
+					`  scenario=${divergence.scenario} step=${divergence.step}: ${divergence.reason}`,
+			)
+			.join("\n")}`,
+	);
 });
+
+/**
+ * Records a divergence and emits the shared cross-SDK report line documented in
+ * `conformance/aion-clients/README.md`, so a step that diverged is visible in
+ * the same stream as the `AION_CONFORMANCE` observables rather than only in a
+ * final assertion message.
+ */
+function recordDivergence(
+	divergences: Divergence[],
+	divergence: Divergence,
+): void {
+	divergences.push(divergence);
+	console.log(
+		`DIVERGENCE sdk=typescript scenario=${divergence.scenario} step=${divergence.step} ` +
+			`expected=${JSON.stringify(divergence.expected)} actual=${JSON.stringify(divergence.actual)}`,
+	);
+}
 
 function scenariosPath(): string {
 	// Walk upward from this file (which runs compiled out of dist/) to the
@@ -77,6 +130,7 @@ async function runScenario(
 	defaults: JsonRecord,
 	fixtures: JsonRecord,
 	serverUrl: string,
+	divergences: Divergence[],
 ): Promise<void> {
 	const scenarioId = String(scenario.id);
 	const context = new ScenarioContext();
@@ -92,10 +146,27 @@ async function runScenario(
 			context,
 			startedAt,
 			now,
+			divergences,
 		);
+	} catch (error) {
+		// The scenario document itself could not be walked (a malformed step, a
+		// missing `expect`). That is a divergence of the SOURCE, not of an SDK
+		// observable, and it is recorded rather than thrown so the remaining
+		// scenarios still produce their matrix.
+		recordDivergence(divergences, {
+			scenario: scenarioId,
+			step: "(scenario)",
+			expected: {},
+			actual: { harnessError: errorText(error) },
+			reason: `scenario could not be walked: ${errorText(error)}`,
+		});
 	} finally {
 		await context.teardown();
 	}
+}
+
+function errorText(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
 }
 
 async function runScenarioSteps(
@@ -107,6 +178,7 @@ async function runScenarioSteps(
 	context: ScenarioContext,
 	startedAt: string,
 	now: string,
+	divergences: Divergence[],
 ): Promise<void> {
 	for (const step of asArray(scenario.steps).map(asRecord)) {
 		const stepId = String(step.id);
@@ -135,6 +207,7 @@ async function runScenarioSteps(
 		);
 		let actual: JsonRecord;
 		let errorIdentity: JsonRecord | null = null;
+		let unexecutable: string | null = null;
 		try {
 			actual = {
 				ok: await execute(operation, input, context, serverUrl, expected),
@@ -149,13 +222,46 @@ async function runScenarioSteps(
 					wireCode: error.detail?.code ?? null,
 				};
 			} else {
-				throw error;
+				// Not a taxonomy outcome: the SDK or the harness could not
+				// execute the step at all. That is a divergence from the shared
+				// contract — reported here as one, and NOT rethrown, because an
+				// abort would delete every scenario after this one.
+				actual = { harnessError: errorText(error) };
+				unexecutable = errorText(error);
 			}
 		}
 		console.log(
 			`AION_CONFORMANCE sdk=typescript scenario=${scenarioId} step=${stepId} result=${JSON.stringify(actual)}`,
 		);
-		assertMatches(scenarioId, stepId, actual, expected, context, errorIdentity);
+		if (unexecutable !== null) {
+			recordDivergence(divergences, {
+				scenario: scenarioId,
+				step: stepId,
+				expected,
+				actual,
+				reason: `step could not be executed: ${unexecutable}`,
+			});
+			return;
+		}
+		try {
+			assertMatches(
+				scenarioId,
+				stepId,
+				actual,
+				expected,
+				context,
+				errorIdentity,
+			);
+		} catch (error) {
+			recordDivergence(divergences, {
+				scenario: scenarioId,
+				step: stepId,
+				expected,
+				actual,
+				reason: errorText(error),
+			});
+			return;
+		}
 		context.record(scenarioId, stepId, actual);
 		if (errorIdentity !== null) {
 			context.recordErrorIdentity(scenarioId, stepId, errorIdentity);
@@ -226,11 +332,17 @@ async function execute(
 			return { kind: "client" };
 		}
 		case "start": {
-			const handle = await context.requireClient().start({
+			// `.handle` because start reports more than the run now: an
+			// idempotent replay that could not apply a requested display name
+			// says so on the outcome (#211). The scenarios observe the handle,
+			// and the Rust and Python harnesses unwrap the same field from the
+			// same shape.
+			const { handle } = await context.requireClient().start({
 				namespace: String(input.namespace ?? "conformance"),
 				workflowType: String(input.workflowType),
 				input: payloadJson(input.payload),
 				idempotencyKey: optionalString(input.idempotencyKey),
+				displayName: optionalString(input.displayName),
 			});
 			return {
 				kind: "handle",
@@ -278,6 +390,7 @@ async function execute(
 				workflowId: summary.workflowId ?? null,
 				runId: input.runId ?? null,
 				status: summary.status ?? null,
+				displayName: summary.displayName ?? null,
 				history: description.history.map(normalizeEnvelopeEvent),
 			};
 		}
@@ -485,6 +598,29 @@ function assertMatches(
 			expectedOk.payloadEquals,
 			`scenario=${scenario} step=${step}`,
 		);
+	if ("displayNameEquals" in expectedOk) {
+		// #211: pins the summarised name, `null` asserting the workflow is
+		// unnamed.
+		//
+		// The observable must CARRY the key. Absent-vs-null is a real wire
+		// distinction and is folded exactly once, in `normalizeSummary`, where
+		// an unnamed workflow genuinely has no recorded attribute. By THIS
+		// layer the harness owns the shape and always emits the key, so a
+		// missing one means the harness stopped projecting at all — and
+		// coalescing it here (`ok.displayName ?? null`) would let that failure
+		// satisfy every `displayNameEquals: null` expectation in the document.
+		// Right answer and plausible-wrong answer coinciding distinguishes
+		// nothing, so the absence is refused instead of absorbed.
+		assert.ok(
+			"displayName" in ok,
+			`scenario=${scenario} step=${step} observable did not project displayName`,
+		);
+		assert.equal(
+			ok.displayName,
+			expectedOk.displayNameEquals,
+			`scenario=${scenario} step=${step} displayNameEquals`,
+		);
+	}
 	if ("sameHandleAs" in expectedOk) {
 		// The resolver may already have replaced the `$scenario.step`
 		// reference with the recorded step's ok payload; both shapes pin the
@@ -638,6 +774,14 @@ function normalizeSummary(summary: WireEnvelope | undefined): JsonRecord {
 			null,
 		workflowType: record.workflow_type ?? record.workflowType ?? null,
 		status: statusName(record.status),
+		// #211: the summarised display name is part of the shared observable —
+		// an SDK that cannot carry a name to the server, or cannot read the one
+		// the server recorded, must diverge rather than pass quietly. `null` is
+		// the observable for an unnamed workflow.
+		displayName:
+			optionalString(record.display_name) ??
+			optionalString(record.displayName) ??
+			null,
 	};
 }
 

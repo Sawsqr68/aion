@@ -13,14 +13,12 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use prost::Message as _;
 
 use aion_proto::generated;
-use aion_proto::{ProtoWireError, WireError};
 use aion_store::NamespaceOrigin;
 
 use super::route::{ForwardMintError, MintCredentials, MintForwarder, encode_mint_origin};
-use crate::routing::{ForwardReply, ForwardRequest, RequestForwarder};
+use crate::routing::{ForwardReply, ForwardRequest, RequestForwarder, owner_refusal};
 
 /// Ships mints over the R-3 gRPC request forwarder.
 #[derive(Clone)]
@@ -41,20 +39,14 @@ impl GrpcMintForwarder {
 /// The server encodes its typed `WireError` into the status details on every
 /// refusal it authors; a transport failure the forwarder itself synthesises (a
 /// failed dial) carries no details. So "did the owner answer?" is a structural
-/// question about the payload, answered structurally.
+/// question about the payload, answered structurally — by
+/// [`crate::routing::owner_refusal`], the one place every forwarding surface
+/// asks it.
 fn classify(status: &tonic::Status) -> ForwardMintError {
-    // proto3 decodes an EMPTY buffer into an all-default message, so "details
-    // present" must be checked before decoding or a bare transport status would
-    // masquerade as an authored refusal.
-    if status.details().is_empty() {
-        return ForwardMintError::Unreachable(status.code().to_string());
-    }
-    let Ok(proto) = ProtoWireError::decode(status.details()) else {
-        return ForwardMintError::Unreachable(status.code().to_string());
-    };
-    match WireError::try_from(proto) {
-        Ok(wire) | Err(wire) => ForwardMintError::Refused(wire),
-    }
+    owner_refusal(status).map_or_else(
+        || ForwardMintError::Unreachable(status.code().to_string()),
+        ForwardMintError::Refused,
+    )
 }
 
 #[async_trait]

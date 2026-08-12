@@ -11,6 +11,7 @@
 //! - `authoring` — server-side Gleam authoring (mounted only when `[authoring].gleam_path` is set).
 //! - `dev_ui` — local dev-server surface (mounted only when `[dev].enabled`).
 //! - `auth` — caller-identity extraction from request headers.
+//! - `routing` — shard-owner forwarding for HTTP writes (clustered builds).
 //! - `visibility` — visibility query-string parsing and namespace scoping.
 //! - `payload` — HTTP body/payload encode-decode shapes and conversions.
 //! - `build` — `GET /build`, the server's own revision.
@@ -49,6 +50,8 @@ mod outbox;
 mod payload;
 mod queues;
 mod router;
+#[cfg(feature = "haematite-backend")]
+mod routing;
 mod schedules;
 mod transcripts;
 mod unrecoverable;

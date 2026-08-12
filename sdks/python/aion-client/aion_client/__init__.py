@@ -1,6 +1,13 @@
 """Public surface for the Aion Python caller SDK."""
 
-from .client import Client, RunOutcome, TLSConfig, WorkflowDescription
+from .client import (
+    Client,
+    DisplayNameNotApplied,
+    RunOutcome,
+    StartOutcome,
+    TLSConfig,
+    WorkflowDescription,
+)
 from .errors import (
     AionClientError,
     AlreadyExists,
@@ -24,6 +31,7 @@ __all__ = [
     "AlreadyExists",
     "Cancelled",
     "Client",
+    "DisplayNameNotApplied",
     "EventStream",
     "InvalidArgument",
     "JSONValue",
@@ -34,6 +42,7 @@ __all__ = [
     "QueryTimeout",
     "RunOutcome",
     "ServerError",
+    "StartOutcome",
     "StreamEvent",
     "TLSConfig",
     "Unauthenticated",

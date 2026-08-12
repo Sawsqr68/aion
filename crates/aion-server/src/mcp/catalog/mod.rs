@@ -7,6 +7,9 @@ pub(crate) mod authoring;
 pub(crate) mod build;
 /// The mutating tools: `start_run`, `signal`, `cancel`.
 pub(crate) mod mutations;
+/// The #211 label rule, checked mechanically against the published schemas.
+#[cfg(test)]
+mod name_is_not_an_address_tests;
 /// The read tools: `describe_run`, `read_transcript`, `read_history`,
 /// `list_runs`, `query`.
 pub(crate) mod reads;

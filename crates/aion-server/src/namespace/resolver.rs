@@ -35,6 +35,17 @@ pub const NAMESPACE_ATTRIBUTE: &str = "aion.namespace";
 /// history-derived start-time queue (#144) cannot drift.
 pub const TASK_QUEUE_ATTRIBUTE: &str = aion_core::START_TIME_TASK_QUEUE_ATTRIBUTE;
 
+/// Search attribute name that carries a workflow run's operator-facing display
+/// name (#211). Recorded durably in the same atomic append as `WorkflowStarted`
+/// when the start named one, and re-recorded by every rename, so history keeps
+/// every name the run has worn. A label over the UUID identity, never an
+/// address: nothing resolves a workflow by name.
+///
+/// Aliases [`aion_core::DISPLAY_NAME_ATTRIBUTE`] rather than redeclaring the
+/// literal, so the server's recorded attribute and the engine's history-derived
+/// display name cannot drift.
+pub const DISPLAY_NAME_ATTRIBUTE: &str = aion_core::DISPLAY_NAME_ATTRIBUTE;
+
 /// Where a caller's grants came from, so a denial message can point the
 /// operator at the knob that actually carries the grant (the development
 /// headers, or the validated token's claims).

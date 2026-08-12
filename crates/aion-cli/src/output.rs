@@ -2,11 +2,20 @@
 
 use std::io::{self, Write};
 
-use aion_client::{PauseOutcome, ReopenOutcome, ResumeOutcome, WorkflowHandle};
+use aion_client::{PauseOutcome, ReopenOutcome, ResumeOutcome, StartOutcome};
 use anyhow::{Context, Result};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
+/// What `aion start` prints.
+///
+/// [`StartOutcome::display_name_not_applied`] is deliberately NOT rendered
+/// here. The SDK raises that report only on an idempotency-key replay, and this
+/// binary cannot produce one: no CLI verb takes an idempotency key, and the
+/// SDK's replay cache is per-`Client`, so a key could not survive between
+/// invocations even if a verb took one. A field that can never carry a value is
+/// a promise the output does not keep, so it is absent rather than always-null.
+/// A verb that grows an idempotency key grows this output with it.
 #[derive(Serialize)]
 pub(crate) struct StartOutput {
     workflow_id: String,
@@ -38,10 +47,10 @@ pub(crate) struct DescribeOutput<TSummary, THistory> {
     pub(crate) history: THistory,
 }
 
-pub(crate) fn start_output(handle: &WorkflowHandle) -> StartOutput {
+pub(crate) fn start_output(outcome: &StartOutcome) -> StartOutput {
     StartOutput {
-        workflow_id: handle.workflow_id().to_string(),
-        run_id: handle.run_id().to_string(),
+        workflow_id: outcome.handle.workflow_id().to_string(),
+        run_id: outcome.handle.run_id().to_string(),
     }
 }
 

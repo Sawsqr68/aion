@@ -246,7 +246,7 @@ fn compose_start(
 
 /// Starts the session from an already-validated input.
 async fn start(client: &Client, embedded: &EmbeddedAssistant, input: Payload) -> Result<Value> {
-    let handle = client
+    let outcome = client
         .start(
             embedded.workflow_type().to_owned(),
             input,
@@ -254,7 +254,7 @@ async fn start(client: &Client, embedded: &EmbeddedAssistant, input: Payload) ->
         )
         .await
         .context("failed to start the assistant session")?;
-    to_value(start_output(&handle))
+    to_value(start_output(&outcome))
 }
 
 /// Composes and validates the one signal both `say` and `end` send.

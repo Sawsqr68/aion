@@ -46,6 +46,20 @@ Retryability is "in principle" only: it describes whether a caller may reasonabl
 
 The current checked-in `StartWorkflowRequest` does not yet expose an idempotency-key field. This contract defines the SDK behaviour and requires SDKs to map the key to the AW-owned start request field or request metadata once AW exposes it; SDKs must not invent a private proto field.
 
+### Display name
+
+`start` accepts an optional operator-facing display name (#211), carried on the AW-owned `StartWorkflowRequest.display_name` field. The server records it durably in the same atomic append as `WorkflowStarted`, as the `aion.display_name` search attribute, and every read surface projects it onto the `WorkflowSummary` that `describe` and `list` return. A start that supplies no name starts unnamed, and its summary carries no name.
+
+The name is a **label, never an address**. No SDK operation accepts a name as a target and no SDK resolves a workflow by name; two workflows may wear the same name. The server trims the name before recording it, so SDKs trim before sending and the name an SDK remembers is the name the workflow actually wears. A present-but-blank (empty or whitespace-only) name is `InvalidArgument` at the SDK boundary, matching the server, which refuses a present-but-blank name with `invalid_input` rather than reading it as unnamed. Only ABSENCE means unnamed. Callers pass "no name" by omitting the field, never by sending an empty string — unlike `routing_key` and `task_queue`, where a blank does mean "not selected".
+
+The label reads back per **workflow**, not per run: the recorded attribute carries no run id, so readers fold it over the whole workflow history, last write wins. Describing any run of a workflow returns the most recently recorded name, and a continue-as-new successor inherits its predecessor's name.
+
+The display name is deliberately **not** part of the start idempotency identity. The idempotency key answers "is this the same act?", and a label carries no identity, so two starts differing only in name are the same act and dedupe to one run rather than raising `AlreadyExists`. The name that could not be applied must be REPORTED rather than dropped: `start` returns an outcome carrying the requested name and the standing one, and never renames the matched run behind the caller. The report is raised only when the call REQUESTED a name the standing run does not wear (a different name, or none at all); a call that requested no name dropped nothing and is told nothing.
+
+**Naming is a start-time act on this surface. Renaming is not an SDK operation in this release** — it is a console/HTTP action, `POST /workflows/rename` (see [Operation: rename](#operation-rename-http-only-not-an-sdk-operation)). SDKs carry the `Rename` RPC in their generated stubs and expose no method for it. A start outcome reporting an unapplied name therefore offers the caller three remedies, none of which is an SDK rename: use a different idempotency key, accept the standing name, or rename through the console.
+
+**No SDK may compose name-filter → take-first → act.** `aion.display_name` is a filterable visibility attribute, so a name-shaped predicate returns a LIST of candidates; turning that list into an action by taking the first element re-imports addressing one layer up, which is exactly what the label rule forbids. The choosing step stays with the caller, by contract. If an SDK later grows a "find by name" convenience, it RETURNS CANDIDATES AND STOPS — it never takes a name and performs an act. This is a pre-made design decision, not advice: an SDK that ships the composed helper is out of contract regardless of how it is documented.
+
 ### Run targeting
 
 `signal`, `query`, `cancel`, and `describe` target the latest run of a workflow by default. If the caller supplies a `RunId`, the operation targets exactly that run. A `WorkflowHandle` returned by `start` supplies both IDs and therefore targets its concrete run unless the caller explicitly constructs a latest-run handle or omits the run in the language's bare-ID constructor.
@@ -87,10 +101,10 @@ The current server handlers require `RunId` for these operations. This contract 
 | Item | Contract |
 | --- | --- |
 | Transport mapping | `WorkflowService.StartWorkflow(StartWorkflowRequest) -> StartWorkflowResponse`. Idempotency key maps to AW-owned start request metadata/field once available. |
-| Inputs | Namespace/default namespace; workflow type name; workflow input as typed value encoded to `Payload` or raw `Payload`; optional caller-supplied idempotency key; optional caller deadline/cancellation context. |
-| Output | `WorkflowHandle` containing the returned `WorkflowId` and `RunId`. The handle exposes per-workflow `signal`, `query`, `cancel`, `describe`, and `subscribe` methods. |
+| Inputs | Namespace/default namespace; workflow type name; workflow input as typed value encoded to `Payload` or raw `Payload`; optional caller-supplied idempotency key; optional operator-facing display name (`StartWorkflowRequest.display_name`, see [Display name](#display-name)); optional caller deadline/cancellation context. |
+| Output | A start outcome carrying the `WorkflowHandle` (the returned `WorkflowId` and `RunId`) plus the report of a requested display name an idempotent replay did not apply. The handle exposes per-workflow `signal`, `query`, `cancel`, `describe`, and `subscribe` methods. |
 | Errors | `AlreadyExists`, `Unauthenticated`, `NamespaceDenied`, `Unavailable`, `InvalidArgument`, `Server`, `Cancelled`. |
-| Notes | Retried identical start with the same idempotency key returns the original handle. Conflicting reuse raises `AlreadyExists`. Without a supplied key, normal server start semantics apply and callers must not assume retry safety. |
+| Notes | Retried identical start with the same idempotency key returns the original handle. Conflicting reuse raises `AlreadyExists`. Without a supplied key, normal server start semantics apply and callers must not assume retry safety. A blank display name is `InvalidArgument` before the request leaves the SDK. |
 
 ## Operation: signal
 
@@ -128,7 +142,7 @@ The current server handlers require `RunId` for these operations. This contract 
 | --- | --- |
 | Transport mapping | `WorkflowService.ListWorkflows(ListWorkflowsRequest) -> ListWorkflowsResponse`; filter is an `aion-core` `WorkflowFilter` in `WireEnvelope`; summaries are `aion-core` `WorkflowSummary` values in `WireEnvelope`. |
 | Inputs | Namespace/default namespace; filter dimensions: workflow type, workflow status, started-after time, started-before time, and parent workflow; pagination controls when AW exposes them; optional caller deadline/cancellation context. |
-| Output | A page of workflow summaries plus pagination continuation information when AW exposes it. Each summary contains the AW/core summary projection, including workflow identity, type, status, start/end timestamps, and parent where available. |
+| Output | A page of workflow summaries plus pagination continuation information when AW exposes it. Each summary contains the AW/core summary projection, including workflow identity, type, status, start/end timestamps, parent where available, and the display name when one has been recorded (see [Display name](#display-name)). |
 | Errors | `Unauthenticated`, `NamespaceDenied`, `Unavailable`, `InvalidArgument`, `Server`, `Cancelled`. |
 | Notes | The current checked-in `ListWorkflowsRequest` has `namespace` and `WireEnvelope filter`, and `ListWorkflowsResponse` has repeated summaries but no pagination fields. Pagination is required SDK/server behaviour for the public clients once AW exposes token/limit fields; SDKs must not invent private pagination fields meanwhile. |
 
@@ -138,7 +152,7 @@ The current server handlers require `RunId` for these operations. This contract 
 | --- | --- |
 | Transport mapping | `WorkflowService.DescribeWorkflow(DescribeWorkflowRequest) -> DescribeWorkflowResponse`; summary and optional history are carried in `WireEnvelope` entries. |
 | Inputs | Namespace/default namespace; `WorkflowId`; optional `RunId` (latest run by default); include-history flag; optional caller deadline/cancellation context. |
-| Output | Workflow description containing the `WorkflowSummary` projection with current status, plus optional event history when requested and authorised. |
+| Output | Workflow description containing the `WorkflowSummary` projection with current status and the display name when one has been recorded (see [Display name](#display-name)), plus optional event history when requested and authorised. |
 | Errors | `NotFound`, `Unauthenticated`, `NamespaceDenied`, `Unavailable`, `InvalidArgument`, `Server`, `Cancelled`. |
 | Notes | Latest-run targeting is the SDK default when no `RunId` is supplied. History is optional and may be omitted by request or server policy; absence of requested history due to an error must be surfaced rather than silently treated as an empty history. |
 
@@ -154,3 +168,16 @@ The current server handlers require `RunId` for these operations. This contract 
 | Output | A language-native async stream/iterator of decoded events. Normal caller cancellation ends the stream according to language idiom; terminal server/transport failures are emitted/surfaced as taxonomy errors. |
 | Errors | `NotFound`, `Unauthenticated`, `NamespaceDenied`, `Unavailable`, `InvalidArgument`, `Server`, `Cancelled`. |
 | Notes | On transient disconnect, the SDK resumes from the last delivered per-workflow sequence number and must not deliver gaps or duplicates. If resumption cannot be completed, the stream surfaces `Unavailable` or the more specific taxonomy variant supplied by AW. |
+
+## Operation: rename (HTTP only, not an SDK operation)
+
+Listed here because the wire contract carries it and every SDK's generated stubs carry it, so its ABSENCE from the SDK surface has to be a stated decision rather than an oversight a reader has to infer.
+
+| Item | Contract |
+| --- | --- |
+| SDK surface | **None.** No SDK exposes a rename method in this release. Rust, Python, TypeScript, and Gleam all omit it deliberately; `docs/operations/operations.md` records the same ruling for the CLI ("Renaming is a console action … not a CLI verb"). An SDK that adds one is a contract change, not an implementation detail. |
+| Transport mapping | `WorkflowService.Rename(RenameRequest) -> RenameResponse`, and `POST /workflows/rename` on the HTTP API. The generated stubs carry both messages and the RPC in every SDK; nothing in the SDKs calls them. |
+| Inputs | Namespace; `WorkflowId`; optional `RunId` (latest run when omitted); the new display name. |
+| Output | The resolved `RunId` and the display name **as recorded** (trimmed). |
+| Errors | A blank name is `invalid_input`. An absent workflow is `not_found`. A run that is neither terminal nor paused and is not resident on the serving node is `invalid_state` (retry once it is resident, rather than have a second writer append behind its live one). A run SUPERSEDED by a later run of the same workflow (a continue-as-new predecessor) is also `invalid_state`, because the recorded attribute carries no run id and the name would land on the later run. |
+| Notes | Every rename is a recorded `SearchAttributesUpdated` event, so history keeps every name the run has worn and the current name is the last one recorded. The rename is addressed to a workflow AND a run, but what it records is a workflow-level attribute — see [Display name](#display-name) for how it reads back. |

@@ -149,6 +149,22 @@ type RawReopenWorkflowResponse = {
   status?: unknown;
 };
 
+/**
+ * Normalized result of a `POST /workflows/rename` (#211). The server answers
+ * with the run the name was recorded against and the name exactly as recorded
+ * (trimmed), so the caller reads back the LABEL the run now wears rather than
+ * the string it happened to send.
+ */
+export type RenameWorkflowResult = {
+  runId: RunId;
+  displayName: string;
+};
+
+type RawRenameWorkflowResponse = {
+  run_id?: unknown;
+  display_name?: unknown;
+};
+
 /** The closed set of statuses the server can project (mirror of `WorkflowStatus`). */
 const WORKFLOW_STATUSES: readonly WorkflowStatus[] = [
   'Running',
@@ -234,6 +250,50 @@ export function normalizeWorkflowPage(
   };
 }
 
+/**
+ * Read the `summary` out of a `POST /workflows/describe` response.
+ *
+ * The server projects this summary from the FULL recorded history, so its
+ * `display_name` is the authority for the WORKFLOW's current name — unlike a
+ * fold over a loaded history window, which can only see the events in hand.
+ * Per workflow rather than per run: the recorded attribute carries no run id. `null`
+ * is the honest answer for a workflow the server knows nothing about; a
+ * non-object response is a contract violation surfaced as an {@link ApiError}.
+ *
+ * Every rendered field is validated rather than cast through, exactly as
+ * {@link normalizeRenameWorkflow} and {@link normalizeReopenWorkflow} validate
+ * theirs. A wrong-typed `display_name` that was cast through would reach
+ * `normalizeDisplayName`, come back `null`, and render the run UNNAMED —
+ * reporting a contract violation as a fact about the workflow.
+ */
+export function normalizeDescribeSummary(response: unknown): WorkflowSummary | null {
+  if (!isRecord(response)) {
+    throw new ApiError(200, 'workflows/describe response was not an object');
+  }
+
+  const summary = response.summary;
+
+  if (summary === null || summary === undefined) {
+    return null;
+  }
+
+  if (!isRecord(summary)) {
+    throw new ApiError(200, 'workflows/describe summary was not a workflow summary');
+  }
+
+  return {
+    workflow_id: requireString(summary.workflow_id, 'workflow_id') as WorkflowId,
+    workflow_type: requireString(summary.workflow_type, 'workflow_type'),
+    status: requireWorkflowStatus(summary.status),
+    started_at: requireString(summary.started_at, 'started_at'),
+    ended_at: requireNullableString(summary.ended_at, 'ended_at'),
+    parent: requireNullableString(summary.parent, 'parent') as WorkflowId | null,
+    failed_step: requireNullableString(summary.failed_step, 'failed_step'),
+    failure_reason: requireNullableString(summary.failure_reason, 'failure_reason'),
+    display_name: requireNullableString(summary.display_name, 'display_name'),
+  };
+}
+
 export function normalizeHistory(response: HistoryResponse): Event[] {
   const events = Array.isArray(response)
     ? response
@@ -308,6 +368,24 @@ export function normalizeReopenWorkflow(response: unknown): ReopenWorkflowResult
   return { runId: runId as RunId, status };
 }
 
+/**
+ * Normalize the `POST /workflows/rename` response (#211). A missing or
+ * non-string `run_id`/`display_name` is a contract violation surfaced as an
+ * {@link ApiError}: the console never reports a rename as applied on a response
+ * that does not name the run it was applied to.
+ */
+export function normalizeRenameWorkflow(response: unknown): RenameWorkflowResult {
+  if (!isRecord(response)) {
+    throw new ApiError(200, 'workflows/rename response was not an object');
+  }
+
+  const raw = response as RawRenameWorkflowResponse;
+  const runId = requireString(raw.run_id, 'run_id');
+  const displayName = requireString(raw.display_name, 'display_name');
+
+  return { runId: runId as RunId, displayName };
+}
+
 export function normalizeLoadPackage(response: unknown): LoadPackageResult {
   if (!isRecord(response)) {
     throw new ApiError(200, 'deploy/packages response was not an object');
@@ -346,6 +424,24 @@ function toWorkflowVersion(raw: RawWorkflowVersion): WorkflowVersion {
 function requireString(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.length === 0) {
     throw new ApiError(200, `response field "${field}" was missing or not a string`);
+  }
+
+  return value;
+}
+
+/**
+ * Validate an OPTIONAL response string: absent and `null` both mean "the server
+ * has no value", and anything else that is not a string is a contract
+ * violation. Distinguishing the two matters — silently coercing a wrong type to
+ * `null` would present a malformed response as an absent value.
+ */
+function requireNullableString(value: unknown, field: string): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    throw new ApiError(200, `response field "${field}" was not a string or null`);
   }
 
   return value;

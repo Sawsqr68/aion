@@ -97,6 +97,24 @@ pub async fn start_with_placement(
         .as_deref()
         .map(str::trim)
         .filter(|queue| !queue.is_empty());
+    // #211: a PRESENT but blank display_name is refused, not reinterpreted.
+    //
+    // The server is the trust boundary — the SDKs are not the only callers, and
+    // raw gRPC, the HTTP body, and the MCP `start_run` tool all reach here.
+    // Trimming a blank one to "unnamed" would answer 200 to an operator who
+    // believed they had named the run and say nothing about the name being
+    // dropped. `None`/absent is how a caller says "unnamed"; a blank string is
+    // a mistake, and the rename endpoint already refuses the same input, so
+    // accepting it here would make the two surfaces disagree about what a blank
+    // name means.
+    let display_name = match request.display_name.as_deref().map(str::trim) {
+        Some("") => {
+            return Err(WireError::invalid_input(
+                "display_name must not be blank; omit it to start the run unnamed",
+            ));
+        }
+        other => other,
+    };
     let span = info_span!(
         "engine_operation",
         operation = "start",
@@ -104,7 +122,7 @@ pub async fn start_with_placement(
         workflow_id = tracing::field::Empty,
         workflow_type = %request.workflow_type,
     );
-    let search_attributes = start_search_attributes(&namespace, task_queue);
+    let search_attributes = start_search_attributes(&namespace, task_queue, display_name);
     let handle = async {
         scoped
             .engine()
@@ -134,15 +152,23 @@ pub async fn start_with_placement(
 }
 
 /// Search attribute map stamping the authorized namespace — and, when the start
-/// selected one, the default task queue — onto an execution.
+/// selected them, the default task queue and the operator-facing display name
+/// (#211) — onto an execution.
 ///
-/// Both are recorded in the same atomic append as `WorkflowStarted`, so the
-/// `(namespace, task_queue)` targeting selection survives restarts/failover and
-/// is never tracked only in memory. `task_queue` is omitted when the start did
-/// not select one (the workflow falls back to the namespace's default queue).
-fn start_search_attributes(
+/// All are recorded in the same atomic append as `WorkflowStarted`, so the
+/// `(namespace, task_queue)` targeting selection and the label survive
+/// restarts/failover and are never tracked only in memory. `task_queue` is
+/// omitted when the start did not select one (the workflow falls back to the
+/// namespace's default queue); `display_name` is omitted when the start did not
+/// name it (it renders as its bare UUID until a rename records one).
+///
+/// The recorded `aion.display_name` carries no run id, so readers fold it over
+/// the whole workflow history: the name stamped here is a per-WORKFLOW label a
+/// continue-as-new successor inherits, not a per-run one.
+pub(crate) fn start_search_attributes(
     namespace: &str,
     task_queue: Option<&str>,
+    display_name: Option<&str>,
 ) -> std::collections::HashMap<String, aion_core::SearchAttributeValue> {
     let mut attributes = std::collections::HashMap::from([(
         crate::namespace::NAMESPACE_ATTRIBUTE.to_owned(),
@@ -152,6 +178,12 @@ fn start_search_attributes(
         attributes.insert(
             crate::namespace::TASK_QUEUE_ATTRIBUTE.to_owned(),
             aion_core::SearchAttributeValue::String(task_queue.to_owned()),
+        );
+    }
+    if let Some(display_name) = display_name {
+        attributes.insert(
+            crate::namespace::DISPLAY_NAME_ATTRIBUTE.to_owned(),
+            aion_core::SearchAttributeValue::String(display_name.to_owned()),
         );
     }
     attributes
@@ -413,6 +445,73 @@ pub async fn pause(
     })
 }
 
+/// Handles a decoded rename request (#211).
+///
+/// Resolves the run (latest when omitted) and calls
+/// [`aion::Engine::rename_workflow`], which records the new display name as a
+/// durable `SearchAttributesUpdated` event — history keeps every name the run
+/// has worn. The name is a LABEL over the UUID identity, never an address:
+/// this request sets a name on an id-addressed run; nothing resolves a
+/// workflow by name. Returns the run id and the name exactly as recorded
+/// (trimmed).
+///
+/// # Errors
+///
+/// Returns a stable [`WireError`] when IDs are missing/malformed, the trimmed
+/// name is empty (`invalid_input`), namespace scoping fails, or the engine
+/// rename call fails — `not_found` for an absent workflow, and `invalid_state`
+/// for a run that is neither terminal nor paused and is not resident on this
+/// node (renaming it then would append behind its live writer, so the engine
+/// refuses for the caller to retry rather than risk a second writer).
+pub async fn rename(
+    guard: &NamespaceGuard,
+    caller: &CallerIdentity,
+    request: aion_proto::ProtoRenameRequest,
+) -> Result<aion_proto::ProtoRenameResponse, WireError> {
+    let workflow_id = required_workflow_id(request.workflow_id.clone())?;
+    // Validate the name BEFORE any engine work: an empty label is a caller
+    // mistake, refused with nothing appended. Trim + empty-filter only (the
+    // task_queue precedent) — no invented caps.
+    let display_name = request.display_name.trim();
+    if display_name.is_empty() {
+        return Err(WireError::invalid_input(
+            "display_name must not be empty; a rename records a non-empty label",
+        ));
+    }
+    let target = WorkflowTarget::workflow(&workflow_id);
+    let scoped = guard
+        .scope(
+            caller,
+            &NamespaceOperation::rename_workflow(&request, target),
+        )
+        .await
+        .map_err(|error| error.to_wire_error())?;
+    let namespace = scoped.namespace().to_owned();
+    let engine = scoped.engine().map_err(|error| error.to_wire_error())?;
+    let run_id = resolve_run_id(engine.as_ref(), &workflow_id, request.run_id.clone()).await?;
+
+    let span = info_span!(
+        "engine_operation",
+        operation = "rename",
+        namespace = %namespace,
+        workflow_id = %workflow_id,
+    );
+
+    let recorded = async {
+        engine
+            .rename_workflow(&workflow_id, &run_id, display_name)
+            .await
+            .map_err(|error| map_workflow_operation_error(error, &workflow_id))
+    }
+    .instrument(span)
+    .await?;
+
+    Ok(aion_proto::ProtoRenameResponse {
+        run_id: Some(run_id.into()),
+        display_name: recorded,
+    })
+}
+
 /// Handles a decoded resume request (#204).
 ///
 /// Resolves the run (latest when omitted) and calls
@@ -485,6 +584,7 @@ mod tests {
             input: Some(proto_payload()?),
             routing_key: None,
             task_queue: None,
+            display_name: None,
         };
 
         let error = start(&context.guard, &context.caller, request).await;
@@ -505,7 +605,7 @@ mod tests {
     fn start_records_namespace_only_when_no_task_queue_selected() {
         use crate::namespace::{NAMESPACE_ATTRIBUTE, TASK_QUEUE_ATTRIBUTE};
 
-        let attributes = start_search_attributes("tenant-a", None);
+        let attributes = start_search_attributes("tenant-a", None, None);
         assert_eq!(
             attributes.get(NAMESPACE_ATTRIBUTE),
             Some(&aion_core::SearchAttributeValue::String(
@@ -521,7 +621,7 @@ mod tests {
     fn start_records_selected_task_queue_durably_like_namespace() {
         use crate::namespace::{NAMESPACE_ATTRIBUTE, TASK_QUEUE_ATTRIBUTE};
 
-        let attributes = start_search_attributes("tenant-a", Some("gpu"));
+        let attributes = start_search_attributes("tenant-a", Some("gpu"), None);
         assert_eq!(
             attributes.get(NAMESPACE_ATTRIBUTE),
             Some(&aion_core::SearchAttributeValue::String(
@@ -535,6 +635,140 @@ mod tests {
             attributes.get(TASK_QUEUE_ATTRIBUTE),
             Some(&aion_core::SearchAttributeValue::String("gpu".to_owned()))
         );
+    }
+
+    /// #211: an unnamed start records no display-name attribute, so the run
+    /// renders as its bare UUID.
+    #[test]
+    fn start_records_no_display_name_when_unnamed() {
+        use crate::namespace::{DISPLAY_NAME_ATTRIBUTE, NAMESPACE_ATTRIBUTE};
+
+        let attributes = start_search_attributes("tenant-a", None, None);
+        assert_eq!(
+            attributes.get(NAMESPACE_ATTRIBUTE),
+            Some(&aion_core::SearchAttributeValue::String(
+                "tenant-a".to_owned()
+            ))
+        );
+        // No name => no display_name attribute is recorded; the unnamed run
+        // renders as its bare UUID.
+        assert!(!attributes.contains_key(DISPLAY_NAME_ATTRIBUTE));
+    }
+
+    /// #211: a named start records `aion.display_name` in the SAME
+    /// search-attribute map as the namespace, so the label lands in the same
+    /// atomic `WorkflowStarted` append and survives replay/failover.
+    #[test]
+    fn start_records_display_name_durably_like_namespace() {
+        use crate::namespace::{DISPLAY_NAME_ATTRIBUTE, NAMESPACE_ATTRIBUTE};
+
+        let attributes = start_search_attributes("tenant-a", None, Some("Nightly settlement"));
+        assert_eq!(
+            attributes.get(NAMESPACE_ATTRIBUTE),
+            Some(&aion_core::SearchAttributeValue::String(
+                "tenant-a".to_owned()
+            ))
+        );
+        assert_eq!(
+            attributes.get(DISPLAY_NAME_ATTRIBUTE),
+            Some(&aion_core::SearchAttributeValue::String(
+                "Nightly settlement".to_owned()
+            ))
+        );
+    }
+
+    /// #211: a PRESENT but blank `display_name` on START is refused rather than
+    /// reinterpreted as "unnamed" — the server is the trust boundary, and a
+    /// caller who believed they had named the run must not get a 200 and a bare
+    /// UUID. Absent stays the way to say "unnamed".
+    #[tokio::test]
+    async fn start_refuses_a_blank_display_name_rather_than_starting_unnamed()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let context = context().await?;
+        for blank in ["", "   ", "\t\n "] {
+            let request = aion_proto::ProtoStartWorkflowRequest {
+                namespace: NAMESPACE.to_owned(),
+                workflow_type: "checkout".to_owned(),
+                input: Some(proto_payload()?),
+                routing_key: None,
+                task_queue: None,
+                display_name: Some(blank.to_owned()),
+            };
+
+            let error = start(&context.guard, &context.caller, request)
+                .await
+                .err()
+                .ok_or_else(|| WireError::backend("expected a blank-name refusal"))?;
+            assert_eq!(error.code, WireErrorCode::InvalidInput, "blank {blank:?}");
+        }
+
+        // ABSENT is still how a caller says "unnamed", and it is NOT refused —
+        // without this arm the assertion above would also pass if the handler
+        // had started refusing every start.
+        let request = aion_proto::ProtoStartWorkflowRequest {
+            namespace: NAMESPACE.to_owned(),
+            workflow_type: "checkout".to_owned(),
+            input: Some(proto_payload()?),
+            routing_key: None,
+            task_queue: None,
+            display_name: None,
+        };
+        let error = start(&context.guard, &context.caller, request)
+            .await
+            .err()
+            .ok_or_else(|| WireError::backend("expected an error"))?;
+        assert_ne!(
+            error.code,
+            WireErrorCode::InvalidInput,
+            "an absent name must not be refused as invalid input"
+        );
+        Ok(())
+    }
+
+    /// #211: an empty rename is refused as `invalid_input` BEFORE any scoping
+    /// or engine work — a rename records a non-empty label or nothing.
+    #[tokio::test]
+    async fn rename_handler_rejects_blank_display_name() -> Result<(), Box<dyn std::error::Error>> {
+        let context = context().await?;
+        let request = aion_proto::ProtoRenameRequest {
+            namespace: NAMESPACE.to_owned(),
+            workflow_id: Some(workflow_id().into()),
+            run_id: Some(run_id().into()),
+            display_name: "   ".to_owned(),
+        };
+
+        let error = rename(&context.guard, &context.caller, request).await;
+
+        let error = error
+            .err()
+            .ok_or_else(|| WireError::backend("expected error"))?;
+        assert_eq!(error.code, WireErrorCode::InvalidInput);
+        Ok(())
+    }
+
+    /// #211: rename scopes the namespace then resolves the run like
+    /// signal/cancel — an absent workflow is `not_found`, and nothing is
+    /// appended.
+    #[tokio::test]
+    async fn rename_handler_scopes_then_reports_absent_workflow()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let context = context().await?;
+        context.ownership.record(workflow_id(), NAMESPACE)?;
+        let request = aion_proto::ProtoRenameRequest {
+            namespace: NAMESPACE.to_owned(),
+            workflow_id: Some(workflow_id().into()),
+            run_id: Some(run_id().into()),
+            display_name: "Nightly settlement".to_owned(),
+        };
+
+        let error = rename(&context.guard, &context.caller, request).await;
+
+        let error = error
+            .err()
+            .ok_or_else(|| WireError::backend("expected error"))?;
+        assert_eq!(error.code, WireErrorCode::NotFound);
+        assert_eq!(error.error_type.as_deref(), Some("WorkflowNotFound"));
+        Ok(())
     }
 
     #[tokio::test]
@@ -879,6 +1113,7 @@ mod tests {
             input: None,
             routing_key: None,
             task_queue: None,
+            display_name: None,
         };
 
         let error = start(&guard, &caller, request).await;
@@ -934,6 +1169,7 @@ mod tests {
             input: Some(proto_payload()?),
             routing_key: None,
             task_queue: None,
+            display_name: None,
         })
     }
 

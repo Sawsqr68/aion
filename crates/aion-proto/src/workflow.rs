@@ -26,6 +26,20 @@ pub struct ProtoStartWorkflowRequest {
     /// the namespace's default queue.
     #[prost(string, optional, tag = "5")]
     pub task_queue: Option<String>,
+    /// Optional operator-facing display name for the workflow this start
+    /// creates (#211). A LABEL over the UUID identity, never an address:
+    /// nothing resolves a workflow by name. When set, the server records it
+    /// durably (as the `aion.display_name` search attribute) in the same atomic
+    /// append as the start. `None` starts it unnamed; a present but blank
+    /// (empty or whitespace-only) value is REFUSED with `invalid_input` rather
+    /// than reinterpreted as unnamed, so pass `None` to mean "no name" — never
+    /// `Some("")`. Unlike `routing_key` and `task_queue`, empty here is not
+    /// "not selected".
+    ///
+    /// The recorded attribute carries no run id, so it reads back per WORKFLOW
+    /// (folded over the whole history, last write wins) rather than per run.
+    #[prost(string, optional, tag = "6")]
+    pub display_name: Option<String>,
 }
 
 /// Proto representation of `StartWorkflowResponse`.
@@ -221,6 +235,48 @@ pub struct ProtoResumeResponse {
     pub status: i32,
 }
 
+/// Proto representation of `RenameRequest` (#211).
+///
+/// Mirrors [`ProtoPauseRequest`]'s shape: a target plus the operator's payload
+/// (here the new display name). An absent `run_id` means the latest run. The
+/// name is a LABEL over the UUID identity, never an address — this request
+/// SETS a name on an id-addressed run; nothing resolves a workflow by name.
+///
+/// Both facts hold at once, and they are easy to confuse: you ADDRESS a run
+/// (workflow id plus run id, so the server can refuse a rename it cannot append
+/// safely), but what gets recorded is a WORKFLOW-level attribute with no run id
+/// in it. The name therefore reads back for every run of that workflow, which
+/// is exactly why the engine refuses to rename a continue-as-new predecessor:
+/// its name would land on the successor that now owns the history head.
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, prost::Message)]
+pub struct ProtoRenameRequest {
+    /// Namespace that scopes the operation.
+    #[prost(string, tag = "1")]
+    pub namespace: String,
+    /// Target workflow identifier.
+    #[prost(message, optional, tag = "2")]
+    pub workflow_id: Option<ProtoWorkflowId>,
+    /// Target run identifier (absent means the latest run).
+    #[prost(message, optional, tag = "3")]
+    pub run_id: Option<ProtoRunId>,
+    /// The new display name. Trimmed by the server; must be non-empty after
+    /// trimming.
+    #[prost(string, tag = "4")]
+    pub display_name: String,
+}
+
+/// Proto representation of `RenameResponse` (#211): the renamed run and the
+/// display name as recorded (trimmed).
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, prost::Message)]
+pub struct ProtoRenameResponse {
+    /// The renamed concrete run identifier.
+    #[prost(message, optional, tag = "1")]
+    pub run_id: Option<ProtoRunId>,
+    /// The display name as recorded (trimmed).
+    #[prost(string, tag = "2")]
+    pub display_name: String,
+}
+
 /// Proto representation of `ListWorkflowsRequest`.
 #[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, prost::Message)]
 pub struct ProtoListWorkflowsRequest {
@@ -356,6 +412,7 @@ mod tests {
             input: Some(payload("input")?),
             routing_key: Some(String::from("tenant-a/order-1")),
             task_queue: Some(String::from("gpu")),
+            display_name: Some(String::from("Order 1 checkout")),
         };
         let response = ProtoStartWorkflowResponse {
             workflow_id: Some(ProtoWorkflowId::from(workflow_id())),
@@ -466,6 +523,163 @@ mod tests {
         // The two shapes stay distinguishable across a proto round trip: a
         // decoder can tell "no arguments supplied" from any supplied document.
         assert_ne!(request, no_arguments_request);
+        Ok(())
+    }
+
+    /// #211: an unnamed start is a distinct wire shape from a named one, and
+    /// both round-trip across JSON and proto without conflating.
+    #[test]
+    fn start_workflow_display_name_absent_round_trips() -> Result<(), Box<dyn std::error::Error>> {
+        let named = ProtoStartWorkflowRequest {
+            namespace: String::from("tenant-a"),
+            workflow_type: String::from("checkout"),
+            input: Some(payload("input")?),
+            routing_key: None,
+            task_queue: None,
+            display_name: Some(String::from("Order 1 checkout")),
+        };
+        let unnamed = ProtoStartWorkflowRequest {
+            display_name: None,
+            ..named.clone()
+        };
+
+        assert_json_round_trip(&named)?;
+        assert_proto_round_trip(&named)?;
+        assert_json_round_trip(&unnamed)?;
+        assert_proto_round_trip(&unnamed)?;
+        // The two shapes stay distinguishable across the wire: a decoder can
+        // tell "no name supplied" from any supplied name.
+        assert_ne!(named, unnamed);
+        Ok(())
+    }
+
+    /// #211: the HAND-WRITTEN `display_name` and the GENERATED stub's
+    /// `display_name` are the same wire field.
+    ///
+    /// Both sides declare tag 6, but "both say 6" is two claims, not agreement.
+    /// This encodes with one and decodes with the other, in both directions, so
+    /// a tag or wire-type drift between the `.proto` and the hand-written prost
+    /// derive is a failure here rather than a field that silently vanishes at a
+    /// real transport boundary. Compiled only under `generated`, which is the
+    /// only posture in which the stubs exist at all.
+    #[cfg(feature = "generated")]
+    #[test]
+    fn start_workflow_display_name_is_the_same_wire_field_as_the_generated_stub()
+    -> Result<(), Box<dyn std::error::Error>> {
+        const NAME: &str = "Nightly settlement";
+        let hand_written = ProtoStartWorkflowRequest {
+            namespace: String::from("tenant-a"),
+            workflow_type: String::from("checkout"),
+            input: None,
+            routing_key: None,
+            task_queue: None,
+            display_name: Some(String::from(NAME)),
+        };
+
+        // Hand-written -> generated.
+        let mut bytes = Vec::new();
+        hand_written.encode(&mut bytes)?;
+        let decoded = crate::generated::StartWorkflowRequest::decode(bytes.as_slice())?;
+        assert_eq!(
+            decoded.display_name.as_deref(),
+            Some(NAME),
+            "the generated stub must read the hand-written display_name"
+        );
+
+        // Generated -> hand-written.
+        let mut bytes = Vec::new();
+        decoded.encode(&mut bytes)?;
+        let round_tripped = ProtoStartWorkflowRequest::decode(bytes.as_slice())?;
+        assert_eq!(round_tripped, hand_written);
+
+        // And the field key itself is pinned: tag 6, length-delimited, is
+        // (6 << 3) | 2 = 0x32. An unnamed start emits it nowhere.
+        let mut bytes = Vec::new();
+        ProtoStartWorkflowRequest {
+            namespace: String::new(),
+            workflow_type: String::new(),
+            input: None,
+            routing_key: None,
+            task_queue: None,
+            display_name: Some(String::from("x")),
+        }
+        .encode(&mut bytes)?;
+        assert_eq!(bytes, vec![0x32, 0x01, b'x']);
+
+        let mut bytes = Vec::new();
+        ProtoStartWorkflowRequest {
+            namespace: String::new(),
+            workflow_type: String::new(),
+            input: None,
+            routing_key: None,
+            task_queue: None,
+            display_name: None,
+        }
+        .encode(&mut bytes)?;
+        assert!(
+            bytes.is_empty(),
+            "an unnamed start must put nothing on the wire, got {bytes:?}"
+        );
+        Ok(())
+    }
+
+    /// #211: the hand-written Rename messages agree with the generated stubs,
+    /// in both directions.
+    #[cfg(feature = "generated")]
+    #[test]
+    fn rename_messages_agree_with_the_generated_stubs() -> Result<(), Box<dyn std::error::Error>> {
+        let request = super::ProtoRenameRequest {
+            namespace: String::from("tenant-a"),
+            workflow_id: Some(ProtoWorkflowId::from(workflow_id())),
+            run_id: Some(ProtoRunId::from(run_id())),
+            display_name: String::from("Nightly settlement"),
+        };
+        let mut bytes = Vec::new();
+        request.encode(&mut bytes)?;
+        let decoded = crate::generated::RenameRequest::decode(bytes.as_slice())?;
+        assert_eq!(decoded.display_name, "Nightly settlement");
+        assert_eq!(decoded.namespace, "tenant-a");
+        let mut bytes = Vec::new();
+        decoded.encode(&mut bytes)?;
+        assert_eq!(
+            super::ProtoRenameRequest::decode(bytes.as_slice())?,
+            request
+        );
+
+        let response = super::ProtoRenameResponse {
+            run_id: Some(ProtoRunId::from(run_id())),
+            display_name: String::from("Nightly settlement"),
+        };
+        let mut bytes = Vec::new();
+        response.encode(&mut bytes)?;
+        let decoded = crate::generated::RenameResponse::decode(bytes.as_slice())?;
+        assert_eq!(decoded.display_name, "Nightly settlement");
+        let mut bytes = Vec::new();
+        decoded.encode(&mut bytes)?;
+        assert_eq!(
+            super::ProtoRenameResponse::decode(bytes.as_slice())?,
+            response
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn rename_round_trips_json_and_proto() -> Result<(), Box<dyn std::error::Error>> {
+        let request = super::ProtoRenameRequest {
+            namespace: String::from("tenant-a"),
+            workflow_id: Some(ProtoWorkflowId::from(workflow_id())),
+            run_id: Some(ProtoRunId::from(run_id())),
+            display_name: String::from("Nightly settlement"),
+        };
+        let response = super::ProtoRenameResponse {
+            run_id: Some(ProtoRunId::from(run_id())),
+            display_name: String::from("Nightly settlement"),
+        };
+
+        assert_json_round_trip(&request)?;
+        assert_proto_round_trip(&request)?;
+        assert_json_round_trip(&response)?;
+        assert_proto_round_trip(&response)?;
         Ok(())
     }
 

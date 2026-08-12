@@ -54,6 +54,14 @@ fn describe_run_output() -> Value {
                                 you omitted it. Carry it into every transcript read.",
             },
             "workflow_type": { "type": "string" },
+            "display_name": {
+                "type": ["string", "null"],
+                "description": "The operator-facing label this WORKFLOW currently wears, or \
+                                null when it wears none and renders as its bare UUID. A \
+                                label, never an address: nothing resolves a workflow by \
+                                name, so carry the workflow_id — not this — into every \
+                                other call.",
+            },
             "status": { "type": "string", "enum": status_values() },
             "started_at": { "type": "string" },
             "ended_at": { "type": ["string", "null"] },

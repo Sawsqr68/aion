@@ -70,6 +70,11 @@ class WorkflowServiceStub:
                 request_serializer=workflow__pb2.ResumeRequest.SerializeToString,
                 response_deserializer=workflow__pb2.ResumeResponse.FromString,
                 _registered_method=True)
+        self.Rename = channel.unary_unary(
+                '/aion.WorkflowService/Rename',
+                request_serializer=workflow__pb2.RenameRequest.SerializeToString,
+                response_deserializer=workflow__pb2.RenameResponse.FromString,
+                _registered_method=True)
         self.ListWorkflows = channel.unary_unary(
                 '/aion.WorkflowService/ListWorkflows',
                 request_serializer=workflow__pb2.ListWorkflowsRequest.SerializeToString,
@@ -168,6 +173,12 @@ class WorkflowServiceServicer:
         raise NotImplementedError('Method not implemented!')
 
     def Resume(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Rename(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -285,6 +296,11 @@ def add_WorkflowServiceServicer_to_server(servicer, server):
                     servicer.Resume,
                     request_deserializer=workflow__pb2.ResumeRequest.FromString,
                     response_serializer=workflow__pb2.ResumeResponse.SerializeToString,
+            ),
+            'Rename': grpc.unary_unary_rpc_method_handler(
+                    servicer.Rename,
+                    request_deserializer=workflow__pb2.RenameRequest.FromString,
+                    response_serializer=workflow__pb2.RenameResponse.SerializeToString,
             ),
             'ListWorkflows': grpc.unary_unary_rpc_method_handler(
                     servicer.ListWorkflows,
@@ -532,6 +548,33 @@ class WorkflowService:
             '/aion.WorkflowService/Resume',
             workflow__pb2.ResumeRequest.SerializeToString,
             workflow__pb2.ResumeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Rename(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/aion.WorkflowService/Rename',
+            workflow__pb2.RenameRequest.SerializeToString,
+            workflow__pb2.RenameResponse.FromString,
             options,
             channel_credentials,
             insecure,

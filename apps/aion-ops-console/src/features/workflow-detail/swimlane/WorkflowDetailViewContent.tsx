@@ -5,9 +5,12 @@ import { ErrorState } from '@/components/ErrorState';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { Badge, Button } from '@/components/ui';
 import { cn } from '@/lib/utils';
+import { displayNameFromEvents, normalizeDisplayName } from '@/lib/workflowIdentity';
 import type { Event, WorkflowId } from '@/types';
 
 import { EventTimeline } from '../components/EventTimeline';
+import { RenameControl } from '../components/RenameControl';
+import type { RenameClient } from '../hooks/useRename';
 import type { projectTimeline } from '../lib/timeline';
 import { deriveFailureContext, ReopenDiff } from '../reopen';
 import type { LifecycleOutcome, TimelineEntry, WorkflowDetailProps } from '../types';
@@ -36,6 +39,26 @@ export type ContentProps = WorkflowDetailProps & {
   initialMode?: ViewMode;
   /** Open the reopen-diff panel on first render (tests only). */
   initialReopenOpen?: boolean;
+  /** Open the rename editor on first render (tests only). */
+  initialRenameOpen?: boolean;
+  /** Injected rename client (tests); defaults to the namespace-scoped client. */
+  renameClient?: RenameClient | undefined;
+  /**
+   * The display name as the SERVER projects it (#211), from the workflow
+   * summary — folded over the WHOLE history, so it is the workflow's current
+   * name and a continue-as-new successor carries its predecessor's.
+   * Window-independent, so it supplies the name when the loaded history window
+   * does not reach the naming event. `null` when unnamed, not
+   * yet loaded, or unreadable — see {@link summaryUnavailable}.
+   */
+  summaryDisplayName?: string | null;
+  /**
+   * True when the summary read FAILED (as opposed to answering "unnamed").
+   * Rendered only when it costs the operator something — i.e. when recorded
+   * history in view supplies no name either — so a failed read is never
+   * mistaken for a run that has no name.
+   */
+  summaryUnavailable?: boolean;
   /**
    * Selection + view mode are optionally CONTROLLED by the router-connected
    * wrapper (URL state, PART 3). When a setter is omitted the field falls back to
@@ -116,6 +139,10 @@ function WorkflowDetailViewContent({
   onRetry,
   initialMode = 'swimlane',
   initialReopenOpen = false,
+  initialRenameOpen = false,
+  renameClient,
+  summaryDisplayName = null,
+  summaryUnavailable = false,
   selectedSequence: selectedSequenceProp,
   onSelectSequence,
   mode: modeProp,
@@ -142,6 +169,22 @@ function WorkflowDetailViewContent({
   const timelineRef = useRef<HTMLDivElement | null>(null);
   const reopenable = isReopenable(isTerminal, terminalOutcome);
   const failureContext = useMemo(() => deriveFailureContext(history), [history]);
+  // The name is PROJECTED, never held as local state, so a rename recorded by
+  // anyone — this operator, the CLI, another console — reaches the header the
+  // same way. Two readers, in this precedence:
+  //
+  //   1. recorded history IN VIEW — the freshest knowledge this client holds.
+  //      Any rename lands at the head of history, and the loaded window is a
+  //      contiguous TAIL, so if any naming event is in view the LATEST one is
+  //      too. This must win, or a rename arriving live would be masked by a
+  //      summary fetched before it.
+  //   2. the server-projected summary — read from FULL history, so it supplies
+  //      a start-time name that sits outside the loaded window.
+  //
+  // Neither reader is a substitute for the other; the window is never widened
+  // to compensate for reader 2 being absent.
+  const historyDisplayName = useMemo(() => displayNameFromEvents(history), [history]);
+  const displayName = historyDisplayName ?? normalizeDisplayName(summaryDisplayName);
   const selectionSurface = useMemo(
     () => resolveSelectionSurface(workflowId, timeline, selectedSequence, scopedSelection),
     [scopedSelection, selectedSequence, timeline, workflowId]
@@ -221,7 +264,8 @@ function WorkflowDetailViewContent({
         <p className="text-muted-foreground text-sm">Namespace {namespace}</p>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-semibold text-2xl text-foreground">Workflow {workflowId}</h1>
+            <WorkflowHeading displayName={displayName} workflowId={workflowId} />
+            <UnreadableNameNote unavailable={summaryUnavailable && displayName === null} />
             <StatusBadge
               isLive={isLive}
               isTerminal={isTerminal}
@@ -229,6 +273,13 @@ function WorkflowDetailViewContent({
             />
           </div>
           <div className="flex items-center gap-2">
+            <RenameControl
+              apiClient={renameClient}
+              displayName={displayName}
+              initialOpen={initialRenameOpen}
+              namespace={namespace}
+              workflowId={workflowId}
+            />
             {reopenable ? (
               <Button
                 className="h-7 px-3 text-xs"
@@ -307,6 +358,59 @@ function WorkflowDetailViewContent({
         />
       ) : null}
     </section>
+  );
+}
+
+/**
+ * The detail header's identity block (#211 R2): the run's name over its id, the
+ * same name-above-id shape the list's identity cell uses.
+ *
+ * The id is rendered IN FULL, as text, always — named or unnamed. A name is a
+ * label over the UUID, never a replacement for it: this page is the one place
+ * the id appears as text, and every CLI verb and API call an operator types
+ * from here (`aion describe <id>`, `aion cancel <id>`) needs the WHOLE UUID. A
+ * short form here would cost the operator the identity to buy a label, which is
+ * exactly the trade R2 forbids. `select-all` makes one click take the whole id,
+ * so copying it needs no drag and cannot pick up a partial selection.
+ *
+ * An unnamed run reads as `Workflow` over its id — a heading is never blank.
+ */
+function WorkflowHeading({
+  displayName,
+  workflowId,
+}: {
+  displayName: string | null;
+  workflowId: string;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <h1 className="font-semibold text-2xl text-foreground">{displayName ?? 'Workflow'}</h1>
+      <p
+        className="select-all font-mono text-muted-foreground text-xs"
+        data-testid="workflow-id"
+        title="Workflow id"
+      >
+        {workflowId}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Says so when the run's name could not be READ, rather than letting a failed
+ * summary read look like a run that was never named. Silent only when the
+ * failure costs nothing — when recorded history in view already supplies the
+ * name, the summary read failing changes nothing the operator can see.
+ */
+function UnreadableNameNote({ unavailable }: { unavailable: boolean }) {
+  if (!unavailable) {
+    return null;
+  }
+
+  return (
+    <p className="text-muted-foreground text-xs" data-testid="name-unavailable" role="note">
+      Name unreadable — this run's summary could not be loaded. It may still have one.
+    </p>
   );
 }
 
