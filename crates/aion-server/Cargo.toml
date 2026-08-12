@@ -24,10 +24,7 @@ aion-proto = { version = "0.14.1", path = "../aion-proto", features = ["generate
 # lightweight/embedded opt-out build.
 aion-store-libsql = { version = "0.14.1", path = "../aion-store-libsql", optional = true }
 aion-store = { version = "0.14.1", path = "../aion-store" }
-# Single-node haematite event-store backend. OPTIONAL and OFF by default: a
-# default aion-server build does not link aion-store-haematite (nor its
-# transitive haematite engine), so the default dependency surface and backend
-# selection are byte-identical to before. Enabled only by the
+# Single-node haematite event-store backend. OPTIONAL, enabled by the
 # `haematite-backend` feature, which lights up the `backend = haematite` arm.
 aion-store-haematite = { version = "0.14.1", path = "../aion-store-haematite", optional = true }
 aion-package = { version = "0.14.1", path = "../aion-package" }
@@ -95,15 +92,14 @@ tempfile.workspace = true
 # feature is selected; rust_crypto is the pure-Rust provider.
 jsonwebtoken = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
-# Cross-node outbox dispatch over the liminal bus (#13). OPTIONAL and OFF by
-# default: a default aion build does not link liminal-sdk (nor its transitive
-# beamr distribution). Enabled only by the `liminal-transport` feature. Resolved
-# from crates.io (liminal-sdk); the default `std` feature carries the real TCP
-# transport and the canonical wire codec.
+# Cross-node outbox dispatch over the liminal bus (#13). OPTIONAL, enabled by
+# the `liminal-transport` feature. Resolved from crates.io (liminal-sdk); the
+# default `std` feature carries the real TCP transport and the canonical wire
+# codec.
 liminal-sdk = { workspace = true, optional = true }
 # Used only by the feature-gated #13-0 integration test to stand up a real
-# liminal server over loopback TCP (the spike's worker-side endpoint). Optional
-# and enabled only by `liminal-transport`, so a default build never pulls it.
+# liminal server over loopback TCP (the spike's worker-side endpoint). Optional,
+# enabled only by `liminal-transport`.
 liminal-server = { workspace = true, optional = true }
 # Liminal core protocol types (LSUB-L2): the connection-keyed `ConnectionNotifier`
 # receives a `liminal::protocol::WorkerRegistration` to build a registry entry from.
@@ -184,14 +180,12 @@ auth = ["dep:jsonwebtoken", "dep:reqwest"]
 # non-optional dep before): with it on, `store.backend = libsql` constructs an
 # embedded `LibSqlStore` over `store.url`. A default build does not link it.
 libsql-backend = ["dep:aion-store-libsql"]
-# Cross-node outbox dispatch over liminal (#13-0 spike). OFF by default so a
-# default build is byte-identical and never links liminal-sdk/beamr. When on,
+# Cross-node outbox dispatch over liminal (#13-0 spike). With it on,
 # `outbox.transport = liminal` selects the liminal dispatch + completion path.
 liminal-transport = ["dep:liminal-sdk", "dep:liminal-server", "dep:liminal"]
-# Selectable haematite event-store backend. OFF by default so a default build is
-# byte-identical and never links aion-store-haematite/haematite. When on,
-# `store.backend = haematite` constructs a single-node HaematiteStore rooted at
-# `store.data_dir` with `store.shard_count` shards.
+# Selectable haematite event-store backend. With it on, `store.backend =
+# haematite` constructs a single-node HaematiteStore rooted at `store.data_dir`
+# with `store.shard_count` shards.
 haematite-backend = ["dep:aion-store-haematite"]
 
 # The runnable multi-node failover demo: boots an in-process haematite cluster,

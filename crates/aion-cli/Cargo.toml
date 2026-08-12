@@ -121,20 +121,17 @@ auth = ["aion-server/auth"]
 libsql-backend = ["aion-server/libsql-backend"]
 # Forwarded to the embedded server: compiles the haematite event-store backend
 # (single-node or distributed `[store.cluster]`) and, for a distributed boot,
-# the SS-5b cluster supervisor that auto-recovers a dead peer's shards. OFF by
-# default so a default `aion` binary is byte-identical and never links
-# aion-store-haematite/haematite. When on, `store.backend = haematite` is
-# selectable at runtime.
+# the SS-5b cluster supervisor that auto-recovers a dead peer's shards. With it
+# on, `store.backend = haematite` is selectable at runtime.
 haematite-backend = ["aion-server/haematite-backend"]
 # Forwarded to the embedded server: compiles the liminal push transport so a
 # deployed `aion server` can HOST the cross-node outbox worker listener
 # (`outbox.transport = liminal` + `outbox.liminal_listen_address`). Remote
 # `LiminalActivityWorker` clients connect IN and the server pushes fan-out
 # dispatches out over those connections, recording completions through the same
-# `record_fan_out_completion` seam as the gRPC path. OFF by default so a default
-# `aion` binary is byte-identical and never links liminal-sdk/liminal-server;
-# without it, selecting `outbox.transport = liminal` at runtime is a boot-time
-# configuration error rather than a silent fall-through to gRPC.
+# `record_fan_out_completion` seam as the gRPC path. Without it, selecting
+# `outbox.transport = liminal` at runtime is a boot-time configuration error
+# rather than a silent fall-through to gRPC.
 #
 # It ALSO compiles the worker SDK's liminal client, which is what `aion worker
 # agent` serves over: the agent-harness seam (`AgentHarnessConfig` threaded through
