@@ -324,18 +324,35 @@ fn revision_io(error: &super::revisions::RevisionError) -> DocumentError {
     DocumentError::Io(io::Error::other(error.to_string()))
 }
 
+/// A document name must be a name the LANGUAGE can hold, not merely a name a
+/// filesystem can hold.
+///
+/// The rule here is the AWL lexer's rule, and it is stated where the lexer
+/// states it: a word begins on an ASCII lowercase letter
+/// (`lexer/cursor.rs:100`) and continues through letters, digits and
+/// underscores (`is_identifier_continue`, `lexer/cursor.rs:256`). Anything
+/// else at the first character is a `stray character` lex error.
+///
+/// The start rule is load-bearing because create-with-source deliberately
+/// does not parse the bytes it stores — this validation is the ONLY guard on
+/// that path — so a name the lexer refuses would otherwise reach the
+/// workspace as a real document that no `workflow <name>` declaration can
+/// ever name.
 fn validate_document_name(name: &str) -> Result<(), DocumentError> {
     let mut characters = name.chars();
-    let starts_validly = characters
-        .next()
-        .is_some_and(|character| character.is_ascii_lowercase() || character == '_');
+    let starts_validly = characters.next().is_some_and(|character| {
+        // Not `_`: the lexer opens a word on a letter only.
+        character.is_ascii_lowercase()
+    });
     if !starts_validly
         || !characters.all(|character| {
             character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_'
         })
     {
         return Err(DocumentError::InvalidName(
-            "use a lowercase AWL identifier (letters, digits, and underscores)".to_owned(),
+            "use a lowercase AWL identifier: start with a lowercase letter, then letters, digits \
+             and underscores"
+                .to_owned(),
         ));
     }
     Ok(())
@@ -655,6 +672,67 @@ mod tests {
         ));
         assert!(!workspace.path().join("Bad-Name.awl").exists());
         Ok(())
+    }
+
+    /// Whether AWL itself will hold a document declared under this name.
+    ///
+    /// The oracle is the CHECKER, not the parser, and that distinction is
+    /// measured rather than assumed: `workflow Bad` parses (the lexer reads
+    /// `Bad` as a type identifier and the parser takes it), and it is the
+    /// checker that refuses a workflow name which is not `snake_case` —
+    /// `aion-awl/tests/fixtures/rev2/header-types/invalid/`
+    /// `workflow_name_not_snake_case.awl` is that rule's own fixture. A pin
+    /// written against the parser alone would have declared the validator
+    /// wrong about every capitalised name.
+    fn the_language_holds_a_document_named(name: &str) -> bool {
+        let Ok(source) = new_document_source(name) else {
+            return false;
+        };
+        let Ok(document) = aion_awl::parse(&source) else {
+            return false;
+        };
+        aion_awl::check(&document).is_empty()
+    }
+
+    /// The name validator answers the same question the LANGUAGE answers.
+    ///
+    /// This is the pin for #153: the start rule used to admit a leading
+    /// underscore, which the AWL lexer refuses outright (`stray character`),
+    /// so a create-with-source — the path that deliberately stores unchecked
+    /// bytes and leans on this validation alone — could put `_name.awl` in
+    /// the workspace as a document no `workflow` declaration could ever name.
+    ///
+    /// Driving the language side off the real parse-and-check chain rather
+    /// than off a literal expectation is what keeps the two rules from
+    /// drifting apart again: widen either one alone and a row disagrees.
+    #[test]
+    fn the_accepted_name_set_is_exactly_the_set_the_language_can_declare() {
+        // Both an accepted and a refused row are required: a validator that
+        // refused everything, or a language check that accepted everything,
+        // would agree vacuously on a one-sided table.
+        for name in [
+            "ok_name", "ok_1", "_leading", "Bad", "has-dash", "9start", "",
+        ] {
+            let validator_accepts = validate_document_name(name).is_ok();
+            let language_accepts = the_language_holds_a_document_named(name);
+            assert_eq!(
+                validator_accepts, language_accepts,
+                "`{name}`: the name validator and the AWL checker must agree — validator \
+                 accepts {validator_accepts}, language accepts {language_accepts}"
+            );
+        }
+        assert!(
+            validate_document_name("ok_name").is_ok(),
+            "the table must contain a name that is accepted, or the agreement above is vacuous"
+        );
+        assert!(
+            the_language_holds_a_document_named("ok_name"),
+            "the language side must accept something too, or its agreement is equally vacuous"
+        );
+        assert!(
+            validate_document_name("_leading").is_err(),
+            "a leading underscore is the case this pin exists for"
+        );
     }
 
     /// The fresh-server arm: a create-with-source against a workspace
