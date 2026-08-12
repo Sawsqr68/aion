@@ -1,0 +1,34 @@
+//! A `cwd` carrying `{workspace_root}` somewhere other than its start.
+//!
+//! The placeholder buys a shipped document ONE shape — the box's root at the
+//! front. Spliced into the middle, no root any box resolves can make the value
+//! absolute, so accepting it here would hand the launching worker a value it
+//! must refuse: green at the checker, red at the spawn. The refusal is stated
+//! at the layer that can see the whole shape.
+workflow ask_the_agent
+  input question: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+/// The canonical agent-outcome record: the checker demands the STRUCTURE, not
+/// a blessed name.
+type Reply { text: String, stop_reason: String }
+
+worker assistants
+  harness
+    kind norn
+    concurrency 2
+    reconnect_initial_backoff 5s
+    reconnect_max_backoff 1m
+    reconnect_max_attempts 50
+    env_pass "PATH", "HOME"
+    args "--account", "default"
+    cwd "/srv/agents/{workspace_root}"
+    binary "/usr/local/bin/norn"
+  action ask(prompt: String) -> Reply
+    agent
+
+step ask
+  ask(prompt: question) -> reply
+  route answered(reply: reply.text)

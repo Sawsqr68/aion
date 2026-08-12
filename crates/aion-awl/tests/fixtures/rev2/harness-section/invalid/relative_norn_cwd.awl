@@ -1,0 +1,35 @@
+//! A relative `cwd`. A worker is started from whatever directory a supervisor
+//! or a shell happens to be in, so a relative working directory roots the agent
+//! in a different tree on every launch — which is the inheritance this setting
+//! exists to end, wearing the clothes of a declaration.
+//!
+//! The `{workspace_root}` form does NOT loosen this: it is refused here exactly
+//! as it was before that form existed, because a value carrying no placeholder
+//! has nothing to expand and must therefore stand absolute on its own.
+workflow ask_the_agent
+  input question: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+/// The canonical agent-outcome record: the checker demands the STRUCTURE, not
+/// a blessed name.
+type Reply { text: String, stop_reason: String }
+
+worker assistants
+  harness
+    kind norn
+    concurrency 2
+    reconnect_initial_backoff 5s
+    reconnect_max_backoff 1m
+    reconnect_max_attempts 50
+    env_pass "PATH", "HOME"
+    args "--account", "default"
+    cwd "agents/workspace"
+    binary "/usr/local/bin/norn"
+  action ask(prompt: String) -> Reply
+    agent
+
+step ask
+  ask(prompt: question) -> reply
+  route answered(reply: reply.text)

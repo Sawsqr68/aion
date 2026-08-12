@@ -88,7 +88,7 @@ fn check_section(queue: &str, harness: &HarnessDecl) -> Vec<(Span, String)> {
     check_kind_independent(queue, harness, &mut refusals);
     match harness.kind_word() {
         Some(HARNESS_KIND_ACP) => check_acp(queue, harness, &mut refusals),
-        Some(HARNESS_KIND_NORN) => check_norn(harness, &mut refusals),
+        Some(HARNESS_KIND_NORN) => check_norn(queue, harness, &mut refusals),
         // The kind itself is already refused below (missing, or a word that names no
         // harness). The per-kind required set is unknowable without it, and guessing a
         // kind to check against would report settings the operator never asked for.
@@ -331,24 +331,41 @@ fn check_acp(queue: &str, harness: &HarnessDecl, refusals: &mut Vec<(Span, Strin
 
 /// The `norn` kind's own settings.
 ///
-/// Norn's argv is the adapter's, so there is no `command` to declare and no `cwd` and no
-/// permission policy: those are ACP's, and one written here would configure nothing.
-/// `binary` is genuinely optional — absent, the adapter uses its own documented
-/// `norn`-on-`PATH` default, which is the library's value and not one invented here.
+/// Norn's argv is the adapter's, so there is no `command` to declare and no permission
+/// policy: those are ACP's, and one written here would configure nothing. `binary` is
+/// genuinely optional — absent, the adapter uses its own documented `norn`-on-`PATH`
+/// default, which is the library's value and not one invented here.
 ///
-/// Takes no queue name, unlike [`check_acp`]: every refusal it can raise anchors on the
-/// setting's own value rather than on the section, so none of them needs to name the
-/// queue to be findable. A parameter accepted and then ignored — or renamed to `_queue`
-/// to quieten the compiler — would be a lie about what this function reads.
-fn check_norn(harness: &HarnessDecl, refusals: &mut Vec<(Span, String)>) {
+/// `cwd` is NOT one of ACP's. It is demanded here at parity with [`check_acp`], for a
+/// reason that has nothing to do with which protocol carries the work: the directory an
+/// agent stands in decides which tree it reads and which files it edits, and that is a
+/// property of the work itself. Undeclared, it is inherited from whatever directory the
+/// worker process happened to be launched in — invisible configuration nobody wrote down
+/// and nobody reviewed, recorded in no document, no argv and no log. The one instrument
+/// that can see a norn agent standing in the wrong tree is a control step whose answer
+/// differs between trees, and a guard of last resort is the wrong place to keep a fact
+/// this cheap to state.
+///
+/// Takes the queue name, unlike the shape this function had before `cwd` was demanded of
+/// it. A refusal anchors on the offending value where there is one, but a MISSING setting
+/// has no value to point at: its refusal anchors on the section, and only the queue name
+/// makes that section findable among all the others in the document.
+fn check_norn(queue: &str, harness: &HarnessDecl, refusals: &mut Vec<(Span, String)>) {
+    absolute_path(
+        queue,
+        harness,
+        HARNESS_CWD_FIELD,
+        harness.cwd.as_ref(),
+        "the directory an agent stands in decides which tree it reads and which files it \
+         edits; left undeclared it is inherited from wherever this worker process happened \
+         to be started, which no document, argv or log records",
+        refusals,
+    );
+
     for (span, field) in [
         (
             harness.command.as_ref().map(|setting| setting.span),
             HARNESS_COMMAND_FIELD,
-        ),
-        (
-            harness.cwd.as_ref().map(|setting| setting.span),
-            HARNESS_CWD_FIELD,
         ),
         (
             harness.permission.as_ref().map(|setting| setting.span),
@@ -362,33 +379,34 @@ fn check_norn(harness: &HarnessDecl, refusals: &mut Vec<(Span, String)>) {
         foreign(span, field, HARNESS_KIND_NORN, HARNESS_KIND_ACP, refusals);
     }
 
-    // The same absolute-path doctrine `command` and `cwd` live by, for the same reason
-    // verbatim: a worker is started from whatever directory a supervisor or a shell
-    // happens to be in, so a relative path names a different file on every launch. There
-    // is no PATH-lookup exception here — a section that WANTS the adapter's
+    // The same path doctrine `command` and `cwd` live by, for the same reason verbatim: a
+    // worker is started from whatever directory a supervisor or a shell happens to be in,
+    // so a relative path names a different file on every launch — and a document that must
+    // be right on more than one box leads the value with `{workspace_root}` instead of
+    // guessing. There is no PATH-lookup exception here: a section that WANTS the adapter's
     // `norn`-on-`PATH` default omits `binary` entirely, which says so plainly, whereas
     // `binary "norn"` would be a second spelling of the same thing and a bare
     // `binary "bin/norn"` would be a hazard wearing its clothes.
+    //
+    // The accept-set is the shared one; only the REMEDY is this field's own, because
+    // omitting `binary` is a real answer here and is an answer nowhere else.
     if let Some(binary) = &harness.binary {
         let value = binary.value.value.as_str();
-        if value.trim().is_empty() {
+        if let Err(refusal) = crate::harness_path_form(value) {
             refusals.push((
                 binary.value.span,
-                format!(
-                    "`{HARNESS_BINARY_FIELD}` is empty; omit it to take the adapter's own \
-                     `{HARNESS_KIND_NORN}`-on-`PATH` default, or name the binary"
-                ),
-            ));
-        } else if !std::path::Path::new(value).is_absolute() {
-            refusals.push((
-                binary.value.span,
-                format!(
-                    "`{HARNESS_BINARY_FIELD} \"{value}\"` must be an ABSOLUTE path. A worker \
-                     is started from whatever directory a supervisor or a shell happens to \
-                     be in, so a relative path names a different file on every launch. To \
-                     take the adapter's own `{HARNESS_KIND_NORN}`-on-`PATH` default instead, \
-                     omit `{HARNESS_BINARY_FIELD}` entirely."
-                ),
+                match refusal {
+                    crate::HarnessPathRefusal::Empty => format!(
+                        "`{HARNESS_BINARY_FIELD}` is empty; omit it to take the adapter's own \
+                         `{HARNESS_KIND_NORN}`-on-`PATH` default, or name the binary"
+                    ),
+                    stated => format!(
+                        "`{HARNESS_BINARY_FIELD} \"{value}\"` cannot be used — {} To take the \
+                         adapter's own `{HARNESS_KIND_NORN}`-on-`PATH` default instead, omit \
+                         `{HARNESS_BINARY_FIELD}` entirely.",
+                        stated.reason()
+                    ),
+                },
             ));
         }
     }
@@ -444,11 +462,19 @@ fn positive_duration(
     }
 }
 
-/// A required path setting that must be absolute.
+/// A required path setting, held to the two forms a harness path may take.
 ///
 /// The path is never made absolute for the operator: resolving it against whatever
 /// directory the worker was started in would root an agent somewhere nobody chose, which
-/// is the same silent scoping the missing default exists to prevent.
+/// is the same silent scoping the missing default exists to prevent. What a document CAN
+/// do instead is lead the value with `{workspace_root}` and let the box that launches the
+/// worker supply its own root — the only way a SHIPPED document (the embedded assistant)
+/// can name a directory that is correct on more than one machine.
+///
+/// The accept-set itself is [`aion_awl::harness_path_form`], stated once for the checker
+/// and the compiler's backstop both.
+///
+/// [`aion_awl::harness_path_form`]: crate::harness_path_form
 fn absolute_path(
     queue: &str,
     harness: &HarnessDecl,
@@ -462,20 +488,12 @@ fn absolute_path(
         return;
     };
     let value = setting.value.value.as_str();
-    if value.trim().is_empty() {
-        refusals.push((
-            setting.value.span,
-            format!("`{field}` is empty; it names an absolute path"),
-        ));
-        return;
-    }
-    if !std::path::Path::new(value).is_absolute() {
+    if let Err(refusal) = crate::harness_path_form(value) {
         refusals.push((
             setting.value.span,
             format!(
-                "`{field} \"{value}\"` must be an ABSOLUTE path. A worker is started from \
-                 whatever directory a supervisor or a shell happens to be in, so a relative \
-                 path names a different place on every launch."
+                "`{field} \"{value}\"` cannot be used — {}",
+                refusal.reason()
             ),
         ));
     }

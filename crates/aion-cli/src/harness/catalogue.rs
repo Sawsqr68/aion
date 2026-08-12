@@ -99,6 +99,7 @@ impl HarnessKind {
             #[cfg(feature = "norn")]
             Self::Norn => HarnessConfig::Norn(super::settings::NornConfig {
                 binary: None,
+                cwd: std::path::PathBuf::from("/srv/workspace"),
                 args: Vec::new(),
                 environment: super::test_environment(),
             }),

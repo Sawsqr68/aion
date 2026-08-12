@@ -28,6 +28,7 @@
 mod harness;
 mod logic;
 
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
@@ -37,6 +38,7 @@ use aion_worker::{
     ActivityContext, ActivityRegistry, AgentHarnessConfig, HandlerFuture, RedialTiming,
     WorkerConfig, WorkerError,
 };
+use anyhow::Context as _;
 
 use crate::harness::{AGENT_ACTIVITY_TYPES, RoleDispatchHarness};
 use crate::logic::{IntegrateInput, PlanOutput, ReviewOutput, integrate, tally, validate_plan};
@@ -156,8 +158,11 @@ fn code_registry() -> Result<Arc<ActivityRegistry>, WorkerError> {
 /// Compose the agent harness owning the `plan`/`dev`/`review` activity types.
 /// The advertised capabilities are exactly the neutral primitives the Norn
 /// adapter supports (`InjectMessage` + `Cancel`).
-fn composed_agent_harness(norn_bin: &str) -> AgentHarnessConfig {
-    let harness: Arc<dyn DynAgentHarness> = Arc::new(RoleDispatchHarness::new(norn_bin));
+///
+/// `cwd` is the directory every dispatched agent stands in, passed in from the
+/// composition root rather than invented here — see [`RoleDispatchHarness::new`].
+fn composed_agent_harness(norn_bin: &str, cwd: &Path) -> AgentHarnessConfig {
+    let harness: Arc<dyn DynAgentHarness> = Arc::new(RoleDispatchHarness::new(norn_bin, cwd));
     AgentHarnessConfig::new(
         harness,
         AGENT_ACTIVITY_TYPES,
@@ -255,7 +260,12 @@ fn main() -> anyhow::Result<()> {
         .build()?;
 
     let registry = code_registry()?;
-    let agent = composed_agent_harness(&args.norn_bin);
+    // The directory the agents work in: this process's own, read HERE at the
+    // composition root instead of inherited silently by each spawned child.
+    let agent_cwd = std::env::current_dir().context(
+        "this worker must be able to read its own working directory to launch agents in it",
+    )?;
+    let agent = composed_agent_harness(&args.norn_bin, &agent_cwd);
 
     let stop = AtomicBool::new(false);
     let ready_file = args.ready_file.clone();

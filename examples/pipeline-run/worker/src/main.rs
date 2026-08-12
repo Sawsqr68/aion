@@ -20,6 +20,7 @@
 //! Norn runs with `OPENAI_API_KEY` REMOVED from its child environment so it uses
 //! the operator's `ChatGPT` OAuth login, exactly like the incident-triage worker.
 
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::thread;
@@ -31,6 +32,7 @@ use aion_worker::{
     ActivityContext, ActivityRegistry, AgentHarnessConfig, HandlerFuture, RedialTiming,
     WorkerConfig, WorkerConfigBuildError,
 };
+use anyhow::Context as _;
 
 use pipeline_run_worker::handlers::{self, WORKSPACE_BASE};
 use pipeline_run_worker::prompts;
@@ -88,6 +90,14 @@ fn main() -> anyhow::Result<()> {
 
     let roles = roles(&args.repo_root);
 
+    // The directory every agent process is started in, resolved HERE once. It
+    // is this worker's own directory rather than `--repo-root`, because
+    // `--repo-root` may be given relative (it defaults to `.`) and the child's
+    // directory must be an absolute one somebody chose. What the agent may read
+    // is still scoped by `--workspace-root` from the same root value.
+    let agent_cwd = std::env::current_dir()
+        .context("this worker must be able to read its own working directory")?;
+
     // Spawn one connection thread per agent role. Each owns its config, an empty
     // registry, its stop flag, and its composed harness, and blocks in
     // serve_with_redial (redialling internally) until the process is killed.
@@ -95,9 +105,10 @@ fn main() -> anyhow::Result<()> {
     for role in roles {
         let candidates = args.candidates.clone();
         let norn_bin = args.norn_bin.clone();
+        let cwd = agent_cwd.clone();
         let identity = format!("{}-{}", args.identity_prefix, role.activity_type);
         threads.push(thread::spawn(move || {
-            serve_agent_role(&candidates, &identity, &norn_bin, &role);
+            serve_agent_role(&candidates, &identity, &norn_bin, &cwd, &role);
         }));
     }
 
@@ -154,7 +165,13 @@ fn roles(repo_root: &str) -> Vec<Role> {
 }
 
 /// Compose one role's harness and serve it on its own liminal connection.
-fn serve_agent_role(candidates: &[String], identity: &str, norn_bin: &str, role: &Role) {
+fn serve_agent_role(
+    candidates: &[String],
+    identity: &str,
+    norn_bin: &str,
+    cwd: &Path,
+    role: &Role,
+) {
     let config = match worker_config(identity) {
         Ok(config) => config,
         Err(error) => {
@@ -163,7 +180,7 @@ fn serve_agent_role(candidates: &[String], identity: &str, norn_bin: &str, role:
         }
     };
     let registry = Arc::new(ActivityRegistry::new());
-    let agent = composed_agent_harness(norn_bin, role);
+    let agent = composed_agent_harness(norn_bin, cwd, role);
     let stop = AtomicBool::new(false);
     let role_name = role.activity_type;
     if let Err(error) = aion_worker::serve_with_redial(
@@ -182,9 +199,9 @@ fn serve_agent_role(candidates: &[String], identity: &str, norn_bin: &str, role:
 /// Build the composed [`NornHarness`] for one role. This is the ONE place a
 /// concrete adapter is named per role; the serve path drives it only through the
 /// erased [`DynAgentHarness`] trait.
-fn composed_agent_harness(norn_bin: &str, role: &Role) -> AgentHarnessConfig {
+fn composed_agent_harness(norn_bin: &str, cwd: &Path, role: &Role) -> AgentHarnessConfig {
     let session_id = format!("{{workflow_id}}-{}", role.session_suffix);
-    let mut harness = NornHarness::with_binary(norn_bin)
+    let mut harness = NornHarness::with_binary(norn_bin, cwd)
         .with_arg("--append-system-prompt")
         .with_arg(role.system_prompt)
         .with_arg("--output-schema")

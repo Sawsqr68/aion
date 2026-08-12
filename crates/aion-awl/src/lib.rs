@@ -34,6 +34,7 @@ pub mod semantic;
 mod spanned;
 mod unlowered;
 mod worker_document;
+mod workspace_root;
 
 pub use ast::{
     ActionBody, ActionDecl, AfterRef, AnswerStmt, Arg, BinaryOp, Binding, Call, CallStmt,
@@ -81,3 +82,6 @@ pub use schema::{
 };
 pub use spanned::Spanned;
 pub use worker_document::{CompiledWorkerAction, CompiledWorkerDocument, compile_worker_document};
+pub use workspace_root::{
+    HarnessPathForm, HarnessPathRefusal, WORKSPACE_ROOT_PLACEHOLDER, harness_path_form,
+};

@@ -56,7 +56,10 @@ fn acp() -> CompiledHarness {
 
 /// A declared Norn launch.
 fn norn() -> CompiledHarness {
-    declared(CompiledHarnessKind::Norn { binary: None })
+    declared(CompiledHarnessKind::Norn {
+        binary: None,
+        cwd: PathBuf::from("/srv/agents/workspace"),
+    })
 }
 
 /// The declared launch for whichever kind this build carries first, so a test about the
@@ -298,6 +301,7 @@ fn the_norn_binary_is_optional_and_the_absence_takes_the_adapters_own_default() 
     let mut declared_binary = norn();
     declared_binary.kind = CompiledHarnessKind::Norn {
         binary: Some(PathBuf::from("/opt/norn/bin/norn")),
+        cwd: PathBuf::from("/srv/agents/workspace"),
     };
     let Some(resolved) = super::settings::resolve(&declared_binary, &document())? else {
         return Err("this build links the norn adapter".into());
@@ -308,6 +312,192 @@ fn the_norn_binary_is_optional_and_the_absence_takes_the_adapters_own_default() 
     assert_eq!(
         config.binary.as_deref(),
         Some(Path::new("/opt/norn/bin/norn"))
+    );
+    Ok(())
+}
+
+/// A document written to be correct on more than one machine round-trips: the checker's
+/// second accepted form reaches this root as the literal placeholder, and what the
+/// adapter is handed is the ABSOLUTE directory this box's own root makes of it.
+///
+/// The root is STATED rather than resolved from the process. Reading the real one would
+/// make the assertion a restatement of whatever box the suite runs on — the pin has to
+/// know the answer independently of the code under test, which is what
+/// [`super::settings::resolve_against`] exists for.
+#[cfg(feature = "norn")]
+#[test]
+fn a_workspace_rooted_cwd_is_expanded_against_this_boxs_own_root() -> TestResult {
+    let scratch = tempfile::tempdir()?;
+    let root = scratch.path().join("clones");
+    let workspace = aion_server::worker::WorkspaceRoot::from_resolution(Ok(root.clone()));
+
+    let mut launch = norn();
+    launch.kind = CompiledHarnessKind::Norn {
+        binary: None,
+        cwd: PathBuf::from("{workspace_root}/assistant"),
+    };
+    let Some(resolved) = super::settings::resolve_against(&launch, &document(), &workspace)? else {
+        return Err("this build links the norn adapter".into());
+    };
+    let super::settings::HarnessConfig::Norn(config) = resolved.config else {
+        return Err("a norn declaration must produce a norn configuration".into());
+    };
+    assert_eq!(
+        config.cwd,
+        root.join("assistant"),
+        "the placeholder must be replaced by THIS box's root, so one shipped document is \
+         correct on every machine that runs it"
+    );
+    assert!(
+        config.cwd.is_absolute(),
+        "expansion does not soften the absolute rule; it is what makes it satisfiable for a \
+         document that cannot name any one machine's path"
+    );
+    Ok(())
+}
+
+/// The worker says where its agents stand, and what it says is the value it will actually
+/// spawn in.
+///
+/// This is the third channel the brief names. A document writing `{workspace_root}` is
+/// DELIBERATELY silent about the path — that is the point of the placeholder, and it means
+/// the document can no longer answer "where did my agent run". The startup line is the only
+/// place the resolved answer exists, so it has to be the resolved answer: read through the
+/// same [`super::settings::ResolvedHarness`] the adapter is handed, never re-derived from
+/// the written value.
+///
+/// The written value is the mutation this pin exists to kill. An accessor that returned the
+/// document's own string would look right in the source and log `{workspace_root}/assistant`
+/// on every box — a report that names no directory at all, while the child stands somewhere
+/// else entirely.
+#[cfg(feature = "norn")]
+#[test]
+fn the_reported_launch_directory_is_the_one_the_child_will_stand_in() -> TestResult {
+    let scratch = tempfile::tempdir()?;
+    let root = scratch.path().join("clones");
+    let workspace = aion_server::worker::WorkspaceRoot::from_resolution(Ok(root.clone()));
+
+    let mut launch = norn();
+    launch.kind = CompiledHarnessKind::Norn {
+        binary: None,
+        cwd: PathBuf::from("{workspace_root}/assistant"),
+    };
+    let Some(resolved) = super::settings::resolve_against(&launch, &document(), &workspace)? else {
+        return Err("this build links the norn adapter".into());
+    };
+
+    let reported = resolved.launch_directory().to_path_buf();
+    let super::settings::HarnessConfig::Norn(config) = resolved.config else {
+        return Err("a norn declaration must produce a norn configuration".into());
+    };
+    assert_eq!(
+        reported, config.cwd,
+        "the operator's report and the adapter's spawn must read ONE value — a report the \
+         child can disagree with is worth less than no report"
+    );
+    assert_eq!(
+        reported,
+        root.join("assistant"),
+        "and that one value is the EXPANDED directory, not the placeholder the document wrote"
+    );
+    Ok(())
+}
+
+/// Waffles' condition 2, at the end that spawns: expanding does not replace the absolute
+/// requirement, it precedes it. Both arms are values the CHECKER would have refused — a
+/// bare relative path, and a placeholder that cannot lead — and both must be refused here
+/// too, because a `CompiledHarness` also reaches this root from a document compiled by an
+/// older binary.
+///
+/// The root is RESOLVABLE for both, so neither refusal can be the root's fault, and the
+/// test above is the presence twin: with this very shape of root, an accepted form
+/// resolves. Without that pairing this would pass just as well against a boundary that
+/// refused every `cwd` there is.
+#[cfg(feature = "norn")]
+#[test]
+fn a_cwd_that_cannot_be_absolute_is_refused_at_the_composition_root() -> TestResult {
+    let scratch = tempfile::tempdir()?;
+    let workspace =
+        aion_server::worker::WorkspaceRoot::from_resolution(Ok(scratch.path().join("clones")));
+
+    for written in ["agents/workspace", "agents/{workspace_root}"] {
+        let mut launch = norn();
+        launch.kind = CompiledHarnessKind::Norn {
+            binary: None,
+            cwd: PathBuf::from(written),
+        };
+        let Err(error) = super::settings::resolve_against(&launch, &document(), &workspace) else {
+            return Err(
+                format!("`cwd \"{written}\"` cannot name one place on every launch").into(),
+            );
+        };
+        let message = format!("{error:#}");
+        assert!(
+            message.contains("not an absolute path"),
+            "the refusal names the rule that was broken: {message}"
+        );
+        assert!(
+            message.contains(written),
+            "the refusal quotes what the document wrote: {message}"
+        );
+        assert!(
+            message.contains("assistant.awl"),
+            "the refusal names the document: {message}"
+        );
+    }
+    Ok(())
+}
+
+/// Waffles' condition 4(c): a document carrying the placeholder, on a box whose home
+/// cannot be resolved, refuses HERE — loudly, by name, carrying the resolution's own
+/// reason — rather than spawning an agent somewhere nobody chose.
+///
+/// A document naming its own absolute path is untouched by the same unresolvable root,
+/// which is the control: the refusal is scoped to values that actually need the root.
+#[cfg(feature = "norn")]
+#[test]
+fn a_workspace_rooted_cwd_on_a_box_with_no_root_refuses_before_anything_spawns() -> TestResult {
+    let workspace = aion_server::worker::WorkspaceRoot::from_resolution(Err(
+        aion_server::worker::WorkspaceRootError::Unresolvable {
+            reason: String::from("AION_HOME must not be empty"),
+        },
+    ));
+
+    let mut launch = norn();
+    launch.kind = CompiledHarnessKind::Norn {
+        binary: None,
+        cwd: PathBuf::from("{workspace_root}/assistant"),
+    };
+    let Err(error) = super::settings::resolve_against(&launch, &document(), &workspace) else {
+        return Err("a box that cannot say where its workspaces live cannot launch there".into());
+    };
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("{workspace_root}/assistant"),
+        "the refusal quotes what the document wrote: {message}"
+    );
+    assert!(
+        message.contains("AION_HOME must not be empty"),
+        "the refusal carries the resolution's own reason, so the operator knows what to fix: \
+         {message}"
+    );
+    assert!(
+        message.contains("assistant.awl"),
+        "the refusal names the document: {message}"
+    );
+
+    // The control: the same unresolvable root launches an absolutely-written document
+    // exactly as it did before expansion existed.
+    let Some(resolved) = super::settings::resolve_against(&norn(), &document(), &workspace)? else {
+        return Err("this build links the norn adapter".into());
+    };
+    let super::settings::HarnessConfig::Norn(config) = resolved.config else {
+        return Err("a norn declaration must produce a norn configuration".into());
+    };
+    assert_eq!(
+        config.cwd,
+        Path::new("/srv/agents/workspace"),
+        "a document that names its own path asks this box for nothing"
     );
     Ok(())
 }

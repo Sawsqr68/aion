@@ -146,18 +146,26 @@ const DEFAULT_NORN_TIMEOUT: &str = "30m";
 /// confinement) and `-C` (tool-execution cwd) — the same pairing the shell
 /// path got from running norn IN `repo_root`.
 ///
+/// `cwd` is a separate fact from `--workspace-root`: it is the directory the
+/// norn PROCESS is started in, where `--workspace-root`/`-C` scope what the
+/// agent may read and where its tools execute. It comes from the binary root
+/// rather than being derived from the optional workspace root, because the
+/// operator may not have named one — and because a value that changes what a
+/// process inherits should be decided at one place, in the open.
+///
 /// The advertised capabilities are exactly the neutral primitives the norn
 /// adapter's intervention translation supports today (`InjectMessage` +
 /// `Cancel`); advertising more would promise interventions the harness
 /// rejects.
 fn composed_agent_harness(
     norn_bin: &str,
+    cwd: &std::path::Path,
     schemas_dir: &std::path::Path,
     workspace_root: Option<&str>,
     reasoning_effort: &str,
     norn_timeout: &str,
 ) -> AgentHarnessConfig {
-    let mut harness = NornHarness::with_binary(norn_bin)
+    let mut harness = NornHarness::with_binary(norn_bin, cwd)
         .with_arg("--fast")
         .with_arg("--model")
         .with_arg(handlers::PILOT_MODEL)
@@ -444,8 +452,13 @@ fn main() -> anyhow::Result<()> {
         .build()?;
 
     let registry = build_registry(&shell)?;
+    // The directory the norn processes are started in: this worker's own,
+    // named here rather than inherited silently by every child.
+    let agent_cwd = std::env::current_dir()
+        .context("this worker must be able to read its own working directory")?;
     let agent = composed_agent_harness(
         &cli.norn_bin,
+        &agent_cwd,
         &schemas_dir,
         cli.workspace_root.as_deref(),
         &cli.reasoning_effort,

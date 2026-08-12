@@ -73,16 +73,23 @@ predates the move and reads no `harness` section at all.
 Of the three documents this repository ships with an agent action, the
 embedded assistant (`crates/aion-server/assistant-embed/assistant.awl`)
 carries its `harness` section — it is the document the invocation above
-serves as written. One thing the shipped section deliberately omits: the
-`--workspace-root`/`-C` pair the pre-#204 flag launch passed. Those two take a
-per-box filesystem root, and harness `args` expand only `{workflow_id}` and
-`{activity_type}` — there is no `{workspace_root}` expansion yet (board task
-#210), so a shipped document cannot name a root that is true on every box. The document's session
-prompt therefore INSTRUCTS the agent to work inside its per-session workspace
-instead of asserting a confinement the launch does not provide. An operator
-who wants the confinement back adds the pair to the harness `args` with their
-own root before deploying — the norn example under "The `norn` harness" below
-shows the shape, with `<workspace_root>` as the token the operator replaces.
+serves as written. Its `cwd` is written `"{workspace_root}"`: a document that
+ships inside the server binary cannot name an absolute directory that is right
+on the second machine, so it names the placeholder and the launching worker
+expands it against that box's own root. The agent therefore starts in a
+DECLARED directory on every box that serves it.
+
+One thing the shipped section still omits: the `--workspace-root`/`-C` pair the
+pre-#204 flag launch passed. Those are `args`, and harness `args` expand only
+`{workflow_id}` and `{activity_type}` — placeholder expansion reached
+path-valued SETTINGS, not arguments (the remaining half of board task #210). So
+the shipped launch sets a working directory but confines no tool, and the
+document's session prompt INSTRUCTS the agent to work inside its per-session
+workspace instead of asserting a confinement the launch does not provide. An
+operator who wants the confinement back adds the pair to the harness `args`
+with their own root before deploying — the norn example under "The `norn`
+harness" below shows the shape, with `<workspace_root>` as the token the
+operator replaces.
 `workflows/norn-fleet/norn_fleet.awl` and
 `workflows/norn-dev/norn_dev.awl` do not yet, so serving either with this
 verb means adding one first. (The census is every document with an
@@ -256,6 +263,7 @@ worker default
     reconnect_max_attempts 100
     env_pass "PATH", "HOME"
     args "--account", "default"
+    cwd "{workspace_root}"
   action assistant(prompt: String) -> Reply
     agent
 ```
@@ -278,19 +286,45 @@ a worker process starts an agent, and nothing about what the workflow does.
 | `reconnect_max_backoff` | both, required | duration, positive, not shorter than the initial | the cap the backoff climbs to |
 | `reconnect_max_attempts` | both, required | whole number > 0 | cumulative session-drop budget |
 | `env_pass` | both, required | quoted variable NAMES, comma-separated | the agent subprocess's WHOLE environment — see below |
+| `command` | `acp` only, required | quoted path, one of the two forms below | the agent executable, passed verbatim |
 | `args` | both, optional | quoted strings, comma-separated, order preserved | the agent's own launch arguments |
-| `command` | `acp` only, required | quoted ABSOLUTE path | the agent executable, passed verbatim |
-| `cwd` | `acp` only, required | quoted ABSOLUTE path | the directory ACP sessions are rooted at |
+| `cwd` | both, required | quoted path, one of the two forms below | the directory the agent works in — which tree it reads and which files it edits |
 | `permission` | `acp` only, required | `"deny"` or `"allow-once"` | how an *unattended* activity answers the agent's permission requests |
 | `exit_grace` | `acp` only, required | duration; `0s` is legitimate | how long the agent may take to exit after its stdin closes before it is killed |
-| `binary` | `norn` only, optional | quoted path | the `norn` binary; omitted takes the adapter's own documented `norn`-on-`PATH` default |
+| `binary` | `norn` only, optional | quoted path, one of the two forms below | the `norn` binary; omitted takes the adapter's own documented `norn`-on-`PATH` default |
 
 **The required set is the DECLARED KIND's.** An `acp` section carrying no
-`binary` is complete, and a `norn` section carrying no `command`, `cwd`,
-`permission` or `exit_grace` is complete: demanding a value that configures
-nothing is how a file comes to be full of settings nobody believes. In the
-other direction, a setting belonging to the kind the section does *not* declare
-is refused by name rather than ignored.
+`binary` is complete, and a `norn` section carrying no `command`, `permission`
+or `exit_grace` is complete: demanding a value that configures nothing is how a
+file comes to be full of settings nobody believes. In the other direction, a
+setting belonging to the kind the section does *not* declare is refused by name
+rather than ignored.
+
+**`cwd` belongs to BOTH kinds.** The directory an agent stands in decides which
+tree it reads and which files it edits — that is a property of the work, not of
+the protocol carrying it. A Norn agent that could not declare it took whichever
+directory the worker process happened to be started in, which no document, argv
+or log recorded.
+
+**Two forms, and only two, for a path-valued setting.** `cwd`, `command` and
+`binary` are each either an ABSOLUTE path or a value LEADING with the literal
+`{workspace_root}`. A relative path is refused where it is written: a worker is
+started from whatever directory a supervisor or a shell happens to be in, so a
+relative value names a different place on every launch.
+
+`{workspace_root}` is for the document that has to be correct on more than one
+machine — the assistant compiled into the server binary is one, and no absolute
+literal is right on the second. The launching worker replaces it with that box's
+own workspace root (the startup banner's `workspace_root` field, the aion home's
+`clones/` directory), then holds the result to the absolute rule before anything
+is spawned. A box that cannot resolve a root refuses the launch by name. The
+placeholder must LEAD the value; `agents/{workspace_root}` could never expand to
+an absolute path and is refused by `aion awl check`.
+
+Binding a setting to the RUN — a per-run working directory, a per-box launch
+argument — is a separate, still-open piece of work (board task #210). The
+`harness` section is per-worker, so what it can name today is per-box, not
+per-run.
 
 **`aion awl check <FILE.awl>` is where a missing setting is named**, before any
 worker starts and before anything is deployed. `permission` and `cwd` in
@@ -352,6 +386,7 @@ worker default
     reconnect_max_attempts 100
     env_pass "PATH", "HOME"
     args "--workspace-root", "<workspace_root>/{workflow_id}/repo", "-C", "<workspace_root>/{workflow_id}/repo", "--session-id", "{workflow_id}-{activity_type}", "--resume-if-exists", "--account", "default"
+    cwd "{workspace_root}"
     binary "/usr/local/bin/norn"
   action assistant(prompt: String) -> Reply
     agent
@@ -367,14 +402,20 @@ through literally (`crates/aion-integration-norn/src/harness.rs`, `expand_arg`).
 That is what makes the example worker's session-pinned invocation (below)
 reproducible without writing a crate.
 
-`<workspace_root>` there is a value **you** substitute before checking the
-document, not a placeholder the adapter expands. It must be the same directory
-the server provisions the run's workspace under, or the agent works somewhere
-other than where it was provisioned. Read it from the server's JSON startup
-banner's `workspace_root` field — that is the server's own resolved value, and
-re-deriving it is exactly how two components come to disagree about one path.
-See
+Two things in that example look alike and are not. `cwd "{workspace_root}"` is
+the LITERAL placeholder, left exactly as written: the launching worker replaces
+it with this box's own root. `<workspace_root>` inside `args` is a value **you**
+substitute before checking the document — the adapter expands only
+`{workflow_id}` and `{activity_type}` in an argument, so anything else you write
+there reaches the agent verbatim, angle brackets and all.
+
+The value you substitute must be the same directory the server provisions the
+run's workspace under, or the agent works somewhere other than where it was
+provisioned. Read it from the server's JSON startup banner's `workspace_root`
+field — that is the server's own resolved value, and re-deriving it is exactly
+how two components come to disagree about one path. See
 [DECLARED-COMMANDS.md](DECLARED-COMMANDS.md#workspace_root--how-a-body-learns-where-to-work).
+That hand-substitution is what closing the remaining half of #210 removes.
 
 Note what is *not* in that `env_pass`: no `OPENAI_API_KEY`. A stray ambient key
 would otherwise take precedence over norn's OAuth login and fail every round,

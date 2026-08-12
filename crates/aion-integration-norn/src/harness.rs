@@ -100,6 +100,11 @@ enum NornArgument {
 pub struct NornInvocation {
     /// The `norn` binary to exec.
     pub program: PathBuf,
+    /// The directory the child is exec'd in. Carried in the preview because the spawn sets
+    /// it: a working directory that appeared only at exec time would be the one part of the
+    /// invocation a composition root could not assert, and it is the part that decides which
+    /// tree the agent reads and edits.
+    pub cwd: PathBuf,
     /// The full argument list, in exec order: the fixed `--protocol jsonrpc`
     /// followed by the configured extra arguments with their run-identity
     /// placeholders expanded.
@@ -122,24 +127,31 @@ pub struct NornInvocation {
 #[derive(Clone, Debug)]
 pub struct NornHarness {
     binary: PathBuf,
+    cwd: PathBuf,
     extra_args: Vec<NornArgument>,
     declared_environment: Option<ChildEnvironment>,
     env: Vec<(String, String)>,
     env_removed: Vec<String>,
 }
 
-impl Default for NornHarness {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// NO `Default`, deliberately. A defaulted harness is one that never says where its agent
+// works, and the only value such a default could carry is "wherever this worker process
+// happened to be started" — which is the inheritance this type exists to end. `cwd` is a
+// constructor parameter rather than a builder setter for the same reason: an
+// `Option<PathBuf>` left `None` would either fall back to inheriting (the defect, intact)
+// or refuse at spawn time (a harness that compiles and cannot run). Positional means the
+// compiler asks every composition root the question, and none of them can decline it.
 
 impl NornHarness {
-    /// A harness that invokes `norn` from `PATH` with no extra arguments.
+    /// A harness that invokes `norn` from `PATH` with no extra arguments, working in `cwd`.
+    ///
+    /// `cwd` must be absolute; it is validated at [`AgentHarness::start`], where the failure
+    /// can be reported as a typed error rather than a panic.
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(cwd: impl Into<PathBuf>) -> Self {
         Self {
             binary: PathBuf::from(DEFAULT_NORN_BINARY),
+            cwd: cwd.into(),
             extra_args: Vec::new(),
             declared_environment: None,
             env: Vec::new(),
@@ -147,11 +159,15 @@ impl NornHarness {
         }
     }
 
-    /// A harness that invokes the `norn` binary at an explicit path.
+    /// A harness that invokes the `norn` binary at an explicit path, working in `cwd`.
+    ///
+    /// `cwd` must be absolute; it is validated at [`AgentHarness::start`], where the failure
+    /// can be reported as a typed error rather than a panic.
     #[must_use]
-    pub fn with_binary(binary: impl Into<PathBuf>) -> Self {
+    pub fn with_binary(binary: impl Into<PathBuf>, cwd: impl Into<PathBuf>) -> Self {
         Self {
             binary: binary.into(),
+            cwd: cwd.into(),
             extra_args: Vec::new(),
             declared_environment: None,
             env: Vec::new(),
@@ -237,6 +253,7 @@ impl NornHarness {
         }
         NornInvocation {
             program: self.binary.clone(),
+            cwd: self.cwd.clone(),
             argv,
             declared_environment: self.declared_environment.clone(),
             env: self.env.clone(),
@@ -244,12 +261,56 @@ impl NornHarness {
         }
     }
 
+    /// Refuses a `cwd` this launch cannot stand in, before anything is spawned.
+    ///
+    /// Both refusals are raised as [`HarnessError::configuration`] and NOT as protocol or
+    /// transport errors, because the classification is load-bearing: `Configuration` is
+    /// deterministic, so the worker maps it to a TERMINAL activity failure. `cwd` comes from
+    /// the document, and the next attempt reads the same document — classing either refusal
+    /// retryable would spend the whole attempt budget re-confirming a value that cannot
+    /// change, and would tell the operator a story about a flaky channel when the truth is
+    /// one wrong line they can fix.
+    ///
+    /// The EXISTENCE arm is here because this adapter now sets `current_dir`. Before it did,
+    /// a spawn failure could only be the binary, and [`Self::spawn`]'s message says so by
+    /// name. With a working directory set, `Command::spawn` answers a missing directory with
+    /// the same `No such file or directory` — a retryable transport refusal, naming the
+    /// binary, for a fault that is neither. Checking first is what keeps that message honest.
+    ///
+    /// The directory is never CREATED here. A `cwd` names the tree the agent is meant to read
+    /// and edit; conjuring an empty one would turn a mistyped path into an agent working
+    /// against nothing, which is the failure this whole setting exists to make impossible.
+    /// (`{workspace_root}` is different and is expanded, and its root created, one layer up —
+    /// that root is the launcher's own directory to make, not the document's claim about a
+    /// tree that should already be there.)
+    fn require_launchable_cwd(&self) -> Result<(), HarnessError> {
+        if !self.cwd.is_absolute() {
+            return Err(HarnessError::configuration(format!(
+                "the norn harness `cwd` must be an ABSOLUTE path, got `{}`. A relative path is \
+                 resolved against whatever directory this worker process was started in, which \
+                 is the inherited working directory this setting exists to replace — and it \
+                 would be inherited while the document appears to have declared one.",
+                self.cwd.display()
+            )));
+        }
+        if !self.cwd.is_dir() {
+            return Err(HarnessError::configuration(format!(
+                "the norn harness `cwd` is `{}`, which is not a directory on this box, so no \
+                 agent can be started in it. The declared working directory names the tree the \
+                 agent reads and edits; it is not created here, because an empty directory \
+                 conjured from a mistyped path would put the agent to work against nothing.",
+                self.cwd.display()
+            )));
+        }
+        Ok(())
+    }
+
     /// Builds the spawn command for one run from [`Self::invocation`], with piped
     /// stdin/stdout and inherited stderr.
     fn command(&self, spec: &AgentRunSpec) -> Command {
         let invocation = self.invocation(spec);
         let mut command = Command::new(&invocation.program);
-        command.args(&invocation.argv);
+        command.args(&invocation.argv).current_dir(&invocation.cwd);
         if let Some(declared) = &invocation.declared_environment {
             command.env_clear();
             command.envs(declared.pairs().iter().map(|(key, value)| (key, value)));
@@ -412,6 +473,13 @@ impl AgentHarness for NornHarness {
 
     async fn start(&self, spec: AgentRunSpec) -> Result<Self::Session, HarnessError> {
         let prompt = prompt_from_spec(&spec)?;
+        // Refused BEFORE the spawn, for the reason the whole setting exists: a relative `cwd`
+        // would be resolved by the OS against the worker process's own current directory —
+        // silently reintroducing the inheritance this field replaced, and doing it in the one
+        // form where the document LOOKS like it declared a directory. A directory that is not
+        // there is refused here too, so it is named as itself rather than reaching the spawn
+        // and coming back as a retryable failure about the binary.
+        self.require_launchable_cwd()?;
         // Named BEFORE the spawn: `norn` is resolved on `PATH` by default, and a declaration
         // that omits `PATH` would otherwise die as a bare `No such file or directory`.
         if let Some(declared) = &self.declared_environment {
@@ -461,7 +529,8 @@ mod tests {
     use aion_core::{ActivityId, ContentType, Payload, RunId, WorkflowId};
 
     use super::{
-        AgentRunSpec, NornHarness, expand_arg, prompt_from_spec, registration_capabilities,
+        AgentRunSpec, HarnessError, NornHarness, expand_arg, prompt_from_spec,
+        registration_capabilities,
     };
 
     type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -562,7 +631,7 @@ mod tests {
     #[test]
     fn removed_env_vars_are_expressed_as_child_removals() {
         let spec = spec();
-        let harness = NornHarness::with_binary("/bin/norn")
+        let harness = NornHarness::with_binary("/bin/norn", "/srv/workspace")
             .with_env("OPENAI_API_KEY", "stray-ambient-key")
             .without_env("OPENAI_API_KEY");
         let command = harness.command(&spec);
@@ -632,7 +701,7 @@ mod tests {
         // `command` is BUILT from `invocation`, so asserting both against one
         // configured harness proves the public preview is what a spawn execs.
         let spec = spec();
-        let harness = NornHarness::with_binary("/bin/norn")
+        let harness = NornHarness::with_binary("/bin/norn", "/srv/workspace")
             .with_arg("--session-id")
             .with_arg("{workflow_id}-{activity_type}")
             .with_env("NORN_LOG", "debug")
@@ -642,6 +711,7 @@ mod tests {
             invocation,
             super::NornInvocation {
                 program: std::path::PathBuf::from("/bin/norn"),
+                cwd: std::path::PathBuf::from("/srv/workspace"),
                 argv: vec![
                     "--protocol".to_owned(),
                     "jsonrpc".to_owned(),
@@ -675,7 +745,7 @@ mod tests {
         let declaration = aion_integrations::EnvironmentDeclaration::new(["PATH"])
             .map_err(|error| error.to_string())?;
 
-        let harness = NornHarness::with_binary("/bin/norn")
+        let harness = NornHarness::with_binary("/bin/norn", "/srv/workspace")
             .with_declared_environment(declaration.resolve(&context));
         let invocation = harness.invocation(&spec);
         let Some(declared) = invocation.declared_environment else {
@@ -695,7 +765,7 @@ mod tests {
     #[test]
     fn template_args_expand_and_literal_args_preserve_reserved_substrings() -> TestResult {
         let spec = spec();
-        let harness = NornHarness::with_binary("/bin/norn")
+        let harness = NornHarness::with_binary("/bin/norn", "/srv/workspace")
             .with_arg("--label")
             .with_arg("{activity_type}/{workflow_id}")
             .with_literal_arg("{workflow_id}/{activity_type}")
@@ -714,6 +784,111 @@ mod tests {
                 "mock-model".to_owned(),
             ]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn the_child_runs_in_the_declared_cwd() -> TestResult {
+        let spec = spec();
+        let harness = NornHarness::with_binary("/bin/norn", "/srv/workspace");
+        let command = harness.command(&spec);
+        let directory = command
+            .as_std()
+            .get_current_dir()
+            .ok_or("the spawned child's working directory must be the declared cwd")?;
+        assert_eq!(directory, std::path::Path::new("/srv/workspace"));
+        Ok(())
+    }
+
+    /// The declared directory must reach the PREVIEW too, not only the spawn.
+    ///
+    /// `NornInvocation` is the value a composition root asserts against without spawning a
+    /// process, and `command` is built from it. A `cwd` that appeared only inside `command`
+    /// would be the one part of the launch nobody could check in advance — and it is the part
+    /// that decides which tree the agent edits.
+    #[test]
+    fn the_preview_carries_the_declared_cwd() {
+        let harness = NornHarness::with_binary("/bin/norn", "/srv/workspace");
+        assert_eq!(
+            harness.invocation(&spec()).cwd,
+            std::path::Path::new("/srv/workspace")
+        );
+    }
+
+    #[test]
+    fn a_relative_cwd_is_refused_as_a_terminal_configuration_error() -> TestResult {
+        let harness = NornHarness::with_binary("/bin/norn", "workspace");
+        let error = harness
+            .require_launchable_cwd()
+            .err()
+            .ok_or("a relative cwd must be refused")?;
+
+        assert!(
+            matches!(error, HarnessError::Configuration { .. }),
+            "got {error:?}"
+        );
+        // The CLASSIFICATION is the load-bearing half, asserted separately from the variant so
+        // that re-classifying the refusal fails here even if the variant name survives: `cwd`
+        // comes from the document, the next attempt reads the same document, so a retryable
+        // refusal would spend the whole attempt budget re-confirming one value that cannot
+        // change — and would describe a fixable line to the operator as a flaky channel.
+        assert!(
+            error.is_deterministic(),
+            "a refusal sourced from the document must be TERMINAL, not retryable: {error:?}"
+        );
+
+        let message = error.to_string();
+        assert!(
+            message.contains("cwd") && message.contains("ABSOLUTE"),
+            "the refusal names the setting and the requirement: {message}"
+        );
+        Ok(())
+    }
+
+    /// A `cwd` that is absolute but is not there is refused HERE, terminally, rather than at
+    /// the spawn.
+    ///
+    /// This adapter sets `current_dir`, so `Command::spawn` now answers a missing working
+    /// directory with the same `No such file or directory` it answers a missing binary with —
+    /// and [`NornHarness::spawn`] maps that to a retryable transport refusal naming the
+    /// BINARY. Left to the spawn, one wrong line in a document would be re-attempted to the
+    /// end of the budget while pointing the operator at the wrong setting.
+    ///
+    /// Both assertions are the pin: the classification, because that is what decides whether
+    /// the worker retries, and the message naming the offending directory, because that is
+    /// what the operator acts on.
+    #[test]
+    fn a_cwd_that_is_not_there_is_refused_before_the_spawn_can_blame_the_binary() -> TestResult {
+        let scratch = tempfile::tempdir()?;
+        let absent = scratch.path().join("no-such-tree");
+        let error = NornHarness::with_binary("/bin/norn", absent.clone())
+            .require_launchable_cwd()
+            .err()
+            .ok_or("a cwd that does not exist must be refused")?;
+
+        assert!(
+            error.is_deterministic(),
+            "a directory named by the document is identically absent on every attempt, so the \
+             refusal is terminal: {error:?}"
+        );
+        let message = error.to_string();
+        assert!(
+            message.contains(&absent.display().to_string()) && message.contains("cwd"),
+            "the refusal names the setting and the directory the operator must fix, rather \
+             than the binary the spawn would have blamed: {message}"
+        );
+        Ok(())
+    }
+
+    /// The presence twin for both refusals above: with a directory that IS there, the same
+    /// gate accepts. Without this, a gate that refused every `cwd` in existence would satisfy
+    /// the two refusal tests exactly as well.
+    #[test]
+    fn an_absolute_cwd_that_exists_is_accepted() -> TestResult {
+        let scratch = tempfile::tempdir()?;
+        NornHarness::with_binary("/bin/norn", scratch.path())
+            .require_launchable_cwd()
+            .map_err(|error| format!("an absolute, existing cwd must be accepted: {error:?}"))?;
         Ok(())
     }
 }

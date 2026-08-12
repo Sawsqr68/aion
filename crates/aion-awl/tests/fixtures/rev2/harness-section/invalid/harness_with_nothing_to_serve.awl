@@ -9,5 +9,6 @@ worker greeter
     reconnect_max_backoff 1m
     reconnect_max_attempts 10
     env_pass "PATH"
+    cwd "/srv/agents/workspace"
   action greet(name: String) -> String
     run text "printf %s $name"

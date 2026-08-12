@@ -45,6 +45,7 @@ worker dev
     reconnect_max_attempts <n>
     env_pass "PATH", "HOME"
     args "--account", "<account>"
+    cwd "<absolute directory the agent works in>"
 ```
 
 then serve it — the command line now carries only the connection:

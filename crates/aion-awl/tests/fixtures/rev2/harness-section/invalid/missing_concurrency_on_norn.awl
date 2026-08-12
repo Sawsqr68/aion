@@ -18,6 +18,7 @@ worker assistants
     reconnect_max_attempts 50
     env_pass "PATH", "HOME"
     args "--account", "default"
+    cwd "/srv/agents/workspace"
     binary "/usr/local/bin/norn"
   action ask(prompt: String) -> Reply
     agent

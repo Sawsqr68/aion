@@ -121,7 +121,10 @@ async fn serve_one(mut stream: TcpStream) {
 /// `KEY_ENV` so norn's provider construction succeeds. It is set on the CHILD via `with_env`, never
 /// on this process's environment.
 fn harness(binary: &str, base_url: &str) -> NornHarness {
-    NornHarness::with_binary(binary)
+    // The crate root: absolute, always present, and the same on every machine that runs this
+    // test. The agent's working directory is irrelevant to what this test measures, but there
+    // is no longer any way to leave it unsaid — which is the point of the setting.
+    NornHarness::with_binary(binary, env!("CARGO_MANIFEST_DIR"))
         .with_arg("--provider")
         .with_arg("openai-compatible")
         .with_arg("--model")

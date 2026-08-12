@@ -1,4 +1,14 @@
-//! Server-side `{workspace_root}` expansion for declared action bodies.
+//! `{workspace_root}` expansion — for declared action bodies, and for the
+//! path-valued settings of a worker document's `harness` section.
+//!
+//! The two consumers differ in one way that matters and are otherwise the same
+//! act. A declared BODY is a command string that gets parsed into an argv, so
+//! the splice must not change how it parses ([`WorkspaceRoot::expand`]). A
+//! harness SETTING is one whole path that nothing parses, so those rules do not
+//! apply to it and are not imposed on it ([`WorkspaceRoot::expand_setting`]);
+//! what does apply is the root being resolvable, absolute, spellable and
+//! spawnable. Both read the ONE resolved root, so a body and a setting in the
+//! same document can never disagree about where this box's workspaces live.
 //!
 //! A declared body runs with its environment cleared to `PATH` only, so it
 //! cannot expand `~` or read a variable to learn where session workspaces
@@ -49,12 +59,11 @@ use thiserror::Error;
 /// The literal placeholder a declared command carries where the server's
 /// workspace root belongs.
 ///
-/// Braces are literal text to both the AWL checker and the worker SDK's
-/// command template (`$name`/`${name}` are the only parameter forms), so a
-/// command carrying this placeholder checks clean and — if it ever reached
-/// the executor unexpanded — would fail loudly on a nonexistent
-/// `{workspace_root}` path rather than silently running somewhere else.
-pub const WORKSPACE_ROOT_PLACEHOLDER: &str = "{workspace_root}";
+/// Defined by the LANGUAGE crate, not here. It is a token of the documents
+/// this server executes, and the AWL checker refuses a harness path setting by
+/// the same spelling this module splices — one definition in the crate both
+/// already depend on is that agreement, where a second copy would be the drift.
+pub use aion_awl::WORKSPACE_ROOT_PLACEHOLDER;
 
 /// The directory under the aion home where session workspaces live.
 const CLONES_DIRECTORY: &str = "clones";
@@ -120,6 +129,23 @@ pub enum WorkspaceRootError {
     PlaceholderMisplaced {
         /// Where the offending occurrence sits, named for the refusal.
         placement: &'static str,
+    },
+    /// The resolved root contains a NUL byte, so no process can be launched in
+    /// a path spliced with it.
+    ///
+    /// The command-splicing path refuses NUL under
+    /// [`WorkspaceRootError::ShapeChanging`] alongside the characters that
+    /// would reshape a parse. A harness SETTING is never parsed, so NUL is the
+    /// only one of that set which still bites — and it bites for its own
+    /// reason, one layer lower: `execve` takes NUL-terminated strings, so a
+    /// path carrying one cannot be handed to the kernel at all.
+    #[error(
+        "the workspace root `{path}` contains a NUL byte, which cannot cross `execve`, so no \
+         process can be launched in it"
+    )]
+    NotSpawnable {
+        /// The offending path, rendered for the refusal.
+        path: String,
     },
     /// The root directory does not exist and could not be created.
     #[error("the workspace root directory `{path}` could not be created: {error}")]
@@ -235,17 +261,7 @@ impl WorkspaceRoot {
         if let Some(placement) = misplaced_placeholder(command) {
             return Err(WorkspaceRootError::PlaceholderMisplaced { placement });
         }
-        let root = self.resolution.as_ref().map_err(Clone::clone)?;
-        if !root.is_absolute() {
-            return Err(WorkspaceRootError::NotAbsolute {
-                path: root.to_string_lossy().into_owned(),
-            });
-        }
-        let root_text = root
-            .to_str()
-            .ok_or_else(|| WorkspaceRootError::NotUnicode {
-                path: root.to_string_lossy().into_owned(),
-            })?;
+        let (root, root_text) = self.spliceable_root()?;
         if let Some(character) = shape_changing_character(root_text) {
             return Err(WorkspaceRootError::ShapeChanging {
                 path: root_text.to_owned(),
@@ -260,6 +276,86 @@ impl WorkspaceRoot {
             command: command.replace(WORKSPACE_ROOT_PLACEHOLDER, root_text),
             workspace_root: root_text.to_owned(),
         }))
+    }
+
+    /// Expand every [`WORKSPACE_ROOT_PLACEHOLDER`] occurrence in a harness
+    /// section's PATH-VALUED setting — an ACP `command`, either kind's `cwd`, a
+    /// Norn `binary` — with the resolved root.
+    ///
+    /// A value without the placeholder is untouched: `Ok(None)`, no resolution
+    /// requirement, no filesystem side effect. A document that names an
+    /// absolute path outright is therefore unaffected by an unresolvable root,
+    /// exactly as it is unaffected by one today.
+    ///
+    /// The rules that govern [`WorkspaceRoot::expand`]'s COMMAND splice are
+    /// deliberately NOT applied here, because a setting is not a command:
+    ///
+    /// - No placeholder-placement rule. A command is split into argv words, so
+    ///   an occurrence glued to other text would splice a fragment of some
+    ///   larger word. A setting is one whole value that nothing splits, so
+    ///   `{workspace_root}/agents` is the ordinary way to write it. Where the
+    ///   placeholder may stand is the LANGUAGE's rule, refused at
+    ///   `aion_awl::harness_path_form` — it must lead the value — and this
+    ///   layer does not restate it.
+    /// - No shape-changing-character rule, save NUL. Whitespace, `$` and quotes
+    ///   change how a command PARSES; a directory named `/Users/a b` is simply
+    ///   a directory, and refusing it here would refuse a legitimate path for a
+    ///   reason that belongs to a different consumer. NUL survives the cut on
+    ///   its own footing: `execve` cannot carry it.
+    ///
+    /// The ROOT directory is created (idempotently, owner-only `0700`) exactly
+    /// as the command path creates it, and for the harder reason: a process
+    /// cannot be started in a directory that does not exist. Only the root —
+    /// a value naming something BENEATH it (`{workspace_root}/assistant`) is
+    /// the document's claim about a tree that should already be there, and
+    /// conjuring an empty one would turn a mistyped path into an agent working
+    /// against nothing. The adapter refuses a missing working directory by
+    /// name, before it spawns.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WorkspaceRootError`] when the root is unresolved, not
+    /// absolute, not valid UTF-8, carries a NUL byte, or does not exist and
+    /// cannot be created. Every one of them is terminal — the root is a
+    /// property of this box's configuration and filesystem, so a second attempt
+    /// reads the same answer.
+    pub fn expand_setting(&self, value: &str) -> Result<Option<String>, WorkspaceRootError> {
+        if !value.contains(WORKSPACE_ROOT_PLACEHOLDER) {
+            return Ok(None);
+        }
+        let (root, root_text) = self.spliceable_root()?;
+        if root_text.contains('\0') {
+            return Err(WorkspaceRootError::NotSpawnable {
+                path: root_text.to_owned(),
+            });
+        }
+        create_root_directory(root).map_err(|error| WorkspaceRootError::CreationFailed {
+            path: root_text.to_owned(),
+            error: error.to_string(),
+        })?;
+        Ok(Some(value.replace(WORKSPACE_ROOT_PLACEHOLDER, root_text)))
+    }
+
+    /// The resolved root as both a path and its text, or why it cannot be
+    /// spliced into anything at all.
+    ///
+    /// The three requirements every consumer shares, stated once: resolution
+    /// succeeded, the root is absolute (a relative one would name a different
+    /// place after a restart from elsewhere), and it has a faithful UTF-8
+    /// spelling to splice.
+    fn spliceable_root(&self) -> Result<(&Path, &str), WorkspaceRootError> {
+        let root = self.resolution.as_ref().map_err(Clone::clone)?;
+        if !root.is_absolute() {
+            return Err(WorkspaceRootError::NotAbsolute {
+                path: root.to_string_lossy().into_owned(),
+            });
+        }
+        let root_text = root
+            .to_str()
+            .ok_or_else(|| WorkspaceRootError::NotUnicode {
+                path: root.to_string_lossy().into_owned(),
+            })?;
+        Ok((root.as_path(), root_text))
     }
 }
 
@@ -438,6 +534,105 @@ mod tests {
         // Resolution failure must not touch a body that does not use the
         // placeholder — the refusal is scoped to bodies that need the root.
         assert_eq!(unresolved().expand("echo $greeting")?, None);
+        Ok(())
+    }
+
+    #[test]
+    fn a_setting_expands_to_the_root_and_the_root_directory_is_made() -> TestResult {
+        let scratch = tempfile::tempdir()?;
+        let root = scratch.path().join("clones");
+        let workspace = WorkspaceRoot::from_resolution(Ok(root.clone()));
+        let root_text = root.to_string_lossy().into_owned();
+        assert!(
+            !root.exists(),
+            "the fixture must start with the root ABSENT, or the creation claim is vacuous"
+        );
+
+        assert_eq!(
+            workspace.expand_setting(WORKSPACE_ROOT_PLACEHOLDER)?,
+            Some(root_text.clone()),
+            "a bare placeholder is the root itself"
+        );
+        assert_eq!(
+            workspace.expand_setting("{workspace_root}/assistant")?,
+            Some(format!("{root_text}/assistant")),
+            "a setting is one whole value: the placeholder leads it and the rest rides along"
+        );
+        assert!(
+            root.is_dir(),
+            "a setting the harness will spawn in must exist by the time it is handed over"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_setting_without_the_placeholder_is_not_expanded() -> TestResult {
+        let scratch = tempfile::tempdir()?;
+        let resolved = WorkspaceRoot::from_resolution(Ok(scratch.path().join("clones")));
+        assert_eq!(resolved.expand_setting("/srv/agents/workspace")?, None);
+        // The document that names its own absolute path is exactly as launchable
+        // on a box with no resolvable home as it was before expansion existed.
+        assert_eq!(unresolved().expand_setting("/srv/agents/workspace")?, None);
+        Ok(())
+    }
+
+    #[test]
+    // No `TestResult`: every arm here is an assertion on a refusal, so there is no `?` to
+    // propagate and a wrapper return would be a shape this test never uses.
+    fn a_setting_carrying_the_placeholder_needs_a_usable_root() {
+        assert!(
+            matches!(
+                unresolved().expand_setting("{workspace_root}/assistant"),
+                Err(WorkspaceRootError::Unresolvable { .. })
+            ),
+            "a box with no resolvable home refuses the launch by name"
+        );
+        assert!(
+            matches!(
+                WorkspaceRoot::from_resolution(Ok(PathBuf::from("relative/clones")))
+                    .expand_setting("{workspace_root}/assistant"),
+                Err(WorkspaceRootError::NotAbsolute { .. })
+            ),
+            "a relative root cannot make an absolute setting"
+        );
+        assert!(
+            matches!(
+                WorkspaceRoot::from_resolution(Ok(PathBuf::from("/srv/clo\0nes")))
+                    .expand_setting("{workspace_root}")
+                    .as_ref(),
+                Err(WorkspaceRootError::NotSpawnable { .. })
+            ),
+            "a NUL cannot cross execve, so no process could ever be started there"
+        );
+    }
+
+    #[test]
+    fn a_setting_accepts_a_root_the_command_splice_refuses() -> TestResult {
+        // The one place the two consumers deliberately diverge, pinned WITH its
+        // control so the pin cannot pass by accident: a root containing a space
+        // would change how a declared command parses and is refused there, while
+        // a directory with a space in its name is just a directory and must be
+        // usable as a working directory. If a future edit routes settings through
+        // the command rules, the first assertion breaks; if it drops the command
+        // rules, the second breaks.
+        let scratch = tempfile::tempdir()?;
+        let root = scratch.path().join("my clones");
+        let workspace = WorkspaceRoot::from_resolution(Ok(root.clone()));
+        assert!(
+            matches!(
+                workspace.expand("ls {workspace_root}"),
+                Err(WorkspaceRootError::ShapeChanging {
+                    character: "whitespace",
+                    ..
+                })
+            ),
+            "the command splice still refuses a root that would reshape the parse"
+        );
+        assert_eq!(
+            workspace.expand_setting("{workspace_root}")?,
+            Some(root.to_string_lossy().into_owned()),
+            "the same root is a perfectly good directory to stand in"
+        );
         Ok(())
     }
 

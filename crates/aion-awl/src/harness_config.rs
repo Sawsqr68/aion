@@ -108,6 +108,11 @@ pub enum CompiledHarnessKind {
         /// The binary to launch, or `None` to take the adapter's own documented
         /// `norn`-on-`PATH` default — the library's value, not one invented here.
         binary: Option<PathBuf>,
+        /// The absolute directory the agent works in. Norn has no session to root, so
+        /// unlike [`Self::Acp`]'s this is the child process's working directory and
+        /// nothing else — but it decides which tree the agent reads and edits, which is
+        /// why it is declared rather than inherited from wherever the worker was started.
+        cwd: PathBuf,
     },
 }
 
@@ -266,6 +271,13 @@ fn build_kind(
             // directory a supervisor happened to be in, at three in the morning, instead of
             // as the named defect this error type exists to report.
             binary: optional_path(queue, HARNESS_BINARY_FIELD, harness.binary.as_ref())?,
+            // REQUIRED, and through the same net for the same reason. The failure this
+            // backstop catches is the one the whole setting exists to prevent: without a
+            // declared directory the agent works in whichever one the worker process was
+            // launched from, and that fact appears in no document, no argv and no log —
+            // so a lost rule here would not announce itself as a defect at all, it would
+            // read as an agent quietly doing its work against the wrong tree.
+            cwd: required_path(queue, harness, HARNESS_CWD_FIELD, harness.cwd.as_ref())?,
         }),
         Some(other) => Err(HarnessConfigError::Unusable {
             queue: queue.to_owned(),
@@ -367,29 +379,34 @@ fn optional_path(
         .transpose()
 }
 
-/// The absoluteness rule itself, stated once so the required and optional forms cannot
-/// come to disagree about what an acceptable path is.
+/// The path rule's backstop, reading the SAME accept-set the checker refuses by
+/// ([`crate::harness_path_form`]) so the required and optional forms — and the two layers
+/// — cannot come to disagree about what an acceptable path is.
 ///
-/// Reaching here with a relative path is a CHECKER DEFECT, not an operator mistake: the
-/// checker refuses one by name, with a written reason. Reported rather than resolved,
-/// because resolving it against the launching process's directory is precisely the
-/// silent scoping the whole rule exists to prevent.
+/// Reaching here with a value in neither accepted form is a CHECKER DEFECT, not an
+/// operator mistake: the checker refuses one by name, with a written reason. Reported
+/// rather than resolved, because resolving it against the launching process's directory
+/// is precisely the silent scoping the whole rule exists to prevent.
+///
+/// A `{workspace_root}`-leading value is carried through VERBATIM, placeholder and all.
+/// This layer is the language's, and where the box's workspace root lives is not a fact
+/// the language has or should have; the composition root that launches the harness
+/// expands it and demands the result be absolute before anything is spawned.
 fn absolute_path(
     queue: &str,
     field: &'static str,
     setting: &crate::ast::HarnessSetting<crate::ast::HarnessText>,
 ) -> Result<PathBuf, HarnessConfigError> {
-    let path = PathBuf::from(&setting.value.value);
-    if !path.is_absolute() {
-        return Err(HarnessConfigError::Unusable {
+    match crate::harness_path_form(&setting.value.value) {
+        Ok(_) => Ok(PathBuf::from(&setting.value.value)),
+        Err(refusal) => Err(HarnessConfigError::Unusable {
             queue: queue.to_owned(),
             field,
             value: setting.value.value.clone(),
-            reason: "it is not an absolute path",
+            reason: refusal.reason(),
             span: setting.value.span,
-        });
+        }),
     }
-    Ok(path)
 }
 
 #[cfg(test)]

@@ -248,8 +248,10 @@ mod tests {
 
     #[test]
     fn the_assembled_prompt_is_the_role_function_applied_to_the_loaded_profile() {
+        // Nothing is spawned here — this exercises prompt assembly — so the
+        // directory only has to be an absolute one the adapter accepts.
         let harness = ProfiledNornHarness::new(
-            NornHarness::new(),
+            NornHarness::new(env!("CARGO_MANIFEST_DIR")),
             "# Verifier\nrefute with evidence".to_owned(),
             crate::prompts::verifier,
         );

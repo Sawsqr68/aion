@@ -1,7 +1,13 @@
-//! A complete `norn` harness declaration. It carries no `command`, no `cwd`,
-//! no `permission` and no `exit_grace` — those are ACP's, and Norn's argv is
-//! the adapter's own — and it is COMPLETE, for the same kind-scoping reason the
-//! ACP document is.
+//! A complete `norn` harness declaration. It carries no `command`, no
+//! `permission` and no `exit_grace` — those are ACP's, and Norn's argv is the
+//! adapter's own — and it is COMPLETE, for the same kind-scoping reason the ACP
+//! document is.
+//!
+//! It DOES carry `cwd`. That setting is not ACP's: the directory an agent stands
+//! in decides which tree it reads and which files it edits, which is a property
+//! of the work rather than of the protocol carrying it. Undeclared, it would be
+//! inherited from wherever the worker process happened to be started — a fact no
+//! document, argv or log records.
 workflow norn_harness_launch
   input question: String
   outcome answered: type Answer, route success
@@ -21,6 +27,7 @@ worker assistants
     reconnect_max_attempts 50
     env_pass "PATH", "HOME"
     args "--account", "default"
+    cwd "/srv/agents/workspace"
     binary "/usr/local/bin/norn"
   action ask(prompt: String) -> Reply
     agent

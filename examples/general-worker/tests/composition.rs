@@ -105,7 +105,7 @@ fn activity_node_map_is_exact() -> TestResult {
 fn registries_and_agent_activity_advertisement_are_exact() -> TestResult {
     let agent_registry = agent_registry();
     let shell_registry = shell_registry(Shell::inherited())?;
-    let agent = agent_config("norn-test", &[])?;
+    let agent = agent_config("norn-test", std::path::Path::new(env!("CARGO_MANIFEST_DIR")), &[])?;
 
     assert!(agent_registry.is_empty());
     assert_eq!(
@@ -122,7 +122,7 @@ fn registries_and_agent_activity_advertisement_are_exact() -> TestResult {
 #[test]
 fn agent_activity_aliases_extend_the_advertisement_and_keep_run_agent() -> TestResult {
     let aliases = ["select_wave".to_owned(), "land_wave".to_owned()];
-    let agent = agent_config("norn-test", &aliases)?;
+    let agent = agent_config("norn-test", std::path::Path::new(env!("CARGO_MANIFEST_DIR")), &aliases)?;
 
     let advertised = agent.agent_activity_types();
     advertised
@@ -154,7 +154,7 @@ fn mechanical_descriptors_match_the_real_awl_contract() -> TestResult {
         .find(|contract| contract.task_queue == TASK_QUEUE)
         .ok_or("compiled general-worker contract is missing its task queue")?;
     let shell = shell_registry(Shell::inherited())?;
-    let agent = agent_config("norn-test", &[])?;
+    let agent = agent_config("norn-test", std::path::Path::new(env!("CARGO_MANIFEST_DIR")), &[])?;
     let advertised = shell
         .activity_descriptors()
         .into_iter()

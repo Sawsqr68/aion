@@ -37,6 +37,9 @@ chrono = { workspace = true }
 futures = { workspace = true }
 # The declared-environment pin spawns a REAL child that writes its own environment to a
 # file; the sandbox that file lives in is a temporary directory, cleaned up with the test.
+# The `cwd` gate uses one too: a directory that exists and one that does not are both
+# facts about the filesystem, and a scratch root is how a test states either without
+# depending on what happens to be on the box.
 tempfile = { workspace = true }
 tokio = { workspace = true, features = [
     "io-util",

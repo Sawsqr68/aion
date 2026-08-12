@@ -128,6 +128,15 @@ fn main() -> anyhow::Result<()> {
 
     let roles = roles(profiles);
 
+    // The directory every agent this worker launches stands in. Read HERE, at
+    // the binary root, and handed to each role: nothing is left for the spawned
+    // child to inherit from whatever shell started the worker. The per-run
+    // worktree the agent actually WORKS in is still supplied per run by
+    // `ProfiledNornHarness` via `--workspace-root`; this is where the process
+    // itself is placed.
+    let agent_cwd = std::env::current_dir()
+        .map_err(|error| anyhow::anyhow!("cannot read this worker's working directory: {error}"))?;
+
     // Spawn one connection thread per agent role. Each owns its config, an
     // empty registry, its stop flag, and its composed harness, and blocks in
     // serve_with_redial (redialling internally) until the process is killed.
@@ -135,9 +144,10 @@ fn main() -> anyhow::Result<()> {
     for role in roles {
         let candidates = args.candidates.clone();
         let norn_bin = args.norn_bin.clone();
+        let cwd = agent_cwd.clone();
         let identity = format!("{}-{}", args.identity_prefix, role.activity_type);
         threads.push(thread::spawn(move || {
-            serve_agent_role(&candidates, &identity, &norn_bin, &role);
+            serve_agent_role(&candidates, &identity, &norn_bin, &cwd, &role);
         }));
     }
 
@@ -187,7 +197,13 @@ fn roles(profiles: Profiles) -> Vec<Role> {
 
 /// Compose one role's harness and serve it on its own liminal connection,
 /// registered on the role's node so only this role's activity is routed here.
-fn serve_agent_role(candidates: &[String], identity: &str, norn_bin: &str, role: &Role) {
+fn serve_agent_role(
+    candidates: &[String],
+    identity: &str,
+    norn_bin: &str,
+    cwd: &Path,
+    role: &Role,
+) {
     let config = match worker_config(identity, role.node) {
         Ok(config) => config,
         Err(error) => {
@@ -196,7 +212,7 @@ fn serve_agent_role(candidates: &[String], identity: &str, norn_bin: &str, role:
         }
     };
     let registry = Arc::new(ActivityRegistry::new());
-    let agent = composed_agent_harness(norn_bin, role);
+    let agent = composed_agent_harness(norn_bin, cwd, role);
     let stop = AtomicBool::new(false);
     let role_name = role.activity_type;
     if let Err(error) = aion_worker::serve_with_redial(
@@ -219,8 +235,8 @@ fn serve_agent_role(candidates: &[String], identity: &str, norn_bin: &str, role:
 /// [`ProfiledNornHarness`] wrapper assembles the per-turn context into the
 /// prompt. This is the ONE place a concrete adapter is named per role; the
 /// serve path drives it only through the erased [`DynAgentHarness`] trait.
-fn composed_agent_harness(norn_bin: &str, role: &Role) -> AgentHarnessConfig {
-    let harness = ProfiledNornHarness::new(inner_norn_harness(norn_bin, role), role.assemble);
+fn composed_agent_harness(norn_bin: &str, cwd: &Path, role: &Role) -> AgentHarnessConfig {
+    let harness = ProfiledNornHarness::new(inner_norn_harness(norn_bin, cwd, role), role.assemble);
     let harness = match role.post_run_commit {
         Some(PostRunCommit::DevWork) => harness.committing_dev_work(),
         None => harness,
@@ -250,9 +266,13 @@ fn composed_agent_harness(norn_bin: &str, role: &Role) -> AgentHarnessConfig {
 /// per-run data the [`ProfiledNornHarness`] appends from the activity input's
 /// `workspace_path` at start time, so both roles root at the run's actual
 /// worktree rather than a static template.
-fn inner_norn_harness(norn_bin: &str, role: &Role) -> NornHarness {
+///
+/// `cwd` is a different thing again: the directory the norn PROCESS is started
+/// in. It comes from the binary root because the only value available without
+/// it would be whichever directory this worker was launched from.
+fn inner_norn_harness(norn_bin: &str, cwd: &Path, role: &Role) -> NornHarness {
     let session_id = format!("{{workflow_id}}-{}", role.session_suffix);
-    let mut harness = NornHarness::with_binary(norn_bin)
+    let mut harness = NornHarness::with_binary(norn_bin, cwd)
         .with_arg("--fast")
         .with_arg("--reasoning-effort")
         .with_arg("high")

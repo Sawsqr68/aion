@@ -53,6 +53,7 @@ worker assistants
     reconnect_max_backoff 30s
     reconnect_max_attempts 100
     env_pass "PATH", "HOME"
+    cwd "{workspace_root}"
   action ask(prompt: String) -> Reply
     agent, timeout 10m
 ```
@@ -73,12 +74,21 @@ Facts to check before claiming this works in a session:
   only on the liminal worker transport.
 - The LAUNCH is the document's, in the `worker` block's `harness` section
   above: `kind` (`acp` or `norn`), `concurrency`, the three reconnect settings,
-  `env_pass`, and per kind `command`/`cwd`/`permission`/`exit_grace` for `acp`
-  or the optional `binary` for `norn`, plus optional `args` for either. **There
+  `env_pass` and `cwd` for both kinds, then per kind
+  `command`/`permission`/`exit_grace` for `acp` or the optional `binary` for
+  `norn`, plus optional `args` for either. **There
   is no flag for any of it** — the per-setting flags this verb used to take
   (`--harness`, `--concurrency`, `--reconnect-*`, `--acp-*`, `--norn-*`) are
   deleted and no longer parse. A document with a queue but no `harness` section
   is refused, by name.
+- `cwd` is required for BOTH kinds and has no default: the directory an agent
+  stands in decides which tree it reads and which files it edits, and the only
+  value a default could carry is whichever directory the worker process happened
+  to be started in. Every path-valued setting (`cwd`, `command`, `binary`) takes
+  one of exactly two forms — an ABSOLUTE path, or a value LEADING with the
+  literal `{workspace_root}`, which the launching worker expands against that
+  box's own workspace root. That second form is how a document that must be
+  correct on more than one machine writes a path at all.
 - `aion awl check FILE.awl` names any setting the section is missing, scoped to
   the KIND it declares: an `acp` section needs no `binary`, a `norn` section
   needs no `command`, and a setting written for the other kind is refused
