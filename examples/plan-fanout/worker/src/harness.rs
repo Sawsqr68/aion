@@ -37,6 +37,8 @@
 //! (intervenable) path. The session id is derived from the activity INPUT rather
 //! than a placeholder, which is the only seam that carries per-member identity.
 
+use std::path::PathBuf;
+
 use aion_integration_norn::NornHarness;
 use aion_integrations::{AgentRunSpec, DynAgentHarness, DynAgentSession, HarnessError};
 use async_trait::async_trait;
@@ -127,16 +129,24 @@ impl Role {
     }
 }
 
-/// The role-dispatching composed harness. Holds only the `norn` binary path; the
-/// per-run configuration is derived from each [`AgentRunSpec`].
+/// The role-dispatching composed harness. Holds the `norn` binary path and the
+/// directory its agents work in; the rest of the per-run configuration is
+/// derived from each [`AgentRunSpec`].
 pub struct RoleDispatchHarness {
     norn_bin: String,
+    cwd: PathBuf,
 }
 
 impl RoleDispatchHarness {
-    pub fn new(norn_bin: impl Into<String>) -> Self {
+    /// `cwd` is the absolute directory every dispatched agent stands in. It is
+    /// held here rather than chosen per run because it is a property of this
+    /// deployment, not of a role — and it is passed IN rather than defaulted,
+    /// because the only default available would be whichever directory this
+    /// worker process happened to be started from.
+    pub fn new(norn_bin: impl Into<String>, cwd: impl Into<PathBuf>) -> Self {
         Self {
             norn_bin: norn_bin.into(),
+            cwd: cwd.into(),
         }
     }
 }
@@ -179,7 +189,7 @@ impl DynAgentHarness for RoleDispatchHarness {
         // than restart. `OPENAI_API_KEY` is stripped so Norn uses the operator's
         // ChatGPT OAuth login (a stray ambient key would take precedence and
         // fail). We then DELEGATE the real driven run to it.
-        let harness = NornHarness::with_binary(&self.norn_bin)
+        let harness = NornHarness::with_binary(&self.norn_bin, &self.cwd)
             .with_arg("--append-system-prompt")
             .with_arg(role.system_prompt())
             .with_arg("--output-schema")

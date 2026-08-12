@@ -364,6 +364,11 @@ async fn serve(
         identity = %settings.identity,
         namespace = %namespace,
         harness = harness.kind.name(),
+        // The RESOLVED working directory, read from the harness that will actually spawn.
+        // A document may write `{workspace_root}`, which is deliberately silent about the
+        // path because the path differs per box — so this line is the only place an
+        // operator can see where their agents really stand.
+        cwd = %harness.launch_directory().display(),
         "agent worker dialing liminal candidates"
     );
     // A shutdown signal flips the shared stop flag; the serve loop checks it between

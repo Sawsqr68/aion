@@ -105,7 +105,7 @@ async fn a_declared_environment_keeps_claudecode_out_of_the_norn_child() -> Test
     );
 
     let declaration = EnvironmentDeclaration::new(["PATH", "HOME"])?;
-    let harness = NornHarness::with_binary(&binary)
+    let harness = NornHarness::with_binary(&binary, sandbox.path())
         .with_arg(report.display().to_string())
         .with_declared_environment(declaration.resolve(&context));
 
@@ -152,7 +152,8 @@ async fn without_a_declaration_the_norn_child_still_inherits() -> TestResult {
     let binary = report_environment_binary(sandbox.path())?;
     let report = sandbox.path().join("child-environment.txt");
 
-    let harness = NornHarness::with_binary(&binary).with_arg(report.display().to_string());
+    let harness =
+        NornHarness::with_binary(&binary, sandbox.path()).with_arg(report.display().to_string());
     let outcome = harness.start(spec()).await;
     assert!(
         outcome.is_err(),
@@ -175,8 +176,11 @@ async fn a_binary_on_path_with_no_path_declared_is_refused_naming_path() -> Test
     context.insert("HOME".to_owned(), "/tmp".to_owned());
     let declaration = EnvironmentDeclaration::new(["HOME"])?;
 
-    // The adapter's own documented default: `norn`, looked up on `PATH`.
-    let harness = NornHarness::new().with_declared_environment(declaration.resolve(&context));
+    // The adapter's own documented default: `norn`, looked up on `PATH`. The working directory
+    // has no default to fall back on, so the crate root stands in — this test measures the
+    // environment declaration, and the directory only has to be absolute and real.
+    let harness = NornHarness::new(env!("CARGO_MANIFEST_DIR"))
+        .with_declared_environment(declaration.resolve(&context));
 
     let Err(error) = harness.start(spec()).await else {
         return Err("a program looked up on an absent PATH cannot be launched".into());

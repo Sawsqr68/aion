@@ -44,12 +44,18 @@ pub fn run() -> Result<()> {
     let agent_norn_bin = args.norn_bin.clone();
     let agent_identity = format!("{}-agent", args.identity);
     let agent_activities = args.agent_activities.clone();
+    // The directory every launched agent stands in. Read HERE, once, at the
+    // binary root: the child no longer inherits whatever directory this process
+    // was started from, it is given one this code chose and can name.
+    let agent_cwd = std::env::current_dir()
+        .context("the general worker must be able to read its own working directory")?;
     coordinate_connections(
         move |stop| {
             serve_agent(
                 &agent_addresses,
                 &agent_identity,
                 &agent_norn_bin,
+                &agent_cwd,
                 &agent_activities,
                 stop,
             )
@@ -142,12 +148,13 @@ fn serve_agent(
     addresses: &[String],
     identity: &str,
     norn_bin: &str,
+    cwd: &Path,
     agent_activities: &[String],
     stop: &AtomicBool,
 ) -> Result<()> {
     let config = build_worker_config(identity, AGENT_NODE)?;
     let registry = Arc::new(agent_registry());
-    let harness = agent_config(norn_bin, agent_activities)?;
+    let harness = agent_config(norn_bin, cwd, agent_activities)?;
     serve_with_redial(
         addresses.to_vec(),
         &config,

@@ -248,7 +248,12 @@ mod tests {
 
     #[test]
     fn the_assembled_prompt_is_the_role_function_applied_to_the_context() {
-        let harness = ProfiledNornHarness::new(NornHarness::new(), crate::prompts::review_lens);
+        // Nothing is spawned by this test: it exercises prompt assembly only, so
+        // the directory just has to be an absolute one the adapter accepts.
+        let harness = ProfiledNornHarness::new(
+            NornHarness::new(env!("CARGO_MANIFEST_DIR")),
+            crate::prompts::review_lens,
+        );
         let prompt = harness.assembled_prompt("{\"diff\":\"...\"}");
         // The per-turn prompt is context only — the profile doctrine is the
         // inner harness's `--append-system-prompt` text, never folded in here.

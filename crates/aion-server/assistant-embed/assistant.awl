@@ -123,13 +123,16 @@ Your workspace for this session is `"""
 // Closes the workspace path and states the working rules as a RULE, not a
 // claim about this launch — because this document has more than one serving
 // path and they differ. Served by `aion worker agent` from the shipped
-// `harness` section, nothing sets a working directory or confines a tool (the
-// old `--workspace-root`/`-C` pair is deliberately absent — see the harness
-// narration). Served by scripts/setup.sh → examples/agent-dev/worker, the
-// worker passes that pair and the agent IS confined and started in the
-// workspace. A sentence asserting either state lies on the other path, so the
-// prompt instructs conduct that is correct on both; the spike document and
-// ENVIRONMENT.md carry the same sentence for the same reason.
+// `harness` section, the agent now starts in a DECLARED directory — the
+// section's `cwd "{workspace_root}"`, this box's own clones root — but that is
+// the root ABOVE the session workspaces, not this session's workspace, and no
+// tool is confined (the old `--workspace-root`/`-C` pair is still absent; see
+// the harness narration). Served by scripts/setup.sh → examples/agent-dev/
+// worker, the worker passes that pair and the agent IS confined and started in
+// the session workspace itself. A sentence asserting either state lies on the
+// other path, so the prompt instructs conduct that is correct on both; the
+// spike document and ENVIRONMENT.md carry the same sentence for the same
+// reason.
 const workspace_confinement = """`. Do not assume you are confined to that directory or started inside it — confinement depends on how this worker was launched. `cd` into the workspace before your first shell command and start every later shell command from it, address files by absolute paths under it, and create nothing outside it."""
 
 // Workspace-note tail, scratch branch.
@@ -295,21 +298,38 @@ worker assistant
   // worker's setup defaults NORN_ACCOUNT to the same value), and it rides
   // with the session pin because norn refuses `--resume-if-exists` without an
   // account. It is a baked value: an operator whose norn account alias is not
-  // `default` changes that one token before deploying — there is currently no
-  // way to bind a harness argument to a per-box value.
+  // `default` changes that one token before deploying — binding a harness
+  // ARGUMENT to a per-box or per-run value is the open half of board task #210,
+  // which this landing did not close.
   //
-  // Deliberately ABSENT: the old `--workspace-root`/`-C` confinement pair.
-  // Those carried the server's own workspace_root, a per-machine value the
-  // operator substituted by hand; the harness section has no
-  // `{workspace_root}` expansion, so writing them here would ship a path that
-  // is wrong on every machine but one. CONSEQUENCE: served as shipped, the
-  // agent's tools are NOT confined to the session workspace and its shell
-  // does not start there — the opening prompt instructs it into the workspace
-  // instead of asserting containment. An operator serving this on a real box
-  // should add the pair with their own workspace_root
-  // (args "--workspace-root", "<root>", "-C", "<root>/{workflow_id}/repo",
-  // …) before deploying; tool-level confinement returns to the shipped
-  // artifact when `{workspace_root}` expansion exists (board task #210).
+  // `cwd` is DECLARED, and it is the one setting a shipped document could not
+  // write until now. An agent's working directory decides which tree it reads
+  // and which files it edits; undeclared, it was inherited from wherever the
+  // worker process happened to be started, recorded in no document, argv or
+  // log. But no absolute literal is right on more than one machine, and this
+  // document ships inside the server binary — so it writes the placeholder
+  // `{workspace_root}` and the launching worker expands it against THAT box's
+  // own clones root (the startup banner's `workspace_root` field), then holds
+  // the result to the absolute rule before anything is spawned. A box that
+  // cannot resolve a root refuses the launch by name rather than inheriting a
+  // directory nobody chose.
+  //
+  // What that gives, exactly: the agent starts in the box's workspace ROOT,
+  // one level above the per-run workspaces the provision body materialises at
+  // `<root>/<run_id>/repo`. The harness section is per-worker, so it cannot
+  // name a per-run path — binding a setting to the run is the open half of
+  // board task #210, and until it lands the opening prompt is what walks the
+  // agent into its own session workspace.
+  //
+  // Still deliberately ABSENT: the old `--workspace-root`/`-C` confinement
+  // pair. Those are `args`, expanded by the ADAPTER at spawn time, and this
+  // landing gave placeholder expansion to path-valued SETTINGS only. So
+  // tool-level confinement is not expressible here yet, and served as shipped
+  // the agent's tools are NOT confined to the session workspace — the opening
+  // prompt instructs conduct that holds either way instead of asserting
+  // containment. An operator serving this on a real box may still add the pair
+  // by hand with their own root (args "--workspace-root", "<root>", "-C",
+  // "<root>/{workflow_id}/repo", …) before deploying.
   harness
     kind norn
     concurrency 4
@@ -318,6 +338,7 @@ worker assistant
     reconnect_max_attempts 100
     env_pass "PATH", "HOME"
     args "--session-id", "{workflow_id}-{activity_type}", "--resume-if-exists", "--account", "default"
+    cwd "{workspace_root}"
 
   /// Materialises the session workspace at `<workspace_root>/<run_id>/repo`
   /// and prints that resolved path as its SOLE stdout — the recorded activity

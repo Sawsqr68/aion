@@ -139,11 +139,18 @@ fn main() -> anyhow::Result<()> {
     // empty registry, its stop flag, its composed harness, and the declared
     // descriptors it advertises, and blocks in serve_with_redial (redialling
     // internally) until the process is killed.
+    // The directory every agent process is started in, resolved HERE once and
+    // handed to each connection, so no spawned child is left to inherit
+    // whichever directory this worker happened to be launched from.
+    let agent_cwd = std::env::current_dir()
+        .map_err(|error| anyhow::anyhow!("cannot read this worker's working directory: {error}"))?;
+
     let mut threads = Vec::new();
     for (connection, descriptors) in connections.into_iter().zip(advertised) {
         let candidates = args.candidates.clone();
         let norn_bin = args.norn_bin.clone();
         let norn_account = args.norn_account.clone();
+        let cwd = agent_cwd.clone();
         let identity = format!("{}-{}", args.identity_prefix, connection.node);
         threads.push(thread::spawn(move || {
             serve_agent_connection(
@@ -151,6 +158,7 @@ fn main() -> anyhow::Result<()> {
                 &identity,
                 &norn_bin,
                 &norn_account,
+                &cwd,
                 &connection,
                 descriptors,
             );
@@ -241,6 +249,7 @@ fn serve_agent_connection(
     identity: &str,
     norn_bin: &str,
     norn_account: &str,
+    cwd: &Path,
     connection: &Connection,
     descriptors: Vec<ActivityDescriptor>,
 ) {
@@ -252,7 +261,7 @@ fn serve_agent_connection(
         }
     };
     let registry = Arc::new(ActivityRegistry::new());
-    let agent = composed_agent_harness(norn_bin, norn_account, connection, descriptors);
+    let agent = composed_agent_harness(norn_bin, norn_account, cwd, connection, descriptors);
     let stop = AtomicBool::new(false);
     let node = connection.node;
     let served = connection
@@ -291,11 +300,12 @@ fn serve_agent_connection(
 fn composed_agent_harness(
     norn_bin: &str,
     norn_account: &str,
+    cwd: &Path,
     connection: &Connection,
     descriptors: Vec<ActivityDescriptor>,
 ) -> AgentHarnessConfig {
     let harness = ProfiledNornHarness::new(
-        inner_norn_harness(norn_bin, norn_account, connection),
+        inner_norn_harness(norn_bin, norn_account, cwd, connection),
         connection.activities.clone(),
     );
     let erased: Arc<dyn DynAgentHarness> = Arc::new(harness);
@@ -352,8 +362,13 @@ fn connection_norn_args(connection: &Connection) -> Vec<String> {
 /// [`connection_norn_args`], plus the env hygiene that forces the `ChatGPT`
 /// OAuth login: a stray ambient API key would take precedence and fail. No
 /// secret is ever set here.
-fn inner_norn_harness(norn_bin: &str, norn_account: &str, connection: &Connection) -> NornHarness {
-    let mut harness = NornHarness::with_binary(norn_bin);
+fn inner_norn_harness(
+    norn_bin: &str,
+    norn_account: &str,
+    cwd: &Path,
+    connection: &Connection,
+) -> NornHarness {
+    let mut harness = NornHarness::with_binary(norn_bin, cwd);
     for arg in connection_norn_args(connection) {
         harness = harness.with_arg(arg);
     }

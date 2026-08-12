@@ -598,6 +598,7 @@ fn harness_document() -> String {
         "worker reviewers\n",
         "worker reviewers\n  harness\n    kind norn\n    concurrency 7\n    \
          reconnect_initial_backoff 5s\n    reconnect_max_backoff 2m\n    \
-         reconnect_max_attempts 42\n    env_pass \"PATH\", \"HOME\"\n",
+         reconnect_max_attempts 42\n    env_pass \"PATH\", \"HOME\"\n    cwd \
+         \"/srv/agents\"\n",
     )
 }

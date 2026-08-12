@@ -18,6 +18,7 @@ worker assistants
     reconnect_max_backoff 1m
     reconnect_max_attempts 50
     args "--account", "default"
+    cwd "/srv/agents/workspace"
     binary "/usr/local/bin/norn"
   action ask(prompt: String) -> Reply
     agent

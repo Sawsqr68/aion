@@ -108,7 +108,14 @@ fn composed_agent_harness(
     // The run's own clone — the ONE template both the file-tool confinement
     // (--workspace-root) and the tool-execution cwd (-C) point at.
     let run_clone = format!("{}/{{workflow_id}}/repo", workspace_root.display());
-    let mut norn = NornHarness::with_binary(norn_bin);
+    // The PROCESS working directory is the workspace root, not `run_clone`: the
+    // clone is a per-run template that does not exist until `provision` makes
+    // it, and a process cannot be started in a directory that is not there yet.
+    // What the agent READS and EDITS is confined to the clone by
+    // `--workspace-root`/`-C` above; this only decides where the child stands
+    // when it is launched, and now it is decided here rather than inherited
+    // from whichever shell started this worker.
+    let mut norn = NornHarness::with_binary(norn_bin, workspace_root);
     for arg in norn_args(&run_clone, norn_account, norn_model, allow_degraded_session) {
         norn = norn.with_arg(arg);
     }

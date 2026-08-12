@@ -657,7 +657,10 @@ field order, so these files are already canonical):
   Norn setting and is COMPLETE, which is the kind-scoping ruling in one file.
 - `harness-section/valid/norn_harness.awl` — a complete `norn` launch, with the
   two optional settings (`args`, `binary`) present. Carries no `command`,
-  `cwd`, `permission` or `exit_grace` and is COMPLETE.
+  `permission` or `exit_grace` and is COMPLETE. It DOES carry `cwd`: that
+  setting belongs to neither protocol in particular — the directory an agent
+  stands in decides which tree it reads and edits — so both kinds are held to
+  it, and only the kind-SPECIFIC settings stay scoped.
 - `harness-section/valid/norn_harness_without_optional_settings.awl` — the same
   launch with both optional settings omitted: an optional setting left out is a
   declaration, not a gap, and the adapter's own `norn`-on-`PATH` default is the
@@ -679,6 +682,21 @@ the `harness` line, because the section is what omitted the setting:
 - `missing_kind_on_a_norn_shape.awl`, `missing_env_pass_on_norn.awl`,
   `missing_concurrency_on_norn.awl` → the kind-independent set again on a Norn
   section, so the rule is witnessed on both kinds rather than inferred from one.
+- `missing_cwd_on_norn.awl` → CHECK "declares no `cwd`", anchored on the
+  `harness` line. `cwd` is required of BOTH kinds — see `missing_acp_cwd.awl`
+  for the other one — because the only default available is whichever directory
+  the worker process happened to be started in, which is the invisible scoping
+  the setting exists to end.
+- `relative_norn_cwd.awl` → CHECK "must be an ABSOLUTE path", anchored on the
+  value. The `{workspace_root}` form did not widen this: a value carrying no
+  placeholder has nothing to expand and must stand absolute on its own, so the
+  old refusal is witnessed AFTER the new accept-form exists rather than assumed
+  to have survived it.
+- `norn_cwd_with_a_misplaced_workspace_root.awl` → CHECK "somewhere other than
+  its start". The placeholder buys a shipped document one shape — the box's root
+  at the front — because no root any box resolves can make a value absolute by
+  landing in the middle of it. Accepting it would mean checker-green,
+  spawn-red.
 - `norn_section_carrying_an_acp_command.awl` → CHECK "`command` configures the
   `acp` harness"; `acp_section_carrying_a_norn_binary.awl` → CHECK "`binary`
   configures the `norn` harness". Both directions, because a setting that

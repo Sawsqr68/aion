@@ -22,6 +22,7 @@ worker assistants
     reconnect_max_backoff 1m
     reconnect_max_attempts 50
     env_pass "PATH", "HOME"
+    cwd "/srv/agents/workspace"
   action ask(prompt: String) -> Reply
     agent
 

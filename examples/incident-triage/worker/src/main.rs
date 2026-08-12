@@ -33,6 +33,7 @@
 //!   incident-triage-worker [--address 127.0.0.1:PORT ...] [--identity <id>]
 //!                          [--ready-file <path>] [--norn-bin <path>] [--plain]
 
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
@@ -43,6 +44,7 @@ use aion_worker::{
     ActivityContext, ActivityRegistry, AgentHarnessConfig, HandlerFuture, RedialTiming,
     WorkerConfig, WorkerError,
 };
+use anyhow::Context as _;
 use serde::{Deserialize, Serialize};
 
 /// The activity type routed through the composed harness (driven mode) or served
@@ -157,9 +159,15 @@ fn plain_triage(
 /// The advertised capabilities are exactly the neutral primitives the Norn
 /// adapter's intervention translation supports today (`InjectMessage` +
 /// `Cancel`); advertising more would promise interventions the harness rejects.
-fn composed_agent_harness(norn_bin: &str) -> AgentHarnessConfig {
+///
+/// `cwd` is the directory every spawned agent stands in — a PARAMETER, because
+/// the composition root is where a launch setting is decided, and a directory
+/// invented here would be a guess about somebody else's box. `main` reads this
+/// process's own directory for it, which makes the inheritance that used to be
+/// silent into a written decision.
+fn composed_agent_harness(norn_bin: &str, cwd: &Path) -> AgentHarnessConfig {
     let harness: Arc<dyn DynAgentHarness> = Arc::new(
-        NornHarness::with_binary(norn_bin)
+        NornHarness::with_binary(norn_bin, cwd)
             .with_arg("--append-system-prompt")
             .with_arg(TRIAGE_SYSTEM_PROMPT)
             .with_arg("--output-schema")
@@ -309,7 +317,13 @@ fn main() -> anyhow::Result<()> {
     // Driven: an empty registry plus the composed agent harness that owns
     // `triage` (advertised via the agent-types union). Plain: the typed registry
     // serves `triage` and no harness is installed.
-    let agent = (!args.plain).then(|| composed_agent_harness(&args.norn_bin));
+    // The directory the triage agent works in: this process's own, read HERE at
+    // the composition root rather than inherited by the child from whatever
+    // shell started the worker. Same behaviour, now on the record.
+    let agent_cwd = std::env::current_dir().context(
+        "this worker must be able to read its own working directory to launch agents in it",
+    )?;
+    let agent = (!args.plain).then(|| composed_agent_harness(&args.norn_bin, &agent_cwd));
     let registry = if args.plain {
         plain_registry()?
     } else {

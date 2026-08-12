@@ -43,7 +43,8 @@ fn document_source(env_pass: &str) -> String {
          Reply {{ text: String, stop_reason: String }}\n\nworker reviewers\n  harness\n    \
          kind norn\n    concurrency 1\n    reconnect_initial_backoff 5s\n    \
          reconnect_max_backoff 1m\n    reconnect_max_attempts 10\n    env_pass \
-         {env_pass}\n  action ask(prompt: String) -> Reply\n    agent\n\nstep ask\n  \
+         {env_pass}\n    cwd \"/srv/agents\"\n  action ask(prompt: String) -> \
+         Reply\n    agent\n\nstep ask\n  \
          ask(prompt: question) -> reply\n  route answered(reply: reply.text)\n"
     )
 }

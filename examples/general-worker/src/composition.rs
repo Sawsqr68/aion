@@ -1,5 +1,6 @@
 //! Shared worker topology and typed activity registry composition.
 
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -58,14 +59,19 @@ pub fn agent_capabilities() -> InterventionCapabilities {
 /// harness with the same input contract, so a workflow can declare
 /// differently-typed agent actions against one worker.
 ///
+/// `cwd` is the directory every agent this worker launches stands in; it comes
+/// from the binary root rather than a default here, because the only default
+/// available would be whichever directory the worker process was started from.
+///
 /// # Errors
 ///
 /// Returns [`WorkerError`] if mechanical schema generation fails.
 pub fn agent_config(
     norn_bin: &str,
+    cwd: &Path,
     agent_activities: &[String],
 ) -> Result<AgentHarnessConfig, WorkerError> {
-    let harness: Arc<dyn DynAgentHarness> = Arc::new(GeneralNornHarness::new(norn_bin));
+    let harness: Arc<dyn DynAgentHarness> = Arc::new(GeneralNornHarness::new(norn_bin, cwd));
     let advertised = std::iter::once(RUN_AGENT.to_owned())
         .chain(agent_activities.iter().cloned())
         .collect::<Vec<_>>();

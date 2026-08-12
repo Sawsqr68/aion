@@ -190,7 +190,9 @@ fn a_missing_workspace_path_is_a_loud_error() -> anyhow::Result<()> {
 /// connection's real shape: two activity types on one harness.
 fn shared_node_harness() -> ProfiledNornHarness {
     ProfiledNornHarness::new(
-        NornHarness::new(),
+        // Prompt assembly only — nothing is spawned, so the directory just has to
+        // be an absolute one the adapter accepts.
+        NornHarness::new(env!("CARGO_MANIFEST_DIR")),
         vec![
             AgentActivity {
                 activity_type: "remediate",
@@ -245,7 +247,9 @@ fn an_unserved_activity_type_is_a_loud_refusal_not_a_default_role() -> anyhow::R
 #[test]
 fn the_assembled_prompt_is_the_activity_function_applied_to_the_context() -> anyhow::Result<()> {
     let harness = ProfiledNornHarness::new(
-        NornHarness::new(),
+        // Prompt assembly only — nothing is spawned, so the directory just has to
+        // be an absolute one the adapter accepts.
+        NornHarness::new(env!("CARGO_MANIFEST_DIR")),
         vec![AgentActivity {
             activity_type: "review_item",
             assemble: crate::prompts::review_item,

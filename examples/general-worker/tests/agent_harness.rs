@@ -96,7 +96,7 @@ fn exercise_fake_norn(root: &Path) -> TestResult {
     }))?;
     let runtime = tokio::runtime::Runtime::new()?;
     let payload = runtime.block_on(async {
-        let session = GeneralNornHarness::new(&executable).start(spec).await?;
+        let session = GeneralNornHarness::new(&executable, root).start(spec).await?;
         session.wait_result().await
     })?;
 
@@ -180,7 +180,7 @@ fn fake_norn_executable_exercises_the_actual_start_and_session_path() -> TestRes
 
 #[test]
 fn prepares_all_static_and_per_run_arguments_with_default_session() -> TestResult {
-    let harness = GeneralNornHarness::new("norn-test");
+    let harness = GeneralNornHarness::new("norn-test", env!("CARGO_MANIFEST_DIR"));
     let schema = "  \n\t{\"type\":\"object\",\"$comment\":\"{workflow_id} {activity_type}\"} \t";
     let spec = run_spec(&json!({
         "instructions": "Be literal: {workflow_id} and {activity_type}.",
@@ -223,7 +223,7 @@ fn prepares_all_static_and_per_run_arguments_with_default_session() -> TestResul
 
 #[test]
 fn supplied_session_and_absent_deny_list_replace_only_the_optional_arguments() -> TestResult {
-    let harness = GeneralNornHarness::new("norn-test");
+    let harness = GeneralNornHarness::new("norn-test", env!("CARGO_MANIFEST_DIR"));
     let prepared = harness.prepare_run(run_spec(&json!({
         "instructions": "Use supplied {workflow_id} and {activity_type} literally.",
         "prompt": "Continue {workflow_id} and {activity_type} literally.",
@@ -257,7 +257,7 @@ fn supplied_session_and_absent_deny_list_replace_only_the_optional_arguments() -
 
 #[test]
 fn missing_and_blank_required_values_are_protocol_errors() -> TestResult {
-    let harness = GeneralNornHarness::new("norn-test");
+    let harness = GeneralNornHarness::new("norn-test", env!("CARGO_MANIFEST_DIR"));
     let missing = harness
         .prepare_run(run_spec(&json!({
             "prompt": "hello",
@@ -312,7 +312,7 @@ fn missing_and_blank_required_values_are_protocol_errors() -> TestResult {
 
 #[test]
 fn blank_supplied_session_is_a_protocol_error() -> TestResult {
-    let harness = GeneralNornHarness::new("norn-test");
+    let harness = GeneralNornHarness::new("norn-test", env!("CARGO_MANIFEST_DIR"));
     let failure = harness
         .prepare_run(run_spec(&json!({
             "instructions": "do it",

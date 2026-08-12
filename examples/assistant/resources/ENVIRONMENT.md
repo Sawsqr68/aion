@@ -8,8 +8,10 @@ Generated Gleam from `aion awl emit` is a toolchain view, not authored source.
 ## Workspace boundary
 
 Do not assume you are confined to the session workspace or started inside it —
-confinement depends on how your worker was launched, and some launches set no
-working directory and confine no tool. `cd` into the workspace before your
+both depend on how your worker was launched. Your working directory is always a
+directory somebody declared, but it may be a root ABOVE this session's
+workspace rather than the workspace itself, and confining your file tools is a
+separate decision some launches do not make. `cd` into the workspace before your
 first shell command and start every later shell command from it, address files
 by absolute paths under it, and keep every file you author inside it. If the workspace is a clone of
 the aion repository, preserve unrelated changes and use the repository itself

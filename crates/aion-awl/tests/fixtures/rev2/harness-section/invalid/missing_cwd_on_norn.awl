@@ -1,0 +1,30 @@
+//! The `cwd` setting removed. Nothing supplies it — the only value a default
+//! could carry is whichever directory the worker process happened to be started
+//! in, which is precisely the invisible scoping this setting exists to end — so
+//! the refusal names the field and the queue whose section omitted it.
+workflow ask_the_agent
+  input question: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+/// The canonical agent-outcome record: the checker demands the STRUCTURE, not
+/// a blessed name.
+type Reply { text: String, stop_reason: String }
+
+worker assistants
+  harness
+    kind norn
+    concurrency 2
+    reconnect_initial_backoff 5s
+    reconnect_max_backoff 1m
+    reconnect_max_attempts 50
+    env_pass "PATH", "HOME"
+    args "--account", "default"
+    binary "/usr/local/bin/norn"
+  action ask(prompt: String) -> Reply
+    agent
+
+step ask
+  ask(prompt: question) -> reply
+  route answered(reply: reply.text)

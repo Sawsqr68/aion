@@ -141,6 +141,13 @@ fn main() -> anyhow::Result<()> {
 
     let roles = roles(&args.repo_root, profiles);
 
+    // The directory every agent process is started in, resolved HERE once and
+    // handed to each role. `--repo-root` may be given relative, so it cannot
+    // serve; what it scopes — which tree the agent may read — still rides as
+    // `--workspace-root` below.
+    let agent_cwd = std::env::current_dir()
+        .map_err(|error| anyhow::anyhow!("cannot read this worker's working directory: {error}"))?;
+
     // Spawn one connection thread per agent role. Each owns its config, an
     // empty registry, its stop flag, and its composed harness, and blocks in
     // serve_with_redial (redialling internally) until the process is killed.
@@ -148,9 +155,10 @@ fn main() -> anyhow::Result<()> {
     for role in roles {
         let candidates = args.candidates.clone();
         let norn_bin = args.norn_bin.clone();
+        let cwd = agent_cwd.clone();
         let identity = format!("{}-{}", args.identity_prefix, role.activity_type);
         threads.push(thread::spawn(move || {
-            serve_agent_role(&candidates, &identity, &norn_bin, &role);
+            serve_agent_role(&candidates, &identity, &norn_bin, &cwd, &role);
         }));
     }
 
@@ -214,7 +222,13 @@ fn roles(repo_root: &str, profiles: Profiles) -> Vec<Role> {
 
 /// Compose one role's harness and serve it on its own liminal connection,
 /// registered on the role's node so only this role's activity is routed here.
-fn serve_agent_role(candidates: &[String], identity: &str, norn_bin: &str, role: &Role) {
+fn serve_agent_role(
+    candidates: &[String],
+    identity: &str,
+    norn_bin: &str,
+    cwd: &Path,
+    role: &Role,
+) {
     let config = match worker_config(identity, role.node()) {
         Ok(config) => config,
         Err(error) => {
@@ -223,7 +237,7 @@ fn serve_agent_role(candidates: &[String], identity: &str, norn_bin: &str, role:
         }
     };
     let registry = Arc::new(ActivityRegistry::new());
-    let agent = composed_agent_harness(norn_bin, role);
+    let agent = composed_agent_harness(norn_bin, cwd, role);
     let stop = AtomicBool::new(false);
     let role_name = role.activity_type;
     if let Err(error) = aion_worker::serve_with_redial(
@@ -245,9 +259,9 @@ fn serve_agent_role(candidates: &[String], identity: &str, norn_bin: &str, role:
 /// [`ProfiledNornHarness`] wrapper assembles {profile + context} into the
 /// prompt. This is the ONE place a concrete adapter is named per role; the
 /// serve path drives it only through the erased [`DynAgentHarness`] trait.
-fn composed_agent_harness(norn_bin: &str, role: &Role) -> AgentHarnessConfig {
+fn composed_agent_harness(norn_bin: &str, cwd: &Path, role: &Role) -> AgentHarnessConfig {
     let session_id = format!("{{workflow_id}}-{}", role.session_suffix);
-    let inner = NornHarness::with_binary(norn_bin)
+    let inner = NornHarness::with_binary(norn_bin, cwd)
         .with_arg("--output-schema")
         .with_arg(role.output_schema.trim_start())
         .with_arg("--session-id")

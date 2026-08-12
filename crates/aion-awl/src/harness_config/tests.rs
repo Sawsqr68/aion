@@ -8,7 +8,7 @@
 //! creates — and assert the seam names the field rather than carrying the bad value
 //! through.
 
-use crate::ast::{HARNESS_BINARY_FIELD, HARNESS_COMMAND_FIELD};
+use crate::ast::{HARNESS_BINARY_FIELD, HARNESS_COMMAND_FIELD, HARNESS_CWD_FIELD};
 
 use super::{HarnessConfigError, compile_harness};
 
@@ -47,9 +47,14 @@ fn worker_with(settings: &str) -> Result<crate::WorkerDecl, Box<dyn std::error::
 
 /// A complete Norn section, with `binary` written as given.
 fn norn_with_binary(binary: &str) -> String {
+    norn_with(&format!("cwd \"/srv/agents\"\nbinary \"{binary}\""))
+}
+
+/// A Norn section complete but for the kind-specific settings `tail` supplies.
+fn norn_with(tail: &str) -> String {
     format!(
         "kind norn\nconcurrency 2\nreconnect_initial_backoff 5s\nreconnect_max_backoff \
-         1m\nreconnect_max_attempts 50\nenv_pass \"PATH\"\nbinary \"{binary}\""
+         1m\nreconnect_max_attempts 50\nenv_pass \"PATH\"\n{tail}"
     )
 }
 
@@ -85,13 +90,14 @@ fn an_absolute_norn_binary_passes_the_same_net() -> TestResult {
     let Some(launch) = compile_harness(&worker)? else {
         return Err("the probe declares a harness".into());
     };
-    let crate::CompiledHarnessKind::Norn { binary } = launch.kind else {
+    let crate::CompiledHarnessKind::Norn { binary, cwd } = launch.kind else {
         return Err("a norn declaration must produce a norn launch".into());
     };
     assert_eq!(
         binary.as_deref(),
         Some(std::path::Path::new("/usr/local/bin/norn"))
     );
+    assert_eq!(cwd, std::path::Path::new("/srv/agents"));
     Ok(())
 }
 
@@ -99,17 +105,73 @@ fn an_absolute_norn_binary_passes_the_same_net() -> TestResult {
 /// it into a refusal. The adapter's own documented `norn`-on-`PATH` default stands.
 #[test]
 fn an_omitted_norn_binary_is_absence_and_not_a_refusal() -> TestResult {
-    let worker = worker_with(
-        "kind norn\nconcurrency 2\nreconnect_initial_backoff 5s\nreconnect_max_backoff \
-         1m\nreconnect_max_attempts 50\nenv_pass \"PATH\"",
-    )?;
+    let worker = worker_with(&norn_with("cwd \"/srv/agents\""))?;
     let Some(launch) = compile_harness(&worker)? else {
         return Err("the probe declares a harness".into());
     };
-    let crate::CompiledHarnessKind::Norn { binary } = launch.kind else {
+    let crate::CompiledHarnessKind::Norn { binary, .. } = launch.kind else {
         return Err("a norn declaration must produce a norn launch".into());
     };
     assert_eq!(binary, None);
+    Ok(())
+}
+
+/// `cwd` has no absence arm at all, and the seam is where that is proven when the checker
+/// is out of the loop. The only default available would be whichever directory the worker
+/// process was launched from — the inheritance the whole setting exists to end — so the
+/// seam must name the missing field rather than invent one.
+#[test]
+fn a_missing_norn_cwd_is_named_at_the_launch_seam() -> TestResult {
+    let worker = worker_with(&norn_with("binary \"/usr/local/bin/norn\""))?;
+    let Err(error) = compile_harness(&worker) else {
+        return Err(
+            "a norn section with no `cwd` must not produce a launch: the agent would work in \
+             whichever tree the worker happened to be started in, recorded nowhere"
+                .into(),
+        );
+    };
+    let HarnessConfigError::Missing { field, .. } = &error else {
+        return Err(format!("expected a Missing naming the field, got: {error}").into());
+    };
+    assert_eq!(*field, HARNESS_CWD_FIELD);
+    Ok(())
+}
+
+/// The second accepted form survives the seam INTACT.
+///
+/// A `{workspace_root}`-leading value is not resolved here and must not be: where this
+/// box keeps its workspaces is not a fact the language layer has. Carrying it verbatim is
+/// what lets the composition root expand it against the box that will actually spawn the
+/// agent — so the assertion is on the placeholder still being there, character for
+/// character, and NOT on any expansion having happened.
+#[test]
+fn a_workspace_rooted_cwd_reaches_the_launch_seam_unexpanded() -> TestResult {
+    let worker = worker_with(&norn_with("cwd \"{workspace_root}/assistant\""))?;
+    let Some(launch) = compile_harness(&worker)? else {
+        return Err("the probe declares a harness".into());
+    };
+    let crate::CompiledHarnessKind::Norn { cwd, .. } = launch.kind else {
+        return Err("a norn declaration must produce a norn launch".into());
+    };
+    assert_eq!(cwd, std::path::Path::new("{workspace_root}/assistant"));
+    Ok(())
+}
+
+/// The refusal that new form did NOT widen: a placeholder anywhere but the front cannot
+/// expand to an absolute path, so the seam refuses it exactly as it refuses a plain
+/// relative one. Without this, the accept-set test above would be consistent with a seam
+/// that had simply stopped checking `cwd` at all.
+#[test]
+fn a_misplaced_workspace_root_in_cwd_is_refused_at_the_seam() -> TestResult {
+    let worker = worker_with(&norn_with("cwd \"agents/{workspace_root}\""))?;
+    let Err(HarnessConfigError::Unusable { field, reason, .. }) = compile_harness(&worker) else {
+        return Err("a placeholder that cannot lead cannot make an absolute path".into());
+    };
+    assert_eq!(field, HARNESS_CWD_FIELD);
+    assert!(
+        reason.contains("somewhere other than its start"),
+        "the reason must name the actual fault rather than a generic one: {reason}"
+    );
     Ok(())
 }
 

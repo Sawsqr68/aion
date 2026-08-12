@@ -889,20 +889,41 @@ worker assistants
 | `reconnect_max_backoff` | both, required | a positive duration, not shorter than the initial |
 | `reconnect_max_attempts` | both, required | a whole number greater than zero |
 | `env_pass` | both, required | quoted variable NAMES, comma-separated |
+| `command` | `acp` only, required | a quoted path in one of the two forms below |
 | `args` | both, optional | quoted strings, comma-separated, order preserved |
-| `command` | `acp` only, required | a quoted ABSOLUTE path |
-| `cwd` | `acp` only, required | a quoted ABSOLUTE path |
+| `cwd` | both, required | a quoted path in one of the two forms below |
 | `permission` | `acp` only, required | `"deny"` or `"allow-once"` |
 | `exit_grace` | `acp` only, required | a duration; `0s` is legitimate and means close stdin, then kill at once |
-| `binary` | `norn` only, optional | a quoted path; omitted takes the adapter's own `norn`-on-`PATH` default |
+| `binary` | `norn` only, optional | a quoted path in one of the two forms below; omitted takes the adapter's own `norn`-on-`PATH` default |
 
 The required set is the DECLARED KIND's. An `acp` section carrying no `binary`
-is complete, a `norn` section carrying no `command`, `cwd`, `permission` or
+is complete, a `norn` section carrying no `command`, `permission` or
 `exit_grace` is complete, and a setting belonging to the kind the section does
 not declare is refused BY NAME rather than ignored — a setting that silently
 does nothing is how an operator comes to believe a policy is in force when it is
 not. Nothing is defaulted: `aion awl check` names every required setting the
 section omits.
+
+`cwd` is required for BOTH kinds, and it has no default. The directory an agent
+stands in decides which tree it reads and which files it edits — a property of
+the work, not of the protocol carrying it — and the only value a default could
+carry is whichever directory the worker process happened to be started in,
+recorded in no document, argv or log.
+
+**The two forms a path setting may take.** Every path-valued setting — `cwd`,
+`command`, `binary` — is either an ABSOLUTE path, or a value LEADING with the
+literal `{workspace_root}`. Anything else is refused, relative paths included: a
+worker is started from whatever directory a supervisor or a shell happens to be
+in, so a relative path names a different place on every launch.
+
+The placeholder exists because a document that must be correct on more than one
+machine cannot name any absolute literal that is right on the second. The
+launching worker replaces it with THAT box's own workspace root, then holds the
+result to the absolute rule before anything is spawned — so a box that cannot
+resolve a root refuses the launch by name rather than starting an agent
+somewhere nobody chose. It must LEAD the value (`{workspace_root}/agents` is a
+path; `agents/{workspace_root}` could never expand to an absolute one, and is
+refused where it is written rather than at the first launch).
 
 `env_pass` is the agent subprocess's WHOLE environment. The document names the
 variables, the machine running the worker supplies their values, and a variable

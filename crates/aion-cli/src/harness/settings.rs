@@ -59,6 +59,10 @@ pub(crate) enum HarnessConfig {
 pub(crate) struct NornConfig {
     /// The binary to launch, or `None` to take the adapter's `norn`-on-`PATH` default.
     pub(crate) binary: Option<PathBuf>,
+    /// The absolute directory the agent works in, from the document. Required and never
+    /// defaulted: the only value a default could carry is this worker's own launch
+    /// directory, which is the inheritance the setting exists to end.
+    pub(crate) cwd: PathBuf,
     /// Extra arguments appended to every spawned `norn`, in the order declared. The
     /// adapter expands `{workflow_id}` / `{activity_type}` in each at spawn time.
     pub(crate) args: Vec<String>,
@@ -121,6 +125,32 @@ impl ResolvedHarness {
             HarnessConfig::Acp(acp) => &acp.environment,
         }
     }
+
+    /// The absolute directory every agent this launch spawns will stand in — the RESOLVED
+    /// one, after any `{workspace_root}` expansion.
+    ///
+    /// This exists so the value can be SAID. The defect this setting was added to close was
+    /// never only that a directory was undeclared; it was that the directory an agent worked
+    /// in "appears in no document, no argv, and no log", so there was no artifact to check
+    /// the behaviour against. Requiring `cwd` closes the document. This closes the log.
+    ///
+    /// It matters most for the form that made the requirement satisfiable at all: a document
+    /// writing `{workspace_root}` is deliberately silent about the actual path, because the
+    /// path differs per box. The document cannot tell an operator where their agent stands;
+    /// only the worker that resolved it can.
+    ///
+    /// Read THROUGH the resolved harness, for the same reason [`Self::environment`] is: a
+    /// caller that re-derived this for its report could report one directory while the
+    /// adapter spawned in another, and the report would be worth less than nothing.
+    #[cfg(any(feature = "norn", feature = "acp"))]
+    pub(crate) fn launch_directory(&self) -> &std::path::Path {
+        match &self.config {
+            #[cfg(feature = "norn")]
+            HarnessConfig::Norn(norn) => &norn.cwd,
+            #[cfg(feature = "acp")]
+            HarnessConfig::Acp(acp) => &acp.cwd,
+        }
+    }
 }
 
 /// Resolves the document's declared harness against this build, and builds the launch.
@@ -138,11 +168,35 @@ pub(crate) fn resolve(
     declared: &CompiledHarness,
     document: &std::path::Path,
 ) -> Result<Option<ResolvedHarness>> {
+    resolve_against(
+        declared,
+        document,
+        &aion_server::worker::WorkspaceRoot::resolve(),
+    )
+}
+
+/// The same resolution, against a workspace root the caller states.
+///
+/// [`resolve`] is the production entry and derives the root the one way it may be derived
+/// — `aion_server::worker::WorkspaceRoot::resolve()`, the server's own rule, called rather
+/// than copied. This seam exists because a test that pins what `{workspace_root}` expands
+/// to needs a root it KNOWS, and reading the box's real one would make the assertion a
+/// restatement of the environment instead of a pin on the behaviour.
+///
+/// # Errors
+///
+/// As [`resolve`], plus a refusal when a `{workspace_root}`-bearing setting cannot be
+/// expanded against the given root, or expands to something that is not absolute.
+pub(crate) fn resolve_against(
+    declared: &CompiledHarness,
+    document: &std::path::Path,
+    workspace_root: &aion_server::worker::WorkspaceRoot,
+) -> Result<Option<ResolvedHarness>> {
     let Some(kind) = catalogue::resolve(declared.kind.word(), document)? else {
         return Ok(None);
     };
     let environment = child_environment(declared, document)?;
-    let config = build(kind, declared, environment)?;
+    let config = build(kind, declared, environment, workspace_root, document)?;
     Ok(Some(ResolvedHarness { kind, config }))
 }
 
@@ -180,12 +234,25 @@ fn build(
     kind: HarnessKind,
     declared: &CompiledHarness,
     environment: ChildEnvironment,
+    workspace_root: &aion_server::worker::WorkspaceRoot,
+    document: &std::path::Path,
 ) -> Result<HarnessConfig> {
     match (kind, &declared.kind) {
         #[cfg(feature = "norn")]
-        (HarnessKind::Norn, CompiledHarnessKind::Norn { binary }) => {
+        (HarnessKind::Norn, CompiledHarnessKind::Norn { binary, cwd }) => {
             Ok(HarnessConfig::Norn(NornConfig {
-                binary: binary.clone(),
+                binary: binary
+                    .as_ref()
+                    .map(|binary| {
+                        launch_path(
+                            aion_awl::HARNESS_BINARY_FIELD,
+                            binary,
+                            workspace_root,
+                            document,
+                        )
+                    })
+                    .transpose()?,
+                cwd: launch_path(aion_awl::HARNESS_CWD_FIELD, cwd, workspace_root, document)?,
                 args: declared.args.clone(),
                 environment,
             }))
@@ -200,9 +267,14 @@ fn build(
                 exit_grace,
             },
         ) => Ok(HarnessConfig::Acp(AcpConfig {
-            command: command.clone(),
+            command: launch_path(
+                aion_awl::HARNESS_COMMAND_FIELD,
+                command,
+                workspace_root,
+                document,
+            )?,
             args: declared.args.clone(),
-            cwd: cwd.clone(),
+            cwd: launch_path(aion_awl::HARNESS_CWD_FIELD, cwd, workspace_root, document)?,
             permission: permission_policy(*permission),
             environment,
             exit_grace: *exit_grace,
@@ -221,6 +293,66 @@ fn build(
             resolved.name()
         ),
     }
+}
+
+/// One path-valued harness setting, as the LAUNCH will use it: the document's
+/// `{workspace_root}` expanded against THIS box, then held to the absolute rule.
+///
+/// This is the second half of a division of labour, and neither half is complete alone.
+/// The checker accepts exactly two forms — an absolute path, or a value leading with
+/// `{workspace_root}` — because a document that must be correct on more than one machine
+/// (the assistant compiled into the server binary is one) cannot name any absolute
+/// literal that is right on the second. What the language layer cannot do is know where
+/// this box keeps its workspaces, so it carries the placeholder through verbatim and the
+/// composition root resolves it here.
+///
+/// The absolute requirement is not softened by that: it is re-imposed on the RESULT.
+/// A placeholder that expands to something relative, or one on a box whose home cannot be
+/// resolved at all, is refused right here — before a worker registers, before a dispatch
+/// arrives, before anything is spawned.
+///
+/// The root itself comes from `aion_server::worker::WorkspaceRoot::resolve()` — the
+/// server's own derivation, called rather than copied. A worker started by hand and a
+/// worker started by the server's supervisor read the one rule, so they cannot come to
+/// disagree about where this box's workspaces live.
+#[cfg(any(feature = "norn", feature = "acp"))]
+fn launch_path(
+    field: &str,
+    declared: &std::path::Path,
+    workspace_root: &aion_server::worker::WorkspaceRoot,
+    document: &std::path::Path,
+) -> Result<PathBuf> {
+    let written = declared.to_str().ok_or_else(|| {
+        anyhow::anyhow!(
+            "the `harness` section of {} sets `{field}` to a path with no UTF-8 spelling, so it \
+             cannot be checked for the `{placeholder}` the document may carry",
+            document.display(),
+            placeholder = aion_server::worker::WORKSPACE_ROOT_PLACEHOLDER,
+        )
+    })?;
+
+    let expanded = workspace_root.expand_setting(written).with_context(|| {
+        format!(
+            "the `harness` section of {} sets `{field}` to `{written}`, which asks this box for \
+             its workspace root",
+            document.display()
+        )
+    })?;
+
+    let resolved = match expanded {
+        Some(expanded) => PathBuf::from(expanded),
+        None => declared.to_path_buf(),
+    };
+    anyhow::ensure!(
+        resolved.is_absolute(),
+        "the `harness` section of {} sets `{field}` to `{written}`, which this box expands to \
+         `{}` — and that is not an absolute path. A worker is started from whatever directory a \
+         supervisor or a shell happens to be in, so a relative path names a different place on \
+         every launch; the launch is refused here rather than rooted somewhere nobody chose.",
+        document.display(),
+        resolved.display()
+    );
+    Ok(resolved)
 }
 
 /// The adapter's permission policy for the document's declared one.

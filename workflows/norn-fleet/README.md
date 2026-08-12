@@ -133,6 +133,7 @@ worker fleet
     reconnect_max_attempts 100
     env_pass "PATH", "HOME"
     args "--workspace-root", "/srv/fleet/{workflow_id}", "-C", "/srv/fleet/{workflow_id}", "--account", "default"
+    cwd "/srv/fleet"
 ```
 
 `{workflow_id}` and `{activity_type}` are expanded per dispatch by the Norn

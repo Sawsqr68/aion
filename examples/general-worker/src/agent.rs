@@ -37,15 +37,21 @@ pub struct GeneralNornHarness {
 }
 
 impl GeneralNornHarness {
-    /// Construct the adapter for an explicit Norn binary.
+    /// Construct the adapter for an explicit Norn binary and an explicit working
+    /// directory.
+    ///
+    /// `cwd` is the absolute directory every agent this adapter launches stands
+    /// in. It is a parameter and not a default because the only default
+    /// available would be whichever directory this worker process was started
+    /// from — a value no document, argv or log records.
     #[must_use]
-    pub fn new(norn_binary: impl Into<PathBuf>) -> Self {
+    pub fn new(norn_binary: impl Into<PathBuf>, cwd: impl Into<PathBuf>) -> Self {
         let base_arguments = vec![
             "--fast".to_owned(),
             "--reasoning-effort".to_owned(),
             "high".to_owned(),
         ];
-        let base = NornHarness::with_binary(norn_binary)
+        let base = NornHarness::with_binary(norn_binary, cwd)
             .with_literal_arg("--fast")
             .with_literal_arg("--reasoning-effort")
             .with_literal_arg("high")

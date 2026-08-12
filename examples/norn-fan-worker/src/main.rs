@@ -33,6 +33,7 @@
 //!                   [--identity <id>] [--task-queue <name>]
 //!                   [--ready-file <path>] [--norn-bin <path>]
 
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -43,6 +44,7 @@ use aion_worker::{
     ActivityContext, ActivityFailure, ActivityRegistry, AgentHarnessConfig, HandlerFuture,
     RedialTiming, WorkerConfig,
 };
+use anyhow::Context as _;
 use serde_json::Value;
 
 /// The fan-out arity of the `collect_four` fixture.
@@ -264,8 +266,14 @@ fn ask_session_id_for_invocation(
 /// The advertised capabilities are exactly the neutral primitives the Norn
 /// adapter's intervention translation supports today (`InjectMessage` +
 /// `Cancel`); advertising more would promise interventions the harness rejects.
-fn composed_agent_harness(norn_bin: &str) -> AgentHarnessConfig {
-    let harness: Arc<dyn DynAgentHarness> = Arc::new(NornHarness::with_binary(norn_bin));
+///
+/// `cwd` is the directory every spawned agent stands in. It is a PARAMETER
+/// rather than a value invented here: the composition root is where a launch
+/// setting is decided, and this demo's root reads the worker process's own
+/// directory explicitly (see `main`) so the agent's tree is written down
+/// instead of inherited from whichever shell happened to start the worker.
+fn composed_agent_harness(norn_bin: &str, cwd: &Path) -> AgentHarnessConfig {
+    let harness: Arc<dyn DynAgentHarness> = Arc::new(NornHarness::with_binary(norn_bin, cwd));
     AgentHarnessConfig::new(
         harness,
         [AGENT_ACTIVITY_TYPE],
@@ -488,7 +496,14 @@ fn main() -> anyhow::Result<()> {
     // dispatch of the neutral `agent` activity type drives a real Norn session
     // (observable + intervenable) — the reference "proper worker" wiring. The
     // typed `fan:N` registry handlers above are untouched by it.
-    let agent = composed_agent_harness(&args.norn_bin);
+    // The directory the agents work in. This demo has no workspace of its own,
+    // so the honest answer is this process's own directory — read HERE, at the
+    // composition root, rather than left to the child to inherit. The behaviour
+    // is what it always was; the difference is that it is now a decision on the
+    // record instead of an accident of how the worker was launched.
+    let agent_cwd = std::env::current_dir()
+        .context("this worker must be able to read its own working directory to launch agents in it")?;
+    let agent = composed_agent_harness(&args.norn_bin, &agent_cwd);
 
     // Never stop on our own; the demo ends the worker with a kill.
     let stop = AtomicBool::new(false);

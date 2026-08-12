@@ -39,8 +39,12 @@ const ACP: &str = "kind acp\nconcurrency 4\nreconnect_initial_backoff 5s\nreconn
                    \"/srv/agents\"\npermission \"deny\"\nexit_grace 10s";
 
 /// A complete Norn section.
+///
+/// `cwd` is here because it is required of BOTH kinds. It is not an ACP setting that Norn
+/// happens to tolerate: the directory an agent stands in decides which tree it reads, which
+/// is a property of the work and not of the protocol carrying it.
 const NORN: &str = "kind norn\nconcurrency 2\nreconnect_initial_backoff 5s\nreconnect_max_backoff \
-                    1m\nreconnect_max_attempts 50\nenv_pass \"PATH\"";
+                    1m\nreconnect_max_attempts 50\nenv_pass \"PATH\"\ncwd \"/srv/agents\"";
 
 #[test]
 fn an_acp_section_is_complete_without_any_norn_setting() {
@@ -52,7 +56,7 @@ fn an_acp_section_is_complete_without_any_norn_setting() {
 }
 
 #[test]
-fn a_norn_section_is_complete_without_command_cwd_permission_or_exit_grace() {
+fn a_norn_section_is_complete_without_command_permission_or_exit_grace() {
     assert_eq!(
         complaints(NORN),
         Vec::<String>::new(),
@@ -98,6 +102,7 @@ fn every_required_norn_field_is_named_when_it_is_the_one_removed() {
         "reconnect_max_backoff",
         "reconnect_max_attempts",
         "env_pass",
+        "cwd",
     ] {
         let settings = NORN
             .lines()
@@ -114,6 +119,15 @@ fn every_required_norn_field_is_named_when_it_is_the_one_removed() {
     }
 }
 
+/// The removed `concurrency` is what keeps this test from passing vacuously: a section that
+/// earned no refusal at all would satisfy every assertion below without proving anything
+/// about which names the checker is willing to say.
+///
+/// `cwd` is deliberately NOT in the ACP-only list. It used to be, and it is the one setting
+/// this contract moved: it is now demanded of both kinds, so a norn section that omits it IS
+/// asked for it by name — pinned in
+/// [`every_required_norn_field_is_named_when_it_is_the_one_removed`]. Leaving it here would
+/// assert the opposite of what the checker now does.
 #[test]
 fn a_norn_section_is_never_asked_for_an_acp_setting() {
     let settings = NORN
@@ -122,7 +136,11 @@ fn a_norn_section_is_never_asked_for_an_acp_setting() {
         .collect::<Vec<_>>()
         .join("\n");
     let complaints = complaints(&settings);
-    for acp_only in ["command", "cwd", "permission", "exit_grace"] {
+    assert!(
+        !complaints.is_empty(),
+        "the fixture must earn at least one refusal, or this proves nothing"
+    );
+    for acp_only in ["command", "permission", "exit_grace"] {
         assert!(
             !complaints
                 .iter()

@@ -21,6 +21,7 @@ worker assistants
     env_pass "PATH", "HOME"
     args "--account", "default"
     command "/usr/local/bin/claude-code-acp"
+    cwd "/srv/agents/workspace"
   action ask(prompt: String) -> Reply
     agent
 
