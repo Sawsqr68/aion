@@ -317,11 +317,21 @@ impl AcpHarness {
 }
 
 /// Refuses a relative path, naming which setting it came from.
+///
+/// The refusal is a [`HarnessError::Configuration`], NOT a protocol fault, and the distinction
+/// is load-bearing rather than cosmetic. `cwd` and `additionalDirectories` come from the worker
+/// DOCUMENT: the next attempt reads the same document and reaches the same relative path, so a
+/// retryable classification would spend the whole attempt budget re-confirming a value that
+/// cannot change. `HarnessError::is_deterministic` says so in the type's own words —
+/// `Configuration` is "deterministic by definition ... A refusal that presented as a transient
+/// transport failure would tell the operator the wrong story AND spend the whole attempt budget
+/// confirming it" — while `Protocol` stays retryable because a malformed frame can be a one-off
+/// peer flake. Nothing about a relative path in a document is a flake.
 fn require_absolute(label: &str, path: &Path) -> Result<(), HarnessError> {
     if path.is_absolute() {
         return Ok(());
     }
-    Err(HarnessError::protocol(format!(
+    Err(HarnessError::configuration(format!(
         "the ACP {label} must be an absolute path, got `{}` — the protocol requires absolute \
          session paths and this adapter will not resolve one against an unstated base",
         path.display()
@@ -838,15 +848,25 @@ mod tests {
     }
 
     #[test]
-    fn a_relative_cwd_is_refused_naming_the_setting() -> TestResult {
+    fn a_relative_cwd_is_refused_as_a_terminal_configuration_error() -> TestResult {
         let harness = AcpHarness::new("agent", ["acp"], "workspace", PermissionPolicy::Deny, GRACE);
         let error = harness
             .validate_paths()
             .err()
             .ok_or("a relative cwd must be refused")?;
+        // BOTH halves are the pin. The variant alone would pass on a future edit that kept the
+        // name and moved the retry classification; `is_deterministic` is the property that
+        // actually decides whether the worker retries, and a relative path in a document is
+        // identically relative on every attempt.
         assert!(
-            matches!(error, HarnessError::Protocol { .. }),
-            "got {error:?}"
+            matches!(error, HarnessError::Configuration { .. }),
+            "a document-sourced path refusal is a configuration refusal, not a protocol fault: \
+             {error:?}"
+        );
+        assert!(
+            error.is_deterministic(),
+            "retrying a relative cwd re-reads the same document and hits the same wall, so the \
+             refusal must be terminal rather than spend the whole attempt budget: {error:?}"
         );
         let message = error.to_string();
         assert!(
@@ -867,6 +887,11 @@ mod tests {
         assert!(
             error.to_string().contains("additionalDirectories"),
             "the refusal names the setting: {error}"
+        );
+        assert!(
+            error.is_deterministic(),
+            "the second document-sourced path travels the same classification as `cwd`; without \
+             this arm the pin above could hold while this one silently stayed retryable: {error:?}"
         );
         Ok(())
     }
