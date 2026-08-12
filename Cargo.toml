@@ -85,6 +85,19 @@ fs4 = "1.1"
 notify = "8.2"
 saffron = { version = "0.1", features = ["std"] }
 hostname = "0.4"
+# 0.18.2 and 0.18.1 carry the beamr seat's two further JIT-era fixes, attributed
+# to her as hers: 0.18.2 that compiled code delivers the messages it sends, and
+# that a compiled stack frame no longer names the wrong module; 0.18.1 the
+# RF-006 JIT GC-rooting fix. Those are the shape of the long-run deaths this
+# engine keeps taking (#82, #196), which is why the bump is taken deliberately —
+# `^0.17.0` EXCLUDES 0.18.x, so no lock refresh could ever have reached it.
+# THE MIGRATION IS PRICED, THE BEHAVIOUR IS NOT: 8 of the 9 breaking symbols
+# have zero call sites here, the one production site
+# (crates/aion/src/runtime/handle.rs `Scheduler::with_code_server`) has a
+# signature verified byte-identical across the two versions from the published
+# tarballs, and `SchedulerConfig`'s 11 public fields are unchanged. A green
+# build therefore proves we COMPILE on 0.18.2 and says nothing whatever about
+# whether the long runs now survive — only a soak on these bytes can say that.
 # 0.17.0 carries the JIT re-entry fix (a compiled frame re-entering the
 # interpreter now carries its NativeServices instead of an empty registry —
 # the replay-durability violation that froze long workflow runs estate-wide;
@@ -98,7 +111,7 @@ hostname = "0.4"
 # (heap-full fix for the 2026-07-14 live AWL child failure); 0.14.0 added
 # `loader/encode` (the `.beam` container writer behind the `encode` feature)
 # consumed by aion-awl's BC-3 bytecode emitter.
-beamr = { version = "0.17.0", features = ["json", "encode"] }
+beamr = { version = "0.18.2", features = ["json", "encode"] }
 haematite = "0.8.1"
 # 0.2.4 carries the park-flip (idle connections park on fd readiness — retires
 # the embedded front door's per-connection busy-spin measured 2026-07-13) and

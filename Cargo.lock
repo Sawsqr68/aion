@@ -74,7 +74,7 @@ version = "0.14.1"
 dependencies = [
  "aion-package",
  "aion-worker",
- "beamr 0.17.0",
+ "beamr 0.18.2",
  "flate2",
  "gleam-types",
  "serde_json",
@@ -102,7 +102,7 @@ version = "0.14.1"
 dependencies = [
  "aion-awl",
  "aion-package",
- "beamr 0.17.0",
+ "beamr 0.18.2",
  "serde_json",
  "sha2 0.11.0",
  "tempfile",
@@ -333,7 +333,7 @@ dependencies = [
  "aion-store-haematite",
  "aion-store-libsql",
  "async-trait",
- "beamr 0.17.0",
+ "beamr 0.18.2",
  "chrono",
  "dashmap",
  "fs4",
@@ -826,9 +826,9 @@ dependencies = [
 
 [[package]]
 name = "beamr"
-version = "0.17.0"
+version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bda4cda26194fc612d1f1c9ff2d554aae7950389278c326c8325cd24e0df4c52"
+checksum = "cf07325c64747b68288f80f8cd2203e813c53eaec9c4d1a9e6a252b0c7e76097"
 dependencies = [
  "base64 0.22.1",
  "cranelift-codegen",
