@@ -23,10 +23,10 @@
 
 use crate::ast::{
     HARNESS_ARGS_FIELD, HARNESS_BINARY_FIELD, HARNESS_COMMAND_FIELD, HARNESS_CONCURRENCY_FIELD,
-    HARNESS_CWD_FIELD, HARNESS_ENV_PASS_FIELD, HARNESS_EXIT_GRACE_FIELD, HARNESS_KIND_FIELD,
-    HARNESS_PERMISSION_FIELD, HARNESS_RECONNECT_INITIAL_BACKOFF_FIELD,
+    HARNESS_CWD_FIELD, HARNESS_CWD_FROM_WORD, HARNESS_ENV_PASS_FIELD, HARNESS_EXIT_GRACE_FIELD,
+    HARNESS_KIND_FIELD, HARNESS_PERMISSION_FIELD, HARNESS_RECONNECT_INITIAL_BACKOFF_FIELD,
     HARNESS_RECONNECT_MAX_ATTEMPTS_FIELD, HARNESS_RECONNECT_MAX_BACKOFF_FIELD, HARNESS_WORD,
-    HarnessDecl, HarnessSetting, HarnessText,
+    HarnessCwd, HarnessDecl, HarnessSetting, HarnessText,
 };
 
 use super::document::Printer;
@@ -103,7 +103,7 @@ pub(super) fn print_harness(printer: &mut Printer, indent: usize, harness: &Harn
         setting(printer, settings, HARNESS_ARGS_FIELD, &text, args);
     }
     if let Some(cwd) = &harness.cwd {
-        let text = string_literal(&cwd.value.value);
+        let text = cwd_text(&cwd.value);
         setting(printer, settings, HARNESS_CWD_FIELD, &text, cwd);
     }
     if let Some(permission) = &harness.permission {
@@ -137,6 +137,21 @@ fn setting<V>(
     printer.leads(indent, &line.lead);
     printer.docs(indent, &line.docs);
     printer.line(indent, &format!("{field} {value}"), line.trailing.as_ref());
+}
+
+/// The `cwd` value in whichever form the author wrote.
+///
+/// The binding form prints its parameter name BARE, after the `from` word, because that
+/// is what it is — an identifier naming a declared parameter, not a path. Quoting it would
+/// print something the parser reads back as a literal directory called `repo`, and the
+/// round-trip pin in [`tests`] is what holds the two halves to one spelling.
+///
+/// [`tests`]: self::tests
+fn cwd_text(cwd: &HarnessCwd) -> String {
+    match cwd {
+        HarnessCwd::Literal(path) => string_literal(&path.value),
+        HarnessCwd::Bound(parameter) => format!("{HARNESS_CWD_FROM_WORD} {}", parameter.word),
+    }
 }
 
 /// A comma-separated list of quoted strings, in the order they were written.

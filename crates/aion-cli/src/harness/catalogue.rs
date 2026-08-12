@@ -99,7 +99,9 @@ impl HarnessKind {
             #[cfg(feature = "norn")]
             Self::Norn => HarnessConfig::Norn(super::settings::NornConfig {
                 binary: None,
-                cwd: std::path::PathBuf::from("/srv/workspace"),
+                workspace: aion_integrations::HarnessWorkspace::Fixed(std::path::PathBuf::from(
+                    "/srv/workspace",
+                )),
                 args: Vec::new(),
                 environment: super::test_environment(),
             }),
@@ -107,7 +109,9 @@ impl HarnessKind {
             Self::Acp => HarnessConfig::Acp(super::settings::AcpConfig {
                 command: std::path::PathBuf::from("/usr/local/bin/opencode"),
                 args: vec![String::from("acp")],
-                cwd: std::path::PathBuf::from("/srv/workspace"),
+                workspace: aion_integrations::HarnessWorkspace::Fixed(std::path::PathBuf::from(
+                    "/srv/workspace",
+                )),
                 permission: aion_integration_acp::PermissionPolicy::Deny,
                 environment: super::test_environment(),
                 exit_grace: std::time::Duration::from_secs(2),

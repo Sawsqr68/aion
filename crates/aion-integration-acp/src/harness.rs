@@ -31,20 +31,18 @@
 //!   can supply credentials through the harness environment instead of the adapter inventing them.
 //! - **It offers no filesystem or terminal callbacks.** See [`crate::protocol`] for the ruling.
 //!
-//! # KNOWN LIMITATION: `cwd` is per-harness, never per-attempt
+//! # Where each session is rooted
 //!
-//! [`AcpHarness`] holds ONE `cwd`, and every session it starts is rooted there. A worker running two
-//! agent activities concurrently through the same harness therefore gives both agents **the same
-//! workspace root**, with no isolation whatsoever: two agents can edit the same file, and the second
-//! writer wins. The same is true of two attempts of the same activity if a retry overlaps its
-//! predecessor.
+//! [`AcpHarness`] holds a [`HarnessWorkspace`], not a path, and resolves it once per attempt. In the
+//! fixed form every session this harness starts is rooted at one directory, and two agents running
+//! concurrently through it share that root with no isolation whatsoever: they can edit the same file
+//! and the second writer wins. That is the honest reading of a worker that serves exactly one tree.
 //!
-//! This is stated rather than fixed because the fix is not a smaller `cwd`: per-attempt workspace
-//! provisioning is its own design (where the workspace comes from, whether it is a copy, a clone or a
-//! fresh checkout, what is carried between attempts, and who cleans it up), and inventing a
-//! convention here — a subdirectory named after the attempt, say — would silently change where every
-//! operator's agent runs. Until that design lands, an operator who needs isolation constructs one
-//! harness per workspace root.
+//! In the per-run form each attempt takes its root from the job that dispatched it, so isolation is
+//! whatever the DISPATCHER arranged — one worktree per lane, one checkout per issue — and this
+//! adapter neither invents it nor conceals its absence. What it will not do is guess: a job that
+//! does not state a directory is refused terminally rather than started somewhere plausible, because
+//! a subdirectory named after the attempt would silently change where every operator's agent runs.
 //!
 //! [`AgentHarness`]: aion_integrations::AgentHarness
 //! [`AgentHarness::start`]: aion_integrations::AgentHarness::start
@@ -66,7 +64,7 @@ use aion_integrations::contract::AgentHarness;
 use aion_integrations::jsonrpc::{
     IncomingMessage, JsonRpcConnection, JsonRpcId, JsonRpcNotification, JsonRpcRequest,
 };
-use aion_integrations::{AgentRunSpec, ChildEnvironment, HarnessError};
+use aion_integrations::{AgentRunSpec, ChildEnvironment, HarnessError, HarnessWorkspace};
 use async_trait::async_trait;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -144,7 +142,7 @@ pub struct AcpHarness {
     declared_environment: Option<ChildEnvironment>,
     env: Vec<(String, String)>,
     env_removed: Vec<String>,
-    cwd: PathBuf,
+    workspace: HarnessWorkspace,
     additional_directories: Vec<PathBuf>,
     permission_policy: PermissionPolicy,
     exit_grace: Duration,
@@ -172,10 +170,11 @@ impl AcpHarness {
     ///
     /// - `command` / `args` — there is no standard ACP launch flag (see the module docs). They are
     ///   passed to the child exactly as given.
-    /// - `cwd` — `session/new` **requires** an absolute working directory, and it is the root the
-    ///   agent reads and writes under. Defaulting it to the worker's own current directory would
-    ///   silently scope an agent to whatever directory the worker happened to be started in. See the
-    ///   module docs for the known limitation that it is per-harness, not per-attempt.
+    /// - `workspace` — `session/new` **requires** an absolute working directory, and it is the root
+    ///   the agent reads and writes under. Defaulting it to the worker's own current directory would
+    ///   silently scope an agent to whatever directory the worker happened to be started in. Its two
+    ///   forms decide whether every session shares one root or each job states its own; see the
+    ///   module docs.
     /// - `permission_policy` — `session/request_permission` blocks the agent until answered, and an
     ///   unattended activity has no operator to ask, so the answer must be decided up front. See
     ///   [`crate::permission`] for why there is no default.
@@ -186,13 +185,14 @@ impl AcpHarness {
     ///   is a legitimate setting and means "close stdin, then kill at once". There is no
     ///   wait-forever setting: a worker must not be hung by an agent that ignores EOF.
     ///
-    /// `cwd` is validated as absolute at [`AgentHarness::start`], where the failure can be reported
-    /// as a [`HarnessError`] rather than swallowed by an infallible constructor.
+    /// Whatever directory the workspace yields is validated as absolute at [`AgentHarness::start`],
+    /// where the failure can be reported as a [`HarnessError`] rather than swallowed by an
+    /// infallible constructor.
     #[must_use]
     pub fn new(
         command: impl Into<PathBuf>,
         args: impl IntoIterator<Item = impl Into<OsString>>,
-        cwd: impl Into<PathBuf>,
+        workspace: HarnessWorkspace,
         permission_policy: PermissionPolicy,
         exit_grace: Duration,
     ) -> Self {
@@ -202,7 +202,7 @@ impl AcpHarness {
             declared_environment: None,
             env: Vec::new(),
             env_removed: Vec::new(),
-            cwd: cwd.into(),
+            workspace,
             additional_directories: Vec::new(),
             permission_policy,
             exit_grace,
@@ -265,9 +265,9 @@ impl AcpHarness {
     /// The child's working directory is set to the session `cwd` as well as being sent in
     /// `session/new`: an agent that resolves a relative path itself must land in the same place the
     /// protocol says the session is rooted.
-    fn command(&self) -> Command {
+    fn command(&self, cwd: &Path) -> Command {
         let mut command = Command::new(&self.command);
-        command.args(&self.args).current_dir(&self.cwd);
+        command.args(&self.args).current_dir(cwd);
         // A DECLARED environment is total: everything the parent carries is cleared and the
         // declared pairs are the child's whole environment. Without a declaration the child
         // inherits, which is the pre-declaration behaviour a hand-written worker still gets.
@@ -291,8 +291,8 @@ impl AcpHarness {
     }
 
     /// Spawns the agent for one run.
-    fn spawn(&self) -> Result<tokio::process::Child, HarnessError> {
-        self.command().spawn().map_err(|source| {
+    fn spawn(&self, cwd: &Path) -> Result<tokio::process::Child, HarnessError> {
+        self.command(cwd).spawn().map_err(|source| {
             HarnessError::transport(format!(
                 "failed to spawn the ACP agent `{}`: {source} — the command and its arguments are \
                  harness configuration (ACP has no standard launch flag) and must name a real \
@@ -307,8 +307,8 @@ impl AcpHarness {
     /// ACP requires `cwd` and every `additionalDirectories` entry to be absolute. Resolving a
     /// relative path here would silently root the agent at the worker's current directory, which is
     /// not a place any operator chose.
-    fn validate_paths(&self) -> Result<(), HarnessError> {
-        require_absolute("cwd", &self.cwd)?;
+    fn validate_paths(&self, cwd: &Path) -> Result<(), HarnessError> {
+        require_absolute("cwd", cwd)?;
         for directory in &self.additional_directories {
             require_absolute("additionalDirectories entry", directory)?;
         }
@@ -336,38 +336,6 @@ fn require_absolute(label: &str, path: &Path) -> Result<(), HarnessError> {
          session paths and this adapter will not resolve one against an unstated base",
         path.display()
     )))
-}
-
-/// Reads the prompt text an [`AgentRunSpec`] carries in its input payload.
-///
-/// Deliberate decoding semantics — the activity input is a serialized [`aion_core::Payload`], not raw
-/// prompt text, so a `String`-typed activity input arrives as its JSON encoding (surrounding quotes
-/// plus `\n` / `\"` escapes):
-///
-/// - JSON content type, bytes parse as a JSON **string** → unwrap to the inner string, so the agent
-///   receives the exact text the workflow passed and multi-line prompts survive verbatim.
-/// - JSON content type, bytes parse as any **other** JSON value → the raw JSON text passes through
-///   unchanged; a structured payload is a legitimate prompt, and inventing a projection would lose
-///   information.
-/// - JSON content type, bytes are **not** valid JSON → the raw UTF-8 text passes through unchanged
-///   ([`aion_core::Payload`] is a dumb carrier that does not validate on construction).
-/// - Non-JSON content types → the bytes decoded as UTF-8 text.
-///
-/// A non-UTF-8 input is a mismatch surfaced honestly in every case: ACP frames are UTF-8 JSON, so
-/// there is no way to put arbitrary bytes in a `text` content block.
-fn prompt_from_spec(spec: &AgentRunSpec) -> Result<String, HarnessError> {
-    let text = std::str::from_utf8(spec.input.bytes())
-        .map(str::to_owned)
-        .map_err(|source| {
-            HarnessError::protocol(format!("the run input is not valid UTF-8: {source}"))
-        })?;
-    if !matches!(spec.input.content_type(), aion_core::ContentType::Json) {
-        return Ok(text);
-    }
-    match serde_json::from_str::<Value>(&text) {
-        Ok(Value::String(inner)) => Ok(inner),
-        _ => Ok(text),
-    }
 }
 
 /// Takes the child's piped stdout + stdin, or a transport error if either was not piped.
@@ -564,6 +532,7 @@ impl AcpHarness {
     pub(crate) async fn connect<R, W>(
         &self,
         connection: &JsonRpcConnection<R, W>,
+        cwd: PathBuf,
         prompt: String,
     ) -> Result<OpenedTurn, HarnessError>
     where
@@ -572,7 +541,7 @@ impl AcpHarness {
     {
         let mut deferred = Vec::new();
         initialize(connection, &mut deferred).await?;
-        self.open_turn(connection, prompt, deferred).await
+        self.open_turn(connection, cwd, prompt, deferred).await
     }
 
     /// Creates the session and issues the prompt, returning the session id, the outstanding
@@ -580,6 +549,7 @@ impl AcpHarness {
     async fn open_turn<R, W>(
         &self,
         connection: &JsonRpcConnection<R, W>,
+        cwd: PathBuf,
         prompt: String,
         mut deferred: Vec<JsonRpcNotification>,
     ) -> Result<OpenedTurn, HarnessError>
@@ -592,7 +562,7 @@ impl AcpHarness {
         // `skip_serializing_if`, so an empty list serialises as `"mcpServers": []` whether or not
         // this call is made. It is written explicitly anyway, so the empty list is a stated decision
         // rather than a reliance on the schema's default, and `wire_tests` asserts the key is there.
-        let new_session = NewSessionRequest::new(self.cwd.clone())
+        let new_session = NewSessionRequest::new(cwd)
             .mcp_servers(Vec::new())
             .additional_directories(self.additional_directories.clone());
         let session: NewSessionResponse = call(
@@ -640,20 +610,29 @@ impl AgentHarness for AcpHarness {
     type Session = AcpSession<ChildStdout, ChildStdin>;
 
     async fn start(&self, spec: AgentRunSpec) -> Result<Self::Session, HarnessError> {
-        self.validate_paths()?;
+        // Resolved ONCE and threaded through, because a per-run workspace has a different answer
+        // per attempt: a second resolution could disagree with the first, and the two places it
+        // reaches — the child's `current_dir` and `session/new`'s `cwd` — are exactly the pair that
+        // must not disagree about where the agent is.
+        let cwd = self.workspace.for_attempt(&spec.input)?;
+        self.validate_paths(&cwd)?;
         // Named BEFORE the spawn: a declaration that omits the variable this program needs to be
         // found would otherwise surface as the kernel's `No such file or directory` against a
         // command the operator can see is spelled correctly.
         if let Some(declared) = &self.declared_environment {
             declared.require_for_program(&self.command)?;
         }
-        let prompt = prompt_from_spec(&spec)?;
-        let mut child = self.spawn()?;
+        // Read through the same workspace that decided `cwd` above, so the field the agent is
+        // asked with and the field it stands in are decided from one input by one rule. An
+        // adapter that read the prompt on its own would be the second place that rule lives,
+        // and the first place it drifts.
+        let prompt = self.workspace.prompt_for_attempt(&spec.input)?;
+        let mut child = self.spawn(&cwd)?;
         let (stdout, stdin) = take_child_io(&mut child)?;
         let connection = Arc::new(JsonRpcConnection::new(stdout, stdin));
 
         // The handshake, the session, and the prompt whose id the session captures the result under.
-        let opened = self.connect(connection.as_ref(), prompt).await?;
+        let opened = self.connect(connection.as_ref(), cwd, prompt).await?;
 
         let identity = EventIdentity {
             workflow_id: spec.workflow_id,
@@ -681,12 +660,13 @@ mod tests {
     //! what a spawn would exec).
 
     use std::error::Error;
+    use std::path::{Path, PathBuf};
     use std::time::Duration;
 
-    use aion_core::{ActivityId, ContentType, Payload, RunId, WorkflowId};
-    use aion_integrations::HarnessError;
+    use aion_core::{ActivityId, Payload, RunId, WorkflowId};
+    use aion_integrations::{HarnessError, HarnessWorkspace};
 
-    use super::{AcpHarness, AgentRunSpec, prompt_from_spec, registration_capabilities};
+    use super::{AcpHarness, AgentRunSpec, registration_capabilities};
     use crate::permission::PermissionPolicy;
 
     type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -763,12 +743,20 @@ mod tests {
         )
     }
 
+    /// The one tree these configuration tests root a session in.
+    const WORKSPACE: &str = "/srv/workspace";
+
+    /// A workspace that answers with one directory for every attempt.
+    fn fixed(directory: &str) -> HarnessWorkspace {
+        HarnessWorkspace::Fixed(PathBuf::from(directory))
+    }
+
     /// A harness configured the way a Gemini CLI launch needs (`--acp` as an argument).
     fn harness() -> AcpHarness {
         AcpHarness::new(
             "/usr/local/bin/gemini",
             ["--acp"],
-            "/srv/workspace",
+            fixed(WORKSPACE),
             PermissionPolicy::Deny,
             GRACE,
         )
@@ -777,7 +765,7 @@ mod tests {
     /// The argv the built command would exec, decoded as UTF-8 strings.
     fn argv(harness: &AcpHarness) -> TestResult<Vec<String>> {
         let decoded = harness
-            .command()
+            .command(Path::new(WORKSPACE))
             .as_std()
             .get_args()
             .map(|arg| arg.to_str().map(str::to_owned).ok_or("argv is not UTF-8"))
@@ -794,7 +782,7 @@ mod tests {
         let no_args = AcpHarness::new(
             "opencode",
             Vec::<String>::new(),
-            "/srv/workspace",
+            fixed(WORKSPACE),
             PermissionPolicy::AllowOnce,
             GRACE,
         );
@@ -803,7 +791,7 @@ mod tests {
         let two_args = AcpHarness::new(
             "npx",
             ["@agentclientprotocol/claude-agent-acp", "--verbose"],
-            "/srv/workspace",
+            fixed(WORKSPACE),
             PermissionPolicy::AllowOnce,
             GRACE,
         );
@@ -819,12 +807,71 @@ mod tests {
 
     #[test]
     fn the_child_runs_in_the_session_cwd() -> TestResult {
-        let command = harness().command();
+        let command = harness().command(Path::new(WORKSPACE));
         let directory = command
             .as_std()
             .get_current_dir()
             .ok_or("the child's working directory is set to the session cwd")?;
-        assert_eq!(directory, std::path::Path::new("/srv/workspace"));
+        assert_eq!(directory, Path::new(WORKSPACE));
+        Ok(())
+    }
+
+    /// The whole point of the per-run form: two jobs served by ONE harness stand in two
+    /// different trees, and the tree each stands in is the one its own input named. The
+    /// control is the second job — a resolver that had ignored the input entirely would
+    /// answer the same directory twice and fail here.
+    #[test]
+    fn each_job_roots_its_session_in_the_tree_that_job_named() -> TestResult {
+        let harness = AcpHarness::new(
+            "/usr/local/bin/gemini",
+            ["--acp"],
+            HarnessWorkspace::PerRun("repo".to_owned()),
+            PermissionPolicy::Deny,
+            GRACE,
+        );
+        let mut seen = Vec::new();
+        for tree in ["/srv/lane-3", "/srv/lane-9"] {
+            let spec = spec_with_input(Payload::from_json(&serde_json::json!({ "repo": tree }))?);
+            let cwd = harness.workspace.for_attempt(&spec.input)?;
+            let command = harness.command(&cwd);
+            let directory = command
+                .as_std()
+                .get_current_dir()
+                .ok_or("the child's working directory is set from the job")?
+                .to_path_buf();
+            seen.push(directory);
+        }
+        assert_eq!(
+            seen,
+            vec![PathBuf::from("/srv/lane-3"), PathBuf::from("/srv/lane-9")]
+        );
+        Ok(())
+    }
+
+    /// A job that does not name its tree is refused TERMINALLY rather than started in
+    /// whichever directory this worker process happens to occupy — the hazard the setting
+    /// exists to close, checked here at the adapter that would have done the spawning.
+    #[test]
+    fn a_job_that_names_no_tree_is_refused_before_any_spawn() -> TestResult {
+        let harness = AcpHarness::new(
+            "/usr/local/bin/gemini",
+            ["--acp"],
+            HarnessWorkspace::PerRun("repo".to_owned()),
+            PermissionPolicy::Deny,
+            GRACE,
+        );
+        let spec = spec_with_input(Payload::from_json(
+            &serde_json::json!({ "branch": "main" }),
+        )?);
+        let error = harness
+            .workspace
+            .for_attempt(&spec.input)
+            .err()
+            .ok_or("a job with no directory cannot launch an agent")?;
+        assert!(
+            error.is_deterministic(),
+            "the same input meets the same wall on every attempt: {error:?}"
+        );
         Ok(())
     }
 
@@ -833,7 +880,7 @@ mod tests {
         let harness = harness()
             .with_env("ANTHROPIC_API_KEY", "stray-ambient-key")
             .without_env("ANTHROPIC_API_KEY");
-        let command = harness.command();
+        let command = harness.command(Path::new(WORKSPACE));
 
         // On std's Command an env REMOVAL is a `(key, None)` entry: the child will not inherit the
         // variable even when the parent carries it, and the removal wins over a set of the same key.
@@ -849,9 +896,15 @@ mod tests {
 
     #[test]
     fn a_relative_cwd_is_refused_as_a_terminal_configuration_error() -> TestResult {
-        let harness = AcpHarness::new("agent", ["acp"], "workspace", PermissionPolicy::Deny, GRACE);
+        let harness = AcpHarness::new(
+            "agent",
+            ["acp"],
+            fixed("workspace"),
+            PermissionPolicy::Deny,
+            GRACE,
+        );
         let error = harness
-            .validate_paths()
+            .validate_paths(Path::new("workspace"))
             .err()
             .ok_or("a relative cwd must be refused")?;
         // BOTH halves are the pin. The variant alone would pass on a future edit that kept the
@@ -878,10 +931,16 @@ mod tests {
 
     #[test]
     fn a_relative_additional_directory_is_refused() -> TestResult {
-        let harness = AcpHarness::new("agent", ["acp"], "/srv", PermissionPolicy::Deny, GRACE)
-            .with_additional_directory("shared");
+        let harness = AcpHarness::new(
+            "agent",
+            ["acp"],
+            fixed("/srv"),
+            PermissionPolicy::Deny,
+            GRACE,
+        )
+        .with_additional_directory("shared");
         let error = harness
-            .validate_paths()
+            .validate_paths(Path::new("/srv"))
             .err()
             .ok_or("a relative additional directory must be refused")?;
         assert!(
@@ -900,51 +959,62 @@ mod tests {
     fn absolute_paths_pass_validation() -> Result<(), HarnessError> {
         harness()
             .with_additional_directory("/srv/shared")
-            .validate_paths()
+            .validate_paths(Path::new(WORKSPACE))
     }
 
+    /// A per-run directory travels the SAME absolute-path net as a written one. Without this
+    /// the refusal above could hold for documents while a job-supplied relative path walked
+    /// straight into a spawn.
     #[test]
-    fn json_string_input_unwraps_to_the_exact_inner_text() -> TestResult {
-        // A String-typed activity input arrives as its JSON encoding: surrounding quotes plus
-        // \n / \" escapes. The prompt must be the exact multi-line text, not the encoding.
-        let encoded = serde_json::to_vec(&serde_json::json!("line one\nsay \"hi\"\nline three"))?;
-        let spec = spec_with_input(Payload::new(ContentType::Json, encoded));
-        assert_eq!(prompt_from_spec(&spec)?, "line one\nsay \"hi\"\nline three");
-        Ok(())
-    }
-
-    #[test]
-    fn json_object_input_passes_through_as_its_json_text() -> TestResult {
-        // A structured payload is a legitimate prompt: it must reach the agent as its raw JSON text,
-        // not be rejected or reshaped.
-        let raw = r#"{"task":"build","steps":[1,2]}"#;
-        let spec = spec_with_input(Payload::new(ContentType::Json, raw.as_bytes().to_vec()));
-        assert_eq!(prompt_from_spec(&spec)?, raw);
-        Ok(())
-    }
-
-    #[test]
-    fn json_tagged_plain_text_input_passes_through_unchanged() -> TestResult {
-        // Payload is a dumb carrier that does not validate on construction, so JSON-tagged bytes
-        // that are NOT valid JSON keep the UTF-8 pass-through behaviour.
-        let spec = spec_with_input(Payload::new(
-            ContentType::Json,
-            b"plain prompt, not json".to_vec(),
-        ));
-        assert_eq!(prompt_from_spec(&spec)?, "plain prompt, not json");
-        Ok(())
-    }
-
-    #[test]
-    fn invalid_utf8_input_is_refused() -> TestResult {
-        // ACP frames are UTF-8 JSON: there is no way to put arbitrary bytes in a text block.
-        let spec = spec_with_input(Payload::new(ContentType::Json, vec![0xff, 0xfe, 0xfd]));
-        let error = prompt_from_spec(&spec)
+    fn a_relative_directory_from_the_job_is_refused_the_same_way() -> TestResult {
+        let harness = AcpHarness::new(
+            "agent",
+            ["acp"],
+            HarnessWorkspace::PerRun("repo".to_owned()),
+            PermissionPolicy::Deny,
+            GRACE,
+        );
+        let spec = spec_with_input(Payload::from_json(
+            &serde_json::json!({ "repo": "lane-3" }),
+        )?);
+        let cwd = harness.workspace.for_attempt(&spec.input)?;
+        let error = harness
+            .validate_paths(&cwd)
             .err()
-            .ok_or("non-UTF-8 input must be refused")?;
+            .ok_or("a relative directory is relative wherever it came from")?;
         assert!(
-            error.to_string().contains("not valid UTF-8"),
-            "the error names the UTF-8 mismatch, got: {error}"
+            error.is_deterministic(),
+            "a job-supplied relative path is identically relative on every attempt: {error:?}"
+        );
+        Ok(())
+    }
+
+    /// The adapter reads the prompt through its workspace — the same value `start` hands to
+    /// `session/prompt` one line after it resolves the directory. What the reader itself does
+    /// with each shape of input is proven in `aion_integrations::HarnessWorkspace`; what this
+    /// pins is that this adapter asks it rather than decoding the payload on its own, which is
+    /// how the two came to disagree and the agent came to be sent `{"prompt":"…"}` as its
+    /// instructions.
+    #[test]
+    fn the_prompt_is_read_through_the_same_workspace_that_places_the_agent() -> TestResult {
+        let harness = AcpHarness::new(
+            "agent",
+            ["acp"],
+            HarnessWorkspace::PerRun("repo".to_owned()),
+            PermissionPolicy::Deny,
+            GRACE,
+        );
+        let spec = spec_with_input(Payload::from_json(&serde_json::json!({
+            "repo": WORKSPACE,
+            "prompt": "review the diff",
+        }))?);
+        assert_eq!(
+            harness.workspace.for_attempt(&spec.input)?,
+            PathBuf::from(WORKSPACE)
+        );
+        assert_eq!(
+            harness.workspace.prompt_for_attempt(&spec.input)?,
+            "review the diff"
         );
         Ok(())
     }

@@ -1,7 +1,7 @@
 //! The `agent` marker rule.
 //!
 //! `agent` on an action declaration says one thing and one thing only: this
-//! action's single `String` parameter carries a PROMPT and its result is the
+//! action carries a PROMPT in a `String` parameter and its result is the
 //! canonical agent-outcome record — a declared record with exactly two
 //! fields, `text: String` (the agent's terminal reply) and
 //! `stop_reason: String` (the canonical `snake_case` stop reason). That is the
@@ -36,36 +36,17 @@ use super::types::{RecordTy, Ty, TypeTable, resolve};
 /// the parameter and result types are the checker's own types rather than
 /// unresolved syntax. Nothing is reported when the action does not carry the
 /// marker.
-pub(super) fn check(ctx: &mut Ctx<'_>, action: &ActionDecl, callable: &Callable) {
+pub(super) fn check(
+    ctx: &mut Ctx<'_>,
+    action: &ActionDecl,
+    callable: &Callable,
+    bound_directory: Option<&str>,
+) {
     let Some(marker) = action.config.as_ref().and_then(|config| config.agent) else {
         return;
     };
 
-    // A prompt is one argument. Zero leaves the harness nothing to send; more
-    // than one leaves it choosing, and a marker whose meaning depends on an
-    // adapter's choice is not a contract.
-    if callable.params.len() != 1 {
-        ctx.error(
-            marker,
-            format!(
-                "`agent` action `{}` takes {} parameters — an agent action takes exactly \
-                 one `String`, the prompt; drop `agent` if this is an ordinary action, or \
-                 carry the extra inputs inside the prompt string",
-                action.name,
-                callable.params.len()
-            ),
-        );
-    } else if !is_string(&callable.params[0].ty) {
-        ctx.error(
-            marker,
-            format!(
-                "`agent` action `{}` takes `{}` — an agent action's one parameter is the \
-                 `String` prompt handed to the harness; a structured input has no place to \
-                 go on the wire to an agent",
-                action.name, callable.params[0].ty
-            ),
-        );
-    }
+    check_prompt(ctx, action, callable, bound_directory, marker);
 
     if !returns_agent_outcome_record(&callable.returns, &ctx.types) {
         ctx.error(
@@ -94,6 +75,77 @@ pub(super) fn check(ctx: &mut Ctx<'_>, action: &ActionDecl, callable: &Callable)
                 action.name
             ),
         );
+    }
+}
+
+/// The prompt rule: exactly one `String` parameter that is not the harness's
+/// working directory.
+///
+/// The prompt is defined by SUBTRACTION rather than by position, because the
+/// two shapes an agent action can have differ only by the directory: a harness
+/// naming a literal tree serves actions of one parameter, and a harness taking
+/// each attempt's tree from the job serves actions that declare that parameter
+/// too. Counting what remains once the directory is removed states one rule for
+/// both, instead of an arity that has to be re-derived per shape — and it means
+/// an action that never declares the bound parameter earns exactly one refusal,
+/// the harness pass's, rather than a second one here saying the same thing in
+/// different words.
+fn check_prompt(
+    ctx: &mut Ctx<'_>,
+    action: &ActionDecl,
+    callable: &Callable,
+    bound_directory: Option<&str>,
+    marker: crate::Span,
+) {
+    let prompts = callable
+        .params
+        .iter()
+        .filter(|param| Some(param.name.as_str()) != bound_directory)
+        .collect::<Vec<_>>();
+
+    // A prompt is one argument. Zero leaves the harness nothing to send; more
+    // than one leaves it choosing, and a marker whose meaning depends on an
+    // adapter's choice is not a contract.
+    if prompts.len() != 1 {
+        let message = match bound_directory {
+            None => format!(
+                "`agent` action `{}` takes {} parameters — an agent action takes exactly \
+                 one `String`, the prompt; drop `agent` if this is an ordinary action, or \
+                 carry the extra inputs inside the prompt string",
+                action.name,
+                prompts.len()
+            ),
+            Some(directory) => format!(
+                "`agent` action `{}` declares {} parameters besides `{directory}` — its \
+                 worker's harness takes each attempt's working directory from \
+                 `{directory}`, so this action takes that `String` and exactly one more, \
+                 the prompt; carry any further inputs inside the prompt string",
+                action.name,
+                prompts.len()
+            ),
+        };
+        ctx.error(marker, message);
+        return;
+    }
+
+    let prompt = prompts[0];
+    if !is_string(&prompt.ty) {
+        let message = match bound_directory {
+            None => format!(
+                "`agent` action `{}` takes `{}` — an agent action's one parameter is the \
+                 `String` prompt handed to the harness; a structured input has no place to \
+                 go on the wire to an agent",
+                action.name, prompt.ty
+            ),
+            Some(directory) => format!(
+                "`agent` action `{}` declares its prompt parameter `{}` as `{}` — with the \
+                 working directory taken from `{directory}`, the parameter that remains is \
+                 the `String` prompt handed to the harness; a structured input has no place \
+                 to go on the wire to an agent",
+                action.name, prompt.name, prompt.ty
+            ),
+        };
+        ctx.error(marker, message);
     }
 }
 

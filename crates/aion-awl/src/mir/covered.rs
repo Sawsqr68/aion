@@ -153,6 +153,13 @@ pub(super) const COVERED: &[&str] = &[
     // all carry one into a comparison against a document that does not.
     "harness-section/valid/harness_absent_control",
     "harness-section/valid/norn_harness",
+    // The binding form of `cwd`, whose agent action carries the directory
+    // parameter beside the prompt. Its golden is what pins WHERE that directory
+    // travels: the activity's input object carries both fields by name, so the
+    // worker reads the tree out of the call the same way it reads the prompt.
+    // A lowering that dropped the extra parameter, or carried it anywhere but
+    // the input, would change these bytes.
+    "harness-section/valid/norn_harness_with_a_bound_cwd",
     "harness-section/valid/norn_harness_without_optional_settings",
     "header-types/valid/builtins",
     "header-types/valid/combined",

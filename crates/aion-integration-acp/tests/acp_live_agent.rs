@@ -64,8 +64,8 @@ use std::time::Duration;
 
 use aion_integration_acp::{AcpHarness, PermissionPolicy};
 use aion_integrations::{
-    ActivityEventKind, ActivityId, AgentHarness, AgentRunSpec, AgentSession, ContentType, Payload,
-    RunId, WorkflowId,
+    ActivityEventKind, ActivityId, AgentHarness, AgentRunSpec, AgentSession, ContentType,
+    HarnessWorkspace, Payload, RunId, WorkflowId,
 };
 use futures::StreamExt;
 
@@ -149,7 +149,13 @@ async fn a_real_acp_agent_completes_a_turn() -> TestResult {
     let grace = exit_grace()?;
 
     // `Deny` deliberately: a live test must not let a real agent take a gated action on a real disk.
-    let harness = AcpHarness::new(agent.clone(), args, cwd, PermissionPolicy::Deny, grace);
+    let harness = AcpHarness::new(
+        agent.clone(),
+        args,
+        HarnessWorkspace::Fixed(std::path::PathBuf::from(cwd)),
+        PermissionPolicy::Deny,
+        grace,
+    );
     let spec = AgentRunSpec::new(
         WorkflowId::new_v4(),
         RunId::new_v4(),

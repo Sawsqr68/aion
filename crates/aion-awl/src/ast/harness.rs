@@ -36,8 +36,10 @@ pub const HARNESS_RECONNECT_MAX_ATTEMPTS_FIELD: &str = "reconnect_max_attempts";
 pub const HARNESS_ENV_PASS_FIELD: &str = "env_pass";
 /// The field word for the ACP agent executable.
 pub const HARNESS_COMMAND_FIELD: &str = "command";
-/// The field word for the ACP session working directory.
+/// The field word for the agent's working directory.
 pub const HARNESS_CWD_FIELD: &str = "cwd";
+/// The word that opens a `cwd` BINDING: `cwd from <parameter>`.
+pub const HARNESS_CWD_FROM_WORD: &str = "from";
 /// The field word for the ACP permission policy.
 pub const HARNESS_PERMISSION_FIELD: &str = "permission";
 /// The field word for the ACP shutdown grace.
@@ -87,6 +89,64 @@ pub const HARNESS_PERMISSION_DENY: &str = "deny";
 /// The `permission` policy that approves one request, once.
 pub const HARNESS_PERMISSION_ALLOW_ONCE: &str = "allow-once";
 
+/// Where one attempt's working directory comes from.
+///
+/// Two forms, because the tree an agent stands in is a property of the WORK and only
+/// sometimes a property of the worker. A document is written before any work exists, so
+/// a document that can only name a literal path can only ever be right for a worker that
+/// serves exactly one tree. That form survives here, narrowed to that honest meaning.
+///
+/// The other form binds the directory to an action PARAMETER, so the run that knows which
+/// tree it concerns is the thing that supplies it. Nothing is inferred and nobody is
+/// asked: the checker proves the named parameter exists on every action the harness
+/// serves, and the worker reads it out of the dispatch.
+///
+/// What does NOT change is the hazard both forms exist to close: an agent must never
+/// inherit whatever directory its worker process happened to be launched in. A bound
+/// value that is missing, relative, or not a directory is a terminal failure, exactly as
+/// an unlaunchable literal already was.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HarnessCwd {
+    /// A path written into the document, absolute or `{workspace_root}`-leading.
+    Literal(HarnessText),
+    /// The name of an action parameter every action this harness serves declares.
+    Bound(HarnessWord),
+}
+
+impl HarnessCwd {
+    /// The span of whichever form was written.
+    ///
+    /// A refusal anchors on the value the author typed, and the two forms carry their
+    /// spans on different types — so the span is asked for HERE rather than matched on at
+    /// every site that reports, which is how one form ends up anchoring on the section
+    /// while the other anchors on the value.
+    #[must_use]
+    pub fn span(&self) -> Span {
+        match self {
+            Self::Literal(text) => text.span,
+            Self::Bound(word) => word.span,
+        }
+    }
+
+    /// The literal path, when this is the literal form.
+    #[must_use]
+    pub fn literal(&self) -> Option<&HarnessText> {
+        match self {
+            Self::Literal(text) => Some(text),
+            Self::Bound(_) => None,
+        }
+    }
+
+    /// The bound parameter's name, when this is the binding form.
+    #[must_use]
+    pub fn bound(&self) -> Option<&HarnessWord> {
+        match self {
+            Self::Bound(word) => Some(word),
+            Self::Literal(_) => None,
+        }
+    }
+}
+
 /// The `harness` section declared inside one `worker` block.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HarnessDecl {
@@ -114,8 +174,9 @@ pub struct HarnessDecl {
     pub command: Option<HarnessSetting<HarnessText>>,
     /// Extra arguments handed to the launched agent, in order.
     pub args: Option<HarnessSetting<Vec<HarnessText>>>,
-    /// The absolute working directory every ACP session is rooted at.
-    pub cwd: Option<HarnessSetting<HarnessText>>,
+    /// Where each attempt's working directory comes from: a literal, or a run-supplied
+    /// action parameter.
+    pub cwd: Option<HarnessSetting<HarnessCwd>>,
     /// How the ACP adapter answers `session/request_permission`.
     pub permission: Option<HarnessSetting<HarnessText>>,
     /// How long the ACP agent may take to exit once its stdin closes.
@@ -129,6 +190,22 @@ impl HarnessDecl {
     #[must_use]
     pub fn kind_word(&self) -> Option<&str> {
         self.kind.as_ref().map(|kind| kind.value.word.as_str())
+    }
+
+    /// The action parameter this section takes each attempt's working directory from,
+    /// when it takes it from one at all.
+    ///
+    /// Read straight off the syntax, because the pass that decides an `agent` action's
+    /// shape runs before the harness pass and still has to know this: an agent action
+    /// carrying the directory declares one parameter more than one that does not. Asking
+    /// the declaration itself keeps that a single fact rather than a table built early and
+    /// a match written late, which is how the two come to disagree.
+    #[must_use]
+    pub fn bound_cwd(&self) -> Option<&str> {
+        self.cwd
+            .as_ref()
+            .and_then(|setting| setting.value.bound())
+            .map(|word| word.word.as_str())
     }
 }
 

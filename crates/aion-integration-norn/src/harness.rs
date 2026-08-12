@@ -19,7 +19,7 @@ use std::sync::Arc;
 use aion_core::{InterventionCapabilities, InterventionPrimitive};
 use aion_integrations::contract::AgentHarness;
 use aion_integrations::jsonrpc::{IncomingMessage, JsonRpcConnection, JsonRpcId, JsonRpcRequest};
-use aion_integrations::{AgentRunSpec, ChildEnvironment, HarnessError};
+use aion_integrations::{AgentRunSpec, ChildEnvironment, HarnessError, HarnessWorkspace};
 use async_trait::async_trait;
 use serde_json::{Value, json};
 use tokio::process::{ChildStdin, ChildStdout, Command};
@@ -127,7 +127,7 @@ pub struct NornInvocation {
 #[derive(Clone, Debug)]
 pub struct NornHarness {
     binary: PathBuf,
-    cwd: PathBuf,
+    workspace: HarnessWorkspace,
     extra_args: Vec<NornArgument>,
     declared_environment: Option<ChildEnvironment>,
     env: Vec<(String, String)>,
@@ -136,22 +136,26 @@ pub struct NornHarness {
 
 // NO `Default`, deliberately. A defaulted harness is one that never says where its agent
 // works, and the only value such a default could carry is "wherever this worker process
-// happened to be started" — which is the inheritance this type exists to end. `cwd` is a
-// constructor parameter rather than a builder setter for the same reason: an
-// `Option<PathBuf>` left `None` would either fall back to inheriting (the defect, intact)
-// or refuse at spawn time (a harness that compiles and cannot run). Positional means the
-// compiler asks every composition root the question, and none of them can decline it.
+// happened to be started" — which is the inheritance this type exists to end. The workspace
+// is a constructor parameter rather than a builder setter for the same reason: an
+// `Option` left `None` would either fall back to inheriting (the defect, intact) or refuse
+// at spawn time (a harness that compiles and cannot run). Positional means the compiler asks
+// every composition root the question, and none of them can decline it — and the two forms
+// of `HarnessWorkspace` mean the honest answer "it depends on the job" is now sayable
+// instead of forcing a single tree to be named.
 
 impl NornHarness {
-    /// A harness that invokes `norn` from `PATH` with no extra arguments, working in `cwd`.
+    /// A harness that invokes `norn` from `PATH` with no extra arguments, working in
+    /// `workspace`.
     ///
-    /// `cwd` must be absolute; it is validated at [`AgentHarness::start`], where the failure
-    /// can be reported as a typed error rather than a panic.
+    /// Whichever form `workspace` takes, the directory it yields must be absolute and must
+    /// exist; both are validated at [`AgentHarness::start`], where the failure can be
+    /// reported as a typed error rather than a panic.
     #[must_use]
-    pub fn new(cwd: impl Into<PathBuf>) -> Self {
+    pub fn new(workspace: HarnessWorkspace) -> Self {
         Self {
             binary: PathBuf::from(DEFAULT_NORN_BINARY),
-            cwd: cwd.into(),
+            workspace,
             extra_args: Vec::new(),
             declared_environment: None,
             env: Vec::new(),
@@ -159,15 +163,17 @@ impl NornHarness {
         }
     }
 
-    /// A harness that invokes the `norn` binary at an explicit path, working in `cwd`.
+    /// A harness that invokes the `norn` binary at an explicit path, working in
+    /// `workspace`.
     ///
-    /// `cwd` must be absolute; it is validated at [`AgentHarness::start`], where the failure
-    /// can be reported as a typed error rather than a panic.
+    /// Whichever form `workspace` takes, the directory it yields must be absolute and must
+    /// exist; both are validated at [`AgentHarness::start`], where the failure can be
+    /// reported as a typed error rather than a panic.
     #[must_use]
-    pub fn with_binary(binary: impl Into<PathBuf>, cwd: impl Into<PathBuf>) -> Self {
+    pub fn with_binary(binary: impl Into<PathBuf>, workspace: HarnessWorkspace) -> Self {
         Self {
             binary: binary.into(),
-            cwd: cwd.into(),
+            workspace,
             extra_args: Vec::new(),
             declared_environment: None,
             env: Vec::new(),
@@ -242,8 +248,15 @@ impl NornHarness {
     ///
     /// Public so a composition root can assert what it composed without spawning a process;
     /// [`Self::command`] is built from this value, so the preview IS the spawn.
-    #[must_use]
-    pub fn invocation(&self, spec: &AgentRunSpec) -> NornInvocation {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HarnessError::Configuration`] when the harness takes its working directory
+    /// from the job and THIS job does not state one. That is why the preview is fallible at
+    /// all: a directory the run supplies is not knowable until there is a run, so the
+    /// preview's promise — that it IS the spawn — can only be kept by resolving the same
+    /// value the spawn will use, and by failing where the spawn would.
+    pub fn invocation(&self, spec: &AgentRunSpec) -> Result<NornInvocation, HarnessError> {
         let mut argv = vec!["--protocol".to_owned(), "jsonrpc".to_owned()];
         for argument in &self.extra_args {
             argv.push(match argument {
@@ -251,14 +264,14 @@ impl NornHarness {
                 NornArgument::Literal(literal) => literal.clone(),
             });
         }
-        NornInvocation {
+        Ok(NornInvocation {
             program: self.binary.clone(),
-            cwd: self.cwd.clone(),
+            cwd: self.workspace.for_attempt(&spec.input)?,
             argv,
             declared_environment: self.declared_environment.clone(),
             env: self.env.clone(),
             env_removed: self.env_removed.clone(),
-        }
+        })
     }
 
     /// Refuses a `cwd` this launch cannot stand in, before anything is spawned.
@@ -283,23 +296,28 @@ impl NornHarness {
     /// (`{workspace_root}` is different and is expanded, and its root created, one layer up —
     /// that root is the launcher's own directory to make, not the document's claim about a
     /// tree that should already be there.)
-    fn require_launchable_cwd(&self) -> Result<(), HarnessError> {
-        if !self.cwd.is_absolute() {
+    ///
+    /// Takes the RESOLVED directory rather than reading a field, because there is no longer
+    /// one directory to read: a harness whose tree arrives with the job has a different
+    /// answer per attempt, and a check that consulted configuration instead of the value
+    /// about to be used would be checking something the spawn never sees.
+    fn require_launchable_cwd(cwd: &std::path::Path) -> Result<(), HarnessError> {
+        if !cwd.is_absolute() {
             return Err(HarnessError::configuration(format!(
                 "the norn harness `cwd` must be an ABSOLUTE path, got `{}`. A relative path is \
                  resolved against whatever directory this worker process was started in, which \
                  is the inherited working directory this setting exists to replace — and it \
                  would be inherited while the document appears to have declared one.",
-                self.cwd.display()
+                cwd.display()
             )));
         }
-        if !self.cwd.is_dir() {
+        if !cwd.is_dir() {
             return Err(HarnessError::configuration(format!(
                 "the norn harness `cwd` is `{}`, which is not a directory on this box, so no \
                  agent can be started in it. The declared working directory names the tree the \
                  agent reads and edits; it is not created here, because an empty directory \
                  conjured from a mistyped path would put the agent to work against nothing.",
-                self.cwd.display()
+                cwd.display()
             )));
         }
         Ok(())
@@ -307,8 +325,9 @@ impl NornHarness {
 
     /// Builds the spawn command for one run from [`Self::invocation`], with piped
     /// stdin/stdout and inherited stderr.
-    fn command(&self, spec: &AgentRunSpec) -> Command {
-        let invocation = self.invocation(spec);
+    fn command(&self, spec: &AgentRunSpec) -> Result<Command, HarnessError> {
+        let invocation = self.invocation(spec)?;
+        Self::require_launchable_cwd(&invocation.cwd)?;
         let mut command = Command::new(&invocation.program);
         command.args(&invocation.argv).current_dir(&invocation.cwd);
         if let Some(declared) = &invocation.declared_environment {
@@ -325,12 +344,12 @@ impl NornHarness {
         for key in &invocation.env_removed {
             command.env_remove(key);
         }
-        command
+        Ok(command)
     }
 
     /// Spawns the `norn` child for one run, its arguments expanded from `spec`.
     fn spawn(&self, spec: &AgentRunSpec) -> Result<tokio::process::Child, HarnessError> {
-        self.command(spec).spawn().map_err(|source| {
+        self.command(spec)?.spawn().map_err(|source| {
             HarnessError::transport(format!(
                 "failed to spawn `{}`: {source}",
                 self.binary.display()
@@ -349,37 +368,6 @@ fn expand_arg(template: &str, spec: &AgentRunSpec) -> String {
     template
         .replace("{workflow_id}", &spec.workflow_id.to_string())
         .replace("{activity_type}", &spec.activity_type)
-}
-
-/// Reads the prompt string an `AgentRunSpec` carries from its input payload.
-///
-/// Deliberate decoding semantics — the activity input is a serialized [`Payload`], not raw prompt
-/// text, so a `String`-typed activity input arrives as its JSON encoding (surrounding quotes plus
-/// `\n`/`\"` escapes):
-///
-/// - JSON content type, bytes parse as a JSON **string** → unwrap to the inner string, so the
-///   agent receives the exact text the workflow passed (multi-line prompts survive verbatim).
-/// - JSON content type, bytes parse as any **other** JSON value (object/array/number/…) → the raw
-///   JSON text passes through unchanged; a structured payload is a legitimate prompt for some
-///   harnesses, and inventing a projection here would lose information.
-/// - JSON content type, bytes are **not** valid JSON → the raw UTF-8 text passes through
-///   unchanged ([`Payload`] is a dumb carrier that does not validate on construction).
-/// - Non-JSON content types → the bytes decoded as UTF-8 text, today's behaviour.
-///
-/// A non-UTF-8 input is a protocol mismatch surfaced honestly in every case.
-fn prompt_from_spec(spec: &AgentRunSpec) -> Result<String, HarnessError> {
-    let text = std::str::from_utf8(spec.input.bytes())
-        .map(str::to_owned)
-        .map_err(|source| {
-            HarnessError::protocol(format!("run input is not valid UTF-8: {source}"))
-        })?;
-    if !matches!(spec.input.content_type(), aion_core::ContentType::Json) {
-        return Ok(text);
-    }
-    match serde_json::from_str::<Value>(&text) {
-        Ok(Value::String(inner)) => Ok(inner),
-        _ => Ok(text),
-    }
 }
 
 /// Takes the child's piped stdout + stdin, or a transport error if either was not piped.
@@ -472,14 +460,11 @@ impl AgentHarness for NornHarness {
     type Session = NornSession<ChildStdout, ChildStdin>;
 
     async fn start(&self, spec: AgentRunSpec) -> Result<Self::Session, HarnessError> {
-        let prompt = prompt_from_spec(&spec)?;
-        // Refused BEFORE the spawn, for the reason the whole setting exists: a relative `cwd`
-        // would be resolved by the OS against the worker process's own current directory —
-        // silently reintroducing the inheritance this field replaced, and doing it in the one
-        // form where the document LOOKS like it declared a directory. A directory that is not
-        // there is refused here too, so it is named as itself rather than reaching the spawn
-        // and coming back as a retryable failure about the binary.
-        self.require_launchable_cwd()?;
+        // Read through the same workspace that decides the directory, so the field the
+        // agent is asked with and the field it stands in are decided from one input by one
+        // rule. An adapter that read the prompt on its own would be the second place that
+        // rule lives, and the first place it drifts.
+        let prompt = self.workspace.prompt_for_attempt(&spec.input)?;
         // Named BEFORE the spawn: `norn` is resolved on `PATH` by default, and a declaration
         // that omits `PATH` would otherwise die as a bare `No such file or directory`.
         if let Some(declared) = &self.declared_environment {
@@ -520,18 +505,26 @@ impl AgentHarness for NornHarness {
 
 #[cfg(test)]
 mod tests {
-    //! Fast unit tests of the spec-aware argument construction and prompt decoding — no process
-    //! is spawned; the built [`Command`]'s argv is inspected directly (that argv is exactly what
-    //! a spawn would exec) and [`prompt_from_spec`] is exercised on payloads directly.
+    //! Fast unit tests of the spec-aware argument construction — no process is spawned; the
+    //! built [`Command`]'s argv is inspected directly, and that argv is exactly what a spawn
+    //! would exec. What each shape of input yields as a prompt is proven where the reading
+    //! lives, in `aion_integrations::HarnessWorkspace`.
 
     use std::error::Error;
 
     use aion_core::{ActivityId, ContentType, Payload, RunId, WorkflowId};
 
-    use super::{
-        AgentRunSpec, HarnessError, NornHarness, expand_arg, prompt_from_spec,
-        registration_capabilities,
-    };
+    use aion_integrations::HarnessWorkspace;
+
+    use super::{AgentRunSpec, HarnessError, NornHarness, expand_arg, registration_capabilities};
+
+    /// The one tree these configuration tests root an agent in.
+    const WORKSPACE: &str = "/srv/workspace";
+
+    /// A workspace that answers with one directory for every attempt.
+    fn fixed(directory: impl Into<std::path::PathBuf>) -> HarnessWorkspace {
+        HarnessWorkspace::Fixed(directory.into())
+    }
 
     type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
@@ -553,7 +546,7 @@ mod tests {
     /// The argv the built command would exec, decoded as UTF-8 strings.
     fn argv(harness: &NornHarness, spec: &AgentRunSpec) -> TestResult<Vec<String>> {
         let decoded = harness
-            .command(spec)
+            .command(spec)?
             .as_std()
             .get_args()
             .map(|arg| arg.to_str().map(str::to_owned).ok_or("argv is not UTF-8"))
@@ -629,12 +622,13 @@ mod tests {
     }
 
     #[test]
-    fn removed_env_vars_are_expressed_as_child_removals() {
+    fn removed_env_vars_are_expressed_as_child_removals() -> TestResult {
         let spec = spec();
-        let harness = NornHarness::with_binary("/bin/norn", "/srv/workspace")
+        let tree = tempfile::tempdir()?;
+        let harness = NornHarness::with_binary("/bin/norn", fixed(tree.path()))
             .with_env("OPENAI_API_KEY", "stray-ambient-key")
             .without_env("OPENAI_API_KEY");
-        let command = harness.command(&spec);
+        let command = harness.command(&spec)?;
 
         // On std's Command, an env REMOVAL is expressed as a `(key, None)` entry — the child
         // will not inherit the variable even when the parent environment carries it, and the
@@ -647,51 +641,30 @@ mod tests {
             removal_expressed,
             "without_env must express a child-side env removal on the spawned command"
         );
-    }
-
-    #[test]
-    fn json_string_input_unwraps_to_the_exact_inner_text() -> TestResult {
-        // A String-typed activity input arrives as its JSON encoding: surrounding quotes plus
-        // \n / \" escapes. The prompt must be the exact multi-line text, not the encoding.
-        let encoded = serde_json::to_vec(&serde_json::json!("line one\nsay \"hi\"\nline three"))?;
-        let spec = spec_with_input(Payload::new(ContentType::Json, encoded));
-        assert_eq!(prompt_from_spec(&spec)?, "line one\nsay \"hi\"\nline three");
         Ok(())
     }
 
+    /// The adapter reads the prompt through its workspace — the same value `start` sends as
+    /// the `run/execute` prompt one line after the environment is checked. What the reader
+    /// itself does with each shape of input is proven in
+    /// `aion_integrations::HarnessWorkspace`; what this pins is that this adapter asks it
+    /// rather than decoding the payload on its own, which is how the two came to disagree and
+    /// the agent came to be sent `{"prompt":"…"}` as its instructions.
     #[test]
-    fn json_object_input_passes_through_as_its_json_text() -> TestResult {
-        // A structured payload is a legitimate prompt for some harnesses: a non-string JSON
-        // value must reach the agent as its raw JSON text, not be rejected or reshaped.
-        let raw = r#"{"task":"build","steps":[1,2]}"#;
-        let spec = spec_with_input(Payload::new(ContentType::Json, raw.as_bytes().to_vec()));
-        assert_eq!(prompt_from_spec(&spec)?, raw);
-        Ok(())
-    }
-
-    #[test]
-    fn json_tagged_plain_text_input_passes_through_unchanged() -> TestResult {
-        // Payload is a dumb carrier that does not validate on construction, so JSON-tagged
-        // bytes that are NOT valid JSON keep today's UTF-8 pass-through behaviour. (This is
-        // also the behaviour every non-JSON content type keeps; ContentType has only `Json`
-        // today, so the non-JSON arm cannot be constructed in a test yet.)
-        let spec = spec_with_input(Payload::new(
-            ContentType::Json,
-            b"plain prompt, not json".to_vec(),
-        ));
-        assert_eq!(prompt_from_spec(&spec)?, "plain prompt, not json");
-        Ok(())
-    }
-
-    #[test]
-    fn invalid_utf8_input_still_errors() -> TestResult {
-        let spec = spec_with_input(Payload::new(ContentType::Json, vec![0xff, 0xfe, 0xfd]));
-        let error = prompt_from_spec(&spec)
-            .err()
-            .ok_or("non-UTF-8 input must error")?;
-        assert!(
-            error.to_string().contains("not valid UTF-8"),
-            "error must name the UTF-8 mismatch, got: {error}"
+    fn the_prompt_is_read_through_the_same_workspace_that_places_the_agent() -> TestResult {
+        let harness =
+            NornHarness::with_binary("/bin/norn", HarnessWorkspace::PerRun("repo".to_owned()));
+        let spec = spec_with_input(Payload::from_json(&serde_json::json!({
+            "repo": WORKSPACE,
+            "prompt": "review the diff",
+        }))?);
+        assert_eq!(
+            harness.workspace.for_attempt(&spec.input)?,
+            std::path::PathBuf::from(WORKSPACE)
+        );
+        assert_eq!(
+            harness.workspace.prompt_for_attempt(&spec.input)?,
+            "review the diff"
         );
         Ok(())
     }
@@ -701,17 +674,18 @@ mod tests {
         // `command` is BUILT from `invocation`, so asserting both against one
         // configured harness proves the public preview is what a spawn execs.
         let spec = spec();
-        let harness = NornHarness::with_binary("/bin/norn", "/srv/workspace")
+        let tree = tempfile::tempdir()?;
+        let harness = NornHarness::with_binary("/bin/norn", fixed(tree.path()))
             .with_arg("--session-id")
             .with_arg("{workflow_id}-{activity_type}")
             .with_env("NORN_LOG", "debug")
             .without_env("OPENAI_API_KEY");
-        let invocation = harness.invocation(&spec);
+        let invocation = harness.invocation(&spec)?;
         assert_eq!(
             invocation,
             super::NornInvocation {
                 program: std::path::PathBuf::from("/bin/norn"),
-                cwd: std::path::PathBuf::from("/srv/workspace"),
+                cwd: tree.path().to_path_buf(),
                 argv: vec![
                     "--protocol".to_owned(),
                     "jsonrpc".to_owned(),
@@ -745,9 +719,11 @@ mod tests {
         let declaration = aion_integrations::EnvironmentDeclaration::new(["PATH"])
             .map_err(|error| error.to_string())?;
 
-        let harness = NornHarness::with_binary("/bin/norn", "/srv/workspace")
+        let harness = NornHarness::with_binary("/bin/norn", fixed(WORKSPACE))
             .with_declared_environment(declaration.resolve(&context));
-        let invocation = harness.invocation(&spec);
+        let invocation = harness
+            .invocation(&spec)
+            .map_err(|error| error.to_string())?;
         let Some(declared) = invocation.declared_environment else {
             return Err("the declaration must reach the invocation preview".to_owned());
         };
@@ -765,7 +741,8 @@ mod tests {
     #[test]
     fn template_args_expand_and_literal_args_preserve_reserved_substrings() -> TestResult {
         let spec = spec();
-        let harness = NornHarness::with_binary("/bin/norn", "/srv/workspace")
+        let tree = tempfile::tempdir()?;
+        let harness = NornHarness::with_binary("/bin/norn", fixed(tree.path()))
             .with_arg("--label")
             .with_arg("{activity_type}/{workflow_id}")
             .with_literal_arg("{workflow_id}/{activity_type}")
@@ -790,13 +767,14 @@ mod tests {
     #[test]
     fn the_child_runs_in_the_declared_cwd() -> TestResult {
         let spec = spec();
-        let harness = NornHarness::with_binary("/bin/norn", "/srv/workspace");
-        let command = harness.command(&spec);
+        let tree = tempfile::tempdir()?;
+        let harness = NornHarness::with_binary("/bin/norn", fixed(tree.path()));
+        let command = harness.command(&spec)?;
         let directory = command
             .as_std()
             .get_current_dir()
             .ok_or("the spawned child's working directory must be the declared cwd")?;
-        assert_eq!(directory, std::path::Path::new("/srv/workspace"));
+        assert_eq!(directory, tree.path());
         Ok(())
     }
 
@@ -807,19 +785,90 @@ mod tests {
     /// would be the one part of the launch nobody could check in advance — and it is the part
     /// that decides which tree the agent edits.
     #[test]
-    fn the_preview_carries_the_declared_cwd() {
-        let harness = NornHarness::with_binary("/bin/norn", "/srv/workspace");
+    fn the_preview_carries_the_declared_cwd() -> TestResult {
+        let harness = NornHarness::with_binary("/bin/norn", fixed(WORKSPACE));
         assert_eq!(
-            harness.invocation(&spec()).cwd,
-            std::path::Path::new("/srv/workspace")
+            harness.invocation(&spec())?.cwd,
+            std::path::Path::new(WORKSPACE)
         );
+        Ok(())
+    }
+
+    /// The per-run form on the adapter that spawns: two jobs served by ONE harness stand in
+    /// two different trees, and each stands in the tree its own input named. The second job is
+    /// the control — a resolver that ignored the input would answer the same directory twice.
+    #[test]
+    fn each_job_runs_in_the_tree_that_job_named() -> TestResult {
+        let harness =
+            NornHarness::with_binary("/bin/norn", HarnessWorkspace::PerRun("repo".to_owned()));
+        let mut seen = Vec::new();
+        for tree in ["/srv/lane-3", "/srv/lane-9"] {
+            let spec = spec_with_input(Payload::from_json(&serde_json::json!({ "repo": tree }))?);
+            seen.push(harness.invocation(&spec)?.cwd);
+        }
+        assert_eq!(
+            seen,
+            vec![
+                std::path::PathBuf::from("/srv/lane-3"),
+                std::path::PathBuf::from("/srv/lane-9")
+            ]
+        );
+        Ok(())
+    }
+
+    /// A job that does not name its tree is refused TERMINALLY rather than started in
+    /// whichever directory this worker process happens to occupy.
+    #[test]
+    fn a_job_that_names_no_tree_is_refused_before_any_spawn() -> TestResult {
+        let harness =
+            NornHarness::with_binary("/bin/norn", HarnessWorkspace::PerRun("repo".to_owned()));
+        let spec = spec_with_input(Payload::from_json(
+            &serde_json::json!({ "branch": "main" }),
+        )?);
+        let error = harness
+            .invocation(&spec)
+            .err()
+            .ok_or("a job with no directory cannot launch an agent")?;
+        assert!(
+            matches!(error, HarnessError::Configuration { .. }),
+            "a job that did not say where to work is a configuration refusal: {error:?}"
+        );
+        assert!(
+            error.is_deterministic(),
+            "the same input meets the same wall on every attempt: {error:?}"
+        );
+        Ok(())
+    }
+
+    /// A directory that arrives WITH the job travels the same absolute-path net a written one
+    /// does. Without this, the refusals below could hold for documents while a job-supplied
+    /// relative path walked straight into a spawn.
+    #[test]
+    fn a_relative_tree_from_the_job_is_refused_the_same_way() -> TestResult {
+        let harness =
+            NornHarness::with_binary("/bin/norn", HarnessWorkspace::PerRun("repo".to_owned()));
+        let spec = spec_with_input(Payload::from_json(
+            &serde_json::json!({ "repo": "lane-3" }),
+        )?);
+        let error = harness
+            .command(&spec)
+            .err()
+            .ok_or("a relative directory is relative wherever it came from")?;
+        assert!(
+            error.is_deterministic(),
+            "a job-supplied relative path is identically relative on every attempt: {error:?}"
+        );
+        let message = error.to_string();
+        assert!(
+            message.contains("cwd") && message.contains("ABSOLUTE"),
+            "the refusal names the setting and the requirement: {message}"
+        );
+        Ok(())
     }
 
     #[test]
     fn a_relative_cwd_is_refused_as_a_terminal_configuration_error() -> TestResult {
-        let harness = NornHarness::with_binary("/bin/norn", "workspace");
-        let error = harness
-            .require_launchable_cwd()
+        let error = NornHarness::require_launchable_cwd(std::path::Path::new("workspace"))
             .err()
             .ok_or("a relative cwd must be refused")?;
 
@@ -861,8 +910,7 @@ mod tests {
     fn a_cwd_that_is_not_there_is_refused_before_the_spawn_can_blame_the_binary() -> TestResult {
         let scratch = tempfile::tempdir()?;
         let absent = scratch.path().join("no-such-tree");
-        let error = NornHarness::with_binary("/bin/norn", absent.clone())
-            .require_launchable_cwd()
+        let error = NornHarness::require_launchable_cwd(&absent)
             .err()
             .ok_or("a cwd that does not exist must be refused")?;
 
@@ -886,8 +934,7 @@ mod tests {
     #[test]
     fn an_absolute_cwd_that_exists_is_accepted() -> TestResult {
         let scratch = tempfile::tempdir()?;
-        NornHarness::with_binary("/bin/norn", scratch.path())
-            .require_launchable_cwd()
+        NornHarness::require_launchable_cwd(scratch.path())
             .map_err(|error| format!("an absolute, existing cwd must be accepted: {error:?}"))?;
         Ok(())
     }

@@ -82,8 +82,8 @@ pub(super) fn build_norn(
     use aion_integration_norn::NornHarness;
 
     let mut harness = match &config.binary {
-        Some(binary) => NornHarness::with_binary(binary, config.cwd.clone()),
-        None => NornHarness::new(config.cwd.clone()),
+        Some(binary) => NornHarness::with_binary(binary, config.workspace.clone()),
+        None => NornHarness::new(config.workspace.clone()),
     };
     for arg in &config.args {
         harness = harness.with_arg(arg.clone());
@@ -105,7 +105,7 @@ fn build_acp(config: &super::settings::AcpConfig) -> aion_integration_acp::AcpHa
     AcpHarness::new(
         config.command.clone(),
         config.args.clone(),
-        config.cwd.clone(),
+        config.workspace.clone(),
         config.permission,
         config.exit_grace,
     )

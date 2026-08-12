@@ -24,6 +24,7 @@
 //! [`JsonRpcConnection`]: aion_integrations::jsonrpc::JsonRpcConnection
 //! [`the_driver_contract_completes_against_an_agent_that_stays_alive`]: crate::wire_tests::the_driver_contract_completes_against_an_agent_that_stays_alive
 
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -36,7 +37,7 @@ use aion_integrations::jsonrpc::{
     IncomingMessage, JsonRpcConnection, JsonRpcId, JsonRpcNotification, JsonRpcRequest,
     JsonRpcResponse,
 };
-use aion_integrations::{ContentType, HarnessError};
+use aion_integrations::{ContentType, HarnessError, HarnessWorkspace};
 use chrono::Utc;
 use futures::StreamExt;
 use serde_json::{Value, json};
@@ -71,6 +72,10 @@ const EXIT_GRACE: Duration = Duration::from_secs(2);
 /// The session id the fake agent mints, and the one every frame in these tests is scoped to.
 const SESSION: &str = "sess-under-test";
 
+/// The tree every session in these tests is rooted in. Nothing is spawned, so it only has to
+/// be an absolute path a real document could name.
+const WORKSPACE: &str = "/srv/workspace";
+
 /// The connection type on both ends of the in-memory duplex.
 type Wire = JsonRpcConnection<ReadHalf<DuplexStream>, WriteHalf<DuplexStream>>;
 /// The session under test, driven over that duplex.
@@ -98,7 +103,7 @@ fn harness(policy: PermissionPolicy) -> AcpHarness {
     AcpHarness::new(
         "/nonexistent/acp-agent",
         ["acp"],
-        "/srv/workspace",
+        HarnessWorkspace::Fixed(PathBuf::from(WORKSPACE)),
         policy,
         EXIT_GRACE,
     )
@@ -249,7 +254,11 @@ async fn wire_up_with_capacity(policy: PermissionPolicy, capacity: usize) -> Tes
         })
     };
     let opened = harness(policy)
-        .connect(connection.as_ref(), "do the thing".to_owned())
+        .connect(
+            connection.as_ref(),
+            PathBuf::from(WORKSPACE),
+            "do the thing".to_owned(),
+        )
         .await
         .map_err(|error| fail("the handshake must succeed", &error))?;
     script
@@ -400,7 +409,11 @@ async fn the_initialize_request_sends_the_integer_version_and_all_false_capabili
 
     let client = tokio::spawn(async move {
         harness(PermissionPolicy::Deny)
-            .connect(connection.as_ref(), "prompt".to_owned())
+            .connect(
+                connection.as_ref(),
+                PathBuf::from(WORKSPACE),
+                "prompt".to_owned(),
+            )
             .await
     });
     let request = expect_request(&agent, protocol::METHOD_INITIALIZE)
@@ -458,7 +471,11 @@ async fn a_version_the_adapter_cannot_speak_is_refused_before_a_session_exists()
         tokio::spawn(async move { agent_opens(agent.as_ref(), 2).await })
     };
     let error = harness(PermissionPolicy::Deny)
-        .connect(connection.as_ref(), "prompt".to_owned())
+        .connect(
+            connection.as_ref(),
+            PathBuf::from(WORKSPACE),
+            "prompt".to_owned(),
+        )
         .await
         .err()
         .ok_or("a version mismatch must refuse the connection".to_owned())?;
@@ -1613,7 +1630,11 @@ async fn a_notification_read_during_the_handshake_reaches_the_transcript() -> Te
         })
     };
     let opened = harness(PermissionPolicy::Deny)
-        .connect(connection.as_ref(), "do the thing".to_owned())
+        .connect(
+            connection.as_ref(),
+            PathBuf::from(WORKSPACE),
+            "do the thing".to_owned(),
+        )
         .await
         .map_err(|error| fail("the handshake must succeed", &error))?;
     script
@@ -1737,7 +1758,11 @@ async fn wire_up_raw(policy: PermissionPolicy) -> TestResult<RawWired> {
     });
 
     let opened = harness(policy)
-        .connect(connection.as_ref(), "do the thing".to_owned())
+        .connect(
+            connection.as_ref(),
+            PathBuf::from(WORKSPACE),
+            "do the thing".to_owned(),
+        )
         .await
         .map_err(|error| fail("the handshake must succeed", &error))?;
     let (reader, writer) = script

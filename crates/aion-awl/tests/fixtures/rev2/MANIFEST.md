@@ -649,7 +649,9 @@ environment variables cross into the agent subprocess, and the per-kind launch
 settings. Every setting is the operator's; nothing anywhere invents one, and a
 section missing a field of ITS DECLARED KIND's required set is refused naming
 the field. The section is launch configuration and not flow meaning, which the
-MIR ratchet pins: all three valid fixtures lower to byte-identical MIR.
+MIR ratchet pins: the three section-carrying fixtures below and the absent
+control lower to the same instructions, their goldens differing only where the
+documents differ in their own names (module, input record, outcome union).
 
 Valid (parse, check clean, print byte-canonically; the printer emits the fixed
 field order, so these files are already canonical):
@@ -665,6 +667,19 @@ field order, so these files are already canonical):
   launch with both optional settings omitted: an optional setting left out is a
   declaration, not a gap, and the adapter's own `norn`-on-`PATH` default is the
   library's value rather than one invented at the boundary.
+- `harness-section/valid/harness_absent_control.awl` — the norn document with
+  its whole section removed. It is what turns "the section does not change the
+  lowering" from a claim about documents that all carry one into a comparison
+  against a document that does not.
+- `harness-section/valid/norn_harness_with_a_bound_cwd.awl` — the second `cwd`
+  form: `cwd from repo`, where the directory arrives WITH the job rather than
+  being written into a document authored before any job exists. Its agent action
+  declares `repo` beside the prompt, which is the shape the marker rule admits
+  under a binding harness (prompt plus exactly one more `String`, the bound
+  directory). A different document from the four above, so it is not part of
+  their comparison; its own golden pins where the directory travels — the
+  activity input object carries `repo` and `prompt` by name, so the worker reads
+  the tree out of the call exactly as it reads the prompt.
 
 Invalid (stage / substring / span line) — one per required field of each kind,
 then the value and kind-scoping refusals. Every missing-field refusal anchors on
@@ -697,6 +712,16 @@ the `harness` line, because the section is what omitted the setting:
   at the front — because no root any box resolves can make a value absolute by
   landing in the middle of it. Accepting it would mean checker-green,
   spawn-red.
+- `bound_cwd_naming_no_parameter.awl` → CHECK "declares no such parameter" @26;
+  `bound_cwd_on_a_parameter_that_is_not_a_string.awl` → CHECK "A working
+  directory is a path, so the parameter is a `String`" @25. The pair is what
+  makes `cwd from <parameter>` a checked declaration rather than a hope: the
+  binding is settled statically against EVERY action the harness actually serves
+  — presence first, then type — and both refusals anchor on the `cwd` line,
+  because the binding is what named a parameter the action does not carry. An
+  unchecked binding fails at the launcher with no directory at all, which is the
+  same silent inheritance a missing `cwd` produces, wearing the clothes of a
+  declaration.
 - `norn_section_carrying_an_acp_command.awl` → CHECK "`command` configures the
   `acp` harness"; `acp_section_carrying_a_norn_binary.awl` → CHECK "`binary`
   configures the `norn` harness". Both directions, because a setting that

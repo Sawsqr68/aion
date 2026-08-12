@@ -1,0 +1,39 @@
+//! The second accepted `cwd` form: the directory arrives WITH the work.
+//!
+//! A worker that serves many jobs cannot name one tree in advance — which tree a
+//! job concerns is a property of the job, not of the box the worker runs on. So
+//! the harness binds its working directory to an action parameter, and the
+//! checker proves that every action this harness actually serves declares that
+//! parameter as a `String`.
+//!
+//! Nothing is softened by this. The document still has to SAY where the agent
+//! stands; it just says it by naming the field the answer arrives in rather than
+//! by writing a path only one machine could satisfy.
+workflow review_a_tree
+  input tree: String
+  input question: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+/// The canonical agent-outcome record: the checker demands the STRUCTURE, not
+/// a blessed name.
+type Reply { text: String, stop_reason: String }
+
+worker reviewers
+  harness
+    kind norn
+    concurrency 2
+    reconnect_initial_backoff 5s
+    reconnect_max_backoff 1m
+    reconnect_max_attempts 50
+    env_pass "PATH", "HOME"
+    args "--account", "default"
+    cwd from repo
+    binary "/usr/local/bin/norn"
+  action review(repo: String, prompt: String) -> Reply
+    agent
+
+step review
+  review(repo: tree, prompt: question) -> reply
+  route answered(reply: reply.text)

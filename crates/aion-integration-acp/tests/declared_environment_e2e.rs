@@ -34,8 +34,8 @@ use std::time::Duration;
 
 use aion_integration_acp::{AcpHarness, PermissionPolicy};
 use aion_integrations::{
-    ActivityId, AgentHarness, AgentRunSpec, ContentType, EnvironmentDeclaration, Payload, RunId,
-    WorkflowId,
+    ActivityId, AgentHarness, AgentRunSpec, ContentType, EnvironmentDeclaration, HarnessWorkspace,
+    Payload, RunId, WorkflowId,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -117,7 +117,7 @@ async fn a_declared_environment_keeps_claudecode_out_of_the_agent_child() -> Tes
     let harness = AcpHarness::new(
         &agent,
         [report.display().to_string()],
-        sandbox.path(),
+        HarnessWorkspace::Fixed(sandbox.path().to_path_buf()),
         PermissionPolicy::Deny,
         Duration::from_secs(0),
     )
@@ -171,7 +171,7 @@ async fn without_a_declaration_the_child_still_inherits_which_is_what_makes_the_
     let harness = AcpHarness::new(
         &agent,
         [report.display().to_string()],
-        sandbox.path(),
+        HarnessWorkspace::Fixed(sandbox.path().to_path_buf()),
         PermissionPolicy::Deny,
         Duration::from_secs(0),
     );
@@ -202,7 +202,7 @@ async fn a_bare_command_with_no_path_declared_is_refused_naming_path() -> TestRe
     let harness = AcpHarness::new(
         "claude-code-acp",
         Vec::<String>::new(),
-        sandbox.path(),
+        HarnessWorkspace::Fixed(sandbox.path().to_path_buf()),
         PermissionPolicy::Deny,
         Duration::from_secs(0),
     )

@@ -15,7 +15,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use aion_awl::{CompiledHarness, CompiledHarnessKind, HarnessPermission};
+use aion_awl::{CompiledHarness, CompiledHarnessKind, CwdSource, HarnessPermission};
+use aion_integrations::HarnessWorkspace;
 
 use super::catalogue;
 // Named only by the tests that configure a specific adapter; a build with none carries
@@ -44,11 +45,16 @@ fn declared(kind: CompiledHarnessKind) -> CompiledHarness {
     }
 }
 
+/// A `cwd` as a document writes it when it names a path.
+fn literal(path: &str) -> CwdSource {
+    CwdSource::Literal(PathBuf::from(path))
+}
+
 /// A declared ACP launch.
 fn acp() -> CompiledHarness {
     declared(CompiledHarnessKind::Acp {
         command: PathBuf::from("/usr/local/bin/claude-code-acp"),
-        cwd: PathBuf::from("/srv/agents/workspace"),
+        cwd: literal("/srv/agents/workspace"),
         permission: HarnessPermission::Deny,
         exit_grace: Duration::from_secs(10),
     })
@@ -58,7 +64,7 @@ fn acp() -> CompiledHarness {
 fn norn() -> CompiledHarness {
     declared(CompiledHarnessKind::Norn {
         binary: None,
-        cwd: PathBuf::from("/srv/agents/workspace"),
+        cwd: literal("/srv/agents/workspace"),
     })
 }
 
@@ -223,7 +229,7 @@ fn a_declared_acp_launch_reaches_the_adapter_verbatim() -> TestResult {
     launch.args = vec![String::from("--acp")];
     launch.kind = CompiledHarnessKind::Acp {
         command: PathBuf::from("/opt/gemini/bin/gemini"),
-        cwd: PathBuf::from("/srv/agents/gemini"),
+        cwd: literal("/srv/agents/gemini"),
         permission: HarnessPermission::AllowOnce,
         exit_grace: Duration::from_secs(0),
     };
@@ -236,7 +242,10 @@ fn a_declared_acp_launch_reaches_the_adapter_verbatim() -> TestResult {
     };
     assert_eq!(config.command, Path::new("/opt/gemini/bin/gemini"));
     assert_eq!(config.args, vec![String::from("--acp")]);
-    assert_eq!(config.cwd, Path::new("/srv/agents/gemini"));
+    assert_eq!(
+        config.workspace,
+        HarnessWorkspace::Fixed(PathBuf::from("/srv/agents/gemini"))
+    );
     assert_eq!(
         config.permission,
         aion_integration_acp::PermissionPolicy::AllowOnce
@@ -265,7 +274,7 @@ fn each_permission_spelling_resolves_to_the_adapters_policy() -> TestResult {
         let mut launch = acp();
         launch.kind = CompiledHarnessKind::Acp {
             command: PathBuf::from("/usr/local/bin/claude-code-acp"),
-            cwd: PathBuf::from("/srv/agents/workspace"),
+            cwd: literal("/srv/agents/workspace"),
             permission: declared,
             exit_grace: Duration::from_secs(1),
         };
@@ -301,7 +310,7 @@ fn the_norn_binary_is_optional_and_the_absence_takes_the_adapters_own_default() 
     let mut declared_binary = norn();
     declared_binary.kind = CompiledHarnessKind::Norn {
         binary: Some(PathBuf::from("/opt/norn/bin/norn")),
-        cwd: PathBuf::from("/srv/agents/workspace"),
+        cwd: literal("/srv/agents/workspace"),
     };
     let Some(resolved) = super::settings::resolve(&declared_binary, &document())? else {
         return Err("this build links the norn adapter".into());
@@ -334,7 +343,7 @@ fn a_workspace_rooted_cwd_is_expanded_against_this_boxs_own_root() -> TestResult
     let mut launch = norn();
     launch.kind = CompiledHarnessKind::Norn {
         binary: None,
-        cwd: PathBuf::from("{workspace_root}/assistant"),
+        cwd: literal("{workspace_root}/assistant"),
     };
     let Some(resolved) = super::settings::resolve_against(&launch, &document(), &workspace)? else {
         return Err("this build links the norn adapter".into());
@@ -343,13 +352,13 @@ fn a_workspace_rooted_cwd_is_expanded_against_this_boxs_own_root() -> TestResult
         return Err("a norn declaration must produce a norn configuration".into());
     };
     assert_eq!(
-        config.cwd,
-        root.join("assistant"),
+        config.workspace,
+        HarnessWorkspace::Fixed(root.join("assistant")),
         "the placeholder must be replaced by THIS box's root, so one shipped document is \
          correct on every machine that runs it"
     );
     assert!(
-        config.cwd.is_absolute(),
+        config.workspace.fixed().is_some_and(Path::is_absolute),
         "expansion does not soften the absolute rule; it is what makes it satisfiable for a \
          document that cannot name any one machine's path"
     );
@@ -380,25 +389,66 @@ fn the_reported_launch_directory_is_the_one_the_child_will_stand_in() -> TestRes
     let mut launch = norn();
     launch.kind = CompiledHarnessKind::Norn {
         binary: None,
-        cwd: PathBuf::from("{workspace_root}/assistant"),
+        cwd: literal("{workspace_root}/assistant"),
     };
     let Some(resolved) = super::settings::resolve_against(&launch, &document(), &workspace)? else {
         return Err("this build links the norn adapter".into());
     };
 
-    let reported = resolved.launch_directory().to_path_buf();
+    let reported = resolved.launch_directory_report();
     let super::settings::HarnessConfig::Norn(config) = resolved.config else {
         return Err("a norn declaration must produce a norn configuration".into());
     };
     assert_eq!(
-        reported, config.cwd,
+        Some(Path::new(&reported)),
+        config.workspace.fixed(),
         "the operator's report and the adapter's spawn must read ONE value — a report the \
          child can disagree with is worth less than no report"
     );
     assert_eq!(
-        reported,
+        Path::new(&reported),
         root.join("assistant"),
         "and that one value is the EXPANDED directory, not the placeholder the document wrote"
+    );
+    Ok(())
+}
+
+/// The per-run form at the composition root: a document that BINDS its directory to an
+/// action parameter resolves to the per-run workspace carrying that parameter's name, and
+/// the startup line reports the parameter rather than inventing a directory.
+///
+/// The control is the whole test above: with a written path, the same code answers a
+/// directory. A resolver that had collapsed both forms into one would fail one or the
+/// other, and the two tests differ only in what the document declared.
+#[cfg(feature = "norn")]
+#[test]
+fn a_bound_cwd_resolves_to_the_parameter_the_job_will_carry() -> TestResult {
+    let scratch = tempfile::tempdir()?;
+    let workspace =
+        aion_server::worker::WorkspaceRoot::from_resolution(Ok(scratch.path().join("clones")));
+
+    let mut launch = norn();
+    launch.kind = CompiledHarnessKind::Norn {
+        binary: None,
+        cwd: CwdSource::Bound(String::from("repo")),
+    };
+    let Some(resolved) = super::settings::resolve_against(&launch, &document(), &workspace)? else {
+        return Err("this build links the norn adapter".into());
+    };
+    let reported = resolved.launch_directory_report();
+    assert_eq!(
+        resolved.launch_workspace(),
+        &HarnessWorkspace::PerRun(String::from("repo"))
+    );
+    assert!(
+        reported.contains("repo"),
+        "the startup line names the parameter each job's directory arrives in: {reported}"
+    );
+    assert_eq!(
+        resolved.launch_workspace().fixed(),
+        None,
+        "a per-run workspace has no directory to report before a job exists, and must not \
+         invent one — the whole hazard is an agent standing somewhere nobody chose"
     );
     Ok(())
 }
@@ -424,7 +474,7 @@ fn a_cwd_that_cannot_be_absolute_is_refused_at_the_composition_root() -> TestRes
         let mut launch = norn();
         launch.kind = CompiledHarnessKind::Norn {
             binary: None,
-            cwd: PathBuf::from(written),
+            cwd: literal(written),
         };
         let Err(error) = super::settings::resolve_against(&launch, &document(), &workspace) else {
             return Err(
@@ -466,7 +516,7 @@ fn a_workspace_rooted_cwd_on_a_box_with_no_root_refuses_before_anything_spawns()
     let mut launch = norn();
     launch.kind = CompiledHarnessKind::Norn {
         binary: None,
-        cwd: PathBuf::from("{workspace_root}/assistant"),
+        cwd: literal("{workspace_root}/assistant"),
     };
     let Err(error) = super::settings::resolve_against(&launch, &document(), &workspace) else {
         return Err("a box that cannot say where its workspaces live cannot launch there".into());
@@ -495,8 +545,8 @@ fn a_workspace_rooted_cwd_on_a_box_with_no_root_refuses_before_anything_spawns()
         return Err("a norn declaration must produce a norn configuration".into());
     };
     assert_eq!(
-        config.cwd,
-        Path::new("/srv/agents/workspace"),
+        config.workspace,
+        HarnessWorkspace::Fixed(PathBuf::from("/srv/agents/workspace")),
         "a document that names its own path asks this box for nothing"
     );
     Ok(())
@@ -543,7 +593,7 @@ fn the_declared_argv_reaches_the_child_expanded_and_in_order() -> TestResult {
         "assistant",
         Payload::new(ContentType::Json, b"\"prompt\"".to_vec()),
     );
-    let invocation = harness.invocation(&spec);
+    let invocation = harness.invocation(&spec)?;
 
     let clone = format!("/tmp/{workflow_id}/repo");
     assert_eq!(

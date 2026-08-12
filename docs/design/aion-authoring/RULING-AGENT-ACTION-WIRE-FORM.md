@@ -225,3 +225,60 @@ signal-killed child completes with `stop_reason: "other"` — never
 `end_turn` — and the pump synthesizes a terminal transcript `Stop { Other {
 "terminated by signal" } }` so the detail survives on the channel built to
 carry it.
+
+## AMENDMENT 3 — task #228 (2026-08-13): the wire form is the object, read by name
+
+Ruling item 1 above — *"the emitter puts the bare value on the wire for an
+`agent` action, so the harness's existing string-unwrap path is hit… No adapter
+change at all"* — is **superseded**. Two findings, in this order.
+
+**First, it was never built.** Measured 2026-08-13 against the committed
+lowering, not inferred: `crates/aion-awl/tests/mir-goldens/harness-section/valid/norn_harness.mir`
+line 101 lowers the `agent`-marked `ask(prompt: String)` to
+`v2 = json_obj {"prompt": v1|>awlc.string_to_json}`. An `aion awl emit --target
+gleam` of a purpose-written one-parameter probe emits the same object codec.
+So the bare-string emission the ruling turned on does not exist, the acceptance
+criterion it set ("a live run whose recorded dispatch input is a bare JSON
+string") was never met, and the symptom this document opens with — an agent
+handed `{"prompt": "…"}` as its literal instructions — has been the live
+behaviour of every AWL-authored agent round in both adapters the whole time.
+Nothing below reverses a working mechanism; it closes a gap a ratified ruling
+had been believed to close.
+
+**Second, #228 makes the bare form unable to carry the call.** Tom ruled on
+2026-08-13 that an agent's working tree is a property of the JOB, not of the
+box: a worker's `harness` may now write `cwd from <parameter>`, and that
+parameter arrives with the dispatch. An agent action under a binding harness
+therefore declares TWO values — the prompt and the directory — and a bare JSON
+string can carry one. The object IS the wire form, necessarily.
+
+**What now stands.** The adapters read the prompt out of the input object BY
+NAME, through one shared reader
+(`aion_integrations::HarnessWorkspace::prompt_for_attempt`), which both the norn
+and ACP adapters call one line from where they resolve the directory. The
+prompt is defined by subtraction: the one field that is not this harness's
+bound directory parameter. The checker enforces exactly that population — an
+`agent` action takes the prompt `String` plus, when its worker's harness binds
+a directory, exactly that one more.
+
+This is the shape Option A was rejected as, and the rejection's two reasons are
+answered rather than ignored:
+
+- *"A two-field agent action would still be broken, silently."* It is not
+  silent and it is not broken. Two fields is the shape the checker admits and
+  the reader is total over it; a shape it cannot read — no prompt field, two
+  candidates, a non-string — is a terminal `HarnessError::Configuration` naming
+  the fields it found. Nothing is guessed.
+- *"It contradicts the adapter's documented contract for structured prompts."*
+  That contract ("a structured payload is a legitimate prompt… inventing a
+  projection here would lose information") is retired. It was a limitation
+  worded as a decision: the only structured payload an authored action can
+  produce is its own parameter object, and passing it through was never a
+  feature anyone used — it was the defect, wearing the words of a policy. Both
+  adapters' local `prompt_from_spec` copies are DELETED, not amended alongside.
+
+**Acceptance, in the same discipline this document set.** A green test is not
+the proof. The proof is a live agent round on the swapped binary whose agent
+receives the prompt TEXT — read from the recorded dispatch input and from the
+agent's own transcript, not from a passing suite. That acceptance is owed, is
+recorded here as owed, and rides the #228 release swap.

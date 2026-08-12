@@ -41,6 +41,8 @@ pub mod error;
 pub mod jsonrpc;
 /// The neutral run identity handed to a harness at start.
 pub mod spec;
+/// Where one attempt's working directory comes from: the worker, or the work.
+pub mod workspace;
 
 pub use contract::{AgentHarness, AgentSession, DynAgentHarness, DynAgentSession};
 pub use environment::{
@@ -48,6 +50,7 @@ pub use environment::{
 };
 pub use error::HarnessError;
 pub use spec::AgentRunSpec;
+pub use workspace::HarnessWorkspace;
 
 // Curated re-export of the neutral `aion-core` types the integration surface speaks, so an
 // integrator has one dependency and never reaches directly into `aion-core` for these.

@@ -27,17 +27,20 @@
 //! ever runs, and it would be invisible in the document an operator reads. A missing
 //! setting is named; it is never filled in.
 
+use std::collections::BTreeMap;
+
 use crate::Span;
 use crate::ast::{
     HARNESS_ARGS_FIELD, HARNESS_BINARY_FIELD, HARNESS_COMMAND_FIELD, HARNESS_CONCURRENCY_FIELD,
-    HARNESS_CWD_FIELD, HARNESS_ENV_PASS_FIELD, HARNESS_EXIT_GRACE_FIELD, HARNESS_KIND_ACP,
-    HARNESS_KIND_FIELD, HARNESS_KIND_NORN, HARNESS_PERMISSION_ALLOW_ONCE, HARNESS_PERMISSION_DENY,
-    HARNESS_PERMISSION_FIELD, HARNESS_RECONNECT_INITIAL_BACKOFF_FIELD,
+    HARNESS_CWD_FIELD, HARNESS_CWD_FROM_WORD, HARNESS_ENV_PASS_FIELD, HARNESS_EXIT_GRACE_FIELD,
+    HARNESS_KIND_ACP, HARNESS_KIND_FIELD, HARNESS_KIND_NORN, HARNESS_PERMISSION_ALLOW_ONCE,
+    HARNESS_PERMISSION_DENY, HARNESS_PERMISSION_FIELD, HARNESS_RECONNECT_INITIAL_BACKOFF_FIELD,
     HARNESS_RECONNECT_MAX_ATTEMPTS_FIELD, HARNESS_RECONNECT_MAX_BACKOFF_FIELD, HARNESS_WORD,
-    HarnessDecl, HarnessSetting, HarnessText,
+    HarnessCwd, HarnessDecl, HarnessSetting, HarnessText, HarnessWord, WorkerDecl,
 };
 
-use super::context::Ctx;
+use super::context::{Callable, Ctx};
+use super::types::Ty;
 
 /// Run the harness pass over every worker block in the document.
 ///
@@ -45,8 +48,13 @@ use super::context::Ctx;
 /// construct in a worker document and in the workflow document that requires the queue,
 /// and a launch declared in one and refused in the other would be a rule stated twice.
 pub(super) fn run(ctx: &mut Ctx<'_>) {
+    // The document reference is copied out rather than borrowed from `ctx`, because the
+    // bound-`cwd` rule reads the parameter types the DECLARATION pass resolved — so this
+    // pass holds two shared borrows of the context at once and may hold neither when it
+    // reports.
+    let doc = ctx.doc;
     let mut refusals = Vec::new();
-    for worker in &ctx.doc.workers {
+    for worker in &doc.workers {
         let Some(harness) = &worker.harness else {
             continue;
         };
@@ -75,7 +83,7 @@ pub(super) fn run(ctx: &mut Ctx<'_>) {
                 ),
             ));
         }
-        refusals.extend(check_section(&worker.name, harness));
+        refusals.extend(check_section(worker, harness, &ctx.actions));
     }
     for (span, message) in refusals {
         ctx.error(span, message);
@@ -83,12 +91,17 @@ pub(super) fn run(ctx: &mut Ctx<'_>) {
 }
 
 /// Every refusal one section earns.
-fn check_section(queue: &str, harness: &HarnessDecl) -> Vec<(Span, String)> {
+fn check_section(
+    worker: &WorkerDecl,
+    harness: &HarnessDecl,
+    actions: &BTreeMap<String, Callable>,
+) -> Vec<(Span, String)> {
+    let queue = worker.name.as_str();
     let mut refusals = Vec::new();
     check_kind_independent(queue, harness, &mut refusals);
     match harness.kind_word() {
-        Some(HARNESS_KIND_ACP) => check_acp(queue, harness, &mut refusals),
-        Some(HARNESS_KIND_NORN) => check_norn(queue, harness, &mut refusals),
+        Some(HARNESS_KIND_ACP) => check_acp(worker, harness, actions, &mut refusals),
+        Some(HARNESS_KIND_NORN) => check_norn(worker, harness, actions, &mut refusals),
         // The kind itself is already refused below (missing, or a word that names no
         // harness). The per-kind required set is unknowable without it, and guessing a
         // kind to check against would report settings the operator never asked for.
@@ -250,7 +263,13 @@ fn check_environment(queue: &str, harness: &HarnessDecl, refusals: &mut Vec<(Spa
 }
 
 /// The `acp` kind's own settings.
-fn check_acp(queue: &str, harness: &HarnessDecl, refusals: &mut Vec<(Span, String)>) {
+fn check_acp(
+    worker: &WorkerDecl,
+    harness: &HarnessDecl,
+    actions: &BTreeMap<String, Callable>,
+    refusals: &mut Vec<(Span, String)>,
+) {
+    let queue = worker.name.as_str();
     absolute_path(
         queue,
         harness,
@@ -261,11 +280,10 @@ fn check_acp(queue: &str, harness: &HarnessDecl, refusals: &mut Vec<(Span, Strin
          speaks no JSON-RPC at all",
         refusals,
     );
-    absolute_path(
-        queue,
+    check_cwd(
+        worker,
         harness,
-        HARNESS_CWD_FIELD,
-        harness.cwd.as_ref(),
+        actions,
         "ACP's session/new requires an absolute working directory, and defaulting it to the \
          worker's own would root the agent somewhere nobody chose",
         refusals,
@@ -346,18 +364,23 @@ fn check_acp(queue: &str, harness: &HarnessDecl, refusals: &mut Vec<(Span, Strin
 /// differs between trees, and a guard of last resort is the wrong place to keep a fact
 /// this cheap to state.
 ///
-/// Takes the queue name, unlike the shape this function had before `cwd` was demanded of
-/// it. A refusal anchors on the offending value where there is one, but a MISSING setting
-/// has no value to point at: its refusal anchors on the section, and only the queue name
-/// makes that section findable among all the others in the document.
-fn check_norn(queue: &str, harness: &HarnessDecl, refusals: &mut Vec<(Span, String)>) {
-    absolute_path(
-        queue,
+/// Takes the whole worker, unlike the shape this function had before `cwd` was demanded of
+/// it. Two things are needed and neither is only the section: a refusal for a MISSING
+/// setting has no value to anchor on, so it anchors on the section and needs the QUEUE
+/// NAME to be findable among all the others; and a `cwd` BOUND to an action parameter is
+/// ruled against the ACTIONS this worker declares.
+fn check_norn(
+    worker: &WorkerDecl,
+    harness: &HarnessDecl,
+    actions: &BTreeMap<String, Callable>,
+    refusals: &mut Vec<(Span, String)>,
+) {
+    check_cwd(
+        worker,
         harness,
-        HARNESS_CWD_FIELD,
-        harness.cwd.as_ref(),
+        actions,
         "the directory an agent stands in decides which tree it reads and which files it \
-         edits; left undeclared it is inherited from wherever this worker process happened \
+         edits; left unstated it is inherited from wherever this worker process happened \
          to be started, which no document, argv or log records",
         refusals,
     );
@@ -408,6 +431,90 @@ fn check_norn(queue: &str, harness: &HarnessDecl, refusals: &mut Vec<(Span, Stri
                     ),
                 },
             ));
+        }
+    }
+}
+
+/// The required `cwd`, in whichever of its two forms the section wrote.
+///
+/// The setting is required for both kinds and its absence is refused with `why`, which is
+/// the kind's own — ACP's protocol demands an absolute root, Norn's does not, and both
+/// arrive at the same requirement by different routes.
+///
+/// The two present forms are held to two different rules because they state the directory
+/// in two different places. A LITERAL is in the document, so the document is where it is
+/// proven. A BINDING names an action parameter, so the value does not exist yet and there
+/// is no path to rule on — what CAN be proven statically is that the parameter will be
+/// there, on every action this harness serves, carrying a string. That is
+/// [`check_bound_cwd`]'s job, and it is the whole of what makes the binding form safe to
+/// admit: without it a run could dispatch an action that never declared the parameter, and
+/// the agent would reach the launcher with no directory at all.
+fn check_cwd(
+    worker: &WorkerDecl,
+    harness: &HarnessDecl,
+    actions: &BTreeMap<String, Callable>,
+    why: &str,
+    refusals: &mut Vec<(Span, String)>,
+) {
+    let Some(setting) = harness.cwd.as_ref() else {
+        refusals.push((harness.span, missing(&worker.name, HARNESS_CWD_FIELD, why)));
+        return;
+    };
+    match &setting.value {
+        HarnessCwd::Literal(path) => written_path(HARNESS_CWD_FIELD, path, refusals),
+        HarnessCwd::Bound(parameter) => check_bound_cwd(worker, parameter, actions, refusals),
+    }
+}
+
+/// The binding form's rule: the named parameter is declared, as a `String`, on every
+/// action this harness actually serves.
+///
+/// "Actually serves" is the closure, and it is narrower than "declares": an action
+/// carrying a body is run by whatever dispatched it and never reaches the harness at all,
+/// so demanding the parameter there would demand a value that does nothing — the same
+/// thing [`foreign`] refuses a kind's foreign setting for.
+///
+/// The type is read from the DECLARATION pass's resolved parameters rather than re-derived
+/// from the syntax here, so the one place that decides what `String` means keeps deciding
+/// it. An action the pass never recorded is skipped rather than reported: it is already
+/// carrying its own refusal (an unknown type, a duplicate name), and a second refusal
+/// about its parameters would be noise on top of the fault that caused it.
+fn check_bound_cwd(
+    worker: &WorkerDecl,
+    parameter: &HarnessWord,
+    actions: &BTreeMap<String, Callable>,
+    refusals: &mut Vec<(Span, String)>,
+) {
+    let name = parameter.word.as_str();
+    for action in worker.actions.iter().filter(|action| action.body.is_none()) {
+        let Some(callable) = actions.get(&action.name) else {
+            continue;
+        };
+        match callable.params.iter().find(|param| param.name == name) {
+            None => refusals.push((
+                parameter.span,
+                format!(
+                    "`{HARNESS_CWD_FIELD} {HARNESS_CWD_FROM_WORD} {name}` takes each attempt's \
+                     working directory from an action parameter named `{name}`, and action \
+                     `{action}` declares no such parameter. Every action this harness serves \
+                     must supply it, or the agent reaches the launcher with no directory at \
+                     all. Add `{name}: String` to `{action}`, or write the directory as a \
+                     quoted path if this worker serves exactly one tree.",
+                    action = action.name
+                ),
+            )),
+            Some(param) if param.ty != Ty::Str => refusals.push((
+                parameter.span,
+                format!(
+                    "`{HARNESS_CWD_FIELD} {HARNESS_CWD_FROM_WORD} {name}` takes each attempt's \
+                     working directory from an action parameter named `{name}`, and action \
+                     `{action}` declares `{name}` as `{ty}`. A working directory is a path, so \
+                     the parameter is a `String`.",
+                    action = action.name,
+                    ty = param.ty
+                ),
+            )),
+            Some(_) => {}
         }
     }
 }
@@ -487,10 +594,21 @@ fn absolute_path(
         refusals.push((harness.span, missing(queue, field, why)));
         return;
     };
-    let value = setting.value.value.as_str();
+    written_path(field, &setting.value, refusals);
+}
+
+/// The accept-set applied to one path an operator wrote.
+///
+/// Split out of [`absolute_path`] because `cwd` reaches the same rule by a different route
+/// — its literal form is one arm of [`HarnessCwd`] rather than a setting of its own — and
+/// two copies of a refusal are two spellings of the rule waiting to drift apart. The rule
+/// itself is [`crate::harness_path_form`]'s, stated once for the checker and the
+/// compiler's backstop both.
+fn written_path(field: &str, written: &HarnessText, refusals: &mut Vec<(Span, String)>) {
+    let value = written.value.as_str();
     if let Err(refusal) = crate::harness_path_form(value) {
         refusals.push((
-            setting.value.span,
+            written.span,
             format!(
                 "`{field} \"{value}\"` cannot be used — {}",
                 refusal.reason()

@@ -64,7 +64,8 @@ pub use emitter::{
     emit_in,
 };
 pub use harness_config::{
-    CompiledHarness, CompiledHarnessKind, HarnessConfigError, HarnessPermission, compile_harness,
+    CompiledHarness, CompiledHarnessKind, CwdSource, HarnessConfigError, HarnessPermission,
+    compile_harness,
 };
 pub use lexer::{
     ANSWER_WORD, DurationUnit, IN_WORD, Keyword, LexError, POSITIONAL_WORDS, QUERY_WORD, RUN_WORD,

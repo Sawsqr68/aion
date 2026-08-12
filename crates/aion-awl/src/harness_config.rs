@@ -23,8 +23,8 @@ use crate::ast::{
     HARNESS_ENV_PASS_FIELD, HARNESS_EXIT_GRACE_FIELD, HARNESS_KIND_ACP, HARNESS_KIND_FIELD,
     HARNESS_KIND_NORN, HARNESS_PERMISSION_ALLOW_ONCE, HARNESS_PERMISSION_DENY,
     HARNESS_PERMISSION_FIELD, HARNESS_RECONNECT_INITIAL_BACKOFF_FIELD,
-    HARNESS_RECONNECT_MAX_ATTEMPTS_FIELD, HARNESS_RECONNECT_MAX_BACKOFF_FIELD, HarnessDecl,
-    WorkerDecl,
+    HARNESS_RECONNECT_MAX_ATTEMPTS_FIELD, HARNESS_RECONNECT_MAX_BACKOFF_FIELD, HarnessCwd,
+    HarnessDecl, WorkerDecl,
 };
 
 /// A `harness` section that passed the checker and could still not be turned into a
@@ -88,6 +88,50 @@ pub enum HarnessPermission {
     AllowOnce,
 }
 
+/// Where a launch takes each attempt's working directory from.
+///
+/// The document decides which of the two it is, and this type carries that decision to the
+/// launcher WITHOUT resolving it: a bound directory is not knowable at compile time, and a
+/// seam that had to produce a `PathBuf` here would have to invent one.
+///
+/// What the two forms share is the rule they exist to keep: the agent's tree is stated,
+/// never inherited. [`Self::Literal`] states it in the document and is proven absolute
+/// here; [`Self::Bound`] states it in the run, and the launcher proves the supplied value
+/// absolute and launchable before it spawns anything, refusing terminally when it is not.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CwdSource {
+    /// A directory written into the document — absolute, or `{workspace_root}`-leading for
+    /// the composition root to expand. One worker, one tree.
+    Literal(PathBuf),
+    /// The NAME of an action parameter each dispatch supplies. The checker has already
+    /// proven every action this harness serves declares it, as a string.
+    Bound(String),
+}
+
+impl CwdSource {
+    /// The literal directory, when the document wrote one.
+    ///
+    /// A caller that can only act on a path asks for it HERE and handles the `None`,
+    /// rather than matching and silently treating a bound directory as absent — which is
+    /// exactly the inherited-directory hazard both forms exist to close.
+    #[must_use]
+    pub fn literal(&self) -> Option<&PathBuf> {
+        match self {
+            Self::Literal(path) => Some(path),
+            Self::Bound(_) => None,
+        }
+    }
+
+    /// The bound parameter's name, when the run supplies the directory.
+    #[must_use]
+    pub fn bound(&self) -> Option<&str> {
+        match self {
+            Self::Bound(parameter) => Some(parameter.as_str()),
+            Self::Literal(_) => None,
+        }
+    }
+}
+
 /// The per-kind half of a launch: what is true of an ACP agent and not of a Norn one,
 /// and the reverse.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,8 +140,8 @@ pub enum CompiledHarnessKind {
     Acp {
         /// The agent executable, an absolute path.
         command: PathBuf,
-        /// The absolute working directory every session is rooted at.
-        cwd: PathBuf,
+        /// Where the working directory each session is rooted at comes from.
+        cwd: CwdSource,
         /// How `session/request_permission` is answered.
         permission: HarnessPermission,
         /// How long the agent may take to exit once its stdin closes.
@@ -108,11 +152,11 @@ pub enum CompiledHarnessKind {
         /// The binary to launch, or `None` to take the adapter's own documented
         /// `norn`-on-`PATH` default — the library's value, not one invented here.
         binary: Option<PathBuf>,
-        /// The absolute directory the agent works in. Norn has no session to root, so
-        /// unlike [`Self::Acp`]'s this is the child process's working directory and
+        /// Where the directory the agent works in comes from. Norn has no session to root,
+        /// so unlike [`Self::Acp`]'s this is the child process's working directory and
         /// nothing else — but it decides which tree the agent reads and edits, which is
-        /// why it is declared rather than inherited from wherever the worker was started.
-        cwd: PathBuf,
+        /// why it is stated rather than inherited from wherever the worker was started.
+        cwd: CwdSource,
     },
 }
 
@@ -228,7 +272,7 @@ fn build_kind(
                 HARNESS_COMMAND_FIELD,
                 harness.command.as_ref(),
             )?;
-            let cwd = required_path(queue, harness, HARNESS_CWD_FIELD, harness.cwd.as_ref())?;
+            let cwd = required_cwd(queue, harness)?;
             let Some(permission) = &harness.permission else {
                 return Err(HarnessConfigError::Missing {
                     queue: queue.to_owned(),
@@ -271,13 +315,14 @@ fn build_kind(
             // directory a supervisor happened to be in, at three in the morning, instead of
             // as the named defect this error type exists to report.
             binary: optional_path(queue, HARNESS_BINARY_FIELD, harness.binary.as_ref())?,
-            // REQUIRED, and through the same net for the same reason. The failure this
-            // backstop catches is the one the whole setting exists to prevent: without a
-            // declared directory the agent works in whichever one the worker process was
-            // launched from, and that fact appears in no document, no argv and no log —
-            // so a lost rule here would not announce itself as a defect at all, it would
-            // read as an agent quietly doing its work against the wrong tree.
-            cwd: required_path(queue, harness, HARNESS_CWD_FIELD, harness.cwd.as_ref())?,
+            // REQUIRED, and its literal form goes through the same net for the same
+            // reason. The failure this backstop catches is the one the whole setting
+            // exists to prevent: without a stated directory the agent works in whichever
+            // one the worker process was launched from, and that fact appears in no
+            // document, no argv and no log — so a lost rule here would not announce itself
+            // as a defect at all, it would read as an agent quietly doing its work against
+            // the wrong tree.
+            cwd: required_cwd(queue, harness)?,
         }),
         Some(other) => Err(HarnessConfigError::Unusable {
             queue: queue.to_owned(),
@@ -360,7 +405,32 @@ fn required_path(
             span: harness.span,
         });
     };
-    absolute_path(queue, field, setting)
+    absolute_path(queue, field, &setting.value)
+}
+
+/// The required `cwd` setting, in whichever form the document wrote it.
+///
+/// The literal form is held to the path rule here, exactly as `command` and `binary` are.
+/// The binding form carries the parameter's NAME through untouched: there is no path to
+/// rule on yet, and inventing one — from the launching process, from a workspace root,
+/// from anywhere — is the silent scoping this whole setting exists to prevent. The rule
+/// that stands in its place has already run in the checker (every action this harness
+/// serves declares the parameter, as a string), and the rule that governs the VALUE runs
+/// in the launcher, per dispatch, where the value first exists.
+fn required_cwd(queue: &str, harness: &HarnessDecl) -> Result<CwdSource, HarnessConfigError> {
+    let Some(setting) = harness.cwd.as_ref() else {
+        return Err(HarnessConfigError::Missing {
+            queue: queue.to_owned(),
+            field: HARNESS_CWD_FIELD,
+            span: harness.span,
+        });
+    };
+    match &setting.value {
+        HarnessCwd::Literal(path) => {
+            absolute_path(queue, HARNESS_CWD_FIELD, path).map(CwdSource::Literal)
+        }
+        HarnessCwd::Bound(parameter) => Ok(CwdSource::Bound(parameter.word.clone())),
+    }
 }
 
 /// An OPTIONAL absolute-path setting, held to the same rule as a required one.
@@ -375,7 +445,7 @@ fn optional_path(
     setting: Option<&crate::ast::HarnessSetting<crate::ast::HarnessText>>,
 ) -> Result<Option<PathBuf>, HarnessConfigError> {
     setting
-        .map(|setting| absolute_path(queue, field, setting))
+        .map(|setting| absolute_path(queue, field, &setting.value))
         .transpose()
 }
 
@@ -395,16 +465,16 @@ fn optional_path(
 fn absolute_path(
     queue: &str,
     field: &'static str,
-    setting: &crate::ast::HarnessSetting<crate::ast::HarnessText>,
+    written: &crate::ast::HarnessText,
 ) -> Result<PathBuf, HarnessConfigError> {
-    match crate::harness_path_form(&setting.value.value) {
-        Ok(_) => Ok(PathBuf::from(&setting.value.value)),
+    match crate::harness_path_form(&written.value) {
+        Ok(_) => Ok(PathBuf::from(&written.value)),
         Err(refusal) => Err(HarnessConfigError::Unusable {
             queue: queue.to_owned(),
             field,
-            value: setting.value.value.clone(),
+            value: written.value.clone(),
             reason: refusal.reason(),
-            span: setting.value.span,
+            span: written.span,
         }),
     }
 }

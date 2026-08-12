@@ -278,7 +278,15 @@ fn check_workers_and_children(ctx: &mut Ctx<'_>) {
             ctx.semantic
                 .ty(action.name_span, &callable.returns.to_string());
             let returns = callable.returns.clone();
-            super::agents::check(ctx, action, &callable);
+            super::agents::check(
+                ctx,
+                action,
+                &callable,
+                worker
+                    .harness
+                    .as_ref()
+                    .and_then(crate::ast::HarnessDecl::bound_cwd),
+            );
             super::bodies::check(ctx, action, &returns);
             if ctx.children.contains_key(&action.name) {
                 ctx.error(

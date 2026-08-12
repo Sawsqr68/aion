@@ -35,8 +35,8 @@ use std::time::Duration;
 use aion_integration_norn::NornHarness;
 use aion_integrations::{
     ActivityEventKind, ActivityId, AgentHarness, AgentRunSpec, AgentSession, ContentType,
-    InjectPriority, InterventionCommand, InterventionKind, InterventionPrimitive, Payload, RunId,
-    WorkflowId,
+    HarnessWorkspace, InjectPriority, InterventionCommand, InterventionKind, InterventionPrimitive,
+    Payload, RunId, WorkflowId,
 };
 use chrono::Utc;
 use futures::StreamExt;
@@ -124,26 +124,29 @@ fn harness(binary: &str, base_url: &str) -> NornHarness {
     // The crate root: absolute, always present, and the same on every machine that runs this
     // test. The agent's working directory is irrelevant to what this test measures, but there
     // is no longer any way to leave it unsaid — which is the point of the setting.
-    NornHarness::with_binary(binary, env!("CARGO_MANIFEST_DIR"))
-        .with_arg("--provider")
-        .with_arg("openai-compatible")
-        .with_arg("--model")
-        .with_arg("mock-model")
-        .with_arg("-c")
-        .with_arg(format!("base_url={base_url}"))
-        .with_arg("-c")
-        .with_arg(format!("api_key_env={KEY_ENV}"))
-        // No retries: the single-turn mock answers on the first request, so a retry only masks a
-        // real failure behind a long backoff.
-        .with_arg("-c")
-        .with_arg("max_retries=0")
-        // `mock-model` is not in norn's model catalog, and norn refuses an uncatalogued model with
-        // no context window rather than guessing one. A single-turn run against a canned reply
-        // never approaches the window; the value is only large enough to sit above norn's
-        // auto-compaction reserve, so the run carries no compaction-disabled warnings.
-        .with_arg("-c")
-        .with_arg("context_window=131072")
-        .with_env(KEY_ENV, "mock-key-unused")
+    NornHarness::with_binary(
+        binary,
+        HarnessWorkspace::Fixed(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))),
+    )
+    .with_arg("--provider")
+    .with_arg("openai-compatible")
+    .with_arg("--model")
+    .with_arg("mock-model")
+    .with_arg("-c")
+    .with_arg(format!("base_url={base_url}"))
+    .with_arg("-c")
+    .with_arg(format!("api_key_env={KEY_ENV}"))
+    // No retries: the single-turn mock answers on the first request, so a retry only masks a
+    // real failure behind a long backoff.
+    .with_arg("-c")
+    .with_arg("max_retries=0")
+    // `mock-model` is not in norn's model catalog, and norn refuses an uncatalogued model with
+    // no context window rather than guessing one. A single-turn run against a canned reply
+    // never approaches the window; the value is only large enough to sit above norn's
+    // auto-compaction reserve, so the run carries no compaction-disabled warnings.
+    .with_arg("-c")
+    .with_arg("context_window=131072")
+    .with_env(KEY_ENV, "mock-key-unused")
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

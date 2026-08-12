@@ -19,11 +19,11 @@
 
 use crate::ast::{
     DocLine, DurationLiteral, HARNESS_ARGS_FIELD, HARNESS_BINARY_FIELD, HARNESS_COMMAND_FIELD,
-    HARNESS_CONCURRENCY_FIELD, HARNESS_CWD_FIELD, HARNESS_ENV_PASS_FIELD, HARNESS_EXIT_GRACE_FIELD,
-    HARNESS_FIELDS, HARNESS_KIND_FIELD, HARNESS_PERMISSION_FIELD,
+    HARNESS_CONCURRENCY_FIELD, HARNESS_CWD_FIELD, HARNESS_CWD_FROM_WORD, HARNESS_ENV_PASS_FIELD,
+    HARNESS_EXIT_GRACE_FIELD, HARNESS_FIELDS, HARNESS_KIND_FIELD, HARNESS_PERMISSION_FIELD,
     HARNESS_RECONNECT_INITIAL_BACKOFF_FIELD, HARNESS_RECONNECT_MAX_ATTEMPTS_FIELD,
-    HARNESS_RECONNECT_MAX_BACKOFF_FIELD, HARNESS_WORD, HarnessDecl, HarnessInteger, HarnessSetting,
-    HarnessText, HarnessWord, Lead,
+    HARNESS_RECONNECT_MAX_BACKOFF_FIELD, HARNESS_WORD, HarnessCwd, HarnessDecl, HarnessInteger,
+    HarnessSetting, HarnessText, HarnessWord, Lead,
 };
 use crate::{Span, TokenKind};
 
@@ -153,7 +153,7 @@ fn parse_setting(
         }
         HARNESS_CWD_FIELD => {
             claim(section.cwd.as_ref(), &field, field_span)?;
-            let value = expect_text(stream, &field, field_span)?;
+            let value = expect_cwd(stream, &field, field_span)?;
             section.cwd = Some(finish(stream, field_span, lead, docs, value)?);
         }
         HARNESS_PERMISSION_FIELD => {
@@ -315,6 +315,51 @@ fn expect_duration(
 }
 
 /// A quoted string value.
+/// A working directory: a quoted path, or `from <parameter>`.
+///
+/// The two forms are told apart by ONE token. `from` is read as the opening word of the
+/// binding form rather than as a value, which is unambiguous because the literal form
+/// always opens with a string: no path can be written here without quotes, so no author
+/// can mean a directory called `from`.
+///
+/// `from` is NOT reserved by this — like every other word in the section it is read
+/// positionally, so `from` stays usable as an identifier everywhere else, including as
+/// the very parameter name a binding points at.
+fn expect_cwd(stream: &mut Stream, field: &str, anchor: Span) -> Result<HarnessCwd, ParseError> {
+    let Some(token) = stream.peek() else {
+        return Err(missing_value(anchor, field, VALUE_FORMS));
+    };
+    let span = token.span;
+    match &token.kind {
+        TokenKind::Identifier(word) if word == HARNESS_CWD_FROM_WORD => {
+            stream.next();
+            Ok(HarnessCwd::Bound(expect_word(stream, field, span)?))
+        }
+        TokenKind::String(value) => {
+            let value = value.clone();
+            stream.next();
+            Ok(HarnessCwd::Literal(HarnessText { span, value }))
+        }
+        TokenKind::Newline | TokenKind::Comment(_) => {
+            Err(missing_value(anchor, field, VALUE_FORMS))
+        }
+        other => {
+            let found = describe(other);
+            Err(ParseError::new(
+                span,
+                format!("`{field}` takes {VALUE_FORMS}, found {found}"),
+            ))
+        }
+    }
+}
+
+/// Both spellings a `cwd` value may take, named together wherever one is refused.
+///
+/// One string, because an author who wrote the wrong form needs to be told the other
+/// exists — and a refusal that named only the form the parser happened to try first would
+/// send a reader looking for a quoting mistake when the answer is a binding.
+const VALUE_FORMS: &str = "a quoted path or `from <parameter>`";
+
 fn expect_text(stream: &mut Stream, field: &str, anchor: Span) -> Result<HarnessText, ParseError> {
     let Some(token) = stream.peek() else {
         return Err(missing_value(anchor, field, "a quoted string"));

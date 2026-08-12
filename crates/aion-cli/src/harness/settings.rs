@@ -32,7 +32,11 @@ use std::path::PathBuf;
 #[cfg(feature = "acp")]
 use std::time::Duration;
 
+#[cfg(any(feature = "norn", feature = "acp"))]
+use aion_awl::CwdSource;
 use aion_awl::{CompiledHarness, CompiledHarnessKind};
+#[cfg(any(feature = "norn", feature = "acp"))]
+use aion_integrations::HarnessWorkspace;
 use aion_integrations::{ChildEnvironment, EnvironmentDeclaration};
 use anyhow::{Context, Result};
 
@@ -59,10 +63,12 @@ pub(crate) enum HarnessConfig {
 pub(crate) struct NornConfig {
     /// The binary to launch, or `None` to take the adapter's `norn`-on-`PATH` default.
     pub(crate) binary: Option<PathBuf>,
-    /// The absolute directory the agent works in, from the document. Required and never
-    /// defaulted: the only value a default could carry is this worker's own launch
-    /// directory, which is the inheritance the setting exists to end.
-    pub(crate) cwd: PathBuf,
+    /// Where each agent's working directory comes from. Required and never defaulted:
+    /// the only value a default could carry is this worker's own launch directory,
+    /// which is the inheritance the setting exists to end. A document naming a path
+    /// yields the fixed form; a document binding an action parameter yields the per-run
+    /// form, and the directory is then read from each job's own input.
+    pub(crate) workspace: HarnessWorkspace,
     /// Extra arguments appended to every spawned `norn`, in the order declared. The
     /// adapter expands `{workflow_id}` / `{activity_type}` in each at spawn time.
     pub(crate) args: Vec<String>,
@@ -84,8 +90,9 @@ pub(crate) struct AcpConfig {
     pub(crate) command: PathBuf,
     /// The agent's arguments, in the order declared.
     pub(crate) args: Vec<String>,
-    /// The absolute session working directory.
-    pub(crate) cwd: PathBuf,
+    /// Where each session's working directory comes from — a fixed absolute path, or
+    /// the job's own input under a named parameter.
+    pub(crate) workspace: HarnessWorkspace,
     /// How `session/request_permission` is answered.
     pub(crate) permission: aion_integration_acp::PermissionPolicy,
     /// The child's WHOLE environment, resolved from the document's `env_pass` names.
@@ -143,12 +150,28 @@ impl ResolvedHarness {
     /// caller that re-derived this for its report could report one directory while the
     /// adapter spawned in another, and the report would be worth less than nothing.
     #[cfg(any(feature = "norn", feature = "acp"))]
-    pub(crate) fn launch_directory(&self) -> &std::path::Path {
+    pub(crate) const fn launch_workspace(&self) -> &HarnessWorkspace {
         match &self.config {
             #[cfg(feature = "norn")]
-            HarnessConfig::Norn(norn) => &norn.cwd,
+            HarnessConfig::Norn(norn) => &norn.workspace,
             #[cfg(feature = "acp")]
-            HarnessConfig::Acp(acp) => &acp.cwd,
+            HarnessConfig::Acp(acp) => &acp.workspace,
+        }
+    }
+
+    /// The same fact, worded for the one line an operator reads at startup.
+    ///
+    /// A per-run workspace has no directory to report before a job arrives, and naming
+    /// one would be stating a fact that does not exist — so it reports the PARAMETER the
+    /// directory will arrive in, which is the thing an operator can actually check
+    /// against the workflow that dispatches the work.
+    #[cfg(any(feature = "norn", feature = "acp"))]
+    pub(crate) fn launch_directory_report(&self) -> String {
+        match self.launch_workspace() {
+            HarnessWorkspace::Fixed(directory) => directory.display().to_string(),
+            HarnessWorkspace::PerRun(parameter) => {
+                format!("each job names its own directory in its `{parameter}` parameter")
+            }
         }
     }
 }
@@ -252,7 +275,12 @@ fn build(
                         )
                     })
                     .transpose()?,
-                cwd: launch_path(aion_awl::HARNESS_CWD_FIELD, cwd, workspace_root, document)?,
+                workspace: launch_workspace(
+                    aion_awl::HARNESS_CWD_FIELD,
+                    cwd,
+                    workspace_root,
+                    document,
+                )?,
                 args: declared.args.clone(),
                 environment,
             }))
@@ -274,7 +302,12 @@ fn build(
                 document,
             )?,
             args: declared.args.clone(),
-            cwd: launch_path(aion_awl::HARNESS_CWD_FIELD, cwd, workspace_root, document)?,
+            workspace: launch_workspace(
+                aion_awl::HARNESS_CWD_FIELD,
+                cwd,
+                workspace_root,
+                document,
+            )?,
             permission: permission_policy(*permission),
             environment,
             exit_grace: *exit_grace,
@@ -315,6 +348,35 @@ fn build(
 /// server's own derivation, called rather than copied. A worker started by hand and a
 /// worker started by the server's supervisor read the one rule, so they cannot come to
 /// disagree about where this box's workspaces live.
+/// Where one launch's working directory will come from, as the LAUNCH will use it.
+///
+/// The two forms are resolved at different times and that is the whole point. A written
+/// path can be settled here, once, against this box — expanded and held to the absolute
+/// rule before a worker registers. A bound parameter cannot be settled here at all: the
+/// directory it names does not exist until a job arrives carrying it, so what travels is
+/// the parameter NAME and the adapter reads it per attempt.
+///
+/// # Errors
+///
+/// As [`launch_path`], for the written form. The bound form cannot fail here — the
+/// checker has already proven every action this harness serves declares the parameter as
+/// a `String`, and whether a given job supplied a usable value is a fact about that job,
+/// answered when that job arrives.
+#[cfg(any(feature = "norn", feature = "acp"))]
+fn launch_workspace(
+    field: &str,
+    declared: &CwdSource,
+    workspace_root: &aion_server::worker::WorkspaceRoot,
+    document: &std::path::Path,
+) -> Result<HarnessWorkspace> {
+    match declared {
+        CwdSource::Literal(path) => {
+            launch_path(field, path, workspace_root, document).map(HarnessWorkspace::Fixed)
+        }
+        CwdSource::Bound(parameter) => Ok(HarnessWorkspace::PerRun(parameter.clone())),
+    }
+}
+
 #[cfg(any(feature = "norn", feature = "acp"))]
 fn launch_path(
     field: &str,

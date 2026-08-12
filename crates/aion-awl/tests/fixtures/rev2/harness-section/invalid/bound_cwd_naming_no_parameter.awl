@@ -1,0 +1,33 @@
+//! A `cwd` bound to a parameter no served action declares.
+//!
+//! The binding form is only a declaration if the parameter is really there. If
+//! it is not, the agent reaches the launcher with no directory at all — the same
+//! silent inheritance a missing `cwd` would produce, wearing the clothes of a
+//! declaration. The refusal names the action that is short, so the author knows
+//! which one to change.
+workflow review_a_tree
+  input tree: String
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+/// The canonical agent-outcome record: the checker demands the STRUCTURE, not
+/// a blessed name.
+type Reply { text: String, stop_reason: String }
+
+worker reviewers
+  harness
+    kind norn
+    concurrency 2
+    reconnect_initial_backoff 5s
+    reconnect_max_backoff 1m
+    reconnect_max_attempts 50
+    env_pass "PATH", "HOME"
+    cwd from repo
+    binary "/usr/local/bin/norn"
+  action review(prompt: String) -> Reply
+    agent
+
+step review
+  review(prompt: tree) -> reply
+  route answered(reply: reply.text)

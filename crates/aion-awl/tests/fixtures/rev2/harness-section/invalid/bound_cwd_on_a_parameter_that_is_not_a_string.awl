@@ -1,0 +1,32 @@
+//! A `cwd` bound to a parameter the action declares as the wrong type.
+//!
+//! The parameter exists, so the presence rule is satisfied — and it still cannot
+//! carry a working directory, because a directory is a path and a path is a
+//! `String`. Refusing here rather than at the launcher means the author is told
+//! by the checker, not by an agent that never started.
+workflow review_a_tree
+  input depth: Int
+  outcome answered: type Answer, route success
+
+type Answer { reply: String }
+
+/// The canonical agent-outcome record: the checker demands the STRUCTURE, not
+/// a blessed name.
+type Reply { text: String, stop_reason: String }
+
+worker reviewers
+  harness
+    kind norn
+    concurrency 2
+    reconnect_initial_backoff 5s
+    reconnect_max_backoff 1m
+    reconnect_max_attempts 50
+    env_pass "PATH", "HOME"
+    cwd from repo
+    binary "/usr/local/bin/norn"
+  action review(repo: Int) -> Reply
+    agent
+
+step review
+  review(repo: depth) -> reply
+  route answered(reply: reply.text)

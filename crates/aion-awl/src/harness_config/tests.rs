@@ -8,6 +8,8 @@
 //! creates — and assert the seam names the field rather than carrying the bad value
 //! through.
 
+use std::path::{Path, PathBuf};
+
 use crate::ast::{HARNESS_BINARY_FIELD, HARNESS_COMMAND_FIELD, HARNESS_CWD_FIELD};
 
 use super::{HarnessConfigError, compile_harness};
@@ -97,7 +99,10 @@ fn an_absolute_norn_binary_passes_the_same_net() -> TestResult {
         binary.as_deref(),
         Some(std::path::Path::new("/usr/local/bin/norn"))
     );
-    assert_eq!(cwd, std::path::Path::new("/srv/agents"));
+    assert_eq!(
+        cwd.literal().map(PathBuf::as_path),
+        Some(Path::new("/srv/agents"))
+    );
     Ok(())
 }
 
@@ -153,7 +158,10 @@ fn a_workspace_rooted_cwd_reaches_the_launch_seam_unexpanded() -> TestResult {
     let crate::CompiledHarnessKind::Norn { cwd, .. } = launch.kind else {
         return Err("a norn declaration must produce a norn launch".into());
     };
-    assert_eq!(cwd, std::path::Path::new("{workspace_root}/assistant"));
+    assert_eq!(
+        cwd.literal().map(PathBuf::as_path),
+        Some(Path::new("{workspace_root}/assistant"))
+    );
     Ok(())
 }
 

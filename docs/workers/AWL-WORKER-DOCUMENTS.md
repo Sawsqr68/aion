@@ -140,6 +140,36 @@ document, which is the shape
 checked by the same pass, so writing one here is refused rather than quietly
 accepted.
 
+**The working directory can arrive with the job instead.** `cwd` has a second
+form — `cwd from <parameter>` — for the worker whose jobs each concern a
+different tree, which is most of them: a document written before any work exists
+can only name one directory, and one directory is only ever right for a worker
+that serves one tree.
+
+```awl
+worker reviewers
+  harness
+    kind norn
+    concurrency 2
+    reconnect_initial_backoff 5s
+    reconnect_max_backoff 1m
+    reconnect_max_attempts 50
+    env_pass "PATH", "HOME"
+    cwd from repo
+    binary "/usr/local/bin/norn"
+  action review(repo: String, prompt: String) -> Reply
+    agent
+```
+
+Two things changed together, and both are checked. The harness names `repo`, so
+every action it serves must declare `repo` as a `String` — `aion awl check`
+refuses against the action that does not, rather than letting the agent reach the
+launcher with no directory at all. And the `agent` action now takes two
+parameters, because an agent action's prompt is defined as the one parameter that
+is NOT the bound directory: under a fixed `cwd` that is the only parameter, and
+under a binding one it is the only other. Each call carries both by name, so the
+worker reads the tree out of the job exactly as it reads the prompt.
+
 The section is the only place those settings exist — `aion worker agent` has no
 flag for any of them — and the full field table, the per-kind required sets, and
 what each refusal means are in

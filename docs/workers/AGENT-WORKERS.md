@@ -288,7 +288,7 @@ a worker process starts an agent, and nothing about what the workflow does.
 | `env_pass` | both, required | quoted variable NAMES, comma-separated | the agent subprocess's WHOLE environment — see below |
 | `command` | `acp` only, required | quoted path, one of the two forms below | the agent executable, passed verbatim |
 | `args` | both, optional | quoted strings, comma-separated, order preserved | the agent's own launch arguments |
-| `cwd` | both, required | quoted path, one of the two forms below | the directory the agent works in — which tree it reads and which files it edits |
+| `cwd` | both, required | a quoted path (one of the two path forms below), OR `from <parameter>` | where the agent works — which tree it reads and which files it edits; either one tree written into the document, or the tree each job names for itself |
 | `permission` | `acp` only, required | `"deny"` or `"allow-once"` | how an *unattended* activity answers the agent's permission requests |
 | `exit_grace` | `acp` only, required | duration; `0s` is legitimate | how long the agent may take to exit after its stdin closes before it is killed |
 | `binary` | `norn` only, optional | quoted path, one of the two forms below | the `norn` binary; omitted takes the adapter's own documented `norn`-on-`PATH` default |
@@ -306,6 +306,21 @@ the protocol carrying it. A Norn agent that could not declare it took whichever
 directory the worker process happened to be started in, which no document, argv
 or log recorded.
 
+**`cwd` has a second form, because the tree is a property of the WORK.** Written
+`cwd from <parameter>`, it says each job carries its own directory, in the named
+parameter of the action being served. A document authored before any work exists
+can only name one tree, and one tree is only ever right for a worker that serves
+one tree — a reviewer that reads whichever repository the job is about cannot be
+written any other way. `aion awl check` settles the binding statically: the named
+parameter must be declared, and declared `String`, on EVERY action that harness
+serves; a binding that names a parameter an action does not carry is refused
+against that action, because otherwise the agent reaches the launcher with no
+directory at all — the same silent inheritance a missing `cwd` produces, wearing
+the clothes of a declaration. The bound parameter also changes what an `agent`
+action looks like: its prompt is the one parameter that is NOT the bound
+directory, so under a binding harness the action takes exactly two `String`s and
+the worker reads the tree out of the call exactly as it reads the prompt.
+
 **Two forms, and only two, for a path-valued setting.** `cwd`, `command` and
 `binary` are each either an ABSOLUTE path or a value LEADING with the literal
 `{workspace_root}`. A relative path is refused where it is written: a worker is
@@ -321,10 +336,16 @@ is spawned. A box that cannot resolve a root refuses the launch by name. The
 placeholder must LEAD the value; `agents/{workspace_root}` could never expand to
 an absolute path and is refused by `aion awl check`.
 
-Binding a setting to the RUN — a per-run working directory, a per-box launch
-argument — is a separate, still-open piece of work (board task #210). The
-`harness` section is per-worker, so what it can name today is per-box, not
-per-run.
+Those two forms are the LITERAL value's forms. They are the whole of what `cwd`
+offers only when it is written as a path; `cwd from <parameter>` is the third
+shape and is not held to them, because there is no value in the document to hold
+— the path arrives with each job and the launching adapter checks it then
+(absolute, existing, a directory) rather than the checker checking it now.
+
+Binding a per-box launch ARGUMENT to the run remains a separate, still-open
+piece of work (board task #210). `args` and the other launch settings are
+per-worker: what they can name is per-box, not per-run. The working directory is
+no longer among them.
 
 **`aion awl check <FILE.awl>` is where a missing setting is named**, before any
 worker starts and before anything is deployed. `permission` and `cwd` in
@@ -457,7 +478,9 @@ worker default
 `command` is the agent executable and must be an ABSOLUTE path: a worker is
 started from whatever directory a supervisor or a shell happens to be in, so a
 relative path names a different place on every launch. `cwd` is the directory
-ACP's `session/new` roots sessions at, absolute for the same reason. `args`
+ACP's `session/new` roots sessions at, absolute for the same reason — and when
+it is bound with `from <parameter>` instead, the path each job carries is held
+to that same rule by the adapter before a session is opened. `args`
 carries the agent's own launch arguments in order — Gemini CLI needs `--acp`,
 OpenCode needs `acp`, Claude Code's ACP adapter needs none. `permission` is
 `"deny"` (refuse every gated action) or `"allow-once"` (a one-shot approval,
