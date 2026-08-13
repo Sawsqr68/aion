@@ -1,68 +1,47 @@
 #!/usr/bin/env bash
-# Publish Aion crates in dependency order.
+# Publish the Aion crates to crates.io.
 #
-# crates.io requires dependencies to be available before crates that depend on
-# them. Keep this leaf-first order in sync with README.md and validate it with
-# cargo metadata before every dry-run or live publish.
+# The publish ORDER and the publish SET both come from cargo, derived from the
+# workspace's own dependency graph at the moment of the run. Neither is written
+# down here.
+#
+# This script used to carry a hand-maintained `PUBLISH_ORDER` array and a
+# validator that checked that array was topologically sound. The validator could
+# only ever consult the crates already ON the list, so it could not see a crate
+# MISSING from it — and by 2026-08-13 eleven of the twenty-two publishable
+# members were missing (aion-awl, aion-awl-lsp, aion-awl-package, aion-mcp,
+# aion-integrations, aion-integration-{acp,cli,norn}, aion-proto-generated,
+# aion-store-haematite, aion-toolchain). A run would have reported success
+# having shipped half a release. The list is gone rather than corrected: a
+# second copy of the dependency graph is a thing that drifts, and cargo already
+# holds the first.
 set -euo pipefail
 
 readonly SCRIPT_NAME="$(basename "$0")"
-readonly MODE_DRY_RUN="dry-run"
-readonly MODE_LIVE="live"
-
-# Leaf-first publish order derived from workspace-internal crate dependencies:
-#   aion-core: no Aion crate dependencies
-#   aion-store: aion-core
-#   aion-store-libsql: aion-core, aion-store
-#   aion-package: aion-core
-#   aion: aion-core, aion-package, aion-store
-#   aion-proto: aion-core, aion-store
-#   aion-darwin-acl: no Aion crate dependencies
-#   aion-server: aion, aion-core, aion-darwin-acl, aion-package, aion-proto, aion-store, aion-store-libsql
-#   aion-worker: aion-core, aion-proto
-#   aion-client: aion, aion-core, aion-proto, aion-store
-#   aion-cli: aion-client, aion-core, aion-package, aion-proto, aion-server
-readonly PUBLISH_ORDER=(
-  aion-core
-  aion-store
-  aion-store-libsql
-  aion-package
-  aion-rs
-  aion-proto
-  aion-darwin-acl
-  aion-server
-  aion-worker
-  aion-client
-  aion-cli
-)
 
 usage() {
   cat <<USAGE
 Usage: ${SCRIPT_NAME} [--live] [--help]
 
-Publishes the Aion Rust crates in leaf-first dependency order:
-  ${PUBLISH_ORDER[*]}
+Publishes every publishable crate in the Aion workspace. Cargo resolves the
+leaf-first order from the workspace dependency graph; crates marked
+\`publish = false\` are excluded by cargo itself.
 
-By default, this performs a full safe dry run:
-  cargo publish --dry-run -p <crate>
+By default this performs a dry run:
+  cargo publish --workspace --dry-run
 
 Options:
-  --live    publish for real with cargo publish -p <crate>
+  --live    publish for real with cargo publish --workspace
   -h, --help
             show this help text
 USAGE
 }
 
-mode="${MODE_DRY_RUN}"
+live=0
 for arg in "$@"; do
   case "$arg" in
-    --live)
-      mode="${MODE_LIVE}"
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
+    --live) live=1 ;;
+    -h|--help) usage; exit 0 ;;
     *)
       echo "error: unknown argument: ${arg}" >&2
       usage >&2
@@ -71,98 +50,50 @@ for arg in "$@"; do
   esac
 done
 
-find_repo_root() {
-  local root
-  root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-    echo "error: ${SCRIPT_NAME} must be run from inside the Aion git repository" >&2
-    exit 1
-  }
-  printf '%s\n' "$root"
-}
+if ! git rev-parse --show-toplevel >/dev/null 2>&1; then
+  echo "error: ${SCRIPT_NAME} must be run from inside the Aion git repository" >&2
+  exit 1
+fi
+cd "$(git rev-parse --show-toplevel)"
 
-validate_publish_order() {
-  local metadata
-  local jq_program
-  local order_json
-  local order_errors
+# Announce the SET before acting on it, so the operator sees what a run covers
+# rather than trusting that it covered everything. The set is READ OUT of cargo's
+# own metadata, not maintained here — this prints what cargo will do, it does not
+# decide it.
+#
+# jq rather than python3: on 2026-08-13 the first `python3` on this box's PATH was
+# a Linux ELF binary (a broken uv install under a directory named macos-aarch64),
+# so every `python3` call died with "cannot execute binary file". A release script
+# must not fail on an interpreter it does not need. jq is the tool the estate's
+# gate commands already speak, and its absence is refused by name rather than
+# silently skipping the announcement — an announcement that can quietly not happen
+# is worse than none, because its silence reads as "nothing to report".
+if ! command -v jq >/dev/null 2>&1; then
+  echo "error: jq is required to announce the publish set before acting; install it and re-run" >&2
+  exit 1
+fi
 
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "error: jq is required to validate the publish order from cargo metadata" >&2
-    exit 1
-  fi
+echo "==> Publishable workspace members (from cargo metadata)"
+metadata="$(cargo metadata --format-version=1 --no-deps)"
+publishable="$(printf '%s' "$metadata" | jq -r '[.packages[] | select(.publish != []) | .name] | sort | .[]')"
+excluded="$(printf '%s' "$metadata" | jq -r '[.packages[] | select(.publish == []) | .name] | sort | join(", ")')"
 
-  echo "==> Validating publish order with cargo metadata"
-  metadata="$(cargo metadata --format-version=1 --no-deps)"
-  order_json="$(printf '%s\n' "${PUBLISH_ORDER[@]}" | jq --raw-input --slurp 'split("\n")[:-1]')"
+if [ -z "$publishable" ]; then
+  echo "error: cargo metadata reported no publishable members — refusing to run a vacuous publish" >&2
+  exit 1
+fi
 
-  jq_program='def idx($order): reduce range(0; $order | length) as $i ({}; . + {($order[$i]): $i});
-    . as $metadata
-    | idx($order) as $index
-    | ($metadata.packages | map(select(.name as $name | $index[$name] != null)) | length) as $found
-    | if $found != ($order | length) then
-        ($metadata.packages | map(.name) | unique) as $packages
-        | ($order | map(select(. as $name | ($packages | index($name)) == null))) as $missing
-        | "missing publish-order crate(s) from cargo metadata: \($missing | join(", "))"
-      else
-        [ $metadata.packages[]
-          | select(.name as $name | $index[$name] != null)
-          | .name as $dependent
-          | .dependencies[]?
-          | select(.source == null)
-          | .name as $dependency
-          | select($index[$dependency] != null)
-          | select($index[$dependency] >= $index[$dependent])
-          | "\($dependent) depends on \($dependency), but \($dependency) appears later in PUBLISH_ORDER"
-        ]
-        | if length > 0 then .[] else empty end
-      end'
+printf '    %s\n' $publishable
+printf '==> %s publishable, excluded: %s\n' \
+  "$(printf '%s\n' "$publishable" | wc -l | tr -d ' ')" \
+  "${excluded:-none}"
 
-  order_errors="$(jq --raw-output --argjson order "$order_json" "$jq_program" <<<"$metadata")"
+if (( live )); then
+  echo "==> LIVE publish: cargo publish --workspace"
+  cargo publish --workspace
+else
+  echo "==> Dry run: cargo publish --workspace --dry-run"
+  cargo publish --workspace --dry-run
+fi
 
-  if [[ -n "$order_errors" ]]; then
-    printf 'error: publish order validation failed:\n' >&2
-    while IFS= read -r order_error; do
-      printf '  - %s\n' "$order_error" >&2
-    done <<<"$order_errors"
-    exit 1
-  fi
-
-  echo "==> Publish order validation passed"
-}
-
-run_publish() {
-  local crate
-  local status
-  local -a publish_args
-
-  if [[ "$mode" == "${MODE_DRY_RUN}" ]]; then
-    publish_args=(--dry-run)
-  else
-    publish_args=()
-    cat <<'WARNING'
-==> LIVE publish mode enabled; crates will be published to crates.io.
-WARNING
-  fi
-
-  for crate in "${PUBLISH_ORDER[@]}"; do
-    echo "==> Running cargo publish for ${crate} (${mode})"
-    if cargo publish -p "$crate" "${publish_args[@]}"; then
-      echo "==> cargo publish succeeded for ${crate} (${mode})"
-    else
-      status=$?
-      echo "error: cargo publish failed for ${crate} (${mode}) with exit status ${status}" >&2
-      exit "$status"
-    fi
-  done
-}
-
-main() {
-  local repo_root
-  repo_root="$(find_repo_root)"
-  cd "$repo_root"
-
-  validate_publish_order
-  run_publish
-}
-
-main "$@"
+echo "==> Done"

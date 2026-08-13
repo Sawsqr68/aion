@@ -1,0 +1,159 @@
+//! repo_gates — run the three checks over ONE named repository and come back
+//! with every finding.
+//!
+//! This is the GENERIC gate workflow. It takes the repository as an input, so
+//! it works against any cargo workspace on the box serving the queue — not
+//! only this one. Its sibling `gates.awl` is the aion lane battery: seven legs
+//! wired to this repository's own shape (the console's bun suite, the embed
+//! freshness check, the battery's own worker crate) and returning each leg's
+//! exit code beside a tail of its log. Both are real; they answer different
+//! questions. Ask `gates` "did the aion battery pass". Ask this "what is wrong
+//! in this repository, exactly".
+//!
+//! WHAT COMES BACK IS THE FINDINGS, NOT A SUMMARY. Every diagnostic arrives as
+//! a value with its file, line, column, lint name, and message; every failing
+//! test arrives with everything it printed, which for a panicking test is the
+//! whole assertion block including the line it panicked at. Both outcomes carry
+//! the per-gate exit codes as well, so a reader never has to infer from a
+//! finding count whether a gate ran.
+//!
+//! THE RED OUTCOME CARRIES EVERYTHING THE GREEN ONE DOES, AND MORE. A verdict
+//! that drops its evidence on the way to being a verdict makes the reader
+//! re-run the gates to learn anything, which is the whole fault this document
+//! exists to close.
+//!
+//! WHY NO `timeout`, ON THE ACTION OR THE RUN. How long a full build, lint and
+//! test pass takes is a property of the repository being gated, and this
+//! document cannot know it. A ceiling written here would be a number nobody
+//! named, and the direction it fails in is the bad one: it would report an
+//! honest slow build as a broken one. With no declared timeout the activity
+//! waits exactly as long as it always has, and with no declared retry it runs
+//! exactly once — a broken measurement surfaces rather than being re-attempted
+//! on a schedule nobody chose. An operator who wants a bound names it by
+//! cancelling the run.
+//!
+//! THE TYPES BELOW ARE DUPLICATED IN `repo_gates_worker.awl`, AND THAT IS #225.
+//! AWL has no import. The two copies are byte-identical on purpose and must
+//! move together; the server refuses a worker whose advertised descriptors do
+//! not match the deployed contract, and that refusal is the only thing holding
+//! them equal today.
+//!
+//! THE TWO INPUTS.
+//!
+//! - `repo` — absolute path to the cargo workspace to gate.
+//! - `runner` — absolute path to `repo-gates.zsh` on the box serving the queue.
+//!   It is an input rather than a written-out path because this queue gates any
+//!   repository while the script lives with aion, so its location is a property
+//!   of the box, not of the work.
+workflow repo_gates
+  input repo: String
+  input runner: String
+  outcome clean: type Clean, route success
+  outcome red:   type Red,   route failure
+
+/// One gate command's own result. `finding_count` is that gate's share of the
+/// deduplicated findings, so the three counts and the `findings` list are two
+/// views of one measurement rather than two tallies that can disagree.
+type GateOutcome { gate: String, exit_code: Int, finding_count: Int }
+
+/// One diagnostic, at the resolution needed to fix it: where it is, which lint
+/// or error code raised it, and what it says.
+///
+/// `line` and `column` are 0 when the compiler attached no source location —
+/// linker warnings arrive that way, under `#[warn(linker_messages)]`, with no
+/// span at all. Zero cannot collide with a real reading because rustc's lines
+/// and columns are 1-based, and `file` reads `unknown` in the same case.
+///
+/// rustc's child notes are deliberately absent. They are mostly instructions
+/// for SILENCING a lint — `#[allow(...)]` and its family — and handing those to
+/// a reader whose job is to fix the code is handing them the bypass alongside
+/// the defect.
+type Finding {
+  gate: String,
+  level: String,
+  file: String,
+  line: Int,
+  column: Int,
+  lint: String,
+  message: String,
+}
+
+/// One failing test, with everything it printed. For a panicking test that is
+/// the whole assertion block including the source file and line it panicked at,
+/// so the failure needs no summary written beside it.
+type FailedTest { test: String, stdout: String }
+
+/// The whole measurement, from one repository, in one document.
+///
+/// `raw_finding_count` is the count BEFORE byte-identical duplicates were
+/// collapsed. `--all-targets` compiles a crate's library and its test target,
+/// and rustc emits the same diagnostic once for each, so one defect arrives
+/// twice per gate; the collapse is recorded here rather than performed
+/// silently, because two copies of one defect is not a more exact count, it is
+/// a count that misrepresents how much is wrong.
+///
+/// `passed` is computed from what actually ran: every gate exited zero AND no
+/// findings came back AND no test failed. All three are required because any
+/// one can be true while another is false — `--keep-going` can leave a zero
+/// exit beside real diagnostics, and a gate can die non-zero having emitted
+/// nothing.
+///
+/// `instruction` travels with the findings and says to fix them at their cause,
+/// never to silence them. It is carried in the report rather than assumed by
+/// whoever reads it.
+type GateReport {
+  repo: String,
+  /// "git" or "none" — never absent, so a reader never has to tell "this tree
+  /// is not under version control" from "this report predates the field".
+  vcs: String,
+  /// The commit the gates measured; the empty string exactly when `vcs` is
+  /// "none". A gate run against a dirty tree is evidence about that dirty
+  /// tree, and a report carrying only a path cannot say which one it was.
+  head_commit: String,
+  /// `git status --porcelain` verbatim, empty for a clean tree. Carried as the
+  /// LINES themselves rather than a count or a hash: a count cannot attribute,
+  /// and a hash has no preimage the reader holds.
+  porcelain: String,
+  gates: [GateOutcome],
+  raw_finding_count: Int,
+  errors: Int,
+  warnings: Int,
+  findings: [Finding],
+  failed_tests: [FailedTest],
+  passed: Bool,
+  instruction: String,
+}
+
+/// Nothing to report. The per-gate exit codes ride along anyway, so a green
+/// verdict can still be checked against what actually ran rather than taken on
+/// the word `clean`.
+type Clean { repo: String, gates: [GateOutcome] }
+
+/// Everything that is wrong, at full resolution.
+type Red {
+  repo: String,
+  gates: [GateOutcome],
+  errors: Int,
+  warnings: Int,
+  raw_finding_count: Int,
+  findings: [Finding],
+  failed_tests: [FailedTest],
+  instruction: String,
+}
+
+worker repo_gates
+  /// Served by `repo_gates_worker.awl` — one declared command running
+  /// `repo-gates.zsh` on the worker's own host. Bodyless here because a
+  /// workflow document declares what it REQUIRES of a queue; the body lives
+  /// with the queue that serves it.
+  action run_gates(runner: String, repo: String) -> GateReport
+
+step gate
+  run_gates(runner: runner, repo: repo) -> report
+  outcome green: when report.passed,
+    route clean(repo: report.repo, gates: report.gates)
+  outcome findings: otherwise,
+    route red(repo: report.repo, gates: report.gates, errors: report.errors,
+      warnings: report.warnings, raw_finding_count: report.raw_finding_count,
+      findings: report.findings, failed_tests: report.failed_tests,
+      instruction: report.instruction)

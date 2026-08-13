@@ -3,6 +3,100 @@
 All aion crates share one workspace version; entries below cover the
 whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
 
+## 0.15.0 — 2026-08-13
+
+- **A norn agent's working directory is declared — and each job can name its
+  own (#222, #228).** The directory an agent stands in decides which tree it
+  reads and which files it edits. For a norn agent that value appeared in NO
+  document, NO argv and NO log: it was inherited from wherever the worker
+  process happened to be started. That is invisible configuration nobody wrote
+  down and nobody reviewed, and ACP's `cwd` was already required and
+  gate-tested — the asymmetry was the defect.
+
+  `cwd` is now a REQUIRED setting on every `harness` section, norn as well as
+  acp, held to the same absolute-path rule. It may be written in either of two
+  forms. A LITERAL path pins the section to one tree:
+
+      harness
+        kind norn
+        cwd "/srv/agents/checkout"
+
+  A BINDING makes the tree a property of the WORK rather than of the LAUNCH,
+  taking each attempt's working directory from a named input of the action
+  being served — so one worker serves many repositories and the dispatcher
+  need not know the path before the run exists:
+
+      harness
+        kind norn
+        cwd from repo
+      action delegate(repo: String, prompt: String) -> Reply
+        agent
+
+  The binding is settled STATICALLY, at `aion awl check`, against every action
+  the harness actually serves — the serving closure, which is narrower than
+  the declaring closure. A document naming a parameter no action declares, or
+  declaring it at the wrong type, is refused by name at the `cwd` line. The
+  adapter refuses an attempt that carries no such value BEFORE spawning
+  anything, so a misrouted dispatch cannot reach an agent at all.
+
+  A LITERAL path may lead with `{workspace_root}`, expanded by the launching
+  box, so one document serves boxes that keep their trees in different places.
+  A BOUND value is not expanded — it arrives from the caller already made — but
+  it travels the same net: absolute, and present on disk, or the attempt is
+  refused terminally before anything is spawned.
+
+  The worker's startup line now states the directory it will spawn children in,
+  read through the RESOLVED harness rather than off the document, so the
+  reported value is the value the child gets.
+
+  **🔴 Who this affects — action required.** A norn `harness` section written
+  against 0.14.1 carries no `cwd` line, because declaring one was refused there
+  as a setting foreign to norn. Every such document now fails `aion awl check`
+  with a named refusal until a `cwd` is added. Write the literal form to keep
+  the behaviour you had — name the directory your worker was being started
+  from — or the binding form to serve many trees from one worker. That shell
+  discipline is no longer load-bearing either way: the declaration decides.
+  ACP documents already carried a required `cwd` and are unaffected.
+
+- **The authored action `timeout` is an armed per-attempt deadline (#223,
+  closes #198).** AWL lowered `timeout`, the Gleam SDK put it on the wire as
+  `timeout_ms`, and NO reader existed in the engine — the only field parsed out
+  of that dispatch config was `retry`. A hung activity ran forever while its
+  document claimed a bound. The engine now reads the bound and arms it; expiry
+  is recorded as a non-terminal failure that NAMES the bound, and the retry
+  policy (if any) drives re-delivery with an incremented attempt.
+
+  **Who this affects.** Anyone whose documents already declared `timeout` —
+  the declaration now has force where it previously had none. A workflow that
+  was silently relying on an unbounded activity will begin seeing that activity
+  expire at the bound it declared.
+
+- **A run carries a display name, and the history keeps every one (#211).**
+  `aion.display_name` is a search attribute; renames are recorded as
+  `SearchAttributesUpdated` events rather than mutating a field, so the run's
+  own history is the record of what it has been called. The console always
+  shows the short UUID beside the name — the name is a label, never an
+  identifier, and there is no by-name parameter on any API.
+
+- **Timestamps render in the viewer's own timezone (#212).** One render truth
+  in the console, with the raw UTC value preserved on the `<time dateTime>`
+  attribute so the record on the page is still the record. RFC3339 offsets are
+  mandatory at the boundary.
+
+- **`update_watch` — the update check as a durable workflow (#213).** The
+  half-hourly check now runs as an ordinary Aion workflow with an
+  operator-named cadence, driving the server's embedded check. Manual-start
+  only, by design: a schedule is a value an operator names, not a default.
+
+- **beamr 0.17.0 → 0.18.2 (#220).**
+
+- **Fixes.** A worker document's timeout refusal states a reason that is true;
+  a document name the server accepts is a name AWL can declare (#153); a
+  relative path in an ACP document is a configuration refusal rather than a
+  protocol fault; the manifests no longer claim the default build excludes the
+  ablative stack (#218); the documented slim libSQL build (`--no-default-features
+  --features libsql-backend`) is real again (#186).
+
 ## 0.14.1 — 2026-08-12
 
 - **The embedded assistant document is launchable by the verb the server

@@ -1,0 +1,120 @@
+//! Serve the `repo_gates` queue: run the three checks over ONE named
+//! repository and hand back every finding, typed.
+//!
+//! The whole implementation is one declared command. `repo-gates.zsh` runs the
+//! gate commands and prints one JSON document; `run json` parses that document
+//! into `GateReport` and the calling workflow receives it as a value it can
+//! read fields off — not a tail of log text it would have to parse, and not an
+//! exit code that names nothing.
+//!
+//! WHY THE RUNNER IS A PARAMETER RATHER THAN A WRITTEN-OUT PATH. The program
+//! (`zsh`) is written out, as the language requires. Its script is not, because
+//! this queue gates ANY repository and the script lives with aion — so the
+//! script's location is a property of the box serving the queue, not of the
+//! work. Writing an absolute path here would pin the document to one machine,
+//! which is the exact fault #222 and #228 closed for harness working
+//! directories. The caller names it; the caller knows.
+//!
+//! WHY THERE IS NO `timeout` HERE. A delivery key configures how the CALLER
+//! dispatches, and the caller is the workflow document — stating it here as
+//! well would put one fact in two files with nothing holding them equal. The
+//! workflow document does not declare one either, and says why.
+//!
+//! THE TYPES BELOW ARE DUPLICATED IN `repo_gates.awl`, AND THAT IS #225. AWL
+//! has no import, so a queue's contract types must be written out in both the
+//! document that serves the queue and the document that calls it. The two
+//! copies are byte-identical on purpose and must move together; the server's
+//! admission check compares the advertised descriptors against the deployed
+//! contract, so a drift between them is refused at connect rather than
+//! discovered in a run. That refusal is the only thing holding them equal
+//! today.
+worker repo_gates
+  /// Run `cargo check`, `cargo clippy -D warnings`, and `cargo nextest` over
+  /// the repository at `repo`, and return every finding.
+  ///
+  /// `runner` is the absolute path to `repo-gates.zsh`. `repo` is the absolute
+  /// path to the cargo workspace to gate.
+  ///
+  /// The runner exits 0 whether the gates are green or red, deliberately: under
+  /// `run json` a non-zero exit is a failure and its stdout is DISCARDED, so a
+  /// runner that exited non-zero on a red gate would throw away the findings at
+  /// exactly the moment they matter. Red arrives here as `passed: false` with
+  /// the list. A non-zero exit from the runner therefore means the gates could
+  /// not be MEASURED — jq or cargo absent, the repository missing, nextest not
+  /// installed — and that is a genuine failure of this action, carrying the
+  /// runner's own stderr.
+  action run_gates(runner: String, repo: String) -> GateReport
+    run json "zsh $runner $repo"
+
+/// One gate command's own result. `finding_count` is that gate's share of the
+/// deduplicated findings, so the three counts and the `findings` list are two
+/// views of one measurement rather than two tallies that can disagree.
+type GateOutcome { gate: String, exit_code: Int, finding_count: Int }
+
+/// One diagnostic, at the resolution needed to fix it: where it is, which lint
+/// or error code raised it, and what it says.
+///
+/// `line` and `column` are 0 when the compiler attached no source location —
+/// linker warnings arrive that way, under `#[warn(linker_messages)]`, with no
+/// span at all. Zero cannot collide with a real reading because rustc's lines
+/// and columns are 1-based, and `file` reads `unknown` in the same case.
+///
+/// rustc's child notes are deliberately absent. They are mostly instructions
+/// for SILENCING a lint — `#[allow(...)]` and its family — and handing those to
+/// a reader whose job is to fix the code is handing them the bypass alongside
+/// the defect.
+type Finding {
+  gate: String,
+  level: String,
+  file: String,
+  line: Int,
+  column: Int,
+  lint: String,
+  message: String,
+}
+
+/// One failing test, with everything it printed. For a panicking test that is
+/// the whole assertion block including the source file and line it panicked at,
+/// so the failure needs no summary written beside it.
+type FailedTest { test: String, stdout: String }
+
+/// The whole measurement, from one repository, in one document.
+///
+/// `raw_finding_count` is the count BEFORE byte-identical duplicates were
+/// collapsed. `--all-targets` compiles a crate's library and its test target,
+/// and rustc emits the same diagnostic once for each, so one defect arrives
+/// twice per gate; the collapse is recorded here rather than performed
+/// silently, because two copies of one defect is not a more exact count, it is
+/// a count that misrepresents how much is wrong.
+///
+/// `passed` is computed from what actually ran: every gate exited zero AND no
+/// findings came back AND no test failed. All three are required because any
+/// one can be true while another is false — `--keep-going` can leave a zero
+/// exit beside real diagnostics, and a gate can die non-zero having emitted
+/// nothing.
+///
+/// `instruction` travels with the findings and says to fix them at their cause,
+/// never to silence them. It is carried in the report rather than assumed by
+/// whoever reads it.
+type GateReport {
+  repo: String,
+  /// "git" or "none" — never absent, so a reader never has to tell "this tree
+  /// is not under version control" from "this report predates the field".
+  vcs: String,
+  /// The commit the gates measured; the empty string exactly when `vcs` is
+  /// "none". A gate run against a dirty tree is evidence about that dirty
+  /// tree, and a report carrying only a path cannot say which one it was.
+  head_commit: String,
+  /// `git status --porcelain` verbatim, empty for a clean tree. Carried as the
+  /// LINES themselves rather than a count or a hash: a count cannot attribute,
+  /// and a hash has no preimage the reader holds.
+  porcelain: String,
+  gates: [GateOutcome],
+  raw_finding_count: Int,
+  errors: Int,
+  warnings: Int,
+  findings: [Finding],
+  failed_tests: [FailedTest],
+  passed: Bool,
+  instruction: String,
+}
