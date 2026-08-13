@@ -46,6 +46,7 @@
 use anyhow::{Context, Result};
 
 use super::args::{self, AgentArgs, ConnectionSettings};
+#[cfg(any(feature = "norn", feature = "acp"))]
 use super::environment_report::report_absent_pass_through;
 use super::surface::{self, AdvertisedSurface};
 use crate::harness::ResolvedHarness;
@@ -102,6 +103,11 @@ async fn prepare(args: &AgentArgs) -> Result<Prepared> {
     // subscriber, so both paths carry it and neither depends on a listener that does not
     // exist yet. Stderr, because stdout on this verb is the `--check` report's and an
     // operator piping that into `jq` must not have a warning land in the middle of it.
+    //
+    // Gated on carrying an adapter at all: `harness` is `None` in a build that compiles
+    // none in (see the field's own note), so there is no environment to report on and
+    // `ResolvedHarness::environment` does not exist to be called.
+    #[cfg(any(feature = "norn", feature = "acp"))]
     if let Some(resolved) = &harness {
         report_absent_pass_through(
             &mut std::io::stderr().lock(),

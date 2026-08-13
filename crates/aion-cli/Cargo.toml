@@ -55,9 +55,28 @@ aion-integration-acp = { version = "0.14.1", path = "../aion-integration-acp", o
 # The harness-integration SDK (the trait the worker drives). Present so the
 # composition root can name the neutral `AgentHarness` seam the injected
 # `NornHarness` satisfies; carries no concrete adapter.
-aion-integrations = { version = "0.14.1", path = "../aion-integrations", optional = true }
+#
+# NOT optional, and that is load-bearing rather than incidental. `harness::settings`
+# and `harness::catalogue` compile in EVERY build by design — catalogue's `test_config`
+# takes nothing but `self` precisely so its cfg-gated match stays exhaustive when no
+# adapter is compiled in — and both of them name this crate's `ChildEnvironment` /
+# `EnvironmentDeclaration`, which describe a worker document's DECLARED child
+# environment, not any one harness. Gating the crate behind `norn`/`acp` made
+# `--no-default-features` fail to compile outright, which is half of why the
+# documented slim build was impossible (#186). Nothing is pulled in by this: every
+# dependency it carries (aion-core, tokio, serde, serde_json, thiserror, futures,
+# async-trait) is already in the slim graph. The §3A.4 invariant is about CONCRETE
+# adapters never reaching a platform crate; this is the neutral seam, and aion-cli is
+# the composition root regardless.
+aion-integrations = { version = "0.14.1", path = "../aion-integrations" }
 aion-package = { version = "0.14.1", path = "../aion-package" }
-aion-server = { version = "0.14.1", path = "../aion-server" }
+# `default-features = false` is what makes the documented slim opt-out real. The
+# CLI's own `default` re-selects `haematite-backend` and `liminal-transport` (the
+# exact pair aion-server defaults to), so a stock build is unchanged; without it,
+# aion-server's defaults were unconditional and
+# `--no-default-features --features libsql-backend` still linked haematite, the
+# liminal transport, and their beamr distributions.
+aion-server = { version = "0.14.1", path = "../aion-server", default-features = false }
 # The instant authoring loop (`aion dev`) reuses the toolchain's external
 # `gleam build` shell-out (build_project) instead of reinventing it. The
 # toolchain embeds no compiler — it only spawns the operator-named gleam
@@ -146,10 +165,7 @@ liminal-transport = ["aion-server/liminal-transport", "aion-worker/liminal-trans
 # platform LIBRARY crates build with ZERO Norn code (the §3A.4 invariant). The
 # worker drives the harness through the neutral `AgentHarness` trait; this feature
 # only decides which concrete adapter the binary compiles in.
-norn = [
-    "dep:aion-integration-norn",
-    "dep:aion-integrations",
-]
+norn = ["dep:aion-integration-norn"]
 # Composes the first-party ACP adapter (`aion-integration-acp`) into the `aion` binary,
 # so the shipped default product can serve ANY agent that speaks the Agent Client
 # Protocol out-of-box — the same "our complete experience is the default" thread as
@@ -164,7 +180,4 @@ norn = [
 # NOTE: this feature raises the build's minimum rustc to 1.88.0 (see the package's
 # `rust-version`), which is why the adapter is a separate crate carrying that floor
 # rather than code in a platform crate.
-acp = [
-    "dep:aion-integration-acp",
-    "dep:aion-integrations",
-]
+acp = ["dep:aion-integration-acp"]

@@ -124,6 +124,16 @@ impl ResolvedHarness {
     /// Reached THROUGH the resolved harness rather than returned alongside it so there is
     /// one environment in play: a caller cannot report on one value and launch with
     /// another.
+    ///
+    /// Gated exactly as [`Self::launch_workspace`] is, and for a reason the compiler
+    /// enforces rather than a stylistic one: with no adapter compiled in, every
+    /// [`HarnessConfig`] variant is gated away and the enum is uninhabited, so this
+    /// method has no arm to take. A zero-arm match is only accepted on the place
+    /// itself — `&self.config` is a reference, and a reference to an uninhabited type
+    /// is perfectly inhabited — so the body cannot be written at all in that build.
+    /// Nothing is lost: a `ResolvedHarness` cannot be constructed without a variant to
+    /// construct it from, so there is no caller to serve.
+    #[cfg(any(feature = "norn", feature = "acp"))]
     pub(crate) const fn environment(&self) -> &ChildEnvironment {
         match &self.config {
             #[cfg(feature = "norn")]

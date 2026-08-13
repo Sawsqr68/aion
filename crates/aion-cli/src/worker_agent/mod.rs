@@ -28,6 +28,9 @@
 //! reports the surface and then refuses to serve.
 
 mod args;
+// Only a build that carries an adapter can resolve a harness, and only a resolved
+// harness has a declared child environment to report absences from.
+#[cfg(any(feature = "norn", feature = "acp"))]
 mod environment_report;
 mod serve;
 mod surface;
