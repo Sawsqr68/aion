@@ -97,6 +97,55 @@ whole stack (crates.io) plus the `aion_flow` Gleam SDK (hex) where noted.
   ablative stack (#218); the documented slim libSQL build (`--no-default-features
   --features libsql-backend`) is real again (#186).
 
+- **Known issue, still open and now measured more sharply: the libsql backend
+  can fail whether or not the machine is busy (#85).** This release pins the
+  same `libsql` 0.9.30 as 0.14.0 and carries the same defect. 0.9.30 remains
+  the newest published stable libsql, so there is no version to move to yet.
+
+  **Correction to what 0.14.0 said.** That release described the failure as
+  arriving "rarely, under concurrent load". That is how it *looks*, and it is
+  the wrong picture. The underlying fault is not occasional and does not need
+  load: **every libsql connection this backend closes is closed twice**, always,
+  including on a single-threaded run of one test. What load and concurrency
+  change is only whether you *notice* — whether the freed memory has been handed
+  to something else by the time the second close reads it. A quiet machine is
+  not protection; it is a machine where the same fault is less likely to be
+  seen.
+
+  Proven on 2026-08-13 by re-running the store's own test binary under macOS
+  Guard Malloc, which unmaps freed pages instead of recycling them. The run
+  faults immediately and in the same place every time: reading the connection
+  handle's state field inside `sqlite3_close_v2`, called from libsql's
+  `Connection::disconnect` — a read of memory the *first* close already
+  released. Without Guard Malloc that same read usually returns whatever now
+  occupies the block, which is why the visible symptom is intermittent.
+
+  **What it looks like from the outside.** A store error reading
+  `SQLite failure: bad parameter or other API misuse`, or a failure to open a
+  database at all reading `Unable to open connection to local database <path>:
+  21`, or a process abort. All three are the same fault wearing different
+  clothes: SQLite's "misuse" code, code 21.
+
+  **Why it is the dependency's and not ours.** In the SQLite that libsql
+  bundles, the open call can only return code 21 down two paths: a null output
+  pointer, which libsql never passes, and a check on the open flags. Aion's
+  flags always pass that check. So the flags the call read were not the flags
+  that were written — a memory-safety fault inside the dependency, which no
+  input from aion can cause or prevent.
+
+  **Who this affects.** Servers explicitly configured with
+  `store.backend = "libsql"`. The default haematite backend and the memory
+  backend do not use libsql and are unaffected. Within libsql it is not an
+  exotic path: the double close was caught on the ordinary startup catalog
+  reload, the read every libsql-backed server does when it comes up.
+
+  **What to do.** Prefer the default haematite backend — and note that this
+  backend is on its way out. Retiring `aion-store-libsql` in favour of
+  haematite is planned as the next release's work, so an operator standing up a
+  new server should choose haematite now rather than migrate later. If you run
+  libsql and see one of the faces above, it is this known defect rather than an
+  aion regression.
+
 ## 0.14.1 — 2026-08-12
 
 - **The embedded assistant document is launchable by the verb the server

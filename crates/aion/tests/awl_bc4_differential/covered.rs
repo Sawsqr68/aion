@@ -82,7 +82,19 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// four ran byte-identical and to completion on both backends (0 divergences,
 /// 0 infra), and their `EXPECTED_SUCCEEDED` entries below were read off that
 /// run, not predicted.
-const COVERED_COUNT: usize = 111;
+///
+/// 112 since the bound `cwd` (#228): `harness-section/valid/
+/// norn_harness_with_a_bound_cwd`, the binding form whose agent action carries
+/// the working directory beside the prompt. It joined the compiler's covered
+/// corpus at `2066b3183` WITHOUT this ratchet moving with it, so from that
+/// commit until this one both tests in this file died on the size assertion
+/// ABOVE any differential work — which means the fixture had never been
+/// differentially run at all, and the whole byte-identity question went
+/// unmeasured rather than answered. It belongs in the differential on its own
+/// merits: the directory is an extra parameter on the activity's input, so a
+/// lowering that dropped it, or carried it anywhere but the input, would change
+/// the trail. Its bucket below was read off the run, not predicted.
+const COVERED_COUNT: usize = 112;
 
 /// Out-of-oracle (r2 finding 3): fixtures whose durable park boundary is NOT
 /// observable through any engine surface without racy sampling.
@@ -378,6 +390,7 @@ const EXPECTED_SUCCEEDED: &[&str] = &[
     "harness-section/valid/acp_harness",
     "harness-section/valid/harness_absent_control",
     "harness-section/valid/norn_harness",
+    "harness-section/valid/norn_harness_with_a_bound_cwd",
     "harness-section/valid/norn_harness_without_optional_settings",
     "header-types/valid/doc_comments",
     "header-types/valid/enum",

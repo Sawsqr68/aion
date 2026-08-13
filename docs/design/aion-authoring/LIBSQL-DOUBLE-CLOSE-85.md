@@ -185,3 +185,114 @@ removes the evidence while keeping the defect.
 "mismatched `sqlite3_errmsg`" was treated for weeks as a confusing detail; it
 was in fact the diagnostic — per-connection state cannot mismatch unless the
 pointer stopped naming the connection.
+
+---
+
+# AMENDMENT — 2026-08-13. §7 IS DISCHARGED: the manifestation is no longer inferred.
+
+**Seat:** Vesper Lynd. The two experiments §7 parked ("both must wait until the
+workspace battery finishes") were run once the battery completed and the box
+was quiet. E1 fired on the first attempt.
+
+## E1 — Guard Malloc. Executed, armed, and decisive.
+
+Binary: the already-built `outbox_e2e` test binary, copied out of `target/` and
+**hash-pinned** (`40620ca4377d00d0e38f985ed8d41a518b29dd5182564c9d0a0fb74a7ba4f3eb`)
+so a concurrent build could not swap the artifact mid-measurement. No rebuild.
+
+`DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib`, one test,
+`--test-threads=1`. **The instrument's own channel was checked first** — the
+`GuardMalloc[...]` banner is present in the log, so a clean run would have
+meant something. It was not clean: EXIT=139.
+
+```
+stop reason = EXC_BAD_ACCESS (code=1, address=0xd0b3b3d41)
+frame #0: sqlite3SafetyCheckSickOrOk(db=0x...) at sqlite3.c:36835
+          -> eOpenState = db->eOpenState;
+frame #1: sqlite3Close(db=0x..., forceZombie=1)     at sqlite3.c:182133
+frame #2: sqlite3_close_v2(db=0x...)                at sqlite3.c:182234
+frame #3: libsql::local::connection::Connection::disconnect  connection.rs:110
+frame #4: <Connection as Drop>::drop                         connection.rs:40
+frame #6: drop_glue::<libsql::local::impls::LibsqlConnection>
+frame #13: aion_store_libsql::pool::ReadGuard drop
+frame #14: LibSqlStore::list_packages                        store.rs:234
+frame #16: aion::loader::persistence::reload_persisted_packages
+frame #18: <EngineBuilder>::build
+```
+
+§7 predicted "a deterministic fault inside `sqlite3_close_v2` at the first
+teardown". That is exactly what happened. **Note one honest difference from the
+prediction:** §7 said "two `disconnect` frames in the backtrace". There is ONE.
+That is consistent, not contradictory — this stack IS the second close; the
+first already returned on an earlier stack. The evidence for doubling is the
+source below, not a doubled frame.
+
+## The defect, at the line — two `Drop` impls over one handle
+
+```rust
+// libsql-0.9.30/src/local/impls.rs:16-18
+pub(crate) struct LibsqlConnection { pub(crate) conn: super::Connection }
+
+// libsql-0.9.30/src/local/impls.rs:108-110
+impl Drop for LibsqlConnection {
+    fn drop(&mut self) { self.conn.disconnect() }        // CLOSE #1
+}
+
+// libsql-0.9.30/src/local/connection.rs:38-42
+impl Drop for Connection {
+    fn drop(&mut self) { self.disconnect() }             // CLOSE #2
+}
+
+// libsql-0.9.30/src/local/connection.rs:108-112
+pub fn disconnect(&mut self) {
+    if Arc::get_mut(&mut self.drop_ref).is_some() {
+        unsafe { sqlite3_close_v2(self.raw) };           // `raw` is NEVER nulled
+    }
+}
+```
+
+`LibsqlConnection::drop` runs and closes. Rust then drops its fields, so the
+inner `Connection`'s own `Drop` runs and calls `disconnect` **again** — and
+because `drop_ref` is untouched by the first call, `Arc::get_mut` still returns
+`Some`, so the guard does not stop it. Two `sqlite3_close_v2` on one handle,
+**every teardown, unconditionally.**
+
+## 🔴 THE READING THIS OVERTURNS — including one I wrote myself
+
+The task-list summary of #85 said "isolated: 5/5 green", and 0.14.0's shipped
+known-issue inherited that as "rarely, under concurrent load". Both invite
+"a quiet machine is safe". **It is not, and load is not the variable.**
+
+The double close is unconditional. What contention changes is only whether the
+freed block has been *reused* by the time the second close reads it — that is,
+whether the fault is **visible**, not whether it happens. §5's own warning
+("dose, not cause") said this, and the narrowed summary lost it.
+
+I nearly repeated the error in the other direction. On measuring 4 failures in
+24 parallel runs against 0 in 15 serialised runs, I first wrote into the
+CHANGELOG that "the trigger is concurrency inside one process". E1 refutes that
+too: the fault fired on a **single-threaded** run, on the first test. Serialising
+does not avoid the defect; it lowers the dose. **A rate difference between two
+arms measures visibility, and only names a trigger if the mechanism agrees.**
+
+## Where it fires — not an exotic path
+
+Frames 13-18: a read-pool guard dropped by `LibSqlStore::list_packages`, called
+from `reload_persisted_packages` inside `EngineBuilder::build`. That is the
+**startup catalog reload** — what every libsql-backed server does when it comes
+up, not a rare concurrent-load event.
+
+## Method laws earned
+
+**Check your instrument's channel before believing its silence.** The
+GuardMalloc banner was counted before the result was read. A clean run under an
+instrument that never armed is a non-run, not a refutation.
+
+**A rate difference between arms measures visibility, not mechanism.** Two arms
+can differ sharply while the underlying fault is identical and unconditional in
+both. Only the mechanism can tell you which you measured.
+
+**A summary that narrows its own source outranks the source in practice.** The
+canonical record here never claimed contention-only; the one-line task summary
+did, and the shipped artifact followed the summary. When two records of one
+fact disagree, the shorter one is what people act on.
