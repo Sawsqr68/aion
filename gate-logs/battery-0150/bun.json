@@ -1,0 +1,6 @@
+{
+  "gate": "bun",
+  "exit_code": 0,
+  "passed": true,
+  "output_tail": "bun test v1.3.14 (0d9b296a)\n\n 1005 pass\n 0 fail\n 19309 expect() calls\nRan 1005 tests across 132 files. [2.41s]\n"
+}

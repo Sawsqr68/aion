@@ -1,0 +1,6 @@
+{
+  "gate": "clippy_workspace",
+  "exit_code": 0,
+  "passed": true,
+  "output_tail": "    Checking aion-rs v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.76s\n"
+}

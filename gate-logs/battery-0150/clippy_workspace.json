@@ -1,0 +1,6 @@
+{
+  "gate": "clippy_workspace",
+  "exit_code": 0,
+  "passed": true,
+  "output_tail": "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.59s\n"
+}

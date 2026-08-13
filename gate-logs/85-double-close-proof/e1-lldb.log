@@ -1,0 +1,24 @@
+(lldb) target create "/private/tmp/claude-501/-Users-tom-Developer-ablative-stack-aion/5849e0d8-4802-4869-8e0f-9f7fd187e198/scratchpad/outbox_e2e.pinned"
+Current executable set to '/private/tmp/claude-501/-Users-tom-Developer-ablative-stack-aion/5849e0d8-4802-4869-8e0f-9f7fd187e198/scratchpad/outbox_e2e.pinned' (arm64).
+(lldb) settings set -- target.run-args  "--test-threads=1" "--exact" "outbox_happy_path_completes_with_n_terminals_in_order"
+(lldb) settings set target.env-vars DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib
+(lldb) run
+GuardMalloc[outbox_e2e.pinned-36677]: Allocations will be placed on 16 byte boundaries.
+GuardMalloc[outbox_e2e.pinned-36677]:  - Some buffer overruns may not be noticed.
+GuardMalloc[outbox_e2e.pinned-36677]:  - Applications using vector instructions (e.g., SSE) should work.
+GuardMalloc[outbox_e2e.pinned-36677]: version 064573.1.1
+
+running 1 test
+test outbox_happy_path_completes_with_n_terminals_in_order ... Process 36677 launched: '/private/tmp/claude-501/-Users-tom-Developer-ablative-stack-aion/5849e0d8-4802-4869-8e0f-9f7fd187e198/scratchpad/outbox_e2e.pinned' (arm64)
+Process 36677 stopped
+* thread #2, name = 'outbox_happy_path_completes_with_n_terminals_in_order', stop reason = EXC_BAD_ACCESS (code=1, address=0xd0b3b3d41)
+    frame #0: 0x00000001009b9478 outbox_e2e.pinned`sqlite3SafetyCheckSickOrOk(db=0x0000000d0b3b3cd0) at sqlite3.c:36835:20
+   36832	}
+   36833	SQLITE_PRIVATE int sqlite3SafetyCheckSickOrOk(sqlite3 *db){
+   36834	  u8 eOpenState;
+-> 36835	  eOpenState = db->eOpenState;
+    	                   ^
+   36836	  if( eOpenState!=SQLITE_STATE_SICK &&
+   36837	      eOpenState!=SQLITE_STATE_OPEN &&
+   36838	      eOpenState!=SQLITE_STATE_BUSY ){
+Target 0: (outbox_e2e.pinned) stopped.

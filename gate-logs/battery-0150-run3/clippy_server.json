@@ -1,0 +1,6 @@
+{
+  "gate": "clippy_server",
+  "exit_code": 0,
+  "passed": true,
+  "output_tail": "    Checking aion-server v0.15.0 (/Users/tom/Developer/ablative/stack/aion/crates/aion-server)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 42.84s\n"
+}

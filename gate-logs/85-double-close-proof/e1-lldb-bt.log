@@ -1,0 +1,52 @@
+(lldb) target create "/private/tmp/claude-501/-Users-tom-Developer-ablative-stack-aion/5849e0d8-4802-4869-8e0f-9f7fd187e198/scratchpad/outbox_e2e.pinned"
+Current executable set to '/private/tmp/claude-501/-Users-tom-Developer-ablative-stack-aion/5849e0d8-4802-4869-8e0f-9f7fd187e198/scratchpad/outbox_e2e.pinned' (arm64).
+(lldb) settings set -- target.run-args  "--test-threads=1" "--exact" "outbox_happy_path_completes_with_n_terminals_in_order"
+(lldb) settings set target.env-vars DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib
+(lldb) run
+GuardMalloc[outbox_e2e.pinned-37409]: Allocations will be placed on 16 byte boundaries.
+GuardMalloc[outbox_e2e.pinned-37409]:  - Some buffer overruns may not be noticed.
+GuardMalloc[outbox_e2e.pinned-37409]:  - Applications using vector instructions (e.g., SSE) should work.
+GuardMalloc[outbox_e2e.pinned-37409]: version 064573.1.1
+
+running 1 test
+test outbox_happy_path_completes_with_n_terminals_in_order ... Process 37409 launched: '/private/tmp/claude-501/-Users-tom-Developer-ablative-stack-aion/5849e0d8-4802-4869-8e0f-9f7fd187e198/scratchpad/outbox_e2e.pinned' (arm64)
+Process 37409 stopped
+* thread #2, name = 'outbox_happy_path_completes_with_n_terminals_in_order', stop reason = EXC_BAD_ACCESS (code=1, address=0xf1d3afd41)
+    frame #0: 0x00000001009b9478 outbox_e2e.pinned`sqlite3SafetyCheckSickOrOk(db=0x0000000f1d3afcd0) at sqlite3.c:36835:20
+   36832	}
+   36833	SQLITE_PRIVATE int sqlite3SafetyCheckSickOrOk(sqlite3 *db){
+   36834	  u8 eOpenState;
+-> 36835	  eOpenState = db->eOpenState;
+    	                   ^
+   36836	  if( eOpenState!=SQLITE_STATE_SICK &&
+   36837	      eOpenState!=SQLITE_STATE_OPEN &&
+   36838	      eOpenState!=SQLITE_STATE_BUSY ){
+Target 0: (outbox_e2e.pinned) stopped.
+(lldb) thread backtrace -c 25
+* thread #2, name = 'outbox_happy_path_completes_with_n_terminals_in_order', stop reason = EXC_BAD_ACCESS (code=1, address=0xf1d3afd41)
+  * frame #0: 0x00000001009b9478 outbox_e2e.pinned`sqlite3SafetyCheckSickOrOk(db=0x0000000f1d3afcd0) at sqlite3.c:36835:20
+    frame #1: 0x00000001009b6a90 outbox_e2e.pinned`sqlite3Close(db=0x0000000f1d3afcd0, forceZombie=1) at sqlite3.c:182133:8
+    frame #2: 0x00000001009b6c20 outbox_e2e.pinned`sqlite3_close_v2(db=0x0000000f1d3afcd0) at sqlite3.c:182234:54
+    frame #3: 0x00000001005a1a90 outbox_e2e.pinned`<libsql::local::connection::Connection>::disconnect(self=0x0000000f1d39fdc0) at connection.rs:110:22
+    frame #4: 0x00000001005a57c8 outbox_e2e.pinned`<libsql::local::connection::Connection as core::ops::drop::Drop>::drop(self=0x0000000f1d39fdc0) at connection.rs:40:14
+    frame #5: 0x000000010038ab64 outbox_e2e.pinned`core::ptr::drop_glue::<libsql::local::connection::Connection>((null)=0x0000000f1d39fdc0) at mod.rs:825:1
+    frame #6: 0x000000010038ae70 outbox_e2e.pinned`core::ptr::drop_glue::<libsql::local::impls::LibsqlConnection>((null)=0x0000000f1d39fdc0) at mod.rs:825:1
+    frame #7: 0x0000000100361344 outbox_e2e.pinned`core::ptr::drop_glue::<dyn libsql::connection::Conn + core::marker::Sync + core::marker::Send>((null)=&mut (dyn libsql::connection::Conn + core::marker::Send + core::marker::Sync) @ 0x0000000f136ccc60) at mod.rs:825:1
+    frame #8: 0x000000010048c68c outbox_e2e.pinned`core::ptr::drop_in_place::<dyn libsql::connection::Conn + core::marker::Sync + core::marker::Send>(to_drop=<unavailable>) at mod.rs:820:14 [inlined]
+    frame #9: 0x000000010048c670 outbox_e2e.pinned`<alloc::sync::Arc<dyn libsql::connection::Conn + core::marker::Sync + core::marker::Send>>::drop_slow(self=0x0000000f1d387e50) at sync.rs:2143:18
+    frame #10: 0x0000000100498db8 outbox_e2e.pinned`<alloc::sync::Arc<dyn libsql::connection::Conn + core::marker::Sync + core::marker::Send> as core::ops::drop::Drop>::drop(self=0x0000000f1d387e50) at sync.rs:2874:18
+    frame #11: 0x0000000100367ad0 outbox_e2e.pinned`core::ptr::drop_glue::<alloc::sync::Arc<dyn libsql::connection::Conn + core::marker::Sync + core::marker::Send>>((null)=0x0000000f1d387e50) at mod.rs:825:1
+    frame #12: 0x0000000100388ee4 outbox_e2e.pinned`core::ptr::drop_glue::<libsql::connection::Connection>((null)=0x0000000f1d387e50) at mod.rs:825:1
+    frame #13: 0x0000000100275be0 outbox_e2e.pinned`core::ptr::drop_glue::<aion_store_libsql::pool::ReadGuard>((null)=0x0000000f1d387e50) at mod.rs:825:1
+    frame #14: 0x0000000100156b98 outbox_e2e.pinned`<aion_store_libsql::store::LibSqlStore as aion_store::package::PackageStore>::list_packages::{closure#0}((null)=Pin<&mut aion_store_libsql::store::{impl#2}::list_packages::{async_block_env#0}> @ 0x0000000f136cd3e8) at store.rs:234:72
+    frame #15: 0x0000000101fd8ef4 outbox_e2e.pinned`<core::pin::Pin<alloc::boxed::Box<dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<aion_store::package::PackageRecord>, aion_store::error::StoreError>> + core::marker::Send>> as core::future::future::Future>::poll(self=Pin<&mut core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output=core::result::Result<alloc::vec::Vec<aion_store::package::PackageRecord, alloc::alloc::Global>, aion_store::error::StoreError>> + core::marker::Send), alloc::alloc::Global>>> @ 0x0000000f136cd498, cx=0x0000000f136f1380) at future.rs:133:9
+    frame #16: 0x000000010002bc14 outbox_e2e.pinned`aion::loader::persistence::reload_persisted_packages::{closure#0}((null)=Pin<&mut aion::loader::persistence::reload_persisted_packages::{async_fn_env#0}> @ 0x0000000f136cf320) at persistence.rs:117:41
+    frame #17: 0x00000001000bc380 outbox_e2e.pinned`aion::engine::builder_assembly::assemble_startup_catalog::{closure#0}((null)=Pin<&mut aion::engine::builder_assembly::assemble_startup_catalog::{async_fn_env#0}> @ 0x0000000f136d1b60) at builder_assembly.rs:97:93
+    frame #18: 0x00000001000c1cec outbox_e2e.pinned`<aion::engine::builder::EngineBuilder>::build::{closure#0}((null)=Pin<&mut aion::engine::builder::{impl#6}::build::{async_fn_env#0}> @ 0x0000000f136d7170) at builder.rs:525:10
+    frame #19: 0x0000000100074110 outbox_e2e.pinned`outbox_e2e::engine_over::{closure#0}((null)=Pin<&mut outbox_e2e::engine_over::{async_fn_env#0}> @ 0x0000000f136dbac0) at outbox_e2e.rs:151:10
+    frame #20: 0x000000010007615c outbox_e2e.pinned`outbox_e2e::started_and_suspended_at::{closure#0}((null)=Pin<&mut outbox_e2e::started_and_suspended_at::{async_fn_env#0}> @ 0x0000000f136e5850) at outbox_e2e.rs:302:53
+    frame #21: 0x00000001000749fc outbox_e2e.pinned`outbox_e2e::started_and_suspended::{closure#0}((null)=Pin<&mut outbox_e2e::started_and_suspended::{async_fn_env#0}> @ 0x0000000f136ea6a8) at outbox_e2e.rs:348:52
+    frame #22: 0x00000001000783b4 outbox_e2e.pinned`outbox_e2e::outbox_happy_path_completes_with_n_terminals_in_order::{closure#0}((null)=Pin<&mut outbox_e2e::outbox_happy_path_completes_with_n_terminals_in_order::{async_block_env#0}> @ 0x0000000f136f0d08) at outbox_e2e.rs:520:86
+    frame #23: 0x000000010003bff0 outbox_e2e.pinned`<core::pin::Pin<&mut dyn core::future::future::Future<Output = core::result::Result<(), alloc::boxed::Box<dyn core::error::Error>>>> as core::future::future::Future>::poll(self=Pin<&mut core::pin::Pin<&mut dyn core::future::future::Future<Output=core::result::Result<(), alloc::boxed::Box<dyn core::error::Error, alloc::alloc::Global>>>>> @ 0x0000000f136f1278, cx=0x0000000f136f1380) at future.rs:133:9
+    frame #24: 0x00000001000b8d4c outbox_e2e.pinned`<tokio::runtime::park::CachedParkThread>::block_on::<core::pin::Pin<&mut dyn core::future::future::Future<Output = core::result::Result<(), alloc::boxed::Box<dyn core::error::Error>>>>>::{closure#0} at park.rs:284:71
+(lldb) quit

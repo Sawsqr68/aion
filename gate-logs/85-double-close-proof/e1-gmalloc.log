@@ -1,0 +1,7 @@
+GuardMalloc[outbox_e2e.pinned-36109]: Allocations will be placed on 16 byte boundaries.
+GuardMalloc[outbox_e2e.pinned-36109]:  - Some buffer overruns may not be noticed.
+GuardMalloc[outbox_e2e.pinned-36109]:  - Applications using vector instructions (e.g., SSE) should work.
+GuardMalloc[outbox_e2e.pinned-36109]: version 064573.1.1
+
+running 1 test
+test outbox_happy_path_completes_with_n_terminals_in_order ... 
