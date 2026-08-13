@@ -265,13 +265,13 @@ everything under it — and reports a CANCELLED MEASUREMENT, never a result.
 
 **Why a liminal SDK crate and not `aion worker awl`?** The server dispatches
 a deployed AWL workflow's activities through its liminal outbox, and
-dispatch ELIGIBILITY is earned by answering the liminal liveness pings. A
-gRPC-registered worker (`aion worker awl` / `worker shell`) is admitted into
-the same registry with the right pool key, but the liveness probe only pings
-liminal connections — so a gRPC worker's opening probation can never be
-served and it stays dispatch-ineligible forever, reported by the selection
-miss's catch-all message. That is filed (#197 re-filed with this mechanism);
-when it closes, the served worker document can supersede this crate.
+dispatch ELIGIBILITY is earned by answering the liveness probe. When this
+crate was written the probe enumerated only liminal connections, so a
+gRPC-registered worker (`aion worker awl` / `worker shell`) could never be
+asked a question and stayed dispatch-ineligible for the life of the process
+(#197). That closed at fc98ea1b7 (0.14.0): the probe now reaches
+gRPC-delivered workers, so both paths earn eligibility. This crate remains
+the served worked example; the gRPC worker path is a peer, not a dead end.
 
 **MANUAL START ONLY.** No cadence, no CI trigger, no schedule: a schedule is
 a value the operator names, and none is named. The battery is heavy (~30-60
