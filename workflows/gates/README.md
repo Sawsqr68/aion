@@ -11,9 +11,23 @@ from the history (the record the lane commits).
 ## What it runs
 
 Seven legs, every one returning `GateResult {gate, exit_code, passed,
-output_tail}` — the command's REAL exit code as data, never a derived
-pass-claim. `passed` is true exactly when the command exited 0 AND the leg's
-coverage floor held.
+failing_targets, failure_detail, output_tail}` — the command's REAL exit code
+as data, never a derived pass-claim. `passed` is true exactly when the command
+exited 0 AND the leg's coverage floor held.
+
+A red leg says WHY in the record, not only on the box (#236). `failing_targets`
+is cargo's own list of rerun invocations, kept separate from any tail;
+`failure_detail` is the whole diagnosis — cargo's error blocks including the
+indented `Caused by:` lines, then every failure block attributed to its target
+— and neither is truncated. The four cargo legs (`test`, both clippy legs,
+`gates_worker`) derive them from the retained log; `fmt`, `bun`, and `embed`
+have no extractor for their output shapes and say so in `failure_detail`
+rather than returning an empty field.
+
+The `Caused by:` lines are the reason the error blocks are carried and not just
+the failure text: a signal-killed test binary prints no `test result:` line at
+all, so `(signal: 11, SIGSEGV)` is the only thing the run ever says about the
+target that died — and a 40-line tail showed none of it.
 
 | # | Leg | Command |
 |---|---|---|

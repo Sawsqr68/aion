@@ -56,9 +56,24 @@ type GateResult {
   gate: String,
   exit_code: Int,
   passed: Bool,
-  /// Last lines of combined output, enough to read the failure without the
-  /// full log; the complete log is retained at
-  /// `<workspace>/gate-logs/gates-runs/<workflow_id>/<gate>.log`.
+  /// Cargo's own rerun invocations, one per failing target — the failing-target
+  /// list kept SEPARATE from any tail, so a reader routes on it without
+  /// parsing prose and every entry reproduces exactly that target. Empty on a
+  /// green leg, and on legs whose command has no targets to rerun.
+  failing_targets: [String],
+  /// WHY the leg is red, in full and never truncated: cargo's error blocks —
+  /// including the indented `Caused by:` lines, which for a signal-killed test
+  /// binary are the only diagnosis that exists — followed by every failure
+  /// block, each attributed to the target that produced it.
+  ///
+  /// A leg whose command this extractor does not read carries a sentence
+  /// saying so rather than an empty string: "nothing went wrong" and "nobody
+  /// looked" must not arrive as the same value.
+  failure_detail: String,
+  /// Last lines of combined output, for routing and for reading at a glance;
+  /// the complete log is retained at
+  /// `<workspace>/gate-logs/gates-runs/<workflow_id>/<gate>.log` and the
+  /// derived diagnosis beside it as `<gate>.diagnosis.json`.
   output_tail: String,
 }
 

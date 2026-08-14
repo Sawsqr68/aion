@@ -11,7 +11,7 @@
 # CONTRACT — gate subcommands (fmt, clippy_workspace, clippy_server, test,
 # bun, embed, gates_worker): stdout carries EXACTLY ONE JSON object, the
 # GateResult
-#   { gate, exit_code, passed, output_tail }
+#   { gate, exit_code, passed, failing_targets, failure_detail, output_tail }
 # and the script exits 0 even when the gate is RED — a red gate is a RESULT
 # the workflow routes on, carrying the gate command's real exit code as data.
 # `passed` is true exactly when the command exited 0 AND the leg's coverage
@@ -53,6 +53,53 @@
 # (gitignored — stated home on the measuring box, named in the manifest; the
 # bounded tails in workflow history are for routing and reading, the retained
 # log is for the #118 class of question the tail cannot answer).
+#
+# A RED GATE SAYS WHY, IN THE RECORD (#236). The retained log answers only on
+# the box that wrote it: it is gitignored, so it never joins a committed
+# bundle, and under a fleet it sits on whichever node measured while the
+# record travels. So the result itself carries the diagnosis, in two fields
+# that are SEPARATE from the tail and are never truncated:
+#
+#   failing_targets — cargo's own rerun invocations, one per failing target,
+#                     parsed from the `to rerun pass \`...\`` lines. A list, so
+#                     a reader routes on it without parsing prose, and every
+#                     entry is a command that reproduces exactly that target.
+#   failure_detail  — cargo's error blocks (including the indented `Caused by:`
+#                     lines) followed by every failure block in full, each
+#                     headed by the `Running <target>` line it belongs to.
+#
+# Both are derived from the retained log by `diagnose_cargo`, which runs on
+# the four legs whose commands are cargo: `test`, `clippy_workspace`,
+# `clippy_server`, and `gates_worker`. `failing_targets` is cargo-test-shaped
+# and is simply empty on the clippy legs, which have no targets to rerun;
+# `failure_detail` carries cargo's error blocks on all four, so a clippy leg
+# denied over two hundred warnings no longer arrives as the last two.
+#
+# `fmt`, `bun`, and `embed` have no extractor: their output shapes are a
+# rustfmt diff, a bun summary, and a directory diff, none of which this
+# program reads. Each says so IN `failure_detail` rather than leaving it
+# empty, because an empty field that means "nothing went wrong" and an empty
+# field that means "nobody looked" are not the same fact. Writing those three
+# extractors is separate work, not a silent gap.
+#
+# NEITHER FIELD IS CAPPED, deliberately. The size of a failure record is a
+# property of the failures, not a number this script picks: one assertion in
+# the 0.15.0 battery printed 124,511 bytes (a whole-document `assert_eq!`
+# diff), and a cap chosen to make that comfortable would have cut the next
+# failure's evidence in half. Nothing at rest forces a cap either — the
+# engine's `payload_limit_bytes` is a read-projection default on ONE history
+# window, and `describe`/`event` return payloads whole.
+#
+# The extractor is CALIBRATED, not assumed (2026-08-14): it was run against
+# five retained logs whose answers were known independently — two two-target
+# failures, one signal death, two green runs — and reconciled against a
+# separate count of `test result: FAILED` and column-zero `error:` lines in
+# each. The signal-death log is why `failure_detail` carries cargo's error
+# block and not just the failure text: that run has NO `test result:` line at
+# all, and `Caused by: ... (signal: 11, SIGSEGV)` is the only thing it ever
+# says about the target that died. Its first draft printed the NEXT target's
+# PASSING tests under the failing-target heading, because it continued an
+# error block on a blank-line count instead of on cargo's own indentation.
 #
 # CONTRACT — manifest subcommand: derives the committed-manifest artifact
 # MECHANICALLY from the run's own recorded history (`aion describe`), the
@@ -231,18 +278,153 @@ capture_identity() {
 # Emit one GateResult. `passed` is exit_code == 0 AND an empty floor verdict;
 # a non-empty floor verdict is prepended to the tail so the reason is the
 # first thing a reader sees.
+#
+# The diagnosis (#236) is derived on EVERY leg that has an extractor, green
+# ones included. A green leg yields an empty list and empty detail, which is
+# the control that the extractor is reading the log rather than inventing from
+# the exit code; a green leg that yielded a diagnosis would be the vacuous-
+# green contradiction this battery already exists to catch, and it would now
+# be visible in the record instead of silent.
 emit_result() {
-  local gate="$1" code="$2" log="$3" floor="$4"
-  local passed=false
+  local gate="$1" code="$2" log="$3" floor="$4" diagnose_fn="$5"
+  local passed=false diagnosis_file
   (( code == 0 )) && [[ -z "$floor" ]] && passed=true
+  if [[ -n "$diagnose_fn" ]]; then
+    diagnosis_file="$("$diagnose_fn" "$log")" || return $?
+  else
+    diagnosis_file="${log:r}.diagnosis.json"
+    jq -n --arg detail "$NO_EXTRACTOR_DETAIL" \
+      '{failing_targets: [], failure_detail: $detail}' >"$diagnosis_file" || {
+      print -u2 "gate-runner: failed to encode the no-extractor diagnosis for gate \`$gate\`"
+      return 70
+    }
+  fi
+  # `--slurpfile` reads the diagnosis from disk rather than argv, so an
+  # uncapped failure record cannot break the encoding of its own result.
   {
     [[ -n "$floor" ]] && printf '%s\n' "$floor"
     tail -n "$TAIL_LINES" -- "$log"
   } | jq -Rs --arg gate "$gate" --argjson code "$code" --argjson passed "$passed" \
-      '{gate: $gate, exit_code: $code, passed: $passed, output_tail: .}' || {
+      --slurpfile diagnosis "$diagnosis_file" \
+      '{gate: $gate, exit_code: $code, passed: $passed,
+        failing_targets: $diagnosis[0].failing_targets,
+        failure_detail: $diagnosis[0].failure_detail,
+        output_tail: .}' || {
     print -u2 "gate-runner: failed to encode the GateResult for gate \`$gate\` (real exit code was $code)"
     return 70
   }
+}
+
+# The diagnosis extractor (#236), inline because this script is spawned with a
+# cleared environment and an external program file would be one more path to
+# resolve — and one more thing that can be absent at the moment a gate is red.
+#
+# mode=errors  cargo's own error blocks: the `to rerun pass` line for each
+#              failing target, the final `N targets failed:` roll-up, and the
+#              indented `Caused by:` detail. For a signal-killed binary that
+#              detail is the ONLY diagnosis the run produces.
+# mode=text    every failure block in full, each headed by the `Running
+#              <target>` line it belongs to, so a panic is attributed to the
+#              target that produced it rather than floating free.
+#
+# An error block ends where cargo indentation ends, NOT after a blank line: a
+# blank line is held back and printed only if the block turns out to continue,
+# because counting blanks swallowed the next target passing tests and printed
+# them under the failing-target heading (measured, first draft, 2026-08-14).
+#
+# No apostrophes below: this program is carried in a single-quoted zsh string.
+readonly FAILURE_EXTRACT_AWK='
+BEGIN { running = ""; in_failures = 0; in_error = 0; held_blank = 0 }
+
+/^[[:space:]]+Running / || /^[[:space:]]+Doc-tests / {
+  in_error = 0; held_blank = 0
+  running = $0
+  sub(/^[[:space:]]+/, "", running)
+  next
+}
+
+# Both spellings, because rustc codes its errors and cargo does not:
+# `error[E0308]: mismatched types` from the compiler, `error: test failed, to
+# rerun pass ...` from cargo, `error: <lint>` from clippy under -D warnings. A
+# compile failure is the commonest cause of a red test leg, so matching only
+# the bare `error: ` form would have missed exactly the case that arrives most.
+/^error(\[[^]]*\])?: / {
+  if (mode == "errors") { print }
+  in_error = 1; held_blank = 0
+  next
+}
+in_error {
+  if ($0 ~ /^[[:space:]]*$/) { held_blank = 1; next }
+  if ($0 ~ /^[[:space:]]/ || $0 ~ /^Caused by:/) {
+    if (mode == "errors") { if (held_blank) print ""; print }
+    held_blank = 0
+    next
+  }
+  in_error = 0; held_blank = 0
+}
+
+/^failures:$/ {
+  if (mode == "text") {
+    if (!in_failures) {
+      print ""
+      print "=== " (running != "" ? running : "(target not named in the log)") " ==="
+    }
+    print
+  }
+  in_failures = 1
+  next
+}
+/^test result:/ {
+  if (in_failures && mode == "text") print
+  in_failures = 0
+  next
+}
+in_failures { if (mode == "text") print }
+'
+
+# The sentence a leg without an extractor puts in `failure_detail`. It is not
+# left empty on purpose: "nothing went wrong" and "nobody looked" must not
+# arrive as the same value.
+readonly NO_EXTRACTOR_DETAIL='This leg has no structured diagnosis extractor — its command does not produce cargo test output, so nothing here is a claim that the leg found nothing. Read output_tail for the bounded view and the retained full log named in the manifest for the whole record.'
+
+# Derive {failing_targets, failure_detail} from a retained cargo log and WRITE
+# IT TO A FILE, printing the path. The value is deliberately uncapped, so it
+# must never travel as a command-line argument: `jq --argjson` would put a
+# multi-megabyte failure record on the argv of the encoding call and blow
+# ARG_MAX, turning the largest, most informative failures into broken
+# measurements — the exact direction a diagnosis must not fail in. Every
+# intermediate is a file for the same reason.
+#
+# The file is retained beside the leg's log, so the diagnosis is an artifact on
+# the box as well as a value in the record.
+#
+# Returns non-zero only when the derivation itself broke, which run_gate turns
+# into a broken measurement — a leg whose diagnosis could not be read is not
+# reported as a leg with no diagnosis.
+diagnose_cargo() {
+  local log="$1" out="${1:r}.diagnosis.json"
+  local targets="${1:r}.targets.txt" errors="${1:r}.errors.txt" text="${1:r}.failtext.txt"
+  # The rerun invocation cargo names for each failing target. `doctest` is the
+  # same line in a different word, and a doctest target fails the same way.
+  sed -nE 's/^error: (test|doctest) failed, to rerun pass `(.*)`$/\2/p' "$log" >"$targets" || {
+    print -u2 "gate-runner: reading the failing-target list out of $log failed"
+    return 70
+  }
+  awk -v mode=errors "$FAILURE_EXTRACT_AWK" "$log" >"$errors" || {
+    print -u2 "gate-runner: extracting the cargo error blocks from $log failed"
+    return 70
+  }
+  awk -v mode=text "$FAILURE_EXTRACT_AWK" "$log" >"$text" || {
+    print -u2 "gate-runner: extracting the failure text from $log failed"
+    return 70
+  }
+  jq -n --rawfile targets "$targets" --rawfile errors "$errors" --rawfile text "$text" \
+    '{failing_targets: ($targets | if . == "" then [] else rtrimstr("\n") | split("\n") end),
+      failure_detail: ([$errors, $text] | map(rtrimstr("\n")) | map(select(length > 0)) | join("\n"))}' >"$out" || {
+    print -u2 "gate-runner: encoding the diagnosis for $log failed"
+    return 70
+  }
+  print -r -- "$out"
 }
 
 # The estate's cargo-test coverage control, ported from scripts/battery.sh
@@ -302,8 +484,8 @@ coverage_floor_bun() {
 # this function returns non-zero only when the measurement machinery itself
 # broke (unenterable workspace, command not found, unwritable log).
 run_gate() {
-  local gate="$1" dir="$2" floor_fn="$3"
-  shift 3
+  local gate="$1" dir="$2" floor_fn="$3" diagnose_fn="$4"
+  shift 4
   local log="$RUN_LOG_DIR/$gate.log"
 
   # The workspace is checked SEPARATELY from the gate command: a directory
@@ -341,7 +523,7 @@ run_gate() {
       return 70
     }
   fi
-  emit_result "$gate" "$code" "$log" "$floor"
+  emit_result "$gate" "$code" "$log" "$floor" "$diagnose_fn"
 }
 
 # The embed gate's stages, in order, each announced so the tail names the
@@ -471,11 +653,24 @@ cmd_manifest() {
   # completed activity whose recorded result carries the GateResult members,
   # in activity-id (dispatch) order.
   local gate_filter='[.history[] | select(.type == "ActivityCompleted") | .data
-    | select(.result | type == "object" and has("gate") and has("exit_code") and has("passed") and has("output_tail"))]
+    | select(.result | type == "object" and has("gate") and has("exit_code") and has("passed")
+                       and has("failing_targets") and has("failure_detail") and has("output_tail"))]
     | sort_by(.activity_id)'
 
   local legs count
-  legs="$(jq "$gate_filter"' | map({gate: .result.gate, activity_id: .activity_id, exit_code: .result.exit_code, passed: .result.passed})' "$describe")" || {
+  # `failing_targets` is IN the committed leg table (#236). The retained logs
+  # are gitignored, so before this the committed record could say a leg was red
+  # and nothing about which target — and the answer lived only on the box that
+  # measured. The list is small, bounded by the number of failing targets, and
+  # every entry is a command that reproduces the failure.
+  #
+  # `failure_detail` is deliberately NOT inlined here, and that is a stated
+  # boundary rather than a silent drop: it is uncapped (124 KB from one
+  # assertion in the 0.15.0 battery) and this artifact is committed. It is
+  # carried WHOLE in the run's own history, which `aion describe` returns
+  # without elision, and retained on the box beside each leg's log as
+  # `<gate>.diagnosis.json`. Both are named in this manifest — logs_dir below.
+  legs="$(jq "$gate_filter"' | map({gate: .result.gate, activity_id: .activity_id, exit_code: .result.exit_code, passed: .result.passed, failing_targets: .result.failing_targets})' "$describe")" || {
     print -u2 "gate-runner: jq failed reading the describe history"; rm -f -- "$describe" "$describe_err"; return 70; }
   count="$(jq 'length' <<<"$legs")" || { rm -f -- "$describe" "$describe_err"; return 70; }
 
@@ -794,36 +989,36 @@ case "$subcommand" in
   fmt)
     require_tools cargo || exit $?
     require_cargo_subcommands fmt || exit $?
-    run_gate fmt "$workspace" "" "${CMD_FMT[@]}"
+    run_gate fmt "$workspace" "" "" "${CMD_FMT[@]}"
     ;;
   clippy_workspace)
     require_tools cargo || exit $?
     require_cargo_subcommands clippy || exit $?
-    run_gate clippy_workspace "$workspace" "" "${CMD_CLIPPY_WORKSPACE[@]}"
+    run_gate clippy_workspace "$workspace" "" diagnose_cargo "${CMD_CLIPPY_WORKSPACE[@]}"
     ;;
   clippy_server)
     require_tools cargo || exit $?
     require_cargo_subcommands clippy || exit $?
-    run_gate clippy_server "$workspace" "" "${CMD_CLIPPY_SERVER[@]}"
+    run_gate clippy_server "$workspace" "" diagnose_cargo "${CMD_CLIPPY_SERVER[@]}"
     ;;
   test)
     require_tools cargo awk || exit $?
-    run_gate test "$workspace" coverage_floor_cargo_test "${CMD_TEST[@]}"
+    run_gate test "$workspace" coverage_floor_cargo_test diagnose_cargo "${CMD_TEST[@]}"
     ;;
   bun)
     require_tools bun sed || exit $?
-    run_gate bun "$workspace/apps/aion-ops-console" coverage_floor_bun "${CMD_BUN[@]}"
+    run_gate bun "$workspace/apps/aion-ops-console" coverage_floor_bun "" "${CMD_BUN[@]}"
     ;;
   embed)
     require_tools cargo bun diff || exit $?
-    run_gate embed "$workspace" "" embed_stages "$workspace"
+    run_gate embed "$workspace" "" "" embed_stages "$workspace"
     ;;
   gates_worker)
     require_tools cargo || exit $?
     # This leg runs fmt AND clippy AND test of the worker crate, so both
     # components must answer before it can report anything.
     require_cargo_subcommands fmt clippy || exit $?
-    run_gate gates_worker "$workspace/workflows/gates/worker" "" gates_worker_stages "$workspace/workflows/gates/worker"
+    run_gate gates_worker "$workspace/workflows/gates/worker" "" diagnose_cargo gates_worker_stages "$workspace/workflows/gates/worker"
     ;;
   manifest)
     cmd_manifest "$@"

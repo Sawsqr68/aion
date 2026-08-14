@@ -66,6 +66,20 @@ pub struct GateResult {
     /// True exactly when the gate command exited zero AND the leg's coverage
     /// floor held.
     pub passed: bool,
+    /// Cargo's own rerun invocations, one per failing target, kept SEPARATE
+    /// from any tail so a reader routes on the list without parsing prose and
+    /// every entry reproduces exactly that target. Empty on a green leg, and
+    /// empty on legs whose command has no targets to rerun.
+    pub failing_targets: Vec<String>,
+    /// Why the leg is red, in full and never truncated: cargo's error blocks
+    /// (including the indented `Caused by:` lines, which for a signal-killed
+    /// binary are the only diagnosis that exists) followed by every failure
+    /// block, each attributed to the target that produced it.
+    ///
+    /// A leg with no extractor carries a sentence saying so rather than an
+    /// empty string — "nothing went wrong" and "nobody looked" must not arrive
+    /// as the same value.
+    pub failure_detail: String,
     /// At most the final 40 lines of combined output, with any coverage-floor
     /// verdict at its head; the full log is retained on the measuring box.
     pub output_tail: String,
@@ -812,9 +826,12 @@ mod tests {
                 {"type": "WorkflowStarted", "data": {"envelope": {"seq": 1}, "run_id": "r-1",
                   "package_version": "p-1"}},
                 {"type": "ActivityCompleted", "data": {"activity_id": 0, "result":
-                  {"gate": "fmt", "exit_code": 0, "passed": true, "output_tail": "a\n"}}},
+                  {"gate": "fmt", "exit_code": 0, "passed": true, "failing_targets": [],
+                   "failure_detail": "", "output_tail": "a\n"}}},
                 {"type": "ActivityCompleted", "data": {"activity_id": 1, "result":
-                  {"gate": "bun", "exit_code": 1, "passed": false, "output_tail": "b\n"}}}
+                  {"gate": "bun", "exit_code": 1, "passed": false,
+                   "failing_targets": ["-p demo --lib"],
+                   "failure_detail": "error: test failed\n", "output_tail": "b\n"}}}
             ]
         });
         let canned = fixture.join("describe.json");
