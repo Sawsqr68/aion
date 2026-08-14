@@ -153,6 +153,20 @@ at the operator's desk, after this workflow returns.
 - **`judge_pass` is an input**, not a constant: the token the judge is
   instructed to reply with and the token the document matches against must be
   one truth, and both live at the dispatcher's hand.
+- **The red-routing `otherwise` arms are UNREACHABLE on this server — RULED
+  for the v3 rev (2026-08-14, from the first dispatch's live finding).** A
+  non-zero exit of a declared command is a retryable activity ERROR
+  (DECLARED-COMMANDS.md:368), so a `RunOutcome` never carries a non-zero
+  `exit_code` and every red arm that routes on one
+  (`unplanned`/`unforked`/`unmerged`/`unreported`/`gates_red`) cannot fire:
+  a red script ends the run terminally at that step instead of routing. Two
+  things follow, both ruled. The degradation is FAIL-LOUD, not silent — a
+  red gate still kills the run before judge spend and leaves the tree
+  inspectable — so v2 stands as dispatched. And the v3 rev makes the whole
+  document ONE oracle grammar: declared scripts always exit 0 and emit a
+  single stdout token, with every routing decision reading stdout equality —
+  exactly the register the controls already use. The exit status is not an
+  oracle; the document's own lesson, now applied to its own scripts.
 
 ## What this does not prove
 
