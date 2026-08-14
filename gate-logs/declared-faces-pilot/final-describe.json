@@ -1,0 +1,235 @@
+{
+  "summary": {
+    "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca",
+    "workflow_type": "norn_dev",
+    "status": "Completed",
+    "started_at": "2026-08-14T12:15:23.382835Z",
+    "ended_at": "2026-08-14T12:43:14.153356Z",
+    "parent": null
+  },
+  "history": [
+    {
+      "type": "WorkflowStarted",
+      "data": {
+        "envelope": {
+          "seq": 1,
+          "recorded_at": "2026-08-14T12:15:23.382835Z",
+          "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca"
+        },
+        "workflow_type": "norn_dev",
+        "input": {
+          "repo": "/Users/tom/Developer/ablative/apps/manifold/.worktrees/declared-faces",
+          "control_prompt": "This is a control question with a known answer. Read the file surface/page/package.json in your current working directory and reply with exactly the value of its \"name\" field — the bare string only, no quotes, no punctuation, no other words.",
+          "control_expect": "manifold-surface-page",
+          "brief": "DISPATCH PREAMBLE (from the dispatcher, rides above the brief):\nYou are the builder for this brief, working in the git worktree at\n/Users/tom/Developer/ablative/apps/manifold/.worktrees/declared-faces\n(branch declared-faces, HEAD f1e7ba0) — your current working directory.\nHARD WALLS, restated from the brief and binding: never touch ports\n4176/41100/41101/41102/9490s or any .manifold* path; dev estates only;\nno changes under crates/ (STOP-REPORT instead); never land, merge, push,\nor deploy — worktree commits only; no lint bypasses, no test skips.\nYour final reply is your report: what you built, the evidence you\ncommitted (including gate-logs/declared-faces/red.log), what remains\nstated-not-done if anything, and any STOP-REPORT with its reason.\nThe four R7 gates will be run mechanically by the server after you —\ndo not claim their result; commit your work so the tree carries it.\n\n# Declared faces — K6 runtime view delivery, leg 1 — brief r1\n\nTHE PILOT BRIEF: this is the first development leg dispatched as an aion\nworkflow (dev queue, norn worker). Written floors-not-ceilings: follow the\nsteps as written; where this brief and the repo's docs disagree, STOP and\nreport rather than choosing.\n\n## The settled design this implements (do not re-derive)\n\nRuling 5, DESIGN-EXTENSIONS.md:50-62 (Tom, binding): runtime view delivery —\ndeclare a kind, its view renders, no rebuild. The delivery model is RULED at\nROUND-20260813-VIEW-EYES-WORKFLOWS.md:31-38 (r1.2 bytes-correction): views\ntravel as RECORD ENTRIES on the registry feed, which the page already folds\nlive. NO code crosses this seam — declared-form-schema.ts:18-21 is law: \"a\nfacet cannot carry code\"; the vocabulary grows by a core release, never by a\ndeclaration. The pattern to copy is the AUTHORING half, already live: the\ncarried roster is empty (authoring-roster.ts:13-19), forms derive from the\n`accepts` facet at runtime, carried-wins on collision\n(kind-authoring.ts:135-142).\n\nThis leg does the SAME for the rendering half: a kind's DISPLAY face derives\nat runtime from a declared face spec — a closed-vocabulary JSON facet — with\nthe hand-wired poll face surviving as carried-wins. Interactivity (buttons,\nactions) is deliberately OUT: that is the K8 interaction door, a later leg.\nDeclared faces in this leg are read-only display.\n\n## Requirements\n\n**R1 — the face facet.** A component declaration may carry a new facet\n`manifold.facet.face@v1`. The core needs NO change: unknown facets travel,\nstore, and serve verbatim (registry/declaration.rs:69-71) — verify this by\ntest, not by edit; ⛔ if any crates/ change seems required, STOP-REPORT. The\nfacet body is `{ \"faces\": { \"<kind-token>\": <face-spec> } }`. A face-spec is\n`{ \"layout\": [ <element>... ] }` where each element is one of exactly FOUR\nclosed primitives (this vocabulary is v1 law, grows only by core release):\n- `{ \"primitive\": \"heading\", \"from\": \"<field>\" }` — the record field rendered\n  as the entry's heading text.\n- `{ \"primitive\": \"text\", \"from\": \"<field>\" }` — a field as body text.\n- `{ \"primitive\": \"list\", \"from\": \"<field>\" }` — a list field as items, one\n  row each; non-list value = this element refuses (see R4).\n- `{ \"primitive\": \"badge\", \"label\": \"<literal>\", \"from\": \"<field>\" }` — a\n  small labelled value.\n`\"from\"` names a top-level field of the record body. Unknown primitive names,\nmissing `from`, or a non-object spec are MALFORMED (R4). deny-unknown-fields\ndiscipline at every level, matching declared-form-schema.ts's reader style.\n\n**R2 — the page derives faces from the record.** New module\n`surface/page/src/declared-face.ts` (≤500 LOC, match the house style of\ndeclared-form-schema.ts + kind-authoring.ts): reads mounted declarations\n(mounted-registry standing, exactly as record-declaration.ts reads `renders`),\nopens `manifold.facet.face@v1`, and yields a `KindFaces` function\n(kind-render.ts:97). Composition: in\nsurface/page/src/composition/conversation/mount.ts, the faces passed to\nmountFeedView become carried-first-declared-after — the existing\n`pollFaces(...)` answer wins for its tokens; a declared face answers tokens\nthe carried roster returns null for; both null → existing renderBoundKind\nfallback unchanged. This mirrors authorableKinds precedence EXACTLY\n(carried first, derived after, carried wins; see the pinned test\ncomposition-declared-form-cases.mjs:584-611 for the precedence shape).\n\n**R3 — live arrival and re-declaration.** Because faces derive from the\nmounted-registry fold the page already applies on every registry.feed entry\n(record-delivery.ts:87), a newly mounted declaration's face takes effect on\nthe NEXT render with no rebuild and no reload, and a re-declared face changes\nthe rendering the same way. Acceptance: a dev-estate walk (never the live\nestate) — fixture kind declared with a face renders through it; re-declare\nwith a changed layout; the rendering changes; the page bundle bytes are\nuntouched throughout (assert dist/ mtimes or hashes unchanged across the\nwalk).\n\n**R4 — refusals by name, absence honest.** A malformed face-spec never\nhalf-renders: the kind falls back to renderBoundKind and the malformation is\ndisclosed the same way authoring derivation refusals are\n(authoring-roster.ts's derivationRefusals pattern — find the analogous\nsurface for render-side disclosure; if none exists, the refusal list is\nreturned by declared-face.ts and rendered nowhere yet — a stated remainder,\nNOT a silent drop; say which in the report). A `list` primitive over a\nnon-list value refuses that ELEMENT by name, renders the rest. A face naming\na field absent from a given record renders that element as the typed-absence\nstyle already used by kind-render.ts:216-236, never blank.\n\n**R5 — the fixture and the red.** The fixture kind is NOT poll — mint\n`ablative.message.notice@v1` (fields: `title` text, `body` text,\n`tags` text-list) with a declaration fixture carrying renders + accepts +\nface facets, added beside records/polls-declaration.json as\nrecords/notice-declaration.json. RED FIRST: commit a failing case asserting\nthe declared face's output (heading from title, text from body, list from\ntags, badge) BEFORE implementing R2 — the red run's output committed as\nevidence in gate-logs/declared-faces/red.log. Then green.\n\n**R6 — pins stay green.** Every existing case in\ncomposition-conversation-cases.mjs, composition-authoring-cases.mjs and\ncomposition-declared-form-cases.mjs passes UNMODIFIED — especially\n:1519 (poll kindComponent), :1544 (face never renders undeclared kind),\n:2102-2120 (poll declaration pins). ⛔ If any existing pin contradicts a\nrequirement here, STOP-REPORT with the pin named; never rewrite a pin.\n\n**R7 — gates.** npm run build (tsc + composition build) exit 0; full\ncomposition suite (node scripts/composition-test.mjs) with the new cases\nfile (scripts/composition-declared-face-cases.mjs) registered the same way\nthe declared-form cases are; scripts/loc-gate.sh exit 0 (no new debt\nentries); scripts/dist-gate.mjs exit 0 (nothing lands in dist/ but build\noutputs — the face spec travels on the record, NOT as a served file).\nEvery exit captured directly to gate-logs/declared-faces/, never through a\npipeline.\n\n## Hard walls\n\n⛔ Live estate untouchable: ports 4176/41100/41101/41102/9490s, every\n.manifold* path. Dev estates only. ⛔ No changes under crates/ (STOP-REPORT\nif a requirement seems to need one). ⛔ No edits to vendor/, no import-map\nchanges, no new served files, no dynamic import() of runtime URLs — code\ndelivery is REFUSED by the settled design; if you find yourself loading\ncode, you have left the brief. ⛔ poll-face.ts and poll.ts untouched. ⛔ No\nlint bypasses, no test skips. Worktree only; never land, merge, push, or\ndeploy — the re-gate and landing happen at Waffles's desk.\n\n## Provenance\n\nr1 by Waffles 2026-08-14, written against the wiring survey (explorer report,\nsame date): roster site mount.ts:67-72/:319, faces port kind-render.ts:97,\nconsumption feed-view.ts:352-371, authoring precedent\nauthoring-roster.ts/kind-authoring.ts, facet-verbatim law\nregistry/declaration.rs:69-71, delivery ruling\nROUND-20260813-VIEW-EYES-WORKFLOWS.md:31-38. Amendments land here.\n",
+          "gate_script": "/Users/tom/Developer/ablative/stack/aion/gate-logs/declared-faces-pilot/gate.sh"
+        },
+        "run_id": "30a7f12f-ede8-4e5e-804a-e07d32b86f90",
+        "parent_run_id": null,
+        "package_version": "c63f0a7a33ce1d291fa6c84e5db33f281d58b0707e84ce7eb9a3b7ef09598494"
+      }
+    },
+    {
+      "type": "SearchAttributesUpdated",
+      "data": {
+        "envelope": {
+          "seq": 2,
+          "recorded_at": "2026-08-14T12:15:23.382835Z",
+          "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca"
+        },
+        "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca",
+        "attributes": {
+          "aion.namespace": {
+            "type": "String",
+            "data": "default"
+          }
+        }
+      }
+    },
+    {
+      "type": "TimerStarted",
+      "data": {
+        "envelope": {
+          "seq": 3,
+          "recorded_at": "2026-08-14T12:15:23.382835Z",
+          "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca"
+        },
+        "timer_id": {
+          "Named": "deadline:30a7f12f-ede8-4e5e-804a-e07d32b86f90"
+        },
+        "fire_at": "2026-08-14T16:15:23.382835Z"
+      }
+    },
+    {
+      "type": "ActivityScheduled",
+      "data": {
+        "envelope": {
+          "seq": 4,
+          "recorded_at": "2026-08-14T12:15:23.593384Z",
+          "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca"
+        },
+        "activity_id": 0,
+        "activity_type": "delegate",
+        "input": {
+          "repo": "/Users/tom/Developer/ablative/apps/manifold/.worktrees/declared-faces",
+          "prompt": "This is a control question with a known answer. Read the file surface/page/package.json in your current working directory and reply with exactly the value of its \"name\" field — the bare string only, no quotes, no punctuation, no other words."
+        },
+        "task_queue": "dev",
+        "node": null
+      }
+    },
+    {
+      "type": "ActivityStarted",
+      "data": {
+        "envelope": {
+          "seq": 5,
+          "recorded_at": "2026-08-14T12:15:23.593384Z",
+          "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca"
+        },
+        "activity_id": 0,
+        "attempt": 1
+      }
+    },
+    {
+      "type": "ActivityCompleted",
+      "data": {
+        "envelope": {
+          "seq": 6,
+          "recorded_at": "2026-08-14T12:15:31.763549Z",
+          "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca"
+        },
+        "activity_id": 0,
+        "result": {
+          "text": "manifold-surface-page",
+          "stop_reason": "end_turn"
+        },
+        "attempt": 1
+      }
+    },
+    {
+      "type": "ActivityScheduled",
+      "data": {
+        "envelope": {
+          "seq": 7,
+          "recorded_at": "2026-08-14T12:15:31.862428Z",
+          "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca"
+        },
+        "activity_id": 1,
+        "activity_type": "delegate",
+        "input": {
+          "repo": "/Users/tom/Developer/ablative/apps/manifold/.worktrees/declared-faces",
+          "prompt": "DISPATCH PREAMBLE (from the dispatcher, rides above the brief):\nYou are the builder for this brief, working in the git worktree at\n/Users/tom/Developer/ablative/apps/manifold/.worktrees/declared-faces\n(branch declared-faces, HEAD f1e7ba0) — your current working directory.\nHARD WALLS, restated from the brief and binding: never touch ports\n4176/41100/41101/41102/9490s or any .manifold* path; dev estates only;\nno changes under crates/ (STOP-REPORT instead); never land, merge, push,\nor deploy — worktree commits only; no lint bypasses, no test skips.\nYour final reply is your report: what you built, the evidence you\ncommitted (including gate-logs/declared-faces/red.log), what remains\nstated-not-done if anything, and any STOP-REPORT with its reason.\nThe four R7 gates will be run mechanically by the server after you —\ndo not claim their result; commit your work so the tree carries it.\n\n# Declared faces — K6 runtime view delivery, leg 1 — brief r1\n\nTHE PILOT BRIEF: this is the first development leg dispatched as an aion\nworkflow (dev queue, norn worker). Written floors-not-ceilings: follow the\nsteps as written; where this brief and the repo's docs disagree, STOP and\nreport rather than choosing.\n\n## The settled design this implements (do not re-derive)\n\nRuling 5, DESIGN-EXTENSIONS.md:50-62 (Tom, binding): runtime view delivery —\ndeclare a kind, its view renders, no rebuild. The delivery model is RULED at\nROUND-20260813-VIEW-EYES-WORKFLOWS.md:31-38 (r1.2 bytes-correction): views\ntravel as RECORD ENTRIES on the registry feed, which the page already folds\nlive. NO code crosses this seam — declared-form-schema.ts:18-21 is law: \"a\nfacet cannot carry code\"; the vocabulary grows by a core release, never by a\ndeclaration. The pattern to copy is the AUTHORING half, already live: the\ncarried roster is empty (authoring-roster.ts:13-19), forms derive from the\n`accepts` facet at runtime, carried-wins on collision\n(kind-authoring.ts:135-142).\n\nThis leg does the SAME for the rendering half: a kind's DISPLAY face derives\nat runtime from a declared face spec — a closed-vocabulary JSON facet — with\nthe hand-wired poll face surviving as carried-wins. Interactivity (buttons,\nactions) is deliberately OUT: that is the K8 interaction door, a later leg.\nDeclared faces in this leg are read-only display.\n\n## Requirements\n\n**R1 — the face facet.** A component declaration may carry a new facet\n`manifold.facet.face@v1`. The core needs NO change: unknown facets travel,\nstore, and serve verbatim (registry/declaration.rs:69-71) — verify this by\ntest, not by edit; ⛔ if any crates/ change seems required, STOP-REPORT. The\nfacet body is `{ \"faces\": { \"<kind-token>\": <face-spec> } }`. A face-spec is\n`{ \"layout\": [ <element>... ] }` where each element is one of exactly FOUR\nclosed primitives (this vocabulary is v1 law, grows only by core release):\n- `{ \"primitive\": \"heading\", \"from\": \"<field>\" }` — the record field rendered\n  as the entry's heading text.\n- `{ \"primitive\": \"text\", \"from\": \"<field>\" }` — a field as body text.\n- `{ \"primitive\": \"list\", \"from\": \"<field>\" }` — a list field as items, one\n  row each; non-list value = this element refuses (see R4).\n- `{ \"primitive\": \"badge\", \"label\": \"<literal>\", \"from\": \"<field>\" }` — a\n  small labelled value.\n`\"from\"` names a top-level field of the record body. Unknown primitive names,\nmissing `from`, or a non-object spec are MALFORMED (R4). deny-unknown-fields\ndiscipline at every level, matching declared-form-schema.ts's reader style.\n\n**R2 — the page derives faces from the record.** New module\n`surface/page/src/declared-face.ts` (≤500 LOC, match the house style of\ndeclared-form-schema.ts + kind-authoring.ts): reads mounted declarations\n(mounted-registry standing, exactly as record-declaration.ts reads `renders`),\nopens `manifold.facet.face@v1`, and yields a `KindFaces` function\n(kind-render.ts:97). Composition: in\nsurface/page/src/composition/conversation/mount.ts, the faces passed to\nmountFeedView become carried-first-declared-after — the existing\n`pollFaces(...)` answer wins for its tokens; a declared face answers tokens\nthe carried roster returns null for; both null → existing renderBoundKind\nfallback unchanged. This mirrors authorableKinds precedence EXACTLY\n(carried first, derived after, carried wins; see the pinned test\ncomposition-declared-form-cases.mjs:584-611 for the precedence shape).\n\n**R3 — live arrival and re-declaration.** Because faces derive from the\nmounted-registry fold the page already applies on every registry.feed entry\n(record-delivery.ts:87), a newly mounted declaration's face takes effect on\nthe NEXT render with no rebuild and no reload, and a re-declared face changes\nthe rendering the same way. Acceptance: a dev-estate walk (never the live\nestate) — fixture kind declared with a face renders through it; re-declare\nwith a changed layout; the rendering changes; the page bundle bytes are\nuntouched throughout (assert dist/ mtimes or hashes unchanged across the\nwalk).\n\n**R4 — refusals by name, absence honest.** A malformed face-spec never\nhalf-renders: the kind falls back to renderBoundKind and the malformation is\ndisclosed the same way authoring derivation refusals are\n(authoring-roster.ts's derivationRefusals pattern — find the analogous\nsurface for render-side disclosure; if none exists, the refusal list is\nreturned by declared-face.ts and rendered nowhere yet — a stated remainder,\nNOT a silent drop; say which in the report). A `list` primitive over a\nnon-list value refuses that ELEMENT by name, renders the rest. A face naming\na field absent from a given record renders that element as the typed-absence\nstyle already used by kind-render.ts:216-236, never blank.\n\n**R5 — the fixture and the red.** The fixture kind is NOT poll — mint\n`ablative.message.notice@v1` (fields: `title` text, `body` text,\n`tags` text-list) with a declaration fixture carrying renders + accepts +\nface facets, added beside records/polls-declaration.json as\nrecords/notice-declaration.json. RED FIRST: commit a failing case asserting\nthe declared face's output (heading from title, text from body, list from\ntags, badge) BEFORE implementing R2 — the red run's output committed as\nevidence in gate-logs/declared-faces/red.log. Then green.\n\n**R6 — pins stay green.** Every existing case in\ncomposition-conversation-cases.mjs, composition-authoring-cases.mjs and\ncomposition-declared-form-cases.mjs passes UNMODIFIED — especially\n:1519 (poll kindComponent), :1544 (face never renders undeclared kind),\n:2102-2120 (poll declaration pins). ⛔ If any existing pin contradicts a\nrequirement here, STOP-REPORT with the pin named; never rewrite a pin.\n\n**R7 — gates.** npm run build (tsc + composition build) exit 0; full\ncomposition suite (node scripts/composition-test.mjs) with the new cases\nfile (scripts/composition-declared-face-cases.mjs) registered the same way\nthe declared-form cases are; scripts/loc-gate.sh exit 0 (no new debt\nentries); scripts/dist-gate.mjs exit 0 (nothing lands in dist/ but build\noutputs — the face spec travels on the record, NOT as a served file).\nEvery exit captured directly to gate-logs/declared-faces/, never through a\npipeline.\n\n## Hard walls\n\n⛔ Live estate untouchable: ports 4176/41100/41101/41102/9490s, every\n.manifold* path. Dev estates only. ⛔ No changes under crates/ (STOP-REPORT\nif a requirement seems to need one). ⛔ No edits to vendor/, no import-map\nchanges, no new served files, no dynamic import() of runtime URLs — code\ndelivery is REFUSED by the settled design; if you find yourself loading\ncode, you have left the brief. ⛔ poll-face.ts and poll.ts untouched. ⛔ No\nlint bypasses, no test skips. Worktree only; never land, merge, push, or\ndeploy — the re-gate and landing happen at Waffles's desk.\n\n## Provenance\n\nr1 by Waffles 2026-08-14, written against the wiring survey (explorer report,\nsame date): roster site mount.ts:67-72/:319, faces port kind-render.ts:97,\nconsumption feed-view.ts:352-371, authoring precedent\nauthoring-roster.ts/kind-authoring.ts, facet-verbatim law\nregistry/declaration.rs:69-71, delivery ruling\nROUND-20260813-VIEW-EYES-WORKFLOWS.md:31-38. Amendments land here.\n"
+        },
+        "task_queue": "dev",
+        "node": null
+      }
+    },
+    {
+      "type": "ActivityStarted",
+      "data": {
+        "envelope": {
+          "seq": 8,
+          "recorded_at": "2026-08-14T12:15:31.862428Z",
+          "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca"
+        },
+        "activity_id": 1,
+        "attempt": 1
+      }
+    },
+    {
+      "type": "ActivityCompleted",
+      "data": {
+        "envelope": {
+          "seq": 9,
+          "recorded_at": "2026-08-14T12:40:05.717776Z",
+          "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca"
+        },
+        "activity_id": 1,
+        "result": {
+          "text": "## Delivery report\n\nImplemented **Declared faces — K6 runtime view delivery, leg 1** on branch `declared-faces`. Worktree is clean; nothing was landed, merged, pushed, or deployed.\n\n### Commits\n\n- `eef6428` — `test(page): pin declared faces red`\n  - Added the failing declared-face browser cases first.\n  - Added `records/notice-declaration.json`.\n  - Registered `composition-declared-face-cases.mjs`.\n  - Committed the required failing transcript:\n    - `surface/page/gate-logs/declared-faces/red.log`\n    - Exit `1`, with exactly the four new declared-face claims failing.\n\n- `e58973d` — `feat(page): derive display faces from declarations`\n  - Added the runtime implementation and final evidence.\n\n### What was built\n\n- Added `surface/page/src/declared-face.ts`:\n  - Reads `manifold.facet.face@v1`.\n  - Strict, deny-unknown parsing at facet, face-spec, and element levels.\n  - Closed v1 vocabulary:\n    - `heading`\n    - `text`\n    - `list`\n    - `badge`\n  - Malformed face specs return no face, preserving `renderBoundKind` fallback.\n  - Missing record fields render an explicit typed absence naming the field.\n  - A `list` over a non-list value refuses only that element by field name; remaining elements render.\n  - Preserves bound-kind provenance and attribution.\n  - Resolves against a fresh mounted-registry snapshot on every token request.\n  - Exposes `declaredFaceRefusals(snapshot)` for malformed-declaration disclosure.\n\n- Updated conversation composition:\n  - Existing `pollFaces(...)` remains carried-first.\n  - Declared faces answer only when the carried roster returns `null`.\n  - Both returning `null` leaves the existing bound-kind fallback unchanged.\n  - The page’s existing mounted-registry fold is reused; no second registry reading was introduced.\n\n- Added fixture:\n  - `surface/page/records/notice-declaration.json`\n  - Kind: `ablative.message.notice@v1`\n  - Fields: `title`, `body`, `tags`\n  - Carries renders, accepts, and face facets.\n\n- Added and registered browser coverage:\n  - Unknown face facets pass through the existing declaration reader verbatim.\n  - All four primitives render.\n  - Malformed specs refuse whole and disclose the primitive/reason.\n  - Missing-field and list-type behavior.\n  - Fresh declaration and re-declaration layouts affect the next resolver answer.\n  - Existing composition pins remained unmodified.\n\n### Committed evidence\n\nUnder `surface/page/gate-logs/declared-faces/`:\n\n- `red.log` — required red-first run, exit `1`.\n- `build.log` — local `npm run build`, exit `0`.\n- `composition.log` — full suite:\n  - `COMPOSITION TESTS PASS — 635 claims, all green.`\n- `loc.log` — LOC gate:\n  - 468 files measured.\n  - Five existing debts.\n  - None grown or stale; no new over-limit files.\n- `dist.log` — dist gate:\n  - 140 served files regenerated byte-identically.\n  - No tracked or committable dist output.\n- `live-redeclaration.log` — declaration/re-declaration browser walk:\n  - 442 dist files before and after.\n  - `page bundle bytes unchanged: true`.\n\nThese are local committed transcripts; the server’s four mechanical R7 re-gates remain authoritative and are not claimed here.\n\n### Stated-not-done\n\nThere is currently **no render-side disclosure surface analogous to the composer’s authoring-refusal disclosure**. As permitted by R4, `declaredFaceRefusals(...)` returns the actionable refusal list, but it is not rendered anywhere yet. Malformed faces still fall back honestly rather than being silently half-rendered.\n\n### Hard-wall audit\n\n- No changes under `crates/`.\n- No changes to `poll-face.ts` or `poll.ts`.\n- No changes under `vendor/`.\n- No import-map changes, served face-spec files, or runtime code loading.\n- No live-estate ports or `.manifold*` paths touched.\n- No lint bypasses or test skips.\n- No land, merge, push, or deploy performed.\n- Final branch HEAD: `e58973d`\n- Worktree status: clean.\n- Norn session: `40d7248c-0f69-4452-9668-a7d2abfcef43`\n\n**STOP-REPORT:** none.",
+          "stop_reason": "end_turn"
+        },
+        "attempt": 1
+      }
+    },
+    {
+      "type": "ActivityScheduled",
+      "data": {
+        "envelope": {
+          "seq": 10,
+          "recorded_at": "2026-08-14T12:40:05.784088Z",
+          "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca"
+        },
+        "activity_id": 2,
+        "activity_type": "gates",
+        "input": {
+          "script": "/Users/tom/Developer/ablative/stack/aion/gate-logs/declared-faces-pilot/gate.sh"
+        },
+        "task_queue": "dev",
+        "node": null
+      }
+    },
+    {
+      "type": "ActivityStarted",
+      "data": {
+        "envelope": {
+          "seq": 11,
+          "recorded_at": "2026-08-14T12:40:05.784088Z",
+          "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca"
+        },
+        "activity_id": 2,
+        "attempt": 1
+      }
+    },
+    {
+      "type": "ActivityCompleted",
+      "data": {
+        "envelope": {
+          "seq": 12,
+          "recorded_at": "2026-08-14T12:43:14.106063Z",
+          "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca"
+        },
+        "activity_id": 2,
+        "result": {
+          "exit_code": 0,
+          "stdout": "build=0 composition=0 loc=0 dist=0",
+          "stderr": ""
+        },
+        "attempt": 1
+      }
+    },
+    {
+      "type": "WorkflowCompleted",
+      "data": {
+        "envelope": {
+          "seq": 13,
+          "recorded_at": "2026-08-14T12:43:14.153356Z",
+          "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca"
+        },
+        "result": {
+          "outcome": "done",
+          "payload": {
+            "report": "## Delivery report\n\nImplemented **Declared faces — K6 runtime view delivery, leg 1** on branch `declared-faces`. Worktree is clean; nothing was landed, merged, pushed, or deployed.\n\n### Commits\n\n- `eef6428` — `test(page): pin declared faces red`\n  - Added the failing declared-face browser cases first.\n  - Added `records/notice-declaration.json`.\n  - Registered `composition-declared-face-cases.mjs`.\n  - Committed the required failing transcript:\n    - `surface/page/gate-logs/declared-faces/red.log`\n    - Exit `1`, with exactly the four new declared-face claims failing.\n\n- `e58973d` — `feat(page): derive display faces from declarations`\n  - Added the runtime implementation and final evidence.\n\n### What was built\n\n- Added `surface/page/src/declared-face.ts`:\n  - Reads `manifold.facet.face@v1`.\n  - Strict, deny-unknown parsing at facet, face-spec, and element levels.\n  - Closed v1 vocabulary:\n    - `heading`\n    - `text`\n    - `list`\n    - `badge`\n  - Malformed face specs return no face, preserving `renderBoundKind` fallback.\n  - Missing record fields render an explicit typed absence naming the field.\n  - A `list` over a non-list value refuses only that element by field name; remaining elements render.\n  - Preserves bound-kind provenance and attribution.\n  - Resolves against a fresh mounted-registry snapshot on every token request.\n  - Exposes `declaredFaceRefusals(snapshot)` for malformed-declaration disclosure.\n\n- Updated conversation composition:\n  - Existing `pollFaces(...)` remains carried-first.\n  - Declared faces answer only when the carried roster returns `null`.\n  - Both returning `null` leaves the existing bound-kind fallback unchanged.\n  - The page’s existing mounted-registry fold is reused; no second registry reading was introduced.\n\n- Added fixture:\n  - `surface/page/records/notice-declaration.json`\n  - Kind: `ablative.message.notice@v1`\n  - Fields: `title`, `body`, `tags`\n  - Carries renders, accepts, and face facets.\n\n- Added and registered browser coverage:\n  - Unknown face facets pass through the existing declaration reader verbatim.\n  - All four primitives render.\n  - Malformed specs refuse whole and disclose the primitive/reason.\n  - Missing-field and list-type behavior.\n  - Fresh declaration and re-declaration layouts affect the next resolver answer.\n  - Existing composition pins remained unmodified.\n\n### Committed evidence\n\nUnder `surface/page/gate-logs/declared-faces/`:\n\n- `red.log` — required red-first run, exit `1`.\n- `build.log` — local `npm run build`, exit `0`.\n- `composition.log` — full suite:\n  - `COMPOSITION TESTS PASS — 635 claims, all green.`\n- `loc.log` — LOC gate:\n  - 468 files measured.\n  - Five existing debts.\n  - None grown or stale; no new over-limit files.\n- `dist.log` — dist gate:\n  - 140 served files regenerated byte-identically.\n  - No tracked or committable dist output.\n- `live-redeclaration.log` — declaration/re-declaration browser walk:\n  - 442 dist files before and after.\n  - `page bundle bytes unchanged: true`.\n\nThese are local committed transcripts; the server’s four mechanical R7 re-gates remain authoritative and are not claimed here.\n\n### Stated-not-done\n\nThere is currently **no render-side disclosure surface analogous to the composer’s authoring-refusal disclosure**. As permitted by R4, `declaredFaceRefusals(...)` returns the actionable refusal list, but it is not rendered anywhere yet. Malformed faces still fall back honestly rather than being silently half-rendered.\n\n### Hard-wall audit\n\n- No changes under `crates/`.\n- No changes to `poll-face.ts` or `poll.ts`.\n- No changes under `vendor/`.\n- No import-map changes, served face-spec files, or runtime code loading.\n- No live-estate ports or `.manifold*` paths touched.\n- No lint bypasses or test skips.\n- No land, merge, push, or deploy performed.\n- Final branch HEAD: `e58973d`\n- Worktree status: clean.\n- Norn session: `40d7248c-0f69-4452-9668-a7d2abfcef43`\n\n**STOP-REPORT:** none.",
+            "gate_exit": 0,
+            "gate_stderr": "",
+            "control_reply": "manifold-surface-page"
+          }
+        }
+      }
+    },
+    {
+      "type": "TimerCancelled",
+      "data": {
+        "envelope": {
+          "seq": 14,
+          "recorded_at": "2026-08-14T12:43:14.199246Z",
+          "workflow_id": "766e0bfe-d8b4-48ba-b1b5-afd2f8991cca"
+        },
+        "timer_id": {
+          "Named": "deadline:30a7f12f-ede8-4e5e-804a-e07d32b86f90"
+        },
+        "cause": "WorkflowIntent"
+      }
+    }
+  ]
+}
