@@ -1,7 +1,8 @@
-//! fleet_dev — one brief, planned into legs by a planning counsel, built leg
-//! by leg by delegated builders, judged by a judging counsel, and gated by the
-//! server — on the engine's own durability, with every seam proven against a
-//! known answer before anything real is spent.
+//! fleet_dev — one brief, planned into legs by a planning counsel, built by
+//! parallel delegated builders in isolated worktrees, merged by the server,
+//! judged by a judging counsel, and gated by the server — on the engine's own
+//! durability, with every seam proven against a known answer before anything
+//! real is spent.
 //!
 //! This is the fleet-shaped sibling of `norn_dev`: same agent seam (the tree
 //! to work in, the prompt to work on, the canonical agent-outcome record
@@ -13,17 +14,19 @@
 //! THE TREE IS THE BLACKBOARD. AWL composes no strings at runtime — constant
 //! concatenation exists, runtime concatenation deliberately does not — so no
 //! step can wrap one leg's reply inside another leg's prompt. Instead every
-//! prompt in this document is an ADDRESS and every payload lives in the
-//! working tree, which all legs share through `cwd from repo`:
+//! prompt in this document is an ADDRESS and every payload lives in a working
+//! tree named by the dispatch:
 //!   - the planner is instructed (by `plan_prompt`) to write the whole leg
 //!     plan to `.fleet/plan.md` and one complete brief per leg to
 //!     `.fleet/legs/<id>.md`, each anchored file:line to the requirement it
-//!     fans out;
+//!     fans out — in the PRIMARY tree (`repo`);
 //!   - each builder's prompt (built by the dispatcher, carried in `legs`)
 //!     names its own `.fleet/legs/<id>.md` as the brief to read and
-//!     `.fleet/reports/<id>.md` as the report to write;
+//!     `.fleet/reports/<id>.md` as the report to write — in the leg's OWN
+//!     tree (`leg.repo`);
 //!   - the judge's prompt names the plan, the briefs, the reports, and the
-//!     diff, and carries the judging charter itself.
+//!     diff of the MERGED primary tree, and carries the judging charter
+//!     itself.
 //! Every agent's deliverable is CHECKED MECHANICALLY, because every reply is
 //! a claim and the tree is the fact: `plan_check` verifies every promised
 //! leg brief exists and is non-empty, so a planner that answered eloquently
@@ -31,6 +34,19 @@
 //! downstream — and `report_check` holds the builders to the same law, so a
 //! builder whose reply claimed work the tree does not carry routes to
 //! `unreported` before the gates can pass a tree left in its prior state.
+//!
+//! BUILDERS FAN OUT; THE SERVER FANS IN. The legs run in parallel
+//! (`distribute`), one isolated worktree per builder, because concurrent
+//! writers in one tree destroy each other's work — isolation is the ruled
+//! answer, not a nicety. The `fanout` action cuts one worktree and one branch
+//! per leg from the planned tree and carries the planner's `.fleet/` briefs
+//! into each; the `fanin` action merges the leg branches back into the
+//! primary tree and carries each leg's report back with it. Both are sealed
+//! server-run scripts routed on exit codes: a tree that cannot be cut routes
+//! `unforked` before any builder is spent, and branches that cannot be
+//! merged route `unmerged` with the conflict named — a merge conflict is a
+//! finding about the plan's leg boundaries, never something an agent talks
+//! its way past.
 //!
 //! THE JUDGE IS NOT A GATE AND THE GATES ARE NOT A JUDGE. The gate script's
 //! exit code routes green/red mechanically, before the judge runs — a red
@@ -46,12 +62,6 @@
 //! `judge_flagged` carrying the verdict text whole. The mismatch direction is
 //! deliberate: this document can produce a false flag, never a false clear.
 //!
-//! Builders run in `sequence`, one leg at a time in the ONE shared tree, in
-//! the dispatcher's leg order: later legs see earlier legs' commits, which is
-//! what dependent legs need, and no merge phase exists to go wrong. A
-//! parallel variant (per-leg worktrees, `distribute`) is a recorded
-//! trade-off in this folder's README, not a quiet default.
-//!
 //! WHAT THIS DOES NOT PROVE: a green gate proves what the script measures; a
 //! judge's CLEAR is one model's read of the tree, priced by its charter but
 //! unverified. The landing re-gate and the landing itself stay at the
@@ -65,13 +75,17 @@ workflow fleet_dev
   input control_expect: String
   input plan_prompt: String
   input plan_check_script: String
+  input fanout_script: String
   input legs: [Leg]
+  input fanin_script: String
   input report_check_script: String
   input judge_prompt: String
   input judge_pass: String
   input gate_script: String
   outcome done:          type FleetDevReport, route success
   outcome unplanned:     type PlanRefused,    route failure
+  outcome unforked:      type Unforked,       route failure
+  outcome unmerged:      type Unmerged,       route failure
   outcome unreported:    type Unreported,     route failure
   outcome gates_red:     type GatesRed,       route failure
   outcome judge_flagged: type JudgeFlagged,   route failure
@@ -80,8 +94,10 @@ workflow fleet_dev
 /// One unit of fleet work. `prompt` is complete and self-contained AS AN
 /// ADDRESS: it names the leg's brief file the planner wrote and the report
 /// file the builder must write, plus the standing register (floors not
-/// ceilings, hard walls restated). The brief's CONTENT lives in the tree.
-type Leg { id: String, prompt: String }
+/// ceilings, hard walls restated). `repo` is the leg's OWN isolated
+/// worktree, cut by `fanout` — the dispatcher fixes both. The brief's
+/// CONTENT lives in the tree.
+type Leg { id: String, prompt: String, repo: String }
 
 /// The canonical agent-outcome record every dispatch of an agent seam
 /// returns: the leg's terminal `text` and the canonical `stop_reason`.
@@ -94,10 +110,10 @@ type Reply { text: String, stop_reason: String }
 /// filled by the server for every `run`-bodied action.
 type RunOutcome { exit_code: Int, stdout: String, stderr: String }
 
-/// A fleet that planned, built, gated green, and was judged clear. The
-/// builders' own accounts travel with the machine's gate evidence and the
-/// judge's admission, plus both controls' replies — an assertion that the
-/// method worked is not a demonstration.
+/// A fleet that planned, built in parallel, merged clean, gated green, and
+/// was judged clear. The builders' own accounts travel with the machine's
+/// gate evidence and the judge's admission, plus both controls' replies —
+/// an assertion that the method worked is not a demonstration.
 type FleetDevReport {
   plan: String,
   leg_ids: [String],
@@ -113,6 +129,19 @@ type FleetDevReport {
 /// Carries the planner's account beside the check's own streams.
 type PlanRefused { plan: String, check_exit: Int, stdout: String, stderr: String }
 
+/// The leg worktrees could not be cut, so no builder was spent. The fanout
+/// script refuses loudly — including when a leftover tree or branch from a
+/// prior attempt is in the way, which is the dispatcher's to inspect, never
+/// a script's to delete.
+type Unforked { plan: String, fork_exit: Int, stdout: String, stderr: String }
+
+/// The legs built but their branches could not be merged back. A conflict
+/// here is a finding about the plan's leg boundaries — two briefs claimed
+/// the same ground. The script names the conflicting files on stdout and
+/// aborts the merge, leaving the primary tree clean and every leg branch
+/// intact for the dispatcher to read.
+type Unmerged { plan: String, reports: [String], merge_exit: Int, stdout: String, stderr: String }
+
 /// The builders answered but at least one promised report is not in the
 /// tree. A builder's reply is a claim exactly as the planner's is; a tree
 /// left in its prior state can gate GREEN, so this is caught by a script
@@ -121,8 +150,8 @@ type PlanRefused { plan: String, check_exit: Int, stdout: String, stderr: String
 /// travels here beside the builders' own accounts.
 type Unreported { plan: String, reports: [String], check_exit: Int, stdout: String, stderr: String }
 
-/// The legs built but the gates are red. Everything needed to read the
-/// failure travels with the refusal-to-report.
+/// The legs built and merged but the gates are red. Everything needed to
+/// read the failure travels with the refusal-to-report.
 type GatesRed { plan: String, reports: [String], gate_exit: Int, stdout: String, stderr: String }
 
 /// The delivery gated green and the judge refused it anyway — or answered
@@ -168,14 +197,19 @@ worker counsel
     agent, timeout 30m, retry 3 backoff 30s..5m
 
 worker dev
-  /// The builders' seat: queue `dev`, byte-compatible with `norn_dev`'s
-  /// declaration so the same seated worker serves both documents. Same
-  /// register as the pilot: the brief address goes to the session verbatim,
-  /// the report comes back verbatim, retries absorb provider-overload
-  /// bursts — a failed build is a reply, not an error.
+  /// The builders' seat: queue `dev`, the same action seam as `norn_dev`'s
+  /// declaration (`delegate(repo, prompt) -> Reply`) so a seated norn
+  /// worker serves both documents. `concurrency 3` is the parallel-legs
+  /// value — one lane per leg of this dispatch — and diverges from
+  /// `norn_dev`'s single lane, so a fleet run wanting true parallelism
+  /// seats a worker FROM THIS DOCUMENT; the trade-off is recorded in this
+  /// folder's README. Same register as the pilot otherwise: the brief
+  /// address goes to the session verbatim, the report comes back verbatim,
+  /// retries absorb provider-overload bursts — a failed build is a reply,
+  /// not an error.
   harness
     kind norn
-    concurrency 1
+    concurrency 3
     reconnect_initial_backoff 1s
     reconnect_max_backoff 30s
     reconnect_max_attempts 100
@@ -190,9 +224,23 @@ worker dev
   action plan_check(script: String) -> RunOutcome
     run "zsh $script"
 
-  /// The builders' deliverables, verified the same way: the sealed script
-  /// checks every promised `.fleet/reports/<id>.md` exists and is
-  /// non-empty, naming each missing leg on stdout.
+  /// The fan-out, run by the server: one isolated worktree and one branch
+  /// per leg, cut from the planned tree, each carrying the planner's
+  /// `.fleet/` briefs. Refuses loudly rather than deleting anything in its
+  /// way.
+  action fanout(script: String) -> RunOutcome
+    run "zsh $script"
+
+  /// The fan-in, run by the server: each leg's report carried back to the
+  /// primary tree, then each leg branch merged in dispatch order. A
+  /// conflict aborts clean and exits non-zero with the files named.
+  action fanin(script: String) -> RunOutcome
+    run "zsh $script"
+
+  /// The builders' deliverables, verified the same way as the planner's:
+  /// the sealed script checks every promised `.fleet/reports/<id>.md`
+  /// exists and is non-empty in the merged tree, naming each missing leg
+  /// on stdout.
   action report_check(script: String) -> RunOutcome
     run "zsh $script"
 
@@ -229,26 +277,46 @@ step plan_legs
 /// check's exit code, never on the eloquence of the reply.
 step check_plan
   plan_check(script: plan_check_script) -> plan_checked
-  outcome written: when plan_checked.exit_code == 0, route open
+  outcome written: when plan_checked.exit_code == 0, route cut_trees
   outcome missing: otherwise,
     route unplanned(plan: planned.text, check_exit: plan_checked.exit_code,
       stdout: plan_checked.stdout, stderr: plan_checked.stderr)
 
+/// Cut the leg worktrees from the planned tree before any builder is
+/// spent: a fleet that cannot be isolated does not build.
+step cut_trees
+  fanout(script: fanout_script) -> forked
+  outcome cut: when forked.exit_code == 0, route open
+  outcome uncut: otherwise,
+    route unforked(plan: planned.text, fork_exit: forked.exit_code, stdout: forked.stdout,
+      stderr: forked.stderr)
+
 step open
-  sequence leg in legs
+  distribute leg in legs
 
 step build_one
-  delegate(repo: repo, prompt: leg.prompt) -> built
+  delegate(repo: leg.repo, prompt: leg.prompt) -> built
   built.text -> report
 
 step close
   collect report -> reports
   legs |> map(.id) -> leg_ids
 
+/// The server joins what the builders made: reports carried back, branches
+/// merged in dispatch order. A conflict is a finding about the plan's leg
+/// boundaries and routes with the conflicting files named — it is never an
+/// agent's to resolve in passing.
+step merge
+  fanin(script: fanin_script) -> merged
+  outcome joined: when merged.exit_code == 0, route check_reports
+  outcome conflicted: otherwise,
+    route unmerged(plan: planned.text, reports: reports, merge_exit: merged.exit_code,
+      stdout: merged.stdout, stderr: merged.stderr)
+
 /// A builder's answer is a claim; the tree is the fact — the same law
 /// `check_plan` enforces on the planner, enforced here on every builder
-/// before the gates run, so the judge is never the first thing to notice
-/// an eloquent reply that wrote nothing.
+/// against the merged tree, so the judge is never the first thing to
+/// notice an eloquent reply that wrote nothing.
 step check_reports
   report_check(script: report_check_script) -> reports_checked
   outcome written: when reports_checked.exit_code == 0, route gate

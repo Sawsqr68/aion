@@ -1,0 +1,2 @@
+{"timestamp":"2026-08-14T13:48:10.426436Z","level":"INFO","fields":{"message":"agent worker dialing liminal candidates","candidates":"127.0.0.1:50061","task_queue":"counsel","identity":"counsel-worker","namespace":"default","harness":"acp","cwd":"each job names its own directory in its `repo` parameter"},"target":"aion::worker_agent::serve"}
+{"timestamp":"2026-08-14T13:48:10.433557Z","level":"INFO","fields":{"message":"agent worker registered; serving through the composed agent harness","task_queue":"counsel","actions":"judge, plan"},"target":"aion::worker_agent::serve"}

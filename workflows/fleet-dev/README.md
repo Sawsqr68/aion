@@ -1,15 +1,19 @@
-# `fleet-dev` — one brief, planned, built leg by leg, judged, and gated
+# `fleet-dev` — one brief, planned, built in parallel, merged, judged, and gated
 
 The fleet-shaped sibling of [`norn-dev`](../norn-dev/): the division of labour
 the single-lane pilot performed by hand at the dispatcher's desk moves into
 the workflow. A planning counsel (Claude over ACP) grounds the brief in the
-tree, delegated builders (GPT over norn, queue `dev`) build one leg at a time,
-a judging counsel rules on the delivery, and the server's own gate script —
-never any agent's account of itself — admits or refuses the result.
+tree, delegated builders (GPT over norn, queue `dev`) build the legs in
+parallel — one isolated worktree per builder, fanned out and merged back by
+the server — a judging counsel rules on the delivery, and the server's own
+gate script — never any agent's account of itself — admits or refuses the
+result.
 
-**Status: reviewed and amended (2026-08-14).** The document review ratified
-the shape and every value below, and added the `check_reports` step. Not yet
-deployed, not dispatched; the operator sees the shape before anything runs.
+**Status: reviewed, amended, and re-shaped to fan-out (2026-08-14).** The
+document review ratified the values below and added the `check_reports`
+step; the operator then ruled the fan-out pattern in before first dispatch
+("make sure that good pattern is used in this one"), superseding the
+sequential v1 — see the first entry under recorded trade-offs.
 
 ## The shape
 
@@ -24,25 +28,36 @@ deployed, not dispatched; the operator sees the shape before anything runs.
    exists and is non-empty. The planner's reply is a claim; the tree is the
    fact. A planner that answered eloquently and wrote nothing routes to
    `unplanned` instead of starving every builder downstream.
-4. **`open` → `build_one` → `close`** — a `sequence` region: one builder
-   dispatch per leg, one at a time, in the dispatcher's leg order, all in the
-   one shared tree. Each builder's prompt is an ADDRESS: read your brief at
-   `.fleet/legs/<id>.md`, write your report to `.fleet/reports/<id>.md`.
-   Later legs see earlier legs' commits — what dependent legs need, with no
-   merge phase to go wrong.
-5. **`check_reports`** — the builders get the planner's treatment: a
-   server-run script verifies every promised report exists and is non-empty,
-   naming each missing leg on stdout. A builder that answered eloquently and
-   wrote nothing leaves the tree in its prior state — which can gate GREEN —
-   so this is caught by a script before the gates, never left for the judge
-   as a mechanism of last resort. Missing → `unreported`.
-6. **`gate`** — the server runs the gate script; the real exit code routes
-   green/red. Red refuses the run as `gates_red` before any judgement is
-   spent on it.
-7. **`judgement`** — the judge reads the tree (plan, briefs, reports, diff)
-   under the charter carried in its prompt. Exactly the `judge_pass` token
-   routes `done`; ANY other reply routes `judge_flagged` with the verdict
-   text whole. The mismatch direction is deliberate: a false flag is
+4. **`cut_trees`** — the server runs the fanout script: one isolated
+   worktree and one branch per leg, cut from the planned tree, each carrying
+   the planner's `.fleet/` briefs. It refuses loudly rather than deleting
+   anything in its way (a leftover tree from a prior attempt is the
+   dispatcher's to inspect). Failure → `unforked`, before any builder is
+   spent.
+5. **`open` → `build_one` → `close`** — a `distribute` region: all legs in
+   parallel, each builder in its OWN worktree on its OWN branch
+   (`leg.repo`). Each builder's prompt is an ADDRESS: read your brief at
+   `.fleet/legs/<id>.md`, write your report to `.fleet/reports/<id>.md`,
+   commit to your own branch, stay inside your brief's file zone.
+6. **`merge`** — the server runs the fanin script: each leg's report carried
+   back to the primary tree, then each leg branch merged in dispatch order.
+   A conflict names the conflicting files on stdout, aborts clean, and
+   routes `unmerged` — a merge conflict is a finding about the plan's leg
+   boundaries, never something an agent resolves in passing.
+7. **`check_reports`** — the builders get the planner's treatment: a
+   server-run script verifies every promised report exists and is non-empty
+   in the merged tree, naming each missing leg on stdout. A builder that
+   answered eloquently and wrote nothing leaves the tree in its prior state —
+   which can gate GREEN — so this is caught by a script before the gates,
+   never left for the judge as a mechanism of last resort. Missing →
+   `unreported`.
+8. **`gate`** — the server runs the gate script on the merged tree; the real
+   exit code routes green/red. Red refuses the run as `gates_red` before any
+   judgement is spent on it.
+9. **`judgement`** — the judge reads the merged tree (plan, briefs, reports,
+   diff) under the charter carried in its prompt. Exactly the `judge_pass`
+   token routes `done`; ANY other reply routes `judge_flagged` with the
+   verdict text whole. The mismatch direction is deliberate: a false flag is
    possible, a false clear is not.
 
 ## Why the tree is the blackboard
@@ -80,15 +95,30 @@ at the operator's desk, after this workflow returns.
   protocol changes land reader-first, and landed-is-not-running applies to
   the `session_id` contract like anything else. The pilot proved this
   register against this server, and this document checks clean on the
-  installed binary (`ok, 10 steps`). **The upgrade**: the three-field record
+  installed binary (`ok, 12 steps` after the fan-out re-shape). **The upgrade**: the three-field record
   (`session_id`, post-#205) rides the next release cut, and this document
   revs to it WITH that cut, not ahead of it.
-- **`sequence`, not `distribute`** — RATIFIED. Builders share one tree, so
-  parallel builders would collide; dependent legs need earlier commits
-  visible, and no merge phase means no merge phase to go wrong. A parallel
-  variant is expressible — per-leg worktrees created by a server-run prepare
-  script, `Leg` carrying its own `repo`, `distribute` over disjoint legs —
-  and is left as a recorded follow-up, never a quiet default.
+- **`distribute` with per-leg worktrees — TOM'S RULING (2026-08-14),
+  superseding the sequential v1.** The review had ratified `sequence`
+  (shared tree, no merge phase to go wrong) with the parallel variant as a
+  recorded follow-up; before first dispatch the operator ruled the fan-out
+  pattern in. The isolation cost is paid honestly, not waved off: `Leg`
+  carries its own `repo`, the server-run `fanout` cuts one worktree + branch
+  per leg (refusing loudly at anything in its way), and the server-run
+  `fanin` merges the branches in dispatch order, routing conflicts to
+  `unmerged` with the files named. The corollary lands on the PLANNER's
+  charter: briefs must be independent and name disjoint file zones, because
+  a merge conflict is now a plan defect the run can end on. Dependent legs
+  are the sequential variant's territory; this document no longer serves
+  them.
+- **Dev harness `concurrency 3` — dispatch-matched, diverges from
+  `norn_dev`'s single lane.** The action seam stays byte-compatible
+  (`delegate(repo, prompt) -> Reply`, same queue `dev`), so a seated
+  norn_dev worker still serves this document's dispatches — but at one leg
+  at a time. True parallelism needs a worker seated FROM THIS DOCUMENT,
+  whose harness carries the 3-lane value (one lane per leg of the
+  declared-actions dispatch). Both workers can share the queue; the server
+  spreads dispatches across them.
 - **The planner plans the what-and-where, not the how-many.** The leg
   topology is fixed by the dispatcher in `legs` before the run starts; the
   planner authors the CONTENT of each leg's brief and its file:line
@@ -105,8 +135,9 @@ at the operator's desk, after this workflow returns.
 - **Every numeric value is RULED, with provenance** — none are guesses:
   builder `timeout 90m` is the pilot's measured register; `retry 3 backoff
   30s..5m` and the reconnect ladder are the proven norn register (provider
-  overload defence); workflow `timeout 12h` bounds a worst-case ~7-leg
-  sequence with headroom; planner/judge `timeout 30m`; ACP `exit_grace 30s`;
+  overload defence); workflow `timeout 12h` held from the sequential v1 and
+  now carries even more headroom (parallel legs bound the build phase by the
+  slowest leg, not the sum); planner/judge `timeout 30m`; ACP `exit_grace 30s`;
   `permission "allow-once"` is necessary because the counsel seats WRITE
   their deliverables into the tree.
 - **The authoring workspace resolves home-side when unconfigured.** With
