@@ -248,6 +248,30 @@ pub struct ProtoLivenessPing {
     pub silence_window_ms: u64,
 }
 
+/// Server-initiated cancellation of ONE in-flight activity (#233).
+///
+/// A REQUEST, never a guarantee. The server asks the worker holding this
+/// activity to stop it; the worker fires that activity's cancellation handle,
+/// which cooperative action code observes and which terminates a contained
+/// child process group. A worker that no longer holds the named activity
+/// ignores it — the `(workflow_id, activity_id)` pair is globally unique, so
+/// this can never stop somebody else's work.
+///
+/// Distinct from [`ProtoDrainRequest`]: drain is about the WORKER (finish what
+/// you hold, expect nothing new, reconnect), this is about ONE ACTIVITY (stop
+/// this piece of work, keep serving). A drained worker still finishes the very
+/// work this message exists to interrupt.
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, prost::Message)]
+pub struct ProtoCancelActivity {
+    /// Workflow whose activity is to be cancelled.
+    #[prost(message, optional, tag = "1")]
+    pub workflow_id: Option<ProtoWorkflowId>,
+    /// Activity within that workflow. With `workflow_id` it forms the key the
+    /// worker's in-flight registry is addressed by.
+    #[prost(message, optional, tag = "2")]
+    pub activity_id: Option<ProtoActivityId>,
+}
+
 /// The worker runtime's answer to a [`ProtoLivenessPing`], echoing its sequence.
 #[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, prost::Message)]
 pub struct ProtoLivenessAnswer {

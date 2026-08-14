@@ -8,7 +8,7 @@ use aion_core::{
     ClusterEvent, DeploymentAssociation, InterventionCapabilities, WorkerDeathReason,
     WorkerTransport,
 };
-use aion_proto::{ProtoActivityTask, ProtoLivenessPing, ProtoRegisterWorker};
+use aion_proto::{ProtoActivityTask, ProtoCancelActivity, ProtoLivenessPing, ProtoRegisterWorker};
 use aion_store::{NamespaceOrigin, NamespacePlacement, NamespaceStore, WorkerDeploymentStore};
 use tokio::sync::{Notify, mpsc};
 
@@ -73,6 +73,17 @@ pub enum WorkerMessage {
     /// process whose dispatch path is dead. Answered by the worker SDK RUNTIME,
     /// never by action code.
     LivenessPing(ProtoLivenessPing),
+    /// Ask the worker to stop ONE in-flight activity (#233).
+    ///
+    /// A request, not a guarantee: pushing this proves only that the server
+    /// asked. Whether the work stops depends on the worker still holding the
+    /// activity and on the action being interruptible, and neither is
+    /// observable from here.
+    ///
+    /// It travels this channel — the SAME one the dispatch travelled — so the
+    /// cancel cannot overtake or bypass the task it interrupts, and so a worker
+    /// whose dispatch path is dead cannot appear to have been told.
+    CancelActivity(ProtoCancelActivity),
 }
 
 /// Address of a worker pool: the two disjoint routing dimensions that select a

@@ -1,5 +1,7 @@
 //! Module declarations.
 
+/// Asking the workers holding a cancelled run's activities to stop (#233).
+pub mod activity_cancel;
 /// Whether a contract refusal is new information, and therefore worth saying.
 pub mod admission_audit;
 /// Reading one attempt's volatile worker progress note, with typed absence.
@@ -82,6 +84,7 @@ pub mod transport_loss;
 /// Server-side `{workspace_root}` expansion for declared action bodies (#139).
 pub mod workspace_root;
 
+pub use activity_cancel::{CancelDelivery, CancelRequest, cancel_in_flight_activities};
 pub use admission_audit::AdmissionAudit;
 pub use attempt_progress::{AttemptProgress, attempt_progress};
 pub use backpressure::{Backpressure, OwnedShardFraction};

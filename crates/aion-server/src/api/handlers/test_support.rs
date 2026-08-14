@@ -25,9 +25,14 @@ pub(super) struct TestContext {
     pub(super) ownership: StaticWorkflowNamespaces,
     pub(super) store: Arc<dyn EventStore>,
     pub(super) visibility_store: Arc<dyn VisibilityStore>,
+    /// Server state over the SAME resolver as `guard`, for the handlers that
+    /// reach past the engine into server-owned machinery — the cancel fan-out
+    /// to connected workers (#233) needs the heartbeat tracker and the worker
+    /// registry, and both live here.
+    pub(super) state: crate::ServerState,
 }
 
-pub(super) async fn context() -> Result<TestContext, aion::EngineError> {
+pub(super) async fn context() -> Result<TestContext, Box<dyn std::error::Error>> {
     let backing = Arc::new(InMemoryStore::default());
     let store: Arc<dyn EventStore> = backing.clone();
     let visibility_store: Arc<dyn VisibilityStore> = backing;
@@ -39,14 +44,14 @@ pub(super) async fn context() -> Result<TestContext, aion::EngineError> {
             .build()
             .await?,
     );
-    Ok(context_from_engine(engine, store, visibility_store))
+    context_from_engine(engine, store, visibility_store).await
 }
 
-fn context_from_engine(
+async fn context_from_engine(
     engine: Arc<Engine>,
     store: Arc<dyn EventStore>,
     visibility_store: Arc<dyn VisibilityStore>,
-) -> TestContext {
+) -> Result<TestContext, Box<dyn std::error::Error>> {
     let ownership = StaticWorkflowNamespaces::default();
     let resolver = NamespaceResolver::from_parts(
         NamespaceMode::SharedEngine,
@@ -54,13 +59,22 @@ fn context_from_engine(
         Arc::new(ownership.clone()),
         Arc::new(StaticScheduleNamespaces::default()),
     );
-    TestContext {
+    // One resolver behind both surfaces: a handler that authorizes through the
+    // guard and then reaches through the state must be looking at one server,
+    // not two that happen to agree.
+    let state = crate::api::http::test_support::server_state(
+        resolver.clone(),
+        crate::api::http::test_support::runtime_config(),
+    )
+    .await?;
+    Ok(TestContext {
         guard: NamespaceGuard::new(resolver),
         caller: CallerIdentity::new("alice", [NAMESPACE.to_owned()]),
         ownership,
         store,
         visibility_store,
-    }
+        state,
+    })
 }
 
 pub(super) fn denied_guard() -> (NamespaceGuard, CallerIdentity) {

@@ -752,6 +752,19 @@ fn encode_server_to_worker(message: WorkerMessage) -> generated::ServerToWorker 
                 silence_window_ms: ping.silence_window_ms,
             })
         }
+        // #233: the cancel rides the SAME forwarder the dispatch rode, so it
+        // cannot overtake the task it interrupts and a worker whose dispatch
+        // path is dead cannot appear to have been told.
+        WorkerMessage::CancelActivity(cancel) => {
+            generated::server_to_worker::Message::CancelActivity(generated::CancelActivity {
+                workflow_id: cancel
+                    .workflow_id
+                    .map(|id| generated::WorkflowId { uuid: id.uuid }),
+                activity_id: cancel.activity_id.map(|id| generated::ActivityId {
+                    sequence_position: id.sequence_position,
+                }),
+            })
+        }
     };
     generated::ServerToWorker {
         message: Some(message),

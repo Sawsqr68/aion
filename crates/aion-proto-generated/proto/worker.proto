@@ -8,8 +8,8 @@ import "common.proto";
 // RegisterWorker first; the server answers with RegisterAck as the guaranteed
 // first frame on the response stream before any other server-to-worker
 // message. The worker then sends ActivityResult and Heartbeat messages while
-// the server pushes ActivityTask, ResultAck, and DrainRequest messages down
-// the same stream; there is no polling RPC.
+// the server pushes ActivityTask, ResultAck, DrainRequest, LivenessPing, and
+// CancelActivity messages down the same stream; there is no polling RPC.
 service WorkerProtocol {
   rpc StreamWorker(stream WorkerToServer) returns (stream ServerToWorker);
 }
@@ -44,7 +44,32 @@ message ServerToWorker {
     RegisterAck register_ack = 3;
     ResultAck result_ack = 4;
     LivenessPing liveness_ping = 5;
+    CancelActivity cancel_activity = 6;
   }
+}
+
+// Server-initiated cancellation of ONE in-flight activity (#233).
+//
+// A REQUEST, never a guarantee. The server asks the worker holding this
+// activity to stop it; the worker fires the activity's cancellation handle,
+// which cooperative action code observes and which terminates a contained
+// child process group. A worker that no longer holds the named activity
+// ignores the message — the (workflow_id, activity_id) pair is globally
+// unique, so this can never stop somebody else's work.
+//
+// Distinct from DrainRequest: drain is about the WORKER (finish what you hold,
+// expect nothing new, reconnect), this is about ONE ACTIVITY (stop this piece
+// of work now, keep serving). A drained worker still finishes the very work
+// this message exists to interrupt.
+//
+// The server records what it ASKED and what it OBSERVED. It never records that
+// the work stopped, because delivering this message does not establish that.
+message CancelActivity {
+  // Workflow whose activity is to be cancelled.
+  WorkflowId workflow_id = 1;
+  // Activity within that workflow. With workflow_id it forms the key the
+  // worker's in-flight registry is addressed by.
+  ActivityId activity_id = 2;
 }
 
 // Transport-level liveness ping, pushed by the server down the SAME stream a

@@ -172,6 +172,7 @@ pub(crate) async fn cancel(
     let reason = optional_str(call, "reason").unwrap_or_default();
 
     handlers::cancel(
+        state,
         state.namespace_guard(),
         caller,
         ProtoCancelRequest {

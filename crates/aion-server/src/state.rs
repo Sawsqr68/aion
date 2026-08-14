@@ -771,6 +771,31 @@ impl ServerState {
         &self.inner.worker_registry
     }
 
+    /// Ask every worker holding an activity of `workflow_id` to stop it (#233).
+    ///
+    /// Joins the two pieces of live state this node holds — the heartbeat
+    /// tracker (which worker holds which activity) and the connected-worker
+    /// registry (how to reach that worker) — so the cancel handler needs only a
+    /// `ServerState` and never learns the routing itself.
+    ///
+    /// Returns one record per tracked in-flight activity, INCLUDING the ones
+    /// that could not be asked. A cancel is a request, not a guarantee.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] when the tracker's or the
+    /// registry's state cannot be read.
+    pub fn cancel_in_flight_activities(
+        &self,
+        workflow_id: &aion_core::WorkflowId,
+    ) -> Result<Vec<crate::worker::CancelRequest>, ServerError> {
+        crate::worker::cancel_in_flight_activities(
+            self.heartbeat_tracker(),
+            self.worker_registry(),
+            workflow_id,
+        )
+    }
+
     /// Borrow the WS3 cluster-event publisher shared by the cluster state-change
     /// sites (supervisor, worker registry) and the cluster subscription endpoint.
     /// Always present, on every boot.

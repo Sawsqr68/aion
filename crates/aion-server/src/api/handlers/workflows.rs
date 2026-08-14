@@ -4,7 +4,8 @@ use aion_proto::{
     ProtoCancelRequest, ProtoCancelResponse, ProtoPauseRequest, ProtoPauseResponse,
     ProtoQueryRequest, ProtoQueryResponse, ProtoReopenRequest, ProtoReopenResponse,
     ProtoResumeRequest, ProtoResumeResponse, ProtoSignalRequest, ProtoSignalResponse,
-    ProtoStartWorkflowRequest, ProtoStartWorkflowResponse, WireError, proto_query_response,
+    ProtoStartWorkflowRequest, ProtoStartWorkflowResponse, WireError, WireErrorCode,
+    proto_query_response,
 };
 use tracing::{Instrument, info_span};
 
@@ -15,7 +16,7 @@ use super::error::{
 use super::payload::{optional_payload, required_payload, required_workflow_id};
 use super::runs::{resolve_run_id, terminal_status};
 use crate::{
-    CallerIdentity, NamespaceGuard, NamespaceMinter, NamespaceOperation, ServerError,
+    CallerIdentity, NamespaceGuard, NamespaceMinter, NamespaceOperation, ServerError, ServerState,
     WorkflowTarget,
 };
 
@@ -295,11 +296,26 @@ pub async fn query(
 
 /// Handles a decoded cancel request.
 ///
+/// After the cancellation is durably recorded, asks every worker holding one of
+/// this run's activities to stop it (#233). Cancelling records the fact, kills
+/// the workflow's own VM process, and settles its outbox rows so nothing more is
+/// dispatched — none of which reaches an activity a remote worker is ALREADY
+/// executing. Without that second step a cancelled run keeps a machine busy
+/// while the console truthfully reports `Cancelled`, so the operator stops
+/// watching.
+///
+/// The ask comes AFTER the engine call returns, never before: a cancel pushed
+/// ahead of the record could stop work for a cancellation that then fails to
+/// persist. And it is only an ask — a failure to reach a worker is logged with
+/// the worker and activity named, and does not fail the cancellation, because
+/// the cancellation itself genuinely happened.
+///
 /// # Errors
 ///
 /// Returns a stable [`WireError`] when IDs are missing or malformed, namespace scoping fails, or the
 /// engine cancel call fails.
 pub async fn cancel(
+    state: &ServerState,
     guard: &NamespaceGuard,
     caller: &CallerIdentity,
     request: ProtoCancelRequest,
@@ -332,6 +348,18 @@ pub async fn cancel(
     }
     .instrument(span)
     .await?;
+
+    // #233. The cancellation is durably recorded; now ask whoever is executing
+    // this run's activities to stop. A failure to reach a worker is logged with
+    // the worker and activity named (inside `cancel_in_flight_activities`) and
+    // does NOT fail the response — the cancellation genuinely happened, and
+    // reporting it as failed would be its own lie. A poisoned lock is the one
+    // exception: it means the routing state could not be read at all, and
+    // answering "cancelled" while silently asking nobody is exactly the defect
+    // this closes.
+    state
+        .cancel_in_flight_activities(&workflow_id)
+        .map_err(|error| WireError::new(WireErrorCode::Backend, error.to_string()))?;
 
     Ok(ProtoCancelResponse {})
 }
@@ -863,7 +891,13 @@ mod tests {
         let context = context().await?;
         context.ownership.record(workflow_id(), NAMESPACE)?;
 
-        let error = cancel(&context.guard, &context.caller, cancel_request()).await;
+        let error = cancel(
+            &context.state,
+            &context.guard,
+            &context.caller,
+            cancel_request(),
+        )
+        .await;
 
         let error = error
             .err()
@@ -1019,7 +1053,13 @@ mod tests {
         context.ownership.record(workflow_id(), NAMESPACE)?;
         append_completed(context.store.as_ref()).await?;
 
-        let error = cancel(&context.guard, &context.caller, cancel_request()).await;
+        let error = cancel(
+            &context.state,
+            &context.guard,
+            &context.caller,
+            cancel_request(),
+        )
+        .await;
 
         let error = error
             .err()
@@ -1043,7 +1083,13 @@ mod tests {
         context.ownership.record(workflow_id(), NAMESPACE)?;
         append_failed(context.store.as_ref()).await?;
 
-        let error = cancel(&context.guard, &context.caller, cancel_request()).await;
+        let error = cancel(
+            &context.state,
+            &context.guard,
+            &context.caller,
+            cancel_request(),
+        )
+        .await;
 
         let error = error
             .err()
@@ -1097,7 +1143,7 @@ mod tests {
         let mut request = cancel_request();
         request.run_id = None;
 
-        let error = cancel(&context.guard, &context.caller, request).await;
+        let error = cancel(&context.state, &context.guard, &context.caller, request).await;
 
         assert_workflow_not_found(error)?;
         Ok(())

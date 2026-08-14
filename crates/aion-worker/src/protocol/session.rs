@@ -44,10 +44,10 @@ pub enum WorkerSessionEvent {
     },
     /// Cooperative cancellation for an in-flight activity.
     ///
-    /// The current AW worker proto in this worktree does not yet carry this
-    /// frame, but fake sessions can emit it and the runtime handles it without
-    /// forcing task termination. When AW lands the wire variant,
-    /// `decode_server_message` should map it to this event.
+    /// Carried on the wire as `CancelActivity` and decoded by
+    /// `decode_cancel_activity`. The runtime handles it without forcing task
+    /// termination: the activity's cancellation token is tripped and the
+    /// handler is given the chance to stop on its own terms.
     Cancel {
         /// Workflow owning the activity.
         workflow_id: WorkflowId,
@@ -652,6 +652,9 @@ fn decode_server_message(
                 silence_window: std::time::Duration::from_millis(ping.silence_window_ms),
             })
         }
+        Some(aion_proto::generated::server_to_worker::Message::CancelActivity(cancel)) => {
+            decode_cancel_activity(cancel)
+        }
         Some(aion_proto::generated::server_to_worker::Message::RegisterAck(_)) => {
             // The ack is consumed inside `open_registered_stream`; a second
             // one mid-stream is a server ordering bug that must surface.
@@ -665,6 +668,49 @@ fn decode_server_message(
             message: String::from("server-to-worker message was empty"),
         })),
     }
+}
+
+/// Decode a server-initiated activity cancellation (#233).
+///
+/// This is the seam that makes the worker's cancellation path REACHABLE: until
+/// it existed, `WorkerSessionEvent::Cancel` was never constructed anywhere in
+/// production, so the receive loop's cancel arm — and the handle, in-flight
+/// registry, and process-group kill behind it — could not run at all.
+///
+/// Both ids are REQUIRED. A cancel that cannot name what it is cancelling is
+/// refused rather than defaulted: the in-flight registry is addressed by the
+/// `(workflow, activity)` pair together, so a missing half would silently
+/// address nothing and the refusal would be invisible — which is this whole
+/// defect's shape.
+fn decode_cancel_activity(
+    cancel: aion_proto::generated::CancelActivity,
+) -> Result<WorkerSessionEvent, WorkerError> {
+    let workflow_id = cancel
+        .workflow_id
+        .ok_or_else(|| {
+            WorkerError::decode(SessionStateError {
+                message: String::from("cancel activity workflow_id is missing"),
+            })
+        })
+        .and_then(|id| {
+            WorkflowId::try_from(ProtoWorkflowId { uuid: id.uuid }).map_err(|source| {
+                WorkerError::decode(SessionStateError {
+                    message: format!("cancel activity workflow_id is invalid: {source}"),
+                })
+            })
+        })?;
+    let activity_id = cancel
+        .activity_id
+        .map(|id| ActivityId::from_sequence_position(id.sequence_position))
+        .ok_or_else(|| {
+            WorkerError::decode(SessionStateError {
+                message: String::from("cancel activity activity_id is missing"),
+            })
+        })?;
+    Ok(WorkerSessionEvent::Cancel {
+        workflow_id,
+        activity_id,
+    })
 }
 
 fn decode_result_ack(
@@ -803,7 +849,7 @@ mod tests {
 
     use super::{
         WorkerSession, WorkerSessionEvent, WorkerTaskStream, apply_auth_metadata,
-        validate_activity_handlers,
+        decode_server_message, validate_activity_handlers,
     };
     use crate::error::WorkerError;
     use crate::{ReconnectConfig, WorkerConfig};
@@ -1108,5 +1154,93 @@ mod tests {
             error.to_string(),
             "worker registration failed: activity type `send-email` has no registered handler"
         );
+    }
+
+    /// Build a `ServerToWorker` carrying a cancel with the supplied halves, so
+    /// each test states exactly which half it is withholding.
+    fn cancel_frame(
+        workflow_uuid: Option<String>,
+        sequence_position: Option<u64>,
+    ) -> aion_proto::generated::ServerToWorker {
+        aion_proto::generated::ServerToWorker {
+            message: Some(
+                aion_proto::generated::server_to_worker::Message::CancelActivity(
+                    aion_proto::generated::CancelActivity {
+                        workflow_id: workflow_uuid
+                            .map(|uuid| aion_proto::generated::WorkflowId { uuid }),
+                        activity_id: sequence_position.map(|sequence_position| {
+                            aion_proto::generated::ActivityId { sequence_position }
+                        }),
+                    },
+                ),
+            ),
+        }
+    }
+
+    type CancelTestResult = Result<(), Box<dyn std::error::Error>>;
+
+    /// Assert that a frame is refused with a message naming `expected_refusal`.
+    fn assert_cancel_refused(
+        frame: aion_proto::generated::ServerToWorker,
+        expected_refusal: &str,
+    ) -> CancelTestResult {
+        let error = match decode_server_message(frame) {
+            Ok(event) => {
+                return Err(format!("an invalid cancel was accepted as {event:?}").into());
+            }
+            Err(error) => error,
+        };
+
+        assert!(
+            error.to_string().contains(expected_refusal),
+            "refusal did not name the defective half: {error}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn cancel_frame_decodes_to_the_pair_it_names() -> CancelTestResult {
+        let workflow_id = aion_core::WorkflowId::new_v4();
+
+        let event = decode_server_message(cancel_frame(Some(workflow_id.to_string()), Some(7)))?;
+
+        // The whole point of the frame is that BOTH halves arrive intact: the
+        // in-flight registry is addressed by the pair, so a decode that kept
+        // one and lost the other would cancel nothing while reporting success.
+        match event {
+            WorkerSessionEvent::Cancel {
+                workflow_id: decoded_workflow,
+                activity_id,
+            } => {
+                assert_eq!(decoded_workflow, workflow_id);
+                assert_eq!(activity_id.sequence_position(), 7);
+            }
+            other => {
+                return Err(format!("cancel frame decoded to the wrong event: {other:?}").into());
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn cancel_without_a_workflow_id_is_refused() -> CancelTestResult {
+        assert_cancel_refused(cancel_frame(None, Some(7)), "workflow_id is missing")
+    }
+
+    #[test]
+    fn cancel_without_an_activity_id_is_refused() -> CancelTestResult {
+        let workflow_id = aion_core::WorkflowId::new_v4();
+        assert_cancel_refused(
+            cancel_frame(Some(workflow_id.to_string()), None),
+            "activity_id is missing",
+        )
+    }
+
+    #[test]
+    fn cancel_carrying_an_unparseable_workflow_id_is_refused() -> CancelTestResult {
+        assert_cancel_refused(
+            cancel_frame(Some(String::from("not-a-uuid")), Some(7)),
+            "workflow_id is invalid",
+        )
     }
 }

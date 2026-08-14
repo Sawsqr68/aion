@@ -949,6 +949,39 @@ impl HeartbeatTracker {
             .collect())
     }
 
+    /// Every activity of `workflow_id` a connected worker is holding RIGHT NOW
+    /// (#233).
+    ///
+    /// A tracked entry means a live worker owns that activity: entries are
+    /// added at dispatch ([`Self::track_task`]) and removed on completion,
+    /// disconnect, or heartbeat expiry. That is what makes this — rather than
+    /// the durable outbox row, which records no worker at all — the authority
+    /// on where a cancellation has to be sent. The worker id here is present
+    /// membership, not a recorded historical fact, so it cannot go stale the
+    /// way a worker id written down at claim time would.
+    ///
+    /// A within-attempt failover can briefly show a dying owner AND its adopter
+    /// for one activity. Both are returned: a cancel is addressed to a
+    /// `(workflow, activity)` key that either worker may or may not still hold,
+    /// and a worker that does not hold it ignores the message, so asking both
+    /// is correct and asking one would be a guess.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ServerError::LockPoisoned`] if tracker state cannot be trusted.
+    pub fn in_flight_for_workflow(
+        &self,
+        workflow_id: &WorkflowId,
+    ) -> Result<Vec<TaskLiveness>, ServerError> {
+        Ok(self
+            .state()?
+            .tasks
+            .values()
+            .filter(|liveness| &liveness.workflow_id == workflow_id)
+            .cloned()
+            .collect())
+    }
+
     fn state(&self) -> Result<MutexGuard<'_, HeartbeatState>, ServerError> {
         self.inner
             .lock()

@@ -315,3 +315,93 @@ Closure, not diff: `aion-proto-generated`, `aion-proto`, `aion-worker`,
 (`aion-store/src/conformance/outbox_settlement.rs`) if the trait return widens.
 Both clippy resolutions (`--workspace` and `-p aion-server`). The new decode arm
 must be seen failing before it is trusted.
+
+## BUILD RECORD (2026-08-14, post-compact-59)
+
+All seven pieces built. Every load-bearing arm was SEEN RED before being
+trusted, and the red-first requirement paid for itself twice.
+
+**Worker-side decode (`aion-worker` session.rs): 4 new tests, 2 mutations.**
+- Mutation 1 — missing `activity_id` silently defaults to 0 instead of
+  refusing: killed exactly `cancel_without_an_activity_id_is_refused` (the
+  accepted event was `ActivityId(0)`, the precise silent-address failure the
+  refusal exists to prevent). Other three stayed green — each control kills
+  only its own test.
+- Mutation 2 — the wire arm never routes to `decode_cancel_activity` (returns
+  Drain): killed ALL FOUR. That arm is the whole of #233; the tests sit on it.
+- Both restored by writing bytes; suite 9/9 green on the rebuilt tree.
+- The stale doc on `WorkerSessionEvent::Cancel` ("the proto does not yet carry
+  this frame") corrected — it now names the wire message and decoder.
+
+**Server-side fan-out (`aion-server` activity_cancel.rs): first run was
+RED + HUNG, and the red was a real trap.**
+- `WorkerRegistration` deregisters on Drop (disconnect cleanup). My helper
+  dropped it, so every test's worker was GONE before the body ran: two tests
+  failed (`WorkerGone` where `Requested`/`ChannelUnavailable` was expected)
+  and one HUNG forever at `recv().await` on a channel no cancel had reached.
+- Worse: `a_departed_worker_is_reported_rather_than_skipped` passed GREEN for
+  the WRONG reason — its explicit deregister had already been done by the
+  drop. A coinciding answer: right verdict, dead treatment.
+- Fix: `RegisteredWorker` holds the registration guard for the test's
+  lifetime; the departed test now deregisters through the guard explicitly.
+  All `recv().await` replaced with `try_recv()` — the fan-out is synchronous,
+  so after it returns the message is either queued or absent; a wait can only
+  hide the absence as a hang instead of a failure.
+- Routing filter mutation — `in_flight_for_workflow` filter → `true` (returns
+  every workflow's activities): killed exactly the bystander test (2 asks
+  where 1). Restored by writing bytes, 5/5 green in 0.01s.
+
+**Handler threading.** `cargo check` had NOT covered test targets: four
+existing handler tests called `cancel` with the old arity. Rather than clone a
+40-line RuntimeConfig fixture, `api/http/test_support` was widened to
+`pub(crate)` and the handler `TestContext` now carries a `ServerState` built
+over the SAME resolver as its guard (one server, not two that happen to
+agree). `context()`'s error type widened to `Box<dyn Error>` (all 31 callers
+already return that) so the state build refuses instead of panicking.
+
+**Clippy caught my own tests.** Both resolutions were RED on five `panic!`
+sites I had just written (the lints cover test code). Fixed by making the
+tests return errors — no `#[allow]`. Both resolutions then EXIT=0 (logs:
+scratchpad clippy-ws2.log / clippy-p2.log).
+
+**Instrumentation lesson re-learned:** the background wrapper's exit code was
+the tail's/echo's, not cargo's — the first "completed exit 0" notification
+covered a run that was RED and hung. The EXIT= line written INTO the log file
+is the only trustworthy verdict; a `| tail -20` also ate the failures block
+until the single-test rerun wrote to a file.
+
+**Remaining before commit:** closure battery (4 crates, all targets) —
+running; trait return did NOT widen, so the outbox conformance suite is
+untouched by this change. Then commit + push + Opus review.
+
+## Closure battery record (2026-08-14)
+
+**Run 1 (battery-233.log): RED and INCOMPLETE — attributed, kept beside.**
+EXIT=101 inside the file (the wrapper notification again said "exit 0" —
+second confirmed instance of the wrapper-exit lie). The single failure was
+`worker::outbox_dispatcher::tests::failed_dispatch_retries_with_backoff_and_bumps_attempt`
+(outbox_dispatcher.rs:997) — 1110 passed / 1 failed in aion-server --lib.
+Module untouched by this diff (`git diff --name-only | grep -i outbox` = no
+hits). Mechanism: the test asserts nothing is claimable inside a 100ms
+backoff fence; at load 34-48 more than 100ms of wall-clock elapsed between
+sweep and claim, the row became visible, the absence-assertion went red —
+contention pushes this assertion directionally red. Solo re-run on the same
+tree: green, 1.27s, EXIT=0 (retry-solo.log). Filed as task #238 (same class
+as #207: wall-clock window narrower than scheduling jitter). Because cargo
+aborted at that target, run 1 has only 6 verdict lines — most binaries never
+ran, so run 1 could not certify the closure regardless of the flake.
+
+**Task #237 filed:** a run ending TimedOut/Failed leaks in-flight activities
+identically — #233's fan-out must fire on every terminal transition. Not
+closed by this change; must not pass silently under its green.
+
+**Run 2 (battery-233-run2.log): the closure run** — same 4-crate
+--all-targets battery, uptime head+foot, EXIT= inside the file. Verdict
+recorded below when it lands.
+
+**Run 2 verdict: GREEN, complete.** EXIT=0 inside battery-233-run2.log,
+60 verdict lines, 1587 passed / 0 failed, no nonzero-failed lines. Load
+12.59 at head, 10.95 at foot (quiet relative to run 1's 34-48). cargo's
+own EXIT=0 certifies every target ran to a verdict — a crashed binary
+would have propagated nonzero. This is the closure run; run 1 stays
+beside it as the contended-red exhibit.

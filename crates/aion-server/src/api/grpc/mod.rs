@@ -251,6 +251,7 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
                 }
                 RouteResolution::Local => {
                     let response = handlers::cancel(
+                        &self.state,
                         self.state.namespace_guard(),
                         &caller,
                         decode_cancel_request(inner),
@@ -264,6 +265,7 @@ impl generated::workflow_service_server::WorkflowService for WorkflowGrpcService
         #[cfg(not(feature = "haematite-backend"))]
         {
             let response = handlers::cancel(
+                &self.state,
                 self.state.namespace_guard(),
                 &caller,
                 decode_cancel_request(request.into_inner()),

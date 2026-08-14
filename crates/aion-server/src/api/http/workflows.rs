@@ -86,7 +86,7 @@ pub(crate) async fn cancel_workflow(
     Json(request): Json<CancelWorkflowRequest>,
 ) -> Result<Json<ProtoCancelResponse>, HttpWireError> {
     let request = request.try_into().map_err(HttpWireError)?;
-    handlers::cancel(state.namespace_guard(), &caller, request)
+    handlers::cancel(&state, state.namespace_guard(), &caller, request)
         .await
         .map(Json)
         .map_err(HttpWireError)
