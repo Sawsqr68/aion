@@ -500,6 +500,21 @@ mod tests {
     }
 
     #[test]
+    fn three_answer_messages_keep_the_last_message_distinct() {
+        let mut accumulator = MessageAccumulator::new();
+        accumulator.push_agent_chunk(&chunk("narration", Some("m1")));
+        accumulator.push_agent_chunk(&chunk("more narration", Some("m2")));
+        accumulator.push_agent_chunk(&chunk("fleet-judge-pass", Some("m3")));
+        accumulator.finish();
+
+        assert_eq!(
+            accumulator.completed_text(),
+            "narration\nmore narration\nfleet-judge-pass"
+        );
+        assert_eq!(accumulator.final_message(), "fleet-judge-pass");
+    }
+
+    #[test]
     fn a_non_text_chunk_survives_verbatim_and_is_not_appended() -> Result<(), String> {
         let mut accumulator = MessageAccumulator::new();
         let image = ContentChunk::new(ContentBlock::Image(ImageContent::new(
