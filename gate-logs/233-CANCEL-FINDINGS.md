@@ -141,3 +141,94 @@ contract**, not on a call-site census.
   #233 does not close #26.
 - **#233 is not #223.** #223 armed the activity dispatch *timeout* — a deadline
   the engine enforces on its own side. It does not tell the worker to stop either.
+
+---
+
+# BUILD PLAN (measured 2026-08-14, before compaction — resume from here)
+
+## What ALREADY exists and must NOT be rebuilt
+
+- **`settle_terminal_outbox_rows`** (`aion-server/src/worker/outbox_settle.rs:54`)
+  and **`OutboxStore::cancel_outbox_rows_for_workflow`**
+  (`aion-store/src/outbox.rs:568`) already settle a terminal workflow's live
+  (`Pending`/`Claimed`) rows to `Cancelled` — #253. The Recorder settles at
+  terminal-record time; `outbox_settle` is the boot/adoption backstop.
+  **This stops FUTURE dispatch and redrive. It does NOT tell a worker already
+  executing to stop.** That remains the whole of #233.
+- `is_settle_terminal` (`outbox_settle.rs:29`) — the four hard terminals.
+
+## Routing decision — MADE, with the reason
+
+The outbox row does **not** record which worker took the dispatch
+(`OutboxRow`, `aion-store/src/outbox.rs:166-227`: dispatch_key, workflow_id,
+ordinal, run_id, namespace, task_queue, node, activity_type, input, status,
+attempt, visible_after, claimed_at, failure_delivered — **no worker id**).
+
+Two shapes were available:
+- (a) record the winning `WorkerId` on claim and route the cancel to it;
+- (b) **broadcast to every worker in the row's `(namespace, task_queue, node)`
+  pool** and let each ignore a key it does not hold.
+
+**(b) is chosen.** `deliver_cancellation` (`aion-worker/src/runtime/loop_.rs:669`)
+is already a no-op when the key is absent from `in_flight`, and the in-flight key
+is `(workflow_id, activity_id)` — globally unique, so a broadcast cannot cancel
+someone else's work. (b) needs no durable schema change and cannot point at a
+stale registration (a worker that reconnects gets a new `WorkerId` mid-flight,
+which is exactly the hazard (a) carries). Cost is a few no-op messages inside one
+small pool, and the pool is already the correctness boundary.
+
+## The five pieces, in order
+
+1. **`crates/aion-proto-generated/proto/worker.proto`** — add
+   `CancelActivity { WorkflowId workflow_id = 1; ActivityId activity_id = 2; }`
+   and a sixth member on the `ServerToWorker` oneof (tag `6`). Stubs are
+   generated at build time by `build.rs` (protoc vendored, `rerun-if-changed=proto`),
+   so **nothing is committed by hand**.
+2. **`WorkerMessage`** (`aion-server/src/worker/registry.rs:63`) — a
+   `CancelActivity` variant beside `ActivityTask` / `DrainRequest` /
+   `LivenessPing`.
+3. **`encode_server_to_worker`** (`aion-server/src/api/worker_grpc.rs:738`) — its
+   encoding arm.
+4. **`decode_server_message`** (`aion-worker/src/protocol/session.rs:636`) — the
+   arm that finally constructs `WorkerSessionEvent::Cancel`, with the same
+   missing-field refusals `decode_result_ack` (`session.rs:670-699`) already
+   models. **This is the line that makes `loop_.rs:245-247` reachable.**
+5. **The server's cancel fan-out** — the natural hook is beside the settle, which
+   already runs on terminal and already has the workflow id. For each row settled
+   by `cancel_outbox_rows_for_workflow` whose prior status was `Claimed`, push a
+   `CancelActivity{workflow_id, activity_id: ordinal}` to every worker in that
+   row's pool via `WorkerRegistry::workers_for(...)`.
+   ⚠️ `cancel_outbox_rows_for_workflow` currently returns only `Vec<String>` of
+   dispatch keys — **it does not say which were `Claimed` nor carry the pool**.
+   Either widen its return to the settled rows, or read the rows before settling.
+   Decide by reading the concrete impls before changing the trait.
+
+## The engine→server edge
+
+`terminate::cancel` is in `aion`, which must not learn about workers. It does not
+need to: the settle hook already fires on the terminal record, server-side. Put
+the fan-out there, **not** in the engine. No new cross-crate seam.
+
+## Ordering
+
+Fan out the cancel **after** the terminal is durably recorded — never before. A
+cancel pushed ahead of the record could stop work for a cancellation that then
+fails to persist.
+
+## Two things the fix must not get wrong (restated — these are the review bar)
+
+- **A cancel is a request, not a guarantee.** The record must say what was
+  *asked* and what was *observed*; it must never assert a stop it did not
+  witness. "Silently assumed it stopped" is this same defect one layer up.
+- **The escalation grace is the operator's value.**
+  `PROCESS_GROUP_TERMINATION_GRACE` already exists
+  (`aion-worker/src/lib.rs:82`). Whether a cancel escalates past it, and after
+  how long, is declared — not invented here.
+
+## Battery scope for this change
+
+Closure, not diff: `aion-proto-generated`, `aion-proto`, `aion-worker`,
+`aion-server`, plus the outbox conformance suite
+(`aion-store/src/conformance/outbox_settlement.rs`) if the trait return widens.
+Both clippy resolutions (`--workspace` and `-p aion-server`). The new decode arm
+must be seen failing before it is trusted.
