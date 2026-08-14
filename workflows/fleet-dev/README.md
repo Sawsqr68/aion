@@ -109,6 +109,12 @@ at the operator's desk, after this workflow returns.
   sequence with headroom; planner/judge `timeout 30m`; ACP `exit_grace 30s`;
   `permission "allow-once"` is necessary because the counsel seats WRITE
   their deliverables into the tree.
+- **The authoring workspace resolves home-side when unconfigured.** With
+  `authoring.workspace_dir` deliberately absent, the resolver lands on
+  `~/.aion/authoring` on this box — not `./aion-authoring` at the server's
+  working directory. Seating this document for the console's Authoring panel
+  means copying it there; verify with `GET /awl/documents` and a checksum
+  against the committed file rather than hunting the repo root.
 - **The ACP `command` is this box's absolute npx path**
   (`/opt/homebrew/bin/npx` + `@agentclientprotocol/claude-agent-acp`); the
   portable `{workspace_root}` form waits on per-box harness-arg binding
