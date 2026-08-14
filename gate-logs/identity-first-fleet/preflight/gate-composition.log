@@ -1,0 +1,782 @@
+build-composition: wrote dist/index.html, 3 copied asset(s) and 1 printed document(s) into composition/, and 1 committed document(s) beside the source
+[chrome] [manifold] the replay request for registry.feed was refused on manifold.replay: the bridge holds no seat on registry.feed
+[chrome] [manifold] 3 receipted replay asks for registry.feed got no records back; the page has stopped asking on its own — a manual replay re-arms it.
+[chrome] [manifold] 3 receipted replay asks for registry.feed got no records back; the page has stopped asking on its own — a manual replay re-arms it.
+[chrome] [manifold] 3 receipted replay asks for registry.feed got no records back; the page has stopped asking on its own — a manual replay re-arms it.
+[chrome] [manifold] a replay status listener threw for registry.feed Error: a surface broke while redrawing
+    at onStatus (https://composition-tests.manifold/composition-shared-cases.mjs:1879:15)
+    at announce (https://composition-tests.manifold/replay.js:220:13)
+    at wireReplay (https://composition-tests.manifold/replay.js:329:5)
+    at https://composition-tests.manifold/composition-shared-cases.mjs:1874:5
+    at check (https://composition-tests.manifold/composition-shared-cases.mjs:177:18)
+    at run (https://composition-tests.manifold/composition-shared-cases.mjs:1870:3)
+    at async <anonymous>:337:30
+[chrome] [manifold] a replay status listener threw for registry.feed Error: a surface broke while redrawing
+    at onStatus (https://composition-tests.manifold/composition-shared-cases.mjs:1879:15)
+    at announce (https://composition-tests.manifold/replay.js:220:13)
+    at send (https://composition-tests.manifold/replay.js:242:9)
+    at onFeed (https://composition-tests.manifold/replay.js:317:9)
+    at Object.go (https://composition-tests.manifold/composition-shared-cases.mjs:455:46)
+    at https://composition-tests.manifold/composition-shared-cases.mjs:1882:10
+    at check (https://composition-tests.manifold/composition-shared-cases.mjs:177:18)
+    at run (https://composition-tests.manifold/composition-shared-cases.mjs:1870:3)
+    at async <anonymous>:337:30
+[chrome] [manifold] a replay status listener threw for registry.feed Error: a surface broke while redrawing
+    at onStatus (https://composition-tests.manifold/composition-shared-cases.mjs:1879:15)
+    at announce (https://composition-tests.manifold/replay.js:220:13)
+    at onFeed (https://composition-tests.manifold/replay.js:318:9)
+    at Object.go (https://composition-tests.manifold/composition-shared-cases.mjs:455:46)
+    at https://composition-tests.manifold/composition-shared-cases.mjs:1882:10
+    at check (https://composition-tests.manifold/composition-shared-cases.mjs:177:18)
+    at run (https://composition-tests.manifold/composition-shared-cases.mjs:1870:3)
+    at async <anonymous>:337:30
+[chrome] [manifold] The registry galaxy behind this page is drawn by GraphMother, which needs WebGPU, and this context does not have it (navigator.gpu is null. WebGPU may be disabled.). WebGPU is only exposed on a secure origin, so a page served over plain HTTP from anything but a loopback address will not have it however new the browser is. The registry itself is unaffected: the navigator, the counts and every panel are the document, and the field behind them is only a rendering of it.
+[chrome] [manifold] the history request for registry.feed was refused on manifold.replay: PUBLISH_REJECTED: the bridge holds no seat on registry.feed
+[chrome] [manifold] the history request for registry.feed was refused on manifold.replay: PUBLISH_REJECTED: still no seat
+the shared modules' claims ran in a real browser — 260 of them
+[idle-cost] 2s at rest, by caller: frame vendor/iridium/core/controller/index.js ×720 | frame vendor/graphmother/graphmother.esm.js ×240 | timeout vendor/liminal.js ×2 | timeout composition/redraw-beat.js ×1 — highlight live: true
+[chrome] pageerror: Cannot read properties of null (reading 'kind')
+[manifold] a link state listener threw on manifold.registry.feed Error: a view blew up while being told the link moved
+    at file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/scripts/composition-transport-recovery-cases.mjs:269:13
+    at announce (file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/dist/composition/transport-recovery.js:169:17)
+    at onLive (file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/dist/composition/transport-recovery.js:281:13)
+    at dispatch (file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/dist/composition/transport-recovery.js:264:13)
+    at file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/dist/composition/transport-recovery.js:251:13
+    at move (file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/scripts/composition-transport-recovery-cases.mjs:81:46)
+    at Object.connect (file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/scripts/composition-transport-recovery-cases.mjs:105:22)
+    at file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/scripts/composition-transport-recovery-cases.mjs:273:18
+    at claim (file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/scripts/composition-test.mjs:128:24)
+    at registerTransportRecoveryClaims (file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/scripts/composition-transport-recovery-cases.mjs:262:9)
+[manifold] a link state listener threw on manifold.registry.feed Error: a view blew up while being told the link moved
+    at file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/scripts/composition-transport-recovery-cases.mjs:269:13
+    at announce (file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/dist/composition/transport-recovery.js:169:17)
+    at beginReplacement (file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/dist/composition/transport-recovery.js:355:9)
+    at onLive (file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/dist/composition/transport-recovery.js:292:18)
+    at dispatch (file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/dist/composition/transport-recovery.js:264:13)
+    at file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/dist/composition/transport-recovery.js:251:13
+    at move (file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/scripts/composition-transport-recovery-cases.mjs:81:46)
+    at Object.drop (file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/scripts/composition-transport-recovery-cases.mjs:109:9)
+    at file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/scripts/composition-transport-recovery-cases.mjs:281:18
+    at claim (file:///Users/tom/Developer/ablative/apps/manifold/.worktrees/identity-first/surface/page/scripts/composition-test.mjs:128:24)
+PASS  the browser-envelope fixtures are the emitted signer's own current output
+        both fixtures re-derived byte-identically from the emitted signer
+PASS  the composition's own slot declarations hold together
+PASS  an exact accept clause takes its own token and nothing else
+PASS  a declared prefix stops at its namespace boundary
+PASS  a refusal carries the slot, the offer and the whole contract
+PASS  a malformed slot set is refused fault by fault
+PASS  a parent chain that loops is refused before anything is placed
+PASS  a reading with nothing in it says so, and claims no liveness
+PASS  every link phase gets its own words, and only one says subscribed
+PASS  a created address moves the reading, verdict and sequence with it
+PASS  an enrolment counts as a member, and an archive counts apart
+PASS  the member census follows the record, and an archived member leaves it
+PASS  a verb this page cannot read is counted apart from bytes it refused
+PASS  the band counts the record, not the deliveries a replay repeats
+        after one round: 36 attested mutations read · 5 members, 6 topics, 25 channels created · 0 addresses archived · 36 verified, 0 forged, 0 unknown signers, 0 unsigned · latest sequence 36 — after the replay: 36 attested mutations read · 5 members, 6 topics, 25 channels created · 0 addresses archived · 36 verified, 0 forged, 0 unknown signers, 0 unsigned · 36 re-delivered, already held · latest sequence 36
+PASS  a burst of records is one redraw, whatever its length
+        36 asks, then 36 more, then a disposal: 2 redraws in all
+PASS  a re-delivered record is counted as re-delivered, never discarded quietly
+PASS  the served document is exactly what the source module renders
+PASS  the document names no asset the served root does not carry
+PASS  a one-segment path binds t.<segment>
+PASS  dots replace slashes, with the t. prefix
+PASS  kebab segments survive derivation intact
+PASS  a deep real path derives without loss
+PASS  two nodes sharing a leaf bind two different channels
+PASS  derivation refuses a path the grammar refuses
+PASS  a spine stream is mirrored onto the bus under manifold.<stream>
+PASS  a bound channel's two names are derived in that order, and differ
+PASS  the mirror refuses an empty stream rather than yielding the bare prefix
+PASS  the grammar admits the paths the registry accepts
+PASS  the replay request encodes to exactly the frozen shape, and nothing more
+PASS  a replay request names the SPINE stream, never the bus mirror
+PASS  a request that names no stream is refused rather than encoded
+PASS  the replay channel is stated, and is not the mirror the answer arrives on
+PASS  the compose body limit is the bridge's own number, in bytes
+PASS  the limit is counted in BYTES, so a two-byte character reaches it sooner
+PASS  an empty compose body is refused here, in the bridge's own terms
+PASS  encodeComposeFrame refuses to emit bytes the bridge is certain to reject
+PASS  a send identifier is unique across page loads, not a per-mount counter
+PASS  the replay request's version is the feed frame's version, and may not move alone
+PASS  a well-formed create parses to the frozen fields
+PASS  an archive carries no kind and reads as null, never as a guess
+PASS  a create with no kind is refused by name
+PASS  every other way an entry can be wrong is refused, with the reason
+PASS  a refusal counts the bytes that really arrived
+PASS  a future VERB carrying a future FIELD is a refusal, not an unknown op
+PASS  a feed frame carrying a field nobody agreed on is refused too
+PASS  the frame the bridge really sends still parses, field for field
+PASS  a seq past what this page can hold EXACTLY is refused by name
+PASS  a seq that is not a u64 at all is refused, each for its own reason
+PASS  a frame's seq is held to the same u64 rule as an entry's
+PASS  kind absent and kind null are the SAME fact, on every verb
+PASS  the fixture history projects the tree it describes
+PASS  counts are honest: seen, implied, archived, and by kind
+PASS  an ancestor never announced is kept, marked unseen, and given no kind
+PASS  an implied ancestor is reported as an anomaly naming the missing paths
+PASS  a create arriving twice is refused the way the REGISTRY refuses it: first write wins
+PASS  a second archive of an archived node is refused too, and the first one stands
+PASS  an archive for a path never seen is applied and reported
+PASS  a sequence that goes backwards is applied and reported
+PASS  a clean history produces no anomalies at all
+PASS  the whole history arriving a second time changes nothing, and is counted
+PASS  a repeated seq is ignored idempotently, not applied over the top
+PASS  a replayed record does not read as a sequence that went backwards
+PASS  a genuinely new entry that goes backwards is still reported
+PASS  a repeat is counted even when the entry is byte-identical
+PASS  archive is a state: the node stays, and its own status is the one that changed
+PASS  a descendant of an archived node inherits the status and names the ancestor
+PASS  the nearest archived ancestor is the one named
+PASS  creates land live: a projection grows without being rebuilt
+PASS  a child row navigates, and carries its own kind and state
+PASS  a node this page was never told about says exactly that, and guesses nothing
+PASS  an archived pane calls archive a state, not a deletion
+PASS  a node's facts are grunk's sheet — every value tied to its own label
+PASS  a node with no record gets prose, never a sheet of blanks
+PASS  displayForm never invents a sigil
+PASS  the no-selection pane states what to do rather than showing nothing
+PASS  attribution folds case and a leading @, and nothing else
+PASS  unparsed frames and unattributed frames are attributed to nobody
+PASS  the store refuses a frame on a channel it was never told was subscribed
+PASS  a member view lists the member's entries with their verdicts
+PASS  R4: the member pane draws the SIGNER and never a claimed seat
+PASS  presence is derived activity, and says so in those words
+PASS  three different kinds of nothing are reported as three different things
+PASS  the member pane prints the matching rule it used
+PASS  the reconnect delay is the SDK's, carries jitter, and the page owns no timer
+PASS  the feed's pin arithmetic is grunk's export, at this surface's own threshold
+PASS  nothing is asked for before the feed is live
+PASS  the feed reaching live asks once, in the frozen shape
+PASS  every reconnection of the feed asks again
+PASS  a refusal is counted and stated, and not retried on the spot
+PASS  a receipt settles only the live spell that raised it
+PASS  a receipt does not settle the spell — only an arriving record does, and an unanswered ask is retried then starved
+PASS  the manual re-arm and the automatic release converge on the same state
+PASS  disposing stops observing both links
+PASS  a status listener that throws does not stop the requester asking
+PASS  a frame captured off a real bus decodes to its entry and its verdict
+PASS  the capture's keys are the envelope this suite builds
+PASS  field order is the bus's, and the parser does not depend on it
+PASS  a BARE registry entry on the mirror is refused at the envelope layer
+PASS  an envelope carrying a body that is not an entry is refused at the body layer
+PASS  a full history delivered as real mirror frames projects the tree
+PASS  a replayed frame carries the same verdict it carried live
+PASS  a node wears the verdict of the record that created it
+PASS  an unseen node has no verdict, and none is invented for it
+PASS  an entry survives being encoded and parsed back, field for field
+PASS  a partial history does NOT license discarding the stored tree
+PASS  a stored tree that cannot be read is refused with a reason, never a crash
+PASS  a browser that refuses storage is reported, and the page still works
+PASS  what is stored round-trips to the tree that was on screen
+PASS  the stored key is versioned, so two page versions cannot read each other's bytes
+PASS  a held record does not touch the tree until it is a whole history
+PASS  the reconciler RESETS rather than merges, so a rewritten history leaves no ghost
+PASS  once live, records apply as they arrive and the tree keeps growing
+PASS  a contiguous feed applies as it arrives, and the run is never broken
+PASS  a page joining mid-life starts where the feed found it, and says so
+PASS  a GAP holds everything behind it, applies nothing, and names the missing seq
+PASS  the hole closing drains the held records IN THE REGISTRY'S ORDER
+PASS  a replay reaching BACK below the floor rebuilds the run from its new beginning
+PASS  a repeat inside the run still reaches the projection, and one behind a hole does not
+PASS  the page applies NOTHING across a hole in the live feed
+PASS  the page REPORTS the hole it is sitting on, and stops reporting when it closes
+PASS  a stored tree with a hole in it is refused whole, and the bytes are left alone
+PASS  a stored run that does not start at 1 is still restored
+PASS  a stale tree survives a replay that never comes
+PASS  every action has a binding, and every binding renders as a hint
+PASS  a binding matches its own key and not its neighbours
+PASS  an option chord matches the key that was PRESSED, not the glyph macOS made of it
+PASS  a shifted option chord reaches the swap, and never the focus move it sits above
+PASS  a keystroke typed into a field belongs to the field
+PASS  exactly one row is tabbable, and it is the selected one
+PASS  a tree with no selection still has a way in from the keyboard
+PASS  a selection that is gone does not strand the tab stop
+PASS  movement walks the rows and stops at the ends rather than wrapping
+PASS  the palette opens on the commands, and every command shows its key
+PASS  the palette finds a node by typing part of its path
+PASS  the palette HIGHLIGHTS what the query matched, and ORDERS the rows it ranked
+PASS  Escape closes the palette and nothing is chosen
+PASS  an action that needs a selection is not offered when there is none
+PASS  compose and archive are both reachable with a node selected
+PASS  every mouse action on a row has a keyboard path to the same place
+PASS  ⌘K over the nodes switches to the commands with the query intact; over the commands it closes
+PASS  the palette NAMES the mode it is showing, and the chip follows the mode
+PASS  Tab cycles the MODE, wrapping, and the row cycling stays on the arrows
+PASS  a command row advertises the binding the dispatcher would really honour, remap included
+PASS  every tiling command is in the one action table, bound and hintable
+PASS  `⌘M` and `⌘⇧M` are two commands, and neither eats the other
+PASS  the PillBar renders nothing when nothing is minimized — §3.5
+PASS  a plain string body is the default text shape, byte-faithful
+PASS  every message ever sent still renders — old bodies in a new reader
+PASS  an unregistered shape renders honestly, with its raw body kept
+PASS  a registered shape reaches its own renderer with its payload
+PASS  the text shape is always registered — an ordinary message cannot be undrawable
+PASS  the mention pattern is §6.4's three forms, and nothing that only looks like one
+PASS  a mention this page can resolve and one it cannot are drawn as different things
+PASS  a message body is never parsed as markup — only mentions are lifted out of it
+PASS  an avatar chip is two characters, in the register this page can actually attest
+PASS  the sidebar lists the whole address tree, collapsed to its roots
+PASS  rows nest at 12px per depth, and a collapsed parent hides its descendants
+PASS  the chevron names the region it opens, and does not activate the row
+PASS  selection wears the rail; an open tile wears the live-row ink; both wears both
+PASS  an empty sidebar distinguishes 'no tree yet' from 'a tree with nothing to list'
+PASS  an empty tree panel walks fetching -> fetching(n) -> settled, never 'nobody is asking'
+PASS  a connecting link draws skeletons; a failing one says so and offers a retry
+PASS  the filter hides rows and offers a way back, and selects nothing
+PASS  the create affordance is SHOWN disabled with its reason, never hidden-and-silent
+PASS  a host that refuses CREATE with no reason is refused at mount, like every other capability
+PASS  the address list is a LIST, and every ARIA promise in it is one the panel keeps
+PASS  the caller's slot host survives a collapsed address section
+PASS  the state action carries its intent, never its own label
+PASS  the row menu is derived, and a disabled item shows its reason as TEXT
+PASS  an archived node is offered no new-child, and unarchive instead of archive
+PASS  the sidebar draws NO unread badge, because this page has no read state
+PASS  a click on a sidebar row asks the surface to open that address
+PASS  expansion persists through the store, and a corrupt value collapses rather than breaks
+PASS  the arrangement a reader left is the arrangement they come back to
+PASS  a replay burst rebuilds the spine once, and the control says what it cost
+        36 addresses · one rebuild costs 2 childList mutations · once per record: 72 · once per burst: 2
+PASS  a refused write is SHOWN in the panel, never only logged
+PASS  the resize handle clamps, announces, and reports only a settled width
+PASS  a stored width outside the clamp is discarded, not silently clamped
+PASS  one panel renders no tab strip; two switch and keep the inactive one mounted
+PASS  the sidebar collapses, rotates its chevron, and says so to a screen reader
+PASS  the sidebar's aria-expanded finally says WHICH region — grunk's, not a promise
+PASS  the panel slides at 300ms ease-out, with no opacity fade
+PASS  a closed sidebar is out of the tab order, not merely off the screen
+PASS  the drawer collapses by translateY and keeps its body mounted
+PASS  a section with nothing in it says what would go there, and is never hidden
+PASS  a drawer with no sections declared says THAT, rather than opening onto nothing
+PASS  the header row toggles on a click ANYWHERE — except on a control
+PASS  the chevron rotates 180 degrees when the drawer is collapsed
+PASS  a Mission Control control either acts or says why it cannot
+PASS  a Mission Control control reflects the state it toggles
+PASS  every icon this surface draws is registered — an unknown glyph is loud, never blank
+PASS  a strip control may draw a typed sigil where grunk vendors no glyph
+PASS  the watch slot writes nothing anywhere — it is a slot, not a store
+PASS  a watch slot takes no tab stop away from the row it sits on
+PASS  arrows move the palette's selection and Enter commits it, with no mouse
+PASS  the no-op holds on a palette that keeps no query at all
+PASS  what a reader ran and what they half-typed both survive the palette being remounted
+PASS  the no-op is the keystroke that CLOSED it, never an Enter somewhere else
+PASS  a palette that keeps no query comes up empty; one that keeps it comes up holding it
+PASS  every way out of the palette hands focus back to the page, never restores it itself
+PASS  the palette LEARNS — a command run twice outranks one run once
+PASS  the vendored graphmother build really exposes the API this surface declares
+PASS  the galaxy is GRAPHMOTHER running, and the field on screen is its output
+PASS  the galaxy grows with the REGISTRY, and it can invent nothing
+PASS  a node LEAVING does not take the frame's box with it
+PASS  a node's STARTING place is its PATH, so two loads open on the same field
+PASS  every node carries its own MEANING into the load payload
+PASS  the relation is TYPED, so a dependency edge could never be mistaken for a containment one
+PASS  every floating surface is GLASS — §2.11's default, §2.3's three values
+PASS  focus is the glass edge, not a debug rectangle — §2.7's ring is 40%
+PASS  §2.1's two voices: DM Sans for UI text, JetBrains Mono for code and nothing else
+PASS  a message body renders code chips — §5.7's InlineCode, in the data face
+PASS  code wins over a mention, and the lister agrees with the renderer
+PASS  nothing in a narrow tile is sliced — every trailing label truncates
+PASS  both faces are really LOADED — a declared stack is not a face
+PASS  a galaxy with no box takes the registry and throws nothing
+PASS  the field is framed to OVERFILL the viewport, not to float in the middle of it
+PASS  a workspace nobody is looking at stops simulating, and starts again
+PASS  a context that cannot run the engine SAYS SO, and never draws a silent void
+PASS  this page reads the seven verbs it has readers for, and knows which class each is
+PASS  a watch entry parses, and its kind is present-and-null rather than guessed
+PASS  a verb that carries a kind is refused by name, whichever verb it is
+PASS  a verb this page does not speak is named, kept whole, and applied to nothing
+PASS  a future verb off the mirror keeps the bridge's verdict
+PASS  a token is matched by exact spelling or a declared prefix, and by nothing else
+PASS  a declaration the record could not have written is refused, by name
+PASS  a presentation is read where the declarer wrote one and is never invented
+PASS  the mount pair's fold is a projection of the feed, and a replay costs it nothing
+PASS  a withdrawal is remembered with what it took away, and a re-mount binds again
+PASS  an entry a fold cannot apply is NAMED, never skipped
+PASS  a kind resolves to the component that declared it, and says on which clause
+PASS  an UNBOUND entry is labelled, carries its token, and keeps every byte
+PASS  a bound entry with no declared presentation draws its payload, attributed
+PASS  R8: every refusal this lane minted has words on this surface
+PASS  a watch entry re-encodes to the frozen feed shape, kind present and null
+PASS  watch entries in a feed leave the tree projection byte-for-byte unchanged
+PASS  the watches projection derives the standing sets the registry would
+PASS  a signer who withdraws their last declaration leaves NO entry behind
+PASS  replay order decides what stands: the same two entries, either way round
+PASS  archiving an address does not withdraw the declaration, and the live set excludes it
+PASS  a declaration naming an address this page never saw is kept, excluded, and explained
+PASS  the registry's two vocabularies are closed, named, and mapped as the registry maps them
+PASS  every rule the watches fold can name is one of the registry's nine
+PASS  a declaration is deduped on the registry's seq, exactly like every other entry
+PASS  resetting the projection takes the declarations with it
+PASS  the watches fold refuses to be fed a verb that is not a declaration
+PASS  declaring is still gated, and the tooltip names the gate that is actually in the way
+PASS  drawing a watch bell writes nothing anywhere — it is a reading, not a store
+PASS  a contributed panel taller than the ruled bound scrolls, and the workspace keeps the viewport
+PASS  a request answered with nothing is asked again on the next live spell, and never on a clock
+PASS  the ONE clock left retries a REFUSED request, and settles
+PASS  a status that did not move is not announced at all
+PASS  the reader's own state type has no way to say the record came back empty
+PASS  an archive is the §3.1 op the registry parses, and carries no kind
+PASS  this page refuses only the archive it can SEE, and leaves the rest to the door
+PASS  the link's phases ARE liminal's four, in the order the machine walks them
+PASS  a registry seq past 2^53 is disclosed rather than printed — §4's second law
+PASS  leafOf really throws on an invalid path, exactly as it has always claimed to
+PASS  the ops gate is READ off the host's roster, and names the registry's frozen stream
+PASS  ONE renderer for an instant — three spellings, one refusal, one module
+PASS  the bell's tooltip is a FOLD of the record, so two bells cannot disagree
+PASS  the four predicates the composition reads a record WITH are held to their own words
+PASS  a record that has not answered says it is FETCHING, never that it is empty
+PASS  the SDK's two refusal codes are the only ones read as a refusal
+PASS  every planted code reaches a reader as a typed cause on the state
+PASS  an error the page has no ruling for is unknown, and says so honestly
+PASS  a link that never erred carries a cause, and it is not a refusal
+PASS  every normal minute of this page renders nothing at all
+PASS  a refusal is loud in EVERY phase the machine can hold it in
+PASS  a link that is over says so, and never says the cause was not a refusal
+PASS  the REAL machine reconnecting a REFUSED feed renders the line
+PASS  a CONNECT_REJECTED reaches the line as the same refusal
+PASS  a wire that drops and heals renders NOTHING, start to finish
+PASS  the line clears when the machine reaches connected
+PASS  the line clears on a genuine re-open reaching connecting
+PASS  one line, and the newest fault is the one on it
+PASS  the rendered line actually WEARS the alert register, in the real stylesheet
+PASS  the line is disposable, and disposing it empties it
+PASS  the composition boots and builds every slot it declares
+PASS  every history requester the composition wires is one that cannot stop asking
+PASS  an empty tree panel says what is being done about it, and never that it stopped
+PASS  every subscription this page opens heals itself, and the probe names them all
+PASS  each slot renders its declared id, purpose and accept-contract
+PASS  a slot that has refused nothing shows no refusal block
+PASS  the default view renders zero bespoke chrome
+PASS  the composition mounts the shell: galaxy behind, sidebar, strip
+PASS  a closed sidebar leaves zero horizontal cutout
+PASS  the inspector carries the whole disclosure, and is CLOSED on load
+PASS  the disclosure says what this page's subscriptions have survived
+PASS  no subscription on this page is paced by quiet
+        7 subscriptions · 5 quiet by contract · 2 heartbeat-keyed at null
+PASS  the inspector is reachable keyboard-only, and Escape lands on the work
+PASS  the whole walk is keyboard-only: sidebar, palette, composer, send
+PASS  the editor takes the focus and the keys, and the handoff loses nothing
+PASS  open/closed never persists — a reload starts summoned
+PASS  the Mission Control drawer is a mechanism, not a hidden div
+PASS  the sidebar's create affordance is SHOWN, disabled, with its reason
+PASS  the right-hand dock is a shell: mechanism whole, empty state stated
+PASS  no region of the page is blank — every shell states what it holds
+PASS  this document links to no other surface
+PASS  the ladder is written once: no served stylesheet declares a duration
+PASS  ONE module reads the reader's motion preference, and one only
+PASS  prefers-reduced-motion collapses every slide and stops the pulse
+PASS  a page LOADED under reduced motion is still through the same one gate
+PASS  a slot refuses an offer in place, and takes one its contract covers
+PASS  a browser mints one visitor key, keeps it, and derives its name from it (R1)
+PASS  the private key is non-extractable: the platform itself refuses to export it (R1)
+PASS  the signed entry carries exactly its six fields and verifiable public material only (R1/R2)
+PASS  a lone surrogate is refused by name, never silently replaced (R1)
+PASS  the naming fold: unvouched claims never render, vouches must match exactly, supersession is clean (R4)
+PASS  an unverified claim moves nothing: the fold takes only the record's word (R4)
+PASS  Enter is a newline and ⌘/Ctrl+Enter is the send — Tom's ratified keys
+PASS  a press inside an IME composition is never a send
+PASS  ⌥Enter grows the field, ⇧⌥Enter shrinks it, and the floor holds
+PASS  the pill overlay reconstructs the field's text exactly, character for character
+PASS  a handle the record has not attested is drawn as unknown, never as a member
+PASS  a mention is found by scanning back, and never across a newline
+PASS  candidates are an unranked case-insensitive substring of the census
+PASS  taking a mention quotes what has to be quoted and closes with one space
+PASS  the unknown mentions are named, in order, without repeats
+PASS  sends leave the outbox in the order they were made, and one goes at a time
+PASS  a receipt moves a send to awaiting and removes nothing
+PASS  settlement is the send identifier, and an identifier nothing knows settles nothing
+PASS  a QUEUED send is never settled by an echo of its identifier
+PASS  every send state the outbox can write, the draft store can read back
+PASS  the conversation stream is the INVERSE of the mirror rule, not the last dotted label
+PASS  a bridge refusal is read strictly, and an empty identifier is no identifier
+PASS  a failed publish hands the words back and takes the send out
+PASS  a restored send is HELD, and nothing re-publishes it
+PASS  R1: the guard's whole evidence is the outbox it is handed
+PASS  R1: the horizon is the outbox's own, and a settled send is still in it
+PASS  R2: byte-equal and nothing looser — one changed character is a different message
+PASS  R3: the words differ by the earlier send's state, and none of them is a bare duplicate
+PASS  R2: a body already SETTLED is refused, and nothing is minted — the #111 defect
+PASS  R2/R3: a body still IN FLIGHT is refused, and the refusal points at the recovery
+PASS  R2: the override is a SECOND action — it mints exactly as an ordinary send does
+PASS  R2: the override belongs to its refusal — a keystroke takes both down
+PASS  R2: the same words to a DIFFERENT conversation are not the defect and pass
+PASS  R1: a body the page only REMEMBERS is not a body it sent
+PASS  R4: two guards, two lanes — ordering is not repeat-catching
+PASS  R3: a repeat of a HELD send says what this page does not know
+PASS  R2: the declared surface names the refusal and the override it can answer with
+PASS  R2: the declared override sends, and a value that is not yes is refused by name
+PASS  a draft round-trips through the store exactly
+PASS  stored bytes this page cannot read are REFUSED and never re-interpreted
+PASS  stored bytes this page cannot read are moved aside, never written over
+PASS  the compose component's declaration holds together and is served as data
+PASS  the record-borne declaration is the served one with its attestation dropped
+PASS  the committed record-borne document is what this build renders, byte for byte
+PASS  the mount request that puts this declaration on the record fits the registry's limit
+PASS  the space slot's accept-contract answers the declaration's render token
+PASS  the skill file is generated from the declaration, and names only declared actions
+PASS  a narrative naming an undeclared action REFUSES the whole declaration
+PASS  the field is a textarea, and Enter really does insert a newline in it
+PASS  ⌘Enter sends what is typed, and the field is emptied only after the words are elsewhere
+PASS  R4: SUBMIT RESOLUTION clears nothing — the words are in the outbox and the store
+PASS  R4: a BUS RECEIPT clears nothing — it moves the state and destroys no words
+PASS  R4: a BRIDGE ECHO naming another send clears nothing
+PASS  R4: an entry carrying NO send identifier clears nothing (today's production shape)
+PASS  an arrival that answers nothing is SAID, not only counted
+PASS  R4: SETTLEMENT is the one event that clears, and it clears only the send it names
+PASS  R4: an entry the record does NOT vouch for settles nothing, and says so
+PASS  R1: one send, ONE identifier, minted at take and never again
+PASS  R2: an echo of ANOTHER conversation's send settles nothing here
+PASS  R2: a REPLAYED echo settles nothing twice and cannot touch the landing
+PASS  R2: a replayed echo cannot retire a LATER send that shares its words
+PASS  R3: the settlement key is the identifier, the state and the verdict — and no body
+PASS  R4: a BRIDGE REFUSAL reaches the reader in place, with the words handed back
+PASS  a bridge refusal naming another page's send, or none at all, is not claimed
+PASS  the field's height moves on ⌥Enter and ⇧⌥Enter, in pixels a reader would see
+PASS  the retired mirror never paints: the fallback field draws its own glyphs, once
+PASS  the completion is a real listbox, arrow keys move it and Enter takes the candidate
+PASS  a member enrolling on the record reaches the field's offer without a keystroke
+PASS  a reader can take an outstanding send's words back, and nothing is lost doing it
+PASS  the draft and the outbox come back after a reload, and the restored send is not re-sent
+PASS  R4 refusal: an empty message is refused by the contract's own words
+PASS  R4 refusal: a body past the contract's byte limit is refused before it is spent
+PASS  R4 refusal: a mention the record has not attested is refused, and named
+PASS  R4 refusal: an estate whose host names no write door is refused before a draft is spent
+PASS  R4 refusal: a send met by an unseated door asks the host again, and refuses THIS send anyway
+        refused by name, the draft intact, and the host asked again (0 → 1)
+PASS  R4 refusal: words that cannot be encoded come back to the field, and say why
+PASS  R4 refusal: an estate that refuses the publish gives the words back, and says why
+PASS  R4 refusal: a carrier that THROWS instead of rejecting still gives the words back
+PASS  R4 refusal: a browser that will not keep a draft says so, in place, and still sends
+PASS  R4 refusal: a browser that cannot hold a key is refused BY NAME, with no seat to fall back to
+        named as an identity refusal, in the identity layer's own words, with nothing sent and no shared seat anywhere
+PASS  the space carries the conversation, with the compose field seated inside it
+PASS  the sidebar is still empty, and says what it is waiting for
+PASS  the LIVE component implements exactly the actions its served declaration names
+PASS  a declared action runs against the live component and answers what it did
+PASS  a served declaration the shell does not actually carry refuses the whole boot
+PASS  a served declaration that is not the one this build declares refuses the boot
+PASS  compose.send reports what THIS CALL did, not what is on screen
+PASS  R2: the draft survives TWO REAL RELOADS — the state the store writes, it reads
+PASS  the tokenizer's split for ONE `@` source is the split mentions.ts makes
+PASS  a second source with its own trigger is a configuration, not a code change
+PASS  a configuration this composer cannot draw is refused BY NAME, and all of it
+PASS  R5: the suppression set is on the served DOM, and a conversation called login stays clean
+PASS  the composer opens at five lines, not at the editor's 200px floor
+PASS  the ConfigTab carries the diagonal and the signature orange
+PASS  THE SECOND OBJECT: a wholly different configuration mounts the same composer
+PASS  manifold's own composer configures no settings, and SAYS so rather than opening nothing
+PASS  a control kind the composer cannot draw REFUSES at mount, in the surface
+PASS  the editor is consumed from npm at an exact pin, and the served vendor tree matches it
+PASS  the composer's open is the SPRING's own curve, sampled — not a literal
+PASS  the composer publishes ONE open pair, on the root, where both surfaces read it
+PASS  a configured highlight surface that fails SAYS so; a configured absence says nothing
+PASS  a REFUSED configuration mounts a composer with nothing in it, and the panel opens
+PASS  R1: compose interactions hit-test ABOVE the galaxy, at the field and at the send
+PASS  R1 idle cost: at rest, NOTHING under composition/compose asks for a frame
+PASS  a placed body rides the composer's own outbox and carrier, and leaves the draft alone
+        one send on the wire, one outbox row, and a draft nobody touched
+PASS  a placed body the write door refuses says so in the composer's own refusal line, and never lands in the field
+        the estate's own reason and words, in the composer's one alert line, with the draft intact
+PASS  a placed body settles on the record's echo exactly as a typed one does
+        receipt, then the record — a vote is retired by the same one event every message is
+PASS  a message is drawn once, however many times a bridge republishes it
+PASS  the identity is the record's own content, never the frame number
+PASS  the record's identity is every field the record contributes, and no more
+PASS  a republished record whose verdict changed is counted, and said
+PASS  a delivery this page cannot read is drawn, counted apart, and never de-duplicated
+PASS  restored and delivered are counted apart, and never added together
+PASS  a restored conversation with nothing delivered says so, in the words
+PASS  only what this page could read is worth keeping, in the order it was drawn
+PASS  what the memory keeps is what it gives back, frame for frame
+PASS  one unreadable record refuses the WHOLE blob, by name, and deletes nothing
+PASS  a browser that will not keep the conversation says so, and trims nothing
+PASS  a store this browser will not even read is a fact, not a crash
+PASS  the four verdicts render exactly as the room page renders them
+PASS  R4: the claimed seat is drawn as a CLAIM, beside the signer and never as it
+PASS  a restored message is MARKED, and a delivered one is not
+PASS  consecutive messages from one author keep their own provenance
+PASS  a restored history NEVER settles the fetching line
+PASS  one delivery is what turns the fetching line over
+PASS  the empty state says what it can honestly say, and retires on a message
+PASS  a reader's ask goes through the page's own history door
+PASS  the connection is on the summary and moves with the link
+PASS  what the browser refuses to keep is said in the surface, not the console
+PASS  the keep is coalesced onto one beat, and a teardown never loses it
+PASS  a republished record after a restore draws nothing new, on the real DOM
+PASS  a memory that could not be read is on screen, and the conversation still works
+PASS  a restored conversation opens at the newest message
+PASS  the composer is seated INSIDE the conversation, under the messages
+PASS  R6: a message kind the record binds is drawn by the component that declared it
+        the presentation is read off the mounted declaration; nothing in the page names a poll
+PASS  R6: a kind nothing on the record declares is an UNBOUND entry carrying its token
+PASS  R6v: a v2 renderer never reinterprets a v1 entry, and v1 keeps its own
+        v2 mounted alongside v1-minted entries: neither reinterpreted the other's
+PASS  R6v/R7c: withdrawing the renderer degrades what is already drawn, naming the append
+        v1 withdrawn with v2 mounted: v1 entries typed-UNBOUND naming entry 41, v2 entries drawn
+PASS  R7a: an extension arrives on the record and its kind renders, with no core edit
+        one append changed what a reader sees; no line of this repository did
+PASS  R1: a poll the record binds is drawn as a poll — the question, the options as controls, the closing
+        the live specimen's own bytes, drawn as a card with two pressable options
+PASS  R1: the face never makes an undeclared kind render — the same poll with nothing mounted is UNBOUND
+        binding is still the record's decision; the face only changes what a BOUND poll looks like
+PASS  R2: pressing an option places a vote naming the poll and the choice, on this conversation's own write path
+        one press, one vote body, and no optimism about it
+PASS  R3: the tally is counted off the record — one seat one vote, and a seat's later vote replaces its earlier one
+        three vote entries, two seats, and a tally that is a projection over them
+PASS  R3: a vote arriving live moves the tally already on screen, with nothing asked for again
+        a card already on screen corrected by an arrival — no clock, no poll, nothing asked for
+PASS  R3: the reader's own vote is marked, and it is the one their own KEY signed
+        marked as a class, as `aria-pressed`, and in words — three, because a colour alone tells nobody
+PASS  R3: a vote the record will not vouch for is drawn and is not counted
+        the stream is the ballot box AND it is attested: an unvouched entry is shown, never counted
+PASS  R6: a press puts the pending state ON the control, in the same frame
+        the answer lands on the control the reader pressed, before any echo
+PASS  R6: the record's echo resolves the pending press — feedback cleared, mark and count from the record
+        pending is FEEDBACK and the record is the measurement; the echo swaps one for the other
+PASS  R6: a refused press clears nothing it never held — the refusal lands in the said line, no pending state
+        refusal is a release condition, named — the card is immediately pressable again
+PASS  R7: single-flight per card — two presses in one pending window place exactly one vote
+        one vote per pending window, and the window closes on the record's own echo
+PASS  R4: past the closing the options are disabled, the card says voting closed, and the tally stands
+        closed in the reader's own clock — the stated limit of this slice, written at `poll.ts`
+PASS  R4: a closing this page cannot read as a time closes nothing, and says so
+        a closing nobody can place is shown verbatim and never guessed into a date
+PASS  R2: a vote this page cannot carry is refused where the reader pressed, and nothing is sent
+PASS  R2: a refusal from the write path is said on the card in the estate's own words
+        the write path's own words, quoted rather than re-worded on the card
+PASS  VOTE-SEQ R1/R2: a vote cast in another session counts here — both sides carry the record's own sequence, not this page's frame numbering
+        one poll at record 177 met at frame 38: the foreign vote counts, and the minted vote names 177
+PASS  VOTE-SEQ R4: a vote whose poll identifier resolves to no poll record moves no tally
+        both legacy votes are on the record and in no column — counting one against the wrong poll is the hazard
+PASS  the committed poll declaration names exactly the two tokens this page draws
+        ablative.message.poll@v1, ablative.message.poll.vote@v1 — declared once, in records/polls-declaration.json
+PASS  the space slot's accept-contract answers the conversation's render token
+PASS  VIEW R3: a manifest-origin mount arriving mid-session rebinds an already-drawn entry, and view:null returns it typed
+        the seat's own mount byte-shape, folded live: next look new face, and absence typed on the way back
+PASS  VIEW R4a: before any view is declared, the rendering is today's exactly — and byte-stable across redraws
+        no declared view means the generic rendering it has today — absence stays honest
+PASS  VIEW R4b: a mount this page cannot read is refused by name and reaches the ledger, never dropped
+        never a silently skipped declaration: refused at decode in the reader's words, or reported unapplied by entry
+PASS  VIEW R5: script, event-handler and javascript: payloads in a declared view render as inert text in the renderer's own vocabulary
+        a view is a declaration the trusted renderer interprets; nothing third-party executes, ever
+PASS  AUTHORING R1: a poll authored from the composer is a well-formed poll record on the wire, and its rendered card is votable
+        authored on the page, well-formed on the wire, rendered as a card a reader voted on
+PASS  AUTHORING R2: the picker offers only what is derivable as accepted — a registered builder whose kind the record binds
+        derived from the fold both times: nothing offered off an empty record, exactly one kind after its declaration lands, and a builderless kind never offered
+PASS  AUTHORING R3: a room with no declared kinds composes exactly as today — the seam invisible when unused
+        one plain send, byte for byte what was typed, and no authoring furniture on either composer
+PASS  AUTHORING R4: an invalid form refuses in words in place and sends nothing
+        refused in words where the reader stands, both faults named, nothing minted, nothing queued, nothing destroyed
+PASS  AUTHORING R5: the poll's form is DERIVED from its own declaration — the record carries the schema, and taking the facet off takes the form away
+        the form appears with the facet and disappears with it, and a declaration carrying none is refused nothing
+PASS  AUTHORING R6: the derived form authors a record readPoll accepts, shape-identical to what the bespoke form emitted, with the closing OMITTED when blank
+        member for member and type for type what the deleted bespoke form emitted, read back by the estate's own readPoll, with the closing absent rather than empty
+PASS  DECLARED FORM R1: a well-formed accepts facet reads as a form schema, and a declaration carrying none is an absence rather than a fault
+        one of each field kind read off the facet, and a declaration carrying no accepts facet is an absence
+PASS  DECLARED FORM R1: every malformed accepts facet is refused AT READ, in words naming the fault
+        17 malformed accepts bodies, every one refused at read with the offending member named
+PASS  DECLARED FORM R1: a kind whose accepts this surface cannot read offers no form, and the reason reaches the composer's own disclosure
+        nothing offered, and the record's own reason on the composer's disclosure naming the component and the member
+PASS  DECLARED FORM R2: a valid schema derives the form the declaration asked for — labelled inputs, rows that add and remove, and one body member per field
+        a form nothing on this page has code for: three rows, a list that grew and shrank, and a body carrying exactly the declared members
+PASS  DECLARED FORM R2: the picker wears the words the DECLARER wrote for its kind, and the shape token verbatim when the declaration names none
+        the declarer's words when it wrote them, the shape token verbatim when it did not, and the token unmoved either way
+PASS  DECLARED FORM R2: a derived form refuses in words naming the field, and an optional field left blank is OMITTED rather than sent empty
+        both faults named in one answer, nothing sent, nothing destroyed, and the blank optional member absent from the body
+PASS  DECLARED FORM R3: a kind is offered when the record binds its renderer AND a form exists — and a bespoke form wins over the derived one for the same token
+        derived offered, bespoke overriding it for the same token, nothing offered for an unbound renderer, order untouched
+PASS  the record declaration reader preserves the unknown face facet verbatim
+PASS  a declared face renders its four closed primitives
+PASS  a malformed face refuses whole and is disclosed
+PASS  list type mismatch refuses only that named element and missing fields are explicit
+PASS  a new snapshot and a re-declaration change the next face answer
+PASS  the record declaration reader preserves the unknown actions facet verbatim
+PASS  the RSVP fixture pins its two declared actions
+PASS  declared action controls have the pinned shape and a press is the act
+PASS  malformed declared actions refuse whole by name and are disclosed
+PASS  choose over a non-list refuses only that action and renders its sibling
+PASS  no write path disables every declared action and refuses in words
+PASS  a fresh snapshot answers a live action re-declaration
+PASS  R2: the primary conversation and a record-created channel BOTH ride the door
+        genesis -> door, t.estate.rooms.alpha -> door
+PASS  R2: a stream neither path carries is refused by name, never routed
+        three streams this page holds no write path for, each refused with its own name in it
+PASS  R6: the seat's words no longer claim a second binding this page lacks
+        the sentence names the stream and carries the reason it was given, verbatim
+PASS  R1: a room opened from the tree seats a composer bound to THAT stream
+        estate/rooms/alpha seats a field bound to t.estate.rooms.alpha, carried by the write door
+PASS  R1: two open rooms hold two independent drafts
+        two rooms, two keys — manifold.composition.compose.draft/v1/t.estate.rooms.alpha and manifold.composition.compose.draft/v1/t.estate.rooms.beta
+PASS  R3: a send from a room is placed at the door naming that room's stream
+        one placement, naming t.estate.rooms.alpha, keyed by the composer's own send identifier, signed by guest-a4609bee6970090b3801594c113cfba3202c51f86deddfabbf990aeb48a10d8d
+PASS  R3: a door send settles on the room's own echo and on nothing before it
+        taken, then held, then settled — and only by the entry echoing its own identifier
+PASS  R3: a door refusal reaches the reader in the door's own words, with the draft kept
+        the door's own reason and its own sentence, on screen, with the words back where they were typed
+PASS  R4: a room's send never names another room's stream
+        one send, one stream, and the other room's words untouched
+PASS  R4: a bridge refusal reaches the composer bound to its stream and no other
+        routed by the frame's stream across 2 seated composers, including the one no outbox can absorb
+PASS  R1: the host's own conversation is seated through the same seam, and rides the door
+        genesis seated by the same seam, on the door, and registered for routing
+PASS  R2: the host's OWN conversation rides the door whatever stream it names
+        four hosts, four different conversations, one path — the estate's write door
+PASS  R1: a SECOND field on the host's own conversation is a boot refusal, not a seat
+        refused at boot, by name, under the code the failure panel already draws
+PASS  R4 trap: an opened room subscribes to its OWN mirror and to no refusal channel
+        two rooms, two mirrors, and no second socket onto manifold.compose.refused
+PASS  R4: a refusal naming the host's OWN conversation reaches the home composer
+        routed to the stream it names, and to nothing else
+PASS  R5: a room the record has archived seats the honest sentence, never a field
+        No compose field is seated here, and this is not a control that is coming: the record has archived estate/rooms/alpha, a
+PASS  R6: a room's composer discloses the DOOR and the hand that actually signs
+        the door, the room's own stream, and the browser's own key named as the hand
+PASS  R5: a send made before the host has answered is refused, and says the ask is in flight
+        an ask in flight is its own fact, and it is not `nothing has been asked`
+PASS  R5: a room on an estate seating no write door says so, and keeps the draft
+        nothing placed, the reason on screen, and the words still where they were typed
+PASS  a #channel opens as the stream it binds, on the mirror that stream reaches
+PASS  an address with no stream of its own opens into its KIND's view
+PASS  a kind this build has no view for opens RAW rather than being refused
+PASS  a path the channel grammar refuses opens nothing, and says the grammar's words
+PASS  every kind view's token is one the space slot's contract takes
+PASS  the roster is evidence: an absent mirror is named, a present one says nothing
+PASS  activating an address opens it into the space, and the panel says where you are
+PASS  an address opened twice is built once, and comes back holding its own element
+PASS  an address this page's record does not hold is refused, and the space keeps what it had
+PASS  a / space opens the space view: its subspaces, its streams, its participants
+PASS  a space says where its objects live and never descends a binding
+PASS  the properties a view draws are the properties the buffer prints
+PASS  a child row inside an opened address goes through the page's one open verb
+PASS  an @ participant opens their CONTAINER: profile, presence, the DM seam, properties
+PASS  presence is not invented: the container reports what the record was signed by
+PASS  an address whose kind never arrived opens the record, verbatim
+PASS  a conversation opened from the spine seats its OWN field, bound to its own stream
+PASS  a mirror this host DOES advertise draws no evidence at all
+PASS  an address that leaves the record stops showing facts nothing attests
+PASS  an opened detail follows the record: a new child appears without a reopen
+PASS  the compose-bound conversation is what the space returns to, and it is told
+PASS  teardown releases every address a reader opened
+PASS  escape dismisses what is most in the way, and then RETURNS
+PASS  the page carries a command back to the conversation it composes to
+PASS  every form of a written address round-trips, text and value alike
+PASS  the root and the empty text are HOME, which is not an address on the record
+PASS  a sigil above the leaf is refused by name, and the grammar is stated
+PASS  a text that is not an address at all is refused, and never repaired
+PASS  a node whose kind never arrived is written with ? and claims nothing
+PASS  an address the record does not hold is HELD, and says what it waits for
+PASS  an address the record holds opens, with nothing to say about it
+PASS  the record outranks the link about WHAT, and the reader is told
+PASS  a text this grammar refuses is carried into the intent verbatim
+PASS  the carrier reads the fragment without its mark, and writes it back with one
+PASS  a browser that will not take a history entry answers a sentence, never a throw
+PASS  both ways a reader can move the fragment are watched, and both released
+PASS  an address a reader ARRIVED with opens the moment the record carries it
+PASS  every navigation writes the location, and walking back returns
+PASS  a link the record contradicts opens what the record says, and is put right
+PASS  a text that is not an address refuses in the space, and is left alone
+PASS  the affordance copies a whole link, and says what it did
+PASS  the booted composition normalises an empty location to the root
+PASS  the booted composition holds a deep link its record has not reached
+PASS  the booted composition refuses a mangled deep link where the reader is
+PASS  the boot snapshot calls a runtime-registered mirror absent — the defect itself
+        the boot snapshot named 3 channels and not manifold.t.ablative.landing
+PASS  a mirror the host registered after boot is not called absent
+        the current reading names 4 channels
+PASS  a mirror no current reading names still gets the words
+PASS  a mirror registered mid-session settles with no reload
+PASS  a wound-down mirror leaves the reading, and a refused one never enters it
+PASS  the live reading never drops what the host booted with
+PASS  a host that cannot answer leaves the boot reading standing, and says so
+PASS  the REAL page asks its host, and what the host answers is what the page draws
+        the panel followed the host's live registry, not the config it booted with
+PASS  bytes this page cannot read as an outcome move nothing
+PASS  R1: a page opened on a room it has not reached seats no field, and none naming another room
+        no field, no composer, and the slot held for estate/standup
+PASS  R1: the held slot says what is being opened, in the page's own vocabulary
+        it names the room being opened, the field it is not offering, and why
+PASS  R1: an addressed load that names no stream holds too, and promises no field
+        held for a space, and the words promise only what the record will decide
+PASS  R2: a page asked for nothing seats its field at once, bound to the host's own
+        one writable field, announced as "compose a message to genesis"
+PASS  R2: a link this grammar refuses seats the field, because the page has not moved
+        a mangled link leaves the reader at home, with home's field
+PASS  R3: when the addressed room lands, its OWN composer is seated and the hold ends
+        t.estate.standup seated with its own draft, and the home field back in its slot
+PASS  R3: a room that resolves to a REFUSAL renders the refusal, and the hold still ends
+        the record's own refusal, in the room, and the home field back where the reader is
+PASS  a §3.1 request parses to exactly its six fields, absent and null alike
+PASS  a verb this page has never heard of is READ, and marked as unknown to it
+PASS  the request parser refuses every way a body can be wrong, by name
+PASS  a delivery on the ops mirror is decoded through BOTH layers, each keeping its own reason
+PASS  an empty ledger says what this page has HEARD, never what was written
+PASS  what was asked, what was accepted and what was refused stay three facts
+PASS  an answer NAMES a request; it never claims to be that request's answer
+PASS  every request naming what an answer names is marked, not merely the first
+PASS  one mutation admitted three times is one record and one acceptance
+PASS  a replay leaves the asks and the refusals exactly where they were
+PASS  one registry seq naming two mutations is recorded, never folded away
+PASS  a sequence past the exact integer range is said to be, never printed as fact
+PASS  a verdict is carried verbatim onto every record this page draws
+PASS  the panel says which registry streams this page can hear, before any of them speak
+PASS  the panel is the sidebar's second seat, and the strip offers both
+PASS  an arrival draws its kind, its stream and its sentence, and an answer re-draws the ask
+PASS  every line the buffer can print reads back as the same line
+PASS  a whole buffer formats back to exactly itself
+PASS  SPINE-MODEL §1's four written examples parse as themselves
+PASS  the grammar refuses a shape by name, and never repairs one
+PASS  a kind the registry cannot make is carried by the grammar and refused at the door
+PASS  the old name-then-kind order is refused, and says which way round it goes
+PASS  an address is the indent, and a level with nothing above it is refused
+PASS  two objects that differ only in key order are one property object
+PASS  the buffer is the folded rows, printed — and the record's own fields open at a line
+PASS  a row whose ancestry is not in the buffer is dropped and said, never re-addressed
+PASS  a line added is a create at the address the indent resolves to
+PASS  a new line's `::note` rides the create, and any other key is refused
+PASS  a line removed is an archive, anchored where the reader deleted it
+PASS  a folded subtree is outside the question, and is never archived by omission
+PASS  changing a sigil is refused at the line, and sends nothing
+PASS  editing what the record wrote is refused, and writing it back unchanged is not an edit
+PASS  two lines naming one address are refused, because an address is an identity
+PASS  a name the registry's grammar refuses is refused in the registry's own words
+PASS  a move is not refused, and is not silent either
+PASS  a receipt is not an acceptance, and only the record retires a request
+PASS  a refusal naming this op is shown at its line and still does not retire it
+PASS  a bridge refusal is routed by the STREAM it names, never by the send it carries
+PASS  a bridge refusal naming this buffer's own send ends that op, and says the registry never saw it
+PASS  a bridge refusal naming a send this buffer never minted, or none at all, moves nothing
+PASS  a bridge refusal delivered twice is one fact, and the second copy moves nothing
+PASS  a bridge refusal outranks a registry refusal on the same op, because it is provably about it
+PASS  the composition seats the editable buffer, and says what it is for
+PASS  typing a line marks its row, and writing it publishes the op the line stands for
+PASS  a BRIDGE refusal for an op is drawn at the line, and hands the line back
+PASS  a bridge refusal this buffer cannot place is counted and said, and retires nothing
+PASS  ACCEPTANCE is the node arriving on the tree, and the line stops being an edit
+PASS  no incumbent state produces a disconnected reader unless the page closed
+PASS  a refusal survives the respawn, because a respawn is not a new answer
+PASS  a state listener that throws stops neither the transport nor the other views
+PASS  a mirror that goes quiet while its socket claims connected is replaced
+PASS  the incumbent keeps delivering until the replacement is connected
+PASS  a reader is never shown anything but connected across a silence swap
+PASS  a swap announces a fresh live spell, so the history reader re-asks
+PASS  a silence limit that is not a duration is refused at the door
+PASS  a link with the liveness watch off never replaces itself on quiet
+PASS  a publication both sockets carry reaches the page once
+PASS  the fold closes with the swap and is never a general de-duplicator
+PASS  a socket this layer has finished with cannot still reach the page
+PASS  the fold reports itself to the record when its window closes
+PASS  an overlap window admits a body once and counts every repeat
+PASS  a link the page did not close is opened again, and never says reload
+PASS  an incumbent that dies mid-refresh is news, and opens no third socket
+PASS  a refused replacement is replaced again, for ever, on the curve
+PASS  a healed link starts its next backoff from the top
+PASS  a publish rides whichever socket is connected, and is never queued
+PASS  the page's own close is the only way a reader is told disconnected
+PASS  closing during a replacement takes both sockets with it
+PASS  the record's fold is idempotent on the seq a replay re-delivers
+PASS  the conversation's fold is idempotent on the frame numbers a swap re-delivers
+PASS  a host that does not carry the record's mirror is refused by name
+PASS  a host serving no config at all is refused before anything is drawn
+
+COMPOSITION TESTS PASS — 642 claims, all green.
+EXIT=0
