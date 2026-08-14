@@ -1,0 +1,278 @@
+//! fleet_dev — one brief, planned into legs by a planning counsel, built leg
+//! by leg by delegated builders, judged by a judging counsel, and gated by the
+//! server — on the engine's own durability, with every seam proven against a
+//! known answer before anything real is spent.
+//!
+//! This is the fleet-shaped sibling of `norn_dev`: same agent seam (the tree
+//! to work in, the prompt to work on, the canonical agent-outcome record
+//! back), same control-first discipline, same server-run gates. What it adds
+//! is the division of labour the single-lane pilot performed by hand at the
+//! dispatcher's desk: the PLANNER grounds the brief in the tree before any
+//! builder runs, and the JUDGE reads the delivery before it is reported done.
+//!
+//! THE TREE IS THE BLACKBOARD. AWL composes no strings at runtime — constant
+//! concatenation exists, runtime concatenation deliberately does not — so no
+//! step can wrap one leg's reply inside another leg's prompt. Instead every
+//! prompt in this document is an ADDRESS and every payload lives in the
+//! working tree, which all legs share through `cwd from repo`:
+//!   - the planner is instructed (by `plan_prompt`) to write the whole leg
+//!     plan to `.fleet/plan.md` and one complete brief per leg to
+//!     `.fleet/legs/<id>.md`, each anchored file:line to the requirement it
+//!     fans out;
+//!   - each builder's prompt (built by the dispatcher, carried in `legs`)
+//!     names its own `.fleet/legs/<id>.md` as the brief to read and
+//!     `.fleet/reports/<id>.md` as the report to write;
+//!   - the judge's prompt names the plan, the briefs, the reports, and the
+//!     diff, and carries the judging charter itself.
+//! Every agent's deliverable is CHECKED MECHANICALLY, because every reply is
+//! a claim and the tree is the fact: `plan_check` verifies every promised
+//! leg brief exists and is non-empty, so a planner that answered eloquently
+//! and wrote nothing routes to `unplanned` instead of starving every builder
+//! downstream — and `report_check` holds the builders to the same law, so a
+//! builder whose reply claimed work the tree does not carry routes to
+//! `unreported` before the gates can pass a tree left in its prior state.
+//!
+//! THE JUDGE IS NOT A GATE AND THE GATES ARE NOT A JUDGE. The gate script's
+//! exit code routes green/red mechanically, before the judge runs — a red
+//! tree is refused without spending judgement on it. The judge then rules on
+//! the delivery that gated green, with exactly two duties written in its
+//! charter: FIRST, the permitted-choice points — every "stated-not-done" the
+//! builders claimed under the brief's own permissions, verified as genuinely
+//! permitted, genuinely stated, and genuinely the better call; SECOND, the
+//! hard-wall audit against the brief's forbidden list. The judge never
+//! re-runs gates: a judge re-running them is a colleague pretending to be a
+//! mechanism. Its admission token is exact: a reply of precisely `judge_pass`
+//! routes done; ANY other reply — including a hedged pass — routes
+//! `judge_flagged` carrying the verdict text whole. The mismatch direction is
+//! deliberate: this document can produce a false flag, never a false clear.
+//!
+//! Builders run in `sequence`, one leg at a time in the ONE shared tree, in
+//! the dispatcher's leg order: later legs see earlier legs' commits, which is
+//! what dependent legs need, and no merge phase exists to go wrong. A
+//! parallel variant (per-leg worktrees, `distribute`) is a recorded
+//! trade-off in this folder's README, not a quiet default.
+//!
+//! WHAT THIS DOES NOT PROVE: a green gate proves what the script measures; a
+//! judge's CLEAR is one model's read of the tree, priced by its charter but
+//! unverified. The landing re-gate and the landing itself stay at the
+//! operator's desk, after this workflow returns.
+workflow fleet_dev
+  timeout 12h
+  input repo: String
+  input counsel_control_prompt: String
+  input counsel_control_expect: String
+  input control_prompt: String
+  input control_expect: String
+  input plan_prompt: String
+  input plan_check_script: String
+  input legs: [Leg]
+  input report_check_script: String
+  input judge_prompt: String
+  input judge_pass: String
+  input gate_script: String
+  outcome done:          type FleetDevReport, route success
+  outcome unplanned:     type PlanRefused,    route failure
+  outcome unreported:    type Unreported,     route failure
+  outcome gates_red:     type GatesRed,       route failure
+  outcome judge_flagged: type JudgeFlagged,   route failure
+  outcome unmeasured:    type Refused,        route failure
+
+/// One unit of fleet work. `prompt` is complete and self-contained AS AN
+/// ADDRESS: it names the leg's brief file the planner wrote and the report
+/// file the builder must write, plus the standing register (floors not
+/// ceilings, hard walls restated). The brief's CONTENT lives in the tree.
+type Leg { id: String, prompt: String }
+
+/// The canonical agent-outcome record every dispatch of an agent seam
+/// returns: the leg's terminal `text` and the canonical `stop_reason`.
+/// Two fields exactly — the running 0.15.0 reader demands the shape
+/// structurally. The three-field record (`session_id`) revs WITH the next
+/// cut, not ahead of it; the upgrade is recorded in this folder's README.
+type Reply { text: String, stop_reason: String }
+
+/// What actually ran: the sealed command's exit status and both streams,
+/// filled by the server for every `run`-bodied action.
+type RunOutcome { exit_code: Int, stdout: String, stderr: String }
+
+/// A fleet that planned, built, gated green, and was judged clear. The
+/// builders' own accounts travel with the machine's gate evidence and the
+/// judge's admission, plus both controls' replies — an assertion that the
+/// method worked is not a demonstration.
+type FleetDevReport {
+  plan: String,
+  leg_ids: [String],
+  reports: [String],
+  verdict: String,
+  gate_exit: Int,
+  gate_stderr: String,
+  control_reply: String,
+  counsel_control_reply: String,
+}
+
+/// The planner answered but its promised deliverable is not in the tree.
+/// Carries the planner's account beside the check's own streams.
+type PlanRefused { plan: String, check_exit: Int, stdout: String, stderr: String }
+
+/// The builders answered but at least one promised report is not in the
+/// tree. A builder's reply is a claim exactly as the planner's is; a tree
+/// left in its prior state can gate GREEN, so this is caught by a script
+/// before the gates, never left for the judge as a mechanism of last
+/// resort. The check script names each missing leg on stdout, which
+/// travels here beside the builders' own accounts.
+type Unreported { plan: String, reports: [String], check_exit: Int, stdout: String, stderr: String }
+
+/// The legs built but the gates are red. Everything needed to read the
+/// failure travels with the refusal-to-report.
+type GatesRed { plan: String, reports: [String], gate_exit: Int, stdout: String, stderr: String }
+
+/// The delivery gated green and the judge refused it anyway — or answered
+/// anything other than the exact admission token. The whole verdict text
+/// travels with the refusal.
+type JudgeFlagged { plan: String, reports: [String], verdict: String }
+
+/// A fleet that did not build, said out loud rather than reported as a pass.
+type Refused { control_expect: String, control_reply: String, reason: String }
+
+worker counsel
+  /// The planning and judging seats, both served by one Claude-backed ACP
+  /// worker on queue `counsel`. Prompts go to the session verbatim; replies
+  /// come back verbatim; the working tree arrives with each dispatch.
+  ///
+  /// HARNESS VALUES ARE PROPOSALS for the document review, not defaults:
+  /// `command` is this box's absolute npx path (the `{workspace_root}` form
+  /// is the portable alternative once a per-box binding exists), `permission
+  /// allow-once` because the planner and judge WRITE their deliverables into
+  /// the tree, `exit_grace 30s` and the reconnect ladder copied from the
+  /// proven norn register.
+  harness
+    kind acp
+    concurrency 1
+    reconnect_initial_backoff 1s
+    reconnect_max_backoff 30s
+    reconnect_max_attempts 100
+    env_pass "PATH", "HOME", "USER", "LOGNAME", "TMPDIR"
+    command "/opt/homebrew/bin/npx"
+    args "@agentclientprotocol/claude-agent-acp"
+    cwd from repo
+    permission "allow-once"
+    exit_grace 30s
+  /// The planner. Reads the dispatcher's brief (carried whole in the
+  /// prompt), grounds every requirement file:line in the tree, and writes
+  /// `.fleet/plan.md` plus one complete builder brief per leg.
+  action plan(repo: String, prompt: String) -> Reply
+    agent, timeout 30m, retry 3 backoff 30s..5m
+  /// The judge. Two duties, in its charter, carried in the prompt: the
+  /// permitted-choice points first, the hard-wall audit second. Never the
+  /// gates. Replies with exactly the admission token, or with its findings.
+  action judge(repo: String, prompt: String) -> Reply
+    agent, timeout 30m, retry 3 backoff 30s..5m
+
+worker dev
+  /// The builders' seat: queue `dev`, byte-compatible with `norn_dev`'s
+  /// declaration so the same seated worker serves both documents. Same
+  /// register as the pilot: the brief address goes to the session verbatim,
+  /// the report comes back verbatim, retries absorb provider-overload
+  /// bursts — a failed build is a reply, not an error.
+  harness
+    kind norn
+    concurrency 1
+    reconnect_initial_backoff 1s
+    reconnect_max_backoff 30s
+    reconnect_max_attempts 100
+    env_pass "PATH", "HOME", "USER", "LOGNAME", "TMPDIR"
+    args "--account", "default"
+    cwd from repo
+  action delegate(repo: String, prompt: String) -> Reply
+    agent, timeout 90m, retry 3 backoff 30s..5m
+
+  /// The planner's deliverable, verified by the machine: the sealed script
+  /// checks every promised `.fleet/legs/<id>.md` exists and is non-empty.
+  action plan_check(script: String) -> RunOutcome
+    run "zsh $script"
+
+  /// The builders' deliverables, verified the same way: the sealed script
+  /// checks every promised `.fleet/reports/<id>.md` exists and is
+  /// non-empty, naming each missing leg on stdout.
+  action report_check(script: String) -> RunOutcome
+    run "zsh $script"
+
+  /// The gates, run by the server. The command is sealed into the package
+  /// identity at deploy; the script path arrives as one whole argument and
+  /// never passes through a shell expansion.
+  action gates(script: String) -> RunOutcome
+    run "zsh $script"
+
+/// Prove the counsel seam before spending it: ask the planning seat a
+/// question whose answer the dispatcher already knows. A broken pipeline and
+/// a working one both return well-formed strings; only a known answer tells
+/// them apart.
+step counsel_control
+  plan(repo: repo, prompt: counsel_control_prompt) -> counsel_control
+  outcome proven: when counsel_control.text == counsel_control_expect, route dev_control
+  outcome broken: otherwise,
+    route unmeasured(control_expect: counsel_control_expect, control_reply: counsel_control.text,
+      reason: "the counsel control did not return the expected reply, so the planning and judging pipeline cannot be shown to read the tree or follow instructions — nothing was planned")
+
+/// Prove the builder seam the same way, before the planner writes a single
+/// brief for it.
+step dev_control
+  delegate(repo: repo, prompt: control_prompt) -> control
+  outcome proven: when control.text == control_expect, route plan_legs
+  outcome broken: otherwise,
+    route unmeasured(control_expect: control_expect, control_reply: control.text,
+      reason: "the builder control did not return the expected reply, so the delegation pipeline cannot be shown to read the tree or follow instructions — nothing was planned or built")
+
+step plan_legs
+  plan(repo: repo, prompt: plan_prompt) -> planned
+
+/// The planner's answer is a claim; the tree is the fact. Route on the
+/// check's exit code, never on the eloquence of the reply.
+step check_plan
+  plan_check(script: plan_check_script) -> plan_checked
+  outcome written: when plan_checked.exit_code == 0, route open
+  outcome missing: otherwise,
+    route unplanned(plan: planned.text, check_exit: plan_checked.exit_code,
+      stdout: plan_checked.stdout, stderr: plan_checked.stderr)
+
+step open
+  sequence leg in legs
+
+step build_one
+  delegate(repo: repo, prompt: leg.prompt) -> built
+  built.text -> report
+
+step close
+  collect report -> reports
+  legs |> map(.id) -> leg_ids
+
+/// A builder's answer is a claim; the tree is the fact — the same law
+/// `check_plan` enforces on the planner, enforced here on every builder
+/// before the gates run, so the judge is never the first thing to notice
+/// an eloquent reply that wrote nothing.
+step check_reports
+  report_check(script: report_check_script) -> reports_checked
+  outcome written: when reports_checked.exit_code == 0, route gate
+  outcome missing: otherwise,
+    route unreported(plan: planned.text, reports: reports, check_exit: reports_checked.exit_code,
+      stdout: reports_checked.stdout, stderr: reports_checked.stderr)
+
+/// Mechanical measurement before judgement: a red tree is refused without
+/// spending the judge on it.
+step gate
+  gates(script: gate_script) -> gate_result
+  outcome green: when gate_result.exit_code == 0, route judgement
+  outcome red: otherwise,
+    route gates_red(plan: planned.text, reports: reports, gate_exit: gate_result.exit_code,
+      stdout: gate_result.stdout, stderr: gate_result.stderr)
+
+/// The judge rules on the delivery that gated green. Exact admission only:
+/// anything other than the dispatcher's `judge_pass` token — a hedge, a
+/// preamble, a finding — routes to `judge_flagged` with the verdict whole.
+step judgement
+  judge(repo: repo, prompt: judge_prompt) -> judged
+  outcome clear: when judged.text == judge_pass,
+    route done(plan: planned.text, leg_ids: leg_ids, reports: reports, verdict: judged.text,
+      gate_exit: gate_result.exit_code, gate_stderr: gate_result.stderr,
+      control_reply: control.text, counsel_control_reply: counsel_control.text)
+  outcome flagged: otherwise,
+    route judge_flagged(plan: planned.text, reports: reports, verdict: judged.text)
