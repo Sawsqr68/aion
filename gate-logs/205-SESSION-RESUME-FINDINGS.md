@@ -210,3 +210,19 @@ sent 2026-08-14. Until it lands, (a)+(b) are still correct and complete
 for "the dispatcher already knows the id" cases (e.g. an operator or
 workflow that recorded it out-of-band), but the self-contained
 resume-across-attempts story waits on (c).
+
+**As built (2026-08-14, landed bc6703ef4; deviation RATIFIED by Waffles).**
+The ruling landed and (c) is closed, with one classification change from
+the text above. Norn does NOT fill the field with a derived id: the
+envelope carries norn's own `session_id`, and the adapter reads it as a
+FACT — an id this adapter derived would name a session norn never
+persisted. That fact-read forces the null arm the design above never
+priced: a COMPLETED envelope whose `session_id` is null/absent (a
+`--no-session` invocation, the one case the stop-envelope contract names)
+is `HarnessError::Contract` naming `--no-session` — NOT Protocol — because
+a worker configured to discard its session is a deterministic
+misconfiguration, not malformed data: the same configuration answers the
+same way every time, and a retryable classification would burn a retry
+budget of live agent runs against a config that cannot heal.
+Empty-string and non-string `session_id` stay Protocol — off the
+stop-envelope contract entirely, the malformed-data lane, kept distinct.
